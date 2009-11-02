@@ -48,8 +48,6 @@ func newORMStorageAndMock(t *testing.T) (*ORMStorage, sqlmock.Sqlmock) {
 }
 
 func TestORMStorageGetEmptyRecord(t *testing.T) {
-	t.Parallel()
-
 	s, mock := newORMStorageAndMock(t)
 
 	mock.ExpectQuery("SELECT * FROM `test` WHERE id = ? LIMIT 1").
@@ -60,8 +58,6 @@ func TestORMStorageGetEmptyRecord(t *testing.T) {
 }
 
 func TestORMStorageGetExistingRecord(t *testing.T) {
-	t.Parallel()
-
 	s, mock := newORMStorageAndMock(t)
 
 	expectedRecord := &Record{
@@ -90,8 +86,6 @@ func TestORMStorageGetExistingRecord(t *testing.T) {
 }
 
 func TestORMStorageInsertRecord(t *testing.T) {
-	t.Parallel()
-
 	s, mock := newORMStorageAndMock(t)
 
 	record := &Record{
@@ -118,8 +112,6 @@ func TestORMStorageInsertRecord(t *testing.T) {
 }
 
 func TestORMStorageUpdateMember(t *testing.T) {
-	t.Parallel()
-
 	leaderNotChanged := false
 	s, mock := newORMStorageAndMock(t)
 
@@ -152,8 +144,6 @@ func TestORMStorageUpdateMember(t *testing.T) {
 }
 
 func TestORMStorageUpdateLeader(t *testing.T) {
-	t.Parallel()
-
 	leaderChanged := true
 	s, mock := newORMStorageAndMock(t)
 
@@ -197,8 +187,6 @@ func TestORMStorageUpdateLeader(t *testing.T) {
 }
 
 func TestORMStorageTxnWithLeaderCheck(t *testing.T) {
-	t.Parallel()
-
 	s, mock := newORMStorageAndMock(t)
 
 	mock.ExpectBegin()
