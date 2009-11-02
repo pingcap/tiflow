@@ -962,4 +962,12 @@ var (
 		"not controller",
 		errors.RFCCodeText("CDC:ErrNotController"),
 	)
+	ErrMetaOpIgnored = errors.Normalize(
+		"meta operation %s is ignored",
+		errors.RFCCodeText("CDC:ErrMetaOpIgnored"),
+	)
+	ErrMetaOpFailed = errors.Normalize(
+		"meta operation %s is failed",
+		errors.RFCCodeText("DFLOW:ErrMetaOpFail"),
+	)
 )

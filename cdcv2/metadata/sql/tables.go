@@ -33,7 +33,7 @@ type UpstreamDO struct {
 	Endpoints string    `gorm:"column:endpoints;type:text;not null" json:"endpoints"`
 	Config    *string   `gorm:"column:config;type:text" json:"config"`
 	Version   uint64    `gorm:"column:version;type:bigint(20) unsigned;not null" json:"version"`
-	UpdateAt  time.Time `gorm:"column:update_at;type:datetime(6);not null" json:"update_at"`
+	UpdateAt  time.Time `gorm:"column:update_at;type:datetime(6);not null;autoUpdateTime" json:"update_at"`
 }
 
 // TableName Upstream's table name
@@ -55,7 +55,7 @@ type ChangefeedInfoDO struct {
 	Config     ReplicaConfig `gorm:"column:config;type:longtext;not null" json:"config"`
 
 	Version  uint64    `gorm:"column:version;type:bigint(20) unsigned;not null" json:"version"`
-	UpdateAt time.Time `gorm:"column:update_at;type:datetime(6);not null" json:"update_at"`
+	UpdateAt time.Time `gorm:"column:update_at;type:datetime(6);not null;autoUpdateTime" json:"update_at"`
 }
 
 // TableName ChangefeedInfo's table name
@@ -70,7 +70,7 @@ type ChangefeedStateDO struct {
 	Warning        *string   `gorm:"column:warning;type:text" json:"warning"`
 	Error          *string   `gorm:"column:error;type:text" json:"error"`
 	Version        uint64    `gorm:"column:version;type:bigint(20) unsigned;not null" json:"version"`
-	UpdateAt       time.Time `gorm:"column:update_at;type:datetime(6);not null" json:"update_at"`
+	UpdateAt       time.Time `gorm:"column:update_at;type:datetime(6);not null;autoUpdateTime" json:"update_at"`
 }
 
 // TableName ChangefeedState's table name
@@ -86,7 +86,7 @@ type ScheduleDO struct {
 	Processors     *string             `gorm:"column:processors;type:text" json:"processors"`
 	TaskPosition   *ChangefeedProgress `gorm:"column:task_position;type:text" json:"task_position"`
 	Version        uint64              `gorm:"column:version;type:bigint(20) unsigned;not null" json:"version"`
-	UpdateAt       time.Time           `gorm:"column:update_at;type:datetime(6);not null" json:"update_at"`
+	UpdateAt       time.Time           `gorm:"column:update_at;type:datetime(6);not null;autoUpdateTime" json:"update_at"`
 }
 
 // TableName Schedule's table name
@@ -99,7 +99,7 @@ type ProgressDO struct {
 	CaptureID string           `gorm:"column:capture_id;type:varchar(128);primaryKey" json:"capture_id"`
 	Progress  *CaptureProgress `gorm:"column:progress;type:longtext" json:"progress"`
 	Version   uint64           `gorm:"column:version;type:bigint(20) unsigned;not null" json:"version"`
-	UpdateAt  time.Time        `gorm:"column:update_at;type:datetime(6);not null" json:"update_at"`
+	UpdateAt  time.Time        `gorm:"column:update_at;type:datetime(6);not null;autoUpdateTime" json:"update_at"`
 }
 
 // TableName Progress's table name

@@ -12,3 +12,54 @@
 // limitations under the License.
 
 package sql
+
+import (
+	"context"
+
+	"gorm.io/gorm"
+)
+
+// TxnAction is a series of operations that can be executed in a transaction and the
+// generic type T represents the transaction context.
+//
+// Note that in the current implementation the metadata operation and leader check are
+// always in the same transaction context. In the future, cross-database transactions
+// could also be supported with different implementations.
+type TxnAction[T any] func(T) error
+
+type sqlTxnAction TxnAction[*gorm.DB]
+
+// LeaderChecker enables the controller to ensure its leadership during a series of actions.
+type LeaderChecker[T any] interface {
+	TxnWithLeaderLock(ctx context.Context, leaderID string, fn TxnAction[T]) error
+}
+
+type ControllerClient interface {
+}
+
+// =========================== Capture ===========================
+// CaptureOb is an implement for metadata.CaptureObservation.
+// type CaptureOb struct {
+// 	// election related fields.
+// 	metadata.Elector
+// 	selfInfo *model.CaptureInfo
+
+// 	storage *meatStorageClient
+
+// 	tasks struct {
+// 		sync.RWMutex
+// 		owners     sortedScheduledChangefeeds
+// 		processors sortedScheduledChangefeeds
+// 	}
+
+// 	ownerChanges     *chann.DrainableChann[metadata.ScheduledChangefeed]
+// 	processorChanges *chann.DrainableChann[metadata.ScheduledChangefeed]
+// }
+
+// func (s *meatStorageClient) test() {
+// 	s.db.Transaction()
+// }
+
+// =========================== Controller ===========================
+
+// =========================== Owner ===========================
