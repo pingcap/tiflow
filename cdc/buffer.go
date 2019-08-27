@@ -1,24 +1,39 @@
 package cdc
 
-import "context"
+import (
+	"context"
+
+	"github.com/pingcap/tidb-cdc/cdc/util"
+)
 
 // buffer entry from kv layer
-type bufferEntry struct {
-	kv       *KVEntry
-	resolved *ResolvedSpan
+type BufferEntry struct {
+	KV       *KVEntry
+	Resolved *ResolvedSpan
 }
 
-type buffer struct {
-	entriesCh chan bufferEntry
-}
-
-func makeBuffer() *buffer {
-	return &buffer{
-		entriesCh: make(chan bufferEntry),
+func (e *BufferEntry) GetValue() interface{} {
+	if e.KV != nil {
+		return e.KV
+	} else if e.Resolved != nil {
+		return e.Resolved
+	} else {
+		return nil
 	}
 }
 
-func (b *buffer) AddEntry(ctx context.Context, entry bufferEntry) error {
+// Buffer buffer kv entry
+type Buffer struct {
+	entriesCh chan BufferEntry
+}
+
+func MakeBuffer() *Buffer {
+	return &Buffer{
+		entriesCh: make(chan BufferEntry),
+	}
+}
+
+func (b *Buffer) AddEntry(ctx context.Context, entry BufferEntry) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -27,18 +42,18 @@ func (b *buffer) AddEntry(ctx context.Context, entry bufferEntry) error {
 	}
 }
 
-func (b *buffer) AddKVEntry(ctx context.Context, kv *KVEntry) error {
-	return b.AddEntry(ctx, bufferEntry{kv: kv})
+func (b *Buffer) AddKVEntry(ctx context.Context, kv *KVEntry) error {
+	return b.AddEntry(ctx, BufferEntry{KV: kv})
 }
 
-func (b *buffer) AddResolved(ctx context.Context, span Span, ts uint64) error {
-	return b.AddEntry(ctx, bufferEntry{resolved: &ResolvedSpan{Span: span, Timestamp: ts}})
+func (b *Buffer) AddResolved(ctx context.Context, span util.Span, ts uint64) error {
+	return b.AddEntry(ctx, BufferEntry{Resolved: &ResolvedSpan{Span: span, Timestamp: ts}})
 }
 
-func (b *buffer) Get(ctx context.Context) (bufferEntry, error) {
+func (b *Buffer) Get(ctx context.Context) (BufferEntry, error) {
 	select {
 	case <-ctx.Done():
-		return bufferEntry{}, ctx.Err()
+		return BufferEntry{}, ctx.Err()
 	case e := <-b.entriesCh:
 		return e, nil
 	}

@@ -31,5 +31,7 @@ bin
 cscope.*
 **/*.swp
 
+cmd/cdc/cdc
+
 # Files generated when testing
 vendor/
