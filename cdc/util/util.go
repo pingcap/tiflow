@@ -6,12 +6,14 @@ import (
 	"github.com/pingcap/errors"
 )
 
+// Span represents a arbitrary kv range
 type Span struct {
 	Start []byte
 	End   []byte
 }
 
-// nil means Negative infinity
+// Nil means Negative infinity
+// The result will be 0 if lhs==rhs, -1 if lhs < rhs, and +1 if lhs > rhs
 func StartCompare(lhs []byte, rhs []byte) int {
 	if lhs == nil && rhs == nil {
 		return 0
@@ -28,7 +30,8 @@ func StartCompare(lhs []byte, rhs []byte) int {
 	return bytes.Compare(lhs, rhs)
 }
 
-// nil means Positive infinity
+// Nil means Positive infinity
+// The result will be 0 if lhs==rhs, -1 if lhs < rhs, and +1 if lhs > rhs
 func EndCompare(lhs []byte, rhs []byte) int {
 	if lhs == nil && rhs == nil {
 		return 0
@@ -48,8 +51,8 @@ func EndCompare(lhs []byte, rhs []byte) int {
 // Intersect return the intersect part of lhs and rhs span.
 // Return error if there's no intersect part
 func Intersect(lhs Span, rhs Span) (span Span, err error) {
-	if lhs.Start != nil && rhs.End != nil && bytes.Compare(lhs.Start, rhs.End) >= 0 ||
-		rhs.Start != nil && lhs.End != nil && bytes.Compare(rhs.Start, lhs.End) >= 0 {
+	if lhs.Start != nil && EndCompare(lhs.Start, rhs.End) >= 0 ||
+		rhs.Start != nil && EndCompare(rhs.Start, lhs.End) >= 0 {
 		return Span{}, errors.Errorf("span do not overlap: %+v vs %+v", lhs, rhs)
 	}
 

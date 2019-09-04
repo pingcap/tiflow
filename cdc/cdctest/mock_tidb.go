@@ -113,7 +113,7 @@ func (p *MockTiDB) updateEvent() (entrys []cdc.KVEntry, err error) {
 		_, ok := newKVS[k]
 		if !ok {
 			entry := cdc.KVEntry{
-				OpType: cdc.OpTypePut,
+				OpType: cdc.OpTypeDelete,
 				Key:    []byte(k),
 				Value:  []byte(v),
 				TS:     ts,

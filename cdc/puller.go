@@ -19,10 +19,13 @@ type Puller struct {
 	buf          *Buffer
 }
 
+// NewPuller create a new Puller fetch event start from checkpointTS
+// and put into buf.
 func NewPuller(
 	pdCli pd.Client,
 	checkpointTS uint64,
 	spans []util.Span,
+	// useless now
 	detail ChangeFeedDetail,
 	buf *Buffer,
 ) *Puller {
@@ -37,6 +40,7 @@ func NewPuller(
 	return p
 }
 
+// Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *Puller) Run(ctx context.Context) error {
 	// TODO pull from tikv and push into buf
 	// need buffer in memory first
@@ -69,11 +73,12 @@ func (p *Puller) Run(ctx context.Context) error {
 					val := e.Val
 
 					var opType OpType
-					if val.Value == nil {
+					if val.OpType == kv.OpTypeDelete {
 						opType = OpTypeDelete
-					} else {
+					} else if val.OpType == kv.OpTypePut {
 						opType = OpTypePut
 					}
+
 					kv := &KVEntry{
 						OpType: opType,
 						Key:    val.Key,

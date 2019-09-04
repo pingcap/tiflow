@@ -23,6 +23,14 @@ const (
 	dialTimeout = 10 * time.Second
 )
 
+type OpType int
+
+const (
+	OpTypeUnknow OpType = 0
+	OpTypePut    OpType = 1
+	OpTypeDelete OpType = 2
+)
+
 type RegionFeedEvent struct {
 	Val        *RegionFeedValue
 	Checkpoint *RegionnFeedCheckpoint
@@ -34,8 +42,9 @@ type RegionnFeedCheckpoint struct {
 }
 
 type RegionFeedValue struct {
-	Key []byte
-	// nil for delete
+	OpType OpType
+	Key    []byte
+	// Nil fro delete type
 	Value []byte
 	TS    uint64
 }
@@ -96,7 +105,9 @@ func (c *CDCClient) Close() error {
 	return nil
 }
 
-func (c *CDCClient) getConn(ctx context.Context, addr string) (conn *grpc.ClientConn, err error) {
+func (c *CDCClient) getConn(
+	ctx context.Context, addr string,
+) (conn *grpc.ClientConn, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -128,7 +139,9 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (conn *grpc.Client
 	return
 }
 
-func (c *CDCClient) getConnByMeta(ctx context.Context, meta *metapb.Region) (conn *grpc.ClientConn, err error) {
+func (c *CDCClient) getConnByMeta(
+	ctx context.Context, meta *metapb.Region,
+) (conn *grpc.ClientConn, err error) {
 	if len(meta.Peers) == 0 {
 		return nil, errors.New("no peer")
 	}
@@ -144,7 +157,9 @@ func (c *CDCClient) getConnByMeta(ctx context.Context, meta *metapb.Region) (con
 	return c.getConn(ctx, store.Address)
 }
 
-func (c *CDCClient) getStore(ctx context.Context, id uint64) (store *metapb.Store, err error) {
+func (c *CDCClient) getStore(
+	ctx context.Context, id uint64,
+) (store *metapb.Store, err error) {
 	c.storeMu.Lock()
 	defer c.storeMu.Unlock()
 
@@ -162,7 +177,9 @@ func (c *CDCClient) getStore(ctx context.Context, id uint64) (store *metapb.Stor
 	return
 }
 
-func (c *CDCClient) scanRegions(ctx context.Context, key []byte, limit int) (regions []*metapb.Region, peers []*metapb.Peer, err error) {
+func (c *CDCClient) scanRegions(
+	ctx context.Context, key []byte, limit int,
+) (regions []*metapb.Region, peers []*metapb.Peer, err error) {
 	// Will return "unknown method ScanRegions"
 	// Look like pd don't impl this ScanRegions really yet
 	// return c.pd.ScanRegions(ctx, start, limit)
@@ -198,7 +215,6 @@ func (c *CDCClient) scanRegions(ctx context.Context, key []byte, limit int) (reg
 func (c *CDCClient) EventFeed(
 	ctx context.Context, span util.Span, ts uint64, eventCh chan<- *RegionFeedEvent,
 ) error {
-
 	g, ctx := errgroup.WithContext(ctx)
 
 	regionCh := make(chan singleRegionInfo, 16)
@@ -259,7 +275,7 @@ func (c *CDCClient) partialRegionFeed(
 
 			return backoff.Permanent(serr)
 			// TODO
-			// retry for some err type
+			// retry for some err type, divideAndSendEventFeedToRegions for region merge/split
 			// switch t := errors.Cause(serr).(type) {
 			// default:
 			// 	return backoff.Permanent(serr)
@@ -325,7 +341,6 @@ func (c *CDCClient) singleEventFeed(
 	meta *metapb.Region,
 	eventCh chan<- *RegionFeedEvent,
 ) (checkpointTS uint64, err error) {
-
 	req := &cdcpb.ChangeDataRequest{
 		Header: &cdcpb.Header{
 			ClusterId: c.clusterID,
@@ -344,7 +359,7 @@ func (c *CDCClient) singleEventFeed(
 
 	client := cdcpb.NewChangeDataClient(conn)
 
-	notMatchTS := make(map[uint64][]byte)
+	notMatch := make(map[string][]byte)
 
 	for {
 		stream, err := client.EventFeed(ctx, req)
@@ -354,7 +369,22 @@ func (c *CDCClient) singleEventFeed(
 			continue
 		}
 
-		var maxRecvHeartbeatTs uint64
+		maxItemFn := func(item sortItem) {
+			// emit a checkpoint
+			revent := &RegionFeedEvent{
+				Checkpoint: &RegionnFeedCheckpoint{
+					Span:       span,
+					ResolvedTS: item.commit,
+				},
+			}
+
+			select {
+			case eventCh <- revent:
+			case <-ctx.Done():
+			}
+		}
+
+		sorter := newSorter(maxItemFn)
 
 		for {
 			cevent, err := stream.Recv()
@@ -374,39 +404,58 @@ func (c *CDCClient) singleEventFeed(
 					for _, row := range x.Entries.GetEntries() {
 						switch row.Type {
 						case cdcpb.Event_PREWRITE:
-							notMatchTS[row.StartTs] = row.GetValue()
+							notMatch[string(row.Key)] = row.GetValue()
+							sorter.pushTSItem(sortItem{
+								start: row.GetStartTs(),
+								tp:    cdcpb.Event_PREWRITE,
+							})
 						case cdcpb.Event_COMMIT:
-
-							if row.CommitTs > maxRecvHeartbeatTs {
-								maxRecvHeartbeatTs = row.CommitTs
-							}
-
 							// emit a value
 							value := row.GetValue()
-							if pvalue, ok := notMatchTS[row.StartTs]; ok {
+							if pvalue, ok := notMatch[string(row.Key)]; ok {
 								if len(pvalue) > 0 {
 									value = pvalue
 								}
 							}
 
-							delete(notMatchTS, row.StartTs)
-							if row.GetOpType() == cdcpb.Event_Row_DELETE {
-								value = nil
+							delete(notMatch, string(row.Key))
+
+							var opType OpType
+							switch row.GetOpType() {
+							case cdcpb.Event_Row_DELETE:
+								opType = OpTypeDelete
+							case cdcpb.Event_Row_PUT:
+								opType = OpTypePut
+							default:
+								return uint64(req.CheckpointTs), errors.Errorf("unknow tp: %v", row.GetOpType())
 							}
+
 							revent := &RegionFeedEvent{
 								Val: &RegionFeedValue{
-									Key:   row.Key,
-									Value: value,
-									TS:    row.CommitTs,
+									OpType: opType,
+									Key:    row.Key,
+									Value:  value,
+									TS:     row.CommitTs,
 								},
 							}
+
 							select {
 							case eventCh <- revent:
 							case <-ctx.Done():
 								return uint64(req.CheckpointTs), errors.Trace(ctx.Err())
 							}
+							sorter.pushTSItem(sortItem{
+								start:  row.GetStartTs(),
+								commit: row.GetCommitTs(),
+								tp:     cdcpb.Event_COMMIT,
+							})
 						case cdcpb.Event_ROLLBACK:
-							delete(notMatchTS, row.StartTs)
+							delete(notMatch, string(row.Key))
+							sorter.pushTSItem(sortItem{
+								start:  row.GetStartTs(),
+								commit: row.GetCommitTs(),
+								tp:     cdcpb.Event_ROLLBACK,
+							})
 						}
 					}
 				case *cdcpb.Event_Admin_:
@@ -414,31 +463,14 @@ func (c *CDCClient) singleEventFeed(
 				case *cdcpb.Event_Error_:
 					// x.Error
 					// TODO a empty message send by tikv now
-					// should add some filed about what error happen
+					// should add some field about what error happen
 					log.Warn("receive error msg", zap.Stringer("event", event))
 				case *cdcpb.Event_HearbeatTs:
-					if x.HearbeatTs > maxRecvHeartbeatTs {
-						maxRecvHeartbeatTs = x.HearbeatTs
-					}
-				}
-			}
-
-			if len(notMatchTS) == 0 {
-				if maxRecvHeartbeatTs > uint64(req.CheckpointTs) {
-					req.CheckpointTs = int64(maxRecvHeartbeatTs)
-				}
-
-				// emit a checkpoint
-				revent := &RegionFeedEvent{
-					Checkpoint: &RegionnFeedCheckpoint{
-						Span:       span,
-						ResolvedTS: maxRecvHeartbeatTs,
-					},
-				}
-				select {
-				case eventCh <- revent:
-				case <-ctx.Done():
-					return uint64(req.CheckpointTs), errors.Trace(ctx.Err())
+					sorter.pushTSItem(sortItem{
+						start:  x.HearbeatTs,
+						commit: x.HearbeatTs,
+						tp:     cdcpb.Event_ROLLBACK,
+					})
 				}
 			}
 		}
