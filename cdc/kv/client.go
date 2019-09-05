@@ -23,24 +23,31 @@ const (
 	dialTimeout = 10 * time.Second
 )
 
+// OpType for the kv, delete or put
 type OpType int
 
+// OpType for kv
 const (
 	OpTypeUnknow OpType = 0
 	OpTypePut    OpType = 1
 	OpTypeDelete OpType = 2
 )
 
+// RegionFeedEvent from the kv layer.
+// Only one of the event will be setted.
 type RegionFeedEvent struct {
 	Val        *RegionFeedValue
 	Checkpoint *RegionnFeedCheckpoint
 }
 
+// RegionnFeedCheckpoint guarantees all the KV value event
+// with commit ts less than ResolvedTS has been emitted.
 type RegionnFeedCheckpoint struct {
 	Span       util.Span
 	ResolvedTS uint64
 }
 
+// RegionFeedValue notify the KV operator
 type RegionFeedValue struct {
 	OpType OpType
 	Key    []byte
@@ -55,6 +62,7 @@ type singleRegionInfo struct {
 	ts   uint64
 }
 
+// CDCClient to get events from TiKV
 type CDCClient struct {
 	pd pd.Client
 
@@ -71,6 +79,7 @@ type CDCClient struct {
 	}
 }
 
+// NewCDCClient creates a CDCClient instance
 func NewCDCClient(pd pd.Client) (c *CDCClient, err error) {
 	clusterID := pd.GetClusterID(context.Background())
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
@@ -95,6 +104,7 @@ func NewCDCClient(pd pd.Client) (c *CDCClient, err error) {
 	return
 }
 
+// Close CDCClient
 func (c *CDCClient) Close() error {
 	c.mu.Lock()
 	for _, conn := range c.mu.conns {
