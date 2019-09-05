@@ -183,12 +183,6 @@ func (m *MockTiDBPuller) updateEvent(kvChan chan<- RawKVEntry) error {
 		}
 	}
 
-	// sned resolved ts
-	kvChan <- RawKVEntry{
-		OpType: OpResolvedTS,
-		Ts:     ts,
-	}
-
 	m.kvs = newKVS
 	return nil
 }

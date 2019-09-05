@@ -30,7 +30,6 @@ const (
 	OpTypeUnknow OpType = 0
 	OpTypePut    OpType = 1
 	OpTypeDelete OpType = 2
-	OpResolvedTS OpType = 3
 )
 
 type RawKVEntry struct {
@@ -82,11 +81,6 @@ type UnknownKVEntry struct {
 }
 
 func Unmarshal(raw *RawKVEntry) (KVEntry, error) {
-	if raw.OpType == OpResolvedTS {
-		return &ResolvedTS{
-			Ts: raw.Ts,
-		}, nil
-	}
 	switch {
 	case hasTablePrefix(raw.Key):
 		return unmarshalTableKVEntry(raw)
