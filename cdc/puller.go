@@ -1,6 +1,18 @@
 package cdc
 
-import "context"
+import (
+	"context"
+	"github.com/pingcap/tidb-cdc/kv_entry"
+)
+
+type Range struct {
+	Start []byte
+	End   []byte
+}
+
+type Puller interface {
+	Pull(ranges []Range) <-chan kv_entry.RawKVEntry
+}
 
 // puller pull data from tikv and push changes into a buffer
 type puller struct {

@@ -2,14 +2,6 @@ package cdc
 
 import "context"
 
-type OpType int
-
-const (
-	OpTypeUnknow OpType = 0
-	OpTypePut    OpType = 1
-	OpTypeDelete OpType = 2
-)
-
 // Capture watch some span of KV and emit the entries to sink according to the ChangeFeedDetail
 type Capture struct {
 	watchs       []Span
@@ -24,13 +16,6 @@ type Capture struct {
 	// sink is the Sink to write rows to.
 	// Resolved timestamps are never written by Capture
 	sink Sink
-}
-
-type KVEntry struct {
-	OpType OpType
-	Key    []byte
-	Value  []byte
-	TS     uint64
 }
 
 type ResolvedSpan struct {
