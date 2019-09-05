@@ -1,7 +1,21 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package kv_entry
 
 import (
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 )
 
@@ -16,9 +30,11 @@ var (
 	intLen            = 8
 	tablePrefixLen    = len(tablePrefix)
 	recordPrefixLen   = len(recordPrefix)
+	indexPrefixLen    = len(indexPrefix)
 	metaPrefixLen     = len(metaPrefix)
 	prefixTableIdLen  = tablePrefixLen + intLen  /*tableId*/
 	prefixRecordIdLen = recordPrefixLen + intLen /*recordId*/
+	prefixIndexLen    = indexPrefixLen + intLen  /*indexId*/
 )
 
 // MetaType is for data structure meta/data flag.
@@ -79,6 +95,22 @@ func decodeRecordId(key []byte) (odd []byte, recordId int64, err error) {
 	return
 }
 
+func decodeIndexKey(key []byte) (indexId int64, indexValue []types.Datum, err error) {
+	if len(key) < prefixIndexLen || !hasIndexPrefix(key) {
+		return 0, nil, errors.Errorf("invalid record key - %q", key)
+	}
+	key = key[indexPrefixLen:]
+	key, indexId, err = codec.DecodeInt(key)
+	if err != nil {
+		return 0, nil, errors.Trace(err)
+	}
+	indexValue, err = codec.Decode(key, 2)
+	if err != nil {
+		return 0, nil, errors.Trace(err)
+	}
+	return
+}
+
 func decodeMetaKey(ek []byte) (key string, tp MetaType, field []byte, err error) {
 	if !hasMetaPrefix(ek) {
 		return "", UnknownMetaType, nil, errors.New("invalid encoded hash data key prefix")
@@ -106,32 +138,39 @@ func decodeMetaKey(ek []byte) (key string, tp MetaType, field []byte, err error)
 	return
 }
 
-// DecodeIndexKey decodes the key and gets the tableID, indexID, indexValues.
-//func DecodeIndexKey(key kv.Key) (tableID int64, indexID int64, indexValues []string, err error) {
-//	k := key
-//
-//	tableID, indexID, isRecord, err := DecodeKeyHead(key)
-//	if err != nil {
-//		return 0, 0, nil, errors.Trace(err)
-//	}
-//	if isRecord {
-//		return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid index key - %q", k)
-//	}
-//	key = key[prefixLen+intLen:]
-//
-//	for len(key) > 0 {
-//		// FIXME: Without the schema information, we can only decode the raw kind of
-//		// the column. For instance, MysqlTime is internally saved as uint64.
-//		remain, d, e := codec.DecodeOne(key)
-//		if e != nil {
-//			return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid index key - %q %v", k, e)
-//		}
-//		str, e1 := d.ToString()
-//		if e1 != nil {
-//			return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid index key - %q %v", k, e1)
-//		}
-//		indexValues = append(indexValues, str)
-//		key = remain
-//	}
-//	return
-//}
+// DecodeRowWithMap decodes a byte slice into datums with a existing row map.
+// Row layout: colID1, value1, colID2, value2, .....
+func decodeRow(b []byte) (map[int64]types.Datum, error) {
+	row := make(map[int64]types.Datum)
+	if b == nil {
+		return row, nil
+	}
+	if len(b) == 1 && b[0] == codec.NilFlag {
+		return row, nil
+	}
+	var err error
+	var data []byte
+	for len(b) > 0 {
+		// Get col id.
+		data, b, err = codec.CutOne(b)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		_, cid, err := codec.DecodeOne(data)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		// Get col value.
+		data, b, err = codec.CutOne(b)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		id := cid.GetInt64()
+		_, v, err := codec.DecodeOne(data)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		row[id] = v
+	}
+	return row, nil
+}
