@@ -6,6 +6,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/tidb-cdc/cdc/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -25,6 +27,7 @@ type emitEntry struct {
 	resolved *ResolvedSpan
 }
 
+// ChangeFeedDetail describe the detail of a ChangeFeed
 type ChangeFeedDetail struct {
 	SinkURI      string
 	Opts         map[string]string
@@ -33,14 +36,20 @@ type ChangeFeedDetail struct {
 }
 
 type ChangeFeed struct {
+	pdCli    pd.Client
 	detail   ChangeFeedDetail
 	frontier *Frontier
 }
 
-func NewChangeFeed(detail ChangeFeedDetail) *ChangeFeed {
+func NewChangeFeed(pdAddr []string, detail ChangeFeedDetail) (*ChangeFeed, error) {
+	pdCli, err := pd.NewClient(pdAddr, pd.SecurityOption{})
+	if err != nil {
+		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdAddr)
+	}
 	return &ChangeFeed{
 		detail: detail,
-	}
+		pdCli:  pdCli,
+	}, nil
 }
 
 func (c *ChangeFeed) Start(ctx context.Context) error {
@@ -50,13 +59,13 @@ func (c *ChangeFeed) Start(ctx context.Context) error {
 	}
 
 	var err error
-	c.frontier, err = NewFrontier([]Span{{nil, nil}}, c.detail)
+	c.frontier, err = NewFrontier([]util.Span{{nil, nil}}, c.detail)
 	if err != nil {
 		return errors.Annotate(err, "NewFrontier failed")
 	}
 
 	// TODO: just one capture watch all kv for test now
-	capure, err := NewCapture([]Span{{nil, nil}}, checkpointTS, c.detail)
+	capure, err := NewCapture(c.pdCli, []util.Span{{nil, nil}}, checkpointTS, c.detail)
 	if err != nil {
 		return errors.Annotate(err, "NewCapture failed")
 	}
@@ -78,7 +87,7 @@ func (c *ChangeFeed) Start(ctx context.Context) error {
 // The returned closure is not threadsafe.
 func kvsToRows(
 	detail ChangeFeedDetail,
-	inputFn func(context.Context) (bufferEntry, error),
+	inputFn func(context.Context) (BufferEntry, error),
 ) func(context.Context) (*emitEntry, error) {
 	panic("todo")
 }
@@ -89,7 +98,7 @@ func kvsToRows(
 // updates. The returned closure is not threadsafe.
 func emitEntries(
 	detail ChangeFeedDetail,
-	watchedSpans []Span,
+	watchedSpans []util.Span,
 	encoder Encoder,
 	sink Sink,
 	inputFn func(context.Context) (*emitEntry, error),
