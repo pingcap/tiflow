@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
-	"github.com/pingcap/tidb-cdc/kv_entry"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
@@ -49,14 +48,14 @@ type MockTiDBPuller struct {
 	kvs map[string][]byte
 }
 
-func (m *MockTiDBPuller) Pull(ranges []Range) <-chan kv_entry.RawKVEntry {
-	output := make(chan kv_entry.RawKVEntry)
+func (m *MockTiDBPuller) Pull() <-chan RawKVEntry {
+	output := make(chan RawKVEntry)
 	go func() {
 		for {
 			select {
 			case <-m.close:
 				close(output)
-				log.Info("Puller exited", zap.Reflect("ranges", ranges))
+				log.Info("MockTiDBPuller exited")
 				return
 			case <-time.After(50 * time.Millisecond):
 				err := m.updateEvent(output)
@@ -149,7 +148,7 @@ func (m *MockTiDBPuller) run() {
 // We scan all the KV space to get the changed KV events every time after
 // execute a SQL and use the current version as the ts of the KV events
 // because there's no way to get the true commit ts of the kv
-func (m *MockTiDBPuller) updateEvent(kvChan chan<- kv_entry.RawKVEntry) error {
+func (m *MockTiDBPuller) updateEvent(kvChan chan<- RawKVEntry) error {
 	newKVS := make(map[string][]byte)
 	ts, err := m.scan(newKVS)
 	if err != nil {
@@ -160,8 +159,8 @@ func (m *MockTiDBPuller) updateEvent(kvChan chan<- kv_entry.RawKVEntry) error {
 	for k, v := range newKVS {
 		oldV, _ := m.kvs[k]
 		if !reflect.DeepEqual(oldV, v) {
-			entry := kv_entry.RawKVEntry{
-				OpType: kv_entry.OpTypePut,
+			entry := RawKVEntry{
+				OpType: OpTypePut,
 				Key:    []byte(k),
 				Value:  v,
 				Ts:     ts,
@@ -174,8 +173,8 @@ func (m *MockTiDBPuller) updateEvent(kvChan chan<- kv_entry.RawKVEntry) error {
 	for k, v := range m.kvs {
 		_, ok := newKVS[k]
 		if !ok {
-			entry := kv_entry.RawKVEntry{
-				OpType: kv_entry.OpTypeDelete,
+			entry := RawKVEntry{
+				OpType: OpTypeDelete,
 				Key:    []byte(k),
 				Value:  v,
 				Ts:     ts,
@@ -185,8 +184,8 @@ func (m *MockTiDBPuller) updateEvent(kvChan chan<- kv_entry.RawKVEntry) error {
 	}
 
 	// sned resolved ts
-	kvChan <- kv_entry.RawKVEntry{
-		OpType: kv_entry.OpResolvedTS,
+	kvChan <- RawKVEntry{
+		OpType: OpResolvedTS,
 		Ts:     ts,
 	}
 
@@ -205,7 +204,7 @@ func (s *mockTiDBPullerSuite) TestCanGetKVEntrys(c *check.C) {
 	sqlChan := make(chan string)
 	puller, err := NewMockTiDBPuller(c, sqlChan)
 	c.Assert(err, check.IsNil)
-	rawKvChan := puller.Pull([]Range{})
+	rawKvChan := puller.Pull()
 	sqls := []string{
 		"create table test.pkh(id int primary key, a int)",
 		"create table test.pknh(id varchar(255) primary key, a int)",
@@ -226,12 +225,12 @@ func (s *mockTiDBPullerSuite) TestCanGetKVEntrys(c *check.C) {
 		time.Sleep(1 * time.Second)
 		puller.Close()
 	}()
-	var rawKvs []kv_entry.RawKVEntry
+	var rawKvs []RawKVEntry
 	for rawKv := range rawKvChan {
 		rawKvs = append(rawKvs, rawKv)
-		kvEntry, err := kv_entry.Unmarshal(&rawKv)
+		kvEntry, err := Unmarshal(&rawKv)
 		c.Assert(err, check.IsNil)
-		if e, ok := kvEntry.(*kv_entry.UnknownKVEntry); ok {
+		if e, ok := kvEntry.(*UnknownKVEntry); ok {
 			fmt.Printf("key: %s, value: %s, op: %d\n", string(e.Key), string(e.Value), e.OpType)
 		} else {
 			log.Info("kv entry", zap.Reflect("kvEntry", kvEntry))

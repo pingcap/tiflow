@@ -43,7 +43,7 @@ dev: check test
 build: cdc
 
 cdc:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc cmd/cdc/main.go
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
 
 install:
 	go install ./...

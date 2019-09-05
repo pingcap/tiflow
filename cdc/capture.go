@@ -13,11 +13,17 @@
 
 package cdc
 
-import "context"
+import (
+	"context"
+
+	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/tidb-cdc/cdc/util"
+)
 
 // Capture watch some span of KV and emit the entries to sink according to the ChangeFeedDetail
 type Capture struct {
-	watchs       []Span
+	pdCli        pd.Client
+	watchs       []util.Span
 	checkpointTS uint64
 	encoder      Encoder
 	detail       ChangeFeedDetail
@@ -32,12 +38,13 @@ type Capture struct {
 }
 
 type ResolvedSpan struct {
-	Span      Span
+	Span      util.Span
 	Timestamp uint64
 }
 
 func NewCapture(
-	watchs []Span,
+	pdCli pd.Client,
+	watchs []util.Span,
 	checkpointTS uint64,
 	detail ChangeFeedDetail,
 ) (c *Capture, err error) {
@@ -52,6 +59,7 @@ func NewCapture(
 	}
 
 	c = &Capture{
+		pdCli:        pdCli,
 		watchs:       watchs,
 		checkpointTS: checkpointTS,
 		encoder:      encoder,
@@ -66,9 +74,9 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	ctx, c.cancel = context.WithCancel(ctx)
 	defer c.cancel()
 
-	buf := makeBuffer()
+	buf := MakeBuffer()
 
-	puller := newPuller(c.checkpointTS, c.watchs, c.detail, buf)
+	puller := NewPuller(c.pdCli, c.checkpointTS, c.watchs, c.detail, buf)
 	c.errCh = make(chan error, 2)
 	go func() {
 		err := puller.Run(ctx)
@@ -96,13 +104,13 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 // Frontier handle all ResolvedSpan and emit resolved timestamp
 type Frontier struct {
 	// once all the span receive a resolved ts, it's safe to emit a changefeed level resolved ts
-	spans   []Span
+	spans   []util.Span
 	detail  ChangeFeedDetail
 	encoder Encoder
 	sink    Sink
 }
 
-func NewFrontier(spans []Span, detail ChangeFeedDetail) (f *Frontier, err error) {
+func NewFrontier(spans []util.Span, detail ChangeFeedDetail) (f *Frontier, err error) {
 	encoder, err := getEncoder(detail.Opts)
 	if err != nil {
 		return nil, err

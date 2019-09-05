@@ -1,40 +1,39 @@
-// Copyright 2019 PingCAP, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package cdc
 
 import (
 	"context"
-	"github.com/pingcap/tidb-cdc/kv_entry"
+
+	"github.com/pingcap/tidb-cdc/cdc/util"
 )
 
 // buffer entry from kv layer
-type bufferEntry struct {
-	kv       *kv_entry.RawKVEntry
-	resolved *ResolvedSpan
+type BufferEntry struct {
+	KV       *RawKVEntry
+	Resolved *ResolvedSpan
 }
 
-type buffer struct {
-	entriesCh chan bufferEntry
-}
-
-func makeBuffer() *buffer {
-	return &buffer{
-		entriesCh: make(chan bufferEntry),
+func (e *BufferEntry) GetValue() interface{} {
+	if e.KV != nil {
+		return e.KV
+	} else if e.Resolved != nil {
+		return e.Resolved
+	} else {
+		return nil
 	}
 }
 
-func (b *buffer) AddEntry(ctx context.Context, entry bufferEntry) error {
+// Buffer buffer kv entry
+type Buffer struct {
+	entriesCh chan BufferEntry
+}
+
+func MakeBuffer() *Buffer {
+	return &Buffer{
+		entriesCh: make(chan BufferEntry),
+	}
+}
+
+func (b *Buffer) AddEntry(ctx context.Context, entry BufferEntry) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -43,18 +42,18 @@ func (b *buffer) AddEntry(ctx context.Context, entry bufferEntry) error {
 	}
 }
 
-func (b *buffer) AddKVEntry(ctx context.Context, kv *kv_entry.RawKVEntry) error {
-	return b.AddEntry(ctx, bufferEntry{kv: kv})
+func (b *Buffer) AddKVEntry(ctx context.Context, kv *RawKVEntry) error {
+	return b.AddEntry(ctx, BufferEntry{KV: kv})
 }
 
-func (b *buffer) AddResolved(ctx context.Context, span Span, ts uint64) error {
-	return b.AddEntry(ctx, bufferEntry{resolved: &ResolvedSpan{Span: span, Timestamp: ts}})
+func (b *Buffer) AddResolved(ctx context.Context, span util.Span, ts uint64) error {
+	return b.AddEntry(ctx, BufferEntry{Resolved: &ResolvedSpan{Span: span, Timestamp: ts}})
 }
 
-func (b *buffer) Get(ctx context.Context) (bufferEntry, error) {
+func (b *Buffer) Get(ctx context.Context) (BufferEntry, error) {
 	select {
 	case <-ctx.Done():
-		return bufferEntry{}, ctx.Err()
+		return BufferEntry{}, ctx.Err()
 	case e := <-b.entriesCh:
 		return e, nil
 	}
