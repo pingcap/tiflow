@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type OpType int
@@ -61,7 +62,7 @@ type IndexKVEntry struct {
 
 type DDLJobHistoryKVEntry struct {
 	Ts    uint64
-	JobId uint64
+	JobId int64
 	Job   *model.Job
 }
 
@@ -78,6 +79,42 @@ type ResolvedTS struct {
 
 type UnknownKVEntry struct {
 	RawKVEntry
+}
+
+func (idx *IndexKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Location) error {
+	if tableInfo.ID != idx.TableId {
+		return errors.New("wrong table info in Unflatten")
+	}
+	index := tableInfo.Indices[idx.IndexId-1]
+	if !(index.Unique || index.Primary) {
+		idx.RecordId = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
+		idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-1]
+	}
+	for i, v := range idx.IndexValue {
+		colOffset := index.Columns[i].Offset
+		fieldType := &tableInfo.Columns[colOffset].FieldType
+		datum, err := unflatten(v, fieldType, loc)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		idx.IndexValue[i] = datum
+	}
+	return nil
+}
+
+func (row *RowKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Location) error {
+	if tableInfo.ID != row.TableId {
+		return errors.New("wrong table info in Unflatten")
+	}
+	for i, v := range row.Row {
+		fieldType := &tableInfo.Columns[i-1].FieldType
+		datum, err := unflatten(v, fieldType, loc)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		row.Row[i] = datum
+	}
+	return nil
 }
 
 func Unmarshal(raw *RawKVEntry) (KVEntry, error) {
@@ -121,7 +158,9 @@ func unmarshalTableKVEntry(raw *RawKVEntry) (KVEntry, error) {
 			return nil, errors.Trace(err)
 		}
 		var recordId int64
-		if len(raw.Value) > 0 {
+
+		if len(raw.Value) == 8 {
+			// primary key or unique index
 			buf := bytes.NewBuffer(raw.Value)
 			err = binary.Read(buf, binary.BigEndian, &recordId)
 			if err != nil {
@@ -172,7 +211,7 @@ func unmarshalMetaKVEntry(raw *RawKVEntry) (KVEntry, error) {
 			}
 			return &DDLJobHistoryKVEntry{
 				Ts:    raw.Ts,
-				JobId: jobId,
+				JobId: int64(jobId),
 				Job:   job,
 			}, nil
 		}

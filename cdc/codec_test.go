@@ -16,7 +16,10 @@ package cdc
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/tablecodec"
+	"testing"
 )
+
+func Test(t *testing.T) { check.TestingT(t) }
 
 type codecSuite struct {
 }

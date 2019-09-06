@@ -16,8 +16,10 @@ package cdc
 import (
 	"bytes"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
+	"time"
 )
 
 var (
@@ -161,4 +163,64 @@ func decodeRow(b []byte) (map[int64]types.Datum, error) {
 		row[id] = v
 	}
 	return row, nil
+}
+
+// unflatten converts a raw datum to a column datum.
+func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (types.Datum, error) {
+	if datum.IsNull() {
+		return datum, nil
+	}
+	switch ft.Tp {
+	case mysql.TypeFloat:
+		datum.SetFloat32(float32(datum.GetFloat64()))
+		return datum, nil
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeYear, mysql.TypeInt24,
+		mysql.TypeLong, mysql.TypeLonglong, mysql.TypeDouble, mysql.TypeTinyBlob,
+		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob, mysql.TypeVarchar,
+		mysql.TypeString:
+		return datum, nil
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
+		var t types.Time
+		t.Type = ft.Tp
+		t.Fsp = ft.Decimal
+		var err error
+		err = t.FromPackedUint(datum.GetUint64())
+		if err != nil {
+			return datum, errors.Trace(err)
+		}
+		if ft.Tp == mysql.TypeTimestamp && !t.IsZero() {
+			err = t.ConvertTimeZone(time.UTC, loc)
+			if err != nil {
+				return datum, errors.Trace(err)
+			}
+		}
+		datum.SetUint64(0)
+		datum.SetMysqlTime(t)
+		return datum, nil
+	case mysql.TypeDuration: //duration should read fsp from column meta data
+		dur := types.Duration{Duration: time.Duration(datum.GetInt64()), Fsp: ft.Decimal}
+		datum.SetValue(dur)
+		return datum, nil
+	case mysql.TypeEnum:
+		// ignore error deliberately, to read empty enum value.
+		enum, err := types.ParseEnumValue(ft.Elems, datum.GetUint64())
+		if err != nil {
+			enum = types.Enum{}
+		}
+		datum.SetValue(enum)
+		return datum, nil
+	case mysql.TypeSet:
+		set, err := types.ParseSetValue(ft.Elems, datum.GetUint64())
+		if err != nil {
+			return datum, errors.Trace(err)
+		}
+		datum.SetValue(set)
+		return datum, nil
+	case mysql.TypeBit:
+		val := datum.GetUint64()
+		byteSize := (ft.Flen + 7) >> 3
+		datum.SetUint64(0)
+		datum.SetMysqlBit(types.NewBinaryLiteralFromUint(val, byteSize))
+	}
+	return datum, nil
 }
