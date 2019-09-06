@@ -82,9 +82,9 @@ type UnknownKVEntry struct {
 
 func Unmarshal(raw *RawKVEntry) (KVEntry, error) {
 	switch {
-	case hasTablePrefix(raw.Key):
+	case bytes.HasPrefix(raw.Key, tablePrefix):
 		return unmarshalTableKVEntry(raw)
-	case hasMetaPrefix(raw.Key):
+	case bytes.HasPrefix(raw.Key, metaPrefix):
 		return unmarshalMetaKVEntry(raw)
 	}
 	return &UnknownKVEntry{*raw}, nil
@@ -96,7 +96,7 @@ func unmarshalTableKVEntry(raw *RawKVEntry) (KVEntry, error) {
 		return nil, errors.Trace(err)
 	}
 	switch {
-	case hasRecordPrefix(key):
+	case bytes.HasPrefix(key, recordPrefix):
 		key, recordId, err := decodeRecordId(key)
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -115,7 +115,7 @@ func unmarshalTableKVEntry(raw *RawKVEntry) (KVEntry, error) {
 			Delete:   raw.OpType == OpTypeDelete,
 			Row:      row,
 		}, nil
-	case hasIndexPrefix(key):
+	case bytes.HasPrefix(key, indexPrefix):
 		indexId, indexValue, err := decodeIndexKey(key)
 		if err != nil {
 			return nil, errors.Trace(err)

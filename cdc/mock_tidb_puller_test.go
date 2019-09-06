@@ -202,14 +202,14 @@ func (s *mockTiDBPullerSuite) TestCanGetKVEntrys(c *check.C) {
 	sqls := []string{
 		"create table test.pkh(id int primary key, a int)",
 		"create table test.pknh(id varchar(255) primary key, a int)",
-		"insert into test.pkh(id, a) values(1, 2)",
-		"insert into test.pknh(id, a) values('1', 2)",
-		"insert into test.pkh(id, a) values(2, 3)",
-		"insert into test.pknh(id, a) values('2', 3)",
-		"delete from test.pkh where id = 1",
-		"delete from test.pknh where id = '1'",
-		"update test.pkh set id = 1 where id = 2",
-		"update test.pknh set id = 1 where id = 2",
+		"insert into test.pkh(id, a) values(6, 2)",
+		"insert into test.pknh(id, a) values('6', 2)",
+		"insert into test.pkh(id, a) values(8, 3)",
+		"insert into test.pknh(id, a) values('8', 3)",
+		"delete from test.pkh where id = 6",
+		"delete from test.pknh where id = '6'",
+		"update test.pkh set id = 81 where id = 8",
+		"update test.pknh set id = '11' where id = '8'",
 	}
 	go func() {
 		for _, sql := range sqls {

@@ -14,6 +14,7 @@
 package cdc
 
 import (
+	"bytes"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
@@ -56,23 +57,8 @@ const (
 	ListData MetaType = 'l'
 )
 
-func hasTablePrefix(key []byte) bool {
-	return key[0] == tablePrefix[0]
-}
-
-func hasRecordPrefix(key []byte) bool {
-	return key[0] == recordPrefix[0] && key[1] == recordPrefix[1]
-}
-
-func hasIndexPrefix(key []byte) bool {
-	return key[0] == indexPrefix[0] && key[1] == indexPrefix[1]
-}
-func hasMetaPrefix(key []byte) bool {
-	return key[0] == metaPrefix[0]
-}
-
 func decodeTableId(key []byte) (odd []byte, tableId int64, err error) {
-	if len(key) < prefixTableIdLen || !hasTablePrefix(key) {
+	if len(key) < prefixTableIdLen || !bytes.HasPrefix(key, tablePrefix) {
 		return nil, 0, errors.Errorf("invalid record key - %q", key)
 	}
 	key = key[tablePrefixLen:]
@@ -84,7 +70,7 @@ func decodeTableId(key []byte) (odd []byte, tableId int64, err error) {
 }
 
 func decodeRecordId(key []byte) (odd []byte, recordId int64, err error) {
-	if len(key) < prefixRecordIdLen || !hasRecordPrefix(key) {
+	if len(key) < prefixRecordIdLen || !bytes.HasPrefix(key, recordPrefix) {
 		return nil, 0, errors.Errorf("invalid record key - %q", key)
 	}
 	key = key[recordPrefixLen:]
@@ -96,7 +82,7 @@ func decodeRecordId(key []byte) (odd []byte, recordId int64, err error) {
 }
 
 func decodeIndexKey(key []byte) (indexId int64, indexValue []types.Datum, err error) {
-	if len(key) < prefixIndexLen || !hasIndexPrefix(key) {
+	if len(key) < prefixIndexLen || !bytes.HasPrefix(key, indexPrefix) {
 		return 0, nil, errors.Errorf("invalid record key - %q", key)
 	}
 	key = key[indexPrefixLen:]
@@ -112,7 +98,7 @@ func decodeIndexKey(key []byte) (indexId int64, indexValue []types.Datum, err er
 }
 
 func decodeMetaKey(ek []byte) (key string, tp MetaType, field []byte, err error) {
-	if !hasMetaPrefix(ek) {
+	if !bytes.HasPrefix(ek, metaPrefix) {
 		return "", UnknownMetaType, nil, errors.New("invalid encoded hash data key prefix")
 	}
 
@@ -160,16 +146,18 @@ func decodeRow(b []byte) (map[int64]types.Datum, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		id := cid.GetInt64()
+
 		// Get col value.
 		data, b, err = codec.CutOne(b)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		id := cid.GetInt64()
 		_, v, err := codec.DecodeOne(data)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+
 		row[id] = v
 	}
 	return row, nil
