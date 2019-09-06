@@ -59,24 +59,24 @@ const (
 	ListData MetaType = 'l'
 )
 
-func decodeTableId(key []byte) (odd []byte, tableId int64, err error) {
+func decodeTableId(key []byte) (rest []byte, tableId int64, err error) {
 	if len(key) < prefixTableIdLen || !bytes.HasPrefix(key, tablePrefix) {
 		return nil, 0, errors.Errorf("invalid record key - %q", key)
 	}
 	key = key[tablePrefixLen:]
-	odd, tableId, err = codec.DecodeInt(key)
+	rest, tableId, err = codec.DecodeInt(key)
 	if err != nil {
 		return nil, 0, errors.Trace(err)
 	}
 	return
 }
 
-func decodeRecordId(key []byte) (odd []byte, recordId int64, err error) {
+func decodeRecordId(key []byte) (rest []byte, recordId int64, err error) {
 	if len(key) < prefixRecordIdLen || !bytes.HasPrefix(key, recordPrefix) {
 		return nil, 0, errors.Errorf("invalid record key - %q", key)
 	}
 	key = key[recordPrefixLen:]
-	odd, recordId, err = codec.DecodeInt(key)
+	rest, recordId, err = codec.DecodeInt(key)
 	if err != nil {
 		return nil, 0, errors.Trace(err)
 	}
