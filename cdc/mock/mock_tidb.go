@@ -1,7 +1,6 @@
-package cdc
+package mock
 
 import (
-	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
@@ -14,6 +13,8 @@ import (
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/testkit"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/check"
 )
 
 type MockTiDB struct {
@@ -35,6 +36,9 @@ func NewMockPuller(c *check.C) (*MockTiDB, error) {
 	}
 
 	if err := p.setUp(); err != nil {
+		return nil, err
+	}
+	if _, err := p.updateEvent(); err != nil {
 		return nil, err
 	}
 
@@ -74,7 +78,7 @@ func (p *MockTiDB) tearDown() {
 // We scan all the KV space to get the changed KV events every time after
 // execute a SQL and use the current version as the ts of the KV events
 // because there's no way to get the true commit ts of the kv
-func (p *MockTiDB) updateEvent() (entrys []cdc.KVEntry, err error) {
+func (p *MockTiDB) updateEvent() (entrys []cdc.RawKVEntry, err error) {
 	ver, err := p.store.CurrentVersion()
 	if err != nil {
 		return nil, err
@@ -97,11 +101,11 @@ func (p *MockTiDB) updateEvent() (entrys []cdc.KVEntry, err error) {
 	for k, v := range newKVS {
 		oldv, _ := p.kvs[k]
 		if oldv != v {
-			entry := cdc.KVEntry{
+			entry := cdc.RawKVEntry{
 				OpType: cdc.OpTypePut,
 				Key:    []byte(k),
 				Value:  []byte(v),
-				TS:     ts,
+				Ts:     ts,
 			}
 
 			entrys = append(entrys, entry)
@@ -109,14 +113,13 @@ func (p *MockTiDB) updateEvent() (entrys []cdc.KVEntry, err error) {
 	}
 
 	// Delete
-	for k, v := range p.kvs {
+	for k := range p.kvs {
 		_, ok := newKVS[k]
 		if !ok {
-			entry := cdc.KVEntry{
+			entry := cdc.RawKVEntry{
 				OpType: cdc.OpTypeDelete,
 				Key:    []byte(k),
-				Value:  []byte(v),
-				TS:     ts,
+				Ts:     ts,
 			}
 			entrys = append(entrys, entry)
 		}
@@ -128,7 +131,7 @@ func (p *MockTiDB) updateEvent() (entrys []cdc.KVEntry, err error) {
 }
 
 // MustExec execute the sql and return all the KVEntry events
-func (p *MockTiDB) MustExec(sql string, args ...interface{}) []cdc.KVEntry {
+func (p *MockTiDB) MustExec(sql string, args ...interface{}) []cdc.RawKVEntry {
 	tk := testkit.NewTestKit(p.c, p.store)
 	tk.MustExec(sql, args...)
 

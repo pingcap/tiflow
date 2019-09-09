@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cdc
 
 import (
@@ -16,6 +29,13 @@ const (
 	OpTypeDelete OpType = 2
 )
 
+type RawKVEntry struct {
+	OpType OpType
+	Key    []byte
+	Value  []byte
+	Ts     uint64
+}
+
 // Capture watch some span of KV and emit the entries to sink according to the ChangeFeedDetail
 type Capture struct {
 	pdCli        pd.Client
@@ -31,13 +51,6 @@ type Capture struct {
 	// sink is the Sink to write rows to.
 	// Resolved timestamps are never written by Capture
 	sink Sink
-}
-
-type KVEntry struct {
-	OpType OpType
-	Key    []byte
-	Value  []byte
-	TS     uint64
 }
 
 type ResolvedSpan struct {
@@ -145,7 +158,7 @@ func (f *Frontier) NotifyResolvedSpan(resolve ResolvedSpan) error {
 // RawTxn represents a complete collection of entries that belong to the same transaction
 type RawTxn struct {
 	ts      uint64
-	entries []*KVEntry
+	entries []*RawKVEntry
 }
 
 // TODO: Add unit tests
@@ -153,14 +166,14 @@ func collectRawTxns(ctx context.Context, inputFn func(context.Context) (BufferEn
 	rawTxns := make(chan RawTxn)
 	go func() {
 		defer close(rawTxns)
-		entryGroups := make(map[uint64][]*KVEntry)
+		entryGroups := make(map[uint64][]*RawKVEntry)
 		for {
 			be, err := inputFn(ctx)
 			if err != nil {
 				return
 			}
 			if be.KV != nil {
-				entryGroups[be.KV.TS] = append(entryGroups[be.KV.TS], be.KV)
+				entryGroups[be.KV.Ts] = append(entryGroups[be.KV.Ts], be.KV)
 			} else if be.Resolved != nil {
 				resolvedTs := be.Resolved.Timestamp
 				var readyTxns []RawTxn

@@ -2,13 +2,12 @@ package cdc
 
 import (
 	"context"
-
 	"github.com/pingcap/tidb-cdc/cdc/util"
 )
 
 // buffer entry from kv layer
 type BufferEntry struct {
-	KV       *KVEntry
+	KV       *RawKVEntry
 	Resolved *ResolvedSpan
 }
 
@@ -42,7 +41,7 @@ func (b *Buffer) AddEntry(ctx context.Context, entry BufferEntry) error {
 	}
 }
 
-func (b *Buffer) AddKVEntry(ctx context.Context, kv *KVEntry) error {
+func (b *Buffer) AddKVEntry(ctx context.Context, kv *RawKVEntry) error {
 	return b.AddEntry(ctx, BufferEntry{KV: kv})
 }
 
