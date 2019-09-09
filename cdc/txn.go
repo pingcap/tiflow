@@ -50,7 +50,6 @@ type DML struct {
 	Values   map[string]interface{}
 	// only set when Tp = UpdateDMLType
 	OldValues map[string]interface{}
-	// TODO: info *tableInfo
 }
 
 // DDL holds the ddl info
