@@ -113,7 +113,7 @@ func (p *MockTiDB) updateEvent() (entrys []cdc.RawKVEntry, err error) {
 	}
 
 	// Delete
-	for k, _ := range p.kvs {
+	for k := range p.kvs {
 		_, ok := newKVS[k]
 		if !ok {
 			entry := cdc.RawKVEntry{
