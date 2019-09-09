@@ -16,6 +16,8 @@ package cdc
 import (
 	"context"
 	"sort"
+
+	"github.com/pingcap/tidb/types"
 )
 
 type sqlType int
@@ -47,9 +49,9 @@ type DML struct {
 	Database string
 	Table    string
 	Tp       DMLType
-	Values   map[string]interface{}
+	Values   map[string]types.Datum
 	// only set when Tp = UpdateDMLType
-	OldValues map[string]interface{}
+	OldValues map[string]types.Datum
 }
 
 // DDL holds the ddl info
