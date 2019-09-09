@@ -1,9 +1,10 @@
-package cdc
+package mock
 
 import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
+	"github.com/pingcap/tidb-cdc/cdc"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
@@ -77,7 +78,7 @@ func (p *MockTiDB) tearDown() {
 // We scan all the KV space to get the changed KV events every time after
 // execute a SQL and use the current version as the ts of the KV events
 // because there's no way to get the true commit ts of the kv
-func (p *MockTiDB) updateEvent() (entrys []RawKVEntry, err error) {
+func (p *MockTiDB) updateEvent() (entrys []cdc.RawKVEntry, err error) {
 	ver, err := p.store.CurrentVersion()
 	if err != nil {
 		return nil, err
@@ -100,8 +101,8 @@ func (p *MockTiDB) updateEvent() (entrys []RawKVEntry, err error) {
 	for k, v := range newKVS {
 		oldv, _ := p.kvs[k]
 		if oldv != v {
-			entry := RawKVEntry{
-				OpType: OpTypePut,
+			entry := cdc.RawKVEntry{
+				OpType: cdc.OpTypePut,
 				Key:    []byte(k),
 				Value:  []byte(v),
 				Ts:     ts,
@@ -115,8 +116,8 @@ func (p *MockTiDB) updateEvent() (entrys []RawKVEntry, err error) {
 	for k, _ := range p.kvs {
 		_, ok := newKVS[k]
 		if !ok {
-			entry := RawKVEntry{
-				OpType: OpTypeDelete,
+			entry := cdc.RawKVEntry{
+				OpType: cdc.OpTypeDelete,
 				Key:    []byte(k),
 				Ts:     ts,
 			}
@@ -130,7 +131,7 @@ func (p *MockTiDB) updateEvent() (entrys []RawKVEntry, err error) {
 }
 
 // MustExec execute the sql and return all the KVEntry events
-func (p *MockTiDB) MustExec(sql string, args ...interface{}) []RawKVEntry {
+func (p *MockTiDB) MustExec(sql string, args ...interface{}) []cdc.RawKVEntry {
 	tk := testkit.NewTestKit(p.c, p.store)
 	tk.MustExec(sql, args...)
 
@@ -138,27 +139,4 @@ func (p *MockTiDB) MustExec(sql string, args ...interface{}) []RawKVEntry {
 	p.c.Assert(err, check.IsNil)
 
 	return entrys
-}
-
-type mockTiDBsuite struct {
-}
-
-var _ = check.Suite(&mockTiDBsuite{})
-
-func (s *mockTiDBsuite) TestCanGetKVEntrys(c *check.C) {
-	puller, err := NewMockPuller(c)
-	c.Assert(err, check.IsNil)
-
-	var entrys []RawKVEntry
-	entrys = puller.MustExec("create table test.test(id varchar(255) primary key, a int)")
-	c.Assert(len(entrys), check.Greater, 0)
-	c.Log(len(entrys))
-
-	entrys = puller.MustExec("insert into test.test(id, a) values(?, ?)", 1, 1)
-	c.Assert(len(entrys), check.Greater, 0)
-	c.Logf("%+v", entrys)
-
-	entrys = puller.MustExec("delete from test.test")
-	c.Assert(len(entrys), check.Greater, 0)
-	c.Logf("%+v", entrys)
 }

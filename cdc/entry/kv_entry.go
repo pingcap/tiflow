@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package entry
 
 import (
 	"bytes"
@@ -19,26 +19,12 @@ import (
 	"encoding/json"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb-cdc/cdc"
 	"github.com/pingcap/tidb/types"
 	"strconv"
 	"strings"
 	"time"
 )
-
-type OpType int
-
-const (
-	OpTypeUnknow OpType = 0
-	OpTypePut    OpType = 1
-	OpTypeDelete OpType = 2
-)
-
-type RawKVEntry struct {
-	OpType OpType
-	Key    []byte
-	Value  []byte
-	Ts     uint64
-}
 
 type KVEntry interface {
 }
@@ -78,7 +64,7 @@ type ResolvedTS struct {
 }
 
 type UnknownKVEntry struct {
-	RawKVEntry
+	cdc.RawKVEntry
 }
 
 func (idx *IndexKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Location) error {
@@ -117,7 +103,7 @@ func (row *RowKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Location)
 	return nil
 }
 
-func Unmarshal(raw *RawKVEntry) (KVEntry, error) {
+func Unmarshal(raw *cdc.RawKVEntry) (KVEntry, error) {
 	switch {
 	case bytes.HasPrefix(raw.Key, tablePrefix):
 		return unmarshalTableKVEntry(raw)
@@ -127,7 +113,7 @@ func Unmarshal(raw *RawKVEntry) (KVEntry, error) {
 	return &UnknownKVEntry{*raw}, nil
 }
 
-func unmarshalTableKVEntry(raw *RawKVEntry) (KVEntry, error) {
+func unmarshalTableKVEntry(raw *cdc.RawKVEntry) (KVEntry, error) {
 	key, tableId, err := decodeTableId(raw.Key)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -149,7 +135,7 @@ func unmarshalTableKVEntry(raw *RawKVEntry) (KVEntry, error) {
 			Ts:       raw.Ts,
 			TableId:  tableId,
 			RecordId: recordId,
-			Delete:   raw.OpType == OpTypeDelete,
+			Delete:   raw.OpType == cdc.OpTypeDelete,
 			Row:      row,
 		}, nil
 	case bytes.HasPrefix(key, indexPrefix):
@@ -172,7 +158,7 @@ func unmarshalTableKVEntry(raw *RawKVEntry) (KVEntry, error) {
 			TableId:    tableId,
 			IndexId:    indexId,
 			IndexValue: indexValue,
-			Delete:     raw.OpType == OpTypeDelete,
+			Delete:     raw.OpType == cdc.OpTypeDelete,
 			RecordId:   recordId,
 		}, nil
 
@@ -195,7 +181,7 @@ var (
 	tableMetaPrefixLen = len(tableMetaPrefix)
 )
 
-func unmarshalMetaKVEntry(raw *RawKVEntry) (KVEntry, error) {
+func unmarshalMetaKVEntry(raw *cdc.RawKVEntry) (KVEntry, error) {
 	key, tp, field, err := decodeMetaKey(raw.Key)
 	if err != nil {
 		return nil, errors.Trace(err)

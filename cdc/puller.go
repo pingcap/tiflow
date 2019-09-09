@@ -15,7 +15,6 @@ package cdc
 
 import (
 	"context"
-
 	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"

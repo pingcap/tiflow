@@ -1,9 +1,11 @@
-package cdc
+package entry
 
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb-cdc/cdc"
+	"github.com/pingcap/tidb-cdc/cdc/mock"
 	"github.com/pingcap/tidb/types"
 	"reflect"
 	"time"
@@ -15,7 +17,7 @@ type kvEntrySuite struct {
 var _ = check.Suite(&kvEntrySuite{})
 
 func (s *kvEntrySuite) TestCreateTable(c *check.C) {
-	puller, err := NewMockPuller(c)
+	puller, err := mock.NewMockPuller(c)
 	c.Assert(err, check.IsNil)
 	rawEntries := puller.MustExec("create table test.test1(id varchar(255) primary key, a int, index i1 (a))")
 	existUpdateTableKVEntry := false
@@ -41,7 +43,7 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 			c.Assert(e.TableInfo.Indices[0].Unique, check.IsFalse)
 			c.Assert(e.TableInfo.Indices[0].Columns[0].Name.O, check.Equals, "a")
 			c.Assert(e.TableInfo.Indices[0].Columns[0].Offset, check.Equals, 1)
-			// primart index
+			// primary index
 			c.Assert(e.TableInfo.Indices[1].Name.O, check.Equals, "PRIMARY")
 			c.Assert(e.TableInfo.Indices[1].Tp, check.Equals, model.IndexTypeBtree)
 			c.Assert(e.TableInfo.Indices[1].Unique, check.IsTrue)
@@ -93,7 +95,7 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 }
 
 func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
-	puller, err := NewMockPuller(c)
+	puller, err := mock.NewMockPuller(c)
 	c.Assert(err, check.IsNil)
 	rawEntries := puller.MustExec("create table test.test1(id varchar(255) primary key, a int, index ci (a))")
 	var tableInfo *model.TableInfo
@@ -179,7 +181,7 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 }
 
 func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
-	puller, err := NewMockPuller(c)
+	puller, err := mock.NewMockPuller(c)
 	c.Assert(err, check.IsNil)
 	rawEntries := puller.MustExec("create table test.test2(id int primary key, b varchar(255) unique key)")
 	var tableInfo *model.TableInfo
@@ -265,7 +267,7 @@ func assertIn(c *check.C, item KVEntry, expect []KVEntry) {
 	c.Fatalf("item {%#v} is not exist in expect {%#v}", item, expect)
 }
 
-func checkDMLKVEntries(c *check.C, tableInfo *model.TableInfo, rawEntries []RawKVEntry, expect []KVEntry) {
+func checkDMLKVEntries(c *check.C, tableInfo *model.TableInfo, rawEntries []cdc.RawKVEntry, expect []KVEntry) {
 	for _, raw := range rawEntries {
 		entry, err := Unmarshal(&raw)
 		c.Assert(err, check.IsNil)

@@ -2,7 +2,6 @@ package cdc
 
 import (
 	"context"
-
 	"github.com/pingcap/tidb-cdc/cdc/util"
 )
 
