@@ -97,9 +97,5 @@ func (p *Puller) Run(ctx context.Context) error {
 		}
 	})
 
-	if err := g.Wait(); err != nil {
-		return err
-	}
-
-	return nil
+	return g.Wait()
 }
