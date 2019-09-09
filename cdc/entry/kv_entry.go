@@ -59,10 +59,6 @@ type UpdateTableKVEntry struct {
 	TableInfo *model.TableInfo
 }
 
-type ResolvedTS struct {
-	Ts uint64
-}
-
 type UnknownKVEntry struct {
 	cdc.RawKVEntry
 }

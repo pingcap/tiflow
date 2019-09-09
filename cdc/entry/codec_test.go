@@ -37,3 +37,5 @@ func (s *codecSuite) TestDecodeRecordKey(c *check.C) {
 	c.Assert(recordId, check.Equals, int64(67890))
 	c.Assert(len(key), check.Equals, 0)
 }
+
+// TODO add more tests

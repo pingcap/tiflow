@@ -126,7 +126,7 @@ func decodeMetaKey(ek []byte) (key string, tp MetaType, field []byte, err error)
 	return
 }
 
-// DecodeRowWithMap decodes a byte slice into datums with a existing row map.
+// decodeRow decodes a byte slice into datums with a existing row map.
 // Row layout: colID1, value1, colID2, value2, .....
 func decodeRow(b []byte) (map[int64]types.Datum, error) {
 	row := make(map[int64]types.Datum)
