@@ -163,20 +163,19 @@ func collectRawTxns(ctx context.Context, inputFn func(context.Context) (BufferEn
 				entryGroups[be.KV.TS] = append(entryGroups[be.KV.TS], be.KV)
 			} else if be.Resolved != nil {
 				resolvedTs := be.Resolved.Timestamp
-				var readyTsList []uint64
-				for ts := range entryGroups {
+				var readyTxns []RawTxn
+				for ts, entries := range entryGroups {
 					if ts <= resolvedTs {
-						readyTsList = append(readyTsList, ts)
+						readyTxns = append(readyTxns, RawTxn{ts, entries})
+						delete(entryGroups, ts)
 					}
 				}
 				// TODO: Handle the case when readyTsList is empty
-				sort.Slice(readyTsList, func(i, j int) bool {
-					return readyTsList[i] < readyTsList[j]
+				sort.Slice(readyTxns, func(i, j int) bool {
+					return readyTxns[i].ts < readyTxns[j].ts
 				})
-				for _, ts := range readyTsList {
-					entries := entryGroups[ts]
-					delete(entryGroups, ts)
-					rawTxns <- RawTxn{ts, entries}
+				for _, t := range readyTxns {
+					rawTxns <- t
 				}
 			}
 		}
