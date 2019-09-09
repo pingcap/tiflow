@@ -78,7 +78,7 @@ func (c *ChangeFeed) Start(ctx context.Context) error {
 	}
 
 	// TODO: just one capture watch all kv for test now
-	capure, err := NewCapture(c.pdCli, []util.Span{{nil, nil}}, checkpointTS, c.detail)
+	capture, err := NewCapture(c.pdCli, []util.Span{{nil, nil}}, checkpointTS, c.detail)
 	if err != nil {
 		return errors.Annotate(err, "NewCapture failed")
 	}
@@ -86,7 +86,7 @@ func (c *ChangeFeed) Start(ctx context.Context) error {
 	errg, ctx := errgroup.WithContext(context.Background())
 
 	errg.Go(func() error {
-		return capure.Start(ctx)
+		return capture.Start(ctx)
 	})
 
 	// errg.Go(func() error {

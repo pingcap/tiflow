@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"context"
+	"sort"
 
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/util"
@@ -98,6 +99,8 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		c.errCh <- err
 	}()
 
+	// txns := collectRawTxns(ctx, buf.Get)
+
 	rowsFn := kvsToRows(c.detail, buf.Get)
 	emitFn := emitEntries(c.detail, c.watchs, c.encoder, c.sink, rowsFn)
 
@@ -150,4 +153,45 @@ func (f *Frontier) NotifyResolvedSpan(resolve ResolvedSpan) error {
 	// TODO emit resolved timestamp once it's safe
 
 	return nil
+}
+
+// RawTxn represents a complete collection of entries that belong to the same transaction
+type RawTxn struct {
+	ts      uint64
+	entries []*KVEntry
+}
+
+// TODO: Add unit tests
+func collectRawTxns(ctx context.Context, inputFn func(context.Context) (BufferEntry, error)) <-chan RawTxn {
+	rawTxns := make(chan RawTxn)
+	go func() {
+		defer close(rawTxns)
+		entryGroups := make(map[uint64][]*KVEntry)
+		for {
+			be, err := inputFn(ctx)
+			if err != nil {
+				return
+			}
+			if be.KV != nil {
+				entryGroups[be.KV.TS] = append(entryGroups[be.KV.TS], be.KV)
+			} else if be.Resolved != nil {
+				resolvedTs := be.Resolved.Timestamp
+				var readyTxns []RawTxn
+				for ts, entries := range entryGroups {
+					if ts <= resolvedTs {
+						readyTxns = append(readyTxns, RawTxn{ts, entries})
+						delete(entryGroups, ts)
+					}
+				}
+				// TODO: Handle the case when readyTsList is empty
+				sort.Slice(readyTxns, func(i, j int) bool {
+					return readyTxns[i].ts < readyTxns[j].ts
+				})
+				for _, t := range readyTxns {
+					rawTxns <- t
+				}
+			}
+		}
+	}()
+	return rawTxns
 }
