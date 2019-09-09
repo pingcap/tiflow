@@ -99,7 +99,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		c.errCh <- err
 	}()
 
-	// txns := collectRawTxns(ctx, buf.Get)
+	// err := collectRawTxns(ctx, buf.Get, output)
 
 	rowsFn := kvsToRows(c.detail, buf.Get)
 	emitFn := emitEntries(c.detail, c.watchs, c.encoder, c.sink, rowsFn)
@@ -161,37 +161,38 @@ type RawTxn struct {
 	entries []*RawKVEntry
 }
 
-// TODO: Add unit tests
-func collectRawTxns(ctx context.Context, inputFn func(context.Context) (BufferEntry, error)) <-chan RawTxn {
-	rawTxns := make(chan RawTxn)
-	go func() {
-		defer close(rawTxns)
-		entryGroups := make(map[uint64][]*RawKVEntry)
-		for {
-			be, err := inputFn(ctx)
-			if err != nil {
-				return
-			}
-			if be.KV != nil {
-				entryGroups[be.KV.Ts] = append(entryGroups[be.KV.Ts], be.KV)
-			} else if be.Resolved != nil {
-				resolvedTs := be.Resolved.Timestamp
-				var readyTxns []RawTxn
-				for ts, entries := range entryGroups {
-					if ts <= resolvedTs {
-						readyTxns = append(readyTxns, RawTxn{ts, entries})
-						delete(entryGroups, ts)
-					}
+func collectRawTxns(
+	ctx context.Context,
+	inputFn func(context.Context) (BufferEntry, error),
+	outputFn func(context.Context, RawTxn) error,
+) error {
+	entryGroups := make(map[uint64][]*RawKVEntry)
+	for {
+		be, err := inputFn(ctx)
+		if err != nil {
+			return err
+		}
+		if be.KV != nil {
+			entryGroups[be.KV.Ts] = append(entryGroups[be.KV.Ts], be.KV)
+		} else if be.Resolved != nil {
+			resolvedTs := be.Resolved.Timestamp
+			var readyTxns []RawTxn
+			for ts, entries := range entryGroups {
+				if ts <= resolvedTs {
+					readyTxns = append(readyTxns, RawTxn{ts, entries})
+					delete(entryGroups, ts)
 				}
-				// TODO: Handle the case when readyTsList is empty
-				sort.Slice(readyTxns, func(i, j int) bool {
-					return readyTxns[i].ts < readyTxns[j].ts
-				})
-				for _, t := range readyTxns {
-					rawTxns <- t
+			}
+			// TODO: Handle the case when readyTsList is empty
+			sort.Slice(readyTxns, func(i, j int) bool {
+				return readyTxns[i].ts < readyTxns[j].ts
+			})
+			for _, t := range readyTxns {
+				err := outputFn(ctx, t)
+				if err != nil {
+					return err
 				}
 			}
 		}
-	}()
-	return rawTxns
+	}
 }
