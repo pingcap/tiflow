@@ -18,10 +18,54 @@ import (
 	"sort"
 )
 
+type sqlType int
+
+const (
+	sqlDML sqlType = iota
+	sqlDDL sqlType = iota
+)
+
 // RawTxn represents a complete collection of entries that belong to the same transaction
 type RawTxn struct {
 	ts      uint64
 	entries []*RawKVEntry
+}
+
+// DMLType represents the dml type
+type DMLType int
+
+// DMLType types
+const (
+	UnknownDMLType DMLType = iota
+	InsertDMLType  DMLType = iota
+	UpdateDMLType  DMLType = iota
+	DeleteDMLType  DMLType = iota
+)
+
+// DML holds the dml info
+type DML struct {
+	Database string
+	Table    string
+	Tp       DMLType
+	Values   map[string]interface{}
+	// only set when Tp = UpdateDMLType
+	OldValues map[string]interface{}
+	// TODO: info *tableInfo
+}
+
+// DDL holds the ddl info
+type DDL struct {
+	Database string
+	Table    string
+	SQL      string
+}
+
+// Txn holds transaction info, an DDL or DML sequences
+type Txn struct {
+	DMLs []*DML
+	DDL  *DDL
+
+	Ts int64
 }
 
 func collectRawTxns(
