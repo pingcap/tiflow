@@ -158,7 +158,7 @@ func (f *Frontier) NotifyResolvedSpan(resolve ResolvedSpan) error {
 // RawTxn represents a complete collection of entries that belong to the same transaction
 type RawTxn struct {
 	ts      uint64
-	entries []*KVEntry
+	entries []*RawKVEntry
 }
 
 // TODO: Add unit tests
@@ -166,14 +166,14 @@ func collectRawTxns(ctx context.Context, inputFn func(context.Context) (BufferEn
 	rawTxns := make(chan RawTxn)
 	go func() {
 		defer close(rawTxns)
-		entryGroups := make(map[uint64][]*KVEntry)
+		entryGroups := make(map[uint64][]*RawKVEntry)
 		for {
 			be, err := inputFn(ctx)
 			if err != nil {
 				return
 			}
 			if be.KV != nil {
-				entryGroups[be.KV.TS] = append(entryGroups[be.KV.TS], be.KV)
+				entryGroups[be.KV.Ts] = append(entryGroups[be.KV.Ts], be.KV)
 			} else if be.Resolved != nil {
 				resolvedTs := be.Resolved.Timestamp
 				var readyTxns []RawTxn
