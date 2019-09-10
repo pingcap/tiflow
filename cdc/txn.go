@@ -69,6 +69,10 @@ type Txn struct {
 	Ts int64
 }
 
+func (t Txn) IsDDL() bool {
+	return t.DDL != nil
+}
+
 func collectRawTxns(
 	ctx context.Context,
 	inputFn func(context.Context) (BufferEntry, error),

@@ -28,6 +28,7 @@ type Sink interface {
 		encoder Encoder,
 		resolved uint64,
 	) error
+	// TODO: Add GetLastSuccessTs() uint64
 	// Flush blocks until every message enqueued by EmitRow and
 	// EmitResolvedTimestamp has been acknowledged by the sink.
 	Flush(ctx context.Context) error
