@@ -66,6 +66,7 @@ type DDL struct {
 
 // Txn holds transaction info, an DDL or DML sequences
 type Txn struct {
+	// TODO: Group changes by tables to improve efficiency
 	DMLs []*DML
 	DDL  *DDL
 

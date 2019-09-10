@@ -93,7 +93,8 @@ func escapeName(name string) string {
 }
 
 func holderString(n int) string {
-	builder := new(strings.Builder)
+	var builder strings.Builder
+	builder.Grow((n-1)*2 + 1)
 	for i := 0; i < n; i++ {
 		if i > 0 {
 			builder.WriteString(",")
