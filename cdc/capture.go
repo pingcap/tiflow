@@ -15,7 +15,6 @@ package cdc
 
 import (
 	"context"
-	"sort"
 
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/util"
@@ -153,46 +152,4 @@ func (f *Frontier) NotifyResolvedSpan(resolve ResolvedSpan) error {
 	// TODO emit resolved timestamp once it's safe
 
 	return nil
-}
-
-// RawTxn represents a complete collection of entries that belong to the same transaction
-type RawTxn struct {
-	ts      uint64
-	entries []*RawKVEntry
-}
-
-func collectRawTxns(
-	ctx context.Context,
-	inputFn func(context.Context) (BufferEntry, error),
-	outputFn func(context.Context, RawTxn) error,
-) error {
-	entryGroups := make(map[uint64][]*RawKVEntry)
-	for {
-		be, err := inputFn(ctx)
-		if err != nil {
-			return err
-		}
-		if be.KV != nil {
-			entryGroups[be.KV.Ts] = append(entryGroups[be.KV.Ts], be.KV)
-		} else if be.Resolved != nil {
-			resolvedTs := be.Resolved.Timestamp
-			var readyTxns []RawTxn
-			for ts, entries := range entryGroups {
-				if ts <= resolvedTs {
-					readyTxns = append(readyTxns, RawTxn{ts, entries})
-					delete(entryGroups, ts)
-				}
-			}
-			// TODO: Handle the case when readyTsList is empty
-			sort.Slice(readyTxns, func(i, j int) bool {
-				return readyTxns[i].ts < readyTxns[j].ts
-			})
-			for _, t := range readyTxns {
-				err := outputFn(ctx, t)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
 }

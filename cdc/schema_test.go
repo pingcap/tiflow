@@ -15,7 +15,6 @@ package cdc
 
 import (
 	"fmt"
-	"testing"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -23,8 +22,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
 )
-
-func Test(t *testing.T) { TestingT(t) }
 
 type schemaSuite struct{}
 
