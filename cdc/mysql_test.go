@@ -24,13 +24,25 @@ type EmitSuite struct{}
 
 var _ = check.Suite(&EmitSuite{})
 
+type dummyInspector struct{}
+
+func (dummyInspector) Get(schema, table string) (*tableInfo, error) {
+	return nil, nil
+}
+
+func (dummyInspector) Refresh(schema, table string) {
+}
+
 func (s EmitSuite) TestShouldExecDDL(c *check.C) {
 	// Set up
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	c.Assert(err, check.IsNil)
 	defer db.Close()
 
-	sink := mysqlSink{db}
+	sink := mysqlSink{
+		db:           db,
+		tblInspector: dummyInspector{},
+	}
 
 	txn := Txn{
 		DDL: &DDL{

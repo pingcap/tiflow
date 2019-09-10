@@ -16,7 +16,6 @@ package cdc
 import (
 	"context"
 	"database/sql"
-	"strings"
 
 	"github.com/pingcap/parser/model"
 
@@ -28,15 +27,27 @@ import (
 	"go.uber.org/zap"
 )
 
+type tableInspector interface {
+	// Get returns information about the specified table
+	Get(schema, table string) (*tableInfo, error)
+	// Refresh invalidates any cached information about the specified table
+	Refresh(schema, table string)
+}
+
 type mysqlSink struct {
-	db *sql.DB
+	db           *sql.DB
+	tblInspector tableInspector
 }
 
 var _ Sink = &mysqlSink{}
 
 func (s *mysqlSink) Emit(ctx context.Context, txn Txn) error {
 	if txn.IsDDL() {
-		return s.execDDLWithMaxRetries(ctx, txn.DDL, 5)
+		err := s.execDDLWithMaxRetries(ctx, txn.DDL, 5)
+		if err == nil && isTableChanged(txn.DDL) {
+			s.tblInspector.Refresh(txn.DDL.Database, txn.DDL.Table)
+		}
+		return err
 	}
 	// TODO: Handle DML
 	return nil
@@ -93,12 +104,4 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *DDL) error {
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.SQL))
 	return nil
-}
-
-func quoteName(name string) string {
-	return "`" + escapeName(name) + "`"
-}
-
-func escapeName(name string) string {
-	return strings.Replace(name, "`", "``", -1)
 }
