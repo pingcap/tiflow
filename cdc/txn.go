@@ -17,6 +17,8 @@ import (
 	"context"
 	"sort"
 
+	"github.com/pingcap/parser/model"
+
 	"github.com/pingcap/tidb/types"
 )
 
@@ -59,6 +61,7 @@ type DDL struct {
 	Database string
 	Table    string
 	SQL      string
+	Type     model.ActionType
 }
 
 // Txn holds transaction info, an DDL or DML sequences

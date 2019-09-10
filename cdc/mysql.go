@@ -18,10 +18,10 @@ import (
 	"database/sql"
 	"strings"
 
+	"github.com/pingcap/parser/model"
+
 	"github.com/cenkalti/backoff"
 
-	"github.com/pingcap/parser"
-	"github.com/pingcap/parser/ast"
 	_ "github.com/pingcap/tidb/types/parser_driver"
 
 	"github.com/pingcap/log"
@@ -67,11 +67,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *DDL, maxRetr
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *DDL) error {
-	isCreateDB, err := isCreateDatabaseDDL(ddl.SQL)
-	if err != nil {
-		return err
-	}
-	shouldSwitchDB := len(ddl.Database) > 0 && !isCreateDB
+	shouldSwitchDB := len(ddl.Database) > 0 && ddl.Type != model.ActionCreateSchema
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -97,16 +93,6 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *DDL) error {
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.SQL))
 	return nil
-}
-
-func isCreateDatabaseDDL(sql string) (bool, error) {
-	stmt, err := parser.New().ParseOneStmt(sql, "", "")
-	if err != nil {
-		return false, err
-	}
-
-	_, isCreateDatabase := stmt.(*ast.CreateDatabaseStmt)
-	return isCreateDatabase, nil
 }
 
 func quoteName(name string) string {

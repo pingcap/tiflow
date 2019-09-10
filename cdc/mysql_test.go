@@ -20,27 +20,6 @@ import (
 	"github.com/pingcap/check"
 )
 
-type IsCreateDBSuite struct{}
-
-var _ = check.Suite(&IsCreateDBSuite{})
-
-func (s *IsCreateDBSuite) TestShouldReturnTrue(c *check.C) {
-	result, err := isCreateDatabaseDDL("CREATE DATABASE hello;")
-	c.Assert(err, check.IsNil)
-	c.Assert(result, check.IsTrue)
-}
-
-func (s *IsCreateDBSuite) TestShouldReturnFalse(c *check.C) {
-	result, err := isCreateDatabaseDDL("CREATE TABLE hello (id INT PRIMARY KEY);")
-	c.Assert(err, check.IsNil)
-	c.Assert(result, check.IsFalse)
-}
-
-func (s *IsCreateDBSuite) TestShouldReturnErr(c *check.C) {
-	_, err := isCreateDatabaseDDL("CREATE adsf;")
-	c.Assert(err, check.NotNil)
-}
-
 type EmitSuite struct{}
 
 var _ = check.Suite(&EmitSuite{})
