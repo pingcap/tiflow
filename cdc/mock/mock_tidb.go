@@ -4,9 +4,9 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
-	"github.com/pingcap/tidb-cdc/cdc"
+	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb/domain"
-	"github.com/pingcap/tidb/kv"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
@@ -20,7 +20,7 @@ import (
 type MockTiDB struct {
 	cluster   *mocktikv.Cluster
 	mvccStore mocktikv.MVCCStore
-	store     kv.Storage
+	store     tidbkv.Storage
 	domain    *domain.Domain
 	*parser.Parser
 	ctx *mock.Context
@@ -78,7 +78,7 @@ func (p *MockTiDB) tearDown() {
 // We scan all the KV space to get the changed KV events every time after
 // execute a SQL and use the current version as the ts of the KV events
 // because there's no way to get the true commit ts of the kv
-func (p *MockTiDB) updateEvent() (entrys []cdc.RawKVEntry, err error) {
+func (p *MockTiDB) updateEvent() (entrys []*kv.RawKVEntry, err error) {
 	ver, err := p.store.CurrentVersion()
 	if err != nil {
 		return nil, err
@@ -101,14 +101,14 @@ func (p *MockTiDB) updateEvent() (entrys []cdc.RawKVEntry, err error) {
 	for k, v := range newKVS {
 		oldv, _ := p.kvs[k]
 		if oldv != v {
-			entry := cdc.RawKVEntry{
-				OpType: cdc.OpTypePut,
+			entry := kv.RawKVEntry{
+				OpType: kv.OpTypePut,
 				Key:    []byte(k),
 				Value:  []byte(v),
 				Ts:     ts,
 			}
 
-			entrys = append(entrys, entry)
+			entrys = append(entrys, &entry)
 		}
 	}
 
@@ -116,12 +116,12 @@ func (p *MockTiDB) updateEvent() (entrys []cdc.RawKVEntry, err error) {
 	for k := range p.kvs {
 		_, ok := newKVS[k]
 		if !ok {
-			entry := cdc.RawKVEntry{
-				OpType: cdc.OpTypeDelete,
+			entry := kv.RawKVEntry{
+				OpType: kv.OpTypeDelete,
 				Key:    []byte(k),
 				Ts:     ts,
 			}
-			entrys = append(entrys, entry)
+			entrys = append(entrys, &entry)
 		}
 	}
 
@@ -131,7 +131,7 @@ func (p *MockTiDB) updateEvent() (entrys []cdc.RawKVEntry, err error) {
 }
 
 // MustExec execute the sql and return all the KVEntry events
-func (p *MockTiDB) MustExec(sql string, args ...interface{}) []cdc.RawKVEntry {
+func (p *MockTiDB) MustExec(sql string, args ...interface{}) []*kv.RawKVEntry {
 	tk := testkit.NewTestKit(p.c, p.store)
 	tk.MustExec(sql, args...)
 

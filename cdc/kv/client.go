@@ -33,6 +33,8 @@ const (
 	OpTypeDelete OpType = 2
 )
 
+type RawKVEntry = RegionFeedValue
+
 // RegionFeedEvent from the kv layer.
 // Only one of the event will be setted.
 type RegionFeedEvent struct {
@@ -53,7 +55,7 @@ type RegionFeedValue struct {
 	Key    []byte
 	// Nil fro delete type
 	Value []byte
-	TS    uint64
+	Ts    uint64
 }
 
 type singleRegionInfo struct {
@@ -445,7 +447,7 @@ func (c *CDCClient) singleEventFeed(
 									OpType: opType,
 									Key:    row.Key,
 									Value:  value,
-									TS:     row.CommitTs,
+									Ts:     row.CommitTs,
 								},
 							}
 

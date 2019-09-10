@@ -15,7 +15,12 @@ package cdc
 
 import (
 	"context"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb-cdc/cdc/entry"
+	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"sort"
+	"time"
 
 	"github.com/pingcap/tidb/types"
 )
@@ -30,7 +35,7 @@ const (
 // RawTxn represents a complete collection of entries that belong to the same transaction
 type RawTxn struct {
 	ts      uint64
-	entries []*RawKVEntry
+	entries []*kv.RawKVEntry
 }
 
 // DMLType represents the dml type
@@ -54,6 +59,17 @@ type DML struct {
 	OldValues map[string]types.Datum
 }
 
+type IndexKey struct {
+	indexId    int64
+	IndexValue types.Datum
+}
+
+type FlatDMLs struct {
+	ts           uint64
+	rowKVEntries []*entry.RowKVEntry
+	indexEntries map[int64][]*entry.IndexKVEntry
+}
+
 // DDL holds the ddl info
 type DDL struct {
 	Database string
@@ -66,7 +82,7 @@ type Txn struct {
 	DMLs []*DML
 	DDL  *DDL
 
-	Ts int64
+	Ts uint64
 }
 
 func collectRawTxns(
@@ -74,7 +90,7 @@ func collectRawTxns(
 	inputFn func(context.Context) (BufferEntry, error),
 	outputFn func(context.Context, RawTxn) error,
 ) error {
-	entryGroups := make(map[uint64][]*RawKVEntry)
+	entryGroups := make(map[uint64][]*kv.RawKVEntry)
 	for {
 		be, err := inputFn(ctx)
 		if err != nil {
@@ -103,4 +119,89 @@ func collectRawTxns(
 			}
 		}
 	}
+}
+
+type TxnMounter struct {
+	schema    *Schema
+	loc       *time.Location
+	tableInfo *model.TableInfo
+}
+
+func NewTxnMounter(schema *Schema, tableId int64, loc *time.Location) (*TxnMounter, error) {
+	m := &TxnMounter{schema: schema, loc: loc}
+
+	tableInfo, exist := m.schema.TableByID(tableId)
+	if !exist {
+		return nil, errors.Errorf("can not find table, id: %d", tableId)
+	}
+	m.tableInfo = tableInfo
+	return m, nil
+}
+
+func (m *TxnMounter) Mount(rawTxn *RawTxn) (*Txn, error) {
+	var flatDMLs FlatDMLs
+	flatDMLs.indexEntries = make(map[int64][]*entry.IndexKVEntry)
+
+	for _, raw := range rawTxn.entries {
+		kvEntry, err := entry.Unmarshal(raw)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		switch e := kvEntry.(type) {
+		case *entry.RowKVEntry:
+			err := e.Unflatten(m.tableInfo, m.loc)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			flatDMLs.rowKVEntries = append(flatDMLs.rowKVEntries, e)
+		case *entry.IndexKVEntry:
+			// TODO
+			//err := e.Unflatten(m.tableInfo, m.loc)
+			//if err != nil {
+			//	return nil, errors.Trace(err)
+			//}
+			//iEntries := flatDMLs.indexEntries[e.RecordId]
+			//iEntries = append(iEntries, e)
+			//flatDMLs.indexEntries[e.RecordId] = iEntries
+		case *entry.DDLJobHistoryKVEntry:
+			return m.mountDDL(e)
+		}
+	}
+	flatDMLs.ts = rawTxn.ts
+	return m.mountDML(flatDMLs)
+}
+
+func (m *TxnMounter) mountDDL(ddlEntry *entry.DDLJobHistoryKVEntry) (*Txn, error) {
+	panic("TODO")
+}
+
+func (m *TxnMounter) mountDML(flatDMLs FlatDMLs) (*Txn, error) {
+	txn := Txn{
+		Ts: flatDMLs.ts,
+	}
+	for _, row := range flatDMLs.rowKVEntries {
+		if row.Delete {
+			// TODO: handle delete
+		} else {
+			// TODO: handle update
+			// we regard all rows data setting log as insert operation for now
+			// only support the table which pk is not handle now
+			values := make(map[string]types.Datum)
+			for index, rowValue := range row.Row {
+				colName := m.tableInfo.Columns[index-1].Name.O
+				values[colName] = rowValue
+			}
+			databaseName, tableName, exist := m.schema.SchemaAndTableName(row.TableId)
+			if !exist {
+				return nil, errors.Errorf("can not find table, id: %d", row.TableId)
+			}
+			txn.DMLs = append(txn.DMLs, &DML{
+				Database: databaseName,
+				Table:    tableName,
+				Tp:       InsertDMLType,
+				Values:   values,
+			})
+		}
+	}
+	return &txn, nil
 }

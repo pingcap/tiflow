@@ -4,7 +4,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb-cdc/cdc"
+	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/mock"
 	"github.com/pingcap/tidb/types"
 	"reflect"
@@ -23,7 +23,7 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 	existUpdateTableKVEntry := false
 	existDDLJobHistoryKVEntry := false
 	for _, raw := range rawEntries {
-		entry, err := Unmarshal(&raw)
+		entry, err := Unmarshal(raw)
 		c.Assert(err, check.IsNil)
 		switch e := entry.(type) {
 		case *UpdateTableKVEntry:
@@ -64,7 +64,7 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 	existUpdateTableKVEntry = false
 	existDDLJobHistoryKVEntry = false
 	for _, raw := range rawEntries {
-		entry, err := Unmarshal(&raw)
+		entry, err := Unmarshal(raw)
 		c.Assert(err, check.IsNil)
 		switch e := entry.(type) {
 		case *UpdateTableKVEntry:
@@ -100,7 +100,7 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 	rawEntries := puller.MustExec("create table test.test1(id varchar(255) primary key, a int, index ci (a))")
 	var tableInfo *model.TableInfo
 	for _, raw := range rawEntries {
-		entry, err := Unmarshal(&raw)
+		entry, err := Unmarshal(raw)
 		c.Assert(err, check.IsNil)
 		switch e := entry.(type) {
 		case *UpdateTableKVEntry:
@@ -186,7 +186,7 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 	rawEntries := puller.MustExec("create table test.test2(id int primary key, b varchar(255) unique key)")
 	var tableInfo *model.TableInfo
 	for _, raw := range rawEntries {
-		entry, err := Unmarshal(&raw)
+		entry, err := Unmarshal(raw)
 		c.Assert(err, check.IsNil)
 		switch e := entry.(type) {
 		case *UpdateTableKVEntry:
@@ -267,9 +267,9 @@ func assertIn(c *check.C, item KVEntry, expect []KVEntry) {
 	c.Fatalf("item {%#v} is not exist in expect {%#v}", item, expect)
 }
 
-func checkDMLKVEntries(c *check.C, tableInfo *model.TableInfo, rawEntries []cdc.RawKVEntry, expect []KVEntry) {
+func checkDMLKVEntries(c *check.C, tableInfo *model.TableInfo, rawEntries []*kv.RawKVEntry, expect []KVEntry) {
 	for _, raw := range rawEntries {
-		entry, err := Unmarshal(&raw)
+		entry, err := Unmarshal(raw)
 		c.Assert(err, check.IsNil)
 		switch e := entry.(type) {
 		case *RowKVEntry:

@@ -84,18 +84,11 @@ func (p *Puller) Run(ctx context.Context) error {
 				if e.Val != nil {
 					val := e.Val
 
-					var opType OpType
-					if val.OpType == kv.OpTypeDelete {
-						opType = OpTypeDelete
-					} else if val.OpType == kv.OpTypePut {
-						opType = OpTypePut
-					}
-
-					kv := &RawKVEntry{
-						OpType: opType,
+					kv := &kv.RawKVEntry{
+						OpType: val.OpType,
 						Key:    val.Key,
 						Value:  val.Value,
-						Ts:     val.TS,
+						Ts:     val.Ts,
 					}
 
 					p.buf.AddKVEntry(ctx, kv)

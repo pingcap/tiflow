@@ -30,6 +30,7 @@ const implicitColID = -1
 // schema infomations could be changed by drainer init and ddls appear
 type Schema struct {
 	tableIDToName  map[int64]TableName
+	tableNameToId  map[TableName]int64
 	schemaNameToID map[string]int64
 
 	schemas map[int64]*model.DBInfo
@@ -62,6 +63,7 @@ func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
 	}
 
 	s.tableIDToName = make(map[int64]TableName)
+	s.tableNameToId = make(map[TableName]int64)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.schemaNameToID = make(map[string]int64)
 	s.tables = make(map[int64]*model.TableInfo)
@@ -72,11 +74,13 @@ func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
 func (s *Schema) String() string {
 	mp := map[string]interface{}{
 		"tableIDToName":  s.tableIDToName,
+		"tableNameToId":  s.tableNameToId,
 		"schemaNameToID": s.schemaNameToID,
 		// "schemas":           s.schemas,
 		// "tables":            s.tables,
 		"schemaMetaVersion": s.schemaMetaVersion,
 		"hasImplicitCol":    s.hasImplicitCol,
+		"test":              "test",
 	}
 
 	data, _ := json.MarshalIndent(mp, "\t", "\t")
@@ -97,6 +101,19 @@ func (s *Schema) SchemaAndTableName(id int64) (string, string, bool) {
 	}
 
 	return tn.Schema, tn.Table, true
+}
+
+// SchemaAndTableId returns the tableId by table schemaName and tableName
+func (s *Schema) SchemaAndTableId(schemaName string, tableName string) (int64, bool) {
+	id, ok := s.tableNameToId[TableName{
+		Schema: schemaName,
+		Table:  tableName,
+	}]
+	if !ok {
+		return 0, false
+	}
+
+	return id, true
 }
 
 // SchemaByID returns the DBInfo by schema id
@@ -133,7 +150,11 @@ func (s *Schema) DropSchema(id int64) (string, error) {
 
 	for _, table := range schema.Tables {
 		delete(s.tables, table.ID)
+		tableName, exist := s.tableIDToName[table.ID]
 		delete(s.tableIDToName, table.ID)
+		if exist {
+			delete(s.tableNameToId, tableName)
+		}
 	}
 
 	delete(s.schemas, id)
@@ -167,7 +188,11 @@ func (s *Schema) DropTable(id int64) (string, error) {
 	}
 
 	delete(s.tables, id)
+	tableName, exist := s.tableIDToName[id]
 	delete(s.tableIDToName, id)
+	if exist {
+		delete(s.tableNameToId, tableName)
+	}
 
 	log.Debug("drop table success", zap.String("name", table.Name.O), zap.Int64("id", id))
 	return table.Name.O, nil
@@ -187,6 +212,7 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 	schema.Tables = append(schema.Tables, table)
 	s.tables[table.ID] = table
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
+	s.tableNameToId[s.tableIDToName[table.ID]] = table.ID
 
 	log.Debug("create table success", zap.String("name", schema.Name.O+"."+table.Name.O), zap.Int64("id", table.ID))
 	return nil
