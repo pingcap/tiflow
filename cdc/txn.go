@@ -160,7 +160,9 @@ func (m *TableTxnMounter) Mount(rawTxn *RawTxn) (*TableTxn, error) {
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			tableTxn.replaceDMLs = append(tableTxn.replaceDMLs, dml)
+			if dml != nil {
+				tableTxn.replaceDMLs = append(tableTxn.replaceDMLs, dml)
+			}
 		case *entry.IndexKVEntry:
 			err := e.Unflatten(m.tableInfo, m.loc)
 			if err != nil {
@@ -170,16 +172,14 @@ func (m *TableTxnMounter) Mount(rawTxn *RawTxn) (*TableTxn, error) {
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			tableTxn.deleteDMLs = append(tableTxn.deleteDMLs, dml)
+			if dml != nil {
+				tableTxn.deleteDMLs = append(tableTxn.deleteDMLs, dml)
+			}
 		case *entry.DDLJobHistoryKVEntry:
 			//return m.mountDDL(e)
 		}
 	}
-	return nil, nil
-}
-
-func (m *TableTxnMounter) mountDDL(ddlEntry *entry.DDLJobHistoryKVEntry) (*Txn, error) {
-	panic("TODO")
+	return tableTxn, nil
 }
 
 func (m *TableTxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
@@ -210,20 +210,23 @@ func (m *TableTxnMounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, erro
 
 	// TODO:
 	// only support the table which pk is not handle now
-	values := make(map[string]types.Datum, len(idx.IndexValue))
-
-	for index, colValue := range idx.IndexValue {
-		colName := m.tableInfo.Columns[index-1].Name.O
-		values[colName] = colValue
+	indexInfo := m.tableInfo.Indices[idx.IndexId-1]
+	if !indexInfo.Primary && !indexInfo.Unique {
+		return nil, nil
 	}
-	databaseName, tableName, exist := m.schema.SchemaAndTableName(row.TableId)
+	values := make(map[string]types.Datum, len(idx.IndexValue))
+	for i, idxCol := range indexInfo.Columns {
+		colName := m.tableInfo.Columns[idxCol.Offset].Name.O
+		values[colName] = idx.IndexValue[i]
+	}
+	databaseName, tableName, exist := m.schema.SchemaAndTableName(idx.TableId)
 	if !exist {
-		return nil, errors.Errorf("can not find table, id: %d", row.TableId)
+		return nil, errors.Errorf("can not find table, id: %d", idx.TableId)
 	}
 	return &DML{
 		Database: databaseName,
 		Table:    tableName,
-		Tp:       InsertDMLType,
+		Tp:       DeleteDMLType,
 		Values:   values,
 	}, nil
 }

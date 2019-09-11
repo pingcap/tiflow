@@ -113,7 +113,7 @@ func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *Schema) 
 		}
 	}
 	c.Assert(len(jobs), check.Equals, len(sqls))
-	schema, err := NewSchema(jobs, true)
+	schema, err := NewSchema(jobs, false)
 	c.Assert(err, check.IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.SchemaVersion)
 	c.Assert(err, check.IsNil)
@@ -126,15 +126,16 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 	c.Assert(exist, check.IsTrue)
 	mounter, err := NewTxnMounter(schema, tableId, time.UTC)
 	c.Assert(err, check.IsNil)
+
 	rawKV := puller.MustExec("insert into testDB.test1 values('ttt',6)")
 	txn, err := mounter.Mount(&RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	c.Assert(txn, check.DeepEquals, &Txn{
+	c.Assert(txn, check.DeepEquals, &TableTxn{
 		Ts: rawKV[0].Ts,
-		DMLs: []*DML{
+		replaceDMLs: []*DML{
 			{
 				Database: "testDB",
 				Table:    "test1",
@@ -145,6 +146,74 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 				},
 			},
 		},
+		deleteDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("ttt")),
+				},
+			},
+		},
 	})
 
+	rawKV = puller.MustExec("update testDB.test1 set id = 'vvv' where a = 6")
+	txn, err = mounter.Mount(&RawTxn{
+		ts:      rawKV[0].Ts,
+		entries: rawKV,
+	})
+	c.Assert(err, check.IsNil)
+	c.Assert(txn, check.DeepEquals, &TableTxn{
+		Ts: rawKV[0].Ts,
+		replaceDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       InsertDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("vvv")),
+					"a":  types.NewIntDatum(6),
+				},
+			},
+		},
+		deleteDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("vvv")),
+				},
+			},
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("ttt")),
+				},
+			},
+		},
+	})
+
+	rawKV = puller.MustExec("delete from testDB.test1 where a = 6")
+	txn, err = mounter.Mount(&RawTxn{
+		ts:      rawKV[0].Ts,
+		entries: rawKV,
+	})
+	c.Assert(err, check.IsNil)
+	c.Assert(txn, check.DeepEquals, &TableTxn{
+		Ts: rawKV[0].Ts,
+		deleteDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("vvv")),
+				},
+			},
+		},
+	})
 }
