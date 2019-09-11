@@ -59,11 +59,6 @@ type DML struct {
 	OldValues map[string]types.Datum
 }
 
-type IndexKey struct {
-	indexId    int64
-	IndexValue types.Datum
-}
-
 // DDL holds the ddl info
 type DDL struct {
 	Database string
