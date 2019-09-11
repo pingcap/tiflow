@@ -102,8 +102,8 @@ func (s *Schema) SchemaAndTableName(id int64) (string, string, bool) {
 	return tn.Schema, tn.Table, true
 }
 
-// SchemaAndTableId returns the tableId by table schemaName and tableName
-func (s *Schema) SchemaAndTableId(schemaName string, tableName string) (int64, bool) {
+// GetTableIDByName returns the tableId by table schemaName and tableName
+func (s *Schema) GetTableIDByName(schemaName string, tableName string) (int64, bool) {
 	id, ok := s.tableNameToId[TableName{
 		Schema: schemaName,
 		Table:  tableName,
