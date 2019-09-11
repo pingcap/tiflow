@@ -15,13 +15,13 @@ package cdc
 
 import (
 	"context"
+	"sort"
+	"time"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-cdc/cdc/entry"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"sort"
-	"time"
-
 	"github.com/pingcap/tidb/types"
 )
 
@@ -186,10 +186,10 @@ func (m *TxnMounter) mountDML(flatDMLs FlatDMLs) (*Txn, error) {
 			// TODO: handle update
 			// we regard all rows data setting log as insert operation for now
 			// only support the table which pk is not handle now
-			values := make(map[string]types.Datum)
-			for index, rowValue := range row.Row {
+			values := make(map[string]types.Datum, len(row.Row))
+			for index, colValue := range row.Row {
 				colName := m.tableInfo.Columns[index-1].Name.O
-				values[colName] = rowValue
+				values[colName] = colValue
 			}
 			databaseName, tableName, exist := m.schema.SchemaAndTableName(row.TableId)
 			if !exist {

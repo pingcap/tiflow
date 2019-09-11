@@ -80,7 +80,6 @@ func (s *Schema) String() string {
 		// "tables":            s.tables,
 		"schemaMetaVersion": s.schemaMetaVersion,
 		"hasImplicitCol":    s.hasImplicitCol,
-		"test":              "test",
 	}
 
 	data, _ := json.MarshalIndent(mp, "\t", "\t")
@@ -109,11 +108,7 @@ func (s *Schema) SchemaAndTableId(schemaName string, tableName string) (int64, b
 		Schema: schemaName,
 		Table:  tableName,
 	}]
-	if !ok {
-		return 0, false
-	}
-
-	return id, true
+	return id, ok
 }
 
 // SchemaByID returns the DBInfo by schema id
@@ -150,11 +145,9 @@ func (s *Schema) DropSchema(id int64) (string, error) {
 
 	for _, table := range schema.Tables {
 		delete(s.tables, table.ID)
-		tableName, exist := s.tableIDToName[table.ID]
+		tableName := s.tableIDToName[table.ID]
 		delete(s.tableIDToName, table.ID)
-		if exist {
-			delete(s.tableNameToId, tableName)
-		}
+		delete(s.tableNameToId, tableName)
 	}
 
 	delete(s.schemas, id)
@@ -188,11 +181,9 @@ func (s *Schema) DropTable(id int64) (string, error) {
 	}
 
 	delete(s.tables, id)
-	tableName, exist := s.tableIDToName[id]
+	tableName := s.tableIDToName[id]
 	delete(s.tableIDToName, id)
-	if exist {
-		delete(s.tableNameToId, tableName)
-	}
+	delete(s.tableNameToId, tableName)
 
 	log.Debug("drop table success", zap.String("name", table.Name.O), zap.Int64("id", id))
 	return table.Name.O, nil

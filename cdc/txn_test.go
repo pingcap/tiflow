@@ -17,15 +17,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"testing"
+	"time"
+
+	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-cdc/cdc/entry"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/mock"
 	"github.com/pingcap/tidb/types"
-	"testing"
-	"time"
-
-	"github.com/pingcap/check"
 )
 
 // Hook up gocheck into the "go test" runner.
