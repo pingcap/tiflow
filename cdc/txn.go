@@ -64,12 +64,6 @@ type IndexKey struct {
 	IndexValue types.Datum
 }
 
-type FlatDMLs struct {
-	ts           uint64
-	rowKVEntries []*entry.RowKVEntry
-	indexEntries map[int64][]*entry.IndexKVEntry
-}
-
 // DDL holds the ddl info
 type DDL struct {
 	Database string
@@ -81,6 +75,15 @@ type DDL struct {
 type Txn struct {
 	DMLs []*DML
 	DDL  *DDL
+
+	Ts uint64
+}
+
+// Txn holds transaction info, an DDL or DML sequences
+type TableTxn struct {
+	replaceDMLs []*DML
+	deleteDMLs  []*DML
+	DDL         *DDL
 
 	Ts uint64
 }
@@ -121,14 +124,14 @@ func collectRawTxns(
 	}
 }
 
-type TxnMounter struct {
+type TableTxnMounter struct {
 	schema    *Schema
 	loc       *time.Location
 	tableInfo *model.TableInfo
 }
 
-func NewTxnMounter(schema *Schema, tableId int64, loc *time.Location) (*TxnMounter, error) {
-	m := &TxnMounter{schema: schema, loc: loc}
+func NewTxnMounter(schema *Schema, tableId int64, loc *time.Location) (*TableTxnMounter, error) {
+	m := &TableTxnMounter{schema: schema, loc: loc}
 
 	tableInfo, exist := m.schema.TableByID(tableId)
 	if !exist {
@@ -138,10 +141,10 @@ func NewTxnMounter(schema *Schema, tableId int64, loc *time.Location) (*TxnMount
 	return m, nil
 }
 
-func (m *TxnMounter) Mount(rawTxn *RawTxn) (*Txn, error) {
-	var flatDMLs FlatDMLs
-	flatDMLs.indexEntries = make(map[int64][]*entry.IndexKVEntry)
-
+func (m *TableTxnMounter) Mount(rawTxn *RawTxn) (*TableTxn, error) {
+	tableTxn := &TableTxn{
+		Ts: rawTxn.ts,
+	}
 	for _, raw := range rawTxn.entries {
 		kvEntry, err := entry.Unmarshal(raw)
 		if err != nil {
@@ -153,55 +156,74 @@ func (m *TxnMounter) Mount(rawTxn *RawTxn) (*Txn, error) {
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			flatDMLs.rowKVEntries = append(flatDMLs.rowKVEntries, e)
+			dml, err := m.mountRowKVEntry(e)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			tableTxn.replaceDMLs = append(tableTxn.replaceDMLs, dml)
 		case *entry.IndexKVEntry:
-			// TODO
-			//err := e.Unflatten(m.tableInfo, m.loc)
-			//if err != nil {
-			//	return nil, errors.Trace(err)
-			//}
-			//iEntries := flatDMLs.indexEntries[e.RecordId]
-			//iEntries = append(iEntries, e)
-			//flatDMLs.indexEntries[e.RecordId] = iEntries
+			err := e.Unflatten(m.tableInfo, m.loc)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			dml, err := m.mountIndexKVEntry(e)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			tableTxn.deleteDMLs = append(tableTxn.deleteDMLs, dml)
 		case *entry.DDLJobHistoryKVEntry:
-			return m.mountDDL(e)
+			//return m.mountDDL(e)
 		}
 	}
-	flatDMLs.ts = rawTxn.ts
-	return m.mountDML(flatDMLs)
+	return nil, nil
 }
 
-func (m *TxnMounter) mountDDL(ddlEntry *entry.DDLJobHistoryKVEntry) (*Txn, error) {
+func (m *TableTxnMounter) mountDDL(ddlEntry *entry.DDLJobHistoryKVEntry) (*Txn, error) {
 	panic("TODO")
 }
 
-func (m *TxnMounter) mountDML(flatDMLs FlatDMLs) (*Txn, error) {
-	txn := Txn{
-		Ts: flatDMLs.ts,
+func (m *TableTxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
+	if row.Delete {
+		return nil, nil
 	}
-	for _, row := range flatDMLs.rowKVEntries {
-		if row.Delete {
-			// TODO: handle delete
-		} else {
-			// TODO: handle update
-			// we regard all rows data setting log as insert operation for now
-			// only support the table which pk is not handle now
-			values := make(map[string]types.Datum, len(row.Row))
-			for index, colValue := range row.Row {
-				colName := m.tableInfo.Columns[index-1].Name.O
-				values[colName] = colValue
-			}
-			databaseName, tableName, exist := m.schema.SchemaAndTableName(row.TableId)
-			if !exist {
-				return nil, errors.Errorf("can not find table, id: %d", row.TableId)
-			}
-			txn.DMLs = append(txn.DMLs, &DML{
-				Database: databaseName,
-				Table:    tableName,
-				Tp:       InsertDMLType,
-				Values:   values,
-			})
-		}
+
+	// TODO:
+	// only support the table which pk is not handle now
+	values := make(map[string]types.Datum, len(row.Row))
+	for index, colValue := range row.Row {
+		colName := m.tableInfo.Columns[index-1].Name.O
+		values[colName] = colValue
 	}
-	return &txn, nil
+	databaseName, tableName, exist := m.schema.SchemaAndTableName(row.TableId)
+	if !exist {
+		return nil, errors.Errorf("can not find table, id: %d", row.TableId)
+	}
+	return &DML{
+		Database: databaseName,
+		Table:    tableName,
+		Tp:       InsertDMLType,
+		Values:   values,
+	}, nil
+}
+
+func (m *TableTxnMounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
+
+	// TODO:
+	// only support the table which pk is not handle now
+	values := make(map[string]types.Datum, len(idx.IndexValue))
+
+	for index, colValue := range idx.IndexValue {
+		colName := m.tableInfo.Columns[index-1].Name.O
+		values[colName] = colValue
+	}
+	databaseName, tableName, exist := m.schema.SchemaAndTableName(row.TableId)
+	if !exist {
+		return nil, errors.Errorf("can not find table, id: %d", row.TableId)
+	}
+	return &DML{
+		Database: databaseName,
+		Table:    tableName,
+		Tp:       InsertDMLType,
+		Values:   values,
+	}, nil
 }
