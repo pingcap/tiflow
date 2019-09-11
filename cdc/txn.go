@@ -69,10 +69,12 @@ type DDL struct {
 	Database string
 	Table    string
 	SQL      string
+	Type     model.ActionType
 }
 
 // Txn holds transaction info, an DDL or DML sequences
 type Txn struct {
+	// TODO: Group changes by tables to improve efficiency
 	DMLs []*DML
 	DDL  *DDL
 
@@ -86,6 +88,10 @@ type TableTxn struct {
 	DDL         *DDL
 
 	Ts uint64
+}
+
+func (t Txn) IsDDL() bool {
+	return t.DDL != nil
 }
 
 func collectRawTxns(
