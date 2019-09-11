@@ -20,21 +20,6 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/util"
 )
 
-type OpType int
-
-const (
-	OpTypeUnknow OpType = 0
-	OpTypePut    OpType = 1
-	OpTypeDelete OpType = 2
-)
-
-type RawKVEntry struct {
-	OpType OpType
-	Key    []byte
-	Value  []byte
-	Ts     uint64
-}
-
 // Capture watch some span of KV and emit the entries to sink according to the ChangeFeedDetail
 type Capture struct {
 	pdCli        pd.Client
