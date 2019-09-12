@@ -12,10 +12,10 @@ type Span struct {
 	End   []byte
 }
 
-// BiggestEnd represents the maximum value.
-var BiggestEnd []byte = []byte{255, 255, 255, 255, 255}
+// UpperBoundKey represents the maximum value.
+var UpperBoundKey []byte = []byte{255, 255, 255, 255, 255}
 
-// Hack will set End as BiggestEnd if End is Nil.
+// Hack will set End as UpperBoundKey if End is Nil.
 func (s Span) Hack() Span {
 	if s.End != nil && s.Start != nil {
 		return s
@@ -31,7 +31,7 @@ func (s Span) Hack() Span {
 	}
 
 	if r.End == nil {
-		r.End = BiggestEnd
+		r.End = UpperBoundKey
 	}
 
 	return r

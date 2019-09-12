@@ -20,6 +20,7 @@ func (b Bytes) Compare(a interval.Comparable) int {
 }
 
 // Range represents a kv range interval
+// [Start, End), close Start and open End.
 type Range struct {
 	Start Bytes
 	End   Bytes
@@ -147,8 +148,8 @@ type spanFrontier struct {
 
 func makeSpanFrontier(spans ...util.Span) *spanFrontier {
 	// spanFrontier don't support use Nil as the maximum key of End range
-	// So we use set it as util.BiggestEnd, the means the real use case *should not* have a
-	// End key bigger than util.BiggestEnd
+	// So we use set it as util.UpperBoundKey, the means the real use case *should not* have a
+	// End key bigger than util.UpperBoundKey
 	for i, span := range spans {
 		spans[i] = span.Hack()
 	}
