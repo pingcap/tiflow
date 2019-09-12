@@ -76,6 +76,9 @@ type tableHelper struct {
 func (h *tableHelper) Get(schema, table string) (*tableInfo, error) {
 	return &tableInfo{
 		columns: []string{"id", "name"},
+		uniqueKeys: []indexInfo{
+			{name: "pk", columns: []string{"id"}},
+		},
 	}, nil
 }
 
@@ -108,7 +111,7 @@ func (h *tableHelper) GetTableIDByName(schema, table string) (int64, bool) {
 	return 42, true
 }
 
-func (s EmitSuite) TestShouldExecDMLs(c *check.C) {
+func (s EmitSuite) TestShouldExecReplaceInto(c *check.C) {
 	// Set up
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	c.Assert(err, check.IsNil)
@@ -138,6 +141,46 @@ func (s EmitSuite) TestShouldExecDMLs(c *check.C) {
 	mock.ExpectBegin()
 	mock.ExpectExec("REPLACE INTO `test`.`user`(`id`,`name`) VALUES (?,?);").
 		WithArgs(42, "tester1").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	// Execute
+	err = sink.Emit(context.Background(), txn)
+
+	// Validate
+	c.Assert(err, check.IsNil)
+}
+
+func (s EmitSuite) TestShouldExecDelete(c *check.C) {
+	// Set up
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	c.Assert(err, check.IsNil)
+	defer db.Close()
+
+	helper := tableHelper{}
+	sink := mysqlSink{
+		db:           db,
+		tblInspector: &helper,
+		infoGetter:   &helper,
+	}
+
+	txn := Txn{
+		DMLs: []*DML{
+			{
+				Database: "test",
+				Table:    "user",
+				Tp:       DeleteDMLType,
+				Values: map[string]dbtypes.Datum{
+					"id":   dbtypes.NewDatum(123),
+					"name": dbtypes.NewDatum("tester1"),
+				},
+			},
+		},
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM `test`.`user` WHERE `id` = ? LIMIT 1;").
+		WithArgs(123).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 

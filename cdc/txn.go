@@ -60,6 +60,11 @@ type DML struct {
 	OldValues map[string]types.Datum
 }
 
+// TableName returns the fully qualified name of the DML's table
+func (dml *DML) TableName() string {
+	return quoteSchema(dml.Database, dml.Table)
+}
+
 // DDL holds the ddl info
 type DDL struct {
 	Database string

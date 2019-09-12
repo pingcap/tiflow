@@ -66,7 +66,11 @@ func (s *mysqlSink) Emit(ctx context.Context, txn Txn) error {
 		return err
 	}
 	// TODO: Add retry
-	return s.execDMLs(ctx, txn.DMLs)
+	dmls, err := s.formatDMLs(txn.DMLs)
+	if err != nil {
+		return err
+	}
+	return s.execDMLs(ctx, dmls)
 }
 
 func (s *mysqlSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved uint64) error {
@@ -129,7 +133,16 @@ func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*DML) error {
 	}
 
 	for _, dml := range dmls {
-		query, args, err := s.parseDML(dml)
+		var fPrepare func(*DML) (string, []interface{}, error)
+		switch dml.Tp {
+		case InsertDMLType, UpdateDMLType:
+			fPrepare = s.prepareReplace
+		case DeleteDMLType:
+			fPrepare = s.prepareDelete
+		default:
+			return fmt.Errorf("invalid dml type: %v", dml.Tp)
+		}
+		query, args, err := fPrepare(dml)
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -148,16 +161,33 @@ func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*DML) error {
 	return nil
 }
 
-func (s *mysqlSink) parseDML(dml *DML) (string, []interface{}, error) {
-	tblID, ok := s.infoGetter.GetTableIDByName(dml.Database, dml.Table)
+func (s *mysqlSink) formatDMLs(dmls []*DML) ([]*DML, error) {
+	result := make([]*DML, 0, len(dmls))
+	for _, dml := range dmls {
+		tableInfo, ok := s.getTableDefinition(dml.Database, dml.Table)
+		if !ok {
+			return nil, fmt.Errorf("table not found: %s.%s", dml.Database, dml.Table)
+		}
+		var err error
+		dml.Values, err = formatValues(tableInfo, dml.Values)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, dml)
+	}
+	return result, nil
+}
+
+func (s *mysqlSink) getTableDefinition(schema, table string) (*model.TableInfo, bool) {
+	tblID, ok := s.infoGetter.GetTableIDByName(schema, table)
 	if !ok {
-		return "", nil, fmt.Errorf("table not found: %s.%s", dml.Database, dml.Table)
+		return nil, false
 	}
 	tableInfo, ok := s.infoGetter.TableByID(tblID)
-	if !ok {
-		return "", nil, fmt.Errorf("no info found for table: %d", tblID)
-	}
+	return tableInfo, ok
+}
 
+func (s *mysqlSink) prepareReplace(dml *DML) (string, []interface{}, error) {
 	info, err := s.tblInspector.Get(dml.Database, dml.Table)
 	if err != nil {
 		return "", nil, err
@@ -168,20 +198,43 @@ func (s *mysqlSink) parseDML(dml *DML) (string, []interface{}, error) {
 	builder.WriteString("REPLACE INTO " + tblName + cols + " VALUES ")
 	builder.WriteString("(" + holderString(len(info.columns)) + ");")
 
-	formattedVals, err := formatColumnValues(tableInfo, dml.Values)
-	if err != nil {
-		return "", nil, err
-	}
 	args := make([]interface{}, 0, len(info.columns))
 	for _, name := range info.columns {
-		val, ok := formattedVals[name]
+		val, ok := dml.Values[name]
 		if !ok {
 			return "", nil, fmt.Errorf("missing value for column: %s", name)
 		}
-		args = append(args, val)
+		args = append(args, val.GetValue())
 	}
 
 	return builder.String(), args, nil
+}
+
+func (s *mysqlSink) prepareDelete(dml *DML) (string, []interface{}, error) {
+	info, err := s.tblInspector.Get(dml.Database, dml.Table)
+	if err != nil {
+		return "", nil, err
+	}
+
+	var builder strings.Builder
+	builder.WriteString("DELETE FROM " + dml.TableName() + " WHERE ")
+
+	colNames, wargs := whereSlice(info, dml.Values)
+	args := make([]interface{}, 0, len(wargs))
+	for i := 0; i < len(colNames); i++ {
+		if i > 0 {
+			builder.WriteString(" AND ")
+		}
+		if wargs[i].IsNull() {
+			builder.WriteString(quoteName(colNames[i]) + " IS NULL")
+		} else {
+			builder.WriteString(quoteName(colNames[i]) + " = ?")
+			args = append(args, wargs[i].GetValue())
+		}
+	}
+	builder.WriteString(" LIMIT 1;")
+	sql := builder.String()
+	return sql, args, nil
 }
 
 func formatColumnValues(table *model.TableInfo, colVals map[string]types.Datum) (map[string]interface{}, error) {
@@ -199,6 +252,26 @@ func formatColumnValues(table *model.TableInfo, colVals map[string]types.Datum) 
 			return nil, errors.Trace(err)
 		}
 		formatted[col.Name.O] = value.GetValue()
+	}
+
+	return formatted, nil
+}
+
+func formatValues(table *model.TableInfo, colVals map[string]types.Datum) (map[string]types.Datum, error) {
+	columns := writableColumns(table)
+
+	formatted := make(map[string]types.Datum, len(columns))
+	for _, col := range columns {
+		val, ok := colVals[col.Name.O]
+		if !ok {
+			val = getDefaultOrZeroValue(col)
+		}
+
+		value, err := formatColVal(val, col.FieldType)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		formatted[col.Name.O] = value
 	}
 
 	return formatted, nil
@@ -259,4 +332,31 @@ func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
 	}
 
 	return table.GetZeroValue(col)
+}
+func whereValues(colVals map[string]types.Datum, names []string) (values []types.Datum) {
+	for _, name := range names {
+		v := colVals[name]
+		values = append(values, v)
+	}
+	return
+}
+
+func whereSlice(table *tableInfo, colVals map[string]types.Datum) (colNames []string, args []types.Datum) {
+	// Try to use unique key values when available
+	for _, index := range table.uniqueKeys {
+		values := whereValues(colVals, index.columns)
+		notAnyNil := true
+		for i := 0; i < len(values); i++ {
+			if values[i].IsNull() {
+				notAnyNil = false
+				break
+			}
+		}
+		if notAnyNil {
+			return index.columns, values
+		}
+	}
+
+	// Fallback to use all columns
+	return table.columns, whereValues(colVals, table.columns)
 }
