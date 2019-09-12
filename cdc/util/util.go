@@ -12,6 +12,31 @@ type Span struct {
 	End   []byte
 }
 
+// UpperBoundKey represents the maximum value.
+var UpperBoundKey []byte = []byte{255, 255, 255, 255, 255}
+
+// Hack will set End as UpperBoundKey if End is Nil.
+func (s Span) Hack() Span {
+	if s.End != nil && s.Start != nil {
+		return s
+	}
+
+	r := Span{
+		Start: s.Start,
+		End:   s.End,
+	}
+
+	if r.Start == nil {
+		r.Start = []byte{}
+	}
+
+	if r.End == nil {
+		r.End = UpperBoundKey
+	}
+
+	return r
+}
+
 // Nil means Negative infinity
 // The result will be 0 if lhs==rhs, -1 if lhs < rhs, and +1 if lhs > rhs
 func StartCompare(lhs []byte, rhs []byte) int {

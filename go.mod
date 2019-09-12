@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.3.3
+	github.com/biogo/store v0.0.0-20190426020002-884f370e325d
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
 	github.com/pingcap/errors v0.11.4
