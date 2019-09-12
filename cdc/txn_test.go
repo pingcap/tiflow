@@ -121,7 +121,7 @@ func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *Schema) 
 	return puller, schema
 }
 
-func (cs *mountTxnsSuite) NTestInsertPkNotHandle(c *check.C) {
+func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 	puller, schema := setUpPullerAndSchema(c, "create database testDB", "create table testDB.test1(id varchar(255) primary key, a int, index ci (a))")
 	tableId, exist := schema.GetTableIDByName("testDB", "test1")
 	c.Assert(exist, check.IsTrue)
