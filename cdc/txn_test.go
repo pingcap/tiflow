@@ -231,7 +231,6 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
 	})
-	fmt.Printf("%#v\n", txn.deleteDMLs[0])
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &TableTxn{
 		Ts: rawKV[0].Ts,
@@ -320,6 +319,93 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 				Tp:       DeleteDMLType,
 				Values: map[string]types.Datum{
 					"a": types.NewIntDatum(888),
+				},
+			},
+		},
+	})
+}
+
+func (cs *mountTxnsSuite) TestDDL(c *check.C) {
+	puller, schema := setUpPullerAndSchema(c, "create database testDB", "create table testDB.test1(id varchar(255) primary key, a int, index ci (a))")
+	tableId, exist := schema.GetTableIDByName("testDB", "test1")
+	c.Assert(exist, check.IsTrue)
+	mounter, err := NewTxnMounter(schema, tableId, time.UTC)
+	c.Assert(err, check.IsNil)
+	rawKV := puller.MustExec("alter table testDB.test1 add b int null")
+	txn, err := mounter.Mount(&RawTxn{
+		ts:      rawKV[0].Ts,
+		entries: rawKV,
+	})
+	c.Assert(err, check.IsNil)
+	c.Assert(txn, check.DeepEquals, &TableTxn{
+		DDL: &DDL{
+			Database: "testDB",
+			Table:    "test1",
+			SQL:      "alter table testDB.test1 add b int null",
+			Type:     model.ActionAddColumn,
+		},
+		Ts: rawKV[0].Ts,
+	})
+
+	// test insert null value
+	rawKV = puller.MustExec("insert into testDB.test1(id,a) values('ttt',6)")
+	txn, err = mounter.Mount(&RawTxn{
+		ts:      rawKV[0].Ts,
+		entries: rawKV,
+	})
+	c.Assert(err, check.IsNil)
+	cs.assertTableTxnEquals(c, txn, &TableTxn{
+		Ts: rawKV[0].Ts,
+		replaceDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       InsertDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("ttt")),
+					"a":  types.NewIntDatum(6),
+				},
+			},
+		},
+		deleteDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("ttt")),
+				},
+			},
+		},
+	})
+
+	rawKV = puller.MustExec("insert into testDB.test1(id,a,b) values('kkk',6,7)")
+	txn, err = mounter.Mount(&RawTxn{
+		ts:      rawKV[0].Ts,
+		entries: rawKV,
+	})
+	c.Assert(err, check.IsNil)
+	cs.assertTableTxnEquals(c, txn, &TableTxn{
+		Ts: rawKV[0].Ts,
+		replaceDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       InsertDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("kkk")),
+					"a":  types.NewIntDatum(6),
+					"b":  types.NewIntDatum(7),
+				},
+			},
+		},
+		deleteDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("kkk")),
 				},
 			},
 		},

@@ -132,25 +132,21 @@ func collectRawTxns(
 }
 
 type TableTxnMounter struct {
-	schema      *Schema
-	loc         *time.Location
-	tableInfo   *model.TableInfo
-	pkColOffset int
+	schema       *Schema
+	loc          *time.Location
+	tableInfo    *model.TableInfo
+	tableId      int64
+	pkColOffset  int
+	databaseName string
+	tableName    string
+	pkColName    string
 }
 
 func NewTxnMounter(schema *Schema, tableId int64, loc *time.Location) (*TableTxnMounter, error) {
-	m := &TableTxnMounter{schema: schema, loc: loc}
-
-	tableInfo, exist := m.schema.TableByID(tableId)
-	if !exist {
-		return nil, errors.Errorf("can not find table, id: %d", tableId)
-	}
-	m.tableInfo = tableInfo
-	m.pkColOffset = -1
-	for i, col := range tableInfo.Columns {
-		if mysql.HasPriKeyFlag(col.Flag) {
-			m.pkColOffset = i
-		}
+	m := &TableTxnMounter{schema: schema, tableId: tableId, loc: loc}
+	err := m.flushTableInfo()
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 	return m, nil
 }
@@ -194,7 +190,11 @@ func (m *TableTxnMounter) Mount(rawTxn *RawTxn) (*TableTxn, error) {
 				tableTxn.deleteDMLs = append(tableTxn.deleteDMLs, dml)
 			}
 		case *entry.DDLJobHistoryKVEntry:
-			//return m.mountDDL(e)
+			tableTxn.DDL, err = m.mountDDL(e)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			return tableTxn, nil
 		}
 	}
 	return tableTxn, nil
@@ -203,15 +203,10 @@ func (m *TableTxnMounter) Mount(rawTxn *RawTxn) (*TableTxn, error) {
 func (m *TableTxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
 	if row.Delete {
 		if m.tableInfo.PKIsHandle {
-			databaseName, tableName, exist := m.schema.SchemaAndTableName(row.TableId)
-			if !exist {
-				return nil, errors.Errorf("can not find table, id: %d", row.TableId)
-			}
-			pkColName := m.tableInfo.Columns[m.pkColOffset].Name.O
-			values := map[string]types.Datum{pkColName: types.NewIntDatum(row.RecordId)}
+			values := map[string]types.Datum{m.pkColName: types.NewIntDatum(row.RecordId)}
 			return &DML{
-				Database: databaseName,
-				Table:    tableName,
+				Database: m.databaseName,
+				Table:    m.tableName,
 				Tp:       DeleteDMLType,
 				Values:   values,
 			}, nil
@@ -219,46 +214,79 @@ func (m *TableTxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
 		return nil, nil
 	}
 
-	values := make(map[string]types.Datum, len(row.Row))
+	values := make(map[string]types.Datum, len(row.Row)+1)
 	for index, colValue := range row.Row {
 		colName := m.tableInfo.Columns[index-1].Name.O
 		values[colName] = colValue
 	}
 	if m.tableInfo.PKIsHandle {
-		pkColName := m.tableInfo.Columns[m.pkColOffset].Name.O
-		values[pkColName] = types.NewIntDatum(row.RecordId)
-	}
-	databaseName, tableName, exist := m.schema.SchemaAndTableName(row.TableId)
-	if !exist {
-		return nil, errors.Errorf("can not find table, id: %d", row.TableId)
+		values[m.pkColName] = types.NewIntDatum(row.RecordId)
 	}
 	return &DML{
-		Database: databaseName,
-		Table:    tableName,
+		Database: m.databaseName,
+		Table:    m.tableName,
 		Tp:       InsertDMLType,
 		Values:   values,
 	}, nil
 }
 
 func (m *TableTxnMounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
-
 	indexInfo := m.tableInfo.Indices[idx.IndexId-1]
 	if !indexInfo.Primary && !indexInfo.Unique {
 		return nil, nil
 	}
 	values := make(map[string]types.Datum, len(idx.IndexValue))
 	for i, idxCol := range indexInfo.Columns {
-		colName := m.tableInfo.Columns[idxCol.Offset].Name.O
-		values[colName] = idx.IndexValue[i]
-	}
-	databaseName, tableName, exist := m.schema.SchemaAndTableName(idx.TableId)
-	if !exist {
-		return nil, errors.Errorf("can not find table, id: %d", idx.TableId)
+		values[idxCol.Name.O] = idx.IndexValue[i]
 	}
 	return &DML{
-		Database: databaseName,
-		Table:    tableName,
+		Database: m.databaseName,
+		Table:    m.tableName,
 		Tp:       DeleteDMLType,
 		Values:   values,
+	}, nil
+}
+
+func (m *TableTxnMounter) flushTableInfo() error {
+	tableInfo, exist := m.schema.TableByID(m.tableId)
+	if !exist {
+		return errors.Errorf("can not find table, id: %d", m.tableId)
+	}
+	m.tableInfo = tableInfo
+
+	m.databaseName, m.tableName, exist = m.schema.SchemaAndTableName(m.tableId)
+	if !exist {
+		return errors.Errorf("can not find table, id: %d", m.tableId)
+	}
+
+	m.pkColOffset = -1
+	for i, col := range tableInfo.Columns {
+		if mysql.HasPriKeyFlag(col.Flag) {
+			m.pkColOffset = i
+			m.pkColName = m.tableInfo.Columns[m.pkColOffset].Name.O
+		}
+	}
+	if tableInfo.PKIsHandle && m.pkColOffset == -1 {
+		return errors.Errorf("this table (%d) is handled by pk, but pk column not found", m.tableId)
+	}
+	return nil
+}
+
+func (m *TableTxnMounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, error) {
+	_, _, _, err := m.schema.handleDDL(jobHistory.Job)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if err := m.flushTableInfo(); err != nil {
+		return nil, errors.Trace(err)
+	}
+	if jobHistory.Job.TableID != m.tableId {
+		return nil, nil
+	}
+	return &DDL{
+		m.databaseName,
+		m.tableName,
+		jobHistory.Job.Query,
+		jobHistory.Job.Type,
 	}, nil
 }
