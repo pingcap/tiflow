@@ -141,6 +141,7 @@ func NewTxnMounter(schema *Schema, tableId int64, loc *time.Location) (*TableTxn
 		return nil, errors.Errorf("can not find table, id: %d", tableId)
 	}
 	m.tableInfo = tableInfo
+	m.pkColOffset = -1
 	for i, col := range tableInfo.Columns {
 		if mysql.HasPriKeyFlag(col.Flag) {
 			m.pkColOffset = i
@@ -201,9 +202,8 @@ func (m *TableTxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
 			if !exist {
 				return nil, errors.Errorf("can not find table, id: %d", row.TableId)
 			}
-			values := make(map[string]types.Datum, len(row.Row))
 			pkColName := m.tableInfo.Columns[m.pkColOffset].Name.O
-			values[pkColName] = types.NewIntDatum(row.RecordId)
+			values := map[string]types.Datum{pkColName: types.NewIntDatum(row.RecordId)}
 			return &DML{
 				Database: databaseName,
 				Table:    tableName,
