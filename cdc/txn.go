@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-cdc/cdc/entry"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb/types"
@@ -126,9 +127,10 @@ func collectRawTxns(
 }
 
 type TableTxnMounter struct {
-	schema    *Schema
-	loc       *time.Location
-	tableInfo *model.TableInfo
+	schema      *Schema
+	loc         *time.Location
+	tableInfo   *model.TableInfo
+	pkColOffset int
 }
 
 func NewTxnMounter(schema *Schema, tableId int64, loc *time.Location) (*TableTxnMounter, error) {
@@ -139,6 +141,12 @@ func NewTxnMounter(schema *Schema, tableId int64, loc *time.Location) (*TableTxn
 		return nil, errors.Errorf("can not find table, id: %d", tableId)
 	}
 	m.tableInfo = tableInfo
+	m.pkColOffset = -1
+	for i, col := range tableInfo.Columns {
+		if mysql.HasPriKeyFlag(col.Flag) {
+			m.pkColOffset = i
+		}
+	}
 	return m, nil
 }
 
@@ -162,7 +170,11 @@ func (m *TableTxnMounter) Mount(rawTxn *RawTxn) (*TableTxn, error) {
 				return nil, errors.Trace(err)
 			}
 			if dml != nil {
-				tableTxn.replaceDMLs = append(tableTxn.replaceDMLs, dml)
+				if dml.Tp == InsertDMLType {
+					tableTxn.replaceDMLs = append(tableTxn.replaceDMLs, dml)
+				} else {
+					tableTxn.deleteDMLs = append(tableTxn.deleteDMLs, dml)
+				}
 			}
 		case *entry.IndexKVEntry:
 			err := e.Unflatten(m.tableInfo, m.loc)
@@ -185,15 +197,31 @@ func (m *TableTxnMounter) Mount(rawTxn *RawTxn) (*TableTxn, error) {
 
 func (m *TableTxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
 	if row.Delete {
+		if m.tableInfo.PKIsHandle {
+			databaseName, tableName, exist := m.schema.SchemaAndTableName(row.TableId)
+			if !exist {
+				return nil, errors.Errorf("can not find table, id: %d", row.TableId)
+			}
+			pkColName := m.tableInfo.Columns[m.pkColOffset].Name.O
+			values := map[string]types.Datum{pkColName: types.NewIntDatum(row.RecordId)}
+			return &DML{
+				Database: databaseName,
+				Table:    tableName,
+				Tp:       DeleteDMLType,
+				Values:   values,
+			}, nil
+		}
 		return nil, nil
 	}
 
-	// TODO:
-	// only support the table which pk is not handle now
 	values := make(map[string]types.Datum, len(row.Row))
 	for index, colValue := range row.Row {
 		colName := m.tableInfo.Columns[index-1].Name.O
 		values[colName] = colValue
+	}
+	if m.tableInfo.PKIsHandle {
+		pkColName := m.tableInfo.Columns[m.pkColOffset].Name.O
+		values[pkColName] = types.NewIntDatum(row.RecordId)
 	}
 	databaseName, tableName, exist := m.schema.SchemaAndTableName(row.TableId)
 	if !exist {
@@ -209,8 +237,6 @@ func (m *TableTxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
 
 func (m *TableTxnMounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
 
-	// TODO:
-	// only support the table which pk is not handle now
 	indexInfo := m.tableInfo.Indices[idx.IndexId-1]
 	if !indexInfo.Primary && !indexInfo.Unique {
 		return nil, nil

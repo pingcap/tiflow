@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -133,7 +134,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	c.Assert(txn, check.DeepEquals, &TableTxn{
+	cs.assertTableTxnEquals(c, txn, &TableTxn{
 		Ts: rawKV[0].Ts,
 		replaceDMLs: []*DML{
 			{
@@ -164,7 +165,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	c.Assert(txn, check.DeepEquals, &TableTxn{
+	cs.assertTableTxnEquals(c, txn, &TableTxn{
 		Ts: rawKV[0].Ts,
 		replaceDMLs: []*DML{
 			{
@@ -203,7 +204,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	c.Assert(txn, check.DeepEquals, &TableTxn{
+	cs.assertTableTxnEquals(c, txn, &TableTxn{
 		Ts: rawKV[0].Ts,
 		deleteDMLs: []*DML{
 			{
@@ -216,4 +217,140 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 			},
 		},
 	})
+}
+
+func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
+	puller, schema := setUpPullerAndSchema(c, "create database testDB", "create table testDB.test1(id int primary key, a int unique key)")
+	tableId, exist := schema.GetTableIDByName("testDB", "test1")
+	c.Assert(exist, check.IsTrue)
+	mounter, err := NewTxnMounter(schema, tableId, time.UTC)
+	c.Assert(err, check.IsNil)
+
+	rawKV := puller.MustExec("insert into testDB.test1 values(777,888)")
+	txn, err := mounter.Mount(&RawTxn{
+		ts:      rawKV[0].Ts,
+		entries: rawKV,
+	})
+	fmt.Printf("%#v\n", txn.deleteDMLs[0])
+	c.Assert(err, check.IsNil)
+	cs.assertTableTxnEquals(c, txn, &TableTxn{
+		Ts: rawKV[0].Ts,
+		replaceDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       InsertDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewIntDatum(777),
+					"a":  types.NewIntDatum(888),
+				},
+			},
+		},
+		deleteDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"a": types.NewIntDatum(888),
+				},
+			},
+		},
+	})
+
+	rawKV = puller.MustExec("update testDB.test1 set id = 999 where a = 888")
+	txn, err = mounter.Mount(&RawTxn{
+		ts:      rawKV[0].Ts,
+		entries: rawKV,
+	})
+	c.Assert(err, check.IsNil)
+	cs.assertTableTxnEquals(c, txn, &TableTxn{
+		Ts: rawKV[0].Ts,
+		replaceDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       InsertDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewIntDatum(999),
+					"a":  types.NewIntDatum(888),
+				},
+			},
+		},
+		deleteDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"a": types.NewIntDatum(888),
+				},
+			},
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewIntDatum(777),
+				},
+			},
+		},
+	})
+
+	rawKV = puller.MustExec("delete from testDB.test1 where id = 999")
+	txn, err = mounter.Mount(&RawTxn{
+		ts:      rawKV[0].Ts,
+		entries: rawKV,
+	})
+	c.Assert(err, check.IsNil)
+	cs.assertTableTxnEquals(c, txn, &TableTxn{
+		Ts: rawKV[0].Ts,
+		deleteDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewIntDatum(999),
+				},
+			},
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"a": types.NewIntDatum(888),
+				},
+			},
+		},
+	})
+}
+
+func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C, obtained, expected *TableTxn) {
+	obtainedDeleteDMLs := obtained.deleteDMLs
+	obtainedReplaceDMLs := obtained.replaceDMLs
+	expectedDeleteDMLs := expected.deleteDMLs
+	expectedReplaceDMLs := expected.replaceDMLs
+	obtained.deleteDMLs = nil
+	obtained.replaceDMLs = nil
+	expected.deleteDMLs = nil
+	expected.replaceDMLs = nil
+	c.Assert(obtained, check.DeepEquals, expected)
+	assertContain := func(obtained []*DML, expected []*DML) {
+		for _, oDML := range obtained {
+			match := false
+			for _, eDML := range expected {
+				if reflect.DeepEqual(oDML, eDML) {
+					match = true
+					break
+				}
+			}
+			if !match {
+				c.Errorf("obtained DML %#v isn't contained by expected DML", oDML)
+			}
+		}
+	}
+	assertContain(obtainedDeleteDMLs, expectedDeleteDMLs)
+	assertContain(obtainedReplaceDMLs, expectedReplaceDMLs)
+
 }
