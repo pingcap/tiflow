@@ -122,17 +122,17 @@ func collectRawTxns(
 	}
 }
 
-type TableTxnMounter struct {
+type TxnMounter struct {
 	schema *Schema
 	loc    *time.Location
 }
 
-func NewTxnMounter(schema *Schema, loc *time.Location) (*TableTxnMounter, error) {
-	m := &TableTxnMounter{schema: schema, loc: loc}
+func NewTxnMounter(schema *Schema, loc *time.Location) (*TxnMounter, error) {
+	m := &TxnMounter{schema: schema, loc: loc}
 	return m, nil
 }
 
-func (m *TableTxnMounter) Mount(rawTxn RawTxn) (*Txn, error) {
+func (m *TxnMounter) Mount(rawTxn RawTxn) (*Txn, error) {
 	txn := &Txn{
 		Ts: rawTxn.ts,
 	}
@@ -179,7 +179,7 @@ func (m *TableTxnMounter) Mount(rawTxn RawTxn) (*Txn, error) {
 	return txn, nil
 }
 
-func (m *TableTxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
+func (m *TxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
 	tableInfo, tableName, handleColName, err := m.fetchTableInfo(row.TableId)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -219,7 +219,7 @@ func (m *TableTxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
 	}, nil
 }
 
-func (m *TableTxnMounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
+func (m *TxnMounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
 	tableInfo, tableName, _, err := m.fetchTableInfo(idx.TableId)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -247,7 +247,7 @@ func (m *TableTxnMounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, erro
 	}, nil
 }
 
-func (m *TableTxnMounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, tableName *TableName, handleColName string, err error) {
+func (m *TxnMounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, tableName *TableName, handleColName string, err error) {
 	tableInfo, exist := m.schema.TableByID(tableId)
 	if !exist {
 		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableId)
@@ -273,7 +273,7 @@ func (m *TableTxnMounter) fetchTableInfo(tableId int64) (tableInfo *model.TableI
 	return
 }
 
-func (m *TableTxnMounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, error) {
+func (m *TxnMounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, error) {
 	_, _, _, err := m.schema.handleDDL(jobHistory.Job)
 	if err != nil {
 		return nil, errors.Trace(err)
