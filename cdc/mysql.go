@@ -92,8 +92,11 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *DDL, maxRetr
 		maxRetries,
 	)
 	return backoff.Retry(func() error {
-		// TODO: Wrap context canceled or deadline exceeded as permanent errors
-		return s.execDDL(ctx, ddl)
+		err := s.execDDL(ctx, ddl)
+		if err == context.Canceled || err == context.DeadlineExceeded {
+			err = backoff.Permanent(err)
+		}
+		return err
 	}, retryCfg)
 }
 
