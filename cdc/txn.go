@@ -76,25 +76,20 @@ type DDL struct {
 // Txn holds transaction info, an DDL or DML sequences
 type Txn struct {
 	// TODO: Group changes by tables to improve efficiency
-	replaceDMLs []*DML
-	deleteDMLs  []*DML
-	DDL         *DDL
+	DMLs []*DML
+	DDL  *DDL
 
 	Ts uint64
 }
 
-func (t *Txn) IsDDL() bool {
+func (t Txn) IsDDL() bool {
 	return t.DDL != nil
-}
-
-func (t *Txn) DMLs() []*DML {
-	return append(t.deleteDMLs, t.replaceDMLs...)
 }
 
 func collectRawTxns(
 	ctx context.Context,
 	inputFn func(context.Context) (BufferEntry, error),
-	outputFn func(context.Context, *RawTxn) error,
+	outputFn func(context.Context, RawTxn) error,
 ) error {
 	entryGroups := make(map[uint64][]*kv.RawKVEntry)
 	for {
@@ -118,7 +113,7 @@ func collectRawTxns(
 				return readyTxns[i].ts < readyTxns[j].ts
 			})
 			for _, t := range readyTxns {
-				err := outputFn(ctx, &t)
+				err := outputFn(ctx, t)
 				if err != nil {
 					return err
 				}
@@ -137,10 +132,11 @@ func NewTxnMounter(schema *Schema, loc *time.Location) (*TableTxnMounter, error)
 	return m, nil
 }
 
-func (m *TableTxnMounter) Mount(rawTxn *RawTxn) (*Txn, error) {
-	tableTxn := &Txn{
+func (m *TableTxnMounter) Mount(rawTxn RawTxn) (*Txn, error) {
+	txn := &Txn{
 		Ts: rawTxn.ts,
 	}
+	var replaceDMLs, deleteDMLs []*DML
 	for _, raw := range rawTxn.entries {
 		kvEntry, err := entry.Unmarshal(raw)
 		if err != nil {
@@ -158,9 +154,9 @@ func (m *TableTxnMounter) Mount(rawTxn *RawTxn) (*Txn, error) {
 			}
 			if dml != nil {
 				if dml.Tp == InsertDMLType {
-					tableTxn.replaceDMLs = append(tableTxn.replaceDMLs, dml)
+					replaceDMLs = append(replaceDMLs, dml)
 				} else {
-					tableTxn.deleteDMLs = append(tableTxn.deleteDMLs, dml)
+					deleteDMLs = append(deleteDMLs, dml)
 				}
 			}
 		case *entry.IndexKVEntry:
@@ -169,17 +165,18 @@ func (m *TableTxnMounter) Mount(rawTxn *RawTxn) (*Txn, error) {
 				return nil, errors.Trace(err)
 			}
 			if dml != nil {
-				tableTxn.deleteDMLs = append(tableTxn.deleteDMLs, dml)
+				deleteDMLs = append(deleteDMLs, dml)
 			}
 		case *entry.DDLJobHistoryKVEntry:
-			tableTxn.DDL, err = m.mountDDL(e)
+			txn.DDL, err = m.mountDDL(e)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			return tableTxn, nil
+			return txn, nil
 		}
 	}
-	return tableTxn, nil
+	txn.DMLs = append(deleteDMLs, replaceDMLs...)
+	return txn, nil
 }
 
 func (m *TableTxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {

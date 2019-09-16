@@ -71,8 +71,8 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	}
 
 	var rawTxns []RawTxn
-	output := func(ctx context.Context, txn *RawTxn) error {
-		rawTxns = append(rawTxns, *txn)
+	output := func(ctx context.Context, txn RawTxn) error {
+		rawTxns = append(rawTxns, txn)
 		return nil
 	}
 
@@ -127,14 +127,22 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	rawKV := puller.MustExec("insert into testDB.test1 values('ttt',6)")
-	txn, err := mounter.Mount(&RawTxn{
+	txn, err := mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
-		replaceDMLs: []*DML{
+		DMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("ttt")),
+				},
+			},
 			{
 				Database: "testDB",
 				Table:    "test1",
@@ -142,41 +150,20 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 				Values: map[string]types.Datum{
 					"id": types.NewBytesDatum([]byte("ttt")),
 					"a":  types.NewIntDatum(6),
-				},
-			},
-		},
-		deleteDMLs: []*DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("ttt")),
 				},
 			},
 		},
 	})
 
 	rawKV = puller.MustExec("update testDB.test1 set id = 'vvv' where a = 6")
-	txn, err = mounter.Mount(&RawTxn{
+	txn, err = mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
-		replaceDMLs: []*DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       InsertDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("vvv")),
-					"a":  types.NewIntDatum(6),
-				},
-			},
-		},
-		deleteDMLs: []*DML{
+		DMLs: []*DML{
 			{
 				Database: "testDB",
 				Table:    "test1",
@@ -193,18 +180,27 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 					"id": types.NewBytesDatum([]byte("ttt")),
 				},
 			},
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       InsertDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("vvv")),
+					"a":  types.NewIntDatum(6),
+				},
+			},
 		},
 	})
 
 	rawKV = puller.MustExec("delete from testDB.test1 where a = 6")
-	txn, err = mounter.Mount(&RawTxn{
+	txn, err = mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
-		deleteDMLs: []*DML{
+		DMLs: []*DML{
 			{
 				Database: "testDB",
 				Table:    "test1",
@@ -223,14 +219,22 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	rawKV := puller.MustExec("insert into testDB.test1 values(777,888)")
-	txn, err := mounter.Mount(&RawTxn{
+	txn, err := mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
-		replaceDMLs: []*DML{
+		DMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"a": types.NewIntDatum(888),
+				},
+			},
 			{
 				Database: "testDB",
 				Table:    "test1",
@@ -241,7 +245,17 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 				},
 			},
 		},
-		deleteDMLs: []*DML{
+	})
+
+	rawKV = puller.MustExec("update testDB.test1 set id = 999 where a = 888")
+	txn, err = mounter.Mount(RawTxn{
+		ts:      rawKV[0].Ts,
+		entries: rawKV,
+	})
+	c.Assert(err, check.IsNil)
+	cs.assertTableTxnEquals(c, txn, &Txn{
+		Ts: rawKV[0].Ts,
+		DMLs: []*DML{
 			{
 				Database: "testDB",
 				Table:    "test1",
@@ -250,18 +264,14 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 					"a": types.NewIntDatum(888),
 				},
 			},
-		},
-	})
-
-	rawKV = puller.MustExec("update testDB.test1 set id = 999 where a = 888")
-	txn, err = mounter.Mount(&RawTxn{
-		ts:      rawKV[0].Ts,
-		entries: rawKV,
-	})
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, txn, &Txn{
-		Ts: rawKV[0].Ts,
-		replaceDMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewIntDatum(777),
+				},
+			},
 			{
 				Database: "testDB",
 				Table:    "test1",
@@ -272,35 +282,17 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 				},
 			},
 		},
-		deleteDMLs: []*DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       DeleteDMLType,
-				Values: map[string]types.Datum{
-					"a": types.NewIntDatum(888),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewIntDatum(777),
-				},
-			},
-		},
 	})
 
 	rawKV = puller.MustExec("delete from testDB.test1 where id = 999")
-	txn, err = mounter.Mount(&RawTxn{
+	txn, err = mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
-		deleteDMLs: []*DML{
+		DMLs: []*DML{
 			{
 				Database: "testDB",
 				Table:    "test1",
@@ -326,7 +318,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 	mounter, err := NewTxnMounter(schema, time.UTC)
 	c.Assert(err, check.IsNil)
 	rawKV := puller.MustExec("alter table testDB.test1 add b int null")
-	txn, err := mounter.Mount(&RawTxn{
+	txn, err := mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
 	})
@@ -343,14 +335,22 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 
 	// test insert null value
 	rawKV = puller.MustExec("insert into testDB.test1(id,a) values('ttt',6)")
-	txn, err = mounter.Mount(&RawTxn{
+	txn, err = mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
-		replaceDMLs: []*DML{
+		DMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("ttt")),
+				},
+			},
 			{
 				Database: "testDB",
 				Table:    "test1",
@@ -361,27 +361,25 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 				},
 			},
 		},
-		deleteDMLs: []*DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("ttt")),
-				},
-			},
-		},
 	})
 
 	rawKV = puller.MustExec("insert into testDB.test1(id,a,b) values('kkk',6,7)")
-	txn, err = mounter.Mount(&RawTxn{
+	txn, err = mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
-		replaceDMLs: []*DML{
+		DMLs: []*DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       DeleteDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewBytesDatum([]byte("kkk")),
+				},
+			},
 			{
 				Database: "testDB",
 				Table:    "test1",
@@ -393,28 +391,15 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 				},
 			},
 		},
-		deleteDMLs: []*DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("kkk")),
-				},
-			},
-		},
 	})
 }
 
-func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C, obtained, expected *Txn) {
-	obtainedDeleteDMLs := obtained.deleteDMLs
-	obtainedReplaceDMLs := obtained.replaceDMLs
-	expectedDeleteDMLs := expected.deleteDMLs
-	expectedReplaceDMLs := expected.replaceDMLs
-	obtained.deleteDMLs = nil
-	obtained.replaceDMLs = nil
-	expected.deleteDMLs = nil
-	expected.replaceDMLs = nil
+func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C,
+	obtained, expected *Txn) {
+	obtainedDMLs := obtained.DMLs
+	expectedDMLs := expected.DMLs
+	obtained.DMLs = nil
+	expected.DMLs = nil
 	c.Assert(obtained, check.DeepEquals, expected)
 	assertContain := func(obtained []*DML, expected []*DML) {
 		for _, oDML := range obtained {
@@ -430,7 +415,6 @@ func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C, obtained, expected *T
 			}
 		}
 	}
-	assertContain(obtainedDeleteDMLs, expectedDeleteDMLs)
-	assertContain(obtainedReplaceDMLs, expectedReplaceDMLs)
+	assertContain(obtainedDMLs, expectedDMLs)
 
 }

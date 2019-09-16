@@ -66,7 +66,7 @@ func (s *mysqlSink) Emit(ctx context.Context, txn Txn) error {
 		return err
 	}
 	// TODO: Add retry
-	dmls, err := s.formatDMLs(txn.DMLs())
+	dmls, err := s.formatDMLs(txn.DMLs)
 	if err != nil {
 		return err
 	}

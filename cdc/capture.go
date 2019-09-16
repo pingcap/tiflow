@@ -98,7 +98,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		c.errCh <- err
 	}()
 
-	err = collectRawTxns(ctx, buf.Get, func(context context.Context, rawTxn *RawTxn) error {
+	err = collectRawTxns(ctx, buf.Get, func(context context.Context, rawTxn RawTxn) error {
 		txn, err := mounter.Mount(rawTxn)
 		if err != nil {
 			return errors.Trace(err)
@@ -111,22 +111,6 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		return errors.Trace(err)
 	}
 
-	//rowsFn := kvsToRows(c.detail, buf.Get)
-	//emitFn := emitEntries(c.detail, c.watchs, c.encoder, c.sink, rowsFn)
-	//
-	//for {
-	//	resolved, err := emitFn(ctx)
-	//	if err != nil {
-	//		select {
-	//		case err = <-c.errCh:
-	//		default:
-	//		}
-	//		return err
-	//	}
-	//
-	//	// TODO: forward resolved span to Frontier
-	//	_ = resolved
-	//}
 	return nil
 }
 
