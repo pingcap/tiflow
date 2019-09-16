@@ -15,9 +15,13 @@ package cdc
 
 import (
 	"context"
+	"time"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/util"
+	"go.uber.org/zap"
 )
 
 // Capture watch some span of KV and emit the entries to sink according to the ChangeFeedDetail
@@ -76,6 +80,17 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 
 	buf := MakeBuffer()
 
+	// TODO get All History DDL Job
+	schema, err := NewSchema(nil, false)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// TODO get time zone from config
+	mounter, err := NewTxnMounter(schema, time.UTC)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	puller := NewPuller(c.pdCli, c.checkpointTS, c.watchs, c.detail, buf)
 	c.errCh = make(chan error, 2)
 	go func() {
@@ -83,24 +98,20 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		c.errCh <- err
 	}()
 
-	// err := collectRawTxns(ctx, buf.Get, output)
-
-	rowsFn := kvsToRows(c.detail, buf.Get)
-	emitFn := emitEntries(c.detail, c.watchs, c.encoder, c.sink, rowsFn)
-
-	for {
-		resolved, err := emitFn(ctx)
+	err = collectRawTxns(ctx, buf.Get, func(context context.Context, rawTxn RawTxn) error {
+		txn, err := mounter.Mount(rawTxn)
 		if err != nil {
-			select {
-			case err = <-c.errCh:
-			default:
-			}
-			return err
+			return errors.Trace(err)
 		}
-
-		// TODO: forward resolved span to Frontier
-		_ = resolved
+		// TODO output Txn to mysql sink
+		log.Info("Output Txn", zap.Reflect("Tax", txn))
+		return nil
+	})
+	if err != nil {
+		return errors.Trace(err)
 	}
+
+	return nil
 }
 
 // Frontier handle all ResolvedSpan and emit resolved timestamp
