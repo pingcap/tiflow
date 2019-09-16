@@ -173,7 +173,7 @@ func (m *TxnMounter) Mount(rawTxn RawTxn) (*Txn, error) {
 			}
 			return txn, nil
 		case *entry.UnknownKVEntry:
-			log.Warn("warning: unknown kv entry", zap.Reflect("UnknownKVEntry", e))
+			log.Warn("Found unknown kv entry", zap.Reflect("UnknownKVEntry", e))
 		}
 	}
 	txn.DMLs = append(deleteDMLs, replaceDMLs...)
