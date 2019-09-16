@@ -402,6 +402,7 @@ func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C,
 	expected.DMLs = nil
 	c.Assert(obtained, check.DeepEquals, expected)
 	assertContain := func(obtained []*DML, expected []*DML) {
+		c.Assert(len(obtained), check.Equals, len(expected))
 		for _, oDML := range obtained {
 			match := false
 			for _, eDML := range expected {
