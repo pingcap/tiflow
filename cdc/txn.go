@@ -19,11 +19,13 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-cdc/cdc/entry"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb/types"
+	"go.uber.org/zap"
 )
 
 type sqlType int
@@ -142,9 +144,6 @@ func (m *TxnMounter) Mount(rawTxn RawTxn) (*Txn, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		if _, ok := kvEntry.(*entry.UnknownKVEntry); ok {
-			continue
-		}
 
 		switch e := kvEntry.(type) {
 		case *entry.RowKVEntry:
@@ -173,6 +172,8 @@ func (m *TxnMounter) Mount(rawTxn RawTxn) (*Txn, error) {
 				return nil, errors.Trace(err)
 			}
 			return txn, nil
+		case *entry.UnknownKVEntry:
+			log.Warn("warning: unknown kv entry", zap.Reflect("UnknownKVEntry", e))
 		}
 	}
 	txn.DMLs = append(deleteDMLs, replaceDMLs...)
