@@ -71,8 +71,8 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	}
 
 	var rawTxns []RawTxn
-	output := func(ctx context.Context, txn RawTxn) error {
-		rawTxns = append(rawTxns, txn)
+	output := func(ctx context.Context, txn *RawTxn) error {
+		rawTxns = append(rawTxns, *txn)
 		return nil
 	}
 
@@ -123,9 +123,7 @@ func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *Schema) 
 
 func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 	puller, schema := setUpPullerAndSchema(c, "create database testDB", "create table testDB.test1(id varchar(255) primary key, a int, index ci (a))")
-	tableId, exist := schema.GetTableIDByName("testDB", "test1")
-	c.Assert(exist, check.IsTrue)
-	mounter, err := NewTxnMounter(schema, tableId, time.UTC)
+	mounter, err := NewTxnMounter(schema, time.UTC)
 	c.Assert(err, check.IsNil)
 
 	rawKV := puller.MustExec("insert into testDB.test1 values('ttt',6)")
@@ -134,7 +132,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, txn, &TableTxn{
+	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
 		replaceDMLs: []*DML{
 			{
@@ -165,7 +163,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, txn, &TableTxn{
+	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
 		replaceDMLs: []*DML{
 			{
@@ -204,7 +202,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, txn, &TableTxn{
+	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
 		deleteDMLs: []*DML{
 			{
@@ -221,9 +219,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 
 func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 	puller, schema := setUpPullerAndSchema(c, "create database testDB", "create table testDB.test1(id int primary key, a int unique key)")
-	tableId, exist := schema.GetTableIDByName("testDB", "test1")
-	c.Assert(exist, check.IsTrue)
-	mounter, err := NewTxnMounter(schema, tableId, time.UTC)
+	mounter, err := NewTxnMounter(schema, time.UTC)
 	c.Assert(err, check.IsNil)
 
 	rawKV := puller.MustExec("insert into testDB.test1 values(777,888)")
@@ -232,7 +228,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, txn, &TableTxn{
+	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
 		replaceDMLs: []*DML{
 			{
@@ -263,7 +259,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, txn, &TableTxn{
+	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
 		replaceDMLs: []*DML{
 			{
@@ -302,7 +298,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, txn, &TableTxn{
+	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
 		deleteDMLs: []*DML{
 			{
@@ -327,9 +323,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 
 func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 	puller, schema := setUpPullerAndSchema(c, "create database testDB", "create table testDB.test1(id varchar(255) primary key, a int, index ci (a))")
-	tableId, exist := schema.GetTableIDByName("testDB", "test1")
-	c.Assert(exist, check.IsTrue)
-	mounter, err := NewTxnMounter(schema, tableId, time.UTC)
+	mounter, err := NewTxnMounter(schema, time.UTC)
 	c.Assert(err, check.IsNil)
 	rawKV := puller.MustExec("alter table testDB.test1 add b int null")
 	txn, err := mounter.Mount(&RawTxn{
@@ -337,7 +331,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	c.Assert(txn, check.DeepEquals, &TableTxn{
+	c.Assert(txn, check.DeepEquals, &Txn{
 		DDL: &DDL{
 			Database: "testDB",
 			Table:    "test1",
@@ -354,7 +348,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, txn, &TableTxn{
+	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
 		replaceDMLs: []*DML{
 			{
@@ -385,7 +379,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 		entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, txn, &TableTxn{
+	cs.assertTableTxnEquals(c, txn, &Txn{
 		Ts: rawKV[0].Ts,
 		replaceDMLs: []*DML{
 			{
@@ -412,7 +406,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 	})
 }
 
-func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C, obtained, expected *TableTxn) {
+func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C, obtained, expected *Txn) {
 	obtainedDeleteDMLs := obtained.deleteDMLs
 	obtainedReplaceDMLs := obtained.replaceDMLs
 	expectedDeleteDMLs := expected.deleteDMLs

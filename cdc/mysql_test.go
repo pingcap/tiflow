@@ -125,7 +125,7 @@ func (s EmitSuite) TestShouldExecReplaceInto(c *check.C) {
 	}
 
 	txn := Txn{
-		DMLs: []*DML{
+		replaceDMLs: []*DML{
 			{
 				Database: "test",
 				Table:    "user",
@@ -165,7 +165,7 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 	}
 
 	txn := Txn{
-		DMLs: []*DML{
+		deleteDMLs: []*DML{
 			{
 				Database: "test",
 				Table:    "user",
