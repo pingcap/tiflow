@@ -45,6 +45,14 @@ func (t *schemaSuite) TestSchema(c *C) {
 		BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database test",
 	}
+	jobDup := &model.Job{
+		ID:         3,
+		State:      model.JobStateSynced,
+		SchemaID:   1,
+		Type:       model.ActionCreateSchema,
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 124},
+		Query:      "create database test",
+	}
 	jobs = append(jobs, job)
 
 	// construct a rollbackdone job
@@ -72,6 +80,16 @@ func (t *schemaSuite) TestSchema(c *C) {
 	c.Assert(err, IsNil)
 	err = schema.handlePreviousDDLJobIfNeed(124)
 	c.Assert(err, IsNil)
+
+	// test create schema already exist error
+	jobs = jobs[:0]
+	jobs = append(jobs, job)
+	jobs = append(jobs, jobDup)
+	schema, err = NewSchema(jobs, false)
+	c.Assert(err, IsNil)
+	err = schema.handlePreviousDDLJobIfNeed(125)
+	c.Log(err)
+	c.Assert(errors.IsAlreadyExists(err), IsTrue)
 
 	// test schema drop schema error
 	jobs = jobs[:0]
