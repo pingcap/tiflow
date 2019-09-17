@@ -39,6 +39,7 @@ type Schema struct {
 	truncateTableID map[int64]struct{}
 
 	schemaMetaVersion int64
+	lastHandledTs     uint64
 
 	hasImplicitCol bool
 
@@ -260,6 +261,9 @@ func (s *Schema) handlePreviousDDLJobIfNeed(commitTs uint64) error {
 		if job.BinlogInfo.FinishedTS > commitTs {
 			break
 		}
+		if job.BinlogInfo.FinishedTS <= s.lastHandledTs {
+			continue
+		}
 
 		_, _, _, err := s.handleDDL(job)
 		if err != nil {
@@ -429,7 +433,7 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		schemaName = schema.Name.O
 		tableName = tbInfo.Name.O
 	}
-
+	s.lastHandledTs = job.BinlogInfo.FinishedTS
 	return
 }
 

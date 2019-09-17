@@ -15,12 +15,20 @@ package cdc
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/pkg/flags"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/store"
+	"github.com/pingcap/tidb/store/tikv"
 	"go.uber.org/zap"
 )
 
@@ -80,8 +88,17 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 
 	buf := MakeBuffer()
 
-	// TODO get All History DDL Job
-	schema, err := NewSchema(nil, false)
+	// TODO get etdc url from config
+	// here we create another pb client,we should reuse them
+	kvStore, err := createTiStore("http://localhost:2379")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	jobs, err := loadHistoryDDLJobs(kvStore)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	schema, err := NewSchema(jobs, false)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -99,12 +116,13 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	}()
 
 	err = collectRawTxns(ctx, buf.Get, func(context context.Context, rawTxn RawTxn) error {
+		log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.entries))
 		txn, err := mounter.Mount(rawTxn)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		// TODO output Txn to mysql sink
-		log.Info("Output Txn", zap.Reflect("Tax", txn))
+		log.Info("Output Txn", zap.Reflect("Txn", txn))
 		return nil
 	})
 	if err != nil {
@@ -148,4 +166,53 @@ func (f *Frontier) NotifyResolvedSpan(resolve ResolvedSpan) error {
 	// TODO emit resolved timestamp once it's safe
 
 	return nil
+}
+
+func createTiStore(urls string) (kv.Storage, error) {
+	urlv, err := flags.NewURLsValue(urls)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if err := store.Register("tikv", tikv.Driver{}); err != nil {
+		return nil, errors.Trace(err)
+	}
+	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
+	tiStore, err := store.New(tiPath)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return tiStore, nil
+}
+
+// loadHistoryDDLJobs loads all history DDL jobs from TiDB
+func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
+	snapMeta, err := getSnapshotMeta(tiStore)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	jobs, err := snapMeta.GetAllHistoryDDLJobs()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// jobs from GetAllHistoryDDLJobs are sorted by job id, need sorted by schema version
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].BinlogInfo.FinishedTS < jobs[j].BinlogInfo.FinishedTS
+	})
+
+	return jobs, nil
+}
+
+func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
+	version, err := tiStore.CurrentVersion()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snapshot, err := tiStore.GetSnapshot(version)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return meta.NewSnapshotMeta(snapshot), nil
 }

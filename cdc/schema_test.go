@@ -50,7 +50,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 		State:      model.JobStateSynced,
 		SchemaID:   1,
 		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 124},
 		Query:      "create database test",
 	}
 	jobs = append(jobs, job)
@@ -87,7 +87,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 	jobs = append(jobs, jobDup)
 	schema, err = NewSchema(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(123)
+	err = schema.handlePreviousDDLJobIfNeed(125)
 	c.Log(err)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
 

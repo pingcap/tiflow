@@ -140,3 +140,9 @@ func (p *MockTiDB) MustExec(sql string, args ...interface{}) []*kv.RawKVEntry {
 
 	return entrys
 }
+
+func (p *MockTiDB) ScanAll(fn func(*kv.RawKVEntry)) {
+	for key, value := range p.kvs {
+		fn(&kv.RawKVEntry{Key: []byte(key), Value: []byte(value), OpType: kv.OpTypePut})
+	}
+}

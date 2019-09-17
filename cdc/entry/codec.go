@@ -116,8 +116,15 @@ func decodeMetaKey(ek []byte) (key string, tp MetaType, field []byte, err error)
 		return "", UnknownMetaType, nil, errors.Trace(err)
 	}
 	tp = MetaType(rawTp)
+	if tp == ListData {
+		// TODO decode list data
+		return
+	}
 	if len(ek) > 0 {
 		ek, field, err = codec.DecodeBytes(ek, nil)
+		if err != nil {
+			return "", UnknownMetaType, nil, errors.Trace(err)
+		}
 	}
 	if len(ek) > 0 {
 		// TODO: warning hash key decode failure

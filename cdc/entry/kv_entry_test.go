@@ -283,3 +283,12 @@ func checkDMLKVEntries(c *check.C, tableInfo *model.TableInfo, rawEntries []*kv.
 		}
 	}
 }
+
+func (s *kvEntrySuite) TestAllKVS(c *check.C) {
+	puller, err := mock.NewMockPuller(c)
+	c.Assert(err, check.IsNil)
+	puller.ScanAll(func(rawKVEntry *kv.RawKVEntry) {
+		_, err := Unmarshal(rawKVEntry)
+		c.Assert(err, check.IsNil)
+	})
+}
