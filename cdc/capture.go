@@ -16,19 +16,19 @@ package cdc
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb-cdc/pkg/flags"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/store"
-	"github.com/pingcap/tidb/store/tikv"
 	"sort"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/pkg/flags"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/store"
+	"github.com/pingcap/tidb/store/tikv"
 	"go.uber.org/zap"
 )
 
