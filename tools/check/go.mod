@@ -17,3 +17,5 @@ require (
 	golang.org/x/tools v0.0.0-20190425222832-ad9eeb80039a // indirect
 	sourcegraph.com/sourcegraph/go-diff v0.5.1-0.20190210232911-dee78e514455 // indirect
 )
+
+go 1.13

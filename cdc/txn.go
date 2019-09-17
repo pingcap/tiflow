@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
@@ -139,11 +140,16 @@ func (m *TxnMounter) Mount(rawTxn RawTxn) (*Txn, error) {
 		Ts: rawTxn.ts,
 	}
 	var replaceDMLs, deleteDMLs []*DML
+	err := m.schema.handlePreviousDDLJobIfNeed(rawTxn.ts)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	for _, raw := range rawTxn.entries {
 		kvEntry, err := entry.Unmarshal(raw)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		log.Info("kvEntry", zap.Reflect(fmt.Sprintf("%T", kvEntry), kvEntry))
 
 		switch e := kvEntry.(type) {
 		case *entry.RowKVEntry:
