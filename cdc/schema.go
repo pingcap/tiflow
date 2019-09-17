@@ -247,28 +247,23 @@ func (s *Schema) addJob(job *model.Job) {
 	}
 }
 
-func (s *Schema) handlePreviousDDLJobIfNeed(version int64) error {
+func (s *Schema) handlePreviousDDLJobIfNeed(commitTs uint64) error {
 	var i int
-	for i = 0; i < len(s.jobs); i++ {
-		if skipJob(s.jobs[i]) {
-			log.Debug("skip ddl job", zap.Stringer("job", s.jobs[i]))
+	var job *model.Job
+	// TODO: Make sure jobs are sorted by BinlogInfo.FinishedTS
+	for i, job = range s.jobs {
+		if skipJob(job) {
+			log.Debug("skip ddl job", zap.Stringer("job", job))
 			continue
 		}
 
-		if s.jobs[i].BinlogInfo.SchemaVersion <= version {
-			if s.jobs[i].BinlogInfo.SchemaVersion <= s.currentVersion {
-				log.Warn("ddl job schema version is less than current version, skip this ddl job",
-					zap.Stringer("job", s.jobs[i]),
-					zap.Int64("currentVersion", s.currentVersion))
-				continue
-			}
-
-			_, _, _, err := s.handleDDL(s.jobs[i])
-			if err != nil {
-				return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", s.jobs[i], s)
-			}
-		} else {
+		if job.BinlogInfo.FinishedTS > commitTs {
 			break
+		}
+
+		_, _, _, err := s.handleDDL(job)
+		if err != nil {
+			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", job, s)
 		}
 	}
 

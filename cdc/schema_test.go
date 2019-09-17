@@ -61,7 +61,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 	// reconstruct the local schema
 	schema, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(2)
+	err = schema.handlePreviousDDLJobIfNeed(123)
 	c.Assert(err, IsNil)
 
 	// test drop schema
@@ -72,13 +72,13 @@ func (t *schemaSuite) TestSchema(c *C) {
 			State:      model.JobStateSynced,
 			SchemaID:   1,
 			Type:       model.ActionDropSchema,
-			BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, FinishedTS: 123},
+			BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, FinishedTS: 124},
 			Query:      "drop database test",
 		},
 	)
 	schema, err = NewSchema(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(3)
+	err = schema.handlePreviousDDLJobIfNeed(124)
 	c.Assert(err, IsNil)
 
 	// test create schema already exist error
@@ -87,7 +87,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 	jobs = append(jobs, jobDup)
 	schema, err = NewSchema(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(2)
+	err = schema.handlePreviousDDLJobIfNeed(123)
 	c.Log(err)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
 
@@ -106,7 +106,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 	)
 	schema, err = NewSchema(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(1)
+	err = schema.handlePreviousDDLJobIfNeed(123)
 	c.Assert(errors.IsNotFound(err), IsTrue)
 }
 
@@ -170,7 +170,7 @@ func (*schemaSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionCreateTable,
-		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 124},
 		Query:      "create table " + tbName.O,
 	}
 	jobs = append(jobs, job)
@@ -183,7 +183,7 @@ func (*schemaSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddColumn,
-		BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, TableInfo: tblInfo, FinishedTS: 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, TableInfo: tblInfo, FinishedTS: 125},
 		Query:      "alter table " + tbName.O + " add column " + colName.O,
 	}
 	jobs = append(jobs, job)
@@ -196,7 +196,7 @@ func (*schemaSuite) TestTable(c *C) {
 		SchemaID:   3,
 		TableID:    2,
 		Type:       model.ActionAddIndex,
-		BinlogInfo: &model.HistoryInfo{SchemaVersion: 4, TableInfo: tblInfo, FinishedTS: 123},
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 4, TableInfo: tblInfo, FinishedTS: 126},
 		Query:      fmt.Sprintf("alter table %s add index %s(%s)", tbName, idxName, colName),
 	}
 	jobs = append(jobs, job)
@@ -204,7 +204,7 @@ func (*schemaSuite) TestTable(c *C) {
 	// reconstruct the local schema
 	schema, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(4)
+	err = schema.handlePreviousDDLJobIfNeed(126)
 	c.Assert(err, IsNil)
 
 	// check the historical db that constructed above whether in the schema list of local schema
@@ -229,13 +229,13 @@ func (*schemaSuite) TestTable(c *C) {
 			SchemaID:   3,
 			TableID:    2,
 			Type:       model.ActionTruncateTable,
-			BinlogInfo: &model.HistoryInfo{SchemaVersion: 5, TableInfo: tblInfo1, FinishedTS: 123},
+			BinlogInfo: &model.HistoryInfo{SchemaVersion: 5, TableInfo: tblInfo1, FinishedTS: 127},
 			Query:      "truncate table " + tbName.O,
 		},
 	)
 	schema1, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema1.handlePreviousDDLJobIfNeed(5)
+	err = schema1.handlePreviousDDLJobIfNeed(127)
 	c.Assert(err, IsNil)
 	_, ok = schema1.TableByID(tblInfo1.ID)
 	c.Assert(ok, IsTrue)
@@ -251,13 +251,13 @@ func (*schemaSuite) TestTable(c *C) {
 			SchemaID:   3,
 			TableID:    9,
 			Type:       model.ActionDropTable,
-			BinlogInfo: &model.HistoryInfo{SchemaVersion: 6, FinishedTS: 123},
+			BinlogInfo: &model.HistoryInfo{SchemaVersion: 6, FinishedTS: 128},
 			Query:      "drop table " + tbName.O,
 		},
 	)
 	schema2, err := NewSchema(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema2.handlePreviousDDLJobIfNeed(6)
+	err = schema2.handlePreviousDDLJobIfNeed(128)
 	c.Assert(err, IsNil)
 
 	_, ok = schema2.TableByID(tblInfo.ID)

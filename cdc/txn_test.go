@@ -116,7 +116,7 @@ func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *Schema) 
 	c.Assert(len(jobs), check.Equals, len(sqls))
 	schema, err := NewSchema(jobs, false)
 	c.Assert(err, check.IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.SchemaVersion)
+	err = schema.handlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
 	c.Assert(err, check.IsNil)
 	return puller, schema
 }
