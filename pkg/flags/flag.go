@@ -15,7 +15,6 @@ package flags
 
 import (
 	"flag"
-	"net/url"
 	"os"
 	"strings"
 
@@ -70,14 +69,4 @@ func setFlagFromEnv(fs flagSetter, prefix, fname string, usedEnvKey, alreadySet 
 		}
 	}
 	return nil
-}
-
-// URLsFromFlag returns a slices from url got from the flag.
-func URLsFromFlag(fs *flag.FlagSet, urlsFlagName string) []url.URL {
-	return fs.Lookup(urlsFlagName).Value.(*URLsValue).URLSlice()
-}
-
-// URLStrsFromFlag returns a string slices from url got from the flag.
-func URLStrsFromFlag(fs *flag.FlagSet, urlsFlagName string) []string {
-	return fs.Lookup(urlsFlagName).Value.(*URLsValue).StringSlice()
 }

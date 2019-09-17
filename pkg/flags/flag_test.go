@@ -16,7 +16,6 @@ package flags
 import (
 	"flag"
 	"os"
-	"strings"
 	"testing"
 
 	. "github.com/pingcap/check"
@@ -108,20 +107,6 @@ func (s *testFlagSuite) TestSetFlagsFromEnvBad(c *C) {
 	os.Setenv("TEST_NUM", "abc123")
 
 	mustFail(c, SetFlagsFromEnv("TEST", fs))
-}
-
-func (s *testFlagSuite) TestURLStrsFromFlag(c *C) {
-	urlv, err := NewURLsValue("http://127.0.0.1:1234")
-	c.Assert(err, IsNil)
-
-	fs := flag.NewFlagSet("testUrlFlag", flag.ExitOnError)
-	fs.Var(urlv, "urls", "")
-	err = fs.Parse([]string{})
-	c.Assert(err, IsNil)
-
-	urls := "http://192.168.1.1:1234,http://192.168.1.2:1234,http://192.168.1.3:1234"
-	mustSuccess(c, fs.Set("urls", urls))
-	c.Assert(strings.Join(URLStrsFromFlag(fs, "urls"), ","), Equals, urls)
 }
 
 func (s *testFlagSuite) TestURLValue(c *C) {

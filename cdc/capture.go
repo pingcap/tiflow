@@ -119,12 +119,10 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.entries))
 		txn, err := mounter.Mount(rawTxn)
 		if err != nil {
-			//return errors.Trace(err)
-			log.Error("Error", zap.Error(err))
-
+			return errors.Trace(err)
 		}
 		// TODO output Txn to mysql sink
-		log.Info("Output Txn", zap.Reflect("Tax", txn))
+		log.Info("Output Txn", zap.Reflect("Txn", txn))
 		return nil
 	})
 	if err != nil {
@@ -201,7 +199,7 @@ func loadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
 
 	// jobs from GetAllHistoryDDLJobs are sorted by job id, need sorted by schema version
 	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].BinlogInfo.SchemaVersion < jobs[j].BinlogInfo.SchemaVersion
+		return jobs[i].BinlogInfo.FinishedTS < jobs[j].BinlogInfo.FinishedTS
 	})
 
 	return jobs, nil
