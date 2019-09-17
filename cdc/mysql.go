@@ -240,26 +240,6 @@ func (s *mysqlSink) prepareDelete(dml *DML) (string, []interface{}, error) {
 	return sql, args, nil
 }
 
-func formatColumnValues(table *model.TableInfo, colVals map[string]types.Datum) (map[string]interface{}, error) {
-	columns := writableColumns(table)
-
-	formatted := make(map[string]interface{}, len(columns))
-	for _, col := range columns {
-		val, ok := colVals[col.Name.O]
-		if !ok {
-			val = getDefaultOrZeroValue(col)
-		}
-
-		value, err := formatColVal(val, col.FieldType)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		formatted[col.Name.O] = value.GetValue()
-	}
-
-	return formatted, nil
-}
-
 func formatValues(table *model.TableInfo, colVals map[string]types.Datum) (map[string]types.Datum, error) {
 	columns := writableColumns(table)
 
