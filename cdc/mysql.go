@@ -43,12 +43,6 @@ type tableInspector interface {
 	Refresh(schema, table string)
 }
 
-// TableInfoGetter is used to get table info by table id of TiDB
-type TableInfoGetter interface {
-	TableByID(id int64) (info *model.TableInfo, ok bool)
-	GetTableIDByName(schema, table string) (int64, bool)
-}
-
 type mysqlSink struct {
 	db           *sql.DB
 	tblInspector tableInspector

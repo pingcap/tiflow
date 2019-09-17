@@ -44,6 +44,8 @@ type Capture struct {
 	errCh  chan error
 	cancel context.CancelFunc
 
+	schema *Schema
+
 	// sink is the Sink to write rows to.
 	// Resolved timestamps are never written by Capture
 	sink Sink
@@ -65,7 +67,22 @@ func NewCapture(
 		return nil, err
 	}
 
-	sink, err := getSink(detail.SinkURI, detail.Opts)
+	// TODO get etdc url from config
+	// here we create another pb client,we should reuse them
+	kvStore, err := createTiStore("http://localhost:2379")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	jobs, err := loadHistoryDDLJobs(kvStore)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schema, err := NewSchema(jobs, false)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	sink, err := getSink(detail.SinkURI, schema, detail.Opts)
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +94,7 @@ func NewCapture(
 		encoder:      encoder,
 		sink:         sink,
 		detail:       detail,
+		schema:       schema,
 	}
 
 	return
@@ -88,22 +106,8 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 
 	buf := MakeBuffer()
 
-	// TODO get etdc url from config
-	// here we create another pb client,we should reuse them
-	kvStore, err := createTiStore("http://localhost:2379")
-	if err != nil {
-		return errors.Trace(err)
-	}
-	jobs, err := loadHistoryDDLJobs(kvStore)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	schema, err := NewSchema(jobs, false)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	// TODO get time zone from config
-	mounter, err := NewTxnMounter(schema, time.UTC)
+	mounter, err := NewTxnMounter(c.schema, time.UTC)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -138,7 +142,6 @@ type Frontier struct {
 	spans   []util.Span
 	detail  ChangeFeedDetail
 	encoder Encoder
-	sink    Sink
 }
 
 func NewFrontier(spans []util.Span, detail ChangeFeedDetail) (f *Frontier, err error) {
@@ -147,16 +150,10 @@ func NewFrontier(spans []util.Span, detail ChangeFeedDetail) (f *Frontier, err e
 		return nil, err
 	}
 
-	sink, err := getSink(detail.SinkURI, detail.Opts)
-	if err != nil {
-		return nil, err
-	}
-
 	f = &Frontier{
 		spans:   spans,
 		detail:  detail,
 		encoder: encoder,
-		sink:    sink,
 	}
 
 	return

@@ -15,9 +15,11 @@ package cdc
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
-	"os"
+
+	"github.com/pingcap/parser/model"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
@@ -36,12 +38,29 @@ type Sink interface {
 	Close() error
 }
 
+// TableInfoGetter is used to get table info by table id of TiDB
+type TableInfoGetter interface {
+	TableByID(id int64) (info *model.TableInfo, ok bool)
+	GetTableIDByName(schema, table string) (int64, bool)
+}
+
 func getSink(
 	sinkURI string,
+	infoGetter TableInfoGetter,
 	opts map[string]string,
 ) (Sink, error) {
 	// TODO
-	return &writerSink{Writer: os.Stdout}, nil
+	db, err := sql.Open("mysql", sinkURI)
+	if err != nil {
+		return nil, err
+	}
+	cachedInspector := newCachedInspector(db)
+	sink := mysqlSink{
+		db:           db,
+		infoGetter:   infoGetter,
+		tblInspector: cachedInspector,
+	}
+	return &sink, nil
 }
 
 type writerSink struct {
