@@ -74,7 +74,7 @@ func (s *mysqlSink) Emit(ctx context.Context, txn Txn) error {
 }
 
 func filterBySchemaAndTable(txn *Txn) {
-	toIgnore := regexp.MustCompile("(?i)(INFORMATION_SCHEMA|PERFORMANCE_SCHEMA|MYSQL)")
+	toIgnore := regexp.MustCompile("(?i)^(INFORMATION_SCHEMA|PERFORMANCE_SCHEMA|MYSQL)$")
 	if txn.IsDDL() {
 		if toIgnore.MatchString(txn.DDL.Database) {
 			txn.DDL = nil

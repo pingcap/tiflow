@@ -200,7 +200,7 @@ func (s *FilterSuite) TestFilterDMLs(c *check.C) {
 		DMLs: []*DML{
 			{Database: "INFORMATIOn_SCHEmA"},
 			{Database: "test"},
-			{Database: "test"},
+			{Database: "test_mysql"},
 			{Database: "mysql"},
 		},
 		Ts: 213,
@@ -209,9 +209,8 @@ func (s *FilterSuite) TestFilterDMLs(c *check.C) {
 	c.Assert(txn.Ts, check.Equals, uint64(213))
 	c.Assert(txn.DDL, check.IsNil)
 	c.Assert(txn.DMLs, check.HasLen, 2)
-	for _, dml := range txn.DMLs {
-		c.Assert(dml.Database, check.Equals, "test")
-	}
+	c.Assert(txn.DMLs[0].Database, check.Equals, "test")
+	c.Assert(txn.DMLs[1].Database, check.Equals, "test_mysql")
 }
 
 func (s *FilterSuite) TestFilterDDL(c *check.C) {
