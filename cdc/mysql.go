@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/pingcap/tidb/table"
@@ -52,6 +53,11 @@ type mysqlSink struct {
 var _ Sink = &mysqlSink{}
 
 func (s *mysqlSink) Emit(ctx context.Context, txn Txn) error {
+	filterBySchemaAndTable(&txn)
+	if len(txn.DMLs) == 0 && txn.DDL == nil {
+		log.Info("Whole txn ignored", zap.Uint64("ts", txn.Ts))
+		return nil
+	}
 	if txn.IsDDL() {
 		err := s.execDDLWithMaxRetries(ctx, txn.DDL, 5)
 		if err == nil && isTableChanged(txn.DDL) {
@@ -65,6 +71,23 @@ func (s *mysqlSink) Emit(ctx context.Context, txn Txn) error {
 		return err
 	}
 	return s.execDMLs(ctx, dmls)
+}
+
+func filterBySchemaAndTable(txn *Txn) {
+	toIgnore := regexp.MustCompile("(?i)^(INFORMATION_SCHEMA|PERFORMANCE_SCHEMA|MYSQL)$")
+	if txn.IsDDL() {
+		if toIgnore.MatchString(txn.DDL.Database) {
+			txn.DDL = nil
+		}
+	} else {
+		filteredDMLs := make([]*DML, 0, len(txn.DMLs))
+		for _, dml := range txn.DMLs {
+			if !toIgnore.MatchString(dml.Database) {
+				filteredDMLs = append(filteredDMLs, dml)
+			}
+		}
+		txn.DMLs = filteredDMLs
+	}
 }
 
 func (s *mysqlSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved uint64) error {

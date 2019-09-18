@@ -190,3 +190,36 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 	// Validate
 	c.Assert(err, check.IsNil)
 }
+
+type FilterSuite struct{}
+
+var _ = check.Suite(&FilterSuite{})
+
+func (s *FilterSuite) TestFilterDMLs(c *check.C) {
+	txn := Txn{
+		DMLs: []*DML{
+			{Database: "INFORMATIOn_SCHEmA"},
+			{Database: "test"},
+			{Database: "test_mysql"},
+			{Database: "mysql"},
+		},
+		Ts: 213,
+	}
+	filterBySchemaAndTable(&txn)
+	c.Assert(txn.Ts, check.Equals, uint64(213))
+	c.Assert(txn.DDL, check.IsNil)
+	c.Assert(txn.DMLs, check.HasLen, 2)
+	c.Assert(txn.DMLs[0].Database, check.Equals, "test")
+	c.Assert(txn.DMLs[1].Database, check.Equals, "test_mysql")
+}
+
+func (s *FilterSuite) TestFilterDDL(c *check.C) {
+	txn := Txn{
+		DDL: &DDL{Database: "performance_schema"},
+		Ts:  10234,
+	}
+	filterBySchemaAndTable(&txn)
+	c.Assert(txn.Ts, check.Equals, uint64((10234)))
+	c.Assert(txn.DMLs, check.HasLen, 0)
+	c.Assert(txn.DDL, check.IsNil)
+}
