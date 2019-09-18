@@ -125,7 +125,6 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		// TODO output Txn to mysql sink
 		err = c.sink.Emit(context, *txn)
 		if err != nil {
 			return errors.Trace(err)
