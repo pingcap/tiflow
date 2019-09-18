@@ -6,6 +6,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.3.3
 	github.com/biogo/store v0.0.0-20190426020002-884f370e325d
 	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/go-sql-driver/mysql v1.4.1
 	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
 	github.com/pingcap/errors v0.11.4
 	github.com/pingcap/kvproto v0.0.0-20190816084801-93197044d6d7
@@ -17,6 +18,7 @@ require (
 	github.com/sirupsen/logrus v1.4.2 // indirect
 	github.com/spf13/cobra v0.0.3
 	go.uber.org/zap v1.9.1
-	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
+	golang.org/x/sync v0.0.0-20190423024810-112230192c58
+	google.golang.org/appengine v1.6.2 // indirect
 	google.golang.org/grpc v1.17.0
 )

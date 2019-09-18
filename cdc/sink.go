@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/parser/model"
 )
 

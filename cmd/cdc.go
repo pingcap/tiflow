@@ -11,7 +11,7 @@ import (
 
 func feed() {
 	detail := cdc.ChangeFeedDetail{
-		SinkURI:      "",
+		SinkURI:      "root:123456@tcp(127.0.0.1:3306)/test",
 		Opts:         make(map[string]string),
 		CheckpointTS: 0,
 		CreateTime:   time.Now(),
