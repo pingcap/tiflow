@@ -32,7 +32,6 @@ cscope.*
 **/*.swp
 
 cmd/cdc/cdc
-tests/cdc/out
 
 # Files generated when testing
 vendor/
