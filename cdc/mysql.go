@@ -20,6 +20,11 @@ import (
 	"regexp"
 	"strings"
 
+	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/parser/terror"
+	tddl "github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/infoschema"
+
 	"github.com/pingcap/tidb/table"
 
 	"github.com/pingcap/parser/mysql"
@@ -110,6 +115,9 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *DDL, maxRetr
 	)
 	return backoff.Retry(func() error {
 		err := s.execDDL(ctx, ddl)
+		if isIgnorableDDLError(err) {
+			return nil
+		}
 		if err == context.Canceled || err == context.DeadlineExceeded {
 			err = backoff.Permanent(err)
 		}
@@ -359,4 +367,33 @@ func whereSlice(table *tableInfo, colVals map[string]types.Datum) (colNames []st
 
 	// Fallback to use all columns
 	return table.columns, whereValues(colVals, table.columns)
+}
+
+func isIgnorableDDLError(err error) bool {
+	errCode, ok := getSQLErrCode(err)
+	if !ok {
+		return false
+	}
+	// we can get error code from:
+	// infoschema's error definition: https://github.com/pingcap/tidb/blob/master/infoschema/infoschema.go
+	// DDL's error definition: https://github.com/pingcap/tidb/blob/master/ddl/ddl.go
+	// tidb/mysql error code definition: https://github.com/pingcap/tidb/blob/master/mysql/errcode.go
+	switch errCode {
+	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseNotExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
+		infoschema.ErrTableExists.Code(), infoschema.ErrTableNotExists.Code(), infoschema.ErrTableDropExists.Code(),
+		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(), infoschema.ErrIndexExists.Code(),
+		infoschema.ErrKeyNotExists.Code(), tddl.ErrCantDropFieldOrKey.Code(), mysql.ErrDupKeyName:
+		return true
+	default:
+		return false
+	}
+}
+
+func getSQLErrCode(err error) (terror.ErrCode, bool) {
+	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
+	if !ok {
+		return -1, false
+	}
+
+	return terror.ErrCode(mysqlErr.Number), true
 }
