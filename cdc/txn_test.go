@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tidb-cdc/cdc/util"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-cdc/cdc/entry"
@@ -33,6 +35,20 @@ import (
 func Test(t *testing.T) { check.TestingT(t) }
 
 type CollectRawTxnsSuite struct{}
+
+type mockTracker struct {
+	forwarded []bool
+	cur       int
+}
+
+func (t *mockTracker) Forward(span util.Span, ts uint64) bool {
+	if len(t.forwarded) > 0 {
+		r := t.forwarded[t.cur]
+		t.cur++
+		return r
+	}
+	return true
+}
 
 var _ = check.Suite(&CollectRawTxnsSuite{})
 
@@ -60,6 +76,72 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 		entries = append(entries, e)
 	}
 
+	nRead := 0
+	input := func(ctx context.Context) (BufferEntry, error) {
+		if nRead >= len(entries) {
+			return BufferEntry{}, errors.New("End")
+		}
+		e := entries[nRead]
+		nRead++
+		return e, nil
+	}
+
+	var rawTxns []RawTxn
+	output := func(ctx context.Context, txn RawTxn) error {
+		rawTxns = append(rawTxns, txn)
+		return nil
+	}
+
+	ctx := context.Background()
+	err := collectRawTxns(ctx, input, output, &mockTracker{})
+	c.Assert(err, check.ErrorMatches, "End")
+
+	c.Assert(rawTxns, check.HasLen, 2)
+	c.Assert(rawTxns[0].ts, check.Equals, startTs)
+	for i, e := range rawTxns[0].entries {
+		c.Assert(e.Ts, check.Equals, startTs)
+		c.Assert(string(e.Key), check.Equals, fmt.Sprintf("key-0-%d", i))
+	}
+	c.Assert(rawTxns[1].ts, check.Equals, startTs+1)
+	for i, e := range rawTxns[1].entries {
+		c.Assert(e.Ts, check.Equals, startTs+1)
+		c.Assert(string(e.Key), check.Equals, fmt.Sprintf("key-1-%d", i))
+	}
+}
+
+func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
+	var entries []BufferEntry
+	for _, v := range []struct {
+		key          []byte
+		ts           uint64
+		isResolvedTs bool
+	}{
+		{key: []byte("key1-1"), ts: 1},
+		{key: []byte("key2-1"), ts: 2},
+		{key: []byte("key1-2"), ts: 1},
+		{key: []byte("key1-3"), ts: 1},
+		{ts: 1, isResolvedTs: true},
+		{ts: 2, isResolvedTs: true},
+		{key: []byte("key2-1"), ts: 2},
+		{ts: 1, isResolvedTs: true},
+	} {
+		var e BufferEntry
+		if v.isResolvedTs {
+			e = BufferEntry{
+				Resolved: &ResolvedSpan{Timestamp: v.ts},
+			}
+		} else {
+			e = BufferEntry{
+				KV: &kv.RawKVEntry{
+					OpType: kv.OpTypePut,
+					Key:    v.key,
+					Ts:     v.ts,
+				},
+			}
+		}
+		entries = append(entries, e)
+	}
+
 	cursor := 0
 	input := func(ctx context.Context) (BufferEntry, error) {
 		if cursor >= len(entries) {
@@ -77,20 +159,18 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	}
 
 	ctx := context.Background()
-	err := collectRawTxns(ctx, input, output)
+	// Set up the tracker so that only the last resolve event forwards the global minimum ts
+	tracker := mockTracker{forwarded: []bool{false, false, true}}
+	err := collectRawTxns(ctx, input, output, &tracker)
 	c.Assert(err, check.ErrorMatches, "End")
 
-	c.Assert(rawTxns, check.HasLen, 2)
-	c.Assert(rawTxns[0].ts, check.Equals, startTs)
-	for i, e := range rawTxns[0].entries {
-		c.Assert(e.Ts, check.Equals, startTs)
-		c.Assert(string(e.Key), check.Equals, fmt.Sprintf("key-0-%d", i))
-	}
-	c.Assert(rawTxns[1].ts, check.Equals, startTs+1)
-	for i, e := range rawTxns[1].entries {
-		c.Assert(e.Ts, check.Equals, startTs+1)
-		c.Assert(string(e.Key), check.Equals, fmt.Sprintf("key-1-%d", i))
-	}
+	c.Assert(rawTxns, check.HasLen, 1)
+	txn := rawTxns[0]
+	c.Assert(txn.ts, check.Equals, uint64(1))
+	c.Assert(txn.entries, check.HasLen, 3)
+	c.Assert(string(txn.entries[0].Key), check.Equals, "key1-1")
+	c.Assert(string(txn.entries[1].Key), check.Equals, "key1-2")
+	c.Assert(string(txn.entries[2].Key), check.Equals, "key1-3")
 }
 
 type mountTxnsSuite struct{}

@@ -18,6 +18,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pingcap/tidb-cdc/cdc/util"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
@@ -88,10 +90,15 @@ func (t Txn) IsDDL() bool {
 	return t.DDL != nil
 }
 
+type resolveTsTracker interface {
+	Forward(span util.Span, ts uint64) bool
+}
+
 func collectRawTxns(
 	ctx context.Context,
 	inputFn func(context.Context) (BufferEntry, error),
 	outputFn func(context.Context, RawTxn) error,
+	tracker resolveTsTracker,
 ) error {
 	entryGroups := make(map[uint64][]*kv.RawKVEntry)
 	for {
@@ -103,6 +110,14 @@ func collectRawTxns(
 			entryGroups[be.KV.Ts] = append(entryGroups[be.KV.Ts], be.KV)
 		} else if be.Resolved != nil {
 			resolvedTs := be.Resolved.Timestamp
+			// 1. Forward is called in a single thread
+			// 2. The only way the global minimum resolved ts can be forwarded is that
+			// 	  the resolveTs we pass in replaces the original one
+			// Thus, we can just use resolvedTs here as the new global minimum resolved ts.
+			forwarded := tracker.Forward(be.Resolved.Span, resolvedTs)
+			if !forwarded {
+				continue
+			}
 			var readyTxns []RawTxn
 			for ts, entries := range entryGroups {
 				if ts <= resolvedTs {
