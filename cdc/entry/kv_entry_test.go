@@ -1,14 +1,15 @@
 package entry
 
 import (
+	"reflect"
+	"time"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/mock"
 	"github.com/pingcap/tidb/types"
-	"reflect"
-	"time"
 )
 
 type kvEntrySuite struct {
@@ -52,7 +53,6 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 		case *DDLJobHistoryKVEntry:
 			existDDLJobHistoryKVEntry = true
 			c.Assert(e.JobId, check.Equals, e.Job.ID)
-			c.Assert(e.Job.SchemaName, check.Equals, "test")
 			c.Assert(e.Job.Type, check.Equals, model.ActionCreateTable)
 			c.Assert(e.Job.Query, check.Equals, "create table test.test1(id varchar(255) primary key, a int, index i1 (a))")
 		}
@@ -85,7 +85,6 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 		case *DDLJobHistoryKVEntry:
 			existDDLJobHistoryKVEntry = true
 			c.Assert(e.JobId, check.Equals, e.Job.ID)
-			c.Assert(e.Job.SchemaName, check.Equals, "test")
 			c.Assert(e.Job.Type, check.Equals, model.ActionCreateTable)
 			c.Assert(e.Job.Query, check.Equals, "create table test.test2(id int primary key, b varchar(255) unique key)")
 		}
