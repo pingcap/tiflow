@@ -119,7 +119,9 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		c.errCh <- err
 	}()
 
-	err = collectRawTxns(ctx, buf.Get, func(context context.Context, rawTxn RawTxn) error {
+	spanFrontier := makeSpanFrontier(c.watchs...)
+
+	writeToSink := func(context context.Context, rawTxn RawTxn) error {
 		log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.entries))
 		txn, err := mounter.Mount(rawTxn)
 		if err != nil {
@@ -131,7 +133,9 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		}
 		log.Info("Output Txn", zap.Reflect("Txn", txn))
 		return nil
-	})
+	}
+
+	err = collectRawTxns(ctx, buf.Get, writeToSink, spanFrontier)
 	if err != nil {
 		return errors.Trace(err)
 	}
