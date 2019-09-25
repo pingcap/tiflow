@@ -16,9 +16,9 @@ export PATH=$PATH:$(dirname $pwd)/bin
 
 clean_data() {
     rm -rf $OUT_DIR/pd || true
-    rm -rf $OUT_DIR/tidb || true
+    rm -rf $OUT_DIR/down_pd || true
     rm -rf $OUT_DIR/tikv || true
-    rm -rf $OUT_DIR/cdc || true
+    rm -rf $OUT_DIR/down_tikv || true
 }
 
 stop_services() {
@@ -39,22 +39,22 @@ start_services() {
         --log-file "$OUT_DIR/pd.log" \
         --data-dir "$OUT_DIR/pd" &
 
-#    echo "Starting downstream PD..."
-#    pd-server \
-#        --client-urls http://127.0.0.1:2381 \
-#        --peer-urls http://127.0.0.1:2382 \
-#        --log-file "$OUT_DIR/down_pd.log" \
-#        --data-dir "$OUT_DIR/down_pd" &
+    echo "Starting downstream PD..."
+    pd-server \
+        --client-urls http://127.0.0.1:2381 \
+        --peer-urls http://127.0.0.1:2382 \
+        --log-file "$OUT_DIR/down_pd.log" \
+        --data-dir "$OUT_DIR/down_pd" &
 
     # wait until PD is online...
     while ! curl -o /dev/null -sf http://127.0.0.1:2379/pd/api/v1/version; do
-        sleep 0.2
+        sleep 1
     done
 
-#    # wait until downstream PD is online...
-#    while ! curl -o /dev/null -sf http://127.0.0.1:2381/pd/api/v1/version; do
-#        sleep 5
-#    done
+    # wait until downstream PD is online...
+    while ! curl -o /dev/null -sf http://127.0.0.1:2381/pd/api/v1/version; do
+        sleep 1
+    done
 
     # Tries to limit the max number of open files under the system limit
     cat - > "$OUT_DIR/tikv-config.toml" <<EOF
@@ -83,7 +83,7 @@ EOF
         -C "$OUT_DIR/tikv-config.toml" \
         -s "$OUT_DIR/down_tikv" &
 
-    sleep 20
+    sleep 5
 
     echo "Starting TiDB..."
     tidb-server \
@@ -123,7 +123,7 @@ EOF
     done
 
     echo "Starting CDC..."
-    ../bin/cdc
+    cdc &
     sleep 1
 }
 
