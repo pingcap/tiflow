@@ -110,6 +110,10 @@ func collectRawTxns(
 			entryGroups[be.KV.Ts] = append(entryGroups[be.KV.Ts], be.KV)
 		} else if be.Resolved != nil {
 			resolvedTs := be.Resolved.Timestamp
+			// 1. Forward is called in a single thread
+			// 2. The only way the global minimum resolved ts can be forwarded is that
+			// 	  the resolveTs we pass in replaces the original one
+			// Thus, we can just use resolvedTs here as the new global minimum resolved ts.
 			forwarded := tracker.Forward(be.Resolved.Span, resolvedTs)
 			if !forwarded {
 				continue
