@@ -84,7 +84,7 @@ func NewCapture(
 
 	sink, err := getSink(detail.SinkURI, schema, detail.Opts)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	c = &Capture{
