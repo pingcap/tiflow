@@ -17,13 +17,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb/types"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type KVEntry interface {
@@ -68,7 +69,7 @@ func (idx *IndexKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Locatio
 		return errors.New("wrong table info in Unflatten")
 	}
 	index := tableInfo.Indices[idx.IndexId-1]
-	if !(index.Unique || index.Primary) {
+	if !isDistinct(index, idx.IndexValue) {
 		idx.RecordId = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
 		idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-1]
 	}
@@ -82,6 +83,21 @@ func (idx *IndexKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Locatio
 		idx.IndexValue[i] = datum
 	}
 	return nil
+}
+
+func isDistinct(index *model.IndexInfo, indexValue []types.Datum) bool {
+	if index.Primary {
+		return true
+	}
+	if index.Unique {
+		for _, value := range indexValue {
+			if value.IsNull() {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func (row *RowKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Location) error {

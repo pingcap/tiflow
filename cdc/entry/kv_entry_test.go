@@ -1,14 +1,15 @@
 package entry
 
 import (
+	"reflect"
+	"time"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/mock"
 	"github.com/pingcap/tidb/types"
-	"reflect"
-	"time"
 )
 
 type kvEntrySuite struct {
@@ -115,7 +116,7 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 			TableId:  tableInfo.ID,
 			RecordId: 1,
 			Delete:   false,
-			Row:      make(map[int64]types.Datum),
+			Row:      map[int64]types.Datum{1: types.NewBytesDatum([]byte("ttt")), 2: types.NewIntDatum(666)},
 		}, &IndexKVEntry{
 			TableId:    tableInfo.ID,
 			RecordId:   1,
@@ -129,8 +130,6 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("ttt"))},
 		}}
-	expect[0].(*RowKVEntry).Row[1] = types.NewBytesDatum([]byte("ttt"))
-	expect[0].(*RowKVEntry).Row[2] = types.NewIntDatum(666)
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
 	rawEntries = puller.MustExec("update test.test1 set id = '777' where a = 666")
@@ -139,7 +138,7 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 			TableId:  tableInfo.ID,
 			RecordId: 1,
 			Delete:   false,
-			Row:      make(map[int64]types.Datum),
+			Row:      map[int64]types.Datum{1: types.NewBytesDatum([]byte("777")), 2: types.NewIntDatum(666)},
 		}, &IndexKVEntry{
 			TableId:    tableInfo.ID,
 			RecordId:   1,
@@ -153,8 +152,6 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 			Delete:     true,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("ttt"))},
 		}}
-	expect[0].(*RowKVEntry).Row[1] = types.NewBytesDatum([]byte("777"))
-	expect[0].(*RowKVEntry).Row[2] = types.NewIntDatum(666)
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
 	rawEntries = puller.MustExec("delete from test.test1 where id = '777'")
@@ -163,7 +160,7 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 			TableId:  tableInfo.ID,
 			RecordId: 1,
 			Delete:   true,
-			Row:      make(map[int64]types.Datum),
+			Row:      map[int64]types.Datum{},
 		}, &IndexKVEntry{
 			TableId:    tableInfo.ID,
 			RecordId:   0,
@@ -201,7 +198,7 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 			TableId:  tableInfo.ID,
 			RecordId: 666,
 			Delete:   false,
-			Row:      make(map[int64]types.Datum),
+			Row:      map[int64]types.Datum{2: types.NewBytesDatum([]byte("aaa"))},
 		}, &IndexKVEntry{
 			TableId:    tableInfo.ID,
 			RecordId:   666,
@@ -209,7 +206,6 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("aaa"))},
 		}}
-	expect[0].(*RowKVEntry).Row[2] = types.NewBytesDatum([]byte("aaa"))
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
 	rawEntries = puller.MustExec("update test.test2 set id = 888,b = 'bbb' where id = 666")
@@ -218,12 +214,12 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 			TableId:  tableInfo.ID,
 			RecordId: 666,
 			Delete:   true,
-			Row:      make(map[int64]types.Datum),
+			Row:      map[int64]types.Datum{},
 		}, &RowKVEntry{
 			TableId:  tableInfo.ID,
 			RecordId: 888,
 			Delete:   false,
-			Row:      make(map[int64]types.Datum),
+			Row:      map[int64]types.Datum{2: types.NewBytesDatum([]byte("bbb"))},
 		}, &IndexKVEntry{
 			TableId:    tableInfo.ID,
 			RecordId:   0,
@@ -237,7 +233,6 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("bbb"))},
 		}}
-	expect[1].(*RowKVEntry).Row[2] = types.NewBytesDatum([]byte("bbb"))
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
 	rawEntries = puller.MustExec("delete from test.test2 where id = 888")
@@ -246,7 +241,7 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 			TableId:  tableInfo.ID,
 			RecordId: 888,
 			Delete:   true,
-			Row:      make(map[int64]types.Datum),
+			Row:      map[int64]types.Datum{},
 		}, &IndexKVEntry{
 			TableId:    tableInfo.ID,
 			RecordId:   0,
@@ -256,6 +251,117 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 		}}
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
+}
+
+func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
+	puller, err := mock.NewMockPuller(c)
+	c.Assert(err, check.IsNil)
+
+	rawEntries := puller.MustExec("create table test.test2( a int, b varchar(255), c date, unique key(a,b,c))")
+	var tableInfo *model.TableInfo
+	for _, raw := range rawEntries {
+		entry, err := Unmarshal(raw)
+		c.Assert(err, check.IsNil)
+		switch e := entry.(type) {
+		case *UpdateTableKVEntry:
+			tableInfo = e.TableInfo
+		}
+	}
+	c.Assert(tableInfo, check.NotNil)
+
+	rawEntries = puller.MustExec("insert into test.test2 values(null, 'aa', '1996-11-20')")
+	time, err := types.ParseDate(nil, "1996-11-20")
+	c.Assert(err, check.IsNil)
+	expect := []KVEntry{
+		&RowKVEntry{
+			TableId:  tableInfo.ID,
+			RecordId: 1,
+			Delete:   false,
+			Row:      map[int64]types.Datum{2: types.NewBytesDatum([]byte("aa")), 3: types.NewTimeDatum(time)},
+		},
+		&IndexKVEntry{
+			TableId:    tableInfo.ID,
+			RecordId:   1,
+			IndexId:    1,
+			Delete:     false,
+			IndexValue: []types.Datum{{}, types.NewBytesDatum([]byte("aa")), types.NewTimeDatum(time)},
+		}}
+	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
+
+	rawEntries = puller.MustExec("insert into test.test2 values(null, null, '1996-11-20')")
+	expect = []KVEntry{
+		&RowKVEntry{
+			TableId:  tableInfo.ID,
+			RecordId: 2,
+			Delete:   false,
+			Row:      map[int64]types.Datum{3: types.NewTimeDatum(time)},
+		},
+		&IndexKVEntry{
+			TableId:    tableInfo.ID,
+			RecordId:   2,
+			IndexId:    1,
+			Delete:     false,
+			IndexValue: []types.Datum{{}, {}, types.NewTimeDatum(time)},
+		}}
+	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
+
+	rawEntries = puller.MustExec("insert into test.test2 values(null, null, null)")
+	expect = []KVEntry{
+		&RowKVEntry{
+			TableId:  tableInfo.ID,
+			RecordId: 3,
+			Delete:   false,
+			Row:      map[int64]types.Datum{},
+		},
+		&IndexKVEntry{
+			TableId:    tableInfo.ID,
+			RecordId:   3,
+			IndexId:    1,
+			Delete:     false,
+			IndexValue: []types.Datum{{}, {}, {}},
+		}}
+	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
+
+	rawEntries = puller.MustExec("delete from test.test2 where c is null")
+	expect = []KVEntry{
+		&RowKVEntry{
+			TableId:  tableInfo.ID,
+			RecordId: 3,
+			Delete:   true,
+			Row:      map[int64]types.Datum{},
+		},
+		&IndexKVEntry{
+			TableId:    tableInfo.ID,
+			RecordId:   3,
+			IndexId:    1,
+			Delete:     true,
+			IndexValue: []types.Datum{{}, {}, {}},
+		}}
+	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
+
+	rawEntries = puller.MustExec("update test.test2 set a = 1, b = null where a is null and b is not null")
+	expect = []KVEntry{
+		&RowKVEntry{
+			TableId:  tableInfo.ID,
+			RecordId: 1,
+			Delete:   false,
+			Row:      map[int64]types.Datum{1: types.NewIntDatum(1), 3: types.NewTimeDatum(time)},
+		},
+		&IndexKVEntry{
+			TableId:    tableInfo.ID,
+			RecordId:   1,
+			IndexId:    1,
+			Delete:     false,
+			IndexValue: []types.Datum{types.NewIntDatum(1), {}, types.NewTimeDatum(time)},
+		},
+		&IndexKVEntry{
+			TableId:    tableInfo.ID,
+			RecordId:   1,
+			IndexId:    1,
+			Delete:     true,
+			IndexValue: []types.Datum{{}, types.NewBytesDatum([]byte("aa")), types.NewTimeDatum(time)},
+		}}
+	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 }
 
 func assertIn(c *check.C, item KVEntry, expect []KVEntry) {
@@ -268,6 +374,7 @@ func assertIn(c *check.C, item KVEntry, expect []KVEntry) {
 }
 
 func checkDMLKVEntries(c *check.C, tableInfo *model.TableInfo, rawEntries []*kv.RawKVEntry, expect []KVEntry) {
+	eventSum := 0
 	for _, raw := range rawEntries {
 		entry, err := Unmarshal(raw)
 		c.Assert(err, check.IsNil)
@@ -276,12 +383,15 @@ func checkDMLKVEntries(c *check.C, tableInfo *model.TableInfo, rawEntries []*kv.
 			c.Assert(e.Unflatten(tableInfo, time.UTC), check.IsNil)
 			e.Ts = 0
 			assertIn(c, e, expect)
+			eventSum++
 		case *IndexKVEntry:
 			c.Assert(e.Unflatten(tableInfo, time.UTC), check.IsNil)
 			e.Ts = 0
 			assertIn(c, e, expect)
+			eventSum++
 		}
 	}
+	c.Assert(eventSum, check.Equals, len(expect))
 }
 
 func (s *kvEntrySuite) TestAllKVS(c *check.C) {
