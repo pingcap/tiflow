@@ -17,7 +17,7 @@ type kvEntrySuite struct {
 
 var _ = check.Suite(&kvEntrySuite{})
 
-func (s *kvEntrySuite) ATestCreateTable(c *check.C) {
+func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 	puller, err := mock.NewMockPuller(c)
 	c.Assert(err, check.IsNil)
 	rawEntries := puller.MustExec("create table test.test1(id varchar(255) primary key, a int, index i1 (a))")
@@ -95,7 +95,7 @@ func (s *kvEntrySuite) ATestCreateTable(c *check.C) {
 	c.Assert(existDDLJobHistoryKVEntry, check.IsTrue)
 }
 
-func (s *kvEntrySuite) ATestPkIsNotHandleDML(c *check.C) {
+func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 	puller, err := mock.NewMockPuller(c)
 	c.Assert(err, check.IsNil)
 	rawEntries := puller.MustExec("create table test.test1(id varchar(255) primary key, a int, index ci (a))")
@@ -177,7 +177,7 @@ func (s *kvEntrySuite) ATestPkIsNotHandleDML(c *check.C) {
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 }
 
-func (s *kvEntrySuite) ATestPkIsHandleDML(c *check.C) {
+func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 	puller, err := mock.NewMockPuller(c)
 	c.Assert(err, check.IsNil)
 	rawEntries := puller.MustExec("create table test.test2(id int primary key, b varchar(255) unique key)")
@@ -194,22 +194,6 @@ func (s *kvEntrySuite) ATestPkIsHandleDML(c *check.C) {
 
 	rawEntries = puller.MustExec("insert into test.test2 values(666,'aaa')")
 	expect := []KVEntry{
-		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 666,
-			Delete:   false,
-			Row:      map[int64]types.Datum{2: types.NewBytesDatum([]byte("aaa"))},
-		}, &IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   666,
-			IndexId:    1,
-			Delete:     false,
-			IndexValue: []types.Datum{types.NewBytesDatum([]byte("aaa"))},
-		}}
-	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
-
-	rawEntries = puller.MustExec("insert into test.test2 values(667, null)")
-	expect = []KVEntry{
 		&RowKVEntry{
 			TableId:  tableInfo.ID,
 			RecordId: 666,
