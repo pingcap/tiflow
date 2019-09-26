@@ -90,14 +90,12 @@ func isDistinct(index *model.IndexInfo, indexValue []types.Datum) bool {
 		return true
 	}
 	if index.Unique {
-		hasNull := false
 		for _, value := range indexValue {
 			if value.IsNull() {
-				hasNull = true
-				break
+				return false
 			}
 		}
-		return !hasNull
+		return true
 	}
 	return false
 }
