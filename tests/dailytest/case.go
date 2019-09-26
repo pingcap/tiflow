@@ -19,7 +19,6 @@ import (
 	"math"
 	"math/rand"
 	"strings"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -187,107 +186,107 @@ func (tr *testRunner) execSQLs(sqls []string) {
 func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr := &testRunner{src: src, dst: dst, schema: schema}
 
-	runPKcases(tr)
+	runPKorUKcases(tr)
 
-	tr.execSQLs(caseMultiDataType)
-	tr.execSQLs(caseMultiDataTypeClean)
-
-	tr.execSQLs(caseUKWithNoPK)
-	tr.execSQLs(caseUKWithNoPKClean)
-
-	// run casePKAddDuplicateUK
-	tr.run(func(src *sql.DB) {
-		err := execSQLs(src, casePKAddDuplicateUK)
-		if err != nil && !strings.Contains(err.Error(), "Duplicate for key") {
-			log.S().Fatal(err)
-		}
-	})
-	tr.execSQLs(casePKAddDuplicateUKClean)
-
-	// run caseInsertBit
-	tr.execSQLs(caseInsertBit)
-	tr.execSQLs(caseInsertBitClean)
-
-	// run caseRecoverAndInsert
-	tr.execSQLs(caseRecoverAndInsert)
-	tr.execSQLs(caseRecoverAndInsertClean)
-
-	tr.run(caseTblWithGeneratedCol)
-	tr.execSQLs([]string{"DROP TABLE gen_contacts;"})
-
-	tr.run(caseCreateView)
-	tr.execSQLs([]string{"DROP TABLE base_for_view;"})
-	tr.execSQLs([]string{"DROP VIEW view_user_sum;"})
-
-	// random op on have both pk and uk table
-	tr.run(func(src *sql.DB) {
-		start := time.Now()
-
-		err := updatePKUK(src, 1000)
-		if err != nil {
-			log.S().Fatal(errors.ErrorStack(err))
-		}
-
-		log.S().Info(" updatePKUK take: ", time.Since(start))
-	})
-
-	// swap unique index value
-	tr.run(func(src *sql.DB) {
-		mustExec(src, "create table uindex(id int primary key, a1 int unique)")
-
-		mustExec(src, "insert into uindex(id, a1) values(1, 10), (2, 20)")
-
-		tx, err := src.Begin()
-		if err != nil {
-			log.S().Fatal(err)
-		}
-
-		_, err = tx.Exec("update uindex set a1 = 30 where id = 1")
-		if err != nil {
-			log.S().Fatal(err)
-		}
-
-		_, err = tx.Exec("update uindex set a1 = 10 where id = 2")
-		if err != nil {
-			log.S().Fatal(err)
-		}
-
-		_, err = tx.Exec("update uindex set a1 = 20 where id = 1")
-		if err != nil {
-			log.S().Fatal(err)
-		}
-
-		err = tx.Commit()
-		if err != nil {
-			log.S().Fatal(err)
-		}
-
-		mustExec(src, "drop table uindex")
-	})
-
-	// test big cdc msg
-	tr.run(func(src *sql.DB) {
-		mustExec(src, "create table binlog_big(id int primary key, data longtext);")
-
-		tx, err := src.Begin()
-		if err != nil {
-			log.S().Fatal(err)
-		}
-		// insert 5 * 1M
-		// note limitation of TiDB: https://github.com/pingcap/docs/blob/733a5b0284e70c5b4d22b93a818210a3f6fbb5a0/FAQ.md#the-error-message-transaction-too-large-is-displayed
-		var data = make([]byte, 1<<20)
-		for i := 0; i < 5; i++ {
-			_, err = tx.Query("INSERT INTO binlog_big(id, data) VALUES(?, ?);", i, data)
-			if err != nil {
-				log.S().Fatal(err)
-			}
-		}
-		err = tx.Commit()
-		if err != nil {
-			log.S().Fatal(err)
-		}
-	})
-	tr.execSQLs([]string{"DROP TABLE binlog_big;"})
+	//tr.execSQLs(caseMultiDataType)
+	//tr.execSQLs(caseMultiDataTypeClean)
+	//
+	//tr.execSQLs(caseUKWithNoPK)
+	//tr.execSQLs(caseUKWithNoPKClean)
+	//
+	//// run casePKAddDuplicateUK
+	//tr.run(func(src *sql.DB) {
+	//	err := execSQLs(src, casePKAddDuplicateUK)
+	//	if err != nil && !strings.Contains(err.Error(), "Duplicate for key") {
+	//		log.S().Fatal(err)
+	//	}
+	//})
+	//tr.execSQLs(casePKAddDuplicateUKClean)
+	//
+	//// run caseInsertBit
+	//tr.execSQLs(caseInsertBit)
+	//tr.execSQLs(caseInsertBitClean)
+	//
+	//// run caseRecoverAndInsert
+	//tr.execSQLs(caseRecoverAndInsert)
+	//tr.execSQLs(caseRecoverAndInsertClean)
+	//
+	//tr.run(caseTblWithGeneratedCol)
+	//tr.execSQLs([]string{"DROP TABLE gen_contacts;"})
+	//
+	//tr.run(caseCreateView)
+	//tr.execSQLs([]string{"DROP TABLE base_for_view;"})
+	//tr.execSQLs([]string{"DROP VIEW view_user_sum;"})
+	//
+	//// random op on have both pk and uk table
+	//tr.run(func(src *sql.DB) {
+	//	start := time.Now()
+	//
+	//	err := updatePKUK(src, 1000)
+	//	if err != nil {
+	//		log.S().Fatal(errors.ErrorStack(err))
+	//	}
+	//
+	//	log.S().Info(" updatePKUK take: ", time.Since(start))
+	//})
+	//
+	//// swap unique index value
+	//tr.run(func(src *sql.DB) {
+	//	mustExec(src, "create table uindex(id int primary key, a1 int unique)")
+	//
+	//	mustExec(src, "insert into uindex(id, a1) values(1, 10), (2, 20)")
+	//
+	//	tx, err := src.Begin()
+	//	if err != nil {
+	//		log.S().Fatal(err)
+	//	}
+	//
+	//	_, err = tx.Exec("update uindex set a1 = 30 where id = 1")
+	//	if err != nil {
+	//		log.S().Fatal(err)
+	//	}
+	//
+	//	_, err = tx.Exec("update uindex set a1 = 10 where id = 2")
+	//	if err != nil {
+	//		log.S().Fatal(err)
+	//	}
+	//
+	//	_, err = tx.Exec("update uindex set a1 = 20 where id = 1")
+	//	if err != nil {
+	//		log.S().Fatal(err)
+	//	}
+	//
+	//	err = tx.Commit()
+	//	if err != nil {
+	//		log.S().Fatal(err)
+	//	}
+	//
+	//	mustExec(src, "drop table uindex")
+	//})
+	//
+	//// test big cdc msg
+	//tr.run(func(src *sql.DB) {
+	//	mustExec(src, "create table binlog_big(id int primary key, data longtext);")
+	//
+	//	tx, err := src.Begin()
+	//	if err != nil {
+	//		log.S().Fatal(err)
+	//	}
+	//	// insert 5 * 1M
+	//	// note limitation of TiDB: https://github.com/pingcap/docs/blob/733a5b0284e70c5b4d22b93a818210a3f6fbb5a0/FAQ.md#the-error-message-transaction-too-large-is-displayed
+	//	var data = make([]byte, 1<<20)
+	//	for i := 0; i < 5; i++ {
+	//		_, err = tx.Query("INSERT INTO binlog_big(id, data) VALUES(?, ?);", i, data)
+	//		if err != nil {
+	//			log.S().Fatal(err)
+	//		}
+	//	}
+	//	err = tx.Commit()
+	//	if err != nil {
+	//		log.S().Fatal(err)
+	//	}
+	//})
+	//tr.execSQLs([]string{"DROP TABLE binlog_big;"})
 }
 
 // caseTblWithGeneratedCol creates a table with generated column,
@@ -448,7 +447,7 @@ func updatePKUK(db *sql.DB, opNum int) error {
 // create a table with one column id with different type
 // test the case whether it is primary key too, this can
 // also help test when the column is handle or not.
-func runPKcases(tr *testRunner) {
+func runPKorUKcases(tr *testRunner) {
 	cases := []struct {
 		Tp     string
 		Value  interface{}
@@ -497,28 +496,25 @@ func runPKcases(tr *testRunner) {
 	}
 
 	for _, c := range cases {
-		for _, ispk := range []string{"", "PRIMARY KEY"} {
+		for _, pkOrUK := range []string{"UNIQUE", "PRIMARY KEY"} {
 
 			tr.run(func(src *sql.DB) {
-				sql := fmt.Sprintf("CREATE TABLE pk(id %s %s)", c.Tp, ispk)
+				sql := fmt.Sprintf("CREATE TABLE pk_or_uk(id %s %s)", c.Tp, pkOrUK)
 				mustExec(src, sql)
-
-				sql = "INSERT INTO pk(id) values( ? )"
+				sql = "INSERT INTO pk_or_uk(id) values( ? )"
 				mustExec(src, sql, c.Value)
 
-				if len(ispk) == 0 {
+				if pkOrUK == "UNIQUE" {
 					// insert a null value
 					mustExec(src, sql, nil)
 				}
-
-				sql = "UPDATE pk set id = ? where id = ?"
+				sql = "UPDATE pk_or_uk set id = ? where id = ?"
 				mustExec(src, sql, c.Update, c.Value)
-
-				sql = "DELETE from pk where id = ?"
+				sql = "DELETE from pk_or_uk where id = ?"
 				mustExec(src, sql, c.Update)
 			})
 
-			tr.execSQLs([]string{"DROP TABLE pk"})
+			tr.execSQLs([]string{"DROP TABLE pk_or_uk"})
 		}
 	}
 }
