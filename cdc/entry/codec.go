@@ -15,11 +15,13 @@ package entry
 
 import (
 	"bytes"
+	"fmt"
+	"time"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
-	"time"
 )
 
 var (
@@ -58,6 +60,36 @@ const (
 	// ListData is the flag for list data.
 	ListData MetaType = 'l'
 )
+
+type Meta interface {
+	GetType() MetaType
+}
+
+type MetaHashData struct {
+	key   string
+	field []byte
+}
+
+func (d MetaHashData) GetType() MetaType {
+	return HashData
+}
+
+type MetaListData struct {
+	key   string
+	index int64
+}
+
+func (d MetaListData) GetType() MetaType {
+	return ListData
+}
+
+type Other struct {
+	tp MetaType
+}
+
+func (d Other) GetType() MetaType {
+	return d.tp
+}
 
 func decodeTableId(key []byte) (rest []byte, tableId int64, err error) {
 	if len(key) < prefixTableIdLen || !bytes.HasPrefix(key, tablePrefix) {
@@ -99,38 +131,51 @@ func decodeIndexKey(key []byte) (indexId int64, indexValue []types.Datum, err er
 	return
 }
 
-func decodeMetaKey(ek []byte) (key string, tp MetaType, field []byte, err error) {
+func decodeMetaKey(ek []byte) (Meta, error) {
 	if !bytes.HasPrefix(ek, metaPrefix) {
-		return "", UnknownMetaType, nil, errors.New("invalid encoded hash data key prefix")
+		return nil, errors.New("invalid encoded hash data key prefix")
 	}
 
 	ek = ek[metaPrefixLen:]
 	ek, rawKey, err := codec.DecodeBytes(ek, nil)
 	if err != nil {
-		return "", UnknownMetaType, nil, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
-	key = string(rawKey)
+	key := string(rawKey)
 
 	ek, rawTp, err := codec.DecodeUint(ek)
 	if err != nil {
-		return "", UnknownMetaType, nil, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
-	tp = MetaType(rawTp)
-	if tp == ListData {
-		// TODO decode list data
-		return
-	}
-	if len(ek) > 0 {
-		ek, field, err = codec.DecodeBytes(ek, nil)
-		if err != nil {
-			return "", UnknownMetaType, nil, errors.Trace(err)
+	switch MetaType(rawTp) {
+	case HashData:
+		if len(ek) > 0 {
+			var field []byte
+			ek, field, err = codec.DecodeBytes(ek, nil)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			return MetaHashData{key: key, field: field}, nil
 		}
+		if len(ek) > 0 {
+			// TODO: warning hash key decode failure
+			panic("hash key decode failure, should never happen")
+		}
+	case ListData:
+		if len(ek) == 0 {
+			panic("list key decode failure")
+		}
+		var index int64
+		ek, index, err = codec.DecodeInt(ek)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return MetaListData{key: key, index: index}, nil
+	// TODO decode other key
+	default:
+		return Other{tp: MetaType(rawTp)}, nil
 	}
-	if len(ek) > 0 {
-		// TODO: warning hash key decode failure
-		panic("hash key decode failure, should never happen")
-	}
-	return
+	return nil, fmt.Errorf("unknown meta type %v", rawTp)
 }
 
 // decodeRow decodes a byte slice into datums with a existing row map.

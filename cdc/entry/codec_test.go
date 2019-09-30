@@ -14,9 +14,11 @@
 package entry
 
 import (
+	"testing"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/tablecodec"
-	"testing"
+	"github.com/pingcap/tidb/util/codec"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -38,4 +40,24 @@ func (s *codecSuite) TestDecodeRecordKey(c *check.C) {
 	c.Assert(len(key), check.Equals, 0)
 }
 
-// TODO add more tests
+type decodeMetaKeySuite struct {
+}
+
+var _ = check.Suite(&decodeMetaKeySuite{})
+
+func (s *decodeMetaKeySuite) TestDecodeListData(c *check.C) {
+	key := []byte("hello")
+	var index int64 = 3
+	ek := make([]byte, 0, len(metaPrefix)+len(key)+36)
+	ek = append(ek, metaPrefix...)
+	ek = codec.EncodeBytes(ek, key)
+	ek = codec.EncodeUint(ek, uint64(ListData))
+	metaKey := codec.EncodeInt(ek, index)
+
+	meta, err := decodeMetaKey(metaKey)
+	c.Assert(err, check.IsNil)
+	c.Assert(meta.GetType(), check.Equals, ListData)
+	list := meta.(MetaListData)
+	c.Assert(list.key, check.Equals, string(key))
+	c.Assert(list.index, check.Equals, index)
+}

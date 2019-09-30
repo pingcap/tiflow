@@ -194,14 +194,15 @@ var (
 )
 
 func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
-	key, tp, field, err := decodeMetaKey(raw.Key)
+	meta, err := decodeMetaKey(raw.Key)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	switch key {
-	case ddlJobHistoryKey:
-		if tp == HashData {
-			jobId := binary.BigEndian.Uint64(field)
+	switch meta.GetType() {
+	case HashData:
+		k := meta.(MetaHashData)
+		if k.key == ddlJobHistoryKey {
+			jobId := binary.BigEndian.Uint64(k.field)
 			job := &model.Job{}
 			err = json.Unmarshal(raw.Value, job)
 			if err != nil {
@@ -213,33 +214,32 @@ func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 				Job:   job,
 			}, nil
 		}
-	}
-	switch {
-	case strings.HasPrefix(key, dbMetaPrefix):
-		key = key[len(dbMetaPrefix):]
-		var tableId int64
-		dbId, err := strconv.ParseInt(key, 10, 64)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		fieldStr := string(field)
-		if tp == HashData && strings.HasPrefix(fieldStr, tableMetaPrefix) {
-			fieldStr = fieldStr[len(tableMetaPrefix):]
-			tableId, err = strconv.ParseInt(fieldStr, 10, 64)
+		if strings.HasPrefix(k.key, dbMetaPrefix) {
+			key := k.key[len(dbMetaPrefix):]
+			var tableId int64
+			dbId, err := strconv.ParseInt(key, 10, 64)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			tableInfo := &model.TableInfo{}
-			err = json.Unmarshal(raw.Value, tableInfo)
-			if err != nil {
-				return nil, errors.Trace(err)
+			fieldStr := string(k.field)
+			if strings.HasPrefix(fieldStr, tableMetaPrefix) {
+				fieldStr = fieldStr[len(tableMetaPrefix):]
+				tableId, err = strconv.ParseInt(fieldStr, 10, 64)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+				tableInfo := &model.TableInfo{}
+				err = json.Unmarshal(raw.Value, tableInfo)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+				return &UpdateTableKVEntry{
+					Ts:        raw.Ts,
+					DbId:      dbId,
+					TableId:   tableId,
+					TableInfo: tableInfo,
+				}, nil
 			}
-			return &UpdateTableKVEntry{
-				Ts:        raw.Ts,
-				DbId:      dbId,
-				TableId:   tableId,
-				TableInfo: tableInfo,
-			}, nil
 		}
 	}
 	return &UnknownKVEntry{*raw}, nil
