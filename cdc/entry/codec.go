@@ -74,6 +74,15 @@ func (d MetaHashData) GetType() MetaType {
 	return HashData
 }
 
+type MetaListData struct {
+	key   string
+	index int64
+}
+
+func (d MetaListData) GetType() MetaType {
+	return ListData
+}
+
 type Other struct {
 	tp MetaType
 }
@@ -152,6 +161,16 @@ func decodeMetaKey(ek []byte) (Meta, error) {
 			// TODO: warning hash key decode failure
 			panic("hash key decode failure, should never happen")
 		}
+	case ListData:
+		if len(ek) == 0 {
+			panic("list key decode failure")
+		}
+		var index int64
+		ek, index, err = codec.DecodeInt(ek)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return MetaListData{key: key, index: index}, nil
 	// TODO decode other key
 	default:
 		return Other{tp: MetaType(rawTp)}, nil
