@@ -175,7 +175,7 @@ func decodeMetaKey(ek []byte) (Meta, error) {
 	default:
 		return Other{tp: MetaType(rawTp)}, nil
 	}
-	return nil, fmt.Errorf("unknown meta type %s", rawTp)
+	return nil, fmt.Errorf("unknown meta type %v", rawTp)
 }
 
 // decodeRow decodes a byte slice into datums with a existing row map.
