@@ -68,6 +68,7 @@ func (s EmitSuite) TestShouldExecDDL(c *check.C) {
 
 	// Validate
 	c.Assert(err, check.IsNil)
+	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }
 
 func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
@@ -95,13 +96,13 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 		Number: uint16(infoschema.ErrTableExists.Code()),
 	}
 	mock.ExpectExec(txn.DDL.SQL).WillReturnError(&ignorable)
-	mock.ExpectCommit()
 
 	// Execute
 	err = sink.Emit(context.Background(), txn)
 
 	// Validate
 	c.Assert(err, check.IsNil)
+	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }
 
 type tableHelper struct {
@@ -185,6 +186,7 @@ func (s EmitSuite) TestShouldExecReplaceInto(c *check.C) {
 
 	// Validate
 	c.Assert(err, check.IsNil)
+	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }
 
 func (s EmitSuite) TestShouldExecDelete(c *check.C) {
@@ -225,6 +227,7 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 
 	// Validate
 	c.Assert(err, check.IsNil)
+	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }
 
 type FilterSuite struct{}
