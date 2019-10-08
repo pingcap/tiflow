@@ -2,8 +2,12 @@ package util
 
 import (
 	"bytes"
+	"sort"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/meta"
 )
 
 // Span represents a arbitrary kv range
@@ -94,4 +98,35 @@ func Intersect(lhs Span, rhs Span) (span Span, err error) {
 	}
 
 	return Span{start, end}, nil
+}
+
+// LoadHistoryDDLJobs loads all history DDL jobs from TiDB
+func LoadHistoryDDLJobs(tiStore kv.Storage) ([]*model.Job, error) {
+	snapMeta, err := getSnapshotMeta(tiStore)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	jobs, err := snapMeta.GetAllHistoryDDLJobs()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// jobs from GetAllHistoryDDLJobs are sorted by job id, need sorted by schema version
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].BinlogInfo.FinishedTS < jobs[j].BinlogInfo.FinishedTS
+	})
+
+	return jobs, nil
+}
+
+func getSnapshotMeta(tiStore kv.Storage) (*meta.Meta, error) {
+	version, err := tiStore.CurrentVersion()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	snapshot, err := tiStore.GetSnapshot(version)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return meta.NewSnapshotMeta(snapshot), nil
 }

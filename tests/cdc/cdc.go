@@ -20,7 +20,6 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-cdc/tests/dailytest"
 	"github.com/pingcap/tidb-cdc/tests/util"
 )
 
@@ -67,5 +66,5 @@ func main() {
 	}()
 
 	//dailytest.RunMultiSource(sourceDBs, targetDB, cfg.SourceDBCfg.Name)
-	dailytest.Run(sourceDB, targetDB, cfg.SourceDBCfg.Name, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
+	//dailytest.Run(sourceDB, targetDB, cfg.SourceDBCfg.Name, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 }

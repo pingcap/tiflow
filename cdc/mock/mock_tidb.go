@@ -4,7 +4,9 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
+	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/cdc/util"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
@@ -24,14 +26,12 @@ type MockTiDB struct {
 	domain    *domain.Domain
 	*parser.Parser
 	ctx *mock.Context
-	c   *check.C
 
 	kvs map[string]string
 }
 
-func NewMockPuller(c *check.C) (*MockTiDB, error) {
+func NewMockPuller() (*MockTiDB, error) {
 	p := &MockTiDB{
-		c:   c,
 		kvs: make(map[string]string),
 	}
 
@@ -131,12 +131,12 @@ func (p *MockTiDB) updateEvent() (entrys []*kv.RawKVEntry, err error) {
 }
 
 // MustExec execute the sql and return all the KVEntry events
-func (p *MockTiDB) MustExec(sql string, args ...interface{}) []*kv.RawKVEntry {
-	tk := testkit.NewTestKit(p.c, p.store)
+func (p *MockTiDB) MustExec(c *check.C, sql string, args ...interface{}) []*kv.RawKVEntry {
+	tk := testkit.NewTestKit(c, p.store)
 	tk.MustExec(sql, args...)
 
 	entrys, err := p.updateEvent()
-	p.c.Assert(err, check.IsNil)
+	c.Assert(err, check.IsNil)
 
 	return entrys
 }
@@ -145,4 +145,8 @@ func (p *MockTiDB) ScanAll(fn func(*kv.RawKVEntry)) {
 	for key, value := range p.kvs {
 		fn(&kv.RawKVEntry{Key: []byte(key), Value: []byte(value), OpType: kv.OpTypePut})
 	}
+}
+
+func (p *MockTiDB) GetAllHistoryDDLJobs() ([]*model.Job, error) {
+	return util.LoadHistoryDDLJobs(p.store)
 }

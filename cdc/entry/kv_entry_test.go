@@ -18,9 +18,9 @@ type kvEntrySuite struct {
 var _ = check.Suite(&kvEntrySuite{})
 
 func (s *kvEntrySuite) TestCreateTable(c *check.C) {
-	puller, err := mock.NewMockPuller(c)
+	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
-	rawEntries := puller.MustExec("create table test.test1(id varchar(255) primary key, a int, index i1 (a))")
+	rawEntries := puller.MustExec(c, "create table test.test1(id varchar(255) primary key, a int, index i1 (a))")
 	existUpdateTableKVEntry := false
 	existDDLJobHistoryKVEntry := false
 	for _, raw := range rawEntries {
@@ -61,7 +61,7 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 	c.Assert(existUpdateTableKVEntry, check.IsTrue)
 	c.Assert(existDDLJobHistoryKVEntry, check.IsTrue)
 
-	rawEntries = puller.MustExec("create table test.test2(id int primary key, b varchar(255) unique key)")
+	rawEntries = puller.MustExec(c, "create table test.test2(id int primary key, b varchar(255) unique key)")
 	existUpdateTableKVEntry = false
 	existDDLJobHistoryKVEntry = false
 	for _, raw := range rawEntries {
@@ -96,9 +96,9 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 }
 
 func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
-	puller, err := mock.NewMockPuller(c)
+	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
-	rawEntries := puller.MustExec("create table test.test1(id varchar(255) primary key, a int, index ci (a))")
+	rawEntries := puller.MustExec(c, "create table test.test1(id varchar(255) primary key, a int, index ci (a))")
 	var tableInfo *model.TableInfo
 	for _, raw := range rawEntries {
 		entry, err := Unmarshal(raw)
@@ -110,7 +110,7 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 	}
 	c.Assert(tableInfo, check.NotNil)
 
-	rawEntries = puller.MustExec("insert into test.test1 values('ttt',666)")
+	rawEntries = puller.MustExec(c, "insert into test.test1 values('ttt',666)")
 	expect := []KVEntry{
 		&RowKVEntry{
 			TableId:  tableInfo.ID,
@@ -132,7 +132,7 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 		}}
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
-	rawEntries = puller.MustExec("update test.test1 set id = '777' where a = 666")
+	rawEntries = puller.MustExec(c, "update test.test1 set id = '777' where a = 666")
 	expect = []KVEntry{
 		&RowKVEntry{
 			TableId:  tableInfo.ID,
@@ -154,7 +154,7 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 		}}
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
-	rawEntries = puller.MustExec("delete from test.test1 where id = '777'")
+	rawEntries = puller.MustExec(c, "delete from test.test1 where id = '777'")
 	expect = []KVEntry{
 		&RowKVEntry{
 			TableId:  tableInfo.ID,
@@ -178,9 +178,9 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 }
 
 func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
-	puller, err := mock.NewMockPuller(c)
+	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
-	rawEntries := puller.MustExec("create table test.test2(id int primary key, b varchar(255) unique key)")
+	rawEntries := puller.MustExec(c, "create table test.test2(id int primary key, b varchar(255) unique key)")
 	var tableInfo *model.TableInfo
 	for _, raw := range rawEntries {
 		entry, err := Unmarshal(raw)
@@ -192,7 +192,7 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 	}
 	c.Assert(tableInfo, check.NotNil)
 
-	rawEntries = puller.MustExec("insert into test.test2 values(666,'aaa')")
+	rawEntries = puller.MustExec(c, "insert into test.test2 values(666,'aaa')")
 	expect := []KVEntry{
 		&RowKVEntry{
 			TableId:  tableInfo.ID,
@@ -208,7 +208,7 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 		}}
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
-	rawEntries = puller.MustExec("update test.test2 set id = 888,b = 'bbb' where id = 666")
+	rawEntries = puller.MustExec(c, "update test.test2 set id = 888,b = 'bbb' where id = 666")
 	expect = []KVEntry{
 		&RowKVEntry{
 			TableId:  tableInfo.ID,
@@ -235,7 +235,7 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 		}}
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
-	rawEntries = puller.MustExec("delete from test.test2 where id = 888")
+	rawEntries = puller.MustExec(c, "delete from test.test2 where id = 888")
 	expect = []KVEntry{
 		&RowKVEntry{
 			TableId:  tableInfo.ID,
@@ -254,10 +254,10 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 }
 
 func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
-	puller, err := mock.NewMockPuller(c)
+	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
 
-	rawEntries := puller.MustExec("create table test.test2( a int, b varchar(255), c date, unique key(a,b,c))")
+	rawEntries := puller.MustExec(c, "create table test.test2( a int, b varchar(255), c date, unique key(a,b,c))")
 	var tableInfo *model.TableInfo
 	for _, raw := range rawEntries {
 		entry, err := Unmarshal(raw)
@@ -269,7 +269,7 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 	}
 	c.Assert(tableInfo, check.NotNil)
 
-	rawEntries = puller.MustExec("insert into test.test2 values(null, 'aa', '1996-11-20')")
+	rawEntries = puller.MustExec(c, "insert into test.test2 values(null, 'aa', '1996-11-20')")
 	time, err := types.ParseDate(nil, "1996-11-20")
 	c.Assert(err, check.IsNil)
 	expect := []KVEntry{
@@ -288,7 +288,7 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 		}}
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
-	rawEntries = puller.MustExec("insert into test.test2 values(null, null, '1996-11-20')")
+	rawEntries = puller.MustExec(c, "insert into test.test2 values(null, null, '1996-11-20')")
 	expect = []KVEntry{
 		&RowKVEntry{
 			TableId:  tableInfo.ID,
@@ -305,7 +305,7 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 		}}
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
-	rawEntries = puller.MustExec("insert into test.test2 values(null, null, null)")
+	rawEntries = puller.MustExec(c, "insert into test.test2 values(null, null, null)")
 	expect = []KVEntry{
 		&RowKVEntry{
 			TableId:  tableInfo.ID,
@@ -322,7 +322,7 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 		}}
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
-	rawEntries = puller.MustExec("delete from test.test2 where c is null")
+	rawEntries = puller.MustExec(c, "delete from test.test2 where c is null")
 	expect = []KVEntry{
 		&RowKVEntry{
 			TableId:  tableInfo.ID,
@@ -339,7 +339,7 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 		}}
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 
-	rawEntries = puller.MustExec("update test.test2 set a = 1, b = null where a is null and b is not null")
+	rawEntries = puller.MustExec(c, "update test.test2 set a = 1, b = null where a is null and b is not null")
 	expect = []KVEntry{
 		&RowKVEntry{
 			TableId:  tableInfo.ID,
@@ -395,7 +395,7 @@ func checkDMLKVEntries(c *check.C, tableInfo *model.TableInfo, rawEntries []*kv.
 }
 
 func (s *kvEntrySuite) TestAllKVS(c *check.C) {
-	puller, err := mock.NewMockPuller(c)
+	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
 	puller.ScanAll(func(rawKVEntry *kv.RawKVEntry) {
 		_, err := Unmarshal(rawKVEntry)
