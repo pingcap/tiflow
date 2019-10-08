@@ -178,12 +178,12 @@ type mountTxnsSuite struct{}
 var _ = check.Suite(&mountTxnsSuite{})
 
 func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *Schema) {
-	puller, err := mock.NewMockPuller(c)
+	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
 	var jobs []*model.Job
 
 	for _, sql := range sqls {
-		rawEntries := puller.MustExec(sql)
+		rawEntries := puller.MustExec(c, sql)
 		for _, raw := range rawEntries {
 			e, err := entry.Unmarshal(raw)
 			c.Assert(err, check.IsNil)
@@ -206,7 +206,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 	mounter, err := NewTxnMounter(schema, time.UTC)
 	c.Assert(err, check.IsNil)
 
-	rawKV := puller.MustExec("insert into testDB.test1 values('ttt',6)")
+	rawKV := puller.MustExec(c, "insert into testDB.test1 values('ttt',6)")
 	txn, err := mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
@@ -235,7 +235,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 		},
 	})
 
-	rawKV = puller.MustExec("update testDB.test1 set id = 'vvv' where a = 6")
+	rawKV = puller.MustExec(c, "update testDB.test1 set id = 'vvv' where a = 6")
 	txn, err = mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
@@ -272,7 +272,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 		},
 	})
 
-	rawKV = puller.MustExec("delete from testDB.test1 where a = 6")
+	rawKV = puller.MustExec(c, "delete from testDB.test1 where a = 6")
 	txn, err = mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
@@ -298,7 +298,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 	mounter, err := NewTxnMounter(schema, time.UTC)
 	c.Assert(err, check.IsNil)
 
-	rawKV := puller.MustExec("insert into testDB.test1 values(777,888)")
+	rawKV := puller.MustExec(c, "insert into testDB.test1 values(777,888)")
 	txn, err := mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
@@ -327,7 +327,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 		},
 	})
 
-	rawKV = puller.MustExec("update testDB.test1 set id = 999 where a = 888")
+	rawKV = puller.MustExec(c, "update testDB.test1 set id = 999 where a = 888")
 	txn, err = mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
@@ -364,7 +364,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 		},
 	})
 
-	rawKV = puller.MustExec("delete from testDB.test1 where id = 999")
+	rawKV = puller.MustExec(c, "delete from testDB.test1 where id = 999")
 	txn, err = mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
@@ -397,7 +397,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 	puller, schema := setUpPullerAndSchema(c, "create database testDB", "create table testDB.test1(id varchar(255) primary key, a int, index ci (a))")
 	mounter, err := NewTxnMounter(schema, time.UTC)
 	c.Assert(err, check.IsNil)
-	rawKV := puller.MustExec("alter table testDB.test1 add b int null")
+	rawKV := puller.MustExec(c, "alter table testDB.test1 add b int null")
 	txn, err := mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
@@ -414,7 +414,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 	})
 
 	// test insert null value
-	rawKV = puller.MustExec("insert into testDB.test1(id,a) values('ttt',6)")
+	rawKV = puller.MustExec(c, "insert into testDB.test1(id,a) values('ttt',6)")
 	txn, err = mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
@@ -443,7 +443,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 		},
 	})
 
-	rawKV = puller.MustExec("insert into testDB.test1(id,a,b) values('kkk',6,7)")
+	rawKV = puller.MustExec(c, "insert into testDB.test1(id,a,b) values('kkk',6,7)")
 	txn, err = mounter.Mount(RawTxn{
 		ts:      rawKV[0].Ts,
 		entries: rawKV,
