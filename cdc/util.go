@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
 
 	"github.com/pingcap/errors"
 )
@@ -77,6 +78,58 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 		}
 	}
 
+	return
+}
+
+func getTableInfoFromSchema(schema *Schema, schemaName, tableName string) (info *tableInfo, err error) {
+	info = new(tableInfo)
+	tableId, exist := schema.GetTableIDByName(schemaName, tableName)
+	if !exist {
+		return nil, ErrTableNotExist
+	}
+	tableInfoModel, exist := schema.TableByID(tableId)
+	if !exist {
+		return nil, ErrTableNotExist
+	}
+	columns := make([]string, len(tableInfoModel.Columns))
+	for i, col := range tableInfoModel.Columns {
+		columns[i] = col.Name.O
+	}
+	var uniques []indexInfo
+	for _, idx := range tableInfoModel.Indices {
+		if idx.Primary || idx.Unique {
+			idxCols := make([]string, len(idx.Columns))
+			for i, col := range idx.Columns {
+				idxCols[i] = col.Name.O
+			}
+			uniques = append(uniques, indexInfo{
+				name:    idx.Name.O,
+				columns: idxCols,
+			})
+		}
+	}
+	if tableInfoModel.PKIsHandle {
+		for _, col := range tableInfoModel.Columns {
+			if mysql.HasPriKeyFlag(col.Flag) {
+				uniques = append(uniques, indexInfo{
+					name:    "PRIMARY",
+					columns: []string{col.Name.O},
+				})
+				break
+			}
+		}
+	}
+	info.columns = columns
+	info.uniqueKeys = uniques
+	// put primary key at first place
+	// and set primaryKey
+	for i := 0; i < len(info.uniqueKeys); i++ {
+		if info.uniqueKeys[i].name == "PRIMARY" {
+			info.uniqueKeys[i], info.uniqueKeys[0] = info.uniqueKeys[0], info.uniqueKeys[i]
+			info.primaryKey = &info.uniqueKeys[0]
+			break
+		}
+	}
 	return
 }
 

@@ -284,6 +284,7 @@ func (m *TxnMounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, 
 		if mysql.HasPriKeyFlag(col.Flag) {
 			pkColOffset = i
 			handleColName = tableInfo.Columns[i].Name.O
+			break
 		}
 	}
 	if tableInfo.PKIsHandle && pkColOffset == -1 {
@@ -294,23 +295,28 @@ func (m *TxnMounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, 
 }
 
 func (m *TxnMounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, error) {
-	_, _, _, err := m.schema.handleDDL(jobHistory.Job)
+	var databaseName, tableName string
+	var err error
+	getTableName := false
+	//TODO support create schema and drop schema
+	if jobHistory.Job.Type == model.ActionDropTable {
+		databaseName, tableName, err = m.tryGetTableName(jobHistory)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		getTableName = true
+	}
+
+	_, _, _, err = m.schema.handleDDL(jobHistory.Job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	var databaseName, tableName string
-	if tableId := jobHistory.Job.TableID; tableId > 0 {
-		var exist bool
-		databaseName, tableName, exist = m.schema.SchemaAndTableName(tableId)
-		if !exist {
-			return nil, errors.Errorf("can not find table, id: %d", tableId)
+
+	if !getTableName {
+		databaseName, tableName, err = m.tryGetTableName(jobHistory)
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
-	} else if schemaId := jobHistory.Job.SchemaID; schemaId > 0 {
-		dbInfo, exist := m.schema.SchemaByID(schemaId)
-		if !exist {
-			return nil, errors.Errorf("can not find schema, id: %d", schemaId)
-		}
-		databaseName = dbInfo.Name.O
 	}
 
 	return &DDL{
@@ -319,4 +325,21 @@ func (m *TxnMounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, err
 		jobHistory.Job.Query,
 		jobHistory.Job.Type,
 	}, nil
+}
+
+func (m *TxnMounter) tryGetTableName(jobHistory *entry.DDLJobHistoryKVEntry) (databaseName string, tableName string, err error) {
+	if tableId := jobHistory.Job.TableID; tableId > 0 {
+		var exist bool
+		databaseName, tableName, exist = m.schema.SchemaAndTableName(tableId)
+		if !exist {
+			return "", "", errors.Errorf("can not find table, id: %d", tableId)
+		}
+	} else if schemaId := jobHistory.Job.SchemaID; schemaId > 0 {
+		dbInfo, exist := m.schema.SchemaByID(schemaId)
+		if !exist {
+			return "", "", errors.Errorf("can not find schema, id: %d", schemaId)
+		}
+		databaseName = dbInfo.Name.O
+	}
+	return
 }

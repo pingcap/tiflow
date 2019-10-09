@@ -2,6 +2,9 @@ package cdc
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"math"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -49,10 +52,19 @@ func NewCDCSuite() *CDCSuite {
 	}
 	cdcSuite.mock = mock
 
+	inspector := &cachedInspector{
+		db:    db,
+		cache: make(map[string]*tableInfo),
+		tableGetter: func(_ *sql.DB, schemaName string, tableName string) (*tableInfo, error) {
+			info, err := getTableInfoFromSchema(schema, schemaName, tableName)
+			log.Info("tableInfo", zap.Reflect("columns", info.columns), zap.Reflect("uniqueKeys", info.uniqueKeys), zap.Reflect("primaryKey", info.primaryKey))
+			return info, err
+		},
+	}
 	sink := &mysqlSink{
 		db:           db,
 		infoGetter:   schema,
-		tblInspector: newCachedInspector(db),
+		tblInspector: inspector,
 	}
 	cdcSuite.sink = sink
 
@@ -98,4 +110,114 @@ func (s *CDCSuite) TestSimple(c *C) {
 		mock.ExpectExec("create table test.simple_test (id bigint primary key)").WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 	})
+}
+
+func (s *CDCSuite) TestPKorUKCases(c *C) {
+	cases := []struct {
+		Tp     string
+		Value  interface{}
+		Update interface{}
+	}{
+		{
+			Tp:     "BIGINT UNSIGNED",
+			Value:  uint64(math.MaxInt64),
+			Update: uint64(math.MaxInt64) - 1,
+		},
+		{
+			Tp:     "BIGINT SIGNED",
+			Value:  int64(math.MaxInt64),
+			Update: int64(math.MaxInt64) - 1,
+		},
+		{
+			Tp:     "INT UNSIGNED",
+			Value:  uint32(math.MaxUint32),
+			Update: uint32(math.MaxUint32) - 1,
+		},
+		{
+			Tp:     "INT SIGNED",
+			Value:  int32(math.MaxInt32),
+			Update: int32(math.MaxInt32) - 1,
+		},
+		{
+			Tp:     "SMALLINT UNSIGNED",
+			Value:  uint16(math.MaxUint16),
+			Update: uint16(math.MaxUint16) - 1,
+		},
+		{
+			Tp:     "SMALLINT SIGNED",
+			Value:  int16(math.MaxInt16),
+			Update: int16(math.MaxInt16) - 1,
+		},
+		{
+			Tp:     "TINYINT UNSIGNED",
+			Value:  uint8(math.MaxUint8),
+			Update: uint8(math.MaxUint8) - 1,
+		},
+		{
+			Tp:     "TINYINT SIGNED",
+			Value:  int8(math.MaxInt8),
+			Update: int8(math.MaxInt8) - 1,
+		},
+	}
+
+	for _, cs := range cases {
+		for _, pkOrUK := range []string{"UNIQUE KEY NOT NULL", "PRIMARY KEY"} {
+
+			sql := fmt.Sprintf("CREATE TABLE test.pk_or_uk(id %s %s)", cs.Tp, pkOrUK)
+			s.RunAndCheckSync(c, func(execute func(string, ...interface{})) {
+				execute(sql)
+			}, func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec(sql).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+			})
+
+			sql = fmt.Sprintf("INSERT INTO test.pk_or_uk(id) values(%d)", cs.Value)
+			s.RunAndCheckSync(c, func(execute func(string, ...interface{})) {
+				execute(sql)
+			}, func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				// pk is not handle
+				if pkOrUK != "PRIMARY KEY" {
+					mock.ExpectExec("DELETE FROM `test`.`pk_or_uk` WHERE `id` = ? LIMIT 1;").WithArgs(cs.Value).WillReturnResult(sqlmock.NewResult(1, 1))
+				}
+				mock.ExpectExec("REPLACE INTO `test`.`pk_or_uk`(`id`) VALUES (?);").WithArgs(cs.Value).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+			})
+
+			sql = fmt.Sprintf("UPDATE test.pk_or_uk set id = %d where id = %d", cs.Update, cs.Value)
+			s.RunAndCheckSync(c, func(execute func(string, ...interface{})) {
+				execute(sql)
+			}, func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				// pk is not handle
+				if pkOrUK != "PRIMARY KEY" {
+					mock.ExpectExec("DELETE FROM `test`.`pk_or_uk` WHERE `id` = ? LIMIT 1;").WithArgs(cs.Update).WillReturnResult(sqlmock.NewResult(1, 1))
+				}
+				mock.ExpectExec("DELETE FROM `test`.`pk_or_uk` WHERE `id` = ? LIMIT 1;").WithArgs(cs.Value).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec("REPLACE INTO `test`.`pk_or_uk`(`id`) VALUES (?);").WithArgs(cs.Update).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+			})
+
+			sql = fmt.Sprintf("DELETE from test.pk_or_uk where id = %d", cs.Update)
+			s.RunAndCheckSync(c, func(execute func(string, ...interface{})) {
+				execute(sql)
+			}, func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec("DELETE FROM `test`.`pk_or_uk` WHERE `id` = ? LIMIT 1;").WithArgs(cs.Update).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+			})
+
+			sql = "DROP TABLE test.pk_or_uk"
+			s.RunAndCheckSync(c, func(execute func(string, ...interface{})) {
+				execute(sql)
+			}, func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec(sql).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+			})
+		}
+	}
 }

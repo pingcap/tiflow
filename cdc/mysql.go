@@ -68,14 +68,14 @@ func (s *mysqlSink) Emit(ctx context.Context, txn Txn) error {
 		if err == nil && isTableChanged(txn.DDL) {
 			s.tblInspector.Refresh(txn.DDL.Database, txn.DDL.Table)
 		}
-		return err
+		return errors.Trace(err)
 	}
 	// TODO: Add retry
 	dmls, err := s.formatDMLs(txn.DMLs)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
-	return s.execDMLs(ctx, dmls)
+	return errors.Trace(s.execDMLs(ctx, dmls))
 }
 
 func filterBySchemaAndTable(txn *Txn) {
