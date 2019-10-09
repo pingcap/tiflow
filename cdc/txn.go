@@ -298,7 +298,7 @@ func (m *TxnMounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, err
 	var databaseName, tableName string
 	var err error
 	getTableName := false
-	// support create schema and drop schema
+	//TODO support create schema and drop schema
 	if jobHistory.Job.Type == model.ActionDropTable {
 		databaseName, tableName, err = m.tryGetTableName(jobHistory)
 		if err != nil {

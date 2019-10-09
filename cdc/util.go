@@ -87,16 +87,16 @@ func getTableInfoFromSchema(schema *Schema, schemaName, tableName string) (info 
 	if !exist {
 		return nil, ErrTableNotExist
 	}
-	tableInfo, exist := schema.TableByID(tableId)
+	tableInfoModel, exist := schema.TableByID(tableId)
 	if !exist {
 		return nil, ErrTableNotExist
 	}
-	columns := make([]string, len(tableInfo.Columns))
-	for i, col := range tableInfo.Columns {
+	columns := make([]string, len(tableInfoModel.Columns))
+	for i, col := range tableInfoModel.Columns {
 		columns[i] = col.Name.O
 	}
 	var uniques []indexInfo
-	for _, idx := range tableInfo.Indices {
+	for _, idx := range tableInfoModel.Indices {
 		if idx.Primary || idx.Unique {
 			idxCols := make([]string, len(idx.Columns))
 			for i, col := range idx.Columns {
@@ -108,8 +108,8 @@ func getTableInfoFromSchema(schema *Schema, schemaName, tableName string) (info 
 			})
 		}
 	}
-	if tableInfo.PKIsHandle {
-		for _, col := range tableInfo.Columns {
+	if tableInfoModel.PKIsHandle {
+		for _, col := range tableInfoModel.Columns {
 			if mysql.HasPriKeyFlag(col.Flag) {
 				uniques = append(uniques, indexInfo{
 					name:    "PRIMARY",
