@@ -3,6 +3,8 @@ package util
 import (
 	"testing"
 
+	"github.com/pingcap/tidb/tablecodec"
+
 	"github.com/pingcap/check"
 )
 
@@ -83,4 +85,12 @@ func (s *spanSuite) TestIntersect(c *check.C) {
 			c.Assert(res2, check.DeepEquals, *t.res)
 		}
 	}
+}
+
+func (s *spanSuite) TestGetTableSpan(c *check.C) {
+	span := GetTableSpan(123)
+	c.Assert(span.Start, check.Less, span.End)
+	prefix := []byte(tablecodec.GenTablePrefix(123))
+	c.Assert(span.Start[:len(span.Start)-1], check.BytesEquals, prefix)
+	c.Assert(span.End[:len(span.End)-1], check.BytesEquals, prefix)
 }
