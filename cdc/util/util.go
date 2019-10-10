@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"sort"
 
+	"github.com/pingcap/tidb/tablecodec"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/kv"
@@ -39,6 +41,17 @@ func (s Span) Hack() Span {
 	}
 
 	return r
+}
+
+func GetTableSpan(tableID int64) Span {
+	sep := byte('_')
+	tablePrefix := tablecodec.GenTablePrefix(tableID)
+	start := append(tablePrefix, sep)
+	end := append(tablePrefix, sep+1)
+	return Span{
+		Start: start,
+		End:   end,
+	}
 }
 
 // Nil means Negative infinity
