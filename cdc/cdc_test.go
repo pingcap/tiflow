@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -68,7 +69,7 @@ func NewCDCSuite() *CDCSuite {
 	}
 	cdcSuite.sink = sink
 
-	mounter, err := NewTxnMounter(schema, time.UTC)
+	mounter, err := NewTxnMounter(schema, time.Local)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -219,5 +220,116 @@ func (s *CDCSuite) TestPKorUKCases(c *C) {
 				mock.ExpectCommit()
 			})
 		}
+	}
+}
+
+func (s *CDCSuite) TestMultiDataType(c *C) {
+	ddlExpectFunc := func(sql string, mock sqlmock.Sqlmock) {
+		mock.ExpectBegin()
+		mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec(sql).WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectCommit()
+	}
+
+	expectedReplaceSQL := "REPLACE INTO `test`.`cdc_multi_data_type`" +
+		"(`id`,`t_boolean`,`t_bigint`,`t_double`,`t_decimal`,`t_bit`," +
+		"`t_date`,`t_datetime`,`t_timestamp`,`t_time`,`t_year`," +
+		"`t_char`,`t_varchar`,`t_blob`,`t_text`,`t_enum`," +
+		"`t_set`,`t_json`) VALUES " +
+		"(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);"
+
+	// test different data type of mysql
+	// mysql will change boolean to tinybit(1)
+	cases := []testCases{{`CREATE TABLE test.cdc_multi_data_type (
+			id INT AUTO_INCREMENT,
+			t_boolean BOOLEAN,
+			t_bigint BIGINT,
+			t_double DOUBLE,
+			t_decimal DECIMAL(38,19),
+			t_bit BIT(64),
+			t_date DATE,
+			t_datetime DATETIME,
+			t_timestamp TIMESTAMP NULL,
+			t_time TIME,
+			t_year YEAR,
+			t_char CHAR,
+			t_varchar VARCHAR(10),
+			t_blob BLOB,
+			t_text TEXT,
+			t_enum ENUM('enum1', 'enum2', 'enum3'),
+			t_set SET('a', 'b', 'c'),
+			t_json JSON,
+			PRIMARY KEY(id)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;`, ddlExpectFunc},
+
+		{`INSERT INTO test.cdc_multi_data_type(t_boolean, t_bigint, t_double, t_decimal, t_bit
+		,t_date, t_datetime, t_timestamp, t_time, t_year
+		,t_char, t_varchar, t_blob, t_text, t_enum
+		,t_set, t_json) VALUES
+		(true, 9223372036854775807, 123.123, 123456789012.123456789012, b'1000001'
+		,'1000-01-01', '9999-12-31 23:59:59', '19731230153000', '23:59:59', 1970
+		,'测', '测试', 'blob', '测试text', 'enum2'
+		,'a,b', NULL);`,
+			func(sql string, mock sqlmock.Sqlmock) {
+				b1000001, err := strconv.ParseInt("1000001", 2, 64)
+				c.Assert(err, IsNil)
+				mock.ExpectBegin()
+				mock.ExpectExec(expectedReplaceSQL).
+					WithArgs(1, 1, 9223372036854775807, 123.123, "123456789012.1234567890120000000", b1000001, "1000-01-01", "9999-12-31 23:59:59", "1973-12-30 15:30:00", "23:59:59", 1970, []byte("测"), []byte("测试"), []byte("blob"), []byte("测试text"), 2, 3, nil).WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+			}},
+
+		{`INSERT INTO test.cdc_multi_data_type(t_boolean) VALUES(TRUE);`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec(expectedReplaceSQL).
+				WithArgs(2, 1, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+
+		{`INSERT INTO test.cdc_multi_data_type(t_boolean) VALUES(FALSE);`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec(expectedReplaceSQL).
+				WithArgs(3, 0, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+
+		{`INSERT INTO test.cdc_multi_data_type(t_bigint) VALUES(-9223372036854775808);`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec(expectedReplaceSQL).
+				WithArgs(4, nil, -9223372036854775808, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+
+		{`INSERT INTO test.cdc_multi_data_type(t_bigint) VALUES(9223372036854775807);`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec(expectedReplaceSQL).
+				WithArgs(5, nil, 9223372036854775807, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+
+		{`INSERT INTO test.cdc_multi_data_type(t_json) VALUES('{"key1": "value1", "key2": "value2"}');`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec(expectedReplaceSQL).
+				WithArgs(6, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, `{"key1": "value1", "key2": "value2"}`).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+
+		{"DROP TABLE test.cdc_multi_data_type", ddlExpectFunc},
+	}
+	s.RunTestCases(c, cases)
+}
+
+type testCases struct {
+	execSQL string
+	expect  func(string, sqlmock.Sqlmock)
+}
+
+func (s *CDCSuite) RunTestCases(c *C, cases []testCases) {
+	for _, cs := range cases {
+		s.RunAndCheckSync(c, func(execute func(string, ...interface{})) {
+			execute(cs.execSQL)
+		}, func(mock sqlmock.Sqlmock) {
+			cs.expect(cs.execSQL, mock)
+		})
 	}
 }
