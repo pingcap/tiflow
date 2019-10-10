@@ -224,7 +224,6 @@ func (s *CDCSuite) TestPKorUKCases(c *C) {
 }
 
 func (s *CDCSuite) TestMultiDataType(c *C) {
-
 	// test different data type of mysql
 	// mysql will change boolean to tinybit(1)
 	sql := `
