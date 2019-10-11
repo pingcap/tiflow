@@ -179,7 +179,7 @@ func (m *Mounter) Mount(rawTxn RawTxn) (*Txn, error) {
 			if dml != nil {
 				deleteDMLs = append(deleteDMLs, dml)
 			}
-		case *entry.DDLJobHistoryKVEntry:
+		case *entry.DDLJobKVEntry:
 			txn.DDL, err = m.mountDDL(e)
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -288,26 +288,26 @@ func (m *Mounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, tab
 	return
 }
 
-func (m *Mounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, error) {
+func (m *Mounter) mountDDL(jobEntry *entry.DDLJobKVEntry) (*DDL, error) {
 	var databaseName, tableName string
 	var err error
 	getTableName := false
 	//TODO support create schema and drop schema
-	if jobHistory.Job.Type == model.ActionDropTable {
-		databaseName, tableName, err = m.tryGetTableName(jobHistory)
+	if jobEntry.Job.Type == model.ActionDropTable {
+		databaseName, tableName, err = m.tryGetTableName(jobEntry)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		getTableName = true
 	}
 
-	_, _, _, err = m.schema.HandleDDL(jobHistory.Job)
+	_, _, _, err = m.schema.HandleDDL(jobEntry.Job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	if !getTableName {
-		databaseName, tableName, err = m.tryGetTableName(jobHistory)
+		databaseName, tableName, err = m.tryGetTableName(jobEntry)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -316,12 +316,12 @@ func (m *Mounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, error)
 	return &DDL{
 		databaseName,
 		tableName,
-		jobHistory.Job.Query,
-		jobHistory.Job.Type,
+		jobEntry.Job.Query,
+		jobEntry.Job.Type,
 	}, nil
 }
 
-func (m *Mounter) tryGetTableName(jobHistory *entry.DDLJobHistoryKVEntry) (databaseName string, tableName string, err error) {
+func (m *Mounter) tryGetTableName(jobHistory *entry.DDLJobKVEntry) (databaseName string, tableName string, err error) {
 	if tableId := jobHistory.Job.TableID; tableId > 0 {
 		var exist bool
 		databaseName, tableName, exist = m.schema.SchemaAndTableName(tableId)

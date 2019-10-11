@@ -192,7 +192,7 @@ func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.S
 			e, err := entry.Unmarshal(raw)
 			c.Assert(err, check.IsNil)
 			switch e := e.(type) {
-			case *entry.DDLJobHistoryKVEntry:
+			case *entry.DDLJobKVEntry:
 				jobs = append(jobs, e.Job)
 			}
 		}

@@ -50,7 +50,7 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 			c.Assert(e.TableInfo.Indices[1].Unique, check.IsTrue)
 			c.Assert(e.TableInfo.Indices[1].Columns[0].Name.O, check.Equals, "id")
 			c.Assert(e.TableInfo.Indices[1].Columns[0].Offset, check.Equals, 0)
-		case *DDLJobHistoryKVEntry:
+		case *DDLJobKVEntry:
 			existDDLJobHistoryKVEntry = true
 			c.Assert(e.JobId, check.Equals, e.Job.ID)
 			c.Assert(e.Job.SchemaName, check.Equals, "test")
@@ -83,7 +83,7 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 			c.Assert(e.TableInfo.Indices[0].Tp, check.Equals, model.IndexTypeBtree)
 			c.Assert(e.TableInfo.Indices[0].Unique, check.IsTrue)
 			c.Assert(e.TableInfo.Indices[0].Columns[0].Name.O, check.Equals, "b")
-		case *DDLJobHistoryKVEntry:
+		case *DDLJobKVEntry:
 			existDDLJobHistoryKVEntry = true
 			c.Assert(e.JobId, check.Equals, e.Job.ID)
 			c.Assert(e.Job.SchemaName, check.Equals, "test")
