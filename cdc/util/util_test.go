@@ -94,3 +94,20 @@ func (s *spanSuite) TestGetTableSpan(c *check.C) {
 	c.Assert(span.Start[:len(span.Start)-1], check.BytesEquals, prefix)
 	c.Assert(span.End[:len(span.End)-1], check.BytesEquals, prefix)
 }
+
+func (s *spanSuite) TestSpanHack(c *check.C) {
+	testCases := []struct {
+		input  Span
+		expect Span
+	}{
+		{Span{nil, nil}, Span{[]byte{}, UpperBoundKey}},
+		{Span{nil, []byte{1}}, Span{[]byte{}, []byte{1}}},
+		{Span{[]byte{1}, nil}, Span{[]byte{1}, UpperBoundKey}},
+		{Span{[]byte{1}, []byte{2}}, Span{[]byte{1}, []byte{2}}},
+		{Span{[]byte{}, []byte{}}, Span{[]byte{}, []byte{}}},
+	}
+
+	for _, tc := range testCases {
+		c.Assert(tc.input.Hack(), check.DeepEquals, tc.expect)
+	}
+}
