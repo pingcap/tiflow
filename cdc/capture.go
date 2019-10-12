@@ -21,9 +21,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/util"
 	"github.com/pingcap/tidb-cdc/pkg/flags"
-	"github.com/pingcap/tidb/kv"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 	"go.uber.org/zap"
@@ -70,7 +71,7 @@ func NewCapture(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	jobs, err := util.LoadHistoryDDLJobs(kvStore)
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -169,7 +170,7 @@ func (f *Frontier) NotifyResolvedSpan(resolve ResolvedSpan) error {
 	return nil
 }
 
-func createTiStore(urls string) (kv.Storage, error) {
+func createTiStore(urls string) (tidbkv.Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {
 		return nil, errors.Trace(err)

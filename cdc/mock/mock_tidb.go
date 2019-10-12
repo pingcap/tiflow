@@ -6,7 +6,6 @@ import (
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/util"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
@@ -148,5 +147,5 @@ func (p *MockTiDB) ScanAll(fn func(*kv.RawKVEntry)) {
 }
 
 func (p *MockTiDB) GetAllHistoryDDLJobs() ([]*model.Job, error) {
-	return util.LoadHistoryDDLJobs(p.store)
+	return kv.LoadHistoryDDLJobs(p.store)
 }
