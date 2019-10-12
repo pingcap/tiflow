@@ -207,7 +207,7 @@ func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			if job.IsDone() || job.IsRollbackDone() {
+			if job.IsDone() {
 				// FinishedTs is only set when the job is synced,
 				// but we can use the entry's ts here
 				job.BinlogInfo.FinishedTS = raw.Ts
@@ -220,19 +220,6 @@ func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 		}
 	case HashData:
 		k := meta.(MetaHashData)
-		if k.key == ddlJobHistoryKey {
-			jobId := binary.BigEndian.Uint64(k.field)
-			job := &model.Job{}
-			err = json.Unmarshal(raw.Value, job)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			return &DDLJobKVEntry{
-				Ts:    raw.Ts,
-				JobId: int64(jobId),
-				Job:   job,
-			}, nil
-		}
 		if strings.HasPrefix(k.key, dbMetaPrefix) {
 			key := k.key[len(dbMetaPrefix):]
 			var tableId int64
