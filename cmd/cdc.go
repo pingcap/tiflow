@@ -2,11 +2,16 @@ package cmd
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-cdc/cdc"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/tidb-cdc/cdc"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
 func feed() {
@@ -15,6 +20,15 @@ func feed() {
 		Opts:         make(map[string]string),
 		CheckpointTS: 0,
 		CreateTime:   time.Now(),
+	}
+
+	err := util.InitLogger(&util.Config{
+		File:  "cdc.log",
+		Level: "debug",
+	})
+	if err != nil {
+		fmt.Printf("init logger error %v", errors.ErrorStack(err))
+		os.Exit(1)
 	}
 
 	feed, err := cdc.NewChangeFeed([]string{"localhost:2379"}, detail)
