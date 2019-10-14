@@ -7,6 +7,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.3.3
 	github.com/biogo/store v0.0.0-20190426020002-884f370e325d
 	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/coreos/etcd v3.3.13+incompatible
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
 	github.com/pingcap/errors v0.11.4

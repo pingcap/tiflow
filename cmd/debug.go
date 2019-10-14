@@ -3,11 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
@@ -15,7 +13,6 @@ import (
 
 	"github.com/pingcap/tidb-cdc/cdc"
 	"github.com/pingcap/tidb-cdc/cdc/util"
-	putil "github.com/pingcap/tidb-cdc/pkg/util"
 )
 
 func init() {
@@ -31,15 +28,6 @@ var pullCmd = &cobra.Command{
 	Short: "pull kv change and print out",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
-		err := putil.InitLogger(&putil.Config{
-			File:  "cdc_pull.log",
-			Level: "debug",
-		})
-		if err != nil {
-			fmt.Printf("init logger error %v", errors.ErrorStack(err))
-			os.Exit(1)
-		}
-
 		cli, err := pd.NewClient(strings.Split(pdAddr, ","), pd.SecurityOption{})
 		if err != nil {
 			fmt.Println(err)
