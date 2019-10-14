@@ -10,17 +10,17 @@ import (
 )
 
 type options struct {
-	pd_endpoints string
+	pdEndpoints string
 }
 
 var defaultServerOptions = options{
-	pd_endpoints: "127.0.0.1:2379",
+	pdEndpoints: "127.0.0.1:2379",
 }
 
 // PDEndpoints returns a ServerOption that sets the endpoints of PD for the server.
 func PDEndpoints(s string) ServerOption {
 	return func(o *options) {
-		o.pd_endpoints = s
+		o.pdEndpoints = s
 	}
 }
 
@@ -43,7 +43,7 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 	}
 
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   strings.Split(opts.pd_endpoints, ","),
+		Endpoints:   strings.Split(opts.pdEndpoints, ","),
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
 			grpc.WithBackoffMaxDelay(time.Second * 3),
