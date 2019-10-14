@@ -19,12 +19,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
