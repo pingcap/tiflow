@@ -22,4 +22,16 @@ type ProcessTableInfo struct {
 type Owner interface {
 	// TableSchedule updates table infos stored in SubChangeFeed in etcd
 	TableSchedule(changeFeedID string, schedule map[string][]*ProcessTableInfo) error
+
+	// UpdateResolvedTS updates the ResolvedTS to resolvedTS of a ChangeFeed with ID = changeFeedID
+	UpdateResolvedTS(changeFeedID string, resolveTS uint64) error
+
+	// UpdateCheckpointTS updates the CheckpointTS to checkpointTS of a ChangeFeed with ID = changeFeedID
+	UpdateCheckpointTS(changeFeedID string, checkpointTS uint64) error
+
+	// CalcResolvedTS calculates ResolvedTS of a ChangeFeed
+	CalcResolvedTS() (uint64, error)
+
+	// CalcCheckpointTS calculates CheckpointTS of a ChangeFeed
+	CalcCheckpointTS() (uint64, error)
 }
