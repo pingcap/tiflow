@@ -15,6 +15,8 @@ package cdc
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -22,6 +24,7 @@ import (
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -42,10 +45,31 @@ type emitEntry struct {
 
 // ChangeFeedDetail describe the detail of a ChangeFeed
 type ChangeFeedDetail struct {
-	SinkURI      string
-	Opts         map[string]string
-	CheckpointTS uint64
-	CreateTime   time.Time
+	SinkURI      string            `json:"sink-uri"`
+	Opts         map[string]string `json:"opts"`
+	CheckpointTS uint64            `json:"checkpoint-ts"`
+	CreateTime   time.Time         `json:"create-time"`
+	// All events with CommitTS <= ResolvedTS can be synchronized
+	// ResolvedTS is updated by owner only
+	ResolvedTS uint64 `json:"resolved-ts"`
+	// The ChangeFeed will exits until sync to timestamp TargetTS
+	TargetTS uint64 `json:"target-ts"`
+}
+
+func (cfd *ChangeFeedDetail) String() string {
+	data, err := json.Marshal(cfd)
+	if err != nil {
+		log.Error("fail to marshal ChangeFeedDetail to json", zap.Error(err))
+	}
+	return string(data)
+}
+
+// SaveChangeFeedDetail stores change feed detail into etcd
+// TODO: this should be called from outer system, such as from a TiDB client
+func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, changeFeedID string) error {
+	key := fmt.Sprintf("/tidb/cdc/changefeed/%s/config", changeFeedID)
+	_, err := client.Put(ctx, key, cfd.String())
+	return err
 }
 
 type ChangeFeed struct {

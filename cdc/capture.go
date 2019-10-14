@@ -30,8 +30,14 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// CaptureOwnerKey is the capture owner path that is saved to etcd
+	CaptureOwnerKey = kv.EtcdKeyBase + "/capture/owner"
+)
+
 // Capture watch some span of KV and emit the entries to sink according to the ChangeFeedDetail
 type Capture struct {
+	id           string
 	pdCli        pd.Client
 	watchs       []util.Span
 	checkpointTS uint64
@@ -138,6 +144,11 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		return errors.Trace(err)
 	}
 
+	return nil
+}
+
+// register registers the capture information in etcd
+func (c *Capture) register() error {
 	return nil
 }
 
