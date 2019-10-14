@@ -364,6 +364,51 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
 }
 
+func (s *kvEntrySuite) TestUkWithNoPk(c *check.C) {
+	puller, err := mock.NewMockPuller()
+	c.Assert(err, check.IsNil)
+
+	rawEntries := puller.MustExec(c, "CREATE TABLE test.cdc_uk_with_no_pk (id INT, a1 INT, a3 INT, UNIQUE KEY dex1(a1, a3));")
+	var tableInfo *model.TableInfo
+	for _, raw := range rawEntries {
+		entry, err := Unmarshal(raw)
+		c.Assert(err, check.IsNil)
+		switch e := entry.(type) {
+		case *UpdateTableKVEntry:
+			tableInfo = e.TableInfo
+		}
+	}
+	c.Assert(tableInfo, check.NotNil)
+
+	rawEntries = puller.MustExec(c, "INSERT INTO test.cdc_uk_with_no_pk(id, a1, a3) VALUES(5, 6, NULL);")
+	expect := []KVEntry{
+		&RowKVEntry{
+			TableId:  tableInfo.ID,
+			RecordId: 1,
+			Delete:   false,
+			Row:      map[int64]types.Datum{1: types.NewIntDatum(5), 2: types.NewIntDatum(6)},
+		},
+		&IndexKVEntry{
+			TableId:    tableInfo.ID,
+			RecordId:   1,
+			IndexId:    1,
+			Delete:     false,
+			IndexValue: []types.Datum{types.NewIntDatum(6), {}},
+		}}
+	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
+
+	rawEntries = puller.MustExec(c, "UPDATE test.cdc_uk_with_no_pk SET id = 10 WHERE id = 5;")
+	expect = []KVEntry{
+		&RowKVEntry{
+			TableId:  tableInfo.ID,
+			RecordId: 1,
+			Delete:   false,
+			Row:      map[int64]types.Datum{1: types.NewIntDatum(10), 2: types.NewIntDatum(6)},
+		}}
+	checkDMLKVEntries(c, tableInfo, rawEntries, expect)
+
+}
+
 func assertIn(c *check.C, item KVEntry, expect []KVEntry) {
 	for _, e := range expect {
 		if reflect.DeepEqual(item, e) {

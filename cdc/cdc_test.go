@@ -10,11 +10,9 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/mock"
 	"github.com/pingcap/tidb-cdc/cdc/util"
-	"go.uber.org/zap"
 )
 
 type CDCSuite struct {
@@ -58,7 +56,6 @@ func NewCDCSuite() *CDCSuite {
 		cache: make(map[string]*tableInfo),
 		tableGetter: func(_ *sql.DB, schemaName string, tableName string) (*tableInfo, error) {
 			info, err := getTableInfoFromSchema(schema, schemaName, tableName)
-			log.Info("tableInfo", zap.Reflect("columns", info.columns), zap.Reflect("uniqueKeys", info.uniqueKeys), zap.Reflect("primaryKey", info.primaryKey))
 			return info, err
 		},
 	}
@@ -85,17 +82,12 @@ func (s *CDCSuite) RunAndCheckSync(c *C, execute func(func(string, ...interface{
 	expect(s.mock)
 	var rawKVs []*kv.RawKVEntry
 	executeSql := func(sql string, args ...interface{}) {
-		log.Info("b rawKVs", zap.Reflect("rawKVs", rawKVs), zap.String("sql", sql))
 		kvs := s.puller.MustExec(c, sql, args...)
-		log.Info("kvs", zap.Reflect("kvs", kvs), zap.Int("len", len(kvs)))
 		rawKVs = append(rawKVs, kvs...)
-		log.Info("c rawKVs", zap.Reflect("rawKVs", rawKVs))
 	}
 	execute(executeSql)
-	log.Info("all kvs", zap.Int("len", len(rawKVs)))
 	txn, err := s.mounter.Mount(RawTxn{ts: rawKVs[len(rawKVs)-1].Ts, entries: rawKVs})
 	c.Assert(err, IsNil)
-	log.Info("txn", zap.Reflect("txn", txn))
 	err = s.sink.Emit(context.Background(), *txn)
 	c.Assert(err, IsNil)
 	err = s.mock.ExpectationsWereMet()
@@ -223,13 +215,14 @@ func (s *CDCSuite) TestPKorUKCases(c *C) {
 	}
 }
 
+func expectSuccessDDL(sql string, mock sqlmock.Sqlmock) {
+	mock.ExpectBegin()
+	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(sql).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+}
+
 func (s *CDCSuite) TestMultiDataType(c *C) {
-	ddlExpectFunc := func(sql string, mock sqlmock.Sqlmock) {
-		mock.ExpectBegin()
-		mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectExec(sql).WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectCommit()
-	}
 
 	expectedReplaceSQL := "REPLACE INTO `test`.`cdc_multi_data_type`" +
 		"(`id`,`t_boolean`,`t_bigint`,`t_double`,`t_decimal`,`t_bit`," +
@@ -260,7 +253,7 @@ func (s *CDCSuite) TestMultiDataType(c *C) {
 			t_set SET('a', 'b', 'c'),
 			t_json JSON,
 			PRIMARY KEY(id)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;`, ddlExpectFunc},
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;`, expectSuccessDDL},
 
 		{`INSERT INTO test.cdc_multi_data_type(t_boolean, t_bigint, t_double, t_decimal, t_bit
 		,t_date, t_datetime, t_timestamp, t_time, t_year
@@ -314,8 +307,53 @@ func (s *CDCSuite) TestMultiDataType(c *C) {
 			mock.ExpectCommit()
 		}},
 
-		{"DROP TABLE test.cdc_multi_data_type", ddlExpectFunc},
+		{"DROP TABLE test.cdc_multi_data_type", expectSuccessDDL},
 	}
+	s.RunTestCases(c, cases)
+}
+
+func (s *CDCSuite) TestUKWithNoPK(c *C) {
+	cases := []testCases{
+		{`CREATE TABLE test.cdc_uk_with_no_pk (id INT, a1 INT, a3 INT, UNIQUE KEY dex1(a1, a3));`, expectSuccessDDL},
+		{`INSERT INTO test.cdc_uk_with_no_pk(id, a1, a3) VALUES(5, 6, NULL);`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec("DELETE FROM `test`.`cdc_uk_with_no_pk` WHERE `id` IS NULL AND `a1` = ? AND `a3` IS NULL LIMIT 1;").
+				WithArgs(6).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("REPLACE INTO `test`.`cdc_uk_with_no_pk`(`id`,`a1`,`a3`) VALUES (?,?,?);").
+				WithArgs(5, 6, nil).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+		{`INSERT INTO test.cdc_uk_with_no_pk(id, a1, a3) VALUES(7, 8, NULL);`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec("DELETE FROM `test`.`cdc_uk_with_no_pk` WHERE `id` IS NULL AND `a1` = ? AND `a3` IS NULL LIMIT 1;").
+				WithArgs(8).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("REPLACE INTO `test`.`cdc_uk_with_no_pk`(`id`,`a1`,`a3`) VALUES (?,?,?);").
+				WithArgs(7, 8, nil).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+		{`UPDATE test.cdc_uk_with_no_pk SET id = 10 WHERE id = 5;`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec("REPLACE INTO `test`.`cdc_uk_with_no_pk`(`id`,`a1`,`a3`) VALUES (?,?,?);").
+				WithArgs(10, 6, nil).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+		{`UPDATE test.cdc_uk_with_no_pk SET id = 100 WHERE id = 10;`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec("REPLACE INTO `test`.`cdc_uk_with_no_pk`(`id`,`a1`,`a3`) VALUES (?,?,?);").
+				WithArgs(100, 6, nil).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+		{`UPDATE test.cdc_uk_with_no_pk SET a1 = 9 WHERE a1 = 8;`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec("DELETE FROM `test`.`cdc_uk_with_no_pk` WHERE `id` IS NULL AND `a1` = ? AND `a3` IS NULL LIMIT 1;").
+				WithArgs(9).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("DELETE FROM `test`.`cdc_uk_with_no_pk` WHERE `id` IS NULL AND `a1` = ? AND `a3` IS NULL LIMIT 1;").
+				WithArgs(8).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("REPLACE INTO `test`.`cdc_uk_with_no_pk`(`id`,`a1`,`a3`) VALUES (?,?,?);").
+				WithArgs(7, 9, nil).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+		{`DROP TABLE test.cdc_uk_with_no_pk`, expectSuccessDDL}}
 	s.RunTestCases(c, cases)
 }
 
