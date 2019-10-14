@@ -13,6 +13,10 @@
 
 package roles
 
+import (
+	"context"
+)
+
 type ProcessTableInfo struct {
 	ID      uint64 `json:"id"`
 	StartTS uint64 `json:"start-ts"`
@@ -21,17 +25,17 @@ type ProcessTableInfo struct {
 // Owner is used to process etcd information for a capture with owner role
 type Owner interface {
 	// TableSchedule updates table infos stored in SubChangeFeed in etcd
-	TableSchedule(changeFeedID string, schedule map[string][]*ProcessTableInfo) error
+	TableSchedule(ctx context.Context, changeFeedID string, schedule map[string][]*ProcessTableInfo) error
 
 	// UpdateResolvedTS updates the ResolvedTS to resolvedTS of a ChangeFeed with ID = changeFeedID
-	UpdateResolvedTS(changeFeedID string, resolveTS uint64) error
+	UpdateResolvedTS(ctx context.Context, changeFeedID string, resolveTS uint64) error
 
 	// UpdateCheckpointTS updates the CheckpointTS to checkpointTS of a ChangeFeed with ID = changeFeedID
-	UpdateCheckpointTS(changeFeedID string, checkpointTS uint64) error
+	UpdateCheckpointTS(ctx context.Context, changeFeedID string, checkpointTS uint64) error
 
 	// CalcResolvedTS calculates ResolvedTS of a ChangeFeed
-	CalcResolvedTS() (uint64, error)
+	CalcResolvedTS(ctx context.Context) (uint64, error)
 
 	// CalcCheckpointTS calculates CheckpointTS of a ChangeFeed
-	CalcCheckpointTS() (uint64, error)
+	CalcCheckpointTS(ctx context.Context) (uint64, error)
 }

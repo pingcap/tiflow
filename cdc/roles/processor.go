@@ -26,8 +26,8 @@ type Processor interface {
 	UpdateResolveTS(ctx context.Context, ts uint64) error
 
 	// CalcCheckpointTS gets checkpoint ts based on the checkpoint ts of each puller
-	CalcCheckpointTS() (uint64, error)
+	CalcCheckpointTS(ctx context.Context) (uint64, error)
 
 	// CalcResovleTS gets resolve ts based on each puller in the processor
-	CalcResolveTS() (uint64, error)
+	CalcResolveTS(ctx context.Context) (uint64, error)
 }

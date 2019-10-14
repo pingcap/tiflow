@@ -66,9 +66,9 @@ func (cfd *ChangeFeedDetail) String() string {
 
 // SaveChangeFeedDetail stores change feed detail into etcd
 // TODO: this should be called from outer system, such as from a TiDB client
-func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(client *clientv3.Client, changeFeedID string) error {
+func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, changeFeedID string) error {
 	key := fmt.Sprintf("/tidb/cdc/changefeed/%s/config", changeFeedID)
-	_, err := client.Put(context.Background(), key, cfd.String())
+	_, err := client.Put(ctx, key, cfd.String())
 	return err
 }
 
