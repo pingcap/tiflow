@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"context"
+
 	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
@@ -28,7 +29,7 @@ type Puller struct {
 	checkpointTS uint64
 	spans        []util.Span
 	detail       ChangeFeedDetail
-	buf          *Buffer
+	buf          Buffer
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTS
@@ -39,7 +40,7 @@ func NewPuller(
 	spans []util.Span,
 	// useless now
 	detail ChangeFeedDetail,
-	buf *Buffer,
+	buf Buffer,
 ) *Puller {
 	p := &Puller{
 		pdCli:        pdCli,
