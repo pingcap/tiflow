@@ -129,12 +129,6 @@ func NewSubChangeFeed(pdAddr []string, detail ChangeFeedDetail) (*SubChangeFeed,
 }
 
 func (c *SubChangeFeed) Start(ctx context.Context) error {
-	var err error
-	c.frontier, err = NewFrontier(c.watchs, c.detail)
-	if err != nil {
-		return errors.Annotate(err, "NewFrontier failed")
-	}
-
 	errg, ctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
