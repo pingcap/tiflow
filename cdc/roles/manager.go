@@ -91,10 +91,10 @@ func (m *ownerManager) IsOwner() bool {
 	return atomic.LoadPointer(&m.elec) != unsafe.Pointer(nil)
 }
 
-// ManagerSessionTTL is the etcd session's TTL in seconds. It's exported for testing.
-var ManagerSessionTTL = 60
+// ManagerSessionTTLSeconds is the etcd session's TTL in seconds. It's exported for testing.
+var ManagerSessionTTLSeconds = 60
 
-// setManagerSessionTTL sets the ManagerSessionTTL value, it's used for testing.
+// setManagerSessionTTL sets the ManagerSessionTTLSeconds value, it's used for testing.
 func setManagerSessionTTL() error {
 	ttlStr := os.Getenv("cdc_manager_ttl")
 	if len(ttlStr) == 0 {
@@ -104,7 +104,7 @@ func setManagerSessionTTL() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	ManagerSessionTTL = ttl
+	ManagerSessionTTLSeconds = ttl
 	return nil
 }
 
@@ -136,7 +136,7 @@ func NewSession(ctx context.Context, etcdCli *clientv3.Client, retryCnt, ttl int
 
 // CampaignOwner implements Manager.CampaignOwner interface.
 func (m *ownerManager) CampaignOwner(ctx context.Context) error {
-	session, err := NewSession(ctx, m.etcdCli, NewSessionDefaultRetryCnt, ManagerSessionTTL)
+	session, err := NewSession(ctx, m.etcdCli, NewSessionDefaultRetryCnt, ManagerSessionTTLSeconds)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -164,7 +164,7 @@ func (m *ownerManager) campaignLoop(ctx context.Context, etcdSession *concurrenc
 		case <-etcdSession.Done():
 			m.logger.Info("etcd session is done, creates a new one")
 			leaseID := etcdSession.Lease()
-			etcdSession, err = NewSession(ctx, m.etcdCli, NewSessionRetryUnlimited, ManagerSessionTTL)
+			etcdSession, err = NewSession(ctx, m.etcdCli, NewSessionRetryUnlimited, ManagerSessionTTLSeconds)
 			if err != nil {
 				m.logger.Info("break campaign loop, NewSession failed", zap.Error(err))
 				m.revokeSession(leaseID)
@@ -211,7 +211,7 @@ func (m *ownerManager) revokeSession(leaseID clientv3.LeaseID) {
 	// Revoke the session lease.
 	// If revoke takes longer than the ttl, lease is expired anyway.
 	cancelCtx, cancel := context.WithTimeout(context.Background(),
-		time.Duration(ManagerSessionTTL)*time.Second)
+		time.Duration(ManagerSessionTTLSeconds)*time.Second)
 	_, err := m.etcdCli.Revoke(cancelCtx, leaseID)
 	cancel()
 	m.logger.Info("revoke session", zap.Error(err))
