@@ -179,7 +179,7 @@ func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span) error {
 	spanFrontier := makeSpanFrontier(span)
 
 	err := collectRawTxns(ctx, buf.Get, c.writeToSink, spanFrontier)
-	return errors.Trace(err)
+	return err
 }
 
 func (c *SubChangeFeed) writeToSink(context context.Context, rawTxn RawTxn) error {
