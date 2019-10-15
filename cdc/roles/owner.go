@@ -34,8 +34,8 @@ type Owner interface {
 	UpdateCheckpointTS(ctx context.Context, changeFeedID string, checkpointTS uint64) error
 
 	// CalcResolvedTS calculates ResolvedTS of a ChangeFeed
-	CalcResolvedTS(ctx context.Context) (uint64, error)
+	CalcResolvedTS(ctx context.Context, changeFeedID string) (uint64, error)
 
 	// CalcCheckpointTS calculates CheckpointTS of a ChangeFeed
-	CalcCheckpointTS(ctx context.Context) (uint64, error)
+	CalcCheckpointTS(ctx context.Context, changeFeedID string) (uint64, error)
 }
