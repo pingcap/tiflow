@@ -98,7 +98,7 @@ func NewSubChangeFeed(pdAddr []string, detail ChangeFeedDetail) (*SubChangeFeed,
 	// here we create another pb client,we should reuse them
 	kvStore, err := createTiStore("http://localhost:2379")
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
 	if err != nil {
