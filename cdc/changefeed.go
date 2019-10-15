@@ -80,10 +80,9 @@ type SubChangeFeed struct {
 	frontier *Frontier
 	watchs   []util.Span
 
-	// errCh contains the return values of the puller
-	errCh chan error
+	schema  *Schema
+	mounter *TxnMounter
 
-	schema *Schema
 	// sink is the Sink to write rows to.
 	// Resolved timestamps are never written by Capture
 	sink Sink
@@ -94,106 +93,106 @@ func NewSubChangeFeed(pdAddr []string, detail ChangeFeedDetail) (*SubChangeFeed,
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdAddr)
 	}
+
+	// TODO get etdc url from config
+	// here we create another pb client,we should reuse them
+	kvStore, err := createTiStore("http://localhost:2379")
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	if err != nil {
+		return nil, err
+	}
+	schema, err := NewSchema(jobs, false)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	sink, err := getSink(detail.SinkURI, schema, detail.Opts)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// TODO: get time zone from config
+	mounter, err := NewTxnMounter(schema, time.UTC)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &SubChangeFeed{
-		detail: detail,
-		pdCli:  pdCli,
+		detail:  detail,
+		pdCli:   pdCli,
+		schema:  schema,
+		sink:    sink,
+		mounter: mounter,
 	}, nil
 }
 
 func (c *SubChangeFeed) Start(ctx context.Context) error {
-	checkpointTS := c.detail.CheckpointTS
-	if checkpointTS == 0 {
-		checkpointTS = oracle.EncodeTSO(c.detail.CreateTime.Unix() * 1000)
-	}
-
-	// TODO: just one SubChangeFeed watch all kv for test now
-	c.watchs = []util.Span{{nil, nil}}
-
 	var err error
 	c.frontier, err = NewFrontier(c.watchs, c.detail)
 	if err != nil {
 		return errors.Annotate(err, "NewFrontier failed")
 	}
 
-	// encoder, err := getEncoder(c.detail.Opts)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// TODO get etdc url from config
-	// here we create another pb client,we should reuse them
-	kvStore, err := createTiStore("http://localhost:2379")
-	if err != nil {
-		return errors.Trace(err)
-	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	schema, err := NewSchema(jobs, false)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	sink, err := getSink(c.detail.SinkURI, schema, c.detail.Opts)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	c.sink = sink
-
-	errg, ctx := errgroup.WithContext(context.Background())
+	errg, ctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
-		return c.run(ctx)
+		ddlSpan := util.Span{
+			Start: []byte{'m'},
+			End:   []byte{'m' + 1},
+		}
+		return c.startOnSpan(ctx, ddlSpan)
 	})
 
-	// errg.Go(func() error {
-	// 	return frontier.Start(ctx)
-	// })
+	errg.Go(func() error {
+		tblSpan := util.Span{
+			Start: []byte{'t'},
+			End:   []byte{'t' + 1},
+		}
+		return c.startOnSpan(ctx, tblSpan)
+	})
 
 	return errg.Wait()
 }
 
-func (c *SubChangeFeed) run(ctx context.Context) error {
-	cctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span) error {
+	checkpointTS := c.detail.CheckpointTS
+	if checkpointTS == 0 {
+		checkpointTS = oracle.EncodeTSO(c.detail.CreateTime.Unix() * 1000)
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
 
 	buf := MakeBuffer()
+	puller := NewPuller(c.pdCli, checkpointTS, c.watchs, c.detail, buf)
 
-	// TODO get time zone from config
-	mounter, err := NewTxnMounter(c.schema, time.UTC)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	puller := NewPuller(c.pdCli, c.detail.CheckpointTS, c.watchs, c.detail, buf)
-	c.errCh = make(chan error, 2)
 	go func() {
-		err := puller.Run(cctx)
-		c.errCh <- err
+		err := puller.Run(ctx)
+		if err != nil {
+			cancel()
+			log.Error("Puller run", zap.Any("span", span))
+		}
 	}()
 
-	spanFrontier := makeSpanFrontier(c.watchs...)
+	spanFrontier := makeSpanFrontier(span)
 
-	writeToSink := func(context context.Context, rawTxn RawTxn) error {
-		log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.entries))
-		txn, err := mounter.Mount(rawTxn)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = c.sink.Emit(context, *txn)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		log.Info("Output Txn", zap.Reflect("Txn", txn))
-		return nil
-	}
+	err := collectRawTxns(ctx, buf.Get, c.writeToSink, spanFrontier)
+	return err
+}
 
-	err = collectRawTxns(cctx, buf.Get, writeToSink, spanFrontier)
+func (c *SubChangeFeed) writeToSink(context context.Context, rawTxn RawTxn) error {
+	log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.entries))
+	txn, err := c.mounter.Mount(rawTxn)
 	if err != nil {
 		return errors.Trace(err)
 	}
-
+	err = c.sink.Emit(context, *txn)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Info("Output Txn", zap.Reflect("Txn", txn))
 	return nil
 }
 
