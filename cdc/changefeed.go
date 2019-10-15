@@ -152,16 +152,19 @@ func (c *SubChangeFeed) Start(ctx context.Context) error {
 	return errg.Wait()
 }
 
-func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span) error {
+func (c *SubChangeFeed) getCheckpointTs() uint64 {
 	checkpointTS := c.detail.CheckpointTS
 	if checkpointTS == 0 {
 		checkpointTS = oracle.EncodeTSO(c.detail.CreateTime.Unix() * 1000)
 	}
+	return checkpointTS
+}
 
+func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span) error {
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	buf := MakeBuffer()
-	puller := NewPuller(c.pdCli, checkpointTS, c.watchs, c.detail, buf)
+	puller := NewPuller(c.pdCli, c.getCheckpointTs(), []util.Span{span}, c.detail)
 
 	go func() {
 		err := puller.Run(ctx)
@@ -171,10 +174,7 @@ func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span) error {
 		}
 	}()
 
-	spanFrontier := makeSpanFrontier(span)
-
-	err := collectRawTxns(ctx, buf.Get, c.writeToSink, spanFrontier)
-	return err
+	return puller.CollectRawTxns(ctx, c.writeToSink)
 }
 
 func (c *SubChangeFeed) writeToSink(context context.Context, rawTxn RawTxn) error {

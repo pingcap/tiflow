@@ -40,14 +40,13 @@ func NewPuller(
 	spans []util.Span,
 	// useless now
 	detail ChangeFeedDetail,
-	buf Buffer,
 ) *Puller {
 	p := &Puller{
 		pdCli:        pdCli,
 		checkpointTS: checkpointTS,
 		spans:        spans,
 		detail:       detail,
-		buf:          buf,
+		buf:          MakeBuffer(),
 	}
 
 	return p
@@ -104,4 +103,9 @@ func (p *Puller) Run(ctx context.Context) error {
 	})
 
 	return g.Wait()
+}
+
+func (p *Puller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, RawTxn) error) error {
+	spanFrontier := makeSpanFrontier(p.spans...)
+	return collectRawTxns(ctx, p.buf.Get, outputFn, spanFrontier)
 }
