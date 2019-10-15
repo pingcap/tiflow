@@ -75,10 +75,9 @@ func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(ctx context.Context, client *c
 
 // SubChangeFeed is a SubChangeFeed task on capture
 type SubChangeFeed struct {
-	pdCli    pd.Client
-	detail   ChangeFeedDetail
-	frontier *Frontier
-	watchs   []util.Span
+	pdCli  pd.Client
+	detail ChangeFeedDetail
+	watchs []util.Span
 
 	// errCh contains the return values of the puller
 	errCh chan error
@@ -108,12 +107,6 @@ func (c *SubChangeFeed) Start(ctx context.Context) error {
 
 	// TODO: just one SubChangeFeed watch all kv for test now
 	c.watchs = []util.Span{{nil, nil}}
-
-	var err error
-	c.frontier, err = NewFrontier(c.watchs, c.detail)
-	if err != nil {
-		return errors.Annotate(err, "NewFrontier failed")
-	}
 
 	// encoder, err := getEncoder(c.detail.Opts)
 	// if err != nil {
