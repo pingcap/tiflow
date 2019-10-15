@@ -24,23 +24,18 @@ type ProcessTableInfo struct {
 
 // Owner is used to process etcd information for a capture with owner role
 type Owner interface {
-	// RegisterResolver registers resolver into Owner, which can get resolveTs form a SubChangeFeed
-	RegisterResolver(ctx context.Context, changeFeedID string, captureID string, resolver func(ctx context.Context) uint64) error
 
-	// RegisterResolver registers checkpointer into Owner, which can get checkpointTS form a SubChangeFeed
-	RegisterCheckpointer(ctx context.Context, changeFeedID string, captureID string, checkpointer func(ctx context.Context) uint64) error
+	// ResolverFunc registers the resolver into Owner
+	ResolverFunc(ctx context.Context, resolver func(ctx context.Context, changeFeedID string, captureID string) (uint64, error)) error
 
-	// RemoveResolver removes a resolver from Owner
-	RemoveResolver(ctx context.Context, changeFeedID string, captureID string) error
+	// CheckpointerFunc registers the checkpointer into Owner
+	CheckpointerFunc(ctx context.Context, checkpointer func(ctx context.Context, changeFeedID string, captureID string) (uint64, error)) error
 
-	// RemoveCheckpointer removes a checkpointer from Owner
-	RemoveCheckpointer(ctx context.Context, changeFeedID string, captureID string) error
+	// UpdateResolvedTSFunc registers a updater into Owner, which can update resolvedTS to ETCD
+	UpdateResolvedTSFunc(ctx context.Context, updater func(ctx context.Context, changeFeedID string, resolvedTS uint64) error)
 
-	// UpdateResolvedTS registers a updater into Owner, which can update resolvedTS to ETCD
-	UpdateResolvedTS(ctx context.Context, updater func(ctx context.Context, changeFeedID string, resolvedTS uint64) error)
-
-	// UpdateResolvedTS registers a updater into Owner, which can update checkpointTS to ETCD
-	UpdateCheckpointTS(ctx context.Context, updater func(ctx context.Context, changeFeedID string, checkpointTS uint64) error)
+	// UpdateCheckpointTSFunc registers a updater into Owner, which can update checkpointTS to ETCD
+	UpdateCheckpointTSFunc(ctx context.Context, updater func(ctx context.Context, changeFeedID string, checkpointTS uint64) error)
 
 	// CalcResolvedTS gets ResolvedTS of a ChangeFeed
 	GetResolvedTS(ctx context.Context, changeFeedID string) (uint64, error)
