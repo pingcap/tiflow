@@ -24,18 +24,30 @@ type ProcessTableInfo struct {
 
 // Owner is used to process etcd information for a capture with owner role
 type Owner interface {
-	// TableSchedule updates table infos stored in SubChangeFeed in etcd
-	TableSchedule(ctx context.Context, changeFeedID string, schedule map[string][]*ProcessTableInfo) error
+	// RegisterResolver registers resolver into Owner, which can get resolveTs form a SubChangeFeed
+	RegisterResolver(ctx context.Context, changeFeedID string, captureID string, resolver func(ctx context.Context) uint64) error
 
-	// UpdateResolvedTS updates the ResolvedTS to resolvedTS of a ChangeFeed with ID = changeFeedID
-	UpdateResolvedTS(ctx context.Context, changeFeedID string, resolveTS uint64) error
+	// RegisterResolver registers checkpointer into Owner, which can get checkpointTS form a SubChangeFeed
+	RegisterCheckpointer(ctx context.Context, changeFeedID string, captureID string, checkpointer func(ctx context.Context) uint64) error
 
-	// UpdateCheckpointTS updates the CheckpointTS to checkpointTS of a ChangeFeed with ID = changeFeedID
-	UpdateCheckpointTS(ctx context.Context, changeFeedID string, checkpointTS uint64) error
+	// RemoveResolver removes a resolver from Owner
+	RemoveResolver(ctx context.Context, changeFeedID string, captureID string) error
 
-	// CalcResolvedTS calculates ResolvedTS of a ChangeFeed
-	CalcResolvedTS(ctx context.Context, changeFeedID string) (uint64, error)
+	// RemoveCheckpointer removes a checkpointer from Owner
+	RemoveCheckpointer(ctx context.Context, changeFeedID string, captureID string) error
 
-	// CalcCheckpointTS calculates CheckpointTS of a ChangeFeed
-	CalcCheckpointTS(ctx context.Context, changeFeedID string) (uint64, error)
+	// UpdateResolvedTS registers a updater into Owner, which can update resolvedTS to ETCD
+	UpdateResolvedTS(ctx context.Context, updater func(ctx context.Context, changeFeedID string, resolvedTS uint64) error)
+
+	// UpdateResolvedTS registers a updater into Owner, which can update checkpointTS to ETCD
+	UpdateCheckpointTS(ctx context.Context, updater func(ctx context.Context, changeFeedID string, checkpointTS uint64) error)
+
+	// CalcResolvedTS gets ResolvedTS of a ChangeFeed
+	GetResolvedTS(ctx context.Context, changeFeedID string) (uint64, error)
+
+	// CalcCheckpointTS gets CheckpointTS of a ChangeFeed
+	GetCheckpointTS(ctx context.Context, changeFeedID string) (uint64, error)
+
+	// Run a goroutine to handle Owner logic
+	Run(ctx context.Context) error
 }
