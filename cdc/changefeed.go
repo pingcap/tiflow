@@ -102,7 +102,7 @@ func NewSubChangeFeed(pdAddr []string, detail ChangeFeedDetail) (*SubChangeFeed,
 	}
 	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 	schema, err := NewSchema(jobs, false)
 	if err != nil {
