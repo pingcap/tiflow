@@ -93,14 +93,16 @@ func (s *managerSuite) TestManager(c *check.C) {
 	c.Assert(m2.ID(), check.Equals, "m2")
 
 	go func() {
-		m1.CampaignOwner(m1Ctx)
+		err := m1.CampaignOwner(m1Ctx)
+		c.Assert(err, check.IsNil)
 	}()
 
 	go func() {
 		// let m1 be owner first
 		time.Sleep(1 * time.Second)
 
-		m2.CampaignOwner(context.Background())
+		err := m2.CampaignOwner(context.Background())
+		c.Assert(err, check.IsNil)
 	}()
 
 	time.Sleep(time.Second)
