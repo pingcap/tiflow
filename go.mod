@@ -9,6 +9,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/coreos/etcd v3.3.13+incompatible
 	github.com/go-sql-driver/mysql v1.4.1
+	github.com/google/uuid v1.1.1
 	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
 	github.com/pingcap/errors v0.11.4
 	github.com/pingcap/kvproto v0.0.0-20190816084801-93197044d6d7

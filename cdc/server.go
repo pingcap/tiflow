@@ -1,6 +1,7 @@
 package cdc
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -64,8 +65,11 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 
 // Run runs the server.
 func (s *Server) Run() error {
-
-	return nil
+	capture, err := NewCapture()
+	if err != nil {
+		return err
+	}
+	return capture.Start(context.Background())
 }
 
 // Close closes the server.

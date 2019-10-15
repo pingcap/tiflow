@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
@@ -72,45 +73,78 @@ func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(ctx context.Context, client *c
 	return err
 }
 
-type ChangeFeed struct {
+// SubChangeFeed is a SubChangeFeed task on capture
+type SubChangeFeed struct {
 	pdCli    pd.Client
 	detail   ChangeFeedDetail
 	frontier *Frontier
+	watchs   []util.Span
+
+	// errCh contains the return values of the puller
+	errCh chan error
+
+	schema *Schema
+	// sink is the Sink to write rows to.
+	// Resolved timestamps are never written by Capture
+	sink Sink
 }
 
-func NewChangeFeed(pdAddr []string, detail ChangeFeedDetail) (*ChangeFeed, error) {
+func NewSubChangeFeed(pdAddr []string, detail ChangeFeedDetail) (*SubChangeFeed, error) {
 	pdCli, err := pd.NewClient(pdAddr, pd.SecurityOption{})
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdAddr)
 	}
-	return &ChangeFeed{
+	return &SubChangeFeed{
 		detail: detail,
 		pdCli:  pdCli,
 	}, nil
 }
 
-func (c *ChangeFeed) Start(ctx context.Context) error {
+func (c *SubChangeFeed) Start(ctx context.Context) error {
 	checkpointTS := c.detail.CheckpointTS
 	if checkpointTS == 0 {
 		checkpointTS = oracle.EncodeTSO(c.detail.CreateTime.Unix() * 1000)
 	}
 
+	// TODO: just one SubChangeFeed watch all kv for test now
+	c.watchs = []util.Span{{nil, nil}}
+
 	var err error
-	c.frontier, err = NewFrontier([]util.Span{{nil, nil}}, c.detail)
+	c.frontier, err = NewFrontier(c.watchs, c.detail)
 	if err != nil {
 		return errors.Annotate(err, "NewFrontier failed")
 	}
 
-	// TODO: just one capture watch all kv for test now
-	capture, err := NewCapture(c.pdCli, []util.Span{{nil, nil}}, checkpointTS, c.detail)
+	// encoder, err := getEncoder(c.detail.Opts)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// TODO get etdc url from config
+	// here we create another pb client,we should reuse them
+	kvStore, err := createTiStore("http://localhost:2379")
 	if err != nil {
-		return errors.Annotate(err, "NewCapture failed")
+		return errors.Trace(err)
 	}
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	schema, err := NewSchema(jobs, false)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	sink, err := getSink(c.detail.SinkURI, schema, c.detail.Opts)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.sink = sink
 
 	errg, ctx := errgroup.WithContext(context.Background())
 
 	errg.Go(func() error {
-		return capture.Start(ctx)
+		return c.run(ctx)
 	})
 
 	// errg.Go(func() error {
@@ -118,6 +152,49 @@ func (c *ChangeFeed) Start(ctx context.Context) error {
 	// })
 
 	return errg.Wait()
+}
+
+func (c *SubChangeFeed) run(ctx context.Context) error {
+	cctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	buf := MakeBuffer()
+
+	// TODO get time zone from config
+	mounter, err := NewTxnMounter(c.schema, time.UTC)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	puller := NewPuller(c.pdCli, c.detail.CheckpointTS, c.watchs, c.detail, buf)
+	c.errCh = make(chan error, 2)
+	go func() {
+		err := puller.Run(cctx)
+		c.errCh <- err
+	}()
+
+	spanFrontier := makeSpanFrontier(c.watchs...)
+
+	writeToSink := func(context context.Context, rawTxn RawTxn) error {
+		log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.entries))
+		txn, err := mounter.Mount(rawTxn)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = c.sink.Emit(context, *txn)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Info("Output Txn", zap.Reflect("Txn", txn))
+		return nil
+	}
+
+	err = collectRawTxns(cctx, buf.Get, writeToSink, spanFrontier)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
 }
 
 // kvsToRows gets changed kvs from a closure and converts them into sql rows.

@@ -22,8 +22,8 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/roles"
 )
 
-// SubChangeFeed records the process information of a capture
-type SubChangeFeed struct {
+// SubChangeFeedInfo records the process information of a capture
+type SubChangeFeedInfo struct {
 	// The maximum event CommitTS that has been synchronized. This is updated by corresponding processor.
 	CheckPointTS uint64 `json:"checkpoint-ts"`
 	// The event that satisfies CommitTS <= ResolvedTS can be synchronized. This is updated by corresponding processor.
@@ -32,8 +32,8 @@ type SubChangeFeed struct {
 	TableInfos []*roles.ProcessTableInfo `json:"table-infos"`
 }
 
-func (scf *SubChangeFeed) String() string {
-	data, err := json.Marshal(scf)
+func (scfi *SubChangeFeedInfo) String() string {
+	data, err := json.Marshal(scfi)
 	if err != nil {
 		log.Error("fail to marshal ChangeFeedDetail to json", zap.Error(err))
 	}

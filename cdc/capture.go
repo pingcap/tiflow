@@ -18,16 +18,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/util"
 	"github.com/pingcap/tidb-cdc/pkg/flags"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
-	"go.uber.org/zap"
 )
 
 const (
@@ -35,116 +33,45 @@ const (
 	CaptureOwnerKey = kv.EtcdKeyBase + "/capture/owner"
 )
 
-// Capture watch some span of KV and emit the entries to sink according to the ChangeFeedDetail
-type Capture struct {
-	id           string
-	pdCli        pd.Client
-	watchs       []util.Span
-	checkpointTS uint64
-	encoder      Encoder
-	detail       ChangeFeedDetail
-
-	// errCh contains the return values of the puller
-	errCh  chan error
-	cancel context.CancelFunc
-
-	schema *Schema
-
-	// sink is the Sink to write rows to.
-	// Resolved timestamps are never written by Capture
-	sink Sink
-}
-
 type ResolvedSpan struct {
 	Span      util.Span
 	Timestamp uint64
 }
 
-func NewCapture(
-	pdCli pd.Client,
-	watchs []util.Span,
-	checkpointTS uint64,
-	detail ChangeFeedDetail,
-) (c *Capture, err error) {
-	encoder, err := getEncoder(detail.Opts)
-	if err != nil {
-		return nil, err
-	}
+// Capture represents a Capture server, it monitors the changefeed information in etcd and schedules SubChangeFeed on it.
+type Capture struct {
+	id string
+}
 
-	// TODO get etdc url from config
-	// here we create another pb client,we should reuse them
-	kvStore, err := createTiStore("http://localhost:2379")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	schema, err := NewSchema(jobs, false)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	sink, err := getSink(detail.SinkURI, schema, detail.Opts)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
+// NewCapture returns a new Capture instance
+func NewCapture() (c *Capture, err error) {
 	c = &Capture{
-		pdCli:        pdCli,
-		watchs:       watchs,
-		checkpointTS: checkpointTS,
-		encoder:      encoder,
-		sink:         sink,
-		detail:       detail,
-		schema:       schema,
+		id: uuid.New().String(),
 	}
 
 	return
 }
 
+// Start starts the Capture mainloop
 func (c *Capture) Start(ctx context.Context) (err error) {
-	ctx, c.cancel = context.WithCancel(ctx)
-	defer c.cancel()
+	// TODO: better channgefeed model with etcd storage
+	err = c.register()
+	if err != nil {
+		return err
+	}
 
-	buf := MakeBuffer()
-
-	// TODO get time zone from config
-	mounter, err := NewTxnMounter(c.schema, time.UTC)
+	// create a test changefeed
+	detail := ChangeFeedDetail{
+		SinkURI:      "root@tcp(127.0.0.1:3306)/test",
+		Opts:         make(map[string]string),
+		CheckpointTS: 0,
+		CreateTime:   time.Now(),
+	}
+	feed, err := NewSubChangeFeed([]string{"localhost:2379"}, detail)
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	puller := NewPuller(c.pdCli, c.checkpointTS, c.watchs, c.detail, buf)
-	c.errCh = make(chan error, 2)
-	go func() {
-		err := puller.Run(ctx)
-		c.errCh <- err
-	}()
-
-	spanFrontier := makeSpanFrontier(c.watchs...)
-
-	writeToSink := func(context context.Context, rawTxn RawTxn) error {
-		log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.entries))
-		txn, err := mounter.Mount(rawTxn)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = c.sink.Emit(context, *txn)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		log.Info("Output Txn", zap.Reflect("Txn", txn))
-		return nil
-	}
-
-	err = collectRawTxns(ctx, buf.Get, writeToSink, spanFrontier)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
+	return feed.Start(ctx)
 }
 
 // register registers the capture information in etcd
