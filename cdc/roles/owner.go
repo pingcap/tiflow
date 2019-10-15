@@ -37,10 +37,10 @@ type Owner interface {
 	// UpdateCheckpointTSFunc registers a updater into Owner, which can update checkpointTS to ETCD
 	UpdateCheckpointTSFunc(ctx context.Context, updater func(ctx context.Context, changeFeedID string, checkpointTS uint64) error)
 
-	// CalcResolvedTS gets ResolvedTS of a ChangeFeed
+	// GetResolvedTS gets ResolvedTS of a ChangeFeed
 	GetResolvedTS(ctx context.Context, changeFeedID string) (uint64, error)
 
-	// CalcCheckpointTS gets CheckpointTS of a ChangeFeed
+	// GetCheckpointTS gets CheckpointTS of a ChangeFeed
 	GetCheckpointTS(ctx context.Context, changeFeedID string) (uint64, error)
 
 	// Run a goroutine to handle Owner logic
