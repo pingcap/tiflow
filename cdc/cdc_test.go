@@ -357,6 +357,57 @@ func (s *CDCSuite) TestUKWithNoPK(c *C) {
 	s.RunTestCases(c, cases)
 }
 
+func (s *CDCSuite) TestInsertBit(c *C) {
+	cases := []testCases{
+		{`CREATE TABLE test.cdc_insert_bit(id int primary key,a BIT(1) NOT NULL);`, expectSuccessDDL},
+		{`INSERT INTO test.cdc_insert_bit VALUES (1, 0x01);`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec("REPLACE INTO `test`.`cdc_insert_bit`(`id`,`a`) VALUES (?,?);").
+				WithArgs(1, 1).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+		{`UPDATE test.cdc_insert_bit SET a = 0x00 where id = 1;`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec("REPLACE INTO `test`.`cdc_insert_bit`(`id`,`a`) VALUES (?,?);").
+				WithArgs(1, 0).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+		{`DROP TABLE test.cdc_insert_bit`, expectSuccessDDL}}
+	s.RunTestCases(c, cases)
+}
+
+func (s *CDCSuite) TestTblWithGeneratedCol(c *C) {
+	cases := []testCases{
+		{`CREATE TABLE test.gen_contacts (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	first_name VARCHAR(50) NOT NULL,
+	last_name VARCHAR(50) NOT NULL,
+	other VARCHAR(101),
+	fullname VARCHAR(101) GENERATED ALWAYS AS (CONCAT(first_name,' ',last_name)),
+	initial VARCHAR(101) GENERATED ALWAYS AS (CONCAT(LEFT(first_name, 1),' ',LEFT(last_name,1))) STORED
+);`, expectSuccessDDL},
+		{`INSERT INTO test.gen_contacts(first_name, last_name) VALUES('Bob', 'John');`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec("REPLACE INTO `test`.`gen_contacts`(`id`,`first_name`,`last_name`,`other`) VALUES (?,?,?,?);").
+				WithArgs(1, []byte("Bob"), []byte("John"), nil).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+		{`UPDATE test.gen_contacts SET other = fullname WHERE first_name = 'Bob'`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec("REPLACE INTO `test`.`gen_contacts`(`id`,`first_name`,`last_name`,`other`) VALUES (?,?,?,?);").
+				WithArgs(1, []byte("Bob"), []byte("John"), []byte("Bob John")).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+		{`DELETE FROM test.gen_contacts WHERE fullname = 'Bob John'`, func(sql string, mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec("DELETE FROM `test`.`gen_contacts` WHERE `id` = ? LIMIT 1;").
+				WithArgs(1).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		}},
+		{`DROP TABLE test.gen_contacts`, expectSuccessDDL}}
+	s.RunTestCases(c, cases)
+}
+
 type testCases struct {
 	execSQL string
 	expect  func(string, sqlmock.Sqlmock)

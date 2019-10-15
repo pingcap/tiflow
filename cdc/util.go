@@ -91,9 +91,12 @@ func getTableInfoFromSchema(schema *Schema, schemaName, tableName string) (info 
 	if !exist {
 		return nil, ErrTableNotExist
 	}
-	columns := make([]string, len(tableInfoModel.Columns))
-	for i, col := range tableInfoModel.Columns {
-		columns[i] = col.Name.O
+	var columns []string
+	for _, col := range tableInfoModel.Columns {
+		if col.GeneratedExprString != "" {
+			continue
+		}
+		columns = append(columns, col.Name.O)
 	}
 	var uniques []indexInfo
 	for _, idx := range tableInfoModel.Indices {
