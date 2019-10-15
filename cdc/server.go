@@ -3,11 +3,6 @@ package cdc
 import (
 	"context"
 	"strings"
-	"time"
-
-	"github.com/coreos/etcd/clientv3"
-	"github.com/pingcap/errors"
-	"google.golang.org/grpc"
 )
 
 type options struct {
@@ -32,8 +27,6 @@ type ServerOption func(*options)
 type Server struct {
 	opts options
 	id   string
-
-	etcdClient *clientv3.Client
 }
 
 // NewServer creates a Server instance.
@@ -43,21 +36,8 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 		o(&opts)
 	}
 
-	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   strings.Split(opts.pdEndpoints, ","),
-		DialTimeout: 5 * time.Second,
-		DialOptions: []grpc.DialOption{
-			grpc.WithBackoffMaxDelay(time.Second * 3),
-		},
-	})
-
-	if err != nil {
-		return nil, errors.Annotate(err, "new etcd client")
-	}
-
 	s := &Server{
-		opts:       opts,
-		etcdClient: cli,
+		opts: opts,
 	}
 
 	return s, nil
@@ -65,7 +45,7 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 
 // Run runs the server.
 func (s *Server) Run() error {
-	capture, err := NewCapture()
+	capture, err := NewCapture(strings.Split(s.opts.pdEndpoints, ","))
 	if err != nil {
 		return err
 	}

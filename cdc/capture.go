@@ -18,14 +18,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/coreos/etcd/clientv3"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/cdc/roles"
 	"github.com/pingcap/tidb-cdc/cdc/util"
 	"github.com/pingcap/tidb-cdc/pkg/flags"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -41,12 +44,34 @@ type ResolvedSpan struct {
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules SubChangeFeed on it.
 type Capture struct {
 	id string
+
+	pdEndpoints  []string
+	etcdClient   *clientv3.Client
+	ownerManager roles.Manager
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture() (c *Capture, err error) {
+func NewCapture(pdEndpoints []string) (c *Capture, err error) {
+	cli, err := clientv3.New(clientv3.Config{
+		Endpoints:   pdEndpoints,
+		DialTimeout: 5 * time.Second,
+		DialOptions: []grpc.DialOption{
+			grpc.WithBackoffMaxDelay(time.Second * 3),
+		},
+	})
+	if err != nil {
+		return nil, errors.Annotate(err, "new etcd client")
+	}
+
+	id := uuid.New().String()
+
+	manager := roles.NewOwnerManager(cli, id, CaptureOwnerKey)
+
 	c = &Capture{
-		id: uuid.New().String(),
+		id:           id,
+		pdEndpoints:  pdEndpoints,
+		etcdClient:   cli,
+		ownerManager: manager,
 	}
 
 	return
@@ -60,6 +85,11 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		return err
 	}
 
+	err = c.ownerManager.CampaignOwner(ctx)
+	if err != nil {
+		return errors.Annotate(err, "CampaignOwner")
+	}
+
 	// create a test changefeed
 	detail := ChangeFeedDetail{
 		SinkURI:      "root@tcp(127.0.0.1:3306)/test",
@@ -67,7 +97,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		CheckpointTS: 0,
 		CreateTime:   time.Now(),
 	}
-	feed, err := NewSubChangeFeed([]string{"localhost:2379"}, detail)
+	feed, err := NewSubChangeFeed(c.pdEndpoints, detail)
 	if err != nil {
 		return errors.Trace(err)
 	}

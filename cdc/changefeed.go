@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -75,9 +76,10 @@ func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(ctx context.Context, client *c
 
 // SubChangeFeed is a SubChangeFeed task on capture
 type SubChangeFeed struct {
-	pdCli  pd.Client
-	detail ChangeFeedDetail
-	watchs []util.Span
+	pdEndpoints []string
+	pdCli       pd.Client
+	detail      ChangeFeedDetail
+	watchs      []util.Span
 
 	schema  *Schema
 	mounter *TxnMounter
@@ -87,15 +89,14 @@ type SubChangeFeed struct {
 	sink Sink
 }
 
-func NewSubChangeFeed(pdAddr []string, detail ChangeFeedDetail) (*SubChangeFeed, error) {
-	pdCli, err := pd.NewClient(pdAddr, pd.SecurityOption{})
+func NewSubChangeFeed(pdEndpoints []string, detail ChangeFeedDetail) (*SubChangeFeed, error) {
+	pdCli, err := pd.NewClient(pdEndpoints, pd.SecurityOption{})
 	if err != nil {
-		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdAddr)
+		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
 	}
 
-	// TODO get etdc url from config
 	// here we create another pb client,we should reuse them
-	kvStore, err := createTiStore("http://localhost:2379")
+	kvStore, err := createTiStore(strings.Join(pdEndpoints, ","))
 	if err != nil {
 		return nil, err
 	}
@@ -120,11 +121,12 @@ func NewSubChangeFeed(pdAddr []string, detail ChangeFeedDetail) (*SubChangeFeed,
 	}
 
 	return &SubChangeFeed{
-		detail:  detail,
-		pdCli:   pdCli,
-		schema:  schema,
-		sink:    sink,
-		mounter: mounter,
+		pdEndpoints: pdEndpoints,
+		detail:      detail,
+		pdCli:       pdCli,
+		schema:      schema,
+		sink:        sink,
+		mounter:     mounter,
 	}, nil
 }
 
