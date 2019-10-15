@@ -79,35 +79,6 @@ func (c *Capture) register() error {
 	return nil
 }
 
-// Frontier handle all ResolvedSpan and emit resolved timestamp
-type Frontier struct {
-	// once all the span receive a resolved ts, it's safe to emit a changefeed level resolved ts
-	spans   []util.Span
-	detail  ChangeFeedDetail
-	encoder Encoder
-}
-
-func NewFrontier(spans []util.Span, detail ChangeFeedDetail) (f *Frontier, err error) {
-	encoder, err := getEncoder(detail.Opts)
-	if err != nil {
-		return nil, err
-	}
-
-	f = &Frontier{
-		spans:   spans,
-		detail:  detail,
-		encoder: encoder,
-	}
-
-	return
-}
-
-func (f *Frontier) NotifyResolvedSpan(resolve ResolvedSpan) error {
-	// TODO emit resolved timestamp once it's safe
-
-	return nil
-}
-
 func createTiStore(urls string) (tidbkv.Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {

@@ -75,10 +75,9 @@ func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(ctx context.Context, client *c
 
 // SubChangeFeed is a SubChangeFeed task on capture
 type SubChangeFeed struct {
-	pdCli    pd.Client
-	detail   ChangeFeedDetail
-	frontier *Frontier
-	watchs   []util.Span
+	pdCli  pd.Client
+	detail ChangeFeedDetail
+	watchs []util.Span
 
 	schema  *Schema
 	mounter *TxnMounter
