@@ -92,6 +92,7 @@ func (t Txn) IsDDL() bool {
 
 type resolveTsTracker interface {
 	Forward(span util.Span, ts uint64) bool
+	Frontier() uint64
 }
 
 func collectRawTxns(

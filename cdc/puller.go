@@ -30,6 +30,7 @@ type Puller struct {
 	spans        []util.Span
 	detail       ChangeFeedDetail
 	buf          Buffer
+	tsTracker    resolveTsTracker
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTS
@@ -47,6 +48,7 @@ func NewPuller(
 		spans:        spans,
 		detail:       detail,
 		buf:          MakeBuffer(),
+		tsTracker:    makeSpanFrontier(spans...),
 	}
 
 	return p
@@ -105,7 +107,10 @@ func (p *Puller) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
+func (p *Puller) GetResolvedTs() uint64 {
+	return p.tsTracker.Frontier()
+}
+
 func (p *Puller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, RawTxn) error) error {
-	spanFrontier := makeSpanFrontier(p.spans...)
-	return collectRawTxns(ctx, p.buf.Get, outputFn, spanFrontier)
+	return collectRawTxns(ctx, p.buf.Get, outputFn, p.tsTracker)
 }
