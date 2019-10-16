@@ -38,7 +38,7 @@ var pullCmd = &cobra.Command{
 		ts := oracle.ComposeTS(time.Now().Unix()*1000, 0)
 		detail := cdc.ChangeFeedDetail{}
 
-		p := cdc.NewPuller(cli, ts, []util.Span{{nil, nil}}, detail, buf)
+		p := cdc.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}}, detail, buf)
 
 		g, ctx := errgroup.WithContext(context.Background())
 

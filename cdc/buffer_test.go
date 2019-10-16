@@ -61,7 +61,8 @@ func (bs *bufferSuite) TestWaitsCanBeCanceled(c *check.C) {
 	b := MakeBuffer()
 	ctx := context.Background()
 
-	timeout, _ := context.WithTimeout(ctx, time.Millisecond)
+	timeout, cancel := context.WithTimeout(ctx, time.Millisecond)
+	defer cancel()
 	stopped := make(chan struct{})
 	go func() {
 		err := b.AddEntry(timeout, BufferEntry{KV: &kv.RawKVEntry{Ts: 111}})
