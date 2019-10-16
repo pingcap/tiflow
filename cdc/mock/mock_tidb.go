@@ -98,8 +98,7 @@ func (p *MockTiDB) updateEvent() (entrys []*kv.RawKVEntry, err error) {
 
 	// Put kv
 	for k, v := range newKVS {
-		oldv, _ := p.kvs[k]
-		if oldv != v {
+		if p.kvs[k] != v {
 			entry := kv.RawKVEntry{
 				OpType: kv.OpTypePut,
 				Key:    []byte(k),
