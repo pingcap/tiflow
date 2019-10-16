@@ -34,11 +34,10 @@ var pullCmd = &cobra.Command{
 			return
 		}
 
-		buf := cdc.MakeBuffer()
 		ts := oracle.ComposeTS(time.Now().Unix()*1000, 0)
 		detail := cdc.ChangeFeedDetail{}
 
-		p := cdc.NewPuller(cli, ts, []util.Span{{nil, nil}}, detail, buf)
+		p := cdc.NewPuller(cli, ts, []util.Span{{nil, nil}}, detail)
 
 		g, ctx := errgroup.WithContext(context.Background())
 
@@ -47,14 +46,10 @@ var pullCmd = &cobra.Command{
 		})
 
 		g.Go(func() error {
-			for {
-				entry, err := buf.Get(ctx)
-				if err != nil {
-					return err
-				}
-
-				fmt.Printf("%+v\n", entry.GetValue())
-			}
+			return p.CollectRawTxns(ctx, func(ctx context.Context, txn cdc.RawTxn) error {
+				fmt.Printf("%+v\n", txn)
+				return nil
+			})
 		})
 
 		err = g.Wait()
