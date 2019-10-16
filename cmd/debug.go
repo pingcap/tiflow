@@ -38,6 +38,7 @@ var pullCmd = &cobra.Command{
 		detail := cdc.ChangeFeedDetail{}
 
 		p := cdc.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}}, detail)
+		buf := p.Output()
 
 		g, ctx := errgroup.WithContext(context.Background())
 
@@ -46,10 +47,14 @@ var pullCmd = &cobra.Command{
 		})
 
 		g.Go(func() error {
-			return p.CollectRawTxns(ctx, func(ctx context.Context, txn cdc.RawTxn) error {
-				fmt.Printf("%+v\n", txn)
-				return nil
-			})
+			for {
+				entry, err := buf.Get(ctx)
+				if err != nil {
+					return err
+				}
+
+				fmt.Printf("%+v\n", entry.GetValue())
+			}
 		})
 
 		err = g.Wait()

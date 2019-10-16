@@ -54,6 +54,10 @@ func NewPuller(
 	return p
 }
 
+func (p *Puller) Output() Buffer {
+	return p.buf
+}
+
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *Puller) Run(ctx context.Context) error {
 	// TODO pull from tikv and push into buf
