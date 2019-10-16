@@ -131,50 +131,70 @@ func NewSubChangeFeed(pdEndpoints []string, detail ChangeFeedDetail) (*SubChange
 }
 
 func (c *SubChangeFeed) Start(ctx context.Context) error {
-	errg, ctx := errgroup.WithContext(ctx)
+	errCh := make(chan error, 1)
 
-	errg.Go(func() error {
-		ddlSpan := util.Span{
-			Start: []byte{'m'},
-			End:   []byte{'m' + 1},
+	ddlSpan := util.Span{
+		Start: []byte{'m'},
+		End:   []byte{'m' + 1},
+	}
+	ddlPuller := c.startOnSpan(ctx, ddlSpan, errCh)
+
+	tblSpan := util.Span{
+		Start: []byte{'t'},
+		End:   []byte{'t' + 1},
+	}
+	dmlPuller := c.startOnSpan(ctx, tblSpan, errCh)
+
+	// TODO: Set up a way to notify the pullers of new resolved ts
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case e := <-errCh:
+			return e
+		case <-time.After(10 * time.Millisecond):
+			ts := c.GetResolvedTs(ddlPuller, dmlPuller)
+			log.Info("Min ResolvedTs", zap.Uint64("ts", ts))
 		}
-		return c.startOnSpan(ctx, ddlSpan)
-	})
-
-	errg.Go(func() error {
-		tblSpan := util.Span{
-			Start: []byte{'t'},
-			End:   []byte{'t' + 1},
-		}
-		return c.startOnSpan(ctx, tblSpan)
-	})
-
-	return errg.Wait()
+	}
 }
 
-func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span) error {
+func (c *SubChangeFeed) GetResolvedTs(pullers ...*Puller) uint64 {
+	minResolvedTs := pullers[0].GetResolvedTs()
+	for _, p := range pullers[1:] {
+		ts := p.GetResolvedTs()
+		if ts < minResolvedTs {
+			minResolvedTs = ts
+		}
+	}
+	return minResolvedTs
+}
+
+func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span, errCh chan<- error) *Puller {
+	// Set it up so that one failed goroutine cancels all others sharing the same ctx
+	errg, ctx := errgroup.WithContext(ctx)
+
 	checkpointTS := c.detail.CheckpointTS
 	if checkpointTS == 0 {
 		checkpointTS = oracle.EncodeTSO(c.detail.CreateTime.Unix() * 1000)
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	puller := NewPuller(c.pdCli, checkpointTS, []util.Span{span}, c.detail)
 
-	buf := MakeBuffer()
-	puller := NewPuller(c.pdCli, checkpointTS, c.watchs, c.detail, buf)
+	errg.Go(func() error {
+		return puller.Run(ctx)
+	})
+
+	errg.Go(func() error {
+		return puller.CollectRawTxns(ctx, c.writeToSink)
+	})
 
 	go func() {
-		err := puller.Run(ctx)
-		if err != nil {
-			cancel()
-			log.Error("Puller run", zap.Any("span", span))
-		}
+		err := errg.Wait()
+		errCh <- err
 	}()
 
-	spanFrontier := makeSpanFrontier(span)
-
-	err := collectRawTxns(ctx, buf.Get, c.writeToSink, spanFrontier)
-	return err
+	return puller
 }
 
 func (c *SubChangeFeed) writeToSink(context context.Context, rawTxn RawTxn) error {

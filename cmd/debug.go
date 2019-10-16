@@ -34,11 +34,11 @@ var pullCmd = &cobra.Command{
 			return
 		}
 
-		buf := cdc.MakeBuffer()
 		ts := oracle.ComposeTS(time.Now().Unix()*1000, 0)
 		detail := cdc.ChangeFeedDetail{}
 
-		p := cdc.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}}, detail, buf)
+		p := cdc.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}}, detail)
+		buf := p.Output()
 
 		g, ctx := errgroup.WithContext(context.Background())
 
