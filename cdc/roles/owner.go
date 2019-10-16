@@ -24,18 +24,25 @@ type ProcessTableInfo struct {
 
 // Owner is used to process etcd information for a capture with owner role
 type Owner interface {
-	// TableSchedule updates table infos stored in SubChangeFeed in etcd
-	TableSchedule(ctx context.Context, changeFeedID string, schedule map[string][]*ProcessTableInfo) error
 
-	// UpdateResolvedTS updates the ResolvedTS to resolvedTS of a ChangeFeed with ID = changeFeedID
-	UpdateResolvedTS(ctx context.Context, changeFeedID string, resolveTS uint64) error
+	// ResolverFunc registers the resolver into Owner
+	ResolverFunc(ctx context.Context, resolver func(ctx context.Context, changeFeedID string, captureID string) (uint64, error)) error
 
-	// UpdateCheckpointTS updates the CheckpointTS to checkpointTS of a ChangeFeed with ID = changeFeedID
-	UpdateCheckpointTS(ctx context.Context, changeFeedID string, checkpointTS uint64) error
+	// CheckpointerFunc registers the checkpointer into Owner
+	CheckpointerFunc(ctx context.Context, checkpointer func(ctx context.Context, changeFeedID string, captureID string) (uint64, error)) error
 
-	// CalcResolvedTS calculates ResolvedTS of a ChangeFeed
-	CalcResolvedTS(ctx context.Context, changeFeedID string) (uint64, error)
+	// UpdateResolvedTSFunc registers a updater into Owner, which can update resolvedTS to ETCD
+	UpdateResolvedTSFunc(ctx context.Context, updater func(ctx context.Context, changeFeedID string, resolvedTS uint64) error)
 
-	// CalcCheckpointTS calculates CheckpointTS of a ChangeFeed
-	CalcCheckpointTS(ctx context.Context, changeFeedID string) (uint64, error)
+	// UpdateCheckpointTSFunc registers a updater into Owner, which can update checkpointTS to ETCD
+	UpdateCheckpointTSFunc(ctx context.Context, updater func(ctx context.Context, changeFeedID string, checkpointTS uint64) error)
+
+	// GetResolvedTS gets ResolvedTS of a ChangeFeed
+	GetResolvedTS(ctx context.Context, changeFeedID string) (uint64, error)
+
+	// GetCheckpointTS gets CheckpointTS of a ChangeFeed
+	GetCheckpointTS(ctx context.Context, changeFeedID string) (uint64, error)
+
+	// Run a goroutine to handle Owner logic
+	Run(ctx context.Context) error
 }

@@ -25,9 +25,9 @@ type Processor interface {
 	// UpdateResolveTS updates ResolvedTS stored in SubChangeFeed in etcd
 	UpdateResolveTS(ctx context.Context, ts uint64) error
 
-	// CalcCheckpointTS gets checkpoint ts based on the checkpoint ts of each puller
-	CalcCheckpointTS(ctx context.Context) (uint64, error)
+	// GetCheckpointTS gets checkpoint ts based on the checkpoint ts of each puller
+	GetCheckpointTS(ctx context.Context) (uint64, error)
 
-	// CalcResovleTS gets resolve ts based on each puller in the processor
-	CalcResolveTS(ctx context.Context) (uint64, error)
+	// GetResolveTS gets resolve ts based on each puller in the processor
+	GetResolveTS(ctx context.Context) (uint64, error)
 }
