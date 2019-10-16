@@ -170,19 +170,16 @@ func (c *SubChangeFeed) GetResolvedTs(pullers ...*Puller) uint64 {
 	return minResolvedTs
 }
 
-func (c *SubChangeFeed) getCheckpointTs() uint64 {
-	checkpointTS := c.detail.CheckpointTS
-	if checkpointTS == 0 {
-		checkpointTS = oracle.EncodeTSO(c.detail.CreateTime.Unix() * 1000)
-	}
-	return checkpointTS
-}
-
 func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span, errCh chan<- error) *Puller {
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
 
-	puller := NewPuller(c.pdCli, c.getCheckpointTs(), []util.Span{span}, c.detail)
+	checkpointTS := c.detail.CheckpointTS
+	if checkpointTS == 0 {
+		checkpointTS = oracle.EncodeTSO(c.detail.CreateTime.Unix() * 1000)
+	}
+
+	puller := NewPuller(c.pdCli, checkpointTS, []util.Span{span}, c.detail)
 
 	errg.Go(func() error {
 		return puller.Run(ctx)
