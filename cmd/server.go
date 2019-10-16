@@ -1,9 +1,16 @@
 package cmd
 
 import (
+	"context"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 var (
@@ -32,8 +39,24 @@ func runEServer(cmd *cobra.Command, args []string) error {
 		return errors.Annotate(err, "new server")
 	}
 
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
+	go func() {
+		sig := <-sc
+		log.Info("got signal to exit", zap.Stringer("signal", sig))
+		server.Close()
+	}()
+
 	err = server.Run()
 	if err != nil {
+		if errors.Cause(err) == context.Canceled {
+			return nil
+		}
 		return errors.Annotate(err, "run server")
 	}
 
