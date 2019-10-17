@@ -31,9 +31,6 @@ type Server struct {
 	opts    options
 	id      string
 	capture *Capture
-
-	ctx    context.Context
-	cancel context.CancelFunc
 }
 
 // NewServer creates a Server instance.
@@ -43,33 +40,30 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 		o(&opts)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	s := &Server{
-		opts:   opts,
-		ctx:    ctx,
-		cancel: cancel,
+		opts: opts,
 	}
 
 	return s, nil
 }
 
 // Run runs the server.
-func (s *Server) Run() error {
+func (s *Server) Run(ctx context.Context) error {
 	capture, err := NewCapture(strings.Split(s.opts.pdEndpoints, ","))
 	if err != nil {
 		return err
 	}
 	s.capture = capture
-	return s.capture.Start(s.ctx)
+	return s.capture.Start(ctx)
 }
 
 // Close closes the server.
-func (s *Server) Close() {
+func (s *Server) Close(ctx context.Context, cancel context.CancelFunc) {
 	if s.capture != nil {
-		err := s.capture.Close()
+		err := s.capture.Close(ctx)
 		if err != nil {
 			log.Error("close capture", zap.Error(err))
 		}
 	}
-	s.cancel()
+	cancel()
 }

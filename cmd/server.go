@@ -27,13 +27,14 @@ var (
 func init() {
 	rootCmd.AddCommand(serverCmd)
 
-	serverCmd.Flags().StringVar(&pdEndpoints, "pd-endpoints", "127.0.0.1:2379", "endpoints of PD, separated by comma")
+	serverCmd.Flags().StringVar(&pdEndpoints, "pd-endpoints", "http://127.0.0.1:2379", "endpoints of PD, separated by comma")
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
 	var opts []cdc.ServerOption
 	opts = append(opts, cdc.PDEndpoints(pdEndpoints))
 
+	ctx, cancel := context.WithCancel(context.Background())
 	server, err := cdc.NewServer(opts...)
 	if err != nil {
 		return errors.Annotate(err, "new server")
@@ -49,10 +50,10 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	go func() {
 		sig := <-sc
 		log.Info("got signal to exit", zap.Stringer("signal", sig))
-		server.Close()
+		server.Close(ctx, cancel)
 	}()
 
-	err = server.Run()
+	err = server.Run(ctx)
 	if err != nil {
 		if errors.Cause(err) == context.Canceled {
 			return nil

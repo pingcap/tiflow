@@ -104,8 +104,8 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	return feed.Start(ctx)
 }
 
-func (c *Capture) Close() error {
-	_, err := c.etcdClient.Delete(context.Background(), c.infoKey())
+func (c *Capture) Close(ctx context.Context) error {
+	_, err := c.etcdClient.Delete(ctx, c.infoKey())
 	return errors.Trace(err)
 }
 
