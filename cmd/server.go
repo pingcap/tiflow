@@ -34,7 +34,6 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	var opts []cdc.ServerOption
 	opts = append(opts, cdc.PDEndpoints(pdEndpoints))
 
-	ctx, cancel := context.WithCancel(context.Background())
 	server, err := cdc.NewServer(opts...)
 	if err != nil {
 		return errors.Annotate(err, "new server")
@@ -47,6 +46,7 @@ func runEServer(cmd *cobra.Command, args []string) error {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		sig := <-sc
 		log.Info("got signal to exit", zap.Stringer("signal", sig))
