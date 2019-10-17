@@ -307,6 +307,18 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		schemaName = schema.Name.O
 
+	case model.ActionModifySchemaCharsetAndCollate:
+		db := job.BinlogInfo.DBInfo
+		if _, ok := s.schemas[db.ID]; !ok {
+			return "", "", "", errors.NotFoundf("schema %s(%d)", db.Name, db.ID)
+		}
+
+		s.schemas[db.ID] = db
+		s.schemaNameToID[db.Name.O] = db.ID
+		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: db.Name.O, Table: ""}
+		s.currentVersion = job.BinlogInfo.SchemaVersion
+		schemaName = db.Name.O
+
 	case model.ActionDropSchema:
 		schemaName, err = s.DropSchema(job.SchemaID)
 		if err != nil {
