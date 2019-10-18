@@ -154,7 +154,10 @@ func (c *SubChangeFeed) Start(ctx context.Context) error {
 			return e
 		case <-time.After(10 * time.Millisecond):
 			ts := c.GetResolvedTs(ddlPuller, dmlPuller)
-			log.Info("Min ResolvedTs", zap.Uint64("ts", ts))
+			// NOTE: prevent too much noisy log now, refine it later
+			if ts > 0 {
+				log.Info("Min ResolvedTs", zap.Uint64("ts", ts))
+			}
 		}
 	}
 }

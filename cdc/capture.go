@@ -80,7 +80,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 // Start starts the Capture mainloop
 func (c *Capture) Start(ctx context.Context) (err error) {
 	// TODO: better channgefeed model with etcd storage
-	err = c.register()
+	err = c.register(ctx)
 	if err != nil {
 		return err
 	}
@@ -104,9 +104,19 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	return feed.Start(ctx)
 }
 
+func (c *Capture) Close(ctx context.Context) error {
+	_, err := c.etcdClient.Delete(ctx, c.infoKey())
+	return errors.Trace(err)
+}
+
+func (c *Capture) infoKey() string {
+	return fmt.Sprintf("%s/capture/info/%s", kv.EtcdKeyBase, c.id)
+}
+
 // register registers the capture information in etcd
-func (c *Capture) register() error {
-	return nil
+func (c *Capture) register(ctx context.Context) error {
+	_, err := c.etcdClient.Put(ctx, c.infoKey(), "{}")
+	return errors.Trace(err)
 }
 
 func createTiStore(urls string) (tidbkv.Storage, error) {

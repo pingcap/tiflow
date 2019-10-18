@@ -3,6 +3,9 @@ package cdc
 import (
 	"context"
 	"strings"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 type options struct {
@@ -25,8 +28,9 @@ type ServerOption func(*options)
 
 // Server is the capture server
 type Server struct {
-	opts options
-	id   string
+	opts    options
+	id      string
+	capture *Capture
 }
 
 // NewServer creates a Server instance.
@@ -44,15 +48,22 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 }
 
 // Run runs the server.
-func (s *Server) Run() error {
+func (s *Server) Run(ctx context.Context) error {
 	capture, err := NewCapture(strings.Split(s.opts.pdEndpoints, ","))
 	if err != nil {
 		return err
 	}
-	return capture.Start(context.Background())
+	s.capture = capture
+	return s.capture.Start(ctx)
 }
 
 // Close closes the server.
-func (s *Server) Close() {
-
+func (s *Server) Close(ctx context.Context, cancel context.CancelFunc) {
+	if s.capture != nil {
+		err := s.capture.Close(ctx)
+		if err != nil {
+			log.Error("close capture", zap.Error(err))
+		}
+	}
+	cancel()
 }
