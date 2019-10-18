@@ -119,7 +119,7 @@ func Unmarshal(raw *kv.RawKVEntry) (KVEntry, error) {
 	switch {
 	case bytes.HasPrefix(raw.Key, tablePrefix):
 		return unmarshalTableKVEntry(raw)
-	case bytes.HasPrefix(raw.Key, metaPrefix):
+	case bytes.HasPrefix(raw.Key, metaPrefix) && raw.OpType == kv.OpTypePut:
 		return unmarshalMetaKVEntry(raw)
 	}
 	return &UnknownKVEntry{*raw}, nil
@@ -231,7 +231,7 @@ func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 				tableInfo := &model.TableInfo{}
 				err = json.Unmarshal(raw.Value, tableInfo)
 				if err != nil {
-					return nil, errors.Trace(err)
+					return nil, errors.Annotatef(err, "data: %v", raw.Value)
 				}
 				return &UpdateTableKVEntry{
 					Ts:        raw.Ts,

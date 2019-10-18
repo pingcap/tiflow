@@ -282,7 +282,7 @@ func (s *Schema) handlePreviousDDLJobIfNeed(commitTs uint64) error {
 // the third value[string]: the sql that is corresponding to the job
 // the fourth value[error]: the handleDDL execution's err
 func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string, sql string, err error) {
-	log.Debug("handle job: ", zap.Stringer("job", job))
+	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
 
 	if skipJob(job) {
 		return "", "", "", nil

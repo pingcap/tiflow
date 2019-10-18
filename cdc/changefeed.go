@@ -191,7 +191,11 @@ func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span, errCh c
 	})
 
 	errg.Go(func() error {
-		return puller.CollectRawTxns(ctx, c.writeToSink)
+		err := puller.CollectRawTxns(ctx, c.writeToSink)
+		if err != nil {
+			return errors.Annotatef(err, "span: %v", span)
+		}
+		return nil
 	})
 
 	go func() {
