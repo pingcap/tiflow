@@ -97,11 +97,13 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		CheckpointTS: 0,
 		CreateTime:   time.Now(),
 	}
-	feed, err := NewSubChangeFeed(c.pdEndpoints, detail)
+	err = detail.SaveChangeFeedDetail(ctx, c.etcdClient, uuid.New().String())
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return feed.Start(ctx)
+
+	watcher := NewChangeFeedWatcher(c.id, c.pdEndpoints, c.etcdClient)
+	return watcher.Watch(ctx)
 }
 
 func (c *Capture) Close(ctx context.Context) error {

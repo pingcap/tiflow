@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/pingcap/log"
@@ -24,8 +25,17 @@ func feed() {
 		return
 	}
 
-	err = feed.Start(context.Background())
-	if err != nil {
+	var wg sync.WaitGroup
+	errCh := make(chan error, 1)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		feed.Start(context.Background(), errCh)
+	}()
+	wg.Wait()
+	select {
+	case err := <-errCh:
 		log.Error("feed failed", zap.Error(err))
+	default:
 	}
 }
