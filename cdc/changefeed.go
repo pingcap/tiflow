@@ -146,6 +146,7 @@ func (c *SubChangeFeed) Start(ctx context.Context) error {
 	dmlPuller := c.startOnSpan(ctx, tblSpan, errCh)
 
 	// TODO: Set up a way to notify the pullers of new resolved ts
+	var lastTS uint64
 	for {
 		select {
 		case <-ctx.Done():
@@ -155,9 +156,10 @@ func (c *SubChangeFeed) Start(ctx context.Context) error {
 		case <-time.After(10 * time.Millisecond):
 			ts := c.GetResolvedTs(ddlPuller, dmlPuller)
 			// NOTE: prevent too much noisy log now, refine it later
-			if ts > 0 {
+			if ts != lastTS {
 				log.Info("Min ResolvedTs", zap.Uint64("ts", ts))
 			}
+			lastTS = ts
 		}
 	}
 }
