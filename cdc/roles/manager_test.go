@@ -3,14 +3,13 @@ package roles
 import (
 	"context"
 	"net/url"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
-	"github.com/phayes/freeport"
 	"github.com/pingcap/check"
+	"github.com/pingcap/tidb-cdc/pkg/etcd"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -22,49 +21,12 @@ type managerSuite struct {
 
 var _ = check.Suite(&managerSuite{})
 
-// getFreeListenURLs get free ports and localhost as url.
-func getFreeListenURLs(c *check.C, n int) (urls []*url.URL) {
-	ports, err := freeport.GetFreePorts(n)
-	if err != nil {
-		c.Fatal(err)
-	}
-
-	c.Log("get free ports:", ports)
-
-	for _, port := range ports {
-		u, err := url.Parse("http://localhost:" + strconv.Itoa(port))
-		if err != nil {
-			c.Fatal(err)
-		}
-		urls = append(urls, u)
-	}
-
-	return
-}
-
 // Set up a embeded etcd using free ports.
 func (s *managerSuite) SetUpTest(c *check.C) {
-	cfg := embed.NewConfig()
-	cfg.Dir = c.MkDir()
-
-	urls := getFreeListenURLs(c, 2)
-	cfg.LPUrls = []url.URL{*urls[0]}
-	cfg.LCUrls = []url.URL{*urls[1]}
-	s.clientURL = urls[1]
-
-	e, err := embed.StartEtcd(cfg)
-	if err != nil {
-		c.Fatal(err)
-	}
-
-	select {
-	case <-e.Server.ReadyNotify():
-		c.Log("Server is ready!")
-	case <-time.After(60 * time.Second):
-		e.Server.Stop() // trigger a shutdown
-		c.Log("Server took too long to start!")
-	}
-
+	dir := c.MkDir()
+	curl, e, err := etcd.SetupEmbedEtcd(dir)
+	c.Assert(err, check.IsNil)
+	s.clientURL = curl
 	s.etcd = e
 	go func() {
 		c.Log(<-e.Err())
