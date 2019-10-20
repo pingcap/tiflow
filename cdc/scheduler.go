@@ -26,12 +26,33 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 )
 
+var runSubChangeFeed = realRunSubChangeFeed
+
 // ChangeFeedWatcher is a changefeed watcher
 type ChangeFeedWatcher struct {
 	captureID   string
 	pdEndpoints []string
 	etcdCli     *clientv3.Client
 	details     map[string]ChangeFeedDetail
+}
+
+const (
+	keyChangeFeedList int = iota + 1
+	keyChangeFeed
+	keySubChangeFeed
+)
+
+func getEtcdKey(keyType int, params ...interface{}) string {
+	switch keyType {
+	case keyChangeFeedList:
+		return fmt.Sprintf("%s/changefeed/config", kv.EtcdKeyBase)
+	case keyChangeFeed:
+		return fmt.Sprintf("%s/changefeed/config/%s", append([]interface{}{kv.EtcdKeyBase}, params...)...)
+	case keySubChangeFeed:
+		return fmt.Sprintf("%s/changefeed/subchangfeed/%s/%s", append([]interface{}{kv.EtcdKeyBase}, params...)...)
+	default:
+		return "unknonw"
+	}
 }
 
 func splitChangeFeedID(key string) string {
@@ -52,7 +73,7 @@ func NewChangeFeedWatcher(captureID string, pdEndpoints []string, cli *clientv3.
 
 // Watch watches changefeed key base
 func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
-	key := fmt.Sprintf("%s/changefeed/config", kv.EtcdKeyBase)
+	key := getEtcdKey(keyChangeFeedList)
 	watchCh := w.etcdCli.Watch(ctx, key, clientv3.WithPrefix())
 	errCh := make(chan error, 1)
 	for {
@@ -116,42 +137,49 @@ func NewSubChangeFeedWatcher(
 }
 
 func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
-	key := fmt.Sprintf("%s/changfeed/subchangfeed/%s/%s", kv.EtcdKeyBase, w.changefeedID, w.captureID)
+	key := getEtcdKey(keySubChangeFeed, w.changefeedID, w.captureID)
 
-	// wait for key to appear
-	watchCh := w.etcdCli.Watch(ctx, key)
-waitKeyLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case resp, ok := <-watchCh:
-			if !ok {
-				log.Info("watcher is closed")
+	val, err := w.etcdCli.Get(ctx, key)
+	if err != nil {
+		errCh <- errors.Trace(err)
+		return
+	}
+	if val.Count == 0 {
+		// wait for key to appear
+		watchCh := w.etcdCli.Watch(ctx, key)
+	waitKeyLoop:
+		for {
+			select {
+			case <-ctx.Done():
 				return
-			}
-			for _, ev := range resp.Events {
-				switch ev.Type {
-				case mvccpb.PUT:
-					break waitKeyLoop
+			case resp, ok := <-watchCh:
+				if !ok {
+					log.Info("watcher is closed")
+					return
+				}
+				for _, ev := range resp.Events {
+					switch ev.Type {
+					case mvccpb.PUT:
+						break waitKeyLoop
+					}
 				}
 			}
 		}
 	}
 
-	feed, err := NewSubChangeFeed(w.pdEndpoints, w.detail)
+	feedErrCh, err := runSubChangeFeed(ctx, w.pdEndpoints, w.detail)
 	if err != nil {
-		errCh <- errors.Trace(err)
+		errCh <- err
 		return
 	}
-	cctx, cancel := context.WithCancel(ctx)
-	feedErrCh := make(chan error, 1)
-	go feed.Start(cctx, feedErrCh)
-	defer cancel()
 
 	for {
 		select {
 		case <-ctx.Done():
+			err := ctx.Err()
+			if err != context.Canceled {
+				errCh <- err
+			}
 			return
 		case err := <-feedErrCh:
 			errCh <- err
@@ -167,4 +195,15 @@ waitKeyLoop:
 			}
 		}
 	}
+}
+
+// realRunSubChangeFeed creates a new subchangefeed then starts it, and returns a channel to pass error
+func realRunSubChangeFeed(ctx context.Context, pdEndpoints []string, detail ChangeFeedDetail) (chan error, error) {
+	feed, err := NewSubChangeFeed(pdEndpoints, detail)
+	if err != nil {
+		return nil, err
+	}
+	errCh := make(chan error, 1)
+	go feed.Start(ctx, errCh)
+	return errCh, nil
 }

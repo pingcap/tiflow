@@ -16,7 +16,6 @@ package cdc
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -76,7 +75,7 @@ func RestoreChangeFeedDetail(data []byte) (ChangeFeedDetail, error) {
 // SaveChangeFeedDetail stores change feed detail into etcd
 // TODO: this should be called from outer system, such as from a TiDB client
 func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, changeFeedID string) error {
-	key := fmt.Sprintf("/tidb/cdc/changefeed/config/%s", changeFeedID)
+	key := getEtcdKey(keyChangeFeed, changeFeedID)
 	_, err := client.Put(ctx, key, cfd.String())
 	return err
 }
@@ -156,6 +155,10 @@ func (c *SubChangeFeed) Start(ctx context.Context, result chan<- error) {
 	for {
 		select {
 		case <-ctx.Done():
+			err := ctx.Err()
+			if err != context.Canceled {
+				result <- err
+			}
 			return
 		case e := <-errCh:
 			result <- e
