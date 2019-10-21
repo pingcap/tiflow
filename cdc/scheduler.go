@@ -42,23 +42,16 @@ type ChangeFeedWatcher struct {
 	details     map[string]ChangeFeedDetail
 }
 
-const (
-	keyChangeFeedList int = iota + 1
-	keyChangeFeed
-	keySubChangeFeed
-)
+func getEtcdKeyChangeFeedList() string {
+	return fmt.Sprintf("%s/changefeed/config", kv.EtcdKeyBase)
+}
 
-func getEtcdKey(keyType int, params ...interface{}) string {
-	switch keyType {
-	case keyChangeFeedList:
-		return fmt.Sprintf("%s/changefeed/config", kv.EtcdKeyBase)
-	case keyChangeFeed:
-		return fmt.Sprintf("%s/changefeed/config/%s", append([]interface{}{kv.EtcdKeyBase}, params...)...)
-	case keySubChangeFeed:
-		return fmt.Sprintf("%s/changefeed/subchangfeed/%s/%s", append([]interface{}{kv.EtcdKeyBase}, params...)...)
-	default:
-		return "unknonw"
-	}
+func getEtcdKeyChangeFeed(changefeedID string) string {
+	return fmt.Sprintf("%s/changefeed/config/%s", kv.EtcdKeyBase, changefeedID)
+}
+
+func getEtcdKeySubChangeFeed(changefeedID, captureID string) string {
+	return fmt.Sprintf("%s/changefeed/subchangfeed/%s/%s", kv.EtcdKeyBase, changefeedID, captureID)
 }
 
 func splitChangeFeedID(key string) string {
@@ -79,7 +72,7 @@ func NewChangeFeedWatcher(captureID string, pdEndpoints []string, cli *clientv3.
 
 // Watch watches changefeed key base
 func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
-	key := getEtcdKey(keyChangeFeedList)
+	key := getEtcdKeyChangeFeedList()
 	watchCh := w.etcdCli.Watch(ctx, key, clientv3.WithPrefix())
 	errCh := make(chan error, 1)
 	for {
@@ -97,7 +90,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 				switch ev.Type {
 				case mvccpb.PUT:
 					changefeedID := splitChangeFeedID(string(ev.Kv.Key))
-					detail, err := RestoreChangeFeedDetail(ev.Kv.Value)
+					detail, err := DecodeChangeFeedDetail(ev.Kv.Value)
 					if err != nil {
 						return errors.Trace(err)
 					}
@@ -166,7 +159,7 @@ func (w *SubChangeFeedWatcher) reopen() error {
 
 func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 	defer w.wg.Done()
-	key := getEtcdKey(keySubChangeFeed, w.changefeedID, w.captureID)
+	key := getEtcdKeySubChangeFeed(w.changefeedID, w.captureID)
 
 	val, err := w.etcdCli.Get(ctx, key)
 	if err != nil {

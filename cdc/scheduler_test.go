@@ -89,7 +89,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 		captureID    = "test-capture"
 		pdEndpoints  = []string{}
 		detail       = ChangeFeedDetail{}
-		key          = getEtcdKey(keySubChangeFeed, changefeedID, captureID)
+		key          = getEtcdKeySubChangeFeed(changefeedID, captureID)
 	)
 
 	oriRunSubChangeFeed := runSubChangeFeed
@@ -152,7 +152,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcherError(c *check.C) {
 		captureID    = "test-capture-err"
 		pdEndpoints  = []string{}
 		detail       = ChangeFeedDetail{}
-		key          = getEtcdKey(keySubChangeFeed, changefeedID, captureID)
+		key          = getEtcdKeySubChangeFeed(changefeedID, captureID)
 	)
 
 	oriRunSubChangeFeed := runSubChangeFeed
@@ -189,7 +189,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 		pdEndpoints  = []string{}
 		sinkURI      = "root@tcp(127.0.0.1:3306)/test"
 		detail       = ChangeFeedDetail{SinkURI: sinkURI}
-		key          = getEtcdKey(keyChangeFeed, changefeedID)
+		key          = getEtcdKeyChangeFeed(changefeedID)
 	)
 
 	oriRunSubChangeFeedWatcher := runSubChangeFeedWatcher

@@ -75,7 +75,7 @@ func DecodeChangeFeedDetail(data []byte) (ChangeFeedDetail, error) {
 // SaveChangeFeedDetail stores change feed detail into etcd
 // TODO: this should be called from outer system, such as from a TiDB client
 func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, changeFeedID string) error {
-	key := getEtcdKey(keyChangeFeed, changeFeedID)
+	key := getEtcdKeyChangeFeed(changeFeedID)
 	_, err := client.Put(ctx, key, cfd.String())
 	return err
 }
