@@ -30,6 +30,7 @@ func init() {
 	cobra.OnInitialize(func() {
 		err := initLog()
 		if err != nil {
+			fmt.Println("fail to init log: %v", err)
 			os.Exit(1)
 		}
 	})
