@@ -113,7 +113,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 	// subchangefeed exists before watch starts
 	errCh := make(chan error, 1)
 	sw := runSubChangeFeedWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh)
-	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
+	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runSubChangeFeedCount) == 1
 	}), check.IsTrue)
 
@@ -137,11 +137,10 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 
 	// check watcher can find new subchangefeed in watch loop
 	errCh2 := make(chan error, 1)
-	sw = runSubChangeFeedWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2)
-	time.Sleep(time.Millisecond * 10)
+	runSubChangeFeedWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2)
 	_, err = cli.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
-	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
+	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runSubChangeFeedCount) == 2
 	}), check.IsTrue)
 }
@@ -175,7 +174,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcherError(c *check.C) {
 
 	errCh := make(chan error, 1)
 	sw := runSubChangeFeedWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh)
-	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
+	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return len(errCh) == 1
 	}), check.IsTrue)
 	sw.close()
@@ -220,12 +219,13 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	}()
 
 	// short wait to ensure ChangeFeedWatcher has started watch loop
+	// TODO: test watch key apperance with revision works as expected
 	time.Sleep(time.Millisecond * 100)
 
 	// create a changefeed
 	err = detail.SaveChangeFeedDetail(context.Background(), cli, changefeedID)
 	c.Assert(err, check.IsNil)
-	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
+	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runChangeFeedWatcherCount) == 1
 	}), check.IsTrue)
 	w.lock.RLock()
