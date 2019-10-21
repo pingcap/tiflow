@@ -80,7 +80,6 @@ func (w *ChangeFeedWatcher) processPutKv(kv *mvccpb.KeyValue) (bool, string, Cha
 	w.lock.Lock()
 	_, ok := w.details[changefeedID]
 	if !ok {
-		// runSubChangeFeedWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh)
 		needRunWatcher = true
 	}
 	w.details[changefeedID] = detail

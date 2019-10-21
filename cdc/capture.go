@@ -97,10 +97,19 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		CheckpointTS: 0,
 		CreateTime:   time.Now(),
 	}
-	err = detail.SaveChangeFeedDetail(ctx, c.etcdClient, uuid.New().String())
+	changefeedID := uuid.New().String()
+	err = detail.SaveChangeFeedDetail(ctx, c.etcdClient, changefeedID)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// create subchangefeed for test
+	// TODO: should be updated by owner
+	skey := getEtcdKeySubChangeFeed(changefeedID, c.id)
+	c.etcdClient.Put(ctx, skey, "")
+	defer func() {
+		c.etcdClient.Delete(ctx, getEtcdKeyChangeFeed(changefeedID))
+		c.etcdClient.Delete(ctx, skey)
+	}()
 
 	watcher := NewChangeFeedWatcher(c.id, c.pdEndpoints, c.etcdClient)
 	return watcher.Watch(ctx)
