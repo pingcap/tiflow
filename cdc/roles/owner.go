@@ -202,7 +202,7 @@ func (o *ownerImpl) calcResolvedTS() error {
 }
 
 func (o *ownerImpl) handleDDL(ctx context.Context) error {
-FOR1:
+waitCheckpointTSLoop:
 	for changeFeedID, cfInfo := range o.changeFeedInfos {
 		if cfInfo.status != ChangeFeedWaitToExecDDL {
 			break
@@ -210,7 +210,7 @@ FOR1:
 		todoDDLJob := o.ddlJobHistory[cfInfo.ddlCurrentIndex]
 		for _, pInfo := range cfInfo.processorInfos {
 			if pInfo.CheckPointTS != todoDDLJob.BinlogInfo.FinishedTS {
-				continue FOR1
+				continue waitCheckpointTSLoop
 			}
 		}
 		cfInfo.status = ChangeFeedExecDDL
@@ -219,12 +219,12 @@ FOR1:
 			o.finishedDDLJob <- ddlExecResult{changeFeedID, todoDDLJob, err}
 		}()
 	}
-FOR2:
+handleFinishedDDLLoop:
 	for {
 		select {
 		case ddlExecRes, ok := <-o.finishedDDLJob:
 			if !ok {
-				break FOR2
+				break handleFinishedDDLLoop
 			}
 			cfInfo, exist := o.changeFeedInfos[ddlExecRes.changeFeedID]
 			if !exist {
@@ -246,7 +246,7 @@ FOR2:
 			cfInfo.ddlCurrentIndex += 1
 			cfInfo.status = ChangeFeedSyncDML
 		default:
-			break FOR2
+			break handleFinishedDDLLoop
 		}
 	}
 	return nil
