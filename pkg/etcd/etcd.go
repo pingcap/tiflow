@@ -24,17 +24,17 @@ import (
 )
 
 // getFreeListenURLs get free ports and localhost as url.
-func getFreeListenURLs(n int) (urls []*url.URL, err error) {
-	ports, err2 := freeport.GetFreePorts(n)
+func getFreeListenURLs(n int) (urls []*url.URL, retErr error) {
+	ports, err := freeport.GetFreePorts(n)
 	if err != nil {
-		err = errors.Trace(err2)
+		retErr = errors.Trace(err)
 		return
 	}
 
 	for _, port := range ports {
-		u, err2 := url.Parse("http://localhost:" + strconv.Itoa(port))
-		if err2 != nil {
-			err = errors.Trace(err2)
+		u, err := url.Parse("http://localhost:" + strconv.Itoa(port))
+		if err != nil {
+			retErr = errors.Trace(err)
 			return
 		}
 		urls = append(urls, u)

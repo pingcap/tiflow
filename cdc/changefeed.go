@@ -65,8 +65,8 @@ func (cfd *ChangeFeedDetail) String() string {
 	return string(data)
 }
 
-// RestoreChangeFeedDetail restores a new ChangeFeedDetail instance from json marshal byte slice
-func RestoreChangeFeedDetail(data []byte) (ChangeFeedDetail, error) {
+// DecodeChangeFeedDetail decodes a new ChangeFeedDetail instance from json marshal byte slice
+func DecodeChangeFeedDetail(data []byte) (ChangeFeedDetail, error) {
 	detail := ChangeFeedDetail{}
 	err := json.Unmarshal(data, &detail)
 	return detail, errors.Trace(err)
