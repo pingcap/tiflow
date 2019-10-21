@@ -221,6 +221,7 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 	}
 }
 
+// realRunSubChangeFeedWatcher creates a new SubChangeFeedWatcher and executes the Watch method.
 func realRunSubChangeFeedWatcher(
 	ctx context.Context,
 	changefeedID string,
@@ -229,13 +230,14 @@ func realRunSubChangeFeedWatcher(
 	etcdCli *clientv3.Client,
 	detail ChangeFeedDetail,
 	errCh chan error,
-) {
+) *SubChangeFeedWatcher {
 	sw := NewSubChangeFeedWatcher(changefeedID, captureID, pdEndpoints, etcdCli, detail)
 	sw.wg.Add(1)
 	go sw.Watch(ctx, errCh)
+	return sw
 }
 
-// realRunSubChangeFeed creates a new subchangefeed then starts it, and returns a channel to pass error
+// realRunSubChangeFeed creates a new subchangefeed then starts it, and returns a channel to pass error.
 func realRunSubChangeFeed(ctx context.Context, pdEndpoints []string, detail ChangeFeedDetail) (chan error, error) {
 	feed, err := NewSubChangeFeed(pdEndpoints, detail)
 	if err != nil {

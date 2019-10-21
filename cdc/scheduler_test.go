@@ -77,8 +77,9 @@ func mockRunSubChangeFeedWatcher(
 	etcdCli *clientv3.Client,
 	detail ChangeFeedDetail,
 	errCh chan error,
-) {
+) *SubChangeFeedWatcher {
 	runChangeFeedWatcherCount += 1
+	return nil
 }
 
 func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
@@ -108,10 +109,9 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 	_, err = cli.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
 
+	// subchangefeed exists before watch starts
 	errCh := make(chan error, 1)
-	sw := NewSubChangeFeedWatcher(changefeedID, captureID, pdEndpoints, cli, detail)
-	sw.wg.Add(1)
-	go sw.Watch(context.Background(), errCh)
+	sw := runSubChangeFeedWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh)
 	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
 		return runSubChangeFeedCount == 1
 	}), check.IsTrue)
@@ -133,6 +133,16 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 	cancel()
 	sw.close()
 	c.Assert(sw.isClosed(), check.IsTrue)
+
+	// check watcher can find new subchangefeed in watch loop
+	errCh2 := make(chan error, 1)
+	sw = runSubChangeFeedWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2)
+	time.Sleep(time.Millisecond * 10)
+	_, err = cli.Put(context.Background(), key, "{}")
+	c.Assert(err, check.IsNil)
+	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
+		return runSubChangeFeedCount == 2
+	}), check.IsTrue)
 }
 
 func (s *schedulerSuite) TestSubChangeFeedWatcherError(c *check.C) {
@@ -163,9 +173,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcherError(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	errCh := make(chan error, 1)
-	sw := NewSubChangeFeedWatcher(changefeedID, captureID, pdEndpoints, cli, detail)
-	sw.wg.Add(1)
-	go sw.Watch(context.Background(), errCh)
+	sw := runSubChangeFeedWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh)
 	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
 		return len(errCh) == 1
 	}), check.IsTrue)
