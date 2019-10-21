@@ -205,7 +205,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	go func() {
 		defer wg.Done()
 		err2 := w.Watch(ctx)
-		if err2 != nil && err2 != context.Canceled {
+		if err2 != nil && errors.Cause(err2) != context.Canceled {
 			c.Fatal(err2)
 		}
 	}()
