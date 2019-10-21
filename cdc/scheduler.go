@@ -35,6 +35,7 @@ var (
 
 // ChangeFeedWatcher is a changefeed watcher
 type ChangeFeedWatcher struct {
+	lock        sync.RWMutex
 	captureID   string
 	pdEndpoints []string
 	etcdCli     *clientv3.Client
@@ -100,14 +101,18 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 					if err != nil {
 						return errors.Trace(err)
 					}
+					w.lock.Lock()
 					_, ok := w.details[changefeedID]
 					if !ok {
 						runSubChangeFeedWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh)
 					}
 					w.details[changefeedID] = detail
+					w.lock.Unlock()
 				case mvccpb.DELETE:
 					changefeedID := splitChangeFeedID(string(ev.Kv.Key))
+					w.lock.Lock()
 					delete(w.details, changefeedID)
+					w.lock.Unlock()
 				}
 			}
 		}
@@ -212,6 +217,7 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 			resp, err := w.etcdCli.Get(ctx, key)
 			if err != nil {
 				errCh <- errors.Trace(err)
+				return
 			}
 			// subchangefeed has been removed from this capture
 			if resp.Count == 0 {

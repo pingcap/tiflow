@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -35,8 +36,8 @@ type schedulerSuite struct {
 var _ = check.Suite(&schedulerSuite{})
 
 var (
-	runSubChangeFeedCount     int
-	runChangeFeedWatcherCount int
+	runSubChangeFeedCount     int32
+	runChangeFeedWatcherCount int32
 )
 
 // Set up a embed etcd using free ports.
@@ -57,7 +58,7 @@ func (s *schedulerSuite) TearDownTest(c *check.C) {
 
 func mockRunSubChangeFeed(ctx context.Context, pdEndpoints []string, detail ChangeFeedDetail) (chan error, error) {
 	errCh := make(chan error, 1)
-	runSubChangeFeedCount += 1
+	atomic.AddInt32(&runSubChangeFeedCount, 1)
 	return errCh, nil
 }
 
@@ -78,7 +79,7 @@ func mockRunSubChangeFeedWatcher(
 	detail ChangeFeedDetail,
 	errCh chan error,
 ) *SubChangeFeedWatcher {
-	runChangeFeedWatcherCount += 1
+	atomic.AddInt32(&runChangeFeedWatcherCount, 1)
 	return nil
 }
 
@@ -113,7 +114,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 	errCh := make(chan error, 1)
 	sw := runSubChangeFeedWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh)
 	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
-		return runSubChangeFeedCount == 1
+		return atomic.LoadInt32(&runSubChangeFeedCount) == 1
 	}), check.IsTrue)
 
 	// delete the subchangefeed
@@ -141,7 +142,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 	_, err = cli.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
-		return runSubChangeFeedCount == 2
+		return atomic.LoadInt32(&runSubChangeFeedCount) == 2
 	}), check.IsTrue)
 }
 
@@ -222,14 +223,18 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	err = detail.SaveChangeFeedDetail(context.Background(), cli, changefeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
-		return runChangeFeedWatcherCount == 1
+		return atomic.LoadInt32(&runChangeFeedWatcherCount) == 1
 	}), check.IsTrue)
+	w.lock.RLock()
 	c.Assert(len(w.details), check.Equals, 1)
+	w.lock.RUnlock()
 
 	// delete the changefeed
 	_, err = cli.Delete(context.Background(), key)
 	c.Assert(err, check.IsNil)
+	w.lock.RLock()
 	c.Assert(len(w.details), check.Equals, 0)
+	w.lock.RUnlock()
 
 	cancel()
 	wg.Wait()
