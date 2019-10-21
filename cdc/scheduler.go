@@ -223,7 +223,7 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 				}
 				respErr := resp.Err()
 				if respErr != nil {
-					errCh <- errors.Trace(err)
+					errCh <- errors.Trace(respErr)
 					return
 				}
 				for _, ev := range resp.Events {
