@@ -70,11 +70,54 @@ func NewChangeFeedWatcher(captureID string, pdEndpoints []string, cli *clientv3.
 	return w
 }
 
+func (w *ChangeFeedWatcher) processPutKv(kv *mvccpb.KeyValue) (bool, string, ChangeFeedDetail, error) {
+	needRunWatcher := false
+	changefeedID := splitChangeFeedID(string(kv.Key))
+	detail, err := DecodeChangeFeedDetail(kv.Value)
+	if err != nil {
+		return needRunWatcher, changefeedID, ChangeFeedDetail{}, err
+	}
+	w.lock.Lock()
+	_, ok := w.details[changefeedID]
+	if !ok {
+		// runSubChangeFeedWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh)
+		needRunWatcher = true
+	}
+	w.details[changefeedID] = detail
+	w.lock.Unlock()
+	// TODO: this detail is not copied, should be readonly
+	return needRunWatcher, changefeedID, detail, nil
+}
+
+func (w *ChangeFeedWatcher) processDeleteKv(kv *mvccpb.KeyValue) error {
+	changefeedID := splitChangeFeedID(string(kv.Key))
+	w.lock.Lock()
+	delete(w.details, changefeedID)
+	w.lock.Unlock()
+	return nil
+}
+
 // Watch watches changefeed key base
 func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 	key := getEtcdKeyChangeFeedList()
-	watchCh := w.etcdCli.Watch(ctx, key, clientv3.WithPrefix())
 	errCh := make(chan error, 1)
+
+	getResp, err := w.etcdCli.Get(ctx, key, clientv3.WithPrefix())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	revision := getResp.Header.Revision
+	for _, kv := range getResp.Kvs {
+		needRunWatcher, changefeedID, detail, err := w.processPutKv(kv)
+		if err != nil {
+			return err
+		}
+		if needRunWatcher {
+			runSubChangeFeedWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh)
+		}
+	}
+
+	watchCh := w.etcdCli.Watch(ctx, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
 	for {
 		select {
 		case <-ctx.Done():
@@ -89,23 +132,18 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 			for _, ev := range resp.Events {
 				switch ev.Type {
 				case mvccpb.PUT:
-					changefeedID := splitChangeFeedID(string(ev.Kv.Key))
-					detail, err := DecodeChangeFeedDetail(ev.Kv.Value)
+					needRunWatcher, changefeedID, detail, err := w.processPutKv(ev.Kv)
 					if err != nil {
-						return errors.Trace(err)
+						return err
 					}
-					w.lock.Lock()
-					_, ok := w.details[changefeedID]
-					if !ok {
+					if needRunWatcher {
 						runSubChangeFeedWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh)
 					}
-					w.details[changefeedID] = detail
-					w.lock.Unlock()
 				case mvccpb.DELETE:
-					changefeedID := splitChangeFeedID(string(ev.Kv.Key))
-					w.lock.Lock()
-					delete(w.details, changefeedID)
-					w.lock.Unlock()
+					err := w.processDeleteKv(ev.Kv)
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -161,14 +199,15 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 	defer w.wg.Done()
 	key := getEtcdKeySubChangeFeed(w.changefeedID, w.captureID)
 
-	val, err := w.etcdCli.Get(ctx, key)
+	getResp, err := w.etcdCli.Get(ctx, key)
 	if err != nil {
 		errCh <- errors.Trace(err)
 		return
 	}
-	if val.Count == 0 {
+	revision := getResp.Header.Revision
+	if getResp.Count == 0 {
 		// wait for key to appear
-		watchCh := w.etcdCli.Watch(ctx, key)
+		watchCh := w.etcdCli.Watch(ctx, key, clientv3.WithRev(revision))
 	waitKeyLoop:
 		for {
 			select {
