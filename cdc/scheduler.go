@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -26,7 +28,10 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 )
 
-var runSubChangeFeed = realRunSubChangeFeed
+var (
+	runSubChangeFeedWatcher = realRunSubChangeFeedWatcher
+	runSubChangeFeed        = realRunSubChangeFeed
+)
 
 // ChangeFeedWatcher is a changefeed watcher
 type ChangeFeedWatcher struct {
@@ -97,8 +102,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 					}
 					_, ok := w.details[changefeedID]
 					if !ok {
-						sw := NewSubChangeFeedWatcher(changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail)
-						go sw.Watch(ctx, errCh)
+						runSubChangeFeedWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh)
 					}
 					w.details[changefeedID] = detail
 				case mvccpb.DELETE:
@@ -117,6 +121,8 @@ type SubChangeFeedWatcher struct {
 	captureID    string
 	etcdCli      *clientv3.Client
 	detail       ChangeFeedDetail
+	wg           sync.WaitGroup
+	closed       int32
 }
 
 // NewSubChangeFeedWatcher creates a new SubChangeFeedWatcher instance
@@ -136,7 +142,25 @@ func NewSubChangeFeedWatcher(
 	}
 }
 
+func (w *SubChangeFeedWatcher) isClosed() bool {
+	return atomic.LoadInt32(&w.closed) == 1
+}
+
+func (w *SubChangeFeedWatcher) close() {
+	atomic.StoreInt32(&w.closed, 1)
+	w.wg.Wait()
+}
+
+func (w *SubChangeFeedWatcher) reopen() error {
+	if !w.isClosed() {
+		return errors.New("SubChangeFeedWatcher is not closed")
+	}
+	atomic.StoreInt32(&w.closed, 0)
+	return nil
+}
+
 func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
+	defer w.wg.Done()
 	key := getEtcdKey(keySubChangeFeed, w.changefeedID, w.captureID)
 
 	val, err := w.etcdCli.Get(ctx, key)
@@ -195,6 +219,20 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 			}
 		}
 	}
+}
+
+func realRunSubChangeFeedWatcher(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+	pdEndpoints []string,
+	etcdCli *clientv3.Client,
+	detail ChangeFeedDetail,
+	errCh chan error,
+) {
+	sw := NewSubChangeFeedWatcher(changefeedID, captureID, pdEndpoints, etcdCli, detail)
+	sw.wg.Add(1)
+	go sw.Watch(ctx, errCh)
 }
 
 // realRunSubChangeFeed creates a new subchangefeed then starts it, and returns a channel to pass error

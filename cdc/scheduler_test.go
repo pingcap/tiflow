@@ -16,12 +16,15 @@ package cdc
 import (
 	"context"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
 type schedulerSuite struct {
@@ -32,7 +35,8 @@ type schedulerSuite struct {
 var _ = check.Suite(&schedulerSuite{})
 
 var (
-	runSubChangeFeedCount int
+	runSubChangeFeedCount     int
+	runChangeFeedWatcherCount int
 )
 
 // Set up a embed etcd using free ports.
@@ -55,6 +59,26 @@ func mockRunSubChangeFeed(ctx context.Context, pdEndpoints []string, detail Chan
 	errCh := make(chan error, 1)
 	runSubChangeFeedCount += 1
 	return errCh, nil
+}
+
+func mockRunSubChangeFeedError(ctx context.Context, pdEndpoints []string, detail ChangeFeedDetail) (chan error, error) {
+	errCh := make(chan error, 1)
+	defer func() {
+		errCh <- errors.New("mock run error")
+	}()
+	return errCh, nil
+}
+
+func mockRunSubChangeFeedWatcher(
+	tx context.Context,
+	changefeedID string,
+	captureID string,
+	pdEndpoints []string,
+	etcdCli *clientv3.Client,
+	detail ChangeFeedDetail,
+	errCh chan error,
+) {
+	runChangeFeedWatcherCount += 1
 }
 
 func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
@@ -80,12 +104,125 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer cli.Close()
 
+	// create a subchangefeed
 	_, err = cli.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
 
 	errCh := make(chan error, 1)
 	sw := NewSubChangeFeedWatcher(changefeedID, captureID, pdEndpoints, cli, detail)
+	sw.wg.Add(1)
 	go sw.Watch(context.Background(), errCh)
-	time.Sleep(time.Millisecond * 500)
-	c.Assert(runSubChangeFeedCount, check.Equals, 1)
+	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
+		return runSubChangeFeedCount == 1
+	}), check.IsTrue)
+
+	// delete the subchangefeed
+	_, err = cli.Delete(context.Background(), key)
+	c.Assert(err, check.IsNil)
+	time.Sleep(time.Second)
+	sw.close()
+	c.Assert(sw.isClosed(), check.IsTrue)
+
+	// check SubChangeFeedWatcher watch subchangefeed key can ben canceled
+	err = sw.reopen()
+	c.Assert(err, check.IsNil)
+	c.Assert(sw.isClosed(), check.IsFalse)
+	ctx, cancel := context.WithCancel(context.Background())
+	sw.wg.Add(1)
+	go sw.Watch(ctx, errCh)
+	cancel()
+	sw.close()
+	c.Assert(sw.isClosed(), check.IsTrue)
+}
+
+func (s *schedulerSuite) TestSubChangeFeedWatcherError(c *check.C) {
+	var (
+		changefeedID = "test-changefeed-err"
+		captureID    = "test-capture-err"
+		pdEndpoints  = []string{}
+		detail       = ChangeFeedDetail{}
+		key          = getEtcdKey(keySubChangeFeed, changefeedID, captureID)
+	)
+
+	oriRunSubChangeFeed := runSubChangeFeed
+	runSubChangeFeed = mockRunSubChangeFeedError
+	defer func() {
+		runSubChangeFeed = oriRunSubChangeFeed
+	}()
+
+	curl := s.clientURL.String()
+	cli, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{curl},
+		DialTimeout: 3 * time.Second,
+	})
+	c.Assert(err, check.IsNil)
+	defer cli.Close()
+
+	// create a subchangefeed
+	_, err = cli.Put(context.Background(), key, "{}")
+	c.Assert(err, check.IsNil)
+
+	errCh := make(chan error, 1)
+	sw := NewSubChangeFeedWatcher(changefeedID, captureID, pdEndpoints, cli, detail)
+	sw.wg.Add(1)
+	go sw.Watch(context.Background(), errCh)
+	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
+		return len(errCh) == 1
+	}), check.IsTrue)
+	sw.close()
+	c.Assert(sw.isClosed(), check.IsTrue)
+}
+
+func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
+	var (
+		changefeedID = "test-changefeed-watcher"
+		captureID    = "test-capture"
+		pdEndpoints  = []string{}
+		sinkURI      = "root@tcp(127.0.0.1:3306)/test"
+		detail       = ChangeFeedDetail{SinkURI: sinkURI}
+		key          = getEtcdKey(keyChangeFeed, changefeedID)
+	)
+
+	oriRunSubChangeFeedWatcher := runSubChangeFeedWatcher
+	runSubChangeFeedWatcher = mockRunSubChangeFeedWatcher
+	defer func() {
+		runSubChangeFeedWatcher = oriRunSubChangeFeedWatcher
+	}()
+
+	curl := s.clientURL.String()
+	cli, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{curl},
+		DialTimeout: 3 * time.Second,
+	})
+	c.Assert(err, check.IsNil)
+	defer cli.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	w := NewChangeFeedWatcher(captureID, pdEndpoints, cli)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err2 := w.Watch(ctx)
+		if err2 != nil && err2 != context.Canceled {
+			c.Fatal(err2)
+		}
+	}()
+
+	// create a changefeed
+	err = detail.SaveChangeFeedDetail(context.Background(), cli, changefeedID)
+	c.Assert(err, check.IsNil)
+	c.Assert(util.WaitSomething(5, time.Millisecond*10, func() bool {
+		return runChangeFeedWatcherCount == 1
+	}), check.IsTrue)
+	c.Assert(len(w.details), check.Equals, 1)
+
+	// delete the changefeed
+	_, err = cli.Delete(context.Background(), key)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(w.details), check.Equals, 0)
+
+	cancel()
+	wg.Wait()
 }
