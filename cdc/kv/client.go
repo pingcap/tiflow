@@ -274,35 +274,34 @@ func (c *CDCClient) partialRegionFeed(
 			return err
 		}
 
-		maxTS, serr := c.singleEventFeed(ctx, regionInfo.span, regionInfo.ts, regionInfo.meta, eventCh)
+		maxTS, err := c.singleEventFeed(ctx, regionInfo.span, regionInfo.ts, regionInfo.meta, eventCh)
 
 		if maxTS > ts {
 			ts = maxTS
 		}
 
-		if serr != nil {
+		if err != nil {
 			log.Info("EventFeed disconnected",
 				zap.Reflect("span", regionInfo.span),
 				zap.Uint64("checkpoint", ts))
 
-			if serr.eventError == nil {
-				return backoff.Permanent(serr.other)
-			}
-
-			eerr := serr.eventError
-
-			if eerr.GetNotLeader() != nil {
-				regionInfo.meta = nil
-				return serr
-			} else if eerr.GetEpochNotMatch() != nil {
-				regionInfo.meta = nil
-				return serr
-			} else if eerr.GetRegionNotFound() != nil {
-				regionInfo.meta = nil
-				return serr
-			} else {
-				log.Warn("receive empty or unknown error msg", zap.Stringer("error", eerr))
-				return errors.Annotate(serr, "receive empty or unknow error msg")
+			switch eerr := errors.Cause(err).(type) {
+			case *eventError:
+				if eerr.GetNotLeader() != nil {
+					regionInfo.meta = nil
+					return eerr
+				} else if eerr.GetEpochNotMatch() != nil {
+					regionInfo.meta = nil
+					return eerr
+				} else if eerr.GetRegionNotFound() != nil {
+					regionInfo.meta = nil
+					return eerr
+				} else {
+					log.Warn("receive empty or unknown error msg", zap.Stringer("error", eerr))
+					return errors.Annotate(eerr, "receive empty or unknow error msg")
+				}
+			default:
+				return backoff.Permanent(err)
 			}
 		}
 
@@ -364,7 +363,7 @@ func (c *CDCClient) singleEventFeed(
 	ts uint64,
 	meta *metapb.Region,
 	eventCh chan<- *RegionFeedEvent,
-) (checkpointTS uint64, serr *sError) {
+) (checkpointTS uint64, err error) {
 	req := &cdcpb.ChangeDataRequest{
 		Header: &cdcpb.Header{
 			ClusterId: c.clusterID,
@@ -378,7 +377,7 @@ func (c *CDCClient) singleEventFeed(
 
 	conn, err := c.getConnByMeta(ctx, meta)
 	if err != nil {
-		return uint64(req.CheckpointTs), &sError{other: err}
+		return uint64(req.CheckpointTs), err
 	}
 
 	client := cdcpb.NewChangeDataClient(conn)
@@ -417,7 +416,7 @@ func (c *CDCClient) singleEventFeed(
 			}
 
 			if err != nil {
-				return uint64(req.CheckpointTs), &sError{other: errors.Trace(err)}
+				return uint64(req.CheckpointTs), errors.Trace(err)
 			}
 
 			log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
@@ -451,7 +450,7 @@ func (c *CDCClient) singleEventFeed(
 							case cdcpb.Event_Row_PUT:
 								opType = OpTypePut
 							default:
-								return uint64(req.CheckpointTs), &sError{other: errors.Errorf("unknow tp: %v", row.GetOpType())}
+								return uint64(req.CheckpointTs), errors.Errorf("unknow tp: %v", row.GetOpType())
 							}
 
 							revent := &RegionFeedEvent{
@@ -466,7 +465,7 @@ func (c *CDCClient) singleEventFeed(
 							select {
 							case eventCh <- revent:
 							case <-ctx.Done():
-								return uint64(req.CheckpointTs), &sError{other: errors.Trace(ctx.Err())}
+								return uint64(req.CheckpointTs), errors.Trace(ctx.Err())
 							}
 							sorter.pushTSItem(sortItem{
 								start:  row.GetStartTs(),
@@ -485,7 +484,7 @@ func (c *CDCClient) singleEventFeed(
 				case *cdcpb.Event_Admin_:
 					log.Info("receive admin event", zap.Stringer("event", event))
 				case *cdcpb.Event_Error_:
-					return uint64(req.CheckpointTs), &sError{eventError: x.Error}
+					return uint64(req.CheckpointTs), &eventError{Event_Error: x.Error}
 				case *cdcpb.Event_ResolvedTs:
 					// emit a checkpoint
 					revent := &RegionFeedEvent{
@@ -498,7 +497,7 @@ func (c *CDCClient) singleEventFeed(
 					select {
 					case eventCh <- revent:
 					case <-ctx.Done():
-						return uint64(req.CheckpointTs), &sError{other: errors.Trace(ctx.Err())}
+						return uint64(req.CheckpointTs), errors.Trace(ctx.Err())
 					}
 				}
 			}
@@ -506,16 +505,12 @@ func (c *CDCClient) singleEventFeed(
 	}
 }
 
-type sError struct {
-	other      error
-	eventError *cdcpb.Event_Error
+// eventError wrap cdcpb.Event_Error to implements error interface.
+type eventError struct {
+	*cdcpb.Event_Error
 }
 
 // Error implement error interface.
-func (s *sError) Error() string {
-	if s.eventError != nil {
-		return s.eventError.String()
-	}
-
-	return s.other.Error()
+func (e *eventError) Error() string {
+	return e.Event_Error.String()
 }
