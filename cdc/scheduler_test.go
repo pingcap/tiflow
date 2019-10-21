@@ -219,6 +219,9 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 		}
 	}()
 
+	// short wait to ensure ChangeFeedWatcher has started watch loop
+	time.Sleep(time.Millisecond * 100)
+
 	// create a changefeed
 	err = detail.SaveChangeFeedDetail(context.Background(), cli, changefeedID)
 	c.Assert(err, check.IsNil)
