@@ -128,6 +128,10 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 				log.Info("watcher is closed")
 				return nil
 			}
+			respErr := resp.Err()
+			if respErr != nil {
+				return errors.Trace(respErr)
+			}
 			for _, ev := range resp.Events {
 				switch ev.Type {
 				case mvccpb.PUT:
@@ -217,6 +221,11 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 					log.Info("watcher is closed")
 					return
 				}
+				respErr := resp.Err()
+				if respErr != nil {
+					errCh <- errors.Trace(err)
+					return
+				}
 				for _, ev := range resp.Events {
 					switch ev.Type {
 					case mvccpb.PUT:
@@ -227,7 +236,8 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 		}
 	}
 
-	feedErrCh, err := runSubChangeFeed(ctx, w.pdEndpoints, w.detail)
+	cctx, cancel := context.WithCancel(ctx)
+	feedErrCh, err := runSubChangeFeed(cctx, w.pdEndpoints, w.detail)
 	if err != nil {
 		errCh <- err
 		return
@@ -250,8 +260,9 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 				errCh <- errors.Trace(err)
 				return
 			}
-			// subchangefeed has been removed from this capture
+			// subchangefeed has been removed from this capture, cancel the subchangefeed too
 			if resp.Count == 0 {
+				cancel()
 				return
 			}
 		}
