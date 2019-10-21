@@ -408,6 +408,32 @@ func (s *CDCSuite) TestTblWithGeneratedCol(c *C) {
 	s.RunTestCases(c, cases)
 }
 
+func (s *CDCSuite) TestBigCDC(c *C) {
+	// insert 5 * 1M
+	// note limitation of TiDB: https://github.com/pingcap/docs/blob/733a5b0284e70c5b4d22b93a818210a3f6fbb5a0/FAQ.md#the-error-message-transaction-too-large-is-displayed
+	var data = make([]byte, 1<<20)
+	s.RunAndCheckSync(c, func(execute func(string, ...interface{})) {
+		execute(`create table test.cdc_big(id int primary key, data longtext);`)
+	}, func(mock sqlmock.Sqlmock) {
+		expectSuccessDDL(`create table test.cdc_big(id int primary key, data longtext);`, mock)
+	})
+	for i := 0; i < 5; i++ {
+		s.RunAndCheckSync(c, func(execute func(string, ...interface{})) {
+			execute(`INSERT INTO test.cdc_big(id, data) VALUES(?, ?);`, i, data)
+		}, func(mock sqlmock.Sqlmock) {
+			mock.ExpectBegin()
+			mock.ExpectExec("REPLACE INTO `test`.`cdc_big`(`id`,`data`) VALUES (?,?);").
+				WithArgs(i, data).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+		})
+	}
+	s.RunAndCheckSync(c, func(execute func(string, ...interface{})) {
+		execute(`DROP TABLE test.cdc_big`)
+	}, func(mock sqlmock.Sqlmock) {
+		expectSuccessDDL(`DROP TABLE test.cdc_big`, mock)
+	})
+}
+
 type testCases struct {
 	execSQL string
 	expect  func(string, sqlmock.Sqlmock)
