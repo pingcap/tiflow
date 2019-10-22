@@ -81,10 +81,10 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 	}
 
 	owner := &ownerImpl{
-		changeFeedInfos:       changeFeedInfos,
-		targetTS:              100,
-		ChangeFeedInfoRWriter: handler,
-		OwnerDDLHandler:       handler,
+		changeFeedInfos: changeFeedInfos,
+		targetTS:        100,
+		ddlHandler:      handler,
+		cfRWriter:       handler,
 	}
 	s.owner = owner
 	err := owner.Run(ctx, 50*time.Millisecond)
@@ -237,8 +237,8 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 		targetTS:        100,
 		finishedDDLJob:  make(chan ddlExecResult),
 
-		OwnerDDLHandler:       handler,
-		ChangeFeedInfoRWriter: handler,
+		ddlHandler: handler,
+		cfRWriter:  handler,
 	}
 	s.owner = owner
 	err := owner.Run(ctx, 50*time.Millisecond)

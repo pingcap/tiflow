@@ -144,8 +144,8 @@ type ChangeFeedInfoRWriter interface {
 type ownerImpl struct {
 	changeFeedInfos map[ChangeFeedID]*ChangeFeedInfo
 
-	OwnerDDLHandler
-	ChangeFeedInfoRWriter
+	ddlHandler OwnerDDLHandler
+	cfRWriter  ChangeFeedInfoRWriter
 
 	ddlResolvedTS  uint64
 	targetTS       uint64
@@ -156,7 +156,7 @@ type ownerImpl struct {
 }
 
 func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
-	infos, err := o.ChangeFeedInfoRWriter.Read(ctx)
+	infos, err := o.cfRWriter.Read(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -171,11 +171,11 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 }
 
 func (o *ownerImpl) flushChangeFeedInfos(ctx context.Context) error {
-	return errors.Trace(o.ChangeFeedInfoRWriter.Write(ctx, o.changeFeedInfos))
+	return errors.Trace(o.cfRWriter.Write(ctx, o.changeFeedInfos))
 }
 
 func (o *ownerImpl) pullDDLJob() error {
-	ddlResolvedTS, ddlJobs, err := o.PullDDL()
+	ddlResolvedTS, ddlJobs, err := o.ddlHandler.PullDDL()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -269,7 +269,7 @@ waitCheckpointTSLoop:
 		// Execute DDL Job asynchronously
 		cfInfo.status = ChangeFeedExecDDL
 		go func() {
-			err := o.ExecDDL(todoDDLJob)
+			err := o.ddlHandler.ExecDDL(todoDDLJob)
 			o.finishedDDLJob <- ddlExecResult{changeFeedID, todoDDLJob, err}
 		}()
 	}
