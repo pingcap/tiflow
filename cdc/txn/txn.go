@@ -18,15 +18,14 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pingcap/tidb-cdc/pkg/schema"
-	"github.com/pingcap/tidb-cdc/pkg/util"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb-cdc/cdc/entry"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/cdc/schema"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )

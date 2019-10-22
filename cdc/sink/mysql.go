@@ -20,29 +20,23 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cenkalti/backoff"
 	dmysql "github.com/go-sql-driver/mysql"
+	"go.uber.org/zap"
+
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
+	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
-	"github.com/pingcap/tidb-cdc/pkg/schema"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
-
 	"github.com/pingcap/tidb/table"
-
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/types"
-
-	"github.com/pingcap/errors"
-
-	"github.com/pingcap/parser/model"
-
-	"github.com/cenkalti/backoff"
-
 	_ "github.com/pingcap/tidb/types/parser_driver"
-
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
 )
 
 type tableInspector interface {

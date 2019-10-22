@@ -21,14 +21,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb-cdc/pkg/schema"
-	"github.com/pingcap/tidb-cdc/pkg/util"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-cdc/cdc/entry"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/mock"
+	"github.com/pingcap/tidb-cdc/cdc/schema"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 	"github.com/pingcap/tidb/types"
 )
 

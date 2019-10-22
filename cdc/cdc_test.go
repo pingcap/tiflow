@@ -12,9 +12,9 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/mock"
+	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/sink"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
-	"github.com/pingcap/tidb-cdc/pkg/schema"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
