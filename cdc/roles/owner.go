@@ -244,7 +244,7 @@ handleFinishedDDLLoop:
 					zap.String("ChangeFeedID", ddlExecRes.changeFeedID),
 					zap.Error(ddlExecRes.err),
 					zap.Reflect("ddlJob", ddlExecRes.job))
-				continue
+				continue handleFinishedDDLLoop
 			}
 			if cfInfo.status != ChangeFeedExecDDL {
 				log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
