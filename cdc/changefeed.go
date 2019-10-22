@@ -16,7 +16,6 @@ package cdc
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -66,10 +65,17 @@ func (cfd *ChangeFeedDetail) String() string {
 	return string(data)
 }
 
+// DecodeChangeFeedDetail decodes a new ChangeFeedDetail instance from json marshal byte slice
+func DecodeChangeFeedDetail(data []byte) (ChangeFeedDetail, error) {
+	detail := ChangeFeedDetail{}
+	err := json.Unmarshal(data, &detail)
+	return detail, errors.Trace(err)
+}
+
 // SaveChangeFeedDetail stores change feed detail into etcd
 // TODO: this should be called from outer system, such as from a TiDB client
 func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, changeFeedID string) error {
-	key := fmt.Sprintf("/tidb/cdc/changefeed/%s/config", changeFeedID)
+	key := getEtcdKeyChangeFeed(changeFeedID)
 	_, err := client.Put(ctx, key, cfd.String())
 	return err
 }
@@ -130,7 +136,7 @@ func NewSubChangeFeed(pdEndpoints []string, detail ChangeFeedDetail) (*SubChange
 	}, nil
 }
 
-func (c *SubChangeFeed) Start(ctx context.Context) error {
+func (c *SubChangeFeed) Start(ctx context.Context, result chan<- error) {
 	errCh := make(chan error, 1)
 
 	ddlSpan := util.Span{
@@ -149,9 +155,14 @@ func (c *SubChangeFeed) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			err := ctx.Err()
+			if err != context.Canceled {
+				result <- err
+			}
+			return
 		case e := <-errCh:
-			return e
+			result <- e
+			return
 		case <-time.After(10 * time.Millisecond):
 			ts := c.GetResolvedTs(ddlPuller, dmlPuller)
 			// NOTE: prevent too much noisy log now, refine it later
