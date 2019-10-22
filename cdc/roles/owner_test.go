@@ -145,7 +145,6 @@ func (h *handlerForDDLTest) Read(ctx context.Context) (map[ChangeFeedID]Processo
 }
 
 func (h *handlerForDDLTest) Write(ctx context.Context, infos map[ChangeFeedID]*ChangeFeedInfo) error {
-
 	h.dmlExpectIndex++
 	info, exist := infos["test_change_feed"]
 	h.c.Assert(exist, check.IsTrue)
