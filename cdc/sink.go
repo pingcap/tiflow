@@ -20,11 +20,12 @@ import (
 	"io"
 
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb-cdc/cdc/txn"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
-	Emit(ctx context.Context, txn Txn) error
+	Emit(ctx context.Context, t txn.Txn) error
 	EmitResolvedTimestamp(
 		ctx context.Context,
 		resolved uint64,
@@ -68,8 +69,8 @@ type writerSink struct {
 
 var _ Sink = &writerSink{}
 
-func (s *writerSink) Emit(ctx context.Context, txn Txn) error {
-	fmt.Fprintf(s, "commit ts: %d", txn.Ts)
+func (s *writerSink) Emit(ctx context.Context, t txn.Txn) error {
+	fmt.Fprintf(s, "commit ts: %d", t.Ts)
 	return nil
 }
 

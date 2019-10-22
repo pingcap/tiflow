@@ -11,15 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package txn
 
 import (
 	"context"
 	"sort"
 	"time"
 
-	"github.com/pingcap/tidb-cdc/cdc/util"
 	"github.com/pingcap/tidb-cdc/pkg/schema"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -31,10 +31,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// RawTxn represents a complete collection of entries that belong to the same transaction
+// RawTxn represents a complete collection of Entries that belong to the same transaction
 type RawTxn struct {
-	ts      uint64
-	entries []*kv.RawKVEntry
+	TS      uint64
+	Entries []*kv.RawKVEntry
 }
 
 // DMLType represents the dml type
@@ -60,7 +60,7 @@ type DML struct {
 
 // TableName returns the fully qualified name of the DML's table
 func (dml *DML) TableName() string {
-	return quoteSchema(dml.Database, dml.Table)
+	return util.QuoteSchema(dml.Database, dml.Table)
 }
 
 // DDL holds the ddl info
@@ -84,16 +84,16 @@ func (t Txn) IsDDL() bool {
 	return t.DDL != nil
 }
 
-type resolveTsTracker interface {
+type ResolveTsTracker interface {
 	Forward(span util.Span, ts uint64) bool
 	Frontier() uint64
 }
 
-func collectRawTxns(
+func CollectRawTxns(
 	ctx context.Context,
-	inputFn func(context.Context) (BufferEntry, error),
+	inputFn func(context.Context) (kv.KvOrResolved, error),
 	outputFn func(context.Context, RawTxn) error,
-	tracker resolveTsTracker,
+	tracker ResolveTsTracker,
 ) error {
 	entryGroups := make(map[uint64][]*kv.RawKVEntry)
 	for {
@@ -106,9 +106,9 @@ func collectRawTxns(
 		} else if be.Resolved != nil {
 			resolvedTs := be.Resolved.Timestamp
 			// 1. Forward is called in a single thread
-			// 2. The only way the global minimum resolved ts can be forwarded is that
+			// 2. The only way the global minimum resolved TS can be forwarded is that
 			// 	  the resolveTs we pass in replaces the original one
-			// Thus, we can just use resolvedTs here as the new global minimum resolved ts.
+			// Thus, we can just use resolvedTs here as the new global minimum resolved TS.
 			forwarded := tracker.Forward(be.Resolved.Span, resolvedTs)
 			if !forwarded {
 				continue
@@ -122,7 +122,7 @@ func collectRawTxns(
 			}
 			// TODO: Handle the case when readyTsList is empty
 			sort.Slice(readyTxns, func(i, j int) bool {
-				return readyTxns[i].ts < readyTxns[j].ts
+				return readyTxns[i].TS < readyTxns[j].TS
 			})
 			for _, t := range readyTxns {
 				err := outputFn(ctx, t)
@@ -134,26 +134,26 @@ func collectRawTxns(
 	}
 }
 
-type TxnMounter struct {
+type Mounter struct {
 	schema *schema.Picker
 	loc    *time.Location
 }
 
-func NewTxnMounter(schema *schema.Picker, loc *time.Location) (*TxnMounter, error) {
-	m := &TxnMounter{schema: schema, loc: loc}
+func NewTxnMounter(schema *schema.Picker, loc *time.Location) (*Mounter, error) {
+	m := &Mounter{schema: schema, loc: loc}
 	return m, nil
 }
 
-func (m *TxnMounter) Mount(rawTxn RawTxn) (*Txn, error) {
+func (m *Mounter) Mount(rawTxn RawTxn) (*Txn, error) {
 	txn := &Txn{
-		Ts: rawTxn.ts,
+		Ts: rawTxn.TS,
 	}
 	var replaceDMLs, deleteDMLs []*DML
-	err := m.schema.HandlePreviousDDLJobIfNeed(rawTxn.ts)
+	err := m.schema.HandlePreviousDDLJobIfNeed(rawTxn.TS)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	for _, raw := range rawTxn.entries {
+	for _, raw := range rawTxn.Entries {
 		kvEntry, err := entry.Unmarshal(raw)
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -194,7 +194,7 @@ func (m *TxnMounter) Mount(rawTxn RawTxn) (*Txn, error) {
 	return txn, nil
 }
 
-func (m *TxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
+func (m *Mounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
 	tableInfo, tableName, handleColName, err := m.fetchTableInfo(row.TableId)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -234,7 +234,7 @@ func (m *TxnMounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
 	}, nil
 }
 
-func (m *TxnMounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
+func (m *Mounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
 	tableInfo, tableName, _, err := m.fetchTableInfo(idx.TableId)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -262,7 +262,7 @@ func (m *TxnMounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
 	}, nil
 }
 
-func (m *TxnMounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, tableName *schema.TableName, handleColName string, err error) {
+func (m *Mounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, tableName *schema.TableName, handleColName string, err error) {
 	tableInfo, exist := m.schema.TableByID(tableId)
 	if !exist {
 		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableId)
@@ -289,7 +289,7 @@ func (m *TxnMounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, 
 	return
 }
 
-func (m *TxnMounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, error) {
+func (m *Mounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, error) {
 	var databaseName, tableName string
 	var err error
 	getTableName := false
@@ -322,7 +322,7 @@ func (m *TxnMounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, err
 	}, nil
 }
 
-func (m *TxnMounter) tryGetTableName(jobHistory *entry.DDLJobHistoryKVEntry) (databaseName string, tableName string, err error) {
+func (m *Mounter) tryGetTableName(jobHistory *entry.DDLJobHistoryKVEntry) (databaseName string, tableName string, err error) {
 	if tableId := jobHistory.Job.TableID; tableId > 0 {
 		var exist bool
 		databaseName, tableName, exist = m.schema.SchemaAndTableName(tableId)

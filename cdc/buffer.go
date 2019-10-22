@@ -4,24 +4,11 @@ import (
 	"context"
 
 	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
 // buffer entry from kv layer
-type BufferEntry struct {
-	KV       *kv.RawKVEntry
-	Resolved *ResolvedSpan
-}
-
-func (e *BufferEntry) GetValue() interface{} {
-	if e.KV != nil {
-		return e.KV
-	} else if e.Resolved != nil {
-		return e.Resolved
-	} else {
-		return nil
-	}
-}
+type BufferEntry = kv.KvOrResolved
 
 // Buffer buffers kv entries
 type Buffer chan BufferEntry
@@ -44,7 +31,7 @@ func (b Buffer) AddKVEntry(ctx context.Context, kv *kv.RawKVEntry) error {
 }
 
 func (b Buffer) AddResolved(ctx context.Context, span util.Span, ts uint64) error {
-	return b.AddEntry(ctx, BufferEntry{Resolved: &ResolvedSpan{Span: span, Timestamp: ts}})
+	return b.AddEntry(ctx, BufferEntry{Resolved: &kv.ResolvedSpan{Span: span, Timestamp: ts}})
 }
 
 func (b Buffer) Get(ctx context.Context) (BufferEntry, error) {

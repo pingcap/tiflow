@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/roles"
-	"github.com/pingcap/tidb-cdc/cdc/util"
 	"github.com/pingcap/tidb-cdc/pkg/flags"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
@@ -35,11 +34,6 @@ const (
 	// CaptureOwnerKey is the capture owner path that is saved to etcd
 	CaptureOwnerKey = kv.EtcdKeyBase + "/capture/owner"
 )
-
-type ResolvedSpan struct {
-	Span      util.Span
-	Timestamp uint64
-}
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules SubChangeFeed on it.
 type Capture struct {

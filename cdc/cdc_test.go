@@ -6,21 +6,25 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/mock"
-	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb-cdc/pkg/schema"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 )
+
+func TestSuite(t *testing.T) { TestingT(t) }
 
 type CDCSuite struct {
 	database string
 	puller   *mock.MockTiDB
 	mock     sqlmock.Sqlmock
-	mounter  *TxnMounter
+	mounter  *txn.Mounter
 	sink     Sink
 }
 
@@ -67,7 +71,7 @@ func NewCDCSuite() *CDCSuite {
 	}
 	cdcSuite.sink = sink
 
-	mounter, err := NewTxnMounter(schema, time.Local)
+	mounter, err := txn.NewTxnMounter(schema, time.Local)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -87,7 +91,7 @@ func (s *CDCSuite) RunAndCheckSync(c *C, execute func(func(string, ...interface{
 		rawKVs = append(rawKVs, kvs...)
 	}
 	execute(executeSql)
-	txn, err := s.mounter.Mount(RawTxn{ts: rawKVs[len(rawKVs)-1].Ts, entries: rawKVs})
+	txn, err := s.mounter.Mount(txn.RawTxn{TS: rawKVs[len(rawKVs)-1].Ts, Entries: rawKVs})
 	c.Assert(err, IsNil)
 	err = s.sink.Emit(context.Background(), *txn)
 	c.Assert(err, IsNil)

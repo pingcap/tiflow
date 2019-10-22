@@ -15,11 +15,11 @@ package cdc
 
 import (
 	gosql "database/sql"
-	"fmt"
 	"strings"
 
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb-cdc/pkg/schema"
 
 	"github.com/pingcap/errors"
@@ -137,44 +137,6 @@ func getTableInfoFromSchema(schema *schema.Picker, schemaName, tableName string)
 	return
 }
 
-func quoteSchema(schema string, table string) string {
-	return fmt.Sprintf("`%s`.`%s`", escapeName(schema), escapeName(table))
-}
-
-func quoteName(name string) string {
-
-	return "`" + escapeName(name) + "`"
-}
-
-func escapeName(name string) string {
-	return strings.Replace(name, "`", "``", -1)
-}
-
-func holderString(n int) string {
-	var builder strings.Builder
-	builder.Grow((n-1)*2 + 1)
-	for i := 0; i < n; i++ {
-		if i > 0 {
-			builder.WriteString(",")
-		}
-		builder.WriteString("?")
-	}
-	return builder.String()
-}
-
-func buildColumnList(names []string) string {
-	var b strings.Builder
-	for i, name := range names {
-		if i > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString(quoteName(name))
-
-	}
-
-	return b.String()
-}
-
 // getColsOfTbl returns a slice of the names of all columns,
 // generated columns are excluded.
 // https://dev.mysql.com/doc/mysql-infoschema-excerpt/5.7/en/columns-table.html
@@ -259,7 +221,7 @@ func getUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexInfo, er
 	return
 }
 
-func isTableChanged(ddl *DDL) bool {
+func isTableChanged(ddl *txn.DDL) bool {
 	switch ddl.Type {
 	case model.ActionDropTable, model.ActionDropSchema, model.ActionTruncateTable, model.ActionCreateSchema:
 		return false

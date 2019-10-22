@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-cdc/cdc/kv"

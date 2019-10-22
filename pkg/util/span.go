@@ -14,7 +14,7 @@ type Span struct {
 }
 
 // UpperBoundKey represents the maximum value.
-var UpperBoundKey []byte = []byte{255, 255, 255, 255, 255}
+var UpperBoundKey = []byte{255, 255, 255, 255, 255}
 
 // Hack will set End as UpperBoundKey if End is Nil.
 func (s Span) Hack() Span {

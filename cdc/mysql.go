@@ -22,6 +22,8 @@ import (
 
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/parser/terror"
+	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 
@@ -57,7 +59,7 @@ type mysqlSink struct {
 
 var _ Sink = &mysqlSink{}
 
-func (s *mysqlSink) Emit(ctx context.Context, txn Txn) error {
+func (s *mysqlSink) Emit(ctx context.Context, txn txn.Txn) error {
 	filterBySchemaAndTable(&txn)
 	if len(txn.DMLs) == 0 && txn.DDL == nil {
 		log.Info("Whole txn ignored", zap.Uint64("ts", txn.Ts))
@@ -78,20 +80,20 @@ func (s *mysqlSink) Emit(ctx context.Context, txn Txn) error {
 	return errors.Trace(s.execDMLs(ctx, dmls))
 }
 
-func filterBySchemaAndTable(txn *Txn) {
+func filterBySchemaAndTable(t *txn.Txn) {
 	toIgnore := regexp.MustCompile("(?i)^(INFORMATION_SCHEMA|PERFORMANCE_SCHEMA|MYSQL)$")
-	if txn.IsDDL() {
-		if toIgnore.MatchString(txn.DDL.Database) {
-			txn.DDL = nil
+	if t.IsDDL() {
+		if toIgnore.MatchString(t.DDL.Database) {
+			t.DDL = nil
 		}
 	} else {
-		filteredDMLs := make([]*DML, 0, len(txn.DMLs))
-		for _, dml := range txn.DMLs {
+		filteredDMLs := make([]*txn.DML, 0, len(t.DMLs))
+		for _, dml := range t.DMLs {
 			if !toIgnore.MatchString(dml.Database) {
 				filteredDMLs = append(filteredDMLs, dml)
 			}
 		}
-		txn.DMLs = filteredDMLs
+		t.DMLs = filteredDMLs
 	}
 }
 
@@ -107,7 +109,7 @@ func (s *mysqlSink) Close() error {
 	return nil
 }
 
-func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *DDL, maxRetries uint64) error {
+func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *txn.DDL, maxRetries uint64) error {
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
 			backoff.NewExponentialBackOff(), ctx),
@@ -125,7 +127,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *DDL, maxRetr
 	}, retryCfg)
 }
 
-func (s *mysqlSink) execDDL(ctx context.Context, ddl *DDL) error {
+func (s *mysqlSink) execDDL(ctx context.Context, ddl *txn.DDL) error {
 	shouldSwitchDB := len(ddl.Database) > 0 && ddl.Type != model.ActionCreateSchema
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -134,7 +136,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *DDL) error {
 	}
 
 	if shouldSwitchDB {
-		_, err = tx.ExecContext(ctx, "USE "+quoteName(ddl.Database)+";")
+		_, err = tx.ExecContext(ctx, "USE "+util.QuoteName(ddl.Database)+";")
 		if err != nil {
 			tx.Rollback()
 			return err
@@ -154,18 +156,18 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *DDL) error {
 	return nil
 }
 
-func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*DML) error {
+func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*txn.DML) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 
 	for _, dml := range dmls {
-		var fPrepare func(*DML) (string, []interface{}, error)
+		var fPrepare func(*txn.DML) (string, []interface{}, error)
 		switch dml.Tp {
-		case InsertDMLType, UpdateDMLType:
+		case txn.InsertDMLType, txn.UpdateDMLType:
 			fPrepare = s.prepareReplace
-		case DeleteDMLType:
+		case txn.DeleteDMLType:
 			fPrepare = s.prepareDelete
 		default:
 			return fmt.Errorf("invalid dml type: %v", dml.Tp)
@@ -189,8 +191,8 @@ func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*DML) error {
 	return nil
 }
 
-func (s *mysqlSink) formatDMLs(dmls []*DML) ([]*DML, error) {
-	result := make([]*DML, 0, len(dmls))
+func (s *mysqlSink) formatDMLs(dmls []*txn.DML) ([]*txn.DML, error) {
+	result := make([]*txn.DML, 0, len(dmls))
 	for _, dml := range dmls {
 		tableInfo, ok := s.getTableDefinition(dml.Database, dml.Table)
 		if !ok {
@@ -215,16 +217,16 @@ func (s *mysqlSink) getTableDefinition(schema, table string) (*model.TableInfo, 
 	return tableInfo, ok
 }
 
-func (s *mysqlSink) prepareReplace(dml *DML) (string, []interface{}, error) {
+func (s *mysqlSink) prepareReplace(dml *txn.DML) (string, []interface{}, error) {
 	info, err := s.tblInspector.Get(dml.Database, dml.Table)
 	if err != nil {
 		return "", nil, err
 	}
 	var builder strings.Builder
-	cols := "(" + buildColumnList(info.columns) + ")"
-	tblName := quoteSchema(dml.Database, dml.Table)
+	cols := "(" + util.BuildColumnList(info.columns) + ")"
+	tblName := util.QuoteSchema(dml.Database, dml.Table)
 	builder.WriteString("REPLACE INTO " + tblName + cols + " VALUES ")
-	builder.WriteString("(" + holderString(len(info.columns)) + ");")
+	builder.WriteString("(" + util.HolderString(len(info.columns)) + ");")
 
 	args := make([]interface{}, 0, len(info.columns))
 	for _, name := range info.columns {
@@ -238,7 +240,7 @@ func (s *mysqlSink) prepareReplace(dml *DML) (string, []interface{}, error) {
 	return builder.String(), args, nil
 }
 
-func (s *mysqlSink) prepareDelete(dml *DML) (string, []interface{}, error) {
+func (s *mysqlSink) prepareDelete(dml *txn.DML) (string, []interface{}, error) {
 	info, err := s.tblInspector.Get(dml.Database, dml.Table)
 	if err != nil {
 		return "", nil, err
@@ -254,9 +256,9 @@ func (s *mysqlSink) prepareDelete(dml *DML) (string, []interface{}, error) {
 			builder.WriteString(" AND ")
 		}
 		if wargs[i].IsNull() {
-			builder.WriteString(quoteName(colNames[i]) + " IS NULL")
+			builder.WriteString(util.QuoteName(colNames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(quoteName(colNames[i]) + " = ?")
+			builder.WriteString(util.QuoteName(colNames[i]) + " = ?")
 			args = append(args, wargs[i].GetValue())
 		}
 	}
