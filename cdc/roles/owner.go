@@ -186,11 +186,18 @@ func (o *ownerImpl) calcResolvedTS() error {
 			continue
 		}
 		minResolvedTS := o.targetTS
+
+		// calc the min of all resolvedTS in captures
 		for _, pStatus := range cfInfo.processorInfos {
 			if minResolvedTS > pStatus.ResolvedTS {
 				minResolvedTS = pStatus.ResolvedTS
 			}
 		}
+
+		// if minResolvedTS is greater than ddlResolvedTS,
+		// it means that ddlJobHistory in memory is not intact,
+		// there are some ddl jobs which finishedTS is smaller than minResolvedTS we don't know.
+		// so we need to call `pullDDLJob`, update the ddlJobHistory and ddlResolvedTS.
 		if minResolvedTS > o.ddlResolvedTS {
 			if err := o.pullDDLJob(); err != nil {
 				return errors.Trace(err)
@@ -199,6 +206,9 @@ func (o *ownerImpl) calcResolvedTS() error {
 				minResolvedTS = o.ddlResolvedTS
 			}
 		}
+
+		// if minResolvedTS is greater than the finishedTS of ddl job which is not executed,
+		// we need to execute this ddl job
 		if len(o.ddlJobHistory) > cfInfo.ddlCurrentIndex &&
 			minResolvedTS > o.ddlJobHistory[cfInfo.ddlCurrentIndex].BinlogInfo.FinishedTS {
 			minResolvedTS = o.ddlJobHistory[cfInfo.ddlCurrentIndex].BinlogInfo.FinishedTS
@@ -216,11 +226,15 @@ waitCheckpointTSLoop:
 			break
 		}
 		todoDDLJob := o.ddlJobHistory[cfInfo.ddlCurrentIndex]
+
+		// Check if all the checkpointTs of capture are achieving global resolvedTS(which is equal to todoDDLJob.FinishedTS)
 		for _, pInfo := range cfInfo.processorInfos {
 			if pInfo.CheckPointTS != todoDDLJob.BinlogInfo.FinishedTS {
 				continue waitCheckpointTSLoop
 			}
 		}
+
+		// Execute DDL Job asynchronously
 		cfInfo.status = ChangeFeedExecDDL
 		go func() {
 			err := o.ExecDDL(todoDDLJob)
@@ -238,6 +252,7 @@ handleFinishedDDLLoop:
 			if !exist {
 				return errors.NotFoundf("the changeFeedStatus of ChangeFeed(%s)", ddlExecRes.changeFeedID)
 			}
+			// If DDL executing failed, pause the changefeed and print log
 			if ddlExecRes.err != nil {
 				cfInfo.status = ChangeFeedDDLExecuteFailed
 				log.Error("Execute DDL failed",
