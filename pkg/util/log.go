@@ -63,7 +63,6 @@ func InitLogger(cfg *Config) error {
 		Level: cfg.Level,
 		File: log.FileLogConfig{
 			Filename:   cfg.File,
-			LogRotate:  true,
 			MaxSize:    cfg.FileMaxSize,
 			MaxDays:    cfg.FileMaxDays,
 			MaxBackups: cfg.FileMaxBackups,

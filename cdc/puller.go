@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/util"
@@ -89,6 +90,15 @@ func (p *Puller) Run(ctx context.Context) error {
 			case e := <-eventCh:
 				if e.Val != nil {
 					val := e.Val
+
+					// if a region with kv range [a, z)
+					// and we only want the get [b, c) from this region,
+					// tikv will return all key events in the region although we specified [b, c) int the request.
+					// we can make tikv only return the events about the keys in the specified range.
+					if !util.KeyInSpans(val.Key, p.spans) {
+						log.Warn("key not in spans range")
+						continue
+					}
 
 					kv := &kv.RawKVEntry{
 						OpType: val.OpType,

@@ -27,11 +27,18 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
+	cobra.OnInitialize(func() {
+		err := initLog()
+		if err != nil {
+			fmt.Printf("fail to init log: %v", err)
+			os.Exit(1)
+		}
+	})
 	rootCmd.PersistentFlags().StringVar(&logFile, "log-file", "cdc.log", "log file path")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "debug", "log level (etc: debug|info|warn|error)")
 }
 
-func Execute() {
+func initLog() error {
 	// Init log.
 	err := util.InitLogger(&util.Config{
 		File:  logFile,
@@ -43,6 +50,10 @@ func Execute() {
 	}
 	log.Info("init log", zap.String("file", logFile), zap.String("level", logLevel))
 
+	return nil
+}
+
+func Execute() {
 	// Run root cmd.
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

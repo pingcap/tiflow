@@ -274,24 +274,35 @@ func (c *CDCClient) partialRegionFeed(
 			return err
 		}
 
-		maxTS, serr := c.singleEventFeed(ctx, regionInfo.span, regionInfo.ts, regionInfo.meta, eventCh)
+		maxTS, err := c.singleEventFeed(ctx, regionInfo.span, regionInfo.ts, regionInfo.meta, eventCh)
 
 		if maxTS > ts {
 			ts = maxTS
 		}
 
-		if serr != nil {
+		if err != nil {
 			log.Info("EventFeed disconnected",
 				zap.Reflect("span", regionInfo.span),
 				zap.Uint64("checkpoint", ts))
 
-			return backoff.Permanent(serr)
-			// TODO
-			// retry for some err type, divideAndSendEventFeedToRegions for region merge/split
-			// switch t := errors.Cause(serr).(type) {
-			// default:
-			// 	return backoff.Permanent(serr)
-			// }
+			switch eerr := errors.Cause(err).(type) {
+			case *eventError:
+				if eerr.GetNotLeader() != nil {
+					regionInfo.meta = nil
+					return err
+				} else if eerr.GetEpochNotMatch() != nil {
+					regionInfo.meta = nil
+					return err
+				} else if eerr.GetRegionNotFound() != nil {
+					regionInfo.meta = nil
+					return err
+				} else {
+					log.Warn("receive empty or unknown error msg", zap.Stringer("error", eerr))
+					return errors.Annotate(err, "receive empty or unknow error msg")
+				}
+			default:
+				return backoff.Permanent(err)
+			}
 		}
 
 		return nil
@@ -473,18 +484,33 @@ func (c *CDCClient) singleEventFeed(
 				case *cdcpb.Event_Admin_:
 					log.Info("receive admin event", zap.Stringer("event", event))
 				case *cdcpb.Event_Error_:
-					// x.Error
-					// TODO a empty message send by tikv now
-					// should add some field about what error happen
-					log.Warn("receive error msg", zap.Stringer("event", event))
-				case *cdcpb.Event_HearbeatTs:
-					sorter.pushTSItem(sortItem{
-						start:  x.HearbeatTs,
-						commit: x.HearbeatTs,
-						tp:     cdcpb.Event_ROLLBACK,
-					})
+					return uint64(req.CheckpointTs), errors.Trace(&eventError{Event_Error: x.Error})
+				case *cdcpb.Event_ResolvedTs:
+					// emit a checkpoint
+					revent := &RegionFeedEvent{
+						Checkpoint: &RegionnFeedCheckpoint{
+							Span:       span,
+							ResolvedTS: x.ResolvedTs,
+						},
+					}
+
+					select {
+					case eventCh <- revent:
+					case <-ctx.Done():
+						return uint64(req.CheckpointTs), errors.Trace(ctx.Err())
+					}
 				}
 			}
 		}
 	}
+}
+
+// eventError wrap cdcpb.Event_Error to implements error interface.
+type eventError struct {
+	*cdcpb.Event_Error
+}
+
+// Error implement error interface.
+func (e *eventError) Error() string {
+	return e.Event_Error.String()
 }

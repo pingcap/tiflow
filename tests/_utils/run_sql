@@ -1,0 +1,8 @@
+#!/bin/sh
+
+set -eu
+
+OUT_DIR=/tmp/tidb_cdc_test
+
+echo "[$(date)] Executing SQL: $1" > "$OUT_DIR/sql_res.$TEST_NAME.txt"
+mysql -uroot -h127.0.0.1 -P4000 --default-character-set utf8 -E -e "$1" > "$OUT_DIR/sql_res.$TEST_NAME.txt"

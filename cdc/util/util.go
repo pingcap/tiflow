@@ -49,6 +49,27 @@ func GetTableSpan(tableID int64) Span {
 	}
 }
 
+// KeyInSpans check if k in the range of spans.
+func KeyInSpans(k []byte, spans []Span) bool {
+	for _, span := range spans {
+		if KeyInSpan(k, span) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// KeyInSpan check if k in the span range.
+func KeyInSpan(k []byte, span Span) bool {
+	if StartCompare(k, span.Start) >= 0 &&
+		EndCompare(k, span.End) < 0 {
+		return true
+	}
+
+	return false
+}
+
 // Nil means Negative infinity
 // The result will be 0 if lhs==rhs, -1 if lhs < rhs, and +1 if lhs > rhs
 func StartCompare(lhs []byte, rhs []byte) int {
