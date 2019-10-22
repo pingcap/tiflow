@@ -230,39 +230,3 @@ func (c *SubChangeFeed) writeToSink(context context.Context, rawTxn RawTxn) erro
 	log.Info("Output Txn", zap.Reflect("Txn", txn))
 	return nil
 }
-
-// kvsToRows gets changed kvs from a closure and converts them into sql rows.
-// The returned closure is not threadsafe.
-func kvsToRows(
-	detail ChangeFeedDetail,
-	inputFn func(context.Context) (BufferEntry, error),
-) func(context.Context) (*emitEntry, error) {
-	panic("todo")
-}
-
-// emitEntries connects to a sink, receives rows from a closure, and repeatedly
-// emits them to the sink. It returns a closure that may be repeatedly called to
-// advance the changefeed and which returns span-level resolved timestamp
-// updates. The returned closure is not threadsafe.
-func emitEntries(
-	detail ChangeFeedDetail,
-	watchedSpans []util.Span,
-	encoder Encoder,
-	sink Sink,
-	inputFn func(context.Context) (*emitEntry, error),
-) func(context.Context) ([]ResolvedSpan, error) {
-	panic("todo")
-}
-
-// emitResolvedTimestamp emits a changefeed-level resolved timestamp
-func emitResolvedTimestamp(
-	ctx context.Context, encoder Encoder, sink Sink, resolved uint64,
-) error {
-	if err := sink.EmitResolvedTimestamp(ctx, encoder, resolved); err != nil {
-		return err
-	}
-
-	log.Info("resolved", zap.Uint64("timestamp", resolved))
-
-	return nil
-}
