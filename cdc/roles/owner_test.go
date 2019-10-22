@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 )
@@ -216,16 +217,16 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 
 		dmlExpectIndex: -1,
 		expectResolvedTS: []uint64{
-			3, 3, 3,
-			7, 7, 7,
-			11, 11, 11,
-			89, 89, 89,
+			3, 3,
+			7, 7,
+			11, 11,
+			89, 89,
 			100},
 		expectStatus: []ChangeFeedStatus{
-			ChangeFeedWaitToExecDDL, ChangeFeedExecDDL, ChangeFeedSyncDML,
-			ChangeFeedWaitToExecDDL, ChangeFeedExecDDL, ChangeFeedSyncDML,
-			ChangeFeedWaitToExecDDL, ChangeFeedExecDDL, ChangeFeedSyncDML,
-			ChangeFeedWaitToExecDDL, ChangeFeedExecDDL, ChangeFeedSyncDML,
+			ChangeFeedWaitToExecDDL, ChangeFeedExecDDL,
+			ChangeFeedWaitToExecDDL, ChangeFeedExecDDL,
+			ChangeFeedWaitToExecDDL, ChangeFeedExecDDL,
+			ChangeFeedWaitToExecDDL, ChangeFeedExecDDL,
 			ChangeFeedSyncDML},
 
 		cancel: cancel,
@@ -235,13 +236,12 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	owner := &ownerImpl{
 		changeFeedInfos: changeFeedInfos,
 		targetTS:        100,
-		finishedDDLJob:  make(chan ddlExecResult),
 
 		ddlHandler: handler,
 		cfRWriter:  handler,
 	}
 	s.owner = owner
 	err := owner.Run(ctx, 50*time.Millisecond)
-	c.Assert(err.Error(), check.Equals, "context canceled")
+	c.Assert(errors.Cause(err), check.DeepEquals, context.Canceled)
 
 }

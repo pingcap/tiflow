@@ -147,10 +147,9 @@ type ownerImpl struct {
 	ddlHandler OwnerDDLHandler
 	cfRWriter  ChangeFeedInfoRWriter
 
-	ddlResolvedTS  uint64
-	targetTS       uint64
-	ddlJobHistory  []*model.Job
-	finishedDDLJob chan ddlExecResult
+	ddlResolvedTS uint64
+	targetTS      uint64
+	ddlJobHistory []*model.Job
 
 	l sync.RWMutex
 }
@@ -255,7 +254,7 @@ func (o *ownerImpl) handleDDL(ctx context.Context) error {
 waitCheckpointTSLoop:
 	for changeFeedID, cfInfo := range o.changeFeedInfos {
 		if cfInfo.status != ChangeFeedWaitToExecDDL {
-			break
+			continue waitCheckpointTSLoop
 		}
 		todoDDLJob := o.ddlJobHistory[cfInfo.ddlCurrentIndex]
 
@@ -270,39 +269,25 @@ waitCheckpointTSLoop:
 		cfInfo.status = ChangeFeedExecDDL
 		go func() {
 			err := o.ddlHandler.ExecDDL(todoDDLJob)
-			o.finishedDDLJob <- ddlExecResult{changeFeedID, todoDDLJob, err}
-		}()
-	}
-handleFinishedDDLLoop:
-	for {
-		select {
-		case ddlExecRes, ok := <-o.finishedDDLJob:
-			if !ok {
-				break handleFinishedDDLLoop
-			}
-			cfInfo, exist := o.changeFeedInfos[ddlExecRes.changeFeedID]
-			if !exist {
-				return errors.NotFoundf("the changeFeedStatus of ChangeFeed(%s)", ddlExecRes.changeFeedID)
-			}
+			o.l.Lock()
+			defer o.l.Unlock()
 			// If DDL executing failed, pause the changefeed and print log
-			if ddlExecRes.err != nil {
+			if err != nil {
 				cfInfo.status = ChangeFeedDDLExecuteFailed
 				log.Error("Execute DDL failed",
-					zap.String("ChangeFeedID", ddlExecRes.changeFeedID),
-					zap.Error(ddlExecRes.err),
-					zap.Reflect("ddlJob", ddlExecRes.job))
-				continue handleFinishedDDLLoop
+					zap.String("ChangeFeedID", changeFeedID),
+					zap.Error(err),
+					zap.Reflect("ddlJob", todoDDLJob))
+				return
 			}
 			if cfInfo.status != ChangeFeedExecDDL {
 				log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
-					zap.String("ChangeFeedID", ddlExecRes.changeFeedID),
+					zap.String("ChangeFeedID", changeFeedID),
 					zap.String("ChangeFeedState", cfInfo.status.String()))
 			}
 			cfInfo.ddlCurrentIndex += 1
 			cfInfo.status = ChangeFeedSyncDML
-		default:
-			break handleFinishedDDLLoop
-		}
+		}()
 	}
 	return nil
 }
