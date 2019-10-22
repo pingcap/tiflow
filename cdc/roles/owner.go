@@ -98,14 +98,22 @@ type ddlExecResult struct {
 	err          error
 }
 
+type OwnerDDLHandler interface {
+	PullDDL() (resolvedTS uint64, jobs []*model.Job, err error)
+	ExecDDL(*model.Job) error
+}
+
+type ChangeFeedInfoRWriter interface {
+	Read(ctx context.Context) (map[ChangeFeedID]ProcessorsInfos, error)
+	Write(ctx context.Context, infos map[ChangeFeedID]*ChangeFeedInfo) error
+}
+
 // TODO edit sub change feed
 type ownerImpl struct {
 	changeFeedInfos map[ChangeFeedID]*ChangeFeedInfo
 
-	ddlPullFunc          func() (uint64, []*model.Job, error)
-	execDDLFunc          func(*model.Job) error
-	readChangeFeedInfos  func(context.Context) (map[ChangeFeedID]ProcessorsInfos, error)
-	writeChangeFeedInfos func(context.Context, map[ChangeFeedID]*ChangeFeedInfo) error
+	OwnerDDLHandler
+	ChangeFeedInfoRWriter
 
 	ddlResolvedTS  uint64
 	targetTS       uint64
@@ -116,7 +124,7 @@ type ownerImpl struct {
 }
 
 func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
-	infos, err := o.readChangeFeedInfos(ctx)
+	infos, err := o.ChangeFeedInfoRWriter.Read(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -131,11 +139,11 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 }
 
 func (o *ownerImpl) flushChangeFeedInfos(ctx context.Context) error {
-	return errors.Trace(o.writeChangeFeedInfos(ctx, o.changeFeedInfos))
+	return errors.Trace(o.ChangeFeedInfoRWriter.Write(ctx, o.changeFeedInfos))
 }
 
 func (o *ownerImpl) pullDDLJob() error {
-	ddlResolvedTS, ddlJobs, err := o.ddlPullFunc()
+	ddlResolvedTS, ddlJobs, err := o.PullDDL()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -215,7 +223,7 @@ waitCheckpointTSLoop:
 		}
 		cfInfo.status = ChangeFeedExecDDL
 		go func() {
-			err := o.execDDLFunc(todoDDLJob)
+			err := o.ExecDDL(todoDDLJob)
 			o.finishedDDLJob <- ddlExecResult{changeFeedID, todoDDLJob, err}
 		}()
 	}
