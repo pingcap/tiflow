@@ -271,7 +271,7 @@ func (m *Mounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, tab
 	if !exist {
 		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableId)
 	}
-	tableName = &schema.TableName{database, table}
+	tableName = &schema.TableName{Schema: database, Table: table}
 
 	pkColOffset := -1
 	for i, col := range tableInfo.Columns {
