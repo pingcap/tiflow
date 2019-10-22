@@ -27,7 +27,6 @@ type Sink interface {
 	Emit(ctx context.Context, txn Txn) error
 	EmitResolvedTimestamp(
 		ctx context.Context,
-		encoder Encoder,
 		resolved uint64,
 	) error
 	// TODO: Add GetLastSuccessTs() uint64
@@ -74,7 +73,7 @@ func (s *writerSink) Emit(ctx context.Context, txn Txn) error {
 	return nil
 }
 
-func (s *writerSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved uint64) error {
+func (s *writerSink) EmitResolvedTimestamp(ctx context.Context, resolved uint64) error {
 	fmt.Fprintf(s, "resolved: %d", resolved)
 	return nil
 }

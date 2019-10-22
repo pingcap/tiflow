@@ -95,7 +95,7 @@ func filterBySchemaAndTable(txn *Txn) {
 	}
 }
 
-func (s *mysqlSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved uint64) error {
+func (s *mysqlSink) EmitResolvedTimestamp(ctx context.Context, resolved uint64) error {
 	return nil
 }
 
