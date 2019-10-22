@@ -181,7 +181,7 @@ type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
-func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.Holder) {
+func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.Schema) {
 	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
 	var jobs []*model.Job
@@ -198,7 +198,7 @@ func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.H
 		}
 	}
 	c.Assert(len(jobs), check.Equals, len(sqls))
-	schema, err := schema.NewSchemaHolder(jobs, false)
+	schema, err := schema.NewSchema(jobs, false)
 	c.Assert(err, check.IsNil)
 	err = schema.HandlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
 	c.Assert(err, check.IsNil)
