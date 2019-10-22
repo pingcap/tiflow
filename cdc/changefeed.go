@@ -74,7 +74,8 @@ type SubChangeFeed struct {
 	pdEndpoints []string
 	pdCli       pd.Client
 	detail      ChangeFeedDetail
-	watchs      []util.Span
+
+	ddlPuller  *Puller
 
 	schema  *schema.Schema
 	mounter *txn.Mounter
@@ -132,7 +133,7 @@ func (c *SubChangeFeed) Start(ctx context.Context, result chan<- error) {
 		Start: []byte{'m'},
 		End:   []byte{'m' + 1},
 	}
-	ddlPuller := c.startOnSpan(ctx, ddlSpan, errCh)
+	c.ddlPuller = c.startOnSpan(ctx, ddlSpan, errCh)
 
 	// TODO: Set up a way to notify the pullers of new resolved ts
 	var lastTS uint64
@@ -148,7 +149,7 @@ func (c *SubChangeFeed) Start(ctx context.Context, result chan<- error) {
 			result <- e
 			return
 		case <-time.After(10 * time.Millisecond):
-			ts := c.GetResolvedTs(ddlPuller)
+			ts := c.GetResolvedTs(c.ddlPuller)
 			// NOTE: prevent too much noisy log now, refine it later
 			if ts != lastTS {
 				log.Info("Min ResolvedTs", zap.Uint64("ts", ts))
