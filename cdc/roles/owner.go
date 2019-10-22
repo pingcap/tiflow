@@ -290,8 +290,8 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 }
 
 func (o *ownerImpl) run(ctx context.Context) error {
-	//o.l.Lock()
-	//defer o.l.Unlock()
+	o.l.Lock()
+	defer o.l.Unlock()
 	err := o.loadChangeFeedInfos(ctx)
 	if err != nil {
 		return errors.Trace(err)
