@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package schema
 
 import (
 	"encoding/json"
@@ -26,9 +26,9 @@ import (
 const implicitColName = "_tidb_rowid"
 const implicitColID = -1
 
-// Schema stores the source TiDB all schema infomations
+// Picker stores the source TiDB all schema infomations
 // schema infomations could be changed by drainer init and ddls appear
-type Schema struct {
+type Picker struct {
 	tableIDToName  map[int64]TableName
 	tableNameToId  map[TableName]int64
 	schemaNameToID map[string]int64
@@ -48,15 +48,15 @@ type Schema struct {
 	currentVersion      int64
 }
 
-// TableName specify a Schema name and Table name
+// TableName specify a Picker name and Table name
 type TableName struct {
 	Schema string `toml:"db-name" json:"db-name"`
 	Table  string `toml:"tbl-name" json:"tbl-name"`
 }
 
-// NewSchema returns the Schema object
-func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
-	s := &Schema{
+// NewSchemaPicker returns the Picker object
+func NewSchemaPicker(jobs []*model.Job, hasImplicitCol bool) (*Picker, error) {
+	s := &Picker{
 		hasImplicitCol:      hasImplicitCol,
 		version2SchemaTable: make(map[int64]TableName),
 		truncateTableID:     make(map[int64]struct{}),
@@ -72,7 +72,7 @@ func NewSchema(jobs []*model.Job, hasImplicitCol bool) (*Schema, error) {
 	return s, nil
 }
 
-func (s *Schema) String() string {
+func (s *Picker) String() string {
 	mp := map[string]interface{}{
 		"tableIDToName":  s.tableIDToName,
 		"tableNameToId":  s.tableNameToId,
@@ -89,12 +89,12 @@ func (s *Schema) String() string {
 }
 
 // SchemaMetaVersion returns the current schemaversion in drainer
-func (s *Schema) SchemaMetaVersion() int64 {
+func (s *Picker) SchemaMetaVersion() int64 {
 	return s.schemaMetaVersion
 }
 
 // SchemaAndTableName returns the tableName by table id
-func (s *Schema) SchemaAndTableName(id int64) (string, string, bool) {
+func (s *Picker) SchemaAndTableName(id int64) (string, string, bool) {
 	tn, ok := s.tableIDToName[id]
 	if !ok {
 		return "", "", false
@@ -104,7 +104,7 @@ func (s *Schema) SchemaAndTableName(id int64) (string, string, bool) {
 }
 
 // GetTableIDByName returns the tableId by table schemaName and tableName
-func (s *Schema) GetTableIDByName(schemaName string, tableName string) (int64, bool) {
+func (s *Picker) GetTableIDByName(schemaName string, tableName string) (int64, bool) {
 	id, ok := s.tableNameToId[TableName{
 		Schema: schemaName,
 		Table:  tableName,
@@ -113,13 +113,13 @@ func (s *Schema) GetTableIDByName(schemaName string, tableName string) (int64, b
 }
 
 // SchemaByID returns the DBInfo by schema id
-func (s *Schema) SchemaByID(id int64) (val *model.DBInfo, ok bool) {
+func (s *Picker) SchemaByID(id int64) (val *model.DBInfo, ok bool) {
 	val, ok = s.schemas[id]
 	return
 }
 
 // SchemaByTableID returns the schema ID by table ID
-func (s *Schema) SchemaByTableID(tableID int64) (*model.DBInfo, bool) {
+func (s *Picker) SchemaByTableID(tableID int64) (*model.DBInfo, bool) {
 	tn, ok := s.tableIDToName[tableID]
 	if !ok {
 		return nil, false
@@ -132,13 +132,13 @@ func (s *Schema) SchemaByTableID(tableID int64) (*model.DBInfo, bool) {
 }
 
 // TableByID returns the TableInfo by table id
-func (s *Schema) TableByID(id int64) (val *model.TableInfo, ok bool) {
+func (s *Picker) TableByID(id int64) (val *model.TableInfo, ok bool) {
 	val, ok = s.tables[id]
 	return
 }
 
 // DropSchema deletes the given DBInfo
-func (s *Schema) DropSchema(id int64) (string, error) {
+func (s *Picker) DropSchema(id int64) (string, error) {
 	schema, ok := s.schemas[id]
 	if !ok {
 		return "", errors.NotFoundf("schema %d", id)
@@ -158,7 +158,7 @@ func (s *Schema) DropSchema(id int64) (string, error) {
 }
 
 // CreateSchema adds new DBInfo
-func (s *Schema) CreateSchema(db *model.DBInfo) error {
+func (s *Picker) CreateSchema(db *model.DBInfo) error {
 	if _, ok := s.schemas[db.ID]; ok {
 		return errors.AlreadyExistsf("schema %s(%d)", db.Name, db.ID)
 	}
@@ -171,7 +171,7 @@ func (s *Schema) CreateSchema(db *model.DBInfo) error {
 }
 
 // DropTable deletes the given TableInfo
-func (s *Schema) DropTable(id int64) (string, error) {
+func (s *Picker) DropTable(id int64) (string, error) {
 	table, ok := s.tables[id]
 	if !ok {
 		return "", errors.NotFoundf("table %d", id)
@@ -191,7 +191,7 @@ func (s *Schema) DropTable(id int64) (string, error) {
 }
 
 // CreateTable creates new TableInfo
-func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error {
+func (s *Picker) CreateTable(schema *model.DBInfo, table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if ok {
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
@@ -211,7 +211,7 @@ func (s *Schema) CreateTable(schema *model.DBInfo, table *model.TableInfo) error
 }
 
 // ReplaceTable replace the table by new tableInfo
-func (s *Schema) ReplaceTable(table *model.TableInfo) error {
+func (s *Picker) ReplaceTable(table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if !ok {
 		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
@@ -226,7 +226,7 @@ func (s *Schema) ReplaceTable(table *model.TableInfo) error {
 	return nil
 }
 
-func (s *Schema) removeTable(tableID int64) error {
+func (s *Picker) removeTable(tableID int64) error {
 	schema, ok := s.SchemaByTableID(tableID)
 	if !ok {
 		return errors.NotFoundf("table(%d)'s schema", tableID)
@@ -242,13 +242,13 @@ func (s *Schema) removeTable(tableID int64) error {
 	return nil
 }
 
-func (s *Schema) addJob(job *model.Job) {
+func (s *Picker) addJob(job *model.Job) {
 	if len(s.jobs) == 0 || s.jobs[len(s.jobs)-1].BinlogInfo.SchemaVersion < job.BinlogInfo.SchemaVersion {
 		s.jobs = append(s.jobs, job)
 	}
 }
 
-func (s *Schema) handlePreviousDDLJobIfNeed(commitTs uint64) error {
+func (s *Picker) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 	var i int
 	var job *model.Job
 	// TODO: Make sure jobs are sorted by BinlogInfo.FinishedTS
@@ -265,7 +265,7 @@ func (s *Schema) handlePreviousDDLJobIfNeed(commitTs uint64) error {
 			continue
 		}
 
-		_, _, _, err := s.handleDDL(job)
+		_, _, _, err := s.HandleDDL(job)
 		if err != nil {
 			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", job, s)
 		}
@@ -276,12 +276,12 @@ func (s *Schema) handlePreviousDDLJobIfNeed(commitTs uint64) error {
 	return nil
 }
 
-// handleDDL has four return values,
+// HandleDDL has four return values,
 // the first value[string]: the schema name
 // the second value[string]: the table name
 // the third value[string]: the sql that is corresponding to the job
 // the fourth value[error]: the handleDDL execution's err
-func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string, sql string, err error) {
+func (s *Picker) HandleDDL(job *model.Job) (schemaName string, tableName string, sql string, err error) {
 	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
 
 	if skipJob(job) {
@@ -450,12 +450,12 @@ func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string,
 }
 
 // IsTruncateTableID returns true if the table id have been truncated by truncate table DDL
-func (s *Schema) IsTruncateTableID(id int64) bool {
+func (s *Picker) IsTruncateTableID(id int64) bool {
 	_, ok := s.truncateTableID[id]
 	return ok
 }
 
-func (s *Schema) getSchemaTableAndDelete(version int64) (string, string, error) {
+func (s *Picker) getSchemaTableAndDelete(version int64) (string, string, error) {
 	schemaTable, ok := s.version2SchemaTable[version]
 	if !ok {
 		return "", "", errors.NotFoundf("version: %d", version)

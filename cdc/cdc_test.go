@@ -13,6 +13,7 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/mock"
 	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/pkg/schema"
 )
 
 type CDCSuite struct {
@@ -40,7 +41,7 @@ func NewCDCSuite() *CDCSuite {
 		panic(err.Error())
 	}
 	// create a schema
-	schema, err := NewSchema(jobs, false)
+	schema, err := schema.NewSchemaPicker(jobs, false)
 	if err != nil {
 		panic(err.Error())
 	}

@@ -25,6 +25,7 @@ import (
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/pkg/schema"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -73,7 +74,7 @@ type SubChangeFeed struct {
 	detail      ChangeFeedDetail
 	watchs      []util.Span
 
-	schema  *Schema
+	schema  *schema.Picker
 	mounter *TxnMounter
 
 	// sink is the Sink to write rows to.
@@ -96,7 +97,7 @@ func NewSubChangeFeed(pdEndpoints []string, detail ChangeFeedDetail) (*SubChange
 	if err != nil {
 		return nil, err
 	}
-	schema, err := NewSchema(jobs, false)
+	schema, err := schema.NewSchemaPicker(jobs, false)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

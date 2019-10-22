@@ -11,10 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package schema
 
 import (
 	"fmt"
+	"testing"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -23,7 +24,10 @@ import (
 	"github.com/pingcap/tidb/types"
 )
 
+// TODO run the test
 type schemaSuite struct{}
+
+func Test(t *testing.T) { TestingT(t) }
 
 var _ = Suite(&schemaSuite{})
 
@@ -59,9 +63,9 @@ func (t *schemaSuite) TestSchema(c *C) {
 	jobs = append(jobs, &model.Job{ID: 5, State: model.JobStateRollbackDone})
 
 	// reconstruct the local schema
-	schema, err := NewSchema(jobs, false)
+	schema, err := NewSchemaPicker(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(123)
+	err = schema.HandlePreviousDDLJobIfNeed(123)
 	c.Assert(err, IsNil)
 
 	// test drop schema
@@ -76,18 +80,18 @@ func (t *schemaSuite) TestSchema(c *C) {
 			Query:      "drop database test",
 		},
 	)
-	schema, err = NewSchema(jobs, false)
+	schema, err = NewSchemaPicker(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(124)
+	err = schema.HandlePreviousDDLJobIfNeed(124)
 	c.Assert(err, IsNil)
 
 	// test create schema already exist error
 	jobs = jobs[:0]
 	jobs = append(jobs, job)
 	jobs = append(jobs, jobDup)
-	schema, err = NewSchema(jobs, false)
+	schema, err = NewSchemaPicker(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(125)
+	err = schema.HandlePreviousDDLJobIfNeed(125)
 	c.Log(err)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
 
@@ -104,9 +108,9 @@ func (t *schemaSuite) TestSchema(c *C) {
 			Query:      "drop database test",
 		},
 	)
-	schema, err = NewSchema(jobs, false)
+	schema, err = NewSchemaPicker(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(123)
+	err = schema.HandlePreviousDDLJobIfNeed(123)
 	c.Assert(errors.IsNotFound(err), IsTrue)
 }
 
@@ -202,9 +206,9 @@ func (*schemaSuite) TestTable(c *C) {
 	jobs = append(jobs, job)
 
 	// reconstruct the local schema
-	schema, err := NewSchema(jobs, false)
+	schema, err := NewSchemaPicker(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(126)
+	err = schema.HandlePreviousDDLJobIfNeed(126)
 	c.Assert(err, IsNil)
 
 	// check the historical db that constructed above whether in the schema list of local schema
@@ -233,9 +237,9 @@ func (*schemaSuite) TestTable(c *C) {
 			Query:      "truncate table " + tbName.O,
 		},
 	)
-	schema1, err := NewSchema(jobs, false)
+	schema1, err := NewSchemaPicker(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema1.handlePreviousDDLJobIfNeed(127)
+	err = schema1.HandlePreviousDDLJobIfNeed(127)
 	c.Assert(err, IsNil)
 	_, ok = schema1.TableByID(tblInfo1.ID)
 	c.Assert(ok, IsTrue)
@@ -255,9 +259,9 @@ func (*schemaSuite) TestTable(c *C) {
 			Query:      "drop table " + tbName.O,
 		},
 	)
-	schema2, err := NewSchema(jobs, false)
+	schema2, err := NewSchemaPicker(jobs, false)
 	c.Assert(err, IsNil)
-	err = schema2.handlePreviousDDLJobIfNeed(128)
+	err = schema2.HandlePreviousDDLJobIfNeed(128)
 	c.Assert(err, IsNil)
 
 	_, ok = schema2.TableByID(tblInfo.ID)
@@ -273,7 +277,7 @@ func (*schemaSuite) TestTable(c *C) {
 }
 
 func (t *schemaSuite) TestHandleDDL(c *C) {
-	schema, err := NewSchema(nil, false)
+	schema, err := NewSchemaPicker(nil, false)
 	c.Assert(err, IsNil)
 	dbName := model.NewCIStr("Test")
 	colName := model.NewCIStr("A")
@@ -282,13 +286,13 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 
 	// check rollback done job
 	job := &model.Job{ID: 1, State: model.JobStateRollbackDone}
-	_, _, sql, err := schema.handleDDL(job)
+	_, _, sql, err := schema.HandleDDL(job)
 	c.Assert(err, IsNil)
 	c.Assert(sql, Equals, "")
 
 	// check job.Query is empty
 	job = &model.Job{ID: 1, State: model.JobStateDone}
-	_, _, sql, err = schema.handleDDL(job)
+	_, _, sql, err = schema.HandleDDL(job)
 	c.Assert(sql, Equals, "")
 	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
 
@@ -396,8 +400,8 @@ func (t *schemaSuite) TestAddImplicitColumn(c *C) {
 	c.Assert(tbl.Indices[0].Primary, IsTrue)
 }
 
-func testDoDDLAndCheck(c *C, schema *Schema, job *model.Job, isErr bool, sql string, expectedSchema string, expectedTable string) {
-	schemaName, tableName, resSQL, err := schema.handleDDL(job)
+func testDoDDLAndCheck(c *C, schema *Picker, job *model.Job, isErr bool, sql string, expectedSchema string, expectedTable string) {
+	schemaName, tableName, resSQL, err := schema.HandleDDL(job)
 	c.Logf("handle: %s", job.Query)
 	c.Logf("result: %s, %s, %s, %v", schemaName, tableName, resSQL, err)
 	c.Assert(err != nil, Equals, isErr)

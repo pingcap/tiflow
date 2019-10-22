@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/pkg/schema"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
@@ -181,7 +182,7 @@ type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
-func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *Schema) {
+func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.Picker) {
 	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
 	var jobs []*model.Job
@@ -198,9 +199,9 @@ func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *Schema) 
 		}
 	}
 	c.Assert(len(jobs), check.Equals, len(sqls))
-	schema, err := NewSchema(jobs, false)
+	schema, err := schema.NewSchemaPicker(jobs, false)
 	c.Assert(err, check.IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
+	err = schema.HandlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
 	c.Assert(err, check.IsNil)
 	return puller, schema
 }

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/pkg/schema"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -28,13 +29,6 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
-)
-
-type sqlType int
-
-const (
-	sqlDML sqlType = iota
-	sqlDDL sqlType = iota
 )
 
 // RawTxn represents a complete collection of entries that belong to the same transaction
@@ -141,11 +135,11 @@ func collectRawTxns(
 }
 
 type TxnMounter struct {
-	schema *Schema
+	schema *schema.Picker
 	loc    *time.Location
 }
 
-func NewTxnMounter(schema *Schema, loc *time.Location) (*TxnMounter, error) {
+func NewTxnMounter(schema *schema.Picker, loc *time.Location) (*TxnMounter, error) {
 	m := &TxnMounter{schema: schema, loc: loc}
 	return m, nil
 }
@@ -155,7 +149,7 @@ func (m *TxnMounter) Mount(rawTxn RawTxn) (*Txn, error) {
 		Ts: rawTxn.ts,
 	}
 	var replaceDMLs, deleteDMLs []*DML
-	err := m.schema.handlePreviousDDLJobIfNeed(rawTxn.ts)
+	err := m.schema.HandlePreviousDDLJobIfNeed(rawTxn.ts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -268,7 +262,7 @@ func (m *TxnMounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
 	}, nil
 }
 
-func (m *TxnMounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, tableName *TableName, handleColName string, err error) {
+func (m *TxnMounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, tableName *schema.TableName, handleColName string, err error) {
 	tableInfo, exist := m.schema.TableByID(tableId)
 	if !exist {
 		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableId)
@@ -278,7 +272,7 @@ func (m *TxnMounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, 
 	if !exist {
 		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableId)
 	}
-	tableName = &TableName{database, table}
+	tableName = &schema.TableName{database, table}
 
 	pkColOffset := -1
 	for i, col := range tableInfo.Columns {
@@ -308,7 +302,7 @@ func (m *TxnMounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, err
 		getTableName = true
 	}
 
-	_, _, _, err = m.schema.handleDDL(jobHistory.Job)
+	_, _, _, err = m.schema.HandleDDL(jobHistory.Job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

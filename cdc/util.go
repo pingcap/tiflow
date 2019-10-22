@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb-cdc/pkg/schema"
 
 	"github.com/pingcap/errors"
 )
@@ -81,7 +82,7 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 	return
 }
 
-func getTableInfoFromSchema(schema *Schema, schemaName, tableName string) (info *tableInfo, err error) {
+func getTableInfoFromSchema(schema *schema.Picker, schemaName, tableName string) (info *tableInfo, err error) {
 	info = new(tableInfo)
 	tableId, exist := schema.GetTableIDByName(schemaName, tableName)
 	if !exist {
@@ -141,6 +142,7 @@ func quoteSchema(schema string, table string) string {
 }
 
 func quoteName(name string) string {
+
 	return "`" + escapeName(name) + "`"
 }
 
