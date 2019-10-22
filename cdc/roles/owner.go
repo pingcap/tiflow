@@ -15,6 +15,7 @@ package roles
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -27,6 +28,24 @@ import (
 type ProcessTableInfo struct {
 	ID      uint64 `json:"id"`
 	StartTS uint64 `json:"start-ts"`
+}
+
+// SubChangeFeedInfo records the process information of a capture
+type SubChangeFeedInfo struct {
+	// The maximum event CommitTS that has been synchronized. This is updated by corresponding processor.
+	CheckPointTS uint64 `json:"checkpoint-ts"`
+	// The event that satisfies CommitTS <= ResolvedTS can be synchronized. This is updated by corresponding processor.
+	ResolvedTS uint64 `json:"resolved-ts"`
+	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
+	TableInfos []*ProcessTableInfo `json:"table-infos"`
+}
+
+func (scfi *SubChangeFeedInfo) String() string {
+	data, err := json.Marshal(scfi)
+	if err != nil {
+		log.Error("fail to marshal ChangeFeedDetail to json", zap.Error(err))
+	}
+	return string(data)
 }
 
 // Owner is used to process etcd information for a capture with owner role
@@ -71,6 +90,7 @@ func (s ChangeFeedStatus) String() string {
 	return ""
 }
 
+// ChangeFeedInfo stores information about a ChangeFeed
 type ChangeFeedInfo struct {
 	status       ChangeFeedStatus
 	resolvedTS   uint64
@@ -80,14 +100,17 @@ type ChangeFeedInfo struct {
 	ddlCurrentIndex int
 }
 
+// Status gets the status of the changefeed info.
 func (c *ChangeFeedInfo) Status() ChangeFeedStatus {
 	return c.status
 }
 
+// ResolvedTS gets the resolvedTS for the changefeed info.
 func (c *ChangeFeedInfo) ResolvedTS() uint64 {
 	return c.resolvedTS
 }
 
+// CheckpointTS gets the checkpointTS for the changefeed info.
 func (c *ChangeFeedInfo) CheckpointTS() uint64 {
 	return c.checkpointTS
 }
@@ -98,13 +121,22 @@ type ddlExecResult struct {
 	err          error
 }
 
+// OwnerDDLHandler defines the ddl handler for Owner
+// which can pull ddl jobs and execute ddl jobs
 type OwnerDDLHandler interface {
+
+	// PullDDL pulls the ddl jobs and returns resolvedTS of DDL Puller and job list.
 	PullDDL() (resolvedTS uint64, jobs []*model.Job, err error)
+
+	// ExecDDL executes the ddl job
 	ExecDDL(*model.Job) error
 }
 
+// ChangeFeedInfoRWriter defines the Reader and Writer for ChangeFeedInfo
 type ChangeFeedInfoRWriter interface {
+	// Read the changefeed info from storage such as etcd.
 	Read(ctx context.Context) (map[ChangeFeedID]ProcessorsInfos, error)
+	// Write the changefeed info to storage such as etcd.
 	Write(ctx context.Context, infos map[ChangeFeedID]*ChangeFeedInfo) error
 }
 
