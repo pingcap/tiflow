@@ -45,7 +45,7 @@ func NewCDCSuite() *CDCSuite {
 		panic(err.Error())
 	}
 	// create a picker
-	picker, err := schema.NewSchemaPicker(jobs, false)
+	picker, err := schema.NewSchemaHolder(jobs, false)
 	if err != nil {
 		panic(err.Error())
 	}

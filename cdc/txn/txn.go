@@ -134,11 +134,11 @@ func CollectRawTxns(
 }
 
 type Mounter struct {
-	schema *schema.Picker
+	schema *schema.Holder
 	loc    *time.Location
 }
 
-func NewTxnMounter(schema *schema.Picker, loc *time.Location) (*Mounter, error) {
+func NewTxnMounter(schema *schema.Holder, loc *time.Location) (*Mounter, error) {
 	m := &Mounter{schema: schema, loc: loc}
 	return m, nil
 }

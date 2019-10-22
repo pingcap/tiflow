@@ -63,7 +63,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 	jobs = append(jobs, &model.Job{ID: 5, State: model.JobStateRollbackDone})
 
 	// reconstruct the local schema
-	schema, err := NewSchemaPicker(jobs, false)
+	schema, err := NewSchemaHolder(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema.HandlePreviousDDLJobIfNeed(123)
 	c.Assert(err, IsNil)
@@ -80,7 +80,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 			Query:      "drop database test",
 		},
 	)
-	schema, err = NewSchemaPicker(jobs, false)
+	schema, err = NewSchemaHolder(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema.HandlePreviousDDLJobIfNeed(124)
 	c.Assert(err, IsNil)
@@ -89,7 +89,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 	jobs = jobs[:0]
 	jobs = append(jobs, job)
 	jobs = append(jobs, jobDup)
-	schema, err = NewSchemaPicker(jobs, false)
+	schema, err = NewSchemaHolder(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema.HandlePreviousDDLJobIfNeed(125)
 	c.Log(err)
@@ -108,7 +108,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 			Query:      "drop database test",
 		},
 	)
-	schema, err = NewSchemaPicker(jobs, false)
+	schema, err = NewSchemaHolder(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema.HandlePreviousDDLJobIfNeed(123)
 	c.Assert(errors.IsNotFound(err), IsTrue)
@@ -206,7 +206,7 @@ func (*schemaSuite) TestTable(c *C) {
 	jobs = append(jobs, job)
 
 	// reconstruct the local schema
-	schema, err := NewSchemaPicker(jobs, false)
+	schema, err := NewSchemaHolder(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema.HandlePreviousDDLJobIfNeed(126)
 	c.Assert(err, IsNil)
@@ -237,7 +237,7 @@ func (*schemaSuite) TestTable(c *C) {
 			Query:      "truncate table " + tbName.O,
 		},
 	)
-	schema1, err := NewSchemaPicker(jobs, false)
+	schema1, err := NewSchemaHolder(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema1.HandlePreviousDDLJobIfNeed(127)
 	c.Assert(err, IsNil)
@@ -259,7 +259,7 @@ func (*schemaSuite) TestTable(c *C) {
 			Query:      "drop table " + tbName.O,
 		},
 	)
-	schema2, err := NewSchemaPicker(jobs, false)
+	schema2, err := NewSchemaHolder(jobs, false)
 	c.Assert(err, IsNil)
 	err = schema2.HandlePreviousDDLJobIfNeed(128)
 	c.Assert(err, IsNil)
@@ -277,7 +277,7 @@ func (*schemaSuite) TestTable(c *C) {
 }
 
 func (t *schemaSuite) TestHandleDDL(c *C) {
-	schema, err := NewSchemaPicker(nil, false)
+	schema, err := NewSchemaHolder(nil, false)
 	c.Assert(err, IsNil)
 	dbName := model.NewCIStr("Test")
 	colName := model.NewCIStr("A")
@@ -400,7 +400,7 @@ func (t *schemaSuite) TestAddImplicitColumn(c *C) {
 	c.Assert(tbl.Indices[0].Primary, IsTrue)
 }
 
-func testDoDDLAndCheck(c *C, schema *Picker, job *model.Job, isErr bool, sql string, expectedSchema string, expectedTable string) {
+func testDoDDLAndCheck(c *C, schema *Holder, job *model.Job, isErr bool, sql string, expectedSchema string, expectedTable string) {
 	schemaName, tableName, resSQL, err := schema.HandleDDL(job)
 	c.Logf("handle: %s", job.Query)
 	c.Logf("result: %s, %s, %s, %v", schemaName, tableName, resSQL, err)

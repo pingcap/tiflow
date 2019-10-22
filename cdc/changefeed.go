@@ -76,7 +76,7 @@ type SubChangeFeed struct {
 	detail      ChangeFeedDetail
 	watchs      []util.Span
 
-	schema  *schema.Picker
+	schema  *schema.Holder
 	mounter *txn.Mounter
 
 	// sink is the Sink to write rows to.
@@ -99,7 +99,7 @@ func NewSubChangeFeed(pdEndpoints []string, detail ChangeFeedDetail) (*SubChange
 	if err != nil {
 		return nil, err
 	}
-	schema, err := schema.NewSchemaPicker(jobs, false)
+	schema, err := schema.NewSchemaHolder(jobs, false)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

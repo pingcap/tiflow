@@ -73,7 +73,7 @@ func NewMySQLSink(
 	return &sink, nil
 }
 
-func NewMySQLSinkUsingSchema(db *sql.DB, picker *schema.Picker) Sink {
+func NewMySQLSinkUsingSchema(db *sql.DB, picker *schema.Holder) Sink {
 	inspector := &cachedInspector{
 		db:    db,
 		cache: make(map[string]*tableInfo),
