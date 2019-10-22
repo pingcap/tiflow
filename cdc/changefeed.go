@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/cdc/sink"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb-cdc/pkg/schema"
 	"github.com/pingcap/tidb-cdc/pkg/util"
@@ -80,7 +81,7 @@ type SubChangeFeed struct {
 
 	// sink is the Sink to write rows to.
 	// Resolved timestamps are never written by Capture
-	sink Sink
+	sink sink.Sink
 }
 
 func NewSubChangeFeed(pdEndpoints []string, detail ChangeFeedDetail) (*SubChangeFeed, error) {
@@ -103,7 +104,7 @@ func NewSubChangeFeed(pdEndpoints []string, detail ChangeFeedDetail) (*SubChange
 		return nil, errors.Trace(err)
 	}
 
-	sink, err := getSink(detail.SinkURI, schema, detail.Opts)
+	sink, err := sink.NewMySQLSink(detail.SinkURI, schema, detail.Opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

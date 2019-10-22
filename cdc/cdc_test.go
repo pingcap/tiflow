@@ -2,7 +2,6 @@ package cdc
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"math"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/mock"
+	"github.com/pingcap/tidb-cdc/cdc/sink"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb-cdc/pkg/schema"
 	"github.com/pingcap/tidb-cdc/pkg/util"
@@ -25,7 +25,7 @@ type CDCSuite struct {
 	puller   *mock.MockTiDB
 	mock     sqlmock.Sqlmock
 	mounter  *txn.Mounter
-	sink     Sink
+	sink     sink.Sink
 }
 
 var _ = Suite(NewCDCSuite())
@@ -44,8 +44,8 @@ func NewCDCSuite() *CDCSuite {
 	if err != nil {
 		panic(err.Error())
 	}
-	// create a schema
-	schema, err := schema.NewSchemaPicker(jobs, false)
+	// create a picker
+	picker, err := schema.NewSchemaPicker(jobs, false)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -56,22 +56,9 @@ func NewCDCSuite() *CDCSuite {
 	}
 	cdcSuite.mock = mock
 
-	inspector := &cachedInspector{
-		db:    db,
-		cache: make(map[string]*tableInfo),
-		tableGetter: func(_ *sql.DB, schemaName string, tableName string) (*tableInfo, error) {
-			info, err := getTableInfoFromSchema(schema, schemaName, tableName)
-			return info, err
-		},
-	}
-	sink := &mysqlSink{
-		db:           db,
-		infoGetter:   schema,
-		tblInspector: inspector,
-	}
-	cdcSuite.sink = sink
+	cdcSuite.sink = sink.NewMySQLSinkUsingSchema(db, picker)
 
-	mounter, err := txn.NewTxnMounter(schema, time.Local)
+	mounter, err := txn.NewTxnMounter(picker, time.Local)
 	if err != nil {
 		panic(err.Error())
 	}

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package sink
 
 import (
 	"context"
@@ -23,6 +23,7 @@ import (
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/tidb-cdc/pkg/schema"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
@@ -58,6 +59,41 @@ type mysqlSink struct {
 }
 
 var _ Sink = &mysqlSink{}
+
+func NewMySQLSink(
+	sinkURI string,
+	infoGetter TableInfoGetter,
+	opts map[string]string,
+) (Sink, error) {
+	// TODO
+	db, err := sql.Open("mysql", sinkURI)
+	if err != nil {
+		return nil, err
+	}
+	cachedInspector := newCachedInspector(db)
+	sink := mysqlSink{
+		db:           db,
+		infoGetter:   infoGetter,
+		tblInspector: cachedInspector,
+	}
+	return &sink, nil
+}
+
+func NewMySQLSinkUsingSchema(db *sql.DB, picker *schema.Picker) Sink {
+	inspector := &cachedInspector{
+		db:    db,
+		cache: make(map[string]*tableInfo),
+		tableGetter: func(_ *sql.DB, schemaName string, tableName string) (*tableInfo, error) {
+			info, err := getTableInfoFromSchema(picker, schemaName, tableName)
+			return info, err
+		},
+	}
+	return &mysqlSink{
+		db:           db,
+		infoGetter:   picker,
+		tblInspector: inspector,
+	}
+}
 
 func (s *mysqlSink) Emit(ctx context.Context, txn txn.Txn) error {
 	filterBySchemaAndTable(&txn)

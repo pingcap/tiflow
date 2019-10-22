@@ -11,14 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package sink
 
 import (
 	"regexp"
+	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/check"
 )
+
+func TestSuite(t *testing.T) { check.TestingT(t) }
 
 type UtilSuite struct{}
 

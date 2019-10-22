@@ -11,11 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package sink
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"io"
 
@@ -42,25 +41,6 @@ type Sink interface {
 type TableInfoGetter interface {
 	TableByID(id int64) (info *model.TableInfo, ok bool)
 	GetTableIDByName(schema, table string) (int64, bool)
-}
-
-func getSink(
-	sinkURI string,
-	infoGetter TableInfoGetter,
-	opts map[string]string,
-) (Sink, error) {
-	// TODO
-	db, err := sql.Open("mysql", sinkURI)
-	if err != nil {
-		return nil, err
-	}
-	cachedInspector := newCachedInspector(db)
-	sink := mysqlSink{
-		db:           db,
-		infoGetter:   infoGetter,
-		tblInspector: cachedInspector,
-	}
-	return &sink, nil
 }
 
 type writerSink struct {
