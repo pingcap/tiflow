@@ -189,38 +189,6 @@ func (c *CDCClient) getStore(
 	return
 }
 
-func (c *CDCClient) scanRegions(
-	ctx context.Context, key []byte, limit int,
-) (regions []*metapb.Region, peers []*metapb.Peer, err error) {
-	// Will return "unknown method ScanRegions"
-	// Look like pd don't impl this ScanRegions really yet
-	// return c.pd.ScanRegions(ctx, start, limit)
-
-	for {
-		var region *metapb.Region
-		var peer *metapb.Peer
-		region, peer, err = c.pd.GetRegion(ctx, key)
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-
-		regions = append(regions, region)
-		peers = append(peers, peer)
-
-		if len(regions) == limit {
-			return
-		}
-
-		key = region.EndKey
-
-		// No more region
-		if key == nil {
-			return
-		}
-	}
-
-}
-
 // EventFeed divides a EventFeed request on range boundaries and establishes
 // a EventFeed to each of the individual region. It streams back result on the
 // provided channel.
@@ -321,7 +289,7 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 	nextSpan := span
 
 	for {
-		regions, _, err := c.scanRegions(ctx, nextSpan.Start, limit)
+		regions, _, err := c.pd.ScanRegions(ctx, nextSpan.Start, nextSpan.End, limit)
 		if err != nil {
 			return errors.Trace(err)
 		}
