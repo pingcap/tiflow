@@ -38,7 +38,7 @@ type Owner interface {
 	GetCheckpointTS(changeFeedID string) (uint64, error)
 
 	// Run a goroutine to handle Owner logic
-	Run(context.Context, time.Duration) error
+	Run(ctx context.Context, tickTime time.Duration) error
 }
 
 type CaptureID = string
