@@ -28,16 +28,3 @@ func HolderString(n int) string {
 	}
 	return builder.String()
 }
-
-func BuildColumnList(names []string) string {
-	var b strings.Builder
-	for i, name := range names {
-		if i > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString(QuoteName(name))
-
-	}
-
-	return b.String()
-}

@@ -253,7 +253,7 @@ func (s *mysqlSink) prepareReplace(dml *txn.DML) (string, []interface{}, error) 
 		return "", nil, err
 	}
 	var builder strings.Builder
-	cols := "(" + util.BuildColumnList(info.columns) + ")"
+	cols := "(" + buildColumnList(info.columns) + ")"
 	tblName := util.QuoteSchema(dml.Database, dml.Table)
 	builder.WriteString("REPLACE INTO " + tblName + cols + " VALUES ")
 	builder.WriteString("(" + util.HolderString(len(info.columns)) + ");")
@@ -428,4 +428,17 @@ func getSQLErrCode(err error) (terror.ErrCode, bool) {
 	}
 
 	return terror.ErrCode(mysqlErr.Number), true
+}
+
+func buildColumnList(names []string) string {
+	var b strings.Builder
+	for i, name := range names {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(util.QuoteName(name))
+
+	}
+
+	return b.String()
 }

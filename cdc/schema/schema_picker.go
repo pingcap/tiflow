@@ -48,7 +48,7 @@ type Picker struct {
 	currentVersion      int64
 }
 
-// TableName specify a Picker name and Table name
+// TableName specify a Schema name and Table name
 type TableName struct {
 	Schema string `toml:"db-name" json:"db-name"`
 	Table  string `toml:"tbl-name" json:"tbl-name"`
