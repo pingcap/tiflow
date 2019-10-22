@@ -1,4 +1,4 @@
-module github.com/pingcap/tidb-binlog/_tools
+module github.com/pingcap/tidb-cdc/_tools
 
 go 1.13
 
