@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/types"
 )
 
-// TODO run the test
 type schemaSuite struct{}
 
 func Test(t *testing.T) { TestingT(t) }
