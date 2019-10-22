@@ -289,16 +289,16 @@ func (c *CDCClient) partialRegionFeed(
 			case *eventError:
 				if eerr.GetNotLeader() != nil {
 					regionInfo.meta = nil
-					return eerr
+					return err
 				} else if eerr.GetEpochNotMatch() != nil {
 					regionInfo.meta = nil
-					return eerr
+					return err
 				} else if eerr.GetRegionNotFound() != nil {
 					regionInfo.meta = nil
-					return eerr
+					return err
 				} else {
 					log.Warn("receive empty or unknown error msg", zap.Stringer("error", eerr))
-					return errors.Annotate(eerr, "receive empty or unknow error msg")
+					return errors.Annotate(err, "receive empty or unknow error msg")
 				}
 			default:
 				return backoff.Permanent(err)
@@ -484,7 +484,7 @@ func (c *CDCClient) singleEventFeed(
 				case *cdcpb.Event_Admin_:
 					log.Info("receive admin event", zap.Stringer("event", event))
 				case *cdcpb.Event_Error_:
-					return uint64(req.CheckpointTs), &eventError{Event_Error: x.Error}
+					return uint64(req.CheckpointTs), errors.Trace(&eventError{Event_Error: x.Error})
 				case *cdcpb.Event_ResolvedTs:
 					// emit a checkpoint
 					revent := &RegionFeedEvent{
