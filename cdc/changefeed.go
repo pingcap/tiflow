@@ -24,25 +24,14 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/cdc/schema"
+	"github.com/pingcap/tidb-cdc/cdc/sink"
+	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
-
-type formatType string
-
-const (
-	optFormat = "format"
-
-	optFormatJSON formatType = "json"
-)
-
-type emitEntry struct {
-	row *encodeRow
-
-	resolved *ResolvedSpan
-}
 
 // ChangeFeedDetail describe the detail of a ChangeFeed
 type ChangeFeedDetail struct {
@@ -87,12 +76,12 @@ type SubChangeFeed struct {
 	detail      ChangeFeedDetail
 	watchs      []util.Span
 
-	schema  *Schema
-	mounter *TxnMounter
+	schema  *schema.Schema
+	mounter *txn.Mounter
 
 	// sink is the Sink to write rows to.
 	// Resolved timestamps are never written by Capture
-	sink Sink
+	sink sink.Sink
 }
 
 func NewSubChangeFeed(pdEndpoints []string, detail ChangeFeedDetail) (*SubChangeFeed, error) {
@@ -110,18 +99,18 @@ func NewSubChangeFeed(pdEndpoints []string, detail ChangeFeedDetail) (*SubChange
 	if err != nil {
 		return nil, err
 	}
-	schema, err := NewSchema(jobs, false)
+	schema, err := schema.NewSchema(jobs, false)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	sink, err := getSink(detail.SinkURI, schema, detail.Opts)
+	sink, err := sink.NewMySQLSink(detail.SinkURI, schema, detail.Opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	// TODO: get time zone from config
-	mounter, err := NewTxnMounter(schema, time.UTC)
+	mounter, err := txn.NewTxnMounter(schema, time.UTC)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -217,8 +206,8 @@ func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span, errCh c
 	return puller
 }
 
-func (c *SubChangeFeed) writeToSink(context context.Context, rawTxn RawTxn) error {
-	log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.entries))
+func (c *SubChangeFeed) writeToSink(context context.Context, rawTxn txn.RawTxn) error {
+	log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.Entries))
 	txn, err := c.mounter.Mount(rawTxn)
 	if err != nil {
 		return errors.Trace(err)

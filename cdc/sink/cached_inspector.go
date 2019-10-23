@@ -11,9 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package sink
 
-import "database/sql"
+import (
+	"database/sql"
+
+	"github.com/pingcap/tidb-cdc/pkg/util"
+)
 
 type cachedInspector struct {
 	db          *sql.DB
@@ -32,7 +36,7 @@ func newCachedInspector(db *sql.DB) *cachedInspector {
 var _ tableInspector = &cachedInspector{}
 
 func (i *cachedInspector) Get(schema, table string) (*tableInfo, error) {
-	key := quoteSchema(schema, table)
+	key := util.QuoteSchema(schema, table)
 	t, ok := i.cache[key]
 	if !ok {
 		var err error
@@ -46,6 +50,6 @@ func (i *cachedInspector) Get(schema, table string) (*tableInfo, error) {
 }
 
 func (i *cachedInspector) Refresh(schema, table string) {
-	key := quoteSchema(schema, table)
+	key := util.QuoteSchema(schema, table)
 	delete(i.cache, key)
 }

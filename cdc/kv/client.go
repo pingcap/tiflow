@@ -12,7 +12,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -34,6 +34,26 @@ const (
 )
 
 type RawKVEntry = RegionFeedValue
+
+type KvOrResolved struct {
+	KV       *RawKVEntry
+	Resolved *ResolvedSpan
+}
+
+type ResolvedSpan struct {
+	Span      util.Span
+	Timestamp uint64
+}
+
+func (e *KvOrResolved) GetValue() interface{} {
+	if e.KV != nil {
+		return e.KV
+	} else if e.Resolved != nil {
+		return e.Resolved
+	} else {
+		return nil
+	}
+}
 
 // RegionFeedEvent from the kv layer.
 // Only one of the event will be setted.

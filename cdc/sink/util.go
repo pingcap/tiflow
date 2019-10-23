@@ -11,15 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package sink
 
 import (
 	gosql "database/sql"
-	"fmt"
 	"strings"
 
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb-cdc/cdc/schema"
+	"github.com/pingcap/tidb-cdc/cdc/txn"
 
 	"github.com/pingcap/errors"
 )
@@ -81,7 +82,7 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 	return
 }
 
-func getTableInfoFromSchema(schema *Schema, schemaName, tableName string) (info *tableInfo, err error) {
+func getTableInfoFromSchema(schema *schema.Schema, schemaName, tableName string) (info *tableInfo, err error) {
 	info = new(tableInfo)
 	tableId, exist := schema.GetTableIDByName(schemaName, tableName)
 	if !exist {
@@ -134,43 +135,6 @@ func getTableInfoFromSchema(schema *Schema, schemaName, tableName string) (info 
 		}
 	}
 	return
-}
-
-func quoteSchema(schema string, table string) string {
-	return fmt.Sprintf("`%s`.`%s`", escapeName(schema), escapeName(table))
-}
-
-func quoteName(name string) string {
-	return "`" + escapeName(name) + "`"
-}
-
-func escapeName(name string) string {
-	return strings.Replace(name, "`", "``", -1)
-}
-
-func holderString(n int) string {
-	var builder strings.Builder
-	builder.Grow((n-1)*2 + 1)
-	for i := 0; i < n; i++ {
-		if i > 0 {
-			builder.WriteString(",")
-		}
-		builder.WriteString("?")
-	}
-	return builder.String()
-}
-
-func buildColumnList(names []string) string {
-	var b strings.Builder
-	for i, name := range names {
-		if i > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString(quoteName(name))
-
-	}
-
-	return b.String()
 }
 
 // getColsOfTbl returns a slice of the names of all columns,
@@ -257,7 +221,7 @@ func getUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexInfo, er
 	return
 }
 
-func isTableChanged(ddl *DDL) bool {
+func isTableChanged(ddl *txn.DDL) bool {
 	switch ddl.Type {
 	case model.ActionDropTable, model.ActionDropSchema, model.ActionTruncateTable, model.ActionCreateSchema:
 		return false

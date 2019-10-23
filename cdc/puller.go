@@ -20,7 +20,8 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -31,7 +32,7 @@ type Puller struct {
 	spans        []util.Span
 	detail       ChangeFeedDetail
 	buf          Buffer
-	tsTracker    resolveTsTracker
+	tsTracker    txn.ResolveTsTracker
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTS
@@ -125,6 +126,6 @@ func (p *Puller) GetResolvedTs() uint64 {
 	return p.tsTracker.Frontier()
 }
 
-func (p *Puller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, RawTxn) error) error {
-	return collectRawTxns(ctx, p.buf.Get, outputFn, p.tsTracker)
+func (p *Puller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, txn.RawTxn) error) error {
+	return txn.CollectRawTxns(ctx, p.buf.Get, outputFn, p.tsTracker)
 }

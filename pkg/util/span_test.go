@@ -1,14 +1,10 @@
 package util
 
 import (
-	"testing"
-
 	"github.com/pingcap/tidb/tablecodec"
 
 	"github.com/pingcap/check"
 )
-
-func Test(t *testing.T) { check.TestingT(t) }
 
 type spanSuite struct{}
 

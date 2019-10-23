@@ -11,23 +11,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package sink
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"io"
 
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb-cdc/cdc/txn"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
-	Emit(ctx context.Context, txn Txn) error
+	Emit(ctx context.Context, t txn.Txn) error
 	EmitResolvedTimestamp(
 		ctx context.Context,
-		encoder Encoder,
 		resolved uint64,
 	) error
 	// TODO: Add GetLastSuccessTs() uint64
@@ -44,37 +43,18 @@ type TableInfoGetter interface {
 	GetTableIDByName(schema, table string) (int64, bool)
 }
 
-func getSink(
-	sinkURI string,
-	infoGetter TableInfoGetter,
-	opts map[string]string,
-) (Sink, error) {
-	// TODO
-	db, err := sql.Open("mysql", sinkURI)
-	if err != nil {
-		return nil, err
-	}
-	cachedInspector := newCachedInspector(db)
-	sink := mysqlSink{
-		db:           db,
-		infoGetter:   infoGetter,
-		tblInspector: cachedInspector,
-	}
-	return &sink, nil
-}
-
 type writerSink struct {
 	io.Writer
 }
 
 var _ Sink = &writerSink{}
 
-func (s *writerSink) Emit(ctx context.Context, txn Txn) error {
-	fmt.Fprintf(s, "commit ts: %d", txn.Ts)
+func (s *writerSink) Emit(ctx context.Context, t txn.Txn) error {
+	fmt.Fprintf(s, "commit ts: %d", t.Ts)
 	return nil
 }
 
-func (s *writerSink) EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved uint64) error {
+func (s *writerSink) EmitResolvedTimestamp(ctx context.Context, resolved uint64) error {
 	fmt.Fprintf(s, "resolved: %d", resolved)
 	return nil
 }

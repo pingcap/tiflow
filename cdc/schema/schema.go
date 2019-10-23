@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package schema
 
 import (
 	"encoding/json"
@@ -248,7 +248,7 @@ func (s *Schema) addJob(job *model.Job) {
 	}
 }
 
-func (s *Schema) handlePreviousDDLJobIfNeed(commitTs uint64) error {
+func (s *Schema) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 	var i int
 	var job *model.Job
 	// TODO: Make sure jobs are sorted by BinlogInfo.FinishedTS
@@ -265,7 +265,7 @@ func (s *Schema) handlePreviousDDLJobIfNeed(commitTs uint64) error {
 			continue
 		}
 
-		_, _, _, err := s.handleDDL(job)
+		_, _, _, err := s.HandleDDL(job)
 		if err != nil {
 			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", job, s)
 		}
@@ -276,12 +276,12 @@ func (s *Schema) handlePreviousDDLJobIfNeed(commitTs uint64) error {
 	return nil
 }
 
-// handleDDL has four return values,
+// HandleDDL has four return values,
 // the first value[string]: the schema name
 // the second value[string]: the table name
 // the third value[string]: the sql that is corresponding to the job
 // the fourth value[error]: the handleDDL execution's err
-func (s *Schema) handleDDL(job *model.Job) (schemaName string, tableName string, sql string, err error) {
+func (s *Schema) HandleDDL(job *model.Job) (schemaName string, tableName string, sql string, err error) {
 	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
 
 	if skipJob(job) {

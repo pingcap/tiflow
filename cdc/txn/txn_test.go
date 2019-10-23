@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package txn
 
 import (
 	"context"
@@ -21,13 +21,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb-cdc/cdc/util"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-cdc/cdc/entry"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/mock"
+	"github.com/pingcap/tidb-cdc/cdc/schema"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -57,12 +57,12 @@ func (t *mockTracker) Frontier() uint64 {
 var _ = check.Suite(&CollectRawTxnsSuite{})
 
 func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
-	var entries []BufferEntry
+	var entries []kv.KvOrResolved
 	var startTs uint64 = 1024
 	var i uint64
 	for i = 0; i < 3; i++ {
 		for j := 0; j < 3; j++ {
-			e := BufferEntry{
+			e := kv.KvOrResolved{
 				KV: &kv.RawKVEntry{
 					OpType: kv.OpTypePut,
 					Key:    []byte(fmt.Sprintf("key-%d-%d", i, j)),
@@ -74,16 +74,16 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	}
 	// Only add resolved entry for the first 2 transaction
 	for i = 0; i < 2; i++ {
-		e := BufferEntry{
-			Resolved: &ResolvedSpan{Timestamp: startTs + i},
+		e := kv.KvOrResolved{
+			Resolved: &kv.ResolvedSpan{Timestamp: startTs + i},
 		}
 		entries = append(entries, e)
 	}
 
 	nRead := 0
-	input := func(ctx context.Context) (BufferEntry, error) {
+	input := func(ctx context.Context) (kv.KvOrResolved, error) {
 		if nRead >= len(entries) {
-			return BufferEntry{}, errors.New("End")
+			return kv.KvOrResolved{}, errors.New("End")
 		}
 		e := entries[nRead]
 		nRead++
@@ -97,24 +97,24 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	}
 
 	ctx := context.Background()
-	err := collectRawTxns(ctx, input, output, &mockTracker{})
+	err := CollectRawTxns(ctx, input, output, &mockTracker{})
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, 2)
-	c.Assert(rawTxns[0].ts, check.Equals, startTs)
-	for i, e := range rawTxns[0].entries {
+	c.Assert(rawTxns[0].TS, check.Equals, startTs)
+	for i, e := range rawTxns[0].Entries {
 		c.Assert(e.Ts, check.Equals, startTs)
 		c.Assert(string(e.Key), check.Equals, fmt.Sprintf("key-0-%d", i))
 	}
-	c.Assert(rawTxns[1].ts, check.Equals, startTs+1)
-	for i, e := range rawTxns[1].entries {
+	c.Assert(rawTxns[1].TS, check.Equals, startTs+1)
+	for i, e := range rawTxns[1].Entries {
 		c.Assert(e.Ts, check.Equals, startTs+1)
 		c.Assert(string(e.Key), check.Equals, fmt.Sprintf("key-1-%d", i))
 	}
 }
 
 func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
-	var entries []BufferEntry
+	var entries []kv.KvOrResolved
 	for _, v := range []struct {
 		key          []byte
 		ts           uint64
@@ -129,13 +129,13 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 		{key: []byte("key2-1"), ts: 2},
 		{ts: 1, isResolvedTs: true},
 	} {
-		var e BufferEntry
+		var e kv.KvOrResolved
 		if v.isResolvedTs {
-			e = BufferEntry{
-				Resolved: &ResolvedSpan{Timestamp: v.ts},
+			e = kv.KvOrResolved{
+				Resolved: &kv.ResolvedSpan{Timestamp: v.ts},
 			}
 		} else {
-			e = BufferEntry{
+			e = kv.KvOrResolved{
 				KV: &kv.RawKVEntry{
 					OpType: kv.OpTypePut,
 					Key:    v.key,
@@ -147,9 +147,9 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 	}
 
 	cursor := 0
-	input := func(ctx context.Context) (BufferEntry, error) {
+	input := func(ctx context.Context) (kv.KvOrResolved, error) {
 		if cursor >= len(entries) {
-			return BufferEntry{}, errors.New("End")
+			return kv.KvOrResolved{}, errors.New("End")
 		}
 		e := entries[cursor]
 		cursor++
@@ -163,25 +163,25 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 	}
 
 	ctx := context.Background()
-	// Set up the tracker so that only the last resolve event forwards the global minimum ts
+	// Set up the tracker so that only the last resolve event forwards the global minimum TS
 	tracker := mockTracker{forwarded: []bool{false, false, true}}
-	err := collectRawTxns(ctx, input, output, &tracker)
+	err := CollectRawTxns(ctx, input, output, &tracker)
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, 1)
 	txn := rawTxns[0]
-	c.Assert(txn.ts, check.Equals, uint64(1))
-	c.Assert(txn.entries, check.HasLen, 3)
-	c.Assert(string(txn.entries[0].Key), check.Equals, "key1-1")
-	c.Assert(string(txn.entries[1].Key), check.Equals, "key1-2")
-	c.Assert(string(txn.entries[2].Key), check.Equals, "key1-3")
+	c.Assert(txn.TS, check.Equals, uint64(1))
+	c.Assert(txn.Entries, check.HasLen, 3)
+	c.Assert(string(txn.Entries[0].Key), check.Equals, "key1-1")
+	c.Assert(string(txn.Entries[1].Key), check.Equals, "key1-2")
+	c.Assert(string(txn.Entries[2].Key), check.Equals, "key1-3")
 }
 
 type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
-func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *Schema) {
+func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.Schema) {
 	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
 	var jobs []*model.Job
@@ -198,9 +198,9 @@ func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *Schema) 
 		}
 	}
 	c.Assert(len(jobs), check.Equals, len(sqls))
-	schema, err := NewSchema(jobs, false)
+	schema, err := schema.NewSchema(jobs, false)
 	c.Assert(err, check.IsNil)
-	err = schema.handlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
+	err = schema.HandlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
 	c.Assert(err, check.IsNil)
 	return puller, schema
 }
@@ -212,8 +212,8 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 
 	rawKV := puller.MustExec(c, "insert into testDB.test1 values('ttt',6)")
 	txn, err := mounter.Mount(RawTxn{
-		ts:      rawKV[0].Ts,
-		entries: rawKV,
+		TS:      rawKV[0].Ts,
+		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
@@ -241,8 +241,8 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 
 	rawKV = puller.MustExec(c, "update testDB.test1 set id = 'vvv' where a = 6")
 	txn, err = mounter.Mount(RawTxn{
-		ts:      rawKV[0].Ts,
-		entries: rawKV,
+		TS:      rawKV[0].Ts,
+		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
@@ -278,8 +278,8 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 
 	rawKV = puller.MustExec(c, "delete from testDB.test1 where a = 6")
 	txn, err = mounter.Mount(RawTxn{
-		ts:      rawKV[0].Ts,
-		entries: rawKV,
+		TS:      rawKV[0].Ts,
+		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
@@ -304,8 +304,8 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 
 	rawKV := puller.MustExec(c, "insert into testDB.test1 values(777,888)")
 	txn, err := mounter.Mount(RawTxn{
-		ts:      rawKV[0].Ts,
-		entries: rawKV,
+		TS:      rawKV[0].Ts,
+		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
@@ -333,8 +333,8 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 
 	rawKV = puller.MustExec(c, "update testDB.test1 set id = 999 where a = 888")
 	txn, err = mounter.Mount(RawTxn{
-		ts:      rawKV[0].Ts,
-		entries: rawKV,
+		TS:      rawKV[0].Ts,
+		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
@@ -370,8 +370,8 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 
 	rawKV = puller.MustExec(c, "delete from testDB.test1 where id = 999")
 	txn, err = mounter.Mount(RawTxn{
-		ts:      rawKV[0].Ts,
-		entries: rawKV,
+		TS:      rawKV[0].Ts,
+		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
@@ -403,8 +403,8 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 	rawKV := puller.MustExec(c, "alter table testDB.test1 add b int null")
 	txn, err := mounter.Mount(RawTxn{
-		ts:      rawKV[0].Ts,
-		entries: rawKV,
+		TS:      rawKV[0].Ts,
+		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	c.Assert(txn, check.DeepEquals, &Txn{
@@ -420,8 +420,8 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 	// test insert null value
 	rawKV = puller.MustExec(c, "insert into testDB.test1(id,a) values('ttt',6)")
 	txn, err = mounter.Mount(RawTxn{
-		ts:      rawKV[0].Ts,
-		entries: rawKV,
+		TS:      rawKV[0].Ts,
+		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
@@ -449,8 +449,8 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 
 	rawKV = puller.MustExec(c, "insert into testDB.test1(id,a,b) values('kkk',6,7)")
 	txn, err = mounter.Mount(RawTxn{
-		ts:      rawKV[0].Ts,
-		entries: rawKV,
+		TS:      rawKV[0].Ts,
+		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{

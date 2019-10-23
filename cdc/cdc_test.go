@@ -2,25 +2,30 @@ package cdc
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"math"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/mock"
-	"github.com/pingcap/tidb-cdc/cdc/util"
+	"github.com/pingcap/tidb-cdc/cdc/schema"
+	"github.com/pingcap/tidb-cdc/cdc/sink"
+	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 )
+
+func TestSuite(t *testing.T) { TestingT(t) }
 
 type CDCSuite struct {
 	database string
 	puller   *mock.MockTiDB
 	mock     sqlmock.Sqlmock
-	mounter  *TxnMounter
-	sink     Sink
+	mounter  *txn.Mounter
+	sink     sink.Sink
 }
 
 var _ = Suite(NewCDCSuite())
@@ -39,8 +44,8 @@ func NewCDCSuite() *CDCSuite {
 	if err != nil {
 		panic(err.Error())
 	}
-	// create a schema
-	schema, err := NewSchema(jobs, false)
+	// create a picker
+	picker, err := schema.NewSchema(jobs, false)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -51,22 +56,9 @@ func NewCDCSuite() *CDCSuite {
 	}
 	cdcSuite.mock = mock
 
-	inspector := &cachedInspector{
-		db:    db,
-		cache: make(map[string]*tableInfo),
-		tableGetter: func(_ *sql.DB, schemaName string, tableName string) (*tableInfo, error) {
-			info, err := getTableInfoFromSchema(schema, schemaName, tableName)
-			return info, err
-		},
-	}
-	sink := &mysqlSink{
-		db:           db,
-		infoGetter:   schema,
-		tblInspector: inspector,
-	}
-	cdcSuite.sink = sink
+	cdcSuite.sink = sink.NewMySQLSinkUsingSchema(db, picker)
 
-	mounter, err := NewTxnMounter(schema, time.Local)
+	mounter, err := txn.NewTxnMounter(picker, time.Local)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -86,7 +78,7 @@ func (s *CDCSuite) RunAndCheckSync(c *C, execute func(func(string, ...interface{
 		rawKVs = append(rawKVs, kvs...)
 	}
 	execute(executeSql)
-	txn, err := s.mounter.Mount(RawTxn{ts: rawKVs[len(rawKVs)-1].Ts, entries: rawKVs})
+	txn, err := s.mounter.Mount(txn.RawTxn{TS: rawKVs[len(rawKVs)-1].Ts, Entries: rawKVs})
 	c.Assert(err, IsNil)
 	err = s.sink.Emit(context.Background(), *txn)
 	c.Assert(err, IsNil)

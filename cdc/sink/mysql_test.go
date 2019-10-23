@@ -11,13 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package sink
 
 import (
 	"context"
 
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb/infoschema"
 
 	"github.com/pingcap/parser/model"
@@ -50,8 +51,8 @@ func (s EmitSuite) TestShouldExecDDL(c *check.C) {
 		tblInspector: dummyInspector{},
 	}
 
-	txn := Txn{
-		DDL: &DDL{
+	t := txn.Txn{
+		DDL: &txn.DDL{
 			Database: "test",
 			Table:    "user",
 			SQL:      "CREATE TABLE user (id INT PRIMARY KEY);",
@@ -60,11 +61,11 @@ func (s EmitSuite) TestShouldExecDDL(c *check.C) {
 
 	mock.ExpectBegin()
 	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec(txn.DDL.SQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(t.DDL.SQL).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	// Execute
-	err = sink.Emit(context.Background(), txn)
+	err = sink.Emit(context.Background(), t)
 
 	// Validate
 	c.Assert(err, check.IsNil)
@@ -82,8 +83,8 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 		tblInspector: dummyInspector{},
 	}
 
-	txn := Txn{
-		DDL: &DDL{
+	t := txn.Txn{
+		DDL: &txn.DDL{
 			Database: "test",
 			Table:    "user",
 			SQL:      "CREATE TABLE user (id INT PRIMARY KEY);",
@@ -95,10 +96,10 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 	ignorable := dmysql.MySQLError{
 		Number: uint16(infoschema.ErrTableExists.Code()),
 	}
-	mock.ExpectExec(txn.DDL.SQL).WillReturnError(&ignorable)
+	mock.ExpectExec(t.DDL.SQL).WillReturnError(&ignorable)
 
 	// Execute
-	err = sink.Emit(context.Background(), txn)
+	err = sink.Emit(context.Background(), t)
 
 	// Validate
 	c.Assert(err, check.IsNil)
@@ -161,12 +162,12 @@ func (s EmitSuite) TestShouldExecReplaceInto(c *check.C) {
 		infoGetter:   &helper,
 	}
 
-	txn := Txn{
-		DMLs: []*DML{
+	t := txn.Txn{
+		DMLs: []*txn.DML{
 			{
 				Database: "test",
 				Table:    "user",
-				Tp:       InsertDMLType,
+				Tp:       txn.InsertDMLType,
 				Values: map[string]dbtypes.Datum{
 					"id":   dbtypes.NewDatum(42),
 					"name": dbtypes.NewDatum("tester1"),
@@ -182,7 +183,7 @@ func (s EmitSuite) TestShouldExecReplaceInto(c *check.C) {
 	mock.ExpectCommit()
 
 	// Execute
-	err = sink.Emit(context.Background(), txn)
+	err = sink.Emit(context.Background(), t)
 
 	// Validate
 	c.Assert(err, check.IsNil)
@@ -202,12 +203,12 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 		infoGetter:   &helper,
 	}
 
-	txn := Txn{
-		DMLs: []*DML{
+	t := txn.Txn{
+		DMLs: []*txn.DML{
 			{
 				Database: "test",
 				Table:    "user",
-				Tp:       DeleteDMLType,
+				Tp:       txn.DeleteDMLType,
 				Values: map[string]dbtypes.Datum{
 					"id":   dbtypes.NewDatum(123),
 					"name": dbtypes.NewDatum("tester1"),
@@ -223,7 +224,7 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 	mock.ExpectCommit()
 
 	// Execute
-	err = sink.Emit(context.Background(), txn)
+	err = sink.Emit(context.Background(), t)
 
 	// Validate
 	c.Assert(err, check.IsNil)
@@ -235,8 +236,8 @@ type FilterSuite struct{}
 var _ = check.Suite(&FilterSuite{})
 
 func (s *FilterSuite) TestFilterDMLs(c *check.C) {
-	txn := Txn{
-		DMLs: []*DML{
+	t := txn.Txn{
+		DMLs: []*txn.DML{
 			{Database: "INFORMATIOn_SCHEmA"},
 			{Database: "test"},
 			{Database: "test_mysql"},
@@ -244,21 +245,21 @@ func (s *FilterSuite) TestFilterDMLs(c *check.C) {
 		},
 		Ts: 213,
 	}
-	filterBySchemaAndTable(&txn)
-	c.Assert(txn.Ts, check.Equals, uint64(213))
-	c.Assert(txn.DDL, check.IsNil)
-	c.Assert(txn.DMLs, check.HasLen, 2)
-	c.Assert(txn.DMLs[0].Database, check.Equals, "test")
-	c.Assert(txn.DMLs[1].Database, check.Equals, "test_mysql")
+	filterBySchemaAndTable(&t)
+	c.Assert(t.Ts, check.Equals, uint64(213))
+	c.Assert(t.DDL, check.IsNil)
+	c.Assert(t.DMLs, check.HasLen, 2)
+	c.Assert(t.DMLs[0].Database, check.Equals, "test")
+	c.Assert(t.DMLs[1].Database, check.Equals, "test_mysql")
 }
 
 func (s *FilterSuite) TestFilterDDL(c *check.C) {
-	txn := Txn{
-		DDL: &DDL{Database: "performance_schema"},
+	t := txn.Txn{
+		DDL: &txn.DDL{Database: "performance_schema"},
 		Ts:  10234,
 	}
-	filterBySchemaAndTable(&txn)
-	c.Assert(txn.Ts, check.Equals, uint64((10234)))
-	c.Assert(txn.DMLs, check.HasLen, 0)
-	c.Assert(txn.DDL, check.IsNil)
+	filterBySchemaAndTable(&t)
+	c.Assert(t.Ts, check.Equals, uint64((10234)))
+	c.Assert(t.DMLs, check.HasLen, 0)
+	c.Assert(t.DDL, check.IsNil)
 }
