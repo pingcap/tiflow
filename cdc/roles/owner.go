@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
@@ -58,6 +59,9 @@ type Owner interface {
 
 	// Run a goroutine to handle Owner logic
 	Run(ctx context.Context, tickTime time.Duration) error
+
+	// IsOwner checks whether it has campaigned as owner
+	IsOwner(ctx context.Context) bool
 }
 
 type CaptureID = string
@@ -152,6 +156,23 @@ type ownerImpl struct {
 	ddlJobHistory []*model.Job
 
 	l sync.RWMutex
+
+	etcdCli  *clientv3.Client
+	manager  Manager
+	retireCh <-chan struct{}
+}
+
+// NewOwnerImpl creates a new ownerImpl instance
+func NewOwnerImpl(targetTS uint64, cli *clientv3.Client, manager Manager) *ownerImpl {
+	owner := &ownerImpl{
+		changeFeedInfos: make(map[ChangeFeedID]*ChangeFeedInfo),
+		ddlJobHistory:   make([]*model.Job, 0),
+		ddlHandler:      NewDDLHandler(),
+		cfRWriter:       NewCfInfoReadWriter(),
+		etcdCli:         cli,
+		manager:         manager,
+	}
+	return owner
 }
 
 func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
@@ -298,6 +319,9 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(tickTime):
+			if !o.IsOwner(ctx) {
+				continue
+			}
 			err := o.run(ctx)
 			if err != nil {
 				return err
@@ -307,9 +331,19 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 }
 
 func (o *ownerImpl) run(ctx context.Context) error {
+	cctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-cctx.Done():
+		case <-o.manager.RetireNotify():
+			cancel()
+		}
+	}()
+
 	o.l.Lock()
 	defer o.l.Unlock()
-	err := o.loadChangeFeedInfos(ctx)
+	err := o.loadChangeFeedInfos(cctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -317,13 +351,17 @@ func (o *ownerImpl) run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = o.handleDDL(ctx)
+	err = o.handleDDL(cctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = o.flushChangeFeedInfos(ctx)
+	err = o.flushChangeFeedInfos(cctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func (o *ownerImpl) IsOwner(_ context.Context) bool {
+	return o.manager.IsOwner()
 }

@@ -76,3 +76,8 @@ func (m *mockManager) CampaignOwner(_ context.Context) error {
 	m.toBeOwner()
 	return nil
 }
+
+// RetireNotify implements Manager.RetireNotify interface.
+func (m *mockManager) RetireNotify() <-chan struct{} {
+	return nil
+}
