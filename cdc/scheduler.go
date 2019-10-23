@@ -237,6 +237,7 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 	}
 
 	cctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	feedErrCh, err := runSubChangeFeed(cctx, w.pdEndpoints, w.detail)
 	if err != nil {
 		errCh <- err
@@ -262,7 +263,6 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 			}
 			// subchangefeed has been removed from this capture, cancel the subchangefeed too
 			if resp.Count == 0 {
-				cancel()
 				return
 			}
 		}

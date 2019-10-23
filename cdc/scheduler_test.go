@@ -235,9 +235,11 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	// delete the changefeed
 	_, err = cli.Delete(context.Background(), key)
 	c.Assert(err, check.IsNil)
-	w.lock.RLock()
-	c.Assert(len(w.details), check.Equals, 0)
-	w.lock.RUnlock()
+	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
+		w.lock.RLock()
+		defer w.lock.RUnlock()
+		return len(w.details) == 0
+	}), check.IsTrue)
 
 	cancel()
 	wg.Wait()
