@@ -24,11 +24,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// Processor is used to process etcd information for a capture with processor role
+// Processor is used to push sync progress and calculate the checkpointTS
 type Processor interface {
-	CreateInputChan(table schema.TableName) chan<- ProcessorEntry
+	// SetInputChan receives a table and listens a channel
+	SetInputChan(table schema.TableName, input <-chan ProcessorEntry)
+	// ResolvedChan returns a channel, which output the resolved transaction or resolvedTS
 	ResolvedChan() <-chan ProcessorEntry
+	// ExecutedChan returns a channel, when a transaction is executed,
+	// you should put the transaction into this channel,
+	// processor will calculate checkpointTS according to this channel
 	ExecutedChan() chan<- ProcessorEntry
+	// Close closes the processor
 	Close()
 }
 
@@ -130,7 +136,9 @@ func (p *processorImpl) checkpointWorker() {
 				log.Info("Checkpoint worker is exited")
 				return
 			}
-			checkpointTS = e.TS
+			if e.Typ == ProcessorEntryResolved {
+				checkpointTS = e.TS
+			}
 		case <-time.After(3 * time.Second):
 			err := p.tsRWriter.WriteCheckpointTS(checkpointTS)
 			if err != nil {
@@ -162,8 +170,7 @@ func (p *processorImpl) globalResolvedWorker() {
 	}
 }
 
-func (p *processorImpl) CreateInputChan(table schema.TableName) chan<- ProcessorEntry {
-	input := make(chan ProcessorEntry)
+func (p *processorImpl) SetInputChan(table schema.TableName, input <-chan ProcessorEntry) {
 	go func() {
 		log.Info("Processor input channel listener is started", zap.Reflect("table", table))
 		p.tableInputerGroup.Add(1)
@@ -194,7 +201,6 @@ func (p *processorImpl) CreateInputChan(table schema.TableName) chan<- Processor
 			}
 		}
 	}()
-	return input
 }
 
 func (p *processorImpl) ResolvedChan() <-chan ProcessorEntry {
@@ -206,5 +212,5 @@ func (p *processorImpl) ExecutedChan() chan<- ProcessorEntry {
 }
 
 func (p *processorImpl) Close() {
-	// TODO close safty
+	// TODO close safety
 }
