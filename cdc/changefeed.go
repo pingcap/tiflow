@@ -16,7 +16,9 @@ package cdc
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -69,12 +71,21 @@ func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(ctx context.Context, client *c
 	return err
 }
 
+type CancellablePuller struct {
+	*Puller
+
+	Cancel context.CancelFunc
+}
+
 // SubChangeFeed is a SubChangeFeed task on capture
 type SubChangeFeed struct {
 	pdEndpoints []string
 	pdCli       pd.Client
 	detail      ChangeFeedDetail
-	watchs      []util.Span
+
+	ddlPuller  *Puller
+	tblLock    sync.RWMutex
+	tblPullers map[int64]CancellablePuller
 
 	schema  *schema.Schema
 	mounter *txn.Mounter
@@ -132,13 +143,7 @@ func (c *SubChangeFeed) Start(ctx context.Context, result chan<- error) {
 		Start: []byte{'m'},
 		End:   []byte{'m' + 1},
 	}
-	ddlPuller := c.startOnSpan(ctx, ddlSpan, errCh)
-
-	tblSpan := util.Span{
-		Start: []byte{'t'},
-		End:   []byte{'t' + 1},
-	}
-	dmlPuller := c.startOnSpan(ctx, tblSpan, errCh)
+	c.ddlPuller = c.startOnSpan(ctx, ddlSpan, errCh)
 
 	// TODO: Set up a way to notify the pullers of new resolved ts
 	var lastTS uint64
@@ -154,7 +159,7 @@ func (c *SubChangeFeed) Start(ctx context.Context, result chan<- error) {
 			result <- e
 			return
 		case <-time.After(10 * time.Millisecond):
-			ts := c.GetResolvedTs(ddlPuller, dmlPuller)
+			ts := c.GetResolvedTs()
 			// NOTE: prevent too much noisy log now, refine it later
 			if ts != lastTS {
 				log.Info("Min ResolvedTs", zap.Uint64("ts", ts))
@@ -164,15 +169,51 @@ func (c *SubChangeFeed) Start(ctx context.Context, result chan<- error) {
 	}
 }
 
-func (c *SubChangeFeed) GetResolvedTs(pullers ...*Puller) uint64 {
-	minResolvedTs := pullers[0].GetResolvedTs()
-	for _, p := range pullers[1:] {
+func (c *SubChangeFeed) GetResolvedTs() uint64 {
+	c.tblLock.RLock()
+	defer c.tblLock.RUnlock()
+	if len(c.tblPullers) == 0 {
+		return 0
+	}
+	var minResolvedTs uint64 = math.MaxUint64
+	for _, p := range c.tblPullers {
 		ts := p.GetResolvedTs()
 		if ts < minResolvedTs {
 			minResolvedTs = ts
 		}
 	}
+	ddlResolvedTs := c.ddlPuller.GetResolvedTs()
+	if ddlResolvedTs < minResolvedTs {
+		minResolvedTs = ddlResolvedTs
+	}
 	return minResolvedTs
+}
+
+func (c *SubChangeFeed) AddTable(ctx context.Context, tableID int64, errCh chan<- error) {
+	c.tblLock.Lock()
+	defer c.tblLock.Unlock()
+	// TODO: the resolvedTs for the newly added table puller is 0 initially,
+	//		 how do we keep the global resolvedTs invariant?
+	if _, ok := c.tblPullers[tableID]; ok {
+		log.Info("Adding existing table", zap.Int64("ID", tableID))
+		return
+	}
+	span := util.GetTableSpan(tableID)
+	ctx, cancel := context.WithCancel(ctx)
+	puller := c.startOnSpan(ctx, span, errCh)
+	c.tblPullers[tableID] = CancellablePuller{Puller: puller, Cancel: cancel}
+}
+
+func (c *SubChangeFeed) RemoveTable(ctx context.Context, tableID int64) error {
+	c.tblLock.Lock()
+	defer c.tblLock.Unlock()
+	puller, ok := c.tblPullers[tableID]
+	if !ok {
+		return errors.Errorf("remove non-exist tbl: %d", tableID)
+	}
+	puller.Cancel()
+	delete(c.tblPullers, tableID)
+	return nil
 }
 
 func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span, errCh chan<- error) *Puller {
