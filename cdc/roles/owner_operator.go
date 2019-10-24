@@ -28,7 +28,7 @@ func NewDDLHandler() *ddlHandler {
 }
 
 func (h *ddlHandler) PullDDL() (uint64, []*model.Job, error) {
-	return uint64(math.MaxUint64), nil, nil
+	return math.MaxUint64, nil, nil
 }
 
 func (h *ddlHandler) ExecDDL(*model.Job) error {
