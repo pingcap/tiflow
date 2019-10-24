@@ -37,13 +37,10 @@ import (
 
 // ChangeFeedDetail describe the detail of a ChangeFeed
 type ChangeFeedDetail struct {
-	SinkURI      string            `json:"sink-uri"`
-	Opts         map[string]string `json:"opts"`
-	CheckpointTS uint64            `json:"checkpoint-ts"`
-	CreateTime   time.Time         `json:"create-time"`
-	// All events with CommitTS <= ResolvedTS can be synchronized
-	// ResolvedTS is updated by owner only
-	ResolvedTS uint64 `json:"resolved-ts"`
+	SinkURI    string            `json:"sink-uri"`
+	Opts       map[string]string `json:"opts"`
+	CreateTime time.Time         `json:"create-time"`
+	StartTS    uint64            `json:"start-ts"`
 	// The ChangeFeed will exits until sync to timestamp TargetTS
 	TargetTS uint64 `json:"target-ts"`
 }
@@ -66,7 +63,7 @@ func DecodeChangeFeedDetail(data []byte) (ChangeFeedDetail, error) {
 // SaveChangeFeedDetail stores change feed detail into etcd
 // TODO: this should be called from outer system, such as from a TiDB client
 func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, changeFeedID string) error {
-	key := getEtcdKeyChangeFeed(changeFeedID)
+	key := kv.GetEtcdKeyChangeFeedConfig(changeFeedID)
 	_, err := client.Put(ctx, key, cfd.String())
 	return err
 }
@@ -220,7 +217,7 @@ func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span, errCh c
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
 
-	checkpointTS := c.detail.CheckpointTS
+	checkpointTS := c.detail.StartTS
 	if checkpointTS == 0 {
 		checkpointTS = oracle.EncodeTSO(c.detail.CreateTime.Unix() * 1000)
 	}

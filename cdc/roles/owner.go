@@ -48,6 +48,13 @@ func (scfi *SubChangeFeedInfo) String() string {
 	return string(data)
 }
 
+// DecodeChangeFeedDetail decodes a new SubChangeFeedInfo instance from json marshal byte slice
+func DecodeSubChangeFeedInfo(data []byte) (*SubChangeFeedInfo, error) {
+	info := &SubChangeFeedInfo{}
+	err := json.Unmarshal(data, info)
+	return info, errors.Trace(err)
+}
+
 // Owner is used to process etcd information for a capture with owner role
 type Owner interface {
 	// GetResolvedTS gets resolvedTS of a ChangeFeed
@@ -95,12 +102,18 @@ func (s ChangeFeedStatus) String() string {
 
 // ChangeFeedInfo stores information about a ChangeFeed
 type ChangeFeedInfo struct {
-	status       ChangeFeedStatus
-	resolvedTS   uint64
-	checkpointTS uint64
+	status       ChangeFeedStatus `json:"-"`
+	ResolvedTS   uint64           `json:"resolved-ts"`
+	CheckpointTS uint64           `json:"checkpoint-ts"`
 
-	processorInfos  ProcessorsInfos
-	ddlCurrentIndex int
+	processorInfos  ProcessorsInfos `json:"-"`
+	ddlCurrentIndex int             `json:"-"`
+}
+
+// String returns json encoded string of ChangeFeedInfo, only contains necessary fields stored in storage
+func (info *ChangeFeedInfo) String() (string, error) {
+	data, err := json.Marshal(info)
+	return string(data), errors.Trace(err)
 }
 
 // Status gets the status of the changefeed info.
@@ -108,14 +121,10 @@ func (c *ChangeFeedInfo) Status() ChangeFeedStatus {
 	return c.status
 }
 
-// ResolvedTS gets the resolvedTS for the changefeed info.
-func (c *ChangeFeedInfo) ResolvedTS() uint64 {
-	return c.resolvedTS
-}
-
-// CheckpointTS gets the checkpointTS for the changefeed info.
-func (c *ChangeFeedInfo) CheckpointTS() uint64 {
-	return c.checkpointTS
+type ddlExecResult struct {
+	changeFeedID ChangeFeedID
+	job          *model.Job
+	err          error
 }
 
 // OwnerDDLHandler defines the ddl handler for Owner
@@ -208,7 +217,7 @@ func (o *ownerImpl) GetResolvedTS(changeFeedID string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return cfInfo.resolvedTS, nil
+	return cfInfo.ResolvedTS, nil
 }
 
 func (o *ownerImpl) GetCheckpointTS(changeFeedID string) (uint64, error) {
@@ -218,7 +227,7 @@ func (o *ownerImpl) GetCheckpointTS(changeFeedID string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return cfInfo.checkpointTS, nil
+	return cfInfo.CheckpointTS, nil
 }
 
 func (o *ownerImpl) calcResolvedTS() error {
@@ -255,7 +264,7 @@ func (o *ownerImpl) calcResolvedTS() error {
 			minResolvedTS = o.ddlJobHistory[cfInfo.ddlCurrentIndex].BinlogInfo.FinishedTS
 			cfInfo.status = ChangeFeedWaitToExecDDL
 		}
-		cfInfo.resolvedTS = minResolvedTS
+		cfInfo.ResolvedTS = minResolvedTS
 	}
 	return nil
 }
