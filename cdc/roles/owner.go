@@ -165,7 +165,6 @@ type ownerImpl struct {
 func NewOwnerImpl(targetTS uint64, cli *clientv3.Client, manager Manager) *ownerImpl {
 	owner := &ownerImpl{
 		changeFeedInfos: make(map[ChangeFeedID]*ChangeFeedInfo),
-		ddlJobHistory:   make([]*model.Job, 0),
 		ddlHandler:      NewDDLHandler(),
 		cfRWriter:       NewCfInfoReadWriter(),
 		etcdCli:         cli,
