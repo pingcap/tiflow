@@ -264,6 +264,7 @@ func (m *ownerManager) watchOwner(ctx context.Context, etcdSession *concurrency.
 	defer func() {
 		select {
 		case m.retireCh <- struct{}{}:
+			log.Debug("lost owner role, send retire notification")
 		default:
 		}
 	}()

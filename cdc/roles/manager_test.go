@@ -58,6 +58,18 @@ func (s *managerSuite) TestManager(c *check.C) {
 		err := m1.CampaignOwner(m1Ctx)
 		c.Assert(err, check.IsNil)
 	}()
+	// m1 worker
+	m1DoneCh := make(chan struct{}, 1)
+	go func() {
+		w1ctx, w1cancel := context.WithCancel(context.Background())
+		defer w1cancel()
+		select {
+		case <-w1ctx.Done():
+		case <-m1.RetireNotify():
+			w1cancel()
+		}
+		m1DoneCh <- struct{}{}
+	}()
 
 	go func() {
 		// let m1 be owner first
@@ -74,6 +86,11 @@ func (s *managerSuite) TestManager(c *check.C) {
 	// stop m1 and m2 become owner
 	m1cancel()
 	c.Assert(err, check.IsNil)
+	select {
+	case <-m1DoneCh:
+	case <-time.After(time.Millisecond * 10):
+		c.Fatal("m1 worker not exits")
+	}
 	time.Sleep(time.Second)
 	c.Assert(m1.IsOwner(), check.IsFalse)
 	c.Assert(m2.IsOwner(), check.IsTrue)
