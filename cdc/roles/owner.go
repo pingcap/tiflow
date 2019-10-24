@@ -157,9 +157,8 @@ type ownerImpl struct {
 
 	l sync.RWMutex
 
-	etcdCli  *clientv3.Client
-	manager  Manager
-	retireCh <-chan struct{}
+	etcdCli *clientv3.Client
+	manager Manager
 }
 
 // NewOwnerImpl creates a new ownerImpl instance

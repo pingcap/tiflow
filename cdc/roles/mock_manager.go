@@ -26,16 +26,18 @@ var _ Manager = &mockManager{}
 // It's used for local store and testing.
 // So this worker will always be the owner.
 type mockManager struct {
-	owner  int32
-	id     string // id is the ID of manager.
-	cancel context.CancelFunc
+	owner    int32
+	id       string // id is the ID of manager.
+	cancel   context.CancelFunc
+	retireCh chan struct{}
 }
 
 // NewMockManager creates a new mock Manager.
 func NewMockManager(id string, cancel context.CancelFunc) Manager {
 	return &mockManager{
-		id:     id,
-		cancel: cancel,
+		id:       id,
+		cancel:   cancel,
+		retireCh: make(chan struct{}, 1),
 	}
 }
 
@@ -79,5 +81,5 @@ func (m *mockManager) CampaignOwner(_ context.Context) error {
 
 // RetireNotify implements Manager.RetireNotify interface.
 func (m *mockManager) RetireNotify() <-chan struct{} {
-	return nil
+	return m.retireCh
 }

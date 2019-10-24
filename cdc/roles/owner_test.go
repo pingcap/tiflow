@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -81,14 +82,18 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 		c:                c,
 	}
 
+	manager := NewMockManager(uuid.New().String(), cancel)
+	err := manager.CampaignOwner(ctx)
+	c.Assert(err, check.IsNil)
 	owner := &ownerImpl{
 		changeFeedInfos: changeFeedInfos,
 		targetTS:        100,
 		ddlHandler:      handler,
 		cfRWriter:       handler,
+		manager:         manager,
 	}
 	s.owner = owner
-	err := owner.Run(ctx, 50*time.Millisecond)
+	err = owner.Run(ctx, 50*time.Millisecond)
 	c.Assert(err.Error(), check.Equals, "context canceled")
 
 }
@@ -233,15 +238,19 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 		c:      c,
 	}
 
+	manager := NewMockManager(uuid.New().String(), cancel)
+	err := manager.CampaignOwner(ctx)
+	c.Assert(err, check.IsNil)
 	owner := &ownerImpl{
 		changeFeedInfos: changeFeedInfos,
 		targetTS:        100,
 
 		ddlHandler: handler,
 		cfRWriter:  handler,
+		manager:    manager,
 	}
 	s.owner = owner
-	err := owner.Run(ctx, 50*time.Millisecond)
+	err = owner.Run(ctx, 50*time.Millisecond)
 	c.Assert(errors.Cause(err), check.DeepEquals, context.Canceled)
 
 }
