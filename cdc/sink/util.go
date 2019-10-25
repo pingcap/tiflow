@@ -84,11 +84,11 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 
 func getTableInfoFromSchema(schema *schema.Schema, schemaName, tableName string) (info *tableInfo, err error) {
 	info = new(tableInfo)
-	tableId, exist := schema.GetTableIDByName(schemaName, tableName)
+	tableID, exist := schema.GetTableIDByName(schemaName, tableName)
 	if !exist {
 		return nil, ErrTableNotExist
 	}
-	tableInfoModel, exist := schema.TableByID(tableId)
+	tableInfoModel, exist := schema.TableByID(tableID)
 	if !exist {
 		return nil, ErrTableNotExist
 	}

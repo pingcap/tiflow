@@ -177,8 +177,8 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 	}
 	// TODO: handle changefeed changed and the table of sub changefeed changed
 	// TODO: find the first index of one changefeed in ddl jobs
-	for changeFeedId, etcdChangeFeedInfo := range infos {
-		if cfInfo, exist := o.changeFeedInfos[changeFeedId]; exist {
+	for changeFeedID, etcdChangeFeedInfo := range infos {
+		if cfInfo, exist := o.changeFeedInfos[changeFeedID]; exist {
 			cfInfo.processorInfos = etcdChangeFeedInfo
 		}
 	}

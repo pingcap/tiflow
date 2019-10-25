@@ -62,7 +62,7 @@ func SetupEmbedEtcd(dir string) (clientURL *url.URL, e *embed.Etcd, err error) {
 	case <-e.Server.ReadyNotify():
 	case <-time.After(60 * time.Second):
 		e.Server.Stop() // trigger a shutdown
-		err = errors.New("Server took too long to start!")
+		err = errors.New("server took too long to start")
 	}
 
 	return

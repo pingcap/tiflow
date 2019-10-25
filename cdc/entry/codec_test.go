@@ -31,12 +31,12 @@ var _ = check.Suite(&codecSuite{})
 func (s *codecSuite) TestDecodeRecordKey(c *check.C) {
 	recordPrefix := tablecodec.GenTableRecordPrefix(12345)
 	key := tablecodec.EncodeRecordKey(recordPrefix, 67890)
-	key, tableId, err := decodeTableId(key)
+	key, tableID, err := decodeTableID(key)
 	c.Assert(err, check.IsNil)
-	c.Assert(tableId, check.Equals, int64(12345))
-	key, recordId, err := decodeRecordId(key)
+	c.Assert(tableID, check.Equals, int64(12345))
+	key, recordID, err := decodeRecordID(key)
 	c.Assert(err, check.IsNil)
-	c.Assert(recordId, check.Equals, int64(67890))
+	c.Assert(recordID, check.Equals, int64(67890))
 	c.Assert(len(key), check.Equals, 0)
 }
 
