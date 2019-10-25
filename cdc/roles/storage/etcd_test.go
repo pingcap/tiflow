@@ -86,7 +86,7 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 		{ids: []string{"changefeed1", "changefeed2"}, pinfos: map[string]roles.ProcessorsInfos{"changefeed1": info1, "changefeed2": info1}},
 	}
 
-	rw := NewChangeFeedInfoRWriter(s.client)
+	rw := NewChangeFeedInfoEtcdRWriter(s.client)
 	for _, tc := range testCases {
 		_, err = s.client.Delete(context.Background(), kv.GetEtcdKeyChangeFeedList(), clientv3.WithPrefix())
 		c.Assert(err, check.IsNil)
@@ -132,7 +132,7 @@ func (s *etcdSuite) TestInfoWriter(c *check.C) {
 		{infos: map[string]*roles.ChangeFeedInfo{"changefeed1": info1, "changefeed2": info2}},
 	}
 
-	rw := NewChangeFeedInfoRWriter(s.client)
+	rw := NewChangeFeedInfoEtcdRWriter(s.client)
 	for _, tc := range testCases {
 		for changefeedID, _ := range tc.infos {
 			_, err = s.client.Delete(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))

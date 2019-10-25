@@ -19,7 +19,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/roles"
+	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
@@ -27,31 +27,31 @@ type ChangeFeedInfoRWriter struct {
 	etcdClient *clientv3.Client
 }
 
-func NewChangeFeedInfoRWriter(cli *clientv3.Client) *ChangeFeedInfoRWriter {
+func NewChangeFeedInfoEtcdRWriter(cli *clientv3.Client) *ChangeFeedInfoRWriter {
 	return &ChangeFeedInfoRWriter{
 		etcdClient: cli,
 	}
 }
 
-func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[roles.ChangeFeedID]roles.ProcessorsInfos, error) {
+func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error) {
 	_, details, err := kv.GetChangeFeedList(ctx, rw.etcdClient)
 	if err != nil {
 		return nil, err
 	}
-	result := make(map[string]roles.ProcessorsInfos, len(details))
+	result := make(map[string]model.ProcessorsInfos, len(details))
 	for changefeedID, _ := range details {
 		key := kv.GetEtcdKeySubChangeFeedList(changefeedID)
 		resp, err := rw.etcdClient.Get(ctx, key, clientv3.WithPrefix())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		pinfo := make(map[string]*roles.SubChangeFeedInfo, resp.Count)
+		pinfo := make(map[string]*model.SubChangeFeedInfo, resp.Count)
 		for _, rawKv := range resp.Kvs {
 			captureID, err := util.ExtractKeySuffix(string(rawKv.Key))
 			if err != nil {
 				return nil, err
 			}
-			info, err := roles.DecodeSubChangeFeedInfo(rawKv.Value)
+			info, err := model.DecodeSubChangeFeedInfo(rawKv.Value)
 			if err != nil {
 				return nil, err
 			}
@@ -62,7 +62,7 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[roles.ChangeFeed
 	return result, nil
 }
 
-func (rw *ChangeFeedInfoRWriter) Write(ctx context.Context, infos map[roles.ChangeFeedID]*roles.ChangeFeedInfo) error {
+func (rw *ChangeFeedInfoRWriter) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
 	for changefeedID, info := range infos {
 		storeVal, err := info.String()
 		if err != nil {
