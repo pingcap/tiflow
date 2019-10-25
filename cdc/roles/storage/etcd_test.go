@@ -23,7 +23,7 @@ import (
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/roles"
+	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
 )
 
@@ -57,21 +57,21 @@ func (s *etcdSuite) TearDownTest(c *check.C) {
 
 func (s *etcdSuite) TestInfoReader(c *check.C) {
 	var (
-		info1 = map[roles.CaptureID]*roles.SubChangeFeedInfo{
+		info1 = map[model.CaptureID]*model.SubChangeFeedInfo{
 			"capture1": {
 				CheckPointTS: 1000,
 				ResolvedTS:   1024,
-				TableInfos: []*roles.ProcessTableInfo{
-					&roles.ProcessTableInfo{ID: 1000, StartTS: 0},
-					&roles.ProcessTableInfo{ID: 1001, StartTS: 100},
+				TableInfos: []*model.ProcessTableInfo{
+					&model.ProcessTableInfo{ID: 1000, StartTS: 0},
+					&model.ProcessTableInfo{ID: 1001, StartTS: 100},
 				},
 			},
 			"capture2": {
 				CheckPointTS: 1000,
 				ResolvedTS:   1500,
-				TableInfos: []*roles.ProcessTableInfo{
-					&roles.ProcessTableInfo{ID: 1002, StartTS: 150},
-					&roles.ProcessTableInfo{ID: 1003, StartTS: 200},
+				TableInfos: []*model.ProcessTableInfo{
+					&model.ProcessTableInfo{ID: 1002, StartTS: 150},
+					&model.ProcessTableInfo{ID: 1003, StartTS: 200},
 				},
 			},
 		}
@@ -79,11 +79,11 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 	)
 	testCases := []struct {
 		ids    []string
-		pinfos map[string]roles.ProcessorsInfos
+		pinfos map[string]model.ProcessorsInfos
 	}{
 		{ids: nil, pinfos: nil},
-		{ids: []string{"changefeed1"}, pinfos: map[string]roles.ProcessorsInfos{"changefeed1": info1}},
-		{ids: []string{"changefeed1", "changefeed2"}, pinfos: map[string]roles.ProcessorsInfos{"changefeed1": info1, "changefeed2": info1}},
+		{ids: []string{"changefeed1"}, pinfos: map[string]model.ProcessorsInfos{"changefeed1": info1}},
+		{ids: []string{"changefeed1", "changefeed2"}, pinfos: map[string]model.ProcessorsInfos{"changefeed1": info1, "changefeed2": info1}},
 	}
 
 	rw := NewChangeFeedInfoEtcdRWriter(s.client)
@@ -114,22 +114,22 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 
 func (s *etcdSuite) TestInfoWriter(c *check.C) {
 	var (
-		info1 = &roles.ChangeFeedInfo{
+		info1 = &model.ChangeFeedInfo{
 			ResolvedTS:   2200,
 			CheckpointTS: 2000,
 		}
-		info2 = &roles.ChangeFeedInfo{
+		info2 = &model.ChangeFeedInfo{
 			ResolvedTS:   2600,
 			CheckpointTS: 2500,
 		}
 		err error
 	)
 	testCases := []struct {
-		infos map[roles.ChangeFeedID]*roles.ChangeFeedInfo
+		infos map[model.ChangeFeedID]*model.ChangeFeedInfo
 	}{
 		{infos: nil},
-		{infos: map[string]*roles.ChangeFeedInfo{"changefeed1": info1}},
-		{infos: map[string]*roles.ChangeFeedInfo{"changefeed1": info1, "changefeed2": info2}},
+		{infos: map[string]*model.ChangeFeedInfo{"changefeed1": info1}},
+		{infos: map[string]*model.ChangeFeedInfo{"changefeed1": info1, "changefeed2": info2}},
 	}
 
 	rw := NewChangeFeedInfoEtcdRWriter(s.client)
