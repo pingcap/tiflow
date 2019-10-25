@@ -209,7 +209,7 @@ waitCheckpointTSLoop:
 
 		// Execute DDL Job asynchronously
 		cfInfo.Status = model.ChangeFeedExecDDL
-		go func(changefeedID string, cfInfo *ChangeFeedInfo) {
+		go func(changefeedID string, cfInfo *model.ChangeFeedInfo) {
 			err := o.ddlHandler.ExecDDL(todoDDLJob)
 			o.l.Lock()
 			defer o.l.Unlock()
