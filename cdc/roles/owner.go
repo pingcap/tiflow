@@ -157,17 +157,15 @@ type ownerImpl struct {
 
 	l sync.RWMutex
 
-	etcdCli *clientv3.Client
 	manager Manager
 }
 
-// NewOwnerImpl creates a new ownerImpl instance
-func NewOwnerImpl(targetTS uint64, cli *clientv3.Client, manager Manager) *ownerImpl {
+// NewOwner creates a new ownerImpl instance
+func NewOwner(targetTS uint64, cli *clientv3.Client, manager Manager) *ownerImpl {
 	owner := &ownerImpl{
 		changeFeedInfos: make(map[ChangeFeedID]*ChangeFeedInfo),
 		ddlHandler:      NewDDLHandler(),
 		cfRWriter:       NewCfInfoReadWriter(),
-		etcdCli:         cli,
 		manager:         manager,
 	}
 	return owner

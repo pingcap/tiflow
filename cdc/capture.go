@@ -63,7 +63,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	id := uuid.New().String()
 
 	manager := roles.NewOwnerManager(cli, id, CaptureOwnerKey)
-	worker := roles.NewOwnerImpl(math.MaxUint64, cli, manager)
+	worker := roles.NewOwner(math.MaxUint64, manager)
 
 	c = &Capture{
 		id:           id,
