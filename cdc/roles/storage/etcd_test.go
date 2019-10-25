@@ -62,16 +62,16 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 				CheckPointTS: 1000,
 				ResolvedTS:   1024,
 				TableInfos: []*model.ProcessTableInfo{
-					&model.ProcessTableInfo{ID: 1000, StartTS: 0},
-					&model.ProcessTableInfo{ID: 1001, StartTS: 100},
+					{ID: 1000, StartTS: 0},
+					{ID: 1001, StartTS: 100},
 				},
 			},
 			"capture2": {
 				CheckPointTS: 1000,
 				ResolvedTS:   1500,
 				TableInfos: []*model.ProcessTableInfo{
-					&model.ProcessTableInfo{ID: 1002, StartTS: 150},
-					&model.ProcessTableInfo{ID: 1003, StartTS: 200},
+					{ID: 1002, StartTS: 150},
+					{ID: 1003, StartTS: 200},
 				},
 			},
 		}
@@ -134,7 +134,7 @@ func (s *etcdSuite) TestInfoWriter(c *check.C) {
 
 	rw := NewChangeFeedInfoEtcdRWriter(s.client)
 	for _, tc := range testCases {
-		for changefeedID, _ := range tc.infos {
+		for changefeedID := range tc.infos {
 			_, err = s.client.Delete(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))
 			c.Assert(err, check.IsNil)
 		}

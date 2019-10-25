@@ -39,7 +39,7 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeed
 		return nil, err
 	}
 	result := make(map[string]model.ProcessorsInfos, len(details))
-	for changefeedID, _ := range details {
+	for changefeedID := range details {
 		key := kv.GetEtcdKeySubChangeFeedList(changefeedID)
 		resp, err := rw.etcdClient.Get(ctx, key, clientv3.WithPrefix())
 		if err != nil {

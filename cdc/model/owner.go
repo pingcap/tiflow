@@ -44,7 +44,7 @@ func (scfi *SubChangeFeedInfo) String() string {
 	return string(data)
 }
 
-// DecodeChangeFeedDetail decodes a new SubChangeFeedInfo instance from json marshal byte slice
+// DecodeChangeFeedInfo decodes a new SubChangeFeedInfo instance from json marshal byte slice
 func DecodeSubChangeFeedInfo(data []byte) (*SubChangeFeedInfo, error) {
 	info := &SubChangeFeedInfo{}
 	err := json.Unmarshal(data, info)
