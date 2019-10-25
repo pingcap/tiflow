@@ -179,7 +179,7 @@ func (m *Mounter) Mount(rawTxn RawTxn) (*Txn, error) {
 			if dml != nil {
 				deleteDMLs = append(deleteDMLs, dml)
 			}
-		case *entry.DDLJobHistoryKVEntry:
+		case *entry.DDLJobKVEntry:
 			txn.DDL, err = m.mountDDL(e)
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -194,7 +194,7 @@ func (m *Mounter) Mount(rawTxn RawTxn) (*Txn, error) {
 }
 
 func (m *Mounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
-	tableInfo, tableName, handleColName, err := m.fetchTableInfo(row.TableId)
+	tableInfo, tableName, handleColName, err := m.fetchTableInfo(row.TableID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -206,7 +206,7 @@ func (m *Mounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
 
 	if row.Delete {
 		if tableInfo.PKIsHandle {
-			values := map[string]types.Datum{handleColName: types.NewIntDatum(row.RecordId)}
+			values := map[string]types.Datum{handleColName: types.NewIntDatum(row.RecordID)}
 			return &DML{
 				Database: tableName.Schema,
 				Table:    tableName.Table,
@@ -223,7 +223,7 @@ func (m *Mounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
 		values[colName] = colValue
 	}
 	if tableInfo.PKIsHandle {
-		values[handleColName] = types.NewIntDatum(row.RecordId)
+		values[handleColName] = types.NewIntDatum(row.RecordID)
 	}
 	return &DML{
 		Database: tableName.Schema,
@@ -234,7 +234,7 @@ func (m *Mounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
 }
 
 func (m *Mounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
-	tableInfo, tableName, _, err := m.fetchTableInfo(idx.TableId)
+	tableInfo, tableName, _, err := m.fetchTableInfo(idx.TableID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -244,7 +244,7 @@ func (m *Mounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
 		return nil, errors.Trace(err)
 	}
 
-	indexInfo := tableInfo.Indices[idx.IndexId-1]
+	indexInfo := tableInfo.Indices[idx.IndexID-1]
 	if !indexInfo.Primary && !indexInfo.Unique {
 		return nil, nil
 	}
@@ -261,15 +261,15 @@ func (m *Mounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
 	}, nil
 }
 
-func (m *Mounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, tableName *schema.TableName, handleColName string, err error) {
-	tableInfo, exist := m.schema.TableByID(tableId)
+func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *model.TableInfo, tableName *schema.TableName, handleColName string, err error) {
+	tableInfo, exist := m.schema.TableByID(tableID)
 	if !exist {
-		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableId)
+		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableID)
 	}
 
-	database, table, exist := m.schema.SchemaAndTableName(tableId)
+	database, table, exist := m.schema.SchemaAndTableName(tableID)
 	if !exist {
-		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableId)
+		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableID)
 	}
 	tableName = &schema.TableName{Schema: database, Table: table}
 
@@ -282,32 +282,32 @@ func (m *Mounter) fetchTableInfo(tableId int64) (tableInfo *model.TableInfo, tab
 		}
 	}
 	if tableInfo.PKIsHandle && pkColOffset == -1 {
-		return nil, nil, "", errors.Errorf("this table (%d) is handled by pk, but pk column not found", tableId)
+		return nil, nil, "", errors.Errorf("this table (%d) is handled by pk, but pk column not found", tableID)
 	}
 
 	return
 }
 
-func (m *Mounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, error) {
+func (m *Mounter) mountDDL(jobEntry *entry.DDLJobKVEntry) (*DDL, error) {
 	var databaseName, tableName string
 	var err error
 	getTableName := false
 	//TODO support create schema and drop schema
-	if jobHistory.Job.Type == model.ActionDropTable {
-		databaseName, tableName, err = m.tryGetTableName(jobHistory)
+	if jobEntry.Job.Type == model.ActionDropTable {
+		databaseName, tableName, err = m.tryGetTableName(jobEntry)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		getTableName = true
 	}
 
-	_, _, _, err = m.schema.HandleDDL(jobHistory.Job)
+	_, _, _, err = m.schema.HandleDDL(jobEntry.Job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	if !getTableName {
-		databaseName, tableName, err = m.tryGetTableName(jobHistory)
+		databaseName, tableName, err = m.tryGetTableName(jobEntry)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -316,22 +316,22 @@ func (m *Mounter) mountDDL(jobHistory *entry.DDLJobHistoryKVEntry) (*DDL, error)
 	return &DDL{
 		databaseName,
 		tableName,
-		jobHistory.Job.Query,
-		jobHistory.Job.Type,
+		jobEntry.Job.Query,
+		jobEntry.Job.Type,
 	}, nil
 }
 
-func (m *Mounter) tryGetTableName(jobHistory *entry.DDLJobHistoryKVEntry) (databaseName string, tableName string, err error) {
-	if tableId := jobHistory.Job.TableID; tableId > 0 {
+func (m *Mounter) tryGetTableName(jobHistory *entry.DDLJobKVEntry) (databaseName string, tableName string, err error) {
+	if tableID := jobHistory.Job.TableID; tableID > 0 {
 		var exist bool
-		databaseName, tableName, exist = m.schema.SchemaAndTableName(tableId)
+		databaseName, tableName, exist = m.schema.SchemaAndTableName(tableID)
 		if !exist {
-			return "", "", errors.Errorf("can not find table, id: %d", tableId)
+			return "", "", errors.Errorf("can not find table, id: %d", tableID)
 		}
-	} else if schemaId := jobHistory.Job.SchemaID; schemaId > 0 {
-		dbInfo, exist := m.schema.SchemaByID(schemaId)
+	} else if schemaID := jobHistory.Job.SchemaID; schemaID > 0 {
+		dbInfo, exist := m.schema.SchemaByID(schemaID)
 		if !exist {
-			return "", "", errors.Errorf("can not find schema, id: %d", schemaId)
+			return "", "", errors.Errorf("can not find schema, id: %d", schemaID)
 		}
 		databaseName = dbInfo.Name.O
 	}

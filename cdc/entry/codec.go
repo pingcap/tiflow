@@ -37,9 +37,9 @@ var (
 	recordPrefixLen   = len(recordPrefix)
 	indexPrefixLen    = len(indexPrefix)
 	metaPrefixLen     = len(metaPrefix)
-	prefixTableIdLen  = tablePrefixLen + intLen  /*tableId*/
-	prefixRecordIdLen = recordPrefixLen + intLen /*recordId*/
-	prefixIndexLen    = indexPrefixLen + intLen  /*indexId*/
+	prefixTableIDLen  = tablePrefixLen + intLen  /*tableID*/
+	prefixRecordIDLen = recordPrefixLen + intLen /*recordID*/
+	prefixIndexLen    = indexPrefixLen + intLen  /*indexID*/
 )
 
 // MetaType is for data structure meta/data flag.
@@ -91,36 +91,36 @@ func (d Other) GetType() MetaType {
 	return d.tp
 }
 
-func decodeTableId(key []byte) (rest []byte, tableId int64, err error) {
-	if len(key) < prefixTableIdLen || !bytes.HasPrefix(key, tablePrefix) {
+func decodeTableID(key []byte) (rest []byte, tableID int64, err error) {
+	if len(key) < prefixTableIDLen || !bytes.HasPrefix(key, tablePrefix) {
 		return nil, 0, errors.Errorf("invalid record key - %q", key)
 	}
 	key = key[tablePrefixLen:]
-	rest, tableId, err = codec.DecodeInt(key)
+	rest, tableID, err = codec.DecodeInt(key)
 	if err != nil {
 		return nil, 0, errors.Trace(err)
 	}
 	return
 }
 
-func decodeRecordId(key []byte) (rest []byte, recordId int64, err error) {
-	if len(key) < prefixRecordIdLen || !bytes.HasPrefix(key, recordPrefix) {
+func decodeRecordID(key []byte) (rest []byte, recordID int64, err error) {
+	if len(key) < prefixRecordIDLen || !bytes.HasPrefix(key, recordPrefix) {
 		return nil, 0, errors.Errorf("invalid record key - %q", key)
 	}
 	key = key[recordPrefixLen:]
-	rest, recordId, err = codec.DecodeInt(key)
+	rest, recordID, err = codec.DecodeInt(key)
 	if err != nil {
 		return nil, 0, errors.Trace(err)
 	}
 	return
 }
 
-func decodeIndexKey(key []byte) (indexId int64, indexValue []types.Datum, err error) {
+func decodeIndexKey(key []byte) (indexID int64, indexValue []types.Datum, err error) {
 	if len(key) < prefixIndexLen || !bytes.HasPrefix(key, indexPrefix) {
 		return 0, nil, errors.Errorf("invalid record key - %q", key)
 	}
 	key = key[indexPrefixLen:]
-	key, indexId, err = codec.DecodeInt(key)
+	key, indexID, err = codec.DecodeInt(key)
 	if err != nil {
 		return 0, nil, errors.Trace(err)
 	}
@@ -151,7 +151,7 @@ func decodeMetaKey(ek []byte) (Meta, error) {
 	case HashData:
 		if len(ek) > 0 {
 			var field []byte
-			ek, field, err = codec.DecodeBytes(ek, nil)
+			_, field, err = codec.DecodeBytes(ek, nil)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -166,7 +166,7 @@ func decodeMetaKey(ek []byte) (Meta, error) {
 			panic("list key decode failure")
 		}
 		var index int64
-		ek, index, err = codec.DecodeInt(ek)
+		_, index, err = codec.DecodeInt(ek)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
