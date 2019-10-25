@@ -151,7 +151,7 @@ func decodeMetaKey(ek []byte) (Meta, error) {
 	case HashData:
 		if len(ek) > 0 {
 			var field []byte
-			ek, field, err = codec.DecodeBytes(ek, nil)
+			_, field, err = codec.DecodeBytes(ek, nil)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -166,7 +166,7 @@ func decodeMetaKey(ek []byte) (Meta, error) {
 			panic("list key decode failure")
 		}
 		var index int64
-		ek, index, err = codec.DecodeInt(ek)
+		_, index, err = codec.DecodeInt(ek)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

@@ -11,7 +11,6 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
-	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/testkit"
 	"go.uber.org/zap"
 
@@ -24,7 +23,6 @@ type MockTiDB struct {
 	store     tidbkv.Storage
 	domain    *domain.Domain
 	*parser.Parser
-	ctx *mock.Context
 
 	kvs map[string]string
 }
