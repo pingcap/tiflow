@@ -19,7 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
@@ -161,7 +160,7 @@ type ownerImpl struct {
 }
 
 // NewOwner creates a new ownerImpl instance
-func NewOwner(targetTS uint64, cli *clientv3.Client, manager Manager) *ownerImpl {
+func NewOwner(targetTS uint64, manager Manager) *ownerImpl {
 	owner := &ownerImpl{
 		changeFeedInfos: make(map[ChangeFeedID]*ChangeFeedInfo),
 		ddlHandler:      NewDDLHandler(),
