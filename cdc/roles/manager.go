@@ -50,6 +50,8 @@ type Manager interface {
 	GetOwnerID(ctx context.Context) (string, error)
 	// CampaignOwner campaigns the owner.
 	CampaignOwner(ctx context.Context) error
+	// RetireNotify returns a channel that can fetch notification when owner is retired
+	RetireNotify() <-chan struct{}
 }
 
 const (
@@ -62,11 +64,12 @@ const (
 
 // ownerManager represents the structure which is used for electing owner.
 type ownerManager struct {
-	id      string // id is the ID of the manager.
-	key     string
-	etcdCli *clientv3.Client
-	elec    unsafe.Pointer
-	logger  *zap.Logger
+	id       string // id is the ID of the manager.
+	key      string
+	etcdCli  *clientv3.Client
+	elec     unsafe.Pointer
+	logger   *zap.Logger
+	retireCh chan struct{}
 }
 
 // NewOwnerManager creates a new Manager.
@@ -74,10 +77,11 @@ func NewOwnerManager(etcdCli *clientv3.Client, id, key string) Manager {
 	logger := log.L().With(zap.String("id", id))
 
 	return &ownerManager{
-		etcdCli: etcdCli,
-		id:      id,
-		key:     key,
-		logger:  logger,
+		etcdCli:  etcdCli,
+		id:       id,
+		key:      key,
+		logger:   logger,
+		retireCh: make(chan struct{}, 1),
 	}
 }
 
@@ -249,8 +253,21 @@ func GetOwnerInfo(ctx context.Context, elec *concurrency.Election, id string) (s
 	return string(resp.Kvs[0].Key), nil
 }
 
+// RetireNotify implements Manager.RetireNotify
+func (m *ownerManager) RetireNotify() <-chan struct{} {
+	return m.retireCh
+}
+
 func (m *ownerManager) watchOwner(ctx context.Context, etcdSession *concurrency.Session, key string) {
 	log.Debug("watch owner key", zap.String("key", key))
+
+	defer func() {
+		select {
+		case m.retireCh <- struct{}{}:
+			log.Debug("lost owner role, send retire notification")
+		default:
+		}
+	}()
 
 	watchCh := m.etcdCli.Watch(ctx, key)
 	for {
