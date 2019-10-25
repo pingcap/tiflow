@@ -118,12 +118,6 @@ func (c *ChangeFeedInfo) CheckpointTS() uint64 {
 	return c.checkpointTS
 }
 
-type ddlExecResult struct {
-	changeFeedID ChangeFeedID
-	job          *model.Job
-	err          error
-}
-
 // OwnerDDLHandler defines the ddl handler for Owner
 // which can pull ddl jobs and execute ddl jobs
 type OwnerDDLHandler interface {
@@ -177,8 +171,8 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 	}
 	// TODO: handle changefeed changed and the table of sub changefeed changed
 	// TODO: find the first index of one changefeed in ddl jobs
-	for changeFeedId, etcdChangeFeedInfo := range infos {
-		if cfInfo, exist := o.changeFeedInfos[changeFeedId]; exist {
+	for changeFeedID, etcdChangeFeedInfo := range infos {
+		if cfInfo, exist := o.changeFeedInfos[changeFeedID]; exist {
 			cfInfo.processorInfos = etcdChangeFeedInfo
 		}
 	}
@@ -283,7 +277,7 @@ waitCheckpointTSLoop:
 
 		// Execute DDL Job asynchronously
 		cfInfo.status = ChangeFeedExecDDL
-		go func() {
+		go func(changeFeedID string, cfInfo *ChangeFeedInfo) {
 			err := o.ddlHandler.ExecDDL(todoDDLJob)
 			o.l.Lock()
 			defer o.l.Unlock()
@@ -303,7 +297,7 @@ waitCheckpointTSLoop:
 			}
 			cfInfo.ddlCurrentIndex += 1
 			cfInfo.status = ChangeFeedSyncDML
-		}()
+		}(changeFeedID, cfInfo)
 	}
 	return nil
 }

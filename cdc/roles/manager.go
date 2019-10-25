@@ -30,7 +30,8 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/terror"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -315,7 +316,7 @@ func contextDone(ctx context.Context, err error) error {
 	// TODO: Make sure ctx is closed with etcd client.
 	if terror.ErrorEqual(err, context.Canceled) ||
 		terror.ErrorEqual(err, context.DeadlineExceeded) ||
-		terror.ErrorEqual(err, grpc.ErrClientConnClosing) {
+		status.Code(errors.Cause(err)) == codes.Canceled {
 		return errors.Trace(err)
 	}
 

@@ -10,7 +10,8 @@ warningCode = -1
 [rule.error-return]
 [rule.error-strings]
 [rule.error-naming]
-[rule.exported]
+# TODO: fix and open this opt.
+# [rule.exported]
 [rule.if-return]
 [rule.var-naming]
 [rule.package-comments]

@@ -29,7 +29,6 @@ type ServerOption func(*options)
 // Server is the capture server
 type Server struct {
 	opts    options
-	id      string
 	capture *Capture
 }
 

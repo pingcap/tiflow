@@ -36,7 +36,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
-	_ "github.com/pingcap/tidb/types/parser_driver"
 )
 
 type tableInspector interface {

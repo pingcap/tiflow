@@ -9,10 +9,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/coreos/etcd v3.3.13+incompatible
 	github.com/go-sql-driver/mysql v1.4.1
-	github.com/golang/lint v0.0.0-20180702182130-06c8688daad7 // indirect
 	github.com/google/uuid v1.1.1
-	github.com/kisielk/gotool v1.0.0 // indirect
-	github.com/myesui/uuid v1.0.0 // indirect
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
 	github.com/pingcap/errors v0.11.4
@@ -25,7 +22,6 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20190728182440-6a916e37a237 // indirect
 	github.com/sirupsen/logrus v1.4.2 // indirect
 	github.com/spf13/cobra v0.0.3
-	github.com/twinj/uuid v1.0.0 // indirect
 	go.uber.org/zap v1.10.0
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	google.golang.org/appengine v1.6.2 // indirect
