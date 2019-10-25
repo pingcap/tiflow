@@ -41,6 +41,7 @@ func (s *etcdSuite) SetUpTest(c *check.C) {
 		Endpoints:   []string{s.clientURL.String()},
 		DialTimeout: 3 * time.Second,
 	})
+	c.Assert(err, check.IsNil)
 	go func() {
 		c.Log(<-s.e.Err())
 	}()
