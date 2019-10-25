@@ -227,7 +227,3 @@ func (p *processorImpl) Close() {
 	close(p.closed)
 	close(p.resolvedEntries)
 }
-
-func (p *processorImpl) Start() {
-
-}
