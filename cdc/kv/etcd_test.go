@@ -51,7 +51,7 @@ func (s *etcdSuite) TearDownTest(c *check.C) {
 	s.e.Close()
 }
 
-func (s *etcdSuite) TestGetChangeFeedList(c *check.C) {
+func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 	testCases := []struct {
 		ids     []string
 		details []string
@@ -65,7 +65,7 @@ func (s *etcdSuite) TestGetChangeFeedList(c *check.C) {
 			_, err := s.client.Put(context.Background(), GetEtcdKeyChangeFeedConfig(tc.ids[i]), tc.details[i])
 			c.Assert(err, check.IsNil)
 		}
-		_, result, err := GetChangeFeedList(context.Background(), s.client)
+		_, result, err := GetChangeFeeds(context.Background(), s.client)
 		c.Assert(err, check.IsNil)
 		c.Assert(len(result), check.Equals, len(tc.ids))
 		for i := 0; i < len(tc.ids); i++ {

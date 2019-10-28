@@ -36,7 +36,8 @@ type SubChangeFeedInfo struct {
 	TableInfos []*ProcessTableInfo `json:"table-infos"`
 }
 
-func (scfi *SubChangeFeedInfo) String() string {
+// MarshalSubChangeFeedInfo returns the json marshal format of a SubChangeFeedInfo
+func (scfi *SubChangeFeedInfo) MarshalSubChangeFeedInfo() string {
 	data, err := json.Marshal(scfi)
 	if err != nil {
 		log.Error("fail to marshal ChangeFeedDetail to json", zap.Error(err))
@@ -44,8 +45,8 @@ func (scfi *SubChangeFeedInfo) String() string {
 	return string(data)
 }
 
-// DecodeChangeFeedInfo decodes a new SubChangeFeedInfo instance from json marshal byte slice
-func DecodeSubChangeFeedInfo(data []byte) (*SubChangeFeedInfo, error) {
+// UnmarshalChangeFeedInfo decodes a new SubChangeFeedInfo instance from json marshal byte slice
+func UnmarshalSubChangeFeedInfo(data []byte) (*SubChangeFeedInfo, error) {
 	info := &SubChangeFeedInfo{}
 	err := json.Unmarshal(data, info)
 	return info, errors.Trace(err)
@@ -91,8 +92,8 @@ type ChangeFeedInfo struct {
 	DDLCurrentIndex int             `json:"-"`
 }
 
-// String returns json encoded string of ChangeFeedInfo, only contains necessary fields stored in storage
-func (info *ChangeFeedInfo) String() (string, error) {
+// MarshalChangeFeedInfo returns json encoded string of ChangeFeedInfo, only contains necessary fields stored in storage
+func (info *ChangeFeedInfo) MarshalChangeFeedInfo() (string, error) {
 	data, err := json.Marshal(info)
 	return string(data), errors.Trace(err)
 }

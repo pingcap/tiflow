@@ -24,18 +24,21 @@ import (
 	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
+// ChangeFeedInfoRWriter implements `roles.ChangeFeedInfoRWriter` interface
 type ChangeFeedInfoRWriter struct {
 	etcdClient *clientv3.Client
 }
 
+// NewChangeFeedInfoEtcdRWriter returns a new `*ChangeFeedInfoRWriter` instance
 func NewChangeFeedInfoEtcdRWriter(cli *clientv3.Client) *ChangeFeedInfoRWriter {
 	return &ChangeFeedInfoRWriter{
 		etcdClient: cli,
 	}
 }
 
+// Read reads from etcd, and returns map mapping from changefeedID to `model.ProcessorsInfos`
 func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error) {
-	_, details, err := kv.GetChangeFeedList(ctx, rw.etcdClient)
+	_, details, err := kv.GetChangeFeeds(ctx, rw.etcdClient)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +55,7 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeed
 			if err != nil {
 				return nil, err
 			}
-			info, err := model.DecodeSubChangeFeedInfo(rawKv.Value)
+			info, err := model.UnmarshalSubChangeFeedInfo(rawKv.Value)
 			if err != nil {
 				return nil, err
 			}
@@ -63,13 +66,14 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeed
 	return result, nil
 }
 
+// Write writes ChangeFeedInfo of each changefeed into etcd
 func (rw *ChangeFeedInfoRWriter) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
 	var (
 		txn = rw.etcdClient.KV.Txn(ctx)
 		ops = make([]clientv3.Op, 0, embed.DefaultMaxTxnOps)
 	)
 	for changefeedID, info := range infos {
-		storeVal, err := info.String()
+		storeVal, err := info.MarshalChangeFeedInfo()
 		if err != nil {
 			return err
 		}
@@ -81,7 +85,7 @@ func (rw *ChangeFeedInfoRWriter) Write(ctx context.Context, infos map[model.Chan
 				return errors.Trace(err)
 			}
 			txn = rw.etcdClient.KV.Txn(ctx)
-			ops = make([]clientv3.Op, 0, embed.DefaultMaxTxnOps)
+			ops = ops[:0]
 		}
 	}
 	if len(ops) > 0 {

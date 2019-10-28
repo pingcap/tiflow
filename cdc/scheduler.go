@@ -88,7 +88,7 @@ func (w *ChangeFeedWatcher) processDeleteKv(kv *mvccpb.KeyValue) error {
 func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 	errCh := make(chan error, 1)
 
-	revision, details, err := kv.GetChangeFeedList(ctx, w.etcdCli)
+	revision, details, err := kv.GetChangeFeeds(ctx, w.etcdCli)
 	if err != nil {
 		return err
 	}

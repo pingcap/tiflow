@@ -52,8 +52,8 @@ func GetEtcdKeySubChangeFeed(changefeedID, captureID string) string {
 	return fmt.Sprintf("%s/%s", GetEtcdKeySubChangeFeedList(changefeedID), captureID)
 }
 
-// GetChangeFeedList returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
-func GetChangeFeedList(ctx context.Context, cli *clientv3.Client, opts ...clientv3.OpOption) (int64, map[string]*mvccpb.KeyValue, error) {
+// GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
+func GetChangeFeeds(ctx context.Context, cli *clientv3.Client, opts ...clientv3.OpOption) (int64, map[string]*mvccpb.KeyValue, error) {
 	key := GetEtcdKeyChangeFeedList()
 
 	resp, err := cli.Get(ctx, key, clientv3.WithPrefix())
