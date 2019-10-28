@@ -40,20 +40,19 @@ type inputEntry struct {
 	isResolvedTs bool
 }
 
-func createInputChan(table schema.TableName, cases []inputEntry) (dmlChan chan txn.Txn, resolvedTSChan chan uint64) {
-	var dmls []txn.Txn
+func createInputChan(table schema.TableName, cases []inputEntry) (txnChan chan txn.RawTxn, resolvedTSChan chan uint64) {
+	var rawTxns []txn.RawTxn
 	var resolvedTSs []uint64
 	for _, c := range cases {
 		if c.isResolvedTs {
 			resolvedTSs = append(resolvedTSs, c.ts)
 		} else {
-			dmls = append(dmls, txn.Txn{
-				DMLs: []*txn.DML{{Database: table.Schema, Table: table.Table}},
-				Ts:   c.ts,
+			rawTxns = append(rawTxns, txn.RawTxn{
+				TS: c.ts,
 			})
 		}
 	}
-	dmlChan = make(chan txn.Txn)
+	txnChan = make(chan txn.RawTxn)
 	resolvedTSChan = make(chan uint64)
 	go func() {
 		resolvedTSIndex := 0
@@ -61,15 +60,15 @@ func createInputChan(table schema.TableName, cases []inputEntry) (dmlChan chan t
 			log.Info("input", zap.Uint64("resolvedTS", resolvedTSs[resolvedTSIndex]), zap.Reflect("table", table))
 			resolvedTSChan <- resolvedTSs[resolvedTSIndex]
 		}
-		for _, dml := range dmls {
-			if len(resolvedTSs) > resolvedTSIndex && resolvedTSs[resolvedTSIndex] < dml.Ts {
+		for _, rawTxn := range rawTxns {
+			if len(resolvedTSs) > resolvedTSIndex && resolvedTSs[resolvedTSIndex] < rawTxn.TS {
 				resolvedTSIndex++
 				if len(resolvedTSs) > resolvedTSIndex {
 					log.Info("input", zap.Uint64("resolvedTS", resolvedTSs[resolvedTSIndex]), zap.Reflect("table", table))
 					resolvedTSChan <- resolvedTSs[resolvedTSIndex]
 				}
 			}
-			dmlChan <- dml
+			txnChan <- rawTxn
 		}
 	}()
 	return
@@ -79,7 +78,7 @@ func (s *processorSuite) TestProcessor(c *check.C) {
 	p := NewProcessor(&mockTSRWriter{})
 	t1 := schema.TableName{Schema: "s", Table: "t1"}
 	t2 := schema.TableName{Schema: "s", Table: "t2"}
-	dmlChan1, resolvedTSChan1 := createInputChan(t1, []inputEntry{
+	txnChan1, resolvedTSChan1 := createInputChan(t1, []inputEntry{
 		{ts: 1},
 		{ts: 2},
 		{ts: 3},
@@ -91,7 +90,7 @@ func (s *processorSuite) TestProcessor(c *check.C) {
 		{ts: 9, isResolvedTs: true},
 		{ts: uint64(math.MaxUint64)}, // terminator
 	})
-	dmlChan2, resolvedTSChan2 := createInputChan(t2, []inputEntry{
+	txnChan2, resolvedTSChan2 := createInputChan(t2, []inputEntry{
 		{ts: 2},
 		{ts: 4},
 		{ts: 6, isResolvedTs: true},
@@ -128,7 +127,7 @@ func (s *processorSuite) TestProcessor(c *check.C) {
 			}
 		}
 	}()
-	p.SetInputChan(t1, dmlChan1, resolvedTSChan1)
-	p.SetInputChan(t2, dmlChan2, resolvedTSChan2)
+	p.SetInputChan(t1, txnChan1, resolvedTSChan1)
+	p.SetInputChan(t2, txnChan2, resolvedTSChan2)
 	<-closed
 }

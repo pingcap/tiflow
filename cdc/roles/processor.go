@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"go.uber.org/zap"
@@ -27,7 +28,7 @@ import (
 // Processor is used to push sync progress and calculate the checkpointTS
 type Processor interface {
 	// SetInputChan receives a table and listens a channel
-	SetInputChan(table schema.TableName, inputTxn <-chan txn.Txn, inputResolvedTS <-chan uint64)
+	SetInputChan(table schema.TableName, inputTxn <-chan txn.RawTxn, inputResolvedTS <-chan uint64)
 	// ResolvedChan returns a channel, which output the resolved transaction or resolvedTS
 	ResolvedChan() <-chan ProcessorEntry
 	// ExecutedChan returns a channel, when a transaction is executed,
@@ -53,16 +54,16 @@ const (
 )
 
 type ProcessorEntry struct {
-	DMLs []*txn.DML
-	TS   uint64
-	Typ  ProcessorEntryType
+	Entries []*kv.RawKVEntry
+	TS      uint64
+	Typ     ProcessorEntryType
 }
 
-func NewProcessorDMLsEntry(dmls []*txn.DML, ts uint64) ProcessorEntry {
+func NewProcessorDMLsEntry(entries []*kv.RawKVEntry, ts uint64) ProcessorEntry {
 	return ProcessorEntry{
-		DMLs: dmls,
-		TS:   ts,
-		Typ:  ProcessorEntryDMLS,
+		Entries: entries,
+		TS:      ts,
+		Typ:     ProcessorEntryDMLS,
 	}
 }
 
@@ -171,7 +172,7 @@ func (p *processorImpl) globalResolvedWorker() {
 	}
 }
 
-func (p *processorImpl) SetInputChan(table schema.TableName, inputTxn <-chan txn.Txn, inputResolvedTS <-chan uint64) {
+func (p *processorImpl) SetInputChan(table schema.TableName, inputTxn <-chan txn.RawTxn, inputResolvedTS <-chan uint64) {
 	go func() {
 		log.Info("Processor input channel listener started", zap.Reflect("table", table))
 		p.tableInputerGroup.Add(1)
@@ -187,21 +188,18 @@ func (p *processorImpl) SetInputChan(table schema.TableName, inputTxn <-chan txn
 					log.Info("Processor inputTxn channel is closed, quit listener", zap.Reflect("table", table))
 					return
 				}
-				if t.DMLs == nil {
-					continue
-				}
-				if t.Ts > p.globalResolvedTS {
+				if t.TS > p.globalResolvedTS {
 					log.Debug("Input channel listener: waiting for global resolved ts updating",
 						zap.Reflect("table", table), zap.Uint64("global resolved ts", p.globalResolvedTS))
 					p.tableInputerGroup.Done()
 					p.resolvedCond.L.Lock()
-					for t.Ts > p.globalResolvedTS {
+					for t.TS > p.globalResolvedTS {
 						p.resolvedCond.Wait()
 					}
 					p.resolvedCond.L.Unlock()
 					p.tableInputerGroup.Add(1)
 				}
-				p.resolvedEntries <- NewProcessorDMLsEntry(t.DMLs, t.Ts)
+				p.resolvedEntries <- NewProcessorDMLsEntry(t.Entries, t.TS)
 			case r, ok := <-inputResolvedTS:
 				if !ok {
 					log.Info("Processor inputResolvedTS channel is closed, quit listener", zap.Reflect("table", table))
