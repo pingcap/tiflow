@@ -30,7 +30,7 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 		switch e := entry.(type) {
 		case *UpdateTableKVEntry:
 			existUpdateTableKVEntry = true
-			c.Assert(e.TableId, check.Equals, e.TableInfo.ID)
+			c.Assert(e.TableID, check.Equals, e.TableInfo.ID)
 			c.Assert(e.TableInfo.Name.O, check.Equals, "test1")
 			c.Assert(len(e.TableInfo.Columns), check.Equals, 2)
 			c.Assert(e.TableInfo.Columns[0].Name.O, check.Equals, "id")
@@ -53,7 +53,7 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 			c.Assert(e.TableInfo.Indices[1].Columns[0].Offset, check.Equals, 0)
 		case *DDLJobKVEntry:
 			existDDLJobHistoryKVEntry = true
-			c.Assert(e.JobId, check.Equals, e.Job.ID)
+			c.Assert(e.JobID, check.Equals, e.Job.ID)
 			c.Assert(e.Job.SchemaName, check.Equals, "test")
 			c.Assert(e.Job.Type, check.Equals, model.ActionCreateTable)
 			c.Assert(e.Job.Query, check.Equals, "create table test.test1(id varchar(255) primary key, a int, index i1 (a))")
@@ -71,7 +71,7 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 		switch e := entry.(type) {
 		case *UpdateTableKVEntry:
 			existUpdateTableKVEntry = true
-			c.Assert(e.TableId, check.Equals, e.TableInfo.ID)
+			c.Assert(e.TableID, check.Equals, e.TableInfo.ID)
 			c.Assert(e.TableInfo.Name.O, check.Equals, "test2")
 			c.Assert(len(e.TableInfo.Columns), check.Equals, 2)
 			c.Assert(e.TableInfo.Columns[0].Name.O, check.Equals, "id")
@@ -86,7 +86,7 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 			c.Assert(e.TableInfo.Indices[0].Columns[0].Name.O, check.Equals, "b")
 		case *DDLJobKVEntry:
 			existDDLJobHistoryKVEntry = true
-			c.Assert(e.JobId, check.Equals, e.Job.ID)
+			c.Assert(e.JobID, check.Equals, e.Job.ID)
 			c.Assert(e.Job.SchemaName, check.Equals, "test")
 			c.Assert(e.Job.Type, check.Equals, model.ActionCreateTable)
 			c.Assert(e.Job.Query, check.Equals, "create table test.test2(id int primary key, b varchar(255) unique key)")
@@ -114,20 +114,20 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 	rawEntries = puller.MustExec(c, "insert into test.test1 values('ttt',666)")
 	expect := []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 1,
+			TableID:  tableInfo.ID,
+			RecordID: 1,
 			Delete:   false,
 			Row:      map[int64]types.Datum{1: types.NewBytesDatum([]byte("ttt")), 2: types.NewIntDatum(666)},
 		}, &IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   1,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   1,
+			IndexID:    1,
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewIntDatum(666)},
 		}, &IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   1,
-			IndexId:    2,
+			TableID:    tableInfo.ID,
+			RecordID:   1,
+			IndexID:    2,
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("ttt"))},
 		}}
@@ -136,20 +136,20 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 	rawEntries = puller.MustExec(c, "update test.test1 set id = '777' where a = 666")
 	expect = []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 1,
+			TableID:  tableInfo.ID,
+			RecordID: 1,
 			Delete:   false,
 			Row:      map[int64]types.Datum{1: types.NewBytesDatum([]byte("777")), 2: types.NewIntDatum(666)},
 		}, &IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   1,
-			IndexId:    2,
+			TableID:    tableInfo.ID,
+			RecordID:   1,
+			IndexID:    2,
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("777"))},
 		}, &IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   0,
-			IndexId:    2,
+			TableID:    tableInfo.ID,
+			RecordID:   0,
+			IndexID:    2,
 			Delete:     true,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("ttt"))},
 		}}
@@ -158,20 +158,20 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 	rawEntries = puller.MustExec(c, "delete from test.test1 where id = '777'")
 	expect = []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 1,
+			TableID:  tableInfo.ID,
+			RecordID: 1,
 			Delete:   true,
 			Row:      map[int64]types.Datum{},
 		}, &IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   0,
-			IndexId:    2,
+			TableID:    tableInfo.ID,
+			RecordID:   0,
+			IndexID:    2,
 			Delete:     true,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("777"))},
 		}, &IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   1,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   1,
+			IndexID:    1,
 			Delete:     true,
 			IndexValue: []types.Datum{types.NewIntDatum(666)},
 		}}
@@ -196,14 +196,14 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 	rawEntries = puller.MustExec(c, "insert into test.test2 values(666,'aaa')")
 	expect := []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 666,
+			TableID:  tableInfo.ID,
+			RecordID: 666,
 			Delete:   false,
 			Row:      map[int64]types.Datum{2: types.NewBytesDatum([]byte("aaa"))},
 		}, &IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   666,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   666,
+			IndexID:    1,
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("aaa"))},
 		}}
@@ -212,25 +212,25 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 	rawEntries = puller.MustExec(c, "update test.test2 set id = 888,b = 'bbb' where id = 666")
 	expect = []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 666,
+			TableID:  tableInfo.ID,
+			RecordID: 666,
 			Delete:   true,
 			Row:      map[int64]types.Datum{},
 		}, &RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 888,
+			TableID:  tableInfo.ID,
+			RecordID: 888,
 			Delete:   false,
 			Row:      map[int64]types.Datum{2: types.NewBytesDatum([]byte("bbb"))},
 		}, &IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   0,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   0,
+			IndexID:    1,
 			Delete:     true,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("aaa"))},
 		}, &IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   888,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   888,
+			IndexID:    1,
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("bbb"))},
 		}}
@@ -239,14 +239,14 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 	rawEntries = puller.MustExec(c, "delete from test.test2 where id = 888")
 	expect = []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 888,
+			TableID:  tableInfo.ID,
+			RecordID: 888,
 			Delete:   true,
 			Row:      map[int64]types.Datum{},
 		}, &IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   0,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   0,
+			IndexID:    1,
 			Delete:     true,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("bbb"))},
 		}}
@@ -275,15 +275,15 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 	c.Assert(err, check.IsNil)
 	expect := []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 1,
+			TableID:  tableInfo.ID,
+			RecordID: 1,
 			Delete:   false,
 			Row:      map[int64]types.Datum{2: types.NewBytesDatum([]byte("aa")), 3: types.NewTimeDatum(time)},
 		},
 		&IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   1,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   1,
+			IndexID:    1,
 			Delete:     false,
 			IndexValue: []types.Datum{{}, types.NewBytesDatum([]byte("aa")), types.NewTimeDatum(time)},
 		}}
@@ -292,15 +292,15 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 	rawEntries = puller.MustExec(c, "insert into test.test2 values(null, null, '1996-11-20')")
 	expect = []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 2,
+			TableID:  tableInfo.ID,
+			RecordID: 2,
 			Delete:   false,
 			Row:      map[int64]types.Datum{3: types.NewTimeDatum(time)},
 		},
 		&IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   2,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   2,
+			IndexID:    1,
 			Delete:     false,
 			IndexValue: []types.Datum{{}, {}, types.NewTimeDatum(time)},
 		}}
@@ -309,15 +309,15 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 	rawEntries = puller.MustExec(c, "insert into test.test2 values(null, null, null)")
 	expect = []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 3,
+			TableID:  tableInfo.ID,
+			RecordID: 3,
 			Delete:   false,
 			Row:      map[int64]types.Datum{},
 		},
 		&IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   3,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   3,
+			IndexID:    1,
 			Delete:     false,
 			IndexValue: []types.Datum{{}, {}, {}},
 		}}
@@ -326,15 +326,15 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 	rawEntries = puller.MustExec(c, "delete from test.test2 where c is null")
 	expect = []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 3,
+			TableID:  tableInfo.ID,
+			RecordID: 3,
 			Delete:   true,
 			Row:      map[int64]types.Datum{},
 		},
 		&IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   3,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   3,
+			IndexID:    1,
 			Delete:     true,
 			IndexValue: []types.Datum{{}, {}, {}},
 		}}
@@ -343,22 +343,22 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 	rawEntries = puller.MustExec(c, "update test.test2 set a = 1, b = null where a is null and b is not null")
 	expect = []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 1,
+			TableID:  tableInfo.ID,
+			RecordID: 1,
 			Delete:   false,
 			Row:      map[int64]types.Datum{1: types.NewIntDatum(1), 3: types.NewTimeDatum(time)},
 		},
 		&IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   1,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   1,
+			IndexID:    1,
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewIntDatum(1), {}, types.NewTimeDatum(time)},
 		},
 		&IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   1,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   1,
+			IndexID:    1,
 			Delete:     true,
 			IndexValue: []types.Datum{{}, types.NewBytesDatum([]byte("aa")), types.NewTimeDatum(time)},
 		}}
@@ -384,15 +384,15 @@ func (s *kvEntrySuite) TestUkWithNoPk(c *check.C) {
 	rawEntries = puller.MustExec(c, "INSERT INTO test.cdc_uk_with_no_pk(id, a1, a3) VALUES(5, 6, NULL);")
 	expect := []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 1,
+			TableID:  tableInfo.ID,
+			RecordID: 1,
 			Delete:   false,
 			Row:      map[int64]types.Datum{1: types.NewIntDatum(5), 2: types.NewIntDatum(6)},
 		},
 		&IndexKVEntry{
-			TableId:    tableInfo.ID,
-			RecordId:   1,
-			IndexId:    1,
+			TableID:    tableInfo.ID,
+			RecordID:   1,
+			IndexID:    1,
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewIntDatum(6), {}},
 		}}
@@ -401,8 +401,8 @@ func (s *kvEntrySuite) TestUkWithNoPk(c *check.C) {
 	rawEntries = puller.MustExec(c, "UPDATE test.cdc_uk_with_no_pk SET id = 10 WHERE id = 5;")
 	expect = []KVEntry{
 		&RowKVEntry{
-			TableId:  tableInfo.ID,
-			RecordId: 1,
+			TableID:  tableInfo.ID,
+			RecordID: 1,
 			Delete:   false,
 			Row:      map[int64]types.Datum{1: types.NewIntDatum(10), 2: types.NewIntDatum(6)},
 		}}

@@ -73,11 +73,11 @@ func (s *CDCSuite) Forward(span util.Span, ts uint64) bool {
 func (s *CDCSuite) RunAndCheckSync(c *C, execute func(func(string, ...interface{})), expect func(sqlmock.Sqlmock)) {
 	expect(s.mock)
 	var rawKVs []*kv.RawKVEntry
-	executeSql := func(sql string, args ...interface{}) {
+	executeSQL := func(sql string, args ...interface{}) {
 		kvs := s.puller.MustExec(c, sql, args...)
 		rawKVs = append(rawKVs, kvs...)
 	}
-	execute(executeSql)
+	execute(executeSQL)
 	txn, err := s.mounter.Mount(txn.RawTxn{TS: rawKVs[len(rawKVs)-1].Ts, Entries: rawKVs})
 	c.Assert(err, IsNil)
 	err = s.sink.Emit(context.Background(), *txn)

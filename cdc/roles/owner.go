@@ -58,6 +58,9 @@ type Owner interface {
 
 	// Run a goroutine to handle Owner logic
 	Run(ctx context.Context, tickTime time.Duration) error
+
+	// IsOwner checks whether it has campaigned as owner
+	IsOwner(ctx context.Context) bool
 }
 
 type CaptureID = string
@@ -115,12 +118,6 @@ func (c *ChangeFeedInfo) CheckpointTS() uint64 {
 	return c.checkpointTS
 }
 
-type ddlExecResult struct {
-	changeFeedID ChangeFeedID
-	job          *model.Job
-	err          error
-}
-
 // OwnerDDLHandler defines the ddl handler for Owner
 // which can pull ddl jobs and execute ddl jobs
 type OwnerDDLHandler interface {
@@ -152,6 +149,19 @@ type ownerImpl struct {
 	ddlJobHistory []*model.Job
 
 	l sync.RWMutex
+
+	manager Manager
+}
+
+// NewOwner creates a new ownerImpl instance
+func NewOwner(targetTS uint64, manager Manager) *ownerImpl {
+	owner := &ownerImpl{
+		changeFeedInfos: make(map[ChangeFeedID]*ChangeFeedInfo),
+		ddlHandler:      NewDDLHandler(),
+		cfRWriter:       NewCfInfoReadWriter(),
+		manager:         manager,
+	}
+	return owner
 }
 
 func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
@@ -161,8 +171,8 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 	}
 	// TODO: handle changefeed changed and the table of sub changefeed changed
 	// TODO: find the first index of one changefeed in ddl jobs
-	for changeFeedId, etcdChangeFeedInfo := range infos {
-		if cfInfo, exist := o.changeFeedInfos[changeFeedId]; exist {
+	for changeFeedID, etcdChangeFeedInfo := range infos {
+		if cfInfo, exist := o.changeFeedInfos[changeFeedID]; exist {
 			cfInfo.processorInfos = etcdChangeFeedInfo
 		}
 	}
@@ -267,7 +277,7 @@ waitCheckpointTSLoop:
 
 		// Execute DDL Job asynchronously
 		cfInfo.status = ChangeFeedExecDDL
-		go func() {
+		go func(changeFeedID string, cfInfo *ChangeFeedInfo) {
 			err := o.ddlHandler.ExecDDL(todoDDLJob)
 			o.l.Lock()
 			defer o.l.Unlock()
@@ -287,7 +297,7 @@ waitCheckpointTSLoop:
 			}
 			cfInfo.ddlCurrentIndex += 1
 			cfInfo.status = ChangeFeedSyncDML
-		}()
+		}(changeFeedID, cfInfo)
 	}
 	return nil
 }
@@ -298,6 +308,9 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(tickTime):
+			if !o.IsOwner(ctx) {
+				continue
+			}
 			err := o.run(ctx)
 			if err != nil {
 				return err
@@ -307,9 +320,19 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 }
 
 func (o *ownerImpl) run(ctx context.Context) error {
+	cctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		select {
+		case <-cctx.Done():
+		case <-o.manager.RetireNotify():
+			cancel()
+		}
+	}()
+
 	o.l.Lock()
 	defer o.l.Unlock()
-	err := o.loadChangeFeedInfos(ctx)
+	err := o.loadChangeFeedInfos(cctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -317,13 +340,17 @@ func (o *ownerImpl) run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = o.handleDDL(ctx)
+	err = o.handleDDL(cctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = o.flushChangeFeedInfos(ctx)
+	err = o.flushChangeFeedInfos(cctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func (o *ownerImpl) IsOwner(_ context.Context) bool {
+	return o.manager.IsOwner()
 }

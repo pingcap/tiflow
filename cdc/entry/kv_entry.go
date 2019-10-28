@@ -32,31 +32,31 @@ type KVEntry interface {
 
 type RowKVEntry struct {
 	Ts       uint64
-	TableId  int64
-	RecordId int64
+	TableID  int64
+	RecordID int64
 	Delete   bool
 	Row      map[int64]types.Datum
 }
 
 type IndexKVEntry struct {
 	Ts         uint64
-	TableId    int64
-	IndexId    int64
+	TableID    int64
+	IndexID    int64
 	Delete     bool
 	IndexValue []types.Datum
-	RecordId   int64
+	RecordID   int64
 }
 
 type DDLJobKVEntry struct {
 	Ts    uint64
-	JobId int64
+	JobID int64
 	Job   *model.Job
 }
 
 type UpdateTableKVEntry struct {
 	Ts        uint64
-	DbId      int64
-	TableId   int64
+	DbID      int64
+	TableID   int64
 	TableInfo *model.TableInfo
 }
 
@@ -65,12 +65,12 @@ type UnknownKVEntry struct {
 }
 
 func (idx *IndexKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Location) error {
-	if tableInfo.ID != idx.TableId {
+	if tableInfo.ID != idx.TableID {
 		return errors.New("wrong table info in Unflatten")
 	}
-	index := tableInfo.Indices[idx.IndexId-1]
+	index := tableInfo.Indices[idx.IndexID-1]
 	if !isDistinct(index, idx.IndexValue) {
-		idx.RecordId = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
+		idx.RecordID = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
 		idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-1]
 	}
 	for i, v := range idx.IndexValue {
@@ -101,7 +101,7 @@ func isDistinct(index *model.IndexInfo, indexValue []types.Datum) bool {
 }
 
 func (row *RowKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Location) error {
-	if tableInfo.ID != row.TableId {
+	if tableInfo.ID != row.TableID {
 		return errors.New("wrong table info in Unflatten")
 	}
 	for i, v := range row.Row {
@@ -126,13 +126,13 @@ func Unmarshal(raw *kv.RawKVEntry) (KVEntry, error) {
 }
 
 func unmarshalTableKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
-	key, tableId, err := decodeTableId(raw.Key)
+	key, tableID, err := decodeTableID(raw.Key)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	switch {
 	case bytes.HasPrefix(key, recordPrefix):
-		key, recordId, err := decodeRecordId(key)
+		key, recordID, err := decodeRecordID(key)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -145,33 +145,33 @@ func unmarshalTableKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 		}
 		return &RowKVEntry{
 			Ts:       raw.Ts,
-			TableId:  tableId,
-			RecordId: recordId,
+			TableID:  tableID,
+			RecordID: recordID,
 			Delete:   raw.OpType == kv.OpTypeDelete,
 			Row:      row,
 		}, nil
 	case bytes.HasPrefix(key, indexPrefix):
-		indexId, indexValue, err := decodeIndexKey(key)
+		indexID, indexValue, err := decodeIndexKey(key)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		var recordId int64
+		var recordID int64
 
 		if len(raw.Value) == 8 {
 			// primary key or unique index
 			buf := bytes.NewBuffer(raw.Value)
-			err = binary.Read(buf, binary.BigEndian, &recordId)
+			err = binary.Read(buf, binary.BigEndian, &recordID)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 		}
 		return &IndexKVEntry{
 			Ts:         raw.Ts,
-			TableId:    tableId,
-			IndexId:    indexId,
+			TableID:    tableID,
+			IndexID:    indexID,
 			IndexValue: indexValue,
 			Delete:     raw.OpType == kv.OpTypeDelete,
-			RecordId:   recordId,
+			RecordID:   recordID,
 		}, nil
 
 	}
@@ -180,7 +180,7 @@ func unmarshalTableKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 
 const (
 	ddlJobListKey    = "DDLJobList"
-	ddlJobAddIdxList = "DDLJobAddIdxList"
+	ddlJobAddIDxList = "DDLJobAddIDxList"
 	ddlJobHistoryKey = "DDLJobHistory"
 	ddlJobReorgKey   = "DDLJobReorg"
 
@@ -213,7 +213,7 @@ func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 				job.BinlogInfo.FinishedTS = raw.Ts
 				return &DDLJobKVEntry{
 					Ts:    raw.Ts,
-					JobId: int64(job.ID),
+					JobID: int64(job.ID),
 					Job:   job,
 				}, nil
 			}
@@ -222,15 +222,15 @@ func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 		k := meta.(MetaHashData)
 		if strings.HasPrefix(k.key, dbMetaPrefix) {
 			key := k.key[len(dbMetaPrefix):]
-			var tableId int64
-			dbId, err := strconv.ParseInt(key, 10, 64)
+			var tableID int64
+			dbID, err := strconv.ParseInt(key, 10, 64)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 			fieldStr := string(k.field)
 			if strings.HasPrefix(fieldStr, tableMetaPrefix) {
 				fieldStr = fieldStr[len(tableMetaPrefix):]
-				tableId, err = strconv.ParseInt(fieldStr, 10, 64)
+				tableID, err = strconv.ParseInt(fieldStr, 10, 64)
 				if err != nil {
 					return nil, errors.Trace(err)
 				}
@@ -241,8 +241,8 @@ func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 				}
 				return &UpdateTableKVEntry{
 					Ts:        raw.Ts,
-					DbId:      dbId,
-					TableId:   tableId,
+					DbID:      dbID,
+					TableID:   tableID,
 					TableInfo: tableInfo,
 				}, nil
 			}

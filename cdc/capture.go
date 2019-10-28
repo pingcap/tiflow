@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -27,6 +28,7 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
@@ -42,6 +44,7 @@ type Capture struct {
 	pdEndpoints  []string
 	etcdClient   *clientv3.Client
 	ownerManager roles.Manager
+	ownerWorker  roles.Owner
 }
 
 // NewCapture returns a new Capture instance
@@ -60,12 +63,14 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	id := uuid.New().String()
 
 	manager := roles.NewOwnerManager(cli, id, CaptureOwnerKey)
+	worker := roles.NewOwner(math.MaxUint64, manager)
 
 	c = &Capture{
 		id:           id,
 		pdEndpoints:  pdEndpoints,
 		etcdClient:   cli,
 		ownerManager: manager,
+		ownerWorker:  worker,
 	}
 
 	return
@@ -101,12 +106,22 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	skey := getEtcdKeySubChangeFeed(changefeedID, c.id)
 	c.etcdClient.Put(ctx, skey, "")
 	defer func() {
-		c.etcdClient.Delete(ctx, getEtcdKeyChangeFeed(changefeedID))
-		c.etcdClient.Delete(ctx, skey)
+		c.etcdClient.Delete(context.Background(), getEtcdKeyChangeFeed(changefeedID))
+		c.etcdClient.Delete(context.Background(), skey)
 	}()
 
+	errg, cctx := errgroup.WithContext(ctx)
+
+	errg.Go(func() error {
+		return c.ownerWorker.Run(cctx, time.Second*5)
+	})
+
 	watcher := NewChangeFeedWatcher(c.id, c.pdEndpoints, c.etcdClient)
-	return watcher.Watch(ctx)
+	errg.Go(func() error {
+		return watcher.Watch(cctx)
+	})
+
+	return errg.Wait()
 }
 
 func (c *Capture) Close(ctx context.Context) error {
