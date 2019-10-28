@@ -29,6 +29,7 @@ func (ci *captureInfoSuite) SetUpTest(c *check.C) {
 		Endpoints:   []string{ci.clientURL.String()},
 		DialTimeout: 3 * time.Second,
 	})
+	c.Assert(err, check.IsNil)
 	go func() {
 		c.Log(<-ci.etcd.Err())
 	}()
