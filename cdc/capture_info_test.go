@@ -93,8 +93,7 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 			c.Assert(ok, check.IsTrue)
 			return resp
 		case <-time.After(time.Second * 5):
-			c.Log("timeout to get resp from watchC")
-			c.FailNow()
+			c.Fatal("timeout to get resp from watchC")
 			return nil
 		}
 	}

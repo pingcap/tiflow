@@ -11,7 +11,7 @@ import (
 )
 
 var captureEinfoKeyPrefix = kv.EtcdKeyBase + "/capture/info"
-var errCaptureNotExist = errors.New("capture not exits")
+var errCaptureNotExist = errors.New("capture not exists")
 
 func infoKey(id string) string {
 	return captureEinfoKeyPrefix + "/" + id
@@ -27,22 +27,14 @@ func PutCaptureInfo(ctx context.Context, info *CaptureInfo, cli *clientv3.Client
 
 	key := infoKey(info.ID)
 	_, err = cli.Put(ctx, key, string(data), opts...)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
+	return errors.Trace(err)
 }
 
 // DeleteCaptureInfo delete capture info from etcd.
 func DeleteCaptureInfo(ctx context.Context, id string, cli *clientv3.Client, opts ...clientv3.OpOption) error {
 	key := infoKey(id)
 	_, err := cli.Delete(ctx, key, opts...)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
+	return errors.Trace(err)
 }
 
 // GetCaptureInfo get capture info from etcd.
