@@ -8,7 +8,6 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
 )
 
@@ -99,6 +98,17 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 		}
 	}
 
+	mustClosed := func() {
+		select {
+		case _, ok := <-watchC:
+			c.Assert(ok, check.IsFalse)
+		case <-time.After(time.Second * 5):
+			c.Fatal("timeout to get resp from watchC")
+
+		}
+		return
+	}
+
 	// put info2 and info3
 	err = PutCaptureInfo(ctx, info2, ci.client)
 	c.Assert(err, check.IsNil)
@@ -133,6 +143,5 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 
 	// cancel the watch
 	watchCancel()
-	resp = mustGetResp()
-	c.Assert(errors.Cause(resp.Err), check.Equals, context.Canceled)
+	mustClosed()
 }

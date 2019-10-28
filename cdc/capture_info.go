@@ -7,6 +7,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/mvcc/mvccpb"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 )
 
@@ -87,6 +88,9 @@ type CaptureInfoWatchResp struct {
 	Err      error
 }
 
+// newCaptureInfoWatch return the existing CaptureInfo and continuous get update events from watchC.
+// An error is returned if the underlay watchC from etcd return a error, or will closed normally withou
+// returning an error when the ctx is Done.
 func newCaptureInfoWatch(
 	ctx context.Context, cli *clientv3.Client,
 ) (infos []*CaptureInfo, watchC <-chan *CaptureInfoWatchResp, err error) {
@@ -116,12 +120,9 @@ func newCaptureInfoWatch(
 
 		for {
 			select {
-			case <-ctx.Done():
-				watchResp <- &CaptureInfoWatchResp{Err: ctx.Err()}
-				return
 			case resp, ok := <-etcdWatchC:
 				if !ok {
-					// should meet resp.Err() before closed?
+					log.Debug("watchC from etcd close normally")
 					return
 				}
 
