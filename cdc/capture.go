@@ -63,7 +63,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	id := uuid.New().String()
 
 	manager := roles.NewOwnerManager(cli, id, CaptureOwnerKey)
-	worker := roles.NewOwner(math.MaxUint64, manager)
+	worker := roles.NewOwner(math.MaxUint64, cli, manager)
 
 	c = &Capture{
 		id:           id,
@@ -91,10 +91,9 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 
 	// create a test changefeed
 	detail := ChangeFeedDetail{
-		SinkURI:      "root@tcp(127.0.0.1:3306)/test",
-		Opts:         make(map[string]string),
-		CheckpointTS: 0,
-		CreateTime:   time.Now(),
+		SinkURI:    "root@tcp(127.0.0.1:3306)/test",
+		Opts:       make(map[string]string),
+		CreateTime: time.Now(),
 	}
 	changefeedID := uuid.New().String()
 	err = detail.SaveChangeFeedDetail(ctx, c.etcdClient, changefeedID)
@@ -103,10 +102,11 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	}
 	// create subchangefeed for test
 	// TODO: should be updated by owner
-	skey := getEtcdKeySubChangeFeed(changefeedID, c.id)
+	skey := kv.GetEtcdKeySubChangeFeed(changefeedID, c.id)
 	c.etcdClient.Put(ctx, skey, "")
 	defer func() {
-		c.etcdClient.Delete(context.Background(), getEtcdKeyChangeFeed(changefeedID))
+		c.etcdClient.Delete(context.Background(), kv.GetEtcdKeyChangeFeedConfig(changefeedID))
+		c.etcdClient.Delete(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))
 		c.etcdClient.Delete(context.Background(), skey)
 	}()
 

@@ -22,10 +22,6 @@ import (
 	"github.com/pingcap/tidb/meta"
 )
 
-const (
-	EtcdKeyBase = "/tidb/cdc"
-)
-
 // LoadHistoryDDLJobs loads all history DDL jobs from TiDB
 func LoadHistoryDDLJobs(tiStore tidbkv.Storage) ([]*model.Job, error) {
 	snapMeta, err := getSnapshotMeta(tiStore)

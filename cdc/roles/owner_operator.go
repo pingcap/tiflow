@@ -14,7 +14,6 @@
 package roles
 
 import (
-	"context"
 	"math"
 
 	"github.com/pingcap/parser/model"
@@ -32,20 +31,5 @@ func (h *ddlHandler) PullDDL() (uint64, []*model.Job, error) {
 }
 
 func (h *ddlHandler) ExecDDL(*model.Job) error {
-	return nil
-}
-
-type cfInfoReadWriter struct {
-}
-
-func NewCfInfoReadWriter() *cfInfoReadWriter {
-	return &cfInfoReadWriter{}
-}
-
-func (rw *cfInfoReadWriter) Read(ctx context.Context) (map[ChangeFeedID]ProcessorsInfos, error) {
-	return nil, nil
-}
-
-func (rw *cfInfoReadWriter) Write(ctx context.Context, infos map[ChangeFeedID]*ChangeFeedInfo) error {
 	return nil
 }

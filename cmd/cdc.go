@@ -13,10 +13,9 @@ import (
 
 func feed() {
 	detail := cdc.ChangeFeedDetail{
-		SinkURI:      "root@tcp(127.0.0.1:3306)/test",
-		Opts:         make(map[string]string),
-		CheckpointTS: 0,
-		CreateTime:   time.Now(),
+		SinkURI:    "root@tcp(127.0.0.1:3306)/test",
+		Opts:       make(map[string]string),
+		CreateTime: time.Now(),
 	}
 
 	feed, err := cdc.NewSubChangeFeed([]string{"http://localhost:2379"}, detail)

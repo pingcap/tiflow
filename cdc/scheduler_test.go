@@ -24,6 +24,7 @@ import (
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 )
@@ -89,7 +90,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 		captureID    = "test-capture"
 		pdEndpoints  = []string{}
 		detail       = ChangeFeedDetail{}
-		key          = getEtcdKeySubChangeFeed(changefeedID, captureID)
+		key          = kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
 	)
 
 	oriRunSubChangeFeed := runSubChangeFeed
@@ -151,7 +152,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcherError(c *check.C) {
 		captureID    = "test-capture-err"
 		pdEndpoints  = []string{}
 		detail       = ChangeFeedDetail{}
-		key          = getEtcdKeySubChangeFeed(changefeedID, captureID)
+		key          = kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
 	)
 
 	oriRunSubChangeFeed := runSubChangeFeed
@@ -188,7 +189,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 		pdEndpoints  = []string{}
 		sinkURI      = "root@tcp(127.0.0.1:3306)/test"
 		detail       = ChangeFeedDetail{SinkURI: sinkURI}
-		key          = getEtcdKeyChangeFeed(changefeedID)
+		key          = kv.GetEtcdKeyChangeFeedConfig(changefeedID)
 	)
 
 	oriRunSubChangeFeedWatcher := runSubChangeFeedWatcher

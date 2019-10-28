@@ -15,38 +15,17 @@ package roles
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 	"time"
 
+	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
+	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb-cdc/cdc/model"
+	"github.com/pingcap/tidb-cdc/cdc/roles/storage"
 	"go.uber.org/zap"
 )
-
-type ProcessTableInfo struct {
-	ID      uint64 `json:"id"`
-	StartTS uint64 `json:"start-ts"`
-}
-
-// SubChangeFeedInfo records the process information of a capture
-type SubChangeFeedInfo struct {
-	// The maximum event CommitTS that has been synchronized. This is updated by corresponding processor.
-	CheckPointTS uint64 `json:"checkpoint-ts"`
-	// The event that satisfies CommitTS <= ResolvedTS can be synchronized. This is updated by corresponding processor.
-	ResolvedTS uint64 `json:"resolved-ts"`
-	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
-	TableInfos []*ProcessTableInfo `json:"table-infos"`
-}
-
-func (scfi *SubChangeFeedInfo) String() string {
-	data, err := json.Marshal(scfi)
-	if err != nil {
-		log.Error("fail to marshal ChangeFeedDetail to json", zap.Error(err))
-	}
-	return string(data)
-}
 
 // Owner is used to process etcd information for a capture with owner role
 type Owner interface {
@@ -63,102 +42,49 @@ type Owner interface {
 	IsOwner(ctx context.Context) bool
 }
 
-type CaptureID = string
-type ChangeFeedID = string
-type ProcessorsInfos = map[CaptureID]*SubChangeFeedInfo
-
-type ChangeFeedStatus int
-
-const (
-	ChangeFeedUnknown ChangeFeedStatus = iota
-	ChangeFeedSyncDML
-	ChangeFeedWaitToExecDDL
-	ChangeFeedExecDDL
-	ChangeFeedDDLExecuteFailed
-)
-
-func (s ChangeFeedStatus) String() string {
-	switch s {
-	case ChangeFeedUnknown:
-		return "Unknown"
-	case ChangeFeedSyncDML:
-		return "SyncDML"
-	case ChangeFeedWaitToExecDDL:
-		return "WaitToExecDDL"
-	case ChangeFeedExecDDL:
-		return "ExecDDL"
-	case ChangeFeedDDLExecuteFailed:
-		return "DDLExecuteFailed"
-	}
-	return ""
-}
-
-// ChangeFeedInfo stores information about a ChangeFeed
-type ChangeFeedInfo struct {
-	status       ChangeFeedStatus
-	resolvedTS   uint64
-	checkpointTS uint64
-
-	processorInfos  ProcessorsInfos
-	ddlCurrentIndex int
-}
-
-// Status gets the status of the changefeed info.
-func (c *ChangeFeedInfo) Status() ChangeFeedStatus {
-	return c.status
-}
-
-// ResolvedTS gets the resolvedTS for the changefeed info.
-func (c *ChangeFeedInfo) ResolvedTS() uint64 {
-	return c.resolvedTS
-}
-
-// CheckpointTS gets the checkpointTS for the changefeed info.
-func (c *ChangeFeedInfo) CheckpointTS() uint64 {
-	return c.checkpointTS
-}
-
 // OwnerDDLHandler defines the ddl handler for Owner
 // which can pull ddl jobs and execute ddl jobs
 type OwnerDDLHandler interface {
 
 	// PullDDL pulls the ddl jobs and returns resolvedTS of DDL Puller and job list.
-	PullDDL() (resolvedTS uint64, jobs []*model.Job, err error)
+	PullDDL() (resolvedTS uint64, jobs []*timodel.Job, err error)
 
 	// ExecDDL executes the ddl job
-	ExecDDL(*model.Job) error
+	ExecDDL(*timodel.Job) error
 }
 
 // ChangeFeedInfoRWriter defines the Reader and Writer for ChangeFeedInfo
 type ChangeFeedInfoRWriter interface {
 	// Read the changefeed info from storage such as etcd.
-	Read(ctx context.Context) (map[ChangeFeedID]ProcessorsInfos, error)
+	Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error)
 	// Write the changefeed info to storage such as etcd.
-	Write(ctx context.Context, infos map[ChangeFeedID]*ChangeFeedInfo) error
+	Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error
 }
 
 // TODO edit sub change feed
 type ownerImpl struct {
-	changeFeedInfos map[ChangeFeedID]*ChangeFeedInfo
+	changeFeedInfos map[model.ChangeFeedID]*model.ChangeFeedInfo
 
 	ddlHandler OwnerDDLHandler
 	cfRWriter  ChangeFeedInfoRWriter
 
 	ddlResolvedTS uint64
 	targetTS      uint64
-	ddlJobHistory []*model.Job
+	ddlJobHistory []*timodel.Job
 
 	l sync.RWMutex
 
-	manager Manager
+	etcdClient *clientv3.Client
+	manager    Manager
 }
 
 // NewOwner creates a new ownerImpl instance
-func NewOwner(targetTS uint64, manager Manager) *ownerImpl {
+func NewOwner(targetTS uint64, cli *clientv3.Client, manager Manager) *ownerImpl {
 	owner := &ownerImpl{
-		changeFeedInfos: make(map[ChangeFeedID]*ChangeFeedInfo),
+		changeFeedInfos: make(map[model.ChangeFeedID]*model.ChangeFeedInfo),
 		ddlHandler:      NewDDLHandler(),
-		cfRWriter:       NewCfInfoReadWriter(),
+		cfRWriter:       storage.NewChangeFeedInfoEtcdRWriter(cli),
+		etcdClient:      cli,
 		manager:         manager,
 	}
 	return owner
@@ -173,7 +99,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 	// TODO: find the first index of one changefeed in ddl jobs
 	for changeFeedID, etcdChangeFeedInfo := range infos {
 		if cfInfo, exist := o.changeFeedInfos[changeFeedID]; exist {
-			cfInfo.processorInfos = etcdChangeFeedInfo
+			cfInfo.ProcessorInfos = etcdChangeFeedInfo
 		}
 	}
 	return nil
@@ -193,7 +119,7 @@ func (o *ownerImpl) pullDDLJob() error {
 	return nil
 }
 
-func (o *ownerImpl) getChangeFeedInfo(changeFeedID string) (*ChangeFeedInfo, error) {
+func (o *ownerImpl) getChangeFeedInfo(changeFeedID string) (*model.ChangeFeedInfo, error) {
 	info, exist := o.changeFeedInfos[changeFeedID]
 	if !exist {
 		return nil, errors.NotFoundf("ChangeFeed(%s) in ChangeFeedInfos", changeFeedID)
@@ -208,7 +134,7 @@ func (o *ownerImpl) GetResolvedTS(changeFeedID string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return cfInfo.resolvedTS, nil
+	return cfInfo.ResolvedTS, nil
 }
 
 func (o *ownerImpl) GetCheckpointTS(changeFeedID string) (uint64, error) {
@@ -218,18 +144,18 @@ func (o *ownerImpl) GetCheckpointTS(changeFeedID string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return cfInfo.checkpointTS, nil
+	return cfInfo.CheckpointTS, nil
 }
 
 func (o *ownerImpl) calcResolvedTS() error {
 	for _, cfInfo := range o.changeFeedInfos {
-		if cfInfo.status != ChangeFeedSyncDML {
+		if cfInfo.Status != model.ChangeFeedSyncDML {
 			continue
 		}
 		minResolvedTS := o.targetTS
 
 		// calc the min of all resolvedTS in captures
-		for _, pStatus := range cfInfo.processorInfos {
+		for _, pStatus := range cfInfo.ProcessorInfos {
 			if minResolvedTS > pStatus.ResolvedTS {
 				minResolvedTS = pStatus.ResolvedTS
 			}
@@ -250,12 +176,12 @@ func (o *ownerImpl) calcResolvedTS() error {
 
 		// if minResolvedTS is greater than the finishedTS of ddl job which is not executed,
 		// we need to execute this ddl job
-		if len(o.ddlJobHistory) > cfInfo.ddlCurrentIndex &&
-			minResolvedTS > o.ddlJobHistory[cfInfo.ddlCurrentIndex].BinlogInfo.FinishedTS {
-			minResolvedTS = o.ddlJobHistory[cfInfo.ddlCurrentIndex].BinlogInfo.FinishedTS
-			cfInfo.status = ChangeFeedWaitToExecDDL
+		if len(o.ddlJobHistory) > cfInfo.DDLCurrentIndex &&
+			minResolvedTS > o.ddlJobHistory[cfInfo.DDLCurrentIndex].BinlogInfo.FinishedTS {
+			minResolvedTS = o.ddlJobHistory[cfInfo.DDLCurrentIndex].BinlogInfo.FinishedTS
+			cfInfo.Status = model.ChangeFeedWaitToExecDDL
 		}
-		cfInfo.resolvedTS = minResolvedTS
+		cfInfo.ResolvedTS = minResolvedTS
 	}
 	return nil
 }
@@ -263,40 +189,40 @@ func (o *ownerImpl) calcResolvedTS() error {
 func (o *ownerImpl) handleDDL(ctx context.Context) error {
 waitCheckpointTSLoop:
 	for changeFeedID, cfInfo := range o.changeFeedInfos {
-		if cfInfo.status != ChangeFeedWaitToExecDDL {
+		if cfInfo.Status != model.ChangeFeedWaitToExecDDL {
 			continue waitCheckpointTSLoop
 		}
-		todoDDLJob := o.ddlJobHistory[cfInfo.ddlCurrentIndex]
+		todoDDLJob := o.ddlJobHistory[cfInfo.DDLCurrentIndex]
 
 		// Check if all the checkpointTs of capture are achieving global resolvedTS(which is equal to todoDDLJob.FinishedTS)
-		for _, pInfo := range cfInfo.processorInfos {
+		for _, pInfo := range cfInfo.ProcessorInfos {
 			if pInfo.CheckPointTS != todoDDLJob.BinlogInfo.FinishedTS {
 				continue waitCheckpointTSLoop
 			}
 		}
 
 		// Execute DDL Job asynchronously
-		cfInfo.status = ChangeFeedExecDDL
-		go func(changeFeedID string, cfInfo *ChangeFeedInfo) {
+		cfInfo.Status = model.ChangeFeedExecDDL
+		go func(changeFeedID string, cfInfo *model.ChangeFeedInfo) {
 			err := o.ddlHandler.ExecDDL(todoDDLJob)
 			o.l.Lock()
 			defer o.l.Unlock()
 			// If DDL executing failed, pause the changefeed and print log
 			if err != nil {
-				cfInfo.status = ChangeFeedDDLExecuteFailed
+				cfInfo.Status = model.ChangeFeedDDLExecuteFailed
 				log.Error("Execute DDL failed",
 					zap.String("ChangeFeedID", changeFeedID),
 					zap.Error(err),
 					zap.Reflect("ddlJob", todoDDLJob))
 				return
 			}
-			if cfInfo.status != ChangeFeedExecDDL {
+			if cfInfo.Status != model.ChangeFeedExecDDL {
 				log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
 					zap.String("ChangeFeedID", changeFeedID),
-					zap.String("ChangeFeedState", cfInfo.status.String()))
+					zap.String("ChangeFeedState", cfInfo.Status.String()))
 			}
-			cfInfo.ddlCurrentIndex += 1
-			cfInfo.status = ChangeFeedSyncDML
+			cfInfo.DDLCurrentIndex += 1
+			cfInfo.Status = model.ChangeFeedSyncDML
 		}(changeFeedID, cfInfo)
 	}
 	return nil

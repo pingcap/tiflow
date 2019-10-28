@@ -15,8 +15,6 @@ package cdc
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
 var (
@@ -42,23 +41,6 @@ type ChangeFeedWatcher struct {
 	details     map[string]ChangeFeedDetail
 }
 
-func getEtcdKeyChangeFeedList() string {
-	return fmt.Sprintf("%s/changefeed/config", kv.EtcdKeyBase)
-}
-
-func getEtcdKeyChangeFeed(changefeedID string) string {
-	return fmt.Sprintf("%s/changefeed/config/%s", kv.EtcdKeyBase, changefeedID)
-}
-
-func getEtcdKeySubChangeFeed(changefeedID, captureID string) string {
-	return fmt.Sprintf("%s/changefeed/subchangfeed/%s/%s", kv.EtcdKeyBase, changefeedID, captureID)
-}
-
-func splitChangeFeedID(key string) string {
-	subs := strings.Split(key, "/")
-	return subs[len(subs)-1]
-}
-
 // NewChangeFeedWatcher creates a new changefeed watcher
 func NewChangeFeedWatcher(captureID string, pdEndpoints []string, cli *clientv3.Client) *ChangeFeedWatcher {
 	w := &ChangeFeedWatcher{
@@ -72,7 +54,10 @@ func NewChangeFeedWatcher(captureID string, pdEndpoints []string, cli *clientv3.
 
 func (w *ChangeFeedWatcher) processPutKv(kv *mvccpb.KeyValue) (bool, string, ChangeFeedDetail, error) {
 	needRunWatcher := false
-	changefeedID := splitChangeFeedID(string(kv.Key))
+	changefeedID, err := util.ExtractKeySuffix(string(kv.Key))
+	if err != nil {
+		return needRunWatcher, "", ChangeFeedDetail{}, err
+	}
 	detail, err := DecodeChangeFeedDetail(kv.Value)
 	if err != nil {
 		return needRunWatcher, changefeedID, ChangeFeedDetail{}, err
@@ -89,7 +74,10 @@ func (w *ChangeFeedWatcher) processPutKv(kv *mvccpb.KeyValue) (bool, string, Cha
 }
 
 func (w *ChangeFeedWatcher) processDeleteKv(kv *mvccpb.KeyValue) error {
-	changefeedID := splitChangeFeedID(string(kv.Key))
+	changefeedID, err := util.ExtractKeySuffix(string(kv.Key))
+	if err != nil {
+		return err
+	}
 	w.lock.Lock()
 	delete(w.details, changefeedID)
 	w.lock.Unlock()
@@ -98,16 +86,14 @@ func (w *ChangeFeedWatcher) processDeleteKv(kv *mvccpb.KeyValue) error {
 
 // Watch watches changefeed key base
 func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
-	key := getEtcdKeyChangeFeedList()
 	errCh := make(chan error, 1)
 
-	getResp, err := w.etcdCli.Get(ctx, key, clientv3.WithPrefix())
+	revision, details, err := kv.GetChangeFeeds(ctx, w.etcdCli)
 	if err != nil {
-		return errors.Trace(err)
+		return err
 	}
-	revision := getResp.Header.Revision
-	for _, kv := range getResp.Kvs {
-		needRunWatcher, changefeedID, detail, err := w.processPutKv(kv)
+	for changefeedID, kv := range details {
+		needRunWatcher, _, detail, err := w.processPutKv(kv)
 		if err != nil {
 			return err
 		}
@@ -116,7 +102,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 		}
 	}
 
-	watchCh := w.etcdCli.Watch(ctx, key, clientv3.WithPrefix(), clientv3.WithRev(revision))
+	watchCh := w.etcdCli.Watch(ctx, kv.GetEtcdKeyChangeFeedList(), clientv3.WithPrefix(), clientv3.WithRev(revision))
 	for {
 		select {
 		case <-ctx.Done():
@@ -200,7 +186,7 @@ func (w *SubChangeFeedWatcher) reopen() error {
 
 func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 	defer w.wg.Done()
-	key := getEtcdKeySubChangeFeed(w.changefeedID, w.captureID)
+	key := kv.GetEtcdKeySubChangeFeed(w.changefeedID, w.captureID)
 
 	getResp, err := w.etcdCli.Get(ctx, key)
 	if err != nil {

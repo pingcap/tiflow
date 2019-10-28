@@ -3,6 +3,8 @@ package util
 import (
 	"fmt"
 	"strings"
+
+	"github.com/pingcap/errors"
 )
 
 func QuoteSchema(schema string, table string) string {
@@ -27,4 +29,14 @@ func HolderString(n int) string {
 		builder.WriteString("?")
 	}
 	return builder.String()
+}
+
+// ExtractKeySuffix extracts the suffix of an etcd key, such as extracting
+// "6a6c6dd290bc8732" from /tidb/cdc/changefeed/config/6a6c6dd290bc8732
+func ExtractKeySuffix(key string) (string, error) {
+	subs := strings.Split(key, "/")
+	if len(subs) < 2 {
+		return "", errors.Errorf("invalid key: %s", key)
+	}
+	return subs[len(subs)-1], nil
 }
