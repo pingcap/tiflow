@@ -101,7 +101,7 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 			_, err = s.client.Put(context.Background(), kv.GetEtcdKeyChangeFeedConfig(changefeedID), "")
 			c.Assert(err, check.IsNil)
 			for captureID, cinfo := range tc.pinfos[changefeedID] {
-				_, err = s.client.Put(context.Background(), kv.GetEtcdKeySubChangeFeed(changefeedID, captureID), cinfo.MarshalSubChangeFeedInfo())
+				_, err = s.client.Put(context.Background(), kv.GetEtcdKeySubChangeFeed(changefeedID, captureID), cinfo.Marshal())
 				c.Assert(err, check.IsNil)
 			}
 		}
@@ -154,7 +154,7 @@ func (s *etcdSuite) TestInfoWriter(c *check.C) {
 			resp, err := s.client.Get(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))
 			c.Assert(err, check.IsNil)
 			c.Assert(resp.Count, check.Equals, int64(1))
-			infoStr, err := info.MarshalChangeFeedInfo()
+			infoStr, err := info.Marshal()
 			c.Assert(err, check.IsNil)
 			c.Assert(string(resp.Kvs[0].Value), check.Equals, infoStr)
 		}

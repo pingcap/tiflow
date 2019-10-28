@@ -55,7 +55,8 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeed
 			if err != nil {
 				return nil, err
 			}
-			info, err := model.UnmarshalSubChangeFeedInfo(rawKv.Value)
+			info := &model.SubChangeFeedInfo{}
+			err = info.Unmarshal(rawKv.Value)
 			if err != nil {
 				return nil, err
 			}
@@ -73,7 +74,7 @@ func (rw *ChangeFeedInfoRWriter) Write(ctx context.Context, infos map[model.Chan
 		ops = make([]clientv3.Op, 0, embed.DefaultMaxTxnOps)
 	)
 	for changefeedID, info := range infos {
-		storeVal, err := info.MarshalChangeFeedInfo()
+		storeVal, err := info.Marshal()
 		if err != nil {
 			return err
 		}

@@ -36,8 +36,8 @@ type SubChangeFeedInfo struct {
 	TableInfos []*ProcessTableInfo `json:"table-infos"`
 }
 
-// MarshalSubChangeFeedInfo returns the json marshal format of a SubChangeFeedInfo
-func (scfi *SubChangeFeedInfo) MarshalSubChangeFeedInfo() string {
+// Marshal returns the json marshal format of a SubChangeFeedInfo
+func (scfi *SubChangeFeedInfo) Marshal() string {
 	data, err := json.Marshal(scfi)
 	if err != nil {
 		log.Error("fail to marshal ChangeFeedDetail to json", zap.Error(err))
@@ -45,11 +45,10 @@ func (scfi *SubChangeFeedInfo) MarshalSubChangeFeedInfo() string {
 	return string(data)
 }
 
-// UnmarshalChangeFeedInfo decodes a new SubChangeFeedInfo instance from json marshal byte slice
-func UnmarshalSubChangeFeedInfo(data []byte) (*SubChangeFeedInfo, error) {
-	info := &SubChangeFeedInfo{}
-	err := json.Unmarshal(data, info)
-	return info, errors.Trace(err)
+// Unmarshal unmarshals into *SubChangeFeedInfo from json marshal byte slice
+func (scfi *SubChangeFeedInfo) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, scfi)
+	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 
 type CaptureID = string
@@ -92,8 +91,14 @@ type ChangeFeedInfo struct {
 	DDLCurrentIndex int             `json:"-"`
 }
 
-// MarshalChangeFeedInfo returns json encoded string of ChangeFeedInfo, only contains necessary fields stored in storage
-func (info *ChangeFeedInfo) MarshalChangeFeedInfo() (string, error) {
+// Marshal returns json encoded string of ChangeFeedInfo, only contains necessary fields stored in storage
+func (info *ChangeFeedInfo) Marshal() (string, error) {
 	data, err := json.Marshal(info)
 	return string(data), errors.Trace(err)
+}
+
+// Unmarshal unmarshals into *ChangeFeedInfo from json marshal byte slice
+func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, info)
+	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
