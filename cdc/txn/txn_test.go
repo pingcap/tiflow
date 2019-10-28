@@ -97,7 +97,7 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	}
 
 	ctx := context.Background()
-	err := CollectRawTxns(ctx, input, output, &mockTracker{})
+	err := CollectRawTxns(ctx, input, output, &mockTracker{}, nil)
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, 2)
@@ -162,10 +162,16 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 		return nil
 	}
 
+	var resolvedTSs []uint64
+	saveResolvedTS := func(ctx context.Context, ts uint64) error {
+		resolvedTSs = append(resolvedTSs, ts)
+		return nil
+	}
+
 	ctx := context.Background()
 	// Set up the tracker so that only the last resolve event forwards the global minimum TS
 	tracker := mockTracker{forwarded: []bool{false, false, true}}
-	err := CollectRawTxns(ctx, input, output, &tracker)
+	err := CollectRawTxns(ctx, input, output, &tracker, saveResolvedTS)
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, 1)
@@ -175,6 +181,8 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 	c.Assert(string(txn.Entries[0].Key), check.Equals, "key1-1")
 	c.Assert(string(txn.Entries[1].Key), check.Equals, "key1-2")
 	c.Assert(string(txn.Entries[2].Key), check.Equals, "key1-3")
+
+	c.Assert(resolvedTSs, check.DeepEquals, []uint64{1})
 }
 
 type mountTxnsSuite struct{}

@@ -27,12 +27,13 @@ import (
 
 // Puller pull data from tikv and push changes into a buffer
 type Puller struct {
-	pdCli        pd.Client
-	checkpointTS uint64
-	spans        []util.Span
-	detail       ChangeFeedDetail
-	buf          Buffer
-	tsTracker    txn.ResolveTsTracker
+	pdCli          pd.Client
+	checkpointTS   uint64
+	spans          []util.Span
+	detail         ChangeFeedDetail
+	resolvedTSChan chan uint64
+	buf            Buffer
+	tsTracker      txn.ResolveTsTracker
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTS
@@ -45,15 +46,20 @@ func NewPuller(
 	detail ChangeFeedDetail,
 ) *Puller {
 	p := &Puller{
-		pdCli:        pdCli,
-		checkpointTS: checkpointTS,
-		spans:        spans,
-		detail:       detail,
-		buf:          MakeBuffer(),
-		tsTracker:    makeSpanFrontier(spans...),
+		pdCli:          pdCli,
+		checkpointTS:   checkpointTS,
+		spans:          spans,
+		detail:         detail,
+		resolvedTSChan: make(chan uint64, 1),
+		buf:            MakeBuffer(),
+		tsTracker:      makeSpanFrontier(spans...),
 	}
 
 	return p
+}
+
+func (p *Puller) ResolvedTSChan() <-chan uint64 {
+	return p.resolvedTSChan
 }
 
 func (p *Puller) Output() Buffer {
@@ -127,5 +133,13 @@ func (p *Puller) GetResolvedTs() uint64 {
 }
 
 func (p *Puller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, txn.RawTxn) error) error {
-	return txn.CollectRawTxns(ctx, p.buf.Get, outputFn, p.tsTracker)
+	forwardResolve := func(ctx2 context.Context, ts uint64) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case p.resolvedTSChan <- ts:
+		}
+		return nil
+	}
+	return txn.CollectRawTxns(ctx, p.buf.Get, outputFn, p.tsTracker, forwardResolve)
 }

@@ -93,6 +93,7 @@ func CollectRawTxns(
 	inputFn func(context.Context) (kv.KvOrResolved, error),
 	outputFn func(context.Context, RawTxn) error,
 	tracker ResolveTsTracker,
+	onResolved func(context.Context, uint64) error,
 ) error {
 	entryGroups := make(map[uint64][]*kv.RawKVEntry)
 	for {
@@ -111,6 +112,11 @@ func CollectRawTxns(
 			forwarded := tracker.Forward(be.Resolved.Span, resolvedTs)
 			if !forwarded {
 				continue
+			}
+			if onResolved != nil {
+				if err := onResolved(ctx, resolvedTs); err != nil {
+					return errors.Trace(err)
+				}
 			}
 			var readyTxns []RawTxn
 			for ts, entries := range entryGroups {
