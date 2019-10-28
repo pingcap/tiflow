@@ -15,6 +15,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -125,12 +126,18 @@ func (s *etcdSuite) TestInfoWriter(c *check.C) {
 		}
 		err error
 	)
+	largeTxnInfo := make(map[string]*model.ChangeFeedInfo, embed.DefaultMaxTxnOps+1)
+	for i := 0; i < int(embed.DefaultMaxTxnOps)+1; i++ {
+		changefeedID := fmt.Sprintf("changefeed%d", i+1)
+		largeTxnInfo[changefeedID] = info1
+	}
 	testCases := []struct {
 		infos map[model.ChangeFeedID]*model.ChangeFeedInfo
 	}{
 		{infos: nil},
 		{infos: map[string]*model.ChangeFeedInfo{"changefeed1": info1}},
 		{infos: map[string]*model.ChangeFeedInfo{"changefeed1": info1, "changefeed2": info2}},
+		{infos: largeTxnInfo},
 	}
 
 	rw := NewChangeFeedInfoEtcdRWriter(s.client)

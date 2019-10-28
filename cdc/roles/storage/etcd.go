@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/model"
@@ -63,13 +64,28 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeed
 }
 
 func (rw *ChangeFeedInfoRWriter) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
+	var (
+		txn = rw.etcdClient.KV.Txn(ctx)
+		ops = make([]clientv3.Op, 0, embed.DefaultMaxTxnOps)
+	)
 	for changefeedID, info := range infos {
 		storeVal, err := info.String()
 		if err != nil {
 			return err
 		}
 		key := kv.GetEtcdKeyChangeFeedStatus(changefeedID)
-		_, err = rw.etcdClient.Put(ctx, key, storeVal)
+		ops = append(ops, clientv3.OpPut(key, storeVal))
+		if uint(len(ops)) >= embed.DefaultMaxTxnOps {
+			_, err = txn.Then(ops...).Commit()
+			if err != nil {
+				return errors.Trace(err)
+			}
+			txn = rw.etcdClient.KV.Txn(ctx)
+			ops = make([]clientv3.Op, 0, embed.DefaultMaxTxnOps)
+		}
+	}
+	if len(ops) > 0 {
+		_, err := txn.Then(ops...).Commit()
 		if err != nil {
 			return errors.Trace(err)
 		}
