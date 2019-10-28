@@ -153,7 +153,7 @@ EOF
     done
 
     echo "Starting CDC..."
-    cdc --log-file "$OUT_DIR/cdc.log" &
+    cdc server --log-file "$OUT_DIR/cdc.log" &
     sleep 1
 }
 

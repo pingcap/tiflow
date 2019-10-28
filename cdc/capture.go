@@ -130,7 +130,7 @@ func (c *Capture) Close(ctx context.Context) error {
 }
 
 func (c *Capture) infoKey() string {
-	return fmt.Sprintf("%s/capture/info/%s", kv.EtcdKeyBase, c.id)
+	return infoKey(c.id)
 }
 
 // register registers the capture information in etcd
