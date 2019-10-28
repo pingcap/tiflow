@@ -118,41 +118,35 @@ func newCaptureInfoWatch(
 		revision := resp.Header.Revision
 		etcdWatchC := cli.Watch(ctx, captureEinfoKeyPrefix, clientv3.WithPrefix(), clientv3.WithRev(revision+1), clientv3.WithPrevKV())
 
-		for {
-			select {
-			case resp, ok := <-etcdWatchC:
-				if !ok {
-					log.Debug("watchC from etcd close normally")
-					return
+		for resp := range etcdWatchC {
+			if resp.Err() != nil {
+				watchResp <- &CaptureInfoWatchResp{Err: errors.Trace(resp.Err())}
+				return
+			}
+
+			for _, ev := range resp.Events {
+				infoResp := new(CaptureInfoWatchResp)
+
+				var data []byte
+				switch ev.Type {
+				case mvccpb.DELETE:
+					infoResp.IsDelete = true
+					data = ev.PrevKv.Value
+				case mvccpb.PUT:
+					data = ev.Kv.Value
 				}
-
-				if resp.Err() != nil {
-					watchResp <- &CaptureInfoWatchResp{Err: errors.Trace(resp.Err())}
-					return
-				}
-
-				for _, ev := range resp.Events {
-					infoResp := new(CaptureInfoWatchResp)
-
-					var data []byte
-					switch ev.Type {
-					case mvccpb.DELETE:
-						infoResp.IsDelete = true
-						data = ev.PrevKv.Value
-					case mvccpb.PUT:
-						data = ev.Kv.Value
-					}
-					infoResp.Info = new(CaptureInfo)
-					err := infoResp.Info.Unmarshal(data)
-					if err != nil {
-						infoResp.Err = errors.Trace(err)
-						watchResp <- infoResp
-						return
-					}
+				infoResp.Info = new(CaptureInfo)
+				err := infoResp.Info.Unmarshal(data)
+				if err != nil {
+					infoResp.Err = errors.Trace(err)
 					watchResp <- infoResp
+					return
 				}
+				watchResp <- infoResp
 			}
 		}
+		log.Debug("watchC from etcd close normally")
+
 	}()
 
 	return

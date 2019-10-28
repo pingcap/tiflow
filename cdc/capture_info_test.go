@@ -106,7 +106,6 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 			c.Fatal("timeout to get resp from watchC")
 
 		}
-		return
 	}
 
 	// put info2 and info3
