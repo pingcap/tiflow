@@ -9,10 +9,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/tidb-cdc/cdc"
+	"github.com/pingcap/tidb-cdc/cdc/model"
 )
 
 func feed() {
-	detail := cdc.ChangeFeedDetail{
+	detail := model.ChangeFeedDetail{
 		SinkURI:    "root@tcp(127.0.0.1:3306)/test",
 		Opts:       make(map[string]string),
 		CreateTime: time.Now(),

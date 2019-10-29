@@ -15,17 +15,16 @@ package cdc
 
 import (
 	"context"
-	"encoding/json"
 	"math"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/sink"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
@@ -34,39 +33,6 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
-
-// ChangeFeedDetail describe the detail of a ChangeFeed
-type ChangeFeedDetail struct {
-	SinkURI    string            `json:"sink-uri"`
-	Opts       map[string]string `json:"opts"`
-	CreateTime time.Time         `json:"create-time"`
-	StartTS    uint64            `json:"start-ts"`
-	// The ChangeFeed will exits until sync to timestamp TargetTS
-	TargetTS uint64 `json:"target-ts"`
-}
-
-func (cfd *ChangeFeedDetail) String() string {
-	data, err := json.Marshal(cfd)
-	if err != nil {
-		log.Error("fail to marshal ChangeFeedDetail to json", zap.Error(err))
-	}
-	return string(data)
-}
-
-// DecodeChangeFeedDetail decodes a new ChangeFeedDetail instance from json marshal byte slice
-func DecodeChangeFeedDetail(data []byte) (ChangeFeedDetail, error) {
-	detail := ChangeFeedDetail{}
-	err := json.Unmarshal(data, &detail)
-	return detail, errors.Trace(err)
-}
-
-// SaveChangeFeedDetail stores change feed detail into etcd
-// TODO: this should be called from outer system, such as from a TiDB client
-func (cfd *ChangeFeedDetail) SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, changeFeedID string) error {
-	key := kv.GetEtcdKeyChangeFeedConfig(changeFeedID)
-	_, err := client.Put(ctx, key, cfd.String())
-	return err
-}
 
 type CancellablePuller struct {
 	*Puller
@@ -78,7 +44,7 @@ type CancellablePuller struct {
 type SubChangeFeed struct {
 	pdEndpoints []string
 	pdCli       pd.Client
-	detail      ChangeFeedDetail
+	detail      model.ChangeFeedDetail
 
 	ddlPuller  *Puller
 	tblLock    sync.RWMutex
@@ -92,7 +58,7 @@ type SubChangeFeed struct {
 	sink sink.Sink
 }
 
-func NewSubChangeFeed(pdEndpoints []string, detail ChangeFeedDetail) (*SubChangeFeed, error) {
+func NewSubChangeFeed(pdEndpoints []string, detail model.ChangeFeedDetail) (*SubChangeFeed, error) {
 	pdCli, err := pd.NewClient(pdEndpoints, pd.SecurityOption{})
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)

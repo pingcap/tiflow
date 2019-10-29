@@ -2,13 +2,13 @@ package cdc
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/mvcc/mvccpb"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/cdc/model"
 )
 
 var captureEinfoKeyPrefix = kv.EtcdKeyBase + "/capture/info"
@@ -19,7 +19,7 @@ func infoKey(id string) string {
 }
 
 // PutCaptureInfo put capture info into etcd.
-func PutCaptureInfo(ctx context.Context, info *CaptureInfo, cli *clientv3.Client, opts ...clientv3.OpOption) error {
+func PutCaptureInfo(ctx context.Context, info *model.CaptureInfo, cli *clientv3.Client, opts ...clientv3.OpOption) error {
 	var data []byte
 	data, err := info.Marshal()
 	if err != nil {
@@ -40,7 +40,7 @@ func DeleteCaptureInfo(ctx context.Context, id string, cli *clientv3.Client, opt
 
 // GetCaptureInfo get capture info from etcd.
 // return errCaptureNotExist if the capture not exists.
-func GetCaptureInfo(ctx context.Context, id string, cli *clientv3.Client, opts ...clientv3.OpOption) (info *CaptureInfo, err error) {
+func GetCaptureInfo(ctx context.Context, id string, cli *clientv3.Client, opts ...clientv3.OpOption) (info *model.CaptureInfo, err error) {
 	key := infoKey(id)
 
 	resp, err := cli.Get(ctx, key, opts...)
@@ -52,7 +52,7 @@ func GetCaptureInfo(ctx context.Context, id string, cli *clientv3.Client, opts .
 		return nil, errCaptureNotExist
 	}
 
-	info = new(CaptureInfo)
+	info = new(model.CaptureInfo)
 	err = info.Unmarshal(resp.Kvs[0].Value)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -61,29 +61,8 @@ func GetCaptureInfo(ctx context.Context, id string, cli *clientv3.Client, opts .
 	return
 }
 
-// CaptureInfo store in etcd.
-type CaptureInfo struct {
-	ID string `json:"id"`
-}
-
-// Marshal using json.Marshal.
-func (c *CaptureInfo) Marshal() ([]byte, error) {
-	data, err := json.Marshal(c)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return data, nil
-}
-
-// Unmarshal from binary data.
-func (c *CaptureInfo) Unmarshal(data []byte) error {
-	err := json.Unmarshal(data, c)
-	return errors.Annotatef(err, "Unmarshal data: %v", data)
-}
-
 type CaptureInfoWatchResp struct {
-	Info     *CaptureInfo
+	Info     *model.CaptureInfo
 	IsDelete bool
 	Err      error
 }
@@ -93,14 +72,14 @@ type CaptureInfoWatchResp struct {
 // returning an error when the ctx is Done.
 func newCaptureInfoWatch(
 	ctx context.Context, cli *clientv3.Client,
-) (infos []*CaptureInfo, watchC <-chan *CaptureInfoWatchResp, err error) {
+) (infos []*model.CaptureInfo, watchC <-chan *CaptureInfoWatchResp, err error) {
 	resp, err := cli.Get(ctx, captureEinfoKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
 	for _, kv := range resp.Kvs {
-		info := new(CaptureInfo)
+		info := new(model.CaptureInfo)
 		err := info.Unmarshal(kv.Value)
 		if err != nil {
 			return nil, nil, errors.Trace(err)
@@ -135,7 +114,7 @@ func newCaptureInfoWatch(
 				case mvccpb.PUT:
 					data = ev.Kv.Value
 				}
-				infoResp.Info = new(CaptureInfo)
+				infoResp.Info = new(model.CaptureInfo)
 				err := infoResp.Info.Unmarshal(data)
 				if err != nil {
 					infoResp.Err = errors.Trace(err)

@@ -8,6 +8,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/check"
+	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
 )
 
@@ -49,7 +50,7 @@ func (ci *captureInfoSuite) TestPutDeleteGet(c *check.C) {
 	c.Assert(info, check.IsNil)
 
 	// create
-	info = &CaptureInfo{
+	info = &model.CaptureInfo{
 		ID: id,
 	}
 	err = PutCaptureInfo(ctx, info, ci.client)
@@ -70,9 +71,9 @@ func (ci *captureInfoSuite) TestPutDeleteGet(c *check.C) {
 }
 
 func (ci *captureInfoSuite) TestWatch(c *check.C) {
-	info1 := &CaptureInfo{ID: "1"}
-	info2 := &CaptureInfo{ID: "2"}
-	info3 := &CaptureInfo{ID: "3"}
+	info1 := &model.CaptureInfo{ID: "1"}
+	info2 := &model.CaptureInfo{ID: "2"}
+	info3 := &model.CaptureInfo{ID: "3"}
 
 	ctx := context.Background()
 	var err error

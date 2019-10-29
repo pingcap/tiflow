@@ -17,8 +17,6 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
 )
 
 type ProcessTableInfo struct {
@@ -37,12 +35,9 @@ type SubChangeFeedInfo struct {
 }
 
 // Marshal returns the json marshal format of a SubChangeFeedInfo
-func (scfi *SubChangeFeedInfo) Marshal() string {
+func (scfi *SubChangeFeedInfo) Marshal() (string, error) {
 	data, err := json.Marshal(scfi)
-	if err != nil {
-		log.Error("fail to marshal ChangeFeedDetail to json", zap.Error(err))
-	}
-	return string(data)
+	return string(data), errors.Trace(err)
 }
 
 // Unmarshal unmarshals into *SubChangeFeedInfo from json marshal byte slice
