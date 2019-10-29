@@ -52,26 +52,26 @@ type txnChannel struct {
 }
 
 func (p *txnChannel) Pull() (txn.RawTxn, bool) {
-	if p.putBackTxn == nil {
-		t, ok := <-p.outputTxn
-		return t, ok
+	if p.putBackTxn != nil {
+		t := *p.putBackTxn
+		p.putBackTxn = nil
+		return t, true
 	}
-	t := *p.putBackTxn
-	p.putBackTxn = nil
-	return t, true
+	t, ok := <-p.outputTxn
+	return t, ok
 }
 
 func (p *txnChannel) PutBack(t txn.RawTxn) {
 	if p.putBackTxn != nil {
-		panic("can not put back raw txn continuously")
+		log.Fatal("can not put back raw txn continuously")
 	}
 	p.putBackTxn = &t
 }
 
-func newTxnChannel(inputTxn <-chan txn.RawTxn, handleResolvedTS func(uint64)) *txnChannel {
+func newTxnChannel(inputTxn <-chan txn.RawTxn, chanSize int, handleResolvedTS func(uint64)) *txnChannel {
 	tc := &txnChannel{
 		inputTxn:  inputTxn,
-		outputTxn: make(chan txn.RawTxn, 128),
+		outputTxn: make(chan txn.RawTxn, chanSize),
 	}
 	go func() {
 		for {
@@ -134,6 +134,8 @@ func NewProcessor(tsRWriter ProcessorTSRWriter) Processor {
 		resolvedEntries: make(chan ProcessorEntry),
 		// TODO set the cannel size
 		executedEntries: make(chan ProcessorEntry),
+
+		tableInputChans: make(map[schema.TableName]*txnChannel),
 		closed:          make(chan struct{}),
 	}
 	go p.localResolvedWorker()
@@ -193,16 +195,23 @@ func (p *processorImpl) checkpointWorker() {
 func (p *processorImpl) globalResolvedWorker() {
 	log.Info("Global resolved worker started")
 	wg := new(sync.WaitGroup)
+	lastGlobalResolvedTS := uint64(0)
 	for {
 		globalResolvedTS, err := p.tsRWriter.ReadGlobalResolvedTS()
 		if err != nil {
 			log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
+			time.Sleep(500 * time.Millisecond)
 			continue
 		}
+		if lastGlobalResolvedTS == globalResolvedTS {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		lastGlobalResolvedTS = globalResolvedTS
 		p.inputChansLock.RLock()
-		for _, input := range p.tableInputChans {
+		for table, input := range p.tableInputChans {
 			wg.Add(1)
-			go p.pushTxn(input, globalResolvedTS, wg)
+			go p.pushTxn(table, input, globalResolvedTS, wg)
 		}
 		p.inputChansLock.RUnlock()
 		wg.Wait()
@@ -210,12 +219,12 @@ func (p *processorImpl) globalResolvedWorker() {
 	}
 }
 
-func (p *processorImpl) pushTxn(input *txnChannel, targetTS uint64, wg *sync.WaitGroup) {
+func (p *processorImpl) pushTxn(table schema.TableName, input *txnChannel, targetTS uint64, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
 		t, ok := input.Pull()
 		if !ok {
-			// TODO log
+			log.Info("the input channel of table is closed", zap.Reflect("table", table))
 			return
 		}
 		if t.TS > targetTS {
@@ -227,11 +236,14 @@ func (p *processorImpl) pushTxn(input *txnChannel, targetTS uint64, wg *sync.Wai
 }
 
 func (p *processorImpl) SetInputChan(table schema.TableName, inputTxn <-chan txn.RawTxn) {
-	tc := newTxnChannel(inputTxn, func(resolvedTS uint64) {
+	tc := newTxnChannel(inputTxn, 64, func(resolvedTS uint64) {
 		p.tableResolvedTS.Store(table, resolvedTS)
 	})
 	p.inputChansLock.Lock()
 	defer p.inputChansLock.Unlock()
+	if _, exist := p.tableInputChans[table]; exist {
+		log.Fatal("this chan is already exist", zap.Reflect("table", table))
+	}
 	p.tableInputChans[table] = tc
 }
 
