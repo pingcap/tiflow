@@ -23,16 +23,6 @@ import (
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
 	Emit(ctx context.Context, t txn.Txn) error
-	EmitResolvedTimestamp(
-		ctx context.Context,
-		resolved uint64,
-	) error
-	// TODO: Add GetLastSuccessTs() uint64
-	// Flush blocks until every message enqueued by EmitRow and
-	// EmitResolvedTimestamp has been acknowledged by the sink.
-	Flush(ctx context.Context) error
-	// Close does not guarantee delivery of outstanding messages.
-	Close() error
 }
 
 // TableInfoGetter is used to get table info by table id of TiDB
