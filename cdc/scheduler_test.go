@@ -189,7 +189,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 		captureID    = "test-capture"
 		pdEndpoints  = []string{}
 		sinkURI      = "root@tcp(127.0.0.1:3306)/test"
-		detail       = model.ChangeFeedDetail{SinkURI: sinkURI}
+		detail       = &model.ChangeFeedDetail{SinkURI: sinkURI}
 		key          = kv.GetEtcdKeyChangeFeedConfig(changefeedID)
 	)
 
@@ -225,7 +225,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	time.Sleep(time.Millisecond * 100)
 
 	// create a changefeed
-	err = detail.SaveChangeFeedDetail(context.Background(), cli, changefeedID)
+	err = kv.SaveChangeFeedDetail(context.Background(), cli, detail, changefeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runChangeFeedWatcherCount) == 1
