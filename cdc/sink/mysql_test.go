@@ -15,6 +15,7 @@ package sink
 
 import (
 	"context"
+	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/parser/mysql"
@@ -104,6 +105,59 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 	// Validate
 	c.Assert(err, check.IsNil)
 	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
+}
+
+type RunSuite struct{}
+
+var _ = check.Suite(&RunSuite{})
+
+func (rs *RunSuite) TestShouldSendSuccessTxns(c *check.C) {
+	// Set up
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	c.Assert(err, check.IsNil)
+	defer db.Close()
+
+	sink := mysqlSink{
+		db:           db,
+		tblInspector: dummyInspector{},
+		successC:     make(chan txn.Txn, 1),
+		errC:         make(chan error, 1),
+	}
+
+	t := txn.Txn{
+		DDL: &txn.DDL{
+			Database: "test",
+			Table:    "user",
+			SQL:      "CREATE TABLE user (id INT PRIMARY KEY);",
+		},
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(t.DDL.SQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	ctx := context.Background()
+	input := make(chan txn.Txn, 1)
+	input <- t
+	close(input)
+	stopped := make(chan struct{})
+	go func() {
+		err = sink.Run(ctx, input)
+		c.Assert(err, check.IsNil)
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		c.Fatal("Run didn't stop in time")
+	}
+	select {
+	case txn := <-sink.Success():
+		c.Assert(t, check.DeepEquals, txn)
+	default:
+		c.Fatal("Success txn not sent")
+	}
 }
 
 type tableHelper struct {

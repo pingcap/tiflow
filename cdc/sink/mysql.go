@@ -100,10 +100,14 @@ func NewMySQLSinkUsingSchema(db *sql.DB, picker *schema.Schema) Sink {
 	}
 }
 
-func (s *mysqlSink) Run(ctx context.Context, txns <-chan txn.Txn) error {
+func (s *mysqlSink) Run(ctx context.Context, input <-chan txn.Txn) error {
 	for {
 		select {
-		case t := <-txns:
+		case t, ok := <-input:
+			if !ok {
+				log.Info("Input channel closed")
+				return nil
+			}
 			if err := s.Emit(ctx, t); err != nil {
 				return err
 			}
