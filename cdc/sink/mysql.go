@@ -53,6 +53,8 @@ type tableInspector interface {
 
 type mysqlSink struct {
 	db           *sql.DB
+	successC     chan txn.Txn
+	errC         chan error
 	tblInspector tableInspector
 	infoGetter   TableInfoGetter
 }
@@ -73,6 +75,8 @@ func NewMySQLSink(
 	sink := mysqlSink{
 		db:           db,
 		infoGetter:   infoGetter,
+		successC:     make(chan txn.Txn, 1),
+		errC:         make(chan error, 1),
 		tblInspector: cachedInspector,
 	}
 	return &sink, nil
@@ -89,9 +93,44 @@ func NewMySQLSinkUsingSchema(db *sql.DB, picker *schema.Schema) Sink {
 	}
 	return &mysqlSink{
 		db:           db,
+		successC:     make(chan txn.Txn, 1),
+		errC:         make(chan error, 1),
 		infoGetter:   picker,
 		tblInspector: inspector,
 	}
+}
+
+func (s *mysqlSink) Run(ctx context.Context, txns <-chan txn.Txn) error {
+	for {
+		select {
+		case t := <-txns:
+			if err := s.Emit(ctx, t); err != nil {
+				return err
+			}
+			select {
+			case s.successC <- t:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
+func (s *mysqlSink) Success() <-chan txn.Txn {
+	return s.successC
+}
+
+func (s *mysqlSink) Error() <-chan error {
+	return s.errC
+}
+
+func (s *mysqlSink) Close() error {
+	close(s.successC)
+	close(s.errC)
+	return s.db.Close()
 }
 
 func (s *mysqlSink) Emit(ctx context.Context, txn txn.Txn) error {

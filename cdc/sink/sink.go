@@ -21,5 +21,10 @@ import (
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
-	Emit(ctx context.Context, t txn.Txn) error
+	Run(ctx context.Context, txns <-chan txn.Txn) error
+	Success() <-chan txn.Txn
+	Error() <-chan error
+	Close() error
+	// TODO: Replace Emit completely with Run
+	Emit(ctx context.Context, txn txn.Txn) error
 }
