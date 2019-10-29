@@ -14,6 +14,7 @@
 package roles
 
 import (
+	"context"
 	"math"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // Processor is used to push sync progress and calculate the checkpointTS
@@ -205,7 +207,6 @@ func (p *processorImpl) checkpointWorker() {
 
 func (p *processorImpl) globalResolvedWorker() {
 	log.Info("Global resolved worker started")
-	wg := new(sync.WaitGroup)
 	lastGlobalResolvedTS := uint64(0)
 	for {
 		globalResolvedTS, err := p.tsRWriter.ReadGlobalResolvedTS()
@@ -219,10 +220,16 @@ func (p *processorImpl) globalResolvedWorker() {
 			continue
 		}
 		lastGlobalResolvedTS = globalResolvedTS
+		wg, _ := errgroup.WithContext(context.Background())
 		p.inputChansLock.RLock()
 		for table, input := range p.tableInputChans {
-			wg.Add(1)
-			go p.pushTxn(table, input, globalResolvedTS, wg)
+			table := table
+			input := input
+			globalResolvedTS := globalResolvedTS
+			wg.Go(func() error {
+				p.pushTxn(table, input, globalResolvedTS)
+				return nil
+			})
 		}
 		p.inputChansLock.RUnlock()
 		wg.Wait()
@@ -230,8 +237,7 @@ func (p *processorImpl) globalResolvedWorker() {
 	}
 }
 
-func (p *processorImpl) pushTxn(table schema.TableName, input *txnChannel, targetTS uint64, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (p *processorImpl) pushTxn(table schema.TableName, input *txnChannel, targetTS uint64) {
 	for {
 		t, ok := input.Pull()
 		if !ok {
