@@ -38,6 +38,12 @@ import (
 	"github.com/pingcap/tidb/types"
 )
 
+// TableInfoGetter is used to get table info by table id of TiDB
+type TableInfoGetter interface {
+	TableByID(id int64) (info *model.TableInfo, ok bool)
+	GetTableIDByName(schema, table string) (int64, bool)
+}
+
 type tableInspector interface {
 	// Get returns information about the specified table
 	Get(schema, table string) (*tableInfo, error)

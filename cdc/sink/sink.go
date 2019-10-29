@@ -16,17 +16,10 @@ package sink
 import (
 	"context"
 
-	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
 	Emit(ctx context.Context, t txn.Txn) error
-}
-
-// TableInfoGetter is used to get table info by table id of TiDB
-type TableInfoGetter interface {
-	TableByID(id int64) (info *model.TableInfo, ok bool)
-	GetTableIDByName(schema, table string) (int64, bool)
 }
