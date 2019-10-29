@@ -132,18 +132,6 @@ func filterBySchemaAndTable(t *txn.Txn) {
 	}
 }
 
-func (s *mysqlSink) EmitResolvedTimestamp(ctx context.Context, resolved uint64) error {
-	return nil
-}
-
-func (s *mysqlSink) Flush(ctx context.Context) error {
-	return nil
-}
-
-func (s *mysqlSink) Close() error {
-	return nil
-}
-
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *txn.DDL, maxRetries uint64) error {
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
