@@ -26,6 +26,13 @@ import (
 )
 
 // Processor is used to push sync progress and calculate the checkpointTS
+// How to use it:
+// 1. Call SetInputChan to set a rawTxn input channel
+//        (you can call SetInputChan many time to set multiple input channel)
+// 2. Push rawTxn into rawTxn input channel
+// 3. Pull ProcessorEntry from ResolvedChan, RawTxn is included in ProcessorEntry
+// 4. execute the RawTxn in ProcessorEntry
+// 5. Push ProcessorEntry to ExecutedChan
 type Processor interface {
 	// SetInputChan receives a table and listens a channel
 	SetInputChan(table schema.TableName, inputTxn <-chan txn.RawTxn)
