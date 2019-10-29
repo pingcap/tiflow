@@ -92,23 +92,6 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		return errors.Annotate(err, "CampaignOwner")
 	}
 
-	// create a test changefeed
-	detail := model.ChangeFeedDetail{
-		SinkURI:    "root@tcp(127.0.0.1:3306)/test",
-		Opts:       make(map[string]string),
-		CreateTime: time.Now(),
-	}
-	changefeedID := uuid.New().String()
-	err = kv.SaveChangeFeedDetail(ctx, c.etcdClient, &detail, changefeedID)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// create subchangefeed for test
-	defer func() {
-		c.etcdClient.Delete(context.Background(), kv.GetEtcdKeyChangeFeedConfig(changefeedID))
-		c.etcdClient.Delete(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))
-	}()
-
 	errg, cctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
