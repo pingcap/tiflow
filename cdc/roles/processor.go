@@ -87,6 +87,7 @@ func newTxnChannel(inputTxn <-chan txn.RawTxn, chanSize int, handleResolvedTS fu
 		outputTxn: make(chan txn.RawTxn, chanSize),
 	}
 	go func() {
+		defer close(tc.outputTxn)
 		for {
 			t, ok := <-tc.inputTxn
 			if !ok {
@@ -136,11 +137,13 @@ type processorImpl struct {
 
 	tableInputChans map[schema.TableName]*txnChannel
 	inputChansLock  sync.RWMutex
+	wg              *errgroup.Group
 
 	closed chan struct{}
 }
 
 func NewProcessor(tsRWriter ProcessorTSRWriter) Processor {
+	wg, _ := errgroup.WithContext(context.Background())
 	p := &processorImpl{
 		tsRWriter: tsRWriter,
 		// TODO set the cannel size
@@ -150,10 +153,20 @@ func NewProcessor(tsRWriter ProcessorTSRWriter) Processor {
 
 		tableInputChans: make(map[schema.TableName]*txnChannel),
 		closed:          make(chan struct{}),
+		wg:              wg,
 	}
-	go p.localResolvedWorker()
-	go p.checkpointWorker()
-	go p.globalResolvedWorker()
+	wg.Go(func() error {
+		p.localResolvedWorker()
+		return nil
+	})
+	wg.Go(func() error {
+		p.checkpointWorker()
+		return nil
+	})
+	wg.Go(func() error {
+		p.globalResolvedWorker()
+		return nil
+	})
 	return p
 }
 
@@ -209,31 +222,38 @@ func (p *processorImpl) globalResolvedWorker() {
 	log.Info("Global resolved worker started")
 	lastGlobalResolvedTS := uint64(0)
 	for {
-		globalResolvedTS, err := p.tsRWriter.ReadGlobalResolvedTS()
-		if err != nil {
-			log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
-			time.Sleep(500 * time.Millisecond)
-			continue
+		select {
+		case <-p.closed:
+			log.Info("Global resolved worker exited")
+			return
+		default:
+			globalResolvedTS, err := p.tsRWriter.ReadGlobalResolvedTS()
+			if err != nil {
+				log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
+				//TODO limit the retry times
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+			if lastGlobalResolvedTS == globalResolvedTS {
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+			lastGlobalResolvedTS = globalResolvedTS
+			wg, _ := errgroup.WithContext(context.Background())
+			p.inputChansLock.RLock()
+			for table, input := range p.tableInputChans {
+				table := table
+				input := input
+				globalResolvedTS := globalResolvedTS
+				wg.Go(func() error {
+					p.pushTxn(table, input, globalResolvedTS)
+					return nil
+				})
+			}
+			p.inputChansLock.RUnlock()
+			wg.Wait()
+			p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTS)
 		}
-		if lastGlobalResolvedTS == globalResolvedTS {
-			time.Sleep(500 * time.Millisecond)
-			continue
-		}
-		lastGlobalResolvedTS = globalResolvedTS
-		wg, _ := errgroup.WithContext(context.Background())
-		p.inputChansLock.RLock()
-		for table, input := range p.tableInputChans {
-			table := table
-			input := input
-			globalResolvedTS := globalResolvedTS
-			wg.Go(func() error {
-				p.pushTxn(table, input, globalResolvedTS)
-				return nil
-			})
-		}
-		p.inputChansLock.RUnlock()
-		wg.Wait()
-		p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTS)
 	}
 }
 
@@ -274,7 +294,8 @@ func (p *processorImpl) ExecutedChan() chan<- ProcessorEntry {
 
 func (p *processorImpl) Close() {
 	// TODO close safety
-	close(p.executedEntries)
 	close(p.closed)
 	close(p.resolvedEntries)
+	close(p.executedEntries)
+	p.wg.Wait()
 }
