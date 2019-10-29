@@ -120,7 +120,6 @@ func (s *mysqlSink) Run(ctx context.Context, input <-chan txn.Txn) error {
 			return ctx.Err()
 		}
 	}
-	return nil
 }
 
 func (s *mysqlSink) Success() <-chan txn.Txn {
