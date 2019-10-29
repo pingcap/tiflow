@@ -41,7 +41,7 @@ var cliCmd = &cobra.Command{
 			password = ""
 			user     = "root"
 			port     = 4000
-			tableIDs = make(map[int64]struct{}, 0)
+			tableIDs = make(map[int64]struct{})
 			tableID  sql.NullInt64
 		)
 		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&interpolateParams=true", user, password, host, port)
