@@ -39,9 +39,13 @@ type Processor interface {
 	Close()
 }
 
+// ProcessorTSRWriter reads or writes the resolvedTS and checkpointTS from the storage
 type ProcessorTSRWriter interface {
+	// WriteResolvedTS writes the loacl resolvedTS into the storage
 	WriteResolvedTS(resolvedTS uint64) error
+	// WriteCheckpointTS writes the checkpointTS into the storage
 	WriteCheckpointTS(checkpointTS uint64) error
+	// ReadGlobalResolvedTS reads the global resolvedTS from the storage
 	ReadGlobalResolvedTS() (uint64, error)
 }
 
