@@ -303,7 +303,7 @@ func (o *ownerImpl) IsOwner(_ context.Context) bool {
 // 1. assign tables to captures
 // 2. create subchangefeed info for each capture, and persist to storage
 func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
-	cinfo, err := kv.GetChangeFeedConfig(ctx, o.etcdClient, changefeedID)
+	cinfo, err := kv.GetChangeFeedDetail(ctx, o.etcdClient, changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

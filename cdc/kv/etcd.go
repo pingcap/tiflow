@@ -78,15 +78,15 @@ func GetChangeFeeds(ctx context.Context, cli *clientv3.Client, opts ...clientv3.
 	return revision, details, nil
 }
 
-// GetChangeFeedConfig queries the config of a given changefeed
-func GetChangeFeedConfig(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) (*model.ChangeFeedDetail, error) {
+// GetChangeFeedDetail queries the config of a given changefeed
+func GetChangeFeedDetail(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) (*model.ChangeFeedDetail, error) {
 	key := GetEtcdKeyChangeFeedConfig(id)
 	resp, err := cli.Get(ctx, key, opts...)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return detail, errors.Errorf("changefeed %s not exists", id)
+		return nil, errors.Errorf("changefeed %s not exists", id)
 	}
 	detail := &model.ChangeFeedDetail{}
 	err = detail.Unmarshal(resp.Kvs[0].Value)
