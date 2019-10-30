@@ -1,14 +1,12 @@
 package roles
 
 import (
-	"fmt"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"go.uber.org/zap"
 )
@@ -100,7 +98,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 	}()
 	for i, rawTxnTS := range cases.rawTxnTS {
 		input := make(chan txn.RawTxn)
-		p.SetInputChan(schema.TableName{Table: fmt.Sprintf("test_table_%d", i)}, input)
+		p.SetInputChan(uint64(i), input)
 		go func(rawTxnTS []uint64) {
 			for _, txnTS := range rawTxnTS {
 				input <- txn.RawTxn{TS: txnTS}

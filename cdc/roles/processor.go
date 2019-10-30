@@ -19,9 +19,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -37,7 +37,7 @@ import (
 // 5. Push ProcessorEntry to ExecutedChan
 type Processor interface {
 	// SetInputChan receives a table and listens a channel
-	SetInputChan(table schema.TableName, inputTxn <-chan txn.RawTxn)
+	SetInputChan(tableId uint64, inputTxn <-chan txn.RawTxn) error
 	// ResolvedChan returns a channel, which output the resolved transaction or resolvedTS
 	ResolvedChan() <-chan ProcessorEntry
 	// ExecutedChan returns a channel, when a transaction is executed,
@@ -64,7 +64,7 @@ type txnChannel struct {
 	putBackTxn *txn.RawTxn
 }
 
-func (p *txnChannel) Forward(table schema.TableName, ts uint64, entryC chan<- ProcessorEntry) {
+func (p *txnChannel) Forward(tableId uint64, ts uint64, entryC chan<- ProcessorEntry) {
 	if p.putBackTxn != nil {
 		t := *p.putBackTxn
 		if t.TS > ts {
@@ -80,7 +80,7 @@ func (p *txnChannel) Forward(table schema.TableName, ts uint64, entryC chan<- Pr
 		}
 		entryC <- NewProcessorDMLsEntry(t.Entries, t.TS)
 	}
-	log.Info("Input channel of table closed", zap.Any("table", table))
+	log.Info("Input channel of table closed", zap.Uint64("tableId", tableId))
 }
 
 func (p *txnChannel) PutBack(t txn.RawTxn) {
@@ -144,7 +144,7 @@ type processorImpl struct {
 	resolvedEntries chan ProcessorEntry
 	executedEntries chan ProcessorEntry
 
-	tableInputChans map[schema.TableName]*txnChannel
+	tableInputChans map[uint64]*txnChannel
 	inputChansLock  sync.RWMutex
 	wg              *errgroup.Group
 
@@ -160,7 +160,7 @@ func NewProcessor(tsRWriter ProcessorTSRWriter) Processor {
 		// TODO set the cannel size
 		executedEntries: make(chan ProcessorEntry),
 
-		tableInputChans: make(map[schema.TableName]*txnChannel),
+		tableInputChans: make(map[uint64]*txnChannel),
 		closed:          make(chan struct{}),
 		wg:              wg,
 	}
@@ -268,16 +268,17 @@ func (p *processorImpl) globalResolvedWorker() {
 	}
 }
 
-func (p *processorImpl) SetInputChan(table schema.TableName, inputTxn <-chan txn.RawTxn) {
+func (p *processorImpl) SetInputChan(tableId uint64, inputTxn <-chan txn.RawTxn) error {
 	tc := newTxnChannel(inputTxn, 64, func(resolvedTS uint64) {
-		p.tableResolvedTS.Store(table, resolvedTS)
+		p.tableResolvedTS.Store(tableId, resolvedTS)
 	})
 	p.inputChansLock.Lock()
 	defer p.inputChansLock.Unlock()
-	if _, exist := p.tableInputChans[table]; exist {
-		log.Fatal("this chan is already exist", zap.Reflect("table", table))
+	if _, exist := p.tableInputChans[tableId]; exist {
+		return errors.Errorf("this chan is already exist, tableId: %d", tableId)
 	}
-	p.tableInputChans[table] = tc
+	p.tableInputChans[tableId] = tc
+	return nil
 }
 
 func (p *processorImpl) ResolvedChan() <-chan ProcessorEntry {
