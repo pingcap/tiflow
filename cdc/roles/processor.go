@@ -64,14 +64,23 @@ type txnChannel struct {
 	putBackTxn *txn.RawTxn
 }
 
-func (p *txnChannel) Pull() (txn.RawTxn, bool) {
+func (p *txnChannel) Forward(table schema.TableName, ts uint64, entryC chan<- ProcessorEntry) {
 	if p.putBackTxn != nil {
 		t := *p.putBackTxn
+		if t.TS > ts {
+			return
+		}
 		p.putBackTxn = nil
-		return t, true
+		entryC <- NewProcessorDMLsEntry(t.Entries, t.TS)
 	}
-	t, ok := <-p.outputTxn
-	return t, ok
+	for t := range p.outputTxn {
+		if t.TS > ts {
+			p.PutBack(t)
+			return
+		}
+		entryC <- NewProcessorDMLsEntry(t.Entries, t.TS)
+	}
+	log.Info("Input channel of table closed", zap.Any("table", table))
 }
 
 func (p *txnChannel) PutBack(t txn.RawTxn) {
@@ -246,7 +255,7 @@ func (p *processorImpl) globalResolvedWorker() {
 				input := input
 				globalResolvedTS := globalResolvedTS
 				wg.Go(func() error {
-					p.pushTxn(table, input, globalResolvedTS)
+					input.Forward(table, globalResolvedTS, p.resolvedEntries)
 					return nil
 				})
 			}
@@ -254,21 +263,6 @@ func (p *processorImpl) globalResolvedWorker() {
 			wg.Wait()
 			p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTS)
 		}
-	}
-}
-
-func (p *processorImpl) pushTxn(table schema.TableName, input *txnChannel, targetTS uint64) {
-	for {
-		t, ok := input.Pull()
-		if !ok {
-			log.Info("the input channel of table is closed", zap.Reflect("table", table))
-			return
-		}
-		if t.TS > targetTS {
-			input.PutBack(t)
-			return
-		}
-		p.resolvedEntries <- NewProcessorDMLsEntry(t.Entries, t.TS)
 	}
 }
 
