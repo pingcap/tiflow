@@ -99,9 +99,9 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 	// TODO: handle changefeed changed and the table of sub changefeed changed
 	// TODO: find the first index of one changefeed in ddl jobs
 	for changeFeedID, etcdChangeFeedInfo := range infos {
-		// new changefeed, no subchangefeed allocated
+		// new changefeed, no subchangefeed assignd
 		if len(etcdChangeFeedInfo) == 0 {
-			createdInfo, err := o.allocateChangeFeed(ctx, changeFeedID)
+			createdInfo, err := o.assignChangeFeed(ctx, changeFeedID)
 			if err != nil {
 				return err
 			}
@@ -299,10 +299,10 @@ func (o *ownerImpl) IsOwner(_ context.Context) bool {
 	return o.manager.IsOwner()
 }
 
-// allocateChangeFeed handels newly added changefeed with following steps:
-// 1. allocate tables to captures
+// assignChangeFeed handels newly added changefeed with following steps:
+// 1. assign tables to captures
 // 2. create subchangefeed info for each capture, and persist to storage
-func (o *ownerImpl) allocateChangeFeed(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
+func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
 	cinfo, err := kv.GetChangeFeedConfig(ctx, o.etcdClient, changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -321,7 +321,7 @@ func (o *ownerImpl) allocateChangeFeed(ctx context.Context, changefeedID string)
 
 	result := make(map[string]*model.SubChangeFeedInfo, len(captures))
 
-	// allocate tables with simple round robin
+	// assign tables with simple round robin
 	tableInfos := make([][]*model.ProcessTableInfo, len(captures))
 	for _, id := range cinfo.TableIDs {
 		captureIndex := id % uint64(len(captures))

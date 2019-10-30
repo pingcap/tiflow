@@ -283,10 +283,10 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 
 }
 
-func (s *ownerSuite) TestAllocateChangeFeed(c *check.C) {
+func (s *ownerSuite) TestAssignChangeFeed(c *check.C) {
 	var (
 		err          error
-		changefeedID = "test-allocate-changefeed"
+		changefeedID = "test-assign-changefeed"
 		detail       = &model.ChangeFeedDetail{
 			TableIDs: []uint64{30, 31, 32, 33},
 		}
@@ -309,7 +309,7 @@ func (s *ownerSuite) TestAllocateChangeFeed(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}
 	owner := &ownerImpl{etcdClient: s.client}
-	pinfo, err := owner.allocateChangeFeed(context.Background(), changefeedID)
+	pinfo, err := owner.assignChangeFeed(context.Background(), changefeedID)
 	c.Assert(err, check.IsNil)
 
 	etcdPinfo, err := kv.GetSubChangeFeedInfos(context.Background(), s.client, changefeedID)
