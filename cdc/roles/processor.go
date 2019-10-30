@@ -230,9 +230,12 @@ func (p *processorImpl) checkpointWorker() {
 func (p *processorImpl) globalResolvedWorker() {
 	log.Info("Global resolved worker started")
 	lastGlobalResolvedTS := uint64(0)
+	wg, _ := errgroup.WithContext(context.Background())
 	for {
 		select {
 		case <-p.closed:
+			close(p.resolvedEntries)
+			close(p.executedEntries)
 			log.Info("Global resolved worker exited")
 			return
 		default:
@@ -248,7 +251,6 @@ func (p *processorImpl) globalResolvedWorker() {
 				continue
 			}
 			lastGlobalResolvedTS = globalResolvedTS
-			wg, _ := errgroup.WithContext(context.Background())
 			p.inputChansLock.RLock()
 			for table, input := range p.tableInputChans {
 				table := table
@@ -287,9 +289,6 @@ func (p *processorImpl) ExecutedChan() chan<- ProcessorEntry {
 }
 
 func (p *processorImpl) Close() {
-	// TODO close safety
 	close(p.closed)
-	close(p.resolvedEntries)
-	close(p.executedEntries)
 	p.wg.Wait()
 }
