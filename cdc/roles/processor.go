@@ -37,7 +37,7 @@ import (
 // 5. Push ProcessorEntry to ExecutedChan
 type Processor interface {
 	// SetInputChan receives a table and listens a channel
-	SetInputChan(tableId uint64, inputTxn <-chan txn.RawTxn) error
+	SetInputChan(tableID uint64, inputTxn <-chan txn.RawTxn) error
 	// ResolvedChan returns a channel, which output the resolved transaction or resolvedTS
 	ResolvedChan() <-chan ProcessorEntry
 	// ExecutedChan returns a channel, when a transaction is executed,
@@ -64,7 +64,7 @@ type txnChannel struct {
 	putBackTxn *txn.RawTxn
 }
 
-func (p *txnChannel) Forward(tableId uint64, ts uint64, entryC chan<- ProcessorEntry) {
+func (p *txnChannel) Forward(tableID uint64, ts uint64, entryC chan<- ProcessorEntry) {
 	if p.putBackTxn != nil {
 		t := *p.putBackTxn
 		if t.TS > ts {
@@ -80,7 +80,7 @@ func (p *txnChannel) Forward(tableId uint64, ts uint64, entryC chan<- ProcessorE
 		}
 		entryC <- NewProcessorDMLsEntry(t.Entries, t.TS)
 	}
-	log.Info("Input channel of table closed", zap.Uint64("tableId", tableId))
+	log.Info("Input channel of table closed", zap.Uint64("tableID", tableID))
 }
 
 func (p *txnChannel) PutBack(t txn.RawTxn) {
@@ -268,16 +268,16 @@ func (p *processorImpl) globalResolvedWorker() {
 	}
 }
 
-func (p *processorImpl) SetInputChan(tableId uint64, inputTxn <-chan txn.RawTxn) error {
+func (p *processorImpl) SetInputChan(tableID uint64, inputTxn <-chan txn.RawTxn) error {
 	tc := newTxnChannel(inputTxn, 64, func(resolvedTS uint64) {
-		p.tableResolvedTS.Store(tableId, resolvedTS)
+		p.tableResolvedTS.Store(tableID, resolvedTS)
 	})
 	p.inputChansLock.Lock()
 	defer p.inputChansLock.Unlock()
-	if _, exist := p.tableInputChans[tableId]; exist {
-		return errors.Errorf("this chan is already exist, tableId: %d", tableId)
+	if _, exist := p.tableInputChans[tableID]; exist {
+		return errors.Errorf("this chan is already exist, tableID: %d", tableID)
 	}
-	p.tableInputChans[tableId] = tc
+	p.tableInputChans[tableID] = tc
 	return nil
 }
 
