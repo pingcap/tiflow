@@ -58,13 +58,25 @@ func (s *schedulerSuite) TearDownTest(c *check.C) {
 	s.etcd.Close()
 }
 
-func mockRunSubChangeFeed(ctx context.Context, pdEndpoints []string, detail model.ChangeFeedDetail) (chan error, error) {
+func mockRunSubChangeFeed(
+	ctx context.Context,
+	pdEndpoints []string,
+	detail model.ChangeFeedDetail,
+	changefeedID string,
+	captureID string,
+) (chan error, error) {
 	errCh := make(chan error, 1)
 	atomic.AddInt32(&runSubChangeFeedCount, 1)
 	return errCh, nil
 }
 
-func mockRunSubChangeFeedError(ctx context.Context, pdEndpoints []string, detail model.ChangeFeedDetail) (chan error, error) {
+func mockRunSubChangeFeedError(
+	ctx context.Context,
+	pdEndpoints []string,
+	detail model.ChangeFeedDetail,
+	changefeedID string,
+	captureID string,
+) (chan error, error) {
 	errCh := make(chan error, 1)
 	defer func() {
 		errCh <- errors.New("mock run error")
