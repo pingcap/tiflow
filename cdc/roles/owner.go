@@ -324,8 +324,8 @@ func (o *ownerImpl) allocateChangeFeed(ctx context.Context, changefeedID string)
 	// allocate tables with simple round robin
 	tableInfos := make([][]*model.ProcessTableInfo, len(captures))
 	for _, id := range cinfo.TableIDs {
-		captureID := id % uint64(len(captures))
-		tableInfos[captureID] = append(tableInfos[captureID], &model.ProcessTableInfo{
+		captureIndex := id % uint64(len(captures))
+		tableInfos[captureIndex] = append(tableInfos[captureIndex], &model.ProcessTableInfo{
 			StartTS: cinfo.StartTS,
 			ID:      id,
 		})
