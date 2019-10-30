@@ -301,7 +301,7 @@ func (o *ownerImpl) IsOwner(_ context.Context) bool {
 
 // allocateChangeFeed handels newly added changefeed with following steps:
 // 1. allocate tables to captures
-// 2. create subchangefeed for each capture, and persist to storage
+// 2. create subchangefeed info for each capture, and persist to storage
 func (o *ownerImpl) allocateChangeFeed(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
 	cinfo, err := kv.GetChangeFeedConfig(ctx, o.etcdClient, changefeedID)
 	if err != nil {
@@ -320,7 +320,8 @@ func (o *ownerImpl) allocateChangeFeed(ctx context.Context, changefeedID string)
 	}
 
 	result := make(map[string]*model.SubChangeFeedInfo, len(captures))
-	// simple round robin
+
+	// allocate tables with simple round robin
 	tableInfos := make([][]*model.ProcessTableInfo, len(captures))
 	for _, id := range cinfo.TableIDs {
 		captureID := id % uint64(len(captures))
@@ -329,6 +330,8 @@ func (o *ownerImpl) allocateChangeFeed(ctx context.Context, changefeedID string)
 			ID:      id,
 		})
 	}
+
+	// create subchangefeed info and persist to storage
 	for i := range tableInfos {
 		key := kv.GetEtcdKeySubChangeFeed(changefeedID, captures[i].ID)
 		info := &model.SubChangeFeedInfo{

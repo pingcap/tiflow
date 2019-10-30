@@ -127,3 +127,27 @@ func SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, detail *
 	_, err = client.Put(ctx, key, value)
 	return errors.Trace(err)
 }
+
+// GetSubChangeFeedInfo queries all subchangefeed info of a changefeed, and returns a map
+// mapping from captureID to SubChangeFeedInfo
+func GetSubChangeFeedInfo(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
+	key := GetEtcdKeySubChangeFeedList(changefeedID)
+	resp, err := client.Get(ctx, key, append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)...)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	pinfo := make(map[string]*model.SubChangeFeedInfo, resp.Count)
+	for _, rawKv := range resp.Kvs {
+		captureID, err := util.ExtractKeySuffix(string(rawKv.Key))
+		if err != nil {
+			return nil, err
+		}
+		info := &model.SubChangeFeedInfo{}
+		err = info.Unmarshal(rawKv.Value)
+		if err != nil {
+			return nil, err
+		}
+		pinfo[captureID] = info
+	}
+	return pinfo, nil
+}
