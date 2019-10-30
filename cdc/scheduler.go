@@ -226,7 +226,7 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	feedErrCh, err := runSubChangeFeed(cctx, w.pdEndpoints, w.detail)
+	feedErrCh, err := runSubChangeFeed(cctx, w.pdEndpoints, w.detail, w.changefeedID, w.captureID)
 	if err != nil {
 		errCh <- err
 		return
@@ -274,8 +274,14 @@ func realRunSubChangeFeedWatcher(
 }
 
 // realRunSubChangeFeed creates a new subchangefeed then starts it, and returns a channel to pass error.
-func realRunSubChangeFeed(ctx context.Context, pdEndpoints []string, detail model.ChangeFeedDetail) (chan error, error) {
-	feed, err := NewSubChangeFeed(pdEndpoints, detail)
+func realRunSubChangeFeed(
+	ctx context.Context,
+	pdEndpoints []string,
+	detail model.ChangeFeedDetail,
+	changefeedID string,
+	captureID string,
+) (chan error, error) {
+	feed, err := NewSubChangeFeed(pdEndpoints, detail, changefeedID, captureID)
 	if err != nil {
 		return nil, err
 	}

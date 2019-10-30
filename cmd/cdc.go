@@ -19,7 +19,7 @@ func feed() {
 		CreateTime: time.Now(),
 	}
 
-	feed, err := cdc.NewSubChangeFeed([]string{"http://localhost:2379"}, detail)
+	feed, err := cdc.NewSubChangeFeed([]string{"http://localhost:2379"}, detail, "test-changefeed", "test-capture")
 	if err != nil {
 		log.Error("NewChangeFeed failed", zap.Error(err))
 		return

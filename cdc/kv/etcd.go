@@ -128,9 +128,9 @@ func SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, detail *
 	return errors.Trace(err)
 }
 
-// GetSubChangeFeedInfo queries all subchangefeed info of a changefeed, and returns a map
+// GetSubChangeFeedInfos queries all subchangefeed info of a changefeed, and returns a map
 // mapping from captureID to SubChangeFeedInfo
-func GetSubChangeFeedInfo(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
+func GetSubChangeFeedInfos(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
 	key := GetEtcdKeySubChangeFeedList(changefeedID)
 	resp, err := client.Get(ctx, key, append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)...)
 	if err != nil {
@@ -150,4 +150,24 @@ func GetSubChangeFeedInfo(ctx context.Context, client *clientv3.Client, changefe
 		pinfo[captureID] = info
 	}
 	return pinfo, nil
+}
+
+func GetSubChangeFeedInfo(
+	ctx context.Context,
+	client *clientv3.Client,
+	changefeedID string,
+	captureID string,
+	opts ...clientv3.OpOption,
+) (*model.SubChangeFeedInfo, error) {
+	key := GetEtcdKeySubChangeFeed(changefeedID, captureID)
+	resp, err := client.Get(ctx, key, opts...)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if resp.Count == 0 {
+		return nil, errors.Errorf("subchangefeed info %s.%s not exists", changefeedID, captureID)
+	}
+	info := &model.SubChangeFeedInfo{}
+	err = info.Unmarshal(resp.Kvs[0].Value)
+	return info, errors.Trace(err)
 }

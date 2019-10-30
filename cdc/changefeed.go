@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
@@ -32,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 )
 
 type CancellablePuller struct {
@@ -42,9 +44,12 @@ type CancellablePuller struct {
 
 // SubChangeFeed is a SubChangeFeed task on capture
 type SubChangeFeed struct {
-	pdEndpoints []string
-	pdCli       pd.Client
-	detail      model.ChangeFeedDetail
+	pdEndpoints  []string
+	pdCli        pd.Client
+	etcdCli      *clientv3.Client
+	changefeedID string
+	captureID    string
+	detail       model.ChangeFeedDetail
 
 	ddlPuller  *Puller
 	tblLock    sync.RWMutex
@@ -58,10 +63,20 @@ type SubChangeFeed struct {
 	sink sink.Sink
 }
 
-func NewSubChangeFeed(pdEndpoints []string, detail model.ChangeFeedDetail) (*SubChangeFeed, error) {
+func NewSubChangeFeed(pdEndpoints []string, detail model.ChangeFeedDetail, changefeedID, captureID string) (*SubChangeFeed, error) {
 	pdCli, err := pd.NewClient(pdEndpoints, pd.SecurityOption{})
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
+	}
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:   pdEndpoints,
+		DialTimeout: 5 * time.Second,
+		DialOptions: []grpc.DialOption{
+			grpc.WithBackoffMaxDelay(time.Second * 3),
+		},
+	})
+	if err != nil {
+		return nil, errors.Annotate(err, "new etcd client")
 	}
 
 	// here we create another pb client,we should reuse them
@@ -90,12 +105,16 @@ func NewSubChangeFeed(pdEndpoints []string, detail model.ChangeFeedDetail) (*Sub
 	}
 
 	return &SubChangeFeed{
-		pdEndpoints: pdEndpoints,
-		detail:      detail,
-		pdCli:       pdCli,
-		schema:      schema,
-		sink:        sink,
-		mounter:     mounter,
+		pdEndpoints:  pdEndpoints,
+		changefeedID: changefeedID,
+		captureID:    captureID,
+		detail:       detail,
+		pdCli:        pdCli,
+		etcdCli:      etcdCli,
+		schema:       schema,
+		sink:         sink,
+		mounter:      mounter,
+		tblPullers:   make(map[int64]CancellablePuller),
 	}, nil
 }
 
@@ -107,6 +126,19 @@ func (c *SubChangeFeed) Start(ctx context.Context, result chan<- error) {
 		End:   []byte{'m' + 1},
 	}
 	c.ddlPuller = c.startOnSpan(ctx, ddlSpan, errCh)
+
+	info, err := kv.GetSubChangeFeedInfo(ctx, c.etcdCli, c.changefeedID, c.captureID)
+	if err != nil {
+		result <- err
+		return
+	}
+	for _, tblInfo := range info.TableInfos {
+		c.AddTable(ctx, int64(tblInfo.ID), errCh)
+	}
+
+	go func() {
+		c.watchTables(ctx, errCh)
+	}()
 
 	// TODO: Set up a way to notify the pullers of new resolved ts
 	var lastTS uint64
@@ -132,6 +164,30 @@ func (c *SubChangeFeed) Start(ctx context.Context, result chan<- error) {
 	}
 }
 
+func (c *SubChangeFeed) watchTables(ctx context.Context, errCh chan<- error) {
+	for {
+		select {
+		case <-ctx.Done():
+			err := ctx.Err()
+			if err != context.Canceled {
+				errCh <- err
+			}
+			return
+		case <-time.After(5 * time.Second):
+			info, err := kv.GetSubChangeFeedInfo(ctx, c.etcdCli, c.changefeedID, c.captureID)
+			if err != nil && err != context.Canceled {
+				errCh <- err
+				return
+			}
+			for _, tblInfo := range info.TableInfos {
+				if _, ok := c.tblPullers[int64(tblInfo.ID)]; !ok {
+					c.AddTable(ctx, int64(tblInfo.ID), errCh)
+				}
+			}
+		}
+	}
+}
+
 func (c *SubChangeFeed) GetResolvedTs() uint64 {
 	c.tblLock.RLock()
 	defer c.tblLock.RUnlock()
@@ -153,6 +209,7 @@ func (c *SubChangeFeed) GetResolvedTs() uint64 {
 }
 
 func (c *SubChangeFeed) AddTable(ctx context.Context, tableID int64, errCh chan<- error) {
+	log.Debug("add table", zap.Int64("tableID", tableID))
 	c.tblLock.Lock()
 	defer c.tblLock.Unlock()
 	// TODO: the resolvedTs for the newly added table puller is 0 initially,

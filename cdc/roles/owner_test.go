@@ -312,7 +312,7 @@ func (s *ownerSuite) TestAllocateChangeFeed(c *check.C) {
 	pinfo, err := owner.allocateChangeFeed(context.Background(), changefeedID)
 	c.Assert(err, check.IsNil)
 
-	etcdPinfo, err := kv.GetSubChangeFeedInfo(context.Background(), s.client, changefeedID)
+	etcdPinfo, err := kv.GetSubChangeFeedInfos(context.Background(), s.client, changefeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(pinfo, check.DeepEquals, etcdPinfo)
 	for captureID, info := range etcdPinfo {
