@@ -58,6 +58,7 @@ func runEServer(cmd *cobra.Command, args []string) error {
 		if errors.Cause(err) == context.Canceled {
 			return nil
 		}
+		log.Error("run server", zap.String("error", errors.ErrorStack(err)))
 		return errors.Annotate(err, "run server")
 	}
 

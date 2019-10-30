@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/model"
-	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
 // ChangeFeedInfoRWriter implements `roles.ChangeFeedInfoRWriter` interface
@@ -44,23 +43,9 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeed
 	}
 	result := make(map[string]model.ProcessorsInfos, len(details))
 	for changefeedID := range details {
-		key := kv.GetEtcdKeySubChangeFeedList(changefeedID)
-		resp, err := rw.etcdClient.Get(ctx, key, clientv3.WithPrefix())
+		pinfo, err := kv.GetSubChangeFeedInfos(ctx, rw.etcdClient, changefeedID)
 		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		pinfo := make(map[string]*model.SubChangeFeedInfo, resp.Count)
-		for _, rawKv := range resp.Kvs {
-			captureID, err := util.ExtractKeySuffix(string(rawKv.Key))
-			if err != nil {
-				return nil, err
-			}
-			info := &model.SubChangeFeedInfo{}
-			err = info.Unmarshal(rawKv.Value)
-			if err != nil {
-				return nil, err
-			}
-			pinfo[captureID] = info
+			return nil, err
 		}
 		result[changefeedID] = pinfo
 	}

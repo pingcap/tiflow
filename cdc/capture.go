@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/cdc/roles"
 	"github.com/pingcap/tidb-cdc/pkg/flags"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -39,12 +40,12 @@ const (
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules SubChangeFeed on it.
 type Capture struct {
-	id string
-
 	pdEndpoints  []string
 	etcdClient   *clientv3.Client
 	ownerManager roles.Manager
 	ownerWorker  roles.Owner
+
+	info *model.CaptureInfo
 }
 
 // NewCapture returns a new Capture instance
@@ -66,11 +67,13 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	worker := roles.NewOwner(math.MaxUint64, cli, manager)
 
 	c = &Capture{
-		id:           id,
 		pdEndpoints:  pdEndpoints,
 		etcdClient:   cli,
 		ownerManager: manager,
 		ownerWorker:  worker,
+		info: &model.CaptureInfo{
+			ID: id,
+		},
 	}
 
 	return
@@ -89,34 +92,13 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		return errors.Annotate(err, "CampaignOwner")
 	}
 
-	// create a test changefeed
-	detail := ChangeFeedDetail{
-		SinkURI:    "root@tcp(127.0.0.1:3306)/test",
-		Opts:       make(map[string]string),
-		CreateTime: time.Now(),
-	}
-	changefeedID := uuid.New().String()
-	err = detail.SaveChangeFeedDetail(ctx, c.etcdClient, changefeedID)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// create subchangefeed for test
-	// TODO: should be updated by owner
-	skey := kv.GetEtcdKeySubChangeFeed(changefeedID, c.id)
-	c.etcdClient.Put(ctx, skey, "")
-	defer func() {
-		c.etcdClient.Delete(context.Background(), kv.GetEtcdKeyChangeFeedConfig(changefeedID))
-		c.etcdClient.Delete(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))
-		c.etcdClient.Delete(context.Background(), skey)
-	}()
-
 	errg, cctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
 		return c.ownerWorker.Run(cctx, time.Second*5)
 	})
 
-	watcher := NewChangeFeedWatcher(c.id, c.pdEndpoints, c.etcdClient)
+	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)
 	errg.Go(func() error {
 		return watcher.Watch(cctx)
 	})
@@ -125,18 +107,16 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 }
 
 func (c *Capture) Close(ctx context.Context) error {
-	_, err := c.etcdClient.Delete(ctx, c.infoKey())
-	return errors.Trace(err)
+	return errors.Trace(DeleteCaptureInfo(ctx, c.info.ID, c.etcdClient))
 }
 
 func (c *Capture) infoKey() string {
-	return infoKey(c.id)
+	return infoKey(c.info.ID)
 }
 
 // register registers the capture information in etcd
 func (c *Capture) register(ctx context.Context) error {
-	_, err := c.etcdClient.Put(ctx, c.infoKey(), "{}")
-	return errors.Trace(err)
+	return errors.Trace(PutCaptureInfo(ctx, c.info, c.etcdClient))
 }
 
 func createTiStore(urls string) (tidbkv.Storage, error) {

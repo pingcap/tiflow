@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 )
@@ -57,13 +58,25 @@ func (s *schedulerSuite) TearDownTest(c *check.C) {
 	s.etcd.Close()
 }
 
-func mockRunSubChangeFeed(ctx context.Context, pdEndpoints []string, detail ChangeFeedDetail) (chan error, error) {
+func mockRunSubChangeFeed(
+	ctx context.Context,
+	pdEndpoints []string,
+	detail model.ChangeFeedDetail,
+	changefeedID string,
+	captureID string,
+) (chan error, error) {
 	errCh := make(chan error, 1)
 	atomic.AddInt32(&runSubChangeFeedCount, 1)
 	return errCh, nil
 }
 
-func mockRunSubChangeFeedError(ctx context.Context, pdEndpoints []string, detail ChangeFeedDetail) (chan error, error) {
+func mockRunSubChangeFeedError(
+	ctx context.Context,
+	pdEndpoints []string,
+	detail model.ChangeFeedDetail,
+	changefeedID string,
+	captureID string,
+) (chan error, error) {
 	errCh := make(chan error, 1)
 	defer func() {
 		errCh <- errors.New("mock run error")
@@ -77,7 +90,7 @@ func mockRunSubChangeFeedWatcher(
 	captureID string,
 	pdEndpoints []string,
 	etcdCli *clientv3.Client,
-	detail ChangeFeedDetail,
+	detail model.ChangeFeedDetail,
 	errCh chan error,
 ) *SubChangeFeedWatcher {
 	atomic.AddInt32(&runChangeFeedWatcherCount, 1)
@@ -89,7 +102,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 		changefeedID = "test-changefeed"
 		captureID    = "test-capture"
 		pdEndpoints  = []string{}
-		detail       = ChangeFeedDetail{}
+		detail       = model.ChangeFeedDetail{}
 		key          = kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
 	)
 
@@ -151,7 +164,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcherError(c *check.C) {
 		changefeedID = "test-changefeed-err"
 		captureID    = "test-capture-err"
 		pdEndpoints  = []string{}
-		detail       = ChangeFeedDetail{}
+		detail       = model.ChangeFeedDetail{}
 		key          = kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
 	)
 
@@ -188,7 +201,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 		captureID    = "test-capture"
 		pdEndpoints  = []string{}
 		sinkURI      = "root@tcp(127.0.0.1:3306)/test"
-		detail       = ChangeFeedDetail{SinkURI: sinkURI}
+		detail       = &model.ChangeFeedDetail{SinkURI: sinkURI}
 		key          = kv.GetEtcdKeyChangeFeedConfig(changefeedID)
 	)
 
@@ -224,7 +237,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	time.Sleep(time.Millisecond * 100)
 
 	// create a changefeed
-	err = detail.SaveChangeFeedDetail(context.Background(), cli, changefeedID)
+	err = kv.SaveChangeFeedDetail(context.Background(), cli, detail, changefeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runChangeFeedWatcherCount) == 1

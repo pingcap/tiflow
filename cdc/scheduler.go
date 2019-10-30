@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
@@ -38,7 +39,7 @@ type ChangeFeedWatcher struct {
 	captureID   string
 	pdEndpoints []string
 	etcdCli     *clientv3.Client
-	details     map[string]ChangeFeedDetail
+	details     map[string]model.ChangeFeedDetail
 }
 
 // NewChangeFeedWatcher creates a new changefeed watcher
@@ -47,20 +48,21 @@ func NewChangeFeedWatcher(captureID string, pdEndpoints []string, cli *clientv3.
 		captureID:   captureID,
 		pdEndpoints: pdEndpoints,
 		etcdCli:     cli,
-		details:     make(map[string]ChangeFeedDetail),
+		details:     make(map[string]model.ChangeFeedDetail),
 	}
 	return w
 }
 
-func (w *ChangeFeedWatcher) processPutKv(kv *mvccpb.KeyValue) (bool, string, ChangeFeedDetail, error) {
+func (w *ChangeFeedWatcher) processPutKv(kv *mvccpb.KeyValue) (bool, string, model.ChangeFeedDetail, error) {
 	needRunWatcher := false
 	changefeedID, err := util.ExtractKeySuffix(string(kv.Key))
 	if err != nil {
-		return needRunWatcher, "", ChangeFeedDetail{}, err
+		return needRunWatcher, "", model.ChangeFeedDetail{}, err
 	}
-	detail, err := DecodeChangeFeedDetail(kv.Value)
+	detail := model.ChangeFeedDetail{}
+	err = detail.Unmarshal(kv.Value)
 	if err != nil {
-		return needRunWatcher, changefeedID, ChangeFeedDetail{}, err
+		return needRunWatcher, changefeedID, detail, err
 	}
 	w.lock.Lock()
 	_, ok := w.details[changefeedID]
@@ -145,7 +147,7 @@ type SubChangeFeedWatcher struct {
 	changefeedID string
 	captureID    string
 	etcdCli      *clientv3.Client
-	detail       ChangeFeedDetail
+	detail       model.ChangeFeedDetail
 	wg           sync.WaitGroup
 	closed       int32
 }
@@ -156,7 +158,7 @@ func NewSubChangeFeedWatcher(
 	captureID string,
 	pdEndpoints []string,
 	cli *clientv3.Client,
-	detail ChangeFeedDetail,
+	detail model.ChangeFeedDetail,
 ) *SubChangeFeedWatcher {
 	return &SubChangeFeedWatcher{
 		changefeedID: changefeedID,
@@ -224,7 +226,7 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	feedErrCh, err := runSubChangeFeed(cctx, w.pdEndpoints, w.detail)
+	feedErrCh, err := runSubChangeFeed(cctx, w.pdEndpoints, w.detail, w.changefeedID, w.captureID)
 	if err != nil {
 		errCh <- err
 		return
@@ -262,7 +264,7 @@ func realRunSubChangeFeedWatcher(
 	captureID string,
 	pdEndpoints []string,
 	etcdCli *clientv3.Client,
-	detail ChangeFeedDetail,
+	detail model.ChangeFeedDetail,
 	errCh chan error,
 ) *SubChangeFeedWatcher {
 	sw := NewSubChangeFeedWatcher(changefeedID, captureID, pdEndpoints, etcdCli, detail)
@@ -272,8 +274,14 @@ func realRunSubChangeFeedWatcher(
 }
 
 // realRunSubChangeFeed creates a new subchangefeed then starts it, and returns a channel to pass error.
-func realRunSubChangeFeed(ctx context.Context, pdEndpoints []string, detail ChangeFeedDetail) (chan error, error) {
-	feed, err := NewSubChangeFeed(pdEndpoints, detail)
+func realRunSubChangeFeed(
+	ctx context.Context,
+	pdEndpoints []string,
+	detail model.ChangeFeedDetail,
+	changefeedID string,
+	captureID string,
+) (chan error, error) {
+	feed, err := NewSubChangeFeed(pdEndpoints, detail, changefeedID, captureID)
 	if err != nil {
 		return nil, err
 	}

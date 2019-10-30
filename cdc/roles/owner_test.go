@@ -3,21 +3,48 @@ package roles
 import (
 	"context"
 	"math"
+	"net/url"
 	"time"
 
+	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/embed"
 	"github.com/google/uuid"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/model"
+	"github.com/pingcap/tidb-cdc/pkg/etcd"
 )
 
 type ownerSuite struct {
-	owner Owner
+	owner     Owner
+	e         *embed.Etcd
+	clientURL *url.URL
+	client    *clientv3.Client
 }
 
 var _ = check.Suite(&ownerSuite{})
+
+func (s *ownerSuite) SetUpTest(c *check.C) {
+	dir := c.MkDir()
+	var err error
+	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
+	c.Assert(err, check.IsNil)
+	s.client, err = clientv3.New(clientv3.Config{
+		Endpoints:   []string{s.clientURL.String()},
+		DialTimeout: 3 * time.Second,
+	})
+	c.Assert(err, check.IsNil)
+	go func() {
+		c.Log(<-s.e.Err())
+	}()
+}
+
+func (s *ownerSuite) TearDownTest(c *check.C) {
+	s.e.Close()
+}
 
 type handlerForPrueDMLTest struct {
 	index            int
@@ -254,4 +281,41 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	err = owner.Run(ctx, 50*time.Millisecond)
 	c.Assert(errors.Cause(err), check.DeepEquals, context.Canceled)
 
+}
+
+func (s *ownerSuite) TestAssignChangeFeed(c *check.C) {
+	var (
+		err          error
+		changefeedID = "test-assign-changefeed"
+		detail       = &model.ChangeFeedDetail{
+			TableIDs: []uint64{30, 31, 32, 33},
+		}
+		captureIDs  = []string{"capture1", "capture2", "capture3"}
+		expectedIDs = map[string][]*model.ProcessTableInfo{
+			"capture1": {{ID: 30}, {ID: 33}},
+			"capture2": {{ID: 31}},
+			"capture3": {{ID: 32}},
+		}
+	)
+	err = kv.SaveChangeFeedDetail(context.Background(), s.client, detail, changefeedID)
+	c.Assert(err, check.IsNil)
+	for _, cid := range captureIDs {
+		cinfo := &model.CaptureInfo{ID: cid}
+		// TODO: reorginaze etcd operation for capture info
+		key := kv.EtcdKeyBase + "/capture/info/" + cid
+		data, err := cinfo.Marshal()
+		c.Assert(err, check.IsNil)
+		_, err = s.client.Put(context.Background(), key, string(data))
+		c.Assert(err, check.IsNil)
+	}
+	owner := &ownerImpl{etcdClient: s.client}
+	pinfo, err := owner.assignChangeFeed(context.Background(), changefeedID)
+	c.Assert(err, check.IsNil)
+
+	etcdPinfo, err := kv.GetSubChangeFeedInfos(context.Background(), s.client, changefeedID)
+	c.Assert(err, check.IsNil)
+	c.Assert(pinfo, check.DeepEquals, etcdPinfo)
+	for captureID, info := range etcdPinfo {
+		c.Assert(expectedIDs[captureID], check.DeepEquals, info.TableInfos)
+	}
 }

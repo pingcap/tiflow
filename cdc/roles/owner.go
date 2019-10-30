@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/cdc/roles/storage"
 	"go.uber.org/zap"
@@ -98,8 +99,25 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 	// TODO: handle changefeed changed and the table of sub changefeed changed
 	// TODO: find the first index of one changefeed in ddl jobs
 	for changeFeedID, etcdChangeFeedInfo := range infos {
+		// new changefeed, no subchangefeed assignd
+		if len(etcdChangeFeedInfo) == 0 {
+			createdInfo, err := o.assignChangeFeed(ctx, changeFeedID)
+			if err != nil {
+				return err
+			}
+			etcdChangeFeedInfo = createdInfo
+		}
+
 		if cfInfo, exist := o.changeFeedInfos[changeFeedID]; exist {
 			cfInfo.ProcessorInfos = etcdChangeFeedInfo
+		} else {
+			o.changeFeedInfos[changeFeedID] = &model.ChangeFeedInfo{
+				Status:          model.ChangeFeedSyncDML,
+				ResolvedTS:      0,
+				CheckpointTS:    0,
+				ProcessorInfos:  etcdChangeFeedInfo,
+				DDLCurrentIndex: 0,
+			}
 		}
 	}
 	return nil
@@ -279,4 +297,58 @@ func (o *ownerImpl) run(ctx context.Context) error {
 
 func (o *ownerImpl) IsOwner(_ context.Context) bool {
 	return o.manager.IsOwner()
+}
+
+// assignChangeFeed handels newly added changefeed with following steps:
+// 1. assign tables to captures
+// 2. create subchangefeed info for each capture, and persist to storage
+func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
+	cinfo, err := kv.GetChangeFeedDetail(ctx, o.etcdClient, changefeedID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if len(cinfo.TableIDs) == 0 {
+		return nil, errors.Errorf("no table ids in changefeed %s", changefeedID)
+	}
+
+	_, captures, err := kv.GetCaptures(ctx, o.etcdClient)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if len(captures) == 0 {
+		return nil, errors.New("no available capture")
+	}
+
+	result := make(map[string]*model.SubChangeFeedInfo, len(captures))
+
+	// assign tables with simple round robin
+	tableInfos := make([][]*model.ProcessTableInfo, len(captures))
+	for _, id := range cinfo.TableIDs {
+		captureIndex := id % uint64(len(captures))
+		tableInfos[captureIndex] = append(tableInfos[captureIndex], &model.ProcessTableInfo{
+			StartTS: cinfo.StartTS,
+			ID:      id,
+		})
+	}
+
+	// create subchangefeed info and persist to storage
+	for i := range tableInfos {
+		key := kv.GetEtcdKeySubChangeFeed(changefeedID, captures[i].ID)
+		info := &model.SubChangeFeedInfo{
+			CheckPointTS: 0, // TODO: refine checkpointTS
+			ResolvedTS:   0,
+			TableInfos:   tableInfos[i],
+		}
+		sinfo, err := info.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		_, err = o.etcdClient.Put(ctx, key, sinfo)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		result[captures[i].ID] = info
+	}
+
+	return result, nil
 }
