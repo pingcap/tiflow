@@ -142,6 +142,7 @@ func (rw *ProcessorTSEtcdRWriter) writeTsOrUpToDate(ctx context.Context) error {
 	return nil
 }
 
+// wrapWriteTsOrUpToDate wraps `rw.writeTsOrUpToDate` with retriable error decision
 func (rw *ProcessorTSEtcdRWriter) wrapWriteTsOrUpToDate(ctx context.Context) error {
 	err := rw.writeTsOrUpToDate(ctx)
 	if err != nil && errors.Cause(err) == context.Canceled {
