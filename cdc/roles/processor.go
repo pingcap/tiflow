@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
@@ -230,7 +231,13 @@ func (p *processorImpl) checkpointWorker() {
 func (p *processorImpl) globalResolvedWorker() {
 	log.Info("Global resolved worker started")
 	lastGlobalResolvedTS := uint64(0)
-	wg, _ := errgroup.WithContext(context.Background())
+	ctx := context.Background()
+	wg, _ := errgroup.WithContext(ctx)
+	retryCfg := backoff.WithMaxRetries(
+		backoff.WithContext(
+			backoff.NewExponentialBackOff(), ctx),
+		3,
+	)
 	for {
 		select {
 		case <-p.closed:
@@ -240,12 +247,17 @@ func (p *processorImpl) globalResolvedWorker() {
 			return
 		default:
 		}
-		globalResolvedTS, err := p.tsRWriter.ReadGlobalResolvedTS()
+		var globalResolvedTS uint64
+		err := backoff.Retry(func() error {
+			var err error
+			globalResolvedTS, err = p.tsRWriter.ReadGlobalResolvedTS()
+			if err != nil {
+				log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
+			}
+			return err
+		}, retryCfg)
 		if err != nil {
-			log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
-			//TODO limit the retry times
-			time.Sleep(500 * time.Millisecond)
-			continue
+			return
 		}
 		if lastGlobalResolvedTS == globalResolvedTS {
 			time.Sleep(500 * time.Millisecond)
