@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tidb-cdc/cdc/model"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
@@ -73,7 +75,7 @@ func (p *processorSuite) TestProcessor(c *check.C) {
 
 func runCase(c *check.C, cases *processorTestCase) {
 	tsRW := &mockTSRWriter{}
-	p := NewProcessor(tsRW)
+	p := NewProcessor(tsRW, model.ChangeFeedDetail{}, "", "")
 	var l sync.Mutex
 	var outputDML []uint64
 	var outputResolvedTS []uint64

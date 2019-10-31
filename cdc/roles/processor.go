@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -139,6 +140,10 @@ func NewProcessorResolvedEntry(ts uint64) ProcessorEntry {
 }
 
 type processorImpl struct {
+	captureID    string
+	changefeedID string
+	changefeed   model.ChangeFeedDetail
+
 	tableResolvedTS sync.Map
 	tsRWriter       ProcessorTSRWriter
 	resolvedEntries chan ProcessorEntry
@@ -151,13 +156,17 @@ type processorImpl struct {
 	closed chan struct{}
 }
 
-func NewProcessor(tsRWriter ProcessorTSRWriter) Processor {
+func NewProcessor(tsRWriter ProcessorTSRWriter, changefeed model.ChangeFeedDetail, captureID, changefeedID string) Processor {
 	wg, _ := errgroup.WithContext(context.Background())
 	p := &processorImpl{
+		captureID:    captureID,
+		changefeedID: changefeedID,
+		changefeed:   changefeed,
+
 		tsRWriter: tsRWriter,
-		// TODO set the cannel size
+		// TODO set the channel size
 		resolvedEntries: make(chan ProcessorEntry),
-		// TODO set the cannel size
+		// TODO set the channel size
 		executedEntries: make(chan ProcessorEntry),
 
 		tableInputChans: make(map[uint64]*txnChannel),
