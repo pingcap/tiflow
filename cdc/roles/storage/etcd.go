@@ -146,15 +146,6 @@ func (rw *ProcessorTSEtcdRWriter) writeTsOrUpToDate(ctx context.Context) error {
 	return nil
 }
 
-// wrapWriteTsOrUpToDate wraps `rw.writeTsOrUpToDate` with retriable error decision
-func (rw *ProcessorTSEtcdRWriter) wrapWriteTsOrUpToDate(ctx context.Context) error {
-	err := rw.writeTsOrUpToDate(ctx)
-	if err != nil && errors.Cause(err) == context.Canceled {
-		return backoff.Permanent(err)
-	}
-	return err
-}
-
 func (rw *ProcessorTSEtcdRWriter) retryWriteTs(ctx context.Context, updateTsFn func()) error {
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
@@ -166,7 +157,12 @@ func (rw *ProcessorTSEtcdRWriter) retryWriteTs(ctx context.Context, updateTsFn f
 		rw.lock.Lock()
 		defer rw.lock.Unlock()
 		updateTsFn()
-		return rw.wrapWriteTsOrUpToDate(ctx)
+		err := rw.writeTsOrUpToDate(ctx)
+		if err != nil && errors.Cause(err) == context.Canceled {
+			return backoff.Permanent(err)
+		}
+		return err
+
 	}, retryCfg)
 
 	return err
