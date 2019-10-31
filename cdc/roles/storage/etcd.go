@@ -102,6 +102,7 @@ func NewProcessorTSEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 	}
 }
 
+// updateSubChangeFeedInfo queries SubChangeFeedInfo from etcd and update the memory cached value
 func (rw *ProcessorTSEtcdRWriter) updateSubChangeFeedInfo(ctx context.Context) error {
 	revision, info, err := kv.GetSubChangeFeedInfo(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
 	if err != nil {
@@ -112,6 +113,8 @@ func (rw *ProcessorTSEtcdRWriter) updateSubChangeFeedInfo(ctx context.Context) e
 	return nil
 }
 
+// writeTsOrUpToDate updates new SubChangeFeed info into etcd if the cached info
+// is up to date, otherwise update the cached SubChangeFeed info to the etcd value.
 func (rw *ProcessorTSEtcdRWriter) writeTsOrUpToDate(ctx context.Context) error {
 	key := kv.GetEtcdKeySubChangeFeed(rw.changefeedID, rw.captureID)
 	value, err := rw.info.Marshal()
