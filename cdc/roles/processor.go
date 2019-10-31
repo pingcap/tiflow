@@ -239,32 +239,32 @@ func (p *processorImpl) globalResolvedWorker() {
 			log.Info("Global resolved worker exited")
 			return
 		default:
-			globalResolvedTS, err := p.tsRWriter.ReadGlobalResolvedTS()
-			if err != nil {
-				log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
-				//TODO limit the retry times
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
-			if lastGlobalResolvedTS == globalResolvedTS {
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
-			lastGlobalResolvedTS = globalResolvedTS
-			p.inputChansLock.RLock()
-			for table, input := range p.tableInputChans {
-				table := table
-				input := input
-				globalResolvedTS := globalResolvedTS
-				wg.Go(func() error {
-					input.Forward(table, globalResolvedTS, p.resolvedEntries)
-					return nil
-				})
-			}
-			p.inputChansLock.RUnlock()
-			wg.Wait()
-			p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTS)
 		}
+		globalResolvedTS, err := p.tsRWriter.ReadGlobalResolvedTS()
+		if err != nil {
+			log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
+			//TODO limit the retry times
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		if lastGlobalResolvedTS == globalResolvedTS {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		lastGlobalResolvedTS = globalResolvedTS
+		p.inputChansLock.RLock()
+		for table, input := range p.tableInputChans {
+			table := table
+			input := input
+			globalResolvedTS := globalResolvedTS
+			wg.Go(func() error {
+				input.Forward(table, globalResolvedTS, p.resolvedEntries)
+				return nil
+			})
+		}
+		p.inputChansLock.RUnlock()
+		wg.Wait()
+		p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTS)
 	}
 }
 
