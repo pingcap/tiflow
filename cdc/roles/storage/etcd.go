@@ -140,6 +140,7 @@ func (rw *ProcessorTSEtcdRWriter) writeKVWithRetry(
 		}
 		return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
 	}
+	rw.modRevision = resp.Header.Revision
 	return nil
 }
 

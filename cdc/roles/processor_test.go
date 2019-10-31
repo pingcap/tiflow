@@ -1,6 +1,7 @@
 package roles
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"time"
@@ -20,7 +21,7 @@ type mockTSRWriter struct {
 	l                sync.Mutex
 }
 
-func (s *mockTSRWriter) WriteResolvedTS(resolvedTS uint64) error {
+func (s *mockTSRWriter) WriteResolvedTS(ctx context.Context, resolvedTS uint64) error {
 	s.l.Lock()
 	defer s.l.Unlock()
 	log.Info("write", zap.Uint64("localResolvedTS", resolvedTS))
@@ -28,7 +29,7 @@ func (s *mockTSRWriter) WriteResolvedTS(resolvedTS uint64) error {
 	return nil
 }
 
-func (s *mockTSRWriter) WriteCheckpointTS(checkpointTS uint64) error {
+func (s *mockTSRWriter) WriteCheckpointTS(ctx context.Context, checkpointTS uint64) error {
 	s.l.Lock()
 	defer s.l.Unlock()
 	log.Info("write", zap.Uint64("checkpointTS", checkpointTS))
@@ -36,7 +37,7 @@ func (s *mockTSRWriter) WriteCheckpointTS(checkpointTS uint64) error {
 	return nil
 }
 
-func (s *mockTSRWriter) ReadGlobalResolvedTS() (uint64, error) {
+func (s *mockTSRWriter) ReadGlobalResolvedTS(ctx context.Context) (uint64, error) {
 	s.l.Lock()
 	defer s.l.Unlock()
 	return s.globalResolvedTS, nil
