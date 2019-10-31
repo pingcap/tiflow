@@ -142,6 +142,14 @@ func (rw *ProcessorTSEtcdRWriter) writeTsOrUpToDate(ctx context.Context) error {
 	return nil
 }
 
+func (rw *ProcessorTSEtcdRWriter) wrapWriteTsOrUpToDate(ctx context.Context) error {
+	err := rw.writeTsOrUpToDate(ctx)
+	if err != nil && errors.Cause(err) == context.Canceled {
+		return backoff.Permanent(err)
+	}
+	return err
+}
+
 // WriteResolvedTS writes the loacl resolvedTS into etcd
 func (rw *ProcessorTSEtcdRWriter) WriteResolvedTS(ctx context.Context, resolvedTS uint64) error {
 	if rw.modRevision == 0 {
@@ -159,7 +167,7 @@ func (rw *ProcessorTSEtcdRWriter) WriteResolvedTS(ctx context.Context, resolvedT
 
 	err := backoff.Retry(func() error {
 		rw.info.ResolvedTS = resolvedTS
-		return rw.writeTsOrUpToDate(ctx)
+		return rw.wrapWriteTsOrUpToDate(ctx)
 	}, retryCfg)
 
 	return err
