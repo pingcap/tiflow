@@ -190,7 +190,7 @@ func (rw *ProcessorTSEtcdRWriter) WriteCheckpointTS(ctx context.Context, checkpo
 
 	err := backoff.Retry(func() error {
 		rw.info.CheckPointTS = checkpointTS
-		return rw.writeTsOrUpToDate(ctx)
+		return rw.wrapWriteTsOrUpToDate(ctx)
 	}, retryCfg)
 
 	return err
