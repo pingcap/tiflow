@@ -21,12 +21,12 @@ import (
 	"sync"
 	"time"
 
+  "github.com/cenkalti/backoff"
 	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/pkg/flags"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
@@ -265,7 +265,13 @@ func (p *processorImpl) checkpointWorker() {
 func (p *processorImpl) globalResolvedWorker() {
 	log.Info("Global resolved worker started")
 	lastGlobalResolvedTS := uint64(0)
-	wg, _ := errgroup.WithContext(context.Background())
+	ctx := context.Background()
+	wg, _ := errgroup.WithContext(ctx)
+	retryCfg := backoff.WithMaxRetries(
+		backoff.WithContext(
+			backoff.NewExponentialBackOff(), ctx),
+		3,
+	)
 	for {
 		select {
 		case <-p.closed:
@@ -274,32 +280,37 @@ func (p *processorImpl) globalResolvedWorker() {
 			log.Info("Global resolved worker exited")
 			return
 		default:
-			globalResolvedTS, err := p.tsRWriter.ReadGlobalResolvedTS()
+		}
+		var globalResolvedTS uint64
+		err := backoff.Retry(func() error {
+			var err error
+			globalResolvedTS, err = p.tsRWriter.ReadGlobalResolvedTS()
 			if err != nil {
 				log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
-				//TODO limit the retry times
-				time.Sleep(500 * time.Millisecond)
-				continue
 			}
-			if lastGlobalResolvedTS == globalResolvedTS {
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
-			lastGlobalResolvedTS = globalResolvedTS
-			p.inputChansLock.RLock()
-			for table, input := range p.tableInputChans {
-				table := table
-				input := input
-				globalResolvedTS := globalResolvedTS
-				wg.Go(func() error {
-					input.Forward(table, globalResolvedTS, p.resolvedEntries)
-					return nil
-				})
-			}
-			p.inputChansLock.RUnlock()
-			wg.Wait()
-			p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTS)
+			return err
+		}, retryCfg)
+		if err != nil {
+			return
 		}
+		if lastGlobalResolvedTS == globalResolvedTS {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		lastGlobalResolvedTS = globalResolvedTS
+		p.inputChansLock.RLock()
+		for table, input := range p.tableInputChans {
+			table := table
+			input := input
+			globalResolvedTS := globalResolvedTS
+			wg.Go(func() error {
+				input.Forward(table, globalResolvedTS, p.resolvedEntries)
+				return nil
+			})
+		}
+		p.inputChansLock.RUnlock()
+		wg.Wait()
+		p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTS)
 	}
 }
 
