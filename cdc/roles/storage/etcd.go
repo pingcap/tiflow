@@ -15,6 +15,7 @@ package storage
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cenkalti/backoff"
 	"github.com/coreos/etcd/clientv3"
@@ -86,6 +87,7 @@ func (rw *ChangeFeedInfoRWriter) Write(ctx context.Context, infos map[model.Chan
 
 // ProcessorTSEtcdRWriter implements `roles.ProcessorTSRWriter` interface
 type ProcessorTSEtcdRWriter struct {
+	lock         sync.Mutex
 	etcdClient   *clientv3.Client
 	changefeedID string
 	captureID    string
@@ -102,7 +104,8 @@ func NewProcessorTSEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 	}
 }
 
-// updateSubChangeFeedInfo queries SubChangeFeedInfo from etcd and update the memory cached value
+// updateSubChangeFeedInfo queries SubChangeFeedInfo from etcd and update the memory cached value.
+// This function is not thread safe.
 func (rw *ProcessorTSEtcdRWriter) updateSubChangeFeedInfo(ctx context.Context) error {
 	revision, info, err := kv.GetSubChangeFeedInfo(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
 	if err != nil {
@@ -115,6 +118,7 @@ func (rw *ProcessorTSEtcdRWriter) updateSubChangeFeedInfo(ctx context.Context) e
 
 // writeTsOrUpToDate updates new SubChangeFeed info into etcd if the cached info
 // is up to date, otherwise update the cached SubChangeFeed info to the etcd value.
+// This function is not thread safe.
 func (rw *ProcessorTSEtcdRWriter) writeTsOrUpToDate(ctx context.Context) error {
 	key := kv.GetEtcdKeySubChangeFeed(rw.changefeedID, rw.captureID)
 	value, err := rw.info.Marshal()
@@ -151,15 +155,7 @@ func (rw *ProcessorTSEtcdRWriter) wrapWriteTsOrUpToDate(ctx context.Context) err
 	return err
 }
 
-// WriteResolvedTS writes the loacl resolvedTS into etcd
-func (rw *ProcessorTSEtcdRWriter) WriteResolvedTS(ctx context.Context, resolvedTS uint64) error {
-	if rw.modRevision == 0 {
-		err := rw.updateSubChangeFeedInfo(ctx)
-		if err != nil {
-			return err
-		}
-	}
-
+func (rw *ProcessorTSEtcdRWriter) retryWriteTs(ctx context.Context, updateTsFn func()) error {
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
 			backoff.NewExponentialBackOff(), ctx),
@@ -167,34 +163,46 @@ func (rw *ProcessorTSEtcdRWriter) WriteResolvedTS(ctx context.Context, resolvedT
 	)
 
 	err := backoff.Retry(func() error {
-		rw.info.ResolvedTS = resolvedTS
+		rw.lock.Lock()
+		defer rw.lock.Unlock()
+		updateTsFn()
 		return rw.wrapWriteTsOrUpToDate(ctx)
 	}, retryCfg)
 
 	return err
 }
 
-// WriteCheckpointTS writes the checkpointTS into etcd
-func (rw *ProcessorTSEtcdRWriter) WriteCheckpointTS(ctx context.Context, checkpointTS uint64) error {
+func (rw *ProcessorTSEtcdRWriter) ensureCacheData(ctx context.Context) error {
+	rw.lock.Lock()
+	defer rw.lock.Unlock()
 	if rw.modRevision == 0 {
-		err := rw.updateSubChangeFeedInfo(ctx)
-		if err != nil {
-			return err
-		}
+		return rw.updateSubChangeFeedInfo(ctx)
+	}
+	return nil
+}
+
+// WriteResolvedTS writes the loacl resolvedTS into etcd
+func (rw *ProcessorTSEtcdRWriter) WriteResolvedTS(ctx context.Context, resolvedTS uint64) error {
+	err := rw.ensureCacheData(ctx)
+	if err != nil {
+		return err
 	}
 
-	retryCfg := backoff.WithMaxRetries(
-		backoff.WithContext(
-			backoff.NewExponentialBackOff(), ctx),
-		3,
-	)
+	return rw.retryWriteTs(ctx, func() {
+		rw.info.ResolvedTS = resolvedTS
+	})
+}
 
-	err := backoff.Retry(func() error {
+// WriteCheckpointTS writes the checkpointTS into etcd
+func (rw *ProcessorTSEtcdRWriter) WriteCheckpointTS(ctx context.Context, checkpointTS uint64) error {
+	err := rw.ensureCacheData(ctx)
+	if err != nil {
+		return err
+	}
+
+	return rw.retryWriteTs(ctx, func() {
 		rw.info.CheckPointTS = checkpointTS
-		return rw.wrapWriteTsOrUpToDate(ctx)
-	}, retryCfg)
-
-	return err
+	})
 }
 
 // ReadGlobalResolvedTS reads the global resolvedTS from etcd
