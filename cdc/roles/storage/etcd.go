@@ -16,6 +16,7 @@ package storage
 import (
 	"context"
 
+	"github.com/cenkalti/backoff"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/errors"
@@ -111,17 +112,13 @@ func (rw *ProcessorTSEtcdRWriter) updateSubChangeFeedInfo(ctx context.Context) e
 	return nil
 }
 
-func (rw *ProcessorTSEtcdRWriter) writeKVWithRetry(
-	ctx context.Context,
-	key string,
-	genValueFn func(rw *ProcessorTSEtcdRWriter, ts uint64) (string, error),
-	ts uint64,
-	retryCount int,
-) error {
-	value, err := genValueFn(rw, ts)
+func (rw *ProcessorTSEtcdRWriter) writeTsOrUpToDate(ctx context.Context) error {
+	key := kv.GetEtcdKeySubChangeFeed(rw.changefeedID, rw.captureID)
+	value, err := rw.info.Marshal()
 	if err != nil {
 		return err
 	}
+
 	resp, err := rw.etcdClient.KV.Txn(ctx).If(
 		clientv3.Compare(clientv3.ModRevision(key), "=", rw.modRevision),
 	).Then(
@@ -131,53 +128,61 @@ func (rw *ProcessorTSEtcdRWriter) writeKVWithRetry(
 		return errors.Trace(err)
 	}
 	if !resp.Succeeded {
-		if retryCount > 0 {
-			err := rw.updateSubChangeFeedInfo(ctx)
-			if err != nil {
-				return err
-			}
-			return rw.writeKVWithRetry(ctx, key, genValueFn, ts, retryCount-1)
+		err2 := rw.updateSubChangeFeedInfo(ctx)
+		if err2 != nil {
+			return err2
 		}
 		return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
 	}
+
 	rw.modRevision = resp.Header.Revision
 	return nil
 }
 
 // WriteResolvedTS writes the loacl resolvedTS into etcd
 func (rw *ProcessorTSEtcdRWriter) WriteResolvedTS(ctx context.Context, resolvedTS uint64) error {
-	key := kv.GetEtcdKeySubChangeFeed(rw.changefeedID, rw.captureID)
 	if rw.modRevision == 0 {
 		err := rw.updateSubChangeFeedInfo(ctx)
 		if err != nil {
 			return err
 		}
 	}
-	genFn := func(rw *ProcessorTSEtcdRWriter, ts uint64) (string, error) {
-		rw.info.ResolvedTS = ts
-		val, err := rw.info.Marshal()
-		return val, errors.Trace(err)
-	}
-	err := rw.writeKVWithRetry(ctx, key, genFn, resolvedTS, 3)
-	return errors.Trace(err)
+
+	retryCfg := backoff.WithMaxRetries(
+		backoff.WithContext(
+			backoff.NewExponentialBackOff(), ctx),
+		3,
+	)
+
+	err := backoff.Retry(func() error {
+		rw.info.ResolvedTS = resolvedTS
+		return rw.writeTsOrUpToDate(ctx)
+	}, retryCfg)
+
+	return err
 }
 
 // WriteCheckpointTS writes the checkpointTS into etcd
 func (rw *ProcessorTSEtcdRWriter) WriteCheckpointTS(ctx context.Context, checkpointTS uint64) error {
-	key := kv.GetEtcdKeySubChangeFeed(rw.changefeedID, rw.captureID)
 	if rw.modRevision == 0 {
 		err := rw.updateSubChangeFeedInfo(ctx)
 		if err != nil {
 			return err
 		}
 	}
-	genFn := func(rw *ProcessorTSEtcdRWriter, ts uint64) (string, error) {
-		rw.info.CheckPointTS = ts
-		val, err := rw.info.Marshal()
-		return val, errors.Trace(err)
-	}
-	err := rw.writeKVWithRetry(ctx, key, genFn, checkpointTS, 3)
-	return errors.Trace(err)
+
+	retryCfg := backoff.WithMaxRetries(
+		backoff.WithContext(
+			backoff.NewExponentialBackOff(), ctx),
+		3,
+	)
+
+	err := backoff.Retry(func() error {
+		rw.info.CheckPointTS = checkpointTS
+		return rw.writeTsOrUpToDate(ctx)
+	}, retryCfg)
+
+	return err
 }
 
 // ReadGlobalResolvedTS reads the global resolvedTS from etcd
