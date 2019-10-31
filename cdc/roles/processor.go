@@ -51,11 +51,11 @@ type Processor interface {
 // ProcessorTSRWriter reads or writes the resolvedTS and checkpointTS from the storage
 type ProcessorTSRWriter interface {
 	// WriteResolvedTS writes the loacl resolvedTS into the storage
-	WriteResolvedTS(resolvedTS uint64) error
+	WriteResolvedTS(ctx context.Context, resolvedTS uint64) error
 	// WriteCheckpointTS writes the checkpointTS into the storage
-	WriteCheckpointTS(checkpointTS uint64) error
+	WriteCheckpointTS(ctx context.Context, checkpointTS uint64) error
 	// ReadGlobalResolvedTS reads the global resolvedTS from the storage
-	ReadGlobalResolvedTS() (uint64, error)
+	ReadGlobalResolvedTS(ctx context.Context) (uint64, error)
 }
 
 type txnChannel struct {
@@ -198,7 +198,8 @@ func (p *processorImpl) localResolvedWorker() {
 				// no table in this processor
 				continue
 			}
-			err := p.tsRWriter.WriteResolvedTS(minResolvedTs)
+			// TODO: refine context management
+			err := p.tsRWriter.WriteResolvedTS(context.Background(), minResolvedTs)
 			if err != nil {
 				log.Error("Local resolved worker: write resolved ts failed", zap.Error(err))
 			}
@@ -219,7 +220,8 @@ func (p *processorImpl) checkpointWorker() {
 				checkpointTS = e.TS
 			}
 		case <-time.After(3 * time.Second):
-			err := p.tsRWriter.WriteCheckpointTS(checkpointTS)
+			// TODO: better context management
+			err := p.tsRWriter.WriteCheckpointTS(context.Background(), checkpointTS)
 			if err != nil {
 				log.Error("Checkpoint worker: write checkpoint ts failed", zap.Error(err))
 			}
@@ -240,7 +242,7 @@ func (p *processorImpl) globalResolvedWorker() {
 			return
 		default:
 		}
-		globalResolvedTS, err := p.tsRWriter.ReadGlobalResolvedTS()
+		globalResolvedTS, err := p.tsRWriter.ReadGlobalResolvedTS(context.Background())
 		if err != nil {
 			log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
 			//TODO limit the retry times
