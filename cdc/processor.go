@@ -11,11 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package roles
+package cdc
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -28,10 +27,6 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
-	"github.com/pingcap/tidb-cdc/pkg/flags"
-	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store"
-	"github.com/pingcap/tidb/store/tikv"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -355,22 +350,4 @@ func createSchemaStore(pdEndpoints []string) (*schema.Schema, error) {
 		return nil, errors.Trace(err)
 	}
 	return schema, nil
-}
-
-func createTiStore(urls string) (tidbkv.Storage, error) {
-	urlv, err := flags.NewURLsValue(urls)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	if err := store.Register("tikv", tikv.Driver{}); err != nil {
-		return nil, errors.Trace(err)
-	}
-	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
-	tiStore, err := store.New(tiPath)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return tiStore, nil
 }
