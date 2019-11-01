@@ -20,6 +20,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+
 	pd "github.com/pingcap/pd/client"
 
 	"github.com/cenkalti/backoff"
@@ -345,6 +348,46 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 		wg.Wait()
 		p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTS)
 	}
+}
+
+func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan chan<- txn.RawTxn, errCh chan<- error) *Puller {
+	// Set it up so that one failed goroutine cancels all others sharing the same ctx
+	errg, ctx := errgroup.WithContext(ctx)
+
+	checkpointTS := p.changefeed.StartTS
+	if checkpointTS == 0 {
+		checkpointTS = oracle.EncodeTSO(p.changefeed.CreateTime.Unix() * 1000)
+	}
+
+	puller := NewPuller(p.pdCli, checkpointTS, []util.Span{span})
+
+	errg.Go(func() error {
+		return puller.Run(ctx)
+	})
+
+	errg.Go(func() error {
+		err := puller.CollectRawTxns(ctx, func(ctxInner context.Context, rawTxn txn.RawTxn) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-ctxInner.Done():
+				return ctxInner.Err()
+			case txnChan <- rawTxn:
+				return nil
+			}
+		})
+		if err != nil {
+			return errors.Annotatef(err, "span: %v", span)
+		}
+		return nil
+	})
+
+	go func() {
+		err := errg.Wait()
+		errCh <- err
+	}()
+
+	return puller
 }
 
 func (p *processorImpl) SetInputChan(tableID uint64, inputTxn <-chan txn.RawTxn) error {
