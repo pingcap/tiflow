@@ -100,9 +100,12 @@ func runCase(c *check.C, cases *processorTestCase) {
 	}()
 	p, err := NewProcessor(tsRW, []string{}, model.ChangeFeedDetail{}, "", "")
 	c.Assert(err, check.IsNil)
-	var l sync.Mutex
-	var outputDML []uint64
-	var outputResolvedTS []uint64
+	p.Run(context.Background())
+	var (
+		l                sync.Mutex
+		outputDML        []uint64
+		outputResolvedTS []uint64
+	)
 	go func() {
 		for {
 			e, ok := <-p.ResolvedChan()
