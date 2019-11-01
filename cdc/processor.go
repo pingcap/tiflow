@@ -168,7 +168,8 @@ type processorImpl struct {
 	resolvedEntries chan ProcessorEntry
 	executedEntries chan ProcessorEntry
 
-	tableInputChans map[uint64]*txnChannel
+	tblPullers      map[int64]CancellablePuller
+	tableInputChans map[int64]*txnChannel
 	inputChansLock  sync.RWMutex
 	wg              *errgroup.Group
 
@@ -350,6 +351,25 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 	}
 }
 
+func (p *processorImpl) AddTable(ctx context.Context, tableID int64, errCh chan<- error) error {
+	log.Debug("Add table", zap.Int64("tableID", tableID))
+	// TODO: Make sure it's threadsafe or prove that it doesn't have to be
+	if _, ok := p.tblPullers[tableID]; ok {
+		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
+		return nil
+	}
+	span := util.GetTableSpan(tableID)
+	ctx, cancel := context.WithCancel(ctx)
+
+	txnChan := make(chan txn.RawTxn, 10)
+	if err := p.SetInputChan(tableID, txnChan); err != nil {
+		return err
+	}
+	puller := p.startPuller(ctx, span, txnChan, errCh)
+	p.tblPullers[tableID] = CancellablePuller{Puller: puller, Cancel: cancel}
+	return nil
+}
+
 func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan chan<- txn.RawTxn, errCh chan<- error) *Puller {
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
@@ -390,7 +410,7 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 	return puller
 }
 
-func (p *processorImpl) SetInputChan(tableID uint64, inputTxn <-chan txn.RawTxn) error {
+func (p *processorImpl) SetInputChan(tableID int64, inputTxn <-chan txn.RawTxn) error {
 	tc := newTxnChannel(inputTxn, 64, func(resolvedTS uint64) {
 		p.tableResolvedTS.Store(tableID, resolvedTS)
 	})
