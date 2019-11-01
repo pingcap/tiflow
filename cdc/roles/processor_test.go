@@ -5,6 +5,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tidb-cdc/cdc/schema"
+
+	"github.com/pingcap/tidb-cdc/cdc/model"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
@@ -73,7 +77,15 @@ func (p *processorSuite) TestProcessor(c *check.C) {
 
 func runCase(c *check.C, cases *processorTestCase) {
 	tsRW := &mockTSRWriter{}
-	p := NewProcessor(tsRW)
+	origfSchema := fCreateSchema
+	fCreateSchema = func(pdEndpoints []string) (*schema.Schema, error) {
+		return nil, nil
+	}
+	defer func() {
+		fCreateSchema = origfSchema
+	}()
+	p, err := NewProcessor(tsRW, []string{}, model.ChangeFeedDetail{}, "", "")
+	c.Assert(err, check.IsNil)
 	var l sync.Mutex
 	var outputDML []uint64
 	var outputResolvedTS []uint64
