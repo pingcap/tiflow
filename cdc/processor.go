@@ -11,11 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package roles
+package cdc
 
 import (
 	"context"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,10 +24,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/cdc/model"
+	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
+
+var fCreateSchema = createSchemaStore
 
 // Processor is used to push sync progress and calculate the checkpointTS
 // How to use it:
@@ -140,6 +145,12 @@ func NewProcessorResolvedEntry(ts uint64) ProcessorEntry {
 }
 
 type processorImpl struct {
+	captureID    string
+	changefeedID string
+	changefeed   model.ChangeFeedDetail
+
+	mounter *txn.Mounter
+
 	tableResolvedTS sync.Map
 	tsRWriter       ProcessorTSRWriter
 	resolvedEntries chan ProcessorEntry
@@ -152,19 +163,37 @@ type processorImpl struct {
 	closed chan struct{}
 }
 
-func NewProcessor(tsRWriter ProcessorTSRWriter) Processor {
+func NewProcessor(tsRWriter ProcessorTSRWriter, pdEndpoints []string, changefeed model.ChangeFeedDetail, captureID, changefeedID string) (Processor, error) {
+	schema, err := fCreateSchema(pdEndpoints)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// TODO: get time zone from config
+	mounter, err := txn.NewTxnMounter(schema, time.UTC)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	wg, _ := errgroup.WithContext(context.Background())
 	p := &processorImpl{
+		captureID:    captureID,
+		changefeedID: changefeedID,
+		changefeed:   changefeed,
+
+		mounter: mounter,
+
 		tsRWriter: tsRWriter,
-		// TODO set the cannel size
+		// TODO set the channel size
 		resolvedEntries: make(chan ProcessorEntry),
-		// TODO set the cannel size
+		// TODO set the channel size
 		executedEntries: make(chan ProcessorEntry),
 
 		tableInputChans: make(map[uint64]*txnChannel),
 		closed:          make(chan struct{}),
 		wg:              wg,
 	}
+
 	wg.Go(func() error {
 		p.localResolvedWorker()
 		return nil
@@ -177,7 +206,7 @@ func NewProcessor(tsRWriter ProcessorTSRWriter) Processor {
 		p.globalResolvedWorker()
 		return nil
 	})
-	return p
+	return p, nil
 }
 
 func (p *processorImpl) localResolvedWorker() {
@@ -306,4 +335,21 @@ func (p *processorImpl) ExecutedChan() chan<- ProcessorEntry {
 func (p *processorImpl) Close() {
 	close(p.closed)
 	p.wg.Wait()
+}
+
+func createSchemaStore(pdEndpoints []string) (*schema.Schema, error) {
+	// here we create another pb client,we should reuse them
+	kvStore, err := createTiStore(strings.Join(pdEndpoints, ","))
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	if err != nil {
+		return nil, err
+	}
+	schema, err := schema.NewSchema(jobs, false)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return schema, nil
 }
