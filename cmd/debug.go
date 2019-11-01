@@ -12,7 +12,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/tidb-cdc/cdc"
-	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
@@ -36,9 +35,7 @@ var pullCmd = &cobra.Command{
 		}
 
 		ts := oracle.ComposeTS(time.Now().Unix()*1000, 0)
-		detail := model.ChangeFeedDetail{}
-
-		p := cdc.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}}, detail)
+		p := cdc.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}})
 		buf := p.Output()
 
 		g, ctx := errgroup.WithContext(context.Background())
