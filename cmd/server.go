@@ -15,6 +15,8 @@ import (
 
 var (
 	pdEndpoints string
+	statusHost  string
+	statusPort  int
 
 	serverCmd = &cobra.Command{
 		Use:   "server",
@@ -28,11 +30,13 @@ func init() {
 	rootCmd.AddCommand(serverCmd)
 
 	serverCmd.Flags().StringVar(&pdEndpoints, "pd-endpoints", "http://127.0.0.1:2379", "endpoints of PD, separated by comma")
+	serverCmd.Flags().StringVar(&statusHost, "status-host", "127.0.0.1", "host of status http server")
+	serverCmd.Flags().IntVar(&statusPort, "status-port", 8300, "portof status http server")
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
 	var opts []cdc.ServerOption
-	opts = append(opts, cdc.PDEndpoints(pdEndpoints))
+	opts = append(opts, cdc.PDEndpoints(pdEndpoints), cdc.StatusHost(statusHost), cdc.StatusPort(statusPort))
 
 	server, err := cdc.NewServer(opts...)
 	if err != nil {
