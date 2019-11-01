@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/pingcap/errors"
@@ -15,8 +17,7 @@ import (
 
 var (
 	pdEndpoints string
-	statusHost  string
-	statusPort  int
+	statusAddr  string
 
 	serverCmd = &cobra.Command{
 		Use:   "server",
@@ -30,13 +31,21 @@ func init() {
 	rootCmd.AddCommand(serverCmd)
 
 	serverCmd.Flags().StringVar(&pdEndpoints, "pd-endpoints", "http://127.0.0.1:2379", "endpoints of PD, separated by comma")
-	serverCmd.Flags().StringVar(&statusHost, "status-host", "127.0.0.1", "host of status http server")
-	serverCmd.Flags().IntVar(&statusPort, "status-port", 8300, "portof status http server")
+	serverCmd.Flags().StringVar(&statusAddr, "status-addr", "127.0.0.1:8300", "bind address for http status server")
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
+	addrs := strings.Split(statusAddr, ":")
+	if len(addrs) != 2 {
+		return errors.Errorf("invalid status address: %s", statusAddr)
+	}
+	statusPort, err := strconv.ParseInt(addrs[1], 10, 64)
+	if err != nil {
+		return errors.Annotatef(err, "invalid status address: %s", statusAddr)
+	}
+
 	var opts []cdc.ServerOption
-	opts = append(opts, cdc.PDEndpoints(pdEndpoints), cdc.StatusHost(statusHost), cdc.StatusPort(statusPort))
+	opts = append(opts, cdc.PDEndpoints(pdEndpoints), cdc.StatusHost(addrs[0]), cdc.StatusPort(int(statusPort)))
 
 	server, err := cdc.NewServer(opts...)
 	if err != nil {
