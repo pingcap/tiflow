@@ -252,7 +252,7 @@ func (p *processorImpl) globalResolvedWorker() {
 		var globalResolvedTS uint64
 		err := backoff.Retry(func() error {
 			var err error
-      globalResolvedTS, err = p.tsRWriter.ReadGlobalResolvedTS(context.Background())
+			globalResolvedTS, err = p.tsRWriter.ReadGlobalResolvedTS(context.Background())
 			if err != nil {
 				log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
 			}
