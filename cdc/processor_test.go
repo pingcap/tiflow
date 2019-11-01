@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/schema"
 
 	"github.com/pingcap/tidb-cdc/cdc/model"
@@ -91,12 +92,17 @@ func (p *processorSuite) TestProcessor(c *check.C) {
 
 func runCase(c *check.C, cases *processorTestCase) {
 	tsRW := &mockTSRWriter{}
-	origfSchema := fCreateSchema
+	origFSchema := fCreateSchema
 	fCreateSchema = func(pdEndpoints []string) (*schema.Schema, error) {
 		return nil, nil
 	}
+	origFNewPD := fNewPDCli
+	fNewPDCli = func(pdAddrs []string, security pd.SecurityOption) (client pd.Client, e error) {
+		return nil, nil
+	}
 	defer func() {
-		fCreateSchema = origfSchema
+		fCreateSchema = origFSchema
+		fNewPDCli = origFNewPD
 	}()
 	p, err := NewProcessor(tsRW, []string{}, model.ChangeFeedDetail{}, "", "")
 	c.Assert(err, check.IsNil)

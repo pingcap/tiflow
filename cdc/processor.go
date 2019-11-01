@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	pd "github.com/pingcap/pd/client"
+
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -31,7 +33,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var fCreateSchema = createSchemaStore
+var (
+	fCreateSchema = createSchemaStore
+	fNewPDCli     = pd.NewClient
+)
 
 // Processor is used to push sync progress and calculate the checkpointTS
 // How to use it:
@@ -151,6 +156,8 @@ type processorImpl struct {
 	changefeedID string
 	changefeed   model.ChangeFeedDetail
 
+	pdCli pd.Client
+
 	mounter *txn.Mounter
 
 	tableResolvedTS sync.Map
@@ -166,6 +173,11 @@ type processorImpl struct {
 }
 
 func NewProcessor(tsRWriter ProcessorTSRWriter, pdEndpoints []string, changefeed model.ChangeFeedDetail, captureID, changefeedID string) (Processor, error) {
+	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
+	if err != nil {
+		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
+	}
+
 	schema, err := fCreateSchema(pdEndpoints)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -181,8 +193,8 @@ func NewProcessor(tsRWriter ProcessorTSRWriter, pdEndpoints []string, changefeed
 		captureID:    captureID,
 		changefeedID: changefeedID,
 		changefeed:   changefeed,
-
-		mounter: mounter,
+		pdCli:        pdCli,
+		mounter:      mounter,
 
 		tsRWriter: tsRWriter,
 		// TODO set the channel size
