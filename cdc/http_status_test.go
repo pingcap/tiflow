@@ -56,7 +56,6 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, 200)
-	content, err := ioutil.ReadAll(resp.Body)
+	_, err = ioutil.ReadAll(resp.Body)
 	c.Assert(err, check.IsNil)
-	c.Assert(string(content), check.Matches, ".*TestHTTPStatus")
 }
