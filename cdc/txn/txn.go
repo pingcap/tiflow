@@ -119,7 +119,6 @@ func CollectRawTxns(
 					delete(entryGroups, ts)
 				}
 			}
-			// TODO: Handle the case when readyTsList is empty
 			sort.Slice(readyTxns, func(i, j int) bool {
 				return readyTxns[i].TS < readyTxns[j].TS
 			})
@@ -128,6 +127,14 @@ func CollectRawTxns(
 				if err != nil {
 					return err
 				}
+			}
+			if len(readyTxns) == 0 {
+				log.Info("Forwarding fake txn", zap.Uint64("ts", resolvedTs))
+				fakeTxn := RawTxn{
+					TS:      resolvedTs,
+					Entries: nil,
+				}
+				outputFn(ctx, fakeTxn)
 			}
 		}
 	}
