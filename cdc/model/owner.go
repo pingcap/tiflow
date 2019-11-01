@@ -77,6 +77,7 @@ func (s ChangeFeedStatus) String() string {
 }
 
 // ChangeFeedInfo stores information about a ChangeFeed
+// partial fileds are stored in etcd, we may refine this later
 type ChangeFeedInfo struct {
 	Status       ChangeFeedStatus `json:"-"`
 	ResolvedTS   uint64           `json:"resolved-ts"`

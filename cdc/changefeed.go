@@ -127,7 +127,7 @@ func (c *SubChangeFeed) Start(ctx context.Context, result chan<- error) {
 	}
 	c.ddlPuller = c.startOnSpan(ctx, ddlSpan, errCh)
 
-	info, err := kv.GetSubChangeFeedInfo(ctx, c.etcdCli, c.changefeedID, c.captureID)
+	_, info, err := kv.GetSubChangeFeedInfo(ctx, c.etcdCli, c.changefeedID, c.captureID)
 	if err != nil {
 		result <- err
 		return
@@ -174,7 +174,7 @@ func (c *SubChangeFeed) watchTables(ctx context.Context, errCh chan<- error) {
 			}
 			return
 		case <-time.After(5 * time.Second):
-			info, err := kv.GetSubChangeFeedInfo(ctx, c.etcdCli, c.changefeedID, c.captureID)
+			_, info, err := kv.GetSubChangeFeedInfo(ctx, c.etcdCli, c.changefeedID, c.captureID)
 			if err != nil && err != context.Canceled {
 				errCh <- err
 				return

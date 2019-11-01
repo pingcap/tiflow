@@ -86,11 +86,26 @@ func GetChangeFeedDetail(ctx context.Context, cli *clientv3.Client, id string, o
 		return nil, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return nil, errors.Errorf("changefeed %s not exists", id)
+		return nil, errors.Annotatef(model.ErrChangeFeedNotExists, "query detail id %s", id)
 	}
 	detail := &model.ChangeFeedDetail{}
 	err = detail.Unmarshal(resp.Kvs[0].Value)
 	return detail, errors.Trace(err)
+}
+
+// GetChangeFeedInfo queries the checkpointTS and resovledTS of a given changefeed
+func GetChangeFeedInfo(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) (*model.ChangeFeedInfo, error) {
+	key := GetEtcdKeyChangeFeedStatus(id)
+	resp, err := cli.Get(ctx, key, opts...)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if resp.Count == 0 {
+		return nil, errors.Annotatef(model.ErrChangeFeedNotExists, "query status id %s", id)
+	}
+	info := &model.ChangeFeedInfo{}
+	err = info.Unmarshal(resp.Kvs[0].Value)
+	return info, errors.Trace(err)
 }
 
 // GetCaptures returns kv revision and CaptureInfo list
@@ -156,16 +171,16 @@ func GetSubChangeFeedInfo(
 	changefeedID string,
 	captureID string,
 	opts ...clientv3.OpOption,
-) (*model.SubChangeFeedInfo, error) {
+) (int64, *model.SubChangeFeedInfo, error) {
 	key := GetEtcdKeySubChangeFeed(changefeedID, captureID)
 	resp, err := client.Get(ctx, key, opts...)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return 0, nil, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return nil, errors.Errorf("subchangefeed info %s.%s not exists", changefeedID, captureID)
+		return 0, nil, errors.Errorf("subchangefeed info %s.%s not exists", changefeedID, captureID)
 	}
 	info := &model.SubChangeFeedInfo{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
-	return info, errors.Trace(err)
+	return resp.Header.Revision, info, errors.Trace(err)
 }

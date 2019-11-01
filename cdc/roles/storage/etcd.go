@@ -15,7 +15,9 @@ package storage
 
 import (
 	"context"
+	"sync"
 
+	"github.com/cenkalti/backoff"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/errors"
@@ -81,4 +83,129 @@ func (rw *ChangeFeedInfoRWriter) Write(ctx context.Context, infos map[model.Chan
 		}
 	}
 	return nil
+}
+
+// ProcessorTSEtcdRWriter implements `roles.ProcessorTSRWriter` interface
+type ProcessorTSEtcdRWriter struct {
+	lock         sync.Mutex
+	etcdClient   *clientv3.Client
+	changefeedID string
+	captureID    string
+	modRevision  int64
+	info         *model.SubChangeFeedInfo
+}
+
+// NewProcessorTSEtcdRWriter returns a new `*ChangeFeedInfoRWriter` instance
+func NewProcessorTSEtcdRWriter(cli *clientv3.Client, changefeedID, captureID string) *ProcessorTSEtcdRWriter {
+	return &ProcessorTSEtcdRWriter{
+		etcdClient:   cli,
+		changefeedID: changefeedID,
+		captureID:    captureID,
+	}
+}
+
+// updateSubChangeFeedInfo queries SubChangeFeedInfo from etcd and update the memory cached value.
+// This function is not thread safe.
+func (rw *ProcessorTSEtcdRWriter) updateSubChangeFeedInfo(ctx context.Context) error {
+	revision, info, err := kv.GetSubChangeFeedInfo(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
+	if err != nil {
+		return err
+	}
+	rw.modRevision = revision
+	rw.info = info
+	return nil
+}
+
+// writeTsOrUpToDate updates new SubChangeFeed info into etcd if the cached info
+// is up to date, otherwise update the cached SubChangeFeed info to the etcd value.
+// This function is not thread safe.
+func (rw *ProcessorTSEtcdRWriter) writeTsOrUpToDate(ctx context.Context) error {
+	key := kv.GetEtcdKeySubChangeFeed(rw.changefeedID, rw.captureID)
+	value, err := rw.info.Marshal()
+	if err != nil {
+		return err
+	}
+
+	resp, err := rw.etcdClient.KV.Txn(ctx).If(
+		clientv3.Compare(clientv3.ModRevision(key), "=", rw.modRevision),
+	).Then(
+		clientv3.OpPut(key, value),
+	).Commit()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !resp.Succeeded {
+		err2 := rw.updateSubChangeFeedInfo(ctx)
+		if err2 != nil {
+			return err2
+		}
+		return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
+	}
+
+	rw.modRevision = resp.Header.Revision
+	return nil
+}
+
+func (rw *ProcessorTSEtcdRWriter) retryWriteTs(ctx context.Context, updateTsFn func()) error {
+	retryCfg := backoff.WithMaxRetries(
+		backoff.WithContext(
+			backoff.NewExponentialBackOff(), ctx),
+		3,
+	)
+
+	err := backoff.Retry(func() error {
+		rw.lock.Lock()
+		defer rw.lock.Unlock()
+		updateTsFn()
+		err := rw.writeTsOrUpToDate(ctx)
+		if err != nil && errors.Cause(err) == context.Canceled {
+			return backoff.Permanent(err)
+		}
+		return err
+
+	}, retryCfg)
+
+	return err
+}
+
+func (rw *ProcessorTSEtcdRWriter) ensureCacheData(ctx context.Context) error {
+	rw.lock.Lock()
+	defer rw.lock.Unlock()
+	if rw.modRevision == 0 {
+		return rw.updateSubChangeFeedInfo(ctx)
+	}
+	return nil
+}
+
+// WriteResolvedTS writes the loacl resolvedTS into etcd
+func (rw *ProcessorTSEtcdRWriter) WriteResolvedTS(ctx context.Context, resolvedTS uint64) error {
+	err := rw.ensureCacheData(ctx)
+	if err != nil {
+		return err
+	}
+
+	return rw.retryWriteTs(ctx, func() {
+		rw.info.ResolvedTS = resolvedTS
+	})
+}
+
+// WriteCheckpointTS writes the checkpointTS into etcd
+func (rw *ProcessorTSEtcdRWriter) WriteCheckpointTS(ctx context.Context, checkpointTS uint64) error {
+	err := rw.ensureCacheData(ctx)
+	if err != nil {
+		return err
+	}
+
+	return rw.retryWriteTs(ctx, func() {
+		rw.info.CheckPointTS = checkpointTS
+	})
+}
+
+// ReadGlobalResolvedTS reads the global resolvedTS from etcd
+func (rw *ProcessorTSEtcdRWriter) ReadGlobalResolvedTS(ctx context.Context) (uint64, error) {
+	info, err := kv.GetChangeFeedInfo(ctx, rw.etcdClient, rw.changefeedID)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	return info.ResolvedTS, nil
 }

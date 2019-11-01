@@ -162,3 +162,78 @@ func (s *etcdSuite) TestInfoWriter(c *check.C) {
 		}
 	}
 }
+
+func (s *etcdSuite) TestProcessorTSWriter(c *check.C) {
+	var (
+		changefeedID = "test-ts-writer-changefeed"
+		captureID    = "test-ts-writer-capture"
+		err          error
+		revision     int64
+		info         = &model.SubChangeFeedInfo{
+			TableInfos: []*model.ProcessTableInfo{
+				{ID: 11}, {ID: 12},
+			},
+		}
+	)
+
+	// create a subchangefeed record in etcd
+	sinfo, err := info.Marshal()
+	c.Assert(err, check.IsNil)
+	_, err = s.client.Put(context.Background(), kv.GetEtcdKeySubChangeFeed(changefeedID, captureID), sinfo)
+	c.Assert(err, check.IsNil)
+
+	// test WriteResolvedTS
+	rw := NewProcessorTSEtcdRWriter(s.client, changefeedID, captureID)
+	err = rw.WriteResolvedTS(context.Background(), uint64(128))
+	c.Assert(err, check.IsNil)
+	revision, info, err = kv.GetSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID)
+	c.Assert(err, check.IsNil)
+	c.Assert(revision, check.Equals, rw.modRevision)
+	c.Assert(info.ResolvedTS, check.Equals, uint64(128))
+
+	// test WriteCheckpointTS
+	err = rw.WriteCheckpointTS(context.Background(), uint64(96))
+	c.Assert(err, check.IsNil)
+	revision, info, err = kv.GetSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID)
+	c.Assert(err, check.IsNil)
+	c.Assert(revision, check.Equals, rw.modRevision)
+	c.Assert(info.CheckPointTS, check.Equals, uint64(96))
+
+	// test table info changed, should retry successfully
+	info.TableInfos = []*model.ProcessTableInfo{{ID: 11}, {ID: 12}, {ID: 13}}
+	sinfo, err = info.Marshal()
+	c.Assert(err, check.IsNil)
+	_, err = s.client.Put(context.Background(), kv.GetEtcdKeySubChangeFeed(changefeedID, captureID), sinfo)
+	c.Assert(err, check.IsNil)
+
+	err = rw.WriteResolvedTS(context.Background(), uint64(196))
+	c.Assert(err, check.IsNil)
+	revision, info, err = kv.GetSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID)
+	c.Assert(err, check.IsNil)
+	c.Assert(revision, check.Equals, rw.modRevision)
+	c.Assert(info.ResolvedTS, check.Equals, uint64(196))
+}
+
+func (s *etcdSuite) TestProcessorTSReader(c *check.C) {
+	var (
+		changefeedID = "test-ts-reader-changefeed"
+		captureID    = "test-ts-reader-capture"
+		resolvedTS   uint64
+		err          error
+		info         = &model.ChangeFeedInfo{
+			ResolvedTS:   1000,
+			CheckpointTS: 900,
+		}
+	)
+
+	// create a changefeed info in etcd
+	sinfo, err := info.Marshal()
+	c.Assert(err, check.IsNil)
+	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID), sinfo)
+	c.Assert(err, check.IsNil)
+
+	rw := NewProcessorTSEtcdRWriter(s.client, changefeedID, captureID)
+	resolvedTS, err = rw.ReadGlobalResolvedTS(context.Background())
+	c.Assert(err, check.IsNil)
+	c.Assert(resolvedTS, check.Equals, info.ResolvedTS)
+}
