@@ -61,7 +61,7 @@ func NewMySQLSink(
 	// TODO
 	db, err := sql.Open("mysql", sinkURI)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	cachedInspector := newCachedInspector(db)
 	sink := mysqlSink{

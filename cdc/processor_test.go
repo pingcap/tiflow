@@ -19,16 +19,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tidb-cdc/pkg/etcd"
-
-	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb-cdc/cdc/schema"
-
-	"github.com/pingcap/tidb-cdc/cdc/model"
-
+	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
+	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/tidb-cdc/cdc/model"
+	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/tidb-cdc/pkg/etcd"
 	"go.uber.org/zap"
 )
 
@@ -93,7 +91,6 @@ func (p *processorSuite) TestProcessor(c *check.C) {
 }
 
 func runCase(c *check.C, cases *processorTestCase) {
-	tsRW := &mockTSRWriter{}
 	origFSchema := fCreateSchema
 	fCreateSchema = func(pdEndpoints []string) (*schema.Schema, error) {
 		return nil, nil
@@ -102,17 +99,26 @@ func runCase(c *check.C, cases *processorTestCase) {
 	fNewPDCli = func(pdAddrs []string, security pd.SecurityOption) (pd.Client, error) {
 		return nil, nil
 	}
+	origfNewTsRw := fNewTsRWriter
+	fNewTsRWriter = func(cli *clientv3.Client, changefeedID, captureID string) ProcessorTSRWriter {
+		return &mockTSRWriter{}
+	}
 	defer func() {
 		fCreateSchema = origFSchema
 		fNewPDCli = origFNewPD
+		fNewTsRWriter = origfNewTsRw
 	}()
 	dir := c.MkDir()
 	etcdURL, etcd, err := etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
 	defer etcd.Close()
-	p, err := NewProcessor(tsRW, []string{etcdURL.String()}, model.ChangeFeedDetail{}, "", "")
+
+	p, err := NewProcessor([]string{etcdURL.String()}, model.ChangeFeedDetail{}, "", "")
 	c.Assert(err, check.IsNil)
-	p.Run(context.Background())
+	errCh := make(chan error, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	p.Run(ctx, errCh)
+
 	var (
 		l                sync.Mutex
 		outputDML        []uint64
@@ -147,7 +153,8 @@ func runCase(c *check.C, cases *processorTestCase) {
 		}(rawTxnTS)
 	}
 	for i, globalResolvedTS := range cases.globalResolvedTS {
-		tsRW.SetGlobalResolvedTS(globalResolvedTS)
+		// hack to simulate owner to update global resolved ts
+		p.(*processorImpl).getTSRwriter().(*mockTSRWriter).SetGlobalResolvedTS(globalResolvedTS)
 		// waiting for processor push to resolvedTS
 		for {
 			l.Lock()
@@ -169,5 +176,6 @@ func runCase(c *check.C, cases *processorTestCase) {
 		outputResolvedTS = []uint64{}
 		l.Unlock()
 	}
+	cancel()
 	p.Close()
 }

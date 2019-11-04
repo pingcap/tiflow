@@ -20,28 +20,28 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/grpc"
-
-	"github.com/coreos/etcd/clientv3"
-	"github.com/pingcap/tidb-cdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-
-	pd "github.com/pingcap/pd/client"
-
 	"github.com/cenkalti/backoff"
+	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/model"
+	"github.com/pingcap/tidb-cdc/cdc/roles/storage"
 	"github.com/pingcap/tidb-cdc/cdc/schema"
+	"github.com/pingcap/tidb-cdc/cdc/sink"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 )
 
 var (
 	fCreateSchema = createSchemaStore
 	fNewPDCli     = pd.NewClient
+	fNewTsRWriter = createTsRWriter
 )
 
 // Processor is used to push sync progress and calculate the checkpointTS
@@ -62,7 +62,7 @@ type Processor interface {
 	// processor will calculate checkpointTS according to this channel
 	ExecutedChan() chan<- ProcessorEntry
 	// Run starts the work routine of processor
-	Run(ctx context.Context)
+	Run(ctx context.Context, errCh chan<- error)
 	// Close closes the processor
 	Close()
 }
@@ -166,6 +166,7 @@ type processorImpl struct {
 	etcdCli *clientv3.Client
 
 	mounter *txn.Mounter
+	sink    sink.Sink
 
 	tableResolvedTS sync.Map
 	tsRWriter       ProcessorTSRWriter
@@ -176,15 +177,14 @@ type processorImpl struct {
 	tableInputChans map[int64]*txnChannel
 	inputChansLock  sync.RWMutex
 	wg              *errgroup.Group
-
-	closed chan struct{}
 }
 
-func NewProcessor(tsRWriter ProcessorTSRWriter, pdEndpoints []string, changefeed model.ChangeFeedDetail, captureID, changefeedID string) (Processor, error) {
+func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, captureID, changefeedID string) (Processor, error) {
 	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
 	}
+
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   pdEndpoints,
 		DialTimeout: 5 * time.Second,
@@ -198,13 +198,20 @@ func NewProcessor(tsRWriter ProcessorTSRWriter, pdEndpoints []string, changefeed
 
 	schema, err := fCreateSchema(pdEndpoints)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
+
+	tsRWriter := fNewTsRWriter(etcdCli, changefeedID, captureID)
 
 	// TODO: get time zone from config
 	mounter, err := txn.NewTxnMounter(schema, time.UTC)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
+	}
+
+	sink, err := sink.NewMySQLSink(changefeed.SinkURI, schema, changefeed.Opts)
+	if err != nil {
+		return nil, err
 	}
 
 	p := &processorImpl{
@@ -214,6 +221,7 @@ func NewProcessor(tsRWriter ProcessorTSRWriter, pdEndpoints []string, changefeed
 		pdCli:        pdCli,
 		etcdCli:      etcdCli,
 		mounter:      mounter,
+		sink:         sink,
 
 		tsRWriter: tsRWriter,
 		// TODO set the channel size
@@ -223,13 +231,12 @@ func NewProcessor(tsRWriter ProcessorTSRWriter, pdEndpoints []string, changefeed
 
 		tblPullers:      make(map[int64]CancellablePuller),
 		tableInputChans: make(map[int64]*txnChannel),
-		closed:          make(chan struct{}),
 	}
 
 	return p, nil
 }
 
-func (p *processorImpl) Run(ctx context.Context) {
+func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
 	wg.Go(func() error {
@@ -245,8 +252,24 @@ func (p *processorImpl) Run(ctx context.Context) {
 		return nil
 	})
 	wg.Go(func() error {
-		return p.watchTables(cctx)
+		p.pullerSchedule(cctx, errCh)
+		return nil
 	})
+	// TODO: add sink
+}
+
+// pullerSchedule will be used to monitor table change and schedule pullers in the future
+func (p *processorImpl) pullerSchedule(ctx context.Context, ch chan<- error) {
+	// TODO: add DDL puller to maintain table schema
+
+	err := p.initPullers(ctx, ch)
+	if err != nil {
+		if err != context.Canceled {
+			log.Error("initial pullers", zap.Error(err))
+			ch <- err
+		}
+		return
+	}
 }
 
 func (p *processorImpl) localResolvedWorker(ctx context.Context) {
@@ -255,10 +278,9 @@ func (p *processorImpl) localResolvedWorker(ctx context.Context) {
 		case <-ctx.Done():
 			if ctx.Err() != context.Canceled {
 				log.Error("Local resolved worker exited", zap.Error(ctx.Err()))
+			} else {
+				log.Info("Local resolved worker exited")
 			}
-			return
-		case <-p.closed:
-			log.Info("Local resolved worker exited")
 			return
 		case <-time.After(3 * time.Second):
 			minResolvedTs := uint64(math.MaxUint64)
@@ -288,6 +310,8 @@ func (p *processorImpl) checkpointWorker(ctx context.Context) {
 		case <-ctx.Done():
 			if ctx.Err() != context.Canceled {
 				log.Error("Checkpoint worker exited", zap.Error(ctx.Err()))
+			} else {
+				log.Info("Checkpoint worker exited")
 			}
 			return
 		case e, ok := <-p.executedEntries:
@@ -331,10 +355,9 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 		case <-ctx.Done():
 			if ctx.Err() != context.Canceled {
 				log.Error("Global resolved worker exited", zap.Error(ctx.Err()))
+			} else {
+				log.Info("Global resolved worker exited")
 			}
-			return
-		case <-p.closed:
-			log.Info("Global resolved worker exited")
 			return
 		default:
 		}
@@ -370,8 +393,66 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 	}
 }
 
-func (p *processorImpl) watchTables(ctx context.Context) error {
-	errCh := make(chan error, 1)
+func (p *processorImpl) SetInputChan(tableID int64, inputTxn <-chan txn.RawTxn) error {
+	tc := newTxnChannel(inputTxn, 64, func(resolvedTS uint64) {
+		p.tableResolvedTS.Store(tableID, resolvedTS)
+	})
+	p.inputChansLock.Lock()
+	defer p.inputChansLock.Unlock()
+	if _, exist := p.tableInputChans[tableID]; exist {
+		return errors.Errorf("this chan is already exist, tableID: %d", tableID)
+	}
+	p.tableInputChans[tableID] = tc
+	return nil
+}
+
+func (p *processorImpl) ResolvedChan() <-chan ProcessorEntry {
+	return p.resolvedEntries
+}
+
+func (p *processorImpl) ExecutedChan() chan<- ProcessorEntry {
+	return p.executedEntries
+}
+
+func (p *processorImpl) Close() {
+	if p.wg != nil {
+		p.wg.Wait()
+	}
+}
+
+func createSchemaStore(pdEndpoints []string) (*schema.Schema, error) {
+	// here we create another pb client,we should reuse them
+	kvStore, err := createTiStore(strings.Join(pdEndpoints, ","))
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	if err != nil {
+		return nil, err
+	}
+	schema, err := schema.NewSchema(jobs, false)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return schema, nil
+}
+
+func createTsRWriter(cli *clientv3.Client, changefeedID, captureID string) ProcessorTSRWriter {
+	// TODO: NewProcessorTSEtcdRWriter should return an interface, currently there
+	// exists cycle import issue, will refine it later
+	return storage.NewProcessorTSEtcdRWriter(cli, changefeedID, captureID)
+}
+
+// getTSRwriter is used in unit test only
+func (p *processorImpl) getTSRwriter() ProcessorTSRWriter {
+	return p.tsRWriter
+}
+
+func (p *processorImpl) initPullers(ctx context.Context, errCh chan<- error) error {
+	// the loop is only for test, not support add/remove table dynamically
+	// TODO: the time sequence should be:
+	// user create changefeed -> owner creates subchangefeed info in etcd -> scheduler create processors
+	// but currently scheduler and owner are running concurrently
 	for {
 		select {
 		case <-ctx.Done():
@@ -379,11 +460,9 @@ func (p *processorImpl) watchTables(ctx context.Context) error {
 				return err
 			}
 			return nil
-		case err := <-errCh:
-			return err
-		case <-time.After(5 * time.Second):
+		case <-time.After(time.Second * 5):
 			_, info, err := kv.GetSubChangeFeedInfo(ctx, p.etcdCli, p.changefeedID, p.captureID)
-			if err != nil && err != context.Canceled {
+			if err != nil {
 				return err
 			}
 			for _, tblInfo := range info.TableInfos {
@@ -393,6 +472,9 @@ func (p *processorImpl) watchTables(ctx context.Context) error {
 				if err := p.addTable(ctx, int64(tblInfo.ID), errCh); err != nil {
 					return err
 				}
+			}
+			if len(info.TableInfos) > 0 {
+				return nil
 			}
 		}
 	}
@@ -457,47 +539,16 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 	return puller
 }
 
-func (p *processorImpl) SetInputChan(tableID int64, inputTxn <-chan txn.RawTxn) error {
-	tc := newTxnChannel(inputTxn, 64, func(resolvedTS uint64) {
-		p.tableResolvedTS.Store(tableID, resolvedTS)
-	})
-	p.inputChansLock.Lock()
-	defer p.inputChansLock.Unlock()
-	if _, exist := p.tableInputChans[tableID]; exist {
-		return errors.Errorf("this chan is already exist, tableID: %d", tableID)
-	}
-	p.tableInputChans[tableID] = tc
-	return nil
-}
-
-func (p *processorImpl) ResolvedChan() <-chan ProcessorEntry {
-	return p.resolvedEntries
-}
-
-func (p *processorImpl) ExecutedChan() chan<- ProcessorEntry {
-	return p.executedEntries
-}
-
-func (p *processorImpl) Close() {
-	close(p.closed)
-	if p.wg != nil {
-		p.wg.Wait()
-	}
-}
-
-func createSchemaStore(pdEndpoints []string) (*schema.Schema, error) {
-	// here we create another pb client,we should reuse them
-	kvStore, err := createTiStore(strings.Join(pdEndpoints, ","))
-	if err != nil {
-		return nil, err
-	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
-	if err != nil {
-		return nil, err
-	}
-	schema, err := schema.NewSchema(jobs, false)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return schema, nil
-}
+// func (c *SubChangeFeed) writeToSink(context context.Context, rawTxn txn.RawTxn) error {
+// 	log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.Entries))
+// 	txn, err := c.mounter.Mount(rawTxn)
+// 	if err != nil {
+// 		return errors.Trace(err)
+// 	}
+// 	err = c.sink.Emit(context, *txn)
+// 	if err != nil {
+// 		return errors.Trace(err)
+// 	}
+// 	log.Info("Output Txn", zap.Reflect("Txn", txn))
+// 	return nil
+// }
