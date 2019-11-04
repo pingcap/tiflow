@@ -173,7 +173,6 @@ type processorImpl struct {
 	resolvedEntries chan ProcessorEntry
 	executedEntries chan ProcessorEntry
 
-	// ddlPuller    *Puller
 	tblPullers      map[int64]CancellablePuller
 	tableInputChans map[int64]*txnChannel
 	inputChansLock  sync.RWMutex
@@ -207,12 +206,12 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, captu
 	// TODO: get time zone from config
 	mounter, err := txn.NewTxnMounter(schema, time.UTC)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 
 	sink, err := sink.NewMySQLSink(changefeed.SinkURI, schema, changefeed.Opts)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 
 	p := &processorImpl{
@@ -259,6 +258,7 @@ func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 	// TODO: add sink
 }
 
+// pullerSchedule will be used to monitor table change and schedule pullers
 func (p *processorImpl) pullerSchedule(ctx context.Context, ch chan<- error) {
 	// TODO: add DDL puller
 	// ddlSpan := util.Span{
