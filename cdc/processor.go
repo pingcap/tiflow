@@ -258,15 +258,9 @@ func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 	// TODO: add sink
 }
 
-// pullerSchedule will be used to monitor table change and schedule pullers
+// pullerSchedule will be used to monitor table change and schedule pullers in the future
 func (p *processorImpl) pullerSchedule(ctx context.Context, ch chan<- error) {
-	// TODO: add DDL puller
-	// ddlSpan := util.Span{
-	// 	Start: []byte{'m'},
-	// 	End:   []byte{'m' + 1},
-	// }
-	// txnChan := make(chan txn.RawTxn, 16)
-	// p.ddlPuller = p.startPuller(ctx, ddlSpan, txnChan, errCh)
+	// TODO: add DDL puller to maintain table schema
 
 	err := p.initPullers(ctx, ch)
 	if err != nil {
@@ -478,6 +472,9 @@ func (p *processorImpl) initPullers(ctx context.Context, errCh chan<- error) err
 				if err := p.addTable(ctx, int64(tblInfo.ID), errCh); err != nil {
 					return err
 				}
+			}
+			if len(info.TableInfos) > 0 {
+				return nil
 			}
 		}
 	}
