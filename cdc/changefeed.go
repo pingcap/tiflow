@@ -36,12 +36,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-type CancellablePuller struct {
-	*Puller
-
-	Cancel context.CancelFunc
-}
-
 // SubChangeFeed is a SubChangeFeed task on capture
 type SubChangeFeed struct {
 	pdEndpoints  []string

@@ -281,11 +281,11 @@ func realRunSubChangeFeed(
 	changefeedID string,
 	captureID string,
 ) (chan error, error) {
-	feed, err := NewSubChangeFeed(pdEndpoints, detail, changefeedID, captureID)
+	processor, err := NewProcessor(pdEndpoints, detail, changefeedID, captureID)
 	if err != nil {
 		return nil, err
 	}
 	errCh := make(chan error, 1)
-	go feed.Start(ctx, errCh)
+	processor.Run(ctx, errCh)
 	return errCh, nil
 }

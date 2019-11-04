@@ -34,6 +34,12 @@ type Puller struct {
 	tsTracker    txn.ResolveTsTracker
 }
 
+type CancellablePuller struct {
+	*Puller
+
+	Cancel context.CancelFunc
+}
+
 // NewPuller create a new Puller fetch event start from checkpointTS
 // and put into buf.
 func NewPuller(
