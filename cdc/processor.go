@@ -20,6 +20,9 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc"
+
+	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 
@@ -51,7 +54,7 @@ var (
 // 5. Push ProcessorEntry to ExecutedChan
 type Processor interface {
 	// SetInputChan receives a table and listens a channel
-	SetInputChan(tableID uint64, inputTxn <-chan txn.RawTxn) error
+	SetInputChan(tableID int64, inputTxn <-chan txn.RawTxn) error
 	// ResolvedChan returns a channel, which output the resolved transaction or resolvedTS
 	ResolvedChan() <-chan ProcessorEntry
 	// ExecutedChan returns a channel, when a transaction is executed,
@@ -80,7 +83,7 @@ type txnChannel struct {
 	putBackTxn *txn.RawTxn
 }
 
-func (p *txnChannel) Forward(tableID uint64, ts uint64, entryC chan<- ProcessorEntry) {
+func (p *txnChannel) Forward(tableID int64, ts uint64, entryC chan<- ProcessorEntry) {
 	if p.putBackTxn != nil {
 		t := *p.putBackTxn
 		if t.TS > ts {
@@ -96,7 +99,7 @@ func (p *txnChannel) Forward(tableID uint64, ts uint64, entryC chan<- ProcessorE
 		}
 		entryC <- NewProcessorDMLsEntry(t.Entries, t.TS)
 	}
-	log.Info("Input channel of table closed", zap.Uint64("tableID", tableID))
+	log.Info("Input channel of table closed", zap.Int64("tableID", tableID))
 }
 
 func (p *txnChannel) PutBack(t txn.RawTxn) {
@@ -159,7 +162,8 @@ type processorImpl struct {
 	changefeedID string
 	changefeed   model.ChangeFeedDetail
 
-	pdCli pd.Client
+	pdCli   pd.Client
+	etcdCli *clientv3.Client
 
 	mounter *txn.Mounter
 
@@ -181,6 +185,16 @@ func NewProcessor(tsRWriter ProcessorTSRWriter, pdEndpoints []string, changefeed
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
 	}
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:   pdEndpoints,
+		DialTimeout: 5 * time.Second,
+		DialOptions: []grpc.DialOption{
+			grpc.WithBackoffMaxDelay(time.Second * 3),
+		},
+	})
+	if err != nil {
+		return nil, errors.Annotate(err, "new etcd client")
+	}
 
 	schema, err := fCreateSchema(pdEndpoints)
 	if err != nil {
@@ -198,6 +212,7 @@ func NewProcessor(tsRWriter ProcessorTSRWriter, pdEndpoints []string, changefeed
 		changefeedID: changefeedID,
 		changefeed:   changefeed,
 		pdCli:        pdCli,
+		etcdCli:      etcdCli,
 		mounter:      mounter,
 
 		tsRWriter: tsRWriter,
@@ -206,7 +221,8 @@ func NewProcessor(tsRWriter ProcessorTSRWriter, pdEndpoints []string, changefeed
 		// TODO set the channel size
 		executedEntries: make(chan ProcessorEntry),
 
-		tableInputChans: make(map[uint64]*txnChannel),
+		tblPullers:      make(map[int64]CancellablePuller),
+		tableInputChans: make(map[int64]*txnChannel),
 		closed:          make(chan struct{}),
 	}
 
@@ -227,6 +243,9 @@ func (p *processorImpl) Run(ctx context.Context) {
 	wg.Go(func() error {
 		p.globalResolvedWorker(cctx)
 		return nil
+	})
+	wg.Go(func() error {
+		return p.watchTables(cctx)
 	})
 }
 
@@ -348,6 +367,34 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 		p.inputChansLock.RUnlock()
 		wg.Wait()
 		p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTS)
+	}
+}
+
+func (p *processorImpl) watchTables(ctx context.Context) error {
+	errCh := make(chan error, 1)
+	for {
+		select {
+		case <-ctx.Done():
+			if err := ctx.Err(); err != context.Canceled {
+				return err
+			}
+			return nil
+		case err := <-errCh:
+			return err
+		case <-time.After(5 * time.Second):
+			_, info, err := kv.GetSubChangeFeedInfo(ctx, p.etcdCli, p.changefeedID, p.captureID)
+			if err != nil && err != context.Canceled {
+				return err
+			}
+			for _, tblInfo := range info.TableInfos {
+				if _, ok := p.tblPullers[int64(tblInfo.ID)]; ok {
+					continue
+				}
+				if err := p.AddTable(ctx, int64(tblInfo.ID), errCh); err != nil {
+					return err
+				}
+			}
+		}
 	}
 }
 

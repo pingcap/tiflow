@@ -19,6 +19,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tidb-cdc/pkg/etcd"
+
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/schema"
 
@@ -97,14 +99,18 @@ func runCase(c *check.C, cases *processorTestCase) {
 		return nil, nil
 	}
 	origFNewPD := fNewPDCli
-	fNewPDCli = func(pdAddrs []string, security pd.SecurityOption) (client pd.Client, e error) {
+	fNewPDCli = func(pdAddrs []string, security pd.SecurityOption) (pd.Client, error) {
 		return nil, nil
 	}
 	defer func() {
 		fCreateSchema = origFSchema
 		fNewPDCli = origFNewPD
 	}()
-	p, err := NewProcessor(tsRW, []string{}, model.ChangeFeedDetail{}, "", "")
+	dir := c.MkDir()
+	etcdURL, etcd, err := etcd.SetupEmbedEtcd(dir)
+	c.Assert(err, check.IsNil)
+	defer etcd.Close()
+	p, err := NewProcessor(tsRW, []string{etcdURL.String()}, model.ChangeFeedDetail{}, "", "")
 	c.Assert(err, check.IsNil)
 	p.Run(context.Background())
 	var (
@@ -133,7 +139,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 	}()
 	for i, rawTxnTS := range cases.rawTxnTS {
 		input := make(chan txn.RawTxn)
-		p.SetInputChan(uint64(i), input)
+		p.SetInputChan(int64(i), input)
 		go func(rawTxnTS []uint64) {
 			for _, txnTS := range rawTxnTS {
 				input <- txn.RawTxn{TS: txnTS}
