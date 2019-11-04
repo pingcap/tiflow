@@ -406,13 +406,12 @@ func (p *processorImpl) addTable(ctx context.Context, tableID int64, errCh chan<
 		return nil
 	}
 	span := util.GetTableSpan(tableID)
-	ctx, cancel := context.WithCancel(ctx)
-
 	// TODO: How large should the buffer be?
 	txnChan := make(chan txn.RawTxn, 16)
 	if err := p.SetInputChan(tableID, txnChan); err != nil {
 		return err
 	}
+	ctx, cancel := context.WithCancel(ctx)
 	puller := p.startPuller(ctx, span, txnChan, errCh)
 	p.tblPullers[tableID] = CancellablePuller{Puller: puller, Cancel: cancel}
 	return nil
