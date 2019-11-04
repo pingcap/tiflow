@@ -35,7 +35,6 @@ var pullCmd = &cobra.Command{
 		}
 
 		ts := oracle.ComposeTS(time.Now().Unix()*1000, 0)
-
 		p := cdc.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}})
 		buf := p.Output()
 

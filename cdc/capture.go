@@ -39,8 +39,6 @@ const (
 	CaptureOwnerKey = kv.EtcdKeyBase + "/capture/owner"
 )
 
-var fNewPDCli = pd.NewClient
-
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules SubChangeFeed on it.
 type Capture struct {
 	pdEndpoints  []string

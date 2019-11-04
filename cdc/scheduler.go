@@ -29,8 +29,8 @@ import (
 )
 
 var (
-	runSubChangeFeedWatcher = realRunSubChangeFeedWatcher
-	runSubChangeFeed        = realRunSubChangeFeed
+	runProcessorWatcher = realRunProcessorWatcher
+	runProcessor        = realRunProcessor
 )
 
 // ChangeFeedWatcher is a changefeed watcher
@@ -100,7 +100,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 			return err
 		}
 		if needRunWatcher {
-			runSubChangeFeedWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh)
+			runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh)
 		}
 	}
 
@@ -128,7 +128,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 						return err
 					}
 					if needRunWatcher {
-						runSubChangeFeedWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh)
+						runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh)
 					}
 				case mvccpb.DELETE:
 					err := w.processDeleteKv(ev.Kv)
@@ -141,8 +141,8 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 	}
 }
 
-// SubChangeFeedWatcher is a subchangefeed watcher
-type SubChangeFeedWatcher struct {
+// ProcessorWatcher is a processor watcher
+type ProcessorWatcher struct {
 	pdEndpoints  []string
 	changefeedID string
 	captureID    string
@@ -152,15 +152,15 @@ type SubChangeFeedWatcher struct {
 	closed       int32
 }
 
-// NewSubChangeFeedWatcher creates a new SubChangeFeedWatcher instance
-func NewSubChangeFeedWatcher(
+// NewProcessorWatcher creates a new ProcessorWatcher instance
+func NewProcessorWatcher(
 	changefeedID string,
 	captureID string,
 	pdEndpoints []string,
 	cli *clientv3.Client,
 	detail model.ChangeFeedDetail,
-) *SubChangeFeedWatcher {
-	return &SubChangeFeedWatcher{
+) *ProcessorWatcher {
+	return &ProcessorWatcher{
 		changefeedID: changefeedID,
 		captureID:    captureID,
 		pdEndpoints:  pdEndpoints,
@@ -169,24 +169,24 @@ func NewSubChangeFeedWatcher(
 	}
 }
 
-func (w *SubChangeFeedWatcher) isClosed() bool {
+func (w *ProcessorWatcher) isClosed() bool {
 	return atomic.LoadInt32(&w.closed) == 1
 }
 
-func (w *SubChangeFeedWatcher) close() {
+func (w *ProcessorWatcher) close() {
 	atomic.StoreInt32(&w.closed, 1)
 	w.wg.Wait()
 }
 
-func (w *SubChangeFeedWatcher) reopen() error {
+func (w *ProcessorWatcher) reopen() error {
 	if !w.isClosed() {
-		return errors.New("SubChangeFeedWatcher is not closed")
+		return errors.New("ProcessorWatcher is not closed")
 	}
 	atomic.StoreInt32(&w.closed, 0)
 	return nil
 }
 
-func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
+func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error) {
 	defer w.wg.Done()
 	key := kv.GetEtcdKeySubChangeFeed(w.changefeedID, w.captureID)
 
@@ -226,7 +226,7 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	feedErrCh, err := runSubChangeFeed(cctx, w.pdEndpoints, w.detail, w.changefeedID, w.captureID)
+	feedErrCh, err := runProcessor(cctx, w.pdEndpoints, w.detail, w.changefeedID, w.captureID)
 	if err != nil {
 		errCh <- err
 		return
@@ -249,7 +249,7 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 				errCh <- errors.Trace(err)
 				return
 			}
-			// subchangefeed has been removed from this capture, cancel the subchangefeed too
+			// processor has been removed from this capture
 			if resp.Count == 0 {
 				return
 			}
@@ -257,8 +257,8 @@ func (w *SubChangeFeedWatcher) Watch(ctx context.Context, errCh chan<- error) {
 	}
 }
 
-// realRunSubChangeFeedWatcher creates a new SubChangeFeedWatcher and executes the Watch method.
-func realRunSubChangeFeedWatcher(
+// realRunProcessorWatcher creates a new ProcessorWatcher and executes the Watch method.
+func realRunProcessorWatcher(
 	ctx context.Context,
 	changefeedID string,
 	captureID string,
@@ -266,26 +266,26 @@ func realRunSubChangeFeedWatcher(
 	etcdCli *clientv3.Client,
 	detail model.ChangeFeedDetail,
 	errCh chan error,
-) *SubChangeFeedWatcher {
-	sw := NewSubChangeFeedWatcher(changefeedID, captureID, pdEndpoints, etcdCli, detail)
+) *ProcessorWatcher {
+	sw := NewProcessorWatcher(changefeedID, captureID, pdEndpoints, etcdCli, detail)
 	sw.wg.Add(1)
 	go sw.Watch(ctx, errCh)
 	return sw
 }
 
-// realRunSubChangeFeed creates a new subchangefeed then starts it, and returns a channel to pass error.
-func realRunSubChangeFeed(
+// realRunProcessor creates a new processor then starts it, and returns a channel to pass error.
+func realRunProcessor(
 	ctx context.Context,
 	pdEndpoints []string,
 	detail model.ChangeFeedDetail,
 	changefeedID string,
 	captureID string,
 ) (chan error, error) {
-	feed, err := NewSubChangeFeed(pdEndpoints, detail, changefeedID, captureID)
+	processor, err := NewProcessor(pdEndpoints, detail, changefeedID, captureID)
 	if err != nil {
 		return nil, err
 	}
 	errCh := make(chan error, 1)
-	go feed.Start(ctx, errCh)
+	processor.Run(ctx, errCh)
 	return errCh, nil
 }

@@ -19,9 +19,9 @@ func feed() {
 		CreateTime: time.Now(),
 	}
 
-	feed, err := cdc.NewSubChangeFeed([]string{"http://localhost:2379"}, detail, "test-changefeed", "test-capture")
+	processor, err := cdc.NewProcessor([]string{"http://localhost:2379"}, detail, "test-changefeed", "test-capture")
 	if err != nil {
-		log.Error("NewChangeFeed failed", zap.Error(err))
+		log.Error("NewProcessor failed", zap.Error(err))
 		return
 	}
 
@@ -30,7 +30,7 @@ func feed() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		feed.Start(context.Background(), errCh)
+		processor.Run(context.Background(), errCh)
 	}()
 	wg.Wait()
 	select {

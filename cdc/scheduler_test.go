@@ -38,7 +38,7 @@ type schedulerSuite struct {
 var _ = check.Suite(&schedulerSuite{})
 
 var (
-	runSubChangeFeedCount     int32
+	runProcessorCount         int32
 	runChangeFeedWatcherCount int32
 )
 
@@ -58,7 +58,7 @@ func (s *schedulerSuite) TearDownTest(c *check.C) {
 	s.etcd.Close()
 }
 
-func mockRunSubChangeFeed(
+func mockRunProcessor(
 	ctx context.Context,
 	pdEndpoints []string,
 	detail model.ChangeFeedDetail,
@@ -66,11 +66,11 @@ func mockRunSubChangeFeed(
 	captureID string,
 ) (chan error, error) {
 	errCh := make(chan error, 1)
-	atomic.AddInt32(&runSubChangeFeedCount, 1)
+	atomic.AddInt32(&runProcessorCount, 1)
 	return errCh, nil
 }
 
-func mockRunSubChangeFeedError(
+func mockRunProcessorError(
 	ctx context.Context,
 	pdEndpoints []string,
 	detail model.ChangeFeedDetail,
@@ -84,7 +84,7 @@ func mockRunSubChangeFeedError(
 	return errCh, nil
 }
 
-func mockRunSubChangeFeedWatcher(
+func mockRunProcessorWatcher(
 	tx context.Context,
 	changefeedID string,
 	captureID string,
@@ -92,12 +92,12 @@ func mockRunSubChangeFeedWatcher(
 	etcdCli *clientv3.Client,
 	detail model.ChangeFeedDetail,
 	errCh chan error,
-) *SubChangeFeedWatcher {
+) *ProcessorWatcher {
 	atomic.AddInt32(&runChangeFeedWatcherCount, 1)
 	return nil
 }
 
-func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
+func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 	var (
 		changefeedID = "test-changefeed"
 		captureID    = "test-capture"
@@ -106,10 +106,10 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 		key          = kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
 	)
 
-	oriRunSubChangeFeed := runSubChangeFeed
-	runSubChangeFeed = mockRunSubChangeFeed
+	oriRunProcessor := runProcessor
+	runProcessor = mockRunProcessor
 	defer func() {
-		runSubChangeFeed = oriRunSubChangeFeed
+		runProcessor = oriRunProcessor
 	}()
 
 	curl := s.clientURL.String()
@@ -126,9 +126,9 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 
 	// subchangefeed exists before watch starts
 	errCh := make(chan error, 1)
-	sw := runSubChangeFeedWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh)
+	sw := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
-		return atomic.LoadInt32(&runSubChangeFeedCount) == 1
+		return atomic.LoadInt32(&runProcessorCount) == 1
 	}), check.IsTrue)
 
 	// delete the subchangefeed
@@ -138,7 +138,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 	sw.close()
 	c.Assert(sw.isClosed(), check.IsTrue)
 
-	// check SubChangeFeedWatcher watch subchangefeed key can ben canceled
+	// check ProcessorWatcher watch subchangefeed key can ben canceled
 	err = sw.reopen()
 	c.Assert(err, check.IsNil)
 	c.Assert(sw.isClosed(), check.IsFalse)
@@ -151,15 +151,15 @@ func (s *schedulerSuite) TestSubChangeFeedWatcher(c *check.C) {
 
 	// check watcher can find new subchangefeed in watch loop
 	errCh2 := make(chan error, 1)
-	runSubChangeFeedWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2)
+	runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2)
 	_, err = cli.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
-		return atomic.LoadInt32(&runSubChangeFeedCount) == 2
+		return atomic.LoadInt32(&runProcessorCount) == 2
 	}), check.IsTrue)
 }
 
-func (s *schedulerSuite) TestSubChangeFeedWatcherError(c *check.C) {
+func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 	var (
 		changefeedID = "test-changefeed-err"
 		captureID    = "test-capture-err"
@@ -168,10 +168,10 @@ func (s *schedulerSuite) TestSubChangeFeedWatcherError(c *check.C) {
 		key          = kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
 	)
 
-	oriRunSubChangeFeed := runSubChangeFeed
-	runSubChangeFeed = mockRunSubChangeFeedError
+	oriRunProcessor := runProcessor
+	runProcessor = mockRunProcessorError
 	defer func() {
-		runSubChangeFeed = oriRunSubChangeFeed
+		runProcessor = oriRunProcessor
 	}()
 
 	curl := s.clientURL.String()
@@ -187,7 +187,7 @@ func (s *schedulerSuite) TestSubChangeFeedWatcherError(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	errCh := make(chan error, 1)
-	sw := runSubChangeFeedWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh)
+	sw := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return len(errCh) == 1
 	}), check.IsTrue)
@@ -205,10 +205,10 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 		key          = kv.GetEtcdKeyChangeFeedConfig(changefeedID)
 	)
 
-	oriRunSubChangeFeedWatcher := runSubChangeFeedWatcher
-	runSubChangeFeedWatcher = mockRunSubChangeFeedWatcher
+	oriRunProcessorWatcher := runProcessorWatcher
+	runProcessorWatcher = mockRunProcessorWatcher
 	defer func() {
-		runSubChangeFeedWatcher = oriRunSubChangeFeedWatcher
+		runProcessorWatcher = oriRunProcessorWatcher
 	}()
 
 	curl := s.clientURL.String()
