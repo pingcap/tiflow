@@ -541,3 +541,17 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 
 	return puller
 }
+
+// func (c *SubChangeFeed) writeToSink(context context.Context, rawTxn txn.RawTxn) error {
+// 	log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.Entries))
+// 	txn, err := c.mounter.Mount(rawTxn)
+// 	if err != nil {
+// 		return errors.Trace(err)
+// 	}
+// 	err = c.sink.Emit(context, *txn)
+// 	if err != nil {
+// 		return errors.Trace(err)
+// 	}
+// 	log.Info("Output Txn", zap.Reflect("Txn", txn))
+// 	return nil
+// }
