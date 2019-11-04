@@ -50,6 +50,8 @@ type Processor interface {
 	// you should put the transaction into this channel,
 	// processor will calculate checkpointTS according to this channel
 	ExecutedChan() chan<- ProcessorEntry
+	// Run starts the work routine of processor
+	Run(ctx context.Context)
 	// Close closes the processor
 	Close()
 }
@@ -175,7 +177,6 @@ func NewProcessor(tsRWriter ProcessorTSRWriter, pdEndpoints []string, changefeed
 		return nil, errors.Trace(err)
 	}
 
-	wg, _ := errgroup.WithContext(context.Background())
 	p := &processorImpl{
 		captureID:    captureID,
 		changefeedID: changefeedID,
@@ -191,27 +192,36 @@ func NewProcessor(tsRWriter ProcessorTSRWriter, pdEndpoints []string, changefeed
 
 		tableInputChans: make(map[uint64]*txnChannel),
 		closed:          make(chan struct{}),
-		wg:              wg,
 	}
 
-	wg.Go(func() error {
-		p.localResolvedWorker()
-		return nil
-	})
-	wg.Go(func() error {
-		p.checkpointWorker()
-		return nil
-	})
-	wg.Go(func() error {
-		p.globalResolvedWorker()
-		return nil
-	})
 	return p, nil
 }
 
-func (p *processorImpl) localResolvedWorker() {
+func (p *processorImpl) Run(ctx context.Context) {
+	wg, cctx := errgroup.WithContext(ctx)
+	p.wg = wg
+	wg.Go(func() error {
+		p.localResolvedWorker(cctx)
+		return nil
+	})
+	wg.Go(func() error {
+		p.checkpointWorker(cctx)
+		return nil
+	})
+	wg.Go(func() error {
+		p.globalResolvedWorker(cctx)
+		return nil
+	})
+}
+
+func (p *processorImpl) localResolvedWorker(ctx context.Context) {
 	for {
 		select {
+		case <-ctx.Done():
+			if ctx.Err() != context.Canceled {
+				log.Error("Local resolved worker exited", zap.Error(ctx.Err()))
+			}
+			return
 		case <-p.closed:
 			log.Info("Local resolved worker exited")
 			return
@@ -228,8 +238,7 @@ func (p *processorImpl) localResolvedWorker() {
 				// no table in this processor
 				continue
 			}
-			// TODO: refine context management
-			err := p.tsRWriter.WriteResolvedTS(context.Background(), minResolvedTs)
+			err := p.tsRWriter.WriteResolvedTS(ctx, minResolvedTs)
 			if err != nil {
 				log.Error("Local resolved worker: write resolved ts failed", zap.Error(err))
 			}
@@ -237,10 +246,15 @@ func (p *processorImpl) localResolvedWorker() {
 	}
 }
 
-func (p *processorImpl) checkpointWorker() {
+func (p *processorImpl) checkpointWorker(ctx context.Context) {
 	checkpointTS := uint64(0)
 	for {
 		select {
+		case <-ctx.Done():
+			if ctx.Err() != context.Canceled {
+				log.Error("Checkpoint worker exited", zap.Error(ctx.Err()))
+			}
+			return
 		case e, ok := <-p.executedEntries:
 			if !ok {
 				log.Info("Checkpoint worker exited")
@@ -250,8 +264,7 @@ func (p *processorImpl) checkpointWorker() {
 				checkpointTS = e.TS
 			}
 		case <-time.After(3 * time.Second):
-			// TODO: better context management
-			err := p.tsRWriter.WriteCheckpointTS(context.Background(), checkpointTS)
+			err := p.tsRWriter.WriteCheckpointTS(ctx, checkpointTS)
 			if err != nil {
 				log.Error("Checkpoint worker: write checkpoint ts failed", zap.Error(err))
 			}
@@ -259,29 +272,40 @@ func (p *processorImpl) checkpointWorker() {
 	}
 }
 
-func (p *processorImpl) globalResolvedWorker() {
+func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 	log.Info("Global resolved worker started")
-	lastGlobalResolvedTS := uint64(0)
-	ctx := context.Background()
-	wg, _ := errgroup.WithContext(ctx)
+
+	var (
+		globalResolvedTS     uint64
+		lastGlobalResolvedTS uint64
+	)
+
+	defer func() {
+		close(p.resolvedEntries)
+		close(p.executedEntries)
+	}()
+
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
 			backoff.NewExponentialBackOff(), ctx),
 		3,
 	)
 	for {
+		wg, _ := errgroup.WithContext(ctx)
 		select {
+		case <-ctx.Done():
+			if ctx.Err() != context.Canceled {
+				log.Error("Global resolved worker exited", zap.Error(ctx.Err()))
+			}
+			return
 		case <-p.closed:
-			close(p.resolvedEntries)
-			close(p.executedEntries)
 			log.Info("Global resolved worker exited")
 			return
 		default:
 		}
-		var globalResolvedTS uint64
 		err := backoff.Retry(func() error {
 			var err error
-			globalResolvedTS, err = p.tsRWriter.ReadGlobalResolvedTS(context.Background())
+			globalResolvedTS, err = p.tsRWriter.ReadGlobalResolvedTS(ctx)
 			if err != nil {
 				log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
 			}
@@ -334,7 +358,9 @@ func (p *processorImpl) ExecutedChan() chan<- ProcessorEntry {
 
 func (p *processorImpl) Close() {
 	close(p.closed)
-	p.wg.Wait()
+	if p.wg != nil {
+		p.wg.Wait()
+	}
 }
 
 func createSchemaStore(pdEndpoints []string) (*schema.Schema, error) {
