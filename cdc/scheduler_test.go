@@ -103,7 +103,7 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 		captureID    = "test-capture"
 		pdEndpoints  = []string{}
 		detail       = model.ChangeFeedDetail{}
-		key          = kv.GetEtcdKeyProcessor(changefeedID, captureID)
+		key          = kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
 	)
 
 	oriRunProcessor := runProcessor
@@ -165,7 +165,7 @@ func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 		captureID    = "test-capture-err"
 		pdEndpoints  = []string{}
 		detail       = model.ChangeFeedDetail{}
-		key          = kv.GetEtcdKeyProcessor(changefeedID, captureID)
+		key          = kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
 	)
 
 	oriRunProcessor := runProcessor

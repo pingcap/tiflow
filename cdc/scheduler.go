@@ -188,7 +188,7 @@ func (w *ProcessorWatcher) reopen() error {
 
 func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error) {
 	defer w.wg.Done()
-	key := kv.GetEtcdKeyProcessor(w.changefeedID, w.captureID)
+	key := kv.GetEtcdKeySubChangeFeed(w.changefeedID, w.captureID)
 
 	getResp, err := w.etcdCli.Get(ctx, key)
 	if err != nil {
