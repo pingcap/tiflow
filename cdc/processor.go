@@ -173,13 +173,11 @@ type processorImpl struct {
 	resolvedEntries chan ProcessorEntry
 	executedEntries chan ProcessorEntry
 
+	// ddlPuller    *Puller
 	tblPullers      map[int64]CancellablePuller
 	tableInputChans map[int64]*txnChannel
 	inputChansLock  sync.RWMutex
 	wg              *errgroup.Group
-
-	ddlPuller    *Puller
-	TablePullers map[int64]CancellablePuller
 }
 
 func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, captureID, changefeedID string) (Processor, error) {
@@ -457,16 +455,30 @@ func (p *processorImpl) getTSRwriter() ProcessorTSRWriter {
 }
 
 func (p *processorImpl) initPullers(ctx context.Context, errCh chan<- error) error {
-	_, info, err := kv.GetSubChangeFeedInfo(ctx, p.etcdCli, p.changefeedID, p.captureID)
-	if err != nil {
-		return err
-	}
-	for _, tblInfo := range info.TableInfos {
-		if _, ok := p.tblPullers[int64(tblInfo.ID)]; ok {
-			continue
-		}
-		if err := p.addTable(ctx, int64(tblInfo.ID), errCh); err != nil {
-			return err
+	// the loop is only for test, not support add/remove table dynamically
+	// TODO: the time sequence should be:
+	// user create changefeed -> owner creates subchangefeed info in etcd -> scheduler create processors
+	// but currently scheduler and owner are running concurrently
+	for {
+		select {
+		case <-ctx.Done():
+			if err := ctx.Err(); err != context.Canceled {
+				return err
+			}
+			return nil
+		case <-time.After(time.Second * 5):
+			_, info, err := kv.GetSubChangeFeedInfo(ctx, p.etcdCli, p.changefeedID, p.captureID)
+			if err != nil {
+				return err
+			}
+			for _, tblInfo := range info.TableInfos {
+				if _, ok := p.tblPullers[int64(tblInfo.ID)]; ok {
+					continue
+				}
+				if err := p.addTable(ctx, int64(tblInfo.ID), errCh); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
