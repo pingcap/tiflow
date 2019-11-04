@@ -141,7 +141,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 	}
 }
 
-// ProcessorWatcher is a subchangefeed watcher
+// ProcessorWatcher is a processor watcher
 type ProcessorWatcher struct {
 	pdEndpoints  []string
 	changefeedID string
@@ -249,7 +249,7 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error) {
 				errCh <- errors.Trace(err)
 				return
 			}
-			// subchangefeed has been removed from this capture, cancel the subchangefeed too
+			// processor has been removed from this capture
 			if resp.Count == 0 {
 				return
 			}
@@ -273,7 +273,7 @@ func realRunProcessorWatcher(
 	return sw
 }
 
-// realRunProcessor creates a new subchangefeed then starts it, and returns a channel to pass error.
+// realRunProcessor creates a new processor then starts it, and returns a channel to pass error.
 func realRunProcessor(
 	ctx context.Context,
 	pdEndpoints []string,
