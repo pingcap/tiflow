@@ -390,7 +390,7 @@ func (p *processorImpl) watchTables(ctx context.Context) error {
 				if _, ok := p.tblPullers[int64(tblInfo.ID)]; ok {
 					continue
 				}
-				if err := p.AddTable(ctx, int64(tblInfo.ID), errCh); err != nil {
+				if err := p.addTable(ctx, int64(tblInfo.ID), errCh); err != nil {
 					return err
 				}
 			}
@@ -398,7 +398,7 @@ func (p *processorImpl) watchTables(ctx context.Context) error {
 	}
 }
 
-func (p *processorImpl) AddTable(ctx context.Context, tableID int64, errCh chan<- error) error {
+func (p *processorImpl) addTable(ctx context.Context, tableID int64, errCh chan<- error) error {
 	log.Debug("Add table", zap.Int64("tableID", tableID))
 	// TODO: Make sure it's threadsafe or prove that it doesn't have to be
 	if _, ok := p.tblPullers[tableID]; ok {
