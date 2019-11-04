@@ -245,7 +245,7 @@ func (c *SubChangeFeed) startOnSpan(ctx context.Context, span util.Span, errCh c
 		checkpointTS = oracle.EncodeTSO(c.detail.CreateTime.Unix() * 1000)
 	}
 
-	puller := NewPuller(c.pdCli, checkpointTS, []util.Span{span}, c.detail)
+	puller := NewPuller(c.pdCli, checkpointTS, []util.Span{span})
 
 	errg.Go(func() error {
 		return puller.Run(ctx)

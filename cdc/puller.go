@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 	"golang.org/x/sync/errgroup"
@@ -31,7 +30,6 @@ type Puller struct {
 	pdCli        pd.Client
 	checkpointTS uint64
 	spans        []util.Span
-	detail       model.ChangeFeedDetail
 	buf          Buffer
 	tsTracker    txn.ResolveTsTracker
 }
@@ -42,14 +40,11 @@ func NewPuller(
 	pdCli pd.Client,
 	checkpointTS uint64,
 	spans []util.Span,
-	// useless now
-	detail model.ChangeFeedDetail,
 ) *Puller {
 	p := &Puller{
 		pdCli:        pdCli,
 		checkpointTS: checkpointTS,
 		spans:        spans,
-		detail:       detail,
 		buf:          MakeBuffer(),
 		tsTracker:    makeSpanFrontier(spans...),
 	}
