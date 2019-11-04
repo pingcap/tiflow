@@ -481,7 +481,6 @@ func (p *processorImpl) initPullers(ctx context.Context, errCh chan<- error) err
 			}
 		}
 	}
-	return nil
 }
 
 func (p *processorImpl) addTable(ctx context.Context, tableID int64, errCh chan<- error) error {
