@@ -276,19 +276,14 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 	log.Info("Global resolved worker started")
 
 	var (
-		cleanupFn = func(err error) {
-			close(p.resolvedEntries)
-			close(p.executedEntries)
-			if err != nil && err != context.Canceled {
-				log.Error("Global resolved worker exited", zap.Error(err))
-			} else {
-				log.Info("Global resolved worker exited")
-			}
-		}
-
 		globalResolvedTS     uint64
 		lastGlobalResolvedTS uint64
 	)
+
+	defer func() {
+		close(p.resolvedEntries)
+		close(p.executedEntries)
+	}()
 
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
@@ -299,10 +294,12 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 		wg, _ := errgroup.WithContext(ctx)
 		select {
 		case <-ctx.Done():
-			cleanupFn(ctx.Err())
+			if ctx.Err() != context.Canceled {
+				log.Error("Global resolved worker exited", zap.Error(ctx.Err()))
+			}
 			return
 		case <-p.closed:
-			cleanupFn(nil)
+			log.Info("Global resolved worker exited")
 			return
 		default:
 		}
