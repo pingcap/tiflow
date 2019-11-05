@@ -20,15 +20,20 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cenkalti/backoff"
+	dmysql "github.com/go-sql-driver/mysql"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb-cdc/pkg/util"
+	tddl "github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 )
@@ -44,6 +49,7 @@ type mysqlSink struct {
 	db           *sql.DB
 	tblInspector tableInspector
 	infoGetter   TableInfoGetter
+	ddlOnly      bool
 }
 
 var _ Sink = &mysqlSink{}
@@ -83,6 +89,13 @@ func NewMySQLSinkUsingSchema(db *sql.DB, picker *schema.Schema) Sink {
 	}
 }
 
+func NewMySQLSinkDDLOnly(db *sql.DB) Sink {
+	return &mysqlSink{
+		db:      db,
+		ddlOnly: true,
+	}
+}
+
 func (s *mysqlSink) Emit(ctx context.Context, txn txn.Txn) error {
 	filterBySchemaAndTable(&txn)
 	if len(txn.DMLs) == 0 && txn.DDL == nil {
@@ -90,10 +103,16 @@ func (s *mysqlSink) Emit(ctx context.Context, txn txn.Txn) error {
 		return nil
 	}
 	if txn.IsDDL() {
-		// ignore DDL, processor don't need to execute DDLs
-		return nil
+		err := s.execDDLWithMaxRetries(ctx, txn.DDL, 5)
+		if err == nil && !s.ddlOnly && isTableChanged(txn.DDL) {
+			s.tblInspector.Refresh(txn.DDL.Database, txn.DDL.Table)
+		}
+		return errors.Trace(err)
 	}
 	// TODO: Add retry
+	if s.ddlOnly {
+		log.Fatal("this sink only supports DDL, can not emit DMLs.")
+	}
 	dmls, err := s.formatDMLs(txn.DMLs)
 	if err != nil {
 		return errors.Trace(err)
@@ -127,6 +146,53 @@ func (s *mysqlSink) Flush(ctx context.Context) error {
 }
 
 func (s *mysqlSink) Close() error {
+	return nil
+}
+
+func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *txn.DDL, maxRetries uint64) error {
+	retryCfg := backoff.WithMaxRetries(
+		backoff.WithContext(
+			backoff.NewExponentialBackOff(), ctx),
+		maxRetries,
+	)
+	return backoff.Retry(func() error {
+		err := s.execDDL(ctx, ddl)
+		if isIgnorableDDLError(err) {
+			return nil
+		}
+		if err == context.Canceled || err == context.DeadlineExceeded {
+			err = backoff.Permanent(err)
+		}
+		return err
+	}, retryCfg)
+}
+
+func (s *mysqlSink) execDDL(ctx context.Context, ddl *txn.DDL) error {
+	shouldSwitchDB := len(ddl.Database) > 0 && ddl.Job.Type != model.ActionCreateSchema
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	if shouldSwitchDB {
+		_, err = tx.ExecContext(ctx, "USE "+util.QuoteName(ddl.Database)+";")
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	if _, err = tx.ExecContext(ctx, ddl.Job.Query); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Job.Query))
 	return nil
 }
 
@@ -343,6 +409,35 @@ func whereSlice(table *tableInfo, colVals map[string]types.Datum) (colNames []st
 
 	// Fallback to use all columns
 	return table.columns, whereValues(colVals, table.columns)
+}
+
+func isIgnorableDDLError(err error) bool {
+	errCode, ok := getSQLErrCode(err)
+	if !ok {
+		return false
+	}
+	// we can get error code from:
+	// infoschema's error definition: https://github.com/pingcap/tidb/blob/master/infoschema/infoschema.go
+	// DDL's error definition: https://github.com/pingcap/tidb/blob/master/ddl/ddl.go
+	// tidb/mysql error code definition: https://github.com/pingcap/tidb/blob/master/mysql/errcode.go
+	switch errCode {
+	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseNotExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
+		infoschema.ErrTableExists.Code(), infoschema.ErrTableNotExists.Code(), infoschema.ErrTableDropExists.Code(),
+		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(), infoschema.ErrIndexExists.Code(),
+		infoschema.ErrKeyNotExists.Code(), tddl.ErrCantDropFieldOrKey.Code(), mysql.ErrDupKeyName:
+		return true
+	default:
+		return false
+	}
+}
+
+func getSQLErrCode(err error) (terror.ErrCode, bool) {
+	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
+	if !ok {
+		return -1, false
+	}
+
+	return terror.ErrCode(mysqlErr.Number), true
 }
 
 func buildColumnList(names []string) string {

@@ -16,10 +16,13 @@ package sink
 import (
 	"context"
 
-	"github.com/pingcap/parser/model"
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/types"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/tidb/infoschema"
+
+	"github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/types"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/check"
@@ -35,6 +38,76 @@ type dummyInspector struct {
 }
 
 func (dummyInspector) Refresh(schema, table string) {
+}
+
+func (s EmitSuite) TestShouldExecDDL(c *check.C) {
+	// Set up
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	c.Assert(err, check.IsNil)
+	defer db.Close()
+
+	sink := mysqlSink{
+		db:           db,
+		tblInspector: dummyInspector{},
+	}
+
+	t := txn.Txn{
+		DDL: &txn.DDL{
+			Database: "test",
+			Table:    "user",
+			Job: &model.Job{
+				Query: "CREATE TABLE user (id INT PRIMARY KEY);",
+			},
+		},
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(t.DDL.Job.Query).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	// Execute
+	err = sink.Emit(context.Background(), t)
+
+	// Validate
+	c.Assert(err, check.IsNil)
+	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
+}
+
+func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
+	// Set up
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	c.Assert(err, check.IsNil)
+	defer db.Close()
+
+	sink := mysqlSink{
+		db:           db,
+		tblInspector: dummyInspector{},
+	}
+
+	t := txn.Txn{
+		DDL: &txn.DDL{
+			Database: "test",
+			Table:    "user",
+			Job: &model.Job{
+				Query: "CREATE TABLE user (id INT PRIMARY KEY);",
+			},
+		},
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
+	ignorable := dmysql.MySQLError{
+		Number: uint16(infoschema.ErrTableExists.Code()),
+	}
+	mock.ExpectExec(t.DDL.Job.Query).WillReturnError(&ignorable)
+
+	// Execute
+	err = sink.Emit(context.Background(), t)
+
+	// Validate
+	c.Assert(err, check.IsNil)
+	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }
 
 type tableHelper struct {
