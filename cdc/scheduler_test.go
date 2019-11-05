@@ -33,6 +33,9 @@ import (
 type schedulerSuite struct {
 	etcd      *embed.Etcd
 	clientURL *url.URL
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
 }
 
 var _ = check.Suite(&schedulerSuite{})
@@ -45,17 +48,17 @@ var (
 // Set up a embed etcd using free ports.
 func (s *schedulerSuite) SetUpTest(c *check.C) {
 	dir := c.MkDir()
-	curl, e, err := etcd.SetupEmbedEtcd(dir)
+	var err error
+	s.clientURL, s.etcd, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
-	s.clientURL = curl
-	s.etcd = e
-	go func() {
-		c.Log(<-e.Err())
-	}()
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	util.RecvErrorUntilContextDone(s.ctx, s.wg, s.etcd.Err(), func(e error) { c.Log(e) })
 }
 
 func (s *schedulerSuite) TearDownTest(c *check.C) {
 	s.etcd.Close()
+	s.cancel()
+	s.wg.Wait()
 }
 
 func mockRunProcessor(

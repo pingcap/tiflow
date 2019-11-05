@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -16,6 +17,7 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
 type ownerSuite struct {
@@ -23,6 +25,9 @@ type ownerSuite struct {
 	e         *embed.Etcd
 	clientURL *url.URL
 	client    *clientv3.Client
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
 }
 
 var _ = check.Suite(&ownerSuite{})
@@ -37,13 +42,14 @@ func (s *ownerSuite) SetUpTest(c *check.C) {
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	go func() {
-		c.Log(<-s.e.Err())
-	}()
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	util.RecvErrorUntilContextDone(s.ctx, s.wg, s.e.Err(), func(e error) { c.Log(e) })
 }
 
 func (s *ownerSuite) TearDownTest(c *check.C) {
 	s.e.Close()
+	s.cancel()
+	s.wg.Wait()
 }
 
 type handlerForPrueDMLTest struct {
