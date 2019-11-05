@@ -58,7 +58,7 @@ func GetDDLSpan() Span {
 	start = append(start, metaPrefix...)
 	start = codec.EncodeBytes(start, ddlJobListKey)
 	start = codec.EncodeUint(start, uint64(listData))
-	end := make([]byte, 0, len(start))
+	end := make([]byte, len(start))
 	copy(end, start)
 	end[len(end)-1]++
 	return Span{
