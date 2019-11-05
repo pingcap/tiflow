@@ -104,11 +104,9 @@ func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) 
 	if err != nil {
 		return errors.Trace(err)
 	}
+	defer db.Close()
 	err = h.execDDLWithMaxRetries(ctx, db, ddl, 5)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return errors.Trace(db.Close())
+	return errors.Trace(err)
 }
 
 func (h *ddlHandler) execDDLWithMaxRetries(ctx context.Context, db *sql.DB, ddl *txn.DDL, maxRetries uint64) error {
