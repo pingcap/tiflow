@@ -19,10 +19,12 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/sink"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb-cdc/pkg/util"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -76,6 +78,7 @@ func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn txn.RawTxn) error {
 		return errors.Trace(err)
 	}
 	if !t.IsDDL() {
+		log.Warn("should not be DML here", zap.Reflect("txn", t))
 		return nil
 	}
 	h.ddlJobs = append(h.ddlJobs, t.DDL)

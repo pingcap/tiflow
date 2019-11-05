@@ -235,6 +235,9 @@ waitCheckpointTSLoop:
 					zap.Reflect("ddlJob", todoDDLJob))
 				return
 			}
+			log.Info("Execute DDL succeeded",
+				zap.String("ChangeFeedID", changeFeedID),
+				zap.Reflect("ddlJob", todoDDLJob))
 			if cfInfo.Status != model.ChangeFeedExecDDL {
 				log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
 					zap.String("ChangeFeedID", changeFeedID),
