@@ -60,7 +60,7 @@ func (h *handlerForPrueDMLTest) PullDDL() (resolvedTS uint64, ddl []*txn.DDL, er
 	return uint64(math.MaxUint64), nil, nil
 }
 
-func (h *handlerForPrueDMLTest) ExecDDL(string, *txn.DDL) error {
+func (h *handlerForPrueDMLTest) ExecDDL(context.Context, string, *txn.DDL) error {
 	panic("unreachable")
 }
 
@@ -158,7 +158,7 @@ func (h *handlerForDDLTest) PullDDL() (resolvedTS uint64, jobs []*txn.DDL, err e
 	return h.ddlResolvedTS[h.ddlIndex], []*txn.DDL{h.ddls[h.ddlIndex]}, nil
 }
 
-func (h *handlerForDDLTest) ExecDDL(sinkURI string, ddl *txn.DDL) error {
+func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error {
 	h.ddlExpectIndex++
 	h.c.Assert(ddl, check.DeepEquals, h.ddls[h.ddlExpectIndex])
 	h.c.Assert(ddl.Job.BinlogInfo.FinishedTS, check.Equals, h.currentGlobalResolvedTS)
