@@ -334,8 +334,8 @@ func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (
 	// persist changefeed synchronization status to storage
 	err = kv.PutChangeFeedStatus(ctx, o.etcdClient, changefeedID,
 		&model.ChangeFeedInfo{
-			CheckpointTS: cinfo.StartTS,
-			ResolvedTS:   0,
+			CheckpointTs: cinfo.StartTs,
+			ResolvedTs:   0,
 		})
 	if err != nil {
 		return nil, err
