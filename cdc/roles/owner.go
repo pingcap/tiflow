@@ -52,7 +52,7 @@ type OwnerDDLHandler interface {
 	PullDDL() (resolvedTS uint64, jobs []*txn.DDL, err error)
 
 	// ExecDDL executes the ddl job
-	ExecDDL(sinkURI string, ddl *txn.DDL) error
+	ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error
 }
 
 // ChangeFeedInfoRWriter defines the Reader and Writer for ChangeFeedInfo
@@ -223,7 +223,7 @@ waitCheckpointTSLoop:
 		// Execute DDL Job asynchronously
 		cfInfo.Status = model.ChangeFeedExecDDL
 		go func(changeFeedID string, cfInfo *model.ChangeFeedInfo) {
-			err := o.ddlHandler.ExecDDL(cfInfo.SinkURI, todoDDLJob)
+			err := o.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, todoDDLJob)
 			o.l.Lock()
 			defer o.l.Unlock()
 			// If DDL executing failed, pause the changefeed and print log

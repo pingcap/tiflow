@@ -98,13 +98,13 @@ func (h *ddlHandler) PullDDL() (uint64, []*txn.DDL, error) {
 	return h.resolvedTS, result, nil
 }
 
-func (h *ddlHandler) ExecDDL(sinkURI string, ddl *txn.DDL) error {
+func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error {
 	// TODO cache the database connection
 	db, err := sql.Open("mysql", sinkURI)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = h.execDDLWithMaxRetries(context.Background(), db, ddl, 5)
+	err = h.execDDLWithMaxRetries(ctx, db, ddl, 5)
 	if err != nil {
 		return errors.Trace(err)
 	}
