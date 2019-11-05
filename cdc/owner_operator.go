@@ -100,6 +100,7 @@ func (h *ddlHandler) PullDDL() (uint64, []*txn.DDL, error) {
 
 func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error {
 	// TODO cache the database connection
+	// TODO handle other target database, kile kafka, file
 	db, err := sql.Open("mysql", sinkURI)
 	if err != nil {
 		return errors.Trace(err)
