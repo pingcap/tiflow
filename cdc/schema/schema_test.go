@@ -399,7 +399,7 @@ func (t *schemaSuite) TestAddImplicitColumn(c *C) {
 	c.Assert(tbl.Indices[0].Primary, IsTrue)
 }
 
-func testDoDDLAndCheck(c *C, schema *Schema, job *model.Job, isErr bool, sql string, expectedSchema string, expectedTable string) {
+func testDoDDLAndCheck(c *C, schema *Storage, job *model.Job, isErr bool, sql string, expectedSchema string, expectedTable string) {
 	schemaName, tableName, resSQL, err := schema.HandleDDL(job)
 	c.Logf("handle: %s", job.Query)
 	c.Logf("result: %s, %s, %s, %v", schemaName, tableName, resSQL, err)
