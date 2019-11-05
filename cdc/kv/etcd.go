@@ -93,7 +93,7 @@ func GetChangeFeedDetail(ctx context.Context, cli *clientv3.Client, id string, o
 	return detail, errors.Trace(err)
 }
 
-// GetChangeFeedInfo queries the checkpointTS and resovledTS of a given changefeed
+// GetChangeFeedInfo queries the checkpointTs and resovledTs of a given changefeed
 func GetChangeFeedInfo(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) (*model.ChangeFeedInfo, error) {
 	key := GetEtcdKeyChangeFeedStatus(id)
 	resp, err := cli.Get(ctx, key, opts...)

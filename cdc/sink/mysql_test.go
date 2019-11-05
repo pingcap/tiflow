@@ -243,10 +243,10 @@ func (s *FilterSuite) TestFilterDMLs(c *check.C) {
 			{Database: "test_mysql"},
 			{Database: "mysql"},
 		},
-		TS: 213,
+		Ts: 213,
 	}
 	filterBySchemaAndTable(&t)
-	c.Assert(t.TS, check.Equals, uint64(213))
+	c.Assert(t.Ts, check.Equals, uint64(213))
 	c.Assert(t.DDL, check.IsNil)
 	c.Assert(t.DMLs, check.HasLen, 2)
 	c.Assert(t.DMLs[0].Database, check.Equals, "test")
@@ -256,10 +256,10 @@ func (s *FilterSuite) TestFilterDMLs(c *check.C) {
 func (s *FilterSuite) TestFilterDDL(c *check.C) {
 	t := txn.Txn{
 		DDL: &txn.DDL{Database: "performance_schema"},
-		TS:  10234,
+		Ts:  10234,
 	}
 	filterBySchemaAndTable(&t)
-	c.Assert(t.TS, check.Equals, uint64((10234)))
+	c.Assert(t.Ts, check.Equals, uint64((10234)))
 	c.Assert(t.DMLs, check.HasLen, 0)
 	c.Assert(t.DDL, check.IsNil)
 }

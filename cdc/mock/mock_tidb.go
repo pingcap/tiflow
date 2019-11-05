@@ -101,7 +101,7 @@ func (p *MockTiDB) updateEvent() (entrys []*kv.RawKVEntry, err error) {
 				OpType: kv.OpTypePut,
 				Key:    []byte(k),
 				Value:  []byte(v),
-				TS:     ts,
+				Ts:     ts,
 			}
 
 			entrys = append(entrys, &entry)
@@ -115,7 +115,7 @@ func (p *MockTiDB) updateEvent() (entrys []*kv.RawKVEntry, err error) {
 			entry := kv.RawKVEntry{
 				OpType: kv.OpTypeDelete,
 				Key:    []byte(k),
-				TS:     ts,
+				Ts:     ts,
 			}
 			entrys = append(entrys, &entry)
 		}

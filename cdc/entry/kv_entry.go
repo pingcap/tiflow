@@ -31,7 +31,7 @@ type KVEntry interface {
 }
 
 type RowKVEntry struct {
-	TS       uint64
+	Ts       uint64
 	TableID  int64
 	RecordID int64
 	Delete   bool
@@ -39,7 +39,7 @@ type RowKVEntry struct {
 }
 
 type IndexKVEntry struct {
-	TS         uint64
+	Ts         uint64
 	TableID    int64
 	IndexID    int64
 	Delete     bool
@@ -48,13 +48,13 @@ type IndexKVEntry struct {
 }
 
 type DDLJobKVEntry struct {
-	TS    uint64
+	Ts    uint64
 	JobID int64
 	Job   *model.Job
 }
 
 type UpdateTableKVEntry struct {
-	TS        uint64
+	Ts        uint64
 	DbID      int64
 	TableID   int64
 	TableInfo *model.TableInfo
@@ -144,7 +144,7 @@ func unmarshalTableKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 			return nil, errors.Trace(err)
 		}
 		return &RowKVEntry{
-			TS:       raw.TS,
+			Ts:       raw.Ts,
 			TableID:  tableID,
 			RecordID: recordID,
 			Delete:   raw.OpType == kv.OpTypeDelete,
@@ -166,7 +166,7 @@ func unmarshalTableKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 			}
 		}
 		return &IndexKVEntry{
-			TS:         raw.TS,
+			Ts:         raw.Ts,
 			TableID:    tableID,
 			IndexID:    indexID,
 			IndexValue: indexValue,
@@ -210,9 +210,9 @@ func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 			if job.IsDone() {
 				// FinishedTS is only set when the job is synced,
 				// but we can use the entry's ts here
-				job.BinlogInfo.FinishedTS = raw.TS
+				job.BinlogInfo.FinishedTS = raw.Ts
 				return &DDLJobKVEntry{
-					TS:    raw.TS,
+					Ts:    raw.Ts,
 					JobID: int64(job.ID),
 					Job:   job,
 				}, nil
@@ -240,7 +240,7 @@ func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 					return nil, errors.Annotatef(err, "data: %v", raw.Value)
 				}
 				return &UpdateTableKVEntry{
-					TS:        raw.TS,
+					Ts:        raw.Ts,
 					DbID:      dbID,
 					TableID:   tableID,
 					TableInfo: tableInfo,

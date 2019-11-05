@@ -39,7 +39,7 @@ type Schema struct {
 	truncateTableID map[int64]struct{}
 
 	schemaMetaVersion int64
-	lastHandledTS     uint64
+	lastHandledTs     uint64
 
 	hasImplicitCol bool
 
@@ -248,7 +248,7 @@ func (s *Schema) addJob(job *model.Job) {
 	}
 }
 
-func (s *Schema) HandlePreviousDDLJobIfNeed(commitTS uint64) error {
+func (s *Schema) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 	var i int
 	var job *model.Job
 	// TODO: Make sure jobs are sorted by BinlogInfo.FinishedTS
@@ -258,10 +258,10 @@ func (s *Schema) HandlePreviousDDLJobIfNeed(commitTS uint64) error {
 			continue
 		}
 
-		if job.BinlogInfo.FinishedTS > commitTS {
+		if job.BinlogInfo.FinishedTS > commitTs {
 			break
 		}
-		if job.BinlogInfo.FinishedTS <= s.lastHandledTS {
+		if job.BinlogInfo.FinishedTS <= s.lastHandledTs {
 			continue
 		}
 
@@ -445,7 +445,7 @@ func (s *Schema) HandleDDL(job *model.Job) (schemaName string, tableName string,
 		schemaName = schema.Name.O
 		tableName = tbInfo.Name.O
 	}
-	s.lastHandledTS = job.BinlogInfo.FinishedTS
+	s.lastHandledTs = job.BinlogInfo.FinishedTS
 	return
 }
 
