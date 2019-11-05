@@ -26,6 +26,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+//TODO: add tests
 type ddlHandler struct {
 	puller       *Puller
 	mounter      *txn.Mounter
