@@ -58,7 +58,7 @@ var _ = check.Suite(&CollectRawTxnsSuite{})
 
 func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	var entries []kv.KvOrResolved
-	var startTs uint64 = 1024
+	var startTS uint64 = 1024
 	var i uint64
 	for i = 0; i < 3; i++ {
 		for j := 0; j < 3; j++ {
@@ -66,7 +66,7 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 				KV: &kv.RawKVEntry{
 					OpType: kv.OpTypePut,
 					Key:    []byte(fmt.Sprintf("key-%d-%d", i, j)),
-					Ts:     startTs + i,
+					TS:     startTS + i,
 				},
 			}
 			entries = append(entries, e)
@@ -75,7 +75,7 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	// Only add resolved entry for the first 2 transaction
 	for i = 0; i < 2; i++ {
 		e := kv.KvOrResolved{
-			Resolved: &kv.ResolvedSpan{Timestamp: startTs + i},
+			Resolved: &kv.ResolvedSpan{Timestamp: startTS + i},
 		}
 		entries = append(entries, e)
 	}
@@ -101,36 +101,36 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, 2)
-	c.Assert(rawTxns[0].TS, check.Equals, startTs)
+	c.Assert(rawTxns[0].TS, check.Equals, startTS)
 	for i, e := range rawTxns[0].Entries {
-		c.Assert(e.Ts, check.Equals, startTs)
+		c.Assert(e.TS, check.Equals, startTS)
 		c.Assert(string(e.Key), check.Equals, fmt.Sprintf("key-0-%d", i))
 	}
-	c.Assert(rawTxns[1].TS, check.Equals, startTs+1)
+	c.Assert(rawTxns[1].TS, check.Equals, startTS+1)
 	for i, e := range rawTxns[1].Entries {
-		c.Assert(e.Ts, check.Equals, startTs+1)
+		c.Assert(e.TS, check.Equals, startTS+1)
 		c.Assert(string(e.Key), check.Equals, fmt.Sprintf("key-1-%d", i))
 	}
 }
 
-func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
+func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTS(c *check.C) {
 	var entries []kv.KvOrResolved
 	for _, v := range []struct {
 		key          []byte
 		ts           uint64
-		isResolvedTs bool
+		isResolvedTS bool
 	}{
 		{key: []byte("key1-1"), ts: 1},
 		{key: []byte("key2-1"), ts: 2},
 		{key: []byte("key1-2"), ts: 1},
 		{key: []byte("key1-3"), ts: 1},
-		{ts: 1, isResolvedTs: true},
-		{ts: 2, isResolvedTs: true},
+		{ts: 1, isResolvedTS: true},
+		{ts: 2, isResolvedTS: true},
 		{key: []byte("key2-1"), ts: 2},
-		{ts: 1, isResolvedTs: true},
+		{ts: 1, isResolvedTS: true},
 	} {
 		var e kv.KvOrResolved
-		if v.isResolvedTs {
+		if v.isResolvedTS {
 			e = kv.KvOrResolved{
 				Resolved: &kv.ResolvedSpan{Timestamp: v.ts},
 			}
@@ -139,7 +139,7 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 				KV: &kv.RawKVEntry{
 					OpType: kv.OpTypePut,
 					Key:    v.key,
-					Ts:     v.ts,
+					TS:     v.ts,
 				},
 			}
 		}
@@ -247,12 +247,12 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 
 	rawKV := puller.MustExec(c, "insert into testDB.test1 values('ttt',6)")
 	txn, err := mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		TS:      rawKV[0].TS,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
-		Ts: rawKV[0].Ts,
+		TS: rawKV[0].TS,
 		DMLs: []*DML{
 			{
 				Database: "testDB",
@@ -276,12 +276,12 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 
 	rawKV = puller.MustExec(c, "update testDB.test1 set id = 'vvv' where a = 6")
 	txn, err = mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		TS:      rawKV[0].TS,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
-		Ts: rawKV[0].Ts,
+		TS: rawKV[0].TS,
 		DMLs: []*DML{
 			{
 				Database: "testDB",
@@ -313,12 +313,12 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 
 	rawKV = puller.MustExec(c, "delete from testDB.test1 where a = 6")
 	txn, err = mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		TS:      rawKV[0].TS,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
-		Ts: rawKV[0].Ts,
+		TS: rawKV[0].TS,
 		DMLs: []*DML{
 			{
 				Database: "testDB",
@@ -340,12 +340,12 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 
 	rawKV := puller.MustExec(c, "insert into testDB.test1 values(777,888)")
 	txn, err := mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		TS:      rawKV[0].TS,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
-		Ts: rawKV[0].Ts,
+		TS: rawKV[0].TS,
 		DMLs: []*DML{
 			{
 				Database: "testDB",
@@ -369,12 +369,12 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 
 	rawKV = puller.MustExec(c, "update testDB.test1 set id = 999 where a = 888")
 	txn, err = mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		TS:      rawKV[0].TS,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
-		Ts: rawKV[0].Ts,
+		TS: rawKV[0].TS,
 		DMLs: []*DML{
 			{
 				Database: "testDB",
@@ -406,12 +406,12 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 
 	rawKV = puller.MustExec(c, "delete from testDB.test1 where id = 999")
 	txn, err = mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		TS:      rawKV[0].TS,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
-		Ts: rawKV[0].Ts,
+		TS: rawKV[0].TS,
 		DMLs: []*DML{
 			{
 				Database: "testDB",
@@ -440,7 +440,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 	rawKV := puller.MustExec(c, "alter table testDB.test1 add b int null")
 	txn, err := mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		TS:      rawKV[0].TS,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
@@ -451,18 +451,18 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 			SQL:      "alter table testDB.test1 add b int null",
 			Type:     model.ActionAddColumn,
 		},
-		Ts: rawKV[0].Ts,
+		TS: rawKV[0].TS,
 	})
 
 	// test insert null value
 	rawKV = puller.MustExec(c, "insert into testDB.test1(id,a) values('ttt',6)")
 	txn, err = mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		TS:      rawKV[0].TS,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
-		Ts: rawKV[0].Ts,
+		TS: rawKV[0].TS,
 		DMLs: []*DML{
 			{
 				Database: "testDB",
@@ -486,12 +486,12 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 
 	rawKV = puller.MustExec(c, "insert into testDB.test1(id,a,b) values('kkk',6,7)")
 	txn, err = mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		TS:      rawKV[0].TS,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, txn, &Txn{
-		Ts: rawKV[0].Ts,
+		TS: rawKV[0].TS,
 		DMLs: []*DML{
 			{
 				Database: "testDB",

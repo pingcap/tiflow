@@ -91,7 +91,7 @@ func NewMySQLSinkUsingSchema(db *sql.DB, picker *schema.Schema) Sink {
 func (s *mysqlSink) Emit(ctx context.Context, txn txn.Txn) error {
 	filterBySchemaAndTable(&txn)
 	if len(txn.DMLs) == 0 && txn.DDL == nil {
-		log.Info("Whole txn ignored", zap.Uint64("ts", txn.Ts))
+		log.Info("Whole txn ignored", zap.Uint64("ts", txn.TS))
 		return nil
 	}
 	if txn.IsDDL() {

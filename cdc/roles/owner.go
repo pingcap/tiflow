@@ -212,7 +212,7 @@ waitCheckpointTSLoop:
 		}
 		todoDDLJob := o.ddlJobHistory[cfInfo.DDLCurrentIndex]
 
-		// Check if all the checkpointTs of capture are achieving global resolvedTS(which is equal to todoDDLJob.FinishedTS)
+		// Check if all the checkpointTS of capture are achieving global resolvedTS(which is equal to todoDDLJob.FinishedTS)
 		for _, pInfo := range cfInfo.ProcessorInfos {
 			if pInfo.CheckPointTS != todoDDLJob.BinlogInfo.FinishedTS {
 				continue waitCheckpointTSLoop

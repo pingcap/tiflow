@@ -75,7 +75,7 @@ type RegionFeedValue struct {
 	Key    []byte
 	// Nil fro delete type
 	Value []byte
-	Ts    uint64
+	TS    uint64
 }
 
 type singleRegionInfo struct {
@@ -446,7 +446,7 @@ func (c *CDCClient) singleEventFeed(
 									OpType: opType,
 									Key:    row.Key,
 									Value:  value,
-									Ts:     row.CommitTs,
+									TS:     row.CommitTs,
 								},
 							}
 

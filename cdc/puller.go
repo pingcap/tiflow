@@ -107,7 +107,7 @@ func (p *Puller) Run(ctx context.Context) error {
 						OpType: val.OpType,
 						Key:    val.Key,
 						Value:  val.Value,
-						Ts:     val.Ts,
+						TS:     val.TS,
 					}
 
 					p.buf.AddKVEntry(ctx, kv)
@@ -124,7 +124,7 @@ func (p *Puller) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (p *Puller) GetResolvedTs() uint64 {
+func (p *Puller) GetResolvedTS() uint64 {
 	return p.tsTracker.Frontier()
 }
 

@@ -29,7 +29,7 @@ type Sink interface {
 		ctx context.Context,
 		resolved uint64,
 	) error
-	// TODO: Add GetLastSuccessTs() uint64
+	// TODO: Add GetLastSuccessTS() uint64
 	// Flush blocks until every message enqueued by EmitRow and
 	// EmitResolvedTimestamp has been acknowledged by the sink.
 	Flush(ctx context.Context) error
@@ -50,7 +50,7 @@ type writerSink struct {
 var _ Sink = &writerSink{}
 
 func (s *writerSink) Emit(ctx context.Context, t txn.Txn) error {
-	fmt.Fprintf(s, "commit ts: %d", t.Ts)
+	fmt.Fprintf(s, "commit ts: %d", t.TS)
 	return nil
 }
 

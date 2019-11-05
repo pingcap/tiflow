@@ -427,12 +427,12 @@ func checkDMLKVEntries(c *check.C, tableInfo *model.TableInfo, rawEntries []*kv.
 		switch e := entry.(type) {
 		case *RowKVEntry:
 			c.Assert(e.Unflatten(tableInfo, time.UTC), check.IsNil)
-			e.Ts = 0
+			e.TS = 0
 			assertIn(c, e, expect)
 			eventSum++
 		case *IndexKVEntry:
 			c.Assert(e.Unflatten(tableInfo, time.UTC), check.IsNil)
-			e.Ts = 0
+			e.TS = 0
 			assertIn(c, e, expect)
 			eventSum++
 		}

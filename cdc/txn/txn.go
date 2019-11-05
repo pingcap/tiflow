@@ -76,7 +76,7 @@ type Txn struct {
 	DMLs []*DML
 	DDL  *DDL
 
-	Ts uint64
+	TS uint64
 }
 
 func (t Txn) IsDDL() bool {
@@ -101,20 +101,20 @@ func CollectRawTxns(
 			return err
 		}
 		if be.KV != nil {
-			entryGroups[be.KV.Ts] = append(entryGroups[be.KV.Ts], be.KV)
+			entryGroups[be.KV.TS] = append(entryGroups[be.KV.TS], be.KV)
 		} else if be.Resolved != nil {
-			resolvedTs := be.Resolved.Timestamp
+			resolvedTS := be.Resolved.Timestamp
 			// 1. Forward is called in a single thread
 			// 2. The only way the global minimum resolved TS can be forwarded is that
-			// 	  the resolveTs we pass in replaces the original one
-			// Thus, we can just use resolvedTs here as the new global minimum resolved TS.
-			forwarded := tracker.Forward(be.Resolved.Span, resolvedTs)
+			// 	  the resolveTS we pass in replaces the original one
+			// Thus, we can just use resolvedTS here as the new global minimum resolved TS.
+			forwarded := tracker.Forward(be.Resolved.Span, resolvedTS)
 			if !forwarded {
 				continue
 			}
 			var readyTxns []RawTxn
 			for ts, entries := range entryGroups {
-				if ts <= resolvedTs {
+				if ts <= resolvedTS {
 					readyTxns = append(readyTxns, RawTxn{ts, entries})
 					delete(entryGroups, ts)
 				}
@@ -129,9 +129,9 @@ func CollectRawTxns(
 				}
 			}
 			if len(readyTxns) == 0 {
-				log.Info("Forwarding fake txn", zap.Uint64("ts", resolvedTs))
+				log.Info("Forwarding fake txn", zap.Uint64("ts", resolvedTS))
 				fakeTxn := RawTxn{
-					TS:      resolvedTs,
+					TS:      resolvedTS,
 					Entries: nil,
 				}
 				outputFn(ctx, fakeTxn)
@@ -152,7 +152,7 @@ func NewTxnMounter(schema *schema.Schema, loc *time.Location) (*Mounter, error) 
 
 func (m *Mounter) Mount(rawTxn RawTxn) (*Txn, error) {
 	txn := &Txn{
-		Ts: rawTxn.TS,
+		TS: rawTxn.TS,
 	}
 	var replaceDMLs, deleteDMLs []*DML
 	err := m.schema.HandlePreviousDDLJobIfNeed(rawTxn.TS)

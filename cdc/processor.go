@@ -283,19 +283,19 @@ func (p *processorImpl) localResolvedWorker(ctx context.Context) {
 			}
 			return
 		case <-time.After(3 * time.Second):
-			minResolvedTs := uint64(math.MaxUint64)
+			minResolvedTS := uint64(math.MaxUint64)
 			p.tableResolvedTS.Range(func(key, value interface{}) bool {
 				resolvedTS := value.(uint64)
-				if minResolvedTs > resolvedTS {
-					minResolvedTs = resolvedTS
+				if minResolvedTS > resolvedTS {
+					minResolvedTS = resolvedTS
 				}
 				return true
 			})
-			if minResolvedTs == uint64(math.MaxUint64) {
+			if minResolvedTS == uint64(math.MaxUint64) {
 				// no table in this processor
 				continue
 			}
-			err := p.tsRWriter.WriteResolvedTS(ctx, minResolvedTs)
+			err := p.tsRWriter.WriteResolvedTS(ctx, minResolvedTS)
 			if err != nil {
 				log.Error("Local resolved worker: write resolved ts failed", zap.Error(err))
 			}
