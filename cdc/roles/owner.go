@@ -331,6 +331,16 @@ func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (
 		})
 	}
 
+	// persist changefeed synchronization status to storage
+	err = kv.PutChangeFeedStatus(ctx, o.etcdClient, changefeedID,
+		&model.ChangeFeedInfo{
+			CheckpointTS: cinfo.StartTS,
+			ResolvedTS:   0,
+		})
+	if err != nil {
+		return nil, err
+	}
+
 	// create subchangefeed info and persist to storage
 	for i := range tableInfos {
 		key := kv.GetEtcdKeySubChangeFeed(changefeedID, captures[i].ID)

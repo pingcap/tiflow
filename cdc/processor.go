@@ -179,7 +179,7 @@ type processorImpl struct {
 	wg              *errgroup.Group
 }
 
-func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, captureID, changefeedID string) (Processor, error) {
+func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, changefeedID, captureID string) (Processor, error) {
 	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
