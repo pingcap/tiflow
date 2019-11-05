@@ -44,8 +44,8 @@ func NewCDCSuite() *CDCSuite {
 	if err != nil {
 		panic(err.Error())
 	}
-	// create a picker
-	picker, err := schema.NewSchema(jobs, false)
+	// create a schema storage
+	schemaStorage, err := schema.NewStorage(jobs, false)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -56,9 +56,9 @@ func NewCDCSuite() *CDCSuite {
 	}
 	cdcSuite.mock = mock
 
-	cdcSuite.sink = sink.NewMySQLSinkUsingSchema(db, picker)
+	cdcSuite.sink = sink.NewMySQLSinkUsingSchema(db, schemaStorage)
 
-	mounter, err := txn.NewTxnMounter(picker, time.Local)
+	mounter, err := txn.NewTxnMounter(schemaStorage, time.Local)
 	if err != nil {
 		panic(err.Error())
 	}

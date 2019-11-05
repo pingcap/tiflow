@@ -232,7 +232,7 @@ func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.S
 		}
 	}
 	c.Assert(len(jobs), check.Equals, len(sqls))
-	schema, err := schema.NewSchema(jobs, false)
+	schema, err := schema.NewStorage(jobs, false)
 	c.Assert(err, check.IsNil)
 	err = schema.HandlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
 	c.Assert(err, check.IsNil)
