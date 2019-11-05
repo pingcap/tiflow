@@ -109,7 +109,6 @@ func (s *mysqlSink) Emit(ctx context.Context, txn txn.Txn) error {
 		}
 		return errors.Trace(err)
 	}
-	// TODO: Add retry
 	if s.ddlOnly {
 		log.Fatal("this sink only supports DDL, can not emit DMLs.")
 	}
@@ -117,6 +116,7 @@ func (s *mysqlSink) Emit(ctx context.Context, txn txn.Txn) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// TODO: Add retry
 	return errors.Trace(s.execDMLs(ctx, dmls))
 }
 
