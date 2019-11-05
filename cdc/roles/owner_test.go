@@ -53,6 +53,7 @@ func (s *ownerSuite) TearDownTest(c *check.C) {
 }
 
 type handlerForPrueDMLTest struct {
+	mu               sync.RWMutex
 	index            int
 	resolvedTS1      []uint64
 	resolvedTS2      []uint64
@@ -70,6 +71,8 @@ func (h *handlerForPrueDMLTest) ExecDDL(*timodel.Job) error {
 }
 
 func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	h.index++
 	return map[model.ChangeFeedID]model.ProcessorsInfos{
 		"test_change_feed": {
@@ -84,6 +87,8 @@ func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedI
 }
 
 func (h *handlerForPrueDMLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	info, exist := infos["test_change_feed"]
 	h.c.Assert(exist, check.IsTrue)
 	h.c.Assert(info.ResolvedTS, check.Equals, h.expectResolvedTS[h.index])
@@ -133,6 +138,8 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 }
 
 type handlerForDDLTest struct {
+	mu sync.RWMutex
+
 	ddlIndex      int
 	ddlJobs       []*timodel.Job
 	ddlResolvedTS []uint64
@@ -153,6 +160,8 @@ type handlerForDDLTest struct {
 }
 
 func (h *handlerForDDLTest) PullDDL() (resolvedTS uint64, jobs []*timodel.Job, err error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	if h.ddlIndex < len(h.ddlJobs)-1 {
 		h.ddlIndex++
 	}
@@ -160,6 +169,8 @@ func (h *handlerForDDLTest) PullDDL() (resolvedTS uint64, jobs []*timodel.Job, e
 }
 
 func (h *handlerForDDLTest) ExecDDL(job *timodel.Job) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.ddlExpectIndex++
 	h.c.Assert(job, check.DeepEquals, h.ddlJobs[h.ddlExpectIndex])
 	h.c.Assert(job.BinlogInfo.FinishedTS, check.Equals, h.currentGlobalResolvedTS)
@@ -167,6 +178,8 @@ func (h *handlerForDDLTest) ExecDDL(job *timodel.Job) error {
 }
 
 func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	if h.dmlIndex < len(h.resolvedTS1)-1 {
 		h.dmlIndex++
 	}
@@ -185,6 +198,8 @@ func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.ChangeFeedID]mo
 }
 
 func (h *handlerForDDLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.dmlExpectIndex++
 	info, exist := infos["test_change_feed"]
 	h.c.Assert(exist, check.IsTrue)

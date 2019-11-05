@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/check"
@@ -57,13 +58,13 @@ func (s *testHelperSuite) TestRecvErrorUntilContextDone(c *check.C) {
 		wg          sync.WaitGroup
 		ctx, cancel = context.WithCancel(context.Background())
 		errCh       = make(chan error)
-		count       = 0
+		count       int32
 	)
-	RecvErrorUntilContextDone(ctx, wg, errCh, func(e error) { count += 1 })
+	RecvErrorUntilContextDone(ctx, wg, errCh, func(e error) { atomic.AddInt32(&count, 1) })
 	for i := 0; i < 5; i++ {
 		errCh <- errors.New("test error")
 	}
-	c.Assert(WaitSomething(5, time.Millisecond*10, func() bool { return count == 5 }), check.IsTrue)
+	c.Assert(WaitSomething(5, time.Millisecond*10, func() bool { return atomic.LoadInt32(&count) == int32(5) }), check.IsTrue)
 	cancel()
 	wg.Wait()
 }
