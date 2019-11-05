@@ -90,14 +90,14 @@ func (p *txnChannel) Forward(tableID int64, ts uint64, entryC chan<- ProcessorEn
 			return
 		}
 		p.putBackTxn = nil
-		entryC <- NewProcessorDMLsEntry(t.Entries, t.Ts)
+		entryC <- NewProcessorTxnEntry(t)
 	}
 	for t := range p.outputTxn {
 		if t.Ts > ts {
 			p.PutBack(t)
 			return
 		}
-		entryC <- NewProcessorDMLsEntry(t.Entries, t.Ts)
+		entryC <- NewProcessorTxnEntry(t)
 	}
 	log.Info("Input channel of table closed", zap.Int64("tableID", tableID))
 }
@@ -137,16 +137,16 @@ const (
 )
 
 type ProcessorEntry struct {
-	Entries []*kv.RawKVEntry
-	Ts      uint64
-	Typ     ProcessorEntryType
+	Txn txn.RawTxn
+	Ts  uint64
+	Typ ProcessorEntryType
 }
 
-func NewProcessorDMLsEntry(entries []*kv.RawKVEntry, ts uint64) ProcessorEntry {
+func NewProcessorTxnEntry(txn txn.RawTxn) ProcessorEntry {
 	return ProcessorEntry{
-		Entries: entries,
-		Ts:      ts,
-		Typ:     ProcessorEntryDMLS,
+		Txn: txn,
+		Ts:  txn.Ts,
+		Typ: ProcessorEntryDMLS,
 	}
 }
 
@@ -179,7 +179,7 @@ type processorImpl struct {
 	wg              *errgroup.Group
 }
 
-func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, captureID, changefeedID string) (Processor, error) {
+func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, changefeedID, captureID string) (Processor, error) {
 	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
