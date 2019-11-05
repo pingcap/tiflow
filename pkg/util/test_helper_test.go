@@ -60,7 +60,7 @@ func (s *testHelperSuite) TestRecvErrorUntilContextDone(c *check.C) {
 		errCh       = make(chan error)
 		count       int32
 	)
-	RecvErrorUntilContextDone(ctx, wg, errCh, func(e error) { atomic.AddInt32(&count, 1) })
+	RecvErrorUntilContextDone(ctx, &wg, errCh, func(e error) { atomic.AddInt32(&count, 1) })
 	for i := 0; i < 5; i++ {
 		errCh <- errors.New("test error")
 	}

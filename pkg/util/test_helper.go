@@ -32,10 +32,10 @@ func WaitSomething(nRetry int, waitTime time.Duration, fn func() bool) bool {
 }
 
 // RecvErrorUntilContextDone receives error from an error channel, until the context is Done
-func RecvErrorUntilContextDone(ctx context.Context, wg sync.WaitGroup, errCh <-chan error, errFn func(e error)) {
-	wg.Add(1)
+func RecvErrorUntilContextDone(ctx context.Context, wg *sync.WaitGroup, errCh <-chan error, errFn func(error)) {
+	(*wg).Add(1)
 	go func() {
-		defer wg.Done()
+		defer (*wg).Done()
 		for {
 			select {
 			case <-ctx.Done():

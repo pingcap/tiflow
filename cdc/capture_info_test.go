@@ -36,7 +36,7 @@ func (ci *captureInfoSuite) SetUpTest(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 	ci.ctx, ci.cancel = context.WithCancel(context.Background())
-	util.RecvErrorUntilContextDone(ci.ctx, ci.wg, ci.etcd.Err(), func(e error) { c.Log(e) })
+	util.RecvErrorUntilContextDone(ci.ctx, &ci.wg, ci.etcd.Err(), func(e error) { c.Log(e) })
 }
 
 func (ci *captureInfoSuite) TearDownTest(c *check.C) {

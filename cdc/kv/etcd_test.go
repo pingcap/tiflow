@@ -48,7 +48,7 @@ func (s *etcdSuite) SetUpTest(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	util.RecvErrorUntilContextDone(s.ctx, s.wg, s.e.Err(), func(e error) { c.Log(e) })
+	util.RecvErrorUntilContextDone(s.ctx, &s.wg, s.e.Err(), func(e error) { c.Log(e) })
 }
 
 func (s *etcdSuite) TearDownTest(c *check.C) {

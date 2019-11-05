@@ -52,7 +52,7 @@ func (s *schedulerSuite) SetUpTest(c *check.C) {
 	s.clientURL, s.etcd, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	util.RecvErrorUntilContextDone(s.ctx, s.wg, s.etcd.Err(), func(e error) { c.Log(e) })
+	util.RecvErrorUntilContextDone(s.ctx, &s.wg, s.etcd.Err(), func(e error) { c.Log(e) })
 }
 
 func (s *schedulerSuite) TearDownTest(c *check.C) {
