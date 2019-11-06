@@ -19,6 +19,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tidb-cdc/cdc/sink"
+
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
@@ -66,6 +68,27 @@ func (s *mockTsRWriter) SetGlobalResolvedTs(ts uint64) {
 	s.globalResolvedTs = ts
 }
 
+// mockMounter pretend to decode a RawTxn by returning a Txn of the same Ts
+type mockMounter struct{}
+
+func (m mockMounter) Mount(rawTxn txn.RawTxn) (*txn.Txn, error) {
+	return &txn.Txn{Ts: rawTxn.Ts}, nil
+}
+
+// mockSinker append all received Txns for validation
+type mockSinker struct {
+	sink.Sink
+	synced []txn.Txn
+	mu     sync.Mutex
+}
+
+func (m *mockSinker) Emit(ctx context.Context, t txn.Txn) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.synced = append(m.synced, t)
+	return nil
+}
+
 var _ = check.Suite(&processorSuite{})
 
 type processorTestCase struct {
@@ -99,14 +122,25 @@ func runCase(c *check.C, cases *processorTestCase) {
 	fNewPDCli = func(pdAddrs []string, security pd.SecurityOption) (pd.Client, error) {
 		return nil, nil
 	}
-	origfNewTsRw := fNewTsRWriter
+	origFNewTsRw := fNewTsRWriter
 	fNewTsRWriter = func(cli *clientv3.Client, changefeedID, captureID string) ProcessorTsRWriter {
 		return &mockTsRWriter{}
+	}
+	origFNewMounter := fNewMounter
+	fNewMounter = func(schema *schema.Storage, loc *time.Location) (mounter, error) {
+		return mockMounter{}, nil
+	}
+	origFNewSink := fNewMySQLSink
+	sinker := &mockSinker{}
+	fNewMySQLSink = func(sinkURI string, infoGetter sink.TableInfoGetter, opts map[string]string) (sink.Sink, error) {
+		return sinker, nil
 	}
 	defer func() {
 		fCreateSchema = origFSchema
 		fNewPDCli = origFNewPD
-		fNewTsRWriter = origfNewTsRw
+		fNewTsRWriter = origFNewTsRw
+		fNewMounter = origFNewMounter
+		fNewMySQLSink = origFNewSink
 	}()
 	dir := c.MkDir()
 	etcdURL, etcd, err := etcd.SetupEmbedEtcd(dir)
@@ -119,30 +153,6 @@ func runCase(c *check.C, cases *processorTestCase) {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.Run(ctx, errCh)
 
-	var (
-		l                sync.Mutex
-		outputDML        []uint64
-		outputResolvedTs []uint64
-	)
-	go func() {
-		for {
-			e, ok := <-p.ResolvedChan()
-			if !ok {
-				return
-			}
-			log.Info("output", zap.Reflect("ProcessorEntry", e))
-			l.Lock()
-			switch e.Typ {
-			case ProcessorEntryDMLS:
-				c.Assert(len(outputResolvedTs), check.Equals, 0)
-				outputDML = append(outputDML, e.Ts)
-			case ProcessorEntryResolved:
-				outputResolvedTs = append(outputResolvedTs, e.Ts)
-			}
-			l.Unlock()
-			p.ExecutedChan() <- e
-		}
-	}()
 	for i, rawTxnTs := range cases.rawTxnTs {
 		input := make(chan txn.RawTxn)
 		p.SetInputChan(int64(i), input)
@@ -157,24 +167,26 @@ func runCase(c *check.C, cases *processorTestCase) {
 		p.(*processorImpl).getTsRwriter().(*mockTsRWriter).SetGlobalResolvedTs(globalResolvedTs)
 		// waiting for processor push to resolvedTs
 		for {
-			l.Lock()
-			needBreak := len(outputDML) == len(cases.expect[i]) && len(outputResolvedTs) > 0
-			l.Unlock()
+			sinker.mu.Lock()
+			needBreak := len(sinker.synced) == len(cases.expect[i])
+			sinker.mu.Unlock()
 			if needBreak {
 				break
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 		}
 
-		l.Lock()
-		sort.Slice(outputDML, func(i, j int) bool {
-			return outputDML[i] < outputDML[j]
+		sinker.mu.Lock()
+		syncedTs := make([]uint64, 0, len(sinker.synced))
+		for _, s := range sinker.synced {
+			syncedTs = append(syncedTs, s.Ts)
+		}
+		sort.Slice(syncedTs, func(i, j int) bool {
+			return syncedTs[i] < syncedTs[j]
 		})
-		c.Assert(outputDML, check.DeepEquals, cases.expect[i])
-		outputDML = []uint64{}
-		c.Assert(outputResolvedTs, check.DeepEquals, []uint64{globalResolvedTs})
-		outputResolvedTs = []uint64{}
-		l.Unlock()
+		c.Assert(syncedTs, check.DeepEquals, cases.expect[i])
+		sinker.synced = sinker.synced[:0]
+		sinker.mu.Unlock()
 	}
 	cancel()
 	p.Close()
