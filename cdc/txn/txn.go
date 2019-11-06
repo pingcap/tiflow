@@ -32,7 +32,7 @@ import (
 
 // RawTxn represents a complete collection of Entries that belong to the same transaction
 type RawTxn struct {
-	TS      uint64
+	Ts      uint64
 	Entries []*kv.RawKVEntry
 }
 
@@ -105,9 +105,9 @@ func CollectRawTxns(
 		} else if be.Resolved != nil {
 			resolvedTs := be.Resolved.Timestamp
 			// 1. Forward is called in a single thread
-			// 2. The only way the global minimum resolved TS can be forwarded is that
+			// 2. The only way the global minimum resolved Ts can be forwarded is that
 			// 	  the resolveTs we pass in replaces the original one
-			// Thus, we can just use resolvedTs here as the new global minimum resolved TS.
+			// Thus, we can just use resolvedTs here as the new global minimum resolved Ts.
 			forwarded := tracker.Forward(be.Resolved.Span, resolvedTs)
 			if !forwarded {
 				continue
@@ -120,7 +120,7 @@ func CollectRawTxns(
 				}
 			}
 			sort.Slice(readyTxns, func(i, j int) bool {
-				return readyTxns[i].TS < readyTxns[j].TS
+				return readyTxns[i].Ts < readyTxns[j].Ts
 			})
 			for _, t := range readyTxns {
 				err := outputFn(ctx, t)
@@ -131,7 +131,7 @@ func CollectRawTxns(
 			if len(readyTxns) == 0 {
 				log.Info("Forwarding fake txn", zap.Uint64("ts", resolvedTs))
 				fakeTxn := RawTxn{
-					TS:      resolvedTs,
+					Ts:      resolvedTs,
 					Entries: nil,
 				}
 				outputFn(ctx, fakeTxn)
@@ -152,10 +152,10 @@ func NewTxnMounter(schema *schema.Schema, loc *time.Location) (*Mounter, error) 
 
 func (m *Mounter) Mount(rawTxn RawTxn) (*Txn, error) {
 	txn := &Txn{
-		Ts: rawTxn.TS,
+		Ts: rawTxn.Ts,
 	}
 	var replaceDMLs, deleteDMLs []*DML
-	err := m.schema.HandlePreviousDDLJobIfNeed(rawTxn.TS)
+	err := m.schema.HandlePreviousDDLJobIfNeed(rawTxn.Ts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

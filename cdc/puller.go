@@ -28,7 +28,7 @@ import (
 // Puller pull data from tikv and push changes into a buffer
 type Puller struct {
 	pdCli        pd.Client
-	checkpointTS uint64
+	checkpointTs uint64
 	spans        []util.Span
 	buf          Buffer
 	tsTracker    txn.ResolveTsTracker
@@ -40,16 +40,16 @@ type CancellablePuller struct {
 	Cancel context.CancelFunc
 }
 
-// NewPuller create a new Puller fetch event start from checkpointTS
+// NewPuller create a new Puller fetch event start from checkpointTs
 // and put into buf.
 func NewPuller(
 	pdCli pd.Client,
-	checkpointTS uint64,
+	checkpointTs uint64,
 	spans []util.Span,
 ) *Puller {
 	p := &Puller{
 		pdCli:        pdCli,
-		checkpointTS: checkpointTS,
+		checkpointTs: checkpointTs,
 		spans:        spans,
 		buf:          MakeBuffer(),
 		tsTracker:    makeSpanFrontier(spans...),
@@ -76,14 +76,14 @@ func (p *Puller) Run(ctx context.Context) error {
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	checkpointTS := p.checkpointTS
+	checkpointTs := p.checkpointTs
 	eventCh := make(chan *kv.RegionFeedEvent, 128)
 
 	for _, span := range p.spans {
 		span := span
 
 		g.Go(func() error {
-			return cli.EventFeed(ctx, span, checkpointTS, eventCh)
+			return cli.EventFeed(ctx, span, checkpointTs, eventCh)
 		})
 	}
 
@@ -113,7 +113,7 @@ func (p *Puller) Run(ctx context.Context) error {
 					p.buf.AddKVEntry(ctx, kv)
 				} else if e.Checkpoint != nil {
 					cp := e.Checkpoint
-					p.buf.AddResolved(ctx, cp.Span, cp.ResolvedTS)
+					p.buf.AddResolved(ctx, cp.Span, cp.ResolvedTs)
 				}
 			case <-ctx.Done():
 				return ctx.Err()

@@ -30,11 +30,11 @@ import (
 
 // Owner is used to process etcd information for a capture with owner role
 type Owner interface {
-	// GetResolvedTS gets resolvedTS of a ChangeFeed
-	GetResolvedTS(changeFeedID string) (uint64, error)
+	// GetResolvedTs gets resolvedTs of a ChangeFeed
+	GetResolvedTs(changeFeedID string) (uint64, error)
 
-	// GetCheckpointTS gets CheckpointTS of a ChangeFeed
-	GetCheckpointTS(changeFeedID string) (uint64, error)
+	// GetCheckpointTs gets CheckpointTs of a ChangeFeed
+	GetCheckpointTs(changeFeedID string) (uint64, error)
 
 	// Run a goroutine to handle Owner logic
 	Run(ctx context.Context, tickTime time.Duration) error
@@ -47,8 +47,8 @@ type Owner interface {
 // which can pull ddl jobs and execute ddl jobs
 type OwnerDDLHandler interface {
 
-	// PullDDL pulls the ddl jobs and returns resolvedTS of DDL Puller and job list.
-	PullDDL() (resolvedTS uint64, jobs []*timodel.Job, err error)
+	// PullDDL pulls the ddl jobs and returns resolvedTs of DDL Puller and job list.
+	PullDDL() (resolvedTs uint64, jobs []*timodel.Job, err error)
 
 	// ExecDDL executes the ddl job
 	ExecDDL(*timodel.Job) error
@@ -69,8 +69,8 @@ type ownerImpl struct {
 	ddlHandler OwnerDDLHandler
 	cfRWriter  ChangeFeedInfoRWriter
 
-	ddlResolvedTS uint64
-	targetTS      uint64
+	ddlResolvedTs uint64
+	targetTs      uint64
 	ddlJobHistory []*timodel.Job
 
 	l sync.RWMutex
@@ -80,7 +80,7 @@ type ownerImpl struct {
 }
 
 // NewOwner creates a new ownerImpl instance
-func NewOwner(targetTS uint64, cli *clientv3.Client, manager Manager) *ownerImpl {
+func NewOwner(targetTs uint64, cli *clientv3.Client, manager Manager) *ownerImpl {
 	owner := &ownerImpl{
 		changeFeedInfos: make(map[model.ChangeFeedID]*model.ChangeFeedInfo),
 		ddlHandler:      NewDDLHandler(),
@@ -113,8 +113,8 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 		} else {
 			o.changeFeedInfos[changeFeedID] = &model.ChangeFeedInfo{
 				Status:          model.ChangeFeedSyncDML,
-				ResolvedTS:      0,
-				CheckpointTS:    0,
+				ResolvedTs:      0,
+				CheckpointTs:    0,
 				ProcessorInfos:  etcdChangeFeedInfo,
 				DDLCurrentIndex: 0,
 			}
@@ -128,11 +128,11 @@ func (o *ownerImpl) flushChangeFeedInfos(ctx context.Context) error {
 }
 
 func (o *ownerImpl) pullDDLJob() error {
-	ddlResolvedTS, ddlJobs, err := o.ddlHandler.PullDDL()
+	ddlResolvedTs, ddlJobs, err := o.ddlHandler.PullDDL()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	o.ddlResolvedTS = ddlResolvedTS
+	o.ddlResolvedTs = ddlResolvedTs
 	o.ddlJobHistory = append(o.ddlJobHistory, ddlJobs...)
 	return nil
 }
@@ -145,77 +145,77 @@ func (o *ownerImpl) getChangeFeedInfo(changeFeedID string) (*model.ChangeFeedInf
 	return info, nil
 }
 
-func (o *ownerImpl) GetResolvedTS(changeFeedID string) (uint64, error) {
+func (o *ownerImpl) GetResolvedTs(changeFeedID string) (uint64, error) {
 	o.l.RLock()
 	defer o.l.RUnlock()
 	cfInfo, err := o.getChangeFeedInfo(changeFeedID)
 	if err != nil {
 		return 0, err
 	}
-	return cfInfo.ResolvedTS, nil
+	return cfInfo.ResolvedTs, nil
 }
 
-func (o *ownerImpl) GetCheckpointTS(changeFeedID string) (uint64, error) {
+func (o *ownerImpl) GetCheckpointTs(changeFeedID string) (uint64, error) {
 	o.l.RLock()
 	defer o.l.RUnlock()
 	cfInfo, err := o.getChangeFeedInfo(changeFeedID)
 	if err != nil {
 		return 0, err
 	}
-	return cfInfo.CheckpointTS, nil
+	return cfInfo.CheckpointTs, nil
 }
 
-func (o *ownerImpl) calcResolvedTS() error {
+func (o *ownerImpl) calcResolvedTs() error {
 	for _, cfInfo := range o.changeFeedInfos {
 		if cfInfo.Status != model.ChangeFeedSyncDML {
 			continue
 		}
-		minResolvedTS := o.targetTS
+		minResolvedTs := o.targetTs
 
-		// calc the min of all resolvedTS in captures
+		// calc the min of all resolvedTs in captures
 		for _, pStatus := range cfInfo.ProcessorInfos {
-			if minResolvedTS > pStatus.ResolvedTS {
-				minResolvedTS = pStatus.ResolvedTS
+			if minResolvedTs > pStatus.ResolvedTs {
+				minResolvedTs = pStatus.ResolvedTs
 			}
 		}
 
-		// if minResolvedTS is greater than ddlResolvedTS,
+		// if minResolvedTs is greater than ddlResolvedTs,
 		// it means that ddlJobHistory in memory is not intact,
-		// there are some ddl jobs which finishedTS is smaller than minResolvedTS we don't know.
-		// so we need to call `pullDDLJob`, update the ddlJobHistory and ddlResolvedTS.
-		if minResolvedTS > o.ddlResolvedTS {
+		// there are some ddl jobs which finishedTs is smaller than minResolvedTs we don't know.
+		// so we need to call `pullDDLJob`, update the ddlJobHistory and ddlResolvedTs.
+		if minResolvedTs > o.ddlResolvedTs {
 			if err := o.pullDDLJob(); err != nil {
 				return errors.Trace(err)
 			}
-			if minResolvedTS > o.ddlResolvedTS {
-				minResolvedTS = o.ddlResolvedTS
+			if minResolvedTs > o.ddlResolvedTs {
+				minResolvedTs = o.ddlResolvedTs
 			}
 		}
 
-		// if minResolvedTS is greater than the finishedTS of ddl job which is not executed,
+		// if minResolvedTs is greater than the finishedTS of ddl job which is not executed,
 		// we need to execute this ddl job
 		if len(o.ddlJobHistory) > cfInfo.DDLCurrentIndex &&
-			minResolvedTS > o.ddlJobHistory[cfInfo.DDLCurrentIndex].BinlogInfo.FinishedTS {
-			minResolvedTS = o.ddlJobHistory[cfInfo.DDLCurrentIndex].BinlogInfo.FinishedTS
+			minResolvedTs > o.ddlJobHistory[cfInfo.DDLCurrentIndex].BinlogInfo.FinishedTS {
+			minResolvedTs = o.ddlJobHistory[cfInfo.DDLCurrentIndex].BinlogInfo.FinishedTS
 			cfInfo.Status = model.ChangeFeedWaitToExecDDL
 		}
-		cfInfo.ResolvedTS = minResolvedTS
+		cfInfo.ResolvedTs = minResolvedTs
 	}
 	return nil
 }
 
 func (o *ownerImpl) handleDDL(ctx context.Context) error {
-waitCheckpointTSLoop:
+waitCheckpointTsLoop:
 	for changeFeedID, cfInfo := range o.changeFeedInfos {
 		if cfInfo.Status != model.ChangeFeedWaitToExecDDL {
-			continue waitCheckpointTSLoop
+			continue waitCheckpointTsLoop
 		}
 		todoDDLJob := o.ddlJobHistory[cfInfo.DDLCurrentIndex]
 
-		// Check if all the checkpointTs of capture are achieving global resolvedTS(which is equal to todoDDLJob.FinishedTS)
+		// Check if all the checkpointTs of capture are achieving global resolvedTs(which is equal to todoDDLJob.FinishedTS)
 		for _, pInfo := range cfInfo.ProcessorInfos {
-			if pInfo.CheckPointTS != todoDDLJob.BinlogInfo.FinishedTS {
-				continue waitCheckpointTSLoop
+			if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
+				continue waitCheckpointTsLoop
 			}
 		}
 
@@ -280,7 +280,7 @@ func (o *ownerImpl) run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = o.calcResolvedTS()
+	err = o.calcResolvedTs()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -326,7 +326,7 @@ func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (
 	for _, id := range cinfo.TableIDs {
 		captureIndex := id % uint64(len(captures))
 		tableInfos[captureIndex] = append(tableInfos[captureIndex], &model.ProcessTableInfo{
-			StartTS: cinfo.StartTS,
+			StartTs: cinfo.StartTs,
 			ID:      id,
 		})
 	}
@@ -334,8 +334,8 @@ func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (
 	// persist changefeed synchronization status to storage
 	err = kv.PutChangeFeedStatus(ctx, o.etcdClient, changefeedID,
 		&model.ChangeFeedInfo{
-			CheckpointTS: cinfo.StartTS,
-			ResolvedTS:   0,
+			CheckpointTs: cinfo.StartTs,
+			ResolvedTs:   0,
 		})
 	if err != nil {
 		return nil, err
@@ -345,8 +345,8 @@ func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (
 	for i := range tableInfos {
 		key := kv.GetEtcdKeySubChangeFeed(changefeedID, captures[i].ID)
 		info := &model.SubChangeFeedInfo{
-			CheckPointTS: 0, // TODO: refine checkpointTS
-			ResolvedTS:   0,
+			CheckPointTs: 0, // TODO: refine checkpointTs
+			ResolvedTs:   0,
 			TableInfos:   tableInfos[i],
 		}
 		sinfo, err := info.Marshal()
