@@ -165,8 +165,9 @@ type processorImpl struct {
 	pdCli   pd.Client
 	etcdCli *clientv3.Client
 
-	mounter *txn.Mounter
-	sink    sink.Sink
+	mounter   *txn.Mounter
+	sink      sink.Sink
+	ddlPuller *Puller
 
 	tableResolvedTs sync.Map
 	tsRWriter       ProcessorTsRWriter
@@ -204,10 +205,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 	tsRWriter := fNewTsRWriter(etcdCli, changefeedID, captureID)
 
 	// TODO: get time zone from config
-	mounter, err := txn.NewTxnMounter(schemaStorage, time.UTC)
-	if err != nil {
-		return nil, err
-	}
+	mounter := txn.NewTxnMounter(schemaStorage, time.UTC)
 
 	sink, err := sink.NewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
 	if err != nil {

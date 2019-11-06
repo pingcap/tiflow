@@ -49,7 +49,7 @@ func NewDDLHandler(pdCli pd.Client) *ddlHandler {
 	// TODO this TxnMounter only mount DDL transaction, so it needn't schemaStorage
 	schemaStorage, _ := schema.NewStorage(nil, false)
 	// TODO get time loc from config
-	txnMounter, _ := txn.NewTxnMounter(schemaStorage, time.UTC)
+	txnMounter := txn.NewTxnMounter(schemaStorage, time.UTC)
 	h := &ddlHandler{
 		puller:  puller,
 		cancel:  cancel,
