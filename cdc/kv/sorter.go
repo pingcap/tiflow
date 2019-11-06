@@ -22,7 +22,7 @@ func newMemOracle() *memOracle {
 	}
 }
 
-func (o *memOracle) getTS() uint64 {
+func (o *memOracle) getTs() uint64 {
 	return atomic.AddUint64(&o.ts, 1)
 }
 
@@ -49,7 +49,7 @@ func newItemGenerator(txnNum int32, maxLatency int64, fakeTxnPerNum int32) <-cha
 					wg.Add(1)
 					go func() {
 						defer wg.Done()
-						ts := oracle.getTS()
+						ts := oracle.getTs()
 						items <- sortItem{
 							start:  ts,
 							commit: ts,
@@ -58,7 +58,7 @@ func newItemGenerator(txnNum int32, maxLatency int64, fakeTxnPerNum int32) <-cha
 					}()
 				}
 
-				start := oracle.getTS()
+				start := oracle.getTs()
 				items <- sortItem{
 					start: start,
 					tp:    cdcpb.Event_PREWRITE,
@@ -66,7 +66,7 @@ func newItemGenerator(txnNum int32, maxLatency int64, fakeTxnPerNum int32) <-cha
 
 				time.Sleep(time.Millisecond * time.Duration(rand.Int63()%maxLatency))
 
-				commit := oracle.getTS()
+				commit := oracle.getTs()
 				items <- sortItem{
 					start:  start,
 					commit: commit,
@@ -94,9 +94,9 @@ type sortItem struct {
 }
 
 type sorter struct {
-	maxTSItemCB func(item sortItem)
+	maxTsItemCB func(item sortItem)
 	// save the start ts of txn which we need to wait for the C binlog
-	waitStartTS map[uint64]struct{}
+	waitStartTs map[uint64]struct{}
 
 	lock   sync.Mutex
 	cond   *sync.Cond
@@ -107,9 +107,9 @@ type sorter struct {
 
 func newSorter(fn func(item sortItem)) *sorter {
 	sorter := &sorter{
-		maxTSItemCB: fn,
+		maxTsItemCB: fn,
 		items:       list.New(),
-		waitStartTS: make(map[uint64]struct{}),
+		waitStartTs: make(map[uint64]struct{}),
 	}
 
 	sorter.cond = sync.NewCond(&sorter.lock)
@@ -123,10 +123,10 @@ func (s *sorter) allMatched() bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return len(s.waitStartTS) == 0
+	return len(s.waitStartTs) == 0
 }
 
-func (s *sorter) pushTSItem(item sortItem) {
+func (s *sorter) pushTsItem(item sortItem) {
 	if s.isClosed() {
 		log.Fatal("sorter is closed but still push item, this should never happen")
 	}
@@ -134,9 +134,9 @@ func (s *sorter) pushTSItem(item sortItem) {
 	s.lock.Lock()
 
 	if item.tp == cdcpb.Event_PREWRITE {
-		s.waitStartTS[item.start] = struct{}{}
+		s.waitStartTs[item.start] = struct{}{}
 	} else {
-		delete(s.waitStartTS, item.start)
+		delete(s.waitStartTs, item.start)
 		s.cond.Signal()
 	}
 
@@ -151,7 +151,7 @@ func (s *sorter) run() {
 	defer s.wg.Done()
 
 	go func() {
-		// Avoid if no any more pushTSItem call so block at s.cond.Wait() in run() waiting the matching c-binlog
+		// Avoid if no any more pushTsItem call so block at s.cond.Wait() in run() waiting the matching c-binlog
 		tick := time.NewTicker(1 * time.Second)
 		defer tick.Stop()
 		for range tick.C {
@@ -162,7 +162,7 @@ func (s *sorter) run() {
 		}
 	}()
 
-	var maxTSItem sortItem
+	var maxTsItem sortItem
 	for {
 		s.cond.L.Lock()
 		for s.items.Len() == 0 {
@@ -179,7 +179,7 @@ func (s *sorter) run() {
 
 		if item.tp == cdcpb.Event_PREWRITE {
 			for {
-				_, ok := s.waitStartTS[item.start]
+				_, ok := s.waitStartTs[item.start]
 				if !ok {
 					break
 				}
@@ -193,10 +193,10 @@ func (s *sorter) run() {
 				s.cond.Wait()
 			}
 		} else {
-			// commit is greater than zero, it's OK when we get the first item and maxTSItem.commit = 0
-			if item.commit > maxTSItem.commit {
-				maxTSItem = item
-				s.maxTSItemCB(maxTSItem)
+			// commit is greater than zero, it's OK when we get the first item and maxTsItem.commit = 0
+			if item.commit > maxTsItem.commit {
+				maxTsItem = item
+				s.maxTsItemCB(maxTsItem)
 			}
 		}
 		s.cond.L.Unlock()

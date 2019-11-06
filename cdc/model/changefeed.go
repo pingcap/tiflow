@@ -25,9 +25,9 @@ type ChangeFeedDetail struct {
 	SinkURI    string            `json:"sink-uri"`
 	Opts       map[string]string `json:"opts"`
 	CreateTime time.Time         `json:"create-time"`
-	StartTS    uint64            `json:"start-ts"`
-	// The ChangeFeed will exits until sync to timestamp TargetTS
-	TargetTS uint64 `json:"target-ts"`
+	StartTs    uint64            `json:"start-ts"`
+	// The ChangeFeed will exits until sync to timestamp TargetTs
+	TargetTs uint64 `json:"target-ts"`
 	// start to sync table id lists
 	// TODO: refine it later, use more intuitive table schema.table or something other strategy
 	TableIDs []uint64 `json:"table-ids"`

@@ -44,7 +44,7 @@ var (
 	fNewTsRWriter = createTsRWriter
 )
 
-// Processor is used to push sync progress and calculate the checkpointTS
+// Processor is used to push sync progress and calculate the checkpointTs
 // How to use it:
 // 1. Call SetInputChan to set a rawTxn input channel
 //        (you can call SetInputChan many time to set multiple input channel)
@@ -55,11 +55,11 @@ var (
 type Processor interface {
 	// SetInputChan receives a table and listens a channel
 	SetInputChan(tableID int64, inputTxn <-chan txn.RawTxn) error
-	// ResolvedChan returns a channel, which output the resolved transaction or resolvedTS
+	// ResolvedChan returns a channel, which output the resolved transaction or resolvedTs
 	ResolvedChan() <-chan ProcessorEntry
 	// ExecutedChan returns a channel, when a transaction is executed,
 	// you should put the transaction into this channel,
-	// processor will calculate checkpointTS according to this channel
+	// processor will calculate checkpointTs according to this channel
 	ExecutedChan() chan<- ProcessorEntry
 	// Run starts the work routine of processor
 	Run(ctx context.Context, errCh chan<- error)
@@ -67,14 +67,14 @@ type Processor interface {
 	Close()
 }
 
-// ProcessorTSRWriter reads or writes the resolvedTS and checkpointTS from the storage
-type ProcessorTSRWriter interface {
-	// WriteResolvedTS writes the loacl resolvedTS into the storage
-	WriteResolvedTS(ctx context.Context, resolvedTS uint64) error
-	// WriteCheckpointTS writes the checkpointTS into the storage
-	WriteCheckpointTS(ctx context.Context, checkpointTS uint64) error
-	// ReadGlobalResolvedTS reads the global resolvedTS from the storage
-	ReadGlobalResolvedTS(ctx context.Context) (uint64, error)
+// ProcessorTsRWriter reads or writes the resolvedTs and checkpointTs from the storage
+type ProcessorTsRWriter interface {
+	// WriteResolvedTs writes the loacl resolvedTs into the storage
+	WriteResolvedTs(ctx context.Context, resolvedTs uint64) error
+	// WriteCheckpointTs writes the checkpointTs into the storage
+	WriteCheckpointTs(ctx context.Context, checkpointTs uint64) error
+	// ReadGlobalResolvedTs reads the global resolvedTs from the storage
+	ReadGlobalResolvedTs(ctx context.Context) (uint64, error)
 }
 
 type txnChannel struct {
@@ -86,14 +86,14 @@ type txnChannel struct {
 func (p *txnChannel) Forward(tableID int64, ts uint64, entryC chan<- ProcessorEntry) {
 	if p.putBackTxn != nil {
 		t := *p.putBackTxn
-		if t.TS > ts {
+		if t.Ts > ts {
 			return
 		}
 		p.putBackTxn = nil
 		entryC <- NewProcessorTxnEntry(t)
 	}
 	for t := range p.outputTxn {
-		if t.TS > ts {
+		if t.Ts > ts {
 			p.PutBack(t)
 			return
 		}
@@ -109,7 +109,7 @@ func (p *txnChannel) PutBack(t txn.RawTxn) {
 	p.putBackTxn = &t
 }
 
-func newTxnChannel(inputTxn <-chan txn.RawTxn, chanSize int, handleResolvedTS func(uint64)) *txnChannel {
+func newTxnChannel(inputTxn <-chan txn.RawTxn, chanSize int, handleResolvedTs func(uint64)) *txnChannel {
 	tc := &txnChannel{
 		inputTxn:  inputTxn,
 		outputTxn: make(chan txn.RawTxn, chanSize),
@@ -121,7 +121,7 @@ func newTxnChannel(inputTxn <-chan txn.RawTxn, chanSize int, handleResolvedTS fu
 			if !ok {
 				return
 			}
-			handleResolvedTS(t.TS)
+			handleResolvedTs(t.Ts)
 			tc.outputTxn <- t
 		}
 	}()
@@ -138,21 +138,21 @@ const (
 
 type ProcessorEntry struct {
 	Txn txn.RawTxn
-	TS  uint64
+	Ts  uint64
 	Typ ProcessorEntryType
 }
 
 func NewProcessorTxnEntry(txn txn.RawTxn) ProcessorEntry {
 	return ProcessorEntry{
 		Txn: txn,
-		TS:  txn.TS,
+		Ts:  txn.Ts,
 		Typ: ProcessorEntryDMLS,
 	}
 }
 
 func NewProcessorResolvedEntry(ts uint64) ProcessorEntry {
 	return ProcessorEntry{
-		TS:  ts,
+		Ts:  ts,
 		Typ: ProcessorEntryResolved,
 	}
 }
@@ -168,8 +168,8 @@ type processorImpl struct {
 	mounter *txn.Mounter
 	sink    sink.Sink
 
-	tableResolvedTS sync.Map
-	tsRWriter       ProcessorTSRWriter
+	tableResolvedTs sync.Map
+	tsRWriter       ProcessorTsRWriter
 	resolvedEntries chan ProcessorEntry
 	executedEntries chan ProcessorEntry
 
@@ -284,10 +284,10 @@ func (p *processorImpl) localResolvedWorker(ctx context.Context) {
 			return
 		case <-time.After(3 * time.Second):
 			minResolvedTs := uint64(math.MaxUint64)
-			p.tableResolvedTS.Range(func(key, value interface{}) bool {
-				resolvedTS := value.(uint64)
-				if minResolvedTs > resolvedTS {
-					minResolvedTs = resolvedTS
+			p.tableResolvedTs.Range(func(key, value interface{}) bool {
+				resolvedTs := value.(uint64)
+				if minResolvedTs > resolvedTs {
+					minResolvedTs = resolvedTs
 				}
 				return true
 			})
@@ -295,7 +295,7 @@ func (p *processorImpl) localResolvedWorker(ctx context.Context) {
 				// no table in this processor
 				continue
 			}
-			err := p.tsRWriter.WriteResolvedTS(ctx, minResolvedTs)
+			err := p.tsRWriter.WriteResolvedTs(ctx, minResolvedTs)
 			if err != nil {
 				log.Error("Local resolved worker: write resolved ts failed", zap.Error(err))
 			}
@@ -304,7 +304,7 @@ func (p *processorImpl) localResolvedWorker(ctx context.Context) {
 }
 
 func (p *processorImpl) checkpointWorker(ctx context.Context) {
-	checkpointTS := uint64(0)
+	checkpointTs := uint64(0)
 	for {
 		select {
 		case <-ctx.Done():
@@ -320,10 +320,10 @@ func (p *processorImpl) checkpointWorker(ctx context.Context) {
 				return
 			}
 			if e.Typ == ProcessorEntryResolved {
-				checkpointTS = e.TS
+				checkpointTs = e.Ts
 			}
 		case <-time.After(3 * time.Second):
-			err := p.tsRWriter.WriteCheckpointTS(ctx, checkpointTS)
+			err := p.tsRWriter.WriteCheckpointTs(ctx, checkpointTs)
 			if err != nil {
 				log.Error("Checkpoint worker: write checkpoint ts failed", zap.Error(err))
 			}
@@ -335,8 +335,8 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 	log.Info("Global resolved worker started")
 
 	var (
-		globalResolvedTS     uint64
-		lastGlobalResolvedTS uint64
+		globalResolvedTs     uint64
+		lastGlobalResolvedTs uint64
 	)
 
 	defer func() {
@@ -363,7 +363,7 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 		}
 		err := backoff.Retry(func() error {
 			var err error
-			globalResolvedTS, err = p.tsRWriter.ReadGlobalResolvedTS(ctx)
+			globalResolvedTs, err = p.tsRWriter.ReadGlobalResolvedTs(ctx)
 			if err != nil {
 				log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
 			}
@@ -372,30 +372,30 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 		if err != nil {
 			return
 		}
-		if lastGlobalResolvedTS == globalResolvedTS {
+		if lastGlobalResolvedTs == globalResolvedTs {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		lastGlobalResolvedTS = globalResolvedTS
+		lastGlobalResolvedTs = globalResolvedTs
 		p.inputChansLock.RLock()
 		for table, input := range p.tableInputChans {
 			table := table
 			input := input
-			globalResolvedTS := globalResolvedTS
+			globalResolvedTs := globalResolvedTs
 			wg.Go(func() error {
-				input.Forward(table, globalResolvedTS, p.resolvedEntries)
+				input.Forward(table, globalResolvedTs, p.resolvedEntries)
 				return nil
 			})
 		}
 		p.inputChansLock.RUnlock()
 		wg.Wait()
-		p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTS)
+		p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTs)
 	}
 }
 
 func (p *processorImpl) SetInputChan(tableID int64, inputTxn <-chan txn.RawTxn) error {
-	tc := newTxnChannel(inputTxn, 64, func(resolvedTS uint64) {
-		p.tableResolvedTS.Store(tableID, resolvedTS)
+	tc := newTxnChannel(inputTxn, 64, func(resolvedTs uint64) {
+		p.tableResolvedTs.Store(tableID, resolvedTs)
 	})
 	p.inputChansLock.Lock()
 	defer p.inputChansLock.Unlock()
@@ -437,14 +437,14 @@ func createSchemaStore(pdEndpoints []string) (*schema.Schema, error) {
 	return schema, nil
 }
 
-func createTsRWriter(cli *clientv3.Client, changefeedID, captureID string) ProcessorTSRWriter {
-	// TODO: NewProcessorTSEtcdRWriter should return an interface, currently there
+func createTsRWriter(cli *clientv3.Client, changefeedID, captureID string) ProcessorTsRWriter {
+	// TODO: NewProcessorTsEtcdRWriter should return an interface, currently there
 	// exists cycle import issue, will refine it later
-	return storage.NewProcessorTSEtcdRWriter(cli, changefeedID, captureID)
+	return storage.NewProcessorTsEtcdRWriter(cli, changefeedID, captureID)
 }
 
-// getTSRwriter is used in unit test only
-func (p *processorImpl) getTSRwriter() ProcessorTSRWriter {
+// getTsRwriter is used in unit test only
+func (p *processorImpl) getTsRwriter() ProcessorTsRWriter {
 	return p.tsRWriter
 }
 
@@ -503,12 +503,12 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
 
-	checkpointTS := p.changefeed.StartTS
-	if checkpointTS == 0 {
-		checkpointTS = oracle.EncodeTSO(p.changefeed.CreateTime.Unix() * 1000)
+	checkpointTs := p.changefeed.StartTs
+	if checkpointTs == 0 {
+		checkpointTs = oracle.EncodeTSO(p.changefeed.CreateTime.Unix() * 1000)
 	}
 
-	puller := NewPuller(p.pdCli, checkpointTS, []util.Span{span})
+	puller := NewPuller(p.pdCli, checkpointTs, []util.Span{span})
 
 	errg.Go(func() error {
 		return puller.Run(ctx)
