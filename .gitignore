@@ -27,6 +27,8 @@ bin
 *.iml
 .idea
 .DS_Store
+.devcontainer
+.vscode
 
 cscope.*
 **/*.swp

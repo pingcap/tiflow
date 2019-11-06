@@ -66,7 +66,7 @@ sync-log = false
 
 # make tikv don't split now
 [coprocessor]
-## When it is set to `true`, TiKV will try to split a Region with table prefix if that Region
+## When it is set to \`true\`, TiKV will try to split a Region with table prefix if that Region
 ## crosses tables.
 ## It is recommended to turn off this option if there will be a large number of tables created.
 split-region-on-table = false
@@ -75,15 +75,15 @@ split-region-on-table = false
 ## split keys in one batch.
 # batch-split-limit = 10
 
-## When Region [a,e) size exceeds `region_max_size`, it will be split into several Regions [a,b),
-## [b,c), [c,d), [d,e) and the size of [a,b), [b,c), [c,d) will be `region_split_size` (or a
+## When Region [a,e) size exceeds \`region_max_size\`, it will be split into several Regions [a,b),
+## [b,c), [c,d), [d,e) and the size of [a,b), [b,c), [c,d) will be \`region_split_size\` (or a
 ## little larger).
 region-max-size = "100000MB"
 region-split-size = "100000MB"
 
-## When the number of keys in Region [a,e) exceeds the `region_max_keys`, it will be split into
+## When the number of keys in Region [a,e) exceeds the \`region_max_keys\`, it will be split into
 ## several Regions [a,b), [b,c), [c,d), [d,e) and the number of keys in [a,b), [b,c), [c,d) will be
-## `region_split_keys`.
+## \`region_split_keys\`.
 region-max-keys = 100000000
 region-split-keys = 100000000
 EOF
@@ -131,30 +131,30 @@ EOF
         fi
         sleep 3
     done
-
-    echo "Starting Downstream TiDB..."
-    tidb-server \
-        -P 3306 \
-        -config "$OUT_DIR/tidb-config.toml" \
-        --store tikv \
-        --path 127.0.0.1:2381 \
-        --status=20080 \
-        --log-file "$OUT_DIR/down_tidb.log" &
-
-    echo "Verifying Downstream TiDB is started..."
-    i=0
-    while ! mysql -uroot -h127.0.0.1 -P3306 --default-character-set utf8 -e 'select * from mysql.tidb;'; do
-        i=$((i+1))
-        if [ "$i" -gt 10 ]; then
-            echo 'Failed to start TiDB'
-            exit 1
-        fi
-        sleep 3
-    done
-
-    echo "Starting CDC..."
-    cdc server --log-file "$OUT_DIR/cdc.log" &
-    sleep 1
+#
+#    echo "Starting Downstream TiDB..."
+#    tidb-server \
+#        -P 3306 \
+#        -config "$OUT_DIR/tidb-config.toml" \
+#        --store tikv \
+#        --path 127.0.0.1:2381 \
+#        --status=20080 \
+#        --log-file "$OUT_DIR/down_tidb.log" &
+#
+#    echo "Verifying Downstream TiDB is started..."
+#    i=0
+#    while ! mysql -uroot -h127.0.0.1 -P3306 --default-character-set utf8 -e 'select * from mysql.tidb;'; do
+#        i=$((i+1))
+#        if [ "$i" -gt 10 ]; then
+#            echo 'Failed to start TiDB'
+#            exit 1
+#        fi
+#        sleep 3
+#    done
+#
+#    echo "Starting CDC..."
+#    cdc server --log-file "$OUT_DIR/cdc.log" &
+#    sleep 1
 }
 
 trap stop_services EXIT
