@@ -165,7 +165,10 @@ func GetSubChangeFeedInfos(ctx context.Context, client *clientv3.Client, changef
 	return pinfo, nil
 }
 
-// GetSubChangeFeedInfo queries subchangefeed info from etcd
+// GetSubChangeFeedInfo queries subchangefeed info from etcd, returns
+//  - ModRevision of the given key
+//  - *model.SubChangeFeedInfo unmarshaled from the value
+//  - error if error happens
 func GetSubChangeFeedInfo(
 	ctx context.Context,
 	client *clientv3.Client,
@@ -183,7 +186,7 @@ func GetSubChangeFeedInfo(
 	}
 	info := &model.SubChangeFeedInfo{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
-	return resp.Header.Revision, info, errors.Trace(err)
+	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
 }
 
 // PutChangeFeedStatus puts changefeed synchronization status into etcd
