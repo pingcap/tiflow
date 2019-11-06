@@ -28,14 +28,14 @@ func PDEndpoints(s string) ServerOption {
 	}
 }
 
-// statusHost returns a ServerOption that sets the status server host
+// StatusHost returns a ServerOption that sets the status server host
 func StatusHost(s string) ServerOption {
 	return func(o *options) {
 		o.statusHost = s
 	}
 }
 
-// statusPort returns a ServerOption that sets the status server port
+// StatusPort returns a ServerOption that sets the status server port
 func StatusPort(p int) ServerOption {
 	return func(o *options) {
 		o.statusPort = p
