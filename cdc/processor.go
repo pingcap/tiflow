@@ -42,7 +42,8 @@ var (
 	fCreateSchema = createSchemaStore
 	fNewPDCli     = pd.NewClient
 	fNewTsRWriter = createTsRWriter
-	fNewMounter   = txn.NewTxnMounter
+	fNewMounter   = newMounter
+	fNewMySQLSink = sink.NewMySQLSink
 )
 
 type mounter interface {
@@ -214,7 +215,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		return nil, err
 	}
 
-	sink, err := sink.NewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
+	sink, err := fNewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
 	if err != nil {
 		return nil, err
 	}
@@ -400,6 +401,7 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 }
 
 func (p *processorImpl) syncResolved(ctx context.Context) error {
+	// TODO: Make sure schema is updated according to DDLs
 	for {
 		select {
 		case e, ok := <-p.resolvedEntries:
@@ -427,7 +429,6 @@ func (p *processorImpl) syncResolved(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
-	return nil
 }
 
 func (p *processorImpl) SetInputChan(tableID int64, inputTxn <-chan txn.RawTxn) error {
@@ -576,16 +577,6 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 	return puller
 }
 
-// func (c *SubChangeFeed) writeToSink(context context.Context, rawTxn txn.RawTxn) error {
-// 	log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.Entries))
-// 	txn, err := c.mounter.Mount(rawTxn)
-// 	if err != nil {
-// 		return errors.Trace(err)
-// 	}
-// 	err = c.sink.Emit(context, *txn)
-// 	if err != nil {
-// 		return errors.Trace(err)
-// 	}
-// 	log.Info("Output Txn", zap.Reflect("Txn", txn))
-// 	return nil
-// }
+func newMounter(schema *schema.Storage, loc *time.Location) (mounter, error) {
+	return txn.NewTxnMounter(schema, loc)
+}
