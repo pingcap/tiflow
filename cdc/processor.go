@@ -196,7 +196,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		return nil, errors.Annotate(err, "new etcd client")
 	}
 
-	schema, err := fCreateSchema(pdEndpoints)
+	schemaStorage, err := fCreateSchema(pdEndpoints)
 	if err != nil {
 		return nil, err
 	}
@@ -204,12 +204,12 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 	tsRWriter := fNewTsRWriter(etcdCli, changefeedID, captureID)
 
 	// TODO: get time zone from config
-	mounter, err := txn.NewTxnMounter(schema, time.UTC)
+	mounter, err := txn.NewTxnMounter(schemaStorage, time.UTC)
 	if err != nil {
 		return nil, err
 	}
 
-	sink, err := sink.NewMySQLSink(changefeed.SinkURI, schema, changefeed.Opts)
+	sink, err := sink.NewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
 	if err != nil {
 		return nil, err
 	}
@@ -420,7 +420,7 @@ func (p *processorImpl) Close() {
 	}
 }
 
-func createSchemaStore(pdEndpoints []string) (*schema.Schema, error) {
+func createSchemaStore(pdEndpoints []string) (*schema.Storage, error) {
 	// here we create another pb client,we should reuse them
 	kvStore, err := createTiStore(strings.Join(pdEndpoints, ","))
 	if err != nil {
@@ -430,11 +430,11 @@ func createSchemaStore(pdEndpoints []string) (*schema.Schema, error) {
 	if err != nil {
 		return nil, err
 	}
-	schema, err := schema.NewSchema(jobs, false)
+	schemaStorage, err := schema.NewStorage(jobs, false)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return schema, nil
+	return schemaStorage, nil
 }
 
 func createTsRWriter(cli *clientv3.Client, changefeedID, captureID string) ProcessorTsRWriter {

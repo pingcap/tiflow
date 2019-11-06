@@ -66,8 +66,7 @@ func (dml *DML) TableName() string {
 type DDL struct {
 	Database string
 	Table    string
-	SQL      string
-	Type     model.ActionType
+	Job      *model.Job
 }
 
 // Txn holds transaction info, an DDL or DML sequences
@@ -141,12 +140,12 @@ func CollectRawTxns(
 }
 
 type Mounter struct {
-	schema *schema.Schema
-	loc    *time.Location
+	schemaStorage *schema.Storage
+	loc           *time.Location
 }
 
-func NewTxnMounter(schema *schema.Schema, loc *time.Location) (*Mounter, error) {
-	m := &Mounter{schema: schema, loc: loc}
+func NewTxnMounter(schema *schema.Storage, loc *time.Location) (*Mounter, error) {
+	m := &Mounter{schemaStorage: schema, loc: loc}
 	return m, nil
 }
 
@@ -155,7 +154,7 @@ func (m *Mounter) Mount(rawTxn RawTxn) (*Txn, error) {
 		Ts: rawTxn.Ts,
 	}
 	var replaceDMLs, deleteDMLs []*DML
-	err := m.schema.HandlePreviousDDLJobIfNeed(rawTxn.Ts)
+	err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawTxn.Ts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -269,12 +268,12 @@ func (m *Mounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
 }
 
 func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *model.TableInfo, tableName *schema.TableName, handleColName string, err error) {
-	tableInfo, exist := m.schema.TableByID(tableID)
+	tableInfo, exist := m.schemaStorage.TableByID(tableID)
 	if !exist {
 		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableID)
 	}
 
-	database, table, exist := m.schema.SchemaAndTableName(tableID)
+	database, table, exist := m.schemaStorage.SchemaAndTableName(tableID)
 	if !exist {
 		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableID)
 	}
@@ -299,7 +298,7 @@ func (m *Mounter) mountDDL(jobEntry *entry.DDLJobKVEntry) (*DDL, error) {
 	var databaseName, tableName string
 	var err error
 	getTableName := false
-	//TODO support create schema and drop schema
+	//TODO support create schemaStorage and drop schemaStorage
 	if jobEntry.Job.Type == model.ActionDropTable {
 		databaseName, tableName, err = m.tryGetTableName(jobEntry)
 		if err != nil {
@@ -308,7 +307,7 @@ func (m *Mounter) mountDDL(jobEntry *entry.DDLJobKVEntry) (*DDL, error) {
 		getTableName = true
 	}
 
-	_, _, _, err = m.schema.HandleDDL(jobEntry.Job)
+	_, _, _, err = m.schemaStorage.HandleDDL(jobEntry.Job)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -323,22 +322,21 @@ func (m *Mounter) mountDDL(jobEntry *entry.DDLJobKVEntry) (*DDL, error) {
 	return &DDL{
 		databaseName,
 		tableName,
-		jobEntry.Job.Query,
-		jobEntry.Job.Type,
+		jobEntry.Job,
 	}, nil
 }
 
 func (m *Mounter) tryGetTableName(jobHistory *entry.DDLJobKVEntry) (databaseName string, tableName string, err error) {
 	if tableID := jobHistory.Job.TableID; tableID > 0 {
 		var exist bool
-		databaseName, tableName, exist = m.schema.SchemaAndTableName(tableID)
+		databaseName, tableName, exist = m.schemaStorage.SchemaAndTableName(tableID)
 		if !exist {
 			return "", "", errors.Errorf("can not find table, id: %d", tableID)
 		}
 	} else if schemaID := jobHistory.Job.SchemaID; schemaID > 0 {
-		dbInfo, exist := m.schema.SchemaByID(schemaID)
+		dbInfo, exist := m.schemaStorage.SchemaByID(schemaID)
 		if !exist {
-			return "", "", errors.Errorf("can not find schema, id: %d", schemaID)
+			return "", "", errors.Errorf("can not find schemaStorage, id: %d", schemaID)
 		}
 		databaseName = dbInfo.Name.O
 	}

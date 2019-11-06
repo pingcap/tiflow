@@ -92,7 +92,7 @@ func (p *processorSuite) TestProcessor(c *check.C) {
 
 func runCase(c *check.C, cases *processorTestCase) {
 	origFSchema := fCreateSchema
-	fCreateSchema = func(pdEndpoints []string) (*schema.Schema, error) {
+	fCreateSchema = func(pdEndpoints []string) (*schema.Storage, error) {
 		return nil, nil
 	}
 	origFNewPD := fNewPDCli

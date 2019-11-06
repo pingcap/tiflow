@@ -5,6 +5,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/tablecodec"
+	"github.com/pingcap/tidb/util/codec"
 )
 
 // Span represents a arbitrary kv range
@@ -43,6 +44,23 @@ func GetTableSpan(tableID int64) Span {
 	tablePrefix := tablecodec.GenTablePrefix(tableID)
 	start := append(tablePrefix, sep)
 	end := append(tablePrefix, sep+1)
+	return Span{
+		Start: start,
+		End:   end,
+	}
+}
+
+func GetDDLSpan() Span {
+	metaPrefix := []byte("m")
+	ddlJobListKey := []byte("DDLJobList")
+	listData := 'l'
+	start := make([]byte, 0, len(metaPrefix)+len(ddlJobListKey)+8)
+	start = append(start, metaPrefix...)
+	start = codec.EncodeBytes(start, ddlJobListKey)
+	start = codec.EncodeUint(start, uint64(listData))
+	end := make([]byte, len(start))
+	copy(end, start)
+	end[len(end)-1]++
 	return Span{
 		Start: start,
 		End:   end,
