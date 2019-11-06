@@ -85,8 +85,8 @@ func (rw *ChangeFeedInfoRWriter) Write(ctx context.Context, infos map[model.Chan
 	return nil
 }
 
-// ProcessorTSEtcdRWriter implements `roles.ProcessorTSRWriter` interface
-type ProcessorTSEtcdRWriter struct {
+// ProcessorTsEtcdRWriter implements `roles.ProcessorTsRWriter` interface
+type ProcessorTsEtcdRWriter struct {
 	lock         sync.Mutex
 	etcdClient   *clientv3.Client
 	changefeedID string
@@ -95,9 +95,9 @@ type ProcessorTSEtcdRWriter struct {
 	info         *model.SubChangeFeedInfo
 }
 
-// NewProcessorTSEtcdRWriter returns a new `*ChangeFeedInfoRWriter` instance
-func NewProcessorTSEtcdRWriter(cli *clientv3.Client, changefeedID, captureID string) *ProcessorTSEtcdRWriter {
-	return &ProcessorTSEtcdRWriter{
+// NewProcessorTsEtcdRWriter returns a new `*ChangeFeedInfoRWriter` instance
+func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID string) *ProcessorTsEtcdRWriter {
+	return &ProcessorTsEtcdRWriter{
 		etcdClient:   cli,
 		changefeedID: changefeedID,
 		captureID:    captureID,
@@ -106,7 +106,7 @@ func NewProcessorTSEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 
 // updateSubChangeFeedInfo queries SubChangeFeedInfo from etcd and update the memory cached value.
 // This function is not thread safe.
-func (rw *ProcessorTSEtcdRWriter) updateSubChangeFeedInfo(ctx context.Context) error {
+func (rw *ProcessorTsEtcdRWriter) updateSubChangeFeedInfo(ctx context.Context) error {
 	revision, info, err := kv.GetSubChangeFeedInfo(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
 	if err != nil {
 		return err
@@ -119,7 +119,7 @@ func (rw *ProcessorTSEtcdRWriter) updateSubChangeFeedInfo(ctx context.Context) e
 // writeTsOrUpToDate updates new SubChangeFeed info into etcd if the cached info
 // is up to date, otherwise update the cached SubChangeFeed info to the etcd value.
 // This function is not thread safe.
-func (rw *ProcessorTSEtcdRWriter) writeTsOrUpToDate(ctx context.Context) error {
+func (rw *ProcessorTsEtcdRWriter) writeTsOrUpToDate(ctx context.Context) error {
 	key := kv.GetEtcdKeySubChangeFeed(rw.changefeedID, rw.captureID)
 	value, err := rw.info.Marshal()
 	if err != nil {
@@ -146,7 +146,7 @@ func (rw *ProcessorTSEtcdRWriter) writeTsOrUpToDate(ctx context.Context) error {
 	return nil
 }
 
-func (rw *ProcessorTSEtcdRWriter) retryWriteTs(ctx context.Context, updateTsFn func()) error {
+func (rw *ProcessorTsEtcdRWriter) retryWriteTs(ctx context.Context, updateTsFn func()) error {
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
 			backoff.NewExponentialBackOff(), ctx),
@@ -168,7 +168,7 @@ func (rw *ProcessorTSEtcdRWriter) retryWriteTs(ctx context.Context, updateTsFn f
 	return err
 }
 
-func (rw *ProcessorTSEtcdRWriter) ensureCacheData(ctx context.Context) error {
+func (rw *ProcessorTsEtcdRWriter) ensureCacheData(ctx context.Context) error {
 	rw.lock.Lock()
 	defer rw.lock.Unlock()
 	if rw.modRevision == 0 {
@@ -177,35 +177,35 @@ func (rw *ProcessorTSEtcdRWriter) ensureCacheData(ctx context.Context) error {
 	return nil
 }
 
-// WriteResolvedTS writes the loacl resolvedTS into etcd
-func (rw *ProcessorTSEtcdRWriter) WriteResolvedTS(ctx context.Context, resolvedTS uint64) error {
+// WriteResolvedTs writes the loacl resolvedTs into etcd
+func (rw *ProcessorTsEtcdRWriter) WriteResolvedTs(ctx context.Context, resolvedTs uint64) error {
 	err := rw.ensureCacheData(ctx)
 	if err != nil {
 		return err
 	}
 
 	return rw.retryWriteTs(ctx, func() {
-		rw.info.ResolvedTS = resolvedTS
+		rw.info.ResolvedTs = resolvedTs
 	})
 }
 
-// WriteCheckpointTS writes the checkpointTS into etcd
-func (rw *ProcessorTSEtcdRWriter) WriteCheckpointTS(ctx context.Context, checkpointTS uint64) error {
+// WriteCheckpointTs writes the checkpointTs into etcd
+func (rw *ProcessorTsEtcdRWriter) WriteCheckpointTs(ctx context.Context, checkpointTs uint64) error {
 	err := rw.ensureCacheData(ctx)
 	if err != nil {
 		return err
 	}
 
 	return rw.retryWriteTs(ctx, func() {
-		rw.info.CheckPointTS = checkpointTS
+		rw.info.CheckPointTs = checkpointTs
 	})
 }
 
-// ReadGlobalResolvedTS reads the global resolvedTS from etcd
-func (rw *ProcessorTSEtcdRWriter) ReadGlobalResolvedTS(ctx context.Context) (uint64, error) {
+// ReadGlobalResolvedTs reads the global resolvedTs from etcd
+func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uint64, error) {
 	info, err := kv.GetChangeFeedInfo(ctx, rw.etcdClient, rw.changefeedID)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	return info.ResolvedTS, nil
+	return info.ResolvedTs, nil
 }

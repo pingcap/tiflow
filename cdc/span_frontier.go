@@ -236,18 +236,18 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 	for _, m := range merged {
 		// Compute the newest timestamp seen for this span and note whether it's tracked.
 		// There will be either 1 or 2 payloads.
-		var mergeTS uint64
+		var mergeTs uint64
 		var tracked bool
 
 		for _, payload := range m.Payload.([]interface{}) {
 			switch p := payload.(type) {
 			case uint64:
-				if mergeTS < p {
-					mergeTS = p
+				if mergeTs < p {
+					mergeTs = p
 				}
 			case *spanFrontierEntry:
-				if mergeTS < p.ts {
-					mergeTS = p.ts
+				if mergeTs < p.ts {
+					mergeTs = p.ts
 				}
 				tracked = true
 			}
@@ -258,7 +258,7 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 				id:     s.idAlloc,
 				irange: Range{Start: m.Start, End: m.End},
 				span:   util.Span{Start: m.Start, End: m.End},
-				ts:     mergeTS,
+				ts:     mergeTs,
 			})
 			s.idAlloc++
 		}
