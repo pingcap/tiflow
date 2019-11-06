@@ -459,7 +459,9 @@ func (p *processorImpl) ExecutedChan() chan<- ProcessorEntry {
 
 func (p *processorImpl) Close() {
 	if p.wg != nil {
-		p.wg.Wait()
+		if err := p.wg.Wait(); err != nil {
+			log.Error("Waiting to close", zap.Error(err))
+		}
 	}
 }
 
