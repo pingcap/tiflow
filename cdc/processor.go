@@ -42,7 +42,13 @@ var (
 	fCreateSchema = createSchemaStore
 	fNewPDCli     = pd.NewClient
 	fNewTsRWriter = createTsRWriter
+	fNewMounter   = newMounter
+	fNewMySQLSink = sink.NewMySQLSink
 )
+
+type mounter interface {
+	Mount(rawTxn txn.RawTxn) (*txn.Txn, error)
+}
 
 // Processor is used to push sync progress and calculate the checkpointTs
 // How to use it:
@@ -165,9 +171,10 @@ type processorImpl struct {
 	pdCli   pd.Client
 	etcdCli *clientv3.Client
 
-	mounter   *txn.Mounter
-	sink      sink.Sink
-	ddlPuller *Puller
+	mounter       mounter
+	schemaStorage *schema.Storage
+	sink          sink.Sink
+	ddlPuller     *Puller
 
 	tableResolvedTs sync.Map
 	tsRWriter       ProcessorTsRWriter
@@ -205,21 +212,22 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 	tsRWriter := fNewTsRWriter(etcdCli, changefeedID, captureID)
 
 	// TODO: get time zone from config
-	mounter := txn.NewTxnMounter(schemaStorage, time.UTC)
+	mounter := fNewMounter(schemaStorage, time.UTC)
 
-	sink, err := sink.NewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
+	sink, err := fNewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
 	if err != nil {
 		return nil, err
 	}
 
 	p := &processorImpl{
-		captureID:    captureID,
-		changefeedID: changefeedID,
-		changefeed:   changefeed,
-		pdCli:        pdCli,
-		etcdCli:      etcdCli,
-		mounter:      mounter,
-		sink:         sink,
+		captureID:     captureID,
+		changefeedID:  changefeedID,
+		changefeed:    changefeed,
+		pdCli:         pdCli,
+		etcdCli:       etcdCli,
+		mounter:       mounter,
+		schemaStorage: schemaStorage,
+		sink:          sink,
 
 		tsRWriter: tsRWriter,
 		// TODO set the channel size
@@ -253,7 +261,9 @@ func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 		p.pullerSchedule(cctx, errCh)
 		return nil
 	})
-	// TODO: add sink
+	wg.Go(func() error {
+		return p.syncResolved(cctx)
+	})
 }
 
 // pullerSchedule will be used to monitor table change and schedule pullers in the future
@@ -379,7 +389,6 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 		for table, input := range p.tableInputChans {
 			table := table
 			input := input
-			globalResolvedTs := globalResolvedTs
 			wg.Go(func() error {
 				input.Forward(table, globalResolvedTs, p.resolvedEntries)
 				return nil
@@ -388,6 +397,46 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 		p.inputChansLock.RUnlock()
 		wg.Wait()
 		p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTs)
+	}
+}
+
+func (p *processorImpl) syncResolved(ctx context.Context) error {
+	// TODO: Make sure schema is updated according to DDLs
+	for {
+		select {
+		case e, ok := <-p.resolvedEntries:
+			if !ok {
+				return nil
+			}
+			switch e.Typ {
+			case ProcessorEntryDMLS:
+				err := p.schemaStorage.HandlePreviousDDLJobIfNeed(e.Ts)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				txn, err := p.mounter.Mount(e.Txn)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				if err := p.sink.Emit(ctx, *txn); err != nil {
+					if err != context.Canceled {
+						return errors.Trace(err)
+					}
+					return nil
+				}
+			case ProcessorEntryResolved:
+				select {
+				case p.executedEntries <- e:
+				case <-ctx.Done():
+					if err := ctx.Err(); err != context.Canceled {
+						return errors.Trace(err)
+					}
+					return nil
+				}
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }
 
@@ -414,7 +463,9 @@ func (p *processorImpl) ExecutedChan() chan<- ProcessorEntry {
 
 func (p *processorImpl) Close() {
 	if p.wg != nil {
-		p.wg.Wait()
+		if err := p.wg.Wait(); err != nil {
+			log.Error("Waiting to close", zap.Error(err))
+		}
 	}
 }
 
@@ -537,16 +588,6 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 	return puller
 }
 
-// func (c *SubChangeFeed) writeToSink(context context.Context, rawTxn txn.RawTxn) error {
-// 	log.Info("RawTxn", zap.Reflect("RawTxn", rawTxn.Entries))
-// 	txn, err := c.mounter.Mount(rawTxn)
-// 	if err != nil {
-// 		return errors.Trace(err)
-// 	}
-// 	err = c.sink.Emit(context, *txn)
-// 	if err != nil {
-// 		return errors.Trace(err)
-// 	}
-// 	log.Info("Output Txn", zap.Reflect("Txn", txn))
-// 	return nil
-// }
+func newMounter(schema *schema.Storage, loc *time.Location) mounter {
+	return txn.NewTxnMounter(schema, loc)
+}
