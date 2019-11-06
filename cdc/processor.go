@@ -415,13 +415,19 @@ func (p *processorImpl) syncResolved(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 				if err := p.sink.Emit(ctx, *txn); err != nil {
-					return errors.Trace(err)
+					if err != context.Canceled {
+						return errors.Trace(err)
+					}
+					return nil
 				}
 			case ProcessorEntryResolved:
 				select {
 				case p.executedEntries <- e:
 				case <-ctx.Done():
-					return ctx.Err()
+					if err := ctx.Err(); err != context.Canceled {
+						return errors.Trace(err)
+					}
+					return nil
 				}
 			}
 		case <-ctx.Done():
