@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
 	"github.com/pingcap/tidb-cdc/pkg/util"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
@@ -38,7 +39,7 @@ type etcdSuite struct {
 	client    *clientv3.Client
 	ctx       context.Context
 	cancel    context.CancelFunc
-	wg        sync.WaitGroup
+	errg      *errgroup.Group
 }
 
 var _ = check.Suite(&etcdSuite{})
@@ -54,13 +55,13 @@ func (s *etcdSuite) SetUpTest(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	util.RecvErrorUntilContextDone(s.ctx, &s.wg, s.e.Err(), func(e error) { c.Log(e) })
+	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
 
 func (s *etcdSuite) TearDownTest(c *check.C) {
 	s.e.Close()
 	s.cancel()
-	s.wg.Wait()
+	s.errg.Wait()
 }
 
 func (s *etcdSuite) TestInfoReader(c *check.C) {

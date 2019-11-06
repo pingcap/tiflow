@@ -15,8 +15,9 @@ package util
 
 import (
 	"context"
-	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // WaitSomething waits for something done with `true`, it retrys for nRetry times at most
@@ -31,18 +32,23 @@ func WaitSomething(nRetry int, waitTime time.Duration, fn func() bool) bool {
 	return fn()
 }
 
-// RecvErrorUntilContextDone receives error from an error channel, until the context is Done
-func RecvErrorUntilContextDone(ctx context.Context, wg *sync.WaitGroup, errCh <-chan error, errFn func(error)) {
-	(*wg).Add(1)
-	go func() {
-		defer (*wg).Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case err := <-errCh:
-				errFn(err)
-			}
+// HandleErr receives error from an error channel, until the context is Done
+func HandleErr(ctx context.Context, errCh <-chan error, errFn func(error)) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case err := <-errCh:
+			errFn(err)
 		}
-	}()
+	}
+}
+
+func HandleErrWithErrGroup(ctx context.Context, errCh <-chan error, errFn func(error)) *errgroup.Group {
+	errg, cctx := errgroup.WithContext(ctx)
+	errg.Go(func() error {
+		HandleErr(cctx, errCh, errFn)
+		return nil
+	})
+	return errg
 }

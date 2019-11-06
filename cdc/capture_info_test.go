@@ -3,7 +3,6 @@ package cdc
 import (
 	"context"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -12,6 +11,7 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
 	"github.com/pingcap/tidb-cdc/pkg/util"
+	"golang.org/x/sync/errgroup"
 )
 
 type captureInfoSuite struct {
@@ -20,7 +20,7 @@ type captureInfoSuite struct {
 	client    *clientv3.Client
 	ctx       context.Context
 	cancel    context.CancelFunc
-	wg        sync.WaitGroup
+	errg      *errgroup.Group
 }
 
 var _ = check.Suite(&captureInfoSuite{})
@@ -36,13 +36,13 @@ func (ci *captureInfoSuite) SetUpTest(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 	ci.ctx, ci.cancel = context.WithCancel(context.Background())
-	util.RecvErrorUntilContextDone(ci.ctx, &ci.wg, ci.etcd.Err(), func(e error) { c.Log(e) })
+	ci.errg = util.HandleErrWithErrGroup(ci.ctx, ci.etcd.Err(), func(e error) { c.Log(e) })
 }
 
 func (ci *captureInfoSuite) TearDownTest(c *check.C) {
 	ci.etcd.Close()
 	ci.cancel()
-	ci.wg.Wait()
+	ci.errg.Wait()
 }
 
 func (ci *captureInfoSuite) TestPutDeleteGet(c *check.C) {

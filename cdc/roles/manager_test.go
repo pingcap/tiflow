@@ -3,7 +3,6 @@ package roles
 import (
 	"context"
 	"net/url"
-	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
 	"github.com/pingcap/tidb-cdc/pkg/util"
+	"golang.org/x/sync/errgroup"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -21,7 +21,7 @@ type managerSuite struct {
 	clientURL *url.URL
 	ctx       context.Context
 	cancel    context.CancelFunc
-	wg        sync.WaitGroup
+	errg      *errgroup.Group
 }
 
 var _ = check.Suite(&managerSuite{})
@@ -33,13 +33,13 @@ func (s *managerSuite) SetUpTest(c *check.C) {
 	s.clientURL, s.etcd, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	util.RecvErrorUntilContextDone(s.ctx, &s.wg, s.etcd.Err(), func(e error) { c.Log(e) })
+	s.errg = util.HandleErrWithErrGroup(s.ctx, s.etcd.Err(), func(e error) { c.Log(e) })
 }
 
 func (s *managerSuite) TearDownTest(c *check.C) {
 	s.etcd.Close()
 	s.cancel()
-	s.wg.Wait()
+	s.errg.Wait()
 }
 
 func (s *managerSuite) TestManager(c *check.C) {
