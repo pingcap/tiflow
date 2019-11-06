@@ -49,14 +49,14 @@ func (s *ownerSuite) TearDownTest(c *check.C) {
 
 type handlerForPrueDMLTest struct {
 	index            int
-	resolvedTS1      []uint64
-	resolvedTS2      []uint64
-	expectResolvedTS []uint64
+	resolvedTs1      []uint64
+	resolvedTs2      []uint64
+	expectResolvedTs []uint64
 	c                *check.C
 	cancel           func()
 }
 
-func (h *handlerForPrueDMLTest) PullDDL() (resolvedTS uint64, ddl []*txn.DDL, err error) {
+func (h *handlerForPrueDMLTest) PullDDL() (resolvedTs uint64, ddl []*txn.DDL, err error) {
 	return uint64(math.MaxUint64), nil, nil
 }
 
@@ -73,10 +73,10 @@ func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedI
 	return map[model.ChangeFeedID]model.ProcessorsInfos{
 		"test_change_feed": {
 			"capture_1": {
-				ResolvedTS: h.resolvedTS1[h.index],
+				ResolvedTs: h.resolvedTs1[h.index],
 			},
 			"capture_2": {
-				ResolvedTS: h.resolvedTS2[h.index],
+				ResolvedTs: h.resolvedTs2[h.index],
 			},
 		},
 	}, nil
@@ -85,9 +85,9 @@ func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedI
 func (h *handlerForPrueDMLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
 	info, exist := infos["test_change_feed"]
 	h.c.Assert(exist, check.IsTrue)
-	h.c.Assert(info.ResolvedTS, check.Equals, h.expectResolvedTS[h.index])
+	h.c.Assert(info.ResolvedTs, check.Equals, h.expectResolvedTs[h.index])
 	h.c.Assert(info.Status, check.Equals, model.ChangeFeedSyncDML)
-	if h.index >= len(h.expectResolvedTS)-1 {
+	if h.index >= len(h.expectResolvedTs)-1 {
 		log.Info("cancel")
 		h.cancel()
 	}
@@ -108,9 +108,9 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 
 	handler := &handlerForPrueDMLTest{
 		index:            -1,
-		resolvedTS1:      []uint64{10, 22, 64, 92, 99, 120},
-		resolvedTS2:      []uint64{8, 36, 53, 88, 103, 108},
-		expectResolvedTS: []uint64{8, 22, 53, 88, 99, 100},
+		resolvedTs1:      []uint64{10, 22, 64, 92, 99, 120},
+		resolvedTs2:      []uint64{8, 36, 53, 88, 103, 108},
+		expectResolvedTs: []uint64{8, 22, 53, 88, 99, 100},
 		cancel:           cancel,
 		c:                c,
 	}
@@ -120,7 +120,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 	c.Assert(err, check.IsNil)
 	owner := &ownerImpl{
 		changeFeedInfos: changeFeedInfos,
-		targetTS:        100,
+		targetTs:        100,
 		ddlHandler:      handler,
 		cfRWriter:       handler,
 		manager:         manager,
@@ -134,34 +134,34 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 type handlerForDDLTest struct {
 	ddlIndex      int
 	ddls          []*txn.DDL
-	ddlResolvedTS []uint64
+	ddlResolvedTs []uint64
 
 	ddlExpectIndex int
 
 	dmlIndex                int
-	resolvedTS1             []uint64
-	resolvedTS2             []uint64
-	currentGlobalResolvedTS uint64
+	resolvedTs1             []uint64
+	resolvedTs2             []uint64
+	currentGlobalResolvedTs uint64
 
 	dmlExpectIndex   int
-	expectResolvedTS []uint64
+	expectResolvedTs []uint64
 	expectStatus     []model.ChangeFeedStatus
 
 	c      *check.C
 	cancel func()
 }
 
-func (h *handlerForDDLTest) PullDDL() (resolvedTS uint64, jobs []*txn.DDL, err error) {
+func (h *handlerForDDLTest) PullDDL() (resolvedTs uint64, jobs []*txn.DDL, err error) {
 	if h.ddlIndex < len(h.ddls)-1 {
 		h.ddlIndex++
 	}
-	return h.ddlResolvedTS[h.ddlIndex], []*txn.DDL{h.ddls[h.ddlIndex]}, nil
+	return h.ddlResolvedTs[h.ddlIndex], []*txn.DDL{h.ddls[h.ddlIndex]}, nil
 }
 
 func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error {
 	h.ddlExpectIndex++
 	h.c.Assert(ddl, check.DeepEquals, h.ddls[h.ddlExpectIndex])
-	h.c.Assert(ddl.Job.BinlogInfo.FinishedTS, check.Equals, h.currentGlobalResolvedTS)
+	h.c.Assert(ddl.Job.BinlogInfo.FinishedTS, check.Equals, h.currentGlobalResolvedTs)
 	return nil
 }
 
@@ -170,18 +170,18 @@ func (h *handlerForDDLTest) Close() error {
 }
 
 func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error) {
-	if h.dmlIndex < len(h.resolvedTS1)-1 {
+	if h.dmlIndex < len(h.resolvedTs1)-1 {
 		h.dmlIndex++
 	}
 	return map[model.ChangeFeedID]model.ProcessorsInfos{
 		"test_change_feed": {
 			"capture_1": {
-				ResolvedTS:   h.resolvedTS1[h.dmlIndex],
-				CheckPointTS: h.currentGlobalResolvedTS,
+				ResolvedTs:   h.resolvedTs1[h.dmlIndex],
+				CheckPointTs: h.currentGlobalResolvedTs,
 			},
 			"capture_2": {
-				ResolvedTS:   h.resolvedTS2[h.dmlIndex],
-				CheckPointTS: h.currentGlobalResolvedTS,
+				ResolvedTs:   h.resolvedTs2[h.dmlIndex],
+				CheckPointTs: h.currentGlobalResolvedTs,
 			},
 		},
 	}, nil
@@ -191,10 +191,10 @@ func (h *handlerForDDLTest) Write(ctx context.Context, infos map[model.ChangeFee
 	h.dmlExpectIndex++
 	info, exist := infos["test_change_feed"]
 	h.c.Assert(exist, check.IsTrue)
-	h.currentGlobalResolvedTS = info.ResolvedTS
-	h.c.Assert(info.ResolvedTS, check.Equals, h.expectResolvedTS[h.dmlExpectIndex])
+	h.currentGlobalResolvedTs = info.ResolvedTs
+	h.c.Assert(info.ResolvedTs, check.Equals, h.expectResolvedTs[h.dmlExpectIndex])
 	h.c.Assert(info.Status, check.Equals, h.expectStatus[h.dmlExpectIndex])
-	if h.dmlExpectIndex >= len(h.expectResolvedTS)-1 {
+	if h.dmlExpectIndex >= len(h.expectResolvedTs)-1 {
 		log.Info("cancel")
 		h.cancel()
 	}
@@ -216,7 +216,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 
 	handler := &handlerForDDLTest{
 		ddlIndex:      -1,
-		ddlResolvedTS: []uint64{5, 8, 49, 91, 113},
+		ddlResolvedTs: []uint64{5, 8, 49, 91, 113},
 		ddls: []*txn.DDL{
 			{Job: &timodel.Job{
 				ID: 1,
@@ -253,12 +253,12 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 		ddlExpectIndex: -1,
 
 		dmlIndex:                -1,
-		resolvedTS1:             []uint64{10, 22, 64, 92, 99, 120},
-		resolvedTS2:             []uint64{8, 36, 53, 88, 103, 108},
-		currentGlobalResolvedTS: 0,
+		resolvedTs1:             []uint64{10, 22, 64, 92, 99, 120},
+		resolvedTs2:             []uint64{8, 36, 53, 88, 103, 108},
+		currentGlobalResolvedTs: 0,
 
 		dmlExpectIndex: -1,
-		expectResolvedTS: []uint64{
+		expectResolvedTs: []uint64{
 			3, 3,
 			7, 7,
 			11, 11,
@@ -280,7 +280,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 	owner := &ownerImpl{
 		changeFeedInfos: changeFeedInfos,
-		targetTS:        100,
+		targetTs:        100,
 
 		ddlHandler: handler,
 		cfRWriter:  handler,

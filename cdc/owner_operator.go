@@ -69,7 +69,7 @@ func NewDDLHandler(pdCli pd.Client) *ddlHandler {
 func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn txn.RawTxn) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.resolvedTS = rawTxn.TS
+	h.resolvedTS = rawTxn.Ts
 	if len(rawTxn.Entries) == 0 {
 		return nil
 	}

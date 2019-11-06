@@ -63,10 +63,10 @@ type RegionFeedEvent struct {
 }
 
 // RegionnFeedCheckpoint guarantees all the KV value event
-// with commit ts less than ResolvedTS has been emitted.
+// with commit ts less than ResolvedTs has been emitted.
 type RegionnFeedCheckpoint struct {
 	Span       util.Span
-	ResolvedTS uint64
+	ResolvedTs uint64
 }
 
 // RegionFeedValue notify the KV operator
@@ -262,10 +262,10 @@ func (c *CDCClient) partialRegionFeed(
 			return err
 		}
 
-		maxTS, err := c.singleEventFeed(ctx, regionInfo.span, regionInfo.ts, regionInfo.meta, eventCh)
+		maxTs, err := c.singleEventFeed(ctx, regionInfo.span, regionInfo.ts, regionInfo.meta, eventCh)
 
-		if maxTS > ts {
-			ts = maxTS
+		if maxTs > ts {
+			ts = maxTs
 		}
 
 		if err != nil {
@@ -351,7 +351,7 @@ func (c *CDCClient) singleEventFeed(
 	ts uint64,
 	meta *metapb.Region,
 	eventCh chan<- *RegionFeedEvent,
-) (checkpointTS uint64, err error) {
+) (checkpointTs uint64, err error) {
 	req := &cdcpb.ChangeDataRequest{
 		Header: &cdcpb.Header{
 			ClusterId: c.clusterID,
@@ -385,7 +385,7 @@ func (c *CDCClient) singleEventFeed(
 			revent := &RegionFeedEvent{
 				Checkpoint: &RegionnFeedCheckpoint{
 					Span:       span,
-					ResolvedTS: item.commit,
+					ResolvedTs: item.commit,
 				},
 			}
 
@@ -416,7 +416,7 @@ func (c *CDCClient) singleEventFeed(
 						switch row.Type {
 						case cdcpb.Event_PREWRITE:
 							notMatch[string(row.Key)] = row.GetValue()
-							sorter.pushTSItem(sortItem{
+							sorter.pushTsItem(sortItem{
 								start: row.GetStartTs(),
 								tp:    cdcpb.Event_PREWRITE,
 							})
@@ -455,14 +455,14 @@ func (c *CDCClient) singleEventFeed(
 							case <-ctx.Done():
 								return uint64(req.CheckpointTs), errors.Trace(ctx.Err())
 							}
-							sorter.pushTSItem(sortItem{
+							sorter.pushTsItem(sortItem{
 								start:  row.GetStartTs(),
 								commit: row.GetCommitTs(),
 								tp:     cdcpb.Event_COMMIT,
 							})
 						case cdcpb.Event_ROLLBACK:
 							delete(notMatch, string(row.Key))
-							sorter.pushTSItem(sortItem{
+							sorter.pushTsItem(sortItem{
 								start:  row.GetStartTs(),
 								commit: row.GetCommitTs(),
 								tp:     cdcpb.Event_ROLLBACK,
@@ -478,7 +478,7 @@ func (c *CDCClient) singleEventFeed(
 					revent := &RegionFeedEvent{
 						Checkpoint: &RegionnFeedCheckpoint{
 							Span:       span,
-							ResolvedTS: x.ResolvedTs,
+							ResolvedTs: x.ResolvedTs,
 						},
 					}
 

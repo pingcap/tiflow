@@ -208,7 +208,7 @@ func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 				return nil, errors.Trace(err)
 			}
 			if job.IsDone() {
-				// FinishedTs is only set when the job is synced,
+				// FinishedTS is only set when the job is synced,
 				// but we can use the entry's ts here
 				job.BinlogInfo.FinishedTS = raw.Ts
 				return &DDLJobKVEntry{
