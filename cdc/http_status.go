@@ -35,8 +35,9 @@ func (s *Server) startStatusHTTP() {
 	serverMux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	serverMux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
-	addr := fmt.Sprintf("%s:%d", s.opts.statusHost, s.opts.statusPort)
+	addr := fmt.Sprintf("%s:%d", s.opts.StatusHost, s.opts.StatusPort)
 	s.statusServer = &http.Server{Addr: addr, Handler: serverMux}
+	log.Info("status http server is running", zap.String("addr", addr))
 	go func() {
 		err := s.statusServer.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {

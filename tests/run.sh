@@ -131,30 +131,30 @@ EOF
         fi
         sleep 3
     done
-#
-#    echo "Starting Downstream TiDB..."
-#    tidb-server \
-#        -P 3306 \
-#        -config "$OUT_DIR/tidb-config.toml" \
-#        --store tikv \
-#        --path 127.0.0.1:2381 \
-#        --status=20080 \
-#        --log-file "$OUT_DIR/down_tidb.log" &
-#
-#    echo "Verifying Downstream TiDB is started..."
-#    i=0
-#    while ! mysql -uroot -h127.0.0.1 -P3306 --default-character-set utf8 -e 'select * from mysql.tidb;'; do
-#        i=$((i+1))
-#        if [ "$i" -gt 10 ]; then
-#            echo 'Failed to start TiDB'
-#            exit 1
-#        fi
-#        sleep 3
-#    done
-#
-#    echo "Starting CDC..."
-#    cdc server --log-file "$OUT_DIR/cdc.log" &
-#    sleep 1
+
+    echo "Starting Downstream TiDB..."
+    tidb-server \
+        -P 3306 \
+        -config "$OUT_DIR/tidb-config.toml" \
+        --store tikv \
+        --path 127.0.0.1:2381 \
+        --status=20080 \
+        --log-file "$OUT_DIR/down_tidb.log" &
+
+    echo "Verifying Downstream TiDB is started..."
+    i=0
+    while ! mysql -uroot -h127.0.0.1 -P3306 --default-character-set utf8 -e 'select * from mysql.tidb;'; do
+        i=$((i+1))
+        if [ "$i" -gt 10 ]; then
+            echo 'Failed to start TiDB'
+            exit 1
+        fi
+        sleep 3
+    done
+
+    echo "Starting CDC..."
+    cdc server --log-file "$OUT_DIR/cdc.log" --log-level info &
+    sleep 1
 }
 
 trap stop_services EXIT

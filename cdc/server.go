@@ -10,35 +10,35 @@ import (
 )
 
 type options struct {
-	pdEndpoints string
-	statusHost  string
-	statusPort  int
+	PdEndpoints string
+	StatusHost  string
+	StatusPort  int
 }
 
 var defaultServerOptions = options{
-	pdEndpoints: "127.0.0.1:2379",
-	statusHost:  "127.0.0.1",
-	statusPort:  defaultStatusPort,
+	PdEndpoints: "127.0.0.1:2379",
+	StatusHost:  "127.0.0.1",
+	StatusPort:  defaultStatusPort,
 }
 
 // PDEndpoints returns a ServerOption that sets the endpoints of PD for the server.
 func PDEndpoints(s string) ServerOption {
 	return func(o *options) {
-		o.pdEndpoints = s
+		o.PdEndpoints = s
 	}
 }
 
 // StatusHost returns a ServerOption that sets the status server host
 func StatusHost(s string) ServerOption {
 	return func(o *options) {
-		o.statusHost = s
+		o.StatusHost = s
 	}
 }
 
 // StatusPort returns a ServerOption that sets the status server port
 func StatusPort(p int) ServerOption {
 	return func(o *options) {
-		o.statusPort = p
+		o.StatusPort = p
 	}
 }
 
@@ -58,22 +58,23 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 	for _, o := range opt {
 		o(&opts)
 	}
+	log.Info("creating CDC server", zap.Reflect("options", opts))
 
-	s := &Server{
-		opts: opts,
+	capture, err := NewCapture(strings.Split(opts.PdEndpoints, ","))
+	if err != nil {
+		return nil, err
 	}
 
+	s := &Server{
+		opts:    opts,
+		capture: capture,
+	}
 	return s, nil
 }
 
 // Run runs the server.
 func (s *Server) Run(ctx context.Context) error {
 	s.startStatusHTTP()
-	capture, err := NewCapture(strings.Split(s.opts.pdEndpoints, ","))
-	if err != nil {
-		return err
-	}
-	s.capture = capture
 	return s.capture.Start(ctx)
 }
 
