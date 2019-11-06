@@ -323,11 +323,11 @@ func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (
 
 	// assign tables with simple round robin
 	tableInfos := make([][]*model.ProcessTableInfo, len(captures))
-	for _, id := range cinfo.TableIDs {
-		captureIndex := id % uint64(len(captures))
+	for i, tableID := range cinfo.TableIDs {
+		captureIndex := i % len(captures)
 		tableInfos[captureIndex] = append(tableInfos[captureIndex], &model.ProcessTableInfo{
 			StartTs: cinfo.StartTs,
-			ID:      id,
+			ID:      tableID,
 		})
 	}
 
