@@ -62,8 +62,6 @@ const (
 
 func (s ChangeFeedStatus) String() string {
 	switch s {
-	case ChangeFeedUnknown:
-		return "Unknown"
 	case ChangeFeedSyncDML:
 		return "SyncDML"
 	case ChangeFeedWaitToExecDDL:
@@ -73,13 +71,14 @@ func (s ChangeFeedStatus) String() string {
 	case ChangeFeedDDLExecuteFailed:
 		return "DDLExecuteFailed"
 	}
-	return ""
+	return "Unknown"
 }
 
 // ChangeFeedInfo stores information about a ChangeFeed
 // partial fileds are stored in etcd, we may refine this later
 type ChangeFeedInfo struct {
 	Status       ChangeFeedStatus `json:"-"`
+	SinkURI      string           `json:"sink-uri"`
 	ResolvedTs   uint64           `json:"resolved-ts"`
 	CheckpointTs uint64           `json:"checkpoint-ts"`
 

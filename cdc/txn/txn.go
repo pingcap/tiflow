@@ -66,8 +66,7 @@ func (dml *DML) TableName() string {
 type DDL struct {
 	Database string
 	Table    string
-	SQL      string
-	Type     model.ActionType
+	Job      *model.Job
 }
 
 // Txn holds transaction info, an DDL or DML sequences
@@ -323,8 +322,7 @@ func (m *Mounter) mountDDL(jobEntry *entry.DDLJobKVEntry) (*DDL, error) {
 	return &DDL{
 		databaseName,
 		tableName,
-		jobEntry.Job.Query,
-		jobEntry.Job.Type,
+		jobEntry.Job,
 	}, nil
 }
 

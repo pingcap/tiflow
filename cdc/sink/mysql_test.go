@@ -55,13 +55,15 @@ func (s EmitSuite) TestShouldExecDDL(c *check.C) {
 		DDL: &txn.DDL{
 			Database: "test",
 			Table:    "user",
-			SQL:      "CREATE TABLE user (id INT PRIMARY KEY);",
+			Job: &model.Job{
+				Query: "CREATE TABLE user (id INT PRIMARY KEY);",
+			},
 		},
 	}
 
 	mock.ExpectBegin()
 	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec(t.DDL.SQL).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(t.DDL.Job.Query).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	// Execute
@@ -87,7 +89,9 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 		DDL: &txn.DDL{
 			Database: "test",
 			Table:    "user",
-			SQL:      "CREATE TABLE user (id INT PRIMARY KEY);",
+			Job: &model.Job{
+				Query: "CREATE TABLE user (id INT PRIMARY KEY);",
+			},
 		},
 	}
 
@@ -96,7 +100,7 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 	ignorable := dmysql.MySQLError{
 		Number: uint16(infoschema.ErrTableExists.Code()),
 	}
-	mock.ExpectExec(t.DDL.SQL).WillReturnError(&ignorable)
+	mock.ExpectExec(t.DDL.Job.Query).WillReturnError(&ignorable)
 
 	// Execute
 	err = sink.Emit(context.Background(), t)

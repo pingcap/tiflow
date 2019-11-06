@@ -222,7 +222,7 @@ func getUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexInfo, er
 }
 
 func isTableChanged(ddl *txn.DDL) bool {
-	switch ddl.Type {
+	switch ddl.Job.Type {
 	case model.ActionDropTable, model.ActionDropSchema, model.ActionTruncateTable, model.ActionCreateSchema:
 		return false
 	default:

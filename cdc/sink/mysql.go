@@ -49,6 +49,7 @@ type mysqlSink struct {
 	db           *sql.DB
 	tblInspector tableInspector
 	infoGetter   TableInfoGetter
+	ddlOnly      bool
 }
 
 var _ Sink = &mysqlSink{}
@@ -88,6 +89,13 @@ func NewMySQLSinkUsingSchema(db *sql.DB, schemaStorage *schema.Storage) Sink {
 	}
 }
 
+func NewMySQLSinkDDLOnly(db *sql.DB) Sink {
+	return &mysqlSink{
+		db:      db,
+		ddlOnly: true,
+	}
+}
+
 func (s *mysqlSink) Emit(ctx context.Context, txn txn.Txn) error {
 	filterBySchemaAndTable(&txn)
 	if len(txn.DMLs) == 0 && txn.DDL == nil {
@@ -96,16 +104,19 @@ func (s *mysqlSink) Emit(ctx context.Context, txn txn.Txn) error {
 	}
 	if txn.IsDDL() {
 		err := s.execDDLWithMaxRetries(ctx, txn.DDL, 5)
-		if err == nil && isTableChanged(txn.DDL) {
+		if err == nil && !s.ddlOnly && isTableChanged(txn.DDL) {
 			s.tblInspector.Refresh(txn.DDL.Database, txn.DDL.Table)
 		}
 		return errors.Trace(err)
 	}
-	// TODO: Add retry
+	if s.ddlOnly {
+		log.Fatal("this sink only supports DDL, can not emit DMLs.")
+	}
 	dmls, err := s.formatDMLs(txn.DMLs)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// TODO: Add retry
 	return errors.Trace(s.execDMLs(ctx, dmls))
 }
 
@@ -157,7 +168,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *txn.DDL, max
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *txn.DDL) error {
-	shouldSwitchDB := len(ddl.Database) > 0 && ddl.Type != model.ActionCreateSchema
+	shouldSwitchDB := len(ddl.Database) > 0 && ddl.Job.Type != model.ActionCreateSchema
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -172,7 +183,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *txn.DDL) error {
 		}
 	}
 
-	if _, err = tx.ExecContext(ctx, ddl.SQL); err != nil {
+	if _, err = tx.ExecContext(ctx, ddl.Job.Query); err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -181,7 +192,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *txn.DDL) error {
 		return err
 	}
 
-	log.Info("Exec DDL succeeded", zap.String("sql", ddl.SQL))
+	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Job.Query))
 	return nil
 }
 

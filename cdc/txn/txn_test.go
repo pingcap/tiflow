@@ -448,8 +448,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 		DDL: &DDL{
 			Database: "testDB",
 			Table:    "test1",
-			SQL:      "alter table testDB.test1 add b int null",
-			Type:     model.ActionAddColumn,
+			Job:      &model.Job{},
 		},
 		Ts: rawKV[0].Ts,
 	})

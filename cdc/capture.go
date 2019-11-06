@@ -22,6 +22,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
+	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/cdc/roles"
@@ -64,7 +65,12 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	id := uuid.New().String()
 
 	manager := roles.NewOwnerManager(cli, id, CaptureOwnerKey)
-	worker := roles.NewOwner(math.MaxUint64, cli, manager)
+	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
+	if err != nil {
+		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
+	}
+	ddlHandler := NewDDLHandler(pdCli)
+	worker := roles.NewOwner(math.MaxUint64, cli, manager, ddlHandler)
 
 	c = &Capture{
 		pdEndpoints:  pdEndpoints,
