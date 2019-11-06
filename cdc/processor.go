@@ -410,7 +410,6 @@ func (p *processorImpl) syncResolved(ctx context.Context) error {
 			}
 			switch e.Typ {
 			case ProcessorEntryDMLS:
-				// TODO: make mounter an interface to make it replacable in tests
 				txn, err := p.mounter.Mount(e.Txn)
 				if err != nil {
 					return errors.Trace(err)
