@@ -21,10 +21,10 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/cdc/roles/storage"
+	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"go.uber.org/zap"
 )
 
@@ -48,10 +48,10 @@ type Owner interface {
 type OwnerDDLHandler interface {
 
 	// PullDDL pulls the ddl jobs and returns resolvedTs of DDL Puller and job list.
-	PullDDL() (resolvedTs uint64, jobs []*timodel.Job, err error)
+	PullDDL() (resolvedTs uint64, jobs []*txn.DDL, err error)
 
 	// ExecDDL executes the ddl job
-	ExecDDL(*timodel.Job) error
+	ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error
 }
 
 // ChangeFeedInfoRWriter defines the Reader and Writer for ChangeFeedInfo
@@ -71,7 +71,7 @@ type ownerImpl struct {
 
 	ddlResolvedTs uint64
 	targetTs      uint64
-	ddlJobHistory []*timodel.Job
+	ddlJobHistory []*txn.DDL
 
 	l sync.RWMutex
 
@@ -80,10 +80,10 @@ type ownerImpl struct {
 }
 
 // NewOwner creates a new ownerImpl instance
-func NewOwner(targetTs uint64, cli *clientv3.Client, manager Manager) *ownerImpl {
+func NewOwner(targetTs uint64, cli *clientv3.Client, manager Manager, ddlHandler OwnerDDLHandler) *ownerImpl {
 	owner := &ownerImpl{
 		changeFeedInfos: make(map[model.ChangeFeedID]*model.ChangeFeedInfo),
-		ddlHandler:      NewDDLHandler(),
+		ddlHandler:      ddlHandler,
 		cfRWriter:       storage.NewChangeFeedInfoEtcdRWriter(cli),
 		etcdClient:      cli,
 		manager:         manager,
@@ -195,8 +195,8 @@ func (o *ownerImpl) calcResolvedTs() error {
 		// if minResolvedTs is greater than the finishedTS of ddl job which is not executed,
 		// we need to execute this ddl job
 		if len(o.ddlJobHistory) > cfInfo.DDLCurrentIndex &&
-			minResolvedTs > o.ddlJobHistory[cfInfo.DDLCurrentIndex].BinlogInfo.FinishedTS {
-			minResolvedTs = o.ddlJobHistory[cfInfo.DDLCurrentIndex].BinlogInfo.FinishedTS
+			minResolvedTs > o.ddlJobHistory[cfInfo.DDLCurrentIndex].Job.BinlogInfo.FinishedTS {
+			minResolvedTs = o.ddlJobHistory[cfInfo.DDLCurrentIndex].Job.BinlogInfo.FinishedTS
 			cfInfo.Status = model.ChangeFeedWaitToExecDDL
 		}
 		cfInfo.ResolvedTs = minResolvedTs
@@ -214,7 +214,7 @@ waitCheckpointTsLoop:
 
 		// Check if all the checkpointTs of capture are achieving global resolvedTs(which is equal to todoDDLJob.FinishedTS)
 		for _, pInfo := range cfInfo.ProcessorInfos {
-			if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
+			if pInfo.CheckPointTs != todoDDLJob.Job.BinlogInfo.FinishedTS {
 				continue waitCheckpointTsLoop
 			}
 		}
@@ -222,7 +222,7 @@ waitCheckpointTsLoop:
 		// Execute DDL Job asynchronously
 		cfInfo.Status = model.ChangeFeedExecDDL
 		go func(changeFeedID string, cfInfo *model.ChangeFeedInfo) {
-			err := o.ddlHandler.ExecDDL(todoDDLJob)
+			err := o.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, todoDDLJob)
 			o.l.Lock()
 			defer o.l.Unlock()
 			// If DDL executing failed, pause the changefeed and print log
@@ -234,11 +234,15 @@ waitCheckpointTsLoop:
 					zap.Reflect("ddlJob", todoDDLJob))
 				return
 			}
+			log.Info("Execute DDL succeeded",
+				zap.String("ChangeFeedID", changeFeedID),
+				zap.Reflect("ddlJob", todoDDLJob))
 			if cfInfo.Status != model.ChangeFeedExecDDL {
 				log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
 					zap.String("ChangeFeedID", changeFeedID),
 					zap.String("ChangeFeedState", cfInfo.Status.String()))
 			}
+			// TODO: we can remove the useless ddl job, after the slowest changefeed executed
 			cfInfo.DDLCurrentIndex += 1
 			cfInfo.Status = model.ChangeFeedSyncDML
 		}(changeFeedID, cfInfo)

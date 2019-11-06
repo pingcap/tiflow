@@ -15,6 +15,7 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/model"
+	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
 )
 
@@ -55,12 +56,16 @@ type handlerForPrueDMLTest struct {
 	cancel           func()
 }
 
-func (h *handlerForPrueDMLTest) PullDDL() (resolvedTs uint64, jobs []*timodel.Job, err error) {
+func (h *handlerForPrueDMLTest) PullDDL() (resolvedTs uint64, ddl []*txn.DDL, err error) {
 	return uint64(math.MaxUint64), nil, nil
 }
 
-func (h *handlerForPrueDMLTest) ExecDDL(*timodel.Job) error {
+func (h *handlerForPrueDMLTest) ExecDDL(context.Context, string, *txn.DDL) error {
 	panic("unreachable")
+}
+
+func (h *handlerForPrueDMLTest) Close() error {
+	return nil
 }
 
 func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error) {
@@ -128,7 +133,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 
 type handlerForDDLTest struct {
 	ddlIndex      int
-	ddlJobs       []*timodel.Job
+	ddls          []*txn.DDL
 	ddlResolvedTs []uint64
 
 	ddlExpectIndex int
@@ -146,17 +151,21 @@ type handlerForDDLTest struct {
 	cancel func()
 }
 
-func (h *handlerForDDLTest) PullDDL() (resolvedTs uint64, jobs []*timodel.Job, err error) {
-	if h.ddlIndex < len(h.ddlJobs)-1 {
+func (h *handlerForDDLTest) PullDDL() (resolvedTs uint64, jobs []*txn.DDL, err error) {
+	if h.ddlIndex < len(h.ddls)-1 {
 		h.ddlIndex++
 	}
-	return h.ddlResolvedTs[h.ddlIndex], []*timodel.Job{h.ddlJobs[h.ddlIndex]}, nil
+	return h.ddlResolvedTs[h.ddlIndex], []*txn.DDL{h.ddls[h.ddlIndex]}, nil
 }
 
-func (h *handlerForDDLTest) ExecDDL(job *timodel.Job) error {
+func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error {
 	h.ddlExpectIndex++
-	h.c.Assert(job, check.DeepEquals, h.ddlJobs[h.ddlExpectIndex])
-	h.c.Assert(job.BinlogInfo.FinishedTS, check.Equals, h.currentGlobalResolvedTs)
+	h.c.Assert(ddl, check.DeepEquals, h.ddls[h.ddlExpectIndex])
+	h.c.Assert(ddl.Job.BinlogInfo.FinishedTS, check.Equals, h.currentGlobalResolvedTs)
+	return nil
+}
+
+func (h *handlerForDDLTest) Close() error {
 	return nil
 }
 
@@ -208,37 +217,37 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	handler := &handlerForDDLTest{
 		ddlIndex:      -1,
 		ddlResolvedTs: []uint64{5, 8, 49, 91, 113},
-		ddlJobs: []*timodel.Job{
-			{
+		ddls: []*txn.DDL{
+			{Job: &timodel.Job{
 				ID: 1,
 				BinlogInfo: &timodel.HistoryInfo{
 					FinishedTS: 3,
 				},
-			},
-			{
+			}},
+			{Job: &timodel.Job{
 				ID: 2,
 				BinlogInfo: &timodel.HistoryInfo{
 					FinishedTS: 7,
 				},
-			},
-			{
+			}},
+			{Job: &timodel.Job{
 				ID: 3,
 				BinlogInfo: &timodel.HistoryInfo{
 					FinishedTS: 11,
 				},
-			},
-			{
+			}},
+			{Job: &timodel.Job{
 				ID: 4,
 				BinlogInfo: &timodel.HistoryInfo{
 					FinishedTS: 89,
 				},
-			},
-			{
+			}},
+			{Job: &timodel.Job{
 				ID: 5,
 				BinlogInfo: &timodel.HistoryInfo{
 					FinishedTS: 111,
 				},
-			},
+			}},
 		},
 
 		ddlExpectIndex: -1,

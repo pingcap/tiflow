@@ -107,11 +107,11 @@ func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 // updateSubChangeFeedInfo queries SubChangeFeedInfo from etcd and update the memory cached value.
 // This function is not thread safe.
 func (rw *ProcessorTsEtcdRWriter) updateSubChangeFeedInfo(ctx context.Context) error {
-	revision, info, err := kv.GetSubChangeFeedInfo(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
+	modRevision, info, err := kv.GetSubChangeFeedInfo(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
 	if err != nil {
 		return err
 	}
-	rw.modRevision = revision
+	rw.modRevision = modRevision
 	rw.info = info
 	return nil
 }
