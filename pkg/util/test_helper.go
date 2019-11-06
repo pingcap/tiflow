@@ -44,6 +44,7 @@ func HandleErr(ctx context.Context, errCh <-chan error, errFn func(error)) {
 	}
 }
 
+// HandleErrWithErrGroup creates a `errgroup.Group` and calls `HandleErr` within the error group
 func HandleErrWithErrGroup(ctx context.Context, errCh <-chan error, errFn func(error)) *errgroup.Group {
 	errg, cctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
