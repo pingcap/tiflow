@@ -29,7 +29,6 @@ type ownerSuite struct {
 	client    *clientv3.Client
 	ctx       context.Context
 	cancel    context.CancelFunc
-	wg        sync.WaitGroup
 	errg      *errgroup.Group
 }
 
