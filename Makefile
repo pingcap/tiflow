@@ -17,7 +17,7 @@ TEST_DIR := /tmp/tidb_cdc_test
 
 GO       := GO111MODULE=on go
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
-GOTEST   := CGO_ENABLED=1 $(GO) test -p 3
+GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race
 
 ARCH  := "`uname -s`"
 LINUX := "Linux"
@@ -51,7 +51,7 @@ install:
 test:
 	mkdir -p "$(TEST_DIR)"
 	@export log_level=error;\
-	$(GOTEST) -cover -covermode=count -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES)
+	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES)
 
 fmt:
 	@echo "gofmt (simplify)"

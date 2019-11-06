@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -17,6 +18,8 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
+	"github.com/pingcap/tidb-cdc/pkg/util"
+	"golang.org/x/sync/errgroup"
 )
 
 type ownerSuite struct {
@@ -24,6 +27,9 @@ type ownerSuite struct {
 	e         *embed.Etcd
 	clientURL *url.URL
 	client    *clientv3.Client
+	ctx       context.Context
+	cancel    context.CancelFunc
+	errg      *errgroup.Group
 }
 
 var _ = check.Suite(&ownerSuite{})
@@ -38,16 +44,18 @@ func (s *ownerSuite) SetUpTest(c *check.C) {
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	go func() {
-		c.Log(<-s.e.Err())
-	}()
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
 
 func (s *ownerSuite) TearDownTest(c *check.C) {
 	s.e.Close()
+	s.cancel()
+	s.errg.Wait()
 }
 
 type handlerForPrueDMLTest struct {
+	mu               sync.RWMutex
 	index            int
 	resolvedTs1      []uint64
 	resolvedTs2      []uint64
@@ -69,6 +77,8 @@ func (h *handlerForPrueDMLTest) Close() error {
 }
 
 func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	h.index++
 	return map[model.ChangeFeedID]model.ProcessorsInfos{
 		"test_change_feed": {
@@ -83,6 +93,8 @@ func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedI
 }
 
 func (h *handlerForPrueDMLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	info, exist := infos["test_change_feed"]
 	h.c.Assert(exist, check.IsTrue)
 	h.c.Assert(info.ResolvedTs, check.Equals, h.expectResolvedTs[h.index])
@@ -132,6 +144,8 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 }
 
 type handlerForDDLTest struct {
+	mu sync.RWMutex
+
 	ddlIndex      int
 	ddls          []*txn.DDL
 	ddlResolvedTs []uint64
@@ -152,6 +166,8 @@ type handlerForDDLTest struct {
 }
 
 func (h *handlerForDDLTest) PullDDL() (resolvedTs uint64, jobs []*txn.DDL, err error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	if h.ddlIndex < len(h.ddls)-1 {
 		h.ddlIndex++
 	}
@@ -159,6 +175,8 @@ func (h *handlerForDDLTest) PullDDL() (resolvedTs uint64, jobs []*txn.DDL, err e
 }
 
 func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.ddlExpectIndex++
 	h.c.Assert(ddl, check.DeepEquals, h.ddls[h.ddlExpectIndex])
 	h.c.Assert(ddl.Job.BinlogInfo.FinishedTS, check.Equals, h.currentGlobalResolvedTs)
@@ -170,6 +188,8 @@ func (h *handlerForDDLTest) Close() error {
 }
 
 func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	if h.dmlIndex < len(h.resolvedTs1)-1 {
 		h.dmlIndex++
 	}
@@ -188,6 +208,8 @@ func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.ChangeFeedID]mo
 }
 
 func (h *handlerForDDLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.dmlExpectIndex++
 	info, exist := infos["test_change_feed"]
 	h.c.Assert(exist, check.IsTrue)

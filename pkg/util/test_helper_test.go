@@ -14,6 +14,9 @@
 package util
 
 import (
+	"context"
+	"errors"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/check"
@@ -47,4 +50,19 @@ func (s *testHelperSuite) TestWaitSomething(c *check.C) {
 
 	c.Assert(WaitSomething(backoff, waitTime, f2), check.IsTrue)
 	c.Assert(count, check.Equals, 5)
+}
+
+func (s *testHelperSuite) TestHandleErr(c *check.C) {
+	var (
+		ctx, cancel = context.WithCancel(context.Background())
+		errCh       = make(chan error)
+		count       int32
+	)
+	errg := HandleErrWithErrGroup(ctx, errCh, func(e error) { atomic.AddInt32(&count, 1) })
+	for i := 0; i < 5; i++ {
+		errCh <- errors.New("test error")
+	}
+	c.Assert(WaitSomething(5, time.Millisecond*10, func() bool { return atomic.LoadInt32(&count) == int32(5) }), check.IsTrue)
+	cancel()
+	c.Assert(errg.Wait(), check.IsNil)
 }

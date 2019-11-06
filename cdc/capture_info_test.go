@@ -10,12 +10,17 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
+	"github.com/pingcap/tidb-cdc/pkg/util"
+	"golang.org/x/sync/errgroup"
 )
 
 type captureInfoSuite struct {
 	etcd      *embed.Etcd
 	clientURL *url.URL
 	client    *clientv3.Client
+	ctx       context.Context
+	cancel    context.CancelFunc
+	errg      *errgroup.Group
 }
 
 var _ = check.Suite(&captureInfoSuite{})
@@ -30,13 +35,14 @@ func (ci *captureInfoSuite) SetUpTest(c *check.C) {
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	go func() {
-		c.Log(<-ci.etcd.Err())
-	}()
+	ci.ctx, ci.cancel = context.WithCancel(context.Background())
+	ci.errg = util.HandleErrWithErrGroup(ci.ctx, ci.etcd.Err(), func(e error) { c.Log(e) })
 }
 
 func (ci *captureInfoSuite) TearDownTest(c *check.C) {
 	ci.etcd.Close()
+	ci.cancel()
+	ci.errg.Wait()
 }
 
 func (ci *captureInfoSuite) TestPutDeleteGet(c *check.C) {

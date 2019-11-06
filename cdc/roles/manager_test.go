@@ -10,6 +10,8 @@ import (
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-cdc/pkg/etcd"
+	"github.com/pingcap/tidb-cdc/pkg/util"
+	"golang.org/x/sync/errgroup"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -17,6 +19,9 @@ func Test(t *testing.T) { check.TestingT(t) }
 type managerSuite struct {
 	etcd      *embed.Etcd
 	clientURL *url.URL
+	ctx       context.Context
+	cancel    context.CancelFunc
+	errg      *errgroup.Group
 }
 
 var _ = check.Suite(&managerSuite{})
@@ -24,17 +29,17 @@ var _ = check.Suite(&managerSuite{})
 // Set up a embeded etcd using free ports.
 func (s *managerSuite) SetUpTest(c *check.C) {
 	dir := c.MkDir()
-	curl, e, err := etcd.SetupEmbedEtcd(dir)
+	var err error
+	s.clientURL, s.etcd, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
-	s.clientURL = curl
-	s.etcd = e
-	go func() {
-		c.Log(<-e.Err())
-	}()
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	s.errg = util.HandleErrWithErrGroup(s.ctx, s.etcd.Err(), func(e error) { c.Log(e) })
 }
 
 func (s *managerSuite) TearDownTest(c *check.C) {
 	s.etcd.Close()
+	s.cancel()
+	s.errg.Wait()
 }
 
 func (s *managerSuite) TestManager(c *check.C) {
