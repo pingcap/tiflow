@@ -101,12 +101,12 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, 2)
-	c.Assert(rawTxns[0].TS, check.Equals, startTs)
+	c.Assert(rawTxns[0].Ts, check.Equals, startTs)
 	for i, e := range rawTxns[0].Entries {
 		c.Assert(e.Ts, check.Equals, startTs)
 		c.Assert(string(e.Key), check.Equals, fmt.Sprintf("key-0-%d", i))
 	}
-	c.Assert(rawTxns[1].TS, check.Equals, startTs+1)
+	c.Assert(rawTxns[1].Ts, check.Equals, startTs+1)
 	for i, e := range rawTxns[1].Entries {
 		c.Assert(e.Ts, check.Equals, startTs+1)
 		c.Assert(string(e.Key), check.Equals, fmt.Sprintf("key-1-%d", i))
@@ -163,14 +163,14 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 	}
 
 	ctx := context.Background()
-	// Set up the tracker so that only the last resolve event forwards the global minimum TS
+	// Set up the tracker so that only the last resolve event forwards the global minimum Ts
 	tracker := mockTracker{forwarded: []bool{false, false, true}}
 	err := CollectRawTxns(ctx, input, output, &tracker)
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, 1)
 	txn := rawTxns[0]
-	c.Assert(txn.TS, check.Equals, uint64(1))
+	c.Assert(txn.Ts, check.Equals, uint64(1))
 	c.Assert(txn.Entries, check.HasLen, 3)
 	c.Assert(string(txn.Entries[0].Key), check.Equals, "key1-1")
 	c.Assert(string(txn.Entries[1].Key), check.Equals, "key1-2")
@@ -207,7 +207,7 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputBinlogEvenWhenThereIsNoRealEvent(
 	c.Assert(rawTxns, check.HasLen, len(entries))
 	for i, t := range rawTxns {
 		c.Assert(t.Entries, check.HasLen, 0)
-		c.Assert(t.TS, check.Equals, entries[i].Resolved.Timestamp)
+		c.Assert(t.Ts, check.Equals, entries[i].Resolved.Timestamp)
 	}
 }
 
@@ -247,7 +247,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 
 	rawKV := puller.MustExec(c, "insert into testDB.test1 values('ttt',6)")
 	txn, err := mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		Ts:      rawKV[0].Ts,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
@@ -276,7 +276,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 
 	rawKV = puller.MustExec(c, "update testDB.test1 set id = 'vvv' where a = 6")
 	txn, err = mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		Ts:      rawKV[0].Ts,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
@@ -313,7 +313,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 
 	rawKV = puller.MustExec(c, "delete from testDB.test1 where a = 6")
 	txn, err = mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		Ts:      rawKV[0].Ts,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
@@ -340,7 +340,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 
 	rawKV := puller.MustExec(c, "insert into testDB.test1 values(777,888)")
 	txn, err := mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		Ts:      rawKV[0].Ts,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
@@ -369,7 +369,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 
 	rawKV = puller.MustExec(c, "update testDB.test1 set id = 999 where a = 888")
 	txn, err = mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		Ts:      rawKV[0].Ts,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
@@ -406,7 +406,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 
 	rawKV = puller.MustExec(c, "delete from testDB.test1 where id = 999")
 	txn, err = mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		Ts:      rawKV[0].Ts,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
@@ -440,7 +440,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 	rawKV := puller.MustExec(c, "alter table testDB.test1 add b int null")
 	txn, err := mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		Ts:      rawKV[0].Ts,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
@@ -457,7 +457,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 	// test insert null value
 	rawKV = puller.MustExec(c, "insert into testDB.test1(id,a) values('ttt',6)")
 	txn, err = mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		Ts:      rawKV[0].Ts,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)
@@ -486,7 +486,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 
 	rawKV = puller.MustExec(c, "insert into testDB.test1(id,a,b) values('kkk',6,7)")
 	txn, err = mounter.Mount(RawTxn{
-		TS:      rawKV[0].Ts,
+		Ts:      rawKV[0].Ts,
 		Entries: rawKV,
 	})
 	c.Assert(err, check.IsNil)

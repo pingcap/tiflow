@@ -21,15 +21,15 @@ import (
 
 type ProcessTableInfo struct {
 	ID      uint64 `json:"id"`
-	StartTS uint64 `json:"start-ts"`
+	StartTs uint64 `json:"start-ts"`
 }
 
 // SubChangeFeedInfo records the process information of a capture
 type SubChangeFeedInfo struct {
-	// The maximum event CommitTS that has been synchronized. This is updated by corresponding processor.
-	CheckPointTS uint64 `json:"checkpoint-ts"`
-	// The event that satisfies CommitTS <= ResolvedTS can be synchronized. This is updated by corresponding processor.
-	ResolvedTS uint64 `json:"resolved-ts"`
+	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.
+	CheckPointTs uint64 `json:"checkpoint-ts"`
+	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
+	ResolvedTs uint64 `json:"resolved-ts"`
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
 	TableInfos []*ProcessTableInfo `json:"table-infos"`
 }
@@ -80,8 +80,8 @@ func (s ChangeFeedStatus) String() string {
 // partial fileds are stored in etcd, we may refine this later
 type ChangeFeedInfo struct {
 	Status       ChangeFeedStatus `json:"-"`
-	ResolvedTS   uint64           `json:"resolved-ts"`
-	CheckpointTS uint64           `json:"checkpoint-ts"`
+	ResolvedTs   uint64           `json:"resolved-ts"`
+	CheckpointTs uint64           `json:"checkpoint-ts"`
 
 	ProcessorInfos  ProcessorsInfos `json:"-"`
 	DDLCurrentIndex int             `json:"-"`

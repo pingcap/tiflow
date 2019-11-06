@@ -78,7 +78,7 @@ func (s *CDCSuite) RunAndCheckSync(c *C, execute func(func(string, ...interface{
 		rawKVs = append(rawKVs, kvs...)
 	}
 	execute(executeSQL)
-	txn, err := s.mounter.Mount(txn.RawTxn{TS: rawKVs[len(rawKVs)-1].Ts, Entries: rawKVs})
+	txn, err := s.mounter.Mount(txn.RawTxn{Ts: rawKVs[len(rawKVs)-1].Ts, Entries: rawKVs})
 	c.Assert(err, IsNil)
 	err = s.sink.Emit(context.Background(), *txn)
 	c.Assert(err, IsNil)

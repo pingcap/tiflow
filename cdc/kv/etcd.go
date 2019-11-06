@@ -93,7 +93,7 @@ func GetChangeFeedDetail(ctx context.Context, cli *clientv3.Client, id string, o
 	return detail, errors.Trace(err)
 }
 
-// GetChangeFeedInfo queries the checkpointTS and resovledTS of a given changefeed
+// GetChangeFeedInfo queries the checkpointTs and resovledTs of a given changefeed
 func GetChangeFeedInfo(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) (*model.ChangeFeedInfo, error) {
 	key := GetEtcdKeyChangeFeedStatus(id)
 	resp, err := cli.Get(ctx, key, opts...)
@@ -165,6 +165,10 @@ func GetSubChangeFeedInfos(ctx context.Context, client *clientv3.Client, changef
 	return pinfo, nil
 }
 
+// GetSubChangeFeedInfo queries subchangefeed info from etcd, returns
+//  - ModRevision of the given key
+//  - *model.SubChangeFeedInfo unmarshaled from the value
+//  - error if error happens
 func GetSubChangeFeedInfo(
 	ctx context.Context,
 	client *clientv3.Client,
@@ -182,5 +186,22 @@ func GetSubChangeFeedInfo(
 	}
 	info := &model.SubChangeFeedInfo{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
-	return resp.Header.Revision, info, errors.Trace(err)
+	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
+}
+
+// PutChangeFeedStatus puts changefeed synchronization status into etcd
+func PutChangeFeedStatus(
+	ctx context.Context,
+	client *clientv3.Client,
+	changefeedID string,
+	info *model.ChangeFeedInfo,
+	opts ...clientv3.OpOption,
+) error {
+	key := GetEtcdKeyChangeFeedStatus(changefeedID)
+	value, err := info.Marshal()
+	if err != nil {
+		return err
+	}
+	_, err = client.Put(ctx, key, value, opts...)
+	return errors.Trace(err)
 }

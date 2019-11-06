@@ -32,55 +32,55 @@ import (
 
 type processorSuite struct{}
 
-type mockTSRWriter struct {
-	resolvedTS       uint64
-	checkpointTS     uint64
-	globalResolvedTS uint64
+type mockTsRWriter struct {
+	resolvedTs       uint64
+	checkpointTs     uint64
+	globalResolvedTs uint64
 	l                sync.Mutex
 }
 
-func (s *mockTSRWriter) WriteResolvedTS(ctx context.Context, resolvedTS uint64) error {
+func (s *mockTsRWriter) WriteResolvedTs(ctx context.Context, resolvedTs uint64) error {
 	s.l.Lock()
 	defer s.l.Unlock()
-	log.Info("write", zap.Uint64("localResolvedTS", resolvedTS))
-	s.resolvedTS = resolvedTS
+	log.Info("write", zap.Uint64("localResolvedTs", resolvedTs))
+	s.resolvedTs = resolvedTs
 	return nil
 }
 
-func (s *mockTSRWriter) WriteCheckpointTS(ctx context.Context, checkpointTS uint64) error {
+func (s *mockTsRWriter) WriteCheckpointTs(ctx context.Context, checkpointTs uint64) error {
 	s.l.Lock()
 	defer s.l.Unlock()
-	log.Info("write", zap.Uint64("checkpointTS", checkpointTS))
-	s.checkpointTS = checkpointTS
+	log.Info("write", zap.Uint64("checkpointTs", checkpointTs))
+	s.checkpointTs = checkpointTs
 	return nil
 }
 
-func (s *mockTSRWriter) ReadGlobalResolvedTS(ctx context.Context) (uint64, error) {
+func (s *mockTsRWriter) ReadGlobalResolvedTs(ctx context.Context) (uint64, error) {
 	s.l.Lock()
 	defer s.l.Unlock()
-	return s.globalResolvedTS, nil
+	return s.globalResolvedTs, nil
 }
-func (s *mockTSRWriter) SetGlobalResolvedTS(ts uint64) {
+func (s *mockTsRWriter) SetGlobalResolvedTs(ts uint64) {
 	s.l.Lock()
 	defer s.l.Unlock()
-	s.globalResolvedTS = ts
+	s.globalResolvedTs = ts
 }
 
 var _ = check.Suite(&processorSuite{})
 
 type processorTestCase struct {
-	rawTxnTS         [][]uint64
-	globalResolvedTS []uint64
+	rawTxnTs         [][]uint64
+	globalResolvedTs []uint64
 	expect           [][]uint64
 }
 
 func (p *processorSuite) TestProcessor(c *check.C) {
 	cases := &processorTestCase{
-		rawTxnTS: [][]uint64{
+		rawTxnTs: [][]uint64{
 			{1, 4, 7, 9, 12, 14, 16, 20},
 			{2, 4, 8, 13, 24},
 		},
-		globalResolvedTS: []uint64{14, 15, 19},
+		globalResolvedTs: []uint64{14, 15, 19},
 		expect: [][]uint64{
 			{1, 2, 4, 4, 7, 8, 9, 12, 13, 14},
 			{},
@@ -100,8 +100,8 @@ func runCase(c *check.C, cases *processorTestCase) {
 		return nil, nil
 	}
 	origfNewTsRw := fNewTsRWriter
-	fNewTsRWriter = func(cli *clientv3.Client, changefeedID, captureID string) ProcessorTSRWriter {
-		return &mockTSRWriter{}
+	fNewTsRWriter = func(cli *clientv3.Client, changefeedID, captureID string) ProcessorTsRWriter {
+		return &mockTsRWriter{}
 	}
 	defer func() {
 		fCreateSchema = origFSchema
@@ -122,7 +122,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 	var (
 		l                sync.Mutex
 		outputDML        []uint64
-		outputResolvedTS []uint64
+		outputResolvedTs []uint64
 	)
 	go func() {
 		for {
@@ -134,31 +134,31 @@ func runCase(c *check.C, cases *processorTestCase) {
 			l.Lock()
 			switch e.Typ {
 			case ProcessorEntryDMLS:
-				c.Assert(len(outputResolvedTS), check.Equals, 0)
-				outputDML = append(outputDML, e.TS)
+				c.Assert(len(outputResolvedTs), check.Equals, 0)
+				outputDML = append(outputDML, e.Ts)
 			case ProcessorEntryResolved:
-				outputResolvedTS = append(outputResolvedTS, e.TS)
+				outputResolvedTs = append(outputResolvedTs, e.Ts)
 			}
 			l.Unlock()
 			p.ExecutedChan() <- e
 		}
 	}()
-	for i, rawTxnTS := range cases.rawTxnTS {
+	for i, rawTxnTs := range cases.rawTxnTs {
 		input := make(chan txn.RawTxn)
 		p.SetInputChan(int64(i), input)
-		go func(rawTxnTS []uint64) {
-			for _, txnTS := range rawTxnTS {
-				input <- txn.RawTxn{TS: txnTS}
+		go func(rawTxnTs []uint64) {
+			for _, txnTs := range rawTxnTs {
+				input <- txn.RawTxn{Ts: txnTs}
 			}
-		}(rawTxnTS)
+		}(rawTxnTs)
 	}
-	for i, globalResolvedTS := range cases.globalResolvedTS {
+	for i, globalResolvedTs := range cases.globalResolvedTs {
 		// hack to simulate owner to update global resolved ts
-		p.(*processorImpl).getTSRwriter().(*mockTSRWriter).SetGlobalResolvedTS(globalResolvedTS)
-		// waiting for processor push to resolvedTS
+		p.(*processorImpl).getTsRwriter().(*mockTsRWriter).SetGlobalResolvedTs(globalResolvedTs)
+		// waiting for processor push to resolvedTs
 		for {
 			l.Lock()
-			needBreak := len(outputDML) == len(cases.expect[i]) && len(outputResolvedTS) > 0
+			needBreak := len(outputDML) == len(cases.expect[i]) && len(outputResolvedTs) > 0
 			l.Unlock()
 			if needBreak {
 				break
@@ -172,8 +172,8 @@ func runCase(c *check.C, cases *processorTestCase) {
 		})
 		c.Assert(outputDML, check.DeepEquals, cases.expect[i])
 		outputDML = []uint64{}
-		c.Assert(outputResolvedTS, check.DeepEquals, []uint64{globalResolvedTS})
-		outputResolvedTS = []uint64{}
+		c.Assert(outputResolvedTs, check.DeepEquals, []uint64{globalResolvedTs})
+		outputResolvedTs = []uint64{}
 		l.Unlock()
 	}
 	cancel()
