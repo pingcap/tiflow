@@ -255,7 +255,9 @@ func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 		p.pullerSchedule(cctx, errCh)
 		return nil
 	})
-	// TODO: add sink
+	wg.Go(func() error {
+		return p.syncResolved(cctx)
+	})
 }
 
 // pullerSchedule will be used to monitor table change and schedule pullers in the future
@@ -381,7 +383,6 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 		for table, input := range p.tableInputChans {
 			table := table
 			input := input
-			globalResolvedTs := globalResolvedTs
 			wg.Go(func() error {
 				input.Forward(table, globalResolvedTs, p.resolvedEntries)
 				return nil
@@ -391,6 +392,37 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 		wg.Wait()
 		p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTs)
 	}
+}
+
+func (p *processorImpl) syncResolved(ctx context.Context) error {
+	for {
+		select {
+		case e, ok := <-p.resolvedEntries:
+			if !ok {
+				return nil
+			}
+			switch e.Typ {
+			case ProcessorEntryDMLS:
+				// TODO: make mounter an interface to make it replacable in tests
+				txn, err := p.mounter.Mount(e.Txn)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				if err := p.sink.Emit(ctx, *txn); err != nil {
+					return errors.Trace(err)
+				}
+			case ProcessorEntryResolved:
+				select {
+				case p.executedEntries <- e:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 func (p *processorImpl) SetInputChan(tableID int64, inputTxn <-chan txn.RawTxn) error {
