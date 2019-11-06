@@ -215,7 +215,7 @@ type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
-func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.Schema) {
+func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.Storage) {
 	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
 	var jobs []*model.Job
@@ -232,11 +232,11 @@ func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.S
 		}
 	}
 	c.Assert(len(jobs), check.Equals, len(sqls))
-	schema, err := schema.NewSchema(jobs, false)
+	schemaStorage, err := schema.NewStorage(jobs, false)
 	c.Assert(err, check.IsNil)
-	err = schema.HandlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
+	err = schemaStorage.HandlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
 	c.Assert(err, check.IsNil)
-	return puller, schema
+	return puller, schemaStorage
 }
 
 func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
