@@ -42,7 +42,12 @@ var (
 	fCreateSchema = createSchemaStore
 	fNewPDCli     = pd.NewClient
 	fNewTsRWriter = createTsRWriter
+	fNewMounter   = txn.NewTxnMounter
 )
+
+type mounter interface {
+	Mount(rawTxn txn.RawTxn) (*txn.Txn, error)
+}
 
 // Processor is used to push sync progress and calculate the checkpointTs
 // How to use it:
@@ -165,7 +170,7 @@ type processorImpl struct {
 	pdCli   pd.Client
 	etcdCli *clientv3.Client
 
-	mounter *txn.Mounter
+	mounter mounter
 	sink    sink.Sink
 
 	tableResolvedTs sync.Map
@@ -204,7 +209,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 	tsRWriter := fNewTsRWriter(etcdCli, changefeedID, captureID)
 
 	// TODO: get time zone from config
-	mounter, err := txn.NewTxnMounter(schemaStorage, time.UTC)
+	mounter, err := fNewMounter(schemaStorage, time.UTC)
 	if err != nil {
 		return nil, err
 	}
