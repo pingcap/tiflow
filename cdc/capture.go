@@ -69,7 +69,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 		ID: id,
 	}
 
-	log.Info("creating capture", zap.Reflect("info", info))
+	log.Info("creating capture", zap.String("capture-id", id))
 
 	manager := roles.NewOwnerManager(cli, id, CaptureOwnerKey)
 	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
