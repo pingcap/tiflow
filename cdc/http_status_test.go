@@ -29,7 +29,7 @@ var _ = check.Suite(&httpStatusSuite{})
 const retryTime = 20
 
 func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
-	statusURL := fmt.Sprintf("http://%s:%d/status", defaultServerOptions.StatusHost, defaultServerOptions.StatusPort)
+	statusURL := fmt.Sprintf("http://%s:%d/status", defaultServerOptions.statusHost, defaultServerOptions.statusPort)
 	for i := 0; i < retryTime; i++ {
 		resp, err := http.Get(statusURL)
 		if err == nil {
@@ -51,7 +51,7 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 
 	s.waitUntilServerOnline(c)
 
-	resp, err := http.Get(fmt.Sprintf("http://%s:%d/debug/pprof/cmdline", defaultServerOptions.StatusHost, defaultServerOptions.StatusPort))
+	resp, err := http.Get(fmt.Sprintf("http://%s:%d/debug/pprof/cmdline", defaultServerOptions.statusHost, defaultServerOptions.statusPort))
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, 200)

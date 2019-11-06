@@ -10,35 +10,35 @@ import (
 )
 
 type options struct {
-	PdEndpoints string
-	StatusHost  string
-	StatusPort  int
+	pdEndpoints string
+	statusHost  string
+	statusPort  int
 }
 
 var defaultServerOptions = options{
-	PdEndpoints: "127.0.0.1:2379",
-	StatusHost:  "127.0.0.1",
-	StatusPort:  defaultStatusPort,
+	pdEndpoints: "127.0.0.1:2379",
+	statusHost:  "127.0.0.1",
+	statusPort:  defaultStatusPort,
 }
 
 // PDEndpoints returns a ServerOption that sets the endpoints of PD for the server.
 func PDEndpoints(s string) ServerOption {
 	return func(o *options) {
-		o.PdEndpoints = s
+		o.pdEndpoints = s
 	}
 }
 
-// StatusHost returns a ServerOption that sets the status server host
+// statusHost returns a ServerOption that sets the status server host
 func StatusHost(s string) ServerOption {
 	return func(o *options) {
-		o.StatusHost = s
+		o.statusHost = s
 	}
 }
 
-// StatusPort returns a ServerOption that sets the status server port
+// statusPort returns a ServerOption that sets the status server port
 func StatusPort(p int) ServerOption {
 	return func(o *options) {
-		o.StatusPort = p
+		o.statusPort = p
 	}
 }
 
@@ -58,9 +58,12 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 	for _, o := range opt {
 		o(&opts)
 	}
-	log.Info("creating CDC server", zap.Reflect("options", opts))
+	log.Info("creating CDC server",
+		zap.String("pd-addr", opts.pdEndpoints),
+		zap.String("status-host", opts.statusHost),
+		zap.Int("status-port", opts.statusPort))
 
-	capture, err := NewCapture(strings.Split(opts.PdEndpoints, ","))
+	capture, err := NewCapture(strings.Split(opts.pdEndpoints, ","))
 	if err != nil {
 		return nil, err
 	}
