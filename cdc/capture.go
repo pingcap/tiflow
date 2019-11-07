@@ -16,7 +16,6 @@ package cdc
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -77,7 +76,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
 	}
 	ddlHandler := NewDDLHandler(pdCli)
-	worker := roles.NewOwner(math.MaxUint64, cli, manager, ddlHandler)
+	worker := roles.NewOwner(cli, manager, ddlHandler)
 
 	c = &Capture{
 		pdEndpoints:  pdEndpoints,

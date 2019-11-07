@@ -340,7 +340,7 @@ func (s *ownerSuite) TestAssignChangeFeed(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}
 	owner := &ownerImpl{etcdClient: s.client}
-	pinfo, err := owner.assignChangeFeed(context.Background(), changefeedID)
+	_, pinfo, err := owner.assignChangeFeed(context.Background(), changefeedID)
 	c.Assert(err, check.IsNil)
 
 	etcdPinfo, err := kv.GetSubChangeFeedInfos(context.Background(), s.client, changefeedID)

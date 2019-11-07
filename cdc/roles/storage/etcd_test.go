@@ -113,8 +113,9 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 				c.Assert(err, check.IsNil)
 			}
 		}
-		pinfos, err := rw.Read(context.Background())
+		cfs, pinfos, err := rw.Read(context.Background())
 		c.Assert(err, check.IsNil)
+		c.Assert(len(cfs), check.Equals, len(tc.ids))
 		c.Assert(len(pinfos), check.Equals, len(tc.ids))
 		for _, changefeedID := range tc.ids {
 			c.Assert(pinfos[changefeedID], check.DeepEquals, tc.pinfos[changefeedID])
