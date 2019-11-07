@@ -142,7 +142,6 @@ func CollectRawTxns(
 type Mounter struct {
 	schemaStorage *schema.Storage
 	loc           *time.Location
-	ddlOnly       bool
 }
 
 func NewTxnMounter(schema *schema.Storage, loc *time.Location) *Mounter {
