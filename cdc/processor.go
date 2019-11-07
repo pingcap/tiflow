@@ -163,6 +163,8 @@ func NewProcessorResolvedEntry(ts uint64) ProcessorEntry {
 	}
 }
 
+const ddlPullerID int64 = -1
+
 type processorImpl struct {
 	captureID    string
 	changefeedID string
@@ -180,6 +182,7 @@ type processorImpl struct {
 	tsRWriter       ProcessorTsRWriter
 	resolvedEntries chan ProcessorEntry
 	executedEntries chan ProcessorEntry
+	ddlJobsCh       chan txn.RawTxn
 
 	tblPullers      map[int64]CancellablePuller
 	tableInputChans map[int64]*txnChannel
@@ -211,6 +214,8 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 
 	tsRWriter := fNewTsRWriter(etcdCli, changefeedID, captureID)
 
+	ddlPuller := NewPuller(pdCli, 0, []util.Span{util.GetDDLSpan()})
+
 	// TODO: get time zone from config
 	mounter := fNewMounter(schemaStorage, time.UTC)
 
@@ -228,12 +233,14 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		mounter:       mounter,
 		schemaStorage: schemaStorage,
 		sink:          sink,
+		ddlPuller:     ddlPuller,
 
 		tsRWriter: tsRWriter,
 		// TODO set the channel size
 		resolvedEntries: make(chan ProcessorEntry),
 		// TODO set the channel size
 		executedEntries: make(chan ProcessorEntry),
+		ddlJobsCh:       make(chan txn.RawTxn, 16),
 
 		tblPullers:      make(map[int64]CancellablePuller),
 		tableInputChans: make(map[int64]*txnChannel),
@@ -263,6 +270,9 @@ func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 	})
 	wg.Go(func() error {
 		return p.syncResolved(cctx)
+	})
+	wg.Go(func() error {
+		return p.pullDDLJob(cctx)
 	})
 }
 
@@ -400,10 +410,51 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 	}
 }
 
+func (p *processorImpl) pullDDLJob(ctx context.Context) error {
+	defer close(p.ddlJobsCh)
+	errg, ctx := errgroup.WithContext(ctx)
+
+	errg.Go(func() error {
+		return p.ddlPuller.Run(ctx)
+	})
+
+	errg.Go(func() error {
+		err := p.ddlPuller.CollectRawTxns(ctx, func(ctxInner context.Context, rawTxn txn.RawTxn) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-ctxInner.Done():
+				return ctxInner.Err()
+			case p.ddlJobsCh <- rawTxn:
+				return nil
+			}
+		})
+		return errors.Annotate(err, "span: ddl")
+	})
+	return errg.Wait()
+}
+
 func (p *processorImpl) syncResolved(ctx context.Context) error {
-	// TODO: Make sure schema is updated according to DDLs
 	for {
 		select {
+		case rawTxn, ok := <-p.ddlJobsCh:
+			if !ok {
+				return nil
+			}
+			if len(rawTxn.Entries) == 0 {
+				// fake txn
+				p.tableResolvedTs.Store(ddlPullerID, rawTxn.Ts)
+				continue
+			}
+			t, err := p.mounter.Mount(rawTxn)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if !t.IsDDL() {
+				continue
+			}
+			p.schemaStorage.AddJob(t.DDL.Job)
+			p.tableResolvedTs.Store(ddlPullerID, rawTxn.Ts)
 		case e, ok := <-p.resolvedEntries:
 			if !ok {
 				return nil
