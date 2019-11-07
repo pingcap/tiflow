@@ -163,6 +163,8 @@ func NewProcessorResolvedEntry(ts uint64) ProcessorEntry {
 	}
 }
 
+const ddlPullerID int64 = -1
+
 type processorImpl struct {
 	captureID    string
 	changefeedID string
@@ -171,13 +173,16 @@ type processorImpl struct {
 	pdCli   pd.Client
 	etcdCli *clientv3.Client
 
-	mounter mounter
-	sink    sink.Sink
+	mounter       mounter
+	schemaStorage *schema.Storage
+	sink          sink.Sink
+	ddlPuller     *Puller
 
 	tableResolvedTs sync.Map
 	tsRWriter       ProcessorTsRWriter
 	resolvedEntries chan ProcessorEntry
 	executedEntries chan ProcessorEntry
+	ddlJobsCh       chan txn.RawTxn
 
 	tblPullers      map[int64]CancellablePuller
 	tableInputChans map[int64]*txnChannel
@@ -209,11 +214,10 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 
 	tsRWriter := fNewTsRWriter(etcdCli, changefeedID, captureID)
 
+	ddlPuller := NewPuller(pdCli, changefeed.StartTs, []util.Span{util.GetDDLSpan()})
+
 	// TODO: get time zone from config
-	mounter, err := fNewMounter(schemaStorage, time.UTC)
-	if err != nil {
-		return nil, err
-	}
+	mounter := fNewMounter(schemaStorage, time.UTC)
 
 	sink, err := fNewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
 	if err != nil {
@@ -221,19 +225,22 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 	}
 
 	p := &processorImpl{
-		captureID:    captureID,
-		changefeedID: changefeedID,
-		changefeed:   changefeed,
-		pdCli:        pdCli,
-		etcdCli:      etcdCli,
-		mounter:      mounter,
-		sink:         sink,
+		captureID:     captureID,
+		changefeedID:  changefeedID,
+		changefeed:    changefeed,
+		pdCli:         pdCli,
+		etcdCli:       etcdCli,
+		mounter:       mounter,
+		schemaStorage: schemaStorage,
+		sink:          sink,
+		ddlPuller:     ddlPuller,
 
 		tsRWriter: tsRWriter,
 		// TODO set the channel size
 		resolvedEntries: make(chan ProcessorEntry),
 		// TODO set the channel size
 		executedEntries: make(chan ProcessorEntry),
+		ddlJobsCh:       make(chan txn.RawTxn, 16),
 
 		tblPullers:      make(map[int64]CancellablePuller),
 		tableInputChans: make(map[int64]*txnChannel),
@@ -263,6 +270,9 @@ func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 	})
 	wg.Go(func() error {
 		return p.syncResolved(cctx)
+	})
+	wg.Go(func() error {
+		return p.pullDDLJob(cctx)
 	})
 }
 
@@ -400,16 +410,64 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 	}
 }
 
+func (p *processorImpl) pullDDLJob(ctx context.Context) error {
+	defer close(p.ddlJobsCh)
+	errg, ctx := errgroup.WithContext(ctx)
+
+	errg.Go(func() error {
+		return p.ddlPuller.Run(ctx)
+	})
+
+	errg.Go(func() error {
+		err := p.ddlPuller.CollectRawTxns(ctx, func(ctxInner context.Context, rawTxn txn.RawTxn) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-ctxInner.Done():
+				return ctxInner.Err()
+			case p.ddlJobsCh <- rawTxn:
+				return nil
+			}
+		})
+		if err != nil && err != context.Canceled {
+			return errors.Annotate(err, "span: ddl")
+		}
+		return nil
+	})
+	return errg.Wait()
+}
+
 func (p *processorImpl) syncResolved(ctx context.Context) error {
-	// TODO: Make sure schema is updated according to DDLs
 	for {
 		select {
+		case rawTxn, ok := <-p.ddlJobsCh:
+			if !ok {
+				return nil
+			}
+			if len(rawTxn.Entries) == 0 {
+				// fake txn
+				p.tableResolvedTs.Store(ddlPullerID, rawTxn.Ts)
+				continue
+			}
+			t, err := p.mounter.Mount(rawTxn)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if !t.IsDDL() {
+				continue
+			}
+			p.schemaStorage.AddJob(t.DDL.Job)
+			p.tableResolvedTs.Store(ddlPullerID, rawTxn.Ts)
 		case e, ok := <-p.resolvedEntries:
 			if !ok {
 				return nil
 			}
 			switch e.Typ {
 			case ProcessorEntryDMLS:
+				err := p.schemaStorage.HandlePreviousDDLJobIfNeed(e.Ts)
+				if err != nil {
+					return errors.Trace(err)
+				}
 				txn, err := p.mounter.Mount(e.Txn)
 				if err != nil {
 					return errors.Trace(err)
@@ -584,6 +642,6 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 	return puller
 }
 
-func newMounter(schema *schema.Storage, loc *time.Location) (mounter, error) {
+func newMounter(schema *schema.Storage, loc *time.Location) mounter {
 	return txn.NewTxnMounter(schema, loc)
 }

@@ -42,9 +42,9 @@ type DMLType int
 // DMLType types
 const (
 	UnknownDMLType DMLType = iota
-	InsertDMLType  DMLType = iota
-	UpdateDMLType  DMLType = iota
-	DeleteDMLType  DMLType = iota
+	InsertDMLType
+	UpdateDMLType
+	DeleteDMLType
 )
 
 // DML holds the dml info
@@ -144,9 +144,8 @@ type Mounter struct {
 	loc           *time.Location
 }
 
-func NewTxnMounter(schema *schema.Storage, loc *time.Location) (*Mounter, error) {
-	m := &Mounter{schemaStorage: schema, loc: loc}
-	return m, nil
+func NewTxnMounter(schema *schema.Storage, loc *time.Location) *Mounter {
+	return &Mounter{schemaStorage: schema, loc: loc}
 }
 
 func (m *Mounter) Mount(rawTxn RawTxn) (*Txn, error) {
@@ -154,10 +153,6 @@ func (m *Mounter) Mount(rawTxn RawTxn) (*Txn, error) {
 		Ts: rawTxn.Ts,
 	}
 	var replaceDMLs, deleteDMLs []*DML
-	err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawTxn.Ts)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	for _, raw := range rawTxn.Entries {
 		kvEntry, err := entry.Unmarshal(raw)
 		if err != nil {
@@ -295,50 +290,11 @@ func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *model.TableInfo, tab
 }
 
 func (m *Mounter) mountDDL(jobEntry *entry.DDLJobKVEntry) (*DDL, error) {
-	var databaseName, tableName string
-	var err error
-	getTableName := false
-	//TODO support create schemaStorage and drop schemaStorage
-	if jobEntry.Job.Type == model.ActionDropTable {
-		databaseName, tableName, err = m.tryGetTableName(jobEntry)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		getTableName = true
-	}
-
-	_, _, _, err = m.schemaStorage.HandleDDL(jobEntry.Job)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	if !getTableName {
-		databaseName, tableName, err = m.tryGetTableName(jobEntry)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-
+	databaseName := jobEntry.Job.SchemaName
+	tableName := jobEntry.Job.BinlogInfo.TableInfo.Name.O
 	return &DDL{
 		databaseName,
 		tableName,
 		jobEntry.Job,
 	}, nil
-}
-
-func (m *Mounter) tryGetTableName(jobHistory *entry.DDLJobKVEntry) (databaseName string, tableName string, err error) {
-	if tableID := jobHistory.Job.TableID; tableID > 0 {
-		var exist bool
-		databaseName, tableName, exist = m.schemaStorage.SchemaAndTableName(tableID)
-		if !exist {
-			return "", "", errors.Errorf("can not find table, id: %d", tableID)
-		}
-	} else if schemaID := jobHistory.Job.SchemaID; schemaID > 0 {
-		dbInfo, exist := m.schemaStorage.SchemaByID(schemaID)
-		if !exist {
-			return "", "", errors.Errorf("can not find schemaStorage, id: %d", schemaID)
-		}
-		databaseName = dbInfo.Name.O
-	}
-	return
 }
