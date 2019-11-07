@@ -11,17 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package kv
 
 import (
 	"context"
 	"sync"
 	"time"
 
-	"github.com/pingcap/tidb-cdc/pkg/util"
-
 	"github.com/pingcap/check"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
 type bufferSuite struct{}
@@ -47,11 +45,11 @@ func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
 		c.Assert(third.KV.Ts, check.Equals, uint64(112))
 	}()
 
-	err := b.AddKVEntry(ctx, &kv.RawKVEntry{Ts: 111})
+	err := b.AddKVEntry(ctx, &RawKVEntry{Ts: 111})
 	c.Assert(err, check.IsNil)
 	err = b.AddResolved(ctx, util.Span{}, 110)
 	c.Assert(err, check.IsNil)
-	err = b.AddKVEntry(ctx, &kv.RawKVEntry{Ts: 112})
+	err = b.AddKVEntry(ctx, &RawKVEntry{Ts: 112})
 	c.Assert(err, check.IsNil)
 
 	wg.Wait()
@@ -65,7 +63,7 @@ func (bs *bufferSuite) TestWaitsCanBeCanceled(c *check.C) {
 	defer cancel()
 	stopped := make(chan struct{})
 	go func() {
-		err := b.AddEntry(timeout, BufferEntry{KV: &kv.RawKVEntry{Ts: 111}})
+		err := b.AddEntry(timeout, BufferEntry{KV: &RawKVEntry{Ts: 111}})
 		c.Assert(err, check.Equals, context.DeadlineExceeded)
 		close(stopped)
 	}()

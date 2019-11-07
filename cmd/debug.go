@@ -7,11 +7,11 @@ import (
 	"time"
 
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/tidb-cdc/cdc/puller"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pingcap/tidb-cdc/cdc"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
@@ -35,7 +35,7 @@ var pullCmd = &cobra.Command{
 		}
 
 		ts := oracle.ComposeTS(time.Now().Unix()*1000, 0)
-		p := cdc.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}})
+		p := puller.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}})
 		buf := p.Output()
 
 		g, ctx := errgroup.WithContext(context.Background())
