@@ -37,6 +37,7 @@ func (s *Server) startStatusHTTP() {
 
 	addr := fmt.Sprintf("%s:%d", s.opts.statusHost, s.opts.statusPort)
 	s.statusServer = &http.Server{Addr: addr, Handler: serverMux}
+	log.Info("status http server is running", zap.String("addr", addr))
 	go func() {
 		err := s.statusServer.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {

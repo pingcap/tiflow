@@ -58,22 +58,26 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 	for _, o := range opt {
 		o(&opts)
 	}
+	log.Info("creating CDC server",
+		zap.String("pd-addr", opts.pdEndpoints),
+		zap.String("status-host", opts.statusHost),
+		zap.Int("status-port", opts.statusPort))
 
-	s := &Server{
-		opts: opts,
+	capture, err := NewCapture(strings.Split(opts.pdEndpoints, ","))
+	if err != nil {
+		return nil, err
 	}
 
+	s := &Server{
+		opts:    opts,
+		capture: capture,
+	}
 	return s, nil
 }
 
 // Run runs the server.
 func (s *Server) Run(ctx context.Context) error {
 	s.startStatusHTTP()
-	capture, err := NewCapture(strings.Split(s.opts.pdEndpoints, ","))
-	if err != nil {
-		return err
-	}
-	s.capture = capture
 	return s.capture.Start(ctx)
 }
 

@@ -46,7 +46,6 @@ type Owner interface {
 // OwnerDDLHandler defines the ddl handler for Owner
 // which can pull ddl jobs and execute ddl jobs
 type OwnerDDLHandler interface {
-
 	// PullDDL pulls the ddl jobs and returns resolvedTs of DDL Puller and job list.
 	PullDDL() (resolvedTs uint64, jobs []*txn.DDL, err error)
 
@@ -363,6 +362,7 @@ func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (
 		}
 		result[captures[i].ID] = info
 	}
+	log.Info("assignChangeFeed", zap.Reflect("result", result))
 
 	return result, nil
 }

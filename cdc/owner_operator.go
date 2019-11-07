@@ -17,10 +17,12 @@ import (
 	"context"
 	"database/sql"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/sink"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb-cdc/pkg/util"
@@ -44,9 +46,14 @@ type ddlHandler struct {
 func NewDDLHandler(pdCli pd.Client) *ddlHandler {
 	puller := NewPuller(pdCli, 0, []util.Span{util.GetDDLSpan()})
 	ctx, cancel := context.WithCancel(context.Background())
+	// TODO this TxnMounter only mount DDL transaction, so it needn't schemaStorage
+	schemaStorage, _ := schema.NewStorage(nil, false)
+	// TODO get time loc from config
+	txnMounter, _ := txn.NewTxnMounter(schemaStorage, time.UTC)
 	h := &ddlHandler{
-		puller: puller,
-		cancel: cancel,
+		puller:  puller,
+		cancel:  cancel,
+		mounter: txnMounter,
 	}
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)

@@ -22,6 +22,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/model"
@@ -30,6 +31,7 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -63,6 +65,11 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	}
 
 	id := uuid.New().String()
+	info := &model.CaptureInfo{
+		ID: id,
+	}
+
+	log.Info("creating capture", zap.String("capture-id", id))
 
 	manager := roles.NewOwnerManager(cli, id, CaptureOwnerKey)
 	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
@@ -77,9 +84,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 		etcdClient:   cli,
 		ownerManager: manager,
 		ownerWorker:  worker,
-		info: &model.CaptureInfo{
-			ID: id,
-		},
+		info:         info,
 	}
 
 	return
