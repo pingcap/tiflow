@@ -214,7 +214,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 
 	tsRWriter := fNewTsRWriter(etcdCli, changefeedID, captureID)
 
-	ddlPuller := NewPuller(pdCli, 0, []util.Span{util.GetDDLSpan()})
+	ddlPuller := NewPuller(pdCli, changefeed.StartTs, []util.Span{util.GetDDLSpan()})
 
 	// TODO: get time zone from config
 	mounter := fNewMounter(schemaStorage, time.UTC)
@@ -429,7 +429,10 @@ func (p *processorImpl) pullDDLJob(ctx context.Context) error {
 				return nil
 			}
 		})
-		return errors.Annotate(err, "span: ddl")
+		if err != nil && err != context.Canceled {
+			return errors.Annotate(err, "span: ddl")
+		}
+		return nil
 	})
 	return errg.Wait()
 }
