@@ -1,13 +1,14 @@
-package kv
+package puller
 
 import (
 	"context"
 
+	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
 // buffer entry from kv layer
-type BufferEntry = KvOrResolved
+type BufferEntry = kv.KvOrResolved
 
 // Buffer buffers kv entries
 type Buffer chan BufferEntry
@@ -25,12 +26,12 @@ func (b Buffer) AddEntry(ctx context.Context, entry BufferEntry) error {
 	}
 }
 
-func (b Buffer) AddKVEntry(ctx context.Context, kv *RawKVEntry) error {
+func (b Buffer) AddKVEntry(ctx context.Context, kv *kv.RawKVEntry) error {
 	return b.AddEntry(ctx, BufferEntry{KV: kv})
 }
 
 func (b Buffer) AddResolved(ctx context.Context, span util.Span, ts uint64) error {
-	return b.AddEntry(ctx, BufferEntry{Resolved: &ResolvedSpan{Span: span, Timestamp: ts}})
+	return b.AddEntry(ctx, BufferEntry{Resolved: &kv.ResolvedSpan{Span: span, Timestamp: ts}})
 }
 
 func (b Buffer) Get(ctx context.Context) (BufferEntry, error) {
