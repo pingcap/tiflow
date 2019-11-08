@@ -39,23 +39,23 @@ func NewMVCCListener(store mocktikv.MVCCStore) *MVCCListener {
 
 func (l *MVCCListener) Prewrite(req *kvrpcpb.PrewriteRequest) []error {
 	result := l.MVCCStore.Prewrite(req)
-	log.Info("Prewrite", zap.Reflect("req", req), zap.Reflect("result", result))
+	log.Debug("MVCCListener Prewrite", zap.Reflect("req", req), zap.Reflect("result", result))
 	l.prewriteFn(req, result)
 	return result
 }
 func (l *MVCCListener) Commit(keys [][]byte, startTs, commitTs uint64) error {
 	result := l.MVCCStore.Commit(keys, startTs, commitTs)
-	log.Info("Commit", zap.Reflect("keys", keys),
-		zap.Reflect("startTs", startTs),
-		zap.Reflect("commitTs", commitTs),
+	log.Debug("MVCCListener Commit", zap.Reflect("keys", keys),
+		zap.Uint64("startTs", startTs),
+		zap.Uint64("commitTs", commitTs),
 		zap.Reflect("result", result))
 	l.commitFn(keys, startTs, commitTs, result)
 	return result
 }
 func (l *MVCCListener) Rollback(keys [][]byte, startTs uint64) error {
 	result := l.MVCCStore.Rollback(keys, startTs)
-	log.Info("Commit", zap.Reflect("keys", keys),
-		zap.Reflect("startTs", startTs),
+	log.Debug("MVCCListener Commit", zap.Reflect("keys", keys),
+		zap.Uint64("startTs", startTs),
 		zap.Reflect("result", result))
 	l.rollbackFn(keys, startTs, result)
 	return result
@@ -201,7 +201,7 @@ func (m *MockPullerManager) sendRawTxn(ctx context.Context, rawTxn txn.RawTxn) {
 				toSend.Entries = append(toSend.Entries, kvEntry)
 			}
 		}
-		err := plr.outputFn(ctx, rawTxn)
+		err := plr.outputFn(ctx, toSend)
 		if err != nil {
 			log.Fatal("output raw transaction failed", zap.Error(err))
 		}
