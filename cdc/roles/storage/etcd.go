@@ -37,21 +37,30 @@ func NewChangeFeedInfoEtcdRWriter(cli *clientv3.Client) *ChangeFeedInfoRWriter {
 	}
 }
 
-// Read reads from etcd, and returns map mapping from changefeedID to `model.ProcessorsInfos`
-func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+// Read reads from etcd, and returns
+// - map mapping from changefeedID to `*model.ChangeFeedDetail`
+// - map mapping from changefeedID to `model.ProcessorsInfos`
+func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedDetail, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
 	_, details, err := kv.GetChangeFeeds(ctx, rw.etcdClient)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	result := make(map[string]model.ProcessorsInfos, len(details))
-	for changefeedID := range details {
+	changefeeds := make(map[string]*model.ChangeFeedDetail, len(details))
+	pinfos := make(map[string]model.ProcessorsInfos, len(details))
+	for changefeedID, rawKv := range details {
+		changefeed := &model.ChangeFeedDetail{}
+		err := changefeed.Unmarshal(rawKv.Value)
+		if err != nil {
+			return nil, nil, err
+		}
 		pinfo, err := kv.GetSubChangeFeedInfos(ctx, rw.etcdClient, changefeedID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		result[changefeedID] = pinfo
+		changefeeds[changefeedID] = changefeed
+		pinfos[changefeedID] = pinfo
 	}
-	return result, nil
+	return changefeeds, pinfos, nil
 }
 
 // Write writes ChangeFeedInfo of each changefeed into etcd

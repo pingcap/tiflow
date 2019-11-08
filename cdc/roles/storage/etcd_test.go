@@ -104,7 +104,7 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 		}
 		for i := 0; i < len(tc.ids); i++ {
 			changefeedID := tc.ids[i]
-			_, err = s.client.Put(context.Background(), kv.GetEtcdKeyChangeFeedConfig(changefeedID), "")
+			err = kv.SaveChangeFeedDetail(context.Background(), s.client, &model.ChangeFeedDetail{}, changefeedID)
 			c.Assert(err, check.IsNil)
 			for captureID, cinfo := range tc.pinfos[changefeedID] {
 				sinfo, err := cinfo.Marshal()
@@ -113,8 +113,9 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 				c.Assert(err, check.IsNil)
 			}
 		}
-		pinfos, err := rw.Read(context.Background())
+		cfs, pinfos, err := rw.Read(context.Background())
 		c.Assert(err, check.IsNil)
+		c.Assert(len(cfs), check.Equals, len(tc.ids))
 		c.Assert(len(pinfos), check.Equals, len(tc.ids))
 		for _, changefeedID := range tc.ids {
 			c.Assert(pinfos[changefeedID], check.DeepEquals, tc.pinfos[changefeedID])

@@ -15,6 +15,7 @@ package roles
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 
@@ -56,7 +57,7 @@ type OwnerDDLHandler interface {
 // ChangeFeedInfoRWriter defines the Reader and Writer for ChangeFeedInfo
 type ChangeFeedInfoRWriter interface {
 	// Read the changefeed info from storage such as etcd.
-	Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error)
+	Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedDetail, map[model.ChangeFeedID]model.ProcessorsInfos, error)
 	// Write the changefeed info to storage such as etcd.
 	Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error
 }
@@ -69,7 +70,6 @@ type ownerImpl struct {
 	cfRWriter  ChangeFeedInfoRWriter
 
 	ddlResolvedTs uint64
-	targetTs      uint64
 	ddlJobHistory []*txn.DDL
 
 	l sync.RWMutex
@@ -79,7 +79,7 @@ type ownerImpl struct {
 }
 
 // NewOwner creates a new ownerImpl instance
-func NewOwner(targetTs uint64, cli *clientv3.Client, manager Manager, ddlHandler OwnerDDLHandler) *ownerImpl {
+func NewOwner(cli *clientv3.Client, manager Manager, ddlHandler OwnerDDLHandler) *ownerImpl {
 	owner := &ownerImpl{
 		changeFeedInfos: make(map[model.ChangeFeedID]*model.ChangeFeedInfo),
 		ddlHandler:      ddlHandler,
@@ -91,13 +91,13 @@ func NewOwner(targetTs uint64, cli *clientv3.Client, manager Manager, ddlHandler
 }
 
 func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
-	infos, err := o.cfRWriter.Read(ctx)
+	changefeeds, pinfos, err := o.cfRWriter.Read(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	// TODO: handle changefeed changed and the table of sub changefeed changed
 	// TODO: find the first index of one changefeed in ddl jobs
-	for changeFeedID, etcdChangeFeedInfo := range infos {
+	for changeFeedID, etcdChangeFeedInfo := range pinfos {
 		// new changefeed, no subchangefeed assignd
 		if len(etcdChangeFeedInfo) == 0 {
 			createdInfo, err := o.assignChangeFeed(ctx, changeFeedID)
@@ -110,10 +110,19 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 		if cfInfo, exist := o.changeFeedInfos[changeFeedID]; exist {
 			cfInfo.ProcessorInfos = etcdChangeFeedInfo
 		} else {
+			var targetTs uint64
+			if changefeed, ok := changefeeds[changeFeedID]; !ok {
+				return errors.Annotatef(model.ErrChangeFeedNotExists, "id:%s", changeFeedID)
+			} else if changefeed.TargetTs == uint64(0) {
+				targetTs = uint64(math.MaxUint64)
+			} else {
+				targetTs = changefeed.TargetTs
+			}
 			o.changeFeedInfos[changeFeedID] = &model.ChangeFeedInfo{
 				Status:          model.ChangeFeedSyncDML,
 				ResolvedTs:      0,
 				CheckpointTs:    0,
+				TargetTs:        targetTs,
 				ProcessorInfos:  etcdChangeFeedInfo,
 				DDLCurrentIndex: 0,
 			}
@@ -169,7 +178,7 @@ func (o *ownerImpl) calcResolvedTs() error {
 		if cfInfo.Status != model.ChangeFeedSyncDML {
 			continue
 		}
-		minResolvedTs := o.targetTs
+		minResolvedTs := cfInfo.TargetTs
 
 		// calc the min of all resolvedTs in captures
 		for _, pStatus := range cfInfo.ProcessorInfos {

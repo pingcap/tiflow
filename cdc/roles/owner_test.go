@@ -76,20 +76,24 @@ func (h *handlerForPrueDMLTest) Close() error {
 	return nil
 }
 
-func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedDetail, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	h.index++
-	return map[model.ChangeFeedID]model.ProcessorsInfos{
-		"test_change_feed": {
-			"capture_1": {
-				ResolvedTs: h.resolvedTs1[h.index],
+	return map[model.ChangeFeedID]*model.ChangeFeedDetail{
+			"test_change_feed": {
+				TargetTs: 100,
 			},
-			"capture_2": {
-				ResolvedTs: h.resolvedTs2[h.index],
+		}, map[model.ChangeFeedID]model.ProcessorsInfos{
+			"test_change_feed": {
+				"capture_1": {
+					ResolvedTs: h.resolvedTs1[h.index],
+				},
+				"capture_2": {
+					ResolvedTs: h.resolvedTs2[h.index],
+				},
 			},
-		},
-	}, nil
+		}, nil
 }
 
 func (h *handlerForPrueDMLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
@@ -109,7 +113,8 @@ func (h *handlerForPrueDMLTest) Write(ctx context.Context, infos map[model.Chang
 func (s *ownerSuite) TestPureDML(c *check.C) {
 	changeFeedInfos := map[model.ChangeFeedID]*model.ChangeFeedInfo{
 		"test_change_feed": {
-			Status: model.ChangeFeedSyncDML,
+			TargetTs: 100,
+			Status:   model.ChangeFeedSyncDML,
 			ProcessorInfos: model.ProcessorsInfos{
 				"capture_1": {},
 				"capture_2": {},
@@ -132,7 +137,6 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 	c.Assert(err, check.IsNil)
 	owner := &ownerImpl{
 		changeFeedInfos: changeFeedInfos,
-		targetTs:        100,
 		ddlHandler:      handler,
 		cfRWriter:       handler,
 		manager:         manager,
@@ -187,24 +191,28 @@ func (h *handlerForDDLTest) Close() error {
 	return nil
 }
 
-func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.CaptureID]*model.ChangeFeedDetail, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if h.dmlIndex < len(h.resolvedTs1)-1 {
 		h.dmlIndex++
 	}
-	return map[model.ChangeFeedID]model.ProcessorsInfos{
-		"test_change_feed": {
-			"capture_1": {
-				ResolvedTs:   h.resolvedTs1[h.dmlIndex],
-				CheckPointTs: h.currentGlobalResolvedTs,
+	return map[model.ChangeFeedID]*model.ChangeFeedDetail{
+			"test_change_feed": {
+				TargetTs: 100,
 			},
-			"capture_2": {
-				ResolvedTs:   h.resolvedTs2[h.dmlIndex],
-				CheckPointTs: h.currentGlobalResolvedTs,
+		}, map[model.ChangeFeedID]model.ProcessorsInfos{
+			"test_change_feed": {
+				"capture_1": {
+					ResolvedTs:   h.resolvedTs1[h.dmlIndex],
+					CheckPointTs: h.currentGlobalResolvedTs,
+				},
+				"capture_2": {
+					ResolvedTs:   h.resolvedTs2[h.dmlIndex],
+					CheckPointTs: h.currentGlobalResolvedTs,
+				},
 			},
-		},
-	}, nil
+		}, nil
 }
 
 func (h *handlerForDDLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
@@ -227,7 +235,8 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 
 	changeFeedInfos := map[model.ChangeFeedID]*model.ChangeFeedInfo{
 		"test_change_feed": {
-			Status: model.ChangeFeedSyncDML,
+			TargetTs: 100,
+			Status:   model.ChangeFeedSyncDML,
 			ProcessorInfos: model.ProcessorsInfos{
 				"capture_1": {},
 				"capture_2": {},
@@ -302,7 +311,6 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 	owner := &ownerImpl{
 		changeFeedInfos: changeFeedInfos,
-		targetTs:        100,
 
 		ddlHandler: handler,
 		cfRWriter:  handler,
