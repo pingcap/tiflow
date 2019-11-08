@@ -177,7 +177,7 @@ type processorImpl struct {
 	mounter       mounter
 	schemaStorage *schema.Storage
 	sink          sink.Sink
-	ddlPuller     *Puller
+	ddlPuller     puller.Puller
 
 	tableResolvedTs sync.Map
 	tsRWriter       ProcessorTsRWriter
@@ -215,7 +215,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 
 	tsRWriter := fNewTsRWriter(etcdCli, changefeedID, captureID)
 
-	ddlPuller := NewPuller(pdCli, changefeed.StartTs, []util.Span{util.GetDDLSpan()})
+	ddlPuller := puller.NewPuller(pdCli, changefeed.StartTs, []util.Span{util.GetDDLSpan()})
 
 	// TODO: get time zone from config
 	mounter := fNewMounter(schemaStorage, time.UTC)
