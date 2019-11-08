@@ -177,7 +177,7 @@ type processorImpl struct {
 	mounter       mounter
 	schemaStorage *schema.Storage
 	sink          sink.Sink
-	ddlPuller     puller.Puller
+	ddlPuller     Puller
 
 	tableResolvedTs sync.Map
 	tsRWriter       ProcessorTsRWriter
