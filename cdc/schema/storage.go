@@ -242,7 +242,7 @@ func (s *Storage) removeTable(tableID int64) error {
 	return nil
 }
 
-func (s *Storage) addJob(job *model.Job) {
+func (s *Storage) AddJob(job *model.Job) {
 	if len(s.jobs) == 0 || s.jobs[len(s.jobs)-1].BinlogInfo.SchemaVersion < job.BinlogInfo.SchemaVersion {
 		s.jobs = append(s.jobs, job)
 	}

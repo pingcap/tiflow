@@ -58,10 +58,7 @@ func NewCDCSuite() *CDCSuite {
 
 	cdcSuite.sink = sink.NewMySQLSinkUsingSchema(db, schemaStorage)
 
-	mounter, err := txn.NewTxnMounter(schemaStorage, time.Local)
-	if err != nil {
-		panic(err.Error())
-	}
+	mounter := txn.NewTxnMounter(schemaStorage, time.Local)
 	cdcSuite.mounter = mounter
 	return cdcSuite
 }
