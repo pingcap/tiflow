@@ -3,7 +3,6 @@ package puller
 import (
 	"context"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/pingcap/check"
@@ -11,8 +10,6 @@ import (
 	"github.com/pingcap/tidb-cdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
-
-func Test(t *testing.T) { check.TestingT(t) }
 
 type mockPullerSuite struct{}
 

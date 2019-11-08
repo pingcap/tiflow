@@ -125,7 +125,7 @@ func (p *mockPuller) CollectRawTxns(ctx context.Context, outputFn func(context.C
 	return nil
 }
 
-func (p *mockPuller) Output() kv.Buffer {
+func (p *mockPuller) Output() Buffer {
 	panic("unreachable")
 }
 

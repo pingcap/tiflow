@@ -31,14 +31,14 @@ type Puller interface {
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
 	CollectRawTxns(ctx context.Context, outputFn func(context.Context, txn.RawTxn) error) error
-	Output() kv.Buffer
+	Output() Buffer
 }
 
 type pullerImpl struct {
 	pdCli        pd.Client
 	checkpointTs uint64
 	spans        []util.Span
-	buf          kv.Buffer
+	buf          Buffer
 	tsTracker    txn.ResolveTsTracker
 }
 
@@ -59,14 +59,14 @@ func NewPuller(
 		pdCli:        pdCli,
 		checkpointTs: checkpointTs,
 		spans:        spans,
-		buf:          kv.MakeBuffer(),
+		buf:          MakeBuffer(),
 		tsTracker:    makeSpanFrontier(spans...),
 	}
 
 	return p
 }
 
-func (p *pullerImpl) Output() kv.Buffer {
+func (p *pullerImpl) Output() Buffer {
 	return p.buf
 }
 
