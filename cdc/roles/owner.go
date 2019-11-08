@@ -111,12 +111,12 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			cfInfo.ProcessorInfos = etcdChangeFeedInfo
 		} else {
 			var targetTs uint64
-			changefeed, ok := changefeeds[changeFeedID]
-			// !ok should not happen
-			if ok && changefeed.TargetTs > uint64(0) {
-				targetTs = changefeed.TargetTs
-			} else {
+			if changefeed, ok := changefeeds[changeFeedID]; !ok {
+				return errors.Annotatef(model.ErrChangeFeedNotExists, "id:%s", changeFeedID)
+			} else if changefeed.TargetTs == uint64(0) {
 				targetTs = uint64(math.MaxUint64)
+			} else {
+				targetTs = changefeed.TargetTs
 			}
 			o.changeFeedInfos[changeFeedID] = &model.ChangeFeedInfo{
 				Status:          model.ChangeFeedSyncDML,
