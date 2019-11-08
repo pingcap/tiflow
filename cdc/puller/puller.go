@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package puller
 
 import (
 	"context"
@@ -26,7 +26,15 @@ import (
 )
 
 // Puller pull data from tikv and push changes into a buffer
-type Puller struct {
+type Puller interface {
+	// Run the puller, continually fetch event from TiKV and add event into buffer
+	Run(ctx context.Context) error
+	GetResolvedTs() uint64
+	CollectRawTxns(ctx context.Context, outputFn func(context.Context, txn.RawTxn) error) error
+	Output() Buffer
+}
+
+type pullerImpl struct {
 	pdCli        pd.Client
 	checkpointTs uint64
 	spans        []util.Span
@@ -35,7 +43,7 @@ type Puller struct {
 }
 
 type CancellablePuller struct {
-	*Puller
+	Puller
 
 	Cancel context.CancelFunc
 }
@@ -46,8 +54,8 @@ func NewPuller(
 	pdCli pd.Client,
 	checkpointTs uint64,
 	spans []util.Span,
-) *Puller {
-	p := &Puller{
+) *pullerImpl {
+	p := &pullerImpl{
 		pdCli:        pdCli,
 		checkpointTs: checkpointTs,
 		spans:        spans,
@@ -58,12 +66,12 @@ func NewPuller(
 	return p
 }
 
-func (p *Puller) Output() Buffer {
+func (p *pullerImpl) Output() Buffer {
 	return p.buf
 }
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
-func (p *Puller) Run(ctx context.Context) error {
+func (p *pullerImpl) Run(ctx context.Context) error {
 	// TODO pull from tikv and push into buf
 	// need buffer in memory first
 
@@ -124,10 +132,10 @@ func (p *Puller) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (p *Puller) GetResolvedTs() uint64 {
+func (p *pullerImpl) GetResolvedTs() uint64 {
 	return p.tsTracker.Frontier()
 }
 
-func (p *Puller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, txn.RawTxn) error) error {
+func (p *pullerImpl) CollectRawTxns(ctx context.Context, outputFn func(context.Context, txn.RawTxn) error) error {
 	return txn.CollectRawTxns(ctx, p.buf.Get, outputFn, p.tsTracker)
 }

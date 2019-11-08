@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/tidb-cdc/cdc/puller"
 	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/sink"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
@@ -32,7 +33,7 @@ import (
 
 //TODO: add tests
 type ddlHandler struct {
-	puller       *Puller
+	puller       puller.Puller
 	mounter      *txn.Mounter
 	checkpointTS uint64
 	resolvedTS   uint64
@@ -44,7 +45,7 @@ type ddlHandler struct {
 }
 
 func NewDDLHandler(pdCli pd.Client) *ddlHandler {
-	puller := NewPuller(pdCli, 0, []util.Span{util.GetDDLSpan()})
+	puller := puller.NewPuller(pdCli, 0, []util.Span{util.GetDDLSpan()})
 	ctx, cancel := context.WithCancel(context.Background())
 	// TODO this TxnMounter only mount DDL transaction, so it needn't schemaStorage
 	schemaStorage, _ := schema.NewStorage(nil, false)

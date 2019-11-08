@@ -1,14 +1,17 @@
-package cdc
+package puller
 
 import (
 	"fmt"
 	"strings"
+	"testing"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
 type spanFrontierSuite struct{}
+
+func Test(t *testing.T) { check.TestingT(t) }
 
 var _ = check.Suite(&spanFrontierSuite{})
 

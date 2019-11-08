@@ -11,17 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package puller
 
 import (
 	"context"
 	"sync"
 	"time"
 
-	"github.com/pingcap/tidb-cdc/pkg/util"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/tidb-cdc/pkg/util"
 )
 
 type bufferSuite struct{}

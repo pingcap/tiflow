@@ -27,6 +27,7 @@ import (
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/model"
+	"github.com/pingcap/tidb-cdc/cdc/puller"
 	"github.com/pingcap/tidb-cdc/cdc/roles/storage"
 	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/sink"
@@ -184,7 +185,7 @@ type processorImpl struct {
 	executedEntries chan ProcessorEntry
 	ddlJobsCh       chan txn.RawTxn
 
-	tblPullers      map[int64]CancellablePuller
+	tblPullers      map[int64]puller.CancellablePuller
 	tableInputChans map[int64]*txnChannel
 	inputChansLock  sync.RWMutex
 	wg              *errgroup.Group
@@ -242,7 +243,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		executedEntries: make(chan ProcessorEntry),
 		ddlJobsCh:       make(chan txn.RawTxn, 16),
 
-		tblPullers:      make(map[int64]CancellablePuller),
+		tblPullers:      make(map[int64]puller.CancellablePuller),
 		tableInputChans: make(map[int64]*txnChannel),
 	}
 
@@ -597,12 +598,12 @@ func (p *processorImpl) addTable(ctx context.Context, tableID int64, errCh chan<
 		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	puller := p.startPuller(ctx, span, txnChan, errCh)
-	p.tblPullers[tableID] = CancellablePuller{Puller: puller, Cancel: cancel}
+	plr := p.startPuller(ctx, span, txnChan, errCh)
+	p.tblPullers[tableID] = puller.CancellablePuller{Puller: plr, Cancel: cancel}
 	return nil
 }
 
-func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan chan<- txn.RawTxn, errCh chan<- error) *Puller {
+func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan chan<- txn.RawTxn, errCh chan<- error) puller.Puller {
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
 
@@ -611,7 +612,7 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 		checkpointTs = oracle.EncodeTSO(p.changefeed.CreateTime.Unix() * 1000)
 	}
 
-	puller := NewPuller(p.pdCli, checkpointTs, []util.Span{span})
+	puller := puller.NewPuller(p.pdCli, checkpointTs, []util.Span{span})
 
 	errg.Go(func() error {
 		return puller.Run(ctx)
