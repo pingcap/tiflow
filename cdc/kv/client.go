@@ -423,11 +423,11 @@ func (c *CDCClient) singleEventFeed(
 		for {
 			cevent, err := stream.Recv()
 			if err == io.EOF {
-				return uint64(req.CheckpointTs), nil
+				return req.CheckpointTs, nil
 			}
 
 			if err != nil {
-				return uint64(req.CheckpointTs), errors.Trace(err)
+				return req.CheckpointTs, errors.Trace(err)
 			}
 
 			log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
@@ -447,7 +447,7 @@ func (c *CDCClient) singleEventFeed(
 							case cdcpb.Event_Row_PUT:
 								opType = OpTypePut
 							default:
-								return uint64(req.CheckpointTs), errors.Errorf("unknow tp: %v", row.GetOpType())
+								return req.CheckpointTs, errors.Errorf("unknow tp: %v", row.GetOpType())
 							}
 
 							revent := &RegionFeedEvent{
@@ -461,7 +461,7 @@ func (c *CDCClient) singleEventFeed(
 							select {
 							case eventCh <- revent:
 							case <-ctx.Done():
-								return uint64(req.CheckpointTs), errors.Trace(ctx.Err())
+								return req.CheckpointTs, errors.Trace(ctx.Err())
 							}
 						case cdcpb.Event_PREWRITE:
 							notMatch[string(row.Key)] = row.GetValue()
@@ -487,7 +487,7 @@ func (c *CDCClient) singleEventFeed(
 							case cdcpb.Event_Row_PUT:
 								opType = OpTypePut
 							default:
-								return uint64(req.CheckpointTs), errors.Errorf("unknow tp: %v", row.GetOpType())
+								return req.CheckpointTs, errors.Errorf("unknow tp: %v", row.GetOpType())
 							}
 
 							revent := &RegionFeedEvent{
@@ -502,7 +502,7 @@ func (c *CDCClient) singleEventFeed(
 							select {
 							case eventCh <- revent:
 							case <-ctx.Done():
-								return uint64(req.CheckpointTs), errors.Trace(ctx.Err())
+								return req.CheckpointTs, errors.Trace(ctx.Err())
 							}
 							sorter.pushTsItem(sortItem{
 								start:  row.GetStartTs(),
@@ -521,7 +521,7 @@ func (c *CDCClient) singleEventFeed(
 				case *cdcpb.Event_Admin_:
 					log.Info("receive admin event", zap.Stringer("event", event))
 				case *cdcpb.Event_Error_:
-					return uint64(req.CheckpointTs), errors.Trace(&eventError{Event_Error: x.Error})
+					return req.CheckpointTs, errors.Trace(&eventError{Event_Error: x.Error})
 				case *cdcpb.Event_ResolvedTs:
 					if atomic.LoadUint32(&initialized) == 1 {
 						// emit a checkpoint
@@ -539,7 +539,7 @@ func (c *CDCClient) singleEventFeed(
 						select {
 						case eventCh <- revent:
 						case <-ctx.Done():
-							return uint64(req.CheckpointTs), errors.Trace(ctx.Err())
+							return req.CheckpointTs, errors.Trace(ctx.Err())
 						}
 
 					}
