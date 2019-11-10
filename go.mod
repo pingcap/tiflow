@@ -13,7 +13,7 @@ require (
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
 	github.com/pingcap/errors v0.11.4
-	github.com/pingcap/kvproto v0.0.0-20191016091455-93317d9d9702
+	github.com/pingcap/kvproto v0.0.0-20191029074618-fd9325002cc1
 	github.com/pingcap/log v0.0.0-20191012051959-b742a5d432e9
 	github.com/pingcap/parser v0.0.0-20191012071233-32876040fefb
 	github.com/pingcap/pd v1.1.0-beta.0.20190923032047-5c648dc365e0
@@ -22,6 +22,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20190728182440-6a916e37a237 // indirect
 	github.com/sirupsen/logrus v1.4.2 // indirect
 	github.com/spf13/cobra v0.0.3
+	github.com/stretchr/testify v1.4.0
 	go.uber.org/zap v1.10.0
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	google.golang.org/appengine v1.6.2 // indirect

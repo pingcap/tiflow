@@ -2,8 +2,10 @@ package kv
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -59,12 +61,12 @@ func (e *KvOrResolved) GetValue() interface{} {
 // Only one of the event will be setted.
 type RegionFeedEvent struct {
 	Val        *RegionFeedValue
-	Checkpoint *RegionnFeedCheckpoint
+	Checkpoint *RegionFeedCheckpoint
 }
 
-// RegionnFeedCheckpoint guarantees all the KV value event
+// RegionFeedCheckpoint guarantees all the KV value event
 // with commit ts less than ResolvedTs has been emitted.
-type RegionnFeedCheckpoint struct {
+type RegionFeedCheckpoint struct {
 	Span       util.Span
 	ResolvedTs uint64
 }
@@ -76,6 +78,10 @@ type RegionFeedValue struct {
 	// Nil fro delete type
 	Value []byte
 	Ts    uint64
+}
+
+func (v *RegionFeedValue) String() string {
+	return fmt.Sprintf("OpType: %v, Key: %s, Value: %s, ts: %d", v.OpType, string(v.Key), string(v.Value), v.Ts)
 }
 
 type singleRegionInfo struct {
@@ -263,6 +269,7 @@ func (c *CDCClient) partialRegionFeed(
 		}
 
 		maxTs, err := c.singleEventFeed(ctx, regionInfo.span, regionInfo.ts, regionInfo.meta, eventCh)
+		log.Debug("singleEventFeed quit")
 
 		if maxTs > ts {
 			ts = maxTs
@@ -271,7 +278,8 @@ func (c *CDCClient) partialRegionFeed(
 		if err != nil {
 			log.Info("EventFeed disconnected",
 				zap.Reflect("span", regionInfo.span),
-				zap.Uint64("checkpoint", ts))
+				zap.Uint64("checkpoint", ts),
+				zap.Error(err))
 
 			switch eerr := errors.Cause(err).(type) {
 			case *eventError:
@@ -279,8 +287,7 @@ func (c *CDCClient) partialRegionFeed(
 					regionInfo.meta = nil
 					return err
 				} else if eerr.GetEpochNotMatch() != nil {
-					regionInfo.meta = nil
-					return err
+					return c.divideAndSendEventFeedToRegions(ctx, regionInfo.span, ts, regionCh)
 				} else if eerr.GetRegionNotFound() != nil {
 					regionInfo.meta = nil
 					return err
@@ -314,11 +321,14 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			return errors.Trace(err)
 		}
 
+		log.Debug("ScanRegion", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions))
+
 		for _, region := range regions {
 			partialSpan, err := util.Intersect(nextSpan, util.Span{Start: region.StartKey, End: region.EndKey})
 			if err != nil {
 				return errors.Trace(err)
 			}
+			log.Debug("get partialSpan", zap.Reflect("span", partialSpan))
 
 			nextSpan.Start = region.EndKey
 
@@ -332,6 +342,7 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 				return ctx.Err()
 			}
 
+			// return if no more regions
 			if util.EndCompare(nextSpan.Start, span.End) >= 0 {
 				return nil
 			}
@@ -358,10 +369,12 @@ func (c *CDCClient) singleEventFeed(
 		},
 		RegionId:     meta.GetId(),
 		RegionEpoch:  meta.RegionEpoch,
-		CheckpointTs: int64(ts),
+		CheckpointTs: ts,
 		StartKey:     span.Start,
 		EndKey:       span.End,
 	}
+
+	var initialized uint32
 
 	conn, err := c.getConnByMeta(ctx, meta)
 	if err != nil {
@@ -372,6 +385,7 @@ func (c *CDCClient) singleEventFeed(
 
 	notMatch := make(map[string][]byte)
 
+	log.Debug("start new request", zap.Reflect("request", req))
 	for {
 		stream, err := client.EventFeed(ctx, req)
 
@@ -381,12 +395,19 @@ func (c *CDCClient) singleEventFeed(
 		}
 
 		maxItemFn := func(item sortItem) {
+			if atomic.LoadUint32(&initialized) == 0 {
+				return
+			}
+
 			// emit a checkpoint
 			revent := &RegionFeedEvent{
-				Checkpoint: &RegionnFeedCheckpoint{
+				Checkpoint: &RegionFeedCheckpoint{
 					Span:       span,
 					ResolvedTs: item.commit,
 				},
+			}
+			if item.commit > req.CheckpointTs {
+				req.CheckpointTs = item.commit
 			}
 
 			select {
@@ -395,16 +416,18 @@ func (c *CDCClient) singleEventFeed(
 			}
 		}
 
+		// TODO: drop this if we totally depends on the ResolvedTs event from
+		// tikv to emit the RegionFeedCheckpoint.
 		sorter := newSorter(maxItemFn)
 
 		for {
 			cevent, err := stream.Recv()
 			if err == io.EOF {
-				return uint64(req.CheckpointTs), nil
+				return req.CheckpointTs, nil
 			}
 
 			if err != nil {
-				return uint64(req.CheckpointTs), errors.Trace(err)
+				return req.CheckpointTs, errors.Trace(err)
 			}
 
 			log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
@@ -414,6 +437,32 @@ func (c *CDCClient) singleEventFeed(
 				case *cdcpb.Event_Entries_:
 					for _, row := range x.Entries.GetEntries() {
 						switch row.Type {
+						case cdcpb.Event_INITIALIZED:
+							atomic.StoreUint32(&initialized, 1)
+						case cdcpb.Event_COMMITTED:
+							var opType OpType
+							switch row.GetOpType() {
+							case cdcpb.Event_Row_DELETE:
+								opType = OpTypeDelete
+							case cdcpb.Event_Row_PUT:
+								opType = OpTypePut
+							default:
+								return req.CheckpointTs, errors.Errorf("unknow tp: %v", row.GetOpType())
+							}
+
+							revent := &RegionFeedEvent{
+								Val: &RegionFeedValue{
+									OpType: opType,
+									Key:    row.Key,
+									Value:  row.GetValue(),
+									Ts:     row.CommitTs,
+								},
+							}
+							select {
+							case eventCh <- revent:
+							case <-ctx.Done():
+								return req.CheckpointTs, errors.Trace(ctx.Err())
+							}
 						case cdcpb.Event_PREWRITE:
 							notMatch[string(row.Key)] = row.GetValue()
 							sorter.pushTsItem(sortItem{
@@ -438,7 +487,7 @@ func (c *CDCClient) singleEventFeed(
 							case cdcpb.Event_Row_PUT:
 								opType = OpTypePut
 							default:
-								return uint64(req.CheckpointTs), errors.Errorf("unknow tp: %v", row.GetOpType())
+								return req.CheckpointTs, errors.Errorf("unknow tp: %v", row.GetOpType())
 							}
 
 							revent := &RegionFeedEvent{
@@ -453,7 +502,7 @@ func (c *CDCClient) singleEventFeed(
 							select {
 							case eventCh <- revent:
 							case <-ctx.Done():
-								return uint64(req.CheckpointTs), errors.Trace(ctx.Err())
+								return req.CheckpointTs, errors.Trace(ctx.Err())
 							}
 							sorter.pushTsItem(sortItem{
 								start:  row.GetStartTs(),
@@ -472,20 +521,27 @@ func (c *CDCClient) singleEventFeed(
 				case *cdcpb.Event_Admin_:
 					log.Info("receive admin event", zap.Stringer("event", event))
 				case *cdcpb.Event_Error_:
-					return uint64(req.CheckpointTs), errors.Trace(&eventError{Event_Error: x.Error})
+					return req.CheckpointTs, errors.Trace(&eventError{Event_Error: x.Error})
 				case *cdcpb.Event_ResolvedTs:
-					// emit a checkpoint
-					revent := &RegionFeedEvent{
-						Checkpoint: &RegionnFeedCheckpoint{
-							Span:       span,
-							ResolvedTs: x.ResolvedTs,
-						},
-					}
+					if atomic.LoadUint32(&initialized) == 1 {
+						// emit a checkpoint
+						revent := &RegionFeedEvent{
+							Checkpoint: &RegionFeedCheckpoint{
+								Span:       span,
+								ResolvedTs: x.ResolvedTs,
+							},
+						}
 
-					select {
-					case eventCh <- revent:
-					case <-ctx.Done():
-						return uint64(req.CheckpointTs), errors.Trace(ctx.Err())
+						if x.ResolvedTs > req.CheckpointTs {
+							req.CheckpointTs = x.ResolvedTs
+						}
+
+						select {
+						case eventCh <- revent:
+						case <-ctx.Done():
+							return req.CheckpointTs, errors.Trace(ctx.Err())
+						}
+
 					}
 				}
 			}
