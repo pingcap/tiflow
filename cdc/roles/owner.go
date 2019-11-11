@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/roles/storage"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // Owner is used to process etcd information for a capture with owner role
@@ -213,6 +214,7 @@ func (o *ownerImpl) calcResolvedTs() error {
 }
 
 func (o *ownerImpl) handleDDL(ctx context.Context) error {
+	errg, cctx := errgroup.WithContext(ctx)
 waitCheckpointTsLoop:
 	for changeFeedID, cfInfo := range o.changeFeedInfos {
 		if cfInfo.Status != model.ChangeFeedWaitToExecDDL {
@@ -230,32 +232,35 @@ waitCheckpointTsLoop:
 		// Execute DDL Job asynchronously
 		cfInfo.Status = model.ChangeFeedExecDDL
 		go func(changeFeedID string, cfInfo *model.ChangeFeedInfo) {
-			err := o.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, todoDDLJob)
-			o.l.Lock()
-			defer o.l.Unlock()
-			// If DDL executing failed, pause the changefeed and print log
-			if err != nil {
-				cfInfo.Status = model.ChangeFeedDDLExecuteFailed
-				log.Error("Execute DDL failed",
+			errg.Go(func() error {
+				err := o.ddlHandler.ExecDDL(cctx, cfInfo.SinkURI, todoDDLJob)
+				o.l.Lock()
+				defer o.l.Unlock()
+				// If DDL executing failed, pause the changefeed and print log
+				if err != nil {
+					cfInfo.Status = model.ChangeFeedDDLExecuteFailed
+					log.Error("Execute DDL failed",
+						zap.String("ChangeFeedID", changeFeedID),
+						zap.Error(err),
+						zap.Reflect("ddlJob", todoDDLJob))
+					return err
+				}
+				log.Info("Execute DDL succeeded",
 					zap.String("ChangeFeedID", changeFeedID),
-					zap.Error(err),
 					zap.Reflect("ddlJob", todoDDLJob))
-				return
-			}
-			log.Info("Execute DDL succeeded",
-				zap.String("ChangeFeedID", changeFeedID),
-				zap.Reflect("ddlJob", todoDDLJob))
-			if cfInfo.Status != model.ChangeFeedExecDDL {
-				log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
-					zap.String("ChangeFeedID", changeFeedID),
-					zap.String("ChangeFeedState", cfInfo.Status.String()))
-			}
-			// TODO: we can remove the useless ddl job, after the slowest changefeed executed
-			cfInfo.DDLCurrentIndex += 1
-			cfInfo.Status = model.ChangeFeedSyncDML
+				if cfInfo.Status != model.ChangeFeedExecDDL {
+					log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
+						zap.String("ChangeFeedID", changeFeedID),
+						zap.String("ChangeFeedState", cfInfo.Status.String()))
+				}
+				// TODO: we can remove the useless ddl job, after the slowest changefeed executed
+				cfInfo.DDLCurrentIndex += 1
+				cfInfo.Status = model.ChangeFeedSyncDML
+				return nil
+			})
 		}(changeFeedID, cfInfo)
 	}
-	return nil
+	return errg.Wait()
 }
 
 func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {

@@ -190,5 +190,4 @@ func runCase(c *check.C, cases *processorTestCase) {
 		sinker.mu.Unlock()
 	}
 	cancel()
-	p.Close()
 }
