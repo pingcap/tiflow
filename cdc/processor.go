@@ -314,7 +314,7 @@ func (p *processorImpl) localResolvedWorker(ctx context.Context) error {
 			err := p.tsRWriter.WriteResolvedTs(ctx, minResolvedTs)
 			// TODO: add retry when meeting error
 			if err != nil {
-				return errors.Annotate(err, "Local resolved worker: write resolved ts failed")
+				return errors.Annotate(err, "write resolved ts")
 			}
 		}
 	}
@@ -342,7 +342,7 @@ func (p *processorImpl) checkpointWorker(ctx context.Context) error {
 			err := p.tsRWriter.WriteCheckpointTs(ctx, checkpointTs)
 			// TODO: add retry when meeting error
 			if err != nil {
-				return errors.Annotate(err, "Checkpoint worker: write checkpoint ts failed")
+				return errors.Annotate(err, "write checkpoint ts")
 			}
 		}
 	}
