@@ -70,8 +70,6 @@ type Processor interface {
 	ExecutedChan() chan<- ProcessorEntry
 	// Run starts the work routine of processor
 	Run(ctx context.Context, errCh chan<- error)
-	// Close closes the processor
-	Close()
 }
 
 // ProcessorTsRWriter reads or writes the resolvedTs and checkpointTs from the storage
@@ -262,20 +260,16 @@ func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
 	wg.Go(func() error {
-		p.localResolvedWorker(cctx)
-		return nil
+		return p.localResolvedWorker(cctx)
 	})
 	wg.Go(func() error {
-		p.checkpointWorker(cctx)
-		return nil
+		return p.checkpointWorker(cctx)
 	})
 	wg.Go(func() error {
-		p.globalResolvedWorker(cctx)
-		return nil
+		return p.globalResolvedWorker(cctx)
 	})
 	wg.Go(func() error {
-		p.pullerSchedule(cctx, errCh)
-		return nil
+		return p.pullerSchedule(cctx, errCh)
 	})
 	wg.Go(func() error {
 		return p.syncResolved(cctx)
@@ -283,32 +277,35 @@ func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 	wg.Go(func() error {
 		return p.pullDDLJob(cctx)
 	})
+
+	go func() {
+		err := wg.Wait()
+		if err != nil {
+			errCh <- err
+		}
+	}()
 }
 
 // pullerSchedule will be used to monitor table change and schedule pullers in the future
-func (p *processorImpl) pullerSchedule(ctx context.Context, ch chan<- error) {
+func (p *processorImpl) pullerSchedule(ctx context.Context, ch chan<- error) error {
 	// TODO: add DDL puller to maintain table schema
 
 	err := p.initPullers(ctx, ch)
-	if err != nil {
-		if err != context.Canceled {
-			log.Error("initial pullers", zap.Error(err))
-			ch <- err
-		}
-		return
+	if err != nil && err != context.Canceled {
+		return errors.Annotate(err, "initial pullers")
 	}
+	return nil
 }
 
-func (p *processorImpl) localResolvedWorker(ctx context.Context) {
+func (p *processorImpl) localResolvedWorker(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("Local resolved worker exited")
 			if ctx.Err() != context.Canceled {
-				log.Error("Local resolved worker exited", zap.Error(ctx.Err()))
-			} else {
-				log.Info("Local resolved worker exited")
+				return errors.Trace(ctx.Err())
 			}
-			return
+			return nil
 		case <-time.After(3 * time.Second):
 			minResolvedTs := uint64(math.MaxUint64)
 			p.tableResolvedTs.Range(func(key, value interface{}) bool {
@@ -323,42 +320,43 @@ func (p *processorImpl) localResolvedWorker(ctx context.Context) {
 				continue
 			}
 			err := p.tsRWriter.WriteResolvedTs(ctx, minResolvedTs)
+			// TODO: add retry when meeting error
 			if err != nil {
-				log.Error("Local resolved worker: write resolved ts failed", zap.Error(err))
+				return errors.Annotate(err, "write resolved ts")
 			}
 		}
 	}
 }
 
-func (p *processorImpl) checkpointWorker(ctx context.Context) {
+func (p *processorImpl) checkpointWorker(ctx context.Context) error {
 	checkpointTs := uint64(0)
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("Checkpoint worker exited")
 			if ctx.Err() != context.Canceled {
-				log.Error("Checkpoint worker exited", zap.Error(ctx.Err()))
-			} else {
-				log.Info("Checkpoint worker exited")
+				return errors.Trace(ctx.Err())
 			}
-			return
+			return nil
 		case e, ok := <-p.executedEntries:
 			if !ok {
 				log.Info("Checkpoint worker exited")
-				return
+				return nil
 			}
 			if e.Typ == ProcessorEntryResolved {
 				checkpointTs = e.Ts
 			}
 		case <-time.After(3 * time.Second):
 			err := p.tsRWriter.WriteCheckpointTs(ctx, checkpointTs)
+			// TODO: add retry when meeting error
 			if err != nil {
-				log.Error("Checkpoint worker: write checkpoint ts failed", zap.Error(err))
+				return errors.Annotate(err, "write checkpoint ts")
 			}
 		}
 	}
 }
 
-func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
+func (p *processorImpl) globalResolvedWorker(ctx context.Context) error {
 	log.Info("Global resolved worker started")
 
 	var (
@@ -380,12 +378,11 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 		wg, cctx := errgroup.WithContext(ctx)
 		select {
 		case <-ctx.Done():
+			log.Info("Global resolved worker exited")
 			if ctx.Err() != context.Canceled {
-				log.Error("Global resolved worker exited", zap.Error(ctx.Err()))
-			} else {
-				log.Info("Global resolved worker exited")
+				return errors.Trace(ctx.Err())
 			}
-			return
+			return nil
 		default:
 		}
 		err := backoff.Retry(func() error {
@@ -396,8 +393,11 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 			}
 			return err
 		}, retryCfg)
+		if errors.Cause(err) == context.Canceled {
+			return nil
+		}
 		if err != nil {
-			return
+			return errors.Trace(err)
 		}
 		if lastGlobalResolvedTs == globalResolvedTs {
 			time.Sleep(500 * time.Millisecond)
@@ -438,7 +438,7 @@ func (p *processorImpl) pullDDLJob(ctx context.Context) error {
 				return nil
 			}
 		})
-		if err != nil && err != context.Canceled {
+		if err != nil && errors.Cause(err) != context.Canceled {
 			return errors.Annotate(err, "span: ddl")
 		}
 		return nil
@@ -522,14 +522,6 @@ func (p *processorImpl) ResolvedChan() <-chan ProcessorEntry {
 
 func (p *processorImpl) ExecutedChan() chan<- ProcessorEntry {
 	return p.executedEntries
-}
-
-func (p *processorImpl) Close() {
-	if p.wg != nil {
-		if err := p.wg.Wait(); err != nil {
-			log.Error("Waiting to close", zap.Error(err))
-		}
-	}
 }
 
 func createSchemaStore(pdEndpoints []string) (*schema.Storage, error) {
@@ -638,15 +630,14 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 				return nil
 			}
 		})
-		if err != nil {
-			return errors.Annotatef(err, "span: %v", span)
-		}
-		return nil
+		return errors.Annotatef(err, "span: %v", span)
 	})
 
 	go func() {
 		err := errg.Wait()
-		errCh <- err
+		if errors.Cause(err) != context.Canceled {
+			errCh <- err
+		}
 	}()
 
 	return puller

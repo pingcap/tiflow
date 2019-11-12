@@ -303,6 +303,9 @@ func (c *CDCClient) partialRegionFeed(
 		return nil
 	}, backoff.NewExponentialBackOff())
 
+	if errors.Cause(berr) == context.Canceled {
+		return nil
+	}
 	return errors.Trace(berr)
 }
 
