@@ -90,7 +90,7 @@ type txnChannel struct {
 	putBackTxn *txn.RawTxn
 }
 
-func (p *txnChannel) Forward(tableID int64, ts uint64, entryC chan<- ProcessorEntry) {
+func (p *txnChannel) Forward(ctx context.Context, tableID int64, ts uint64, entryC chan<- ProcessorEntry) {
 	if p.putBackTxn != nil {
 		t := *p.putBackTxn
 		if t.Ts > ts {
@@ -99,14 +99,22 @@ func (p *txnChannel) Forward(tableID int64, ts uint64, entryC chan<- ProcessorEn
 		p.putBackTxn = nil
 		entryC <- NewProcessorTxnEntry(t)
 	}
-	for t := range p.outputTxn {
-		if t.Ts > ts {
-			p.PutBack(t)
+	for {
+		select {
+		case <-ctx.Done():
 			return
+		case t, ok := <-p.outputTxn:
+			if !ok {
+				log.Info("Input channel of table closed", zap.Int64("tableID", tableID))
+				return
+			}
+			if t.Ts > ts {
+				p.PutBack(t)
+				return
+			}
+			entryC <- NewProcessorTxnEntry(t)
 		}
-		entryC <- NewProcessorTxnEntry(t)
 	}
-	log.Info("Input channel of table closed", zap.Int64("tableID", tableID))
 }
 
 func (p *txnChannel) PutBack(t txn.RawTxn) {
@@ -369,7 +377,7 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 		3,
 	)
 	for {
-		wg, _ := errgroup.WithContext(ctx)
+		wg, cctx := errgroup.WithContext(ctx)
 		select {
 		case <-ctx.Done():
 			if ctx.Err() != context.Canceled {
@@ -401,7 +409,7 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) {
 			table := table
 			input := input
 			wg.Go(func() error {
-				input.Forward(table, globalResolvedTs, p.resolvedEntries)
+				input.Forward(cctx, table, globalResolvedTs, p.resolvedEntries)
 				return nil
 			})
 		}
@@ -619,6 +627,7 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 	})
 
 	errg.Go(func() error {
+		defer close(txnChan)
 		err := puller.CollectRawTxns(ctx, func(ctxInner context.Context, rawTxn txn.RawTxn) error {
 			select {
 			case <-ctx.Done():
