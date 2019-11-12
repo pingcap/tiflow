@@ -180,11 +180,15 @@ func (o *ownerImpl) calcResolvedTs() error {
 			continue
 		}
 		minResolvedTs := cfInfo.TargetTs
+		minCheckpointTs := cfInfo.TargetTs
 
 		// calc the min of all resolvedTs in captures
 		for _, pStatus := range cfInfo.ProcessorInfos {
 			if minResolvedTs > pStatus.ResolvedTs {
 				minResolvedTs = pStatus.ResolvedTs
+			}
+			if minCheckpointTs > pStatus.CheckPointTs {
+				minCheckpointTs = pStatus.CheckPointTs
 			}
 		}
 
@@ -209,6 +213,7 @@ func (o *ownerImpl) calcResolvedTs() error {
 			cfInfo.Status = model.ChangeFeedWaitToExecDDL
 		}
 		cfInfo.ResolvedTs = minResolvedTs
+		cfInfo.CheckpointTs = minCheckpointTs
 	}
 	return nil
 }
