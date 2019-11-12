@@ -291,7 +291,13 @@ func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *model.TableInfo, tab
 
 func (m *Mounter) mountDDL(jobEntry *entry.DDLJobKVEntry) (*DDL, error) {
 	databaseName := jobEntry.Job.SchemaName
-	tableName := jobEntry.Job.BinlogInfo.TableInfo.Name.O
+	var tableName string
+	table := jobEntry.Job.BinlogInfo.TableInfo
+	if table == nil {
+		tableName = ""
+	} else {
+		tableName = table.Name.O
+	}
 	return &DDL{
 		databaseName,
 		tableName,
