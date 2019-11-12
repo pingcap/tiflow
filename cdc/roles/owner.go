@@ -218,6 +218,9 @@ func (o *ownerImpl) calcResolvedTs() error {
 	return nil
 }
 
+// handleDDL check if we can change the status to be `ChangeFeedExecDDL` and execute the DDL asynchronously
+// if the status is in ChangeFeedWaitToExecDDL.
+// After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
 func (o *ownerImpl) handleDDL(ctx context.Context) error {
 	errg, cctx := errgroup.WithContext(ctx)
 waitCheckpointTsLoop:
