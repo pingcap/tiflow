@@ -23,18 +23,18 @@ import (
 
 type MVCCListener struct {
 	mocktikv.MVCCStore
-	mu         sync.RWMutex
-	prewriteFn func(req *kvrpcpb.PrewriteRequest, result []error)
-	commitFn   func(keys [][]byte, startTs, commitTs uint64, result error)
-	rollbackFn func(keys [][]byte, startTs uint64, result error)
+	mu           sync.RWMutex
+	postPrewrite func(req *kvrpcpb.PrewriteRequest, result []error)
+	postCommit   func(keys [][]byte, startTs, commitTs uint64, result error)
+	postRollback func(keys [][]byte, startTs uint64, result error)
 }
 
 func NewMVCCListener(store mocktikv.MVCCStore) *MVCCListener {
 	return &MVCCListener{
-		MVCCStore:  store,
-		prewriteFn: func(_ *kvrpcpb.PrewriteRequest, _ []error) {},
-		commitFn:   func(_ [][]byte, _, _ uint64, _ error) {},
-		rollbackFn: func(_ [][]byte, _ uint64, _ error) {},
+		MVCCStore:    store,
+		postPrewrite: func(_ *kvrpcpb.PrewriteRequest, _ []error) {},
+		postCommit:   func(_ [][]byte, _, _ uint64, _ error) {},
+		postRollback: func(_ [][]byte, _ uint64, _ error) {},
 	}
 }
 
@@ -43,7 +43,7 @@ func (l *MVCCListener) Prewrite(req *kvrpcpb.PrewriteRequest) []error {
 	defer l.mu.RUnlock()
 	result := l.MVCCStore.Prewrite(req)
 	log.Debug("MVCCListener Prewrite", zap.Reflect("req", req), zap.Reflect("result", result))
-	l.prewriteFn(req, result)
+	l.postPrewrite(req, result)
 	return result
 }
 func (l *MVCCListener) Commit(keys [][]byte, startTs, commitTs uint64) error {
@@ -54,7 +54,7 @@ func (l *MVCCListener) Commit(keys [][]byte, startTs, commitTs uint64) error {
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("commitTs", commitTs),
 		zap.Reflect("result", result))
-	l.commitFn(keys, startTs, commitTs, result)
+	l.postCommit(keys, startTs, commitTs, result)
 	return result
 }
 func (l *MVCCListener) Rollback(keys [][]byte, startTs uint64) error {
@@ -64,26 +64,26 @@ func (l *MVCCListener) Rollback(keys [][]byte, startTs uint64) error {
 	log.Debug("MVCCListener Commit", zap.Reflect("keys", keys),
 		zap.Uint64("startTs", startTs),
 		zap.Reflect("result", result))
-	l.rollbackFn(keys, startTs, result)
+	l.postRollback(keys, startTs, result)
 	return result
 }
 
-func (l *MVCCListener) RegisterPrewriteFn(fn func(req *kvrpcpb.PrewriteRequest, result []error)) {
+func (l *MVCCListener) RegisterPostPrewrite(fn func(req *kvrpcpb.PrewriteRequest, result []error)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.prewriteFn = fn
+	l.postPrewrite = fn
 }
 
-func (l *MVCCListener) RegisterCommitFn(fn func(keys [][]byte, startTs, commitTs uint64, result error)) {
+func (l *MVCCListener) RegisterPostCommit(fn func(keys [][]byte, startTs, commitTs uint64, result error)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.commitFn = fn
+	l.postCommit = fn
 }
 
-func (l *MVCCListener) RegisterRollbackFn(fn func(keys [][]byte, startTs uint64, result error)) {
+func (l *MVCCListener) RegisterPostRollback(fn func(keys [][]byte, startTs uint64, result error)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.rollbackFn = fn
+	l.postRollback = fn
 }
 
 type MockPullerManager struct {
@@ -166,12 +166,12 @@ func (m *MockPullerManager) setUp() {
 	m.tidbKit = testkit.NewTestKit(m.c, m.store)
 	m.MustExec("use test;")
 
-	mvccListener.RegisterPrewriteFn(m.prewriteFn)
-	mvccListener.RegisterCommitFn(m.commitFn)
-	mvccListener.RegisterRollbackFn(m.rollbackFn)
+	mvccListener.RegisterPostPrewrite(m.prewriteFn)
+	mvccListener.RegisterPostCommit(m.commitFn)
+	mvccListener.RegisterPostRollback(m.rollbackFn)
 }
 
-func (m *MockPullerManager) Run(ctx context.Context) error {
+func (m *MockPullerManager) Run(ctx context.Context) {
 	m.setUp()
 	go func() {
 		for {
@@ -191,7 +191,6 @@ func (m *MockPullerManager) Run(ctx context.Context) error {
 			}
 		}
 	}()
-	return nil
 }
 
 func (m *MockPullerManager) CreatePuller(spans []util.Span) Puller {

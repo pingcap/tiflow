@@ -18,17 +18,17 @@ var _ = check.Suite(&mockPullerSuite{})
 // TODO add a test kit easier-to-use
 func (s *mockPullerSuite) TestTxnSort(c *check.C) {
 	pm := NewMockPullerManager(c)
+	defer pm.Close()
 	plr := pm.CreatePuller([]util.Span{util.Span{}.Hack()})
 	ctx := context.Background()
 	ts := uint64(0)
 	err := plr.CollectRawTxns(ctx, func(ctx context.Context, txn txn.RawTxn) error {
-		c.Assert(ts, check.LessEqual, txn.Ts)
+		c.Assert(ts, check.Less, txn.Ts)
 		atomic.StoreUint64(&ts, txn.Ts)
 		return nil
 	})
 	c.Assert(err, check.IsNil)
-	err = pm.Run(context.Background())
-	c.Assert(err, check.IsNil)
+	pm.Run(context.Background())
 	pm.MustExec("create table test.test(id varchar(255) primary key, a int)")
 	pm.MustExec("insert into test.test(id, a) values(?, ?)", 1, 1)
 	pm.MustExec("update test.test set id = ? where a = ?", 6, 1)
@@ -36,17 +36,17 @@ func (s *mockPullerSuite) TestTxnSort(c *check.C) {
 	pm.MustExec("insert into test.test(id, a) values(?, ?)", 3, 3)
 	pm.MustExec("delete from test.test")
 	waitForGrowingTs(&ts, oracle.EncodeTSO(time.Now().Unix()*1000))
-	pm.Close()
 }
 
 func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 	pm := NewMockPullerManager(c)
+	defer pm.Close()
 	plr := pm.CreatePuller([]util.Span{util.GetDDLSpan()})
 	ctx := context.Background()
 	ts := uint64(0)
 	txnMounter := txn.NewTxnMounter(nil, time.UTC)
 	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn txn.RawTxn) error {
-		c.Assert(ts, check.LessEqual, rawTxn.Ts)
+		c.Assert(ts, check.Less, rawTxn.Ts)
 		atomic.StoreUint64(&ts, rawTxn.Ts)
 		if len(rawTxn.Entries) == 0 {
 			return nil
@@ -64,8 +64,7 @@ func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 		return nil
 	})
 	c.Assert(err, check.IsNil)
-	err = pm.Run(context.Background())
-	c.Assert(err, check.IsNil)
+	pm.Run(context.Background())
 	pm.MustExec("create table test.test(id varchar(255) primary key, a int)")
 	pm.MustExec("insert into test.test(id, a) values(?, ?)", 1, 1)
 	pm.MustExec("update test.test set id = ? where a = ?", 6, 1)
@@ -73,7 +72,6 @@ func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 	pm.MustExec("insert into test.test(id, a) values(?, ?)", 3, 3)
 	pm.MustExec("delete from test.test")
 	waitForGrowingTs(&ts, oracle.EncodeTSO(time.Now().Unix()*1000))
-	pm.Close()
 }
 
 func waitForGrowingTs(growingTs *uint64, targetTs uint64) {
