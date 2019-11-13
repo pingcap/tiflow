@@ -166,9 +166,9 @@ func (m *MockPullerManager) setUp() {
 	m.tidbKit = testkit.NewTestKit(m.c, m.store)
 	m.MustExec("use test;")
 
-	mvccListener.RegisterPostPrewrite(m.prewriteFn)
-	mvccListener.RegisterPostCommit(m.commitFn)
-	mvccListener.RegisterPostRollback(m.rollbackFn)
+	mvccListener.RegisterPostPrewrite(m.postPrewrite)
+	mvccListener.RegisterPostCommit(m.postCommit)
+	mvccListener.RegisterPostRollback(m.postRollback)
 }
 
 func (m *MockPullerManager) Run(ctx context.Context) {
@@ -220,7 +220,7 @@ func (m *MockPullerManager) sendRawTxn(ctx context.Context, rawTxn txn.RawTxn) {
 	}
 }
 
-func (m *MockPullerManager) prewriteFn(req *kvrpcpb.PrewriteRequest, result []error) {
+func (m *MockPullerManager) postPrewrite(req *kvrpcpb.PrewriteRequest, result []error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if anyError(result) {
@@ -229,7 +229,7 @@ func (m *MockPullerManager) prewriteFn(req *kvrpcpb.PrewriteRequest, result []er
 	m.txnMap[req.StartVersion] = req
 }
 
-func (m *MockPullerManager) commitFn(keys [][]byte, startTs, commitTs uint64, result error) {
+func (m *MockPullerManager) postCommit(keys [][]byte, startTs, commitTs uint64, result error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if result != nil {
@@ -243,7 +243,7 @@ func (m *MockPullerManager) commitFn(keys [][]byte, startTs, commitTs uint64, re
 	m.rawTxnCh <- prewrite2RawTxn(prewrite, commitTs)
 }
 
-func (m *MockPullerManager) rollbackFn(keys [][]byte, startTs uint64, result error) {
+func (m *MockPullerManager) postRollback(keys [][]byte, startTs uint64, result error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if result != nil {
