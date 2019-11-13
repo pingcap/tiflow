@@ -113,12 +113,15 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			cfInfo.ProcessorInfos = etcdChangeFeedInfo
 		} else {
 			var targetTs uint64
+			var tableIDs []uint64
 			if changefeed, ok := changefeeds[changeFeedID]; !ok {
 				return errors.Annotatef(model.ErrChangeFeedNotExists, "id:%s", changeFeedID)
 			} else if changefeed.TargetTs == uint64(0) {
 				targetTs = uint64(math.MaxUint64)
+				tableIDs = changefeed.TableIDs
 			} else {
 				targetTs = changefeed.TargetTs
+				tableIDs = changefeed.TableIDs
 			}
 			o.changeFeedInfos[changeFeedID] = &model.ChangeFeedInfo{
 				Status:          model.ChangeFeedSyncDML,
@@ -127,6 +130,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 				TargetTs:        targetTs,
 				ProcessorInfos:  etcdChangeFeedInfo,
 				DDLCurrentIndex: 0,
+				TableIDs:        tableIDs,
 			}
 		}
 	}
@@ -232,6 +236,24 @@ waitCheckpointTsLoop:
 			if pInfo.CheckPointTs != todoDDLJob.Job.BinlogInfo.FinishedTS {
 				continue waitCheckpointTsLoop
 			}
+		}
+
+		// Skip if the table of DDL is not watched.
+		skipDDL := true
+		if tableID := uint64(todoDDLJob.Job.TableID); tableID != 0 {
+			for _, watchingTableID := range cfInfo.TableIDs {
+				if tableID == watchingTableID {
+					skipDDL = false
+					break
+				}
+			}
+		} else {
+			skipDDL = false
+		}
+		if skipDDL {
+			cfInfo.DDLCurrentIndex += 1
+			cfInfo.Status = model.ChangeFeedSyncDML
+			continue waitCheckpointTsLoop
 		}
 
 		// Execute DDL Job asynchronously

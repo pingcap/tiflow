@@ -140,6 +140,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 		ddlHandler:      handler,
 		cfRWriter:       handler,
 		manager:         manager,
+		errCh:           make(chan error),
 	}
 	s.owner = owner
 	err = owner.Run(ctx, 50*time.Millisecond)
@@ -154,6 +155,7 @@ type handlerForDDLTest struct {
 	ddls          []*txn.DDL
 	ddlResolvedTs []uint64
 
+	expectDDLs     []*txn.DDL
 	ddlExpectIndex int
 
 	dmlIndex                int
@@ -182,7 +184,7 @@ func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, ddl *tx
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.ddlExpectIndex++
-	h.c.Assert(ddl, check.DeepEquals, h.ddls[h.ddlExpectIndex])
+	h.c.Assert(ddl, check.DeepEquals, h.expectDDLs[h.ddlExpectIndex])
 	h.c.Assert(ddl.Job.BinlogInfo.FinishedTS, check.Equals, h.currentGlobalResolvedTs)
 	return nil
 }
@@ -241,6 +243,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 				"capture_1": {},
 				"capture_2": {},
 			},
+			TableIDs: []uint64{1, 3},
 		},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -254,34 +257,63 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 				BinlogInfo: &timodel.HistoryInfo{
 					FinishedTS: 3,
 				},
+				TableID: 1,
 			}},
 			{Job: &timodel.Job{
 				ID: 2,
 				BinlogInfo: &timodel.HistoryInfo{
 					FinishedTS: 7,
 				},
+				TableID: 2,
 			}},
 			{Job: &timodel.Job{
 				ID: 3,
 				BinlogInfo: &timodel.HistoryInfo{
 					FinishedTS: 11,
 				},
+				TableID: 3,
 			}},
 			{Job: &timodel.Job{
 				ID: 4,
 				BinlogInfo: &timodel.HistoryInfo{
 					FinishedTS: 89,
 				},
+				TableID: 1,
 			}},
 			{Job: &timodel.Job{
 				ID: 5,
 				BinlogInfo: &timodel.HistoryInfo{
 					FinishedTS: 111,
 				},
+				TableID: 2,
 			}},
 		},
 
 		ddlExpectIndex: -1,
+
+		expectDDLs: []*txn.DDL{
+			{Job: &timodel.Job{
+				ID: 1,
+				BinlogInfo: &timodel.HistoryInfo{
+					FinishedTS: 3,
+				},
+				TableID: 1,
+			}},
+			{Job: &timodel.Job{
+				ID: 3,
+				BinlogInfo: &timodel.HistoryInfo{
+					FinishedTS: 11,
+				},
+				TableID: 3,
+			}},
+			{Job: &timodel.Job{
+				ID: 4,
+				BinlogInfo: &timodel.HistoryInfo{
+					FinishedTS: 89,
+				},
+				TableID: 1,
+			}},
+		},
 
 		dmlIndex:                -1,
 		resolvedTs1:             []uint64{10, 22, 64, 92, 99, 120},
@@ -297,7 +329,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 			100},
 		expectStatus: []model.ChangeFeedStatus{
 			model.ChangeFeedWaitToExecDDL, model.ChangeFeedExecDDL,
-			model.ChangeFeedWaitToExecDDL, model.ChangeFeedExecDDL,
+			model.ChangeFeedWaitToExecDDL, model.ChangeFeedSyncDML,
 			model.ChangeFeedWaitToExecDDL, model.ChangeFeedExecDDL,
 			model.ChangeFeedWaitToExecDDL, model.ChangeFeedExecDDL,
 			model.ChangeFeedSyncDML},
@@ -315,6 +347,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 		ddlHandler: handler,
 		cfRWriter:  handler,
 		manager:    manager,
+		errCh:      make(chan error),
 	}
 	s.owner = owner
 	err = owner.Run(ctx, 50*time.Millisecond)
@@ -347,7 +380,10 @@ func (s *ownerSuite) TestAssignChangeFeed(c *check.C) {
 		_, err = s.client.Put(context.Background(), key, string(data))
 		c.Assert(err, check.IsNil)
 	}
-	owner := &ownerImpl{etcdClient: s.client}
+	owner := &ownerImpl{
+		etcdClient: s.client,
+		errCh:      make(chan error),
+	}
 	pinfo, err := owner.assignChangeFeed(context.Background(), changefeedID)
 	c.Assert(err, check.IsNil)
 
