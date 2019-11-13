@@ -266,6 +266,7 @@ waitCheckpointTsLoop:
 }
 
 func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
+	defer close(o.errCh)
 	for {
 		select {
 		case <-ctx.Done():
