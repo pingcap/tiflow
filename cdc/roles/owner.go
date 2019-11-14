@@ -237,6 +237,7 @@ waitCheckpointTsLoop:
 		// Execute DDL Job asynchronously
 		cfInfo.Status = model.ChangeFeedExecDDL
 		go func(changeFeedID string, cfInfo *model.ChangeFeedInfo) {
+			// create a new context to avoid that the process of DDL executing is cancelled by `run` function
 			ctx := context.Background()
 			err := o.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, todoDDLJob)
 			o.mu.Lock()
