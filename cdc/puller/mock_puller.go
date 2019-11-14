@@ -149,24 +149,6 @@ func (p *mockPuller) CollectRawTxns(ctx context.Context, outputFn func(context.C
 	}
 }
 
-func (p *mockPuller) sendRawTxn(ctx context.Context, rawTxn txn.RawTxn, outputFn func(context.Context, txn.RawTxn) error) {
-	toSend := txn.RawTxn{Ts: rawTxn.Ts}
-	if len(rawTxn.Entries) > 0 {
-		for _, kvEntry := range rawTxn.Entries {
-			if util.KeyInSpans(kvEntry.Key, p.spans) {
-				toSend.Entries = append(toSend.Entries, kvEntry)
-			}
-		}
-		if len(toSend.Entries) == 0 {
-			return
-		}
-	}
-	err := outputFn(ctx, toSend)
-	if err != nil {
-		log.Fatal("output raw transaction failed", zap.Error(err))
-	}
-}
-
 func (p *mockPuller) Output() Buffer {
 	panic("unreachable")
 }
@@ -253,6 +235,24 @@ func (m *MockPullerManager) CreatePuller(startTs uint64, spans []util.Span) Pull
 
 func (m *MockPullerManager) MustExec(sql string, args ...interface{}) {
 	m.tidbKit.MustExec(sql, args...)
+}
+
+func (p *mockPuller) sendRawTxn(ctx context.Context, rawTxn txn.RawTxn, outputFn func(context.Context, txn.RawTxn) error) {
+	toSend := txn.RawTxn{Ts: rawTxn.Ts}
+	if len(rawTxn.Entries) > 0 {
+		for _, kvEntry := range rawTxn.Entries {
+			if util.KeyInSpans(kvEntry.Key, p.spans) {
+				toSend.Entries = append(toSend.Entries, kvEntry)
+			}
+		}
+		if len(toSend.Entries) == 0 {
+			return
+		}
+	}
+	err := outputFn(ctx, toSend)
+	if err != nil {
+		log.Fatal("output raw transaction failed", zap.Error(err))
+	}
 }
 
 func (m *MockPullerManager) postPrewrite(req *kvrpcpb.PrewriteRequest, result []error) {
