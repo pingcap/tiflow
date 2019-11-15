@@ -96,7 +96,7 @@ func (s *mockPullerSuite) TestStartTs(c *check.C) {
 			rawTxns = append(rawTxns, txn)
 			return nil
 		})
-		c.Assert(err, check.IsNil)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 	pm.Run(context.Background())
 	pm.MustExec("create table test.test(id varchar(255) primary key, a int)")
