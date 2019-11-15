@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/pingcap/tidb-cdc/cmd"
+	"github.com/pingcap/ticdc/cmd"
 	_ "github.com/pingcap/tidb/types/parser_driver"
 )
 

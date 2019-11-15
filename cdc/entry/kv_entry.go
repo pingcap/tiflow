@@ -23,7 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/tidb/types"
 )
 

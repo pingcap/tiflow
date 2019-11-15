@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/kv"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }

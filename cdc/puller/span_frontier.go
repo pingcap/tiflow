@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/biogo/store/interval"
-	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 // Generic intervals
