@@ -8,8 +8,8 @@ import (
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/tidb-cdc/cdc"
-	"github.com/pingcap/tidb-cdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc"
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 func feed() {

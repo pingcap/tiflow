@@ -10,12 +10,12 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/mock"
-	"github.com/pingcap/tidb-cdc/cdc/schema"
-	"github.com/pingcap/tidb-cdc/cdc/sink"
-	"github.com/pingcap/tidb-cdc/cdc/txn"
-	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/mock"
+	"github.com/pingcap/ticdc/cdc/schema"
+	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/cdc/txn"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 func TestSuite(t *testing.T) { TestingT(t) }

@@ -5,7 +5,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
