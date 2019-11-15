@@ -114,15 +114,15 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 		} else {
 			var targetTs uint64
 			var tableIDs []uint64
-			if changefeed, ok := changefeeds[changeFeedID]; !ok {
+			changefeed, ok := changefeeds[changeFeedID]
+			if !ok {
 				return errors.Annotatef(model.ErrChangeFeedNotExists, "id:%s", changeFeedID)
 			} else if changefeed.TargetTs == uint64(0) {
 				targetTs = uint64(math.MaxUint64)
-				tableIDs = changefeed.TableIDs
 			} else {
 				targetTs = changefeed.TargetTs
-				tableIDs = changefeed.TableIDs
 			}
+			tableIDs = changefeed.TableIDs
 			o.changeFeedInfos[changeFeedID] = &model.ChangeFeedInfo{
 				Status:          model.ChangeFeedSyncDML,
 				ResolvedTs:      0,
@@ -239,18 +239,7 @@ waitCheckpointTsLoop:
 		}
 
 		// Skip if the table of DDL is not watched.
-		skipDDL := true
-		if tableID := uint64(todoDDLJob.Job.TableID); tableID != 0 {
-			for _, watchingTableID := range cfInfo.TableIDs {
-				if tableID == watchingTableID {
-					skipDDL = false
-					break
-				}
-			}
-		} else {
-			skipDDL = false
-		}
-		if skipDDL {
+		if shouldSkipDDL(cfInfo, todoDDLJob) {
 			cfInfo.DDLCurrentIndex += 1
 			cfInfo.Status = model.ChangeFeedSyncDML
 			continue waitCheckpointTsLoop
@@ -285,6 +274,24 @@ waitCheckpointTsLoop:
 		}(changeFeedID, cfInfo)
 	}
 	return nil
+}
+
+func shouldSkipDDL(cfInfo *model.ChangeFeedInfo, todoDDLJob *txn.DDL) bool {
+	// TODO:
+	//  1. currently the synchronization filter strategy is by `table id`,
+	//  and no schema level filter, will be refined according to synchronization filter strategy.
+	//  2. The algorithm to check whether a table ID is watched has O(N) complexity.
+	//  No need to address here, as the filter strategy may be changed later.
+	tableID := uint64(todoDDLJob.Job.TableID)
+	if tableID == 0 {
+		return false
+	}
+	for _, watchingTableID := range cfInfo.TableIDs {
+		if tableID == watchingTableID {
+			return false
+		}
+	}
+	return true
 }
 
 func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
