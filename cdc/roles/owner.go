@@ -22,10 +22,10 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/model"
-	"github.com/pingcap/tidb-cdc/cdc/roles/storage"
-	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/roles/storage"
+	"github.com/pingcap/ticdc/cdc/txn"
 	"go.uber.org/zap"
 )
 
@@ -113,7 +113,8 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			cfInfo.ProcessorInfos = etcdChangeFeedInfo
 		} else {
 			var targetTs uint64
-			if changefeed, ok := changefeeds[changeFeedID]; !ok {
+			changefeed, ok := changefeeds[changeFeedID]
+			if !ok {
 				return errors.Annotatef(model.ErrChangeFeedNotExists, "id:%s", changeFeedID)
 			} else if changefeed.TargetTs == uint64(0) {
 				targetTs = uint64(math.MaxUint64)
@@ -122,6 +123,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			}
 			o.changeFeedInfos[changeFeedID] = &model.ChangeFeedInfo{
 				Status:          model.ChangeFeedSyncDML,
+				SinkURI:         changefeed.SinkURI,
 				ResolvedTs:      0,
 				CheckpointTs:    0,
 				TargetTs:        targetTs,
@@ -219,6 +221,9 @@ func (o *ownerImpl) calcResolvedTs() error {
 	return nil
 }
 
+// handleDDL check if we can change the status to be `ChangeFeedExecDDL` and execute the DDL asynchronously
+// if the status is in ChangeFeedWaitToExecDDL.
+// After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
 func (o *ownerImpl) handleDDL(ctx context.Context) error {
 waitCheckpointTsLoop:
 	for changeFeedID, cfInfo := range o.changeFeedInfos {
@@ -369,6 +374,7 @@ func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (
 		&model.ChangeFeedInfo{
 			CheckpointTs: cinfo.StartTs,
 			ResolvedTs:   0,
+			SinkURI:      cinfo.SinkURI,
 		})
 	if err != nil {
 		return nil, err

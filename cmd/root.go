@@ -6,7 +6,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )

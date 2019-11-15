@@ -10,7 +10,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"

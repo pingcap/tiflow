@@ -19,8 +19,8 @@ import (
 
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb-cdc/cdc/schema"
-	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/ticdc/cdc/schema"
+	"github.com/pingcap/ticdc/cdc/txn"
 
 	"github.com/pingcap/errors"
 )

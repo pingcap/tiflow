@@ -23,9 +23,9 @@ import (
 	"github.com/coreos/etcd/mvcc/mvccpb"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/model"
-	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 var (
@@ -186,6 +186,7 @@ func (w *ProcessorWatcher) reopen() error {
 	return nil
 }
 
+// Watch wait for the key `/changefeed/subchangefeed/<fid>/cid>` appear and run the processor.
 func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error) {
 	defer w.wg.Done()
 	key := kv.GetEtcdKeySubChangeFeed(w.changefeedID, w.captureID)

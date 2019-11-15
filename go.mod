@@ -1,4 +1,4 @@
-module github.com/pingcap/tidb-cdc
+module github.com/pingcap/ticdc
 
 go 1.12
 
