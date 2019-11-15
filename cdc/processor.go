@@ -88,6 +88,7 @@ type txnChannel struct {
 	putBackTxn *txn.RawTxn
 }
 
+// Forward push all txn with commit ts not greater than ts into entryC.
 func (p *txnChannel) Forward(ctx context.Context, tableID int64, ts uint64, entryC chan<- ProcessorEntry) {
 	if p.putBackTxn != nil {
 		t := *p.putBackTxn
@@ -172,6 +173,11 @@ func NewProcessorResolvedEntry(ts uint64) ProcessorEntry {
 
 const ddlPullerID int64 = -1
 
+// processorImpl don't impl Processor interface really now.
+// you can't use Processor like the interface design.
+// processorImpl handle thinks internal like you should not consume data from `ResolvedChan()`
+// as the interface design.
+// TODO consider remove the processor interface.
 type processorImpl struct {
 	captureID    string
 	changefeedID string
@@ -191,10 +197,12 @@ type processorImpl struct {
 	executedEntries chan ProcessorEntry
 	ddlJobsCh       chan txn.RawTxn
 
-	tblPullers      map[int64]puller.CancellablePuller
-	tableInputChans map[int64]*txnChannel
+	tblPullers map[int64]puller.CancellablePuller
+
 	inputChansLock  sync.RWMutex
-	wg              *errgroup.Group
+	tableInputChans map[int64]*txnChannel
+
+	wg *errgroup.Group
 }
 
 func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, changefeedID, captureID string) (Processor, error) {
@@ -297,6 +305,7 @@ func (p *processorImpl) pullerSchedule(ctx context.Context, ch chan<- error) err
 	return nil
 }
 
+// localResolvedWorker scan all table's resolve ts and update resolved ts in subchangefeed info regularly.
 func (p *processorImpl) localResolvedWorker(ctx context.Context) error {
 	for {
 		select {
@@ -328,6 +337,7 @@ func (p *processorImpl) localResolvedWorker(ctx context.Context) error {
 	}
 }
 
+// checkpointWorker consume data from `executedEntries` and update checkpoint ts in subchangefeed info regularly.
 func (p *processorImpl) checkpointWorker(ctx context.Context) error {
 	checkpointTs := uint64(0)
 	for {
@@ -356,6 +366,7 @@ func (p *processorImpl) checkpointWorker(ctx context.Context) error {
 	}
 }
 
+// globalResolvedWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
 func (p *processorImpl) globalResolvedWorker(ctx context.Context) error {
 	log.Info("Global resolved worker started")
 
@@ -419,6 +430,7 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) error {
 	}
 }
 
+// pullDDLJob push ddl job into `p.ddlJobsCh`.
 func (p *processorImpl) pullDDLJob(ctx context.Context) error {
 	defer close(p.ddlJobsCh)
 	errg, ctx := errgroup.WithContext(ctx)
@@ -446,6 +458,7 @@ func (p *processorImpl) pullDDLJob(ctx context.Context) error {
 	return errg.Wait()
 }
 
+// syncResolved handle `p.ddlJobsCh` and `p.resolvedEntries`
 func (p *processorImpl) syncResolved(ctx context.Context) error {
 	for {
 		select {
@@ -603,6 +616,7 @@ func (p *processorImpl) addTable(ctx context.Context, tableID int64, errCh chan<
 	return nil
 }
 
+// startPuller start pull data with span and push resolved txn into txnChan.
 func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan chan<- txn.RawTxn, errCh chan<- error) puller.Puller {
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)

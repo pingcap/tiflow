@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/puller"
+	"github.com/pingcap/tidb-cdc/cdc/roles"
 	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/sink"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
@@ -93,6 +94,9 @@ func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn txn.RawTxn) error {
 	return nil
 }
 
+var _ roles.OwnerDDLHandler = &ddlHandler{}
+
+// PullDDL implements `roles.OwnerDDLHandler` interface.
 func (h *ddlHandler) PullDDL() (uint64, []*txn.DDL, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -102,6 +106,7 @@ func (h *ddlHandler) PullDDL() (uint64, []*txn.DDL, error) {
 	return h.resolvedTS, result, nil
 }
 
+// ExecDDL implements roles.OwnerDDLHandler interface.
 func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error {
 	// TODO cache the sink
 	// TODO handle other target database, kile kafka, file

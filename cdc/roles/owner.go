@@ -125,6 +125,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			tableIDs = changefeed.TableIDs
 			o.changeFeedInfos[changeFeedID] = &model.ChangeFeedInfo{
 				Status:          model.ChangeFeedSyncDML,
+				SinkURI:         changefeed.SinkURI,
 				ResolvedTs:      0,
 				CheckpointTs:    0,
 				TargetTs:        targetTs,
@@ -223,6 +224,9 @@ func (o *ownerImpl) calcResolvedTs() error {
 	return nil
 }
 
+// handleDDL check if we can change the status to be `ChangeFeedExecDDL` and execute the DDL asynchronously
+// if the status is in ChangeFeedWaitToExecDDL.
+// After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
 func (o *ownerImpl) handleDDL(ctx context.Context) error {
 waitCheckpointTsLoop:
 	for changeFeedID, cfInfo := range o.changeFeedInfos {
@@ -395,6 +399,7 @@ func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (
 		&model.ChangeFeedInfo{
 			CheckpointTs: cinfo.StartTs,
 			ResolvedTs:   0,
+			SinkURI:      cinfo.SinkURI,
 		})
 	if err != nil {
 		return nil, err

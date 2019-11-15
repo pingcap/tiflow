@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/check"
 )
 
+// TODO deprecate this Mock TiDB
 type MockTiDB struct {
 	cluster   *mocktikv.Cluster
 	mvccStore mocktikv.MVCCStore
