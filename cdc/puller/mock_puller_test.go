@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -44,7 +45,7 @@ func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 	plr := pm.CreatePuller([]util.Span{util.GetDDLSpan()})
 	ctx := context.Background()
 	ts := uint64(0)
-	txnMounter := txn.NewTxnMounter(nil, time.UTC)
+	txnMounter := entry.NewTxnMounter(nil, time.UTC)
 	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn txn.RawTxn) error {
 		c.Assert(ts, check.Less, rawTxn.Ts)
 		atomic.StoreUint64(&ts, rawTxn.Ts)
