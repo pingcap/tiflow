@@ -2,6 +2,7 @@ package puller
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -85,8 +86,11 @@ func (s *mockPullerSuite) TestStartTs(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ts := uint64(0)
 	var rawTxns []txn.RawTxn
+	var mu sync.Mutex
 	go func() {
 		err := plrA.CollectRawTxns(ctx, func(ctx context.Context, txn txn.RawTxn) error {
+			mu.Lock()
+			defer mu.Unlock()
 			c.Assert(ts, check.Less, txn.Ts)
 			atomic.StoreUint64(&ts, txn.Ts)
 			rawTxns = append(rawTxns, txn)
@@ -102,9 +106,13 @@ func (s *mockPullerSuite) TestStartTs(c *check.C) {
 	pm.MustExec("insert into test.test(id, a) values(?, ?)", 3, 3)
 	pm.MustExec("delete from test.test")
 	waitForGrowingTs(&ts, oracle.EncodeTSO(time.Now().Unix()*1000))
+	mu.Lock()
 	index := len(rawTxns) / 2
 	plrB := pm.CreatePuller(rawTxns[index].Ts, []util.Span{util.Span{}.Hack()})
+	mu.Unlock()
 	err := plrB.CollectRawTxns(ctx, func(ctx context.Context, txn txn.RawTxn) error {
+		mu.Lock()
+		defer mu.Unlock()
 		if index >= len(rawTxns) {
 			cancel()
 			return nil
