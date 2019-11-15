@@ -20,10 +20,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/types"
@@ -33,7 +33,7 @@ import (
 // RawTxn represents a complete collection of Entries that belong to the same transaction
 type RawTxn struct {
 	Ts      uint64
-	Entries []*kv.RawKVEntry
+	Entries []*model.RawKVEntry
 }
 
 // DMLType represents the dml type
@@ -66,7 +66,7 @@ func (dml *DML) TableName() string {
 type DDL struct {
 	Database string
 	Table    string
-	Job      *model.Job
+	Job      *timodel.Job
 }
 
 // Txn holds transaction info, an DDL or DML sequences
@@ -89,11 +89,11 @@ type ResolveTsTracker interface {
 
 func CollectRawTxns(
 	ctx context.Context,
-	inputFn func(context.Context) (kv.KvOrResolved, error),
+	inputFn func(context.Context) (model.KvOrResolved, error),
 	outputFn func(context.Context, RawTxn) error,
 	tracker ResolveTsTracker,
 ) error {
-	entryGroups := make(map[uint64][]*kv.RawKVEntry)
+	entryGroups := make(map[uint64][]*model.RawKVEntry)
 	for {
 		be, err := inputFn(ctx)
 		if err != nil {
@@ -262,7 +262,7 @@ func (m *Mounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
 	}, nil
 }
 
-func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *model.TableInfo, tableName *schema.TableName, handleColName string, err error) {
+func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *timodel.TableInfo, tableName *schema.TableName, handleColName string, err error) {
 	tableInfo, exist := m.schemaStorage.TableByID(tableID)
 	if !exist {
 		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableID)

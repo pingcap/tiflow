@@ -22,10 +22,10 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/parser/model"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/mock"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/types"
@@ -57,14 +57,14 @@ func (t *mockTracker) Frontier() uint64 {
 var _ = check.Suite(&CollectRawTxnsSuite{})
 
 func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
-	var entries []kv.KvOrResolved
+	var entries []model.KvOrResolved
 	var startTs uint64 = 1024
 	var i uint64
 	for i = 0; i < 3; i++ {
 		for j := 0; j < 3; j++ {
-			e := kv.KvOrResolved{
-				KV: &kv.RawKVEntry{
-					OpType: kv.OpTypePut,
+			e := model.KvOrResolved{
+				KV: &model.RawKVEntry{
+					OpType: model.OpTypePut,
 					Key:    []byte(fmt.Sprintf("key-%d-%d", i, j)),
 					Ts:     startTs + i,
 				},
@@ -74,16 +74,16 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	}
 	// Only add resolved entry for the first 2 transaction
 	for i = 0; i < 2; i++ {
-		e := kv.KvOrResolved{
-			Resolved: &kv.ResolvedSpan{Timestamp: startTs + i},
+		e := model.KvOrResolved{
+			Resolved: &model.ResolvedSpan{Timestamp: startTs + i},
 		}
 		entries = append(entries, e)
 	}
 
 	nRead := 0
-	input := func(ctx context.Context) (kv.KvOrResolved, error) {
+	input := func(ctx context.Context) (model.KvOrResolved, error) {
 		if nRead >= len(entries) {
-			return kv.KvOrResolved{}, errors.New("End")
+			return model.KvOrResolved{}, errors.New("End")
 		}
 		e := entries[nRead]
 		nRead++
@@ -114,7 +114,7 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 }
 
 func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
-	var entries []kv.KvOrResolved
+	var entries []model.KvOrResolved
 	for _, v := range []struct {
 		key          []byte
 		ts           uint64
@@ -129,15 +129,15 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 		{key: []byte("key2-1"), ts: 2},
 		{ts: 1, isResolvedTs: true},
 	} {
-		var e kv.KvOrResolved
+		var e model.KvOrResolved
 		if v.isResolvedTs {
-			e = kv.KvOrResolved{
-				Resolved: &kv.ResolvedSpan{Timestamp: v.ts},
+			e = model.KvOrResolved{
+				Resolved: &model.ResolvedSpan{Timestamp: v.ts},
 			}
 		} else {
-			e = kv.KvOrResolved{
-				KV: &kv.RawKVEntry{
-					OpType: kv.OpTypePut,
+			e = model.KvOrResolved{
+				KV: &model.RawKVEntry{
+					OpType: model.OpTypePut,
 					Key:    v.key,
 					Ts:     v.ts,
 				},
@@ -147,9 +147,9 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 	}
 
 	cursor := 0
-	input := func(ctx context.Context) (kv.KvOrResolved, error) {
+	input := func(ctx context.Context) (model.KvOrResolved, error) {
 		if cursor >= len(entries) {
-			return kv.KvOrResolved{}, errors.New("End")
+			return model.KvOrResolved{}, errors.New("End")
 		}
 		e := entries[cursor]
 		cursor++
@@ -178,15 +178,15 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 }
 
 func (cs *CollectRawTxnsSuite) TestShouldOutputBinlogEvenWhenThereIsNoRealEvent(c *check.C) {
-	entries := []kv.KvOrResolved{
-		{Resolved: &kv.ResolvedSpan{Timestamp: 1024}},
-		{Resolved: &kv.ResolvedSpan{Timestamp: 2000}},
+	entries := []model.KvOrResolved{
+		{Resolved: &model.ResolvedSpan{Timestamp: 1024}},
+		{Resolved: &model.ResolvedSpan{Timestamp: 2000}},
 	}
 
 	cursor := 0
-	input := func(ctx context.Context) (kv.KvOrResolved, error) {
+	input := func(ctx context.Context) (model.KvOrResolved, error) {
 		if cursor >= len(entries) {
-			return kv.KvOrResolved{}, errors.New("End")
+			return model.KvOrResolved{}, errors.New("End")
 		}
 		e := entries[cursor]
 		cursor++
@@ -218,7 +218,7 @@ var _ = check.Suite(&mountTxnsSuite{})
 func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.Storage) {
 	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
-	var jobs []*model.Job
+	var jobs []*timodel.Job
 
 	for _, sql := range sqls {
 		rawEntries := puller.MustExec(c, sql)
@@ -445,7 +445,7 @@ func (cs *mountTxnsSuite) TestDDL(c *check.C) {
 		DDL: &DDL{
 			Database: "testDB",
 			Table:    "test1",
-			Job:      &model.Job{},
+			Job:      &timodel.Job{},
 		},
 		Ts: rawKV[0].Ts,
 	})
