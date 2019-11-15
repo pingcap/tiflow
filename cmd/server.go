@@ -10,7 +10,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-cdc/cdc"
+	"github.com/pingcap/ticdc/cdc"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )

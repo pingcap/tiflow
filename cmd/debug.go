@@ -7,12 +7,12 @@ import (
 	"time"
 
 	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb-cdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 func init() {

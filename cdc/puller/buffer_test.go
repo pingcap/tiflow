@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 type bufferSuite struct{}

@@ -19,7 +19,7 @@ import (
 	"io"
 
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/ticdc/cdc/txn"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.

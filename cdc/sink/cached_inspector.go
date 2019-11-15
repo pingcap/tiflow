@@ -16,7 +16,7 @@ package sink
 import (
 	"database/sql"
 
-	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 type cachedInspector struct {

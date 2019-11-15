@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 type spanFrontierSuite struct{}
