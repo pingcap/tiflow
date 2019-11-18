@@ -30,8 +30,11 @@ type ProcessTableInfo struct {
 // P-lock and set by processor to indicate that the processor has synchronized
 // the checkpoint and won't synchronize the removed table any more.
 type TableLock struct {
-	Ts         uint64 `json:"ts"`
-	OwnerID    string `json:"owner-id"`
+	// Ts is the create timestamp of lock, it is used to pair P-lock and C-lock
+	Ts uint64 `json:"ts"`
+	// OwnerID is the lock creator ID
+	OwnerID string `json:"owner-id"`
+	// Checkpoint is used in C-lock only, it records the table synchronization checkpoint
 	Checkpoint uint64 `json:"checkpoint"`
 }
 

@@ -15,6 +15,8 @@ package roles
 
 import (
 	"context"
+
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 // Tabler is a table scheduler, which is used to table assignment among processors
@@ -23,7 +25,7 @@ type Tabler interface {
 	RemoveTables(ctx context.Context, changefeedID, captureID string, ids []uint64) error
 
 	// AddTables adds more tables to synchronize in a processor
-	AddTables(ctx context.Context, changefeedID, captureID string, ids []uint64) error
+	AddTables(ctx context.Context, changefeedID, captureID string, tables []*model.ProcessTableInfo) error
 
 	// EvictCapture is used when we detect a processor is abnormal, then all processors on
 	// the same capture will be disabled, information of the capture will be removed and
