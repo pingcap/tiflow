@@ -21,7 +21,7 @@ import (
 
 // Tabler is a table scheduler, which is used to table assignment among processors
 type Tabler interface {
-	// RemoveTables removes some tables synchronization from a processor
+	// RemoveTables removes some tables synchronization from a processor, returns the p-lock and error
 	RemoveTables(ctx context.Context, changefeedID, captureID string, ids []uint64) (*model.TableLock, error)
 
 	// AddTables adds more tables to synchronize in a processor

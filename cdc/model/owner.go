@@ -34,8 +34,8 @@ type TableLock struct {
 	Ts uint64 `json:"ts"`
 	// OwnerID is the lock creator ID
 	OwnerID string `json:"owner-id"`
-	// Checkpoint is used in C-lock only, it records the table synchronization checkpoint
-	Checkpoint uint64 `json:"checkpoint"`
+	// CheckpointTs is used in C-lock only, it records the table synchronization checkpoint
+	CheckpointTs uint64 `json:"checkpoint-ts"`
 }
 
 // SubChangeFeedInfo records the process information of a capture
