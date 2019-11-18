@@ -22,10 +22,16 @@ import (
 // Tabler is a table scheduler, which is used to table assignment among processors
 type Tabler interface {
 	// RemoveTables removes some tables synchronization from a processor
-	RemoveTables(ctx context.Context, changefeedID, captureID string, ids []uint64) error
+	RemoveTables(ctx context.Context, changefeedID, captureID string, ids []uint64) (*model.TableLock, error)
 
 	// AddTables adds more tables to synchronize in a processor
 	AddTables(ctx context.Context, changefeedID, captureID string, tables []*model.ProcessTableInfo) error
+
+	// ReadTableCLock watches on the key of `model.SubChangeFeedInfo`, waits for the `table-c-lock` appears and return the C-lock
+	ReadTableCLock(ctx context.Context, changefeedID, captureID string, plock *model.TableLock) (*model.TableLock, error)
+
+	// ClearTableLock clears table p-lock and c-lock of the given processor
+	ClearTableLock(ctx context.Context, changefeedID, captureID string) error
 
 	// EvictCapture is used when we detect a processor is abnormal, then all processors on
 	// the same capture will be disabled, information of the capture will be removed and
