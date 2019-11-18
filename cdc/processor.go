@@ -277,36 +277,27 @@ func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
 	wg.Go(func() error {
-		err := p.localResolvedWorker(cctx)
-		return err
+		return p.localResolvedWorker(cctx)
 	})
 	wg.Go(func() error {
-		err := p.checkpointWorker(cctx)
-		return err
+		return p.checkpointWorker(cctx)
 	})
 	wg.Go(func() error {
-		err := p.globalResolvedWorker(cctx)
-		log.Info("which baby not exit?", zap.String("name", "globalResolvedWorker"))
-		return err
+		return p.globalResolvedWorker(cctx)
 	})
 	wg.Go(func() error {
-		err := p.pullerSchedule(cctx, errCh)
-		return err
+		return p.pullerSchedule(cctx, errCh)
 	})
 	wg.Go(func() error {
-		err := p.syncResolved(cctx)
-		return err
+		return p.syncResolved(cctx)
 	})
 	wg.Go(func() error {
-		err := p.pullDDLJob(cctx)
-		return err
+		return p.pullDDLJob(cctx)
 	})
 
 	go func() {
 		err := wg.Wait()
-		log.Info("I guess not return")
 		if err != nil {
-			log.Info("processorImpl", zap.Error(err))
 			errCh <- err
 		}
 	}()
@@ -522,9 +513,7 @@ func (p *processorImpl) syncResolved(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 				if err := p.sink.Emit(ctx, *txn); err != nil {
-					log.Info("DD:what err in Emit", zap.Error(err))
 					if err != context.Canceled {
-						log.Info("DD:what err in Emit return", zap.Error(err))
 						return errors.Trace(err)
 					}
 					return nil
