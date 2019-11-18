@@ -264,6 +264,7 @@ waitCheckpointTsLoop:
 					zap.String("ChangeFeedID", changeFeedID),
 					zap.Error(err),
 					zap.Reflect("ddlJob", todoDDLJob))
+				// TODO when one of the changefeeds execute ddl failed, this line will lead to server exit and failed.
 				o.pushErr(err)
 				return
 			}
