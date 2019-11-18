@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
@@ -85,7 +86,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	checkpointTs := p.checkpointTs
-	eventCh := make(chan *kv.RegionFeedEvent, 128)
+	eventCh := make(chan *model.RegionFeedEvent, 128)
 
 	for _, span := range p.spans {
 		span := span
@@ -111,7 +112,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						continue
 					}
 
-					kv := &kv.RawKVEntry{
+					kv := &model.RawKVEntry{
 						OpType: val.OpType,
 						Key:    val.Key,
 						Value:  val.Value,

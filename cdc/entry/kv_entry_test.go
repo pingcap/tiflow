@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/parser/model"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/mock"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -41,13 +41,13 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 			c.Assert(len(e.TableInfo.Indices), check.Equals, 2)
 			// i1 index
 			c.Assert(e.TableInfo.Indices[0].Name.O, check.Equals, "i1")
-			c.Assert(e.TableInfo.Indices[0].Tp, check.Equals, model.IndexTypeBtree)
+			c.Assert(e.TableInfo.Indices[0].Tp, check.Equals, timodel.IndexTypeBtree)
 			c.Assert(e.TableInfo.Indices[0].Unique, check.IsFalse)
 			c.Assert(e.TableInfo.Indices[0].Columns[0].Name.O, check.Equals, "a")
 			c.Assert(e.TableInfo.Indices[0].Columns[0].Offset, check.Equals, 1)
 			// primary index
 			c.Assert(e.TableInfo.Indices[1].Name.O, check.Equals, "PRIMARY")
-			c.Assert(e.TableInfo.Indices[1].Tp, check.Equals, model.IndexTypeBtree)
+			c.Assert(e.TableInfo.Indices[1].Tp, check.Equals, timodel.IndexTypeBtree)
 			c.Assert(e.TableInfo.Indices[1].Unique, check.IsTrue)
 			c.Assert(e.TableInfo.Indices[1].Columns[0].Name.O, check.Equals, "id")
 			c.Assert(e.TableInfo.Indices[1].Columns[0].Offset, check.Equals, 0)
@@ -55,7 +55,7 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 			existDDLJobHistoryKVEntry = true
 			c.Assert(e.JobID, check.Equals, e.Job.ID)
 			c.Assert(e.Job.SchemaName, check.Equals, "test")
-			c.Assert(e.Job.Type, check.Equals, model.ActionCreateTable)
+			c.Assert(e.Job.Type, check.Equals, timodel.ActionCreateTable)
 			c.Assert(e.Job.Query, check.Equals, "create table test.test1(id varchar(255) primary key, a int, index i1 (a))")
 		}
 	}
@@ -81,14 +81,14 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 			c.Assert(e.TableInfo.PKIsHandle, check.IsTrue)
 			c.Assert(len(e.TableInfo.Indices), check.Equals, 1)
 			c.Assert(e.TableInfo.Indices[0].Name.O, check.Equals, "b")
-			c.Assert(e.TableInfo.Indices[0].Tp, check.Equals, model.IndexTypeBtree)
+			c.Assert(e.TableInfo.Indices[0].Tp, check.Equals, timodel.IndexTypeBtree)
 			c.Assert(e.TableInfo.Indices[0].Unique, check.IsTrue)
 			c.Assert(e.TableInfo.Indices[0].Columns[0].Name.O, check.Equals, "b")
 		case *DDLJobKVEntry:
 			existDDLJobHistoryKVEntry = true
 			c.Assert(e.JobID, check.Equals, e.Job.ID)
 			c.Assert(e.Job.SchemaName, check.Equals, "test")
-			c.Assert(e.Job.Type, check.Equals, model.ActionCreateTable)
+			c.Assert(e.Job.Type, check.Equals, timodel.ActionCreateTable)
 			c.Assert(e.Job.Query, check.Equals, "create table test.test2(id int primary key, b varchar(255) unique key)")
 		}
 	}
@@ -100,7 +100,7 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
 	rawEntries := puller.MustExec(c, "create table test.test1(id varchar(255) primary key, a int, index ci (a))")
-	var tableInfo *model.TableInfo
+	var tableInfo *timodel.TableInfo
 	for _, raw := range rawEntries {
 		entry, err := Unmarshal(raw)
 		c.Assert(err, check.IsNil)
@@ -182,7 +182,7 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
 	rawEntries := puller.MustExec(c, "create table test.test2(id int primary key, b varchar(255) unique key)")
-	var tableInfo *model.TableInfo
+	var tableInfo *timodel.TableInfo
 	for _, raw := range rawEntries {
 		entry, err := Unmarshal(raw)
 		c.Assert(err, check.IsNil)
@@ -259,7 +259,7 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	rawEntries := puller.MustExec(c, "create table test.test2( a int, b varchar(255), c date, unique key(a,b,c))")
-	var tableInfo *model.TableInfo
+	var tableInfo *timodel.TableInfo
 	for _, raw := range rawEntries {
 		entry, err := Unmarshal(raw)
 		c.Assert(err, check.IsNil)
@@ -370,7 +370,7 @@ func (s *kvEntrySuite) TestUkWithNoPk(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	rawEntries := puller.MustExec(c, "CREATE TABLE test.cdc_uk_with_no_pk (id INT, a1 INT, a3 INT, UNIQUE KEY dex1(a1, a3));")
-	var tableInfo *model.TableInfo
+	var tableInfo *timodel.TableInfo
 	for _, raw := range rawEntries {
 		entry, err := Unmarshal(raw)
 		c.Assert(err, check.IsNil)
@@ -419,7 +419,7 @@ func assertIn(c *check.C, item KVEntry, expect []KVEntry) {
 	c.Fatalf("item {%#v} is not exist in expect {%#v}", item, expect)
 }
 
-func checkDMLKVEntries(c *check.C, tableInfo *model.TableInfo, rawEntries []*kv.RawKVEntry, expect []KVEntry) {
+func checkDMLKVEntries(c *check.C, tableInfo *timodel.TableInfo, rawEntries []*model.RawKVEntry, expect []KVEntry) {
 	eventSum := 0
 	for _, raw := range rawEntries {
 		entry, err := Unmarshal(raw)
@@ -443,7 +443,7 @@ func checkDMLKVEntries(c *check.C, tableInfo *model.TableInfo, rawEntries []*kv.
 func (s *kvEntrySuite) TestAllKVS(c *check.C) {
 	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
-	puller.ScanAll(func(rawKVEntry *kv.RawKVEntry) {
+	puller.ScanAll(func(rawKVEntry *model.RawKVEntry) {
 		_, err := Unmarshal(rawKVEntry)
 		c.Assert(err, check.IsNil)
 	})

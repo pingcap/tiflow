@@ -2,7 +2,6 @@ package kv
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -14,6 +13,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -24,65 +24,6 @@ import (
 const (
 	dialTimeout = 10 * time.Second
 )
-
-// OpType for the kv, delete or put
-type OpType int
-
-// OpType for kv
-const (
-	OpTypeUnknow OpType = 0
-	OpTypePut    OpType = 1
-	OpTypeDelete OpType = 2
-)
-
-type RawKVEntry = RegionFeedValue
-
-type KvOrResolved struct {
-	KV       *RawKVEntry
-	Resolved *ResolvedSpan
-}
-
-type ResolvedSpan struct {
-	Span      util.Span
-	Timestamp uint64
-}
-
-func (e *KvOrResolved) GetValue() interface{} {
-	if e.KV != nil {
-		return e.KV
-	} else if e.Resolved != nil {
-		return e.Resolved
-	} else {
-		return nil
-	}
-}
-
-// RegionFeedEvent from the kv layer.
-// Only one of the event will be setted.
-type RegionFeedEvent struct {
-	Val        *RegionFeedValue
-	Checkpoint *RegionFeedCheckpoint
-}
-
-// RegionFeedCheckpoint guarantees all the KV value event
-// with commit ts less than ResolvedTs has been emitted.
-type RegionFeedCheckpoint struct {
-	Span       util.Span
-	ResolvedTs uint64
-}
-
-// RegionFeedValue notify the KV operator
-type RegionFeedValue struct {
-	OpType OpType
-	Key    []byte
-	// Nil fro delete type
-	Value []byte
-	Ts    uint64
-}
-
-func (v *RegionFeedValue) String() string {
-	return fmt.Sprintf("OpType: %v, Key: %s, Value: %s, ts: %d", v.OpType, string(v.Key), string(v.Value), v.Ts)
-}
 
 type singleRegionInfo struct {
 	meta *metapb.Region
@@ -219,7 +160,7 @@ func (c *CDCClient) getStore(
 // a EventFeed to each of the individual region. It streams back result on the
 // provided channel.
 func (c *CDCClient) EventFeed(
-	ctx context.Context, span util.Span, ts uint64, eventCh chan<- *RegionFeedEvent,
+	ctx context.Context, span util.Span, ts uint64, eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -252,7 +193,7 @@ func (c *CDCClient) partialRegionFeed(
 	ctx context.Context,
 	regionInfo *singleRegionInfo,
 	regionCh chan<- singleRegionInfo,
-	eventCh chan<- *RegionFeedEvent,
+	eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	ts := regionInfo.ts
 
@@ -364,7 +305,7 @@ func (c *CDCClient) singleEventFeed(
 	span util.Span,
 	ts uint64,
 	meta *metapb.Region,
-	eventCh chan<- *RegionFeedEvent,
+	eventCh chan<- *model.RegionFeedEvent,
 ) (checkpointTs uint64, err error) {
 	req := &cdcpb.ChangeDataRequest{
 		Header: &cdcpb.Header{
@@ -403,8 +344,8 @@ func (c *CDCClient) singleEventFeed(
 			}
 
 			// emit a checkpoint
-			revent := &RegionFeedEvent{
-				Checkpoint: &RegionFeedCheckpoint{
+			revent := &model.RegionFeedEvent{
+				Checkpoint: &model.RegionFeedCheckpoint{
 					Span:       span,
 					ResolvedTs: item.commit,
 				},
@@ -443,18 +384,18 @@ func (c *CDCClient) singleEventFeed(
 						case cdcpb.Event_INITIALIZED:
 							atomic.StoreUint32(&initialized, 1)
 						case cdcpb.Event_COMMITTED:
-							var opType OpType
+							var opType model.OpType
 							switch row.GetOpType() {
 							case cdcpb.Event_Row_DELETE:
-								opType = OpTypeDelete
+								opType = model.OpTypeDelete
 							case cdcpb.Event_Row_PUT:
-								opType = OpTypePut
+								opType = model.OpTypePut
 							default:
 								return req.CheckpointTs, errors.Errorf("unknow tp: %v", row.GetOpType())
 							}
 
-							revent := &RegionFeedEvent{
-								Val: &RegionFeedValue{
+							revent := &model.RegionFeedEvent{
+								Val: &model.RegionFeedValue{
 									OpType: opType,
 									Key:    row.Key,
 									Value:  row.GetValue(),
@@ -483,18 +424,18 @@ func (c *CDCClient) singleEventFeed(
 
 							delete(notMatch, string(row.Key))
 
-							var opType OpType
+							var opType model.OpType
 							switch row.GetOpType() {
 							case cdcpb.Event_Row_DELETE:
-								opType = OpTypeDelete
+								opType = model.OpTypeDelete
 							case cdcpb.Event_Row_PUT:
-								opType = OpTypePut
+								opType = model.OpTypePut
 							default:
 								return req.CheckpointTs, errors.Errorf("unknow tp: %v", row.GetOpType())
 							}
 
-							revent := &RegionFeedEvent{
-								Val: &RegionFeedValue{
+							revent := &model.RegionFeedEvent{
+								Val: &model.RegionFeedValue{
 									OpType: opType,
 									Key:    row.Key,
 									Value:  value,
@@ -528,8 +469,8 @@ func (c *CDCClient) singleEventFeed(
 				case *cdcpb.Event_ResolvedTs:
 					if atomic.LoadUint32(&initialized) == 1 {
 						// emit a checkpoint
-						revent := &RegionFeedEvent{
-							Checkpoint: &RegionFeedCheckpoint{
+						revent := &model.RegionFeedEvent{
+							Checkpoint: &model.RegionFeedCheckpoint{
 								Span:       span,
 								ResolvedTs: x.ResolvedTs,
 							},

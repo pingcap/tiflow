@@ -18,8 +18,8 @@ import (
 	"sort"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/kv"
+	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
@@ -28,7 +28,7 @@ import (
 // RawTxn represents a complete collection of Entries that belong to the same transaction
 type RawTxn struct {
 	Ts      uint64
-	Entries []*kv.RawKVEntry
+	Entries []*model.RawKVEntry
 }
 
 // DMLType represents the dml type
@@ -61,7 +61,7 @@ func (dml *DML) TableName() string {
 type DDL struct {
 	Database string
 	Table    string
-	Job      *model.Job
+	Job      *timodel.Job
 }
 
 // Txn holds transaction info, an DDL or DML sequences
@@ -84,11 +84,11 @@ type ResolveTsTracker interface {
 
 func CollectRawTxns(
 	ctx context.Context,
-	inputFn func(context.Context) (kv.KvOrResolved, error),
+	inputFn func(context.Context) (model.KvOrResolved, error),
 	outputFn func(context.Context, RawTxn) error,
 	tracker ResolveTsTracker,
 ) error {
-	entryGroups := make(map[uint64][]*kv.RawKVEntry)
+	entryGroups := make(map[uint64][]*model.RawKVEntry)
 	for {
 		be, err := inputFn(ctx)
 		if err != nil {

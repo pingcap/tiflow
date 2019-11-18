@@ -8,7 +8,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/domain"
@@ -258,18 +258,18 @@ func (m *MockPullerManager) Close() {
 }
 
 func prewrite2RawTxn(req *kvrpcpb.PrewriteRequest, commitTs uint64) txn.RawTxn {
-	var entries []*kv.RawKVEntry
+	var entries []*model.RawKVEntry
 	for _, mut := range req.Mutations {
-		var op kv.OpType
+		var op model.OpType
 		switch mut.Op {
 		case kvrpcpb.Op_Put, kvrpcpb.Op_Insert:
-			op = kv.OpTypePut
+			op = model.OpTypePut
 		case kvrpcpb.Op_Del:
-			op = kv.OpTypeDelete
+			op = model.OpTypeDelete
 		default:
 			continue
 		}
-		rawKV := &kv.RawKVEntry{
+		rawKV := &model.RawKVEntry{
 			Ts:     commitTs,
 			Key:    mut.Key,
 			Value:  mut.Value,

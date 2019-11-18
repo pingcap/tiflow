@@ -10,6 +10,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
@@ -27,14 +28,14 @@ func genValue() []byte {
 
 type eventChecker struct {
 	t       require.TestingT
-	eventCh chan *RegionFeedEvent
+	eventCh chan *model.RegionFeedEvent
 	closeCh chan struct{}
 
-	vals        []*RegionFeedValue
-	checkpoints []*RegionFeedCheckpoint
+	vals        []*model.RegionFeedValue
+	checkpoints []*model.RegionFeedCheckpoint
 }
 
-func valInSlice(val *RegionFeedValue, vals []*RegionFeedValue) bool {
+func valInSlice(val *model.RegionFeedValue, vals []*model.RegionFeedValue) bool {
 	for _, v := range vals {
 		if val.Ts == v.Ts && bytes.Equal(val.Key, v.Key) {
 			return true
@@ -46,7 +47,7 @@ func valInSlice(val *RegionFeedValue, vals []*RegionFeedValue) bool {
 func newEventChecker(t require.TestingT) *eventChecker {
 	ec := &eventChecker{
 		t:       t,
-		eventCh: make(chan *RegionFeedEvent),
+		eventCh: make(chan *model.RegionFeedEvent),
 		closeCh: make(chan struct{}),
 	}
 
@@ -102,7 +103,7 @@ func mustGetTimestamp(t require.TestingT, storage kv.Storage) uint64 {
 	return ts
 }
 
-func mustGetValue(t require.TestingT, eventCh <-chan *RegionFeedEvent, value []byte) {
+func mustGetValue(t require.TestingT, eventCh <-chan *model.RegionFeedEvent, value []byte) {
 	timeout := time.After(time.Second * 20)
 
 	for {
@@ -124,7 +125,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	require.NoError(t, err)
 	defer cli.Close()
 
-	eventCh := make(chan *RegionFeedEvent, 1<<20)
+	eventCh := make(chan *model.RegionFeedEvent, 1<<20)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -248,7 +249,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		checker.stop()
 
 		// filter the unrelated keys event.
-		var vals []*RegionFeedValue
+		var vals []*model.RegionFeedValue
 		for _, v := range checker.vals {
 			if bytes.Equal(v.Key, key) {
 				vals = append(vals, v)
@@ -258,14 +259,14 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 
 		// check we can get the events.
 		require.Len(t, checker.vals, 3)
-		require.Equal(t, checker.vals[0].OpType, OpTypePut)
+		require.Equal(t, checker.vals[0].OpType, model.OpTypePut)
 		require.Equal(t, checker.vals[0].Key, key)
 		require.Equal(t, checker.vals[0].Value, value)
 
-		require.Equal(t, checker.vals[1].OpType, OpTypeDelete)
+		require.Equal(t, checker.vals[1].OpType, model.OpTypeDelete)
 		require.Equal(t, checker.vals[1].Key, key)
 
-		require.Equal(t, checker.vals[2].OpType, OpTypePut)
+		require.Equal(t, checker.vals[2].OpType, model.OpTypePut)
 		require.Equal(t, checker.vals[2].Key, key)
 		require.Equal(t, checker.vals[2].Value, value)
 	}
