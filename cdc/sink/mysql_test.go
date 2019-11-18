@@ -18,7 +18,7 @@ import (
 
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/tidb/infoschema"
 
 	"github.com/pingcap/parser/model"

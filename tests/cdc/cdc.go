@@ -20,7 +20,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-cdc/tests/util"
+	"github.com/pingcap/ticdc/tests/util"
 )
 
 func main() {

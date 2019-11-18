@@ -22,10 +22,10 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/model"
-	"github.com/pingcap/tidb-cdc/cdc/roles/storage"
-	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/roles/storage"
+	"github.com/pingcap/ticdc/cdc/txn"
 	"go.uber.org/zap"
 )
 
@@ -252,6 +252,8 @@ waitCheckpointTsLoop:
 		// Execute DDL Job asynchronously
 		cfInfo.Status = model.ChangeFeedExecDDL
 		go func(changeFeedID string, cfInfo *model.ChangeFeedInfo) {
+			// create a new context to avoid that the process of DDL executing is cancelled by `run` function
+			ctx := context.Background()
 			err := o.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, todoDDLJob)
 			o.mu.Lock()
 			defer o.mu.Unlock()
@@ -263,6 +265,7 @@ waitCheckpointTsLoop:
 					zap.Error(err),
 					zap.Reflect("ddlJob", todoDDLJob))
 				o.pushErr(err)
+				return
 			}
 			log.Info("Execute DDL succeeded",
 				zap.String("ChangeFeedID", changeFeedID),
@@ -305,6 +308,7 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case err := <-o.errCh:
+			// TODO when we got an error here, all changefeeds will exit. It's not reasonable.
 			return err
 		case <-time.After(tickTime):
 			if !o.IsOwner(ctx) {

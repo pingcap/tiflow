@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb-cdc/tests/util"
+	"github.com/pingcap/ticdc/tests/util"
 )
 
 func intRangeValue(column *column, min int64, max int64) (int64, int64) {

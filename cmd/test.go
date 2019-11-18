@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/spf13/cobra"
 )
 

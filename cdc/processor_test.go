@@ -19,16 +19,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tidb-cdc/cdc/sink"
+	"github.com/pingcap/ticdc/cdc/sink"
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb-cdc/cdc/model"
-	"github.com/pingcap/tidb-cdc/cdc/schema"
-	"github.com/pingcap/tidb-cdc/cdc/txn"
-	"github.com/pingcap/tidb-cdc/pkg/etcd"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/schema"
+	"github.com/pingcap/ticdc/cdc/txn"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"go.uber.org/zap"
 )
 
