@@ -436,8 +436,8 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) error {
 		p.inputChansLock.RUnlock()
 		wg.Wait()
 		select {
-		case <-cctx.Done():
-			err := cctx.Err()
+		case <-ctx.Done():
+			err := ctx.Err()
 			if errors.Cause(err) == context.Canceled {
 				return nil
 			}
