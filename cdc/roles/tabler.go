@@ -32,9 +32,4 @@ type Tabler interface {
 
 	// ClearTableLock clears table p-lock and c-lock of the given processor
 	ClearTableLock(ctx context.Context, changefeedID, captureID string) error
-
-	// EvictCapture is used when we detect a processor is abnormal, then all processors on
-	// the same capture will be disabled, information of the capture will be removed and
-	// the tables assigned to this capture will be re assigned to other captures.
-	EvictCapture(ctx context.Context, captureID string) error
 }
