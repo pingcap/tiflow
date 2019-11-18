@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/txn"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 // Owner is used to process etcd information for a capture with owner role
@@ -73,7 +72,8 @@ type ownerImpl struct {
 	ddlResolvedTs uint64
 	ddlJobHistory []*txn.DDL
 
-	l sync.RWMutex
+	mu    sync.RWMutex
+	errCh chan error
 
 	etcdClient *clientv3.Client
 	manager    Manager
@@ -87,6 +87,7 @@ func NewOwner(cli *clientv3.Client, manager Manager, ddlHandler OwnerDDLHandler)
 		cfRWriter:       storage.NewChangeFeedInfoEtcdRWriter(cli),
 		etcdClient:      cli,
 		manager:         manager,
+		errCh:           make(chan error),
 	}
 	return owner
 }
@@ -157,8 +158,8 @@ func (o *ownerImpl) getChangeFeedInfo(changeFeedID string) (*model.ChangeFeedInf
 }
 
 func (o *ownerImpl) GetResolvedTs(changeFeedID string) (uint64, error) {
-	o.l.RLock()
-	defer o.l.RUnlock()
+	o.mu.RLock()
+	defer o.mu.RUnlock()
 	cfInfo, err := o.getChangeFeedInfo(changeFeedID)
 	if err != nil {
 		return 0, err
@@ -167,8 +168,8 @@ func (o *ownerImpl) GetResolvedTs(changeFeedID string) (uint64, error) {
 }
 
 func (o *ownerImpl) GetCheckpointTs(changeFeedID string) (uint64, error) {
-	o.l.RLock()
-	defer o.l.RUnlock()
+	o.mu.RLock()
+	defer o.mu.RUnlock()
 	cfInfo, err := o.getChangeFeedInfo(changeFeedID)
 	if err != nil {
 		return 0, err
@@ -224,7 +225,6 @@ func (o *ownerImpl) calcResolvedTs() error {
 // if the status is in ChangeFeedWaitToExecDDL.
 // After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
 func (o *ownerImpl) handleDDL(ctx context.Context) error {
-	errg, cctx := errgroup.WithContext(ctx)
 waitCheckpointTsLoop:
 	for changeFeedID, cfInfo := range o.changeFeedInfos {
 		if cfInfo.Status != model.ChangeFeedWaitToExecDDL {
@@ -242,42 +242,46 @@ waitCheckpointTsLoop:
 		// Execute DDL Job asynchronously
 		cfInfo.Status = model.ChangeFeedExecDDL
 		go func(changeFeedID string, cfInfo *model.ChangeFeedInfo) {
-			errg.Go(func() error {
-				err := o.ddlHandler.ExecDDL(cctx, cfInfo.SinkURI, todoDDLJob)
-				o.l.Lock()
-				defer o.l.Unlock()
-				// If DDL executing failed, pause the changefeed and print log
-				if err != nil {
-					cfInfo.Status = model.ChangeFeedDDLExecuteFailed
-					log.Error("Execute DDL failed",
-						zap.String("ChangeFeedID", changeFeedID),
-						zap.Error(err),
-						zap.Reflect("ddlJob", todoDDLJob))
-					return err
-				}
-				log.Info("Execute DDL succeeded",
+			// create a new context to avoid that the process of DDL executing is cancelled by `run` function
+			ctx := context.Background()
+			err := o.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, todoDDLJob)
+			o.mu.Lock()
+			defer o.mu.Unlock()
+			// If DDL executing failed, pause the changefeed and print log
+			if err != nil {
+				cfInfo.Status = model.ChangeFeedDDLExecuteFailed
+				log.Error("Execute DDL failed",
 					zap.String("ChangeFeedID", changeFeedID),
+					zap.Error(err),
 					zap.Reflect("ddlJob", todoDDLJob))
-				if cfInfo.Status != model.ChangeFeedExecDDL {
-					log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
-						zap.String("ChangeFeedID", changeFeedID),
-						zap.String("ChangeFeedState", cfInfo.Status.String()))
-				}
-				// TODO: we can remove the useless ddl job, after the slowest changefeed executed
-				cfInfo.DDLCurrentIndex += 1
-				cfInfo.Status = model.ChangeFeedSyncDML
-				return nil
-			})
+				o.pushErr(err)
+				return
+			}
+			log.Info("Execute DDL succeeded",
+				zap.String("ChangeFeedID", changeFeedID),
+				zap.Reflect("ddlJob", todoDDLJob))
+			if cfInfo.Status != model.ChangeFeedExecDDL {
+				log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
+					zap.String("ChangeFeedID", changeFeedID),
+					zap.String("ChangeFeedState", cfInfo.Status.String()))
+			}
+			// TODO: we can remove the useless ddl job, after the slowest changefeed executed
+			cfInfo.DDLCurrentIndex += 1
+			cfInfo.Status = model.ChangeFeedSyncDML
 		}(changeFeedID, cfInfo)
 	}
-	return errg.Wait()
+	return nil
 }
 
 func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
+	defer close(o.errCh)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err := <-o.errCh:
+			// TODO when we got an error here, all changefeeds will exit. It's not reasonable.
+			return err
 		case <-time.After(tickTime):
 			if !o.IsOwner(ctx) {
 				continue
@@ -287,6 +291,14 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 				return err
 			}
 		}
+	}
+}
+
+func (o *ownerImpl) pushErr(err error) {
+	select {
+	case o.errCh <- err:
+	default:
+		log.Error("push error failed", zap.Error(err))
 	}
 }
 
@@ -301,8 +313,8 @@ func (o *ownerImpl) run(ctx context.Context) error {
 		}
 	}()
 
-	o.l.Lock()
-	defer o.l.Unlock()
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	err := o.loadChangeFeedInfos(cctx)
 	if err != nil {
 		return errors.Trace(err)

@@ -140,6 +140,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 		ddlHandler:      handler,
 		cfRWriter:       handler,
 		manager:         manager,
+		errCh:           make(chan error),
 	}
 	s.owner = owner
 	err = owner.Run(ctx, 50*time.Millisecond)
@@ -315,6 +316,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 		ddlHandler: handler,
 		cfRWriter:  handler,
 		manager:    manager,
+		errCh:      make(chan error),
 	}
 	s.owner = owner
 	err = owner.Run(ctx, 50*time.Millisecond)
@@ -347,7 +349,10 @@ func (s *ownerSuite) TestAssignChangeFeed(c *check.C) {
 		_, err = s.client.Put(context.Background(), key, string(data))
 		c.Assert(err, check.IsNil)
 	}
-	owner := &ownerImpl{etcdClient: s.client}
+	owner := &ownerImpl{
+		etcdClient: s.client,
+		errCh:      make(chan error),
+	}
 	pinfo, err := owner.assignChangeFeed(context.Background(), changefeedID)
 	c.Assert(err, check.IsNil)
 
