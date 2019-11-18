@@ -83,8 +83,8 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 		return e, nil
 	}
 
-	var rawTxns []RawTxn
-	output := func(ctx context.Context, txn RawTxn) error {
+	var rawTxns []model.RawTxn
+	output := func(ctx context.Context, txn model.RawTxn) error {
 		rawTxns = append(rawTxns, txn)
 		return nil
 	}
@@ -149,8 +149,8 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 		return e, nil
 	}
 
-	var rawTxns []RawTxn
-	output := func(ctx context.Context, txn RawTxn) error {
+	var rawTxns []model.RawTxn
+	output := func(ctx context.Context, txn model.RawTxn) error {
 		rawTxns = append(rawTxns, txn)
 		return nil
 	}
@@ -186,8 +186,8 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputBinlogEvenWhenThereIsNoRealEvent(
 		return e, nil
 	}
 
-	var rawTxns []RawTxn
-	output := func(ctx context.Context, txn RawTxn) error {
+	var rawTxns []model.RawTxn
+	output := func(ctx context.Context, txn model.RawTxn) error {
 		rawTxns = append(rawTxns, txn)
 		return nil
 	}

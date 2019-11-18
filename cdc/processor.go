@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
@@ -49,7 +48,7 @@ var (
 )
 
 type mounter interface {
-	Mount(rawTxn txn.RawTxn) (*txn.Txn, error)
+	Mount(rawTxn model.RawTxn) (*model.Txn, error)
 }
 
 // Processor is used to push sync progress and calculate the checkpointTs
@@ -62,7 +61,7 @@ type mounter interface {
 // 5. Push ProcessorEntry to ExecutedChan
 type Processor interface {
 	// SetInputChan receives a table and listens a channel
-	SetInputChan(tableID int64, inputTxn <-chan txn.RawTxn) error
+	SetInputChan(tableID int64, inputTxn <-chan model.RawTxn) error
 	// ResolvedChan returns a channel, which output the resolved transaction or resolvedTs
 	ResolvedChan() <-chan ProcessorEntry
 	// ExecutedChan returns a channel, when a transaction is executed,
@@ -84,9 +83,9 @@ type ProcessorTsRWriter interface {
 }
 
 type txnChannel struct {
-	inputTxn   <-chan txn.RawTxn
-	outputTxn  chan txn.RawTxn
-	putBackTxn *txn.RawTxn
+	inputTxn   <-chan model.RawTxn
+	outputTxn  chan model.RawTxn
+	putBackTxn *model.RawTxn
 }
 
 // Forward push all txn with commit ts not greater than ts into entryC.
@@ -117,17 +116,17 @@ func (p *txnChannel) Forward(ctx context.Context, tableID int64, ts uint64, entr
 	}
 }
 
-func (p *txnChannel) PutBack(t txn.RawTxn) {
+func (p *txnChannel) PutBack(t model.RawTxn) {
 	if p.putBackTxn != nil {
 		log.Fatal("can not put back raw txn continuously")
 	}
 	p.putBackTxn = &t
 }
 
-func newTxnChannel(inputTxn <-chan txn.RawTxn, chanSize int, handleResolvedTs func(uint64)) *txnChannel {
+func newTxnChannel(inputTxn <-chan model.RawTxn, chanSize int, handleResolvedTs func(uint64)) *txnChannel {
 	tc := &txnChannel{
 		inputTxn:  inputTxn,
-		outputTxn: make(chan txn.RawTxn, chanSize),
+		outputTxn: make(chan model.RawTxn, chanSize),
 	}
 	go func() {
 		defer close(tc.outputTxn)
@@ -152,12 +151,12 @@ const (
 )
 
 type ProcessorEntry struct {
-	Txn txn.RawTxn
+	Txn model.RawTxn
 	Ts  uint64
 	Typ ProcessorEntryType
 }
 
-func NewProcessorTxnEntry(txn txn.RawTxn) ProcessorEntry {
+func NewProcessorTxnEntry(txn model.RawTxn) ProcessorEntry {
 	return ProcessorEntry{
 		Txn: txn,
 		Ts:  txn.Ts,
@@ -196,7 +195,7 @@ type processorImpl struct {
 	tsRWriter       ProcessorTsRWriter
 	resolvedEntries chan ProcessorEntry
 	executedEntries chan ProcessorEntry
-	ddlJobsCh       chan txn.RawTxn
+	ddlJobsCh       chan model.RawTxn
 
 	tblPullers map[int64]puller.CancellablePuller
 
@@ -256,7 +255,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		resolvedEntries: make(chan ProcessorEntry),
 		// TODO set the channel size
 		executedEntries: make(chan ProcessorEntry),
-		ddlJobsCh:       make(chan txn.RawTxn, 16),
+		ddlJobsCh:       make(chan model.RawTxn, 16),
 
 		tblPullers:      make(map[int64]puller.CancellablePuller),
 		tableInputChans: make(map[int64]*txnChannel),
@@ -441,7 +440,7 @@ func (p *processorImpl) pullDDLJob(ctx context.Context) error {
 	})
 
 	errg.Go(func() error {
-		err := p.ddlPuller.CollectRawTxns(ctx, func(ctxInner context.Context, rawTxn txn.RawTxn) error {
+		err := p.ddlPuller.CollectRawTxns(ctx, func(ctxInner context.Context, rawTxn model.RawTxn) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -517,7 +516,7 @@ func (p *processorImpl) syncResolved(ctx context.Context) error {
 	}
 }
 
-func (p *processorImpl) SetInputChan(tableID int64, inputTxn <-chan txn.RawTxn) error {
+func (p *processorImpl) SetInputChan(tableID int64, inputTxn <-chan model.RawTxn) error {
 	tc := newTxnChannel(inputTxn, 64, func(resolvedTs uint64) {
 		p.tableResolvedTs.Store(tableID, resolvedTs)
 	})
@@ -607,7 +606,7 @@ func (p *processorImpl) addTable(ctx context.Context, tableID int64, errCh chan<
 	}
 	span := util.GetTableSpan(tableID)
 	// TODO: How large should the buffer be?
-	txnChan := make(chan txn.RawTxn, 16)
+	txnChan := make(chan model.RawTxn, 16)
 	if err := p.SetInputChan(tableID, txnChan); err != nil {
 		return err
 	}
@@ -618,7 +617,7 @@ func (p *processorImpl) addTable(ctx context.Context, tableID int64, errCh chan<
 }
 
 // startPuller start pull data with span and push resolved txn into txnChan.
-func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan chan<- txn.RawTxn, errCh chan<- error) puller.Puller {
+func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan chan<- model.RawTxn, errCh chan<- error) puller.Puller {
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
 
@@ -635,7 +634,7 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 
 	errg.Go(func() error {
 		defer close(txnChan)
-		err := puller.CollectRawTxns(ctx, func(ctxInner context.Context, rawTxn txn.RawTxn) error {
+		err := puller.CollectRawTxns(ctx, func(ctxInner context.Context, rawTxn model.RawTxn) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()

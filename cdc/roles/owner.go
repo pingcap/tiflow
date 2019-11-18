@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
-	"github.com/pingcap/ticdc/cdc/txn"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -49,10 +48,10 @@ type Owner interface {
 // which can pull ddl jobs and execute ddl jobs
 type OwnerDDLHandler interface {
 	// PullDDL pulls the ddl jobs and returns resolvedTs of DDL Puller and job list.
-	PullDDL() (resolvedTs uint64, jobs []*txn.DDL, err error)
+	PullDDL() (resolvedTs uint64, jobs []*model.DDL, err error)
 
 	// ExecDDL executes the ddl job
-	ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error
+	ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error
 }
 
 // ChangeFeedInfoRWriter defines the Reader and Writer for ChangeFeedInfo
@@ -71,7 +70,7 @@ type ownerImpl struct {
 	cfRWriter  ChangeFeedInfoRWriter
 
 	ddlResolvedTs uint64
-	ddlJobHistory []*txn.DDL
+	ddlJobHistory []*model.DDL
 
 	l sync.RWMutex
 

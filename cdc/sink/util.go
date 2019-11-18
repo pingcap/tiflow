@@ -17,12 +17,11 @@ import (
 	gosql "database/sql"
 	"strings"
 
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/schema"
-	"github.com/pingcap/ticdc/cdc/txn"
-
 	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/schema"
 )
 
 var (
@@ -221,9 +220,9 @@ func getUniqKeys(db *gosql.DB, schema, table string) (uniqueKeys []indexInfo, er
 	return
 }
 
-func isTableChanged(ddl *txn.DDL) bool {
+func isTableChanged(ddl *model.DDL) bool {
 	switch ddl.Job.Type {
-	case model.ActionDropTable, model.ActionDropSchema, model.ActionTruncateTable, model.ActionCreateSchema:
+	case timodel.ActionDropTable, timodel.ActionDropSchema, timodel.ActionTruncateTable, timodel.ActionCreateSchema:
 		return false
 	default:
 		return true

@@ -19,15 +19,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/sink"
-
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/schema"
-	"github.com/pingcap/ticdc/cdc/txn"
+	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"go.uber.org/zap"
 )
@@ -71,18 +69,18 @@ func (s *mockTsRWriter) SetGlobalResolvedTs(ts uint64) {
 // mockMounter pretend to decode a RawTxn by returning a Txn of the same Ts
 type mockMounter struct{}
 
-func (m mockMounter) Mount(rawTxn txn.RawTxn) (*txn.Txn, error) {
-	return &txn.Txn{Ts: rawTxn.Ts}, nil
+func (m mockMounter) Mount(rawTxn model.RawTxn) (*model.Txn, error) {
+	return &model.Txn{Ts: rawTxn.Ts}, nil
 }
 
 // mockSinker append all received Txns for validation
 type mockSinker struct {
 	sink.Sink
-	synced []txn.Txn
+	synced []model.Txn
 	mu     sync.Mutex
 }
 
-func (m *mockSinker) Emit(ctx context.Context, t txn.Txn) error {
+func (m *mockSinker) Emit(ctx context.Context, t model.Txn) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.synced = append(m.synced, t)
@@ -155,11 +153,11 @@ func runCase(c *check.C, cases *processorTestCase) {
 	p.Run(ctx, errCh)
 
 	for i, rawTxnTs := range cases.rawTxnTs {
-		input := make(chan txn.RawTxn)
+		input := make(chan model.RawTxn)
 		p.SetInputChan(int64(i), input)
 		go func(rawTxnTs []uint64) {
 			for _, txnTs := range rawTxnTs {
-				input <- txn.RawTxn{Ts: txnTs}
+				input <- model.RawTxn{Ts: txnTs}
 			}
 		}(rawTxnTs)
 	}

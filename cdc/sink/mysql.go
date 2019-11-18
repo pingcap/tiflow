@@ -22,20 +22,19 @@ import (
 
 	"github.com/cenkalti/backoff"
 	dmysql "github.com/go-sql-driver/mysql"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/schema"
-	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
+	"go.uber.org/zap"
 )
 
 type tableInspector interface {
@@ -96,23 +95,23 @@ func NewMySQLSinkDDLOnly(db *sql.DB) Sink {
 	}
 }
 
-func (s *mysqlSink) Emit(ctx context.Context, txn txn.Txn) error {
-	filterBySchemaAndTable(&txn)
-	if len(txn.DMLs) == 0 && txn.DDL == nil {
-		log.Info("Whole txn ignored", zap.Uint64("ts", txn.Ts))
+func (s *mysqlSink) Emit(ctx context.Context, t model.Txn) error {
+	filterBySchemaAndTable(&t)
+	if len(t.DMLs) == 0 && t.DDL == nil {
+		log.Info("Whole txn ignored", zap.Uint64("ts", t.Ts))
 		return nil
 	}
-	if txn.IsDDL() {
-		err := s.execDDLWithMaxRetries(ctx, txn.DDL, 5)
-		if err == nil && !s.ddlOnly && isTableChanged(txn.DDL) {
-			s.tblInspector.Refresh(txn.DDL.Database, txn.DDL.Table)
+	if t.IsDDL() {
+		err := s.execDDLWithMaxRetries(ctx, t.DDL, 5)
+		if err == nil && !s.ddlOnly && isTableChanged(t.DDL) {
+			s.tblInspector.Refresh(t.DDL.Database, t.DDL.Table)
 		}
 		return errors.Trace(err)
 	}
 	if s.ddlOnly {
 		log.Fatal("this sink only supports DDL, can not emit DMLs.")
 	}
-	dmls, err := s.formatDMLs(txn.DMLs)
+	dmls, err := s.formatDMLs(t.DMLs)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -120,14 +119,14 @@ func (s *mysqlSink) Emit(ctx context.Context, txn txn.Txn) error {
 	return errors.Trace(s.execDMLs(ctx, dmls))
 }
 
-func filterBySchemaAndTable(t *txn.Txn) {
+func filterBySchemaAndTable(t *model.Txn) {
 	toIgnore := regexp.MustCompile("(?i)^(INFORMATION_SCHEMA|PERFORMANCE_SCHEMA|MYSQL)$")
 	if t.IsDDL() {
 		if toIgnore.MatchString(t.DDL.Database) {
 			t.DDL = nil
 		}
 	} else {
-		filteredDMLs := make([]*txn.DML, 0, len(t.DMLs))
+		filteredDMLs := make([]*model.DML, 0, len(t.DMLs))
 		for _, dml := range t.DMLs {
 			if !toIgnore.MatchString(dml.Database) {
 				filteredDMLs = append(filteredDMLs, dml)
@@ -149,7 +148,7 @@ func (s *mysqlSink) Close() error {
 	return nil
 }
 
-func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *txn.DDL, maxRetries uint64) error {
+func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDL, maxRetries uint64) error {
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
 			backoff.NewExponentialBackOff(), ctx),
@@ -167,8 +166,8 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *txn.DDL, max
 	}, retryCfg)
 }
 
-func (s *mysqlSink) execDDL(ctx context.Context, ddl *txn.DDL) error {
-	shouldSwitchDB := len(ddl.Database) > 0 && ddl.Job.Type != model.ActionCreateSchema
+func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDL) error {
+	shouldSwitchDB := len(ddl.Database) > 0 && ddl.Job.Type != timodel.ActionCreateSchema
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -196,18 +195,18 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *txn.DDL) error {
 	return nil
 }
 
-func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*txn.DML) error {
+func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*model.DML) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 
 	for _, dml := range dmls {
-		var fPrepare func(*txn.DML) (string, []interface{}, error)
+		var fPrepare func(*model.DML) (string, []interface{}, error)
 		switch dml.Tp {
-		case txn.InsertDMLType, txn.UpdateDMLType:
+		case model.InsertDMLType, model.UpdateDMLType:
 			fPrepare = s.prepareReplace
-		case txn.DeleteDMLType:
+		case model.DeleteDMLType:
 			fPrepare = s.prepareDelete
 		default:
 			return fmt.Errorf("invalid dml type: %v", dml.Tp)
@@ -231,8 +230,8 @@ func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*txn.DML) error {
 	return nil
 }
 
-func (s *mysqlSink) formatDMLs(dmls []*txn.DML) ([]*txn.DML, error) {
-	result := make([]*txn.DML, 0, len(dmls))
+func (s *mysqlSink) formatDMLs(dmls []*model.DML) ([]*model.DML, error) {
+	result := make([]*model.DML, 0, len(dmls))
 	for _, dml := range dmls {
 		tableInfo, ok := s.getTableDefinition(dml.Database, dml.Table)
 		if !ok {
@@ -248,7 +247,7 @@ func (s *mysqlSink) formatDMLs(dmls []*txn.DML) ([]*txn.DML, error) {
 	return result, nil
 }
 
-func (s *mysqlSink) getTableDefinition(schema, table string) (*model.TableInfo, bool) {
+func (s *mysqlSink) getTableDefinition(schema, table string) (*timodel.TableInfo, bool) {
 	tblID, ok := s.infoGetter.GetTableIDByName(schema, table)
 	if !ok {
 		return nil, false
@@ -257,7 +256,7 @@ func (s *mysqlSink) getTableDefinition(schema, table string) (*model.TableInfo, 
 	return tableInfo, ok
 }
 
-func (s *mysqlSink) prepareReplace(dml *txn.DML) (string, []interface{}, error) {
+func (s *mysqlSink) prepareReplace(dml *model.DML) (string, []interface{}, error) {
 	info, err := s.tblInspector.Get(dml.Database, dml.Table)
 	if err != nil {
 		return "", nil, err
@@ -280,7 +279,7 @@ func (s *mysqlSink) prepareReplace(dml *txn.DML) (string, []interface{}, error) 
 	return builder.String(), args, nil
 }
 
-func (s *mysqlSink) prepareDelete(dml *txn.DML) (string, []interface{}, error) {
+func (s *mysqlSink) prepareDelete(dml *model.DML) (string, []interface{}, error) {
 	info, err := s.tblInspector.Get(dml.Database, dml.Table)
 	if err != nil {
 		return "", nil, err
@@ -307,7 +306,7 @@ func (s *mysqlSink) prepareDelete(dml *txn.DML) (string, []interface{}, error) {
 	return sql, args, nil
 }
 
-func formatValues(table *model.TableInfo, colVals map[string]types.Datum) (map[string]types.Datum, error) {
+func formatValues(table *timodel.TableInfo, colVals map[string]types.Datum) (map[string]types.Datum, error) {
 	columns := writableColumns(table)
 
 	formatted := make(map[string]types.Datum, len(columns))
@@ -329,10 +328,10 @@ func formatValues(table *model.TableInfo, colVals map[string]types.Datum) (map[s
 
 // writableColumns returns all columns which can be written. This excludes
 // generated and non-public columns.
-func writableColumns(table *model.TableInfo) []*model.ColumnInfo {
-	cols := make([]*model.ColumnInfo, 0, len(table.Columns))
+func writableColumns(table *timodel.TableInfo) []*timodel.ColumnInfo {
+	cols := make([]*timodel.ColumnInfo, 0, len(table.Columns))
 	for _, col := range table.Columns {
-		if col.State == model.StatePublic && !col.IsGenerated() {
+		if col.State == timodel.StatePublic && !col.IsGenerated() {
 			cols = append(cols, col)
 		}
 	}
@@ -363,7 +362,7 @@ func formatColVal(datum types.Datum, ft types.FieldType) (types.Datum, error) {
 	return datum, nil
 }
 
-func getDefaultOrZeroValue(col *model.ColumnInfo) types.Datum {
+func getDefaultOrZeroValue(col *timodel.ColumnInfo) types.Datum {
 	// see https://github.com/pingcap/tidb/issues/9304
 	// must use null if TiDB not write the column value when default value is null
 	// and the value is null

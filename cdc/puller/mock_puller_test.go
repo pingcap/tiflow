@@ -7,7 +7,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/txn"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
@@ -23,7 +23,7 @@ func (s *mockPullerSuite) TestTxnSort(c *check.C) {
 	plr := pm.CreatePuller([]util.Span{util.Span{}.Hack()})
 	ctx := context.Background()
 	ts := uint64(0)
-	err := plr.CollectRawTxns(ctx, func(ctx context.Context, txn txn.RawTxn) error {
+	err := plr.CollectRawTxns(ctx, func(ctx context.Context, txn model.RawTxn) error {
 		c.Assert(ts, check.Less, txn.Ts)
 		atomic.StoreUint64(&ts, txn.Ts)
 		return nil
@@ -46,7 +46,7 @@ func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 	ctx := context.Background()
 	ts := uint64(0)
 	txnMounter := entry.NewTxnMounter(nil, time.UTC)
-	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn txn.RawTxn) error {
+	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
 		c.Assert(ts, check.Less, rawTxn.Ts)
 		atomic.StoreUint64(&ts, rawTxn.Ts)
 		if len(rawTxn.Entries) == 0 {
