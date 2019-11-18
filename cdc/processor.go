@@ -96,7 +96,7 @@ func (p *txnChannel) Forward(ctx context.Context, tableID int64, ts uint64, entr
 			return
 		}
 		p.putBackTxn = nil
-		entryC <- NewProcessorTxnEntry(t)
+		p.PushProcessorEntry(ctx, entryC, NewProcessorTxnEntry(t))
 	}
 	for {
 		select {
@@ -111,8 +111,17 @@ func (p *txnChannel) Forward(ctx context.Context, tableID int64, ts uint64, entr
 				p.PutBack(t)
 				return
 			}
-			entryC <- NewProcessorTxnEntry(t)
+			p.PushProcessorEntry(ctx, entryC, NewProcessorTxnEntry(t))
 		}
+	}
+}
+
+func (p *txnChannel) PushProcessorEntry(ctx context.Context, entryC chan<- ProcessorEntry, e ProcessorEntry) {
+	select {
+	case <-ctx.Done():
+		log.Info("lost processor entry during canceling", zap.Any("entry", e))
+		return
+	case entryC <- e:
 	}
 }
 
@@ -268,27 +277,36 @@ func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
 	wg.Go(func() error {
-		return p.localResolvedWorker(cctx)
+		err := p.localResolvedWorker(cctx)
+		return err
 	})
 	wg.Go(func() error {
-		return p.checkpointWorker(cctx)
+		err := p.checkpointWorker(cctx)
+		return err
 	})
 	wg.Go(func() error {
-		return p.globalResolvedWorker(cctx)
+		err := p.globalResolvedWorker(cctx)
+		log.Info("which baby not exit?", zap.String("name", "globalResolvedWorker"))
+		return err
 	})
 	wg.Go(func() error {
-		return p.pullerSchedule(cctx, errCh)
+		err := p.pullerSchedule(cctx, errCh)
+		return err
 	})
 	wg.Go(func() error {
-		return p.syncResolved(cctx)
+		err := p.syncResolved(cctx)
+		return err
 	})
 	wg.Go(func() error {
-		return p.pullDDLJob(cctx)
+		err := p.pullDDLJob(cctx)
+		return err
 	})
 
 	go func() {
 		err := wg.Wait()
+		log.Info("I guess not return")
 		if err != nil {
+			log.Info("processorImpl", zap.Error(err))
 			errCh <- err
 		}
 	}()
@@ -426,7 +444,16 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) error {
 		}
 		p.inputChansLock.RUnlock()
 		wg.Wait()
-		p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTs)
+		select {
+		case <-cctx.Done():
+			if errors.Cause(err) == context.Canceled {
+				return nil
+			}
+			if err != nil {
+				return errors.Trace(err)
+			}
+		case p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTs):
+		}
 	}
 }
 
@@ -495,7 +522,9 @@ func (p *processorImpl) syncResolved(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 				if err := p.sink.Emit(ctx, *txn); err != nil {
+					log.Info("DD:what err in Emit", zap.Error(err))
 					if err != context.Canceled {
+						log.Info("DD:what err in Emit return", zap.Error(err))
 						return errors.Trace(err)
 					}
 					return nil
