@@ -441,9 +441,7 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) error {
 			if errors.Cause(err) == context.Canceled {
 				return nil
 			}
-			if err != nil {
-				return errors.Trace(err)
-			}
+			return errors.Trace(err)
 		case p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTs):
 		}
 	}
