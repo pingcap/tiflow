@@ -280,6 +280,7 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case err := <-o.errCh:
+			// TODO when we got an error here, all changefeeds will exit. It's not reasonable.
 			return err
 		case <-time.After(tickTime):
 			if !o.IsOwner(ctx) {
