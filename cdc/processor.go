@@ -437,6 +437,7 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) error {
 		wg.Wait()
 		select {
 		case <-cctx.Done():
+			err := cctx.Err()
 			if errors.Cause(err) == context.Canceled {
 				return nil
 			}
