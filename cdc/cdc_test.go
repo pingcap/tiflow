@@ -10,6 +10,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/mock"
 	"github.com/pingcap/ticdc/cdc/schema"
@@ -24,7 +25,7 @@ type CDCSuite struct {
 	database string
 	puller   *mock.MockTiDB
 	mock     sqlmock.Sqlmock
-	mounter  *txn.Mounter
+	mounter  *entry.Mounter
 	sink     sink.Sink
 }
 
@@ -58,7 +59,7 @@ func NewCDCSuite() *CDCSuite {
 
 	cdcSuite.sink = sink.NewMySQLSinkUsingSchema(db, schemaStorage)
 
-	mounter := txn.NewTxnMounter(schemaStorage, time.Local)
+	mounter := entry.NewTxnMounter(schemaStorage, time.Local)
 	cdcSuite.mounter = mounter
 	return cdcSuite
 }
