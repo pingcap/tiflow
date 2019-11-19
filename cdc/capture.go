@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/flags"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
-	"github.com/pingcap/tidb/store/tikv"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -135,9 +134,6 @@ func createTiStore(urls string) (tidbkv.Storage, error) {
 		return nil, errors.Trace(err)
 	}
 
-	if err := store.Register("tikv", tikv.Driver{}); err != nil {
-		return nil, errors.Trace(err)
-	}
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := store.New(tiPath)
 	if err != nil {
