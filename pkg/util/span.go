@@ -39,6 +39,14 @@ func (s Span) Hack() Span {
 	return r
 }
 
+// MemcomparableEncode creates a new Span with memcomparable encoded filed of the original span
+func (s Span) MemcomparableEncode() Span {
+	return Span{
+		Start: codec.EncodeBytes(nil, s.Start),
+		End:   codec.EncodeBytes(nil, s.End),
+	}
+}
+
 func GetTableSpan(tableID int64) Span {
 	sep := byte('_')
 	tablePrefix := tablecodec.GenTablePrefix(tableID)

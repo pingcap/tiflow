@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/util/codec"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -90,10 +89,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	eventCh := make(chan *model.RegionFeedEvent, 128)
 
 	for _, rawSpan := range p.spans {
-		span := util.Span{
-			Start: codec.EncodeBytes(nil, rawSpan.Start),
-			End:   codec.EncodeBytes(nil, rawSpan.End),
-		}
+		span := rawSpan.MemcomparableEncode()
 
 		g.Go(func() error {
 			return cli.EventFeed(ctx, span, checkpointTs, eventCh)
