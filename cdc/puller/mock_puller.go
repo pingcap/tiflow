@@ -209,7 +209,7 @@ func (m *MockPullerManager) sendRawTxn(ctx context.Context, rawTxn txn.RawTxn) {
 	for _, plr := range m.pullers {
 		toSend := txn.RawTxn{Ts: rawTxn.Ts}
 		for _, kvEntry := range rawTxn.Entries {
-			if util.KeyInSpans(kvEntry.Key, plr.spans) {
+			if util.KeyInSpans(kvEntry.Key, plr.spans, false) {
 				toSend.Entries = append(toSend.Entries, kvEntry)
 			}
 		}

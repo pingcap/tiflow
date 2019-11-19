@@ -93,7 +93,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	eventCh := make(chan *model.RegionFeedEvent, 128)
 
 	for _, span := range p.spans {
-		span := util.MemcomparableEncode(span, p.needEncode)
+		span := span
 
 		g.Go(func() error {
 			return cli.EventFeed(ctx, span, checkpointTs, eventCh)
@@ -111,7 +111,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// and we only want the get [b, c) from this region,
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
-					if !util.KeyInSpans(val.Key, p.spans) {
+					if !util.KeyInSpans(val.Key, p.spans, p.needEncode) {
 						log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
 						continue
 					}

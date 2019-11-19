@@ -39,22 +39,11 @@ func (s Span) Hack() Span {
 	return r
 }
 
-// MemcomparableEncode creates a new Span with memcomparable encoded filed of the original span
-func MemcomparableEncode(s Span, encoded bool) Span {
-	if encoded {
-		return Span{
-			Start: codec.EncodeBytes(nil, s.Start),
-			End:   codec.EncodeBytes(nil, s.End),
-		}
-	}
-	return s
-}
-
 func GetTableSpan(tableID int64) Span {
 	sep := byte('_')
 	tablePrefix := tablecodec.GenTablePrefix(tableID)
-	start := append(tablePrefix, sep)
-	end := append(tablePrefix, sep+1)
+	start := codec.EncodeBytes(nil, append(tablePrefix, sep))
+	end := codec.EncodeBytes(nil, append(tablePrefix, sep+1))
 	return Span{
 		Start: start,
 		End:   end,
@@ -79,9 +68,13 @@ func GetDDLSpan() Span {
 }
 
 // KeyInSpans check if k in the range of spans.
-func KeyInSpans(k []byte, spans []Span) bool {
+func KeyInSpans(k []byte, spans []Span, needEncode bool) bool {
+	encodedK := k
+	if needEncode {
+		encodedK = codec.EncodeBytes(nil, k)
+	}
 	for _, span := range spans {
-		if KeyInSpan(k, span) {
+		if KeyInSpan(encodedK, span) {
 			return true
 		}
 	}
