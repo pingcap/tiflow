@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -108,7 +109,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
 					if !util.KeyInSpans(val.Key, p.spans) {
-						log.Warn("key not in spans range")
+						log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
 						continue
 					}
 

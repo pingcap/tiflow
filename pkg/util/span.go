@@ -10,8 +10,9 @@ import (
 
 // Span represents a arbitrary kv range
 type Span struct {
-	Start []byte
-	End   []byte
+	Start   []byte
+	End     []byte
+	Encoded bool
 }
 
 // UpperBoundKey represents the maximum value.
@@ -24,8 +25,9 @@ func (s Span) Hack() Span {
 	}
 
 	r := Span{
-		Start: s.Start,
-		End:   s.End,
+		Start:   s.Start,
+		End:     s.End,
+		Encoded: s.Encoded,
 	}
 
 	if r.Start == nil {
@@ -41,6 +43,9 @@ func (s Span) Hack() Span {
 
 // MemcomparableEncode creates a new Span with memcomparable encoded filed of the original span
 func (s Span) MemcomparableEncode() Span {
+	if s.Encoded {
+		return s
+	}
 	return Span{
 		Start: codec.EncodeBytes(nil, s.Start),
 		End:   codec.EncodeBytes(nil, s.End),
@@ -70,8 +75,9 @@ func GetDDLSpan() Span {
 	copy(end, start)
 	end[len(end)-1]++
 	return Span{
-		Start: start,
-		End:   end,
+		Start:   start,
+		End:     end,
+		Encoded: true,
 	}
 }
 
@@ -152,5 +158,5 @@ func Intersect(lhs Span, rhs Span) (span Span, err error) {
 		end = rhs.End
 	}
 
-	return Span{start, end}, nil
+	return Span{Start: start, End: end}, nil
 }
