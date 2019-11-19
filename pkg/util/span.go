@@ -2,6 +2,7 @@ package util
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/tablecodec"
@@ -39,6 +40,10 @@ func (s Span) Hack() Span {
 	}
 
 	return r
+}
+
+func (s Span) String() string {
+	return fmt.Sprintf("{%s %s}", s.Start, s.End)
 }
 
 // MemcomparableEncode creates a new Span with memcomparable encoded filed of the original span
