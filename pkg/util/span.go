@@ -2,7 +2,6 @@ package util
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/tablecodec"
@@ -11,9 +10,8 @@ import (
 
 // Span represents a arbitrary kv range
 type Span struct {
-	Start   []byte
-	End     []byte
-	Encoded bool
+	Start []byte
+	End   []byte
 }
 
 // UpperBoundKey represents the maximum value.
@@ -26,9 +24,8 @@ func (s Span) Hack() Span {
 	}
 
 	r := Span{
-		Start:   s.Start,
-		End:     s.End,
-		Encoded: s.Encoded,
+		Start: s.Start,
+		End:   s.End,
 	}
 
 	if r.Start == nil {
@@ -42,19 +39,15 @@ func (s Span) Hack() Span {
 	return r
 }
 
-func (s Span) String() string {
-	return fmt.Sprintf("{%s %s}", s.Start, s.End)
-}
-
 // MemcomparableEncode creates a new Span with memcomparable encoded filed of the original span
-func (s Span) MemcomparableEncode() Span {
-	if s.Encoded {
-		return s
+func MemcomparableEncode(s Span, encoded bool) Span {
+	if encoded {
+		return Span{
+			Start: codec.EncodeBytes(nil, s.Start),
+			End:   codec.EncodeBytes(nil, s.End),
+		}
 	}
-	return Span{
-		Start: codec.EncodeBytes(nil, s.Start),
-		End:   codec.EncodeBytes(nil, s.End),
-	}
+	return s
 }
 
 func GetTableSpan(tableID int64) Span {
@@ -80,9 +73,8 @@ func GetDDLSpan() Span {
 	copy(end, start)
 	end[len(end)-1]++
 	return Span{
-		Start:   start,
-		End:     end,
-		Encoded: true,
+		Start: start,
+		End:   end,
 	}
 }
 

@@ -35,7 +35,7 @@ var pullCmd = &cobra.Command{
 		}
 
 		ts := oracle.ComposeTS(time.Now().Unix()*1000, 0)
-		p := puller.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}})
+		p := puller.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}}, false)
 		buf := p.Output()
 
 		g, ctx := errgroup.WithContext(context.Background())

@@ -42,6 +42,7 @@ type pullerImpl struct {
 	spans        []util.Span
 	buf          Buffer
 	tsTracker    txn.ResolveTsTracker
+	needEncode   bool
 }
 
 type CancellablePuller struct {
@@ -56,6 +57,7 @@ func NewPuller(
 	pdCli pd.Client,
 	checkpointTs uint64,
 	spans []util.Span,
+	needEncode bool,
 ) *pullerImpl {
 	p := &pullerImpl{
 		pdCli:        pdCli,
@@ -63,6 +65,7 @@ func NewPuller(
 		spans:        spans,
 		buf:          MakeBuffer(),
 		tsTracker:    makeSpanFrontier(spans...),
+		needEncode:   needEncode,
 	}
 
 	return p
@@ -89,8 +92,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	checkpointTs := p.checkpointTs
 	eventCh := make(chan *model.RegionFeedEvent, 128)
 
-	for _, rawSpan := range p.spans {
-		span := rawSpan.MemcomparableEncode()
+	for _, span := range p.spans {
+		span := util.MemcomparableEncode(span, p.needEncode)
 
 		g.Go(func() error {
 			return cli.EventFeed(ctx, span, checkpointTs, eventCh)

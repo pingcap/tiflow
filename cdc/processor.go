@@ -239,7 +239,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 
 	tsRWriter := fNewTsRWriter(etcdCli, changefeedID, captureID)
 
-	ddlPuller := puller.NewPuller(pdCli, changefeed.StartTs, []util.Span{util.GetDDLSpan()})
+	ddlPuller := puller.NewPuller(pdCli, changefeed.StartTs, []util.Span{util.GetDDLSpan()}, false)
 
 	// TODO: get time zone from config
 	mounter := fNewMounter(schemaStorage, time.UTC)
@@ -644,7 +644,7 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 		checkpointTs = oracle.EncodeTSO(p.changefeed.CreateTime.Unix() * 1000)
 	}
 
-	puller := puller.NewPuller(p.pdCli, checkpointTs, []util.Span{span})
+	puller := puller.NewPuller(p.pdCli, checkpointTs, []util.Span{span}, true)
 
 	errg.Go(func() error {
 		return puller.Run(ctx)

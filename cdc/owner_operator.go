@@ -47,7 +47,7 @@ type ddlHandler struct {
 }
 
 func NewDDLHandler(pdCli pd.Client) *ddlHandler {
-	puller := puller.NewPuller(pdCli, 0, []util.Span{util.GetDDLSpan()})
+	puller := puller.NewPuller(pdCli, 0, []util.Span{util.GetDDLSpan()}, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	// TODO this TxnMounter only mount DDL transaction, so it needn't schemaStorage
 	schemaStorage, _ := schema.NewStorage(nil, false)
