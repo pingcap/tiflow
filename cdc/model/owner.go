@@ -24,6 +24,20 @@ type ProcessTableInfo struct {
 	StartTs uint64 `json:"start-ts"`
 }
 
+// TableLock is used when applying table re-assignment to a processor.
+// There are two kinds of locks, P-lock and C-lock. P-lock is set by owner when
+// owner removes one or more tables from one processor. C-lock is a pair to
+// P-lock and set by processor to indicate that the processor has synchronized
+// the checkpoint and won't synchronize the removed table any more.
+type TableLock struct {
+	// Ts is the create timestamp of lock, it is used to pair P-lock and C-lock
+	Ts uint64 `json:"ts"`
+	// CreatorID is the lock creator ID
+	CreatorID string `json:"creator-id"`
+	// CheckpointTs is used in C-lock only, it records the table synchronization checkpoint
+	CheckpointTs uint64 `json:"checkpoint-ts"`
+}
+
 // SubChangeFeedInfo records the process information of a capture
 type SubChangeFeedInfo struct {
 	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.
@@ -32,6 +46,8 @@ type SubChangeFeedInfo struct {
 	ResolvedTs uint64 `json:"resolved-ts"`
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
 	TableInfos []*ProcessTableInfo `json:"table-infos"`
+	TablePLock *TableLock          `json:"table-p-lock"`
+	TableCLock *TableLock          `json:"table-c-lock"`
 }
 
 // Marshal returns the json marshal format of a SubChangeFeedInfo
