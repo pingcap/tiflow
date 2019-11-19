@@ -5,7 +5,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/store"
+	"github.com/pingcap/tidb/store/tikv"
 	"go.uber.org/zap"
 )
 
@@ -66,6 +69,10 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 	capture, err := NewCapture(strings.Split(opts.pdEndpoints, ","))
 	if err != nil {
 		return nil, err
+	}
+	err = store.Register("tikv", tikv.Driver{})
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	s := &Server{
