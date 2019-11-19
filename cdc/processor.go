@@ -96,7 +96,7 @@ func (p *txnChannel) Forward(ctx context.Context, tableID int64, ts uint64, entr
 			return
 		}
 		p.putBackTxn = nil
-		p.PushProcessorEntry(ctx, entryC, NewProcessorTxnEntry(t))
+		pushProcessorEntry(ctx, entryC, NewProcessorTxnEntry(t))
 	}
 	for {
 		select {
@@ -111,12 +111,12 @@ func (p *txnChannel) Forward(ctx context.Context, tableID int64, ts uint64, entr
 				p.PutBack(t)
 				return
 			}
-			p.PushProcessorEntry(ctx, entryC, NewProcessorTxnEntry(t))
+			pushProcessorEntry(ctx, entryC, NewProcessorTxnEntry(t))
 		}
 	}
 }
 
-func (p *txnChannel) PushProcessorEntry(ctx context.Context, entryC chan<- ProcessorEntry, e ProcessorEntry) {
+func pushProcessorEntry(ctx context.Context, entryC chan<- ProcessorEntry, e ProcessorEntry) {
 	select {
 	case <-ctx.Done():
 		log.Info("lost processor entry during canceling", zap.Any("entry", e))
