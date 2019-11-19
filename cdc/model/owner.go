@@ -32,8 +32,8 @@ type ProcessTableInfo struct {
 type TableLock struct {
 	// Ts is the create timestamp of lock, it is used to pair P-lock and C-lock
 	Ts uint64 `json:"ts"`
-	// OwnerID is the lock creator ID
-	OwnerID string `json:"owner-id"`
+	// CreatorID is the lock creator ID
+	CreatorID string `json:"creator-id"`
 	// CheckpointTs is used in C-lock only, it records the table synchronization checkpoint
 	CheckpointTs uint64 `json:"checkpoint-ts"`
 }
