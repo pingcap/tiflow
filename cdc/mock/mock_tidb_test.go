@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -18,7 +18,7 @@ func (s *mockTiDBsuite) TestCanGetKVEntrys(c *check.C) {
 	puller, err := NewMockPuller()
 	c.Assert(err, check.IsNil)
 
-	var entrys []*kv.RawKVEntry
+	var entrys []*model.RawKVEntry
 	entrys = puller.MustExec(c, "create table test.test(id varchar(255) primary key, a int)")
 	c.Assert(len(entrys), check.Greater, 0)
 	c.Log(len(entrys))

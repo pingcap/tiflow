@@ -11,8 +11,8 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/mock"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/txn"
@@ -70,7 +70,7 @@ func (s *CDCSuite) Forward(span util.Span, ts uint64) bool {
 
 func (s *CDCSuite) RunAndCheckSync(c *C, execute func(func(string, ...interface{})), expect func(sqlmock.Sqlmock)) {
 	expect(s.mock)
-	var rawKVs []*kv.RawKVEntry
+	var rawKVs []*model.RawKVEntry
 	executeSQL := func(sql string, args ...interface{}) {
 		kvs := s.puller.MustExec(c, sql, args...)
 		rawKVs = append(rawKVs, kvs...)
