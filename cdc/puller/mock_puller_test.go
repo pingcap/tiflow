@@ -107,10 +107,12 @@ func (s *mockPullerSuite) TestStartTs(c *check.C) {
 	pm.MustExec("insert into test.test(id, a) values(?, ?)", 3, 3)
 	pm.MustExec("delete from test.test")
 	waitForGrowingTs(&ts, oracle.EncodeTSO(time.Now().Unix()*1000))
+	cancel()
 	mu.Lock()
 	index := len(rawTxns) / 2
 	plrB := pm.CreatePuller(rawTxns[index].Ts, []util.Span{util.Span{}.Hack()})
 	mu.Unlock()
+	ctx, cancel = context.WithCancel(context.Background())
 	err := plrB.CollectRawTxns(ctx, func(ctx context.Context, txn txn.RawTxn) error {
 		mu.Lock()
 		defer mu.Unlock()
