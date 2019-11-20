@@ -159,6 +159,7 @@ func (c *CDCClient) getStore(
 // EventFeed divides a EventFeed request on range boundaries and establishes
 // a EventFeed to each of the individual region. It streams back result on the
 // provided channel.
+// The `Start` and `End` field in input span must be memcomparable encoded.
 func (c *CDCClient) EventFeed(
 	ctx context.Context, span util.Span, ts uint64, eventCh chan<- *model.RegionFeedEvent,
 ) error {

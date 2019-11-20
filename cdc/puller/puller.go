@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -41,6 +42,8 @@ type pullerImpl struct {
 	spans        []util.Span
 	buf          Buffer
 	tsTracker    txn.ResolveTsTracker
+	// needEncode represents whether we need to encode a key when checking it is in span
+	needEncode bool
 }
 
 type CancellablePuller struct {
@@ -55,6 +58,7 @@ func NewPuller(
 	pdCli pd.Client,
 	checkpointTs uint64,
 	spans []util.Span,
+	needEncode bool,
 ) *pullerImpl {
 	p := &pullerImpl{
 		pdCli:        pdCli,
@@ -62,6 +66,7 @@ func NewPuller(
 		spans:        spans,
 		buf:          MakeBuffer(),
 		tsTracker:    makeSpanFrontier(spans...),
+		needEncode:   needEncode,
 	}
 
 	return p
@@ -107,8 +112,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// and we only want the get [b, c) from this region,
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
-					if !util.KeyInSpans(val.Key, p.spans) {
-						log.Warn("key not in spans range")
+					if !util.KeyInSpans(val.Key, p.spans, p.needEncode) {
+						log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
 						continue
 					}
 
