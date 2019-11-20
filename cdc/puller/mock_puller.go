@@ -215,7 +215,6 @@ func (m *MockPullerManager) Run(ctx context.Context) {
 				m.rawTxns = append(m.rawTxns, r)
 				m.rawTxnsMu.Unlock()
 			case <-time.After(time.Second):
-				log.Info("send fake transaction")
 				m.rawTxnsMu.Lock()
 				fakeTxn := txn.RawTxn{Ts: oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond))}
 				m.rawTxns = append(m.rawTxns, fakeTxn)
