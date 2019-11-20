@@ -47,6 +47,8 @@ type ddlHandler struct {
 }
 
 func NewDDLHandler(pdCli pd.Client) *ddlHandler {
+	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
+	// so we set `needEncode` to false.
 	puller := puller.NewPuller(pdCli, 0, []util.Span{util.GetDDLSpan()}, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	// TODO this TxnMounter only mount DDL transaction, so it needn't schemaStorage
