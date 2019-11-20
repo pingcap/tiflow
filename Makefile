@@ -1,7 +1,7 @@
-### Makefile for tidb-cdc
+### Makefile for ticdc
 .PHONY: build test check clean fmt cdc
 
-PROJECT=tidb-cdc
+PROJECT=ticdc
 
 # Ensure GOPATH is set before running build process.
 ifeq "$(GOPATH)" ""
@@ -27,9 +27,9 @@ PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor')
 
-# LDFLAGS += -X "github.com/pingcap/tidb-cdc/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
-# LDFLAGS += -X "github.com/pingcap/tidb-cdc/pkg/version.GitHash=$(shell git rev-parse HEAD)"
-# LDFLAGS += -X "github.com/pingcap/tidb-cdc/pkg/version.ReleaseVersion=$(shell git describe --tags --dirty)"
+# LDFLAGS += -X "github.com/pingcap/ticdc/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
+# LDFLAGS += -X "github.com/pingcap/ticdc/pkg/version.GitHash=$(shell git rev-parse HEAD)"
+# LDFLAGS += -X "github.com/pingcap/ticdc/pkg/version.ReleaseVersion=$(shell git describe --tags --dirty)"
 
 default: build buildsucc
 
