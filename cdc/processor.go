@@ -646,7 +646,7 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 		checkpointTs = oracle.EncodeTSO(p.changefeed.CreateTime.Unix() * 1000)
 	}
 
-	// The key in DDL kv pair returned from TiKV is not memcompariable encoded,
+	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
 	puller := puller.NewPuller(p.pdCli, checkpointTs, []util.Span{span}, true)
 
