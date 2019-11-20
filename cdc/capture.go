@@ -22,7 +22,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/model"
 	"github.com/pingcap/tidb-cdc/cdc/roles"
@@ -45,7 +44,9 @@ type Capture struct {
 	pdEndpoints  []string
 	etcdClient   *clientv3.Client
 	ownerManager roles.Manager
-	ownerWorker  roles.Owner
+	ownerWorker  *ownerImpl
+
+	processors map[string]*processorImpl
 
 	info *model.CaptureInfo
 }
@@ -71,14 +72,14 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	log.Info("creating capture", zap.String("capture-id", id))
 
 	manager := roles.NewOwnerManager(cli, id, CaptureOwnerKey)
-	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
+
+	worker, err := NewOwner(pdEndpoints, cli, manager)
 	if err != nil {
-		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
+		return nil, errors.Annotate(err, "new owner failed")
 	}
-	ddlHandler := NewDDLHandler(pdCli)
-	worker := roles.NewOwner(cli, manager, ddlHandler)
 
 	c = &Capture{
+		processors:   make(map[string]*processorImpl),
 		pdEndpoints:  pdEndpoints,
 		etcdClient:   cli,
 		ownerManager: manager,
@@ -87,6 +88,18 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	}
 
 	return
+}
+
+var _ processorCallback = &Capture{}
+
+// OnRunProcessor implements processorCallback.
+func (c *Capture) OnRunProcessor(p *processorImpl) {
+	c.processors[p.changefeedID] = p
+}
+
+// OnStopProcessor implements processorCallback.
+func (c *Capture) OnStopProcessor(p *processorImpl) {
+	delete(c.processors, p.changefeedID)
 }
 
 // Start starts the Capture mainloop
@@ -110,7 +123,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 
 	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)
 	errg.Go(func() error {
-		return watcher.Watch(cctx)
+		return watcher.Watch(cctx, c)
 	})
 
 	return errg.Wait()
@@ -135,9 +148,9 @@ func createTiStore(urls string) (tidbkv.Storage, error) {
 		return nil, errors.Trace(err)
 	}
 
-	if err := store.Register("tikv", tikv.Driver{}); err != nil {
-		return nil, errors.Trace(err)
-	}
+	// Ignore error if it is already registered.
+	_ = store.Register("tikv", tikv.Driver{})
+
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := store.New(tiPath)
 	if err != nil {

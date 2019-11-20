@@ -144,6 +144,8 @@ type Mounter struct {
 	loc           *time.Location
 }
 
+// NewTxnMounter create a Mounter instance.
+// schema is read only for dml.
 func NewTxnMounter(schema *schema.Storage, loc *time.Location) *Mounter {
 	return &Mounter{schemaStorage: schema, loc: loc}
 }
@@ -187,7 +189,8 @@ func (m *Mounter) Mount(rawTxn RawTxn) (*Txn, error) {
 			}
 			return txn, nil
 		case *entry.UnknownKVEntry:
-			log.Warn("Found unknown kv entry", zap.Reflect("UnknownKVEntry", e))
+			// TODO: to many warn log if log here.
+			// log.Warn("Found unknown kv entry", zap.Reflect("UnknownKVEntry", e))
 		}
 	}
 	txn.DMLs = append(deleteDMLs, replaceDMLs...)

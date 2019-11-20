@@ -15,6 +15,8 @@ package cdc
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"math"
 	"strings"
 	"sync"
@@ -33,7 +35,6 @@ import (
 	"github.com/pingcap/tidb-cdc/cdc/sink"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb-cdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -205,7 +206,7 @@ type processorImpl struct {
 	wg *errgroup.Group
 }
 
-func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, changefeedID, captureID string) (Processor, error) {
+func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, changefeedID, captureID string) (*processorImpl, error) {
 	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
@@ -292,6 +293,10 @@ func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 			errCh <- err
 		}
 	}()
+}
+
+func (p *processorImpl) writeDebugInfo(w io.Writer) {
+	fmt.Fprintf(w, "%+v\n", *p)
 }
 
 // pullerSchedule will be used to monitor table change and schedule pullers in the future
@@ -586,7 +591,7 @@ func (p *processorImpl) initPullers(ctx context.Context, errCh chan<- error) err
 				if _, ok := p.tblPullers[int64(tblInfo.ID)]; ok {
 					continue
 				}
-				if err := p.addTable(ctx, int64(tblInfo.ID), errCh); err != nil {
+				if err := p.addTable(ctx, int64(tblInfo.ID), tblInfo.StartTs, errCh); err != nil {
 					return err
 				}
 			}
@@ -597,7 +602,7 @@ func (p *processorImpl) initPullers(ctx context.Context, errCh chan<- error) err
 	}
 }
 
-func (p *processorImpl) addTable(ctx context.Context, tableID int64, errCh chan<- error) error {
+func (p *processorImpl) addTable(ctx context.Context, tableID int64, checkpointTs uint64, errCh chan<- error) error {
 	log.Debug("Add table", zap.Int64("tableID", tableID))
 	// TODO: Make sure it's threadsafe or prove that it doesn't have to be
 	if _, ok := p.tblPullers[tableID]; ok {
@@ -611,20 +616,15 @@ func (p *processorImpl) addTable(ctx context.Context, tableID int64, errCh chan<
 		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	plr := p.startPuller(ctx, span, txnChan, errCh)
+	plr := p.startPuller(ctx, span, checkpointTs, txnChan, errCh)
 	p.tblPullers[tableID] = puller.CancellablePuller{Puller: plr, Cancel: cancel}
 	return nil
 }
 
 // startPuller start pull data with span and push resolved txn into txnChan.
-func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan chan<- txn.RawTxn, errCh chan<- error) puller.Puller {
+func (p *processorImpl) startPuller(ctx context.Context, span util.Span, checkpointTs uint64, txnChan chan<- txn.RawTxn, errCh chan<- error) puller.Puller {
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
-
-	checkpointTs := p.changefeed.StartTs
-	if checkpointTs == 0 {
-		checkpointTs = oracle.EncodeTSO(p.changefeed.CreateTime.Unix() * 1000)
-	}
 
 	puller := puller.NewPuller(p.pdCli, checkpointTs, []util.Span{span})
 

@@ -23,8 +23,6 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/puller"
-	"github.com/pingcap/tidb-cdc/cdc/roles"
-	"github.com/pingcap/tidb-cdc/cdc/schema"
 	"github.com/pingcap/tidb-cdc/cdc/sink"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
 	"github.com/pingcap/tidb-cdc/pkg/util"
@@ -34,24 +32,21 @@ import (
 
 //TODO: add tests
 type ddlHandler struct {
-	puller       puller.Puller
-	mounter      *txn.Mounter
-	checkpointTS uint64
-	resolvedTS   uint64
-	ddlJobs      []*txn.DDL
+	puller     puller.Puller
+	mounter    *txn.Mounter
+	resolvedTS uint64
+	ddlJobs    []*txn.DDL
 
 	mu     sync.Mutex
 	wg     *errgroup.Group
 	cancel func()
 }
 
-func NewDDLHandler(pdCli pd.Client) *ddlHandler {
-	puller := puller.NewPuller(pdCli, 0, []util.Span{util.GetDDLSpan()})
+func NewDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
+	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan()})
 	ctx, cancel := context.WithCancel(context.Background())
-	// TODO this TxnMounter only mount DDL transaction, so it needn't schemaStorage
-	schemaStorage, _ := schema.NewStorage(nil, false)
 	// TODO get time loc from config
-	txnMounter := txn.NewTxnMounter(schemaStorage, time.UTC)
+	txnMounter := txn.NewTxnMounter(nil, time.UTC)
 	h := &ddlHandler{
 		puller:  puller,
 		cancel:  cancel,
@@ -60,6 +55,7 @@ func NewDDLHandler(pdCli pd.Client) *ddlHandler {
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
 
+	// FIXME: user of ddlHandler can't know error happen.
 	errg.Go(func() error {
 		return puller.Run(ctx)
 	})
@@ -94,13 +90,12 @@ func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn txn.RawTxn) error {
 	return nil
 }
 
-var _ roles.OwnerDDLHandler = &ddlHandler{}
+var _ OwnerDDLHandler = &ddlHandler{}
 
 // PullDDL implements `roles.OwnerDDLHandler` interface.
 func (h *ddlHandler) PullDDL() (uint64, []*txn.DDL, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.checkpointTS = h.resolvedTS
 	result := h.ddlJobs
 	h.ddlJobs = nil
 	return h.resolvedTS, result, nil

@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/tidb-cdc/cdc/kv"
 	"github.com/pingcap/tidb-cdc/cdc/txn"
@@ -107,7 +106,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
 					if !util.KeyInSpans(val.Key, p.spans) {
-						log.Warn("key not in spans range")
+						// log.Warn("key not in spans range")
 						continue
 					}
 

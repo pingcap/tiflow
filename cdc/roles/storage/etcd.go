@@ -53,10 +53,23 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeed
 		if err != nil {
 			return nil, nil, err
 		}
+
 		pinfo, err := kv.GetSubChangeFeedInfos(ctx, rw.etcdClient, changefeedID)
 		if err != nil {
 			return nil, nil, err
 		}
+
+		// Set changefeed info if exists.
+		changefeedInfo, err := kv.GetChangeFeedInfo(ctx, rw.etcdClient, changefeedID)
+
+		switch errors.Cause(err) {
+		case nil:
+			changefeed.Info = changefeedInfo
+		case model.ErrChangeFeedNotExists:
+		default:
+			return nil, nil, err
+		}
+
 		changefeeds[changefeedID] = changefeed
 		pinfos[changefeedID] = pinfo
 	}
