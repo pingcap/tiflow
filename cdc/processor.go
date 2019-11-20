@@ -97,7 +97,7 @@ func (p *txnChannel) Forward(ctx context.Context, tableID int64, ts uint64, entr
 			return
 		}
 		p.putBackTxn = nil
-		entryC <- NewProcessorTxnEntry(t)
+		pushProcessorEntry(ctx, entryC, NewProcessorTxnEntry(t))
 	}
 	for {
 		select {
@@ -112,8 +112,17 @@ func (p *txnChannel) Forward(ctx context.Context, tableID int64, ts uint64, entr
 				p.PutBack(t)
 				return
 			}
-			entryC <- NewProcessorTxnEntry(t)
+			pushProcessorEntry(ctx, entryC, NewProcessorTxnEntry(t))
 		}
+	}
+}
+
+func pushProcessorEntry(ctx context.Context, entryC chan<- ProcessorEntry, e ProcessorEntry) {
+	select {
+	case <-ctx.Done():
+		log.Info("lost processor entry during canceling", zap.Any("entry", e))
+		return
+	case entryC <- e:
 	}
 }
 
@@ -427,7 +436,15 @@ func (p *processorImpl) globalResolvedWorker(ctx context.Context) error {
 		}
 		p.inputChansLock.RUnlock()
 		wg.Wait()
-		p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTs)
+		select {
+		case <-ctx.Done():
+			err := ctx.Err()
+			if errors.Cause(err) == context.Canceled {
+				return nil
+			}
+			return errors.Trace(err)
+		case p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTs):
+		}
 	}
 }
 
