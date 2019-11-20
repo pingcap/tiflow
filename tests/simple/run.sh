@@ -2,11 +2,10 @@
 
 set -e
 
-cur=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 WORK_DIR=$OUT_DIR/$TEST_NAME
 
 function prepare() {
-    rm -rf $WORK_DIR && mkdir -p $WORK_DIR
+    rm -r $WORK_DIR && mkdir -p $WORK_DIR
     cd $WORK_DIR
 
     # record tso before we create tables for two reasons
