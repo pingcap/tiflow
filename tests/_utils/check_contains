@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -eu
 OUT_DIR=/tmp/tidb_cdc_test
