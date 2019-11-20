@@ -126,6 +126,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 				SinkURI:         changefeed.SinkURI,
 				ResolvedTs:      0,
 				CheckpointTs:    0,
+				StartTs:         changefeed.StartTs,
 				TargetTs:        targetTs,
 				ProcessorInfos:  etcdChangeFeedInfo,
 				DDLCurrentIndex: 0,
@@ -210,10 +211,18 @@ func (o *ownerImpl) calcResolvedTs() error {
 
 		// if minResolvedTs is greater than the finishedTS of ddl job which is not executed,
 		// we need to execute this ddl job
-		if len(o.ddlJobHistory) > cfInfo.DDLCurrentIndex &&
-			minResolvedTs > o.ddlJobHistory[cfInfo.DDLCurrentIndex].Job.BinlogInfo.FinishedTS {
-			minResolvedTs = o.ddlJobHistory[cfInfo.DDLCurrentIndex].Job.BinlogInfo.FinishedTS
-			cfInfo.Status = model.ChangeFeedWaitToExecDDL
+		for len(o.ddlJobHistory) > cfInfo.DDLCurrentIndex {
+			finishedTs := o.ddlJobHistory[cfInfo.DDLCurrentIndex].Job.BinlogInfo.FinishedTS
+			if cfInfo.StartTs > finishedTs {
+				log.Info("skip ddl before start ts", zap.Int("ddl index", cfInfo.DDLCurrentIndex), zap.Uint64("StartTs", cfInfo.StartTs), zap.Uint64("finishedTs", finishedTs))
+				cfInfo.DDLCurrentIndex += 1
+				continue
+			}
+			if minResolvedTs > finishedTs {
+				minResolvedTs = finishedTs
+				cfInfo.Status = model.ChangeFeedWaitToExecDDL
+			}
+			break
 		}
 		cfInfo.ResolvedTs = minResolvedTs
 		cfInfo.CheckpointTs = minCheckpointTs

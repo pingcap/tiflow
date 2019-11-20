@@ -97,6 +97,7 @@ type ChangeFeedInfo struct {
 	SinkURI      string           `json:"sink-uri"`
 	ResolvedTs   uint64           `json:"resolved-ts"`
 	CheckpointTs uint64           `json:"checkpoint-ts"`
+	StartTs      uint64           `json:"-"`
 	TargetTs     uint64           `json:"-"`
 
 	ProcessorInfos  ProcessorsInfos `json:"-"`
