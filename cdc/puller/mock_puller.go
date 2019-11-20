@@ -9,7 +9,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -93,7 +92,7 @@ type MockPullerManager struct {
 	domain    *domain.Domain
 
 	txnMap   map[uint64]*kvrpcpb.PrewriteRequest
-	rawTxnCh chan txn.RawTxn
+	rawTxnCh chan model.RawTxn
 	tidbKit  *testkit.TestKit
 	pullers  []*mockPuller
 
@@ -104,7 +103,7 @@ type MockPullerManager struct {
 
 type mockPuller struct {
 	spans      []util.Span
-	outputFn   func(context.Context, txn.RawTxn) error
+	outputFn   func(context.Context, model.RawTxn) error
 	resolvedTs uint64
 }
 
@@ -117,8 +116,8 @@ func (p *mockPuller) GetResolvedTs() uint64 {
 	return p.resolvedTs
 }
 
-func (p *mockPuller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, txn.RawTxn) error) error {
-	p.outputFn = func(ctx context.Context, rawTxn txn.RawTxn) error {
+func (p *mockPuller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
+	p.outputFn = func(ctx context.Context, rawTxn model.RawTxn) error {
 		p.resolvedTs = rawTxn.Ts
 		return outputFn(ctx, rawTxn)
 	}
@@ -132,7 +131,7 @@ func (p *mockPuller) Output() Buffer {
 func NewMockPullerManager(c *check.C) *MockPullerManager {
 	m := &MockPullerManager{
 		txnMap:   make(map[uint64]*kvrpcpb.PrewriteRequest),
-		rawTxnCh: make(chan txn.RawTxn, 16),
+		rawTxnCh: make(chan model.RawTxn, 16),
 		c:        c,
 	}
 	return m
@@ -186,7 +185,7 @@ func (m *MockPullerManager) Run(ctx context.Context) {
 				m.sendRawTxn(ctx, r)
 			case <-time.After(time.Second):
 				log.Info("send fake transaction")
-				fakeTxn := txn.RawTxn{Ts: oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond))}
+				fakeTxn := model.RawTxn{Ts: oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond))}
 				m.sendRawTxn(ctx, fakeTxn)
 			}
 		}
@@ -205,9 +204,9 @@ func (m *MockPullerManager) MustExec(sql string, args ...interface{}) {
 	m.tidbKit.MustExec(sql, args...)
 }
 
-func (m *MockPullerManager) sendRawTxn(ctx context.Context, rawTxn txn.RawTxn) {
+func (m *MockPullerManager) sendRawTxn(ctx context.Context, rawTxn model.RawTxn) {
 	for _, plr := range m.pullers {
-		toSend := txn.RawTxn{Ts: rawTxn.Ts}
+		toSend := model.RawTxn{Ts: rawTxn.Ts}
 		for _, kvEntry := range rawTxn.Entries {
 			if util.KeyInSpans(kvEntry.Key, plr.spans, false) {
 				toSend.Entries = append(toSend.Entries, kvEntry)
@@ -257,7 +256,7 @@ func (m *MockPullerManager) Close() {
 	m.store.Close()
 }
 
-func prewrite2RawTxn(req *kvrpcpb.PrewriteRequest, commitTs uint64) txn.RawTxn {
+func prewrite2RawTxn(req *kvrpcpb.PrewriteRequest, commitTs uint64) model.RawTxn {
 	var entries []*model.RawKVEntry
 	for _, mut := range req.Mutations {
 		var op model.OpType
@@ -277,7 +276,7 @@ func prewrite2RawTxn(req *kvrpcpb.PrewriteRequest, commitTs uint64) txn.RawTxn {
 		}
 		entries = append(entries, rawKV)
 	}
-	return txn.RawTxn{Ts: commitTs, Entries: entries}
+	return model.RawTxn{Ts: commitTs, Entries: entries}
 }
 
 func anyError(errs []error) bool {

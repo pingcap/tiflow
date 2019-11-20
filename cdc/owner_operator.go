@@ -23,11 +23,11 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -39,7 +39,7 @@ type ddlHandler struct {
 	mounter      *entry.Mounter
 	checkpointTS uint64
 	resolvedTS   uint64
-	ddlJobs      []*txn.DDL
+	ddlJobs      []*model.DDL
 
 	mu     sync.Mutex
 	wg     *errgroup.Group
@@ -78,7 +78,7 @@ func NewDDLHandler(pdCli pd.Client) *ddlHandler {
 	return h
 }
 
-func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn txn.RawTxn) error {
+func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn model.RawTxn) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.resolvedTS = rawTxn.Ts
@@ -100,7 +100,7 @@ func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn txn.RawTxn) error {
 var _ roles.OwnerDDLHandler = &ddlHandler{}
 
 // PullDDL implements `roles.OwnerDDLHandler` interface.
-func (h *ddlHandler) PullDDL() (uint64, []*txn.DDL, error) {
+func (h *ddlHandler) PullDDL() (uint64, []*model.DDL, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.checkpointTS = h.resolvedTS
@@ -110,7 +110,7 @@ func (h *ddlHandler) PullDDL() (uint64, []*txn.DDL, error) {
 }
 
 // ExecDDL implements roles.OwnerDDLHandler interface.
-func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error {
+func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error {
 	// TODO cache the sink
 	// TODO handle other target database, kile kafka, file
 	db, err := sql.Open("mysql", sinkURI)
@@ -120,7 +120,7 @@ func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) 
 	defer db.Close()
 	s := sink.NewMySQLSinkDDLOnly(db)
 
-	err = s.Emit(ctx, txn.Txn{Ts: ddl.Job.BinlogInfo.FinishedTS, DDL: ddl})
+	err = s.Emit(ctx, model.Txn{Ts: ddl.Job.BinlogInfo.FinishedTS, DDL: ddl})
 	return errors.Trace(err)
 }
 
