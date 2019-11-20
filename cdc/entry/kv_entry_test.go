@@ -2,8 +2,6 @@ package entry
 
 import (
 	"context"
-	"net/http"
-	_ "net/http/pprof"
 	"reflect"
 	"time"
 
@@ -25,13 +23,6 @@ type kvEntrySuite struct {
 }
 
 var _ = check.Suite(&kvEntrySuite{})
-
-func init() {
-	go func() {
-
-		http.ListenAndServe("0.0.0.0:8888", nil)
-	}()
-}
 
 func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 	// create and run mock puller manager
