@@ -42,7 +42,8 @@ type pullerImpl struct {
 	spans        []util.Span
 	buf          Buffer
 	tsTracker    txn.ResolveTsTracker
-	needEncode   bool
+	// needEncode represents whether we need to encode a key when checking it is in span
+	needEncode bool
 }
 
 type CancellablePuller struct {
