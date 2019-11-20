@@ -9,7 +9,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/txn"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
@@ -26,7 +26,7 @@ func (s *mockPullerSuite) TestTxnSort(c *check.C) {
 	defer cancel()
 	ts := uint64(0)
 	go func() {
-		err := plr.CollectRawTxns(ctx, func(ctx context.Context, txn txn.RawTxn) error {
+		err := plr.CollectRawTxns(ctx, func(ctx context.Context, txn model.RawTxn) error {
 			c.Assert(ts, check.Less, txn.Ts)
 			atomic.StoreUint64(&ts, txn.Ts)
 			return nil
@@ -51,7 +51,7 @@ func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 	ts := uint64(0)
 	txnMounter := entry.NewTxnMounter(nil, time.UTC)
 	go func() {
-		err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn txn.RawTxn) error {
+		err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
 			c.Assert(ts, check.Less, rawTxn.Ts)
 			atomic.StoreUint64(&ts, rawTxn.Ts)
 			if len(rawTxn.Entries) == 0 {
@@ -86,10 +86,10 @@ func (s *mockPullerSuite) TestStartTs(c *check.C) {
 	plrA := pm.CreatePuller(0, []util.Span{util.Span{}.Hack()})
 	ctx, cancel := context.WithCancel(context.Background())
 	ts := uint64(0)
-	var rawTxns []txn.RawTxn
+	var rawTxns []model.RawTxn
 	var mu sync.Mutex
 	go func() {
-		err := plrA.CollectRawTxns(ctx, func(ctx context.Context, txn txn.RawTxn) error {
+		err := plrA.CollectRawTxns(ctx, func(ctx context.Context, txn model.RawTxn) error {
 			mu.Lock()
 			defer mu.Unlock()
 			c.Assert(ts, check.Less, txn.Ts)
@@ -113,7 +113,7 @@ func (s *mockPullerSuite) TestStartTs(c *check.C) {
 	plrB := pm.CreatePuller(rawTxns[index].Ts, []util.Span{util.Span{}.Hack()})
 	mu.Unlock()
 	ctx, cancel = context.WithCancel(context.Background())
-	err := plrB.CollectRawTxns(ctx, func(ctx context.Context, txn txn.RawTxn) error {
+	err := plrB.CollectRawTxns(ctx, func(ctx context.Context, txn model.RawTxn) error {
 		mu.Lock()
 		defer mu.Unlock()
 		if index >= len(rawTxns) {

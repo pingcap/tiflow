@@ -18,13 +18,13 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/txn"
+	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
-	Emit(ctx context.Context, t txn.Txn) error
+	Emit(ctx context.Context, t model.Txn) error
 	EmitResolvedTimestamp(
 		ctx context.Context,
 		resolved uint64,
@@ -39,7 +39,7 @@ type Sink interface {
 
 // TableInfoGetter is used to get table info by table id of TiDB
 type TableInfoGetter interface {
-	TableByID(id int64) (info *model.TableInfo, ok bool)
+	TableByID(id int64) (info *timodel.TableInfo, ok bool)
 	GetTableIDByName(schema, table string) (int64, bool)
 }
 
@@ -49,7 +49,7 @@ type writerSink struct {
 
 var _ Sink = &writerSink{}
 
-func (s *writerSink) Emit(ctx context.Context, t txn.Txn) error {
+func (s *writerSink) Emit(ctx context.Context, t model.Txn) error {
 	fmt.Fprintf(s, "commit ts: %d", t.Ts)
 	return nil
 }

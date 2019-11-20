@@ -16,7 +16,6 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
@@ -64,11 +63,11 @@ type handlerForPrueDMLTest struct {
 	cancel           func()
 }
 
-func (h *handlerForPrueDMLTest) PullDDL() (resolvedTs uint64, ddl []*txn.DDL, err error) {
+func (h *handlerForPrueDMLTest) PullDDL() (resolvedTs uint64, ddl []*model.DDL, err error) {
 	return uint64(math.MaxUint64), nil, nil
 }
 
-func (h *handlerForPrueDMLTest) ExecDDL(context.Context, string, *txn.DDL) error {
+func (h *handlerForPrueDMLTest) ExecDDL(context.Context, string, *model.DDL) error {
 	panic("unreachable")
 }
 
@@ -152,7 +151,7 @@ type handlerForDDLTest struct {
 	mu sync.RWMutex
 
 	ddlIndex      int
-	ddls          []*txn.DDL
+	ddls          []*model.DDL
 	ddlResolvedTs []uint64
 
 	ddlExpectIndex int
@@ -170,16 +169,16 @@ type handlerForDDLTest struct {
 	cancel func()
 }
 
-func (h *handlerForDDLTest) PullDDL() (resolvedTs uint64, jobs []*txn.DDL, err error) {
+func (h *handlerForDDLTest) PullDDL() (resolvedTs uint64, jobs []*model.DDL, err error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if h.ddlIndex < len(h.ddls)-1 {
 		h.ddlIndex++
 	}
-	return h.ddlResolvedTs[h.ddlIndex], []*txn.DDL{h.ddls[h.ddlIndex]}, nil
+	return h.ddlResolvedTs[h.ddlIndex], []*model.DDL{h.ddls[h.ddlIndex]}, nil
 }
 
-func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error {
+func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.ddlExpectIndex++
@@ -249,7 +248,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	handler := &handlerForDDLTest{
 		ddlIndex:      -1,
 		ddlResolvedTs: []uint64{5, 8, 49, 91, 113},
-		ddls: []*txn.DDL{
+		ddls: []*model.DDL{
 			{Job: &timodel.Job{
 				ID: 1,
 				BinlogInfo: &timodel.HistoryInfo{

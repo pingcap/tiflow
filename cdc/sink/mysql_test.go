@@ -16,16 +16,14 @@ package sink
 import (
 	"context"
 
-	dmysql "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/txn"
-	"github.com/pingcap/tidb/infoschema"
-
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/types"
-
 	"github.com/DATA-DOG/go-sqlmock"
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
+	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/parser/types"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tidb/infoschema"
 	dbtypes "github.com/pingcap/tidb/types"
 )
 
@@ -51,11 +49,11 @@ func (s EmitSuite) TestShouldExecDDL(c *check.C) {
 		tblInspector: dummyInspector{},
 	}
 
-	t := txn.Txn{
-		DDL: &txn.DDL{
+	t := model.Txn{
+		DDL: &model.DDL{
 			Database: "test",
 			Table:    "user",
-			Job: &model.Job{
+			Job: &timodel.Job{
 				Query: "CREATE TABLE user (id INT PRIMARY KEY);",
 			},
 		},
@@ -85,11 +83,11 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 		tblInspector: dummyInspector{},
 	}
 
-	t := txn.Txn{
-		DDL: &txn.DDL{
+	t := model.Txn{
+		DDL: &model.DDL{
 			Database: "test",
 			Table:    "user",
-			Job: &model.Job{
+			Job: &timodel.Job{
 				Query: "CREATE TABLE user (id INT PRIMARY KEY);",
 			},
 		},
@@ -124,12 +122,12 @@ func (h *tableHelper) Get(schema, table string) (*tableInfo, error) {
 	}, nil
 }
 
-func (h *tableHelper) TableByID(id int64) (info *model.TableInfo, ok bool) {
-	return &model.TableInfo{
-		Columns: []*model.ColumnInfo{
+func (h *tableHelper) TableByID(id int64) (info *timodel.TableInfo, ok bool) {
+	return &timodel.TableInfo{
+		Columns: []*timodel.ColumnInfo{
 			{
-				Name:  model.CIStr{O: "id"},
-				State: model.StatePublic,
+				Name:  timodel.CIStr{O: "id"},
+				State: timodel.StatePublic,
 				FieldType: types.FieldType{
 					Tp:      mysql.TypeLong,
 					Flen:    types.UnspecifiedLength,
@@ -137,8 +135,8 @@ func (h *tableHelper) TableByID(id int64) (info *model.TableInfo, ok bool) {
 				},
 			},
 			{
-				Name:  model.CIStr{O: "name"},
-				State: model.StatePublic,
+				Name:  timodel.CIStr{O: "name"},
+				State: timodel.StatePublic,
 				FieldType: types.FieldType{
 					Tp:      mysql.TypeString,
 					Flen:    types.UnspecifiedLength,
@@ -166,12 +164,12 @@ func (s EmitSuite) TestShouldExecReplaceInto(c *check.C) {
 		infoGetter:   &helper,
 	}
 
-	t := txn.Txn{
-		DMLs: []*txn.DML{
+	t := model.Txn{
+		DMLs: []*model.DML{
 			{
 				Database: "test",
 				Table:    "user",
-				Tp:       txn.InsertDMLType,
+				Tp:       model.InsertDMLType,
 				Values: map[string]dbtypes.Datum{
 					"id":   dbtypes.NewDatum(42),
 					"name": dbtypes.NewDatum("tester1"),
@@ -207,12 +205,12 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 		infoGetter:   &helper,
 	}
 
-	t := txn.Txn{
-		DMLs: []*txn.DML{
+	t := model.Txn{
+		DMLs: []*model.DML{
 			{
 				Database: "test",
 				Table:    "user",
-				Tp:       txn.DeleteDMLType,
+				Tp:       model.DeleteDMLType,
 				Values: map[string]dbtypes.Datum{
 					"id":   dbtypes.NewDatum(123),
 					"name": dbtypes.NewDatum("tester1"),
@@ -240,8 +238,8 @@ type FilterSuite struct{}
 var _ = check.Suite(&FilterSuite{})
 
 func (s *FilterSuite) TestFilterDMLs(c *check.C) {
-	t := txn.Txn{
-		DMLs: []*txn.DML{
+	t := model.Txn{
+		DMLs: []*model.DML{
 			{Database: "INFORMATIOn_SCHEmA"},
 			{Database: "test"},
 			{Database: "test_mysql"},
@@ -258,8 +256,8 @@ func (s *FilterSuite) TestFilterDMLs(c *check.C) {
 }
 
 func (s *FilterSuite) TestFilterDDL(c *check.C) {
-	t := txn.Txn{
-		DDL: &txn.DDL{Database: "performance_schema"},
+	t := model.Txn{
+		DDL: &model.DDL{Database: "performance_schema"},
 		Ts:  10234,
 	}
 	filterBySchemaAndTable(&t)

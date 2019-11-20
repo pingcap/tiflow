@@ -5,10 +5,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/schema"
-	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )
@@ -22,11 +22,11 @@ func NewTxnMounter(schema *schema.Storage, loc *time.Location) *Mounter {
 	return &Mounter{schemaStorage: schema, loc: loc}
 }
 
-func (m *Mounter) Mount(rawTxn txn.RawTxn) (*txn.Txn, error) {
-	t := &txn.Txn{
+func (m *Mounter) Mount(rawTxn model.RawTxn) (*model.Txn, error) {
+	t := &model.Txn{
 		Ts: rawTxn.Ts,
 	}
-	var replaceDMLs, deleteDMLs []*txn.DML
+	var replaceDMLs, deleteDMLs []*model.DML
 	for _, raw := range rawTxn.Entries {
 		kvEntry, err := Unmarshal(raw)
 		if err != nil {
@@ -40,7 +40,7 @@ func (m *Mounter) Mount(rawTxn txn.RawTxn) (*txn.Txn, error) {
 				return nil, errors.Trace(err)
 			}
 			if dml != nil {
-				if dml.Tp == txn.InsertDMLType {
+				if dml.Tp == model.InsertDMLType {
 					replaceDMLs = append(replaceDMLs, dml)
 				} else {
 					deleteDMLs = append(deleteDMLs, dml)
@@ -68,7 +68,7 @@ func (m *Mounter) Mount(rawTxn txn.RawTxn) (*txn.Txn, error) {
 	return t, nil
 }
 
-func (m *Mounter) mountRowKVEntry(row *RowKVEntry) (*txn.DML, error) {
+func (m *Mounter) mountRowKVEntry(row *RowKVEntry) (*model.DML, error) {
 	tableInfo, tableName, handleColName, err := m.fetchTableInfo(row.TableID)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -82,10 +82,10 @@ func (m *Mounter) mountRowKVEntry(row *RowKVEntry) (*txn.DML, error) {
 	if row.Delete {
 		if tableInfo.PKIsHandle {
 			values := map[string]types.Datum{handleColName: types.NewIntDatum(row.RecordID)}
-			return &txn.DML{
+			return &model.DML{
 				Database: tableName.Schema,
 				Table:    tableName.Table,
-				Tp:       txn.DeleteDMLType,
+				Tp:       model.DeleteDMLType,
 				Values:   values,
 			}, nil
 		}
@@ -100,15 +100,15 @@ func (m *Mounter) mountRowKVEntry(row *RowKVEntry) (*txn.DML, error) {
 	if tableInfo.PKIsHandle {
 		values[handleColName] = types.NewIntDatum(row.RecordID)
 	}
-	return &txn.DML{
+	return &model.DML{
 		Database: tableName.Schema,
 		Table:    tableName.Table,
-		Tp:       txn.InsertDMLType,
+		Tp:       model.InsertDMLType,
 		Values:   values,
 	}, nil
 }
 
-func (m *Mounter) mountIndexKVEntry(idx *IndexKVEntry) (*txn.DML, error) {
+func (m *Mounter) mountIndexKVEntry(idx *IndexKVEntry) (*model.DML, error) {
 	tableInfo, tableName, _, err := m.fetchTableInfo(idx.TableID)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -128,15 +128,15 @@ func (m *Mounter) mountIndexKVEntry(idx *IndexKVEntry) (*txn.DML, error) {
 	for i, idxCol := range indexInfo.Columns {
 		values[idxCol.Name.O] = idx.IndexValue[i]
 	}
-	return &txn.DML{
+	return &model.DML{
 		Database: tableName.Schema,
 		Table:    tableName.Table,
-		Tp:       txn.DeleteDMLType,
+		Tp:       model.DeleteDMLType,
 		Values:   values,
 	}, nil
 }
 
-func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *model.TableInfo, tableName *schema.TableName, handleColName string, err error) {
+func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *timodel.TableInfo, tableName *schema.TableName, handleColName string, err error) {
 	tableInfo, exist := m.schemaStorage.TableByID(tableID)
 	if !exist {
 		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableID)
@@ -163,7 +163,7 @@ func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *model.TableInfo, tab
 	return
 }
 
-func (m *Mounter) mountDDL(jobEntry *DDLJobKVEntry) (*txn.DDL, error) {
+func (m *Mounter) mountDDL(jobEntry *DDLJobKVEntry) (*model.DDL, error) {
 	databaseName := jobEntry.Job.SchemaName
 	var tableName string
 	table := jobEntry.Job.BinlogInfo.TableInfo
@@ -172,7 +172,7 @@ func (m *Mounter) mountDDL(jobEntry *DDLJobKVEntry) (*txn.DDL, error) {
 	} else {
 		tableName = table.Name.O
 	}
-	return &txn.DDL{
+	return &model.DDL{
 		Database: databaseName,
 		Table:    tableName,
 		Job:      jobEntry.Job,

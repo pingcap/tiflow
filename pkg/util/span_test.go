@@ -1,9 +1,9 @@
 package util
 
 import (
-	"github.com/pingcap/tidb/tablecodec"
-
 	"github.com/pingcap/check"
+	"github.com/pingcap/tidb/tablecodec"
+	"github.com/pingcap/tidb/util/codec"
 )
 
 type spanSuite struct{}
@@ -87,8 +87,9 @@ func (s *spanSuite) TestGetTableSpan(c *check.C) {
 	span := GetTableSpan(123)
 	c.Assert(span.Start, check.Less, span.End)
 	prefix := []byte(tablecodec.GenTablePrefix(123))
-	c.Assert(span.Start[:len(span.Start)-1], check.BytesEquals, prefix)
-	c.Assert(span.End[:len(span.End)-1], check.BytesEquals, prefix)
+	c.Assert(span.Start, check.Greater, codec.EncodeBytes(nil, prefix))
+	prefix[len(prefix)-1] += 1
+	c.Assert(span.End, check.Less, codec.EncodeBytes(nil, prefix))
 }
 
 func (s *spanSuite) TestSpanHack(c *check.C) {

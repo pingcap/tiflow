@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
-	"github.com/pingcap/ticdc/cdc/txn"
 	"go.uber.org/zap"
 )
 
@@ -48,10 +47,10 @@ type Owner interface {
 // which can pull ddl jobs and execute ddl jobs
 type OwnerDDLHandler interface {
 	// PullDDL pulls the ddl jobs and returns resolvedTs of DDL Puller and job list.
-	PullDDL() (resolvedTs uint64, jobs []*txn.DDL, err error)
+	PullDDL() (resolvedTs uint64, jobs []*model.DDL, err error)
 
 	// ExecDDL executes the ddl job
-	ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error
+	ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error
 }
 
 // ChangeFeedInfoRWriter defines the Reader and Writer for ChangeFeedInfo
@@ -70,7 +69,7 @@ type ownerImpl struct {
 	cfRWriter  ChangeFeedInfoRWriter
 
 	ddlResolvedTs uint64
-	ddlJobHistory []*txn.DDL
+	ddlJobHistory []*model.DDL
 
 	mu    sync.RWMutex
 	errCh chan error
@@ -126,6 +125,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 				SinkURI:         changefeed.SinkURI,
 				ResolvedTs:      0,
 				CheckpointTs:    0,
+				StartTs:         changefeed.StartTs,
 				TargetTs:        targetTs,
 				ProcessorInfos:  etcdChangeFeedInfo,
 				DDLCurrentIndex: 0,
@@ -210,10 +210,18 @@ func (o *ownerImpl) calcResolvedTs() error {
 
 		// if minResolvedTs is greater than the finishedTS of ddl job which is not executed,
 		// we need to execute this ddl job
-		if len(o.ddlJobHistory) > cfInfo.DDLCurrentIndex &&
-			minResolvedTs > o.ddlJobHistory[cfInfo.DDLCurrentIndex].Job.BinlogInfo.FinishedTS {
-			minResolvedTs = o.ddlJobHistory[cfInfo.DDLCurrentIndex].Job.BinlogInfo.FinishedTS
-			cfInfo.Status = model.ChangeFeedWaitToExecDDL
+		for len(o.ddlJobHistory) > cfInfo.DDLCurrentIndex {
+			finishedTs := o.ddlJobHistory[cfInfo.DDLCurrentIndex].Job.BinlogInfo.FinishedTS
+			if cfInfo.StartTs > finishedTs {
+				log.Info("skip ddl before start ts", zap.Int("ddl index", cfInfo.DDLCurrentIndex), zap.Uint64("StartTs", cfInfo.StartTs), zap.Uint64("finishedTs", finishedTs))
+				cfInfo.DDLCurrentIndex += 1
+				continue
+			}
+			if minResolvedTs > finishedTs {
+				minResolvedTs = finishedTs
+				cfInfo.Status = model.ChangeFeedWaitToExecDDL
+			}
+			break
 		}
 		cfInfo.ResolvedTs = minResolvedTs
 		cfInfo.CheckpointTs = minCheckpointTs

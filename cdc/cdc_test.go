@@ -15,7 +15,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
 )
 
@@ -76,7 +75,7 @@ func (s *CDCSuite) RunAndCheckSync(c *C, execute func(func(string, ...interface{
 		rawKVs = append(rawKVs, kvs...)
 	}
 	execute(executeSQL)
-	txn, err := s.mounter.Mount(txn.RawTxn{Ts: rawKVs[len(rawKVs)-1].Ts, Entries: rawKVs})
+	txn, err := s.mounter.Mount(model.RawTxn{Ts: rawKVs[len(rawKVs)-1].Ts, Entries: rawKVs})
 	c.Assert(err, IsNil)
 	err = s.sink.Emit(context.Background(), *txn)
 	c.Assert(err, IsNil)

@@ -35,7 +35,8 @@ var pullCmd = &cobra.Command{
 		}
 
 		ts := oracle.ComposeTS(time.Now().Unix()*1000, 0)
-		p := puller.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}})
+		// set `needEncode` to true, only DML kv pair will be retained
+		p := puller.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}}, true)
 		buf := p.Output()
 
 		g, ctx := errgroup.WithContext(context.Background())
