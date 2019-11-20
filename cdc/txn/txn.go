@@ -16,71 +16,12 @@ package txn
 import (
 	"context"
 	"sort"
-	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb-cdc/cdc/entry"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/schema"
-	"github.com/pingcap/tidb-cdc/pkg/util"
-	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
-
-// RawTxn represents a complete collection of Entries that belong to the same transaction
-type RawTxn struct {
-	Ts      uint64
-	Entries []*kv.RawKVEntry
-}
-
-// DMLType represents the dml type
-type DMLType int
-
-// DMLType types
-const (
-	UnknownDMLType DMLType = iota
-	InsertDMLType
-	UpdateDMLType
-	DeleteDMLType
-)
-
-// DML holds the dml info
-type DML struct {
-	Database string
-	Table    string
-	Tp       DMLType
-	Values   map[string]types.Datum
-	// only set when Tp = UpdateDMLType
-	OldValues map[string]types.Datum
-}
-
-// TableName returns the fully qualified name of the DML's table
-func (dml *DML) TableName() string {
-	return util.QuoteSchema(dml.Database, dml.Table)
-}
-
-// DDL holds the ddl info
-type DDL struct {
-	Database string
-	Table    string
-	Job      *model.Job
-}
-
-// Txn holds transaction info, an DDL or DML sequences
-type Txn struct {
-	// TODO: Group changes by tables to improve efficiency
-	DMLs []*DML
-	DDL  *DDL
-
-	Ts uint64
-}
-
-func (t Txn) IsDDL() bool {
-	return t.DDL != nil
-}
 
 type ResolveTsTracker interface {
 	Forward(span util.Span, ts uint64) bool
@@ -89,11 +30,11 @@ type ResolveTsTracker interface {
 
 func CollectRawTxns(
 	ctx context.Context,
-	inputFn func(context.Context) (kv.KvOrResolved, error),
-	outputFn func(context.Context, RawTxn) error,
+	inputFn func(context.Context) (model.KvOrResolved, error),
+	outputFn func(context.Context, model.RawTxn) error,
 	tracker ResolveTsTracker,
 ) error {
-	entryGroups := make(map[uint64][]*kv.RawKVEntry)
+	entryGroups := make(map[uint64][]*model.RawKVEntry)
 	for {
 		be, err := inputFn(ctx)
 		if err != nil {
@@ -111,10 +52,10 @@ func CollectRawTxns(
 			if !forwarded {
 				continue
 			}
-			var readyTxns []RawTxn
+			var readyTxns []model.RawTxn
 			for ts, entries := range entryGroups {
 				if ts <= resolvedTs {
-					readyTxns = append(readyTxns, RawTxn{ts, entries})
+					readyTxns = append(readyTxns, model.RawTxn{Ts: ts, Entries: entries})
 					delete(entryGroups, ts)
 				}
 			}
@@ -129,7 +70,7 @@ func CollectRawTxns(
 			}
 			if len(readyTxns) == 0 {
 				log.Info("Forwarding fake txn", zap.Uint64("ts", resolvedTs))
-				fakeTxn := RawTxn{
+				fakeTxn := model.RawTxn{
 					Ts:      resolvedTs,
 					Entries: nil,
 				}
@@ -137,173 +78,4 @@ func CollectRawTxns(
 			}
 		}
 	}
-}
-
-type Mounter struct {
-	schemaStorage *schema.Storage
-	loc           *time.Location
-}
-
-// NewTxnMounter create a Mounter instance.
-// schema is read only for dml.
-func NewTxnMounter(schema *schema.Storage, loc *time.Location) *Mounter {
-	return &Mounter{schemaStorage: schema, loc: loc}
-}
-
-func (m *Mounter) Mount(rawTxn RawTxn) (*Txn, error) {
-	txn := &Txn{
-		Ts: rawTxn.Ts,
-	}
-	var replaceDMLs, deleteDMLs []*DML
-	for _, raw := range rawTxn.Entries {
-		kvEntry, err := entry.Unmarshal(raw)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		switch e := kvEntry.(type) {
-		case *entry.RowKVEntry:
-			dml, err := m.mountRowKVEntry(e)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			if dml != nil {
-				if dml.Tp == InsertDMLType {
-					replaceDMLs = append(replaceDMLs, dml)
-				} else {
-					deleteDMLs = append(deleteDMLs, dml)
-				}
-			}
-		case *entry.IndexKVEntry:
-			dml, err := m.mountIndexKVEntry(e)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			if dml != nil {
-				deleteDMLs = append(deleteDMLs, dml)
-			}
-		case *entry.DDLJobKVEntry:
-			txn.DDL, err = m.mountDDL(e)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			return txn, nil
-		case *entry.UnknownKVEntry:
-			// TODO: to many warn log if log here.
-			// log.Warn("Found unknown kv entry", zap.Reflect("UnknownKVEntry", e))
-		}
-	}
-	txn.DMLs = append(deleteDMLs, replaceDMLs...)
-	return txn, nil
-}
-
-func (m *Mounter) mountRowKVEntry(row *entry.RowKVEntry) (*DML, error) {
-	tableInfo, tableName, handleColName, err := m.fetchTableInfo(row.TableID)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	err = row.Unflatten(tableInfo, m.loc)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	if row.Delete {
-		if tableInfo.PKIsHandle {
-			values := map[string]types.Datum{handleColName: types.NewIntDatum(row.RecordID)}
-			return &DML{
-				Database: tableName.Schema,
-				Table:    tableName.Table,
-				Tp:       DeleteDMLType,
-				Values:   values,
-			}, nil
-		}
-		return nil, nil
-	}
-
-	values := make(map[string]types.Datum, len(row.Row)+1)
-	for index, colValue := range row.Row {
-		colName := tableInfo.Columns[index-1].Name.O
-		values[colName] = colValue
-	}
-	if tableInfo.PKIsHandle {
-		values[handleColName] = types.NewIntDatum(row.RecordID)
-	}
-	return &DML{
-		Database: tableName.Schema,
-		Table:    tableName.Table,
-		Tp:       InsertDMLType,
-		Values:   values,
-	}, nil
-}
-
-func (m *Mounter) mountIndexKVEntry(idx *entry.IndexKVEntry) (*DML, error) {
-	tableInfo, tableName, _, err := m.fetchTableInfo(idx.TableID)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	err = idx.Unflatten(tableInfo, m.loc)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	indexInfo := tableInfo.Indices[idx.IndexID-1]
-	if !indexInfo.Primary && !indexInfo.Unique {
-		return nil, nil
-	}
-
-	values := make(map[string]types.Datum, len(idx.IndexValue))
-	for i, idxCol := range indexInfo.Columns {
-		values[idxCol.Name.O] = idx.IndexValue[i]
-	}
-	return &DML{
-		Database: tableName.Schema,
-		Table:    tableName.Table,
-		Tp:       DeleteDMLType,
-		Values:   values,
-	}, nil
-}
-
-func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *model.TableInfo, tableName *schema.TableName, handleColName string, err error) {
-	tableInfo, exist := m.schemaStorage.TableByID(tableID)
-	if !exist {
-		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableID)
-	}
-
-	database, table, exist := m.schemaStorage.SchemaAndTableName(tableID)
-	if !exist {
-		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableID)
-	}
-	tableName = &schema.TableName{Schema: database, Table: table}
-
-	pkColOffset := -1
-	for i, col := range tableInfo.Columns {
-		if mysql.HasPriKeyFlag(col.Flag) {
-			pkColOffset = i
-			handleColName = tableInfo.Columns[i].Name.O
-			break
-		}
-	}
-	if tableInfo.PKIsHandle && pkColOffset == -1 {
-		return nil, nil, "", errors.Errorf("this table (%d) is handled by pk, but pk column not found", tableID)
-	}
-
-	return
-}
-
-func (m *Mounter) mountDDL(jobEntry *entry.DDLJobKVEntry) (*DDL, error) {
-	databaseName := jobEntry.Job.SchemaName
-	var tableName string
-	table := jobEntry.Job.BinlogInfo.TableInfo
-	if table == nil {
-		tableName = ""
-	} else {
-		tableName = table.Name.O
-	}
-	return &DDL{
-		databaseName,
-		tableName,
-		jobEntry.Job,
-	}, nil
 }

@@ -10,12 +10,12 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/mock"
-	"github.com/pingcap/tidb-cdc/cdc/schema"
-	"github.com/pingcap/tidb-cdc/cdc/sink"
-	"github.com/pingcap/tidb-cdc/cdc/txn"
-	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/ticdc/cdc/mock"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/schema"
+	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 func TestSuite(t *testing.T) { TestingT(t) }
@@ -24,7 +24,7 @@ type CDCSuite struct {
 	database string
 	puller   *mock.MockTiDB
 	mock     sqlmock.Sqlmock
-	mounter  *txn.Mounter
+	mounter  *entry.Mounter
 	sink     sink.Sink
 }
 
@@ -58,7 +58,7 @@ func NewCDCSuite() *CDCSuite {
 
 	cdcSuite.sink = sink.NewMySQLSinkUsingSchema(db, schemaStorage)
 
-	mounter := txn.NewTxnMounter(schemaStorage, time.Local)
+	mounter := entry.NewTxnMounter(schemaStorage, time.Local)
 	cdcSuite.mounter = mounter
 	return cdcSuite
 }
@@ -69,13 +69,13 @@ func (s *CDCSuite) Forward(span util.Span, ts uint64) bool {
 
 func (s *CDCSuite) RunAndCheckSync(c *C, execute func(func(string, ...interface{})), expect func(sqlmock.Sqlmock)) {
 	expect(s.mock)
-	var rawKVs []*kv.RawKVEntry
+	var rawKVs []*model.RawKVEntry
 	executeSQL := func(sql string, args ...interface{}) {
 		kvs := s.puller.MustExec(c, sql, args...)
 		rawKVs = append(rawKVs, kvs...)
 	}
 	execute(executeSQL)
-	txn, err := s.mounter.Mount(txn.RawTxn{Ts: rawKVs[len(rawKVs)-1].Ts, Entries: rawKVs})
+	txn, err := s.mounter.Mount(model.RawTxn{Ts: rawKVs[len(rawKVs)-1].Ts, Entries: rawKVs})
 	c.Assert(err, IsNil)
 	err = s.sink.Emit(context.Background(), *txn)
 	c.Assert(err, IsNil)

@@ -23,7 +23,7 @@ import (
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"go.uber.org/zap"
 )
 

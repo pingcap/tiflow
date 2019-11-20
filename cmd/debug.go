@@ -7,12 +7,12 @@ import (
 	"time"
 
 	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb-cdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 func init() {
@@ -35,7 +35,8 @@ var pullCmd = &cobra.Command{
 		}
 
 		ts := oracle.ComposeTS(time.Now().Unix()*1000, 0)
-		p := puller.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}})
+		// set `needEncode` to true, only DML kv pair will be retained
+		p := puller.NewPuller(cli, ts, []util.Span{{Start: nil, End: nil}}, true)
 		buf := p.Output()
 
 		g, ctx := errgroup.WithContext(context.Background())

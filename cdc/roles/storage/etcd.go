@@ -21,8 +21,8 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 // ChangeFeedInfoRWriter implements `roles.ChangeFeedInfoRWriter` interface

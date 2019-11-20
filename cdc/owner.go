@@ -26,12 +26,11 @@ import (
 	"github.com/pingcap/log"
 	pmodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/model"
-	"github.com/pingcap/tidb-cdc/cdc/roles"
-	"github.com/pingcap/tidb-cdc/cdc/roles/storage"
-	"github.com/pingcap/tidb-cdc/cdc/schema"
-	"github.com/pingcap/tidb-cdc/cdc/txn"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/roles"
+	"github.com/pingcap/ticdc/cdc/roles/storage"
+	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
@@ -40,10 +39,10 @@ import (
 // which can pull ddl jobs and execute ddl jobs
 type OwnerDDLHandler interface {
 	// PullDDL pulls the ddl jobs and returns resolvedTs of DDL Puller and job list.
-	PullDDL() (resolvedTs uint64, jobs []*txn.DDL, err error)
+	PullDDL() (resolvedTs uint64, jobs []*model.DDL, err error)
 
 	// ExecDDL executes the ddl job
-	ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error
+	ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error
 }
 
 // ChangeFeedInfoRWriter defines the Reader and Writer for ChangeFeedInfo
@@ -68,7 +67,7 @@ type ChangeFeedInfo struct {
 	DDLCurrentIndex int
 	ddlHandler      OwnerDDLHandler
 	ddlResolvedTs   uint64
-	ddlJobHistory   []*txn.DDL
+	ddlJobHistory   []*model.DDL
 
 	tables        map[uint64]schema.TableName
 	orphanTables  map[uint64]schema.TableName

@@ -22,10 +22,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/tidb-cdc/cdc/puller"
-	"github.com/pingcap/tidb-cdc/cdc/sink"
-	"github.com/pingcap/tidb-cdc/cdc/txn"
-	"github.com/pingcap/tidb-cdc/pkg/util"
+	"github.com/pingcap/ticdc/cdc/entry"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -33,9 +34,9 @@ import (
 //TODO: add tests
 type ddlHandler struct {
 	puller     puller.Puller
-	mounter    *txn.Mounter
+	mounter    *entry.Mounter
 	resolvedTS uint64
-	ddlJobs    []*txn.DDL
+	ddlJobs    []*model.DDL
 
 	mu     sync.Mutex
 	wg     *errgroup.Group
@@ -43,10 +44,12 @@ type ddlHandler struct {
 }
 
 func NewDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
-	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan()})
+	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
+	// so we set `needEncode` to false.
+	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan()}, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	// TODO get time loc from config
-	txnMounter := txn.NewTxnMounter(nil, time.UTC)
+	txnMounter := entry.NewTxnMounter(nil, time.UTC)
 	h := &ddlHandler{
 		puller:  puller,
 		cancel:  cancel,
@@ -71,7 +74,7 @@ func NewDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
 	return h
 }
 
-func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn txn.RawTxn) error {
+func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn model.RawTxn) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.resolvedTS = rawTxn.Ts
@@ -93,7 +96,7 @@ func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn txn.RawTxn) error {
 var _ OwnerDDLHandler = &ddlHandler{}
 
 // PullDDL implements `roles.OwnerDDLHandler` interface.
-func (h *ddlHandler) PullDDL() (uint64, []*txn.DDL, error) {
+func (h *ddlHandler) PullDDL() (uint64, []*model.DDL, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	result := h.ddlJobs
@@ -102,7 +105,7 @@ func (h *ddlHandler) PullDDL() (uint64, []*txn.DDL, error) {
 }
 
 // ExecDDL implements roles.OwnerDDLHandler interface.
-func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) error {
+func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error {
 	// TODO cache the sink
 	// TODO handle other target database, kile kafka, file
 	db, err := sql.Open("mysql", sinkURI)
@@ -112,7 +115,7 @@ func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *txn.DDL) 
 	defer db.Close()
 	s := sink.NewMySQLSinkDDLOnly(db)
 
-	err = s.Emit(ctx, txn.Txn{Ts: ddl.Job.BinlogInfo.FinishedTS, DDL: ddl})
+	err = s.Emit(ctx, model.Txn{Ts: ddl.Job.BinlogInfo.FinishedTS, DDL: ddl})
 	return errors.Trace(err)
 }
 

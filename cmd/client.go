@@ -8,8 +8,8 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/google/uuid"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 )
@@ -20,12 +20,14 @@ func init() {
 	cliCmd.Flags().StringSliceVar(&tables, "tables", []string{"test.t"}, "all tables provided will be collected in changefeed")
 	cliCmd.Flags().StringSliceVar(&databases, "databases", []string{"test"}, "all tables in given databases will be collected in changefeed")
 	cliCmd.Flags().StringVar(&pdAddress, "pd-addr", "localhost:2379", "address of PD")
+	cliCmd.Flags().Uint64Var(&startTs, "start-ts", 0, "start ts of changefeed")
 }
 
 var (
 	tables    []string
 	databases []string
 	pdAddress string
+	startTs   uint64
 )
 
 var cliCmd = &cobra.Command{
@@ -48,6 +50,7 @@ var cliCmd = &cobra.Command{
 			SinkURI:    "root@tcp(127.0.0.1:3306)/test",
 			Opts:       make(map[string]string),
 			CreateTime: time.Now(),
+			StartTs:    startTs,
 		}
 		fmt.Printf("create changefeed detail %+v\n", detail)
 		return kv.SaveChangeFeedDetail(context.Background(), cli, detail, id)

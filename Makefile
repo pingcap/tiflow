@@ -26,10 +26,13 @@ PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor')
+CDC_PKG := github.com/pingcap/ticdc
 
-# LDFLAGS += -X "github.com/pingcap/tidb-cdc/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %I:%M:%S')"
-# LDFLAGS += -X "github.com/pingcap/tidb-cdc/pkg/version.GitHash=$(shell git rev-parse HEAD)"
-# LDFLAGS += -X "github.com/pingcap/tidb-cdc/pkg/version.ReleaseVersion=$(shell git describe --tags --dirty)"
+LDFLAGS += -X "$(CDC_PKG)/pkg/util.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
+LDFLAGS += -X "$(CDC_PKG)/pkg/util.GitHash=$(shell git rev-parse HEAD)"
+LDFLAGS += -X "$(CDC_PKG)/pkg/util.ReleaseVersion=$(shell git describe --tags --dirty="-dev")"
+LDFLAGS += -X "$(CDC_PKG)/pkg/util.GitBranch=$(shell git rev-parse --abbrev-ref HEAD)"
+LDFLAGS += -X "$(CDC_PKG)/pkg/util.GoVersion=$(shell go version)"
 
 default: build buildsucc
 

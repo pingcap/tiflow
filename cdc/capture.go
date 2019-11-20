@@ -22,10 +22,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb-cdc/cdc/kv"
-	"github.com/pingcap/tidb-cdc/cdc/model"
-	"github.com/pingcap/tidb-cdc/cdc/roles"
-	"github.com/pingcap/tidb-cdc/pkg/flags"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/roles"
+	"github.com/pingcap/ticdc/pkg/flags"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
@@ -118,7 +118,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	errg, cctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
-		return c.ownerWorker.Run(cctx, time.Second*5)
+		return c.ownerWorker.Run(cctx, time.Second*1)
 	})
 
 	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)

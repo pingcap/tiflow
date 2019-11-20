@@ -19,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-cdc/pkg/types"
+	"github.com/pingcap/ticdc/pkg/types"
 )
 
 // URLsValue define a slice of URLs as a type
