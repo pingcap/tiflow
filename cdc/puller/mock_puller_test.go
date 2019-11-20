@@ -129,12 +129,10 @@ func (s *mockPullerSuite) TestStartTs(c *check.C) {
 
 func waitForGrowingTs(growingTs *uint64, targetTs uint64) {
 	for {
-		select {
-		case <-time.After(100 * time.Millisecond):
-			growingTsLocal := atomic.LoadUint64(growingTs)
-			if growingTsLocal >= targetTs {
-				return
-			}
+		<-time.After(100 * time.Millisecond)
+		growingTsLocal := atomic.LoadUint64(growingTs)
+		if growingTsLocal >= targetTs {
+			return
 		}
 	}
 }
