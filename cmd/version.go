@@ -28,6 +28,6 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "output version information",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf(util.GetRawInfo())
+		fmt.Println(util.GetRawInfo())
 	},
 }
