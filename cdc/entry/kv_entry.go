@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/kv"
+	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -50,21 +50,21 @@ type IndexKVEntry struct {
 type DDLJobKVEntry struct {
 	Ts    uint64
 	JobID int64
-	Job   *model.Job
+	Job   *timodel.Job
 }
 
 type UpdateTableKVEntry struct {
 	Ts        uint64
 	DbID      int64
 	TableID   int64
-	TableInfo *model.TableInfo
+	TableInfo *timodel.TableInfo
 }
 
 type UnknownKVEntry struct {
-	kv.RawKVEntry
+	model.RawKVEntry
 }
 
-func (idx *IndexKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Location) error {
+func (idx *IndexKVEntry) Unflatten(tableInfo *timodel.TableInfo, loc *time.Location) error {
 	if tableInfo.ID != idx.TableID {
 		return errors.New("wrong table info in Unflatten")
 	}
@@ -85,7 +85,7 @@ func (idx *IndexKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Locatio
 	return nil
 }
 
-func isDistinct(index *model.IndexInfo, indexValue []types.Datum) bool {
+func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
 	if index.Primary {
 		return true
 	}
@@ -100,7 +100,7 @@ func isDistinct(index *model.IndexInfo, indexValue []types.Datum) bool {
 	return false
 }
 
-func (row *RowKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Location) error {
+func (row *RowKVEntry) Unflatten(tableInfo *timodel.TableInfo, loc *time.Location) error {
 	if tableInfo.ID != row.TableID {
 		return errors.New("wrong table info in Unflatten")
 	}
@@ -115,17 +115,17 @@ func (row *RowKVEntry) Unflatten(tableInfo *model.TableInfo, loc *time.Location)
 	return nil
 }
 
-func Unmarshal(raw *kv.RawKVEntry) (KVEntry, error) {
+func Unmarshal(raw *model.RawKVEntry) (KVEntry, error) {
 	switch {
 	case bytes.HasPrefix(raw.Key, tablePrefix):
 		return unmarshalTableKVEntry(raw)
-	case bytes.HasPrefix(raw.Key, metaPrefix) && raw.OpType == kv.OpTypePut:
+	case bytes.HasPrefix(raw.Key, metaPrefix) && raw.OpType == model.OpTypePut:
 		return unmarshalMetaKVEntry(raw)
 	}
 	return &UnknownKVEntry{*raw}, nil
 }
 
-func unmarshalTableKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
+func unmarshalTableKVEntry(raw *model.RawKVEntry) (KVEntry, error) {
 	key, tableID, err := decodeTableID(raw.Key)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -147,7 +147,7 @@ func unmarshalTableKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 			Ts:       raw.Ts,
 			TableID:  tableID,
 			RecordID: recordID,
-			Delete:   raw.OpType == kv.OpTypeDelete,
+			Delete:   raw.OpType == model.OpTypeDelete,
 			Row:      row,
 		}, nil
 	case bytes.HasPrefix(key, indexPrefix):
@@ -170,7 +170,7 @@ func unmarshalTableKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 			TableID:    tableID,
 			IndexID:    indexID,
 			IndexValue: indexValue,
-			Delete:     raw.OpType == kv.OpTypeDelete,
+			Delete:     raw.OpType == model.OpTypeDelete,
 			RecordID:   recordID,
 		}, nil
 
@@ -193,7 +193,7 @@ var (
 	tableMetaPrefixLen = len(tableMetaPrefix)
 )
 
-func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
+func unmarshalMetaKVEntry(raw *model.RawKVEntry) (KVEntry, error) {
 	meta, err := decodeMetaKey(raw.Key)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -201,8 +201,8 @@ func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 	switch meta.GetType() {
 	case ListData:
 		k := meta.(MetaListData)
-		if k.key == ddlJobListKey && raw.OpType == kv.OpTypePut {
-			job := &model.Job{}
+		if k.key == ddlJobListKey && raw.OpType == model.OpTypePut {
+			job := &timodel.Job{}
 			err := json.Unmarshal(raw.Value, job)
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -234,7 +234,7 @@ func unmarshalMetaKVEntry(raw *kv.RawKVEntry) (KVEntry, error) {
 				if err != nil {
 					return nil, errors.Trace(err)
 				}
-				tableInfo := &model.TableInfo{}
+				tableInfo := &timodel.TableInfo{}
 				err = json.Unmarshal(raw.Value, tableInfo)
 				if err != nil {
 					return nil, errors.Annotatef(err, "data: %v", raw.Value)

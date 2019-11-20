@@ -8,6 +8,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -48,7 +49,7 @@ func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ts := uint64(0)
-	txnMounter := txn.NewTxnMounter(nil, time.UTC)
+	txnMounter := entry.NewTxnMounter(nil, time.UTC)
 	go func() {
 		err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn txn.RawTxn) error {
 			c.Assert(ts, check.Less, rawTxn.Ts)

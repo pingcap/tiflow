@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
@@ -658,5 +659,5 @@ func (p *processorImpl) startPuller(ctx context.Context, span util.Span, txnChan
 }
 
 func newMounter(schema *schema.Storage, loc *time.Location) mounter {
-	return txn.NewTxnMounter(schema, loc)
+	return entry.NewTxnMounter(schema, loc)
 }

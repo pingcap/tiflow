@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/cdc/schema"
@@ -35,7 +36,7 @@ import (
 //TODO: add tests
 type ddlHandler struct {
 	puller       puller.Puller
-	mounter      *txn.Mounter
+	mounter      *entry.Mounter
 	checkpointTS uint64
 	resolvedTS   uint64
 	ddlJobs      []*txn.DDL
@@ -51,7 +52,7 @@ func NewDDLHandler(pdCli pd.Client) *ddlHandler {
 	// TODO this TxnMounter only mount DDL transaction, so it needn't schemaStorage
 	schemaStorage, _ := schema.NewStorage(nil, false)
 	// TODO get time loc from config
-	txnMounter := txn.NewTxnMounter(schemaStorage, time.UTC)
+	txnMounter := entry.NewTxnMounter(schemaStorage, time.UTC)
 	h := &ddlHandler{
 		puller:  puller,
 		cancel:  cancel,
