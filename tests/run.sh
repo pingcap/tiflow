@@ -3,6 +3,7 @@
 set -eu
 
 OUT_DIR=/tmp/tidb_cdc_test
+CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 
 mkdir -p $OUT_DIR || true
 # to the dir of this script
@@ -27,6 +28,8 @@ stop_services() {
 start_services() {
     stop_services
     clean_data
+
+    cd $OUT_DIR
 
     echo "Starting PD..."
     pd-server \
@@ -90,6 +93,7 @@ EOF
         -P 3306 \
         -config "$OUT_DIR/tidb-config.toml" \
         --store mocktikv \
+        --path "$OUT_DIR/down_tidb" \
         --status=20080 \
         --log-file "$OUT_DIR/down_tidb.log" &
 
@@ -125,18 +129,21 @@ run_case() {
     bash "$script"
 }
 
-# List the case names to run, eg. ("cdc" "kafka")
-do_cases=()
+if [ "$#" -ge 1 ]; then
+    test_case=$1
+else
+    test_case="*"
+fi
 
-if [ ${#do_cases[@]} -eq 0 ]; then
-    for script in ./*/run.sh; do
+if [ "$test_case" == "*" ]; then
+    for script in $CUR/*/run.sh; do
         test_name="$(basename "$(dirname "$script")")"
         run_case $test_name $script
     done
 else
-    for case in "${do_cases[@]}"; do
-        script="./$case/run.sh"
-        run_case $case $script
+    for name in $test_case; do
+        script="$CUR/$name/run.sh"
+        run_case $name $script
     done
 fi
 
