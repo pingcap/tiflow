@@ -94,22 +94,32 @@ type MockPullerManager struct {
 	txnMap   map[uint64]*kvrpcpb.PrewriteRequest
 	rawTxnCh chan model.RawTxn
 	tidbKit  *testkit.TestKit
-	pullers  []*mockPuller
 
-	mu sync.Mutex
+	rawTxns []model.RawTxn
+
+	txnMapMu  sync.Mutex
+	rawTxnsMu sync.RWMutex
+	closeCh   chan struct{}
 
 	c *check.C
 }
 
 type mockPuller struct {
+	pm         *MockPullerManager
 	spans      []util.Span
-	outputFn   func(context.Context, model.RawTxn) error
 	resolvedTs uint64
+	startTs    uint64
+	txnOffset  int
 }
 
 func (p *mockPuller) Run(ctx context.Context) error {
 	// Do nothing
-	return nil
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.pm.closeCh:
+		return nil
+	}
 }
 
 func (p *mockPuller) GetResolvedTs() uint64 {
@@ -117,11 +127,25 @@ func (p *mockPuller) GetResolvedTs() uint64 {
 }
 
 func (p *mockPuller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
-	p.outputFn = func(ctx context.Context, rawTxn model.RawTxn) error {
-		p.resolvedTs = rawTxn.Ts
-		return outputFn(ctx, rawTxn)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-p.pm.closeCh:
+			return nil
+		case <-time.After(time.Second):
+			p.pm.rawTxnsMu.RLock()
+			for ; p.txnOffset < len(p.pm.rawTxns); p.txnOffset++ {
+				rawTxn := p.pm.rawTxns[p.txnOffset]
+				if rawTxn.Ts < p.startTs {
+					continue
+				}
+				p.resolvedTs = rawTxn.Ts
+				p.sendRawTxn(ctx, rawTxn, outputFn)
+			}
+			p.pm.rawTxnsMu.RUnlock()
+		}
 	}
-	return nil
 }
 
 func (p *mockPuller) Output() Buffer {
@@ -132,6 +156,7 @@ func NewMockPullerManager(c *check.C) *MockPullerManager {
 	m := &MockPullerManager{
 		txnMap:   make(map[uint64]*kvrpcpb.PrewriteRequest),
 		rawTxnCh: make(chan model.RawTxn, 16),
+		closeCh:  make(chan struct{}),
 		c:        c,
 	}
 	return m
@@ -176,52 +201,61 @@ func (m *MockPullerManager) Run(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
+				m.domain.Close()
+				m.store.Close()
+				close(m.closeCh)
 				return
 			case r, ok := <-m.rawTxnCh:
 				log.Info("send raw transaction", zap.Reflect("raw transaction", r))
 				if !ok {
 					return
 				}
-				m.sendRawTxn(ctx, r)
+				m.rawTxnsMu.Lock()
+				m.rawTxns = append(m.rawTxns, r)
+				m.rawTxnsMu.Unlock()
 			case <-time.After(time.Second):
-				log.Info("send fake transaction")
+				m.rawTxnsMu.Lock()
 				fakeTxn := model.RawTxn{Ts: oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond))}
-				m.sendRawTxn(ctx, fakeTxn)
+				m.rawTxns = append(m.rawTxns, fakeTxn)
+				m.rawTxnsMu.Unlock()
 			}
 		}
 	}()
 }
 
-func (m *MockPullerManager) CreatePuller(spans []util.Span) Puller {
-	plr := &mockPuller{
-		spans: spans,
+func (m *MockPullerManager) CreatePuller(startTs uint64, spans []util.Span) Puller {
+	return &mockPuller{
+		spans:   spans,
+		pm:      m,
+		startTs: startTs,
 	}
-	m.pullers = append(m.pullers, plr)
-	return plr
 }
 
 func (m *MockPullerManager) MustExec(sql string, args ...interface{}) {
 	m.tidbKit.MustExec(sql, args...)
 }
 
-func (m *MockPullerManager) sendRawTxn(ctx context.Context, rawTxn model.RawTxn) {
-	for _, plr := range m.pullers {
-		toSend := model.RawTxn{Ts: rawTxn.Ts}
+func (p *mockPuller) sendRawTxn(ctx context.Context, rawTxn model.RawTxn, outputFn func(context.Context, model.RawTxn) error) {
+	toSend := model.RawTxn{Ts: rawTxn.Ts}
+	if len(rawTxn.Entries) > 0 {
 		for _, kvEntry := range rawTxn.Entries {
-			if util.KeyInSpans(kvEntry.Key, plr.spans, false) {
+			if util.KeyInSpans(kvEntry.Key, p.spans, false) {
 				toSend.Entries = append(toSend.Entries, kvEntry)
 			}
 		}
-		err := plr.outputFn(ctx, toSend)
-		if err != nil {
-			log.Fatal("output raw transaction failed", zap.Error(err))
+		if len(toSend.Entries) == 0 {
+			return
 		}
+	}
+	err := outputFn(ctx, toSend)
+	if err != nil {
+		log.Fatal("output raw transaction failed", zap.Error(err))
 	}
 }
 
 func (m *MockPullerManager) postPrewrite(req *kvrpcpb.PrewriteRequest, result []error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.txnMapMu.Lock()
+	defer m.txnMapMu.Unlock()
 	if anyError(result) {
 		return
 	}
@@ -229,8 +263,8 @@ func (m *MockPullerManager) postPrewrite(req *kvrpcpb.PrewriteRequest, result []
 }
 
 func (m *MockPullerManager) postCommit(keys [][]byte, startTs, commitTs uint64, result error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.txnMapMu.Lock()
+	defer m.txnMapMu.Unlock()
 	if result != nil {
 		return
 	}
@@ -243,17 +277,12 @@ func (m *MockPullerManager) postCommit(keys [][]byte, startTs, commitTs uint64, 
 }
 
 func (m *MockPullerManager) postRollback(keys [][]byte, startTs uint64, result error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.txnMapMu.Lock()
+	defer m.txnMapMu.Unlock()
 	if result != nil {
 		return
 	}
 	delete(m.txnMap, startTs)
-}
-
-func (m *MockPullerManager) Close() {
-	m.domain.Close()
-	m.store.Close()
 }
 
 func prewrite2RawTxn(req *kvrpcpb.PrewriteRequest, commitTs uint64) model.RawTxn {
