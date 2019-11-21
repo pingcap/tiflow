@@ -43,6 +43,8 @@ all: dev install
 
 dev: check test
 
+test: unit_test
+
 build: cdc
 
 cdc:
@@ -51,10 +53,18 @@ cdc:
 install:
 	go install ./...
 
-test:
+unit_test:
 	mkdir -p "$(TEST_DIR)"
 	@export log_level=error;\
 	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES)
+
+check_third_party_binary:
+	@which bin/tidb-server
+	@which bin/tikv-server
+	@which bin/pd-server
+
+integration_test: check_third_party_binary
+	tests/run.sh $(CASE)
 
 fmt:
 	@echo "gofmt (simplify)"

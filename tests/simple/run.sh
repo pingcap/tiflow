@@ -5,7 +5,7 @@ set -e
 WORK_DIR=$OUT_DIR/$TEST_NAME
 
 function prepare() {
-    rm -r $WORK_DIR && mkdir -p $WORK_DIR
+    rm -rf $WORK_DIR && mkdir -p $WORK_DIR
     cd $WORK_DIR
 
     # record tso before we create tables for two reasons
@@ -82,8 +82,6 @@ function sql_test() {
         exit 1
     fi
 
-    run_sql "DROP TABLE test.simple1;"
-    run_sql "DROP TABLE test.simple2;"
     killall cdc || true
 }
 
