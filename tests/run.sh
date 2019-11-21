@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -eu
 
@@ -22,8 +22,6 @@ stop_services() {
     killall -9 tikv-server || true
     killall -9 pd-server || true
     killall -9 tidb-server || true
-
-    killall -9 cdc || true
 }
 
 start_services() {
@@ -36,20 +34,8 @@ start_services() {
         --log-file "$OUT_DIR/pd.log" \
         --data-dir "$OUT_DIR/pd" &
 
-    echo "Starting downstream PD..."
-    pd-server \
-        --client-urls http://127.0.0.1:2381 \
-        --peer-urls http://127.0.0.1:2382 \
-        --log-file "$OUT_DIR/down_pd.log" \
-        --data-dir "$OUT_DIR/down_pd" &
-
     # wait until PD is online...
     while ! curl -o /dev/null -sf http://127.0.0.1:2379/pd/api/v1/version; do
-        sleep 1
-    done
-
-    # wait until downstream PD is online...
-    while ! curl -o /dev/null -sf http://127.0.0.1:2381/pd/api/v1/version; do
         sleep 1
     done
 
@@ -63,36 +49,11 @@ max-open-files = 4096
 [raftstore]
 # true (default value) for high reliability, this can prevent data loss when power failure.
 sync-log = false
-
-# make tikv don't split now
-[coprocessor]
-## When it is set to \`true\`, TiKV will try to split a Region with table prefix if that Region
-## crosses tables.
-## It is recommended to turn off this option if there will be a large number of tables created.
-split-region-on-table = false
-
-## One split check produces several split keys in batch. This config limits the number of produced
-## split keys in one batch.
-# batch-split-limit = 10
-
-## When Region [a,e) size exceeds \`region_max_size\`, it will be split into several Regions [a,b),
-## [b,c), [c,d), [d,e) and the size of [a,b), [b,c), [c,d) will be \`region_split_size\` (or a
-## little larger).
-region-max-size = "100000MB"
-region-split-size = "100000MB"
-
-## When the number of keys in Region [a,e) exceeds the \`region_max_keys\`, it will be split into
-## several Regions [a,b), [b,c), [c,d), [d,e) and the number of keys in [a,b), [b,c), [c,d) will be
-## \`region_split_keys\`.
-region-max-keys = 100000000
-region-split-keys = 100000000
 EOF
 
 # tidb server config file
     cat - > "$OUT_DIR/tidb-config.toml" <<EOF
-# When create table, split a separated region for it. It is recommended to
-# turn off this option if there will be a large number of tables created.
-split-table = false
+split-table = true
 EOF
 
     echo "Starting TiKV..."
@@ -102,14 +63,6 @@ EOF
         --log-file "$OUT_DIR/tikv.log" \
         -C "$OUT_DIR/tikv-config.toml" \
         -s "$OUT_DIR/tikv" &
-
-    echo "Starting downstream TiKV..."
-    tikv-server \
-        --pd 127.0.0.1:2381 \
-        -A 127.0.0.1:20161 \
-        --log-file "$OUT_DIR/down_tikv.log" \
-        -C "$OUT_DIR/tikv-config.toml" \
-        -s "$OUT_DIR/down_tikv" &
 
     sleep 5
 
@@ -136,8 +89,7 @@ EOF
     tidb-server \
         -P 3306 \
         -config "$OUT_DIR/tidb-config.toml" \
-        --store tikv \
-        --path 127.0.0.1:2381 \
+        --store mocktikv \
         --status=20080 \
         --log-file "$OUT_DIR/down_tidb.log" &
 
@@ -151,10 +103,6 @@ EOF
         fi
         sleep 3
     done
-
-    echo "Starting CDC..."
-    cdc server --log-file "$OUT_DIR/cdc.log" --log-level info &
-    sleep 1
 }
 
 trap stop_services EXIT
@@ -174,7 +122,7 @@ run_case() {
     PATH="$pwd/../bin:$pwd/_utils:$PATH" \
     OUT_DIR=$OUT_DIR \
     TEST_NAME=$case \
-    sh "$script"
+    bash "$script"
 }
 
 # List the case names to run, eg. ("cdc" "kafka")

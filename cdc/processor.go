@@ -326,7 +326,7 @@ func (p *processorImpl) localResolvedWorker(ctx context.Context) error {
 				return errors.Trace(ctx.Err())
 			}
 			return nil
-		case <-time.After(3 * time.Second):
+		case <-time.After(1 * time.Second):
 			minResolvedTs := uint64(math.MaxUint64)
 			p.tableResolvedTs.Range(func(key, value interface{}) bool {
 				resolvedTs := value.(uint64)
@@ -367,7 +367,7 @@ func (p *processorImpl) checkpointWorker(ctx context.Context) error {
 			if e.Typ == ProcessorEntryResolved {
 				checkpointTs = e.Ts
 			}
-		case <-time.After(3 * time.Second):
+		case <-time.After(1 * time.Second):
 			err := p.tsRWriter.WriteCheckpointTs(ctx, checkpointTs)
 			// TODO: add retry when meeting error
 			if err != nil {
