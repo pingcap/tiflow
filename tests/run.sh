@@ -109,7 +109,7 @@ EOF
     done
 }
 
-# trap stop_services EXIT
+trap stop_services EXIT
 start_services
 
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';"
