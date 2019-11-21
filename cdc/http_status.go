@@ -81,8 +81,6 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
 	s.writeEtcdInfo(s.capture.etcdClient, w)
-
-	return
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {

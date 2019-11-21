@@ -54,14 +54,14 @@ type SubChangeFeedInfo struct {
 }
 
 // RemoveTable remove the table in TableInfos.
-func (s *SubChangeFeedInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
-	for idx, table := range s.TableInfos {
+func (scfi *SubChangeFeedInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
+	for idx, table := range scfi.TableInfos {
 		if table.ID == id {
-			last := s.TableInfos[len(s.TableInfos)-1]
-			removedTable := s.TableInfos[idx]
+			last := scfi.TableInfos[len(scfi.TableInfos)-1]
+			removedTable := scfi.TableInfos[idx]
 
-			s.TableInfos[idx] = last
-			s.TableInfos = s.TableInfos[:len(s.TableInfos)-1]
+			scfi.TableInfos[idx] = last
+			scfi.TableInfos = scfi.TableInfos[:len(scfi.TableInfos)-1]
 
 			return removedTable, true
 		}

@@ -307,6 +307,8 @@ func (p *processorImpl) Run(ctx context.Context, errCh chan<- error) {
 }
 
 func (p *processorImpl) writeDebugInfo(w io.Writer) {
+	// nolint
+	// TODO: display more readable info.
 	fmt.Fprintf(w, "%+v\n", *p)
 }
 

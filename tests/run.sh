@@ -104,12 +104,12 @@ EOF
         sleep 3
     done
 
-    echo "Starting CDC..."
-    cdc server --log-file "$OUT_DIR/cdc.log" --log-level debug &
-    sleep 1
+    # echo "Starting CDC..."
+    # cdc server --log-file "$OUT_DIR/cdc.log" --log-level debug &
+    # sleep 1
 
-	# create a changefeed
-	cdc cli
+    # create a changefeed
+    # cdc cli
 }
 
 trap stop_services EXIT

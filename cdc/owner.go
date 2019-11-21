@@ -179,7 +179,6 @@ func (c *ChangeFeedInfo) cleanTables(ctx context.Context) {
 	for _, id := range cleanIDs {
 		delete(c.toCleanTables, id)
 	}
-	return
 }
 
 func findSubChangefeedWithTable(infos model.ProcessorsInfos, tableID uint64) (captureID string, info *model.SubChangeFeedInfo, ok bool) {

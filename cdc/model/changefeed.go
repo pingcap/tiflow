@@ -37,21 +37,21 @@ type ChangeFeedDetail struct {
 }
 
 // GetStartTs return StartTs if it's  specified or using the CreateTime of changefeed.
-func (c *ChangeFeedDetail) GetStartTs() uint64 {
-	if c.StartTs > 0 {
-		return c.StartTs
+func (detail *ChangeFeedDetail) GetStartTs() uint64 {
+	if detail.StartTs > 0 {
+		return detail.StartTs
 	}
 
-	return oracle.EncodeTSO(c.CreateTime.Unix() * 1000)
+	return oracle.EncodeTSO(detail.CreateTime.Unix() * 1000)
 }
 
 // GetCheckpointTs return the checkpoint ts of changefeed.
-func (c *ChangeFeedDetail) GetCheckpointTs() uint64 {
-	if c.Info != nil {
-		return c.Info.CheckpointTs
+func (detail *ChangeFeedDetail) GetCheckpointTs() uint64 {
+	if detail.Info != nil {
+		return detail.Info.CheckpointTs
 	}
 
-	return c.GetStartTs()
+	return detail.GetStartTs()
 }
 
 // Marshal returns the json marshal format of a ChangeFeedDetail
