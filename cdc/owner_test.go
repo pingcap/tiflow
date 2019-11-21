@@ -16,6 +16,7 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
+	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
@@ -124,8 +125,11 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 		c:                c,
 	}
 
+	tables := map[uint64]schema.TableName{1: {Schema: "any"}}
+
 	changeFeedInfos := map[model.ChangeFeedID]*ChangeFeedInfo{
 		"test_change_feed": {
+			tables:         tables,
 			ChangeFeedInfo: &model.ChangeFeedInfo{},
 			TargetTs:       100,
 			Status:         model.ChangeFeedSyncDML,
@@ -146,7 +150,6 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 		// ddlHandler:      handler,
 		cfRWriter: handler,
 		manager:   manager,
-		errCh:     make(chan error),
 	}
 	s.owner = owner
 	err = owner.Run(ctx, 50*time.Millisecond)
@@ -301,8 +304,11 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 		c:      c,
 	}
 
+	tables := map[uint64]schema.TableName{1: {Schema: "any"}}
+
 	changeFeedInfos := map[model.ChangeFeedID]*ChangeFeedInfo{
 		"test_change_feed": {
+			tables:         tables,
 			ChangeFeedInfo: &model.ChangeFeedInfo{},
 			TargetTs:       100,
 			Status:         model.ChangeFeedSyncDML,
@@ -321,10 +327,9 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 		cancelWatchCapture: cancel,
 		changeFeedInfos:    changeFeedInfos,
 
-		ddlHandler: handler,
-		cfRWriter:  handler,
-		manager:    manager,
-		errCh:      make(chan error),
+		// ddlHandler: handler,
+		cfRWriter: handler,
+		manager:   manager,
 	}
 	s.owner = owner
 	err = owner.Run(ctx, 50*time.Millisecond)

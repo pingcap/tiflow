@@ -20,6 +20,7 @@ require (
 	github.com/pingcap/tidb v1.1.0-beta.0.20191017064824-e1ba309148ad
 	github.com/pingcap/tidb-tools v2.1.3-0.20190321065848-1e8b48f5c168+incompatible
 	github.com/remyoudompheng/bigfft v0.0.0-20190728182440-6a916e37a237 // indirect
+	github.com/siddontang/go-mysql v0.0.0-20191114035249-07ca7840b812
 	github.com/sirupsen/logrus v1.4.2 // indirect
 	github.com/spf13/cobra v0.0.3
 	github.com/stretchr/testify v1.4.0

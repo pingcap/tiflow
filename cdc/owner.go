@@ -157,7 +157,7 @@ func (c *ChangeFeedInfo) tryBalance(ctx context.Context, captures map[string]*mo
 func (c *ChangeFeedInfo) cleanTables(ctx context.Context) {
 	var cleanIDs []uint64
 
-	for id, _ := range c.toCleanTables {
+	for id := range c.toCleanTables {
 		captureID, subInfo, ok := findSubChangefeedWithTable(c.ProcessorInfos, id)
 		if !ok {
 			log.Warn("ignore clean table id", zap.Uint64("id", id))
@@ -456,13 +456,16 @@ func (o *ownerImpl) calcResolvedTs() error {
 		minCheckpointTs := cfInfo.TargetTs
 
 		if len(cfInfo.tables) == 0 {
+			var ts uint64
+
 			physical, logical, err := o.pdClient.GetTS(context.Background())
 			if err != nil {
 				log.Warn("get ts from pd failed", zap.Error(err))
 				continue
 			}
 
-			ts := oracle.ComposeTS(physical, logical)
+			ts = oracle.ComposeTS(physical, logical)
+
 			minResolvedTs = ts
 			minCheckpointTs = ts
 		} else {
