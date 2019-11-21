@@ -1,9 +1,12 @@
 #!/bin/sh
+# parameter 1: sql
+# parameter 2: database host
+# parameter 3: database port
 
-set -eu
+set -e
 
-OUT_DIR=/tmp/tidb_cdc_test
-TEST_NAME=${TEST_NAME-default}
+host=${2:-127.0.0.1}
+port=${3:-4000}
 
 echo "[$(date)] Executing SQL: $1" > "$OUT_DIR/sql_res.$TEST_NAME.txt"
-mysql -uroot -h127.0.0.1 -P4000 --default-character-set utf8 -E -e "$1" > "$OUT_DIR/sql_res.$TEST_NAME.txt"
+mysql -uroot -h${host} -P${port} --default-character-set utf8mb4 -E -e "$1" > "$OUT_DIR/sql_res.$TEST_NAME.txt"

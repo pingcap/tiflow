@@ -2,10 +2,15 @@
 
 set -e
 
+CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 
 function prepare() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
+
+    start_tidb_cluster $WORK_DIR
+
     cd $WORK_DIR
 
     # record tso before we create tables for two reasons
@@ -25,7 +30,7 @@ function sql_check() {
     # the following statement will be not executed
 
     # check table simple1.
-    down_run_sql "SELECT id, val FROM test.simple1;" && \
+    run_sql "SELECT id, val FROM test.simple1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} && \
     check_contains "id: 1" && \
     check_contains "val: 1" && \
     check_contains "id: 2" && \
@@ -33,7 +38,7 @@ function sql_check() {
     check_not_contains "id: 3" && \
 
     # check table simple2.
-    down_run_sql "SELECT id, val FROM test.simple2;" && \
+    run_sql "SELECT id, val FROM test.simple2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} && \
     check_contains "id: 1" && \
     check_contains "val: 1" && \
     check_contains "id: 2" && \
@@ -85,5 +90,7 @@ function sql_test() {
     killall cdc || true
 }
 
+trap stop_tidb_cluster EXIT
 prepare $*
 sql_test $*
+echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
