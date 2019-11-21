@@ -18,7 +18,6 @@ type mockPullerSuite struct{}
 
 var _ = check.Suite(&mockPullerSuite{})
 
-// TODO add a test kit easier-to-use
 func (s *mockPullerSuite) TestTxnSort(c *check.C) {
 	pm := NewMockPullerManager(c)
 	plr := pm.CreatePuller(0, []util.Span{util.Span{}.Hack()})
