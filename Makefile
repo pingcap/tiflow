@@ -64,6 +64,7 @@ check_third_party_binary:
 	@which bin/pd-server
 	@which bin/pd-ctl
 	@which bin/sync_diff_inspector
+	@which bin/go-ycsb
 
 integration_test: check_third_party_binary
 	tests/run.sh $(CASE)
