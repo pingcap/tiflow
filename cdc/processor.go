@@ -623,7 +623,7 @@ func (p *processorImpl) addTable(ctx context.Context, tableID int64, errCh chan<
 		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
 		return nil
 	}
-	span := util.GetTableSpan(tableID)
+	span := util.GetTableSpan(tableID, true)
 	// TODO: How large should the buffer be?
 	txnChan := make(chan model.RawTxn, 16)
 	if err := p.SetInputChan(tableID, txnChan); err != nil {
