@@ -52,6 +52,6 @@ function run() {
     killall cdc || true
 }
 
-# trap stop_tidb_cluster EXIT
+trap stop_tidb_cluster EXIT
 run $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
