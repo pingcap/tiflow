@@ -62,6 +62,8 @@ check_third_party_binary:
 	@which bin/tidb-server
 	@which bin/tikv-server
 	@which bin/pd-server
+	@which bin/pd-ctl
+	@which bin/sync_diff_inspector
 
 integration_test: check_third_party_binary
 	tests/run.sh $(CASE)

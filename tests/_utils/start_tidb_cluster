@@ -1,0 +1,96 @@
+#!/bin/bash
+# parameter 1: full path of output directory
+
+set -e
+
+CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+source $CUR/../_utils/test_prepare
+
+OUT_DIR=$1
+if [[ -z $OUT_DIR ]]; then
+    echo "wrong out_dir value: $1"
+    exit 1
+fi
+
+stop_tidb_cluster
+
+cd $OUT_DIR && echo "start tidb cluster in $OUT_DIR"
+
+echo "Starting PD..."
+pd-server \
+    --client-urls http://${PD_HOST}:${PD_PORT}\
+    --log-file "$OUT_DIR/pd.log" \
+    --data-dir "$OUT_DIR/pd" &
+
+# wait until PD is online...
+while ! curl -o /dev/null -sf http://${PD_HOST}:${PD_PORT}/pd/api/v1/version; do
+    sleep 1
+done
+
+# Tries to limit the max number of open files under the system limit
+cat - > "$OUT_DIR/tikv-config.toml" <<EOF
+[rocksdb]
+max-open-files = 4096
+[raftdb]
+max-open-files = 4096
+[raftstore]
+# true (default value) for high reliability, this can prevent data loss when power failure.
+sync-log = false
+EOF
+
+# tidb server config file
+cat - > "$OUT_DIR/tidb-config.toml" <<EOF
+split-table = true
+EOF
+
+echo "Starting TiKV..."
+tikv-server \
+    --pd ${PD_HOST}:${PD_PORT} \
+    -A ${TIKV_HOST}:${TIKV_PORT} \
+    --log-file "$OUT_DIR/tikv.log" \
+    -C "$OUT_DIR/tikv-config.toml" \
+    -s "$OUT_DIR/tikv" &
+
+sleep 2
+
+echo "Starting TiDB..."
+tidb-server \
+    -P ${US_TIDB_PORT} \
+    -config "$OUT_DIR/tidb-config.toml" \
+    --store tikv \
+    --path ${PD_HOST}:${PD_PORT} \
+    --status=${US_TIDB_STATUS} \
+    --log-file "$OUT_DIR/tidb.log" &
+
+echo "Verifying TiDB is started..."
+i=0
+while ! mysql -uroot -h${US_TIDB_HOST} -P${US_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
+    i=$((i+1))
+    if [ "$i" -gt 40 ]; then
+        echo 'Failed to start upstream TiDB'
+        exit 2
+    fi
+    sleep 1
+done
+
+echo "Starting Downstream TiDB..."
+tidb-server \
+    -P ${DOWN_TIDB_PORT} \
+    -config "$OUT_DIR/tidb-config.toml" \
+    --store mocktikv \
+    --path "$OUT_DIR/down_tidb" \
+    --status=${DOWN_TIDB_STATUS} \
+    --log-file "$OUT_DIR/down_tidb.log" &
+
+echo "Verifying Downstream TiDB is started..."
+i=0
+while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
+    i=$((i+1))
+    if [ "$i" -gt 10 ]; then
+        echo 'Failed to start downstream TiDB'
+        exit 1
+    fi
+    sleep 2
+done
+
+run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';"
