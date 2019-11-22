@@ -22,6 +22,7 @@ function run() {
     start_ts=$(($(date +%s%N | cut -b1-13)<<18))
     cdc_cli_params=""
 
+    # create $DB_COUNT databases and import initial workload
     for i in $(seq $DB_COUNT); do
         db="multi_capture_$i"
         run_sql "CREATE DATABASE $db;"
@@ -29,17 +30,19 @@ function run() {
         cdc_cli_params="$cdc_cli_params --databases=multi_capture_$i"
     done
 
+    # start $CDC_COUNT cdc servers, and create a changefeed
     for i in $(seq $CDC_COUNT); do
         cdc server --log-file $WORK_DIR/cdc${i}.log --log-level info > $WORK_DIR/stdout${i}.log 2>&1 &
     done
     cdc cli --start-ts=$start_ts $cdc_cli_params
 
-    # sync_diff can't check non-exist table, so we check expected tables are created in downstream first
+    # check tables are created and data is synchronized
     for i in $(seq $DB_COUNT); do
         check_table_exists "multi_capture_$i.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     done
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
+    # add more data in upstream and check again
     for i in $(seq $DB_COUNT); do
         db="multi_capture_$i"
         go-ycsb load mysql -P $CUR/conf/workload2 -p mysql.host=${US_TIDB_HOST} -p mysql.port=${US_TIDB_PORT} -p mysql.user=root -p mysql.db=$db
