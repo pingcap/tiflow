@@ -25,11 +25,8 @@ type kvEntrySuite struct {
 var _ = check.Suite(&kvEntrySuite{})
 
 func (s *kvEntrySuite) TestCreateTable(c *check.C) {
-	// create and run mock puller manager
-	pm := puller.NewMockPullerManager(c)
-	pmCtx, pmCancel := context.WithCancel(context.Background())
+	pm, pmCtx, pmCancel := startPullerManager(c)
 	defer pmCancel()
-	go pm.Run(pmCtx)
 
 	pm.MustExec("create table test.test1(id varchar(255) primary key, a int, index i1 (a))")
 
@@ -121,11 +118,8 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 }
 
 func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
-	// create and run mock puller manager
-	pm := puller.NewMockPullerManager(c)
-	pmCtx, pmCancel := context.WithCancel(context.Background())
+	pm, pmCtx, pmCancel := startPullerManager(c)
 	defer pmCancel()
-	go pm.Run(pmCtx)
 
 	pm.MustExec("create table test.test1(id varchar(255) primary key, a int, index ci (a))")
 	tableInfo := pm.GetTableInfo("test", "test1")
@@ -201,11 +195,9 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 }
 
 func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
-	// create and run mock puller manager
-	pm := puller.NewMockPullerManager(c)
-	pmCtx, pmCancel := context.WithCancel(context.Background())
+	pm, pmCtx, pmCancel := startPullerManager(c)
 	defer pmCancel()
-	go pm.Run(pmCtx)
+
 	pm.MustExec("create table test.test2(id int primary key, b varchar(255) unique key)")
 	tableInfo := pm.GetTableInfo("test", "test2")
 	tableID := tableInfo.ID
@@ -273,11 +265,8 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 }
 
 func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
-	// create and run mock puller manager
-	pm := puller.NewMockPullerManager(c)
-	pmCtx, pmCancel := context.WithCancel(context.Background())
+	pm, pmCtx, pmCancel := startPullerManager(c)
 	defer pmCancel()
-	go pm.Run(pmCtx)
 
 	pm.MustExec("create table test.test2( a int, b varchar(255), c date, unique key(a,b,c))")
 	tableInfo := pm.GetTableInfo("test", "test2")
@@ -381,11 +370,8 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 }
 
 func (s *kvEntrySuite) TestUkWithNoPk(c *check.C) {
-	// create and run mock puller manager
-	pm := puller.NewMockPullerManager(c)
-	pmCtx, pmCancel := context.WithCancel(context.Background())
+	pm, pmCtx, pmCancel := startPullerManager(c)
 	defer pmCancel()
-	go pm.Run(pmCtx)
 
 	pm.MustExec("CREATE TABLE test.cdc_uk_with_no_pk (id INT, a1 INT, a3 INT, UNIQUE KEY dex1(a1, a3));")
 	tableInfo := pm.GetTableInfo("test", "cdc_uk_with_no_pk")
@@ -428,6 +414,14 @@ func assertIn(c *check.C, item KVEntry, expect []KVEntry) {
 		}
 	}
 	c.Fatalf("item {%#v} is not exist in expect {%#v}", item, expect)
+}
+
+func startPullerManager(c *check.C) (*puller.MockPullerManager, context.Context, context.CancelFunc) {
+	// create and run mock puller manager
+	pm := puller.NewMockPullerManager(c)
+	pmCtx, pmCancel := context.WithCancel(context.Background())
+	go pm.Run(pmCtx)
+	return pm, pmCtx, pmCancel
 }
 
 func checkDMLKVEntries(ctx context.Context, c *check.C, tableInfo *timodel.TableInfo, plr puller.Puller, expect []KVEntry) {
