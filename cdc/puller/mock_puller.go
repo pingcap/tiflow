@@ -8,6 +8,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/domain"
@@ -159,6 +160,7 @@ func NewMockPullerManager(c *check.C) *MockPullerManager {
 		closeCh:  make(chan struct{}),
 		c:        c,
 	}
+	m.setUp()
 	return m
 }
 
@@ -196,7 +198,6 @@ func (m *MockPullerManager) setUp() {
 }
 
 func (m *MockPullerManager) Run(ctx context.Context) {
-	m.setUp()
 	go func() {
 		for {
 			select {
@@ -233,6 +234,13 @@ func (m *MockPullerManager) CreatePuller(startTs uint64, spans []util.Span) Pull
 
 func (m *MockPullerManager) MustExec(sql string, args ...interface{}) {
 	m.tidbKit.MustExec(sql, args...)
+}
+
+func (m *MockPullerManager) GetTableInfo(schema, table string) *timodel.TableInfo {
+	is := m.domain.InfoSchema()
+	tbl, err := is.TableByName(timodel.NewCIStr(schema), timodel.NewCIStr(table))
+	m.c.Assert(err, check.IsNil)
+	return tbl.Meta()
 }
 
 func (p *mockPuller) sendRawTxn(ctx context.Context, rawTxn model.RawTxn, outputFn func(context.Context, model.RawTxn) error) {
