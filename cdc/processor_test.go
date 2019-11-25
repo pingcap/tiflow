@@ -163,7 +163,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 	}
 	for i, globalResolvedTs := range cases.globalResolvedTs {
 		// hack to simulate owner to update global resolved ts
-		p.(*processorImpl).getTsRwriter().(*mockTsRWriter).SetGlobalResolvedTs(globalResolvedTs)
+		p.getTsRwriter().(*mockTsRWriter).SetGlobalResolvedTs(globalResolvedTs)
 		// waiting for processor push to resolvedTs
 		for {
 			sinker.mu.Lock()
