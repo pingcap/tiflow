@@ -460,13 +460,6 @@ func (s *Storage) HandleDDL(job *model.Job) (schemaName string, tableName string
 	return
 }
 
-// ScanTable scan all the tables.
-func (s *Storage) ScanTable(f func(id uint64, talbe TableName)) {
-	for id, table := range s.tableIDToName {
-		f(uint64(id), table)
-	}
-}
-
 // CloneTables return a clone of the existing tables.
 func (s *Storage) CloneTables() map[uint64]TableName {
 	mp := make(map[uint64]TableName, len(s.tableIDToName))
