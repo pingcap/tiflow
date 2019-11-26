@@ -255,7 +255,12 @@ func (s *Storage) removeTable(tableID int64) error {
 }
 
 func (s *Storage) AddJob(job *model.Job) {
-	s.jobs = append(s.jobs, job)
+	if len(s.jobs) == 0 || s.jobs[len(s.jobs)-1].BinlogInfo.FinishedTS < job.BinlogInfo.FinishedTS {
+		s.jobs = append(s.jobs, job)
+		return
+	}
+
+	log.Debug("skip job in AddJob")
 }
 
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
