@@ -16,6 +16,7 @@ package roles
 import (
 	"context"
 	"math"
+	"sort"
 	"sync"
 	"time"
 
@@ -370,6 +371,9 @@ func (o *ownerImpl) assignChangeFeed(ctx context.Context, changefeedID string) (
 
 	// assign tables with simple round robin
 	tableInfos := make([][]*model.ProcessTableInfo, len(captures))
+	sort.Slice(cinfo.TableIDs, func(i, j int) bool {
+		return cinfo.TableIDs[i] < cinfo.TableIDs[j]
+	})
 	for i, tableID := range cinfo.TableIDs {
 		captureIndex := i % len(captures)
 		tableInfos[captureIndex] = append(tableInfos[captureIndex], &model.ProcessTableInfo{

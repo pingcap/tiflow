@@ -60,10 +60,19 @@ func (s *mockTsRWriter) ReadGlobalResolvedTs(ctx context.Context) (uint64, error
 	defer s.l.Unlock()
 	return s.globalResolvedTs, nil
 }
+
 func (s *mockTsRWriter) SetGlobalResolvedTs(ts uint64) {
 	s.l.Lock()
 	defer s.l.Unlock()
 	s.globalResolvedTs = ts
+}
+
+func (s *mockTsRWriter) CopySubChangeFeedInfo() (*model.SubChangeFeedInfo, error) {
+	return nil, nil
+}
+
+func (s *mockTsRWriter) WriteTableCLock(ctx context.Context, checkpointTs uint64) error {
+	return nil
 }
 
 // mockMounter pretend to decode a RawTxn by returning a Txn of the same Ts
