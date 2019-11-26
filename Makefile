@@ -1,7 +1,7 @@
-### Makefile for tidb-cdc
+### Makefile for ticdc
 .PHONY: build test check clean fmt cdc
 
-PROJECT=tidb-cdc
+PROJECT=ticdc
 
 # Ensure GOPATH is set before running build process.
 ifeq "$(GOPATH)" ""
