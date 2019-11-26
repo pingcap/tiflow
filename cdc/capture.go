@@ -46,6 +46,8 @@ type Capture struct {
 	ownerManager roles.Manager
 	ownerWorker  roles.Owner
 
+	processors map[string]*processorImpl
+
 	info *model.CaptureInfo
 }
 
@@ -78,6 +80,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	worker := roles.NewOwner(cli, manager, ddlHandler)
 
 	c = &Capture{
+		processors:   make(map[string]*processorImpl),
 		pdEndpoints:  pdEndpoints,
 		etcdClient:   cli,
 		ownerManager: manager,
@@ -86,6 +89,18 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	}
 
 	return
+}
+
+var _ processorCallback = &Capture{}
+
+// OnRunProcessor implements processorCallback.
+func (c *Capture) OnRunProcessor(p *processorImpl) {
+	c.processors[p.changefeedID] = p
+}
+
+// OnStopProcessor implements processorCallback.
+func (c *Capture) OnStopProcessor(p *processorImpl) {
+	delete(c.processors, p.changefeedID)
 }
 
 // Start starts the Capture mainloop
@@ -109,7 +124,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 
 	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)
 	errg.Go(func() error {
-		return watcher.Watch(cctx)
+		return watcher.Watch(cctx, c)
 	})
 
 	return errg.Wait()

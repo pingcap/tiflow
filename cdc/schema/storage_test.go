@@ -59,7 +59,10 @@ func (t *schemaSuite) TestSchema(c *C) {
 	jobs = append(jobs, job)
 
 	// construct a rollbackdone job
-	jobs = append(jobs, &model.Job{ID: 5, State: model.JobStateRollbackDone})
+	jobs = append(jobs, &model.Job{
+		ID:         5,
+		State:      model.JobStateRollbackDone,
+		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 125}})
 
 	// reconstruct the local schema
 	schema, err := NewStorage(jobs, false)

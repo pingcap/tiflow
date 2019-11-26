@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 )
 
 var (
@@ -87,7 +88,7 @@ func (w *ChangeFeedWatcher) processDeleteKv(kv *mvccpb.KeyValue) error {
 }
 
 // Watch watches changefeed key base
-func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
+func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) error {
 	errCh := make(chan error, 1)
 
 	revision, details, err := kv.GetChangeFeeds(ctx, w.etcdCli)
@@ -100,7 +101,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 			return err
 		}
 		if needRunWatcher {
-			runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh)
+			runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh, cb)
 		}
 	}
 
@@ -128,7 +129,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context) error {
 						return err
 					}
 					if needRunWatcher {
-						runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh)
+						runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh, cb)
 					}
 				case mvccpb.DELETE:
 					err := w.processDeleteKv(ev.Kv)
@@ -187,7 +188,7 @@ func (w *ProcessorWatcher) reopen() error {
 }
 
 // Watch wait for the key `/changefeed/subchangefeed/<fid>/cid>` appear and run the processor.
-func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error) {
+func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb processorCallback) {
 	defer w.wg.Done()
 	key := kv.GetEtcdKeySubChangeFeed(w.changefeedID, w.captureID)
 
@@ -227,7 +228,7 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error) {
 
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	feedErrCh, err := runProcessor(cctx, w.pdEndpoints, w.detail, w.changefeedID, w.captureID)
+	feedErrCh, err := runProcessor(cctx, w.pdEndpoints, w.detail, w.changefeedID, w.captureID, cb)
 	if err != nil {
 		errCh <- err
 		return
@@ -258,6 +259,13 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error) {
 	}
 }
 
+type processorCallback interface {
+	// OnRunProcessor is called when the processor is started.
+	OnRunProcessor(p *processorImpl)
+	// OnStopProcessor is called when the processor is stopped.
+	OnStopProcessor(p *processorImpl)
+}
+
 // realRunProcessorWatcher creates a new ProcessorWatcher and executes the Watch method.
 func realRunProcessorWatcher(
 	ctx context.Context,
@@ -267,10 +275,11 @@ func realRunProcessorWatcher(
 	etcdCli *clientv3.Client,
 	detail model.ChangeFeedDetail,
 	errCh chan error,
+	cb processorCallback,
 ) *ProcessorWatcher {
 	sw := NewProcessorWatcher(changefeedID, captureID, pdEndpoints, etcdCli, detail)
 	sw.wg.Add(1)
-	go sw.Watch(ctx, errCh)
+	go sw.Watch(ctx, errCh, cb)
 	return sw
 }
 
@@ -281,12 +290,33 @@ func realRunProcessor(
 	detail model.ChangeFeedDetail,
 	changefeedID string,
 	captureID string,
+	cb processorCallback,
 ) (chan error, error) {
 	processor, err := NewProcessor(pdEndpoints, detail, changefeedID, captureID)
 	if err != nil {
 		return nil, err
 	}
+
+	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
+
+	if cb != nil {
+		cb.OnRunProcessor(processor)
+	}
+
 	errCh := make(chan error, 1)
 	processor.Run(ctx, errCh)
-	return errCh, nil
+
+	returnErrCh := make(chan error, 1)
+
+	go func() {
+		err := <-errCh
+		log.Info("stop to run processor", zap.String("changefeed id", changefeedID))
+		if cb != nil {
+			cb.OnStopProcessor(processor)
+		}
+
+		returnErrCh <- err
+	}()
+
+	return returnErrCh, nil
 }

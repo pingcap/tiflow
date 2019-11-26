@@ -15,6 +15,8 @@ package schema
 
 import (
 	"encoding/json"
+	"fmt"
+	"sort"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -54,8 +56,17 @@ type TableName struct {
 	Table  string `toml:"tbl-name" json:"tbl-name"`
 }
 
+// String implements fmt.Stringer interface.
+func (t TableName) String() string {
+	return fmt.Sprintf("%s.%s", t.Schema, t.Table)
+}
+
 // NewStorage returns the Schema object
 func NewStorage(jobs []*model.Job, hasImplicitCol bool) (*Storage, error) {
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].BinlogInfo.FinishedTS < jobs[j].BinlogInfo.FinishedTS
+	})
+
 	s := &Storage{
 		hasImplicitCol:      hasImplicitCol,
 		version2SchemaTable: make(map[int64]TableName),
@@ -72,6 +83,7 @@ func NewStorage(jobs []*model.Job, hasImplicitCol bool) (*Storage, error) {
 	return s, nil
 }
 
+// String implements fmt.Stringer interface.
 func (s *Storage) String() string {
 	mp := map[string]interface{}{
 		"tableIDToName":  s.tableIDToName,
@@ -243,15 +255,18 @@ func (s *Storage) removeTable(tableID int64) error {
 }
 
 func (s *Storage) AddJob(job *model.Job) {
-	if len(s.jobs) == 0 || s.jobs[len(s.jobs)-1].BinlogInfo.SchemaVersion < job.BinlogInfo.SchemaVersion {
+	if len(s.jobs) == 0 || s.jobs[len(s.jobs)-1].BinlogInfo.FinishedTS < job.BinlogInfo.FinishedTS {
 		s.jobs = append(s.jobs, job)
+		return
 	}
+
+	log.Debug("skip job in AddJob")
 }
 
+// HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
 func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 	var i int
 	var job *model.Job
-	// TODO: Make sure jobs are sorted by BinlogInfo.FinishedTS
 	for i, job = range s.jobs {
 		if skipJob(job) {
 			log.Debug("skip ddl job", zap.Stringer("job", job))
@@ -262,6 +277,7 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 			break
 		}
 		if job.BinlogInfo.FinishedTS <= s.lastHandledTs {
+			log.Warn("skip job", zap.Stringer("job", job))
 			continue
 		}
 
@@ -447,6 +463,17 @@ func (s *Storage) HandleDDL(job *model.Job) (schemaName string, tableName string
 	}
 	s.lastHandledTs = job.BinlogInfo.FinishedTS
 	return
+}
+
+// CloneTables return a clone of the existing tables.
+func (s *Storage) CloneTables() map[uint64]TableName {
+	mp := make(map[uint64]TableName, len(s.tableIDToName))
+
+	for id, table := range s.tableIDToName {
+		mp[uint64(id)] = table
+	}
+
+	return mp
 }
 
 // IsTruncateTableID returns true if the table id have been truncated by truncate table DDL
