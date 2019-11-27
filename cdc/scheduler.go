@@ -261,9 +261,9 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 
 type processorCallback interface {
 	// OnRunProcessor is called when the processor is started.
-	OnRunProcessor(p *processorImpl)
+	OnRunProcessor(p *processor)
 	// OnStopProcessor is called when the processor is stopped.
-	OnStopProcessor(p *processorImpl)
+	OnStopProcessor(p *processor)
 }
 
 // realRunProcessorWatcher creates a new ProcessorWatcher and executes the Watch method.
