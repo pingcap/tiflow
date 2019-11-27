@@ -82,6 +82,21 @@ func (scfi *SubChangeFeedInfo) Unmarshal(data []byte) error {
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 
+func (scfi *SubChangeFeedInfo) Clone() *SubChangeFeedInfo {
+	clone := *scfi
+	infos := make([]*ProcessTableInfo, 0, len(scfi.TableInfos))
+	for _, ti := range scfi.TableInfos {
+		c := *ti
+		infos = append(infos, &c)
+	}
+	clone.TableInfos = infos
+	pLock := *scfi.TablePLock
+	clone.TablePLock = &pLock
+	cLock := *scfi.TableCLock
+	clone.TableCLock = &cLock
+	return &clone
+}
+
 type CaptureID = string
 type ChangeFeedID = string
 type ProcessorsInfos map[CaptureID]*SubChangeFeedInfo
