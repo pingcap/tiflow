@@ -415,7 +415,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 	}
 
 	for _, info := range o.changeFeedInfos {
-		info.tryBalance(context.Background(), o.captures)
+		info.tryBalance(ctx, o.captures)
 	}
 
 	return nil
