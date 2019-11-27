@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 // ChangeFeedDetail describes the detail of a ChangeFeed
@@ -25,12 +26,29 @@ type ChangeFeedDetail struct {
 	SinkURI    string            `json:"sink-uri"`
 	Opts       map[string]string `json:"opts"`
 	CreateTime time.Time         `json:"create-time"`
-	StartTs    uint64            `json:"start-ts"`
+	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
+	StartTs uint64 `json:"start-ts"`
 	// The ChangeFeed will exits until sync to timestamp TargetTs
-	TargetTs uint64 `json:"target-ts"`
-	// start to sync table id lists
-	// TODO: refine it later, use more intuitive table schema.table or something other strategy
-	TableIDs []uint64 `json:"table-ids"`
+	TargetTs uint64          `json:"target-ts"`
+	Info     *ChangeFeedInfo `json:"-"`
+}
+
+// GetStartTs return StartTs if it's  specified or using the CreateTime of changefeed.
+func (detail *ChangeFeedDetail) GetStartTs() uint64 {
+	if detail.StartTs > 0 {
+		return detail.StartTs
+	}
+
+	return oracle.EncodeTSO(detail.CreateTime.Unix() * 1000)
+}
+
+// GetCheckpointTs return the checkpoint ts of changefeed.
+func (detail *ChangeFeedDetail) GetCheckpointTs() uint64 {
+	if detail.Info != nil {
+		return detail.Info.CheckpointTs
+	}
+
+	return detail.GetStartTs()
 }
 
 // Marshal returns the json marshal format of a ChangeFeedDetail

@@ -25,8 +25,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/roles"
-	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
@@ -35,26 +33,23 @@ import (
 
 //TODO: add tests
 type ddlHandler struct {
-	puller       puller.Puller
-	mounter      *entry.Mounter
-	checkpointTS uint64
-	resolvedTS   uint64
-	ddlJobs      []*model.DDL
+	puller     puller.Puller
+	mounter    *entry.Mounter
+	resolvedTS uint64
+	ddlJobs    []*model.DDL
 
 	mu     sync.Mutex
 	wg     *errgroup.Group
 	cancel func()
 }
 
-func NewDDLHandler(pdCli pd.Client) *ddlHandler {
+func NewDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	puller := puller.NewPuller(pdCli, 0, []util.Span{util.GetDDLSpan()}, false)
+	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan()}, false)
 	ctx, cancel := context.WithCancel(context.Background())
-	// TODO this TxnMounter only mount DDL transaction, so it needn't schemaStorage
-	schemaStorage, _ := schema.NewStorage(nil, false)
 	// TODO get time loc from config
-	txnMounter := entry.NewTxnMounter(schemaStorage, time.UTC)
+	txnMounter := entry.NewTxnMounter(nil, time.UTC)
 	h := &ddlHandler{
 		puller:  puller,
 		cancel:  cancel,
@@ -63,6 +58,7 @@ func NewDDLHandler(pdCli pd.Client) *ddlHandler {
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
 
+	// FIXME: user of ddlHandler can't know error happen.
 	errg.Go(func() error {
 		return puller.Run(ctx)
 	})
@@ -97,13 +93,12 @@ func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn model.RawTxn) error 
 	return nil
 }
 
-var _ roles.OwnerDDLHandler = &ddlHandler{}
+var _ OwnerDDLHandler = &ddlHandler{}
 
 // PullDDL implements `roles.OwnerDDLHandler` interface.
 func (h *ddlHandler) PullDDL() (uint64, []*model.DDL, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.checkpointTS = h.resolvedTS
 	result := h.ddlJobs
 	h.ddlJobs = nil
 	return h.resolvedTS, result, nil

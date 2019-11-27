@@ -22,13 +22,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/pkg/flags"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
+	"github.com/pingcap/tidb/store/tikv"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -44,7 +44,7 @@ type Capture struct {
 	pdEndpoints  []string
 	etcdClient   *clientv3.Client
 	ownerManager roles.Manager
-	ownerWorker  roles.Owner
+	ownerWorker  *ownerImpl
 
 	processors map[string]*processorImpl
 
@@ -72,12 +72,11 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	log.Info("creating capture", zap.String("capture-id", id))
 
 	manager := roles.NewOwnerManager(cli, id, CaptureOwnerKey)
-	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
+
+	worker, err := NewOwner(pdEndpoints, cli, manager)
 	if err != nil {
-		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
+		return nil, errors.Annotate(err, "new owner failed")
 	}
-	ddlHandler := NewDDLHandler(pdCli)
-	worker := roles.NewOwner(cli, manager, ddlHandler)
 
 	c = &Capture{
 		processors:   make(map[string]*processorImpl),
@@ -148,6 +147,9 @@ func createTiStore(urls string) (tidbkv.Storage, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	// Ignore error if it is already registered.
+	_ = store.Register("tikv", tikv.Driver{})
 
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := store.New(tiPath)

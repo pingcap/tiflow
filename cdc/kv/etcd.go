@@ -189,6 +189,30 @@ func GetSubChangeFeedInfo(
 	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
 }
 
+// PutSubChangeFeedInfo puts subchangefeed info into etcd.
+func PutSubChangeFeedInfo(
+	ctx context.Context,
+	client *clientv3.Client,
+	changefeedID string,
+	captureID string,
+	info *model.SubChangeFeedInfo,
+	opts ...clientv3.OpOption,
+) error {
+	data, err := info.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	key := GetEtcdKeySubChangeFeed(changefeedID, captureID)
+
+	_, err = client.Put(ctx, key, data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
 // PutChangeFeedStatus puts changefeed synchronization status into etcd
 func PutChangeFeedStatus(
 	ctx context.Context,
