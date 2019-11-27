@@ -385,6 +385,12 @@ func (p *processor) checkpointWorker(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			timedCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			err := p.retryWriteCP(timedCtx, checkpointTs, 1)
+			cancel()
+			if err != nil {
+				log.Error("Failed to flush checkpoint", zap.Uint64("checkpoint", checkpointTs), zap.Error(err))
+			}
 			log.Info("Checkpoint worker exited")
 			if ctx.Err() != context.Canceled {
 				return errors.Trace(ctx.Err())
@@ -400,10 +406,8 @@ func (p *processor) checkpointWorker(ctx context.Context) error {
 			}
 		case <-time.After(1 * time.Second):
 			oldInfo := p.tsRWriter.GetSubChangeFeedInfo()
-			err := p.tsRWriter.WriteCheckpointTs(ctx, checkpointTs)
-			// TODO: add retry when meeting error
-			if err != nil {
-				return errors.Annotate(err, "write checkpoint ts")
+			if err := p.retryWriteCP(ctx, checkpointTs, 3); err != nil {
+				return err
 			}
 			newInfo := p.tsRWriter.GetSubChangeFeedInfo()
 			err = p.handleTables(ctx, oldInfo, newInfo, checkpointTs)
@@ -412,6 +416,25 @@ func (p *processor) checkpointWorker(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (p *processorImpl) retryWriteCP(ctx context.Context, cpTs uint64, maxRetry uint64) error {
+	retryCfg := backoff.WithMaxRetries(
+		backoff.WithContext(
+			backoff.NewExponentialBackOff(), ctx),
+		maxRetry,
+	)
+	err := backoff.Retry(func() error {
+		return p.tsRWriter.WriteCheckpointTs(ctx, cpTs)
+	}, retryCfg)
+	if err != nil {
+		switch errors.Cause(err) {
+		case context.Canceled, context.DeadlineExceeded:
+			return backoff.Permanent(err)
+		}
+		return errors.Annotate(err, "write checkpoint ts")
+	}
+	return nil
 }
 
 // globalResolvedWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
