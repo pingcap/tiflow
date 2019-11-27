@@ -133,16 +133,20 @@ func (c *ChangeFeedInfo) minimumTablesCapture(captures map[string]*model.Capture
 		return ""
 	}
 
-	var minCount int
-	var minID string
 	for id := range captures {
-		minID = id
-		break
+		// We have not dispatch any table to this capture yet.
+		if _, ok := c.ProcessorInfos[id]; !ok {
+			return id
+		}
 	}
+
+	var minCount int = math.MaxInt64
+	var minID string
 
 	for id, pinfo := range c.ProcessorInfos {
 		if len(pinfo.TableInfos) < minCount {
 			minID = id
+			minCount = len(pinfo.TableInfos)
 		}
 	}
 
