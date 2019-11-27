@@ -46,7 +46,7 @@ type Capture struct {
 	ownerManager roles.Manager
 	ownerWorker  *ownerImpl
 
-	processors map[string]*processorImpl
+	processors map[string]*processor
 
 	info *model.CaptureInfo
 }
@@ -79,7 +79,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	}
 
 	c = &Capture{
-		processors:   make(map[string]*processorImpl),
+		processors:   make(map[string]*processor),
 		pdEndpoints:  pdEndpoints,
 		etcdClient:   cli,
 		ownerManager: manager,
@@ -93,12 +93,12 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 var _ processorCallback = &Capture{}
 
 // OnRunProcessor implements processorCallback.
-func (c *Capture) OnRunProcessor(p *processorImpl) {
+func (c *Capture) OnRunProcessor(p *processor) {
 	c.processors[p.changefeedID] = p
 }
 
 // OnStopProcessor implements processorCallback.
-func (c *Capture) OnStopProcessor(p *processorImpl) {
+func (c *Capture) OnStopProcessor(p *processor) {
 	delete(c.processors, p.changefeedID)
 }
 
