@@ -15,10 +15,12 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/pingcap/errors"
 )
 
+// ProcessorsInfo contains the info about tables that processor need to process.
 type ProcessTableInfo struct {
 	ID      uint64 `json:"id"`
 	StartTs uint64 `json:"start-ts"`
@@ -45,9 +47,27 @@ type SubChangeFeedInfo struct {
 	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
 	ResolvedTs uint64 `json:"resolved-ts"`
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
+	// TODO change to be a map for easy update.
 	TableInfos []*ProcessTableInfo `json:"table-infos"`
 	TablePLock *TableLock          `json:"table-p-lock"`
 	TableCLock *TableLock          `json:"table-c-lock"`
+}
+
+// RemoveTable remove the table in TableInfos.
+func (scfi *SubChangeFeedInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
+	for idx, table := range scfi.TableInfos {
+		if table.ID == id {
+			last := scfi.TableInfos[len(scfi.TableInfos)-1]
+			removedTable := scfi.TableInfos[idx]
+
+			scfi.TableInfos[idx] = last
+			scfi.TableInfos = scfi.TableInfos[:len(scfi.TableInfos)-1]
+
+			return removedTable, true
+		}
+	}
+
+	return nil, false
 }
 
 // Marshal returns the json marshal format of a SubChangeFeedInfo
@@ -64,7 +84,7 @@ func (scfi *SubChangeFeedInfo) Unmarshal(data []byte) error {
 
 type CaptureID = string
 type ChangeFeedID = string
-type ProcessorsInfos = map[CaptureID]*SubChangeFeedInfo
+type ProcessorsInfos map[CaptureID]*SubChangeFeedInfo
 
 type ChangeFeedStatus int
 
@@ -76,6 +96,19 @@ const (
 	ChangeFeedDDLExecuteFailed
 )
 
+// String implements fmt.Stringer interface.
+func (p ProcessorsInfos) String() string {
+	s := "{"
+	for id, sinfo := range p {
+		s += fmt.Sprintf("%s: %+v,", id, *sinfo)
+	}
+
+	s += "}"
+
+	return s
+}
+
+// String implements fmt.Stringer interface.
 func (s ChangeFeedStatus) String() string {
 	switch s {
 	case ChangeFeedSyncDML:
@@ -91,17 +124,10 @@ func (s ChangeFeedStatus) String() string {
 }
 
 // ChangeFeedInfo stores information about a ChangeFeed
-// partial fileds are stored in etcd, we may refine this later
 type ChangeFeedInfo struct {
-	Status       ChangeFeedStatus `json:"-"`
-	SinkURI      string           `json:"sink-uri"`
-	ResolvedTs   uint64           `json:"resolved-ts"`
-	CheckpointTs uint64           `json:"checkpoint-ts"`
-	StartTs      uint64           `json:"-"`
-	TargetTs     uint64           `json:"-"`
-
-	ProcessorInfos  ProcessorsInfos `json:"-"`
-	DDLCurrentIndex int             `json:"-"`
+	SinkURI      string `json:"sink-uri"`
+	ResolvedTs   uint64 `json:"resolved-ts"`
+	CheckpointTs uint64 `json:"checkpoint-ts"`
 }
 
 // Marshal returns json encoded string of ChangeFeedInfo, only contains necessary fields stored in storage

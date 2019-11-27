@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tidb/meta"
 )
 
-// LoadHistoryDDLJobs loads all history DDL jobs from TiDB
+// LoadHistoryDDLJobs loads all history DDL jobs from TiDB.
 func LoadHistoryDDLJobs(tiStore tidbkv.Storage) ([]*model.Job, error) {
 	snapMeta, err := getSnapshotMeta(tiStore)
 	if err != nil {
