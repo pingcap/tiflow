@@ -39,12 +39,12 @@ func (s Span) Hack() Span {
 	return r
 }
 
-func GetTableSpan(tableID int64, needEnable bool) Span {
+func GetTableSpan(tableID int64, needEncode bool) Span {
 	sep := byte('_')
 	tablePrefix := tablecodec.GenTablePrefix(tableID)
 	start := append(tablePrefix, sep)
 	end := append(tablePrefix, sep+1)
-	if needEnable {
+	if needEncode {
 		start = codec.EncodeBytes(nil, start)
 		end = codec.EncodeBytes(nil, end)
 	}
