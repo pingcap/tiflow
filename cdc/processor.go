@@ -370,7 +370,7 @@ func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) ([]*model
 		removed = append(removed, oldInfo[i])
 	}
 	for ; j < len(newInfo); j++ {
-		added = append(added, newInfo[i])
+		added = append(added, newInfo[j])
 	}
 	return removed, added
 }

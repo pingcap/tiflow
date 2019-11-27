@@ -112,6 +112,7 @@ func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 		etcdClient:   cli,
 		changefeedID: changefeedID,
 		captureID:    captureID,
+		info:         &model.SubChangeFeedInfo{},
 	}
 }
 

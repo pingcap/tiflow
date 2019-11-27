@@ -198,3 +198,33 @@ func runCase(c *check.C, cases *processorTestCase) {
 	}
 	cancel()
 }
+
+func (p *processorSuite) TestDiffProcessTableInfos(c *check.C) {
+	infos := make([]*model.ProcessTableInfo, 0, 3)
+	for i := uint64(0); i < uint64(3); i++ {
+		infos = append(infos, &model.ProcessTableInfo{ID: i, StartTs: 10 * i})
+	}
+	var (
+		emptyInfo = make([]*model.ProcessTableInfo, 0)
+		cases     = []struct {
+			oldInfo []*model.ProcessTableInfo
+			newInfo []*model.ProcessTableInfo
+			removed []*model.ProcessTableInfo
+			added   []*model.ProcessTableInfo
+		}{
+			{emptyInfo, emptyInfo, emptyInfo, emptyInfo},
+			{[]*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[0]}, emptyInfo, emptyInfo},
+			{emptyInfo, []*model.ProcessTableInfo{infos[0]}, emptyInfo, []*model.ProcessTableInfo{infos[0]}},
+			{[]*model.ProcessTableInfo{infos[0]}, emptyInfo, []*model.ProcessTableInfo{infos[0]}, emptyInfo},
+			{[]*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[1]}, []*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[1]}},
+			{[]*model.ProcessTableInfo{infos[0], infos[1]}, []*model.ProcessTableInfo{infos[1], infos[2]}, []*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[2]}},
+			{[]*model.ProcessTableInfo{infos[1]}, []*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[1]}, []*model.ProcessTableInfo{infos[0]}},
+		}
+	)
+
+	for _, tc := range cases {
+		removed, added := diffProcessTableInfos(tc.oldInfo, tc.newInfo)
+		c.Assert(removed, check.DeepEquals, tc.removed)
+		c.Assert(added, check.DeepEquals, tc.added)
+	}
+}
