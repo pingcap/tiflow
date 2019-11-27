@@ -29,11 +29,8 @@ type ChangeFeedDetail struct {
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
 	StartTs uint64 `json:"start-ts"`
 	// The ChangeFeed will exits until sync to timestamp TargetTs
-	TargetTs uint64 `json:"target-ts"`
-	// start to sync table id lists
-	// TODO: refine it later, use more intuitive table schema.table or something other strategy
-	// TableIDs []uint64 `json:"table-ids"`
-	Info *ChangeFeedInfo `json:"-"`
+	TargetTs uint64          `json:"target-ts"`
+	Info     *ChangeFeedInfo `json:"-"`
 }
 
 // GetStartTs return StartTs if it's  specified or using the CreateTime of changefeed.

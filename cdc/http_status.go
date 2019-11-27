@@ -58,8 +58,8 @@ type status struct {
 	GitHash string `json:"git_hash"`
 }
 
-func (s *Server) writeEtcdInfo(cli *clientv3.Client, w io.Writer) {
-	resp, err := cli.Get(context.Background(), kv.EtcdKeyBase, clientv3.WithPrefix())
+func (s *Server) writeEtcdInfo(ctx context.Context, cli *clientv3.Client, w io.Writer) {
+	resp, err := cli.Get(ctx, kv.EtcdKeyBase, clientv3.WithPrefix())
 	if err != nil {
 		fmt.Fprintf(w, "failed to get info: %s\n\n", err.Error())
 		return
@@ -80,7 +80,7 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	}
 
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")
-	s.writeEtcdInfo(s.capture.etcdClient, w)
+	s.writeEtcdInfo(req.Context(), s.capture.etcdClient, w)
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {

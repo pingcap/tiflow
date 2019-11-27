@@ -147,9 +147,8 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 	owner := &ownerImpl{
 		cancelWatchCapture: cancel,
 		changeFeedInfos:    changeFeedInfos,
-		// ddlHandler:      handler,
-		cfRWriter: handler,
-		manager:   manager,
+		cfRWriter:          handler,
+		manager:            manager,
 	}
 	s.owner = owner
 	err = owner.Run(ctx, 50*time.Millisecond)
