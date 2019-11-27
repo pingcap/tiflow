@@ -343,22 +343,22 @@ var _ = check.Suite(&changefeedInfoSuite{})
 func (s *changefeedInfoSuite) TestMinimumTables(c *check.C) {
 	cf := &ChangeFeedInfo{
 		ProcessorInfos: map[model.CaptureID]*model.SubChangeFeedInfo{
-			"c1": &model.SubChangeFeedInfo{
+			"c1": {
 				TableInfos: make([]*model.ProcessTableInfo, 2),
 			},
-			"c2": &model.SubChangeFeedInfo{
+			"c2": {
 				TableInfos: make([]*model.ProcessTableInfo, 1),
 			},
-			"c3": &model.SubChangeFeedInfo{
+			"c3": {
 				TableInfos: make([]*model.ProcessTableInfo, 3),
 			},
 		},
 	}
 
 	captures := map[string]*model.CaptureInfo{
-		"c1": &model.CaptureInfo{},
-		"c2": &model.CaptureInfo{},
-		"c3": &model.CaptureInfo{},
+		"c1": {},
+		"c2": {},
+		"c3": {},
 	}
 
 	c.Assert(cf.minimumTablesCapture(captures), check.Equals, "c2")
