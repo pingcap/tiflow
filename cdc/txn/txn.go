@@ -30,7 +30,7 @@ type ResolveTsTracker interface {
 }
 
 // CollectRawTxns collects KV events from the inputFn,
-// group them by transactions and send them to the outputFn.
+// groups them by transactions and sends them to the outputFn.
 func CollectRawTxns(
 	ctx context.Context,
 	inputFn func(context.Context) (model.KvOrResolved, error),
