@@ -35,7 +35,6 @@ func (s *cloneSubChangeFeedInfoSuite) TestShouldBeDeepCopy(c *check.C) {
 			{ID: 3},
 		},
 		TablePLock: &TableLock{Ts: 11},
-		TableCLock: &TableLock{Ts: 12},
 	}
 
 	clone := info.Clone()
@@ -47,7 +46,7 @@ func (s *cloneSubChangeFeedInfoSuite) TestShouldBeDeepCopy(c *check.C) {
 			c.Assert(info.ID, check.Equals, uint64(i+1))
 		}
 		c.Assert(clone.TablePLock.Ts, check.Equals, uint64(11))
-		c.Assert(clone.TableCLock.Ts, check.Equals, uint64(12))
+		c.Assert(clone.TableCLock, check.IsNil)
 	}
 
 	assertIsSnapshot()
@@ -55,7 +54,7 @@ func (s *cloneSubChangeFeedInfoSuite) TestShouldBeDeepCopy(c *check.C) {
 	info.CheckPointTs = 1111
 	info.TableInfos[2] = &ProcessTableInfo{ID: 1212}
 	info.TablePLock.Ts = 100
-	info.TableCLock.Ts = 100
+	info.TableCLock = &TableLock{Ts: 100}
 
 	assertIsSnapshot()
 }

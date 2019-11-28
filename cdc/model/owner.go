@@ -96,10 +96,14 @@ func (scfi *SubChangeFeedInfo) Clone() *SubChangeFeedInfo {
 		infos = append(infos, &c)
 	}
 	clone.TableInfos = infos
-	pLock := *scfi.TablePLock
-	clone.TablePLock = &pLock
-	cLock := *scfi.TableCLock
-	clone.TableCLock = &cLock
+	if scfi.TablePLock != nil {
+		pLock := *scfi.TablePLock
+		clone.TablePLock = &pLock
+	}
+	if scfi.TableCLock != nil {
+		cLock := *scfi.TableCLock
+		clone.TableCLock = &cLock
+	}
 	return &clone
 }
 
