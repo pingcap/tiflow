@@ -53,6 +53,12 @@ type SubChangeFeedInfo struct {
 	TableCLock *TableLock          `json:"table-c-lock"`
 }
 
+// String implements fmt.Stringer interface.
+func (scfi *SubChangeFeedInfo) String() string {
+	data, _ := scfi.Marshal()
+	return string(data)
+}
+
 // RemoveTable remove the table in TableInfos.
 func (scfi *SubChangeFeedInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
 	for idx, table := range scfi.TableInfos {

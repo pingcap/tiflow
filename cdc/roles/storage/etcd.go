@@ -21,8 +21,10 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"go.uber.org/zap"
 )
 
 // ChangeFeedInfoRWriter implements `roles.ChangeFeedInfoRWriter` interface
@@ -115,15 +117,20 @@ type ProcessorTsEtcdRWriter struct {
 	captureID    string
 	modRevision  int64
 	info         *model.SubChangeFeedInfo
+	logger       *zap.Logger
 }
 
 // NewProcessorTsEtcdRWriter returns a new `*ChangeFeedInfoRWriter` instance
 func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID string) *ProcessorTsEtcdRWriter {
+	logger := log.L().With(zap.String("changefeed id", changefeedID)).
+		With(zap.String("capture id", captureID))
+
 	return &ProcessorTsEtcdRWriter{
 		etcdClient:   cli,
 		changefeedID: changefeedID,
 		captureID:    captureID,
 		info:         &model.SubChangeFeedInfo{},
+		logger:       logger,
 	}
 }
 
@@ -139,6 +146,7 @@ func (rw *ProcessorTsEtcdRWriter) updateSubChangeFeedInfo(
 	}
 	rw.modRevision = modRevision
 	updateInfoFn(info)
+	rw.logger.Debug("update info from etcd", zap.Stringer("info", info))
 	return nil
 }
 
@@ -181,6 +189,10 @@ func (rw *ProcessorTsEtcdRWriter) writeTsOrUpToDate(
 		}
 		return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
 	}
+
+	rw.logger.Debug("update subchangefeed info success",
+		zap.Int64("modRevision", rw.modRevision),
+		zap.Stringer("info", rw.info))
 
 	rw.modRevision = resp.Header.Revision
 	return nil

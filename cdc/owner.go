@@ -177,6 +177,12 @@ func (c *ChangeFeedInfo) cleanTables(ctx context.Context) {
 			break
 		}
 
+		log.Info("cleanup table success",
+			zap.Uint64("table id", id),
+			zap.String("capture id", captureID))
+
+		log.Debug("after remove", zap.Stringer("subchangefeed info", subInfo))
+
 		cleanIDs = append(cleanIDs, id)
 	}
 
@@ -236,6 +242,7 @@ func (c *ChangeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 }
 
 func (c *ChangeFeedInfo) applyJob(job *pmodel.Job) error {
+	log.Info("apply job", zap.String("sql", job.Query), zap.Int64("job id", job.ID))
 
 	schamaName, tableName, _, err := c.schema.HandleDDL(job)
 	if err != nil {
@@ -409,7 +416,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			ChangeFeedInfo: &model.ChangeFeedInfo{
 				SinkURI:      changefeed.SinkURI,
 				ResolvedTs:   0,
-				CheckpointTs: 0,
+				CheckpointTs: detail.GetCheckpointTs(),
 			},
 			Status:          model.ChangeFeedSyncDML,
 			TargetTs:        targetTs,
@@ -507,7 +514,10 @@ func (o *ownerImpl) calcResolvedTs() error {
 		}
 
 		cfInfo.ResolvedTs = minResolvedTs
-		cfInfo.CheckpointTs = minCheckpointTs
+
+		if minCheckpointTs > cfInfo.CheckpointTs {
+			cfInfo.CheckpointTs = minCheckpointTs
+		}
 
 		log.Debug("update changefeed", zap.String("id", cfInfo.ID),
 			zap.Uint64("checkpoint ts", minCheckpointTs),
