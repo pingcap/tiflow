@@ -60,8 +60,8 @@ type ProcessorTsRWriter interface {
 	WriteCheckpointTs(ctx context.Context, checkpointTs uint64) error
 	// ReadGlobalResolvedTs reads the global resolvedTs from the storage
 	ReadGlobalResolvedTs(ctx context.Context) (uint64, error)
-	// CloneSubChangeFeedInfo returns a copy of *model.SubChangeFeedInfo
-	CloneSubChangeFeedInfo() (*model.SubChangeFeedInfo, error)
+	// GetSubChangeFeedInfo returns a copy of *model.SubChangeFeedInfo
+	GetSubChangeFeedInfo() *model.SubChangeFeedInfo
 	// WriteTableCLock writes C-lock to the storage
 	WriteTableCLock(ctx context.Context, checkpointTs uint64) error
 }
@@ -399,19 +399,13 @@ func (p *processor) checkpointWorker(ctx context.Context) error {
 				checkpointTs = e.Ts
 			}
 		case <-time.After(1 * time.Second):
-			oldInfo, err := p.tsRWriter.CloneSubChangeFeedInfo()
-			if err != nil {
-				return err
-			}
-			err = p.tsRWriter.WriteCheckpointTs(ctx, checkpointTs)
+			oldInfo := p.tsRWriter.GetSubChangeFeedInfo()
+			err := p.tsRWriter.WriteCheckpointTs(ctx, checkpointTs)
 			// TODO: add retry when meeting error
 			if err != nil {
 				return errors.Annotate(err, "write checkpoint ts")
 			}
-			newInfo, err := p.tsRWriter.CloneSubChangeFeedInfo()
-			if err != nil {
-				return err
-			}
+			newInfo := p.tsRWriter.GetSubChangeFeedInfo()
 			err = p.handleTables(ctx, oldInfo, newInfo, checkpointTs)
 			if err != nil {
 				return errors.Annotate(err, "handle tables")

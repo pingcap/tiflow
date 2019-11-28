@@ -67,8 +67,8 @@ func (s *mockTsRWriter) SetGlobalResolvedTs(ts uint64) {
 	s.globalResolvedTs = ts
 }
 
-func (s *mockTsRWriter) CloneSubChangeFeedInfo() (*model.SubChangeFeedInfo, error) {
-	return nil, nil
+func (s *mockTsRWriter) GetSubChangeFeedInfo() *model.SubChangeFeedInfo {
+	return nil
 }
 
 func (s *mockTsRWriter) WriteTableCLock(ctx context.Context, checkpointTs uint64) error {

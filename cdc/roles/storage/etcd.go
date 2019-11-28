@@ -14,9 +14,7 @@
 package storage
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"sync"
 
 	"github.com/cenkalti/backoff"
@@ -258,16 +256,9 @@ func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uin
 	return info.ResolvedTs, nil
 }
 
-// CloneSubChangeFeedInfo returns a deep copy of *model.SubChangeFeedInfo stored in ProcessorTsEtcdRWriter
-func (rw *ProcessorTsEtcdRWriter) CloneSubChangeFeedInfo() (*model.SubChangeFeedInfo, error) {
-	var buf bytes.Buffer
-	err := json.NewEncoder(&buf).Encode(*rw.info)
-	if err != nil {
-		return nil, err
-	}
-	info := &model.SubChangeFeedInfo{}
-	err = json.Unmarshal(buf.Bytes(), &info)
-	return info, err
+// GetSubChangeFeedInfo returns a deep copy of *model.SubChangeFeedInfo stored in ProcessorTsEtcdRWriter
+func (rw *ProcessorTsEtcdRWriter) GetSubChangeFeedInfo() *model.SubChangeFeedInfo {
+	return rw.info.Clone()
 }
 
 // WriteTableCLock writes C-lock to etcd
