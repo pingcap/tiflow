@@ -21,7 +21,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type MVCCListener struct {
+type mvccListener struct {
 	mocktikv.MVCCStore
 	mu           sync.RWMutex
 	postPrewrite func(req *kvrpcpb.PrewriteRequest, result []error)
@@ -29,8 +29,8 @@ type MVCCListener struct {
 	postRollback func(keys [][]byte, startTs uint64, result error)
 }
 
-func NewMVCCListener(store mocktikv.MVCCStore) *MVCCListener {
-	return &MVCCListener{
+func newMVCCListener(store mocktikv.MVCCStore) *mvccListener {
+	return &mvccListener{
 		MVCCStore:    store,
 		postPrewrite: func(_ *kvrpcpb.PrewriteRequest, _ []error) {},
 		postCommit:   func(_ [][]byte, _, _ uint64, _ error) {},
@@ -38,54 +38,60 @@ func NewMVCCListener(store mocktikv.MVCCStore) *MVCCListener {
 	}
 }
 
-func (l *MVCCListener) Prewrite(req *kvrpcpb.PrewriteRequest) []error {
+// Prewrite implements the MVCCStore interface
+func (l *mvccListener) Prewrite(req *kvrpcpb.PrewriteRequest) []error {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	result := l.MVCCStore.Prewrite(req)
-	log.Debug("MVCCListener Prewrite", zap.Reflect("req", req), zap.Reflect("result", result))
+	log.Debug("mvccListener Prewrite", zap.Reflect("req", req), zap.Reflect("result", result))
 	l.postPrewrite(req, result)
 	return result
 }
-func (l *MVCCListener) Commit(keys [][]byte, startTs, commitTs uint64) error {
+
+// Commit implements the MVCCStore interface
+func (l *mvccListener) Commit(keys [][]byte, startTs, commitTs uint64) error {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	result := l.MVCCStore.Commit(keys, startTs, commitTs)
-	log.Debug("MVCCListener Commit", zap.Reflect("keys", keys),
+	log.Debug("mvccListener Commit", zap.Reflect("keys", keys),
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("commitTs", commitTs),
 		zap.Reflect("result", result))
 	l.postCommit(keys, startTs, commitTs, result)
 	return result
 }
-func (l *MVCCListener) Rollback(keys [][]byte, startTs uint64) error {
+
+// Rollback implements the MVCCStore interface
+func (l *mvccListener) Rollback(keys [][]byte, startTs uint64) error {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	result := l.MVCCStore.Rollback(keys, startTs)
-	log.Debug("MVCCListener Commit", zap.Reflect("keys", keys),
+	log.Debug("mvccListener Commit", zap.Reflect("keys", keys),
 		zap.Uint64("startTs", startTs),
 		zap.Reflect("result", result))
 	l.postRollback(keys, startTs, result)
 	return result
 }
 
-func (l *MVCCListener) RegisterPostPrewrite(fn func(req *kvrpcpb.PrewriteRequest, result []error)) {
+func (l *mvccListener) registerPostPrewrite(fn func(req *kvrpcpb.PrewriteRequest, result []error)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.postPrewrite = fn
 }
 
-func (l *MVCCListener) RegisterPostCommit(fn func(keys [][]byte, startTs, commitTs uint64, result error)) {
+func (l *mvccListener) registerPostCommit(fn func(keys [][]byte, startTs, commitTs uint64, result error)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.postCommit = fn
 }
 
-func (l *MVCCListener) RegisterPostRollback(fn func(keys [][]byte, startTs uint64, result error)) {
+func (l *mvccListener) registerPostRollback(fn func(keys [][]byte, startTs uint64, result error)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.postRollback = fn
 }
 
+// MockPullerManager keeps track of transactions for mock pullers
 type MockPullerManager struct {
 	cluster   *mocktikv.Cluster
 	mvccStore mocktikv.MVCCStore
@@ -153,6 +159,7 @@ func (p *mockPuller) Output() Buffer {
 	panic("unreachable")
 }
 
+// NewMockPullerManager creates and sets up a mock puller manager
 func NewMockPullerManager(c *check.C) *MockPullerManager {
 	m := &MockPullerManager{
 		txnMap:   make(map[uint64]*kvrpcpb.PrewriteRequest),
@@ -168,7 +175,7 @@ func (m *MockPullerManager) setUp() {
 	m.cluster = mocktikv.NewCluster()
 	mocktikv.BootstrapWithSingleStore(m.cluster)
 
-	mvccListener := NewMVCCListener(mocktikv.MustNewMVCCStore())
+	mvccListener := newMVCCListener(mocktikv.MustNewMVCCStore())
 
 	m.mvccStore = mvccListener
 	store, err := mockstore.NewMockTikvStore(
@@ -192,11 +199,12 @@ func (m *MockPullerManager) setUp() {
 	m.tidbKit = testkit.NewTestKit(m.c, m.store)
 	m.MustExec("use test;")
 
-	mvccListener.RegisterPostPrewrite(m.postPrewrite)
-	mvccListener.RegisterPostCommit(m.postCommit)
-	mvccListener.RegisterPostRollback(m.postRollback)
+	mvccListener.registerPostPrewrite(m.postPrewrite)
+	mvccListener.registerPostCommit(m.postCommit)
+	mvccListener.registerPostRollback(m.postRollback)
 }
 
+// Run watches and captures all committed rawTxns
 func (m *MockPullerManager) Run(ctx context.Context) {
 	go func() {
 		for {
@@ -224,6 +232,7 @@ func (m *MockPullerManager) Run(ctx context.Context) {
 	}()
 }
 
+// CreatePuller returns a mock puller with the specified start ts and spans
 func (m *MockPullerManager) CreatePuller(startTs uint64, spans []util.Span) Puller {
 	return &mockPuller{
 		spans:   spans,
@@ -232,10 +241,12 @@ func (m *MockPullerManager) CreatePuller(startTs uint64, spans []util.Span) Pull
 	}
 }
 
+// MustExec delegates to TestKit.MustExec
 func (m *MockPullerManager) MustExec(sql string, args ...interface{}) {
 	m.tidbKit.MustExec(sql, args...)
 }
 
+// GetTableInfo queries the info schema with the table name and returns the TableInfo
 func (m *MockPullerManager) GetTableInfo(schema, table string) *timodel.TableInfo {
 	is := m.domain.InfoSchema()
 	tbl, err := is.TableByName(timodel.NewCIStr(schema), timodel.NewCIStr(table))

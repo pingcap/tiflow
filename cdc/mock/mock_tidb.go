@@ -18,8 +18,9 @@ import (
 	"github.com/pingcap/check"
 )
 
+// TiDB is used in tests to act as TiDB
 // TODO deprecate this Mock TiDB
-type MockTiDB struct {
+type TiDB struct {
 	cluster   *mocktikv.Cluster
 	mvccStore mocktikv.MVCCStore
 	store     tidbkv.Storage
@@ -29,8 +30,9 @@ type MockTiDB struct {
 	kvs map[string]string
 }
 
-func NewMockPuller() (*MockTiDB, error) {
-	p := &MockTiDB{
+// NewMockPuller creates a mock puller
+func NewMockPuller() (*TiDB, error) {
+	p := &TiDB{
 		kvs: make(map[string]string),
 	}
 
@@ -44,7 +46,7 @@ func NewMockPuller() (*MockTiDB, error) {
 	return p, nil
 }
 
-func (p *MockTiDB) setUp() (err error) {
+func (p *TiDB) setUp() (err error) {
 	p.Parser = parser.New()
 	p.cluster = mocktikv.NewCluster()
 	mocktikv.BootstrapWithSingleStore(p.cluster)
@@ -69,7 +71,7 @@ func (p *MockTiDB) setUp() (err error) {
 	return nil
 }
 
-func (p *MockTiDB) tearDown() {
+func (p *TiDB) tearDown() {
 	p.domain.Close()
 	p.store.Close()
 }
@@ -77,7 +79,7 @@ func (p *MockTiDB) tearDown() {
 // We scan all the KV space to get the changed KV events every time after
 // execute a SQL and use the current version as the ts of the KV events
 // because there's no way to get the true commit ts of the kv
-func (p *MockTiDB) updateEvent() (entrys []*model.RawKVEntry, err error) {
+func (p *TiDB) updateEvent() (entrys []*model.RawKVEntry, err error) {
 	ver, err := p.store.CurrentVersion()
 	if err != nil {
 		return nil, err
@@ -129,7 +131,7 @@ func (p *MockTiDB) updateEvent() (entrys []*model.RawKVEntry, err error) {
 }
 
 // MustExec execute the sql and return all the KVEntry events
-func (p *MockTiDB) MustExec(c *check.C, sql string, args ...interface{}) []*model.RawKVEntry {
+func (p *TiDB) MustExec(c *check.C, sql string, args ...interface{}) []*model.RawKVEntry {
 	tk := testkit.NewTestKit(c, p.store)
 	tk.MustExec(sql, args...)
 
@@ -139,12 +141,14 @@ func (p *MockTiDB) MustExec(c *check.C, sql string, args ...interface{}) []*mode
 	return entrys
 }
 
-func (p *MockTiDB) ScanAll(fn func(*model.RawKVEntry)) {
+// ScanAll scans all key value pairs and call the provided function with RawKVEntry one by one
+func (p *TiDB) ScanAll(fn func(*model.RawKVEntry)) {
 	for key, value := range p.kvs {
 		fn(&model.RawKVEntry{Key: []byte(key), Value: []byte(value), OpType: model.OpTypePut})
 	}
 }
 
-func (p *MockTiDB) GetAllHistoryDDLJobs() ([]*timodel.Job, error) {
+// GetAllHistoryDDLJobs returns all finished DDL Jobs
+func (p *TiDB) GetAllHistoryDDLJobs() ([]*timodel.Job, error) {
 	return kv.LoadHistoryDDLJobs(p.store)
 }

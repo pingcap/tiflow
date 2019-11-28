@@ -234,7 +234,7 @@ func (m *ownerManager) GetOwnerID(ctx context.Context) (string, error) {
 	return string(resp.Kvs[0].Value), nil
 }
 
-// GetOwnerKey check the owner is id and return the owner key.
+// GetOwnerInfo check the owner is id and return the owner key.
 func GetOwnerInfo(ctx context.Context, elec *concurrency.Election, id string) (string, error) {
 	resp, err := elec.Leader(ctx)
 	if err != nil {

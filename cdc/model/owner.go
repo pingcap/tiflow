@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/errors"
 )
 
-// ProcessorsInfo contains the info about tables that processor need to process.
+// ProcessTableInfo contains the info about tables that processor need to process.
 type ProcessTableInfo struct {
 	ID      uint64 `json:"id"`
 	StartTs uint64 `json:"start-ts"`
@@ -88,6 +88,7 @@ func (scfi *SubChangeFeedInfo) Unmarshal(data []byte) error {
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 
+// Clone returns a deep-clone of the struct
 func (scfi *SubChangeFeedInfo) Clone() *SubChangeFeedInfo {
 	clone := *scfi
 	infos := make([]*ProcessTableInfo, 0, len(scfi.TableInfos))
@@ -107,17 +108,28 @@ func (scfi *SubChangeFeedInfo) Clone() *SubChangeFeedInfo {
 	return &clone
 }
 
+// CaptureID is the type for capture ID
 type CaptureID = string
+
+// ChangeFeedID is the type for change feed ID
 type ChangeFeedID = string
+
+// ProcessorsInfos maps from capture IDs to SubChangeFeedInfo
 type ProcessorsInfos map[CaptureID]*SubChangeFeedInfo
 
+// ChangeFeedStatus is the type for change feed status
 type ChangeFeedStatus int
 
 const (
+	// ChangeFeedUnknown stands for all unknown status
 	ChangeFeedUnknown ChangeFeedStatus = iota
+	// ChangeFeedSyncDML means DMLs are being processed
 	ChangeFeedSyncDML
+	// ChangeFeedWaitToExecDDL means we are waiting to execute a DDL
 	ChangeFeedWaitToExecDDL
+	// ChangeFeedExecDDL means a DDL is being executed
 	ChangeFeedExecDDL
+	// ChangeFeedDDLExecuteFailed means that an error occurred when executing a DDL
 	ChangeFeedDDLExecuteFailed
 )
 

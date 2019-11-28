@@ -16,7 +16,7 @@ type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
-func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.Storage) {
+func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.TiDB, *schema.Storage) {
 	puller, err := mock.NewMockPuller()
 	c.Assert(err, check.IsNil)
 	var jobs []*timodel.Job
@@ -24,10 +24,10 @@ func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.MockTiDB, *schema.S
 	for _, sql := range sqls {
 		rawEntries := puller.MustExec(c, sql)
 		for _, raw := range rawEntries {
-			e, err := Unmarshal(raw)
+			e, err := unmarshal(raw)
 			c.Assert(err, check.IsNil)
 			switch e := e.(type) {
-			case *DDLJobKVEntry:
+			case *ddlJobKVEntry:
 				jobs = append(jobs, e.Job)
 			}
 		}

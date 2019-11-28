@@ -44,6 +44,7 @@ type pullerImpl struct {
 	needEncode bool
 }
 
+// CancellablePuller is a puller that can be stopped with the Cancel function
 type CancellablePuller struct {
 	Puller
 
@@ -62,7 +63,7 @@ func NewPuller(
 		pdCli:        pdCli,
 		checkpointTs: checkpointTs,
 		spans:        spans,
-		buf:          MakeBuffer(),
+		buf:          makeBuffer(),
 		tsTracker:    makeSpanFrontier(spans...),
 		needEncode:   needEncode,
 	}
@@ -76,9 +77,6 @@ func (p *pullerImpl) Output() Buffer {
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	// TODO pull from tikv and push into buf
-	// need buffer in memory first
-
 	cli, err := kv.NewCDCClient(p.pdCli)
 	if err != nil {
 		return errors.Annotate(err, "create cdc client failed")

@@ -39,6 +39,7 @@ func (s Span) Hack() Span {
 	return r
 }
 
+// GetTableSpan returns the span to watch for the specified table
 func GetTableSpan(tableID int64, needEncode bool) Span {
 	sep := byte('_')
 	tablePrefix := tablecodec.GenTablePrefix(tableID)
@@ -54,6 +55,7 @@ func GetTableSpan(tableID int64, needEncode bool) Span {
 	}
 }
 
+// GetDDLSpan returns the span to watch for DDL related events
 func GetDDLSpan() Span {
 	metaPrefix := []byte("m")
 	ddlJobListKey := []byte("DDLJobList")
@@ -96,6 +98,7 @@ func KeyInSpan(k []byte, span Span) bool {
 	return false
 }
 
+// StartCompare compares two start keys.
 // Nil means Negative infinity
 // The result will be 0 if lhs==rhs, -1 if lhs < rhs, and +1 if lhs > rhs
 func StartCompare(lhs []byte, rhs []byte) int {
@@ -114,6 +117,7 @@ func StartCompare(lhs []byte, rhs []byte) int {
 	return bytes.Compare(lhs, rhs)
 }
 
+// EndCompare compares two end keys.
 // Nil means Positive infinity
 // The result will be 0 if lhs==rhs, -1 if lhs < rhs, and +1 if lhs > rhs
 func EndCompare(lhs []byte, rhs []byte) int {

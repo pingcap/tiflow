@@ -27,10 +27,10 @@ import (
 	"github.com/pingcap/tidb/types"
 )
 
-type KVEntry interface {
+type kvEntry interface {
 }
 
-type RowKVEntry struct {
+type rowKVEntry struct {
 	Ts       uint64
 	TableID  int64
 	RecordID int64
@@ -38,7 +38,7 @@ type RowKVEntry struct {
 	Row      map[int64]types.Datum
 }
 
-type IndexKVEntry struct {
+type indexKVEntry struct {
 	Ts         uint64
 	TableID    int64
 	IndexID    int64
@@ -47,26 +47,26 @@ type IndexKVEntry struct {
 	RecordID   int64
 }
 
-type DDLJobKVEntry struct {
+type ddlJobKVEntry struct {
 	Ts    uint64
 	JobID int64
 	Job   *timodel.Job
 }
 
-type UpdateTableKVEntry struct {
+type updateTableKVEntry struct {
 	Ts        uint64
 	DbID      int64
 	TableID   int64
 	TableInfo *timodel.TableInfo
 }
 
-type UnknownKVEntry struct {
+type unknownKVEntry struct {
 	model.RawKVEntry
 }
 
-func (idx *IndexKVEntry) Unflatten(tableInfo *timodel.TableInfo, loc *time.Location) error {
+func (idx *indexKVEntry) unflatten(tableInfo *timodel.TableInfo, loc *time.Location) error {
 	if tableInfo.ID != idx.TableID {
-		return errors.New("wrong table info in Unflatten")
+		return errors.New("wrong table info in unflatten")
 	}
 	index := tableInfo.Indices[idx.IndexID-1]
 	if !isDistinct(index, idx.IndexValue) {
@@ -100,9 +100,9 @@ func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
 	return false
 }
 
-func (row *RowKVEntry) Unflatten(tableInfo *timodel.TableInfo, loc *time.Location) error {
+func (row *rowKVEntry) unflatten(tableInfo *timodel.TableInfo, loc *time.Location) error {
 	if tableInfo.ID != row.TableID {
-		return errors.New("wrong table info in Unflatten")
+		return errors.New("wrong table info in unflatten")
 	}
 	for i, v := range row.Row {
 		fieldType := &tableInfo.Columns[i-1].FieldType
@@ -115,17 +115,17 @@ func (row *RowKVEntry) Unflatten(tableInfo *timodel.TableInfo, loc *time.Locatio
 	return nil
 }
 
-func Unmarshal(raw *model.RawKVEntry) (KVEntry, error) {
+func unmarshal(raw *model.RawKVEntry) (kvEntry, error) {
 	switch {
 	case bytes.HasPrefix(raw.Key, tablePrefix):
 		return unmarshalTableKVEntry(raw)
 	case bytes.HasPrefix(raw.Key, metaPrefix) && raw.OpType == model.OpTypePut:
 		return unmarshalMetaKVEntry(raw)
 	}
-	return &UnknownKVEntry{*raw}, nil
+	return &unknownKVEntry{*raw}, nil
 }
 
-func unmarshalTableKVEntry(raw *model.RawKVEntry) (KVEntry, error) {
+func unmarshalTableKVEntry(raw *model.RawKVEntry) (kvEntry, error) {
 	key, tableID, err := decodeTableID(raw.Key)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -143,7 +143,7 @@ func unmarshalTableKVEntry(raw *model.RawKVEntry) (KVEntry, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		return &RowKVEntry{
+		return &rowKVEntry{
 			Ts:       raw.Ts,
 			TableID:  tableID,
 			RecordID: recordID,
@@ -165,7 +165,7 @@ func unmarshalTableKVEntry(raw *model.RawKVEntry) (KVEntry, error) {
 				return nil, errors.Trace(err)
 			}
 		}
-		return &IndexKVEntry{
+		return &indexKVEntry{
 			Ts:         raw.Ts,
 			TableID:    tableID,
 			IndexID:    indexID,
@@ -175,7 +175,7 @@ func unmarshalTableKVEntry(raw *model.RawKVEntry) (KVEntry, error) {
 		}, nil
 
 	}
-	return &UnknownKVEntry{*raw}, nil
+	return &unknownKVEntry{*raw}, nil
 }
 
 const (
@@ -193,14 +193,14 @@ var (
 	tableMetaPrefixLen = len(tableMetaPrefix)
 )
 
-func unmarshalMetaKVEntry(raw *model.RawKVEntry) (KVEntry, error) {
+func unmarshalMetaKVEntry(raw *model.RawKVEntry) (kvEntry, error) {
 	meta, err := decodeMetaKey(raw.Key)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	switch meta.GetType() {
+	switch meta.getType() {
 	case ListData:
-		k := meta.(MetaListData)
+		k := meta.(metaListData)
 		if k.key == ddlJobListKey && raw.OpType == model.OpTypePut {
 			job := &timodel.Job{}
 			err := json.Unmarshal(raw.Value, job)
@@ -211,7 +211,7 @@ func unmarshalMetaKVEntry(raw *model.RawKVEntry) (KVEntry, error) {
 				// FinishedTS is only set when the job is synced,
 				// but we can use the entry's ts here
 				job.BinlogInfo.FinishedTS = raw.Ts
-				return &DDLJobKVEntry{
+				return &ddlJobKVEntry{
 					Ts:    raw.Ts,
 					JobID: int64(job.ID),
 					Job:   job,
@@ -219,7 +219,7 @@ func unmarshalMetaKVEntry(raw *model.RawKVEntry) (KVEntry, error) {
 			}
 		}
 	case HashData:
-		k := meta.(MetaHashData)
+		k := meta.(metaHashData)
 		if strings.HasPrefix(k.key, dbMetaPrefix) {
 			key := k.key[len(dbMetaPrefix):]
 			var tableID int64
@@ -239,7 +239,7 @@ func unmarshalMetaKVEntry(raw *model.RawKVEntry) (KVEntry, error) {
 				if err != nil {
 					return nil, errors.Annotatef(err, "data: %v", raw.Value)
 				}
-				return &UpdateTableKVEntry{
+				return &updateTableKVEntry{
 					Ts:        raw.Ts,
 					DbID:      dbID,
 					TableID:   tableID,
@@ -248,5 +248,5 @@ func unmarshalMetaKVEntry(raw *model.RawKVEntry) (KVEntry, error) {
 			}
 		}
 	}
-	return &UnknownKVEntry{*raw}, nil
+	return &unknownKVEntry{*raw}, nil
 }

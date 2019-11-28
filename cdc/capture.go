@@ -129,6 +129,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	return errg.Wait()
 }
 
+// Close closes the capture by unregistering it from etcd
 func (c *Capture) Close(ctx context.Context) error {
 	return errors.Trace(DeleteCaptureInfo(ctx, c.info.ID, c.etcdClient))
 }

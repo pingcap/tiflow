@@ -206,6 +206,7 @@ func mustDeleteKey(t require.TestingT, storage kv.Storage, key []byte) {
 	require.NoError(t, err)
 }
 
+// TestGetKVSimple test simple KV operations
 func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	cli, err := NewCDCClient(pdCli)
 	require.NoError(t, err)

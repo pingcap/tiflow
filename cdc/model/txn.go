@@ -59,6 +59,7 @@ type Txn struct {
 	Ts uint64
 }
 
+// IsDDL returns true if it's a DDL transaction
 func (t Txn) IsDDL() bool {
 	return t.DDL != nil
 }

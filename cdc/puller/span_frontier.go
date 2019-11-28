@@ -11,7 +11,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 )
 
-// Generic intervals
+// Bytes represents generic intervals
 type Bytes []byte
 
 // Compare implements interval.Comparable.
@@ -43,12 +43,20 @@ type spanFrontierEntry struct {
 	index int
 }
 
+// Mutable implements interval.Mutable
 type Mutable struct{ start, end Bytes }
 
-func (m *Mutable) Start() interval.Comparable     { return m.start }
-func (m *Mutable) End() interval.Comparable       { return m.end }
+// Start implements interval.Mutable
+func (m *Mutable) Start() interval.Comparable { return m.start }
+
+// End implements interval.Mutable
+func (m *Mutable) End() interval.Comparable { return m.end }
+
+// SetStart implements interval.Mutable
 func (m *Mutable) SetStart(c interval.Comparable) { m.start = c.(Bytes) }
-func (m *Mutable) SetEnd(c interval.Comparable)   { m.end = c.(Bytes) }
+
+// SetEnd implements interval.Mutable
+func (m *Mutable) SetEnd(c interval.Comparable) { m.end = c.(Bytes) }
 
 // Overlap implements interval.Overlapper
 func (s spanFrontierEntry) Overlap(b interval.Range) bool {

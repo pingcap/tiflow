@@ -28,7 +28,7 @@ type bufferSuite struct{}
 var _ = check.Suite(&bufferSuite{})
 
 func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
-	b := MakeBuffer()
+	b := makeBuffer()
 	ctx := context.Background()
 	var wg sync.WaitGroup
 
@@ -57,7 +57,7 @@ func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
 }
 
 func (bs *bufferSuite) TestWaitsCanBeCanceled(c *check.C) {
-	b := MakeBuffer()
+	b := makeBuffer()
 	ctx := context.Background()
 
 	timeout, cancel := context.WithTimeout(ctx, time.Millisecond)

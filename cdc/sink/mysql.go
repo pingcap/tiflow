@@ -53,6 +53,7 @@ type mysqlSink struct {
 
 var _ Sink = &mysqlSink{}
 
+// NewMySQLSink creates a new MySQL sink
 func NewMySQLSink(
 	sinkURI string,
 	infoGetter TableInfoGetter,
@@ -72,6 +73,7 @@ func NewMySQLSink(
 	return &sink, nil
 }
 
+// NewMySQLSinkUsingSchema creates a new MySQL sink
 func NewMySQLSinkUsingSchema(db *sql.DB, schemaStorage *schema.Storage) Sink {
 	inspector := &cachedInspector{
 		db:    db,
@@ -88,6 +90,7 @@ func NewMySQLSinkUsingSchema(db *sql.DB, schemaStorage *schema.Storage) Sink {
 	}
 }
 
+// NewMySQLSinkDDLOnly returns a sink that only processes DDL
 func NewMySQLSinkDDLOnly(db *sql.DB) Sink {
 	return &mysqlSink{
 		db:      db,

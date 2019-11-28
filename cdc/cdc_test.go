@@ -22,7 +22,7 @@ func TestSuite(t *testing.T) { TestingT(t) }
 
 type CDCSuite struct {
 	database string
-	puller   *mock.MockTiDB
+	puller   *mock.TiDB
 	mock     sqlmock.Sqlmock
 	mounter  *entry.Mounter
 	sink     sink.Sink
