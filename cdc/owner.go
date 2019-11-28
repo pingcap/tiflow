@@ -53,6 +53,11 @@ type ChangeFeedInfoRWriter interface {
 	Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error
 }
 
+type orphanTable struct {
+	schema.TableName
+	startTs uint64
+}
+
 type ChangeFeedInfo struct {
 	ID     string
 	detail *model.ChangeFeedDetail
@@ -70,7 +75,7 @@ type ChangeFeedInfo struct {
 	ddlJobHistory   []*model.DDL
 
 	tables        map[uint64]schema.TableName
-	orphanTables  map[uint64]schema.TableName
+	orphanTables  map[uint64]orphanTable
 	toCleanTables map[uint64]struct{}
 }
 
@@ -105,13 +110,16 @@ func filter(_ *model.ChangeFeedDetail, table schema.TableName) bool {
 	return false
 }
 
-func (c *ChangeFeedInfo) addTable(id uint64, table schema.TableName) {
+func (c *ChangeFeedInfo) addTable(id, startTs uint64, table schema.TableName) {
 	if filter(c.detail, table) {
 		return
 	}
 
 	c.tables[id] = table
-	c.orphanTables[id] = table
+	c.orphanTables[id] = orphanTable{
+		TableName: table,
+		startTs:   startTs,
+	}
 }
 
 func (c *ChangeFeedInfo) removeTable(id uint64) {
@@ -202,7 +210,7 @@ func (c *ChangeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 		return
 	}
 
-	for tableID, tableName := range c.orphanTables {
+	for tableID, orphan := range c.orphanTables {
 		captureID := c.selectCapture(captures)
 		if len(captureID) == 0 {
 			return
@@ -216,7 +224,7 @@ func (c *ChangeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 		info.ResolvedTs = 0
 		info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{
 			ID:      tableID,
-			StartTs: c.CheckpointTs,
+			StartTs: orphan.startTs,
 		})
 
 		err := kv.PutSubChangeFeedInfo(ctx, c.client, c.ID, captureID, info)
@@ -227,8 +235,8 @@ func (c *ChangeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 
 		log.Info("dispatch table success",
 			zap.Uint64("table id", tableID),
-			zap.Uint64("start ts", c.CheckpointTs),
-			zap.Stringer("table name", tableName),
+			zap.Uint64("start ts", orphan.startTs),
+			zap.Stringer("table name", orphan.TableName),
 			zap.String("capture", captureID))
 		c.ProcessorInfos[captureID] = info
 		delete(c.orphanTables, tableID)
@@ -246,7 +254,7 @@ func (c *ChangeFeedInfo) applyJob(job *pmodel.Job) error {
 	switch job.Type {
 	case pmodel.ActionCreateTable:
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		c.addTable(addID, schema.TableName{Schema: schamaName, Table: tableName})
+		c.addTable(addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
 	case pmodel.ActionDropTable:
 		dropID := uint64(job.TableID)
 		c.removeTable(dropID)
@@ -258,7 +266,7 @@ func (c *ChangeFeedInfo) applyJob(job *pmodel.Job) error {
 		c.removeTable(dropID)
 
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		c.addTable(addID, schema.TableName{Schema: schamaName, Table: tableName})
+		c.addTable(addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
 	default:
 	}
 
@@ -387,14 +395,17 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 		ddlHandler := NewDDLHandler(o.pdClient, detail.GetCheckpointTs())
 
 		tables := make(map[uint64]schema.TableName)
-		orphanTables := make(map[uint64]schema.TableName)
+		orphanTables := make(map[uint64]orphanTable)
 		for id, table := range schemaStorage.CloneTables() {
 			if filter(detail, table) {
 				continue
 			}
 
 			tables[id] = table
-			orphanTables[id] = table
+			orphanTables[id] = orphanTable{
+				TableName: table,
+				startTs:   changefeed.StartTs,
+			}
 		}
 
 		o.changeFeedInfos[changeFeedID] = &ChangeFeedInfo{
