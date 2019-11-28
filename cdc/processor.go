@@ -138,8 +138,7 @@ func newTxnChannel(inputTxn <-chan model.RawTxn, chanSize int, handleResolvedTs 
 type processorEntryType int
 
 const (
-	processorEntryUnknown processorEntryType = iota
-	processorEntryDMLS
+	processorEntryDMLS processorEntryType = iota
 	processorEntryResolved
 )
 

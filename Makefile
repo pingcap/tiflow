@@ -98,7 +98,6 @@ else
 	grep -F '<option' "$(TEST_DIR)/all_cov.html"
 endif
 
-# TODO: deadcode unused varcheck reports too many "** is unused now"
 check-static: tools/bin/golangci-lint
 	$(GO) mod vendor
 	tools/bin/golangci-lint \
