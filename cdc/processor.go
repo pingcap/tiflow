@@ -344,7 +344,7 @@ func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed,
 	return
 }
 
-func (p *processorImpl) removeTable(tableID int64) {
+func (p *processor) removeTable(tableID int64) {
 	puller, ok := p.tblPullers[tableID]
 	if !ok {
 		log.Warn("table puller not found", zap.Int64("tableID", tableID))
@@ -358,7 +358,7 @@ func (p *processorImpl) removeTable(tableID int64) {
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
-func (p *processorImpl) handleTables(ctx context.Context, oldInfo, newInfo *model.SubChangeFeedInfo, checkpointTs uint64) error {
+func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.SubChangeFeedInfo, checkpointTs uint64) error {
 	removedTables, addedTables := diffProcessTableInfos(oldInfo.TableInfos, newInfo.TableInfos)
 	// some tables are removed
 	if newInfo.TablePLock != nil && newInfo.TableCLock == nil {
