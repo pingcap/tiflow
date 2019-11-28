@@ -33,7 +33,8 @@ func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
 	for i := 0; i < retryTime; i++ {
 		resp, err := http.Get(statusURL)
 		if err == nil {
-			ioutil.ReadAll(resp.Body)
+			_, err := ioutil.ReadAll(resp.Body)
+			c.Assert(err, check.IsNil)
 			resp.Body.Close()
 			return
 		}

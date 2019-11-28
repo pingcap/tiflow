@@ -101,10 +101,7 @@ endif
 # TODO: deadcode unused varcheck reports too many "** is unused now"
 check-static: tools/bin/golangci-lint
 	$(GO) mod vendor
-	tools/bin/golangci-lint --disable errcheck \
-		--disable deadcode \
-		--disable unused \
-		--disable varcheck \
+	tools/bin/golangci-lint \
 		run ./... # $$($(PACKAGE_DIRECTORIES))
 
 clean:

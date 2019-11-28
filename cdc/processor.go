@@ -499,7 +499,10 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 			})
 		}
 		p.inputChansLock.RUnlock()
-		wg.Wait()
+		err = wg.Wait()
+		if err != nil && errors.Cause(err) == context.Canceled {
+			return err
+		}
 		select {
 		case <-ctx.Done():
 			err := ctx.Err()

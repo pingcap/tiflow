@@ -180,13 +180,17 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDL) error {
 	if shouldSwitchDB {
 		_, err = tx.ExecContext(ctx, "USE "+util.QuoteName(ddl.Database)+";")
 		if err != nil {
-			tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Failed to rollback", zap.Error(err))
+			}
 			return err
 		}
 	}
 
 	if _, err = tx.ExecContext(ctx, ddl.Job.Query); err != nil {
-		tx.Rollback()
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Error("Failed to rollback", zap.String("sql", ddl.Job.Query), zap.Error(err))
+		}
 		return err
 	}
 
@@ -216,11 +220,15 @@ func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*model.DML) error {
 		}
 		query, args, err := fPrepare(dml)
 		if err != nil {
-			tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Failed to rollback", zap.Error(err))
+			}
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-			tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Failed to rollback", zap.String("sql", query), zap.Error(err))
+			}
 			return err
 		}
 	}

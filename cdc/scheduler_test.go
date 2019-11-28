@@ -59,7 +59,10 @@ func (s *schedulerSuite) SetUpTest(c *check.C) {
 func (s *schedulerSuite) TearDownTest(c *check.C) {
 	s.etcd.Close()
 	s.cancel()
-	s.errg.Wait()
+	err := s.errg.Wait()
+	if err != nil {
+		c.Errorf("Error group error: %s", err)
+	}
 }
 
 func mockRunProcessor(

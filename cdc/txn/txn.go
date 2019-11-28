@@ -77,7 +77,10 @@ func CollectRawTxns(
 					Ts:      resolvedTs,
 					Entries: nil,
 				}
-				outputFn(ctx, fakeTxn)
+				err := outputFn(ctx, fakeTxn)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}

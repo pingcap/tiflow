@@ -90,8 +90,10 @@ func (ec *eventChecker) stop() {
 // CreateStorage creates a tikv Storage instance.
 func CreateStorage(pdAddr string) (storage kv.Storage, err error) {
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", pdAddr)
-	store.Register("tikv", tikv.Driver{})
-
+	err = store.Register("tikv", tikv.Driver{})
+	if err != nil {
+		return
+	}
 	storage, err = store.New(tiPath)
 	return
 }

@@ -163,7 +163,8 @@ func runCase(c *check.C, cases *processorTestCase) {
 
 	for i, rawTxnTs := range cases.rawTxnTs {
 		input := make(chan model.RawTxn)
-		p.setInputChan(int64(i), input)
+		err := p.setInputChan(int64(i), input)
+		c.Assert(err, check.IsNil)
 		go func(rawTxnTs []uint64) {
 			for _, txnTs := range rawTxnTs {
 				input <- model.RawTxn{Ts: txnTs}

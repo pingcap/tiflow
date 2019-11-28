@@ -71,7 +71,7 @@ func (p *TiDB) setUp() (err error) {
 	return nil
 }
 
-func (p *TiDB) tearDown() {
+func (p *TiDB) TearDown() {
 	p.domain.Close()
 	p.store.Close()
 }

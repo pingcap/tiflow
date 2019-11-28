@@ -197,14 +197,6 @@ func (s *spanFrontier) Frontier() uint64 {
 	return s.minHeap[0].ts
 }
 
-func (s *spanFrontier) peekFrontierSpan() util.Span {
-	if s.minHeap.Len() == 0 {
-		return util.Span{}
-	}
-
-	return s.minHeap[0].span
-}
-
 // Forward advances the timestamp for a span.
 // True is returned if the frontier advanced.
 func (s *spanFrontier) Forward(span util.Span, ts uint64) bool {
