@@ -23,7 +23,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ResolveTsTracker check resolved event of spans and move the global resolved ts ahead
+// ResolveTsTracker checks resolved event of spans and moves the global resolved ts ahead
 type ResolveTsTracker interface {
 	Forward(span util.Span, ts uint64) bool
 	Frontier() uint64
