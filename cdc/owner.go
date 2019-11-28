@@ -53,11 +53,6 @@ type ChangeFeedInfoRWriter interface {
 	Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error
 }
 
-type orphanTable struct {
-	schema.TableName
-	startTs uint64
-}
-
 type ChangeFeedInfo struct {
 	ID     string
 	detail *model.ChangeFeedDetail
@@ -75,7 +70,7 @@ type ChangeFeedInfo struct {
 	ddlJobHistory   []*model.DDL
 
 	tables        map[uint64]schema.TableName
-	orphanTables  map[uint64]orphanTable
+	orphanTables  map[uint64]model.ProcessTableInfo
 	toCleanTables map[uint64]struct{}
 }
 
@@ -116,9 +111,9 @@ func (c *ChangeFeedInfo) addTable(id, startTs uint64, table schema.TableName) {
 	}
 
 	c.tables[id] = table
-	c.orphanTables[id] = orphanTable{
-		TableName: table,
-		startTs:   startTs,
+	c.orphanTables[id] = model.ProcessTableInfo{
+		ID:      id,
+		StartTs: startTs,
 	}
 }
 
@@ -224,7 +219,7 @@ func (c *ChangeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 		info.ResolvedTs = 0
 		info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{
 			ID:      tableID,
-			StartTs: orphan.startTs,
+			StartTs: orphan.StartTs,
 		})
 
 		err := kv.PutSubChangeFeedInfo(ctx, c.client, c.ID, captureID, info)
@@ -235,8 +230,7 @@ func (c *ChangeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 
 		log.Info("dispatch table success",
 			zap.Uint64("table id", tableID),
-			zap.Uint64("start ts", orphan.startTs),
-			zap.Stringer("table name", orphan.TableName),
+			zap.Uint64("start ts", orphan.StartTs),
 			zap.String("capture", captureID))
 		c.ProcessorInfos[captureID] = info
 		delete(c.orphanTables, tableID)
@@ -395,16 +389,16 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 		ddlHandler := NewDDLHandler(o.pdClient, detail.GetCheckpointTs())
 
 		tables := make(map[uint64]schema.TableName)
-		orphanTables := make(map[uint64]orphanTable)
+		orphanTables := make(map[uint64]model.ProcessTableInfo)
 		for id, table := range schemaStorage.CloneTables() {
 			if filter(detail, table) {
 				continue
 			}
 
 			tables[id] = table
-			orphanTables[id] = orphanTable{
-				TableName: table,
-				startTs:   changefeed.StartTs,
+			orphanTables[id] = model.ProcessTableInfo{
+				ID:      id,
+				StartTs: changefeed.StartTs,
 			}
 		}
 
