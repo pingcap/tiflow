@@ -18,7 +18,7 @@ import (
 	"github.com/pingcap/check"
 )
 
-// TiDB is used in tests to acts as TiDB
+// TiDB is used in tests to act as TiDB
 // TODO deprecate this Mock TiDB
 type TiDB struct {
 	cluster   *mocktikv.Cluster
