@@ -410,28 +410,30 @@ func (p *processor) checkpointWorker(ctx context.Context) error {
 				return err
 			}
 			newInfo := p.tsRWriter.GetSubChangeFeedInfo()
-			err = p.handleTables(ctx, oldInfo, newInfo, checkpointTs)
-			if err != nil {
+			if err := p.handleTables(ctx, oldInfo, newInfo, checkpointTs); err != nil {
 				return errors.Annotate(err, "handle tables")
 			}
 		}
 	}
 }
 
-func (p *processorImpl) retryWriteCP(ctx context.Context, cpTs uint64, maxRetry uint64) error {
+func (p *processor) retryWriteCP(ctx context.Context, cpTs uint64, maxRetry uint64) error {
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
 			backoff.NewExponentialBackOff(), ctx),
 		maxRetry,
 	)
 	err := backoff.Retry(func() error {
-		return p.tsRWriter.WriteCheckpointTs(ctx, cpTs)
+		err := p.tsRWriter.WriteCheckpointTs(ctx, cpTs)
+		if err != nil {
+			switch errors.Cause(err) {
+			case context.Canceled, context.DeadlineExceeded:
+				return backoff.Permanent(err)
+			}
+		}
+		return err
 	}, retryCfg)
 	if err != nil {
-		switch errors.Cause(err) {
-		case context.Canceled, context.DeadlineExceeded:
-			return backoff.Permanent(err)
-		}
 		return errors.Annotate(err, "write checkpoint ts")
 	}
 	return nil
