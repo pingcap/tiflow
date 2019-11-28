@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/retry"
+
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
@@ -198,7 +200,7 @@ func (c *CDCClient) partialRegionFeed(
 ) error {
 	ts := regionInfo.ts
 
-	berr := backoff.Retry(func() error {
+	berr := retry.Run(func() error {
 		var err error
 
 		if regionInfo.meta == nil {
@@ -243,7 +245,7 @@ func (c *CDCClient) partialRegionFeed(
 		}
 
 		return nil
-	}, backoff.NewExponentialBackOff())
+	}, 5)
 
 	if errors.Cause(berr) == context.Canceled {
 		return nil

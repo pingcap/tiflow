@@ -17,7 +17,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cenkalti/backoff"
+	"github.com/pingcap/ticdc/pkg/retry"
+
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/errors"
@@ -206,24 +207,12 @@ func (rw *ProcessorTsEtcdRWriter) retryWriteData(
 	updateLocalDataFn func(),
 	updateInfoFn func(*model.SubChangeFeedInfo),
 ) error {
-	retryCfg := backoff.WithMaxRetries(
-		backoff.WithContext(
-			backoff.NewExponentialBackOff(), ctx),
-		3,
-	)
-
-	err := backoff.Retry(func() error {
+	err := retry.Run(func() error {
 		rw.lock.Lock()
 		defer rw.lock.Unlock()
 		updateLocalDataFn()
-		err := rw.writeTsOrUpToDate(ctx, updateInfoFn)
-		if err != nil && errors.Cause(err) == context.Canceled {
-			return backoff.Permanent(err)
-		}
-		return err
-
-	}, retryCfg)
-
+		return rw.writeTsOrUpToDate(ctx, updateInfoFn)
+	}, 3)
 	return err
 }
 
