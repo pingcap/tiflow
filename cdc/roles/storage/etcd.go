@@ -258,15 +258,15 @@ func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uin
 	return info.ResolvedTs, nil
 }
 
-// CopySubChangeFeedInfo returns a deep copy of *model.SubChangeFeedInfo stored in ProcessorTsEtcdRWriter
-func (rw *ProcessorTsEtcdRWriter) CopySubChangeFeedInfo() (*model.SubChangeFeedInfo, error) {
+// CloneSubChangeFeedInfo returns a deep copy of *model.SubChangeFeedInfo stored in ProcessorTsEtcdRWriter
+func (rw *ProcessorTsEtcdRWriter) CloneSubChangeFeedInfo() (*model.SubChangeFeedInfo, error) {
 	var buf bytes.Buffer
 	err := json.NewEncoder(&buf).Encode(*rw.info)
 	if err != nil {
 		return nil, err
 	}
 	info := &model.SubChangeFeedInfo{}
-	err = json.NewDecoder(bytes.NewBuffer(buf.Bytes())).Decode(info)
+	err = json.Unmarshal(buf.Bytes(), &info)
 	return info, err
 }
 

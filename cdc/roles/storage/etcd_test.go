@@ -245,7 +245,7 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 	c.Assert(resolvedTs, check.Equals, info.ResolvedTs)
 }
 
-func (s *etcdSuite) TestCopySubChangeFeedInfo(c *check.C) {
+func (s *etcdSuite) TestCloneSubChangeFeedInfo(c *check.C) {
 	var (
 		changefeedID = "test-copy-changefeed"
 		captureID    = "test-copy-capture"
@@ -258,12 +258,13 @@ func (s *etcdSuite) TestCopySubChangeFeedInfo(c *check.C) {
 	)
 	rw := NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
 	rw.info = info
-	copyInfo, err := rw.CopySubChangeFeedInfo()
+	copyInfo, err := rw.CloneSubChangeFeedInfo()
 	c.Assert(err, check.IsNil)
 	c.Assert(rw.info, check.DeepEquals, copyInfo)
 
 	copyInfo.TableInfos = append(copyInfo.TableInfos, &model.ProcessTableInfo{ID: 3, StartTs: 3000})
 	c.Assert(rw.info, check.DeepEquals, info)
+	c.Assert(len(copyInfo.TableInfos), check.Greater, len(info.TableInfos))
 }
 
 func (s *etcdSuite) TestWriteTableCLock(c *check.C) {

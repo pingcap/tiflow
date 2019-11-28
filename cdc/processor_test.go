@@ -67,7 +67,7 @@ func (s *mockTsRWriter) SetGlobalResolvedTs(ts uint64) {
 	s.globalResolvedTs = ts
 }
 
-func (s *mockTsRWriter) CopySubChangeFeedInfo() (*model.SubChangeFeedInfo, error) {
+func (s *mockTsRWriter) CloneSubChangeFeedInfo() (*model.SubChangeFeedInfo, error) {
 	return nil, nil
 }
 

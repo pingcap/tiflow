@@ -81,8 +81,8 @@ type ProcessorTsRWriter interface {
 	WriteCheckpointTs(ctx context.Context, checkpointTs uint64) error
 	// ReadGlobalResolvedTs reads the global resolvedTs from the storage
 	ReadGlobalResolvedTs(ctx context.Context) (uint64, error)
-	// CopySubChangeFeedInfo returns a copy of *model.SubChangeFeedInfo
-	CopySubChangeFeedInfo() (*model.SubChangeFeedInfo, error)
+	// CloneSubChangeFeedInfo returns a copy of *model.SubChangeFeedInfo
+	CloneSubChangeFeedInfo() (*model.SubChangeFeedInfo, error)
 	// WriteTableCLock writes C-lock to the storage
 	WriteTableCLock(ctx context.Context, checkpointTs uint64) error
 }
@@ -347,12 +347,7 @@ func (p *processorImpl) localResolvedWorker(ctx context.Context) error {
 	}
 }
 
-// diffProcessTableInfos inputs two sorted ProcessTableInfo slice and returns two diff slice,
-// the first returned slice includes tableIDs that are in oldInfo but not in newInfo,
-// the first returned slice includes tableIDs that are not in oldInfo but in newInfo.
-func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) ([]*model.ProcessTableInfo, []*model.ProcessTableInfo) {
-	removed := make([]*model.ProcessTableInfo, 0)
-	added := make([]*model.ProcessTableInfo, 0)
+func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed, added []*model.ProcessTableInfo) {
 	i, j := 0, 0
 	for i < len(oldInfo) && j < len(newInfo) {
 		if oldInfo[i].ID == newInfo[j].ID {
@@ -372,7 +367,7 @@ func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) ([]*model
 	for ; j < len(newInfo); j++ {
 		added = append(added, newInfo[j])
 	}
-	return removed, added
+	return
 }
 
 func (p *processorImpl) removeTable(tableID int64) {
@@ -430,7 +425,7 @@ func (p *processorImpl) checkpointWorker(ctx context.Context) error {
 				checkpointTs = e.Ts
 			}
 		case <-time.After(1 * time.Second):
-			oldInfo, err := p.tsRWriter.CopySubChangeFeedInfo()
+			oldInfo, err := p.tsRWriter.CloneSubChangeFeedInfo()
 			if err != nil {
 				return err
 			}
@@ -439,7 +434,7 @@ func (p *processorImpl) checkpointWorker(ctx context.Context) error {
 			if err != nil {
 				return errors.Annotate(err, "write checkpoint ts")
 			}
-			newInfo, err := p.tsRWriter.CopySubChangeFeedInfo()
+			newInfo, err := p.tsRWriter.CloneSubChangeFeedInfo()
 			if err != nil {
 				return err
 			}
