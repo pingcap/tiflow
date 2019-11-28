@@ -77,6 +77,7 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
 	for _, p := range s.capture.processors {
 		p.writeDebugInfo(w)
+		fmt.Fprintf(w, "\n")
 	}
 
 	fmt.Fprintf(w, "\n\n*** etcd info ***:\n\n")

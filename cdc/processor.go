@@ -284,9 +284,7 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 }
 
 func (p *processor) writeDebugInfo(w io.Writer) {
-	// nolint
-	// TODO: display more readable info.
-	fmt.Fprintf(w, "%+v\n", *p)
+	fmt.Fprintf(w, "changefeedID: %s, detail: %+v", p.changefeedID, p.changefeed)
 }
 
 // localResolvedWorker scan all table's resolve ts and update resolved ts in subchangefeed info regularly.
