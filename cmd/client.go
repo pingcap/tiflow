@@ -17,15 +17,11 @@ import (
 func init() {
 	rootCmd.AddCommand(cliCmd)
 
-	cliCmd.Flags().StringSliceVar(&tables, "tables", []string{"test.t"}, "all tables provided will be collected in changefeed")
-	cliCmd.Flags().StringSliceVar(&databases, "databases", []string{"test"}, "all tables in given databases will be collected in changefeed")
 	cliCmd.Flags().StringVar(&pdAddress, "pd-addr", "localhost:2379", "address of PD")
 	cliCmd.Flags().Uint64Var(&startTs, "start-ts", 0, "start ts of changefeed")
 }
 
 var (
-	tables    []string
-	databases []string
 	pdAddress string
 	startTs   uint64
 )

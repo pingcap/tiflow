@@ -20,21 +20,19 @@ function run() {
     # 1. skip the system table DDL
     # 2. currently we support providing table IDs only when we create a changefeed, so we have to create tables before creating a changefeed.
     start_ts=$(($(date +%s%N | cut -b1-13)<<18))
-    cdc_cli_params=""
 
     # create $DB_COUNT databases and import initial workload
     for i in $(seq $DB_COUNT); do
         db="multi_capture_$i"
         run_sql "CREATE DATABASE $db;"
         go-ycsb load mysql -P $CUR/conf/workload1 -p mysql.host=${US_TIDB_HOST} -p mysql.port=${US_TIDB_PORT} -p mysql.user=root -p mysql.db=$db
-        cdc_cli_params="$cdc_cli_params --databases=multi_capture_$i"
     done
 
     # start $CDC_COUNT cdc servers, and create a changefeed
     for i in $(seq $CDC_COUNT); do
         cdc server --log-file $WORK_DIR/cdc${i}.log --log-level info > $WORK_DIR/stdout${i}.log 2>&1 &
     done
-    cdc cli --start-ts=$start_ts $cdc_cli_params
+    cdc cli --start-ts=$start_ts
 
     # check tables are created and data is synchronized
     for i in $(seq $DB_COUNT); do

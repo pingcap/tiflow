@@ -24,7 +24,7 @@ function run() {
     run_sql_file $CUR/data/prepare.sql ${US_TIDB_HOST} ${US_TIDB_PORT}
 
     cdc server --log-file $WORK_DIR/cdc.log --log-level info > $WORK_DIR/stdout.log 2>&1 &
-    cdc cli --start-ts=$start_ts --databases=split_region
+    cdc cli --start-ts=$start_ts
 
     # sync_diff can't check non-exist table, so we check expected tables are created in downstream first
     check_table_exists split_region.test1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
