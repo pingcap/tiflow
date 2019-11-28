@@ -29,7 +29,7 @@ type ResolveTsTracker interface {
 	Frontier() uint64
 }
 
-// CollectRawTxns collect KV events from the inputFn,
+// CollectRawTxns collects KV events from the inputFn,
 // group them by transactions and send them to the outputFn.
 func CollectRawTxns(
 	ctx context.Context,
