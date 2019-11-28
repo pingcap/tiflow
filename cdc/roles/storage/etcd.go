@@ -119,7 +119,7 @@ type ProcessorTsEtcdRWriter struct {
 	captureID    string
 	modRevision  int64
 	info         *model.SubChangeFeedInfo
-	*zap.Logger
+	logger       *zap.Logger
 }
 
 // NewProcessorTsEtcdRWriter returns a new `*ChangeFeedInfoRWriter` instance
@@ -132,7 +132,7 @@ func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 		changefeedID: changefeedID,
 		captureID:    captureID,
 		info:         &model.SubChangeFeedInfo{},
-		Logger:       logger,
+		logger:       logger,
 	}
 }
 
@@ -148,7 +148,7 @@ func (rw *ProcessorTsEtcdRWriter) updateSubChangeFeedInfo(
 	}
 	rw.modRevision = modRevision
 	updateInfoFn(info)
-	rw.Debug("update info from etcd", zap.Stringer("info", info))
+	rw.logger.Debug("update info from etcd", zap.Stringer("info", info))
 	return nil
 }
 
@@ -192,7 +192,7 @@ func (rw *ProcessorTsEtcdRWriter) writeTsOrUpToDate(
 		return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
 	}
 
-	rw.Debug("update subchangefeed info success",
+	rw.logger.Debug("update subchangefeed info success",
 		zap.Int64("modRevision", rw.modRevision),
 		zap.Stringer("info", rw.info))
 
