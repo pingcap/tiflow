@@ -71,7 +71,8 @@ func (p *TiDB) setUp() (err error) {
 	return nil
 }
 
-func (p *TiDB) tearDown() {
+// TearDown releases resources used by the mock tidb
+func (p *TiDB) TearDown() {
 	p.domain.Close()
 	p.store.Close()
 }

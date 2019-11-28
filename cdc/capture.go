@@ -134,10 +134,6 @@ func (c *Capture) Close(ctx context.Context) error {
 	return errors.Trace(DeleteCaptureInfo(ctx, c.info.ID, c.etcdClient))
 }
 
-func (c *Capture) infoKey() string {
-	return infoKey(c.info.ID)
-}
-
 // register registers the capture information in etcd
 func (c *Capture) register(ctx context.Context) error {
 	return errors.Trace(PutCaptureInfo(ctx, c.info, c.etcdClient))

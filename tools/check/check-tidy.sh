@@ -2,4 +2,8 @@
 set -euo pipefail
 
 GO111MODULE=on go mod tidy
-git diff --quiet
+
+if ! git diff-index --quiet HEAD --; then
+  echo "Please run \`go mod tidy\` to clean up"
+  exit 1
+fi

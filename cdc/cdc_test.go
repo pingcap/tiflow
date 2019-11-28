@@ -63,6 +63,10 @@ func NewCDCSuite() *CDCSuite {
 	return cdcSuite
 }
 
+func (s *CDCSuite) TearDownSuite(c *C) {
+	s.puller.TearDown()
+}
+
 func (s *CDCSuite) Forward(span util.Span, ts uint64) bool {
 	return true
 }

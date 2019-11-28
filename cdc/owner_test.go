@@ -51,7 +51,10 @@ func (s *ownerSuite) SetUpTest(c *check.C) {
 func (s *ownerSuite) TearDownTest(c *check.C) {
 	s.e.Close()
 	s.cancel()
-	s.errg.Wait()
+	err := s.errg.Wait()
+	if err != nil {
+		c.Errorf("Error group error: %s", err)
+	}
 }
 
 type handlerForPrueDMLTest struct {

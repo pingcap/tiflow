@@ -60,7 +60,6 @@ const (
 	NewSessionDefaultRetryCnt = 3
 	// NewSessionRetryUnlimited is the unlimited retry times when create new session.
 	NewSessionRetryUnlimited = math.MaxInt64
-	keyOpDefaultTimeout      = 5 * time.Second
 )
 
 // ownerManager represents the structure which is used for electing owner.

@@ -179,18 +179,10 @@ func unmarshalTableKVEntry(raw *model.RawKVEntry) (kvEntry, error) {
 }
 
 const (
-	ddlJobListKey    = "DDLJobList"
-	ddlJobAddIDxList = "DDLJobAddIDxList"
-	ddlJobHistoryKey = "DDLJobHistory"
-	ddlJobReorgKey   = "DDLJobReorg"
+	ddlJobListKey = "DDLJobList"
 
 	dbMetaPrefix    = "DB:"
 	tableMetaPrefix = "Table:"
-)
-
-var (
-	dbMetaPrefixLen    = len(dbMetaPrefix)
-	tableMetaPrefixLen = len(tableMetaPrefix)
 )
 
 func unmarshalMetaKVEntry(raw *model.RawKVEntry) (kvEntry, error) {
