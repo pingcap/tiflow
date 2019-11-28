@@ -60,6 +60,10 @@ type ProcessorTsRWriter interface {
 	WriteCheckpointTs(ctx context.Context, checkpointTs uint64) error
 	// ReadGlobalResolvedTs reads the global resolvedTs from the storage
 	ReadGlobalResolvedTs(ctx context.Context) (uint64, error)
+	// CloneSubChangeFeedInfo returns a copy of *model.SubChangeFeedInfo
+	CloneSubChangeFeedInfo() (*model.SubChangeFeedInfo, error)
+	// WriteTableCLock writes C-lock to the storage
+	WriteTableCLock(ctx context.Context, checkpointTs uint64) error
 }
 
 type txnChannel struct {
@@ -186,7 +190,8 @@ type processor struct {
 	inputChansLock  sync.RWMutex
 	tableInputChans map[int64]*txnChannel
 
-	wg *errgroup.Group
+	wg    *errgroup.Group
+	errCh chan<- error
 }
 
 func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, changefeedID, captureID string) (*processor, error) {
@@ -253,6 +258,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
+	p.errCh = errCh
 	wg.Go(func() error {
 		return p.localResolvedWorker(cctx)
 	})
@@ -261,9 +267,6 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 	wg.Go(func() error {
 		return p.globalResolvedWorker(cctx)
-	})
-	wg.Go(func() error {
-		return p.pullerSchedule(cctx, errCh)
 	})
 	wg.Go(func() error {
 		return p.syncResolved(cctx)
@@ -284,17 +287,6 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 	// nolint
 	// TODO: display more readable info.
 	fmt.Fprintf(w, "%+v\n", *p)
-}
-
-// pullerSchedule will be used to monitor table change and schedule pullers in the future
-func (p *processor) pullerSchedule(ctx context.Context, ch chan<- error) error {
-	// TODO: add DDL puller to maintain table schema
-
-	err := p.initPullers(ctx, ch)
-	if err != nil && err != context.Canceled {
-		return errors.Annotate(err, "initial pullers")
-	}
-	return nil
 }
 
 // localResolvedWorker scan all table's resolve ts and update resolved ts in subchangefeed info regularly.
@@ -329,6 +321,64 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 	}
 }
 
+func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed, added []*model.ProcessTableInfo) {
+	i, j := 0, 0
+	for i < len(oldInfo) && j < len(newInfo) {
+		if oldInfo[i].ID == newInfo[j].ID {
+			i++
+			j++
+		} else if oldInfo[i].ID < newInfo[j].ID {
+			removed = append(removed, oldInfo[i])
+			i++
+		} else {
+			added = append(added, newInfo[j])
+			j++
+		}
+	}
+	for ; i < len(oldInfo); i++ {
+		removed = append(removed, oldInfo[i])
+	}
+	for ; j < len(newInfo); j++ {
+		added = append(added, newInfo[j])
+	}
+	return
+}
+
+func (p *processor) removeTable(tableID int64) {
+	puller, ok := p.tblPullers[tableID]
+	if !ok {
+		log.Warn("table puller not found", zap.Int64("tableID", tableID))
+	} else {
+		puller.Cancel()
+		delete(p.tblPullers, tableID)
+	}
+	p.inputChansLock.Lock()
+	delete(p.tableInputChans, tableID)
+	p.inputChansLock.Unlock()
+}
+
+// handleTables handles table scheduler on this processor, add or remove table puller
+func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.SubChangeFeedInfo, checkpointTs uint64) error {
+	removedTables, addedTables := diffProcessTableInfos(oldInfo.TableInfos, newInfo.TableInfos)
+	// some tables are removed
+	if newInfo.TablePLock != nil && newInfo.TableCLock == nil {
+		for _, pinfo := range removedTables {
+			p.removeTable(int64(pinfo.ID))
+		}
+		err := p.tsRWriter.WriteTableCLock(ctx, checkpointTs)
+		if err != nil {
+			return err
+		}
+	}
+	for _, pinfo := range addedTables {
+		err := p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // checkpointWorker consume data from `executedEntries` and update checkpoint ts in subchangefeed info regularly.
 func (p *processor) checkpointWorker(ctx context.Context) error {
 	checkpointTs := uint64(0)
@@ -349,10 +399,22 @@ func (p *processor) checkpointWorker(ctx context.Context) error {
 				checkpointTs = e.Ts
 			}
 		case <-time.After(1 * time.Second):
-			err := p.tsRWriter.WriteCheckpointTs(ctx, checkpointTs)
+			oldInfo, err := p.tsRWriter.CloneSubChangeFeedInfo()
+			if err != nil {
+				return err
+			}
+			err = p.tsRWriter.WriteCheckpointTs(ctx, checkpointTs)
 			// TODO: add retry when meeting error
 			if err != nil {
 				return errors.Annotate(err, "write checkpoint ts")
+			}
+			newInfo, err := p.tsRWriter.CloneSubChangeFeedInfo()
+			if err != nil {
+				return err
+			}
+			err = p.handleTables(ctx, oldInfo, newInfo, checkpointTs)
+			if err != nil {
+				return errors.Annotate(err, "handle tables")
 			}
 		}
 	}
@@ -557,39 +619,7 @@ func (p *processor) getTsRwriter() ProcessorTsRWriter {
 	return p.tsRWriter
 }
 
-func (p *processor) initPullers(ctx context.Context, errCh chan<- error) error {
-	// the loop is only for test, not support add/remove table dynamically
-	// TODO: the time sequence should be:
-	// user create changefeed -> owner creates subchangefeed info in etcd -> scheduler create processors
-	// but currently scheduler and owner are running concurrently
-	for {
-		select {
-		case <-ctx.Done():
-			if err := ctx.Err(); err != context.Canceled {
-				return err
-			}
-			return nil
-		case <-time.After(time.Second * 5):
-			_, info, err := kv.GetSubChangeFeedInfo(ctx, p.etcdCli, p.changefeedID, p.captureID)
-			if err != nil {
-				return err
-			}
-			for _, tblInfo := range info.TableInfos {
-				if _, ok := p.tblPullers[int64(tblInfo.ID)]; ok {
-					continue
-				}
-				if err := p.addTable(ctx, int64(tblInfo.ID), tblInfo.StartTs, errCh); err != nil {
-					return err
-				}
-			}
-			if len(info.TableInfos) > 0 {
-				return nil
-			}
-		}
-	}
-}
-
-func (p *processor) addTable(ctx context.Context, tableID int64, checkpointTs uint64, errCh chan<- error) error {
+func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) error {
 	log.Debug("Add table", zap.Int64("tableID", tableID))
 	// TODO: Make sure it's threadsafe or prove that it doesn't have to be
 	if _, ok := p.tblPullers[tableID]; ok {
@@ -603,7 +633,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, checkpointTs ui
 		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	plr := p.startPuller(ctx, span, checkpointTs, txnChan, errCh)
+	plr := p.startPuller(ctx, span, startTs, txnChan, p.errCh)
 	p.tblPullers[tableID] = puller.CancellablePuller{Puller: plr, Cancel: cancel}
 	return nil
 }

@@ -60,10 +60,19 @@ func (s *mockTsRWriter) ReadGlobalResolvedTs(ctx context.Context) (uint64, error
 	defer s.l.Unlock()
 	return s.globalResolvedTs, nil
 }
+
 func (s *mockTsRWriter) SetGlobalResolvedTs(ts uint64) {
 	s.l.Lock()
 	defer s.l.Unlock()
 	s.globalResolvedTs = ts
+}
+
+func (s *mockTsRWriter) CloneSubChangeFeedInfo() (*model.SubChangeFeedInfo, error) {
+	return nil, nil
+}
+
+func (s *mockTsRWriter) WriteTableCLock(ctx context.Context, checkpointTs uint64) error {
+	return nil
 }
 
 // mockMounter pretend to decode a RawTxn by returning a Txn of the same Ts
@@ -188,4 +197,34 @@ func runCase(c *check.C, cases *processorTestCase) {
 		sinker.mu.Unlock()
 	}
 	cancel()
+}
+
+func (p *processorSuite) TestDiffProcessTableInfos(c *check.C) {
+	infos := make([]*model.ProcessTableInfo, 0, 3)
+	for i := uint64(0); i < uint64(3); i++ {
+		infos = append(infos, &model.ProcessTableInfo{ID: i, StartTs: 10 * i})
+	}
+	var (
+		emptyInfo = make([]*model.ProcessTableInfo, 0)
+		cases     = []struct {
+			oldInfo []*model.ProcessTableInfo
+			newInfo []*model.ProcessTableInfo
+			removed []*model.ProcessTableInfo
+			added   []*model.ProcessTableInfo
+		}{
+			{emptyInfo, emptyInfo, nil, nil},
+			{[]*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[0]}, nil, nil},
+			{emptyInfo, []*model.ProcessTableInfo{infos[0]}, nil, []*model.ProcessTableInfo{infos[0]}},
+			{[]*model.ProcessTableInfo{infos[0]}, emptyInfo, []*model.ProcessTableInfo{infos[0]}, nil},
+			{[]*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[1]}, []*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[1]}},
+			{[]*model.ProcessTableInfo{infos[0], infos[1]}, []*model.ProcessTableInfo{infos[1], infos[2]}, []*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[2]}},
+			{[]*model.ProcessTableInfo{infos[1]}, []*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[1]}, []*model.ProcessTableInfo{infos[0]}},
+		}
+	)
+
+	for _, tc := range cases {
+		removed, added := diffProcessTableInfos(tc.oldInfo, tc.newInfo)
+		c.Assert(removed, check.DeepEquals, tc.removed)
+		c.Assert(added, check.DeepEquals, tc.added)
+	}
 }

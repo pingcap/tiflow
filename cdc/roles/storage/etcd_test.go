@@ -244,3 +244,47 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(resolvedTs, check.Equals, info.ResolvedTs)
 }
+
+func (s *etcdSuite) TestCloneSubChangeFeedInfo(c *check.C) {
+	var (
+		changefeedID = "test-copy-changefeed"
+		captureID    = "test-copy-capture"
+		info         = &model.SubChangeFeedInfo{
+			TableInfos: []*model.ProcessTableInfo{
+				{ID: 1, StartTs: 1000},
+				{ID: 2, StartTs: 2000},
+			},
+		}
+	)
+	rw := NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
+	rw.info = info
+	copyInfo, err := rw.CloneSubChangeFeedInfo()
+	c.Assert(err, check.IsNil)
+	c.Assert(rw.info, check.DeepEquals, copyInfo)
+
+	copyInfo.TableInfos = append(copyInfo.TableInfos, &model.ProcessTableInfo{ID: 3, StartTs: 3000})
+	c.Assert(rw.info, check.DeepEquals, info)
+	c.Assert(len(copyInfo.TableInfos), check.Greater, len(info.TableInfos))
+}
+
+func (s *etcdSuite) TestWriteTableCLock(c *check.C) {
+	var (
+		changefeedID = "test-write-clock-changefeed"
+		captureID    = "test-write-clock-capture"
+		info         = &model.SubChangeFeedInfo{
+			TablePLock: &model.TableLock{Ts: 100},
+		}
+		checkpointTs uint64 = 300
+	)
+	rw := NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
+	rw.info = info
+	err := rw.WriteTableCLock(context.Background(), checkpointTs)
+	c.Assert(err, check.IsNil)
+	c.Assert(rw.info.TableCLock, check.NotNil)
+	c.Assert(rw.info.TableCLock.CheckpointTs, check.Equals, checkpointTs)
+
+	revision, rinfo, err := kv.GetSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID)
+	c.Assert(err, check.IsNil)
+	c.Assert(revision, check.Equals, rw.modRevision)
+	c.Assert(rinfo, check.DeepEquals, rw.info)
+}
