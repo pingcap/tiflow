@@ -23,11 +23,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// ResolveTsTracker check resolved event of spans and move the global resolved ts ahead
 type ResolveTsTracker interface {
 	Forward(span util.Span, ts uint64) bool
 	Frontier() uint64
 }
 
+// CollectRawTxns collect KV events from the inputFn,
+// group them by transactions and send them to the outputFn.
 func CollectRawTxns(
 	ctx context.Context,
 	inputFn func(context.Context) (model.KvOrResolved, error),

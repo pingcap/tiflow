@@ -80,7 +80,7 @@ func (p *txnChannel) Forward(ctx context.Context, tableID int64, ts uint64, entr
 			return
 		}
 		p.putBackTxn = nil
-		pushProcessorEntry(ctx, entryC, NewProcessorTxnEntry(t))
+		pushProcessorEntry(ctx, entryC, newProcessorTxnEntry(t))
 	}
 	for {
 		select {
@@ -95,7 +95,7 @@ func (p *txnChannel) Forward(ctx context.Context, tableID int64, ts uint64, entr
 				p.PutBack(t)
 				return
 			}
-			pushProcessorEntry(ctx, entryC, NewProcessorTxnEntry(t))
+			pushProcessorEntry(ctx, entryC, newProcessorTxnEntry(t))
 		}
 	}
 }
@@ -135,32 +135,34 @@ func newTxnChannel(inputTxn <-chan model.RawTxn, chanSize int, handleResolvedTs 
 	return tc
 }
 
-type ProcessorEntryType int
+type processorEntryType int
 
 const (
-	ProcessorEntryUnknown ProcessorEntryType = iota
-	ProcessorEntryDMLS
-	ProcessorEntryResolved
+	processorEntryUnknown processorEntryType = iota
+	processorEntryDMLS
+	processorEntryResolved
 )
 
+// ProcessorEntry contains a transaction to be processed
+// TODO: Do we really need this extra layer of wrapping?
 type ProcessorEntry struct {
 	Txn model.RawTxn
 	Ts  uint64
-	Typ ProcessorEntryType
+	Typ processorEntryType
 }
 
-func NewProcessorTxnEntry(txn model.RawTxn) ProcessorEntry {
+func newProcessorTxnEntry(txn model.RawTxn) ProcessorEntry {
 	return ProcessorEntry{
 		Txn: txn,
 		Ts:  txn.Ts,
-		Typ: ProcessorEntryDMLS,
+		Typ: processorEntryDMLS,
 	}
 }
 
-func NewProcessorResolvedEntry(ts uint64) ProcessorEntry {
+func newProcessorResolvedEntry(ts uint64) ProcessorEntry {
 	return ProcessorEntry{
 		Ts:  ts,
-		Typ: ProcessorEntryResolved,
+		Typ: processorEntryResolved,
 	}
 }
 
@@ -194,6 +196,7 @@ type processor struct {
 	errCh chan<- error
 }
 
+// NewProcessor creates and returns a processor for the specified change feed
 func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, changefeedID, captureID string) (*processor, error) {
 	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
 	if err != nil {
@@ -399,7 +402,7 @@ func (p *processor) checkpointWorker(ctx context.Context) error {
 				log.Info("Checkpoint worker exited")
 				return nil
 			}
-			if e.Typ == ProcessorEntryResolved {
+			if e.Typ == processorEntryResolved {
 				checkpointTs = e.Ts
 			}
 		case <-time.After(1 * time.Second):
@@ -504,7 +507,7 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 				return nil
 			}
 			return errors.Trace(err)
-		case p.resolvedEntries <- NewProcessorResolvedEntry(globalResolvedTs):
+		case p.resolvedEntries <- newProcessorResolvedEntry(globalResolvedTs):
 		}
 	}
 }
@@ -564,7 +567,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				return nil
 			}
 			switch e.Typ {
-			case ProcessorEntryDMLS:
+			case processorEntryDMLS:
 				err := p.schemaStorage.HandlePreviousDDLJobIfNeed(e.Ts)
 				if err != nil {
 					return errors.Trace(err)
@@ -579,7 +582,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 					}
 					return nil
 				}
-			case ProcessorEntryResolved:
+			case processorEntryResolved:
 				select {
 				case p.executedEntries <- e:
 				case <-ctx.Done():

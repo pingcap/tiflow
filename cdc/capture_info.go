@@ -61,6 +61,7 @@ func GetCaptureInfo(ctx context.Context, id string, cli *clientv3.Client, opts .
 	return
 }
 
+// CaptureInfoWatchResp represents the result of watching capture info
 type CaptureInfoWatchResp struct {
 	Info     *model.CaptureInfo
 	IsDelete bool

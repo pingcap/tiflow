@@ -56,8 +56,8 @@ func (s *decodeMetaKeySuite) TestDecodeListData(c *check.C) {
 
 	meta, err := decodeMetaKey(metaKey)
 	c.Assert(err, check.IsNil)
-	c.Assert(meta.GetType(), check.Equals, ListData)
-	list := meta.(MetaListData)
+	c.Assert(meta.getType(), check.Equals, ListData)
+	list := meta.(metaListData)
 	c.Assert(list.key, check.Equals, string(key))
 	c.Assert(list.index, check.Equals, index)
 }

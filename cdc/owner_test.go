@@ -127,7 +127,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 
 	tables := map[uint64]schema.TableName{1: {Schema: "any"}}
 
-	changeFeedInfos := map[model.ChangeFeedID]*ChangeFeedInfo{
+	changeFeedInfos := map[model.ChangeFeedID]*changeFeedInfo{
 		"test_change_feed": {
 			tables:         tables,
 			ChangeFeedInfo: &model.ChangeFeedInfo{},
@@ -305,7 +305,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 
 	tables := map[uint64]schema.TableName{1: {Schema: "any"}}
 
-	changeFeedInfos := map[model.ChangeFeedID]*ChangeFeedInfo{
+	changeFeedInfos := map[model.ChangeFeedID]*changeFeedInfo{
 		"test_change_feed": {
 			tables:         tables,
 			ChangeFeedInfo: &model.ChangeFeedInfo{},
@@ -341,7 +341,7 @@ type changefeedInfoSuite struct {
 var _ = check.Suite(&changefeedInfoSuite{})
 
 func (s *changefeedInfoSuite) TestMinimumTables(c *check.C) {
-	cf := &ChangeFeedInfo{
+	cf := &changeFeedInfo{
 		ProcessorInfos: map[model.CaptureID]*model.SubChangeFeedInfo{
 			"c1": {
 				TableInfos: make([]*model.ProcessTableInfo, 2),

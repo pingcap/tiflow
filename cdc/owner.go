@@ -45,7 +45,7 @@ type OwnerDDLHandler interface {
 	ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error
 }
 
-// ChangeFeedInfoRWriter defines the Reader and Writer for ChangeFeedInfo
+// ChangeFeedInfoRWriter defines the Reader and Writer for changeFeedInfo
 type ChangeFeedInfoRWriter interface {
 	// Read the changefeed info from storage such as etcd.
 	Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedDetail, map[model.ChangeFeedID]model.ProcessorsInfos, error)
@@ -53,7 +53,7 @@ type ChangeFeedInfoRWriter interface {
 	Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error
 }
 
-type ChangeFeedInfo struct {
+type changeFeedInfo struct {
 	ID     string
 	detail *model.ChangeFeedDetail
 	*model.ChangeFeedInfo
@@ -75,7 +75,7 @@ type ChangeFeedInfo struct {
 }
 
 // String implements fmt.Stringer interface.
-func (c *ChangeFeedInfo) String() string {
+func (c *changeFeedInfo) String() string {
 	format := "{\n ID: %s\n detail: %+v\n info: %+v\n Status: %v\n ProcessorInfos: %+v\n tables: %+v\n orphanTables: %+v\n toCleanTables: %v\n DDLCurrentIndex: %d\n ddlResolvedTs: %d\n ddlJobHistory: %+v\n}\n\n"
 	s := fmt.Sprintf(format,
 		c.ID, c.detail, c.ChangeFeedInfo, c.Status, c.ProcessorInfos, c.tables,
@@ -105,7 +105,7 @@ func filter(_ *model.ChangeFeedDetail, table schema.TableName) bool {
 	return false
 }
 
-func (c *ChangeFeedInfo) addTable(id, startTs uint64, table schema.TableName) {
+func (c *changeFeedInfo) addTable(id, startTs uint64, table schema.TableName) {
 	if filter(c.detail, table) {
 		return
 	}
@@ -117,7 +117,7 @@ func (c *ChangeFeedInfo) addTable(id, startTs uint64, table schema.TableName) {
 	}
 }
 
-func (c *ChangeFeedInfo) removeTable(id uint64) {
+func (c *changeFeedInfo) removeTable(id uint64) {
 	delete(c.tables, id)
 
 	if _, ok := c.orphanTables[id]; ok {
@@ -127,11 +127,11 @@ func (c *ChangeFeedInfo) removeTable(id uint64) {
 	}
 }
 
-func (c *ChangeFeedInfo) selectCapture(captures map[string]*model.CaptureInfo) string {
+func (c *changeFeedInfo) selectCapture(captures map[string]*model.CaptureInfo) string {
 	return c.minimumTablesCapture(captures)
 }
 
-func (c *ChangeFeedInfo) minimumTablesCapture(captures map[string]*model.CaptureInfo) string {
+func (c *changeFeedInfo) minimumTablesCapture(captures map[string]*model.CaptureInfo) string {
 	if len(captures) == 0 {
 		return ""
 	}
@@ -156,12 +156,12 @@ func (c *ChangeFeedInfo) minimumTablesCapture(captures map[string]*model.Capture
 	return minID
 }
 
-func (c *ChangeFeedInfo) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo) {
+func (c *changeFeedInfo) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo) {
 	c.cleanTables(ctx)
 	c.banlanceOrphanTables(ctx, captures)
 }
 
-func (c *ChangeFeedInfo) cleanTables(ctx context.Context) {
+func (c *changeFeedInfo) cleanTables(ctx context.Context) {
 	var cleanIDs []uint64
 
 	for id := range c.toCleanTables {
@@ -206,7 +206,7 @@ func findSubChangefeedWithTable(infos model.ProcessorsInfos, tableID uint64) (ca
 	return "", nil, false
 }
 
-func (c *ChangeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo) {
+func (c *changeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo) {
 	if len(captures) == 0 {
 		return
 	}
@@ -243,7 +243,7 @@ func (c *ChangeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 	}
 }
 
-func (c *ChangeFeedInfo) applyJob(job *pmodel.Job) error {
+func (c *changeFeedInfo) applyJob(job *pmodel.Job) error {
 	log.Info("apply job", zap.String("sql", job.Query), zap.Int64("job id", job.ID))
 
 	schamaName, tableName, _, err := c.schema.HandleDDL(job)
@@ -275,7 +275,7 @@ func (c *ChangeFeedInfo) applyJob(job *pmodel.Job) error {
 }
 
 type ownerImpl struct {
-	changeFeedInfos map[model.ChangeFeedID]*ChangeFeedInfo
+	changeFeedInfos map[model.ChangeFeedID]*changeFeedInfo
 
 	cfRWriter ChangeFeedInfoRWriter
 
@@ -314,7 +314,7 @@ func NewOwner(pdEndpoints []string, cli *clientv3.Client, manager roles.Manager)
 	owner := &ownerImpl{
 		pdEndpoints:        pdEndpoints,
 		pdClient:           pdClient,
-		changeFeedInfos:    make(map[model.ChangeFeedID]*ChangeFeedInfo),
+		changeFeedInfos:    make(map[model.ChangeFeedID]*changeFeedInfo),
 		cfRWriter:          storage.NewChangeFeedInfoEtcdRWriter(cli),
 		etcdClient:         cli,
 		manager:            manager,
@@ -358,7 +358,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 	}
 
 	for changeFeedID, etcdChangeFeedInfo := range pinfos {
-		var cfInfo *ChangeFeedInfo
+		var cfInfo *changeFeedInfo
 		var exist bool
 
 		if cfInfo, exist = o.changeFeedInfos[changeFeedID]; exist {
@@ -393,7 +393,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			return errors.Annotate(err, "handle ddl job failed")
 		}
 
-		ddlHandler := NewDDLHandler(o.pdClient, detail.GetCheckpointTs())
+		ddlHandler := newDDLHandler(o.pdClient, detail.GetCheckpointTs())
 
 		tables := make(map[uint64]schema.TableName)
 		orphanTables := make(map[uint64]model.ProcessTableInfo)
@@ -409,7 +409,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			}
 		}
 
-		o.changeFeedInfos[changeFeedID] = &ChangeFeedInfo{
+		o.changeFeedInfos[changeFeedID] = &changeFeedInfo{
 			detail:        detail,
 			ID:            changeFeedID,
 			client:        o.etcdClient,
@@ -445,7 +445,7 @@ func (o *ownerImpl) flushChangeFeedInfos(ctx context.Context) error {
 	return errors.Trace(o.cfRWriter.Write(ctx, infos))
 }
 
-func (c *ChangeFeedInfo) pullDDLJob() error {
+func (c *changeFeedInfo) pullDDLJob() error {
 	ddlResolvedTs, ddlJobs, err := c.ddlHandler.PullDDL()
 	if err != nil {
 		return errors.Trace(err)

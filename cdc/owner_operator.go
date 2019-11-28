@@ -43,7 +43,7 @@ type ddlHandler struct {
 	cancel func()
 }
 
-func NewDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
+func newDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
 	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan()}, false)

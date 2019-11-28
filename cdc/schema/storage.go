@@ -254,6 +254,7 @@ func (s *Storage) removeTable(tableID int64) error {
 	return nil
 }
 
+// AddJob adds a DDL job to the schema storage
 func (s *Storage) AddJob(job *model.Job) {
 	if len(s.jobs) == 0 || s.jobs[len(s.jobs)-1].BinlogInfo.FinishedTS < job.BinlogInfo.FinishedTS {
 		s.jobs = append(s.jobs, job)
