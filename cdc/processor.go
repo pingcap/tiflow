@@ -92,7 +92,7 @@ func (p *txnChannel) Forward(ctx context.Context, tableID int64, ts uint64, entr
 				return
 			}
 			if t.Ts > ts {
-				p.PutBack(t)
+				p.putBack(t)
 				return
 			}
 			pushProcessorEntry(ctx, entryC, newProcessorTxnEntry(t))
@@ -109,7 +109,7 @@ func pushProcessorEntry(ctx context.Context, entryC chan<- ProcessorEntry, e Pro
 	}
 }
 
-func (p *txnChannel) PutBack(t model.RawTxn) {
+func (p *txnChannel) putBack(t model.RawTxn) {
 	if p.putBackTxn != nil {
 		log.Fatal("can not put back raw txn continuously")
 	}

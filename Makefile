@@ -18,7 +18,7 @@ GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race
 ARCH  := "`uname -s`"
 LINUX := "Linux"
 MAC   := "Darwin"
-PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto'
+PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor')
