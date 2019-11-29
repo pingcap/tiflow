@@ -9,6 +9,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/domain"
@@ -252,6 +253,13 @@ func (m *MockPullerManager) GetTableInfo(schema, table string) *timodel.TableInf
 	tbl, err := is.TableByName(timodel.NewCIStr(schema), timodel.NewCIStr(table))
 	m.c.Assert(err, check.IsNil)
 	return tbl.Meta()
+}
+
+// GetDDLJobs returns the ddl jobs
+func (m *MockPullerManager) GetDDLJobs() []*timodel.Job {
+	jobs, err := kv.LoadHistoryDDLJobs(m.store)
+	m.c.Assert(err, check.IsNil)
+	return jobs
 }
 
 func (p *mockPuller) sendRawTxn(ctx context.Context, rawTxn model.RawTxn, outputFn func(context.Context, model.RawTxn) error) {

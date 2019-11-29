@@ -1,14 +1,17 @@
 package entry
 
 import (
+	"context"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/pingcap/check"
-	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/mock"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/schema"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -16,43 +19,56 @@ type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
-func setUpPullerAndSchema(c *check.C, sqls ...string) (*mock.TiDB, *schema.Storage) {
-	puller, err := mock.NewMockPuller()
-	c.Assert(err, check.IsNil)
-	var jobs []*timodel.Job
-
+func setUpPullerAndSchema(ctx context.Context, c *check.C, sqls ...string) (*puller.MockPullerManager, *schema.Storage) {
+	pm := puller.NewMockPullerManager(c)
+	go pm.Run(ctx)
 	for _, sql := range sqls {
-		rawEntries := puller.MustExec(c, sql)
-		for _, raw := range rawEntries {
-			e, err := unmarshal(raw)
-			c.Assert(err, check.IsNil)
-			switch e := e.(type) {
-			case *ddlJobKVEntry:
-				jobs = append(jobs, e.Job)
-			}
-		}
+		pm.MustExec(sql)
 	}
-	c.Assert(len(jobs), check.Equals, len(sqls))
+
+	jobs := pm.GetDDLJobs()
 	schemaStorage, err := schema.NewStorage(jobs, false)
 	c.Assert(err, check.IsNil)
 	err = schemaStorage.HandlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
 	c.Assert(err, check.IsNil)
-	return puller, schemaStorage
+	return pm, schemaStorage
+}
+
+func getFirstRealTxn(ctx context.Context, c *check.C, plr puller.Puller) (result model.RawTxn) {
+	ctx, cancel := context.WithCancel(ctx)
+	var once sync.Once
+	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
+		if rawTxn.IsFake() {
+			return nil
+		}
+		once.Do(func() {
+			result = rawTxn
+		})
+		cancel()
+		return nil
+	})
+	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+	return
 }
 
 func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
-	c.Skip("DDL is undetectable now in unit test environment")
-	puller, schema := setUpPullerAndSchema(c, "create database testDB", "create table testDB.test1(id varchar(255) primary key, a int, index ci (a))")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pm, schema := setUpPullerAndSchema(ctx, c,
+		"create database testDB",
+		"create table testDB.test1(id varchar(255) primary key, a int, index ci (a))",
+	)
+	tableInfo := pm.GetTableInfo("testDB", "test1")
+	tableID := tableInfo.ID
 	mounter := NewTxnMounter(schema, time.UTC)
+	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
 
-	rawKV := puller.MustExec(c, "insert into testDB.test1 values('ttt',6)")
-	t, err := mounter.Mount(model.RawTxn{
-		Ts:      rawKV[0].Ts,
-		Entries: rawKV,
-	})
+	pm.MustExec("insert into testDB.test1 values('ttt',6)")
+	rawTxn := getFirstRealTxn(ctx, c, plr)
+	t, err := mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, t, &model.Txn{
-		Ts: rawKV[0].Ts,
+		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
 				Database: "testDB",
@@ -74,14 +90,12 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 		},
 	})
 
-	rawKV = puller.MustExec(c, "update testDB.test1 set id = 'vvv' where a = 6")
-	t, err = mounter.Mount(model.RawTxn{
-		Ts:      rawKV[0].Ts,
-		Entries: rawKV,
-	})
+	pm.MustExec("update testDB.test1 set id = 'vvv' where a = 6")
+	rawTxn = getFirstRealTxn(ctx, c, plr)
+	t, err = mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, t, &model.Txn{
-		Ts: rawKV[0].Ts,
+		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
 				Database: "testDB",
@@ -111,14 +125,12 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 		},
 	})
 
-	rawKV = puller.MustExec(c, "delete from testDB.test1 where a = 6")
-	t, err = mounter.Mount(model.RawTxn{
-		Ts:      rawKV[0].Ts,
-		Entries: rawKV,
-	})
+	pm.MustExec("delete from testDB.test1 where a = 6")
+	rawTxn = getFirstRealTxn(ctx, c, plr)
+	t, err = mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, t, &model.Txn{
-		Ts: rawKV[0].Ts,
+		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
 				Database: "testDB",
@@ -133,18 +145,23 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 }
 
 func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
-	c.Skip("DDL is undetectable now in unit test environment")
-	puller, schema := setUpPullerAndSchema(c, "create database testDB", "create table testDB.test1(id int primary key, a int unique key)")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pm, schema := setUpPullerAndSchema(ctx, c,
+		"create database testDB",
+		"create table testDB.test1(id int primary key, a int unique key)",
+	)
+	tableInfo := pm.GetTableInfo("testDB", "test1")
+	tableID := tableInfo.ID
 	mounter := NewTxnMounter(schema, time.UTC)
+	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
 
-	rawKV := puller.MustExec(c, "insert into testDB.test1 values(777,888)")
-	t, err := mounter.Mount(model.RawTxn{
-		Ts:      rawKV[0].Ts,
-		Entries: rawKV,
-	})
+	pm.MustExec("insert into testDB.test1 values(777,888)")
+	rawTxn := getFirstRealTxn(ctx, c, plr)
+	t, err := mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, t, &model.Txn{
-		Ts: rawKV[0].Ts,
+		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
 				Database: "testDB",
@@ -166,14 +183,12 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 		},
 	})
 
-	rawKV = puller.MustExec(c, "update testDB.test1 set id = 999 where a = 888")
-	t, err = mounter.Mount(model.RawTxn{
-		Ts:      rawKV[0].Ts,
-		Entries: rawKV,
-	})
+	pm.MustExec("update testDB.test1 set id = 999 where a = 888")
+	rawTxn = getFirstRealTxn(ctx, c, plr)
+	t, err = mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, t, &model.Txn{
-		Ts: rawKV[0].Ts,
+		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
 				Database: "testDB",
@@ -203,14 +218,12 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 		},
 	})
 
-	rawKV = puller.MustExec(c, "delete from testDB.test1 where id = 999")
-	t, err = mounter.Mount(model.RawTxn{
-		Ts:      rawKV[0].Ts,
-		Entries: rawKV,
-	})
+	pm.MustExec("delete from testDB.test1 where id = 999")
+	rawTxn = getFirstRealTxn(ctx, c, plr)
+	t, err = mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
 	cs.assertTableTxnEquals(c, t, &model.Txn{
-		Ts: rawKV[0].Ts,
+		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
 				Database: "testDB",
@@ -226,86 +239,6 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 				Tp:       model.DeleteDMLType,
 				Values: map[string]types.Datum{
 					"a": types.NewIntDatum(888),
-				},
-			},
-		},
-	})
-}
-
-func (cs *mountTxnsSuite) TestDDL(c *check.C) {
-	c.Skip("DDL is undetectable now in unit test environment")
-	puller, schema := setUpPullerAndSchema(c, "create database testDB", "create table testDB.test1(id varchar(255) primary key, a int, index ci (a))")
-	mounter := NewTxnMounter(schema, time.UTC)
-	rawKV := puller.MustExec(c, "alter table testDB.test1 add b int null")
-	t, err := mounter.Mount(model.RawTxn{
-		Ts:      rawKV[0].Ts,
-		Entries: rawKV,
-	})
-	c.Assert(err, check.IsNil)
-	c.Assert(t, check.DeepEquals, &model.Txn{
-		DDL: &model.DDL{
-			Database: "testDB",
-			Table:    "test1",
-			Job:      &timodel.Job{},
-		},
-		Ts: rawKV[0].Ts,
-	})
-
-	// test insert null value
-	rawKV = puller.MustExec(c, "insert into testDB.test1(id,a) values('ttt',6)")
-	t, err = mounter.Mount(model.RawTxn{
-		Ts:      rawKV[0].Ts,
-		Entries: rawKV,
-	})
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, &model.Txn{
-		Ts: rawKV[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("ttt")),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("ttt")),
-					"a":  types.NewIntDatum(6),
-				},
-			},
-		},
-	})
-
-	rawKV = puller.MustExec(c, "insert into testDB.test1(id,a,b) values('kkk',6,7)")
-	t, err = mounter.Mount(model.RawTxn{
-		Ts:      rawKV[0].Ts,
-		Entries: rawKV,
-	})
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, &model.Txn{
-		Ts: rawKV[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("kkk")),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("kkk")),
-					"a":  types.NewIntDatum(6),
-					"b":  types.NewIntDatum(7),
 				},
 			},
 		},
@@ -335,5 +268,4 @@ func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C,
 		}
 	}
 	assertContain(obtainedDMLs, expectedDMLs)
-
 }
