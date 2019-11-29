@@ -85,13 +85,14 @@ check: fmt lint check-static tidy
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
-	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go" > "$(TEST_DIR)/all_cov.out"
+	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go" > "$(TEST_DIR)/tmp_unit_cov.out"
+	grep -v "$(CDC_PKG)/cdc/kv/testing.go" "$(TEST_DIR)/tmp_unit_cov.out" >"$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls
-	@goveralls -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
+	@goveralls -coverprofile=$(TEST_DIR)/unit_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
 else
-	go tool cover -html "$(TEST_DIR)/all_cov.out" -o "$(TEST_DIR)/all_cov.html"
-	grep -F '<option' "$(TEST_DIR)/all_cov.html"
+	go tool cover -html "$(TEST_DIR)/unit_cov.out" -o "$(TEST_DIR)/unit_cov.html"
+	go tool cover -func="$(TEST_DIR)/unit_cov.out"
 endif
 
 check-static: tools/bin/golangci-lint
