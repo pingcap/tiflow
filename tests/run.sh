@@ -9,6 +9,20 @@ export PATH=$PATH:$CUR/_utils:$CUR/../bin
 mkdir -p $OUT_DIR || true
 
 if [ "${1-}" = '--debug' ]; then
+    WORK_DIR=$OUT_DIR/debug
+    trap stop_tidb_cluster EXIT
+
+    rm -rf $WORK_DIR && mkdir -p $WORK_DIR
+
+    PATH="$CUR/../bin:$CUR/_utils:$PATH" \
+    OUT_DIR=$OUT_DIR \
+    TEST_NAME="debug" \
+    start_tidb_cluster $WORK_DIR
+
+    cdc server --log-file $WORK_DIR/cdc.log --log-level debug > $WORK_DIR/cdc.log 2>&1 &
+    sleep 1
+    cdc cli
+
     echo 'You may now debug from another terminal. Press [ENTER] to continue.'
     read line
 fi

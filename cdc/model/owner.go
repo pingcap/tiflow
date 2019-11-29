@@ -15,10 +15,12 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/pingcap/errors"
 )
 
+// ProcessTableInfo contains the info about tables that processor need to process.
 type ProcessTableInfo struct {
 	ID      uint64 `json:"id"`
 	StartTs uint64 `json:"start-ts"`
@@ -45,9 +47,33 @@ type SubChangeFeedInfo struct {
 	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
 	ResolvedTs uint64 `json:"resolved-ts"`
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
+	// TODO change to be a map for easy update.
 	TableInfos []*ProcessTableInfo `json:"table-infos"`
 	TablePLock *TableLock          `json:"table-p-lock"`
 	TableCLock *TableLock          `json:"table-c-lock"`
+}
+
+// String implements fmt.Stringer interface.
+func (scfi *SubChangeFeedInfo) String() string {
+	data, _ := scfi.Marshal()
+	return string(data)
+}
+
+// RemoveTable remove the table in TableInfos.
+func (scfi *SubChangeFeedInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
+	for idx, table := range scfi.TableInfos {
+		if table.ID == id {
+			last := scfi.TableInfos[len(scfi.TableInfos)-1]
+			removedTable := scfi.TableInfos[idx]
+
+			scfi.TableInfos[idx] = last
+			scfi.TableInfos = scfi.TableInfos[:len(scfi.TableInfos)-1]
+
+			return removedTable, true
+		}
+	}
+
+	return nil, false
 }
 
 // Marshal returns the json marshal format of a SubChangeFeedInfo
@@ -62,20 +88,64 @@ func (scfi *SubChangeFeedInfo) Unmarshal(data []byte) error {
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 
-type CaptureID = string
-type ChangeFeedID = string
-type ProcessorsInfos = map[CaptureID]*SubChangeFeedInfo
+// Clone returns a deep-clone of the struct
+func (scfi *SubChangeFeedInfo) Clone() *SubChangeFeedInfo {
+	clone := *scfi
+	infos := make([]*ProcessTableInfo, 0, len(scfi.TableInfos))
+	for _, ti := range scfi.TableInfos {
+		c := *ti
+		infos = append(infos, &c)
+	}
+	clone.TableInfos = infos
+	if scfi.TablePLock != nil {
+		pLock := *scfi.TablePLock
+		clone.TablePLock = &pLock
+	}
+	if scfi.TableCLock != nil {
+		cLock := *scfi.TableCLock
+		clone.TableCLock = &cLock
+	}
+	return &clone
+}
 
+// CaptureID is the type for capture ID
+type CaptureID = string
+
+// ChangeFeedID is the type for change feed ID
+type ChangeFeedID = string
+
+// ProcessorsInfos maps from capture IDs to SubChangeFeedInfo
+type ProcessorsInfos map[CaptureID]*SubChangeFeedInfo
+
+// ChangeFeedStatus is the type for change feed status
 type ChangeFeedStatus int
 
 const (
+	// ChangeFeedUnknown stands for all unknown status
 	ChangeFeedUnknown ChangeFeedStatus = iota
+	// ChangeFeedSyncDML means DMLs are being processed
 	ChangeFeedSyncDML
+	// ChangeFeedWaitToExecDDL means we are waiting to execute a DDL
 	ChangeFeedWaitToExecDDL
+	// ChangeFeedExecDDL means a DDL is being executed
 	ChangeFeedExecDDL
+	// ChangeFeedDDLExecuteFailed means that an error occurred when executing a DDL
 	ChangeFeedDDLExecuteFailed
 )
 
+// String implements fmt.Stringer interface.
+func (p ProcessorsInfos) String() string {
+	s := "{"
+	for id, sinfo := range p {
+		s += fmt.Sprintf("%s: %+v,", id, *sinfo)
+	}
+
+	s += "}"
+
+	return s
+}
+
+// String implements fmt.Stringer interface.
 func (s ChangeFeedStatus) String() string {
 	switch s {
 	case ChangeFeedSyncDML:
@@ -91,17 +161,10 @@ func (s ChangeFeedStatus) String() string {
 }
 
 // ChangeFeedInfo stores information about a ChangeFeed
-// partial fileds are stored in etcd, we may refine this later
 type ChangeFeedInfo struct {
-	Status       ChangeFeedStatus `json:"-"`
-	SinkURI      string           `json:"sink-uri"`
-	ResolvedTs   uint64           `json:"resolved-ts"`
-	CheckpointTs uint64           `json:"checkpoint-ts"`
-	StartTs      uint64           `json:"-"`
-	TargetTs     uint64           `json:"-"`
-
-	ProcessorInfos  ProcessorsInfos `json:"-"`
-	DDLCurrentIndex int             `json:"-"`
+	SinkURI      string `json:"sink-uri"`
+	ResolvedTs   uint64 `json:"resolved-ts"`
+	CheckpointTs uint64 `json:"checkpoint-ts"`
 }
 
 // Marshal returns json encoded string of ChangeFeedInfo, only contains necessary fields stored in storage

@@ -13,28 +13,31 @@ import (
 	"go.uber.org/zap"
 )
 
+// Mounter is used to parse SQL events from KV events
 type Mounter struct {
 	schemaStorage *schema.Storage
 	loc           *time.Location
 }
 
+// NewTxnMounter creates a mounter
 func NewTxnMounter(schema *schema.Storage, loc *time.Location) *Mounter {
 	return &Mounter{schemaStorage: schema, loc: loc}
 }
 
+// Mount parses a raw transaction and returns a transaction
 func (m *Mounter) Mount(rawTxn model.RawTxn) (*model.Txn, error) {
 	t := &model.Txn{
 		Ts: rawTxn.Ts,
 	}
 	var replaceDMLs, deleteDMLs []*model.DML
 	for _, raw := range rawTxn.Entries {
-		kvEntry, err := Unmarshal(raw)
+		kvEntry, err := unmarshal(raw)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 
 		switch e := kvEntry.(type) {
-		case *RowKVEntry:
+		case *rowKVEntry:
 			dml, err := m.mountRowKVEntry(e)
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -46,7 +49,7 @@ func (m *Mounter) Mount(rawTxn model.RawTxn) (*model.Txn, error) {
 					deleteDMLs = append(deleteDMLs, dml)
 				}
 			}
-		case *IndexKVEntry:
+		case *indexKVEntry:
 			dml, err := m.mountIndexKVEntry(e)
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -54,27 +57,27 @@ func (m *Mounter) Mount(rawTxn model.RawTxn) (*model.Txn, error) {
 			if dml != nil {
 				deleteDMLs = append(deleteDMLs, dml)
 			}
-		case *DDLJobKVEntry:
+		case *ddlJobKVEntry:
 			t.DDL, err = m.mountDDL(e)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 			return t, nil
-		case *UnknownKVEntry:
-			log.Warn("Found unknown kv entry", zap.Reflect("UnknownKVEntry", e))
+		case *unknownKVEntry:
+			log.Warn("Found unknown kv entry", zap.Reflect("unknownKVEntry", e))
 		}
 	}
 	t.DMLs = append(deleteDMLs, replaceDMLs...)
 	return t, nil
 }
 
-func (m *Mounter) mountRowKVEntry(row *RowKVEntry) (*model.DML, error) {
+func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 	tableInfo, tableName, handleColName, err := m.fetchTableInfo(row.TableID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	err = row.Unflatten(tableInfo, m.loc)
+	err = row.unflatten(tableInfo, m.loc)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -108,13 +111,13 @@ func (m *Mounter) mountRowKVEntry(row *RowKVEntry) (*model.DML, error) {
 	}, nil
 }
 
-func (m *Mounter) mountIndexKVEntry(idx *IndexKVEntry) (*model.DML, error) {
+func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
 	tableInfo, tableName, _, err := m.fetchTableInfo(idx.TableID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	err = idx.Unflatten(tableInfo, m.loc)
+	err = idx.unflatten(tableInfo, m.loc)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -163,7 +166,7 @@ func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *timodel.TableInfo, t
 	return
 }
 
-func (m *Mounter) mountDDL(jobEntry *DDLJobKVEntry) (*model.DDL, error) {
+func (m *Mounter) mountDDL(jobEntry *ddlJobKVEntry) (*model.DDL, error) {
 	databaseName := jobEntry.Job.SchemaName
 	var tableName string
 	table := jobEntry.Job.BinlogInfo.TableInfo

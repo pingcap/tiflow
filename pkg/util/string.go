@@ -7,18 +7,22 @@ import (
 	"github.com/pingcap/errors"
 )
 
+// QuoteSchema quotes a full table name
 func QuoteSchema(schema string, table string) string {
 	return fmt.Sprintf("`%s`.`%s`", EscapeName(schema), EscapeName(table))
 }
 
+// QuoteName wraps a name with "`"
 func QuoteName(name string) string {
 	return "`" + EscapeName(name) + "`"
 }
 
+// EscapeName replaces all "`" in name with "``"
 func EscapeName(name string) string {
 	return strings.Replace(name, "`", "``", -1)
 }
 
+// HolderString returns a string of place holders separated by comma
 func HolderString(n int) string {
 	var builder strings.Builder
 	builder.Grow((n-1)*2 + 1)

@@ -59,7 +59,10 @@ func (s *schedulerSuite) SetUpTest(c *check.C) {
 func (s *schedulerSuite) TearDownTest(c *check.C) {
 	s.etcd.Close()
 	s.cancel()
-	s.errg.Wait()
+	err := s.errg.Wait()
+	if err != nil {
+		c.Errorf("Error group error: %s", err)
+	}
 }
 
 func mockRunProcessor(
@@ -68,6 +71,7 @@ func mockRunProcessor(
 	detail model.ChangeFeedDetail,
 	changefeedID string,
 	captureID string,
+	_ processorCallback,
 ) (chan error, error) {
 	errCh := make(chan error, 1)
 	atomic.AddInt32(&runProcessorCount, 1)
@@ -80,6 +84,7 @@ func mockRunProcessorError(
 	detail model.ChangeFeedDetail,
 	changefeedID string,
 	captureID string,
+	_ processorCallback,
 ) (chan error, error) {
 	errCh := make(chan error, 1)
 	defer func() {
@@ -96,6 +101,7 @@ func mockRunProcessorWatcher(
 	etcdCli *clientv3.Client,
 	detail model.ChangeFeedDetail,
 	errCh chan error,
+	_ processorCallback,
 ) *ProcessorWatcher {
 	atomic.AddInt32(&runChangeFeedWatcherCount, 1)
 	return nil
@@ -130,7 +136,7 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 
 	// subchangefeed exists before watch starts
 	errCh := make(chan error, 1)
-	sw := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh)
+	sw := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh, nil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runProcessorCount) == 1
 	}), check.IsTrue)
@@ -148,14 +154,14 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 	c.Assert(sw.isClosed(), check.IsFalse)
 	ctx, cancel := context.WithCancel(context.Background())
 	sw.wg.Add(1)
-	go sw.Watch(ctx, errCh)
+	go sw.Watch(ctx, errCh, nil)
 	cancel()
 	sw.close()
 	c.Assert(sw.isClosed(), check.IsTrue)
 
 	// check watcher can find new subchangefeed in watch loop
 	errCh2 := make(chan error, 1)
-	runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2)
+	runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2, nil)
 	_, err = cli.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
@@ -191,7 +197,7 @@ func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	errCh := make(chan error, 1)
-	sw := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh)
+	sw := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh, nil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return len(errCh) == 1
 	}), check.IsTrue)
@@ -230,7 +236,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err2 := w.Watch(ctx)
+		err2 := w.Watch(ctx, nil)
 		if err2 != nil && errors.Cause(err2) != context.Canceled {
 			c.Fatal(err2)
 		}

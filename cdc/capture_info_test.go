@@ -42,7 +42,10 @@ func (ci *captureInfoSuite) SetUpTest(c *check.C) {
 func (ci *captureInfoSuite) TearDownTest(c *check.C) {
 	ci.etcd.Close()
 	ci.cancel()
-	ci.errg.Wait()
+	err := ci.errg.Wait()
+	if err != nil {
+		c.Errorf("Error group error: %s", err)
+	}
 }
 
 func (ci *captureInfoSuite) TestPutDeleteGet(c *check.C) {

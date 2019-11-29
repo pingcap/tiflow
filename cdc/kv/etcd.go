@@ -25,6 +25,7 @@ import (
 )
 
 const (
+	// EtcdKeyBase is the common prefix of the keys in CDC
 	EtcdKeyBase = "/tidb/cdc"
 )
 
@@ -43,7 +44,7 @@ func GetEtcdKeyChangeFeedStatus(changefeedID string) string {
 	return fmt.Sprintf("%s/changefeed/status/%s", EtcdKeyBase, changefeedID)
 }
 
-// GetEtcdKeyChangeFeedList returns the key of a subchangefeed info without captureID part
+// GetEtcdKeySubChangeFeedList returns the key of a subchangefeed info without captureID part
 func GetEtcdKeySubChangeFeedList(changefeedID string) string {
 	return fmt.Sprintf("%s/changefeed/subchangfeed/%s", EtcdKeyBase, changefeedID)
 }
@@ -53,7 +54,7 @@ func GetEtcdKeySubChangeFeed(changefeedID, captureID string) string {
 	return fmt.Sprintf("%s/%s", GetEtcdKeySubChangeFeedList(changefeedID), captureID)
 }
 
-// GetEtcdKeyChangeFeedList returns the prefix key of all capture info
+// GetEtcdKeyCaptureList returns the prefix key of all capture info
 func GetEtcdKeyCaptureList() string {
 	return EtcdKeyBase + "/capture/info"
 }
@@ -187,6 +188,30 @@ func GetSubChangeFeedInfo(
 	info := &model.SubChangeFeedInfo{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
 	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
+}
+
+// PutSubChangeFeedInfo puts subchangefeed info into etcd.
+func PutSubChangeFeedInfo(
+	ctx context.Context,
+	client *clientv3.Client,
+	changefeedID string,
+	captureID string,
+	info *model.SubChangeFeedInfo,
+	opts ...clientv3.OpOption,
+) error {
+	data, err := info.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	key := GetEtcdKeySubChangeFeed(changefeedID, captureID)
+
+	_, err = client.Put(ctx, key, data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
 }
 
 // PutChangeFeedStatus puts changefeed synchronization status into etcd

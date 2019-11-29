@@ -16,18 +16,22 @@ const (
 	OpTypeDelete OpType = 2
 )
 
+// RawKVEntry is entries received from TiKV
 type RawKVEntry = RegionFeedValue
 
+// KvOrResolved can be used as a union type of RawKVEntry and ResolvedSpan
 type KvOrResolved struct {
 	KV       *RawKVEntry
 	Resolved *ResolvedSpan
 }
 
+// ResolvedSpan represents that a span is resolved at a certain timestamp
 type ResolvedSpan struct {
 	Span      util.Span
 	Timestamp uint64
 }
 
+// GetValue returns the underlying value
 func (e *KvOrResolved) GetValue() interface{} {
 	if e.KV != nil {
 		return e.KV

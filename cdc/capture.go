@@ -22,13 +22,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/pkg/flags"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
+	"github.com/pingcap/tidb/store/tikv"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -44,7 +44,9 @@ type Capture struct {
 	pdEndpoints  []string
 	etcdClient   *clientv3.Client
 	ownerManager roles.Manager
-	ownerWorker  roles.Owner
+	ownerWorker  *ownerImpl
+
+	processors map[string]*processor
 
 	info *model.CaptureInfo
 }
@@ -70,14 +72,14 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	log.Info("creating capture", zap.String("capture-id", id))
 
 	manager := roles.NewOwnerManager(cli, id, CaptureOwnerKey)
-	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
+
+	worker, err := NewOwner(pdEndpoints, cli, manager)
 	if err != nil {
-		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
+		return nil, errors.Annotate(err, "new owner failed")
 	}
-	ddlHandler := NewDDLHandler(pdCli)
-	worker := roles.NewOwner(cli, manager, ddlHandler)
 
 	c = &Capture{
+		processors:   make(map[string]*processor),
 		pdEndpoints:  pdEndpoints,
 		etcdClient:   cli,
 		ownerManager: manager,
@@ -86,6 +88,18 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	}
 
 	return
+}
+
+var _ processorCallback = &Capture{}
+
+// OnRunProcessor implements processorCallback.
+func (c *Capture) OnRunProcessor(p *processor) {
+	c.processors[p.changefeedID] = p
+}
+
+// OnStopProcessor implements processorCallback.
+func (c *Capture) OnStopProcessor(p *processor) {
+	delete(c.processors, p.changefeedID)
 }
 
 // Start starts the Capture mainloop
@@ -109,18 +123,15 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 
 	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)
 	errg.Go(func() error {
-		return watcher.Watch(cctx)
+		return watcher.Watch(cctx, c)
 	})
 
 	return errg.Wait()
 }
 
+// Close closes the capture by unregistering it from etcd
 func (c *Capture) Close(ctx context.Context) error {
 	return errors.Trace(DeleteCaptureInfo(ctx, c.info.ID, c.etcdClient))
-}
-
-func (c *Capture) infoKey() string {
-	return infoKey(c.info.ID)
 }
 
 // register registers the capture information in etcd
@@ -133,6 +144,9 @@ func createTiStore(urls string) (tidbkv.Storage, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	// Ignore error if it is already registered.
+	_ = store.Register("tikv", tikv.Driver{})
 
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := store.New(tiPath)

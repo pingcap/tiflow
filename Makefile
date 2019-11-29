@@ -3,10 +3,6 @@
 
 PROJECT=ticdc
 
-# Ensure GOPATH is set before running build process.
-ifeq "$(GOPATH)" ""
-  $(error Please set the environment variable GOPATH before running `make`)
-endif
 FAIL_ON_STDOUT := awk '{ print  } END { if (NR > 0) { exit 1  }  }'
 
 CURDIR := $(shell pwd)
@@ -64,6 +60,7 @@ check_third_party_binary:
 	@which bin/pd-server
 	@which bin/pd-ctl
 	@which bin/sync_diff_inspector
+	@which bin/go-ycsb
 
 integration_test: check_third_party_binary
 	tests/run.sh $(CASE)
@@ -97,13 +94,9 @@ else
 	grep -F '<option' "$(TEST_DIR)/all_cov.html"
 endif
 
-# TODO: deadcode unused varcheck reports too many "** is unused now"
 check-static: tools/bin/golangci-lint
 	$(GO) mod vendor
-	tools/bin/golangci-lint --disable errcheck \
-		--disable deadcode \
-		--disable unused \
-		--disable varcheck \
+	tools/bin/golangci-lint \
 		run ./... # $$($(PACKAGE_DIRECTORIES))
 
 clean:

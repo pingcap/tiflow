@@ -17,13 +17,11 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -46,6 +44,7 @@ type pullerImpl struct {
 	needEncode bool
 }
 
+// CancellablePuller is a puller that can be stopped with the Cancel function
 type CancellablePuller struct {
 	Puller
 
@@ -64,7 +63,7 @@ func NewPuller(
 		pdCli:        pdCli,
 		checkpointTs: checkpointTs,
 		spans:        spans,
-		buf:          MakeBuffer(),
+		buf:          makeBuffer(),
 		tsTracker:    makeSpanFrontier(spans...),
 		needEncode:   needEncode,
 	}
@@ -78,9 +77,6 @@ func (p *pullerImpl) Output() Buffer {
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	// TODO pull from tikv and push into buf
-	// need buffer in memory first
-
 	cli, err := kv.NewCDCClient(p.pdCli)
 	if err != nil {
 		return errors.Annotate(err, "create cdc client failed")
@@ -113,7 +109,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
 					if !util.KeyInSpans(val.Key, p.spans, p.needEncode) {
-						log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
+						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
 						continue
 					}
 
@@ -124,10 +120,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						Ts:     val.Ts,
 					}
 
-					p.buf.AddKVEntry(ctx, kv)
+					if err := p.buf.AddKVEntry(ctx, kv); err != nil {
+						return err
+					}
 				} else if e.Checkpoint != nil {
 					cp := e.Checkpoint
-					p.buf.AddResolved(ctx, cp.Span, cp.ResolvedTs)
+					if err := p.buf.AddResolved(ctx, cp.Span, cp.ResolvedTs); err != nil {
+						return err
+					}
 				}
 			case <-ctx.Done():
 				return ctx.Err()

@@ -60,7 +60,10 @@ func (s *etcdSuite) SetUpTest(c *check.C) {
 func (s *etcdSuite) TearDownTest(c *check.C) {
 	s.e.Close()
 	s.cancel()
-	s.errg.Wait()
+	err := s.errg.Wait()
+	if err != nil {
+		c.Errorf("Error group error: %s", err)
+	}
 }
 
 func (s *etcdSuite) TestInfoReader(c *check.C) {
@@ -243,4 +246,26 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 	resolvedTs, err = rw.ReadGlobalResolvedTs(context.Background())
 	c.Assert(err, check.IsNil)
 	c.Assert(resolvedTs, check.Equals, info.ResolvedTs)
+}
+
+func (s *etcdSuite) TestWriteTableCLock(c *check.C) {
+	var (
+		changefeedID = "test-write-clock-changefeed"
+		captureID    = "test-write-clock-capture"
+		info         = &model.SubChangeFeedInfo{
+			TablePLock: &model.TableLock{Ts: 100},
+		}
+		checkpointTs uint64 = 300
+	)
+	rw := NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
+	rw.info = info
+	err := rw.WriteTableCLock(context.Background(), checkpointTs)
+	c.Assert(err, check.IsNil)
+	c.Assert(rw.info.TableCLock, check.NotNil)
+	c.Assert(rw.info.TableCLock.CheckpointTs, check.Equals, checkpointTs)
+
+	revision, rinfo, err := kv.GetSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID)
+	c.Assert(err, check.IsNil)
+	c.Assert(revision, check.Equals, rw.modRevision)
+	c.Assert(rinfo, check.DeepEquals, rw.info)
 }

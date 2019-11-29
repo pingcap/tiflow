@@ -46,6 +46,7 @@ var (
 type MetaType byte
 
 const (
+	// UnknownMetaType is used for all unknown meta types
 	UnknownMetaType MetaType = 0
 	// StringMeta is the flag for string meta.
 	StringMeta MetaType = 'S'
@@ -61,33 +62,33 @@ const (
 	ListData MetaType = 'l'
 )
 
-type Meta interface {
-	GetType() MetaType
+type meta interface {
+	getType() MetaType
 }
 
-type MetaHashData struct {
+type metaHashData struct {
 	key   string
 	field []byte
 }
 
-func (d MetaHashData) GetType() MetaType {
+func (d metaHashData) getType() MetaType {
 	return HashData
 }
 
-type MetaListData struct {
+type metaListData struct {
 	key   string
 	index int64
 }
 
-func (d MetaListData) GetType() MetaType {
+func (d metaListData) getType() MetaType {
 	return ListData
 }
 
-type Other struct {
+type other struct {
 	tp MetaType
 }
 
-func (d Other) GetType() MetaType {
+func (d other) getType() MetaType {
 	return d.tp
 }
 
@@ -131,7 +132,7 @@ func decodeIndexKey(key []byte) (indexID int64, indexValue []types.Datum, err er
 	return
 }
 
-func decodeMetaKey(ek []byte) (Meta, error) {
+func decodeMetaKey(ek []byte) (meta, error) {
 	if !bytes.HasPrefix(ek, metaPrefix) {
 		return nil, errors.New("invalid encoded hash data key prefix")
 	}
@@ -155,7 +156,7 @@ func decodeMetaKey(ek []byte) (Meta, error) {
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			return MetaHashData{key: key, field: field}, nil
+			return metaHashData{key: key, field: field}, nil
 		}
 		if len(ek) > 0 {
 			// TODO: warning hash key decode failure
@@ -170,10 +171,10 @@ func decodeMetaKey(ek []byte) (Meta, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		return MetaListData{key: key, index: index}, nil
+		return metaListData{key: key, index: index}, nil
 	// TODO decode other key
 	default:
-		return Other{tp: MetaType(rawTp)}, nil
+		return other{tp: MetaType(rawTp)}, nil
 	}
 	return nil, fmt.Errorf("unknown meta type %v", rawTp)
 }

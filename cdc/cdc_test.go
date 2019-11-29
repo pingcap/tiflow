@@ -22,7 +22,7 @@ func TestSuite(t *testing.T) { TestingT(t) }
 
 type CDCSuite struct {
 	database string
-	puller   *mock.MockTiDB
+	puller   *mock.TiDB
 	mock     sqlmock.Sqlmock
 	mounter  *entry.Mounter
 	sink     sink.Sink
@@ -61,6 +61,10 @@ func NewCDCSuite() *CDCSuite {
 	mounter := entry.NewTxnMounter(schemaStorage, time.Local)
 	cdcSuite.mounter = mounter
 	return cdcSuite
+}
+
+func (s *CDCSuite) TearDownSuite(c *C) {
+	s.puller.TearDown()
 }
 
 func (s *CDCSuite) Forward(span util.Span, ts uint64) bool {

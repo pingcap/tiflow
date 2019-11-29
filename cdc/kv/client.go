@@ -375,7 +375,7 @@ func (c *CDCClient) singleEventFeed(
 				return req.CheckpointTs, errors.Trace(err)
 			}
 
-			log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
+			// log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
 
 			for _, event := range cevent.Events {
 				switch x := event.Event.(type) {
