@@ -255,6 +255,7 @@ func (m *MockPullerManager) GetTableInfo(schema, table string) *timodel.TableInf
 	return tbl.Meta()
 }
 
+// GetDDLJobs returns the ddl jobs
 func (m *MockPullerManager) GetDDLJobs() []*timodel.Job {
 	jobs, err := kv.LoadHistoryDDLJobs(m.store)
 	m.c.Assert(err, check.IsNil)
