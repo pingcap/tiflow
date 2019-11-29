@@ -229,3 +229,69 @@ func (p *processorSuite) TestDiffProcessTableInfos(c *check.C) {
 		c.Assert(added, check.DeepEquals, tc.added)
 	}
 }
+
+type txnChannelSuite struct{}
+
+var _ = check.Suite(&txnChannelSuite{})
+
+func (s *txnChannelSuite) TestShouldForwardTxnsByTs(c *check.C) {
+	input := make(chan model.RawTxn, 5)
+	var lastTs uint64
+	callback := func(ts uint64) {
+		lastTs = ts
+	}
+	tc := newTxnChannel(input, 5, callback)
+	for _, ts := range []uint64{1, 2, 4, 6} {
+		select {
+		case input <- model.RawTxn{Ts: ts}:
+		case <-time.After(time.Second):
+			c.Fatal("Timeout sending to input")
+		}
+	}
+	close(input)
+
+	output := make(chan ProcessorEntry, 5)
+
+	assertCorrectOutput := func(expected []uint64) {
+		for _, ts := range expected {
+			c.Logf("Checking %d", ts)
+			select {
+			case e := <-output:
+				c.Assert(e.Ts, check.Equals, ts)
+			case <-time.After(time.Second):
+				c.Fatal("Timeout reading output")
+			}
+		}
+
+		select {
+		case <-output:
+			c.Fatal("Output should be empty now")
+		default:
+		}
+	}
+
+	tc.Forward(context.Background(), 1, 3, output)
+	// Assert that all txns with ts smaller than 3 is sent to output
+	assertCorrectOutput([]uint64{1, 2})
+	tc.Forward(context.Background(), 1, 10, output)
+	// Assert that all txns with ts smaller than 10 is sent to output
+	assertCorrectOutput([]uint64{4, 6})
+	c.Assert(lastTs, check.Equals, uint64(6))
+}
+
+func (s *txnChannelSuite) TestShouldBeCancellable(c *check.C) {
+	input := make(chan model.RawTxn, 5)
+	tc := newTxnChannel(input, 5, func(ts uint64) {})
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	go func() {
+		tc.Forward(ctx, 1, 1, make(chan ProcessorEntry))
+		close(stopped)
+	}()
+	cancel()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		c.Fatal("Not stopped in time after cancelled")
+	}
+}
