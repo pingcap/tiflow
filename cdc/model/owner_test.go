@@ -58,3 +58,28 @@ func (s *cloneSubChangeFeedInfoSuite) TestShouldBeDeepCopy(c *check.C) {
 
 	assertIsSnapshot()
 }
+
+type removeTableSuite struct{}
+
+var _ = check.Suite(&removeTableSuite{})
+
+func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
+	info := SubChangeFeedInfo{
+		TableInfos: []*ProcessTableInfo{
+			{ID: 1},
+			{ID: 2},
+			{ID: 3},
+		},
+	}
+
+	t, found := info.RemoveTable(2)
+	c.Assert(found, check.IsTrue)
+	c.Assert(t.ID, check.Equals, uint64(2))
+}
+
+func (s *removeTableSuite) TestShouldHandleTableNotFoundCorrectly(c *check.C) {
+	info := SubChangeFeedInfo{}
+	t, found := info.RemoveTable(404)
+	c.Assert(found, check.IsFalse)
+	c.Assert(t, check.IsNil)
+}
