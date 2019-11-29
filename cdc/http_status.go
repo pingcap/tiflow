@@ -21,6 +21,9 @@ import (
 	"net/http"
 	"net/http/pprof"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -40,6 +43,9 @@ func (s *Server) startStatusHTTP() {
 
 	serverMux.HandleFunc("/status", s.handleStatus)
 	serverMux.HandleFunc("/debug/info", s.handleDebugInfo)
+
+	prometheus.DefaultGatherer = registry
+	serverMux.Handle("/metrics", promhttp.Handler())
 
 	addr := fmt.Sprintf("%s:%d", s.opts.statusHost, s.opts.statusPort)
 	s.statusServer = &http.Server{Addr: addr, Handler: serverMux}
