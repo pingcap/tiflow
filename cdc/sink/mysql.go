@@ -20,7 +20,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cenkalti/backoff"
+	"github.com/pingcap/ticdc/pkg/retry"
+
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -152,21 +153,13 @@ func (s *mysqlSink) Close() error {
 }
 
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDL, maxRetries uint64) error {
-	retryCfg := backoff.WithMaxRetries(
-		backoff.WithContext(
-			backoff.NewExponentialBackOff(), ctx),
-		maxRetries,
-	)
-	return backoff.Retry(func() error {
+	return retry.Run(func() error {
 		err := s.execDDL(ctx, ddl)
 		if isIgnorableDDLError(err) {
 			return nil
 		}
-		if err == context.Canceled || err == context.DeadlineExceeded {
-			err = backoff.Permanent(err)
-		}
 		return err
-	}, retryCfg)
+	}, maxRetries)
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDL) error {
