@@ -302,7 +302,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 
 	p.tablesMu.Lock()
 	for _, table := range p.tables {
-		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", table.id, table.resolvedTS)
+		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", table.id, table.loadResolvedTS())
 	}
 	p.tablesMu.Unlock()
 
@@ -663,7 +663,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 
 	inputTxn := make(chan model.RawTxn, 1)
 	tc := newTxnChannel(inputTxn, 1, func(resolvedTs uint64) {
-		table.resolvedTS = resolvedTs
+		table.storeResolvedTS(resolvedTs)
 	})
 	table.inputChan = tc
 
