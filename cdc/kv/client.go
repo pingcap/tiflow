@@ -263,7 +263,7 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 
 	for {
 		var (
-			regions = make([]*metapb.Region, 0)
+			regions []*metapb.Region
 			err     error
 		)
 		retryErr := retry.Run(func() error {

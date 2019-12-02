@@ -28,10 +28,14 @@ func CheckRegionsCover(regions []*metapb.Region, span Span) bool {
 		return StartCompare(regions[i].StartKey, regions[j].StartKey) == -1
 	})
 
-	nextStart := regions[0].StartKey
-	if StartCompare(nextStart, span.Start) == 1 {
+	if StartCompare(regions[0].StartKey, span.Start) == 1 {
 		return false
 	}
+	if EndCompare(regions[len(regions)-1].EndKey, span.End) == -1 {
+		return false
+	}
+
+	nextStart := regions[0].StartKey
 	for _, region := range regions {
 		// incontinuous regions
 		if StartCompare(nextStart, region.StartKey) != 0 {
@@ -39,5 +43,5 @@ func CheckRegionsCover(regions []*metapb.Region, span Span) bool {
 		}
 		nextStart = region.EndKey
 	}
-	return EndCompare(nextStart, span.End) >= 0
+	return true
 }
