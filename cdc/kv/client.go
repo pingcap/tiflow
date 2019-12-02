@@ -244,7 +244,7 @@ func (c *CDCClient) partialRegionFeed(
 		}
 
 		return nil
-	}, 5)
+	}, 0)
 
 	if errors.Cause(berr) == context.Canceled {
 		return nil
