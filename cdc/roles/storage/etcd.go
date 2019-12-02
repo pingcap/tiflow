@@ -188,6 +188,8 @@ func (rw *ProcessorTsEtcdRWriter) writeTsOrUpToDate(
 		if err2 != nil {
 			return err2
 		}
+
+		log.Info("outdated table infos, ignore update timestamp")
 		return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
 	}
 
