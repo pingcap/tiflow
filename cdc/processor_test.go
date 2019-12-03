@@ -150,6 +150,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 		fNewMounter = origFNewMounter
 		fNewMySQLSink = origFNewSink
 	}()
+
 	dir := c.MkDir()
 	etcdURL, etcd, err := etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
@@ -162,15 +163,19 @@ func runCase(c *check.C, cases *processorTestCase) {
 	p.Run(ctx, errCh)
 
 	for i, rawTxnTs := range cases.rawTxnTs {
-		input := make(chan model.RawTxn)
-		err := p.setInputChan(int64(i), input)
+		err := p.addTable(ctx, int64(i), 0)
 		c.Assert(err, check.IsNil)
+
+		table := p.tables[int64(i)]
+		input := table.inputTxn
+
 		go func(rawTxnTs []uint64) {
 			for _, txnTs := range rawTxnTs {
 				input <- model.RawTxn{Ts: txnTs}
 			}
 		}(rawTxnTs)
 	}
+
 	for i, globalResolvedTs := range cases.globalResolvedTs {
 		// hack to simulate owner to update global resolved ts
 		p.getTsRwriter().(*mockTsRWriter).SetGlobalResolvedTs(globalResolvedTs)
@@ -270,11 +275,11 @@ func (s *txnChannelSuite) TestShouldForwardTxnsByTs(c *check.C) {
 		}
 	}
 
-	tc.Forward(context.Background(), 1, 3, output)
-	// Assert that all txns with ts smaller than 3 is sent to output
+	tc.Forward(context.Background(), 3, output)
+	// Assert that all txns with ts not greater than 3 is sent to output
 	assertCorrectOutput([]uint64{1, 2})
-	tc.Forward(context.Background(), 1, 10, output)
-	// Assert that all txns with ts smaller than 10 is sent to output
+	tc.Forward(context.Background(), 10, output)
+	// Assert that all txns with ts not greater than 10 is sent to output
 	assertCorrectOutput([]uint64{4, 6})
 	c.Assert(lastTs, check.Equals, uint64(6))
 }
@@ -285,7 +290,7 @@ func (s *txnChannelSuite) TestShouldBeCancellable(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
 	go func() {
-		tc.Forward(ctx, 1, 1, make(chan ProcessorEntry))
+		tc.Forward(ctx, 1, make(chan ProcessorEntry))
 		close(stopped)
 	}()
 	cancel()
