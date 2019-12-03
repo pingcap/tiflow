@@ -287,8 +287,7 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	go func() {
-		err := wg.Wait()
-		if err != nil {
+		if err := wg.Wait(); err != nil {
 			errCh <- err
 		}
 	}()
@@ -328,10 +327,7 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 			cancel()
 
 			log.Info("Local resolved worker exited")
-			if ctx.Err() != context.Canceled {
-				return errors.Trace(ctx.Err())
-			}
-			return nil
+			return ctx.Err()
 		case <-resolveTsTick.C:
 			p.tablesMu.Lock()
 			// no table in this processor
@@ -349,7 +345,6 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 				}
 			}
 			p.tablesMu.Unlock()
-
 			p.subInfo.ResolvedTs = minResolvedTs
 		case e, ok := <-p.executedEntries:
 			if !ok {
@@ -476,10 +471,7 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			log.Info("Global resolved worker exited")
-			if ctx.Err() != context.Canceled {
-				return errors.Trace(ctx.Err())
-			}
-			return nil
+			return ctx.Err()
 		default:
 		}
 		err := backoff.Retry(func() error {
@@ -490,9 +482,6 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 			}
 			return err
 		}, retryCfg)
-		if errors.Cause(err) == context.Canceled {
-			return nil
-		}
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -517,17 +506,13 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 		p.tablesMu.Unlock()
 
 		err = wg.Wait()
-		if err != nil && errors.Cause(err) == context.Canceled {
-			return err
+		if err != nil {
+			return errors.Trace(err)
 		}
 
 		select {
 		case <-ctx.Done():
-			err := ctx.Err()
-			if errors.Cause(err) == context.Canceled {
-				return nil
-			}
-			return errors.Trace(err)
+			return errors.Trace(ctx.Err())
 		case p.resolvedEntries <- newProcessorResolvedEntry(globalResolvedTs):
 		}
 	}
@@ -551,7 +536,7 @@ func (p *processor) pullDDLJob(ctx context.Context) error {
 				return nil
 			}
 		})
-		if err != nil && errors.Cause(err) != context.Canceled {
+		if err != nil {
 			return errors.Annotate(err, "span: ddl")
 		}
 		return nil
@@ -596,19 +581,13 @@ func (p *processor) syncResolved(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 				if err := p.sink.Emit(ctx, *txn); err != nil {
-					if err != context.Canceled {
-						return errors.Trace(err)
-					}
-					return nil
+					return errors.Trace(err)
 				}
 			case processorEntryResolved:
 				select {
 				case p.executedEntries <- e:
 				case <-ctx.Done():
-					if err := ctx.Err(); err != context.Canceled {
-						return errors.Trace(err)
-					}
-					return nil
+					return errors.Trace(ctx.Err())
 				}
 			}
 		case <-ctx.Done():

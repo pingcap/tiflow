@@ -7,8 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/retry"
-
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
@@ -16,6 +14,7 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -263,12 +262,27 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 	nextSpan := span
 
 	for {
-		regions, _, err := c.pd.ScanRegions(ctx, nextSpan.Start, nextSpan.End, limit)
-		if err != nil {
-			return errors.Trace(err)
-		}
+		var (
+			regions []*metapb.Region
+			err     error
+		)
+		retryErr := retry.Run(func() error {
+			regions, _, err = c.pd.ScanRegions(ctx, nextSpan.Start, nextSpan.End, limit)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if !util.CheckRegionsCover(regions, nextSpan) {
+				err = errors.New("regions not completely cover span")
+				log.Warn("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
+				return err
+			}
+			log.Debug("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions))
+			return nil
+		}, 3)
 
-		log.Debug("ScanRegion", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions))
+		if retryErr != nil {
+			return retryErr
+		}
 
 		for _, region := range regions {
 			partialSpan, err := util.Intersect(nextSpan, util.Span{Start: region.StartKey, End: region.EndKey})
