@@ -23,6 +23,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -121,6 +122,10 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 		c.Assert(len(cfs), check.Equals, len(tc.ids))
 		c.Assert(len(pinfos), check.Equals, len(tc.ids))
 		for _, changefeedID := range tc.ids {
+			// don't check ModRevision
+			for _, si := range pinfos[changefeedID] {
+				si.ModRevision = 0
+			}
 			c.Assert(pinfos[changefeedID], check.DeepEquals, tc.pinfos[changefeedID])
 		}
 	}
@@ -268,4 +273,57 @@ func (s *etcdSuite) TestWriteTableCLock(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(revision, check.Equals, rw.modRevision)
 	c.Assert(rinfo, check.DeepEquals, rw.info)
+}
+
+func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
+	var (
+		changefeedID = "test-owner-table-writer-changefeed"
+		captureID    = "test-owner-table-writer-capture"
+		info         = &model.SubChangeFeedInfo{}
+		err          error
+	)
+
+	ow := NewOwnerSubCFInfoEtcdWriter(s.client)
+
+	// owner add table to subchangefeed
+	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 50, StartTs: 100})
+	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
+	c.Assert(err, check.IsNil)
+	c.Assert(info.TableInfos, check.HasLen, 1)
+
+	// simulate processor updates the subchangefeedinfo
+	infoClone := info.Clone()
+	infoClone.ResolvedTs = 200
+	infoClone.CheckPointTs = 100
+	err = kv.PutSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID, infoClone)
+	c.Assert(err, check.IsNil)
+
+	// owner add table to subchangefeed when remote data is updated
+	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 52, StartTs: 100})
+	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
+	c.Assert(err, check.IsNil)
+	c.Assert(info.TableInfos, check.HasLen, 2)
+	// check ModRevision after write
+	revision, _, err := kv.GetSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID)
+	c.Assert(err, check.IsNil)
+	c.Assert(info.ModRevision, check.Equals, revision)
+
+	// owner remove table from subchangefeed
+	info.TableInfos = info.TableInfos[:len(info.TableInfos)-1]
+	info, err = ow.Write(context.Background(), changefeedID, captureID, info, true)
+	c.Assert(err, check.IsNil)
+	c.Assert(info.TableInfos, check.HasLen, 1)
+	c.Assert(info.TablePLock, check.NotNil)
+
+	// owner can't add table when plock is not resolved
+	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 52, StartTs: 100})
+	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrFindPLockNotCommit)
+	c.Assert(info.TableInfos, check.HasLen, 2)
+
+	// owner can't remove table when plock is not resolved
+	info.TableInfos = info.TableInfos[:0]
+	info, err = ow.Write(context.Background(), changefeedID, captureID, info, true)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrFindPLockNotCommit)
+	c.Assert(info.TableInfos, check.HasLen, 0)
 }

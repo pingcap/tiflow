@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
@@ -288,32 +289,33 @@ func NewOwnerSubCFInfoEtcdWriter(cli *clientv3.Client) *OwnerSubCFInfoEtcdWriter
 	}
 }
 
+// updateInfo updates the local SubChangeFeedInfo with etcd value, except for TableInfos and TablePLock
 func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
-	ctx context.Context, changefeedID, captureID string, info *model.SubChangeFeedInfo,
-) error {
-	modRevision, newInfo, err := kv.GetSubChangeFeedInfo(ctx, ow.etcdClient, changefeedID, captureID)
+	ctx context.Context, changefeedID, captureID string, oldInfo *model.SubChangeFeedInfo,
+) (newInfo *model.SubChangeFeedInfo, err error) {
+	modRevision, info, err := kv.GetSubChangeFeedInfo(ctx, ow.etcdClient, changefeedID, captureID)
 	if err != nil {
-		return err
+		return
 	}
 
 	// TableInfos and TablePLock is updated by owner only
-	tableInfos := info.TableInfos
-	pLock := info.TablePLock
-	info = newInfo
-	info.TableInfos = tableInfos
-	info.TablePLock = pLock
-	info.ModRevision = modRevision
+	tableInfos := oldInfo.TableInfos
+	pLock := oldInfo.TablePLock
+	newInfo = info
+	newInfo.TableInfos = tableInfos
+	newInfo.TablePLock = pLock
+	newInfo.ModRevision = modRevision
 
-	if info.TablePLock != nil {
-		if info.TableCLock == nil {
+	if newInfo.TablePLock != nil {
+		if newInfo.TableCLock == nil {
 			err = model.ErrFindPLockNotCommit
 		} else {
 			// clean lock
-			info.TablePLock = nil
-			info.TableCLock = nil
+			newInfo.TablePLock = nil
+			newInfo.TableCLock = nil
 		}
 	}
-	return nil
+	return
 }
 
 // Write persists given `SubChangeFeedInfo` into etcd
@@ -322,24 +324,43 @@ func (ow *OwnerSubCFInfoEtcdWriter) Write(
 	changefeedID, captureID string,
 	info *model.SubChangeFeedInfo,
 	writePLock bool,
-) error {
-	key := kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
+) (newInfo *model.SubChangeFeedInfo, err error) {
 
-	if writePLock {
-		info.TablePLock = &model.TableLock{
-			Ts:        oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond)),
-			CreatorID: "", // TODO: get capture ID from ctx
+	// check p-lock not exists or is already resolved
+	newInfo, err = ow.updateInfo(ctx, changefeedID, captureID, info)
+	if err != nil {
+		if errors.Cause(err) == model.ErrSubChangeFeedInfoNotExists {
+			newInfo = info
+		} else {
+			return
+		}
+	}
+	if newInfo.TablePLock != nil {
+		if newInfo.TableCLock != nil {
+			newInfo.TablePLock = nil
+			newInfo.TableCLock = nil
+		} else {
+			err = errors.Trace(model.ErrFindPLockNotCommit)
+			return
 		}
 	}
 
-	value, err := info.Marshal()
-	if err != nil {
-		return err
+	if writePLock {
+		newInfo.TablePLock = &model.TableLock{
+			Ts:        oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond)),
+			CreatorID: util.CaptureIDFromCtx(ctx),
+		}
 	}
 
+	key := kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
 	err = retry.Run(func() error {
+		value, err := newInfo.Marshal()
+		if err != nil {
+			return err
+		}
+
 		resp, err := ow.etcdClient.KV.Txn(ctx).If(
-			clientv3.Compare(clientv3.ModRevision(key), "=", info.ModRevision),
+			clientv3.Compare(clientv3.ModRevision(key), "=", newInfo.ModRevision),
 		).Then(
 			clientv3.OpPut(key, value),
 		).Commit()
@@ -350,7 +371,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) Write(
 
 		if !resp.Succeeded {
 			log.Info("outdated table infos, update table and retry")
-			err = ow.updateInfo(ctx, changefeedID, captureID, info)
+			newInfo, err = ow.updateInfo(ctx, changefeedID, captureID, info)
 			switch errors.Cause(err) {
 			case model.ErrFindPLockNotCommit:
 				return backoff.Permanent(err)
@@ -361,8 +382,10 @@ func (ow *OwnerSubCFInfoEtcdWriter) Write(
 			}
 		}
 
+		newInfo.ModRevision = resp.Header.Revision
+
 		return nil
 	}, 5)
 
-	return errors.Trace(err)
+	return
 }

@@ -161,6 +161,10 @@ func (c *changeFeedInfo) tryBalance(ctx context.Context, captures map[string]*mo
 	c.banlanceOrphanTables(ctx, captures)
 }
 
+func (c *changeFeedInfo) restoreTableInfos(infoSnapshot *model.SubChangeFeedInfo, captureID string) {
+	c.ProcessorInfos[captureID].TableInfos = infoSnapshot.TableInfos
+}
+
 func (c *changeFeedInfo) cleanTables(ctx context.Context) {
 	var cleanIDs []uint64
 
@@ -173,13 +177,14 @@ cleanLoop:
 			continue
 		}
 
-		removedTable, _ := subInfo.RemoveTable(id)
+		infoClone := subInfo.Clone()
+		subInfo.RemoveTable(id)
 
-		err := c.infoWriter.Write(ctx, c.ID, captureID, subInfo, true)
-		c.ProcessorInfos[captureID] = subInfo
+		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, subInfo, true)
+		c.ProcessorInfos[captureID] = newInfo
 		switch errors.Cause(err) {
 		case model.ErrFindPLockNotCommit:
-			subInfo.TableInfos = append(subInfo.TableInfos, removedTable)
+			c.restoreTableInfos(infoClone, captureID)
 			log.Info("write table info delay, wait plock resolve",
 				zap.String("changefeed", c.ID),
 				zap.String("capture", captureID))
@@ -190,7 +195,7 @@ cleanLoop:
 			log.Debug("after remove", zap.Stringer("subchangefeed info", subInfo))
 			cleanIDs = append(cleanIDs, id)
 		default:
-			subInfo.TableInfos = append(subInfo.TableInfos, removedTable)
+			c.restoreTableInfos(infoClone, captureID)
 			log.Error("fail to put sub changefeed info", zap.Error(err))
 			break cleanLoop
 		}
@@ -228,15 +233,17 @@ func (c *changeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 		if info == nil {
 			info = new(model.SubChangeFeedInfo)
 		}
+		infoClone := info.Clone()
 		info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{
 			ID:      tableID,
 			StartTs: orphan.StartTs,
 		})
 
-		err := c.infoWriter.Write(ctx, c.ID, captureID, info, false)
-		c.ProcessorInfos[captureID] = info
+		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, info, false)
+		c.ProcessorInfos[captureID] = newInfo
 		switch errors.Cause(err) {
 		case model.ErrFindPLockNotCommit:
+			c.restoreTableInfos(infoClone, captureID)
 			log.Info("write table info delay, wait plock resolve",
 				zap.String("changefeed", c.ID),
 				zap.String("capture", captureID))
@@ -247,6 +254,7 @@ func (c *changeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 				zap.String("capture", captureID))
 			delete(c.orphanTables, tableID)
 		default:
+			c.restoreTableInfos(infoClone, captureID)
 			log.Error("fail to put sub changefeed info", zap.Error(err))
 			return
 		}
