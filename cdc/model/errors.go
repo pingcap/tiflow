@@ -19,6 +19,8 @@ import (
 
 // common errors
 var (
-	ErrWriteTsConflict     = errors.New("write ts conflict")
-	ErrChangeFeedNotExists = errors.New("changefeed not exists")
+	ErrWriteTsConflict               = errors.New("write ts conflict")
+	ErrChangeFeedNotExists           = errors.New("changefeed not exists")
+	ErrWriteSubChangeFeedInfoConlict = errors.New("write subchangefeedinfo conflict")
+	ErrFindPLockNotCommit            = errors.New("subchangefeedinfo has p-lock not commited")
 )

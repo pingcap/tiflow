@@ -161,6 +161,7 @@ func GetSubChangeFeedInfos(ctx context.Context, client *clientv3.Client, changef
 		if err != nil {
 			return nil, err
 		}
+		info.ModRevision = rawKv.ModRevision
 		pinfo[captureID] = info
 	}
 	return pinfo, nil

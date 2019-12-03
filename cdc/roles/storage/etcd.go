@@ -16,15 +16,17 @@ package storage
 import (
 	"context"
 	"sync"
+	"time"
 
-	"github.com/pingcap/ticdc/pkg/retry"
-
+	"github.com/cenkalti/backoff"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
 
@@ -272,4 +274,95 @@ func (rw *ProcessorTsEtcdRWriter) WriteTableCLock(ctx context.Context, checkpoin
 	}
 	// when P-lock is not paired, owner can't update TableInfos in SubChangeFeedInfo
 	return rw.retryWriteData(ctx, func() { rw.info.TableCLock = lock }, rw.updateFullInfo)
+}
+
+// OwnerSubCFInfoEtcdWriter encapsulates SubChangeFeedInfo write operation
+type OwnerSubCFInfoEtcdWriter struct {
+	etcdClient *clientv3.Client
+}
+
+// NewOwnerSubCFInfoEtcdWriter returns a new `*OwnerSubCFInfoEtcdWriter` instance
+func NewOwnerSubCFInfoEtcdWriter(cli *clientv3.Client) *OwnerSubCFInfoEtcdWriter {
+	return &OwnerSubCFInfoEtcdWriter{
+		etcdClient: cli,
+	}
+}
+
+func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
+	ctx context.Context, changefeedID, captureID string, info *model.SubChangeFeedInfo,
+) error {
+	modRevision, newInfo, err := kv.GetSubChangeFeedInfo(ctx, ow.etcdClient, changefeedID, captureID)
+	if err != nil {
+		return err
+	}
+
+	// TableInfos and TablePLock is updated by owner only
+	tableInfos := info.TableInfos
+	pLock := info.TablePLock
+	info = newInfo
+	info.TableInfos = tableInfos
+	info.TablePLock = pLock
+	info.ModRevision = modRevision
+
+	if info.TablePLock != nil {
+		if info.TableCLock == nil {
+			err = model.ErrFindPLockNotCommit
+		} else {
+			// clean lock
+			info.TablePLock = nil
+			info.TableCLock = nil
+		}
+	}
+	return nil
+}
+
+// Write persists given `SubChangeFeedInfo` into etcd
+func (ow *OwnerSubCFInfoEtcdWriter) Write(
+	ctx context.Context,
+	changefeedID, captureID string,
+	info *model.SubChangeFeedInfo,
+	writePLock bool,
+) error {
+	key := kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
+
+	if writePLock {
+		info.TablePLock = &model.TableLock{
+			Ts:        oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond)),
+			CreatorID: "", // TODO: get capture ID from ctx
+		}
+	}
+
+	value, err := info.Marshal()
+	if err != nil {
+		return err
+	}
+
+	err = retry.Run(func() error {
+		resp, err := ow.etcdClient.KV.Txn(ctx).If(
+			clientv3.Compare(clientv3.ModRevision(key), "=", info.ModRevision),
+		).Then(
+			clientv3.OpPut(key, value),
+		).Commit()
+
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if !resp.Succeeded {
+			log.Info("outdated table infos, update table and retry")
+			err = ow.updateInfo(ctx, changefeedID, captureID, info)
+			switch errors.Cause(err) {
+			case model.ErrFindPLockNotCommit:
+				return backoff.Permanent(err)
+			case nil:
+				return model.ErrWriteSubChangeFeedInfoConlict
+			default:
+				return err
+			}
+		}
+
+		return nil
+	}, 5)
+
+	return errors.Trace(err)
 }
