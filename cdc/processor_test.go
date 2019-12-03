@@ -167,7 +167,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 		c.Assert(err, check.IsNil)
 
 		table := p.tables[int64(i)]
-		input := table.inputChan.inputTxn
+		input := table.inputTxn
 
 		go func(rawTxnTs []uint64) {
 			for _, txnTs := range rawTxnTs {

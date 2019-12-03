@@ -69,7 +69,7 @@ type ProcessorTsRWriter interface {
 }
 
 type txnChannel struct {
-	inputTxn   chan model.RawTxn
+	inputTxn   <-chan model.RawTxn
 	outputTxn  chan model.RawTxn
 	putBackTxn *model.RawTxn
 }
@@ -119,7 +119,7 @@ func (p *txnChannel) putBack(t model.RawTxn) {
 	p.putBackTxn = &t
 }
 
-func newTxnChannel(inputTxn chan model.RawTxn, chanSize int, handleResolvedTs func(uint64)) *txnChannel {
+func newTxnChannel(inputTxn <-chan model.RawTxn, chanSize int, handleResolvedTs func(uint64)) *txnChannel {
 	tc := &txnChannel{
 		inputTxn:  inputTxn,
 		outputTxn: make(chan model.RawTxn, chanSize),
@@ -199,6 +199,7 @@ type tableInfo struct {
 	id         int64
 	puller     puller.CancellablePuller
 	inputChan  *txnChannel
+	inputTxn   chan model.RawTxn
 	resolvedTS uint64
 }
 
@@ -387,7 +388,7 @@ func (p *processor) removeTable(tableID int64) {
 func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.SubChangeFeedInfo, checkpointTs uint64) error {
 	removedTables, addedTables := diffProcessTableInfos(oldInfo.TableInfos, newInfo.TableInfos)
 
-	// remote tables
+	// remove tables
 	for _, pinfo := range removedTables {
 		p.removeTable(int64(pinfo.ID))
 	}
@@ -658,11 +659,11 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	}
 
 	table := &tableInfo{
-		id: tableID,
+		id:       tableID,
+		inputTxn: make(chan model.RawTxn, 1),
 	}
 
-	inputTxn := make(chan model.RawTxn, 1)
-	tc := newTxnChannel(inputTxn, 1, func(resolvedTs uint64) {
+	tc := newTxnChannel(table.inputTxn, 1, func(resolvedTs uint64) {
 		table.storeResolvedTS(resolvedTs)
 	})
 	table.inputChan = tc
@@ -670,7 +671,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	span := util.GetTableSpan(tableID, true)
 
 	ctx, cancel := context.WithCancel(ctx)
-	plr := p.startPuller(ctx, span, startTs, inputTxn, p.errCh)
+	plr := p.startPuller(ctx, span, startTs, table.inputTxn, p.errCh)
 	table.puller = puller.CancellablePuller{Puller: plr, Cancel: cancel}
 
 	p.tables[tableID] = table
