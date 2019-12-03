@@ -280,8 +280,7 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	go func() {
-		err := wg.Wait()
-		if err != nil {
+		if err := wg.Wait(); err != nil {
 			errCh <- err
 		}
 	}()
@@ -297,10 +296,7 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			log.Info("Local resolved worker exited")
-			if ctx.Err() != context.Canceled {
-				return errors.Trace(ctx.Err())
-			}
-			return nil
+			return ctx.Err()
 		case <-time.After(1 * time.Second):
 			minResolvedTs := uint64(math.MaxUint64)
 			p.tableResolvedTs.Range(func(key, value interface{}) bool {
@@ -394,10 +390,7 @@ func (p *processor) checkpointWorker(ctx context.Context) error {
 				log.Error("Failed to flush checkpoint", zap.Uint64("checkpoint", checkpointTs), zap.Error(err))
 			}
 			log.Info("Checkpoint worker exited")
-			if ctx.Err() != context.Canceled {
-				return errors.Trace(ctx.Err())
-			}
-			return nil
+			return ctx.Err()
 		case e, ok := <-p.executedEntries:
 			if !ok {
 				log.Info("Checkpoint worker exited")
@@ -453,10 +446,7 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			log.Info("Global resolved worker exited")
-			if ctx.Err() != context.Canceled {
-				return errors.Trace(ctx.Err())
-			}
-			return nil
+			return ctx.Err()
 		default:
 		}
 		err := backoff.Retry(func() error {
@@ -467,9 +457,6 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 			}
 			return err
 		}, retryCfg)
-		if errors.Cause(err) == context.Canceled {
-			return nil
-		}
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -489,16 +476,12 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 		}
 		p.inputChansLock.RUnlock()
 		err = wg.Wait()
-		if err != nil && errors.Cause(err) == context.Canceled {
-			return err
+		if err != nil {
+			return errors.Trace(err)
 		}
 		select {
 		case <-ctx.Done():
-			err := ctx.Err()
-			if errors.Cause(err) == context.Canceled {
-				return nil
-			}
-			return errors.Trace(err)
+			return errors.Trace(ctx.Err())
 		case p.resolvedEntries <- newProcessorResolvedEntry(globalResolvedTs):
 		}
 	}
@@ -524,7 +507,7 @@ func (p *processor) pullDDLJob(ctx context.Context) error {
 				return nil
 			}
 		})
-		if err != nil && errors.Cause(err) != context.Canceled {
+		if err != nil {
 			return errors.Annotate(err, "span: ddl")
 		}
 		return nil
@@ -569,19 +552,13 @@ func (p *processor) syncResolved(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 				if err := p.sink.Emit(ctx, *txn); err != nil {
-					if err != context.Canceled {
-						return errors.Trace(err)
-					}
-					return nil
+					return errors.Trace(err)
 				}
 			case processorEntryResolved:
 				select {
 				case p.executedEntries <- e:
 				case <-ctx.Done():
-					if err := ctx.Err(); err != context.Canceled {
-						return errors.Trace(err)
-					}
-					return nil
+					return errors.Trace(ctx.Err())
 				}
 			}
 		case <-ctx.Done():
