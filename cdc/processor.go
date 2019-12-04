@@ -307,7 +307,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 
 // localResolvedWorker do the flowing works.
 // 1, update resolve ts by scaning all table's resolve ts.
-// 3, update checkpoint ts by consuming entry from p.executedEntries.
+// 2, update checkpoint ts by consuming entry from p.executedEntries.
 // 3, sync SubChangeFeedInfo between in memory and storage.
 func (p *processor) localResolvedWorker(ctx context.Context) error {
 	updateInfoTick := time.NewTicker(time.Second)
