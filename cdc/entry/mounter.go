@@ -72,7 +72,7 @@ func (m *Mounter) Mount(rawTxn model.RawTxn) (*model.Txn, error) {
 }
 
 func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
-	tableInfo, tableName, handleColName, err := m.fetchTableInfo(row.TableID)
+	tableInfo, tableName, err := m.fetchTableInfo(row.TableID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -84,12 +84,15 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 
 	if row.Delete {
 		if tableInfo.PKIsHandle {
-			values := map[string]types.Datum{handleColName: types.NewIntDatum(row.RecordID)}
+			pkColName, pkValue, err := fetchHandleValue(tableInfo, row)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
 			return &model.DML{
 				Database: tableName.Schema,
 				Table:    tableName.Table,
 				Tp:       model.DeleteDMLType,
-				Values:   values,
+				Values:   map[string]types.Datum{pkColName: *pkValue},
 			}, nil
 		}
 		return nil, nil
@@ -101,7 +104,11 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 		values[colName] = colValue
 	}
 	if tableInfo.PKIsHandle {
-		values[handleColName] = types.NewIntDatum(row.RecordID)
+		pkColName, pkValue, err := fetchHandleValue(tableInfo, row)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		values[pkColName] = *pkValue
 	}
 	return &model.DML{
 		Database: tableName.Schema,
@@ -112,7 +119,7 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 }
 
 func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
-	tableInfo, tableName, _, err := m.fetchTableInfo(idx.TableID)
+	tableInfo, tableName, err := m.fetchTableInfo(idx.TableID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -139,30 +146,39 @@ func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
 	}, nil
 }
 
-func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *timodel.TableInfo, tableName *schema.TableName, handleColName string, err error) {
+func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *timodel.TableInfo, tableName *schema.TableName, err error) {
 	tableInfo, exist := m.schemaStorage.TableByID(tableID)
 	if !exist {
-		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableID)
+		return nil, nil, errors.Errorf("can not find table, id: %d", tableID)
 	}
 
 	database, table, exist := m.schemaStorage.SchemaAndTableName(tableID)
 	if !exist {
-		return nil, nil, "", errors.Errorf("can not find table, id: %d", tableID)
+		return nil, nil, errors.Errorf("can not find table, id: %d", tableID)
 	}
 	tableName = &schema.TableName{Schema: database, Table: table}
+	return
+}
 
-	pkColOffset := -1
+func fetchHandleValue(tableInfo *timodel.TableInfo, row *rowKVEntry) (pkColName string, pkValue *types.Datum, err error) {
+	handleColOffset := -1
 	for i, col := range tableInfo.Columns {
 		if mysql.HasPriKeyFlag(col.Flag) {
-			pkColOffset = i
-			handleColName = tableInfo.Columns[i].Name.O
+			handleColOffset = i
 			break
 		}
 	}
-	if tableInfo.PKIsHandle && pkColOffset == -1 {
-		return nil, nil, "", errors.Errorf("this table (%d) is handled by pk, but pk column not found", tableID)
+	if handleColOffset == -1 {
+		return "", nil, errors.New("can't find handle column, please check if the pk is handle")
 	}
-
+	handleCol := tableInfo.Columns[handleColOffset]
+	pkColName = handleCol.Name.O
+	pkValue = &types.Datum{}
+	if mysql.HasUnsignedFlag(handleCol.Flag) {
+		pkValue.SetUint64(uint64(row.RecordID))
+	} else {
+		pkValue.SetInt64(row.RecordID)
+	}
 	return
 }
 

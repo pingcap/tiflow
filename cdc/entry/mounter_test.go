@@ -2,6 +2,7 @@ package entry
 
 import (
 	"context"
+	"math"
 	"reflect"
 	"sync"
 	"time"
@@ -243,6 +244,69 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 			},
 		},
 	})
+}
+
+func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pm, schema := setUpPullerAndSchema(ctx, c,
+		"create database testDB",
+		"CREATE TABLE testDB.large_int(id BIGINT UNSIGNED PRIMARY KEY, a int)",
+	)
+	tableInfo := pm.GetTableInfo("testDB", "large_int")
+	tableID := tableInfo.ID
+	mounter := NewTxnMounter(schema, time.UTC)
+	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+
+	pm.MustExec("insert into testDB.large_int values(?, ?)", uint64(math.MaxUint64), 123)
+	rawTxn := getFirstRealTxn(ctx, c, plr)
+	t, err := mounter.Mount(rawTxn)
+	c.Assert(err, check.IsNil)
+	cs.assertTableTxnEquals(c, t, &model.Txn{
+		Ts: rawTxn.Entries[0].Ts,
+		DMLs: []*model.DML{
+			{
+				Database: "testDB",
+				Table:    "large_int",
+				Tp:       model.InsertDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewUintDatum(uint64(math.MaxUint64)),
+					"a":  types.NewIntDatum(123),
+				},
+			},
+		},
+	})
+
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	pm, schema = setUpPullerAndSchema(ctx, c,
+		"create database testDB",
+		"CREATE TABLE testDB.large_int(id BIGINT PRIMARY KEY, a int)",
+	)
+	tableInfo = pm.GetTableInfo("testDB", "large_int")
+	tableID = tableInfo.ID
+	mounter = NewTxnMounter(schema, time.UTC)
+	plr = pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+
+	pm.MustExec("insert into testDB.large_int values(?, ?)", int64(math.MinInt64), 123)
+	rawTxn = getFirstRealTxn(ctx, c, plr)
+	t, err = mounter.Mount(rawTxn)
+	c.Assert(err, check.IsNil)
+	cs.assertTableTxnEquals(c, t, &model.Txn{
+		Ts: rawTxn.Entries[0].Ts,
+		DMLs: []*model.DML{
+			{
+				Database: "testDB",
+				Table:    "large_int",
+				Tp:       model.InsertDMLType,
+				Values: map[string]types.Datum{
+					"id": types.NewIntDatum(int64(math.MinInt64)),
+					"a":  types.NewIntDatum(123),
+				},
+			},
+		},
+	})
+
 }
 
 func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C,
