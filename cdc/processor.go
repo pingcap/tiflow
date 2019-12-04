@@ -22,8 +22,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/retry"
-
 	"github.com/cenkalti/backoff"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
@@ -36,6 +34,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -52,20 +51,6 @@ var (
 
 type mounter interface {
 	Mount(rawTxn model.RawTxn) (*model.Txn, error)
-}
-
-// ProcessorTsRWriter reads or writes the resolvedTs and checkpointTs from the storage
-type ProcessorTsRWriter interface {
-	// WriteResolvedTs writes the loacl resolvedTs into the storage
-	WriteResolvedTs(ctx context.Context, resolvedTs uint64) error
-	// WriteCheckpointTs writes the checkpointTs into the storage
-	WriteCheckpointTs(ctx context.Context, checkpointTs uint64) error
-	// ReadGlobalResolvedTs reads the global resolvedTs from the storage
-	ReadGlobalResolvedTs(ctx context.Context) (uint64, error)
-	// GetSubChangeFeedInfo returns a copy of *model.SubChangeFeedInfo
-	GetSubChangeFeedInfo() *model.SubChangeFeedInfo
-	// WriteTableCLock writes C-lock to the storage
-	WriteTableCLock(ctx context.Context, checkpointTs uint64) error
 }
 
 type txnChannel struct {
@@ -184,9 +169,11 @@ type processor struct {
 	ddlJobsCh    chan model.RawTxn
 	ddlResolveTS uint64
 
-	tsRWriter       ProcessorTsRWriter
+	tsRWriter       storage.ProcessorTsRWriter
 	resolvedEntries chan ProcessorEntry
 	executedEntries chan ProcessorEntry
+
+	subInfo *model.SubChangeFeedInfo
 
 	tablesMu sync.Mutex
 	tables   map[int64]*tableInfo
@@ -234,7 +221,10 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		return nil, err
 	}
 
-	tsRWriter := fNewTsRWriter(etcdCli, changefeedID, captureID)
+	tsRWriter, err := fNewTsRWriter(etcdCli, changefeedID, captureID)
+	if err != nil {
+		return nil, errors.Annotate(err, "failed to create ts RWriter")
+	}
 
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
@@ -260,11 +250,16 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		ddlPuller:     ddlPuller,
 
 		tsRWriter:       tsRWriter,
+		subInfo:         tsRWriter.GetSubChangeFeedInfo(),
 		resolvedEntries: make(chan ProcessorEntry, 1),
 		executedEntries: make(chan ProcessorEntry, 1),
 		ddlJobsCh:       make(chan model.RawTxn, 16),
 
 		tables: make(map[int64]*tableInfo),
+	}
+
+	for _, table := range p.subInfo.TableInfos {
+		p.addTable(context.Background(), int64(table.ID), table.StartTs)
 	}
 
 	return p, nil
@@ -274,18 +269,19 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
 	p.errCh = errCh
+
 	wg.Go(func() error {
 		return p.localResolvedWorker(cctx)
 	})
-	wg.Go(func() error {
-		return p.checkpointWorker(cctx, p.changefeed.GetCheckpointTs())
-	})
+
 	wg.Go(func() error {
 		return p.globalResolvedWorker(cctx)
 	})
+
 	wg.Go(func() error {
 		return p.syncResolved(cctx)
 	})
+
 	wg.Go(func() error {
 		return p.pullDDLJob(cctx)
 	})
@@ -298,7 +294,7 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 }
 
 func (p *processor) writeDebugInfo(w io.Writer) {
-	fmt.Fprintf(w, "changefeedID: %s, detail: %+v\n", p.changefeedID, p.changefeed)
+	fmt.Fprintf(w, "changefeedID: %s, detail: %+v, subInfo: %+v\n", p.changefeedID, p.changefeed, p.subInfo)
 
 	p.tablesMu.Lock()
 	for _, table := range p.tables {
@@ -309,14 +305,30 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 	fmt.Fprintf(w, "\n")
 }
 
-// localResolvedWorker scan all table's resolve ts and update resolved ts in subchangefeed info regularly.
+// localResolvedWorker do the flowing works.
+// 1, update resolve ts by scaning all table's resolve ts.
+// 2, update checkpoint ts by consuming entry from p.executedEntries.
+// 3, sync SubChangeFeedInfo between in memory and storage.
 func (p *processor) localResolvedWorker(ctx context.Context) error {
+	updateInfoTick := time.NewTicker(time.Second)
+	defer updateInfoTick.Stop()
+
+	resolveTsTick := time.NewTicker(time.Second)
+	defer resolveTsTick.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
+			timedCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			err := p.updateInfo(timedCtx)
+			if err != nil {
+				log.Error("failed to update info", zap.Error(err))
+			}
+			cancel()
+
 			log.Info("Local resolved worker exited")
 			return ctx.Err()
-		case <-time.After(1 * time.Second):
+		case <-resolveTsTick.C:
 			p.tablesMu.Lock()
 			// no table in this processor
 			if len(p.tables) == 0 {
@@ -333,13 +345,46 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 				}
 			}
 			p.tablesMu.Unlock()
-
-			err := p.tsRWriter.WriteResolvedTs(ctx, minResolvedTs)
-			// TODO: add retry when meeting error
+			p.subInfo.ResolvedTs = minResolvedTs
+		case e, ok := <-p.executedEntries:
+			if !ok {
+				log.Info("Checkpoint worker exited")
+				return nil
+			}
+			if e.Typ == processorEntryResolved {
+				p.subInfo.CheckPointTs = e.Ts
+			}
+		case <-updateInfoTick.C:
+			err := retry.Run(func() error {
+				return p.updateInfo(ctx)
+			}, 3)
 			if err != nil {
-				return errors.Annotate(err, "write resolved ts")
+				return errors.Annotate(err, "failed to update info")
 			}
 		}
+	}
+}
+
+func (p *processor) updateInfo(ctx context.Context) error {
+	err := p.tsRWriter.WriteInfoIntoStorage(ctx)
+
+	switch errors.Cause(err) {
+	case model.ErrWriteTsConflict:
+		oldInfo, _, err := p.tsRWriter.UpdateInfo(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		p.subInfo = p.tsRWriter.GetSubChangeFeedInfo()
+
+		p.handleTables(ctx, oldInfo, p.subInfo, oldInfo.CheckPointTs)
+
+		log.Info("update subchangefeed info", zap.Stringer("info", p.subInfo))
+		return nil
+	case nil:
+		return nil
+	default:
+		return errors.Trace(err)
 	}
 }
 
@@ -381,7 +426,7 @@ func (p *processor) removeTable(tableID int64) {
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
-func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.SubChangeFeedInfo, checkpointTs uint64) error {
+func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.SubChangeFeedInfo, checkpointTs uint64) {
 	removedTables, addedTables := diffProcessTableInfos(oldInfo.TableInfos, newInfo.TableInfos)
 
 	// remove tables
@@ -391,64 +436,16 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Su
 
 	// write clock if need
 	if newInfo.TablePLock != nil && newInfo.TableCLock == nil {
-		err := p.tsRWriter.WriteTableCLock(ctx, checkpointTs)
-		if err != nil {
-			return err
+		newInfo.TableCLock = &model.TableLock{
+			Ts:           newInfo.TablePLock.Ts,
+			CheckpointTs: checkpointTs,
 		}
 	}
 
 	// add tables
 	for _, pinfo := range addedTables {
-		err := p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
-		if err != nil {
-			return err
-		}
+		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
 	}
-	return nil
-}
-
-// checkpointWorker consume data from `executedEntries` and update checkpoint ts in subchangefeed info regularly.
-func (p *processor) checkpointWorker(ctx context.Context, checkpointTs uint64) error {
-	for {
-		select {
-		case <-ctx.Done():
-			timedCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-			err := p.retryWriteCP(timedCtx, checkpointTs, 1)
-			cancel()
-			if err != nil {
-				log.Error("Failed to flush checkpoint", zap.Uint64("checkpoint", checkpointTs), zap.Error(err))
-			}
-			log.Info("Checkpoint worker exited")
-			return ctx.Err()
-		case e, ok := <-p.executedEntries:
-			if !ok {
-				log.Info("Checkpoint worker exited")
-				return nil
-			}
-			if e.Typ == processorEntryResolved {
-				checkpointTs = e.Ts
-			}
-		case <-time.After(1 * time.Second):
-			oldInfo := p.tsRWriter.GetSubChangeFeedInfo()
-			if err := p.retryWriteCP(ctx, checkpointTs, 3); err != nil {
-				return err
-			}
-			newInfo := p.tsRWriter.GetSubChangeFeedInfo()
-			if err := p.handleTables(ctx, oldInfo, newInfo, checkpointTs); err != nil {
-				return errors.Annotate(err, "handle tables")
-			}
-		}
-	}
-}
-
-func (p *processor) retryWriteCP(ctx context.Context, cpTs uint64, maxRetry uint64) error {
-	err := retry.Run(func() error {
-		return p.tsRWriter.WriteCheckpointTs(ctx, cpTs)
-	}, maxRetry)
-	if err != nil {
-		return errors.Annotate(err, "write checkpoint ts")
-	}
-	return nil
 }
 
 // globalResolvedWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
@@ -616,23 +613,22 @@ func createSchemaStore(pdEndpoints []string) (*schema.Storage, error) {
 	return schemaStorage, nil
 }
 
-func createTsRWriter(cli *clientv3.Client, changefeedID, captureID string) ProcessorTsRWriter {
+func createTsRWriter(cli *clientv3.Client, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
 	return storage.NewProcessorTsEtcdRWriter(cli, changefeedID, captureID)
 }
 
 // getTsRwriter is used in unit test only
-func (p *processor) getTsRwriter() ProcessorTsRWriter {
+func (p *processor) getTsRwriter() storage.ProcessorTsRWriter {
 	return p.tsRWriter
 }
 
-func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) error {
+func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) {
 	p.tablesMu.Lock()
 	defer p.tablesMu.Unlock()
 
 	log.Debug("Add table", zap.Int64("tableID", tableID))
 	if _, ok := p.tables[tableID]; ok {
 		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
-		return nil
 	}
 
 	table := &tableInfo{
@@ -652,8 +648,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	table.puller = puller.CancellablePuller{Puller: plr, Cancel: cancel}
 
 	p.tables[tableID] = table
-
-	return nil
 }
 
 // startPuller start pull data with span and push resolved txn into txnChan in timestamp increasing order.

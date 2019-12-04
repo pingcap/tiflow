@@ -15,9 +15,6 @@ package storage
 
 import (
 	"context"
-	"sync"
-
-	"github.com/pingcap/ticdc/pkg/retry"
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
@@ -110,9 +107,25 @@ func (rw *ChangeFeedInfoRWriter) Write(ctx context.Context, infos map[model.Chan
 	return nil
 }
 
-// ProcessorTsEtcdRWriter implements `roles.ProcessorTsRWriter` interface
+// ProcessorTsRWriter reads or writes the resolvedTs and checkpointTs from the storage
+type ProcessorTsRWriter interface {
+	// ReadGlobalResolvedTs read the bloable resolved ts.
+	ReadGlobalResolvedTs(ctx context.Context) (uint64, error)
+
+	// The flowing methods *IS NOT* thread safe.
+	// GetSubChangeFeedInfo returns the in memory cache *model.SubChangeFeedInfo
+	GetSubChangeFeedInfo() *model.SubChangeFeedInfo
+	// UpdateInfo update the in memory cache as info in storage.
+	// oldInfo and newInfo is the old and new in memory cache info.
+	UpdateInfo(ctx context.Context) (oldInfo *model.SubChangeFeedInfo, newInfo *model.SubChangeFeedInfo, err error)
+	// WriteInfoIntoStorage update info into storage, return model.ErrWriteTsConflict if in last learn info is out dated and must call UpdateInfo.
+	WriteInfoIntoStorage(ctx context.Context) error
+}
+
+var _ ProcessorTsRWriter = &ProcessorTsEtcdRWriter{}
+
+// ProcessorTsEtcdRWriter implements `ProcessorTsRWriter` interface
 type ProcessorTsEtcdRWriter struct {
-	lock         sync.Mutex
 	etcdClient   *clientv3.Client
 	changefeedID string
 	captureID    string
@@ -122,52 +135,46 @@ type ProcessorTsEtcdRWriter struct {
 }
 
 // NewProcessorTsEtcdRWriter returns a new `*ChangeFeedInfoRWriter` instance
-func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID string) *ProcessorTsEtcdRWriter {
+func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID string) (*ProcessorTsEtcdRWriter, error) {
 	logger := log.L().With(zap.String("changefeed id", changefeedID)).
 		With(zap.String("capture id", captureID))
 
-	return &ProcessorTsEtcdRWriter{
+	rw := &ProcessorTsEtcdRWriter{
 		etcdClient:   cli,
 		changefeedID: changefeedID,
 		captureID:    captureID,
 		info:         &model.SubChangeFeedInfo{},
 		logger:       logger,
 	}
+
+	var err error
+	rw.modRevision, rw.info, err = kv.GetSubChangeFeedInfo(context.Background(), rw.etcdClient, rw.changefeedID, rw.captureID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return rw, nil
 }
 
-// updateSubChangeFeedInfo queries SubChangeFeedInfo from etcd and update the memory cached value.
-// This function is not thread safe.
-func (rw *ProcessorTsEtcdRWriter) updateSubChangeFeedInfo(
+// UpdateInfo implements ProcessorTsRWriter interface.
+func (rw *ProcessorTsEtcdRWriter) UpdateInfo(
 	ctx context.Context,
-	updateInfoFn func(info *model.SubChangeFeedInfo),
-) error {
+) (oldInfo *model.SubChangeFeedInfo, newInfo *model.SubChangeFeedInfo, err error) {
 	modRevision, info, err := kv.GetSubChangeFeedInfo(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
 	if err != nil {
-		return err
+		return nil, nil, errors.Trace(err)
 	}
+
+	oldInfo = rw.info
+	newInfo = info
+	rw.info = newInfo
 	rw.modRevision = modRevision
-	updateInfoFn(info)
-	rw.logger.Debug("update info from etcd", zap.Stringer("info", info))
-	return nil
+	return
 }
 
-// updateFullInfo updates rw.info to given info. This function is not thread safe.
-func (rw *ProcessorTsEtcdRWriter) updateFullInfo(info *model.SubChangeFeedInfo) {
-	rw.info = info
-}
-
-// updatePartialInfo only updates checkpointTs and resolvedTs of rw.info. This function is not thread safe.
-func (rw *ProcessorTsEtcdRWriter) updatePartialInfo(info *model.SubChangeFeedInfo) {
-	rw.info.CheckPointTs = info.CheckPointTs
-	rw.info.ResolvedTs = info.ResolvedTs
-}
-
-// writeTsOrUpToDate updates new SubChangeFeed info into etcd if the cached info
-// is up to date, otherwise update the cached SubChangeFeed info to the etcd value
-// via `updateInfoFn` function. This function is not thread safe.
-func (rw *ProcessorTsEtcdRWriter) writeTsOrUpToDate(
+// WriteInfoIntoStorage write info into storage, return model.ErrWriteTsConflict if the latest info is outdated.
+func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 	ctx context.Context,
-	updateInfoFn func(*model.SubChangeFeedInfo),
 ) error {
 	key := kv.GetEtcdKeySubChangeFeed(rw.changefeedID, rw.captureID)
 	value, err := rw.info.Marshal()
@@ -180,16 +187,13 @@ func (rw *ProcessorTsEtcdRWriter) writeTsOrUpToDate(
 	).Then(
 		clientv3.OpPut(key, value),
 	).Commit()
+
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if !resp.Succeeded {
-		err2 := rw.updateSubChangeFeedInfo(ctx, updateInfoFn)
-		if err2 != nil {
-			return err2
-		}
 
-		log.Info("outdated table infos, ignore update timestamp")
+	if !resp.Succeeded {
+		log.Info("outdated table infos, ignore update info")
 		return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
 	}
 
@@ -201,55 +205,6 @@ func (rw *ProcessorTsEtcdRWriter) writeTsOrUpToDate(
 	return nil
 }
 
-// retryWriteData writes `SubChangeFeedInfo` data into etcd
-// `updateLocalDataFn` is used to update local cached `SubChangeFeedInfo`
-// `updateInfoFn` is used to update local cached `SubChangeFeedInfo` with remote storage value
-func (rw *ProcessorTsEtcdRWriter) retryWriteData(
-	ctx context.Context,
-	updateLocalDataFn func(),
-	updateInfoFn func(*model.SubChangeFeedInfo),
-) error {
-	err := retry.Run(func() error {
-		rw.lock.Lock()
-		defer rw.lock.Unlock()
-		updateLocalDataFn()
-		return rw.writeTsOrUpToDate(ctx, updateInfoFn)
-	}, 3)
-	return err
-}
-
-func (rw *ProcessorTsEtcdRWriter) ensureCacheData(ctx context.Context) error {
-	rw.lock.Lock()
-	defer rw.lock.Unlock()
-	if rw.modRevision == 0 {
-		return rw.updateSubChangeFeedInfo(ctx, rw.updateFullInfo)
-	}
-	return nil
-}
-
-// WriteResolvedTs writes the loacl resolvedTs into etcd, and updates
-// checkpointTs and resolvedTs of `Info` in local cache if needed.
-// NOTE the TableInfos, TablePLock and TableCLock are not updated even they have
-// been changed in etcd.
-func (rw *ProcessorTsEtcdRWriter) WriteResolvedTs(ctx context.Context, resolvedTs uint64) error {
-	err := rw.ensureCacheData(ctx)
-	if err != nil {
-		return err
-	}
-
-	return rw.retryWriteData(ctx, func() { rw.info.ResolvedTs = resolvedTs }, rw.updatePartialInfo)
-}
-
-// WriteCheckpointTs writes the checkpointTs into etcd
-func (rw *ProcessorTsEtcdRWriter) WriteCheckpointTs(ctx context.Context, checkpointTs uint64) error {
-	err := rw.ensureCacheData(ctx)
-	if err != nil {
-		return err
-	}
-
-	return rw.retryWriteData(ctx, func() { rw.info.CheckPointTs = checkpointTs }, rw.updateFullInfo)
-}
-
 // ReadGlobalResolvedTs reads the global resolvedTs from etcd
 func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uint64, error) {
 	info, err := kv.GetChangeFeedInfo(ctx, rw.etcdClient, rw.changefeedID)
@@ -259,17 +214,7 @@ func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uin
 	return info.ResolvedTs, nil
 }
 
-// GetSubChangeFeedInfo returns a deep copy of *model.SubChangeFeedInfo stored in ProcessorTsEtcdRWriter
+// GetSubChangeFeedInfo returns the in memory cache of *model.SubChangeFeedInfo stored in ProcessorTsEtcdRWriter
 func (rw *ProcessorTsEtcdRWriter) GetSubChangeFeedInfo() *model.SubChangeFeedInfo {
-	return rw.info.Clone()
-}
-
-// WriteTableCLock writes C-lock to etcd
-func (rw *ProcessorTsEtcdRWriter) WriteTableCLock(ctx context.Context, checkpointTs uint64) error {
-	lock := &model.TableLock{
-		Ts:           rw.info.TablePLock.Ts,
-		CheckpointTs: checkpointTs,
-	}
-	// when P-lock is not paired, owner can't update TableInfos in SubChangeFeedInfo
-	return rw.retryWriteData(ctx, func() { rw.info.TableCLock = lock }, rw.updateFullInfo)
+	return rw.info
 }
