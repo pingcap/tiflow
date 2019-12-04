@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
@@ -35,7 +36,11 @@ func feed() {
 	wg.Wait()
 	select {
 	case err := <-errCh:
-		log.Error("feed failed", zap.Error(err))
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Error("feed failed", zap.Error(err))
+		} else {
+			log.Info("feed stopped")
+		}
 	default:
 	}
 }

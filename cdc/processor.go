@@ -291,9 +291,7 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	go func() {
-		if err := wg.Wait(); err != nil {
-			errCh <- err
-		}
+		errCh <- wg.Wait()
 	}()
 }
 
@@ -683,10 +681,7 @@ func (p *processor) startPuller(ctx context.Context, span util.Span, checkpointT
 	})
 
 	go func() {
-		err := errg.Wait()
-		if errors.Cause(err) != context.Canceled {
-			errCh <- err
-		}
+		errCh <- errg.Wait()
 	}()
 
 	return puller

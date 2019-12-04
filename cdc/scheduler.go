@@ -237,10 +237,7 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 	for {
 		select {
 		case <-ctx.Done():
-			err := ctx.Err()
-			if err != context.Canceled {
-				errCh <- err
-			}
+			errCh <- ctx.Err()
 			return
 		case err := <-feedErrCh:
 			errCh <- err
