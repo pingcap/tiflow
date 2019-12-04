@@ -19,14 +19,14 @@ var (
 	regionSplitCounter = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
-			Subsystem: "capture",
+			Subsystem: "kvclient",
 			Name:      "region_split_count",
 			Help:      "The number of region split events since start.",
 		})
 	scanRegionsDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "capture",
+			Subsystem: "kvclient",
 			Name:      "scan_regions_duration_seconds",
 			Help:      "The time it took to finish a scanRegions call.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
@@ -34,7 +34,7 @@ var (
 	eventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "capture",
+			Subsystem: "kvclient",
 			Name:      "event_size_bytes",
 			Help:      "Size of KV events.",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 25),
