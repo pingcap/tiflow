@@ -81,10 +81,13 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	pkIsHandle, pkColName, pkValue := fetchHandleValue(tableInfo, row)
 
 	if row.Delete {
-		if pkIsHandle {
+		if tableInfo.PKIsHandle {
+			pkColName, pkValue, err := fetchHandleValue(tableInfo, row)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
 			return &model.DML{
 				Database: tableName.Schema,
 				Table:    tableName.Table,
@@ -100,7 +103,11 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 		colName := tableInfo.Columns[index-1].Name.O
 		values[colName] = colValue
 	}
-	if pkIsHandle {
+	if tableInfo.PKIsHandle {
+		pkColName, pkValue, err := fetchHandleValue(tableInfo, row)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		values[pkColName] = *pkValue
 	}
 	return &model.DML{
@@ -153,10 +160,7 @@ func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *timodel.TableInfo, t
 	return
 }
 
-func fetchHandleValue(tableInfo *timodel.TableInfo, row *rowKVEntry) (pkIsHandle bool, pkColName string, pkValue *types.Datum) {
-	if !tableInfo.PKIsHandle {
-		return false, "", nil
-	}
+func fetchHandleValue(tableInfo *timodel.TableInfo, row *rowKVEntry) (pkColName string, pkValue *types.Datum, err error) {
 	handleColOffset := -1
 	for i, col := range tableInfo.Columns {
 		if mysql.HasPriKeyFlag(col.Flag) {
@@ -165,9 +169,8 @@ func fetchHandleValue(tableInfo *timodel.TableInfo, row *rowKVEntry) (pkIsHandle
 		}
 	}
 	if handleColOffset == -1 {
-		log.Fatal("")
+		return "", nil, errors.New("can't find handle column, please check if the pk is handle")
 	}
-	pkIsHandle = true
 	handleCol := tableInfo.Columns[handleColOffset]
 	pkColName = handleCol.Name.O
 	pkValue = &types.Datum{}
