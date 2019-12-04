@@ -21,58 +21,59 @@ import (
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/check"
-	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/etcd"
-	"go.uber.org/zap"
 )
 
 type processorSuite struct{}
 
 type mockTsRWriter struct {
-	resolvedTs       uint64
-	checkpointTs     uint64
-	globalResolvedTs uint64
 	l                sync.Mutex
+	globalResolvedTs uint64
+
+	memInfo     *model.SubChangeFeedInfo
+	storageInfo *model.SubChangeFeedInfo
 }
 
-func (s *mockTsRWriter) WriteResolvedTs(ctx context.Context, resolvedTs uint64) error {
-	s.l.Lock()
-	defer s.l.Unlock()
-	log.Info("write", zap.Uint64("localResolvedTs", resolvedTs))
-	s.resolvedTs = resolvedTs
-	return nil
-}
+var _ storage.ProcessorTsRWriter = &mockTsRWriter{}
 
-func (s *mockTsRWriter) WriteCheckpointTs(ctx context.Context, checkpointTs uint64) error {
-	s.l.Lock()
-	defer s.l.Unlock()
-	log.Info("write", zap.Uint64("checkpointTs", checkpointTs))
-	s.checkpointTs = checkpointTs
-	return nil
-}
-
+// ReadGlobalResolvedTs implement ProcessorTsRWriter interface.
 func (s *mockTsRWriter) ReadGlobalResolvedTs(ctx context.Context) (uint64, error) {
 	s.l.Lock()
 	defer s.l.Unlock()
 	return s.globalResolvedTs, nil
 }
 
+// GetSubChangeFeedInfo implement ProcessorTsRWriter interface.
+func (s *mockTsRWriter) GetSubChangeFeedInfo() *model.SubChangeFeedInfo {
+	return s.memInfo
+}
+
+// WriteInfoIntoStorage implement ProcessorTsRWriter interface.
+func (s *mockTsRWriter) WriteInfoIntoStorage(ctx context.Context) error {
+	s.storageInfo = s.memInfo.Clone()
+	return nil
+}
+
+// UpdateInfo implement ProcessorTsRWriter interface.
+func (s *mockTsRWriter) UpdateInfo(ctx context.Context) (oldInfo *model.SubChangeFeedInfo, newInfo *model.SubChangeFeedInfo, err error) {
+	oldInfo = s.memInfo
+	newInfo = s.storageInfo
+
+	s.memInfo = s.storageInfo
+	s.storageInfo = s.memInfo.Clone()
+
+	return
+}
+
 func (s *mockTsRWriter) SetGlobalResolvedTs(ts uint64) {
 	s.l.Lock()
 	defer s.l.Unlock()
 	s.globalResolvedTs = ts
-}
-
-func (s *mockTsRWriter) GetSubChangeFeedInfo() *model.SubChangeFeedInfo {
-	return nil
-}
-
-func (s *mockTsRWriter) WriteTableCLock(ctx context.Context, checkpointTs uint64) error {
-	return nil
 }
 
 // mockMounter pretend to decode a RawTxn by returning a Txn of the same Ts
@@ -131,8 +132,8 @@ func runCase(c *check.C, cases *processorTestCase) {
 		return nil, nil
 	}
 	origFNewTsRw := fNewTsRWriter
-	fNewTsRWriter = func(cli *clientv3.Client, changefeedID, captureID string) ProcessorTsRWriter {
-		return &mockTsRWriter{}
+	fNewTsRWriter = func(cli *clientv3.Client, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
+		return &mockTsRWriter{}, nil
 	}
 	origFNewMounter := fNewMounter
 	fNewMounter = func(schema *schema.Storage, loc *time.Location) mounter {
@@ -163,8 +164,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 	p.Run(ctx, errCh)
 
 	for i, rawTxnTs := range cases.rawTxnTs {
-		err := p.addTable(ctx, int64(i), 0)
-		c.Assert(err, check.IsNil)
+		p.addTable(ctx, int64(i), 0)
 
 		table := p.tables[int64(i)]
 		input := table.inputTxn
