@@ -40,6 +40,16 @@ type TableLock struct {
 	CheckpointTs uint64 `json:"checkpoint-ts"`
 }
 
+// TableLockStatus for the table lock in SubChangeFeedInfo
+type TableLockStatus int
+
+// Table lock status
+const (
+	TableNoLock TableLockStatus = iota + 1
+	TablePLock
+	TablePLockCommited
+)
+
 // SubChangeFeedInfo records the process information of a capture
 type SubChangeFeedInfo struct {
 	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.

@@ -285,7 +285,7 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 
 	ow := NewOwnerSubCFInfoEtcdWriter(s.client)
 
-	// owner add table to subchangefeed
+	// owner adds table to subchangefeed
 	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 50, StartTs: 100})
 	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
 	c.Assert(err, check.IsNil)
@@ -298,7 +298,7 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 	err = kv.PutSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID, infoClone)
 	c.Assert(err, check.IsNil)
 
-	// owner add table to subchangefeed when remote data is updated
+	// owner adds table to subchangefeed when remote data is updated
 	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 52, StartTs: 100})
 	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
 	c.Assert(err, check.IsNil)
@@ -308,7 +308,7 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(info.ModRevision, check.Equals, revision)
 
-	// owner remove table from subchangefeed
+	// owner removes table from subchangefeed
 	info.TableInfos = info.TableInfos[:len(info.TableInfos)-1]
 	info, err = ow.Write(context.Background(), changefeedID, captureID, info, true)
 	c.Assert(err, check.IsNil)
@@ -326,4 +326,16 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 	info, err = ow.Write(context.Background(), changefeedID, captureID, info, true)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrFindPLockNotCommit)
 	c.Assert(info.TableInfos, check.HasLen, 0)
+
+	// simulate processor removes table and commit table p-lock
+	info.TableCLock = &model.TableLock{Ts: info.TablePLock.Ts, CheckpointTs: 200}
+	err = kv.PutSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID, info)
+	c.Assert(err, check.IsNil)
+	info.TableCLock = nil
+
+	// owner adds table to subchangefeed again
+	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 54, StartTs: 300})
+	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
+	c.Assert(err, check.IsNil)
+	c.Assert(info.TableInfos, check.HasLen, 1)
 }

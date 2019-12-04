@@ -318,6 +318,33 @@ func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
 	return
 }
 
+// checkLock checks whether there exists p-lock or whether p-lock is committed if it exists
+func (ow *OwnerSubCFInfoEtcdWriter) checkLock(
+	ctx context.Context, changefeedID, captureID string,
+) (status model.TableLockStatus, err error) {
+	_, info, err := kv.GetSubChangeFeedInfo(ctx, ow.etcdClient, changefeedID, captureID)
+	if err != nil {
+		if errors.Cause(err) == model.ErrSubChangeFeedInfoNotExists {
+			return model.TableNoLock, nil
+		}
+		return
+	}
+
+	// in most cases there is no p-lock
+	if info.TablePLock == nil {
+		status = model.TableNoLock
+		return
+	}
+
+	if info.TableCLock != nil {
+		status = model.TablePLockCommited
+	} else {
+		status = model.TablePLock
+	}
+
+	return
+}
+
 // Write persists given `SubChangeFeedInfo` into etcd
 func (ow *OwnerSubCFInfoEtcdWriter) Write(
 	ctx context.Context,
@@ -327,22 +354,19 @@ func (ow *OwnerSubCFInfoEtcdWriter) Write(
 ) (newInfo *model.SubChangeFeedInfo, err error) {
 
 	// check p-lock not exists or is already resolved
-	newInfo, err = ow.updateInfo(ctx, changefeedID, captureID, info)
+	lockStatus, err := ow.checkLock(ctx, changefeedID, captureID)
 	if err != nil {
-		if errors.Cause(err) == model.ErrSubChangeFeedInfoNotExists {
-			newInfo = info
-		} else {
-			return
-		}
+		return
 	}
-	if newInfo.TablePLock != nil {
-		if newInfo.TableCLock != nil {
-			newInfo.TablePLock = nil
-			newInfo.TableCLock = nil
-		} else {
-			err = errors.Trace(model.ErrFindPLockNotCommit)
-			return
-		}
+	newInfo = info
+	switch lockStatus {
+	case model.TableNoLock:
+	case model.TablePLockCommited:
+		newInfo.TablePLock = nil
+		newInfo.TableCLock = nil
+	case model.TablePLock:
+		err = errors.Trace(model.ErrFindPLockNotCommit)
+		return
 	}
 
 	if writePLock {
