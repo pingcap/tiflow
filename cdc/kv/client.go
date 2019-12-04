@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package kv
 
 import (
@@ -230,6 +243,7 @@ func (c *CDCClient) partialRegionFeed(
 					regionInfo.meta = nil
 					return err
 				} else if eerr.GetEpochNotMatch() != nil {
+					regionSplitCounter.Inc()
 					return c.divideAndSendEventFeedToRegions(ctx, regionInfo.span, ts, regionCh)
 				} else if eerr.GetRegionNotFound() != nil {
 					regionInfo.meta = nil
@@ -260,6 +274,7 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 	limit := 20
 
 	nextSpan := span
+	captureID := util.CaptureIDFromCtx(ctx)
 
 	for {
 		var (
@@ -267,7 +282,9 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			err     error
 		)
 		retryErr := retry.Run(func() error {
+			scanT0 := time.Now()
 			regions, _, err = c.pd.ScanRegions(ctx, nextSpan.Start, nextSpan.End, limit)
+			scanRegionsDuration.WithLabelValues(captureID).Observe(time.Since(scanT0).Seconds())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -392,8 +409,10 @@ func (c *CDCClient) singleEventFeed(
 			}
 
 			// log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
+			captureID := util.CaptureIDFromCtx(ctx)
 
 			for _, event := range cevent.Events {
+				eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
 				switch x := event.Event.(type) {
 				case *cdcpb.Event_Entries_:
 					for _, row := range x.Entries.GetEntries() {

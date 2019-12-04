@@ -13,11 +13,16 @@
 
 package cdc
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 var registry = prometheus.NewRegistry()
 
 func init() {
 	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	registry.MustRegister(prometheus.NewGoCollector())
+
+	kv.InitMetrics(registry)
 }
