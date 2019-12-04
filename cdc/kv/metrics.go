@@ -30,7 +30,7 @@ var (
 			Name:      "scan_regions_duration_seconds",
 			Help:      "The time it took to finish a scanRegions call.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
-		}, nil)
+		}, []string{"captureID"})
 	eventSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -38,7 +38,7 @@ var (
 			Name:      "event_size_bytes",
 			Help:      "Size of KV events.",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 25),
-		}, nil)
+		}, []string{"captureID"})
 )
 
 // InitMetrics registers all metrics in the kv package

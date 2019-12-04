@@ -274,6 +274,7 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 	limit := 20
 
 	nextSpan := span
+	captureID := util.CaptureIDFromCtx(ctx)
 
 	for {
 		var (
@@ -283,7 +284,7 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 		retryErr := retry.Run(func() error {
 			scanT0 := time.Now()
 			regions, _, err = c.pd.ScanRegions(ctx, nextSpan.Start, nextSpan.End, limit)
-			scanRegionsDuration.WithLabelValues().Observe(time.Since(scanT0).Seconds())
+			scanRegionsDuration.WithLabelValues(captureID).Observe(time.Since(scanT0).Seconds())
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -408,9 +409,10 @@ func (c *CDCClient) singleEventFeed(
 			}
 
 			// log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
+			captureID := util.CaptureIDFromCtx(ctx)
 
 			for _, event := range cevent.Events {
-				eventSize.WithLabelValues().Observe(float64(event.Event.Size()))
+				eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
 				switch x := event.Event.(type) {
 				case *cdcpb.Event_Entries_:
 					for _, row := range x.Entries.GetEntries() {
