@@ -6,7 +6,6 @@ import (
 	"math"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
@@ -58,7 +57,7 @@ func NewCDCSuite() *CDCSuite {
 
 	cdcSuite.sink = sink.NewMySQLSinkUsingSchema(db, schemaStorage)
 
-	mounter := entry.NewTxnMounter(schemaStorage, time.Local)
+	mounter := entry.NewTxnMounter(schemaStorage)
 	cdcSuite.mounter = mounter
 	return cdcSuite
 }

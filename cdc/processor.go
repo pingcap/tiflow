@@ -232,7 +232,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 	ddlPuller := puller.NewPuller(pdCli, changefeed.GetCheckpointTs(), []util.Span{util.GetDDLSpan()}, false)
 
 	// TODO: get time zone from config
-	mounter := fNewMounter(schemaStorage, time.UTC)
+	mounter := fNewMounter(schemaStorage)
 
 	sink, err := fNewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
 	if err != nil {
@@ -692,6 +692,6 @@ func (p *processor) startPuller(ctx context.Context, span util.Span, checkpointT
 	return puller
 }
 
-func newMounter(schema *schema.Storage, loc *time.Location) mounter {
-	return entry.NewTxnMounter(schema, loc)
+func newMounter(schema *schema.Storage) mounter {
+	return entry.NewTxnMounter(schema)
 }

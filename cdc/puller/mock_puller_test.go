@@ -48,7 +48,7 @@ func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ts := uint64(0)
-	txnMounter := entry.NewTxnMounter(nil, time.UTC)
+	txnMounter := entry.NewTxnMounter(nil)
 	go func() {
 		err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
 			c.Assert(ts, check.Less, rawTxn.Ts)

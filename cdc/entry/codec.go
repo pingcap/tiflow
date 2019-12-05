@@ -219,7 +219,7 @@ func decodeRow(b []byte) (map[int64]types.Datum, error) {
 }
 
 // unflatten converts a raw datum to a column datum.
-func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (types.Datum, error) {
+func unflatten(datum types.Datum, ft *types.FieldType) (types.Datum, error) {
 	if datum.IsNull() {
 		return datum, nil
 	}
@@ -240,12 +240,6 @@ func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (type
 		err = t.FromPackedUint(datum.GetUint64())
 		if err != nil {
 			return datum, errors.Trace(err)
-		}
-		if ft.Tp == mysql.TypeTimestamp && !t.IsZero() {
-			err = t.ConvertTimeZone(time.UTC, loc)
-			if err != nil {
-				return datum, errors.Trace(err)
-			}
 		}
 		datum.SetUint64(0)
 		datum.SetMysqlTime(t)
