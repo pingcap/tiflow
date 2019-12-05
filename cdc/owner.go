@@ -181,7 +181,9 @@ cleanLoop:
 		subInfo.RemoveTable(id)
 
 		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, subInfo, true)
-		c.ProcessorInfos[captureID] = newInfo
+		if err == nil {
+			c.ProcessorInfos[captureID] = newInfo
+		}
 		switch errors.Cause(err) {
 		case model.ErrFindPLockNotCommit:
 			c.restoreTableInfos(infoClone, captureID)

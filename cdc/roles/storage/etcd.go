@@ -292,7 +292,8 @@ func (ow *OwnerSubCFInfoEtcdWriter) checkLock(
 	return
 }
 
-// Write persists given `SubChangeFeedInfo` into etcd
+// Write persists given `SubChangeFeedInfo` into etcd.
+// If returned err is not nil, don't use the returned newInfo as it may be not a reasonable value.
 func (ow *OwnerSubCFInfoEtcdWriter) Write(
 	ctx context.Context,
 	changefeedID, captureID string,
