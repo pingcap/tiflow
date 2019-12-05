@@ -2,7 +2,7 @@
 
 [![Build Status](https://internal.pingcap.net/idc-jenkins/job/build_cdc_master/badge/icon)](https://internal.pingcap.net/idc-jenkins/job/build_cdc_master/)
 
-**ticdc** is a change data capture for TiKV, it supports to synchronize change data to various downstream, including MySQL protocol compatible database, message queue via open CDC protocol and other systems such as local file storage.
+**ticdc** is a change data capture for TiDB, it supports to synchronize change data to various downstreams, including MySQL protocol compatible database, message queue via open CDC protocol and other systems such as local file storage.
 
 ## Architecture
 
@@ -17,7 +17,8 @@ TODO
 To check the source code, run test cases and build binaries, you can simply run:
 
 ```bash
-make
+$ make
+$ make test
 ```
 
 Notice ticdc supports building with Go version `Go >= 1.13`
