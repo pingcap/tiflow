@@ -15,13 +15,18 @@ package storage
 
 import (
 	"context"
+	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
 
@@ -217,4 +222,142 @@ func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uin
 // GetSubChangeFeedInfo returns the in memory cache of *model.SubChangeFeedInfo stored in ProcessorTsEtcdRWriter
 func (rw *ProcessorTsEtcdRWriter) GetSubChangeFeedInfo() *model.SubChangeFeedInfo {
 	return rw.info
+}
+
+// OwnerSubCFInfoEtcdWriter encapsulates SubChangeFeedInfo write operation
+type OwnerSubCFInfoEtcdWriter struct {
+	etcdClient *clientv3.Client
+}
+
+// NewOwnerSubCFInfoEtcdWriter returns a new `*OwnerSubCFInfoEtcdWriter` instance
+func NewOwnerSubCFInfoEtcdWriter(cli *clientv3.Client) *OwnerSubCFInfoEtcdWriter {
+	return &OwnerSubCFInfoEtcdWriter{
+		etcdClient: cli,
+	}
+}
+
+// updateInfo updates the local SubChangeFeedInfo with etcd value, except for TableInfos and TablePLock
+func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
+	ctx context.Context, changefeedID, captureID string, oldInfo *model.SubChangeFeedInfo,
+) (newInfo *model.SubChangeFeedInfo, err error) {
+	modRevision, info, err := kv.GetSubChangeFeedInfo(ctx, ow.etcdClient, changefeedID, captureID)
+	if err != nil {
+		return
+	}
+
+	// TableInfos and TablePLock is updated by owner only
+	tableInfos := oldInfo.TableInfos
+	pLock := oldInfo.TablePLock
+	newInfo = info
+	newInfo.TableInfos = tableInfos
+	newInfo.TablePLock = pLock
+	newInfo.ModRevision = modRevision
+
+	if newInfo.TablePLock != nil {
+		if newInfo.TableCLock == nil {
+			err = model.ErrFindPLockNotCommit
+		} else {
+			// clean lock
+			newInfo.TablePLock = nil
+			newInfo.TableCLock = nil
+		}
+	}
+	return
+}
+
+// checkLock checks whether there exists p-lock or whether p-lock is committed if it exists
+func (ow *OwnerSubCFInfoEtcdWriter) checkLock(
+	ctx context.Context, changefeedID, captureID string,
+) (status model.TableLockStatus, err error) {
+	_, info, err := kv.GetSubChangeFeedInfo(ctx, ow.etcdClient, changefeedID, captureID)
+	if err != nil {
+		if errors.Cause(err) == model.ErrSubChangeFeedInfoNotExists {
+			return model.TableNoLock, nil
+		}
+		return
+	}
+
+	// in most cases there is no p-lock
+	if info.TablePLock == nil {
+		status = model.TableNoLock
+		return
+	}
+
+	if info.TableCLock != nil {
+		status = model.TablePLockCommited
+	} else {
+		status = model.TablePLock
+	}
+
+	return
+}
+
+// Write persists given `SubChangeFeedInfo` into etcd.
+// If returned err is not nil, don't use the returned newInfo as it may be not a reasonable value.
+func (ow *OwnerSubCFInfoEtcdWriter) Write(
+	ctx context.Context,
+	changefeedID, captureID string,
+	info *model.SubChangeFeedInfo,
+	writePLock bool,
+) (newInfo *model.SubChangeFeedInfo, err error) {
+
+	// check p-lock not exists or is already resolved
+	lockStatus, err := ow.checkLock(ctx, changefeedID, captureID)
+	if err != nil {
+		return
+	}
+	newInfo = info
+	switch lockStatus {
+	case model.TableNoLock:
+	case model.TablePLockCommited:
+		newInfo.TablePLock = nil
+		newInfo.TableCLock = nil
+	case model.TablePLock:
+		err = errors.Trace(model.ErrFindPLockNotCommit)
+		return
+	}
+
+	if writePLock {
+		newInfo.TablePLock = &model.TableLock{
+			Ts:        oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond)),
+			CreatorID: util.CaptureIDFromCtx(ctx),
+		}
+	}
+
+	key := kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
+	err = retry.Run(func() error {
+		value, err := newInfo.Marshal()
+		if err != nil {
+			return err
+		}
+
+		resp, err := ow.etcdClient.KV.Txn(ctx).If(
+			clientv3.Compare(clientv3.ModRevision(key), "=", newInfo.ModRevision),
+		).Then(
+			clientv3.OpPut(key, value),
+		).Commit()
+
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if !resp.Succeeded {
+			log.Info("outdated table infos, update table and retry")
+			newInfo, err = ow.updateInfo(ctx, changefeedID, captureID, info)
+			switch errors.Cause(err) {
+			case model.ErrFindPLockNotCommit:
+				return backoff.Permanent(err)
+			case nil:
+				return model.ErrWriteSubChangeFeedInfoConlict
+			default:
+				return err
+			}
+		}
+
+		newInfo.ModRevision = resp.Header.Revision
+
+		return nil
+	}, 5)
+
+	return
 }

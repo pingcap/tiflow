@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/log"
 	pmodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
@@ -72,6 +71,7 @@ type changeFeedInfo struct {
 	tables        map[uint64]schema.TableName
 	orphanTables  map[uint64]model.ProcessTableInfo
 	toCleanTables map[uint64]struct{}
+	infoWriter    *storage.OwnerSubCFInfoEtcdWriter
 }
 
 // String implements fmt.Stringer interface.
@@ -161,9 +161,14 @@ func (c *changeFeedInfo) tryBalance(ctx context.Context, captures map[string]*mo
 	c.banlanceOrphanTables(ctx, captures)
 }
 
+func (c *changeFeedInfo) restoreTableInfos(infoSnapshot *model.SubChangeFeedInfo, captureID string) {
+	c.ProcessorInfos[captureID].TableInfos = infoSnapshot.TableInfos
+}
+
 func (c *changeFeedInfo) cleanTables(ctx context.Context) {
 	var cleanIDs []uint64
 
+cleanLoop:
 	for id := range c.toCleanTables {
 		captureID, subInfo, ok := findSubChangefeedWithTable(c.ProcessorInfos, id)
 		if !ok {
@@ -172,21 +177,30 @@ func (c *changeFeedInfo) cleanTables(ctx context.Context) {
 			continue
 		}
 
-		removedTable, _ := subInfo.RemoveTable(id)
-		err := kv.PutSubChangeFeedInfo(ctx, c.client, c.ID, captureID, subInfo)
-		if err != nil {
-			subInfo.TableInfos = append(subInfo.TableInfos, removedTable)
-			log.Error("fail to put sub changefeed info", zap.Error(err))
-			break
+		infoClone := subInfo.Clone()
+		subInfo.RemoveTable(id)
+
+		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, subInfo, true)
+		if err == nil {
+			c.ProcessorInfos[captureID] = newInfo
 		}
-
-		log.Info("cleanup table success",
-			zap.Uint64("table id", id),
-			zap.String("capture id", captureID))
-
-		log.Debug("after remove", zap.Stringer("subchangefeed info", subInfo))
-
-		cleanIDs = append(cleanIDs, id)
+		switch errors.Cause(err) {
+		case model.ErrFindPLockNotCommit:
+			c.restoreTableInfos(infoClone, captureID)
+			log.Info("write table info delay, wait plock resolve",
+				zap.String("changefeed", c.ID),
+				zap.String("capture", captureID))
+		case nil:
+			log.Info("cleanup table success",
+				zap.Uint64("table id", id),
+				zap.String("capture id", captureID))
+			log.Debug("after remove", zap.Stringer("subchangefeed info", subInfo))
+			cleanIDs = append(cleanIDs, id)
+		default:
+			c.restoreTableInfos(infoClone, captureID)
+			log.Error("fail to put sub changefeed info", zap.Error(err))
+			break cleanLoop
+		}
 	}
 
 	for _, id := range cleanIDs {
@@ -221,25 +235,33 @@ func (c *changeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 		if info == nil {
 			info = new(model.SubChangeFeedInfo)
 		}
-		info.CheckPointTs = 0
-		info.ResolvedTs = 0
+		infoClone := info.Clone()
 		info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{
 			ID:      tableID,
 			StartTs: orphan.StartTs,
 		})
 
-		err := kv.PutSubChangeFeedInfo(ctx, c.client, c.ID, captureID, info)
-		if err != nil {
+		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, info, false)
+		if err == nil {
+			c.ProcessorInfos[captureID] = newInfo
+		}
+		switch errors.Cause(err) {
+		case model.ErrFindPLockNotCommit:
+			c.restoreTableInfos(infoClone, captureID)
+			log.Info("write table info delay, wait plock resolve",
+				zap.String("changefeed", c.ID),
+				zap.String("capture", captureID))
+		case nil:
+			log.Info("dispatch table success",
+				zap.Uint64("table id", tableID),
+				zap.Uint64("start ts", orphan.StartTs),
+				zap.String("capture", captureID))
+			delete(c.orphanTables, tableID)
+		default:
+			c.restoreTableInfos(infoClone, captureID)
 			log.Error("fail to put sub changefeed info", zap.Error(err))
 			return
 		}
-
-		log.Info("dispatch table success",
-			zap.Uint64("table id", tableID),
-			zap.Uint64("start ts", orphan.StartTs),
-			zap.String("capture", captureID))
-		c.ProcessorInfos[captureID] = info
-		delete(c.orphanTables, tableID)
 	}
 }
 
@@ -427,6 +449,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			TargetTs:        targetTs,
 			ProcessorInfos:  etcdChangeFeedInfo,
 			DDLCurrentIndex: 0,
+			infoWriter:      storage.NewOwnerSubCFInfoEtcdWriter(o.etcdClient),
 		}
 	}
 

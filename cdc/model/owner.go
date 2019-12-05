@@ -40,6 +40,16 @@ type TableLock struct {
 	CheckpointTs uint64 `json:"checkpoint-ts"`
 }
 
+// TableLockStatus for the table lock in SubChangeFeedInfo
+type TableLockStatus int
+
+// Table lock status
+const (
+	TableNoLock TableLockStatus = iota + 1
+	TablePLock
+	TablePLockCommited
+)
+
 // SubChangeFeedInfo records the process information of a capture
 type SubChangeFeedInfo struct {
 	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.
@@ -48,9 +58,10 @@ type SubChangeFeedInfo struct {
 	ResolvedTs uint64 `json:"resolved-ts"`
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
 	// TODO change to be a map for easy update.
-	TableInfos []*ProcessTableInfo `json:"table-infos"`
-	TablePLock *TableLock          `json:"table-p-lock"`
-	TableCLock *TableLock          `json:"table-c-lock"`
+	TableInfos  []*ProcessTableInfo `json:"table-infos"`
+	TablePLock  *TableLock          `json:"table-p-lock"`
+	TableCLock  *TableLock          `json:"table-c-lock"`
+	ModRevision int64               `json:"-"`
 }
 
 // String implements fmt.Stringer interface.

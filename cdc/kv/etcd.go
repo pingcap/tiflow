@@ -161,6 +161,7 @@ func GetSubChangeFeedInfos(ctx context.Context, client *clientv3.Client, changef
 		if err != nil {
 			return nil, err
 		}
+		info.ModRevision = rawKv.ModRevision
 		pinfo[captureID] = info
 	}
 	return pinfo, nil
@@ -183,7 +184,7 @@ func GetSubChangeFeedInfo(
 		return 0, nil, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return 0, nil, errors.Errorf("subchangefeed info %s.%s not exists", changefeedID, captureID)
+		return 0, nil, errors.Annotatef(model.ErrSubChangeFeedInfoNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
 	}
 	info := &model.SubChangeFeedInfo{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
