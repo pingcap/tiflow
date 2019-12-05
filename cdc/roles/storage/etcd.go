@@ -255,7 +255,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
 
 	if newInfo.TablePLock != nil {
 		if newInfo.TableCLock == nil {
-			err = model.ErrFindPLockNotCommit
+			err = errors.Trace(model.ErrFindPLockNotCommit)
 		} else {
 			// clean lock
 			newInfo.TablePLock = nil
@@ -348,7 +348,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) Write(
 			case model.ErrFindPLockNotCommit:
 				return backoff.Permanent(err)
 			case nil:
-				return model.ErrWriteSubChangeFeedInfoConlict
+				return errors.Trace(model.ErrWriteSubChangeFeedInfoConlict)
 			default:
 				return err
 			}
