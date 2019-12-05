@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -49,7 +48,7 @@ func newDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
 	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan()}, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	// TODO get time loc from config
-	txnMounter := entry.NewTxnMounter(nil, time.UTC)
+	txnMounter := entry.NewTxnMounter(nil)
 	h := &ddlHandler{
 		puller:  puller,
 		cancel:  cancel,

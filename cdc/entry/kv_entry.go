@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
@@ -64,7 +63,7 @@ type unknownKVEntry struct {
 	model.RawKVEntry
 }
 
-func (idx *indexKVEntry) unflatten(tableInfo *timodel.TableInfo, loc *time.Location) error {
+func (idx *indexKVEntry) unflatten(tableInfo *timodel.TableInfo) error {
 	if tableInfo.ID != idx.TableID {
 		return errors.New("wrong table info in unflatten")
 	}
@@ -76,7 +75,7 @@ func (idx *indexKVEntry) unflatten(tableInfo *timodel.TableInfo, loc *time.Locat
 	for i, v := range idx.IndexValue {
 		colOffset := index.Columns[i].Offset
 		fieldType := &tableInfo.Columns[colOffset].FieldType
-		datum, err := unflatten(v, fieldType, loc)
+		datum, err := unflatten(v, fieldType)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -100,13 +99,13 @@ func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
 	return false
 }
 
-func (row *rowKVEntry) unflatten(tableInfo *timodel.TableInfo, loc *time.Location) error {
+func (row *rowKVEntry) unflatten(tableInfo *timodel.TableInfo) error {
 	if tableInfo.ID != row.TableID {
 		return errors.New("wrong table info in unflatten")
 	}
 	for i, v := range row.Row {
 		fieldType := &tableInfo.Columns[i-1].FieldType
-		datum, err := unflatten(v, fieldType, loc)
+		datum, err := unflatten(v, fieldType)
 		if err != nil {
 			return errors.Trace(err)
 		}

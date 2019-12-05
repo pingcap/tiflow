@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -231,7 +232,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 	ddlPuller := puller.NewPuller(pdCli, changefeed.GetCheckpointTs(), []util.Span{util.GetDDLSpan()}, false)
 
 	// TODO: get time zone from config
-	mounter := fNewMounter(schemaStorage, time.UTC)
+	mounter := fNewMounter(schemaStorage)
 
 	sink, err := fNewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
 	if err != nil {
@@ -346,6 +347,7 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 			}
 			p.tablesMu.Unlock()
 			p.subInfo.ResolvedTs = minResolvedTs
+			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case e, ok := <-p.executedEntries:
 			if !ok {
 				log.Info("Checkpoint worker exited")
@@ -353,6 +355,7 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 			}
 			if e.Typ == processorEntryResolved {
 				p.subInfo.CheckPointTs = e.Ts
+				checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(e.Ts)))
 			}
 		case <-updateInfoTick.C:
 			err := retry.Run(func() error {
@@ -378,6 +381,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		p.subInfo = p.tsRWriter.GetSubChangeFeedInfo()
 
 		p.handleTables(ctx, oldInfo, p.subInfo, oldInfo.CheckPointTs)
+		syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.subInfo.TableInfos)))
 
 		log.Info("update subchangefeed info", zap.Stringer("info", p.subInfo))
 		return nil
@@ -583,6 +587,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				if err := p.sink.Emit(ctx, *txn); err != nil {
 					return errors.Trace(err)
 				}
+				txnCounter.WithLabelValues("executed", p.changefeedID, p.captureID).Inc()
 			case processorEntryResolved:
 				select {
 				case p.executedEntries <- e:
@@ -670,6 +675,7 @@ func (p *processor) startPuller(ctx context.Context, span util.Span, checkpointT
 			case <-ctxInner.Done():
 				return ctxInner.Err()
 			case txnChan <- rawTxn:
+				txnCounter.WithLabelValues("received", p.changefeedID, p.captureID).Inc()
 				return nil
 			}
 		})
@@ -686,6 +692,6 @@ func (p *processor) startPuller(ctx context.Context, span util.Span, checkpointT
 	return puller
 }
 
-func newMounter(schema *schema.Storage, loc *time.Location) mounter {
-	return entry.NewTxnMounter(schema, loc)
+func newMounter(schema *schema.Storage) mounter {
+	return entry.NewTxnMounter(schema)
 }

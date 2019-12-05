@@ -5,7 +5,6 @@ import (
 	"math"
 	"reflect"
 	"sync"
-	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -61,7 +60,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 	)
 	tableInfo := pm.GetTableInfo("testDB", "test1")
 	tableID := tableInfo.ID
-	mounter := NewTxnMounter(schema, time.UTC)
+	mounter := NewTxnMounter(schema)
 	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into testDB.test1 values('ttt',6)")
@@ -154,7 +153,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 	)
 	tableInfo := pm.GetTableInfo("testDB", "test1")
 	tableID := tableInfo.ID
-	mounter := NewTxnMounter(schema, time.UTC)
+	mounter := NewTxnMounter(schema)
 	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into testDB.test1 values(777,888)")
@@ -255,7 +254,7 @@ func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
 	)
 	tableInfo := pm.GetTableInfo("testDB", "large_int")
 	tableID := tableInfo.ID
-	mounter := NewTxnMounter(schema, time.UTC)
+	mounter := NewTxnMounter(schema)
 	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into testDB.large_int values(?, ?)", uint64(math.MaxUint64), 123)
@@ -285,7 +284,7 @@ func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
 	)
 	tableInfo = pm.GetTableInfo("testDB", "large_int")
 	tableID = tableInfo.ID
-	mounter = NewTxnMounter(schema, time.UTC)
+	mounter = NewTxnMounter(schema)
 	plr = pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into testDB.large_int values(?, ?)", int64(math.MinInt64), 123)

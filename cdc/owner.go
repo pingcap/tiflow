@@ -246,7 +246,9 @@ func (c *changeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 		})
 
 		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, info, false)
-		c.ProcessorInfos[captureID] = newInfo
+		if err == nil {
+			c.ProcessorInfos[captureID] = newInfo
+		}
 		switch errors.Cause(err) {
 		case model.ErrFindPLockNotCommit:
 			c.restoreTableInfos(infoClone, captureID)
