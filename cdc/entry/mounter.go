@@ -1,8 +1,6 @@
 package entry
 
 import (
-	"time"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -16,12 +14,11 @@ import (
 // Mounter is used to parse SQL events from KV events
 type Mounter struct {
 	schemaStorage *schema.Storage
-	loc           *time.Location
 }
 
 // NewTxnMounter creates a mounter
-func NewTxnMounter(schema *schema.Storage, loc *time.Location) *Mounter {
-	return &Mounter{schemaStorage: schema, loc: loc}
+func NewTxnMounter(schema *schema.Storage) *Mounter {
+	return &Mounter{schemaStorage: schema}
 }
 
 // Mount parses a raw transaction and returns a transaction
@@ -77,7 +74,7 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 		return nil, errors.Trace(err)
 	}
 
-	err = row.unflatten(tableInfo, m.loc)
+	err = row.unflatten(tableInfo)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -124,7 +121,7 @@ func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
 		return nil, errors.Trace(err)
 	}
 
-	err = idx.unflatten(tableInfo, m.loc)
+	err = idx.unflatten(tableInfo)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

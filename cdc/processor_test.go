@@ -136,7 +136,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 		return &mockTsRWriter{}, nil
 	}
 	origFNewMounter := fNewMounter
-	fNewMounter = func(schema *schema.Storage, loc *time.Location) mounter {
+	fNewMounter = func(schema *schema.Storage) mounter {
 		return mockMounter{}
 	}
 	origFNewSink := fNewMySQLSink

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/pingcap/ticdc/pkg/retry"
 
@@ -61,6 +62,10 @@ func NewMySQLSink(
 	opts map[string]string,
 ) (Sink, error) {
 	// TODO
+	sinkURI, err := configureSinkURI(sinkURI)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	db, err := sql.Open("mysql", sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -72,6 +77,19 @@ func NewMySQLSink(
 		tblInspector: cachedInspector,
 	}
 	return &sink, nil
+}
+
+func configureSinkURI(sinkURI string) (string, error) {
+	dsnCfg, err := dmysql.ParseDSN(sinkURI)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	dsnCfg.Loc = time.UTC
+	if dsnCfg.Params == nil {
+		dsnCfg.Params = make(map[string]string, 1)
+	}
+	dsnCfg.Params["time_zone"] = "UTC"
+	return dsnCfg.FormatDSN(), nil
 }
 
 // NewMySQLSinkUsingSchema creates a new MySQL sink
