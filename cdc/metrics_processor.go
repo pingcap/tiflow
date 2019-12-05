@@ -48,8 +48,8 @@ var (
 		}, []string{"type", "changefeed", "capture"})
 )
 
-// InitProcessorMetrics registers all metrics used in processor
-func InitProcessorMetrics(registry *prometheus.Registry) {
+// initProcessorMetrics registers all metrics used in processor
+func initProcessorMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(resolvedTsGauge)
 	registry.MustRegister(checkpointTsGauge)
 	registry.MustRegister(syncTableNumGauge)

@@ -25,5 +25,5 @@ func init() {
 	registry.MustRegister(prometheus.NewGoCollector())
 
 	kv.InitMetrics(registry)
-	InitProcessorMetrics(registry)
+	initProcessorMetrics(registry)
 }
