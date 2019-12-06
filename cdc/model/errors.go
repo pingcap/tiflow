@@ -14,10 +14,11 @@
 package model
 
 import (
-	"github.com/pingcap/errors"
+	"errors"
 )
 
 // common errors
+// use a language builtin error type without error trace stack
 var (
 	ErrWriteTsConflict               = errors.New("write ts conflict")
 	ErrChangeFeedNotExists           = errors.New("changefeed not exists")
