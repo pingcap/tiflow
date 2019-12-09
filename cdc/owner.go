@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/schema"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
 
@@ -494,18 +493,7 @@ func (o *ownerImpl) calcResolvedTs() error {
 		minCheckpointTs := cfInfo.TargetTs
 
 		if len(cfInfo.tables) == 0 {
-			var ts uint64
-
-			physical, logical, err := o.pdClient.GetTS(context.Background())
-			if err != nil {
-				log.Warn("get ts from pd failed", zap.Error(err))
-				continue
-			}
-
-			ts = oracle.ComposeTS(physical, logical)
-
-			minResolvedTs = ts
-			minCheckpointTs = ts
+			minCheckpointTs = cfInfo.CheckpointTs
 		} else {
 			// calc the min of all resolvedTs in captures
 			for _, pStatus := range cfInfo.ProcessorInfos {
