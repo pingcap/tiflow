@@ -35,7 +35,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var markProcessorDownTime = 5 * time.Minute
+var markProcessorDownTime = 1 * time.Minute
 
 // OwnerDDLHandler defines the ddl handler for Owner
 // which can pull ddl jobs and execute ddl jobs
