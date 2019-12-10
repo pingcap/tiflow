@@ -15,6 +15,7 @@ package sink
 
 import (
 	gosql "database/sql"
+	rawerrors "errors"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -25,8 +26,7 @@ import (
 )
 
 var (
-	// ErrTableNotExist means the table not exist.
-	ErrTableNotExist = errors.New("table not exist")
+	errTableNotExist = rawerrors.New("table not exist")
 )
 
 const (
@@ -34,7 +34,7 @@ const (
 SELECT column_name, extra FROM information_schema.columns
 WHERE table_schema = ? AND table_name = ?;`
 	uniqKeysSQL = `
-SELECT non_unique, index_name, seq_in_index, column_name 
+SELECT non_unique, index_name, seq_in_index, column_name
 FROM information_schema.statistics
 WHERE table_schema = ? AND table_name = ?
 ORDER BY seq_in_index ASC;`
@@ -58,9 +58,6 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 	info = new(tableInfo)
 
 	if info.columns, err = getColsOfTbl(db, schema, table); err != nil {
-		if err == ErrTableNotExist {
-			return nil, err
-		}
 		return nil, errors.Trace(err)
 	}
 
@@ -85,11 +82,11 @@ func getTableInfoFromSchemaStorage(schemaStorage *schema.Storage, schemaName, ta
 	info = new(tableInfo)
 	tableID, exist := schemaStorage.GetTableIDByName(schemaName, tableName)
 	if !exist {
-		return nil, ErrTableNotExist
+		return nil, errors.Annotatef(errTableNotExist, "schema: %s table: %s", schemaName, tableName)
 	}
 	tableInfoModel, exist := schemaStorage.TableByID(tableID)
 	if !exist {
-		return nil, ErrTableNotExist
+		return nil, errors.Annotatef(errTableNotExist, "tableID: %d", tableID)
 	}
 	var columns []string
 	for _, col := range tableInfoModel.Columns {
@@ -166,7 +163,7 @@ func getColsOfTbl(db *gosql.DB, schema, table string) ([]string, error) {
 
 	// if no any columns returns, means the table not exist.
 	if len(cols) == 0 {
-		return nil, ErrTableNotExist
+		return nil, errors.Annotatef(errTableNotExist, "schema: %s table: %s", schema, table)
 	}
 
 	return cols, nil

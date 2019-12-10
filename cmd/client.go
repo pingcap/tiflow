@@ -19,11 +19,13 @@ func init() {
 
 	cliCmd.Flags().StringVar(&pdAddress, "pd-addr", "localhost:2379", "address of PD")
 	cliCmd.Flags().Uint64Var(&startTs, "start-ts", 0, "start ts of changefeed")
+	cliCmd.Flags().StringVar(&sinkURI, "sink-uri", "root@tcp(127.0.0.1:3306)/test", "sink uri")
 }
 
 var (
 	pdAddress string
 	startTs   uint64
+	sinkURI   string
 )
 
 var cliCmd = &cobra.Command{
@@ -43,7 +45,7 @@ var cliCmd = &cobra.Command{
 		}
 		id := uuid.New().String()
 		detail := &model.ChangeFeedDetail{
-			SinkURI:    "root@tcp(127.0.0.1:3306)/test",
+			SinkURI:    sinkURI,
 			Opts:       make(map[string]string),
 			CreateTime: time.Now(),
 			StartTs:    startTs,
