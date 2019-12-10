@@ -270,7 +270,7 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 	var job *model.Job
 	for i, job = range s.jobs {
 		if skipJob(job) {
-			log.Debug("skip ddl job", zap.Stringer("job", job))
+			log.Info("skip ddl job", zap.Stringer("job", job))
 			continue
 		}
 
