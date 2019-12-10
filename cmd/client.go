@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 )
@@ -19,12 +20,14 @@ func init() {
 
 	cliCmd.Flags().StringVar(&pdAddress, "pd-addr", "localhost:2379", "address of PD")
 	cliCmd.Flags().Uint64Var(&startTs, "start-ts", 0, "start ts of changefeed")
+	cliCmd.Flags().Uint64Var(&startTs, "target-ts", 0, "target ts of changefeed")
 	cliCmd.Flags().StringVar(&sinkURI, "sink-uri", "root@tcp(127.0.0.1:3306)/test", "sink uri")
 }
 
 var (
 	pdAddress string
 	startTs   uint64
+	targetTs  uint64
 	sinkURI   string
 )
 
@@ -44,11 +47,15 @@ var cliCmd = &cobra.Command{
 			return err
 		}
 		id := uuid.New().String()
+		if startTs == 0 {
+			startTs = oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond))
+		}
 		detail := &model.ChangeFeedDetail{
 			SinkURI:    sinkURI,
 			Opts:       make(map[string]string),
 			CreateTime: time.Now(),
 			StartTs:    startTs,
+			TargetTs:   targetTs,
 		}
 		fmt.Printf("create changefeed detail %+v\n", detail)
 		return kv.SaveChangeFeedDetail(context.Background(), cli, detail, id)
