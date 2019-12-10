@@ -35,7 +35,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var markProcessorDownTime = time.Minute
+var markProcessorDownTime = 5 * time.Minute
 
 // OwnerDDLHandler defines the ddl handler for Owner
 // which can pull ddl jobs and execute ddl jobs
@@ -438,7 +438,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 				}
 
 				oldPinfo, ok := cfInfo.ProcessorInfos[cid]
-				if !ok || oldPinfo.ResolvedTs != pinfo.ResolvedTs {
+				if !ok || oldPinfo.ResolvedTs != pinfo.ResolvedTs || oldPinfo.CheckPointTs != pinfo.CheckPointTs {
 					cfInfo.processorLastUpdateTime[cid] = time.Now()
 				}
 			}
