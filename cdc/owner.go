@@ -379,6 +379,8 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 
 func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 	o.l.Lock()
+	defer o.l.Unlock()
+
 	delete(o.captures, info.ID)
 
 	for _, feed := range o.changeFeedInfos {
@@ -399,7 +401,6 @@ func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 			log.Warn("failed to delete key", zap.Error(err))
 		}
 	}
-	o.l.Unlock()
 }
 
 func (o *ownerImpl) handleWatchCapture() error {
