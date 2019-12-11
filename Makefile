@@ -1,5 +1,5 @@
 ### Makefile for ticdc
-.PHONY: build test check clean fmt cdc
+.PHONY: build test check clean fmt cdc coverage
 
 PROJECT=ticdc
 
@@ -10,6 +10,7 @@ path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
 export PATH := $(path_to_add):$(PATH)
 
 TEST_DIR := /tmp/tidb_cdc_test
+SHELL	 := /usr/bin/env bash
 
 GO       := GO111MODULE=on go
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
@@ -84,12 +85,10 @@ tidy:
 check: fmt lint check-static tidy
 
 coverage:
-	GO111MODULE=off go get github.com/wadey/gocovmerge
-	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go" > "$(TEST_DIR)/tmp_unit_cov.out"
-	grep -v "$(CDC_PKG)/cdc/kv/testing.go" "$(TEST_DIR)/tmp_unit_cov.out" >"$(TEST_DIR)/unit_cov.out"
+	GO111MODULE=off go get github.com/zhouqiang-cl/gocovmerge
+	gocovmerge "$(TEST_DIR)"/cov.* | grep -v "$(CDC_PKG)/cdc/kv/testing.go" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
-	GO111MODULE=off go get github.com/mattn/goveralls
-	@goveralls -coverprofile=$(TEST_DIR)/unit_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
+	@bash <(curl -s https://codecov.io/bash) -f $(TEST_DIR)/unit_cov.out -t $(CODECOV_TOKEN)
 else
 	go tool cover -html "$(TEST_DIR)/unit_cov.out" -o "$(TEST_DIR)/unit_cov.html"
 	go tool cover -func="$(TEST_DIR)/unit_cov.out"

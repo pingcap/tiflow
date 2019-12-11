@@ -1,6 +1,9 @@
 # ticdc
 
 [![Build Status](https://internal.pingcap.net/idc-jenkins/job/build_cdc_master/badge/icon)](https://internal.pingcap.net/idc-jenkins/job/build_cdc_master/)
+[![codecov](https://codecov.io/gh/pingcap/ticdc/branch/master/graph/badge.svg)](https://codecov.io/gh/pingcap/ticdc)
+[![LICENSE](https://img.shields.io/github/license/pingcap/ticdc.svg)](https://github.com/pingcap/ticdc/blob/master/LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/pingcap/ticdc)](https://goreportcard.com/report/github.com/pingcap/ticdc)
 
 **ticdc** is a change data capture for TiDB, it supports to replicate change data to various downstreams, including MySQL protocol compatible database, message queue via open CDC protocol and other systems such as local file storage.
 
