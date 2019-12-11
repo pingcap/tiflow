@@ -1,13 +1,21 @@
 package sink
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/encoding"
 	"hash"
+	"hash/crc32"
+)
+
+// Message tyupe
+const (
+	// emit resolve type message.
+	ResolveTsType = iota
+	// txn message.
+	TxnType
 )
 
 const (
@@ -24,51 +32,112 @@ const (
 	DdlType = byte(1)
 )
 
-
-type Writer struct {
-	fbuf *bufio.Writer
+type writer struct {
+	content []byte
 
 	// Reusable memory.
 	buf1    encoding.Encbuf
 	buf2    encoding.Encbuf
-	uint32s []uint32
+
+	version byte
+	msgType int
+}
+
+func (w *writer) write(bufs ...[]byte) error {
+	for _, b := range bufs {
+		w.content = append(w.content, b...)
+	}
+	return nil
+}
+
+func (w *writer) writeMeta() error{
+	w.buf1.Reset()
+	w.buf1.PutBE32(MagicIndex)
+	w.buf1.PutByte(w.version)
+	w.buf1.PutBE32int(w.msgType)
+
+	return w.write(w.buf1.Get())
+}
+
+func (w *writer) flush() []byte {
+	return w.content
+}
+
+
+type resolveTsWriter struct {
+	*writer
+	ts int64
+}
+
+func NewResloveTsWriter(ts int64)  *resolveTsWriter{
+	return &resolveTsWriter{
+		writer: &writer{
+			version: Version,
+			msgType: ResolveTsType,
+			content: make([]byte, 0, 1 << 22),
+			buf1:    encoding.Encbuf{B: make([]byte, 0, 1<<22)},
+			buf2:    encoding.Encbuf{B: make([]byte, 0, 1<<22)},
+		},
+		ts: ts,
+	}
+}
+
+func (w *resolveTsWriter) Write() ([]byte, error) {
+	w.writeMeta()
+	w.buf1.Reset()
+	w.buf1.PutBE64int64(w.ts)
+	err := w.write(w.buf1.Get())
+	if err != nil {
+		return nil, err
+	}
+	
+	return w.flush(), nil
+}
+
+type txnWriter struct {
+	*writer
 	crc32 hash.Hash
+	txn model.Txn
+	infoGetter TableInfoGetter
+}
+
+func (w *txnWriter) NewTxnWriter(txn model.Txn, infoGetter TableInfoGetter) *txnWriter{
+	return &txnWriter{
+		writer: &writer{
+			version: Version,
+			msgType: TxnType,
+			content: make([]byte, 0, 1 << 22),
+			buf1:    encoding.Encbuf{B: make([]byte, 0, 1<<22)},
+			buf2:    encoding.Encbuf{B: make([]byte, 0, 1<<22)},
+		},
+		crc32: crc32.New(castagnoliTable),
+		txn: txn,
+		infoGetter: infoGetter,
+	}
+}
+
+var castagnoliTable *crc32.Table
+
+func init() {
+	castagnoliTable = crc32.MakeTable(crc32.Castagnoli)
 }
 
 type Datum struct {
 	Value interface{} `json:"value"`
 }
 
-
-func (w *Writer) writeMeta() error{
+func (w *txnWriter) WriteTxn() error{
 	w.buf1.Reset()
-	w.buf1.PutBE32(MagicIndex)
-	w.buf1.PutByte(Version)
+	w.buf1.PutBE64(w.txn.Ts)
 
-	return w.write(w.buf1.Get())
-}
-
-func (w *Writer) write(bufs ...[]byte) error {
-	for _, b := range bufs {
-		if _, err := w.fbuf.Write(b); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (w *Writer) WriteTxn(txn model.Txn, infoGetter TableInfoGetter) error{
-	w.buf1.Reset()
-	w.buf1.PutBE64(txn.Ts)
-
-	if txn.IsDDL() {
+	if w.txn.IsDDL() {
 		w.buf1.PutByte(DdlType)
 
 		w.buf2.Reset()
-		w.buf2.PutUvarintStr(txn.DDL.Database)
-		w.buf2.PutUvarintStr(txn.DDL.Table)
+		w.buf2.PutUvarintStr(w.txn.DDL.Database)
+		w.buf2.PutUvarintStr(w.txn.DDL.Table)
 
-		job, err := json.Marshal(txn.DDL.Job)
+		job, err := json.Marshal(w.txn.DDL.Job)
 		if err != nil {
 			return err
 		}
@@ -81,10 +150,10 @@ func (w *Writer) WriteTxn(txn model.Txn, infoGetter TableInfoGetter) error{
 		return w.write(w.buf1.Get(), w.buf2.Get())
 	}
 
-	return w.writeDML(txn.DMLs, infoGetter)
+	return w.writeDML(w.txn.DMLs, w.infoGetter)
 }
 
-func (w *Writer) writeDML(dmls []*model.DML, infoGetter TableInfoGetter) error{
+func (w *txnWriter) writeDML(dmls []*model.DML, infoGetter TableInfoGetter) error{
 	w.buf1.PutByte(DmlType)
 	w.buf1.PutBE32int(len(dmls))
 
