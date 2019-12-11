@@ -348,17 +348,7 @@ func formatValues(table *timodel.TableInfo, colVals map[string]types.Datum) (map
 	return formatted, nil
 }
 
-// writableColumns returns all columns which can be written. This excludes
-// generated and non-public columns.
-func writableColumns(table *timodel.TableInfo) []*timodel.ColumnInfo {
-	cols := make([]*timodel.ColumnInfo, 0, len(table.Columns))
-	for _, col := range table.Columns {
-		if col.State == timodel.StatePublic && !col.IsGenerated() {
-			cols = append(cols, col)
-		}
-	}
-	return cols
-}
+
 
 func formatColVal(datum types.Datum, ft types.FieldType) (types.Datum, error) {
 	if datum.GetValue() == nil {
