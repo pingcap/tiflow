@@ -26,12 +26,15 @@ import (
 	"github.com/pingcap/log"
 	pmodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"go.uber.org/zap"
 )
+
+var markProcessorDownTime = 1 * time.Minute
 
 // OwnerDDLHandler defines the ddl handler for Owner
 // which can pull ddl jobs and execute ddl jobs
@@ -56,10 +59,11 @@ type changeFeedInfo struct {
 	detail *model.ChangeFeedDetail
 	*model.ChangeFeedInfo
 
-	schema         *schema.Storage
-	Status         model.ChangeFeedStatus
-	TargetTs       uint64
-	ProcessorInfos model.ProcessorsInfos
+	schema                  *schema.Storage
+	Status                  model.ChangeFeedStatus
+	TargetTs                uint64
+	ProcessorInfos          model.ProcessorsInfos
+	processorLastUpdateTime map[string]time.Time
 
 	client          *clientv3.Client
 	DDLCurrentIndex int
@@ -296,7 +300,8 @@ func (c *changeFeedInfo) applyJob(job *pmodel.Job) error {
 }
 
 type ownerImpl struct {
-	changeFeedInfos map[model.ChangeFeedID]*changeFeedInfo
+	changeFeedInfos   map[model.ChangeFeedID]*changeFeedInfo
+	markDownProcessor map[string]struct{}
 
 	cfRWriter ChangeFeedInfoRWriter
 
@@ -335,6 +340,7 @@ func NewOwner(pdEndpoints []string, cli *clientv3.Client, manager roles.Manager)
 	owner := &ownerImpl{
 		pdEndpoints:        pdEndpoints,
 		pdClient:           pdClient,
+		markDownProcessor:  make(map[string]struct{}),
 		changeFeedInfos:    make(map[model.ChangeFeedID]*changeFeedInfo),
 		cfRWriter:          storage.NewChangeFeedInfoEtcdRWriter(cli),
 		etcdClient:         cli,
@@ -348,11 +354,52 @@ func NewOwner(pdEndpoints []string, cli *clientv3.Client, manager roles.Manager)
 }
 
 func (o *ownerImpl) addCapture(info *model.CaptureInfo) {
+	o.l.Lock()
 	o.captures[info.ID] = info
+	o.l.Unlock()
+}
+
+func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
+	var deleted []string
+	for id := range o.markDownProcessor {
+		err := DeleteCaptureInfo(ctx, id, o.etcdClient)
+		if err != nil {
+			log.Warn("failed to delete key", zap.Error(err))
+			continue
+		}
+
+		deleted = append(deleted, id)
+	}
+
+	for _, id := range deleted {
+		delete(o.markDownProcessor, id)
+	}
 }
 
 func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
+	o.l.Lock()
+	defer o.l.Unlock()
+
 	delete(o.captures, info.ID)
+
+	for _, feed := range o.changeFeedInfos {
+		pinfo, ok := feed.ProcessorInfos[info.ID]
+		if !ok {
+			continue
+		}
+
+		for _, table := range pinfo.TableInfos {
+			feed.orphanTables[table.ID] = model.ProcessTableInfo{
+				ID:      table.ID,
+				StartTs: pinfo.CheckPointTs,
+			}
+		}
+
+		key := kv.GetEtcdKeySubChangeFeed(feed.ID, info.ID)
+		if _, err := o.etcdClient.Delete(context.Background(), key); err != nil {
+			log.Warn("failed to delete key", zap.Error(err))
+		}
+	}
 }
 
 func (o *ownerImpl) handleWatchCapture() error {
@@ -383,7 +430,26 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 		var exist bool
 
 		if cfInfo, exist = o.changeFeedInfos[changeFeedID]; exist {
+			for cid, pinfo := range etcdChangeFeedInfo {
+				if _, ok := cfInfo.processorLastUpdateTime[cid]; !ok {
+					cfInfo.processorLastUpdateTime[cid] = time.Now()
+					continue
+				}
+
+				oldPinfo, ok := cfInfo.ProcessorInfos[cid]
+				if !ok || oldPinfo.ResolvedTs != pinfo.ResolvedTs || oldPinfo.CheckPointTs != pinfo.CheckPointTs {
+					cfInfo.processorLastUpdateTime[cid] = time.Now()
+				}
+			}
+
 			cfInfo.ProcessorInfos = etcdChangeFeedInfo
+
+			for id := range cfInfo.ProcessorInfos {
+				lastUpdateTime := cfInfo.processorLastUpdateTime[id]
+				if time.Since(lastUpdateTime) > markProcessorDownTime {
+					o.markDownProcessor[id] = struct{}{}
+				}
+			}
 			continue
 		}
 
@@ -431,14 +497,15 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 		}
 
 		o.changeFeedInfos[changeFeedID] = &changeFeedInfo{
-			detail:        detail,
-			ID:            changeFeedID,
-			client:        o.etcdClient,
-			ddlHandler:    ddlHandler,
-			schema:        schemaStorage,
-			tables:        tables,
-			orphanTables:  orphanTables,
-			toCleanTables: make(map[uint64]struct{}),
+			detail:                  detail,
+			ID:                      changeFeedID,
+			client:                  o.etcdClient,
+			ddlHandler:              ddlHandler,
+			schema:                  schemaStorage,
+			tables:                  tables,
+			orphanTables:            orphanTables,
+			toCleanTables:           make(map[uint64]struct{}),
+			processorLastUpdateTime: make(map[string]time.Time),
 			ChangeFeedInfo: &model.ChangeFeedInfo{
 				SinkURI:      changefeed.SinkURI,
 				ResolvedTs:   0,
@@ -643,6 +710,8 @@ func (o *ownerImpl) run(ctx context.Context) error {
 
 	o.l.Lock()
 	defer o.l.Unlock()
+
+	o.handleMarkdownProcessor(ctx)
 
 	err := o.loadChangeFeedInfos(cctx)
 	if err != nil {
