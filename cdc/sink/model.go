@@ -21,6 +21,7 @@ type Message struct {
 	MsgType MsgType
 	// all cdc list
 	CdcList []string
+	MetaCount int
 	// resloveTs and txn message
 	CdcID string
 	// resloveTS type message
