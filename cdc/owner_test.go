@@ -132,10 +132,11 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 
 	changeFeedInfos := map[model.ChangeFeedID]*changeFeedInfo{
 		"test_change_feed": {
-			tables:         tables,
-			ChangeFeedInfo: &model.ChangeFeedInfo{},
-			TargetTs:       100,
-			Status:         model.ChangeFeedSyncDML,
+			tables:                  tables,
+			ChangeFeedInfo:          &model.ChangeFeedInfo{},
+			processorLastUpdateTime: make(map[string]time.Time),
+			TargetTs:                100,
+			Status:                  model.ChangeFeedSyncDML,
 			ProcessorInfos: model.ProcessorsInfos{
 				"capture_1": {},
 				"capture_2": {},
@@ -310,10 +311,11 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 
 	changeFeedInfos := map[model.ChangeFeedID]*changeFeedInfo{
 		"test_change_feed": {
-			tables:         tables,
-			ChangeFeedInfo: &model.ChangeFeedInfo{},
-			TargetTs:       100,
-			Status:         model.ChangeFeedSyncDML,
+			tables:                  tables,
+			ChangeFeedInfo:          &model.ChangeFeedInfo{},
+			processorLastUpdateTime: make(map[string]time.Time),
+			TargetTs:                100,
+			Status:                  model.ChangeFeedSyncDML,
 			ProcessorInfos: model.ProcessorsInfos{
 				"capture_1": {},
 				"capture_2": {},

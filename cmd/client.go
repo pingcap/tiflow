@@ -57,7 +57,7 @@ var cliCmd = &cobra.Command{
 			StartTs:    startTs,
 			TargetTs:   targetTs,
 		}
-		fmt.Printf("create changefeed detail %+v\n", detail)
+		fmt.Printf("create changefeed ID: %s detail %+v\n", id, detail)
 		return kv.SaveChangeFeedDetail(context.Background(), cli, detail, id)
 	},
 }
