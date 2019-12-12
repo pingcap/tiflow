@@ -21,6 +21,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -84,6 +85,16 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 			c.Assert(string(rawKv.Value), check.Equals, tc.details[i])
 		}
 	}
+	_, result, err := GetChangeFeeds(context.Background(), s.client)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(result), check.Equals, 3)
+
+	err = ClearAllCDCInfo(context.Background(), s.client)
+	c.Assert(err, check.IsNil)
+
+	_, result, err = GetChangeFeeds(context.Background(), s.client)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(result), check.Equals, 0)
 }
 
 func (s *etcdSuite) TestGetPutSubchangeFeed(c *check.C) {
@@ -105,4 +116,9 @@ func (s *etcdSuite) TestGetPutSubchangeFeed(c *check.C) {
 	_, getInfo, err := GetSubChangeFeedInfo(ctx, s.client, feedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(getInfo, check.DeepEquals, info)
+
+	err = ClearAllCDCInfo(context.Background(), s.client)
+	c.Assert(err, check.IsNil)
+	_, _, err = GetSubChangeFeedInfo(ctx, s.client, feedID, captureID)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrSubChangeFeedInfoNotExists)
 }
