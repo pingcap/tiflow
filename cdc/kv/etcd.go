@@ -59,6 +59,12 @@ func GetEtcdKeyCaptureList() string {
 	return EtcdKeyBase + "/capture/info"
 }
 
+// ClearAllCDCInfo delete all keys created by CDC
+func ClearAllCDCInfo(ctx context.Context, cli *clientv3.Client) error {
+	_, err := cli.Delete(ctx, EtcdKeyBase, clientv3.WithPrefix())
+	return errors.Trace(err)
+}
+
 // GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
 func GetChangeFeeds(ctx context.Context, cli *clientv3.Client, opts ...clientv3.OpOption) (int64, map[string]*mvccpb.KeyValue, error) {
 	key := GetEtcdKeyChangeFeedList()
