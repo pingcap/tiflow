@@ -13,6 +13,8 @@ const (
 	ResolveTsType MsgType = 1 + iota
 	// txn message.
 	TxnType
+	// meta message.
+	MetaType
 )
 
 type Message struct {
