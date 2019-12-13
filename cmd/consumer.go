@@ -13,7 +13,7 @@ import (
 func init() {
 	rootCmd.AddCommand(consumerCmd)
 
-	consumerCmd.Flags().StringVar(&kafkaVersion, "kafka-version", "2.11-0.10.0.0", "kafka version")
+	consumerCmd.Flags().StringVar(&kafkaVersion, "kafka-version", "2.11.10", "kafka version")
 	consumerCmd.Flags().StringVar(&kafkaTopic, "kafka-topic", "cdc", "kafka topic")
 	consumerCmd.Flags().StringVar(&kafkaAddr, "kafka-addr", "127.0.0.1:9092", "address of kafka")
 	consumerCmd.Flags().StringVar(&consumerSinkURI, "sink-uri", "root@tcp(127.0.0.1:3306)/test", "sink uri")

@@ -172,110 +172,115 @@ func (consumer *MessageConsumer) tryPersistent(session sarama.ConsumerGroupSessi
 	defer consumer.lock.Unlock()
 
 	for {
+		//check if we received all RS from all cdc node
 		if consumer.cdcCount > 0 && consumer.cdcCount <= len(consumer.cdcResolveTsMap) {
-			minRS := uint64(math.MaxUint64)
-			minRsIndex := 0
-			minRsCdcName := ""
-			for cdcName, messages := range consumer.cdcResolveTsMap {
-				if len(messages) <= 0 { //has no rs, we can not calculate the min rs, skip
-					return
-				}
-				for index, msg := range messages {
-					if msg.ResolveTs < minRS {
-						minRS = msg.ResolveTs
-						minRsCdcName = cdcName
-						minRsIndex = index
-					}
-				}
+			minRS, minRsCdcName, skip := consumer.findMinRs()
+			if skip { //no enough rs data
+				return
 			}
 
-			//for the find the last resolve ts index, msg great than that index will ignore,
-			partitionLastRSIndex := map[int32]int{}
-			for partition, messages := range consumer.partitionMessageMap {
-				for i := len(messages) - 1; i >= 0; i-- {
-					if messages[i].message.MsgType == ResolveTsType {
-						partitionLastRSIndex[partition] = i
-						break
-					}
-				}
-			}
-
-			txnMap := map[uint64][]*Message{}
-			partitionCommitOffset := map[int32]int64{}
-			for partition, messages := range consumer.partitionMessageMap {
-				largestIndex, found := partitionLastRSIndex[partition]
-				if !found {
-					//this partition has no rs
-					continue
-				}
-
-				shouldCommitOffset := true
-				for i := 0; i < largestIndex; i++ {
-					msg := messages[i]
-					if msg.message.MsgType == ResolveTsType {
-						if shouldCommitOffset && msg.message.ResloveTs <= minRS {
-							partitionCommitOffset[partition] = msg.offset
-						} else if msg.message.ResloveTs > minRS {
-							shouldCommitOffset = false
-						}
-					} else if msg.message.MsgType == TxnType {
-						if msg.message.Txn.Ts <= minRS {
-							txnMessages := txnMap[msg.message.Txn.Ts]
-							txnMessages = append(txnMessages, msg.message)
-							txnMap[msg.message.Txn.Ts] = txnMessages
-						}
-					}
-				}
-			}
+			txnMap := consumer.getTxnMap(minRS)
 			//empty rs interval
 			if len(txnMap) <= 0 {
 				//delete saved rs
-				rsList := consumer.cdcResolveTsMap[minRsCdcName]
-				consumer.cdcResolveTsMap[minRsCdcName] = append(rsList[0:minRsIndex], rsList[minRsIndex+1:]...)
+				consumer.cdcResolveTsMap[minRsCdcName] = consumer.cdcResolveTsMap[minRsCdcName][1:]
 				continue
 			}
+			offsetMap := consumer.calCommitOffset(minRS)
 
 			//sort and save to MySQL
-			list := TxnSlice{}
-			for key, v := range txnMap {
-				list = append(list, Txn{ts: key, msgs: v})
-			}
-			sort.Sort(list)
-			for _, item := range list {
-				//save to sink
-				for _, txn := range item.msgs {
-					//todo: error handle
-					if err := consumer.sink.Emit(context.Background(), *txn.Txn); err != nil {
-						log.Fatal("save to sink failed", zap.Error(err))
-					}
-				}
-			}
-			if err := consumer.sink.EmitResolvedTimestamp(context.Background(), minRS); err != nil {
-				log.Fatal("save to sink failed", zap.Error(err))
-			}
-
+			list := consumer.saveMessage2Sink(txnMap, minRS)
 			//commit kafka offset
-			for partition, offset := range partitionCommitOffset {
-				session.MarkOffset(consumer.topic, partition, offset, "")
-			}
-
+			consumer.commitKafkaOffset(offsetMap, session)
 			//delete saved rs
-			rsList := consumer.cdcResolveTsMap[minRsCdcName]
-			consumer.cdcResolveTsMap[minRsCdcName] = append(rsList[0:minRsIndex], rsList[minRsIndex+1:]...)
-
+			consumer.cdcResolveTsMap[minRsCdcName] = consumer.cdcResolveTsMap[minRsCdcName][1:]
 			//delete saved messages
-			maxSavedTs := list[list.Len()-1].ts
-			for partition, list := range consumer.partitionMessageMap {
-				n := 0
-				for _, item := range list {
-					if (item.message.MsgType == ResolveTsType && item.message.ResloveTs <= minRS) || item.message.Txn.Ts > maxSavedTs {
-						list[n] = item
-						n++
-					}
-				}
-				consumer.partitionMessageMap[partition] = list[:n]
+			consumer.deleteSaveKafkaMessage(minRS, list[list.Len()-1].ts)
+		}
+	}
+}
+
+func (consumer *MessageConsumer) calCommitOffset(minRS uint64) map[int32]int64 {
+	offsetMap := map[int32]int64{}
+	for partition, messages := range consumer.partitionMessageMap {
+		for _, msg := range messages {
+			if msg.message.MsgType == ResolveTsType && msg.message.ResloveTs <= minRS ||
+				msg.message.MsgType == TxnType && msg.message.Txn.Ts <= minRS {
+				offsetMap[partition] = msg.offset
 			}
 		}
+	}
+	return offsetMap
+}
+
+func (consumer *MessageConsumer) getTxnMap(minRS uint64) map[uint64][]*Message {
+	txnMap := map[uint64][]*Message{}
+	for _, messages := range consumer.partitionMessageMap {
+		for _, msg := range messages {
+			if msg.message.MsgType == TxnType {
+				if msg.message.Txn.Ts <= minRS {
+					txnMessages := txnMap[msg.message.Txn.Ts]
+					txnMessages = append(txnMessages, msg.message)
+					txnMap[msg.message.Txn.Ts] = txnMessages
+				}
+			}
+		}
+	}
+	return txnMap
+}
+
+func (consumer *MessageConsumer) findMinRs() (uint64, string, bool) {
+	minRS := uint64(math.MaxUint64)
+	minRsCdcName := ""
+	for cdcName, messages := range consumer.cdcResolveTsMap {
+		if len(messages) <= 0 { //has no rs, we can not calculate the min rs, skip
+			return 0, "", true
+		}
+		if messages[0].ResolveTs < minRS {
+			minRS = messages[0].ResolveTs
+			minRsCdcName = cdcName
+		}
+	}
+	return minRS, minRsCdcName, false
+}
+
+func (consumer *MessageConsumer) saveMessage2Sink(txnMap map[uint64][]*Message, minRS uint64) TxnSlice {
+	list := TxnSlice{}
+	for key, v := range txnMap {
+		list = append(list, Txn{ts: key, msgs: v})
+	}
+	sort.Sort(list)
+	for _, item := range list {
+		//save to sink
+		for _, txn := range item.msgs {
+			//todo: error handle
+			if err := consumer.sink.Emit(context.Background(), *txn.Txn); err != nil {
+				log.Fatal("save to sink failed", zap.Error(err))
+			}
+		}
+	}
+	if err := consumer.sink.EmitResolvedTimestamp(context.Background(), minRS); err != nil {
+		log.Fatal("save to sink failed", zap.Error(err))
+	}
+	return list
+}
+
+func (consumer *MessageConsumer) commitKafkaOffset(offsetMap map[int32]int64, session sarama.ConsumerGroupSession) {
+	for partition, offset := range offsetMap {
+		session.MarkOffset(consumer.topic, partition, offset, "")
+	}
+}
+
+func (consumer *MessageConsumer) deleteSaveKafkaMessage(minRS uint64, maxSavedTs uint64) {
+	for partition, list := range consumer.partitionMessageMap {
+		n := 0
+		for _, item := range list {
+			if (item.message.MsgType == ResolveTsType && item.message.ResloveTs <= minRS) || item.message.Txn.Ts > maxSavedTs {
+				list[n] = item
+				n++
+			}
+		}
+		consumer.partitionMessageMap[partition] = list[:n]
 	}
 }
 
