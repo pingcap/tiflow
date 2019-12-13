@@ -245,8 +245,13 @@ func (consumer *MessageConsumer) tryPersistent(session sarama.ConsumerGroupSessi
 				//save to sink
 				for _, txn := range item.msgs {
 					//todo: error handle
-					consumer.sink.Emit(context.Background(), *txn.Txn)
+					if err := consumer.sink.Emit(context.Background(), *txn.Txn); err != nil {
+						log.Fatal("save to sink failed", zap.Error(err))
+					}
 				}
+			}
+			if err := consumer.sink.EmitResolvedTimestamp(context.Background(), minRS); err != nil {
+				log.Fatal("save to sink failed", zap.Error(err))
 			}
 
 			//commit kafka offset
