@@ -5,7 +5,7 @@ go 1.12
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DATA-DOG/go-sqlmock v1.3.3
-	github.com/Shopify/sarama v1.23.1 // indirect
+	github.com/Shopify/sarama v1.23.1
 	github.com/biogo/store v0.0.0-20190426020002-884f370e325d
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/coreos/etcd v3.3.13+incompatible

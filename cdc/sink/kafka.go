@@ -7,7 +7,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
-	"strings"
+	//"strings"
 	"time"
 )
 
@@ -30,7 +30,7 @@ var (
 	_ Sink = &kafkaSink{}
 )
 
-func NewKafkaSink(cfg KafkaConfig) (*kafkaSink, error) {
+func NewKafkaSink(cfg KafkaConfig, cdcId string) (*kafkaSink, error) {
 	config, err := newSaramaConfig(cfg.KafkaVersion)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -49,11 +49,12 @@ func NewKafkaSink(cfg KafkaConfig) (*kafkaSink, error) {
 	config.Producer.Retry.Max = 10000
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
 
-	producer, err :=  sarama.NewSyncProducer(strings.Split(cfg.KafkaAddrs, ","), config)
-	if err != nil {
+	//producer, err :=  sarama.NewSyncProducer(strings.Split(cfg.KafkaAddrs, ","), config)
+	//if err != nil {
+	//
+	//}
 
-	}
-
+	return nil, nil
 
 }
 
@@ -66,8 +67,9 @@ func (s *kafkaSink) Emit(ctx context.Context, t model.Txn) error {
 
 
 
-	msg := &sarama.ProducerMessage{Topic: s.topic, Key: nil, Value: sarama.ByteEncoder(data)}
+	//msg := &sarama.ProducerMessage{Topic: s.topic, Key: nil, Value: sarama.ByteEncoder(data)}
 
+	return nil
 }
 
 func (s *kafkaSink) EmitResolvedTimestamp(ctx context.Context, resolved uint64) error {
