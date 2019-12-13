@@ -37,6 +37,8 @@ const (
 	CtrlQueryCaptures = "query-capture-list"
 	// query subchangefeed replication status
 	CtrlQuerySubCf = "query-sub-cf"
+	// clear all key-values created by CDC
+	CtrlClearAll = "clear-all"
 )
 
 func init() {
@@ -119,6 +121,8 @@ var ctrlCmd = &cobra.Command{
 				return err
 			}
 			return jsonPrint(info)
+		case CtrlClearAll:
+			return kv.ClearAllCDCInfo(context.Background(), cli)
 		default:
 			fmt.Printf("unknown controller command: %s\n", ctrlCommand)
 		}
