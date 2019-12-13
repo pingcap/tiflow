@@ -1,12 +1,13 @@
 package sink
 
 import (
-	"github.com/pingcap/ticdc/cdc/model"
 	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 // Message type
 type MsgType byte
+
 const (
 	_ = iota
 	// emit resolve type message.
@@ -20,12 +21,12 @@ const (
 type Message struct {
 	MsgType MsgType
 	// all cdc list
-	CdcList []string
+	CdcList   []string
 	MetaCount int
 	// resloveTs and txn message
 	CdcID string
 	// resloveTS type message
-	ResloveTs int64
+	ResloveTs uint64
 	// txn type message
 	Txn   *model.Txn
 	Columns  map[string][]*timodel.ColumnInfo

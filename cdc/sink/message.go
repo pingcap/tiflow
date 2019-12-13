@@ -65,10 +65,10 @@ func (w *writer) flush() []byte {
 
 type resolveTsWriter struct {
 	*writer
-	ts int64
+	ts uint64
 }
 
-func NewResloveTsWriter(cdcId string, ts int64)  *resolveTsWriter{
+func NewResloveTsWriter(cdcId string, ts uint64)  *resolveTsWriter{
 	return &resolveTsWriter{
 		writer: &writer{
 			version: Version,
@@ -85,7 +85,7 @@ func NewResloveTsWriter(cdcId string, ts int64)  *resolveTsWriter{
 func (w *resolveTsWriter) Write() ([]byte, error) {
 	w.writeMeta()
 	w.buf1.Reset()
-	w.buf1.PutBE64int64(w.ts)
+	w.buf1.PutBE64(w.ts)
 	err := w.write(w.buf1.Get())
 	if err != nil {
 		return nil, err
@@ -266,7 +266,7 @@ func (r *reader) decodeResloveTsMsg(d *encoding.Decbuf) *Message{
 	return &Message{
 		CdcID: d.UvarintStr(),
 		MsgType: ResolveTsType,
-		ResloveTs: d.Be64int64(),
+		ResloveTs: d.Be64(),
 	}
 }
 
