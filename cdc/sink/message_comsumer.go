@@ -174,20 +174,12 @@ func (consumer *MessageConsumer) tryPersistent(session sarama.ConsumerGroupSessi
 	for {
 		//check if we received all RS from all cdc node
 		if consumer.cdcCount > 0 && consumer.cdcCount <= len(consumer.cdcResolveTsMap) {
-			minRS, minRsCdcName, skip := consumer.findMinRs()
+			minRS, minRsCdcName, skip, offsetMap := consumer.findMinRs()
 			if skip { //no enough rs data
 				return
 			}
-
+			//find all DML and DDL that ts less than minRS
 			txnMap := consumer.getTxnMap(minRS)
-			//empty rs interval
-			if len(txnMap) <= 0 {
-				//delete saved rs
-				consumer.cdcResolveTsMap[minRsCdcName] = consumer.cdcResolveTsMap[minRsCdcName][1:]
-				continue
-			}
-			offsetMap := consumer.calCommitOffset(minRS)
-
 			//sort and save to MySQL
 			list := consumer.saveMessage2Sink(txnMap, minRS)
 			//commit kafka offset
@@ -204,8 +196,7 @@ func (consumer *MessageConsumer) calCommitOffset(minRS uint64) map[int32]int64 {
 	offsetMap := map[int32]int64{}
 	for partition, messages := range consumer.partitionMessageMap {
 		for _, msg := range messages {
-			if msg.message.MsgType == ResolveTsType && msg.message.ResloveTs <= minRS ||
-				msg.message.MsgType == TxnType && msg.message.Txn.Ts <= minRS {
+			if msg.message.MsgType == ResolveTsType && msg.message.ResloveTs == minRS {
 				offsetMap[partition] = msg.offset
 			}
 		}
@@ -229,19 +220,21 @@ func (consumer *MessageConsumer) getTxnMap(minRS uint64) map[uint64][]*Message {
 	return txnMap
 }
 
-func (consumer *MessageConsumer) findMinRs() (uint64, string, bool) {
+func (consumer *MessageConsumer) findMinRs() (uint64, string, bool, map[int32]int64) {
 	minRS := uint64(math.MaxUint64)
+	offsetMap := map[int32]int64{}
 	minRsCdcName := ""
 	for cdcName, messages := range consumer.cdcResolveTsMap {
 		if len(messages) <= 0 { //has no rs, we can not calculate the min rs, skip
-			return 0, "", true
+			return 0, "", true, nil
 		}
 		if messages[0].ResolveTs < minRS {
 			minRS = messages[0].ResolveTs
 			minRsCdcName = cdcName
+			offsetMap[messages[0].partition] = messages[0].offset
 		}
 	}
-	return minRS, minRsCdcName, false
+	return minRS, minRsCdcName, false, offsetMap
 }
 
 func (consumer *MessageConsumer) saveMessage2Sink(txnMap map[uint64][]*Message, minRS uint64) TxnSlice {
