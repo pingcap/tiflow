@@ -21,8 +21,9 @@ const (
 )
 
 type TxnOp byte
+
 const (
-	_  = iota
+	_ = iota
 	// DmlType represents of message.
 	DmlOp TxnOp = 1 + iota
 
@@ -34,12 +35,12 @@ type writer struct {
 	content []byte
 
 	// Reusable memory.
-	buf1    encoding.Encbuf
-	buf2    encoding.Encbuf
+	buf1 encoding.Encbuf
+	buf2 encoding.Encbuf
 
 	version byte
 	msgType MsgType
-	cdcId string
+	cdcId   string
 }
 
 func (w *writer) write(bufs ...[]byte) error {
@@ -49,7 +50,7 @@ func (w *writer) write(bufs ...[]byte) error {
 	return nil
 }
 
-func (w *writer) writeMeta() error{
+func (w *writer) writeMeta() error {
 	w.buf1.Reset()
 	w.buf1.PutBE32(MagicIndex)
 	w.buf1.PutByte(w.version)
@@ -68,15 +69,15 @@ type resolveTsWriter struct {
 	ts uint64
 }
 
-func NewResloveTsWriter(cdcId string, ts uint64)  *resolveTsWriter{
+func NewResloveTsWriter(cdcId string, ts uint64) *resolveTsWriter {
 	return &resolveTsWriter{
 		writer: &writer{
 			version: Version,
 			msgType: ResolveTsType,
-			content: make([]byte, 0, 1 << 22),
+			content: make([]byte, 0, 1<<22),
 			buf1:    encoding.Encbuf{B: make([]byte, 0, 1<<22)},
 			buf2:    encoding.Encbuf{B: make([]byte, 0, 1<<22)},
-			cdcId: cdcId,
+			cdcId:   cdcId,
 		},
 		ts: ts,
 	}
@@ -90,29 +91,29 @@ func (w *resolveTsWriter) Write() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return w.flush(), nil
 }
 
 type txnWriter struct {
 	*writer
-	crc32 hash.Hash
-	txn model.Txn
+	crc32      hash.Hash
+	txn        model.Txn
 	infoGetter TableInfoGetter
 }
 
-func NewTxnWriter(cdcId string, txn model.Txn, infoGetter TableInfoGetter) *txnWriter{
+func NewTxnWriter(cdcId string, txn model.Txn, infoGetter TableInfoGetter) *txnWriter {
 	return &txnWriter{
 		writer: &writer{
 			version: Version,
 			msgType: TxnType,
-			content: make([]byte, 0, 1 << 22),
+			content: make([]byte, 0, 1<<22),
 			buf1:    encoding.Encbuf{B: make([]byte, 0, 1<<22)},
 			buf2:    encoding.Encbuf{B: make([]byte, 0, 1<<22)},
 			cdcId:   cdcId,
 		},
-		crc32: crc32.New(castagnoliTable),
-		txn: txn,
+		crc32:      crc32.New(castagnoliTable),
+		txn:        txn,
 		infoGetter: infoGetter,
 	}
 }
@@ -127,7 +128,7 @@ type Datum struct {
 	Value interface{} `json:"value"`
 }
 
-func (w *txnWriter) Write() ([]byte, error){
+func (w *txnWriter) Write() ([]byte, error) {
 	w.writeMeta()
 	w.buf1.Reset()
 	w.buf1.PutBE64(w.txn.Ts)
@@ -163,7 +164,7 @@ func (w *txnWriter) Write() ([]byte, error){
 	return w.flush(), nil
 }
 
-func (w *txnWriter) writeDML(dmls []*model.DML, infoGetter TableInfoGetter) error{
+func (w *txnWriter) writeDML(dmls []*model.DML, infoGetter TableInfoGetter) error {
 	w.buf1.PutByte(byte(DmlOp))
 	w.buf1.PutBE32int(len(dmls))
 
@@ -218,7 +219,6 @@ func (w *txnWriter) writeDML(dmls []*model.DML, infoGetter TableInfoGetter) erro
 	return w.write(w.buf1.Get(), w.buf2.Get())
 }
 
-
 // writableColumns returns all columns which can be written. This excludes
 // generated and non-public columns.
 func writableColumns(table *timodel.TableInfo) []*timodel.ColumnInfo {
@@ -235,7 +235,7 @@ type reader struct {
 	data []byte
 }
 
-func NewReader(data []byte) *reader{
+func NewReader(data []byte) *reader {
 	return &reader{
 		data: data,
 	}
@@ -262,17 +262,17 @@ func (r *reader) Decode() (*Message, error) {
 	}
 }
 
-func (r *reader) decodeResloveTsMsg(d *encoding.Decbuf) *Message{
+func (r *reader) decodeResloveTsMsg(d *encoding.Decbuf) *Message {
 	return &Message{
-		CdcID: d.UvarintStr(),
-		MsgType: ResolveTsType,
+		CdcID:     d.UvarintStr(),
+		MsgType:   ResolveTsType,
 		ResloveTs: d.Be64(),
 	}
 }
 
-func (r *reader) decodeTxnMsg(d *encoding.Decbuf) (*Message, error){
+func (r *reader) decodeTxnMsg(d *encoding.Decbuf) (*Message, error) {
 	m := &Message{
-		CdcID: d.UvarintStr(),
+		CdcID:   d.UvarintStr(),
 		MsgType: TxnType,
 	}
 
@@ -299,7 +299,7 @@ func (r *reader) decodeTxnMsg(d *encoding.Decbuf) (*Message, error){
 	}
 }
 
-func (r *reader) decodeDDL(d *encoding.Decbuf, ts uint64) (*model.Txn, error){
+func (r *reader) decodeDDL(d *encoding.Decbuf, ts uint64) (*model.Txn, error) {
 	txn := &model.Txn{
 		Ts: ts,
 	}
@@ -309,8 +309,8 @@ func (r *reader) decodeDDL(d *encoding.Decbuf, ts uint64) (*model.Txn, error){
 
 	txn.DDL = &model.DDL{
 		Database: d.UvarintStr(),
-		Table: d.UvarintStr(),
-		Job: &timodel.Job{},
+		Table:    d.UvarintStr(),
+		Job:      &timodel.Job{},
 	}
 
 	job := d.UvarintStr()
@@ -323,7 +323,7 @@ func (r *reader) decodeDDL(d *encoding.Decbuf, ts uint64) (*model.Txn, error){
 	return txn, nil
 }
 
-func (r *reader) decodeDML(d *encoding.Decbuf, ts uint64) (*model.Txn, map[string][]*timodel.ColumnInfo, error){
+func (r *reader) decodeDML(d *encoding.Decbuf, ts uint64) (*model.Txn, map[string][]*timodel.ColumnInfo, error) {
 	txn := &model.Txn{
 		Ts: ts,
 	}
@@ -334,13 +334,13 @@ func (r *reader) decodeDML(d *encoding.Decbuf, ts uint64) (*model.Txn, map[strin
 
 	columnsMap := make(map[string][]*timodel.ColumnInfo)
 	dmls := make([]*model.DML, dmlLen)
-	for i := 0 ; i < dmlLen; i++ {
+	for i := 0; i < dmlLen; i++ {
 		database := d.UvarintStr()
 		table := d.UvarintStr()
 		dml := &model.DML{
 			Database: database,
-			Table: table,
-			Tp: model.DMLType(d.Be32int()),
+			Table:    table,
+			Tp:       model.DMLType(d.Be32int()),
 		}
 
 		values, err := r.decodeDMLValues(d)
@@ -364,7 +364,7 @@ func (r *reader) decodeDML(d *encoding.Decbuf, ts uint64) (*model.Txn, map[strin
 			columns = append(columns, &col)
 		}
 
-		columnsMap[FormColumnKey(database, table)] = columns
+		columnsMap[FormMapKey(database, table)] = columns
 	}
 
 	txn.DMLs = dmls
@@ -372,14 +372,14 @@ func (r *reader) decodeDML(d *encoding.Decbuf, ts uint64) (*model.Txn, map[strin
 	return txn, columnsMap, nil
 }
 
-func FormColumnKey(database, table string) string {
-	return fmt.Sprintf("%s-%s", database, table)
+func FormMapKey(database, table string) string {
+	return fmt.Sprintf("%s.%s", database, table)
 }
 
-func (r *reader) decodeDMLValues(d *encoding.Decbuf) (map[string]types.Datum, error){
+func (r *reader) decodeDMLValues(d *encoding.Decbuf) (map[string]types.Datum, error) {
 	valueLen := d.Be32int()
 	m := make(map[string]types.Datum, valueLen)
-	for i := 0 ; i < valueLen; i++ {
+	for i := 0; i < valueLen; i++ {
 		key := d.UvarintStr()
 
 		var dt Datum
@@ -395,5 +395,3 @@ func (r *reader) decodeDMLValues(d *encoding.Decbuf) (map[string]types.Datum, er
 
 	return m, nil
 }
-
-

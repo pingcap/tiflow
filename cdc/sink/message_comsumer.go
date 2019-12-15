@@ -5,6 +5,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/parser/model"
 	"go.uber.org/zap"
 	"math"
 	"sort"
@@ -14,12 +15,16 @@ import (
 )
 
 type MessageConsumer struct {
-	topic  string
-	client sarama.ConsumerGroup
-	sink   Sink
+	topic   string
+	client  sarama.ConsumerGroup
+	sink    Sink
+	started bool
 
 	cdcResolveTsMap     map[string][]*ResolveMsgWrapper
 	partitionMessageMap map[int32][]*MessageWrapper
+
+	tableInfoMap    map[int64]*timodel.TableInfo
+	tableName2IdMap map[string]int64
 
 	lock       sync.Mutex
 	metaGroup  *sync.WaitGroup
@@ -39,10 +44,10 @@ type ResolveMsgWrapper struct {
 	offset    int64
 }
 
-func NewMessageConsumer(sink Sink, kafkaVersion, kafkaAddr, kafkaTopic string) (*MessageConsumer, error) {
+func NewMessageConsumer(kafkaVersion, kafkaAddr, kafkaTopic string) (*MessageConsumer, TableInfoGetter, error) {
 	config, err := newSaramaConfig(kafkaVersion)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	config.Metadata.Retry.Max = 10000
@@ -51,21 +56,27 @@ func NewMessageConsumer(sink Sink, kafkaVersion, kafkaAddr, kafkaTopic string) (
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 	config.Consumer.Retry.Backoff = 500 * time.Millisecond
 
-	consumer, err := sarama.NewConsumerGroup(strings.Split(kafkaAddr, ","), "", config)
+	consumerGroup, err := sarama.NewConsumerGroup(strings.Split(kafkaAddr, ","), "", config)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &MessageConsumer{
-		client: consumer,
+	consumer := &MessageConsumer{
+		client: consumerGroup,
 		topic:  kafkaTopic,
-		sink:   sink,
-	}, nil
-
+	}
+	return consumer, consumer, nil
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim.
-func (consumer *MessageConsumer) Start(ctx context.Context) {
+func (consumer *MessageConsumer) Start(ctx context.Context, sink Sink) error {
+	consumer.lock.Lock()
+	defer consumer.lock.Unlock()
+
+	if consumer.started {
+		return errors.Errorf("kafka consumer is already started")
+	}
+	consumer.sink = sink
 	go func() {
 		for {
 			if err := consumer.client.Consume(ctx, strings.Split(consumer.topic, ","), consumer); err != nil {
@@ -77,6 +88,7 @@ func (consumer *MessageConsumer) Start(ctx context.Context) {
 			}
 		}
 	}()
+	return nil
 }
 
 func (consumer *MessageConsumer) Setup(session sarama.ConsumerGroupSession) error {
@@ -87,14 +99,22 @@ func (consumer *MessageConsumer) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-func decode(message *sarama.ConsumerMessage) *Message {
-	return nil
+func (consumer *MessageConsumer) TableByID(id int64) (info *timodel.TableInfo, ok bool) {
+	info, ok = consumer.tableInfoMap[id]
+	return
+}
+
+func (consumer *MessageConsumer) GetTableIDByName(schema, table string) (id int64, ok bool) {
+	id, ok = consumer.tableName2IdMap[FormMapKey(schema, table)]
+	return
 }
 
 func (consumer *MessageConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-
 	for message := range claim.Messages() {
-		msg := decode(message)
+		msg, err := NewReader(message.Value).Decode()
+		if err != nil {
+			log.Fatal("failed to decode kafka message", zap.Error(err))
+		}
 		switch msg.MsgType {
 		case TxnType:
 			consumer.processTxnMsg(message, msg)
@@ -110,6 +130,11 @@ func (consumer *MessageConsumer) ConsumeClaim(session sarama.ConsumerGroupSessio
 func (consumer *MessageConsumer) processTxnMsg(kafkaMessage *sarama.ConsumerMessage, msg *Message) {
 	consumer.lock.Lock()
 	defer consumer.lock.Unlock()
+
+	for key, v := range msg.TableInfos {
+		consumer.tableInfoMap[v.ID] = v
+		consumer.tableName2IdMap[key] = v.ID
+	}
 
 	wrapper := &MessageWrapper{message: msg, partition: kafkaMessage.Partition, offset: kafkaMessage.Offset}
 	messages, _ := consumer.partitionMessageMap[wrapper.partition]
