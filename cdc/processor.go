@@ -236,22 +236,19 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 	// TODO: get time zone from config
 	mounter := fNewMounter(schemaStorage)
 
+	subInfo := tsRWriter.GetSubChangeFeedInfo()
 	var s sink.Sink
 	if changefeed.SinkToKafka {
 		if changefeed.KafkaTopic == "" || changefeed.KafkaAddress == "" {
 			return nil, errors.New("invalid kafka configuration")
 		}
 
-		cfg, err := sink.NewKafkaConfig(changefeed.KafkaVersion, changefeed.KafkaMaxMessage)
+		producer, err := sink.NewKafkaSyncProducer(changefeed.KafkaAddress, changefeed.KafkaVersion, changefeed.KafkaMaxMessage)
 		if err != nil {
 			return nil, err
 		}
 
-		producer, err := sarama.NewSyncProducer(strings.Split(changefeed.KafkaAddress, ","), cfg)
-		if err != nil {
-			return nil, err
-		}
-		s, err = fNewKafkaSink(captureID, changefeed.KafkaTopic, changefeed.Partition, producer, schemaStorage)
+		s, err = fNewKafkaSink(captureID, changefeed.KafkaTopic, subInfo.Partition, producer, schemaStorage)
 	} else {
 		s, err = fNewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
 	}
@@ -272,7 +269,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		ddlPuller:     ddlPuller,
 
 		tsRWriter:       tsRWriter,
-		subInfo:         tsRWriter.GetSubChangeFeedInfo(),
+		subInfo:         subInfo,
 		resolvedEntries: make(chan ProcessorEntry, 1),
 		executedEntries: make(chan ProcessorEntry, 1),
 		ddlJobsCh:       make(chan model.RawTxn, 16),
