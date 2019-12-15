@@ -1,3 +1,16 @@
+// Copyright 2019 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package sink
 
 import (
@@ -14,17 +27,20 @@ import (
 	"time"
 )
 
-type MessageConsumer struct {
+type offsetCommitter interface {
+	MarkOffset(topic string, partition int32, offset int64, metadata string)
+}
+
+type messageConsumer struct {
 	topic   string
 	client  sarama.ConsumerGroup
 	sink    Sink
 	started bool
 
-	cdcResolveTsMap     map[string][]*ResolveMsgWrapper
-	partitionMessageMap map[int32][]*MessageWrapper
-
-	tableInfoMap    map[int64]*timodel.TableInfo
-	tableName2IdMap map[string]int64
+	cdcResolveTsMap     map[string][]*resolveMsgWrapper
+	partitionMessageMap map[int32][]*decodedKafkaMessage
+	tableInfoMap        map[int64]*timodel.TableInfo
+	tableName2IdMap     map[string]int64
 
 	lock       sync.Mutex
 	metaGroup  *sync.WaitGroup
@@ -32,19 +48,19 @@ type MessageConsumer struct {
 	cdcCount   int
 }
 
-type MessageWrapper struct {
+type decodedKafkaMessage struct {
 	partition int32
 	offset    int64
 	message   *Message
 }
 
-type ResolveMsgWrapper struct {
+type resolveMsgWrapper struct {
 	ResolveTs uint64
 	partition int32
 	offset    int64
 }
 
-func NewMessageConsumer(kafkaVersion, kafkaAddr, kafkaTopic string) (*MessageConsumer, TableInfoGetter, error) {
+func NewMessageConsumer(kafkaVersion, kafkaAddr, kafkaTopic string) (*messageConsumer, TableInfoGetter, error) {
 	config, err := newSaramaConfig(kafkaVersion)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
@@ -61,15 +77,19 @@ func NewMessageConsumer(kafkaVersion, kafkaAddr, kafkaTopic string) (*MessageCon
 		return nil, nil, err
 	}
 
-	consumer := &MessageConsumer{
-		client: consumerGroup,
-		topic:  kafkaTopic,
+	consumer := &messageConsumer{
+		client:              consumerGroup,
+		topic:               kafkaTopic,
+		cdcResolveTsMap:     map[string][]*resolveMsgWrapper{},
+		partitionMessageMap: map[int32][]*decodedKafkaMessage{},
+		tableInfoMap:        map[int64]*timodel.TableInfo{},
+		tableName2IdMap:     map[string]int64{},
 	}
 	return consumer, consumer, nil
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim.
-func (consumer *MessageConsumer) Start(ctx context.Context, sink Sink) error {
+func (consumer *messageConsumer) Start(ctx context.Context, sink Sink) error {
 	consumer.lock.Lock()
 	defer consumer.lock.Unlock()
 
@@ -91,43 +111,47 @@ func (consumer *MessageConsumer) Start(ctx context.Context, sink Sink) error {
 	return nil
 }
 
-func (consumer *MessageConsumer) Setup(session sarama.ConsumerGroupSession) error {
+func (consumer *messageConsumer) Setup(session sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-func (consumer *MessageConsumer) Cleanup(sarama.ConsumerGroupSession) error {
+func (consumer *messageConsumer) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-func (consumer *MessageConsumer) TableByID(id int64) (info *timodel.TableInfo, ok bool) {
+func (consumer *messageConsumer) TableByID(id int64) (info *timodel.TableInfo, ok bool) {
 	info, ok = consumer.tableInfoMap[id]
 	return
 }
 
-func (consumer *MessageConsumer) GetTableIDByName(schema, table string) (id int64, ok bool) {
+func (consumer *messageConsumer) GetTableIDByName(schema, table string) (id int64, ok bool) {
 	id, ok = consumer.tableName2IdMap[FormMapKey(schema, table)]
 	return
 }
 
-func (consumer *MessageConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+func (consumer *messageConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for message := range claim.Messages() {
 		msg, err := NewReader(message.Value).Decode()
 		if err != nil {
 			log.Fatal("failed to decode kafka message", zap.Error(err))
 		}
-		switch msg.MsgType {
-		case TxnType:
-			consumer.processTxnMsg(message, msg)
-		case ResolveTsType:
-			consumer.processResolveRSMsg(message, msg)
-		case MetaType: //cdc is added or deleted
-			consumer.processMetaMsg(session, msg)()
-		}
+		consumer.processMsg(message.Partition, message.Offset, msg, session)
 	}
 	return nil
 }
 
-func (consumer *MessageConsumer) processTxnMsg(kafkaMessage *sarama.ConsumerMessage, msg *Message) {
+func (consumer *messageConsumer) processMsg(partition int32, offset int64, msg *Message, committer offsetCommitter) {
+	switch msg.MsgType {
+	case TxnType:
+		consumer.processTxnMsg(partition, offset, msg)
+	case ResolveTsType:
+		consumer.processResolveRSMsg(partition, offset, msg)
+	case MetaType: //cdc is added or deleted
+		consumer.processMetaMsg(committer, msg)()
+	}
+}
+
+func (consumer *messageConsumer) processTxnMsg(partition int32, offset int64, msg *Message) {
 	consumer.lock.Lock()
 	defer consumer.lock.Unlock()
 
@@ -136,40 +160,41 @@ func (consumer *MessageConsumer) processTxnMsg(kafkaMessage *sarama.ConsumerMess
 		consumer.tableName2IdMap[key] = v.ID
 	}
 
-	wrapper := &MessageWrapper{message: msg, partition: kafkaMessage.Partition, offset: kafkaMessage.Offset}
+	wrapper := &decodedKafkaMessage{message: msg, partition: partition, offset: offset}
 	messages, _ := consumer.partitionMessageMap[wrapper.partition]
 	messages = append(messages, wrapper)
 	consumer.partitionMessageMap[wrapper.partition] = messages
 }
-func (consumer *MessageConsumer) processResolveRSMsg(kafkaMessage *sarama.ConsumerMessage, msg *Message) {
+func (consumer *messageConsumer) processResolveRSMsg(partition int32, offset int64, msg *Message) {
 	consumer.lock.Lock()
 	defer consumer.lock.Unlock()
 
-	wrapper := &ResolveMsgWrapper{ResolveTs: msg.ResloveTs, partition: kafkaMessage.Partition, offset: kafkaMessage.Offset}
+	wrapper := &resolveMsgWrapper{ResolveTs: msg.ResloveTs, partition: partition, offset: offset}
 	messages, _ := consumer.cdcResolveTsMap[msg.CdcID]
 	messages = append(messages, wrapper)
 	consumer.cdcResolveTsMap[msg.CdcID] = messages
 
 	//add to partition cache too
-	wrapper2 := &MessageWrapper{message: msg, partition: kafkaMessage.Partition, offset: kafkaMessage.Offset}
+	wrapper2 := &decodedKafkaMessage{message: msg, partition: partition, offset: offset}
 	messages2, _ := consumer.partitionMessageMap[wrapper2.partition]
 	messages2 = append(messages2, wrapper2)
 	consumer.partitionMessageMap[wrapper.partition] = messages2
 }
 
-func (consumer *MessageConsumer) processMetaMsg(session sarama.ConsumerGroupSession, msg *Message) func() {
+func (consumer *messageConsumer) processMetaMsg(committer offsetCommitter, msg *Message) func() {
 	consumer.lock.Lock()
 	defer consumer.lock.Unlock()
 
 	if consumer.metaGroup == nil {
 		consumer.metaGroup = &sync.WaitGroup{}
-		consumer.metaGroup.Add(msg.MetaCount - 1)
+		consumer.metaGroup.Add(len(msg.CdcList) - 1)
+		consumer.cleanGroup = &sync.WaitGroup{}
 		consumer.cleanGroup.Add(1)
 		return func() {
 			defer consumer.cleanGroup.Done()
 
 			consumer.metaGroup.Wait()
-			consumer.tryPersistent(session)
+			consumer.tryPersistent(committer)
 
 			//after this time the cdc node count is changed
 			consumer.cdcCount = len(msg.CdcList)
@@ -189,10 +214,11 @@ func (consumer *MessageConsumer) processMetaMsg(session sarama.ConsumerGroupSess
 	return func() {
 		consumer.metaGroup.Done()
 		consumer.cleanGroup.Wait()
+		consumer.cleanGroup = nil
 	}
 }
 
-func (consumer *MessageConsumer) tryPersistent(session sarama.ConsumerGroupSession) {
+func (consumer *messageConsumer) tryPersistent(offsetCommitter offsetCommitter) {
 	consumer.lock.Lock()
 	defer consumer.lock.Unlock()
 
@@ -206,18 +232,20 @@ func (consumer *MessageConsumer) tryPersistent(session sarama.ConsumerGroupSessi
 			//find all DML and DDL that ts less than minRS
 			txnMap := consumer.getTxnMap(minRS)
 			//sort and save to MySQL
-			list := consumer.saveMessage2Sink(txnMap, minRS)
+			consumer.saveMessage2Sink(txnMap, minRS)
 			//commit kafka offset
-			consumer.commitKafkaOffset(offsetMap, session)
+			consumer.commitKafkaOffset(offsetMap, offsetCommitter)
 			//delete saved rs
 			consumer.cdcResolveTsMap[minRsCdcName] = consumer.cdcResolveTsMap[minRsCdcName][1:]
 			//delete saved messages
-			consumer.deleteSaveKafkaMessage(minRS, list[list.Len()-1].ts)
+			consumer.deleteSaveKafkaMessage(minRS)
+		} else {
+			break
 		}
 	}
 }
 
-func (consumer *MessageConsumer) calCommitOffset(minRS uint64) map[int32]int64 {
+func (consumer *messageConsumer) calCommitOffset(minRS uint64) map[int32]int64 {
 	offsetMap := map[int32]int64{}
 	for partition, messages := range consumer.partitionMessageMap {
 		for _, msg := range messages {
@@ -229,7 +257,7 @@ func (consumer *MessageConsumer) calCommitOffset(minRS uint64) map[int32]int64 {
 	return offsetMap
 }
 
-func (consumer *MessageConsumer) getTxnMap(minRS uint64) map[uint64][]*Message {
+func (consumer *messageConsumer) getTxnMap(minRS uint64) map[uint64][]*Message {
 	txnMap := map[uint64][]*Message{}
 	for _, messages := range consumer.partitionMessageMap {
 		for _, msg := range messages {
@@ -245,7 +273,7 @@ func (consumer *MessageConsumer) getTxnMap(minRS uint64) map[uint64][]*Message {
 	return txnMap
 }
 
-func (consumer *MessageConsumer) findMinRs() (uint64, string, bool, map[int32]int64) {
+func (consumer *messageConsumer) findMinRs() (uint64, string, bool, map[int32]int64) {
 	minRS := uint64(math.MaxUint64)
 	offsetMap := map[int32]int64{}
 	minRsCdcName := ""
@@ -262,7 +290,7 @@ func (consumer *MessageConsumer) findMinRs() (uint64, string, bool, map[int32]in
 	return minRS, minRsCdcName, false, offsetMap
 }
 
-func (consumer *MessageConsumer) saveMessage2Sink(txnMap map[uint64][]*Message, minRS uint64) TxnSlice {
+func (consumer *messageConsumer) saveMessage2Sink(txnMap map[uint64][]*Message, minRS uint64) {
 	list := TxnSlice{}
 	for key, v := range txnMap {
 		list = append(list, Txn{ts: key, msgs: v})
@@ -280,20 +308,20 @@ func (consumer *MessageConsumer) saveMessage2Sink(txnMap map[uint64][]*Message, 
 	if err := consumer.sink.EmitResolvedTimestamp(context.Background(), minRS); err != nil {
 		log.Fatal("save to sink failed", zap.Error(err))
 	}
-	return list
 }
 
-func (consumer *MessageConsumer) commitKafkaOffset(offsetMap map[int32]int64, session sarama.ConsumerGroupSession) {
+func (consumer *messageConsumer) commitKafkaOffset(offsetMap map[int32]int64, committer offsetCommitter) {
 	for partition, offset := range offsetMap {
-		session.MarkOffset(consumer.topic, partition, offset, "")
+		committer.MarkOffset(consumer.topic, partition, offset, "")
 	}
 }
 
-func (consumer *MessageConsumer) deleteSaveKafkaMessage(minRS uint64, maxSavedTs uint64) {
+func (consumer *messageConsumer) deleteSaveKafkaMessage(minRS uint64) {
 	for partition, list := range consumer.partitionMessageMap {
 		n := 0
 		for _, item := range list {
-			if (item.message.MsgType == ResolveTsType && item.message.ResloveTs <= minRS) || item.message.Txn.Ts > maxSavedTs {
+			if (item.message.MsgType == ResolveTsType && item.message.ResloveTs <= minRS) ||
+				(item.message.MsgType == TxnType && item.message.Txn.Ts > minRS) {
 				list[n] = item
 				n++
 			}
