@@ -3,9 +3,9 @@ package sink
 import (
 	"fmt"
 	"github.com/pingcap/check"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	dbtypes "github.com/pingcap/tidb/types"
-	timodel "github.com/pingcap/parser/model"
 )
 
 type EncodeSuite struct{}
@@ -78,3 +78,16 @@ func (s EncodeSuite) TestShouldDecodeDMLTxn(c *check.C) {
 	}
 }
 
+func (s EncodeSuite) TestDecodeMeta(c *check.C) {
+	cdcList := []string{"a", "b"}
+	data, err := NewMetaWriter(cdcList, 5).Write()
+	c.Assert(err, check.IsNil)
+
+	m, err := NewReader(data).Decode()
+	c.Assert(err, check.IsNil)
+
+	fmt.Println(fmt.Sprintf("count=%d", m.MetaCount))
+	for _, cdc := range m.CdcList {
+		fmt.Println("cdc:" + cdc)
+	}
+}

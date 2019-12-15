@@ -62,6 +62,7 @@ type SubChangeFeedInfo struct {
 	TablePLock  *TableLock          `json:"table-p-lock"`
 	TableCLock  *TableLock          `json:"table-c-lock"`
 	ModRevision int64               `json:"-"`
+	Partition   int32     `json:"kafka-partition"`
 }
 
 // String implements fmt.Stringer interface.
@@ -116,6 +117,8 @@ func (scfi *SubChangeFeedInfo) Clone() *SubChangeFeedInfo {
 		cLock := *scfi.TableCLock
 		clone.TableCLock = &cLock
 	}
+
+	clone.Partition = scfi.Partition
 	return &clone
 }
 
@@ -173,9 +176,14 @@ func (s ChangeFeedStatus) String() string {
 
 // ChangeFeedInfo stores information about a ChangeFeed
 type ChangeFeedInfo struct {
-	SinkURI      string `json:"sink-uri"`
-	ResolvedTs   uint64 `json:"resolved-ts"`
-	CheckpointTs uint64 `json:"checkpoint-ts"`
+	SinkToKafka     bool   `json:"sink-to-kafka"`
+	KafkaTopic      string `json:"kafka-topic"`
+	KafkaAddress    string `json:"kafka-address"`
+	KafkaVersion    string `json:"kafka-version"`
+	KafkaMaxMessage int    `json:"kafka-max-message-bytes"`
+	SinkURI         string `json:"sink-uri"`
+	ResolvedTs      uint64 `json:"resolved-ts"`
+	CheckpointTs    uint64 `json:"checkpoint-ts"`
 }
 
 // Marshal returns json encoded string of ChangeFeedInfo, only contains necessary fields stored in storage

@@ -29,6 +29,5 @@ type Message struct {
 	ResloveTs uint64
 	// txn type message
 	Txn        *model.Txn
-	Columns    map[string][]*timodel.ColumnInfo
 	TableInfos map[string]*timodel.TableInfo
 }

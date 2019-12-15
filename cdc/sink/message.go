@@ -64,6 +64,55 @@ func (w *writer) flush() []byte {
 	return w.content
 }
 
+type metaWriter struct {
+	*writer
+	cdcIds         []string
+	broadcastCount int
+	crc32          hash.Hash
+}
+
+func NewMetaWriter(cdcIds []string, broadcastCount int) *metaWriter {
+	return &metaWriter{
+		writer: &writer{
+			version: Version,
+			msgType: MetaType,
+			content: make([]byte, 0, 1<<22),
+			buf1:    encoding.Encbuf{B: make([]byte, 0, 1<<22)},
+			buf2:    encoding.Encbuf{B: make([]byte, 0, 1<<22)},
+			cdcId:   "",
+		},
+		cdcIds:         cdcIds,
+		broadcastCount: broadcastCount,
+		crc32:          crc32.New(castagnoliTable),
+	}
+}
+
+func (w *metaWriter) Write() ([]byte, error) {
+	if err := w.writeMeta(); err != nil {
+		return nil, err
+	}
+
+	w.buf2.Reset()
+	w.buf2.PutBE32int(len(w.cdcIds))
+	for _, cdc := range w.cdcIds {
+		w.buf2.PutUvarintStr(cdc)
+	}
+
+	w.buf2.PutBE32int(w.broadcastCount)
+
+	w.buf1.Reset()
+	w.buf1.PutBE32int(w.buf2.Len())
+
+	w.buf2.PutHash(w.crc32)
+
+	err := w.write(w.buf1.Get(), w.buf2.Get())
+	if err != nil {
+		return nil, err
+	}
+
+	return w.flush(), nil
+}
+
 type resolveTsWriter struct {
 	*writer
 	ts uint64
@@ -84,7 +133,10 @@ func NewResloveTsWriter(cdcId string, ts uint64) *resolveTsWriter {
 }
 
 func (w *resolveTsWriter) Write() ([]byte, error) {
-	w.writeMeta()
+	if err := w.writeMeta(); err != nil {
+		return nil, err
+	}
+
 	w.buf1.Reset()
 	w.buf1.PutBE64(w.ts)
 	err := w.write(w.buf1.Get())
@@ -200,35 +252,19 @@ func (w *txnWriter) writeDML(dmls []*model.DML, infoGetter TableInfoGetter) erro
 			return errors.New("get table by id failed")
 		}
 
-		//write columns
-		columns := writableColumns(tableInfo)
-		w.buf2.PutBE32int(len(columns))
-		for _, c := range columns {
-			cbytes, err := json.Marshal(*c)
-			if err != nil {
-				return err
-			}
-
-			w.buf2.PutUvarintStr(string(cbytes))
+		// write tableInfo
+		cbytes, err := json.Marshal(tableInfo)
+		if err != nil {
+			return err
 		}
+
+		w.buf2.PutUvarintStr(string(cbytes))
 	}
 
 	w.buf1.PutBE32int(w.buf2.Len())
 	w.buf2.PutHash(w.crc32)
 
 	return w.write(w.buf1.Get(), w.buf2.Get())
-}
-
-// writableColumns returns all columns which can be written. This excludes
-// generated and non-public columns.
-func writableColumns(table *timodel.TableInfo) []*timodel.ColumnInfo {
-	cols := make([]*timodel.ColumnInfo, 0, len(table.Columns))
-	for _, col := range table.Columns {
-		if col.State == timodel.StatePublic && !col.IsGenerated() {
-			cols = append(cols, col)
-		}
-	}
-	return cols
 }
 
 type reader struct {
@@ -257,9 +293,29 @@ func (r *reader) Decode() (*Message, error) {
 		return r.decodeResloveTsMsg(d), nil
 	case TxnType:
 		return r.decodeTxnMsg(d)
+	case MetaType:
+		return r.decodeMeta(d), nil
 	default:
 		return nil, errors.New(fmt.Sprintf("unsupport type - %d", t))
 	}
+}
+
+func (r *reader) decodeMeta(d *encoding.Decbuf) *Message {
+	m := &Message{
+		CdcID:   d.UvarintStr(),
+		MsgType: MetaType,
+	}
+
+	d.Be32int()
+	cdcLen := d.Be32int()
+	cdcIds := make([]string, cdcLen)
+	for i := 0; i < cdcLen; i++ {
+		cdcIds[i] = d.UvarintStr()
+	}
+	m.CdcList = cdcIds
+	m.MetaCount = d.Be32int()
+
+	return m
 }
 
 func (r *reader) decodeResloveTsMsg(d *encoding.Decbuf) *Message {
@@ -279,12 +335,12 @@ func (r *reader) decodeTxnMsg(d *encoding.Decbuf) (*Message, error) {
 	ts := d.Be64()
 	switch TxnOp(d.Byte()) {
 	case DmlOp:
-		txn, col, err := r.decodeDML(d, ts)
+		txn, tinfos, err := r.decodeDML(d, ts)
 		if err != nil {
 			return nil, err
 		}
 		m.Txn = txn
-		m.Columns = col
+		m.TableInfos = tinfos
 		return m, nil
 	case DdlOp:
 		txn, err := r.decodeDDL(d, ts)
@@ -323,7 +379,7 @@ func (r *reader) decodeDDL(d *encoding.Decbuf, ts uint64) (*model.Txn, error) {
 	return txn, nil
 }
 
-func (r *reader) decodeDML(d *encoding.Decbuf, ts uint64) (*model.Txn, map[string][]*timodel.ColumnInfo, error) {
+func (r *reader) decodeDML(d *encoding.Decbuf, ts uint64) (*model.Txn, map[string]*timodel.TableInfo, error) {
 	txn := &model.Txn{
 		Ts: ts,
 	}
@@ -332,7 +388,7 @@ func (r *reader) decodeDML(d *encoding.Decbuf, ts uint64) (*model.Txn, map[strin
 	// TOOD check checksum
 	d.Be32int()
 
-	columnsMap := make(map[string][]*timodel.ColumnInfo)
+	talbeInfoMap := make(map[string]*timodel.TableInfo)
 	dmls := make([]*model.DML, dmlLen)
 	for i := 0; i < dmlLen; i++ {
 		database := d.UvarintStr()
@@ -350,26 +406,19 @@ func (r *reader) decodeDML(d *encoding.Decbuf, ts uint64) (*model.Txn, map[strin
 		dml.Values = values
 		dmls[i] = dml
 
-		// column info
-		columns := make([]*timodel.ColumnInfo, 0)
-		columnsLen := d.Be32int()
-		for i := 0; i < columnsLen; i++ {
-			var col timodel.ColumnInfo
-
-			err := json.Unmarshal([]byte(d.UvarintStr()), &col)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			columns = append(columns, &col)
+		// table Info
+		var tbl timodel.TableInfo
+		err = json.Unmarshal([]byte(d.UvarintStr()), &tbl)
+		if err != nil {
+			return nil, nil, err
 		}
 
-		columnsMap[FormMapKey(database, table)] = columns
+		talbeInfoMap[FormMapKey(database, table)] = &tbl
 	}
 
 	txn.DMLs = dmls
 
-	return txn, columnsMap, nil
+	return txn, talbeInfoMap, nil
 }
 
 func FormMapKey(database, table string) string {
