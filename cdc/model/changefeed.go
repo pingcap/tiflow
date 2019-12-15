@@ -28,7 +28,6 @@ type ChangeFeedDetail struct {
 	KafkaAddress    string            `json:"kafka-address"`
 	KafkaVersion    string            `json:"kafka-version"`
 	KafkaMaxMessage int               `json:"kafka-max-message-bytes"`
-	Partition       int32             `json:"kafka-partition"`
 	SinkURI         string            `json:"sink-uri"`
 	Opts            map[string]string `json:"opts"`
 	CreateTime      time.Time         `json:"create-time"`

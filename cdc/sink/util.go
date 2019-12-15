@@ -228,6 +228,15 @@ func isTableChanged(ddl *model.DDL) bool {
 	}
 }
 
+func NewKafkaSyncProducer(kafkaAddresses string, kafkaVersion string, maxMessageBytes int) (sarama.SyncProducer, error) {
+	cfg, err := NewKafkaConfig(kafkaVersion, maxMessageBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return sarama.NewSyncProducer(strings.Split(kafkaAddresses, ","), cfg)
+}
+
 func NewKafkaConfig(kafkaVersion string, maxMessageBytes int) (*sarama.Config, error) {
 	config, err := newSaramaConfig(kafkaVersion)
 	if err != nil {
@@ -245,6 +254,5 @@ func NewKafkaConfig(kafkaVersion string, maxMessageBytes int) (*sarama.Config, e
 
 	config.Producer.Retry.Max = 10000
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
-
-	return config, nil
+	return config, err
 }

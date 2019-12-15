@@ -17,8 +17,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/ticdc/cdc/sink"
 	"io"
 	"math"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -157,16 +160,16 @@ func (c *changeFeedInfo) minimumTablesCapture(captures map[string]*model.Capture
 	return minID
 }
 
-func (c *changeFeedInfo) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo) {
-	c.cleanTables(ctx)
-	c.banlanceOrphanTables(ctx, captures)
+func (c *changeFeedInfo) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, partitions map[string]int32) {
+	c.cleanTables(ctx, partitions)
+	c.banlanceOrphanTables(ctx, captures, partitions)
 }
 
 func (c *changeFeedInfo) restoreTableInfos(infoSnapshot *model.SubChangeFeedInfo, captureID string) {
 	c.ProcessorInfos[captureID].TableInfos = infoSnapshot.TableInfos
 }
 
-func (c *changeFeedInfo) cleanTables(ctx context.Context) {
+func (c *changeFeedInfo) cleanTables(ctx context.Context, partitions map[string]int32) {
 	var cleanIDs []uint64
 
 cleanLoop:
@@ -181,6 +184,7 @@ cleanLoop:
 		infoClone := subInfo.Clone()
 		subInfo.RemoveTable(id)
 
+		subInfo.Partition = partitions[captureID]
 		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, subInfo, true)
 		if err == nil {
 			c.ProcessorInfos[captureID] = newInfo
@@ -221,7 +225,7 @@ func findSubChangefeedWithTable(infos model.ProcessorsInfos, tableID uint64) (ca
 	return "", nil, false
 }
 
-func (c *changeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo) {
+func (c *changeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo, partitions map[string]int32) {
 	if len(captures) == 0 {
 		return
 	}
@@ -242,6 +246,7 @@ func (c *changeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 			StartTs: orphan.StartTs,
 		})
 
+		info.Partition = partitions[captureID]
 		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, info, false)
 		if err == nil {
 			c.ProcessorInfos[captureID] = newInfo
@@ -312,6 +317,10 @@ type ownerImpl struct {
 	captureWatchC      <-chan *CaptureInfoWatchResp
 	cancelWatchCapture func()
 	captures           map[model.CaptureID]*model.CaptureInfo
+	capturesToPartition map[model.CaptureID]int32
+	producer *sarama.SyncProducer
+	//support different topic
+	clusterAdmin *sarama.ClusterAdmin
 }
 
 // NewOwner creates a new ownerImpl instance
@@ -380,6 +389,8 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	var cfg kafkaConfig
+	topics := make([]string, 0)
 	for changeFeedID, etcdChangeFeedInfo := range pinfos {
 		var cfInfo *changeFeedInfo
 		var exist bool
@@ -448,7 +459,6 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 				KafkaAddress: changefeed.KafkaAddress,
 				KafkaVersion: changefeed.KafkaVersion,
 				KafkaMaxMessage: changefeed.KafkaMaxMessage,
-				Partition   int32 			`json:"kafka-partition"`
 				ResolvedTs:   0,
 				CheckpointTs: detail.GetCheckpointTs(),
 			},
@@ -458,13 +468,90 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			DDLCurrentIndex: 0,
 			infoWriter:      storage.NewOwnerSubCFInfoEtcdWriter(o.etcdClient),
 		}
+
+		if changefeed.SinkToKafka {
+			cfg = kafkaConfig{
+				address: changefeed.KafkaAddress,
+				version: changefeed.KafkaVersion,
+				maxMessageBytes: changefeed.KafkaMaxMessage,
+			}
+
+			topics = append(topics, changefeed.KafkaTopic)
+		}
 	}
 
+	o.calCaptureToPartition(topics, cfg)
+
 	for _, info := range o.changeFeedInfos {
-		info.tryBalance(ctx, o.captures)
+		info.tryBalance(ctx, o.captures, o.capturesToPartition)
 	}
 
 	return nil
+}
+
+func (o *ownerImpl) calCaptureToPartition(topics []string, cfg kafkaConfig) error{
+	if topics == nil || len(topics) == 0 {
+		return nil
+	}
+
+	partitions, err := o.partitions(cfg.address, cfg.version, cfg.maxMessageBytes, topics)
+	if err != nil {
+		return err
+	}
+
+	captureIds := make([]string, 0)
+	for k, _ := range o.captures {
+		captureIds = append(captureIds, k)
+	}
+
+	sort.Strings(captureIds)
+
+	captures := make(map[model.CaptureID]*model.CaptureInfo)
+	for i := 0 ; i < len(captureIds) && i < len(partitions); i++ {
+		o.capturesToPartition[captureIds[i]] = partitions[i]
+
+		id := captureIds[i]
+		captures[id] = o.captures[id]
+	}
+
+	o.captures = captures
+	return o.sendMetaDataMsg(topics, cfg)
+}
+
+func (o *ownerImpl) partitions(kafkaAddresses string, kafkaVersion string, maxMessageBytes int, topics []string) ([]int32, error) {
+	// run method has lock, so it is thread-safe
+	cfg, err := sink.NewKafkaConfig(kafkaVersion, maxMessageBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	if o.clusterAdmin == nil {
+		admin, err := sarama.NewClusterAdmin(strings.Split(kafkaAddresses, ","), cfg)
+		if err != nil {
+			return nil, err
+		}
+
+		o.clusterAdmin = &admin
+	}
+
+	metas, err := (*o.clusterAdmin).DescribeTopics(topics)
+	if err != nil {
+		return nil, err
+	}
+
+	var partitionMetas []*sarama.PartitionMetadata = nil
+	for _, meta := range metas {
+		if partitionMetas == nil || len(partitionMetas) < len(meta.Partitions) {
+			partitionMetas = meta.Partitions
+		}
+	}
+
+	partitions := make([]int32, len(partitionMetas))
+	for i, p := range partitionMetas {
+		partitions[i] = p.ID
+	}
+
+	return partitions, nil
 }
 
 func (o *ownerImpl) flushChangeFeedInfos(ctx context.Context) error {
@@ -590,7 +677,7 @@ waitCheckpointTsLoop:
 			return errors.Trace(err)
 		}
 
-		cfInfo.banlanceOrphanTables(context.Background(), o.captures)
+		cfInfo.banlanceOrphanTables(context.Background(), o.captures, o.capturesToPartition)
 
 		err = cfInfo.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, todoDDLJob)
 		// o.l.Lock()
@@ -698,4 +785,55 @@ func (o *ownerImpl) writeDebugInfo(w io.Writer) {
 
 func (o *ownerImpl) broadcastMeta(producer *sarama.SyncProducer) {
 	//producer.
+}
+
+type kafkaConfig struct {
+	address string
+	version string
+	maxMessageBytes int
+}
+
+func (o *ownerImpl) sendMetaDataMsg(topics []string, cfg kafkaConfig) error{
+	if o.producer != nil {
+		producer, err := sink.NewKafkaSyncProducer(cfg.address, cfg.version, cfg.maxMessageBytes)
+		if err != nil {
+			return err
+		}
+
+		o.producer = &producer
+	}
+
+	cdcIds := make([]string, len(o.capturesToPartition))
+	partition := make([]int32, len(o.capturesToPartition))
+	for key, value := range o.capturesToPartition {
+		cdcIds = append(cdcIds, key)
+		partition = append(partition, value)
+	}
+
+	for _, topic := range topics {
+		if err := sendMetaDataMsg(topic, partition, cdcIds, *o.producer); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	return nil
+}
+
+func sendMetaDataMsg(topic string, partitions []int32, cdcIds []string, producer sarama.SyncProducer) error{
+	for _, p := range partitions {
+		data, err := sink.NewMetaWriter(cdcIds, len(partitions)).Write()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		msg := &sarama.ProducerMessage{Topic: topic, Key: nil, Value: sarama.ByteEncoder(data), Partition: p}
+		_, _, err = producer.SendMessage(msg)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		return nil
+	}
+
+	return nil
 }
