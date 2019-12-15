@@ -19,6 +19,7 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	"os"
+	"sync"
 )
 
 type ConsumerSuite struct{}
@@ -36,13 +37,12 @@ var commiter = &dummyCommit{}
 
 func (s ConsumerSuite) TestProcessMsg(c *check.C) {
 	consumer := messageConsumer{
-		sink:                &writerSink{os.Stdout},
-		cdcResolveTsMap:     map[string][]*resolveMsgWrapper{},
-		partitionMessageMap: map[int32][]*decodedKafkaMessage{},
-		tableInfoMap:        map[int64]*timodel.TableInfo{},
-		tableName2IdMap:     map[string]int64{},
-		cdcCount:            2,
+		sink:       &writerSink{os.Stdout},
+		cdcCount:   2,
+		persistSig: make(chan uint64, 13),
+		session:    commiter,
 	}
+	go consumer.tick()
 	//two partition and two cdc
 	//cdc1
 	consumer.processMsg(1, 1, newTestTxnMessage("cdc1", 1), commiter)
@@ -60,22 +60,19 @@ func (s ConsumerSuite) TestProcessMsg(c *check.C) {
 	consumer.processMsg(2, 5, newTestResolveRsMessage("cdc2", 7), commiter)
 	consumer.processMsg(2, 6, newTestTxnMessage("cdc2", 8), commiter)
 
-	minRS, minRsCdcName, skip, offsetMap := consumer.findMinRs()
-	c.Check(minRS, check.Equals, uint64(3))
-	c.Check(skip, check.IsFalse)
-	c.Check(minRsCdcName, check.Equals, "cdc1")
-	c.Check(skip, check.IsFalse)
-	c.Check(int64(4), check.Equals, offsetMap[1])
-
 	c.Check(consumer.metaGroup, check.IsNil)
 	go consumer.processMsg(1, 7, newTestMataMsg([]string{"cdc1", "cdc2"}), commiter)
 	consumer.processMsg(2, 7, newTestMataMsg([]string{"cdc1", "cdc2"}), commiter)
 	c.Check(consumer.metaGroup, check.IsNil)
-	c.Check(3, check.Equals, len(consumer.partitionMessageMap[1]))
-	c.Check(1, check.Equals, len(consumer.partitionMessageMap[2]))
+	for i := 0; i < 14; i++ {
+		consumer.persistSig <- uint64(i)
+	}
+	consumer.tryPersistent(commiter)
+	c.Check(getMapValueLength(&consumer.partitionMessageMap, int32(1)), check.Equals, 3)
+	c.Check(getMapValueLength(&consumer.partitionMessageMap, int32(2)), check.Equals, 1)
 
-	c.Check(1, check.Equals, len(consumer.cdcResolveTsMap["cdc1"]))
-	c.Check(0, check.Equals, len(consumer.cdcResolveTsMap["cdc2"]))
+	c.Check(1, check.Equals, getMapValueLength(&consumer.cdcResolveTsMap, "cdc1"))
+	c.Check(0, check.Equals, getMapValueLength(&consumer.cdcResolveTsMap, "cdc2"))
 
 	//meta msg again
 	go consumer.processMsg(1, 8, newTestMataMsg([]string{"cdc1", "cdc2"}), commiter)
@@ -110,4 +107,9 @@ func newTestMataMsg(cdcList []string) *Message {
 		MsgType: MetaType,
 		CdcList: cdcList,
 	}
+}
+
+func getMapValueLength(m *sync.Map, key interface{}) int {
+	v, _ := m.Load(key)
+	return v.(*messageList).length()
 }
