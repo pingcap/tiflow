@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"github.com/Shopify/sarama"
 	"io"
 	"math"
 	"sync"
@@ -442,6 +443,12 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			toCleanTables: make(map[uint64]struct{}),
 			ChangeFeedInfo: &model.ChangeFeedInfo{
 				SinkURI:      changefeed.SinkURI,
+				SinkToKafka: changefeed.SinkToKafka,
+				KafkaTopic: changefeed.KafkaTopic,
+				KafkaAddress: changefeed.KafkaAddress,
+				KafkaVersion: changefeed.KafkaVersion,
+				KafkaMaxMessage: changefeed.KafkaMaxMessage,
+				Partition   int32 			`json:"kafka-partition"`
 				ResolvedTs:   0,
 				CheckpointTs: detail.GetCheckpointTs(),
 			},
@@ -687,4 +694,8 @@ func (o *ownerImpl) writeDebugInfo(w io.Writer) {
 		// fmt.Fprintf(w, "%+v\n", *info)
 		fmt.Fprintf(w, "%s\n", info)
 	}
+}
+
+func (o *ownerImpl) broadcastMeta(producer *sarama.SyncProducer) {
+	//producer.
 }

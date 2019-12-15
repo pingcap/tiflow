@@ -16,7 +16,9 @@ package sink
 import (
 	gosql "database/sql"
 	rawerrors "errors"
+	"github.com/Shopify/sarama"
 	"strings"
+	"time"
 
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
@@ -224,4 +226,25 @@ func isTableChanged(ddl *model.DDL) bool {
 	default:
 		return true
 	}
+}
+
+func NewKafkaConfig(kafkaVersion string, maxMessageBytes int) (*sarama.Config, error) {
+	config, err := newSaramaConfig(kafkaVersion)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	config.Producer.Flush.MaxMessages = maxMessageBytes
+	config.Metadata.Retry.Max = 10000
+	config.Metadata.Retry.Backoff = 500 * time.Millisecond
+
+	config.Producer.Partitioner = sarama.NewManualPartitioner
+	config.Producer.MaxMessageBytes = 1 << 30
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll
+
+	config.Producer.Retry.Max = 10000
+	config.Producer.Retry.Backoff = 500 * time.Millisecond
+
+	return config, nil
 }

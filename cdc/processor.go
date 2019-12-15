@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"github.com/Shopify/sarama"
 	"io"
 	"strings"
 	"sync"
@@ -48,6 +49,7 @@ var (
 	fNewTsRWriter = createTsRWriter
 	fNewMounter   = newMounter
 	fNewMySQLSink = sink.NewMySQLSink
+	fNewKafkaSink = sink.NewKafkaSink
 )
 
 type mounter interface {
@@ -234,7 +236,26 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 	// TODO: get time zone from config
 	mounter := fNewMounter(schemaStorage)
 
-	sink, err := fNewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
+	var s sink.Sink
+	if changefeed.SinkToKafka {
+		if changefeed.KafkaTopic == "" || changefeed.KafkaAddress == "" {
+			return nil, errors.New("invalid kafka configuration")
+		}
+
+		cfg, err := sink.NewKafkaConfig(changefeed.KafkaVersion, changefeed.KafkaMaxMessage)
+		if err != nil {
+			return nil, err
+		}
+
+		producer, err := sarama.NewSyncProducer(strings.Split(changefeed.KafkaAddress, ","), cfg)
+		if err != nil {
+			return nil, err
+		}
+		s, err = fNewKafkaSink(captureID, changefeed.KafkaTopic, changefeed.Partition, producer, schemaStorage)
+	} else {
+		s, err = fNewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +268,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		etcdCli:       etcdCli,
 		mounter:       mounter,
 		schemaStorage: schemaStorage,
-		sink:          sink,
+		sink:          s,
 		ddlPuller:     ddlPuller,
 
 		tsRWriter:       tsRWriter,

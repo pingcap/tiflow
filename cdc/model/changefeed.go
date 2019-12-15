@@ -23,9 +23,15 @@ import (
 
 // ChangeFeedDetail describes the detail of a ChangeFeed
 type ChangeFeedDetail struct {
-	SinkURI    string            `json:"sink-uri"`
-	Opts       map[string]string `json:"opts"`
-	CreateTime time.Time         `json:"create-time"`
+	SinkToKafka     bool              `json:"sink-to-kafka"`
+	KafkaTopic      string            `json:"kafka-topic"`
+	KafkaAddress    string            `json:"kafka-address"`
+	KafkaVersion    string            `json:"kafka-version"`
+	KafkaMaxMessage int               `json:"kafka-max-message-bytes"`
+	Partition       int32             `json:"kafka-partition"`
+	SinkURI         string            `json:"sink-uri"`
+	Opts            map[string]string `json:"opts"`
+	CreateTime      time.Time         `json:"create-time"`
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
 	StartTs uint64 `json:"start-ts"`
 	// The ChangeFeed will exits until sync to timestamp TargetTs
