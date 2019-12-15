@@ -16,7 +16,6 @@ package cdc
 import (
 	"context"
 	"fmt"
-	"github.com/Shopify/sarama"
 	"io"
 	"strings"
 	"sync"
