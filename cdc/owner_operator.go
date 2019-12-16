@@ -121,5 +121,5 @@ func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL
 func (h *ddlHandler) Close() error {
 	h.cancel()
 	err := h.wg.Wait()
-	return err
+	return errors.Trace(err)
 }

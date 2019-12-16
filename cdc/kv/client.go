@@ -221,7 +221,7 @@ func (c *CDCClient) partialRegionFeed(
 
 		if err != nil {
 			log.Warn("get meta failed", zap.Error(err))
-			return err
+			return errors.Trace(err)
 		}
 
 		maxTs, err := c.singleEventFeed(ctx, regionInfo.span, regionInfo.ts, regionInfo.meta, eventCh)
@@ -241,13 +241,13 @@ func (c *CDCClient) partialRegionFeed(
 			case *eventError:
 				if eerr.GetNotLeader() != nil {
 					regionInfo.meta = nil
-					return err
+					return errors.Trace(err)
 				} else if eerr.GetEpochNotMatch() != nil {
 					regionSplitCounter.Inc()
 					return c.divideAndSendEventFeedToRegions(ctx, regionInfo.span, ts, regionCh)
 				} else if eerr.GetRegionNotFound() != nil {
 					regionInfo.meta = nil
-					return err
+					return errors.Trace(err)
 				} else {
 					log.Warn("receive empty or unknown error msg", zap.Stringer("error", eerr))
 					return errors.Annotate(err, "receive empty or unknow error msg")

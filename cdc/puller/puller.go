@@ -121,12 +121,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					}
 
 					if err := p.buf.AddKVEntry(ctx, kv); err != nil {
-						return err
+						return errors.Trace(err)
 					}
 				} else if e.Checkpoint != nil {
 					cp := e.Checkpoint
 					if err := p.buf.AddResolved(ctx, cp.Span, cp.ResolvedTs); err != nil {
-						return err
+						return errors.Trace(err)
 					}
 				}
 			case <-ctx.Done():

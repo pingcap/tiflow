@@ -90,7 +90,7 @@ func (rw *ChangeFeedInfoRWriter) Write(ctx context.Context, infos map[model.Chan
 	for changefeedID, info := range infos {
 		storeVal, err := info.Marshal()
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 		key := kv.GetEtcdKeyChangeFeedStatus(changefeedID)
 		ops = append(ops, clientv3.OpPut(key, storeVal))
@@ -184,7 +184,7 @@ func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 	key := kv.GetEtcdKeySubChangeFeed(rw.changefeedID, rw.captureID)
 	value, err := rw.info.Marshal()
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	resp, err := rw.etcdClient.KV.Txn(ctx).If(
@@ -328,7 +328,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) Write(
 	err = retry.Run(func() error {
 		value, err := newInfo.Marshal()
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 
 		resp, err := ow.etcdClient.KV.Txn(ctx).If(
@@ -350,7 +350,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) Write(
 			case nil:
 				return errors.Trace(model.ErrWriteSubChangeFeedInfoConlict)
 			default:
-				return err
+				return errors.Trace(err)
 			}
 		}
 

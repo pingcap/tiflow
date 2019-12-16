@@ -79,7 +79,7 @@ func (w *ChangeFeedWatcher) processPutKv(kv *mvccpb.KeyValue) (bool, string, mod
 func (w *ChangeFeedWatcher) processDeleteKv(kv *mvccpb.KeyValue) error {
 	changefeedID, err := util.ExtractKeySuffix(string(kv.Key))
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	w.lock.Lock()
 	delete(w.details, changefeedID)
@@ -93,12 +93,12 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) err
 
 	revision, details, err := kv.GetChangeFeeds(ctx, w.etcdCli)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	for changefeedID, kv := range details {
 		needRunWatcher, _, detail, err := w.processPutKv(kv)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 		if needRunWatcher {
 			runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh, cb)
@@ -111,7 +111,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) err
 		case <-ctx.Done():
 			return ctx.Err()
 		case err := <-errCh:
-			return err
+			return errors.Trace(err)
 		case resp, ok := <-watchCh:
 			if !ok {
 				log.Info("watcher is closed")
@@ -126,7 +126,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) err
 				case mvccpb.PUT:
 					needRunWatcher, changefeedID, detail, err := w.processPutKv(ev.Kv)
 					if err != nil {
-						return err
+						return errors.Trace(err)
 					}
 					if needRunWatcher {
 						runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh, cb)
@@ -134,7 +134,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) err
 				case mvccpb.DELETE:
 					err := w.processDeleteKv(ev.Kv)
 					if err != nil {
-						return err
+						return errors.Trace(err)
 					}
 				}
 			}

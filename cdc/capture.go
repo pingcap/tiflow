@@ -107,7 +107,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	// TODO: better channgefeed model with etcd storage
 	err = c.register(ctx)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	err = c.ownerManager.CampaignOwner(ctx)

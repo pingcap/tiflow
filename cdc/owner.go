@@ -650,7 +650,7 @@ waitCheckpointTsLoop:
 				zap.String("ChangeFeedID", changeFeedID),
 				zap.Error(err),
 				zap.Reflect("ddlJob", todoDDLJob))
-			return err
+			return errors.Trace(err)
 		}
 		log.Info("Execute DDL succeeded",
 			zap.String("ChangeFeedID", changeFeedID),

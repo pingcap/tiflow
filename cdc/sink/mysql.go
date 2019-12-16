@@ -185,7 +185,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDL) error {
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	if shouldSwitchDB {
@@ -194,7 +194,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDL) error {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.Error(err))
 			}
-			return err
+			return errors.Trace(err)
 		}
 	}
 
@@ -202,11 +202,11 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDL) error {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Error("Failed to rollback", zap.String("sql", ddl.Job.Query), zap.Error(err))
 		}
-		return err
+		return errors.Trace(err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Job.Query))
@@ -216,7 +216,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDL) error {
 func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*model.DML) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	for _, dml := range dmls {
@@ -234,18 +234,19 @@ func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*model.DML) error {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.Error(err))
 			}
-			return err
+			return errors.Trace(err)
 		}
+		log.Debug("exec dml", zap.String("sql", query), zap.Any("args", args))
 		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.String("sql", query), zap.Error(err))
 			}
-			return err
+			return errors.Trace(err)
 		}
 	}
 
 	if err = tx.Commit(); err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	log.Info("Exec DML succeeded", zap.Int("num of DMLs", len(dmls)))
