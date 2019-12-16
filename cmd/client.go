@@ -20,12 +20,22 @@ func init() {
 	cliCmd.Flags().StringVar(&pdAddress, "pd-addr", "localhost:2379", "address of PD")
 	cliCmd.Flags().Uint64Var(&startTs, "start-ts", 0, "start ts of changefeed")
 	cliCmd.Flags().StringVar(&sinkURI, "sink-uri", "root@tcp(127.0.0.1:3306)/test", "sink uri")
+	cliCmd.Flags().BoolVar(&sinkToKafka, "sink-to-kafka", false, "whether sink to kafka")
+	cliCmd.Flags().StringVar(&kafkaAddress, "sink-kafka-address", "localhost:9092", "kafka address")
+	cliCmd.Flags().StringVar(&kafkaVer, "sink-kafka-version", "2.0.0", "kafka version")
+	cliCmd.Flags().IntVar(&kafkaMaxMessageBytes, "sink-kafka-max-message-bytes", 0, "kafka max message bytes")
+	cliCmd.Flags().StringVar(&kafkaTopicName, "sink-kafka-topic", "", "kafka topic")
 }
 
 var (
-	pdAddress string
-	startTs   uint64
-	sinkURI   string
+	pdAddress            string
+	startTs              uint64
+	sinkURI              string
+	sinkToKafka          bool
+	kafkaAddress         string
+	kafkaVer             string
+	kafkaMaxMessageBytes int
+	kafkaTopicName          string
 )
 
 var cliCmd = &cobra.Command{
@@ -45,10 +55,15 @@ var cliCmd = &cobra.Command{
 		}
 		id := uuid.New().String()
 		detail := &model.ChangeFeedDetail{
-			SinkURI:    sinkURI,
-			Opts:       make(map[string]string),
-			CreateTime: time.Now(),
-			StartTs:    startTs,
+			SinkURI:         sinkURI,
+			SinkToKafka:     sinkToKafka,
+			KafkaAddress:    kafkaAddress,
+			KafkaVersion:    kafkaVer,
+			KafkaMaxMessage: kafkaMaxMessageBytes,
+			KafkaTopic:      kafkaTopicName,
+			Opts:            make(map[string]string),
+			CreateTime:      time.Now(),
+			StartTs:         startTs,
 		}
 		fmt.Printf("create changefeed detail %+v\n", detail)
 		return kv.SaveChangeFeedDetail(context.Background(), cli, detail, id)

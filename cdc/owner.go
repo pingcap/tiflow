@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/ticdc/cdc/sink"
@@ -45,7 +46,7 @@ type OwnerDDLHandler interface {
 	PullDDL() (resolvedTs uint64, jobs []*model.DDL, err error)
 
 	// ExecDDL executes the ddl job
-	ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error
+	ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL, s sink.Sink) error
 }
 
 // ChangeFeedInfoRWriter defines the Reader and Writer for changeFeedInfo
@@ -514,6 +515,8 @@ func (o *ownerImpl) calCaptureToPartition(topics []string, cfg kafkaConfig) erro
 		captures[id] = o.captures[id]
 	}
 
+	log.Info("capature to partition",zap.Int("partitionCount", len(o.capturesToPartition)))
+
 	o.captures = captures
 	return o.sendMetaDataMsg(topics, cfg)
 }
@@ -679,7 +682,32 @@ waitCheckpointTsLoop:
 
 		cfInfo.banlanceOrphanTables(context.Background(), o.captures, o.capturesToPartition)
 
-		err = cfInfo.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, todoDDLJob)
+		var s sink.Sink
+		if cfInfo.KafkaTopic == "" {
+			db, err := sql.Open("mysql", cfInfo.SinkURI)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			defer db.Close()
+
+			s = sink.NewMySQLSinkDDLOnly(db)
+		} else  {
+			id, err := o.manager.GetOwnerID(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			producer, err := sink.NewKafkaSyncProducer(cfInfo.KafkaAddress, cfInfo.KafkaVersion, cfInfo.KafkaMaxMessage)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			s, err = sink.NewKafkaSink(id, cfInfo.KafkaTopic, o.capturesToPartition[id] , producer, nil)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+
+		err = cfInfo.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, todoDDLJob, s)
 		// o.l.Lock()
 		// defer o.l.Unlock()
 		// If DDL executing failed, pause the changefeed and print log

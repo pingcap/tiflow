@@ -15,12 +15,11 @@ package cdc
 
 import (
 	"context"
-	"database/sql"
 	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
@@ -104,17 +103,18 @@ func (h *ddlHandler) PullDDL() (uint64, []*model.DDL, error) {
 }
 
 // ExecDDL implements roles.OwnerDDLHandler interface.
-func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error {
+func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL, s sink.Sink) error {
 	// TODO cache the sink
 	// TODO handle other target database, kile kafka, file
-	db, err := sql.Open("mysql", sinkURI)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer db.Close()
-	s := sink.NewMySQLSinkDDLOnly(db)
+	//db, err := sql.Open("mysql", sinkURI)
+	//if err != nil {
+	//	return errors.Trace(err)
+	//}
+	//defer db.Close()
 
-	err = s.Emit(ctx, model.Txn{Ts: ddl.Job.BinlogInfo.FinishedTS, DDL: ddl})
+	//s := sink.NewMySQLSinkDDLOnly(db)
+
+	err := s.Emit(ctx, model.Txn{Ts: ddl.Job.BinlogInfo.FinishedTS, DDL: ddl})
 	return errors.Trace(err)
 }
 

@@ -30,6 +30,7 @@ var (
 )
 
 func NewKafkaSink(cdcId string, topic string, partition int32, producer sarama.SyncProducer, infoGetter TableInfoGetter) (*kafkaSink, error) {
+	log.Info("Create kafka sink", zap.Int32("partition", partition))
 	return &kafkaSink{
 		producer:   producer,
 		partition:  partition,

@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
@@ -15,6 +16,10 @@ import (
 func feed() {
 	detail := model.ChangeFeedDetail{
 		SinkURI:    "root@tcp(127.0.0.1:3306)/test",
+		SinkToKafka:    true,
+		KafkaTopic:      "a",
+		KafkaAddress:    "kafka:9092",
+		KafkaVersion:    "2.0.0",
 		Opts:       make(map[string]string),
 		CreateTime: time.Now(),
 	}

@@ -32,7 +32,7 @@ var (
 func init() {
 	rootCmd.AddCommand(serverCmd)
 
-	serverCmd.Flags().StringVar(&pdEndpoints, "pd-endpoints", "http://127.0.0.1:2379", "endpoints of PD, separated by comma")
+	serverCmd.Flags().StringVar(&pdEndpoints, "pd-endpoints", "http://172.16.5.92:2389", "endpoints of PD, separated by comma")
 	serverCmd.Flags().StringVar(&statusAddr, "status-addr", "127.0.0.1:8300", "bind address for http status server")
 }
 
