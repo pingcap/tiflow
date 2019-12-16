@@ -12,9 +12,6 @@ function run() {
 
     start_tidb_cluster $WORK_DIR
 
-    # set max-replicas to 1 as we have only one tikv in test, or the region scatter will be refused by PD
-    timeout 5 pd-ctl config set max-replicas 1 || echo "pd-ctl set max-replicas failed"
-
     cd $WORK_DIR
 
     # record tso before we create tables for two reasons
