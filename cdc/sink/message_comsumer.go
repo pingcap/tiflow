@@ -32,22 +32,21 @@ type offsetCommitter interface {
 }
 
 type messageConsumer struct {
-	topic   string
-	client  sarama.ConsumerGroup
-	session offsetCommitter
-	sink    Sink
-	started bool
+	topic     string
+	client    sarama.ConsumerGroup
+	committer offsetCommitter
+	sink      Sink
+	started   bool
 
+	cdcCount            int
 	cdcResolveTsMap     sync.Map
 	partitionMessageMap sync.Map
-
-	tableInfoMap    sync.Map
-	tableName2IdMap sync.Map
+	tableInfoMap        sync.Map
+	tableName2IdMap     sync.Map
 
 	lock       sync.Mutex
 	metaGroup  *sync.WaitGroup
 	cleanGroup *sync.WaitGroup
-	cdcCount   int
 
 	persistSig chan uint64
 }
@@ -84,7 +83,7 @@ func NewMessageConsumer(kafkaVersion, kafkaAddr, kafkaTopic string) (*messageCon
 	return consumer, consumer, nil
 }
 
-// Setup is run at the beginning of a new session, before ConsumeClaim.
+// Setup is run at the beginning of a new committer, before ConsumeClaim.
 func (consumer *messageConsumer) Start(ctx context.Context, sink Sink) error {
 	consumer.lock.Lock()
 	defer consumer.lock.Unlock()
@@ -111,7 +110,7 @@ func (consumer *messageConsumer) Start(ctx context.Context, sink Sink) error {
 }
 
 func (consumer *messageConsumer) Setup(session sarama.ConsumerGroupSession) error {
-	consumer.session = session
+	consumer.committer = session
 	return nil
 }
 
@@ -151,7 +150,7 @@ func (consumer *messageConsumer) processMsg(partition int32, offset int64, msg *
 	case ResolveTsType:
 		consumer.processResolveRSMsg(partition, offset, msg, committer)
 	case MetaType: //cdc is added or deleted
-		consumer.processMetaMsg(committer, msg)()
+		consumer.processMetaMsg(msg)()
 	}
 }
 
@@ -178,7 +177,7 @@ func (consumer *messageConsumer) processResolveRSMsg(partition int32, offset int
 	go func() { consumer.persistSig <- msg.ResloveTs }()
 }
 
-func (consumer *messageConsumer) processMetaMsg(committer offsetCommitter, msg *Message) func() {
+func (consumer *messageConsumer) processMetaMsg(msg *Message) func() {
 	consumer.lock.Lock()
 	defer consumer.lock.Unlock()
 
@@ -215,7 +214,7 @@ func (consumer *messageConsumer) processMetaMsg(committer offsetCommitter, msg *
 	}
 }
 
-func (consumer *messageConsumer) tryPersistent(offsetCommitter offsetCommitter) {
+func (consumer *messageConsumer) saveToSink(offsetCommitter offsetCommitter) {
 
 	for {
 		//check if we received all RS from all cdc node
@@ -250,30 +249,15 @@ func (consumer *messageConsumer) tryPersistent(offsetCommitter offsetCommitter) 
 	}
 }
 
-func (consumer *messageConsumer) calCommitOffset(minRS uint64) map[int32]int64 {
-	offsetMap := map[int32]int64{}
-	consumer.partitionMessageMap.Range(func(key, value interface{}) bool {
-		value.(*messageList).Range(func(i int, msg *decodedKafkaMessage) {
-			if msg.message.MsgType == ResolveTsType && msg.message.ResloveTs == minRS {
-				offsetMap[key.(int32)] = msg.offset
-			}
-		})
-		return true
-	})
-	return offsetMap
-}
-
 func (consumer *messageConsumer) getTxnMap(minRS uint64) map[uint64][]*Message {
 	txnMap := map[uint64][]*Message{}
 	consumer.partitionMessageMap.Range(func(key, value interface{}) bool {
 		value.(*messageList).Range(
 			func(i int, msg *decodedKafkaMessage) {
-				if msg.message.MsgType == TxnType {
-					if msg.message.Txn.Ts <= minRS {
-						txnMessages := txnMap[msg.message.Txn.Ts]
-						txnMessages = append(txnMessages, msg.message)
-						txnMap[msg.message.Txn.Ts] = txnMessages
-					}
+				if msg.message.MsgType == TxnType && msg.message.Txn.Ts <= minRS {
+					txnMessages := txnMap[msg.message.Txn.Ts]
+					txnMessages = append(txnMessages, msg.message)
+					txnMap[msg.message.Txn.Ts] = txnMessages
 				}
 			})
 		return true
@@ -341,7 +325,7 @@ func (consumer *messageConsumer) tick() {
 		select {
 		case rs := <-consumer.persistSig:
 			log.Info("start to process resolved rs", zap.Uint64("rs", rs))
-			consumer.tryPersistent(consumer.session)
+			consumer.saveToSink(consumer.committer)
 		}
 	}
 }
