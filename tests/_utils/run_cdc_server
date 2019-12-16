@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# parameter 1: work directory
+# parameter 2: path to cdc test binary
+# parameter 3: log suffix
+
+set -e
+
+workdir=$1
+binary=$2
+log_suffix=$3
+pwd=$pwd
+
+echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
+cd $workdir
+$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME$log_suffix.out" server --log-file $workdir/cdc$log_suffix.log --log-level info >> $workdir/stdout$log_suffix.log 2>&1 &
+cd $pwd
