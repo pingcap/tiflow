@@ -32,32 +32,30 @@ type offsetCommitter interface {
 }
 
 type messageConsumer struct {
-	topic   string
-	client  sarama.ConsumerGroup
-	sink    Sink
-	started bool
+	topic     string
+	client    sarama.ConsumerGroup
+	committer offsetCommitter
+	sink      Sink
+	started   bool
 
-	cdcResolveTsMap     map[string][]*resolveMsgWrapper
-	partitionMessageMap map[int32][]*decodedKafkaMessage
-	tableInfoMap        map[int64]*timodel.TableInfo
-	tableName2IdMap     map[string]int64
+	cdcCount            int
+	cdcResolveTsMap     sync.Map
+	partitionMessageMap sync.Map
+	tableInfoMap        sync.Map
+	tableName2IdMap     sync.Map
 
 	lock       sync.Mutex
 	metaGroup  *sync.WaitGroup
 	cleanGroup *sync.WaitGroup
-	cdcCount   int
+
+	persistSig chan uint64
 }
 
 type decodedKafkaMessage struct {
 	partition int32
 	offset    int64
+	resolveTs uint64
 	message   *Message
-}
-
-type resolveMsgWrapper struct {
-	ResolveTs uint64
-	partition int32
-	offset    int64
 }
 
 func NewMessageConsumer(kafkaVersion, kafkaAddr, kafkaTopic string) (*messageConsumer, TableInfoGetter, error) {
@@ -78,17 +76,14 @@ func NewMessageConsumer(kafkaVersion, kafkaAddr, kafkaTopic string) (*messageCon
 	}
 
 	consumer := &messageConsumer{
-		client:              consumerGroup,
-		topic:               kafkaTopic,
-		cdcResolveTsMap:     map[string][]*resolveMsgWrapper{},
-		partitionMessageMap: map[int32][]*decodedKafkaMessage{},
-		tableInfoMap:        map[int64]*timodel.TableInfo{},
-		tableName2IdMap:     map[string]int64{},
+		client:     consumerGroup,
+		topic:      kafkaTopic,
+		persistSig: make(chan uint64, 13),
 	}
 	return consumer, consumer, nil
 }
 
-// Setup is run at the beginning of a new session, before ConsumeClaim.
+// Setup is run at the beginning of a new committer, before ConsumeClaim.
 func (consumer *messageConsumer) Start(ctx context.Context, sink Sink) error {
 	consumer.lock.Lock()
 	defer consumer.lock.Unlock()
@@ -108,10 +103,14 @@ func (consumer *messageConsumer) Start(ctx context.Context, sink Sink) error {
 			}
 		}
 	}()
+
+	go consumer.tick()
+
 	return nil
 }
 
 func (consumer *messageConsumer) Setup(session sarama.ConsumerGroupSession) error {
+	consumer.committer = session
 	return nil
 }
 
@@ -119,14 +118,18 @@ func (consumer *messageConsumer) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-func (consumer *messageConsumer) TableByID(id int64) (info *timodel.TableInfo, ok bool) {
-	info, ok = consumer.tableInfoMap[id]
-	return
+func (consumer *messageConsumer) TableByID(id int64) (*timodel.TableInfo, bool) {
+	if info, ok := consumer.tableInfoMap.Load(id); ok {
+		return info.(*timodel.TableInfo), true
+	}
+	return nil, false
 }
 
-func (consumer *messageConsumer) GetTableIDByName(schema, table string) (id int64, ok bool) {
-	id, ok = consumer.tableName2IdMap[FormMapKey(schema, table)]
-	return
+func (consumer *messageConsumer) GetTableIDByName(schema, table string) (int64, bool) {
+	if id, ok := consumer.tableName2IdMap.Load(FormMapKey(schema, table)); ok {
+		return id.(int64), true
+	}
+	return 0, false
 }
 
 func (consumer *messageConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
@@ -145,43 +148,36 @@ func (consumer *messageConsumer) processMsg(partition int32, offset int64, msg *
 	case TxnType:
 		consumer.processTxnMsg(partition, offset, msg)
 	case ResolveTsType:
-		consumer.processResolveRSMsg(partition, offset, msg)
+		consumer.processResolveRSMsg(partition, offset, msg, committer)
 	case MetaType: //cdc is added or deleted
-		consumer.processMetaMsg(committer, msg)()
+		consumer.processMetaMsg(msg)()
 	}
 }
 
 func (consumer *messageConsumer) processTxnMsg(partition int32, offset int64, msg *Message) {
-	consumer.lock.Lock()
-	defer consumer.lock.Unlock()
-
 	for key, v := range msg.TableInfos {
-		consumer.tableInfoMap[v.ID] = v
-		consumer.tableName2IdMap[key] = v.ID
+		consumer.tableInfoMap.Store(v.ID, v)
+		consumer.tableName2IdMap.Store(key, v.ID)
 	}
 
 	wrapper := &decodedKafkaMessage{message: msg, partition: partition, offset: offset}
-	messages, _ := consumer.partitionMessageMap[wrapper.partition]
-	messages = append(messages, wrapper)
-	consumer.partitionMessageMap[wrapper.partition] = messages
+	list, _ := consumer.partitionMessageMap.LoadOrStore(wrapper.partition, &messageList{})
+	list.(*messageList).add(wrapper)
 }
-func (consumer *messageConsumer) processResolveRSMsg(partition int32, offset int64, msg *Message) {
-	consumer.lock.Lock()
-	defer consumer.lock.Unlock()
-
-	wrapper := &resolveMsgWrapper{ResolveTs: msg.ResloveTs, partition: partition, offset: offset}
-	messages, _ := consumer.cdcResolveTsMap[msg.CdcID]
-	messages = append(messages, wrapper)
-	consumer.cdcResolveTsMap[msg.CdcID] = messages
+func (consumer *messageConsumer) processResolveRSMsg(partition int32, offset int64, msg *Message, committer offsetCommitter) {
+	rsMsg := &decodedKafkaMessage{resolveTs: msg.ResloveTs, partition: partition, offset: offset}
+	rsList, _ := consumer.cdcResolveTsMap.LoadOrStore(msg.CdcID, &messageList{})
+	rsList.(*messageList).add(rsMsg)
 
 	//add to partition cache too
-	wrapper2 := &decodedKafkaMessage{message: msg, partition: partition, offset: offset}
-	messages2, _ := consumer.partitionMessageMap[wrapper2.partition]
-	messages2 = append(messages2, wrapper2)
-	consumer.partitionMessageMap[wrapper.partition] = messages2
+	partitionMsg := &decodedKafkaMessage{message: msg, partition: partition, offset: offset}
+	partitionList, _ := consumer.partitionMessageMap.LoadOrStore(partitionMsg.partition, &messageList{})
+	partitionList.(*messageList).add(partitionMsg)
+
+	go func() { consumer.persistSig <- msg.ResloveTs }()
 }
 
-func (consumer *messageConsumer) processMetaMsg(committer offsetCommitter, msg *Message) func() {
+func (consumer *messageConsumer) processMetaMsg(msg *Message) func() {
 	consumer.lock.Lock()
 	defer consumer.lock.Unlock()
 
@@ -192,9 +188,8 @@ func (consumer *messageConsumer) processMetaMsg(committer offsetCommitter, msg *
 		consumer.cleanGroup.Add(1)
 		return func() {
 			defer consumer.cleanGroup.Done()
-
 			consumer.metaGroup.Wait()
-			consumer.tryPersistent(committer)
+			go func() { consumer.persistSig <- msg.ResloveTs }()
 
 			//after this time the cdc node count is changed
 			consumer.cdcCount = len(msg.CdcList)
@@ -202,12 +197,13 @@ func (consumer *messageConsumer) processMetaMsg(committer offsetCommitter, msg *
 			for _, cdcName := range msg.CdcList {
 				existsMap[cdcName] = true
 			}
-			for cdcName, _ := range consumer.cdcResolveTsMap {
-				if !existsMap[cdcName] {
+			consumer.cdcResolveTsMap.Range(func(key, value interface{}) bool {
+				if !existsMap[key.(string)] {
 					//cdc is deleted
-					delete(consumer.cdcResolveTsMap, cdcName)
+					consumer.cdcResolveTsMap.Delete(key)
 				}
-			}
+				return true
+			})
 			consumer.metaGroup = nil
 		}
 	}
@@ -218,13 +214,20 @@ func (consumer *messageConsumer) processMetaMsg(committer offsetCommitter, msg *
 	}
 }
 
-func (consumer *messageConsumer) tryPersistent(offsetCommitter offsetCommitter) {
-	consumer.lock.Lock()
-	defer consumer.lock.Unlock()
+func (consumer *messageConsumer) saveToSink(offsetCommitter offsetCommitter) {
 
 	for {
 		//check if we received all RS from all cdc node
-		if consumer.cdcCount > 0 && consumer.cdcCount <= len(consumer.cdcResolveTsMap) {
+		if consumer.cdcCount > 0 {
+			size := 0
+			consumer.cdcResolveTsMap.Range(func(key, value interface{}) bool {
+				size++
+				return true
+			})
+			if consumer.cdcCount > size {
+				return
+			}
+
 			minRS, minRsCdcName, skip, offsetMap := consumer.findMinRs()
 			if skip { //no enough rs data
 				return
@@ -236,40 +239,29 @@ func (consumer *messageConsumer) tryPersistent(offsetCommitter offsetCommitter) 
 			//commit kafka offset
 			consumer.commitKafkaOffset(offsetMap, offsetCommitter)
 			//delete saved rs
-			consumer.cdcResolveTsMap[minRsCdcName] = consumer.cdcResolveTsMap[minRsCdcName][1:]
+			v, _ := consumer.cdcResolveTsMap.Load(minRsCdcName)
+			v.(*messageList).DeleteFirst()
 			//delete saved messages
 			consumer.deleteSaveKafkaMessage(minRS)
 		} else {
-			break
+			return
 		}
 	}
-}
-
-func (consumer *messageConsumer) calCommitOffset(minRS uint64) map[int32]int64 {
-	offsetMap := map[int32]int64{}
-	for partition, messages := range consumer.partitionMessageMap {
-		for _, msg := range messages {
-			if msg.message.MsgType == ResolveTsType && msg.message.ResloveTs == minRS {
-				offsetMap[partition] = msg.offset
-			}
-		}
-	}
-	return offsetMap
 }
 
 func (consumer *messageConsumer) getTxnMap(minRS uint64) map[uint64][]*Message {
 	txnMap := map[uint64][]*Message{}
-	for _, messages := range consumer.partitionMessageMap {
-		for _, msg := range messages {
-			if msg.message.MsgType == TxnType {
-				if msg.message.Txn.Ts <= minRS {
+	consumer.partitionMessageMap.Range(func(key, value interface{}) bool {
+		value.(*messageList).Range(
+			func(i int, msg *decodedKafkaMessage) {
+				if msg.message.MsgType == TxnType && msg.message.Txn.Ts <= minRS {
 					txnMessages := txnMap[msg.message.Txn.Ts]
 					txnMessages = append(txnMessages, msg.message)
 					txnMap[msg.message.Txn.Ts] = txnMessages
 				}
-			}
-		}
-	}
+			})
+		return true
+	})
 	return txnMap
 }
 
@@ -277,17 +269,22 @@ func (consumer *messageConsumer) findMinRs() (uint64, string, bool, map[int32]in
 	minRS := uint64(math.MaxUint64)
 	offsetMap := map[int32]int64{}
 	minRsCdcName := ""
-	for cdcName, messages := range consumer.cdcResolveTsMap {
-		if len(messages) <= 0 { //has no rs, we can not calculate the min rs, skip
-			return 0, "", true, nil
+	skip := false
+	consumer.cdcResolveTsMap.Range(func(key, value interface{}) bool {
+		msg := value.(*messageList)
+		if msg.length() <= 0 { //has no rs, we can not calculate the min rs, skip
+			skip = true
+			return false
 		}
-		if messages[0].ResolveTs < minRS {
-			minRS = messages[0].ResolveTs
-			minRsCdcName = cdcName
-			offsetMap[messages[0].partition] = messages[0].offset
+
+		if msg.index(0).resolveTs < minRS {
+			minRS = msg.index(0).resolveTs
+			minRsCdcName = key.(string)
+			offsetMap[msg.index(0).partition] = msg.index(0).offset
 		}
-	}
-	return minRS, minRsCdcName, false, offsetMap
+		return true
+	})
+	return minRS, minRsCdcName, skip, offsetMap
 }
 
 func (consumer *messageConsumer) saveMessage2Sink(txnMap map[uint64][]*Message, minRS uint64) {
@@ -317,16 +314,19 @@ func (consumer *messageConsumer) commitKafkaOffset(offsetMap map[int32]int64, co
 }
 
 func (consumer *messageConsumer) deleteSaveKafkaMessage(minRS uint64) {
-	for partition, list := range consumer.partitionMessageMap {
-		n := 0
-		for _, item := range list {
-			if (item.message.MsgType == ResolveTsType && item.message.ResloveTs <= minRS) ||
-				(item.message.MsgType == TxnType && item.message.Txn.Ts > minRS) {
-				list[n] = item
-				n++
-			}
+	consumer.partitionMessageMap.Range(func(key, value interface{}) bool {
+		value.(*messageList).delete(minRS)
+		return true
+	})
+}
+
+func (consumer *messageConsumer) tick() {
+	for {
+		select {
+		case rs := <-consumer.persistSig:
+			log.Info("start to process resolved rs", zap.Uint64("rs", rs))
+			consumer.saveToSink(consumer.committer)
 		}
-		consumer.partitionMessageMap[partition] = list[:n]
 	}
 }
 
@@ -347,4 +347,61 @@ func (t TxnSlice) Less(i int, j int) bool {
 
 func (t TxnSlice) Swap(i int, j int) {
 	t[i], t[j] = t[j], t[i]
+}
+
+type messageList struct {
+	lock    sync.RWMutex
+	msgList []*decodedKafkaMessage
+}
+
+func (l *messageList) add(m *decodedKafkaMessage) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	l.msgList = append(l.msgList, m)
+}
+
+func (l *messageList) delete(minRS uint64) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	n := 0
+	for _, item := range l.msgList {
+		if (item.message.MsgType == ResolveTsType && item.message.ResloveTs <= minRS) ||
+			(item.message.MsgType == TxnType && item.message.Txn.Ts > minRS) {
+			l.msgList[n] = item
+			n++
+		}
+	}
+	l.msgList = l.msgList[:n]
+}
+
+func (l *messageList) length() int {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+
+	return len(l.msgList)
+}
+
+func (l *messageList) index(index int) *decodedKafkaMessage {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+
+	return l.msgList[index]
+}
+
+func (l *messageList) DeleteFirst() {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	l.msgList = l.msgList[1:]
+}
+
+func (l *messageList) Range(f func(i int, message *decodedKafkaMessage)) {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+
+	for index, msg := range l.msgList {
+		f(index, msg)
+	}
 }
