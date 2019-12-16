@@ -232,7 +232,7 @@ func PutChangeFeedStatus(
 	key := GetEtcdKeyChangeFeedStatus(changefeedID)
 	value, err := info.Marshal()
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	_, err = client.Put(ctx, key, value, opts...)
 	return errors.Trace(err)

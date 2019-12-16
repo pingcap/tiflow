@@ -17,6 +17,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -41,7 +42,7 @@ func CollectRawTxns(
 	for {
 		be, err := inputFn(ctx)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 		if be.KV != nil {
 			entryGroups[be.KV.Ts] = append(entryGroups[be.KV.Ts], be.KV)
@@ -68,7 +69,7 @@ func CollectRawTxns(
 			for _, t := range readyTxns {
 				err := outputFn(ctx, t)
 				if err != nil {
-					return err
+					return errors.Trace(err)
 				}
 			}
 			if len(readyTxns) == 0 {
@@ -79,7 +80,7 @@ func CollectRawTxns(
 				}
 				err := outputFn(ctx, fakeTxn)
 				if err != nil {
-					return err
+					return errors.Trace(err)
 				}
 			}
 		}
