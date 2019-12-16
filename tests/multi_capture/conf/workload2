@@ -1,3 +1,4 @@
+threadcount=2
 recordcount=20
 operationcount=0
 workload=core
