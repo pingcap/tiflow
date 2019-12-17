@@ -1,5 +1,6 @@
 ### Makefile for ticdc
-.PHONY: build test check clean fmt cdc coverage
+.PHONY: build test check clean fmt cdc coverage \
+	integration_test_build integration_test
 
 PROJECT=ticdc
 
@@ -63,6 +64,11 @@ check_third_party_binary:
 	@which bin/sync_diff_inspector
 	@which bin/go-ycsb
 
+integration_test_build:
+	$(GOTEST) -c -cover -covemode=atomic \
+		-coverpkg=github.com/pingcap/ticdc/... \
+		-o bin/cdc.test github.com/pingcap/ticdc
+
 integration_test: check_third_party_binary
 	tests/run.sh $(CASE)
 
@@ -86,10 +92,14 @@ check: fmt lint check-static tidy
 
 coverage:
 	GO111MODULE=off go get github.com/zhouqiang-cl/gocovmerge
-	gocovmerge "$(TEST_DIR)"/cov.* | grep -v "$(CDC_PKG)/cdc/kv/testing.go" > "$(TEST_DIR)/unit_cov.out"
+	gocovmerge "$(TEST_DIR)"/cov.* | grep -v "$(CDC_PKG)/cdc/kv/testing.go" > "$(TEST_DIR)/all_cov.out"
+	grep -v "$(CDC_PKG)/cdc/kv/testing.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
+	GO111MODULE=off go get github.com/mattn/goveralls
+	@goveralls -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
 	@bash <(curl -s https://codecov.io/bash) -f $(TEST_DIR)/unit_cov.out -t $(CODECOV_TOKEN)
 else
+	go tool cover -html "$(TEST_DIR)/all_cov.out" -o "$(TEST_DIR)/all_cov.html"
 	go tool cover -html "$(TEST_DIR)/unit_cov.out" -o "$(TEST_DIR)/unit_cov.html"
 	go tool cover -func="$(TEST_DIR)/unit_cov.out"
 endif

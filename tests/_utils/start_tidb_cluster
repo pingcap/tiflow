@@ -16,9 +16,16 @@ stop_tidb_cluster
 
 cd $OUT_DIR && echo "start tidb cluster in $OUT_DIR"
 
+cat - > "$OUT_DIR/pd-config.toml" <<EOF
+[replication]
+# The number of replicas for each region.
+max-replicas = 1
+EOF
+
 echo "Starting PD..."
 pd-server \
     --client-urls http://${PD_HOST}:${PD_PORT}\
+    --config "$OUT_DIR/pd-config.toml" \
     --log-file "$OUT_DIR/pd.log" \
     --data-dir "$OUT_DIR/pd" &
 

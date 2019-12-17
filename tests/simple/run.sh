@@ -5,6 +5,7 @@ set -e
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
+CDC_BINARY=cdc.test
 
 function prepare() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
@@ -19,7 +20,7 @@ function prepare() {
     run_sql "CREATE table test.simple1(id int primary key, val int);"
     run_sql "CREATE table test.simple2(id int primary key, val int);"
 
-    cdc server --log-file $WORK_DIR/cdc.log --log-level info > $WORK_DIR/stdout.log 2>&1 &
+    run_cdc_server $WORK_DIR $CDC_BINARY
     cdc cli --start-ts=$start_ts
 }
 
@@ -85,7 +86,7 @@ function sql_test() {
         exit 1
     fi
 
-    killall cdc || true
+    killall $CDC_BINARY || true
 }
 
 trap stop_tidb_cluster EXIT

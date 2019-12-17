@@ -5,6 +5,7 @@ set -e
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
+CDC_BINARY=cdc.test
 
 CDC_COUNT=3
 DB_COUNT=4
@@ -28,7 +29,7 @@ function run() {
 
     # start $CDC_COUNT cdc servers, and create a changefeed
     for i in $(seq $CDC_COUNT); do
-        cdc server --log-file $WORK_DIR/cdc${i}.log --log-level info > $WORK_DIR/stdout${i}.log 2>&1 &
+        run_cdc_server $WORK_DIR $CDC_BINARY "$i"
     done
     cdc cli --start-ts=$start_ts
 
@@ -45,7 +46,7 @@ function run() {
     done
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
-    killall cdc || true
+    killall $CDC_BINARY || true
 }
 
 trap stop_tidb_cluster EXIT
