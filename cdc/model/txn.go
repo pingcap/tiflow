@@ -8,8 +8,9 @@ import (
 
 // RawTxn represents a complete collection of Entries that belong to the same transaction
 type RawTxn struct {
-	Ts      uint64
-	Entries []*RawKVEntry
+	Ts         uint64
+	IsResolved bool
+	Entries    []*RawKVEntry
 }
 
 // IsFake returns true if this RawTxn is fake txn.

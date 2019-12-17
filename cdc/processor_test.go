@@ -255,7 +255,7 @@ func (s *txnChannelSuite) TestShouldForwardTxnsByTs(c *check.C) {
 	}
 	close(input)
 
-	output := make(chan ProcessorEntry, 5)
+	output := make(chan model.RawTxn, 5)
 
 	assertCorrectOutput := func(expected []uint64) {
 		for _, ts := range expected {
@@ -290,7 +290,7 @@ func (s *txnChannelSuite) TestShouldBeCancellable(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
 	go func() {
-		tc.Forward(ctx, 1, make(chan ProcessorEntry))
+		tc.Forward(ctx, 1, make(chan model.RawTxn))
 		close(stopped)
 	}()
 	cancel()
