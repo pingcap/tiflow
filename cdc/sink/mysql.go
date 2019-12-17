@@ -61,7 +61,6 @@ func NewMySQLSink(
 	infoGetter TableInfoGetter,
 	opts map[string]string,
 ) (Sink, error) {
-	// TODO
 	sinkURI, err := configureSinkURI(sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -71,12 +70,8 @@ func NewMySQLSink(
 		return nil, errors.Trace(err)
 	}
 	cachedInspector := newCachedInspector(db)
-	sink := mysqlSink{
-		db:           db,
-		infoGetter:   infoGetter,
-		tblInspector: cachedInspector,
-	}
-	return &sink, nil
+	sink := newMySQLSink(db, infoGetter, cachedInspector, false)
+	return sink, nil
 }
 
 func configureSinkURI(sinkURI string) (string, error) {
@@ -102,18 +97,20 @@ func NewMySQLSinkUsingSchema(db *sql.DB, schemaStorage *schema.Storage) Sink {
 			return info, err
 		},
 	}
-	return &mysqlSink{
-		db:           db,
-		infoGetter:   schemaStorage,
-		tblInspector: inspector,
-	}
+	return newMySQLSink(db, schemaStorage, inspector, false)
 }
 
 // NewMySQLSinkDDLOnly returns a sink that only processes DDL
 func NewMySQLSinkDDLOnly(db *sql.DB) Sink {
+	return newMySQLSink(db, nil, nil, true)
+}
+
+func newMySQLSink(db *sql.DB, infoGetter TableInfoGetter, tblInspector tableInspector, ddlOnly bool) Sink {
 	return &mysqlSink{
-		db:      db,
-		ddlOnly: true,
+		db:           db,
+		infoGetter:   infoGetter,
+		tblInspector: tblInspector,
+		ddlOnly:      ddlOnly,
 	}
 }
 
