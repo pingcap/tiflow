@@ -32,11 +32,14 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 )
 
 const (
 	dialTimeout = 10 * time.Second
+	maxRetry    = 10
 )
 
 type singleRegionInfo struct {
@@ -253,12 +256,18 @@ func (c *CDCClient) partialRegionFeed(
 					return errors.Annotate(err, "receive empty or unknow error msg")
 				}
 			default:
+				if status.Code(err) == codes.Unavailable {
+					regionInfo.meta = nil
+					return errors.Trace(err)
+				}
+
 				return backoff.Permanent(err)
+
 			}
 		}
 
 		return nil
-	}, 5)
+	}, maxRetry)
 
 	if errors.Cause(berr) == context.Canceled {
 		return nil
@@ -295,7 +304,7 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			}
 			log.Debug("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions))
 			return nil
-		}, 3)
+		}, maxRetry)
 
 		if retryErr != nil {
 			return retryErr
@@ -364,156 +373,118 @@ func (c *CDCClient) singleEventFeed(
 	notMatch := make(map[string][]byte)
 
 	log.Debug("start new request", zap.Reflect("request", req))
+	stream, err := client.EventFeed(ctx, req)
+
+	if err != nil {
+		log.Error("RPC error", zap.Error(err))
+		return req.CheckpointTs, errors.Trace(err)
+	}
+
+	maxItemFn := func(item sortItem) {
+		if atomic.LoadUint32(&initialized) == 0 {
+			return
+		}
+
+		// emit a checkpoint
+		revent := &model.RegionFeedEvent{
+			Checkpoint: &model.RegionFeedCheckpoint{
+				Span:       span,
+				ResolvedTs: item.commit,
+			},
+		}
+		if item.commit > req.CheckpointTs {
+			req.CheckpointTs = item.commit
+		}
+
+		select {
+		case eventCh <- revent:
+		case <-ctx.Done():
+		}
+	}
+
+	// TODO: drop this if we totally depends on the ResolvedTs event from
+	// tikv to emit the RegionFeedCheckpoint.
+	sorter := newSorter(maxItemFn)
+
 	for {
-		stream, err := client.EventFeed(ctx, req)
+		cevent, err := stream.Recv()
+		if err == io.EOF {
+			return req.CheckpointTs, nil
+		}
 
 		if err != nil {
-			log.Error("RPC error", zap.Error(err))
-			continue
+			return req.CheckpointTs, errors.Trace(err)
 		}
 
-		maxItemFn := func(item sortItem) {
-			if atomic.LoadUint32(&initialized) == 0 {
-				return
-			}
+		// log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
+		captureID := util.CaptureIDFromCtx(ctx)
 
-			// emit a checkpoint
-			revent := &model.RegionFeedEvent{
-				Checkpoint: &model.RegionFeedCheckpoint{
-					Span:       span,
-					ResolvedTs: item.commit,
-				},
-			}
-			if item.commit > req.CheckpointTs {
-				req.CheckpointTs = item.commit
-			}
-
-			select {
-			case eventCh <- revent:
-			case <-ctx.Done():
-			}
-		}
-
-		// TODO: drop this if we totally depends on the ResolvedTs event from
-		// tikv to emit the RegionFeedCheckpoint.
-		sorter := newSorter(maxItemFn)
-
-		for {
-			cevent, err := stream.Recv()
-			if err == io.EOF {
-				return req.CheckpointTs, nil
-			}
-
-			if err != nil {
-				return req.CheckpointTs, errors.Trace(err)
-			}
-
-			// log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
-			captureID := util.CaptureIDFromCtx(ctx)
-
-			for _, event := range cevent.Events {
-				eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
-				switch x := event.Event.(type) {
-				case *cdcpb.Event_Entries_:
-					for _, row := range x.Entries.GetEntries() {
-						switch row.Type {
-						case cdcpb.Event_INITIALIZED:
-							atomic.StoreUint32(&initialized, 1)
-						case cdcpb.Event_COMMITTED:
-							var opType model.OpType
-							switch row.GetOpType() {
-							case cdcpb.Event_Row_DELETE:
-								opType = model.OpTypeDelete
-							case cdcpb.Event_Row_PUT:
-								opType = model.OpTypePut
-							default:
-								return req.CheckpointTs, errors.Errorf("unknow tp: %v", row.GetOpType())
-							}
-
-							revent := &model.RegionFeedEvent{
-								Val: &model.RegionFeedValue{
-									OpType: opType,
-									Key:    row.Key,
-									Value:  row.GetValue(),
-									Ts:     row.CommitTs,
-								},
-							}
-							select {
-							case eventCh <- revent:
-							case <-ctx.Done():
-								return req.CheckpointTs, errors.Trace(ctx.Err())
-							}
-						case cdcpb.Event_PREWRITE:
-							notMatch[string(row.Key)] = row.GetValue()
-							sorter.pushTsItem(sortItem{
-								start: row.GetStartTs(),
-								tp:    cdcpb.Event_PREWRITE,
-							})
-						case cdcpb.Event_COMMIT:
-							// emit a value
-							value := row.GetValue()
-							if pvalue, ok := notMatch[string(row.Key)]; ok {
-								if len(pvalue) > 0 {
-									value = pvalue
-								}
-							}
-
-							delete(notMatch, string(row.Key))
-
-							var opType model.OpType
-							switch row.GetOpType() {
-							case cdcpb.Event_Row_DELETE:
-								opType = model.OpTypeDelete
-							case cdcpb.Event_Row_PUT:
-								opType = model.OpTypePut
-							default:
-								return req.CheckpointTs, errors.Errorf("unknow tp: %v", row.GetOpType())
-							}
-
-							revent := &model.RegionFeedEvent{
-								Val: &model.RegionFeedValue{
-									OpType: opType,
-									Key:    row.Key,
-									Value:  value,
-									Ts:     row.CommitTs,
-								},
-							}
-
-							select {
-							case eventCh <- revent:
-							case <-ctx.Done():
-								return req.CheckpointTs, errors.Trace(ctx.Err())
-							}
-							sorter.pushTsItem(sortItem{
-								start:  row.GetStartTs(),
-								commit: row.GetCommitTs(),
-								tp:     cdcpb.Event_COMMIT,
-							})
-						case cdcpb.Event_ROLLBACK:
-							delete(notMatch, string(row.Key))
-							sorter.pushTsItem(sortItem{
-								start:  row.GetStartTs(),
-								commit: row.GetCommitTs(),
-								tp:     cdcpb.Event_ROLLBACK,
-							})
+		for _, event := range cevent.Events {
+			eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
+			switch x := event.Event.(type) {
+			case *cdcpb.Event_Entries_:
+				for _, row := range x.Entries.GetEntries() {
+					switch row.Type {
+					case cdcpb.Event_INITIALIZED:
+						atomic.StoreUint32(&initialized, 1)
+					case cdcpb.Event_COMMITTED:
+						var opType model.OpType
+						switch row.GetOpType() {
+						case cdcpb.Event_Row_DELETE:
+							opType = model.OpTypeDelete
+						case cdcpb.Event_Row_PUT:
+							opType = model.OpTypePut
+						default:
+							return req.CheckpointTs, errors.Errorf("unknow tp: %v", row.GetOpType())
 						}
-					}
-				case *cdcpb.Event_Admin_:
-					log.Info("receive admin event", zap.Stringer("event", event))
-				case *cdcpb.Event_Error_:
-					return req.CheckpointTs, errors.Trace(&eventError{Event_Error: x.Error})
-				case *cdcpb.Event_ResolvedTs:
-					if atomic.LoadUint32(&initialized) == 1 {
-						// emit a checkpoint
+
 						revent := &model.RegionFeedEvent{
-							Checkpoint: &model.RegionFeedCheckpoint{
-								Span:       span,
-								ResolvedTs: x.ResolvedTs,
+							Val: &model.RegionFeedValue{
+								OpType: opType,
+								Key:    row.Key,
+								Value:  row.GetValue(),
+								Ts:     row.CommitTs,
 							},
 						}
+						select {
+						case eventCh <- revent:
+						case <-ctx.Done():
+							return req.CheckpointTs, errors.Trace(ctx.Err())
+						}
+					case cdcpb.Event_PREWRITE:
+						notMatch[string(row.Key)] = row.GetValue()
+						sorter.pushTsItem(sortItem{
+							start: row.GetStartTs(),
+							tp:    cdcpb.Event_PREWRITE,
+						})
+					case cdcpb.Event_COMMIT:
+						// emit a value
+						value := row.GetValue()
+						if pvalue, ok := notMatch[string(row.Key)]; ok {
+							if len(pvalue) > 0 {
+								value = pvalue
+							}
+						}
 
-						if x.ResolvedTs > req.CheckpointTs {
-							req.CheckpointTs = x.ResolvedTs
+						delete(notMatch, string(row.Key))
+
+						var opType model.OpType
+						switch row.GetOpType() {
+						case cdcpb.Event_Row_DELETE:
+							opType = model.OpTypeDelete
+						case cdcpb.Event_Row_PUT:
+							opType = model.OpTypePut
+						default:
+							return req.CheckpointTs, errors.Errorf("unknow tp: %v", row.GetOpType())
+						}
+
+						revent := &model.RegionFeedEvent{
+							Val: &model.RegionFeedValue{
+								OpType: opType,
+								Key:    row.Key,
+								Value:  value,
+								Ts:     row.CommitTs,
+							},
 						}
 
 						select {
@@ -521,8 +492,44 @@ func (c *CDCClient) singleEventFeed(
 						case <-ctx.Done():
 							return req.CheckpointTs, errors.Trace(ctx.Err())
 						}
-
+						sorter.pushTsItem(sortItem{
+							start:  row.GetStartTs(),
+							commit: row.GetCommitTs(),
+							tp:     cdcpb.Event_COMMIT,
+						})
+					case cdcpb.Event_ROLLBACK:
+						delete(notMatch, string(row.Key))
+						sorter.pushTsItem(sortItem{
+							start:  row.GetStartTs(),
+							commit: row.GetCommitTs(),
+							tp:     cdcpb.Event_ROLLBACK,
+						})
 					}
+				}
+			case *cdcpb.Event_Admin_:
+				log.Info("receive admin event", zap.Stringer("event", event))
+			case *cdcpb.Event_Error_:
+				return req.CheckpointTs, errors.Trace(&eventError{Event_Error: x.Error})
+			case *cdcpb.Event_ResolvedTs:
+				if atomic.LoadUint32(&initialized) == 1 {
+					// emit a checkpoint
+					revent := &model.RegionFeedEvent{
+						Checkpoint: &model.RegionFeedCheckpoint{
+							Span:       span,
+							ResolvedTs: x.ResolvedTs,
+						},
+					}
+
+					if x.ResolvedTs > req.CheckpointTs {
+						req.CheckpointTs = x.ResolvedTs
+					}
+
+					select {
+					case eventCh <- revent:
+					case <-ctx.Done():
+						return req.CheckpointTs, errors.Trace(ctx.Err())
+					}
+
 				}
 			}
 		}
