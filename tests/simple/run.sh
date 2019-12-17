@@ -13,10 +13,8 @@ function prepare() {
 
     cd $WORK_DIR
 
-    # record tso before we create tables for two reasons
-    # 1. skip the system table DDL
-    # 2. currently we support providing table IDs only when we create a changefeed, so we have to create tables before creating a changefeed.
-    start_ts=$(($(date +%s%N | cut -b1-13)<<18))
+    # record tso before we create tables to skip the system table DDLs
+    start_ts=$(get_tso http://$PD_HOST:$PD_PORT)
 
     run_sql "CREATE table test.simple1(id int primary key, val int);"
     run_sql "CREATE table test.simple2(id int primary key, val int);"
