@@ -15,8 +15,6 @@ package sink
 
 import (
 	"context"
-	"fmt"
-	"io"
 
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -41,28 +39,4 @@ type Sink interface {
 type TableInfoGetter interface {
 	TableByID(id int64) (info *timodel.TableInfo, ok bool)
 	GetTableIDByName(schema, table string) (int64, bool)
-}
-
-type writerSink struct {
-	io.Writer
-}
-
-var _ Sink = &writerSink{}
-
-func (s *writerSink) Emit(ctx context.Context, t model.Txn) error {
-	fmt.Fprintf(s, "commit ts: %d", t.Ts)
-	return nil
-}
-
-func (s *writerSink) EmitResolvedTimestamp(ctx context.Context, resolved uint64) error {
-	fmt.Fprintf(s, "resolved: %d", resolved)
-	return nil
-}
-
-func (s *writerSink) Flush(ctx context.Context) error {
-	return nil
-}
-
-func (s *writerSink) Close() error {
-	return nil
 }
