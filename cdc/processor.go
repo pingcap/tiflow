@@ -61,14 +61,14 @@ type txnChannel struct {
 }
 
 // Forward push all txn with commit ts not greater than ts into entryC.
-func (p *txnChannel) Forward(ctx context.Context, ts uint64, entryC chan<- ProcessorEntry) {
+func (p *txnChannel) Forward(ctx context.Context, ts uint64, targetC chan<- model.RawTxn) {
 	if p.putBackTxn != nil {
 		t := *p.putBackTxn
 		if t.Ts > ts {
 			return
 		}
 		p.putBackTxn = nil
-		pushProcessorEntry(ctx, entryC, newProcessorTxnEntry(t))
+		pushTxn(ctx, targetC, t)
 	}
 
 	for {
@@ -84,17 +84,17 @@ func (p *txnChannel) Forward(ctx context.Context, ts uint64, entryC chan<- Proce
 				p.putBack(t)
 				return
 			}
-			pushProcessorEntry(ctx, entryC, newProcessorTxnEntry(t))
+			pushTxn(ctx, targetC, t)
 		}
 	}
 }
 
-func pushProcessorEntry(ctx context.Context, entryC chan<- ProcessorEntry, e ProcessorEntry) {
+func pushTxn(ctx context.Context, targetC chan<- model.RawTxn, t model.RawTxn) {
 	select {
 	case <-ctx.Done():
-		log.Info("lost processor entry during canceling", zap.Any("entry", e))
+		log.Info("Dropped txn during canceling", zap.Any("txn", t))
 		return
-	case entryC <- e:
+	case targetC <- t:
 	}
 }
 
@@ -124,36 +124,6 @@ func newTxnChannel(inputTxn <-chan model.RawTxn, chanSize int, handleResolvedTs 
 	return tc
 }
 
-type processorEntryType int
-
-const (
-	processorEntryDMLS processorEntryType = iota
-	processorEntryResolved
-)
-
-// ProcessorEntry contains a transaction to be processed
-// TODO: Do we really need this extra layer of wrapping?
-type ProcessorEntry struct {
-	Txn model.RawTxn
-	Ts  uint64
-	Typ processorEntryType
-}
-
-func newProcessorTxnEntry(txn model.RawTxn) ProcessorEntry {
-	return ProcessorEntry{
-		Txn: txn,
-		Ts:  txn.Ts,
-		Typ: processorEntryDMLS,
-	}
-}
-
-func newProcessorResolvedEntry(ts uint64) ProcessorEntry {
-	return ProcessorEntry{
-		Ts:  ts,
-		Typ: processorEntryResolved,
-	}
-}
-
 type processor struct {
 	captureID    string
 	changefeedID string
@@ -170,9 +140,9 @@ type processor struct {
 	ddlJobsCh    chan model.RawTxn
 	ddlResolveTS uint64
 
-	tsRWriter       storage.ProcessorTsRWriter
-	resolvedEntries chan ProcessorEntry
-	executedEntries chan ProcessorEntry
+	tsRWriter    storage.ProcessorTsRWriter
+	resolvedTxns chan model.RawTxn
+	executedTxns chan model.RawTxn
 
 	subInfo *model.SubChangeFeedInfo
 
@@ -250,11 +220,11 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		sink:          sink,
 		ddlPuller:     ddlPuller,
 
-		tsRWriter:       tsRWriter,
-		subInfo:         tsRWriter.GetSubChangeFeedInfo(),
-		resolvedEntries: make(chan ProcessorEntry, 1),
-		executedEntries: make(chan ProcessorEntry, 1),
-		ddlJobsCh:       make(chan model.RawTxn, 16),
+		tsRWriter:    tsRWriter,
+		subInfo:      tsRWriter.GetSubChangeFeedInfo(),
+		resolvedTxns: make(chan model.RawTxn, 1),
+		executedTxns: make(chan model.RawTxn, 1),
+		ddlJobsCh:    make(chan model.RawTxn, 16),
 
 		tables: make(map[int64]*tableInfo),
 	}
@@ -308,7 +278,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 
 // localResolvedWorker do the flowing works.
 // 1, update resolve ts by scaning all table's resolve ts.
-// 2, update checkpoint ts by consuming entry from p.executedEntries.
+// 2, update checkpoint ts by consuming entry from p.executedTxns.
 // 3, sync SubChangeFeedInfo between in memory and storage.
 func (p *processor) localResolvedWorker(ctx context.Context) error {
 	updateInfoTick := time.NewTicker(time.Second)
@@ -348,12 +318,12 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 			p.tablesMu.Unlock()
 			p.subInfo.ResolvedTs = minResolvedTs
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
-		case e, ok := <-p.executedEntries:
+		case e, ok := <-p.executedTxns:
 			if !ok {
 				log.Info("Checkpoint worker exited")
 				return nil
 			}
-			if e.Typ == processorEntryResolved {
+			if e.IsResolved {
 				p.subInfo.CheckPointTs = e.Ts
 				checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(e.Ts)))
 			}
@@ -462,8 +432,8 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 	)
 
 	defer func() {
-		close(p.resolvedEntries)
-		close(p.executedEntries)
+		close(p.resolvedTxns)
+		close(p.executedTxns)
 	}()
 
 	retryCfg := backoff.WithMaxRetries(
@@ -503,7 +473,7 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 		for _, table := range p.tables {
 			input := table.inputChan
 			wg.Go(func() error {
-				input.Forward(cctx, globalResolvedTs, p.resolvedEntries)
+				input.Forward(cctx, globalResolvedTs, p.resolvedTxns)
 				return nil
 			})
 		}
@@ -517,7 +487,10 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case p.resolvedEntries <- newProcessorResolvedEntry(globalResolvedTs):
+		case p.resolvedTxns <- model.RawTxn{
+			Ts:         globalResolvedTs,
+			IsResolved: true,
+		}:
 		}
 	}
 }
@@ -548,7 +521,7 @@ func (p *processor) pullDDLJob(ctx context.Context) error {
 	return errg.Wait()
 }
 
-// syncResolved handle `p.ddlJobsCh` and `p.resolvedEntries`
+// syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
 	for {
 		select {
@@ -570,17 +543,22 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			p.schemaStorage.AddJob(t.DDL.Job)
 			atomic.StoreUint64(&p.ddlResolveTS, rawTxn.Ts)
-		case e, ok := <-p.resolvedEntries:
+		case e, ok := <-p.resolvedTxns:
 			if !ok {
 				return nil
 			}
-			switch e.Typ {
-			case processorEntryDMLS:
+			if e.IsResolved {
+				select {
+				case p.executedTxns <- e:
+				case <-ctx.Done():
+					return errors.Trace(ctx.Err())
+				}
+			} else {
 				err := p.schemaStorage.HandlePreviousDDLJobIfNeed(e.Ts)
 				if err != nil {
 					return errors.Trace(err)
 				}
-				txn, err := p.mounter.Mount(e.Txn)
+				txn, err := p.mounter.Mount(e)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -588,12 +566,6 @@ func (p *processor) syncResolved(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 				txnCounter.WithLabelValues("executed", p.changefeedID, p.captureID).Inc()
-			case processorEntryResolved:
-				select {
-				case p.executedEntries <- e:
-				case <-ctx.Done():
-					return errors.Trace(ctx.Err())
-				}
 			}
 		case <-ctx.Done():
 			return ctx.Err()
