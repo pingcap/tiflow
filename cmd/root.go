@@ -20,10 +20,6 @@ var rootCmd = &cobra.Command{
 	Use:   "cdc",
 	Short: "CDC",
 	Long:  `Change Data Capture`,
-	Run: func(cmd *cobra.Command, args []string) {
-		// Do Stuff Here
-		feed()
-	},
 }
 
 func init() {

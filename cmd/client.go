@@ -8,6 +8,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/google/uuid"
+	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -46,9 +47,17 @@ var cliCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		pdCli, err := pd.NewClient([]string{pdAddress}, pd.SecurityOption{})
+		if err != nil {
+			return err
+		}
 		id := uuid.New().String()
 		if startTs == 0 {
-			startTs = oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond))
+			ts, logical, err := pdCli.GetTS(context.Background())
+			if err != nil {
+				return err
+			}
+			startTs = oracle.ComposeTS(ts, logical)
 		}
 		detail := &model.ChangeFeedDetail{
 			SinkURI:    sinkURI,
