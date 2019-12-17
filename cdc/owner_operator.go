@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -106,7 +107,7 @@ func (h *ddlHandler) PullDDL() (uint64, []*model.DDL, error) {
 // ExecDDL implements roles.OwnerDDLHandler interface.
 func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error {
 	// TODO cache the sink
-	// TODO handle other target database, kile kafka, file
+	// TODO handle other target database, like kafka, file
 	db, err := sql.Open("mysql", sinkURI)
 	if err != nil {
 		return errors.Trace(err)
@@ -114,8 +115,26 @@ func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL
 	defer db.Close()
 	s := sink.NewMySQLSinkDDLOnly(db)
 
+	go func() {
+		if err := s.Start(ctx); err != nil {
+			log.Error("Sink quit", zap.Error(err))
+		}
+	}()
+
 	err = s.Emit(ctx, model.Txn{Ts: ddl.Job.BinlogInfo.FinishedTS, DDL: ddl})
-	return errors.Trace(err)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	select {
+	case _, ok := <-s.Success():
+		if !ok {
+			return errors.New("[ExecDDL] Sink.Success closed")
+		}
+		return nil
+	case <-time.After(5 * time.Second):
+		return errors.New("[ExecDDL] timeout: save DDL to sink")
+	}
 }
 
 func (h *ddlHandler) Close() error {

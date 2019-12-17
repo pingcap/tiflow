@@ -51,6 +51,10 @@ type mysqlSink struct {
 	tblInspector tableInspector
 	infoGetter   TableInfoGetter
 	ddlOnly      bool
+
+	input    chan model.Txn
+	successC chan model.Txn
+	closeC   chan struct{}
 }
 
 var _ Sink = &mysqlSink{}
@@ -111,10 +115,53 @@ func newMySQLSink(db *sql.DB, infoGetter TableInfoGetter, tblInspector tableInsp
 		infoGetter:   infoGetter,
 		tblInspector: tblInspector,
 		ddlOnly:      ddlOnly,
+
+		input:    make(chan model.Txn, 128),
+		successC: make(chan model.Txn, 16),
+		closeC:   make(chan struct{}),
+	}
+}
+
+func (s *mysqlSink) Start(ctx context.Context) error {
+	defer s.close()
+	for {
+		select {
+		case <-ctx.Done():
+			log.Info("mysqlSink quit", zap.Error(ctx.Err()))
+			return nil
+		case t, ok := <-s.input:
+			if !ok {
+				log.Info("Input channel closed")
+				return nil
+			}
+			// Only save non-resolved txns, resolved ones are simply forwarded to successC
+			if !t.IsResolved {
+				if err := s.save(ctx, t); err != nil {
+					return err
+				}
+			}
+			select {
+			case s.successC <- t:
+			case <-ctx.Done():
+				log.Info("mysqlSink quit", zap.Error(ctx.Err()))
+				return nil
+			}
+		}
 	}
 }
 
 func (s *mysqlSink) Emit(ctx context.Context, t model.Txn) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.closeC:
+		return errors.New("mysqlSink already closed")
+	case s.input <- t:
+		return nil
+	}
+}
+
+func (s *mysqlSink) save(ctx context.Context, t model.Txn) error {
 	filterBySchemaAndTable(&t)
 	if len(t.DMLs) == 0 && t.DDL == nil {
 		log.Info("Whole txn ignored", zap.Uint64("ts", t.Ts))
@@ -138,6 +185,10 @@ func (s *mysqlSink) Emit(ctx context.Context, t model.Txn) error {
 	return errors.Trace(s.execDMLs(ctx, dmls))
 }
 
+func (s *mysqlSink) Success() <-chan model.Txn {
+	return s.successC
+}
+
 func filterBySchemaAndTable(t *model.Txn) {
 	toIgnore := regexp.MustCompile("(?i)^(INFORMATION_SCHEMA|PERFORMANCE_SCHEMA|MYSQL)$")
 	if t.IsDDL() {
@@ -155,15 +206,11 @@ func filterBySchemaAndTable(t *model.Txn) {
 	}
 }
 
-func (s *mysqlSink) EmitResolvedTimestamp(ctx context.Context, resolved uint64) error {
-	return nil
-}
-
-func (s *mysqlSink) Flush(ctx context.Context) error {
-	return nil
-}
-
-func (s *mysqlSink) Close() error {
+func (s *mysqlSink) close() error {
+	close(s.input)
+	close(s.successC)
+	close(s.closeC)
+	// TODO: We have some constructors that accept an existing DB, so we can't just close it here
 	return nil
 }
 

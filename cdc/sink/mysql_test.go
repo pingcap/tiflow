@@ -15,6 +15,7 @@ package sink
 
 import (
 	"context"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
@@ -44,10 +45,7 @@ func (s EmitSuite) TestShouldExecDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer db.Close()
 
-	sink := mysqlSink{
-		db:           db,
-		tblInspector: dummyInspector{},
-	}
+	sink := newMySQLSink(db, nil, dummyInspector{}, false)
 
 	t := model.Txn{
 		DDL: &model.DDL{
@@ -64,11 +62,9 @@ func (s EmitSuite) TestShouldExecDDL(c *check.C) {
 	mock.ExpectExec(t.DDL.Job.Query).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	// Execute
-	err = sink.Emit(context.Background(), t)
+	assertEmitSuccess(c, sink, t)
 
 	// Validate
-	c.Assert(err, check.IsNil)
 	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }
 
@@ -78,10 +74,7 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer db.Close()
 
-	sink := mysqlSink{
-		db:           db,
-		tblInspector: dummyInspector{},
-	}
+	sink := newMySQLSink(db, nil, dummyInspector{}, false)
 
 	t := model.Txn{
 		DDL: &model.DDL{
@@ -100,12 +93,31 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 	}
 	mock.ExpectExec(t.DDL.Job.Query).WillReturnError(&ignorable)
 
-	// Execute
-	err = sink.Emit(context.Background(), t)
+	assertEmitSuccess(c, sink, t)
 
 	// Validate
-	c.Assert(err, check.IsNil)
 	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
+}
+
+func assertEmitSuccess(c *check.C, sink Sink, t model.Txn) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		err := sink.Start(ctx)
+		c.Assert(err, check.IsNil)
+	}()
+
+	// Execute
+	err := sink.Emit(ctx, t)
+	c.Assert(err, check.IsNil)
+
+	// Wait
+	select {
+	case s := <-sink.Success():
+		c.Assert(s, check.DeepEquals, t)
+	case <-time.After(time.Second):
+		c.Fatal("Takes too long to save")
+	}
 }
 
 type tableHelper struct {
@@ -158,11 +170,7 @@ func (s EmitSuite) TestShouldExecReplaceInto(c *check.C) {
 	defer db.Close()
 
 	helper := tableHelper{}
-	sink := mysqlSink{
-		db:           db,
-		tblInspector: &helper,
-		infoGetter:   &helper,
-	}
+	sink := newMySQLSink(db, &helper, &helper, false)
 
 	t := model.Txn{
 		DMLs: []*model.DML{
@@ -185,10 +193,9 @@ func (s EmitSuite) TestShouldExecReplaceInto(c *check.C) {
 	mock.ExpectCommit()
 
 	// Execute
-	err = sink.Emit(context.Background(), t)
+	assertEmitSuccess(c, sink, t)
 
 	// Validate
-	c.Assert(err, check.IsNil)
 	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }
 
@@ -199,11 +206,7 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 	defer db.Close()
 
 	helper := tableHelper{}
-	sink := mysqlSink{
-		db:           db,
-		tblInspector: &helper,
-		infoGetter:   &helper,
-	}
+	sink := newMySQLSink(db, &helper, &helper, false)
 
 	t := model.Txn{
 		DMLs: []*model.DML{
@@ -226,10 +229,9 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 	mock.ExpectCommit()
 
 	// Execute
-	err = sink.Emit(context.Background(), t)
+	assertEmitSuccess(c, sink, t)
 
 	// Validate
-	c.Assert(err, check.IsNil)
 	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }
 

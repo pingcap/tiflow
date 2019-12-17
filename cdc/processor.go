@@ -142,7 +142,7 @@ type processor struct {
 
 	tsRWriter    storage.ProcessorTsRWriter
 	resolvedTxns chan model.RawTxn
-	executedTxns chan model.RawTxn
+	checkpointC  chan uint64
 
 	subInfo *model.SubChangeFeedInfo
 
@@ -223,7 +223,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		tsRWriter:    tsRWriter,
 		subInfo:      tsRWriter.GetSubChangeFeedInfo(),
 		resolvedTxns: make(chan model.RawTxn, 1),
-		executedTxns: make(chan model.RawTxn, 1),
+		checkpointC:  make(chan uint64, 1),
 		ddlJobsCh:    make(chan model.RawTxn, 16),
 
 		tables: make(map[int64]*tableInfo),
@@ -257,6 +257,34 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 		return p.pullDDLJob(cctx)
 	})
 
+	// Start sink
+	wg.Go(func() error {
+		return p.sink.Start(cctx)
+	})
+	// Read from the Success channel to update checkpoint
+	wg.Go(func() error {
+		successC := p.sink.Success()
+		for {
+			select {
+			case <-cctx.Done():
+				log.Info("Stop receiving sink.Success()")
+				return nil
+			case txn, ok := <-successC:
+				if !ok {
+					return nil
+				}
+				if txn.IsResolved {
+					select {
+					case p.checkpointC <- txn.Ts:
+					case <-cctx.Done():
+						return errors.Trace(ctx.Err())
+					}
+				}
+				txnCounter.WithLabelValues("executed", p.changefeedID, p.captureID).Inc()
+			}
+		}
+	})
+
 	go func() {
 		if err := wg.Wait(); err != nil {
 			errCh <- err
@@ -278,7 +306,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 
 // localResolvedWorker do the flowing works.
 // 1, update resolve ts by scaning all table's resolve ts.
-// 2, update checkpoint ts by consuming entry from p.executedTxns.
+// 2, update checkpoint ts by consuming entry from p.checkpointC.
 // 3, sync SubChangeFeedInfo between in memory and storage.
 func (p *processor) localResolvedWorker(ctx context.Context) error {
 	updateInfoTick := time.NewTicker(time.Second)
@@ -318,15 +346,13 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 			p.tablesMu.Unlock()
 			p.subInfo.ResolvedTs = minResolvedTs
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
-		case e, ok := <-p.executedTxns:
+		case ts, ok := <-p.checkpointC:
 			if !ok {
 				log.Info("Checkpoint worker exited")
 				return nil
 			}
-			if e.IsResolved {
-				p.subInfo.CheckPointTs = e.Ts
-				checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(e.Ts)))
-			}
+			p.subInfo.CheckPointTs = ts
+			checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(ts)))
 		case <-updateInfoTick.C:
 			err := retry.Run(func() error {
 				return p.updateInfo(ctx)
@@ -433,7 +459,7 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 
 	defer func() {
 		close(p.resolvedTxns)
-		close(p.executedTxns)
+		close(p.checkpointC)
 	}()
 
 	retryCfg := backoff.WithMaxRetries(
@@ -547,25 +573,21 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
+			var txn *model.Txn
 			if e.IsResolved {
-				select {
-				case p.executedTxns <- e:
-				case <-ctx.Done():
-					return errors.Trace(ctx.Err())
-				}
+				txn = &model.Txn{Ts: e.Ts, IsResolved: true}
 			} else {
 				err := p.schemaStorage.HandlePreviousDDLJobIfNeed(e.Ts)
 				if err != nil {
 					return errors.Trace(err)
 				}
-				txn, err := p.mounter.Mount(e)
+				txn, err = p.mounter.Mount(e)
 				if err != nil {
 					return errors.Trace(err)
 				}
-				if err := p.sink.Emit(ctx, *txn); err != nil {
-					return errors.Trace(err)
-				}
-				txnCounter.WithLabelValues("executed", p.changefeedID, p.captureID).Inc()
+			}
+			if err := p.sink.Emit(ctx, *txn); err != nil {
+				return errors.Trace(err)
 			}
 		case <-ctx.Done():
 			return ctx.Err()

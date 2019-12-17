@@ -58,6 +58,10 @@ type Txn struct {
 	DDL  *DDL
 
 	Ts uint64
+	// IsResolved is true if this is a fake Txn used as a mark that
+	// all Txns with a ts smaller or equal to Txn.Ts have already been
+	// sent
+	IsResolved bool
 }
 
 // IsDDL returns true if it's a DDL transaction
