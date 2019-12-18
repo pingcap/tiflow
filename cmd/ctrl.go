@@ -20,7 +20,9 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
+	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 )
@@ -39,6 +41,8 @@ const (
 	CtrlQuerySubCf = "query-sub-cf"
 	// clear all key-values created by CDC
 	CtrlClearAll = "clear-all"
+	// get tso from pd
+	CtrlGetTso = "get-tso"
 )
 
 func init() {
@@ -123,6 +127,16 @@ var ctrlCmd = &cobra.Command{
 			return jsonPrint(info)
 		case CtrlClearAll:
 			return kv.ClearAllCDCInfo(context.Background(), cli)
+		case CtrlGetTso:
+			pdCli, err := pd.NewClient([]string{ctrlPdAddr}, pd.SecurityOption{})
+			if err != nil {
+				return err
+			}
+			ts, logic, err := pdCli.GetTS(context.Background())
+			if err != nil {
+				return err
+			}
+			fmt.Println(oracle.ComposeTS(ts, logic))
 		default:
 			fmt.Printf("unknown controller command: %s\n", ctrlCommand)
 		}

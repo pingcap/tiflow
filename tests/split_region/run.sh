@@ -15,7 +15,7 @@ function run() {
     cd $WORK_DIR
 
     # record tso before we create tables to skip the system table DDLs
-    start_ts=$(get_tso http://$PD_HOST:$PD_PORT)
+    start_ts=$(cdc ctrl --cmd=get-tso http://$PD_HOST:$PD_PORT)
 
     run_sql_file $CUR/data/prepare.sql ${US_TIDB_HOST} ${US_TIDB_PORT}
 
