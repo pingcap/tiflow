@@ -18,7 +18,7 @@ function run() {
     cd $WORK_DIR
 
     # record tso before we create tables to skip the system table DDLs
-    start_ts=$(get_tso http://$PD_HOST:$PD_PORT)
+    start_ts=$(cdc ctrl --cmd=get-tso http://$PD_HOST:$PD_PORT)
 
     # create $DB_COUNT databases and import initial workload
     for i in $(seq $DB_COUNT); do
