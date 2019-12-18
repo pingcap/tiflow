@@ -131,7 +131,7 @@ func (s *mysqlSink) Emit(ctx context.Context, txns ...model.Txn) error {
 			return errors.Trace(err)
 		}
 		if s.ddlOnly {
-			return errors.New("this sink only supports DDL, can not emit DMLs.")
+			return errors.New("dmls disallowed in ddl-only mode")
 		}
 		dmls, err := s.formatDMLs(t.DMLs)
 		if err != nil {
