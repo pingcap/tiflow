@@ -10,7 +10,6 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/mock"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -452,13 +451,4 @@ func checkDMLKVEntries(ctx context.Context, c *check.C, tableInfo *timodel.Table
 		return nil
 	})
 	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-}
-
-func (s *kvEntrySuite) TestAllKVS(c *check.C) {
-	puller, err := mock.NewMockPuller()
-	c.Assert(err, check.IsNil)
-	puller.ScanAll(func(rawKVEntry *model.RawKVEntry) {
-		_, err := unmarshal(rawKVEntry)
-		c.Assert(err, check.IsNil)
-	})
 }
