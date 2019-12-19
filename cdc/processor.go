@@ -51,7 +51,7 @@ var (
 )
 
 type mounter interface {
-	Mount(rawTxn model.RawTxn) (*model.Txn, error)
+	Mount(rawTxn model.RawTxn) (model.Txn, error)
 }
 
 type txnChannel struct {
@@ -562,7 +562,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
-				if err := p.sink.Emit(ctx, *txn); err != nil {
+				if err := p.sink.Emit(ctx, txn); err != nil {
 					return errors.Trace(err)
 				}
 				txnCounter.WithLabelValues("executed", p.changefeedID, p.captureID).Inc()
