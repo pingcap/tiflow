@@ -60,6 +60,12 @@ func (m *mockManager) RetireOwner() {
 	atomic.StoreInt32(&m.owner, 0)
 }
 
+// ResignOwner implements Manager.ResignOwner interface.
+func (m *mockManager) ResignOwner(ctx context.Context) error {
+	atomic.StoreInt32(&m.owner, 0)
+	return nil
+}
+
 // Cancel implements Manager.Cancel interface.
 func (m *mockManager) Cancel() {
 	m.cancel()

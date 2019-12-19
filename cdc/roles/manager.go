@@ -37,6 +37,7 @@ import (
 const (
 	newSessionRetryInterval = 200 * time.Millisecond
 	logIntervalCnt          = int(3 * time.Second / newSessionRetryInterval)
+	defaultOpTimeout        = 5 * time.Second
 )
 
 // Manager is used to campaign the owner and manage the owner information.
@@ -53,6 +54,8 @@ type Manager interface {
 	CampaignOwner(ctx context.Context) error
 	// RetireNotify returns a channel that can fetch notification when owner is retired
 	RetireNotify() <-chan struct{}
+	// ResignOwner lets the owner to start a new election
+	ResignOwner(ctx context.Context) error
 }
 
 const (
@@ -145,6 +148,22 @@ func (m *ownerManager) CampaignOwner(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	go m.campaignLoop(ctx, session)
+	return nil
+}
+
+// ResignOwner implements Manager.ResignOwner interface.
+func (m *ownerManager) ResignOwner(ctx context.Context) error {
+	elec := (*concurrency.Election)(atomic.LoadPointer(&m.elec))
+	if elec == nil {
+		return errors.Trace(concurrency.ErrElectionNotLeader)
+	}
+	cctx, cancel := context.WithTimeout(ctx, defaultOpTimeout)
+	err := elec.Resign(cctx)
+	defer cancel()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	m.logger.Info("resign owner success")
 	return nil
 }
 

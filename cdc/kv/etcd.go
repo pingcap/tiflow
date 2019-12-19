@@ -27,6 +27,8 @@ import (
 const (
 	// EtcdKeyBase is the common prefix of the keys in CDC
 	EtcdKeyBase = "/tidb/cdc"
+	// CaptureOwnerKey is the capture owner path that is saved to etcd
+	CaptureOwnerKey = EtcdKeyBase + "/capture/owner"
 )
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
