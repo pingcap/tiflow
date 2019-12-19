@@ -121,7 +121,7 @@ func (s *mysqlSink) Emit(ctx context.Context, txns ...model.Txn) error {
 		filterBySchemaAndTable(&t)
 		if len(t.DMLs) == 0 && t.DDL == nil {
 			log.Info("Whole txn ignored", zap.Uint64("ts", t.Ts))
-			return nil
+			continue
 		}
 		if t.IsDDL() {
 			err := s.execDDLWithMaxRetries(ctx, t.DDL, 5)
