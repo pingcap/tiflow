@@ -27,7 +27,7 @@ type commonResp struct {
 
 func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
-		writeError(w, http.StatusBadRequest, errors.New("This api only supports POST method."))
+		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
 		return
 	}
 	err := s.capture.ownerManager.ResignOwner(req.Context())
