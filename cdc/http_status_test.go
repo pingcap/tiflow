@@ -52,10 +52,23 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 
 	s.waitUntilServerOnline(c)
 
+	testPprof(c)
+	testReisgnOwner(c)
+}
+
+func testPprof(c *check.C) {
 	resp, err := http.Get(fmt.Sprintf("http://%s:%d/debug/pprof/cmdline", defaultServerOptions.statusHost, defaultServerOptions.statusPort))
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, 200)
 	_, err = ioutil.ReadAll(resp.Body)
 	c.Assert(err, check.IsNil)
+}
+
+func testReisgnOwner(c *check.C) {
+	uri := fmt.Sprintf("http://%s:%d/capture/owner/resign", defaultServerOptions.statusHost, defaultServerOptions.statusPort)
+	resp, err := http.Get(uri)
+	c.Assert(err, check.IsNil)
+	defer resp.Body.Close()
+	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
 }
