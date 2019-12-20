@@ -221,6 +221,7 @@ func (m *ownerManager) campaignLoop(ctx context.Context, etcdSession *concurrenc
 		if err != nil {
 			continue
 		}
+		m.logger.Info("campaign to be owner")
 
 		m.toBeOwner(elec)
 		m.watchOwner(ctx, etcdSession, ownerKey)
