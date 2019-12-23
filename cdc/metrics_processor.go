@@ -46,6 +46,14 @@ var (
 			Name:      "txn_count",
 			Help:      "txn count received/executed by this processor",
 		}, []string{"type", "changefeed", "capture"})
+	updateInfoDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "update_info_duration_seconds",
+			Help:      "The time it took to update sub change feed info.",
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
+		}, []string{"captureID"})
 )
 
 // initProcessorMetrics registers all metrics used in processor
@@ -54,4 +62,5 @@ func initProcessorMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(checkpointTsGauge)
 	registry.MustRegister(syncTableNumGauge)
 	registry.MustRegister(txnCounter)
+	registry.MustRegister(updateInfoDuration)
 }

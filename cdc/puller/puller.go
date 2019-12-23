@@ -98,6 +98,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	}
 
 	g.Go(func() error {
+		captureID := util.CaptureIDFromCtx(ctx)
 		for {
 			select {
 			case e := <-eventCh:
@@ -123,11 +124,13 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					if err := p.buf.AddKVEntry(ctx, kv); err != nil {
 						return errors.Trace(err)
 					}
+					eventCounter.WithLabelValues(captureID, "kv").Inc()
 				} else if e.Checkpoint != nil {
 					cp := e.Checkpoint
 					if err := p.buf.AddResolved(ctx, cp.Span, cp.ResolvedTs); err != nil {
 						return errors.Trace(err)
 					}
+					eventCounter.WithLabelValues(captureID, "resolved").Inc()
 				}
 			case <-ctx.Done():
 				return ctx.Err()

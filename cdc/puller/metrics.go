@@ -11,21 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package puller
 
-import (
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/prometheus/client_golang/prometheus"
+import "github.com/prometheus/client_golang/prometheus"
+
+var (
+	eventCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "event_count",
+			Help:      "The number of events received.",
+		}, []string{"captureID", "type"})
 )
 
-var registry = prometheus.NewRegistry()
-
-func init() {
-	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	registry.MustRegister(prometheus.NewGoCollector())
-
-	kv.InitMetrics(registry)
-	puller.InitMetrics(registry)
-	initProcessorMetrics(registry)
+// InitMetrics registers all metrics in this file
+func InitMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(eventCounter)
 }
