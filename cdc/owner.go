@@ -426,10 +426,7 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 	}
 
 	for changeFeedID, changeFeedInfo := range pinfos {
-		var cfInfo *changeFeed
-		var exist bool
-
-		if cfInfo, exist = o.changeFeeds[changeFeedID]; exist {
+		if cfInfo, exist := o.changeFeeds[changeFeedID]; exist {
 			for cid, pinfo := range changeFeedInfo {
 				if _, ok := cfInfo.processorLastUpdateTime[cid]; !ok {
 					cfInfo.processorLastUpdateTime[cid] = time.Now()
