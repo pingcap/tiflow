@@ -328,9 +328,11 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 				checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(e.Ts)))
 			}
 		case <-updateInfoTick.C:
+			t0Update := time.Now()
 			err := retry.Run(func() error {
 				return p.updateInfo(ctx)
 			}, 3)
+			updateInfoDuration.WithLabelValues(p.captureID).Observe(time.Since(t0Update).Seconds())
 			if err != nil {
 				return errors.Annotate(err, "failed to update info")
 			}
