@@ -528,7 +528,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 }
 
 func (o *ownerImpl) flushChangeFeedInfos(ctx context.Context) error {
-	infos := make(map[model.CaptureID]*model.ChangeFeedInfo)
+	infos := make(map[model.ChangeFeedID]*model.ChangeFeedInfo, len(o.changeFeeds))
 	for id, info := range o.changeFeeds {
 		infos[id] = info.ChangeFeedInfo
 	}
