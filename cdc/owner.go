@@ -490,14 +490,10 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 				continue
 			}
 
-			startTs := changefeed.StartTs
-			if checkpointTs > startTs {
-				startTs = checkpointTs
-			}
 			tables[id] = table
 			orphanTables[id] = model.ProcessTableInfo{
 				ID:      id,
-				StartTs: startTs,
+				StartTs: checkpointTs,
 			}
 		}
 
