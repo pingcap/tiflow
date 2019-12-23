@@ -20,8 +20,10 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/clientv3/concurrency"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -64,6 +66,12 @@ var (
 // cf holds changefeed id, which is used for output only
 type cf struct {
 	ID string `json:"id"`
+}
+
+// capture holds capture information
+type capture struct {
+	ID      string `json:"id"`
+	IsOwner bool   `json:"is-owner"`
 }
 
 func jsonPrint(v interface{}) error {
@@ -114,14 +122,23 @@ var ctrlCmd = &cobra.Command{
 			}
 			return jsonPrint(cfs)
 		case CtrlQueryCaptures:
-			_, captures, err := kv.GetCaptures(context.Background(), cli)
+			_, raw, err := kv.GetCaptures(context.Background(), cli)
 			if err != nil {
 				return err
+			}
+			ownerID, err := roles.GetOwnerID(context.Background(), cli, kv.CaptureOwnerKey)
+			if err != nil {
+				return err
+			}
+			captures := make([]*capture, 0, len(raw))
+			for _, c := range raw {
+				isOwner := c.ID == ownerID
+				captures = append(captures, &capture{ID: c.ID, IsOwner: isOwner})
 			}
 			return jsonPrint(captures)
 		case CtrlQuerySubCf:
 			_, info, err := kv.GetSubChangeFeedInfo(context.Background(), cli, ctrlCfID, ctrlCaptureID)
-			if err != nil {
+			if err != nil && err != concurrency.ErrElectionNoLeader {
 				return err
 			}
 			return jsonPrint(info)

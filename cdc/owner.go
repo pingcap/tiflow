@@ -691,7 +691,8 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 				continue
 			}
 			err := o.run(ctx)
-			if err != nil {
+			// owner may be evicted during running, ignore the context canceled error directly
+			if err != nil && errors.Cause(err) != context.Canceled {
 				return err
 			}
 		}
@@ -712,7 +713,7 @@ func (o *ownerImpl) run(ctx context.Context) error {
 	o.l.Lock()
 	defer o.l.Unlock()
 
-	o.handleMarkdownProcessor(ctx)
+	o.handleMarkdownProcessor(cctx)
 
 	err := o.loadChangeFeedInfos(cctx)
 	if err != nil {

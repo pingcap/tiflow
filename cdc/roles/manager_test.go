@@ -7,8 +7,11 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
@@ -91,9 +94,12 @@ func (s *managerSuite) TestManager(c *check.C) {
 	c.Assert(m1.IsOwner(), check.IsTrue)
 	c.Assert(m2.IsOwner(), check.IsFalse)
 
+	// can't resign non-owner
+	err = m2.ResignOwner(context.Background())
+	c.Assert(errors.Cause(err), check.Equals, concurrency.ErrElectionNotLeader)
+
 	// stop m1 and m2 become owner
 	m1cancel()
-	c.Assert(err, check.IsNil)
 	select {
 	case <-m1DoneCh:
 	case <-time.After(time.Millisecond * 10):
@@ -102,4 +108,21 @@ func (s *managerSuite) TestManager(c *check.C) {
 	time.Sleep(time.Second)
 	c.Assert(m1.IsOwner(), check.IsFalse)
 	c.Assert(m2.IsOwner(), check.IsTrue)
+
+	resp, err := cli.Get(context.Background(), kv.CaptureOwnerKey+"/"+m2.ID())
+	c.Assert(err, check.IsNil)
+	rev1 := resp.Header.Revision
+
+	// resign owner, it will re-campaign to be owner
+	err = m2.ResignOwner(context.Background())
+	c.Assert(err, check.IsNil)
+	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
+		return m2.IsOwner()
+	}), check.IsTrue)
+
+	// check m2 is re-campaigned
+	resp, err = cli.Get(context.Background(), kv.CaptureOwnerKey+"/"+m2.ID())
+	c.Assert(err, check.IsNil)
+	rev2 := resp.Header.Revision
+	c.Assert(rev1, check.Less, rev2)
 }

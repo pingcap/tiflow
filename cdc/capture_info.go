@@ -103,7 +103,6 @@ func newCaptureInfoWatch(
 				watchResp <- &CaptureInfoWatchResp{Err: errors.Trace(resp.Err())}
 				return
 			}
-
 			for _, ev := range resp.Events {
 				infoResp := new(CaptureInfoWatchResp)
 
@@ -125,7 +124,7 @@ func newCaptureInfoWatch(
 				watchResp <- infoResp
 			}
 		}
-		log.Debug("watchC from etcd close normally")
+		log.Info("capture info watcher from etcd close normally")
 
 	}()
 

@@ -42,6 +42,7 @@ func (s *Server) startStatusHTTP() {
 
 	serverMux.HandleFunc("/status", s.handleStatus)
 	serverMux.HandleFunc("/debug/info", s.handleDebugInfo)
+	serverMux.HandleFunc("/capture/owner/resign", s.handleResignOwner)
 
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())

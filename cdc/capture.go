@@ -34,11 +34,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-const (
-	// CaptureOwnerKey is the capture owner path that is saved to etcd
-	CaptureOwnerKey = kv.EtcdKeyBase + "/capture/owner"
-)
-
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules SubChangeFeed on it.
 type Capture struct {
 	pdEndpoints  []string
@@ -71,7 +66,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 
 	log.Info("creating capture", zap.String("capture-id", id))
 
-	manager := roles.NewOwnerManager(cli, id, CaptureOwnerKey)
+	manager := roles.NewOwnerManager(cli, id, kv.CaptureOwnerKey)
 
 	worker, err := NewOwner(pdEndpoints, cli, manager)
 	if err != nil {

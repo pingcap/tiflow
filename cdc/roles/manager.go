@@ -37,6 +37,7 @@ import (
 const (
 	newSessionRetryInterval = 200 * time.Millisecond
 	logIntervalCnt          = int(3 * time.Second / newSessionRetryInterval)
+	defaultOpTimeout        = 5 * time.Second
 )
 
 // Manager is used to campaign the owner and manage the owner information.
@@ -47,12 +48,12 @@ type Manager interface {
 	IsOwner() bool
 	// RetireOwner make the manager to be a not owner. It's exported for testing.
 	RetireOwner()
-	// GetOwnerID gets the owner ID.
-	GetOwnerID(ctx context.Context) (string, error)
 	// CampaignOwner campaigns the owner.
 	CampaignOwner(ctx context.Context) error
 	// RetireNotify returns a channel that can fetch notification when owner is retired
 	RetireNotify() <-chan struct{}
+	// ResignOwner lets the owner to start a new election
+	ResignOwner(ctx context.Context) error
 }
 
 const (
@@ -148,6 +149,22 @@ func (m *ownerManager) CampaignOwner(ctx context.Context) error {
 	return nil
 }
 
+// ResignOwner implements Manager.ResignOwner interface.
+func (m *ownerManager) ResignOwner(ctx context.Context) error {
+	elec := (*concurrency.Election)(atomic.LoadPointer(&m.elec))
+	if elec == nil {
+		return errors.Trace(concurrency.ErrElectionNotLeader)
+	}
+	cctx, cancel := context.WithTimeout(ctx, defaultOpTimeout)
+	err := elec.Resign(cctx)
+	defer cancel()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	m.logger.Info("resign owner success")
+	return nil
+}
+
 func (m *ownerManager) toBeOwner(elec *concurrency.Election) {
 	atomic.StorePointer(&m.elec, unsafe.Pointer(elec))
 }
@@ -202,6 +219,7 @@ func (m *ownerManager) campaignLoop(ctx context.Context, etcdSession *concurrenc
 		if err != nil {
 			continue
 		}
+		m.logger.Info("campaign to be owner")
 
 		m.toBeOwner(elec)
 		m.watchOwner(ctx, etcdSession, ownerKey)
@@ -219,18 +237,6 @@ func (m *ownerManager) revokeSession(leaseID clientv3.LeaseID) {
 	_, err := m.etcdCli.Revoke(cancelCtx, leaseID)
 	cancel()
 	m.logger.Info("revoke session", zap.Error(err))
-}
-
-// GetOwnerID implements Manager.GetOwnerID interface.
-func (m *ownerManager) GetOwnerID(ctx context.Context) (string, error) {
-	resp, err := m.etcdCli.Get(ctx, m.key, clientv3.WithFirstCreate()...)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	if len(resp.Kvs) == 0 {
-		return "", concurrency.ErrElectionNoLeader
-	}
-	return string(resp.Kvs[0].Value), nil
 }
 
 // GetOwnerInfo check the owner is id and return the owner key.
@@ -320,4 +326,16 @@ func contextDone(ctx context.Context, err error) error {
 	}
 
 	return nil
+}
+
+// GetOwnerID is a helper function used to get the owner ID.
+func GetOwnerID(ctx context.Context, cli *clientv3.Client, key string) (string, error) {
+	resp, err := cli.Get(ctx, key, clientv3.WithFirstCreate()...)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	if len(resp.Kvs) == 0 {
+		return "", concurrency.ErrElectionNoLeader
+	}
+	return string(resp.Kvs[0].Value), nil
 }
