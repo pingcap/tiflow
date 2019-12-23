@@ -130,7 +130,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 
 	tables := map[uint64]schema.TableName{1: {Schema: "any"}}
 
-	changeFeedInfos := map[model.ChangeFeedID]*changeFeed{
+	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
 			tables:                  tables,
 			ChangeFeedInfo:          &model.ChangeFeedInfo{},
@@ -150,7 +150,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 	c.Assert(err, check.IsNil)
 	owner := &ownerImpl{
 		cancelWatchCapture: cancel,
-		changeFeeds:        changeFeedInfos,
+		changeFeeds:        changeFeeds,
 		cfRWriter:          handler,
 		manager:            manager,
 	}
@@ -309,7 +309,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 
 	tables := map[uint64]schema.TableName{1: {Schema: "any"}}
 
-	changeFeedInfos := map[model.ChangeFeedID]*changeFeed{
+	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
 			tables:                  tables,
 			ChangeFeedInfo:          &model.ChangeFeedInfo{},
@@ -329,7 +329,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 	owner := &ownerImpl{
 		cancelWatchCapture: cancel,
-		changeFeeds:        changeFeedInfos,
+		changeFeeds:        changeFeeds,
 
 		// ddlHandler: handler,
 		cfRWriter: handler,

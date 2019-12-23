@@ -419,18 +419,18 @@ func (o *ownerImpl) handleWatchCapture() error {
 	return nil
 }
 
-func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
+func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 	changefeeds, pinfos, err := o.cfRWriter.Read(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	for changeFeedID, etcdChangeFeedInfo := range pinfos {
+	for changeFeedID, changeFeedInfo := range pinfos {
 		var cfInfo *changeFeed
 		var exist bool
 
 		if cfInfo, exist = o.changeFeeds[changeFeedID]; exist {
-			for cid, pinfo := range etcdChangeFeedInfo {
+			for cid, pinfo := range changeFeedInfo {
 				if _, ok := cfInfo.processorLastUpdateTime[cid]; !ok {
 					cfInfo.processorLastUpdateTime[cid] = time.Now()
 					continue
@@ -442,7 +442,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 				}
 			}
 
-			cfInfo.ProcessorInfos = etcdChangeFeedInfo
+			cfInfo.ProcessorInfos = changeFeedInfo
 
 			for id := range cfInfo.ProcessorInfos {
 				lastUpdateTime := cfInfo.processorLastUpdateTime[id]
@@ -514,7 +514,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			},
 			Status:          model.ChangeFeedSyncDML,
 			TargetTs:        targetTs,
-			ProcessorInfos:  etcdChangeFeedInfo,
+			ProcessorInfos:  changeFeedInfo,
 			DDLCurrentIndex: 0,
 			infoWriter:      storage.NewOwnerSubCFInfoEtcdWriter(o.etcdClient),
 		}
@@ -715,7 +715,7 @@ func (o *ownerImpl) run(ctx context.Context) error {
 
 	o.handleMarkdownProcessor(cctx)
 
-	err := o.loadChangeFeedInfos(cctx)
+	err := o.loadChangeFeeds(cctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
