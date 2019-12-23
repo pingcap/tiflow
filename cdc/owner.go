@@ -454,8 +454,9 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 		}
 
 		detail := changefeeds[changeFeedID]
+		checkpointTs := detail.GetCheckpointTs()
 		log.Info("find new changefeed", zap.Reflect("detail", detail),
-			zap.Uint64("checkpoint ts", detail.GetCheckpointTs()))
+			zap.Uint64("checkpoint ts", checkpointTs))
 
 		// we find a new changefeed, init changefeed info here.
 		var targetTs uint64
@@ -475,12 +476,12 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			return errors.Annotate(err, "create schema store failed")
 		}
 
-		err = schemaStorage.HandlePreviousDDLJobIfNeed(detail.GetCheckpointTs())
+		err = schemaStorage.HandlePreviousDDLJobIfNeed(checkpointTs)
 		if err != nil {
 			return errors.Annotate(err, "handle ddl job failed")
 		}
 
-		ddlHandler := newDDLHandler(o.pdClient, detail.GetCheckpointTs())
+		ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
 
 		tables := make(map[uint64]schema.TableName)
 		orphanTables := make(map[uint64]model.ProcessTableInfo)
@@ -492,7 +493,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			tables[id] = table
 			orphanTables[id] = model.ProcessTableInfo{
 				ID:      id,
-				StartTs: changefeed.StartTs,
+				StartTs: checkpointTs,
 			}
 		}
 
@@ -509,7 +510,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			ChangeFeedInfo: &model.ChangeFeedInfo{
 				SinkURI:      changefeed.SinkURI,
 				ResolvedTs:   0,
-				CheckpointTs: detail.GetCheckpointTs(),
+				CheckpointTs: checkpointTs,
 			},
 			Status:          model.ChangeFeedSyncDML,
 			TargetTs:        targetTs,
