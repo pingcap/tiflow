@@ -48,8 +48,6 @@ type Manager interface {
 	IsOwner() bool
 	// RetireOwner make the manager to be a not owner. It's exported for testing.
 	RetireOwner()
-	// GetOwnerID gets the owner ID.
-	GetOwnerID(ctx context.Context) (string, error)
 	// CampaignOwner campaigns the owner.
 	CampaignOwner(ctx context.Context) error
 	// RetireNotify returns a channel that can fetch notification when owner is retired
@@ -241,18 +239,6 @@ func (m *ownerManager) revokeSession(leaseID clientv3.LeaseID) {
 	m.logger.Info("revoke session", zap.Error(err))
 }
 
-// GetOwnerID implements Manager.GetOwnerID interface.
-func (m *ownerManager) GetOwnerID(ctx context.Context) (string, error) {
-	resp, err := m.etcdCli.Get(ctx, m.key, clientv3.WithFirstCreate()...)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	if len(resp.Kvs) == 0 {
-		return "", concurrency.ErrElectionNoLeader
-	}
-	return string(resp.Kvs[0].Value), nil
-}
-
 // GetOwnerInfo check the owner is id and return the owner key.
 func GetOwnerInfo(ctx context.Context, elec *concurrency.Election, id string) (string, error) {
 	resp, err := elec.Leader(ctx)
@@ -340,4 +326,16 @@ func contextDone(ctx context.Context, err error) error {
 	}
 
 	return nil
+}
+
+// GetOwnerID is a helper function used to get the owner ID.
+func GetOwnerID(ctx context.Context, cli *clientv3.Client, key string) (string, error) {
+	resp, err := cli.Get(ctx, key, clientv3.WithFirstCreate()...)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	if len(resp.Kvs) == 0 {
+		return "", concurrency.ErrElectionNoLeader
+	}
+	return string(resp.Kvs[0].Value), nil
 }

@@ -16,8 +16,6 @@ package roles
 import (
 	"context"
 	"sync/atomic"
-
-	"github.com/pingcap/errors"
 )
 
 var _ Manager = &mockManager{}
@@ -69,14 +67,6 @@ func (m *mockManager) ResignOwner(ctx context.Context) error {
 // Cancel implements Manager.Cancel interface.
 func (m *mockManager) Cancel() {
 	m.cancel()
-}
-
-// GetOwnerID implements Manager.GetOwnerID interface.
-func (m *mockManager) GetOwnerID(ctx context.Context) (string, error) {
-	if m.IsOwner() {
-		return m.ID(), nil
-	}
-	return "", errors.New("no owner")
 }
 
 // CampaignOwner implements Manager.CampaignOwner interface.

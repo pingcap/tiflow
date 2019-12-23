@@ -126,8 +126,7 @@ var ctrlCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			mockOwnerMgr := roles.NewOwnerManager(cli, "mock-id", kv.CaptureOwnerKey)
-			ownerID, err := mockOwnerMgr.GetOwnerID(context.Background())
+			ownerID, err := roles.GetOwnerID(context.Background(), cli, kv.CaptureOwnerKey)
 			if err != nil {
 				return err
 			}
