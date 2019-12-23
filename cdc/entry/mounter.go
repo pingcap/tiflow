@@ -22,22 +22,22 @@ func NewTxnMounter(schema *schema.Storage) *Mounter {
 }
 
 // Mount parses a raw transaction and returns a transaction
-func (m *Mounter) Mount(rawTxn model.RawTxn) (*model.Txn, error) {
-	t := &model.Txn{
+func (m *Mounter) Mount(rawTxn model.RawTxn) (model.Txn, error) {
+	t := model.Txn{
 		Ts: rawTxn.Ts,
 	}
 	var replaceDMLs, deleteDMLs []*model.DML
 	for _, raw := range rawTxn.Entries {
 		kvEntry, err := unmarshal(raw)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return model.Txn{}, errors.Trace(err)
 		}
 
 		switch e := kvEntry.(type) {
 		case *rowKVEntry:
 			dml, err := m.mountRowKVEntry(e)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return model.Txn{}, errors.Trace(err)
 			}
 			if dml != nil {
 				if dml.Tp == model.InsertDMLType {
@@ -49,7 +49,7 @@ func (m *Mounter) Mount(rawTxn model.RawTxn) (*model.Txn, error) {
 		case *indexKVEntry:
 			dml, err := m.mountIndexKVEntry(e)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return model.Txn{}, errors.Trace(err)
 			}
 			if dml != nil {
 				deleteDMLs = append(deleteDMLs, dml)
@@ -57,7 +57,7 @@ func (m *Mounter) Mount(rawTxn model.RawTxn) (*model.Txn, error) {
 		case *ddlJobKVEntry:
 			t.DDL, err = m.mountDDL(e)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return model.Txn{}, errors.Trace(err)
 			}
 			return t, nil
 		case *unknownKVEntry:

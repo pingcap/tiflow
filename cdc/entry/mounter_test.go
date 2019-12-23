@@ -67,7 +67,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 	rawTxn := getFirstRealTxn(ctx, c, plr)
 	t, err := mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, &model.Txn{
+	cs.assertTableTxnEquals(c, t, model.Txn{
 		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
@@ -94,7 +94,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 	rawTxn = getFirstRealTxn(ctx, c, plr)
 	t, err = mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, &model.Txn{
+	cs.assertTableTxnEquals(c, t, model.Txn{
 		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
@@ -129,7 +129,7 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 	rawTxn = getFirstRealTxn(ctx, c, plr)
 	t, err = mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, &model.Txn{
+	cs.assertTableTxnEquals(c, t, model.Txn{
 		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
@@ -160,7 +160,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 	rawTxn := getFirstRealTxn(ctx, c, plr)
 	t, err := mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, &model.Txn{
+	cs.assertTableTxnEquals(c, t, model.Txn{
 		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
@@ -187,7 +187,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 	rawTxn = getFirstRealTxn(ctx, c, plr)
 	t, err = mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, &model.Txn{
+	cs.assertTableTxnEquals(c, t, model.Txn{
 		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
@@ -222,7 +222,7 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 	rawTxn = getFirstRealTxn(ctx, c, plr)
 	t, err = mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, &model.Txn{
+	cs.assertTableTxnEquals(c, t, model.Txn{
 		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
@@ -261,7 +261,7 @@ func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
 	rawTxn := getFirstRealTxn(ctx, c, plr)
 	t, err := mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, &model.Txn{
+	cs.assertTableTxnEquals(c, t, model.Txn{
 		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
@@ -291,7 +291,7 @@ func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
 	rawTxn = getFirstRealTxn(ctx, c, plr)
 	t, err = mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, &model.Txn{
+	cs.assertTableTxnEquals(c, t, model.Txn{
 		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
 			{
@@ -309,7 +309,7 @@ func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
 }
 
 func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C,
-	obtained, expected *model.Txn) {
+	obtained, expected model.Txn) {
 	obtainedDMLs := obtained.DMLs
 	expectedDMLs := expected.DMLs
 	obtained.DMLs = nil

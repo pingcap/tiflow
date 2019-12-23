@@ -79,8 +79,8 @@ func (s *mockTsRWriter) SetGlobalResolvedTs(ts uint64) {
 // mockMounter pretend to decode a RawTxn by returning a Txn of the same Ts
 type mockMounter struct{}
 
-func (m mockMounter) Mount(rawTxn model.RawTxn) (*model.Txn, error) {
-	return &model.Txn{Ts: rawTxn.Ts}, nil
+func (m mockMounter) Mount(rawTxn model.RawTxn) (model.Txn, error) {
+	return model.Txn{Ts: rawTxn.Ts}, nil
 }
 
 // mockSinker append all received Txns for validation
