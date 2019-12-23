@@ -61,7 +61,6 @@ func NewMySQLSink(
 	infoGetter TableInfoGetter,
 	opts map[string]string,
 ) (Sink, error) {
-	// TODO
 	sinkURI, err := configureSinkURI(sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -71,12 +70,8 @@ func NewMySQLSink(
 		return nil, errors.Trace(err)
 	}
 	cachedInspector := newCachedInspector(db)
-	sink := mysqlSink{
-		db:           db,
-		infoGetter:   infoGetter,
-		tblInspector: cachedInspector,
-	}
-	return &sink, nil
+	sink := newMySQLSink(db, infoGetter, cachedInspector, false)
+	return sink, nil
 }
 
 func configureSinkURI(sinkURI string) (string, error) {
@@ -102,43 +97,52 @@ func NewMySQLSinkUsingSchema(db *sql.DB, schemaStorage *schema.Storage) Sink {
 			return info, err
 		},
 	}
-	return &mysqlSink{
-		db:           db,
-		infoGetter:   schemaStorage,
-		tblInspector: inspector,
-	}
+	return newMySQLSink(db, schemaStorage, inspector, false)
 }
 
 // NewMySQLSinkDDLOnly returns a sink that only processes DDL
 func NewMySQLSinkDDLOnly(db *sql.DB) Sink {
+	return newMySQLSink(db, nil, nil, true)
+}
+
+func newMySQLSink(db *sql.DB, infoGetter TableInfoGetter, tblInspector tableInspector, ddlOnly bool) Sink {
 	return &mysqlSink{
-		db:      db,
-		ddlOnly: true,
+		db:           db,
+		infoGetter:   infoGetter,
+		tblInspector: tblInspector,
+		ddlOnly:      ddlOnly,
 	}
 }
 
-func (s *mysqlSink) Emit(ctx context.Context, t model.Txn) error {
-	filterBySchemaAndTable(&t)
-	if len(t.DMLs) == 0 && t.DDL == nil {
-		log.Info("Whole txn ignored", zap.Uint64("ts", t.Ts))
-		return nil
-	}
-	if t.IsDDL() {
-		err := s.execDDLWithMaxRetries(ctx, t.DDL, 5)
-		if err == nil && !s.ddlOnly && isTableChanged(t.DDL) {
-			s.tblInspector.Refresh(t.DDL.Database, t.DDL.Table)
+func (s *mysqlSink) Emit(ctx context.Context, txns ...model.Txn) error {
+	// TODO: Merge txns to reduce the number of transactions needed
+	// TODO: Run txns concurrently
+	for _, t := range txns {
+		filterBySchemaAndTable(&t)
+		if len(t.DMLs) == 0 && t.DDL == nil {
+			log.Info("Whole txn ignored", zap.Uint64("ts", t.Ts))
+			continue
 		}
-		return errors.Trace(err)
+		if t.IsDDL() {
+			err := s.execDDLWithMaxRetries(ctx, t.DDL, 5)
+			if err == nil && !s.ddlOnly && isTableChanged(t.DDL) {
+				s.tblInspector.Refresh(t.DDL.Database, t.DDL.Table)
+			}
+			return errors.Trace(err)
+		}
+		if s.ddlOnly {
+			return errors.New("dmls disallowed in ddl-only mode")
+		}
+		dmls, err := s.formatDMLs(t.DMLs)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// TODO: Add retry
+		if err := s.execDMLs(ctx, dmls); err != nil {
+			return errors.Trace(err)
+		}
 	}
-	if s.ddlOnly {
-		log.Fatal("this sink only supports DDL, can not emit DMLs.")
-	}
-	dmls, err := s.formatDMLs(t.DMLs)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// TODO: Add retry
-	return errors.Trace(s.execDMLs(ctx, dmls))
+	return nil
 }
 
 func filterBySchemaAndTable(t *model.Txn) {
@@ -156,14 +160,6 @@ func filterBySchemaAndTable(t *model.Txn) {
 		}
 		t.DMLs = filteredDMLs
 	}
-}
-
-func (s *mysqlSink) EmitResolvedTimestamp(ctx context.Context, resolved uint64) error {
-	return nil
-}
-
-func (s *mysqlSink) Flush(ctx context.Context) error {
-	return nil
 }
 
 func (s *mysqlSink) Close() error {

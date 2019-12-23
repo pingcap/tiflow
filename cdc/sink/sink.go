@@ -15,8 +15,6 @@ package sink
 
 import (
 	"context"
-	"fmt"
-	"io"
 
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -24,15 +22,8 @@ import (
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
-	Emit(ctx context.Context, t model.Txn) error
-	EmitResolvedTimestamp(
-		ctx context.Context,
-		resolved uint64,
-	) error
-	// TODO: Add GetLastSuccessTs() uint64
-	// Flush blocks until every message enqueued by EmitRow and
-	// EmitResolvedTimestamp has been acknowledged by the sink.
-	Flush(ctx context.Context) error
+	// Emit saves the specified transactions to the sink backend
+	Emit(ctx context.Context, txns ...model.Txn) error
 	// Close does not guarantee delivery of outstanding messages.
 	Close() error
 }
@@ -41,28 +32,4 @@ type Sink interface {
 type TableInfoGetter interface {
 	TableByID(id int64) (info *timodel.TableInfo, ok bool)
 	GetTableIDByName(schema, table string) (int64, bool)
-}
-
-type writerSink struct {
-	io.Writer
-}
-
-var _ Sink = &writerSink{}
-
-func (s *writerSink) Emit(ctx context.Context, t model.Txn) error {
-	fmt.Fprintf(s, "commit ts: %d", t.Ts)
-	return nil
-}
-
-func (s *writerSink) EmitResolvedTimestamp(ctx context.Context, resolved uint64) error {
-	fmt.Fprintf(s, "resolved: %d", resolved)
-	return nil
-}
-
-func (s *writerSink) Flush(ctx context.Context) error {
-	return nil
-}
-
-func (s *writerSink) Close() error {
-	return nil
 }

@@ -90,10 +90,10 @@ type mockSinker struct {
 	mu     sync.Mutex
 }
 
-func (m *mockSinker) Emit(ctx context.Context, t model.Txn) error {
+func (m *mockSinker) Emit(ctx context.Context, txns ...model.Txn) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.synced = append(m.synced, t)
+	m.synced = append(m.synced, txns...)
 	return nil
 }
 
