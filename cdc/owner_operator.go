@@ -104,7 +104,7 @@ func (h *ddlHandler) PullDDL() (uint64, []*model.DDL, error) {
 }
 
 // ExecDDL implements roles.OwnerDDLHandler interface.
-func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error {
+func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, txn model.Txn) error {
 	// TODO cache the sink
 	// TODO handle other target database, kile kafka, file
 	db, err := sql.Open("mysql", sinkURI)
@@ -114,7 +114,7 @@ func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL
 	defer db.Close()
 	s := sink.NewMySQLSinkDDLOnly(db)
 
-	err = s.Emit(ctx, model.Txn{Ts: ddl.Job.BinlogInfo.FinishedTS, DDL: ddl})
+	err = s.Emit(ctx, txn)
 	return errors.Trace(err)
 }
 
