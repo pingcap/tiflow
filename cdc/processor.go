@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -60,7 +62,7 @@ type txnChannel struct {
 	putBackTxn *model.RawTxn
 }
 
-// Forward push all txn with commit ts not greater than ts into entryC.
+// Forward push all txn with commit ts not greater than ts into targetC.
 func (p *txnChannel) Forward(ctx context.Context, ts uint64, targetC chan<- model.RawTxn) {
 	if p.putBackTxn != nil {
 		t := *p.putBackTxn
@@ -201,7 +203,6 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 	// so we set `needEncode` to false.
 	ddlPuller := puller.NewPuller(pdCli, changefeed.GetCheckpointTs(), []util.Span{util.GetDDLSpan()}, false)
 
-	// TODO: get time zone from config
 	mounter := fNewMounter(schemaStorage)
 
 	sink, err := fNewMySQLSink(changefeed.SinkURI, schemaStorage, changefeed.Opts)
@@ -311,6 +312,8 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 
 			for _, table := range p.tables {
 				ts := table.loadResolvedTS()
+				tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID, strconv.FormatInt(table.id, 10)).Set(float64(oracle.ExtractPhysical(ts)))
+
 				if ts < minResolvedTs {
 					minResolvedTs = ts
 				}
@@ -355,6 +358,13 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		p.handleTables(ctx, oldInfo, p.subInfo, oldInfo.CheckPointTs)
 		syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.subInfo.TableInfos)))
 
+		if len(oldInfo.TableInfos) > len(p.subInfo.TableInfos) {
+			// some table is removed, we will not both remove and add table in one operation.
+			// keep CheckpointTs and ResolvedTs as the old in memory cache one.
+			p.subInfo.CheckPointTs = oldInfo.CheckPointTs
+			p.subInfo.ResolvedTs = oldInfo.ResolvedTs
+		}
+
 		log.Info("update subchangefeed info", zap.Stringer("info", p.subInfo))
 		return nil
 	case nil:
@@ -365,6 +375,14 @@ func (p *processor) updateInfo(ctx context.Context) error {
 }
 
 func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed, added []*model.ProcessTableInfo) {
+	sort.Slice(oldInfo, func(i, j int) bool {
+		return oldInfo[i].ID < oldInfo[j].ID
+	})
+
+	sort.Slice(newInfo, func(i, j int) bool {
+		return newInfo[i].ID < newInfo[j].ID
+	})
+
 	i, j := 0, 0
 	for i < len(oldInfo) && j < len(newInfo) {
 		if oldInfo[i].ID == newInfo[j].ID {
@@ -384,12 +402,23 @@ func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed,
 	for ; j < len(newInfo); j++ {
 		added = append(added, newInfo[j])
 	}
+
+	if len(removed) > 0 || len(added) > 0 {
+		log.Debug("table diff", zap.Reflect("old", oldInfo),
+			zap.Reflect("new", newInfo),
+			zap.Reflect("add", added),
+			zap.Reflect("remove", removed),
+		)
+	}
+
 	return
 }
 
 func (p *processor) removeTable(tableID int64) {
 	p.tablesMu.Lock()
 	defer p.tablesMu.Unlock()
+
+	log.Debug("remove table", zap.Int64("id", tableID))
 
 	table, ok := p.tables[tableID]
 	if !ok {
@@ -399,6 +428,7 @@ func (p *processor) removeTable(tableID int64) {
 
 	table.puller.Cancel()
 	delete(p.tables, tableID)
+	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureID, strconv.FormatInt(tableID, 10))
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller

@@ -16,12 +16,19 @@ package kv
 import "github.com/prometheus/client_golang/prometheus"
 
 var (
-	regionSplitCounter = prometheus.NewCounter(
+	eventFeedErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
-			Name:      "region_split_count",
-			Help:      "The number of region split events since start.",
+			Name:      "event_feed_error_count",
+			Help:      "The number of error return by tikv",
+		}, []string{"type"})
+	eventFeedGauge = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "event_feed_count",
+			Help:      "The number of event feed running",
 		})
 	scanRegionsDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -43,7 +50,8 @@ var (
 
 // InitMetrics registers all metrics in the kv package
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(regionSplitCounter)
+	registry.MustRegister(eventFeedErrorCounter)
 	registry.MustRegister(scanRegionsDuration)
 	registry.MustRegister(eventSize)
+	registry.MustRegister(eventFeedGauge)
 }

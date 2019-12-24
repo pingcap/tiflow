@@ -180,6 +180,9 @@ func (c *CDCClient) getStore(
 func (c *CDCClient) EventFeed(
 	ctx context.Context, span util.Span, ts uint64, eventCh chan<- *model.RegionFeedEvent,
 ) error {
+	eventFeedGauge.Inc()
+	defer eventFeedGauge.Dec()
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	regionCh := make(chan singleRegionInfo, 16)
@@ -243,15 +246,18 @@ func (c *CDCClient) partialRegionFeed(
 			switch eerr := errors.Cause(err).(type) {
 			case *eventError:
 				if eerr.GetNotLeader() != nil {
+					eventFeedErrorCounter.WithLabelValues("NotLeader").Inc()
 					regionInfo.meta = nil
 					return errors.Trace(err)
 				} else if eerr.GetEpochNotMatch() != nil {
-					regionSplitCounter.Inc()
+					eventFeedErrorCounter.WithLabelValues("EpochNotMatch").Inc()
 					return c.divideAndSendEventFeedToRegions(ctx, regionInfo.span, ts, regionCh)
 				} else if eerr.GetRegionNotFound() != nil {
+					eventFeedErrorCounter.WithLabelValues("RegionNotFound").Inc()
 					regionInfo.meta = nil
 					return errors.Trace(err)
 				} else {
+					eventFeedErrorCounter.WithLabelValues("Unknown").Inc()
 					log.Warn("receive empty or unknown error msg", zap.Stringer("error", eerr))
 					return errors.Annotate(err, "receive empty or unknow error msg")
 				}
@@ -405,6 +411,7 @@ func (c *CDCClient) singleEventFeed(
 	// TODO: drop this if we totally depends on the ResolvedTs event from
 	// tikv to emit the RegionFeedCheckpoint.
 	sorter := newSorter(maxItemFn)
+	defer sorter.close()
 
 	for {
 		cevent, err := stream.Recv()
