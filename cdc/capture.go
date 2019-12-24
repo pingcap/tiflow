@@ -107,14 +107,7 @@ func (c *Capture) OnStopProcessor(p *processor, err error) {
 	if atomic.LoadInt32(&c.procState.closed) == 1 {
 		return
 	}
-	err2 := p.wg.Wait()
-	if err2 != nil && errors.Cause(err2) != context.Canceled {
-		log.Error("processor wait error",
-			zap.String("captureID", p.captureID),
-			zap.String("changefeedID", p.changefeedID),
-			zap.Error(err2),
-		)
-	}
+	p.wait()
 	delete(c.processors, p.changefeedID)
 }
 
@@ -152,14 +145,7 @@ func (c *Capture) Cleanup() {
 	atomic.StoreInt32(&c.procState.closed, 1)
 
 	for _, processor := range c.processors {
-		err := processor.wg.Wait()
-		if err != nil && errors.Cause(err) != context.Canceled {
-			log.Error("processor wait error",
-				zap.String("captureID", processor.captureID),
-				zap.String("changefeedID", processor.changefeedID),
-				zap.Error(err),
-			)
-		}
+		processor.wait()
 	}
 }
 
