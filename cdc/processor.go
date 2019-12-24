@@ -602,6 +602,11 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				cancel()
 			}
 			return ctx.Err()
+		default:
+			if err := flush(ctx); err != nil {
+				return errors.Trace(err)
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 }
