@@ -16,6 +16,8 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -42,6 +44,10 @@ type Capture struct {
 	ownerWorker  *ownerImpl
 
 	processors map[string]*processor
+	procState  struct {
+		sync.Mutex
+		closed int32
+	}
 
 	info *model.CaptureInfo
 }
@@ -93,7 +99,14 @@ func (c *Capture) OnRunProcessor(p *processor) {
 }
 
 // OnStopProcessor implements processorCallback.
-func (c *Capture) OnStopProcessor(p *processor) {
+func (c *Capture) OnStopProcessor(p *processor, err error) {
+	log.Info("stop to run processor", zap.String("changefeed id", p.changefeedID), zap.Error(err))
+	c.procState.Lock()
+	defer c.procState.Unlock()
+	if atomic.LoadInt32(&c.procState.closed) == 1 {
+		return
+	}
+	p.wg.Wait()
 	delete(c.processors, p.changefeedID)
 }
 
@@ -122,6 +135,20 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	})
 
 	return errg.Wait()
+}
+
+// Cleanup cleans all dynamic resources
+func (c *Capture) Cleanup() {
+	c.procState.Lock()
+	defer c.procState.Unlock()
+	atomic.StoreInt32(&c.procState.closed, 1)
+
+	for cid, processor := range c.processors {
+		err := processor.wg.Wait()
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Error("processor wait error", zap.String("changefeedID", cid), zap.Error(err))
+		}
+	}
 }
 
 // Close closes the capture by unregistering it from etcd
