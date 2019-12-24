@@ -15,12 +15,15 @@ package puller
 
 import (
 	"context"
+	"sort"
+
+	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/txn"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
 )
@@ -34,12 +37,18 @@ type Puller interface {
 	Output() Buffer
 }
 
+// resolveTsTracker checks resolved event of spans and moves the global resolved ts ahead
+type resolveTsTracker interface {
+	Forward(span util.Span, ts uint64) bool
+	Frontier() uint64
+}
+
 type pullerImpl struct {
 	pdCli        pd.Client
 	checkpointTs uint64
 	spans        []util.Span
 	buf          Buffer
-	tsTracker    txn.ResolveTsTracker
+	tsTracker    resolveTsTracker
 	// needEncode represents whether we need to encode a key when checking it is in span
 	needEncode bool
 }
@@ -146,5 +155,62 @@ func (p *pullerImpl) GetResolvedTs() uint64 {
 }
 
 func (p *pullerImpl) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
-	return txn.CollectRawTxns(ctx, p.buf.Get, outputFn, p.tsTracker)
+	return collectRawTxns(ctx, p.buf.Get, outputFn, p.tsTracker)
+}
+
+// collectRawTxns collects KV events from the inputFn,
+// groups them by transactions and sends them to the outputFn.
+func collectRawTxns(
+	ctx context.Context,
+	inputFn func(context.Context) (model.KvOrResolved, error),
+	outputFn func(context.Context, model.RawTxn) error,
+	tracker resolveTsTracker,
+) error {
+	entryGroups := make(map[uint64][]*model.RawKVEntry)
+	for {
+		be, err := inputFn(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if be.KV != nil {
+			entryGroups[be.KV.Ts] = append(entryGroups[be.KV.Ts], be.KV)
+		} else if be.Resolved != nil {
+			resolvedTs := be.Resolved.Timestamp
+			// 1. Forward is called in a single thread
+			// 2. The only way the global minimum resolved Ts can be forwarded is that
+			// 	  the resolveTs we pass in replaces the original one
+			// Thus, we can just use resolvedTs here as the new global minimum resolved Ts.
+			forwarded := tracker.Forward(be.Resolved.Span, resolvedTs)
+			if !forwarded {
+				continue
+			}
+			var readyTxns []model.RawTxn
+			for ts, entries := range entryGroups {
+				if ts <= resolvedTs {
+					readyTxns = append(readyTxns, model.RawTxn{Ts: ts, Entries: entries})
+					delete(entryGroups, ts)
+				}
+			}
+			sort.Slice(readyTxns, func(i, j int) bool {
+				return readyTxns[i].Ts < readyTxns[j].Ts
+			})
+			for _, t := range readyTxns {
+				err := outputFn(ctx, t)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			}
+			if len(readyTxns) == 0 {
+				log.Info("Forwarding fake txn", zap.Uint64("ts", resolvedTs))
+				fakeTxn := model.RawTxn{
+					Ts:      resolvedTs,
+					Entries: nil,
+				}
+				err := outputFn(ctx, fakeTxn)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			}
+		}
+	}
 }
