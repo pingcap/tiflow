@@ -525,6 +525,19 @@ func (p *processor) pullDDLJob(ctx context.Context) error {
 
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
+	const bulkLimit = 128
+	pendingTxns := make([]model.Txn, 0, bulkLimit)
+	flush := func(ctx2 context.Context) error {
+		if len(pendingTxns) == 0 {
+			return nil
+		}
+		if err := p.sink.Emit(ctx2, pendingTxns...); err != nil {
+			return errors.Trace(err)
+		}
+		txnCounter.WithLabelValues("executed", p.changefeedID, p.captureID).Add(float64(len(pendingTxns)))
+		pendingTxns = pendingTxns[:0]
+		return nil
+	}
 	for {
 		select {
 		case rawTxn, ok := <-p.ddlJobsCh:
@@ -541,35 +554,53 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			if !t.IsDDL() {
+				log.Warn("Receive non-DDL txn from ddlJobsCh", zap.Uint64("ts", t.Ts))
 				continue
 			}
 			p.schemaStorage.AddJob(t.DDL.Job)
+			if err := flush(ctx); err != nil {
+				return errors.Trace(err)
+			}
 			atomic.StoreUint64(&p.ddlResolveTS, rawTxn.Ts)
-		case e, ok := <-p.resolvedTxns:
+		case rawTxn, ok := <-p.resolvedTxns:
 			if !ok {
 				return nil
 			}
-			if e.IsResolved {
+			if rawTxn.IsResolved {
+				// TODO: Avoid flushing for every resolved message
+				if err := flush(ctx); err != nil {
+					return errors.Trace(err)
+				}
 				select {
-				case p.executedTxns <- e:
+				case p.executedTxns <- rawTxn:
+					continue
 				case <-ctx.Done():
 					return errors.Trace(ctx.Err())
 				}
-			} else {
-				err := p.schemaStorage.HandlePreviousDDLJobIfNeed(e.Ts)
-				if err != nil {
+			}
+
+			if err := p.schemaStorage.HandlePreviousDDLJobIfNeed(rawTxn.Ts); err != nil {
+				return errors.Trace(err)
+			}
+			txn, err := p.mounter.Mount(rawTxn)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			pendingTxns = append(pendingTxns, txn)
+			if len(pendingTxns) >= bulkLimit {
+				if err := flush(ctx); err != nil {
 					return errors.Trace(err)
 				}
-				txn, err := p.mounter.Mount(e)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				if err := p.sink.Emit(ctx, txn); err != nil {
-					return errors.Trace(err)
-				}
-				txnCounter.WithLabelValues("executed", p.changefeedID, p.captureID).Inc()
 			}
 		case <-ctx.Done():
+			err := ctx.Err()
+			if err == context.Canceled {
+				timedCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+				if err := flush(timedCtx); err != nil {
+					log.Error("Failed to flush Txns before quiting", zap.Error(err))
+				}
+				cancel()
+			}
 			return ctx.Err()
 		}
 	}
