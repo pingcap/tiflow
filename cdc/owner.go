@@ -92,6 +92,22 @@ func (c *changeFeed) String() string {
 	return s
 }
 
+func (c *changeFeed) updateProcessorInfos(processInfos model.ProcessorsInfos) {
+	for cid, pinfo := range processInfos {
+		if _, ok := c.processorLastUpdateTime[cid]; !ok {
+			c.processorLastUpdateTime[cid] = time.Now()
+			continue
+		}
+
+		oldPinfo, ok := c.ProcessorInfos[cid]
+		if !ok || oldPinfo.ResolvedTs != pinfo.ResolvedTs || oldPinfo.CheckPointTs != pinfo.CheckPointTs {
+			c.processorLastUpdateTime[cid] = time.Now()
+		}
+	}
+
+	c.ProcessorInfos = processInfos
+}
+
 // filter return true if we should not sync the table to downstream.
 // we can add configuration support at the detail.
 func filter(_ *model.ChangeFeedDetail, table schema.TableName) bool {
@@ -420,30 +436,72 @@ func (o *ownerImpl) handleWatchCapture() error {
 	return nil
 }
 
+func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.ProcessorsInfos, detail *model.ChangeFeedDetail) (*changeFeed, error) {
+	checkpointTs := detail.GetCheckpointTs()
+	log.Info("Find new changefeed", zap.Reflect("detail", detail),
+		zap.Uint64("checkpoint ts", checkpointTs))
+
+	schemaStorage, err := createSchemaStore(o.pdEndpoints)
+	if err != nil {
+		return nil, errors.Annotate(err, "create schema store failed")
+	}
+
+	err = schemaStorage.HandlePreviousDDLJobIfNeed(checkpointTs)
+	if err != nil {
+		return nil, errors.Annotate(err, "handle ddl job failed")
+	}
+
+	ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
+
+	tables := make(map[uint64]schema.TableName)
+	orphanTables := make(map[uint64]model.ProcessTableInfo)
+	for id, table := range schemaStorage.CloneTables() {
+		if filter(detail, table) {
+			continue
+		}
+
+		tables[id] = table
+		orphanTables[id] = model.ProcessTableInfo{
+			ID:      id,
+			StartTs: checkpointTs,
+		}
+	}
+
+	cf := &changeFeed{
+		detail:                  detail,
+		ID:                      id,
+		client:                  o.etcdClient,
+		ddlHandler:              ddlHandler,
+		schema:                  schemaStorage,
+		tables:                  tables,
+		orphanTables:            orphanTables,
+		toCleanTables:           make(map[uint64]struct{}),
+		processorLastUpdateTime: make(map[string]time.Time),
+		ChangeFeedInfo: &model.ChangeFeedInfo{
+			SinkURI:      detail.SinkURI,
+			ResolvedTs:   0,
+			CheckpointTs: checkpointTs,
+		},
+		Status:          model.ChangeFeedSyncDML,
+		TargetTs:        detail.GetTargetTs(),
+		ProcessorInfos:  processorsInfos,
+		DDLCurrentIndex: 0,
+		infoWriter:      storage.NewOwnerSubCFInfoEtcdWriter(o.etcdClient),
+	}
+	return cf, nil
+}
+
 func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
-	changefeeds, pinfos, err := o.cfRWriter.Read(ctx)
+	cfDetails, pinfos, err := o.cfRWriter.Read(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	for changeFeedID, changeFeedInfo := range pinfos {
-		if cfInfo, exist := o.changeFeeds[changeFeedID]; exist {
-			for cid, pinfo := range changeFeedInfo {
-				if _, ok := cfInfo.processorLastUpdateTime[cid]; !ok {
-					cfInfo.processorLastUpdateTime[cid] = time.Now()
-					continue
-				}
-
-				oldPinfo, ok := cfInfo.ProcessorInfos[cid]
-				if !ok || oldPinfo.ResolvedTs != pinfo.ResolvedTs || oldPinfo.CheckPointTs != pinfo.CheckPointTs {
-					cfInfo.processorLastUpdateTime[cid] = time.Now()
-				}
-			}
-
-			cfInfo.ProcessorInfos = changeFeedInfo
-
-			for id, info := range cfInfo.ProcessorInfos {
-				lastUpdateTime := cfInfo.processorLastUpdateTime[id]
+		if cf, exist := o.changeFeeds[changeFeedID]; exist {
+			cf.updateProcessorInfos(changeFeedInfo)
+			for id, info := range cf.ProcessorInfos {
+				lastUpdateTime := cf.processorLastUpdateTime[id]
 				if time.Since(lastUpdateTime) > markProcessorDownTime {
 					o.markDownProcessor[id] = struct{}{}
 					log.Info("markdown processor", zap.String("id", id),
@@ -453,71 +511,17 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 			continue
 		}
 
-		detail := changefeeds[changeFeedID]
-		checkpointTs := detail.GetCheckpointTs()
-		log.Info("find new changefeed", zap.Reflect("detail", detail),
-			zap.Uint64("checkpoint ts", checkpointTs))
-
 		// we find a new changefeed, init changefeed info here.
-		var targetTs uint64
-		changefeed, ok := changefeeds[changeFeedID]
+		detail, ok := cfDetails[changeFeedID]
 		if !ok {
 			return errors.Annotatef(model.ErrChangeFeedNotExists, "id:%s", changeFeedID)
 		}
 
-		if changefeed.TargetTs == uint64(0) {
-			targetTs = uint64(math.MaxUint64)
-		} else {
-			targetTs = changefeed.TargetTs
-		}
-
-		schemaStorage, err := createSchemaStore(o.pdEndpoints)
+		newCf, err := o.newChangeFeed(changeFeedID, changeFeedInfo, detail)
 		if err != nil {
-			return errors.Annotate(err, "create schema store failed")
+			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
-
-		err = schemaStorage.HandlePreviousDDLJobIfNeed(checkpointTs)
-		if err != nil {
-			return errors.Annotate(err, "handle ddl job failed")
-		}
-
-		ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
-
-		tables := make(map[uint64]schema.TableName)
-		orphanTables := make(map[uint64]model.ProcessTableInfo)
-		for id, table := range schemaStorage.CloneTables() {
-			if filter(detail, table) {
-				continue
-			}
-
-			tables[id] = table
-			orphanTables[id] = model.ProcessTableInfo{
-				ID:      id,
-				StartTs: checkpointTs,
-			}
-		}
-
-		o.changeFeeds[changeFeedID] = &changeFeed{
-			detail:                  detail,
-			ID:                      changeFeedID,
-			client:                  o.etcdClient,
-			ddlHandler:              ddlHandler,
-			schema:                  schemaStorage,
-			tables:                  tables,
-			orphanTables:            orphanTables,
-			toCleanTables:           make(map[uint64]struct{}),
-			processorLastUpdateTime: make(map[string]time.Time),
-			ChangeFeedInfo: &model.ChangeFeedInfo{
-				SinkURI:      changefeed.SinkURI,
-				ResolvedTs:   0,
-				CheckpointTs: checkpointTs,
-			},
-			Status:          model.ChangeFeedSyncDML,
-			TargetTs:        targetTs,
-			ProcessorInfos:  changeFeedInfo,
-			DDLCurrentIndex: 0,
-			infoWriter:      storage.NewOwnerSubCFInfoEtcdWriter(o.etcdClient),
-		}
+		o.changeFeeds[changeFeedID] = newCf
 	}
 
 	for _, info := range o.changeFeeds {
