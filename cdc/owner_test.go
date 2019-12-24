@@ -130,7 +130,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 
 	tables := map[uint64]schema.TableName{1: {Schema: "any"}}
 
-	changeFeedInfos := map[model.ChangeFeedID]*changeFeedInfo{
+	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
 			tables:                  tables,
 			ChangeFeedInfo:          &model.ChangeFeedInfo{},
@@ -150,7 +150,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 	c.Assert(err, check.IsNil)
 	owner := &ownerImpl{
 		cancelWatchCapture: cancel,
-		changeFeedInfos:    changeFeedInfos,
+		changeFeeds:        changeFeeds,
 		cfRWriter:          handler,
 		manager:            manager,
 	}
@@ -309,7 +309,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 
 	tables := map[uint64]schema.TableName{1: {Schema: "any"}}
 
-	changeFeedInfos := map[model.ChangeFeedID]*changeFeedInfo{
+	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
 			tables:                  tables,
 			ChangeFeedInfo:          &model.ChangeFeedInfo{},
@@ -329,7 +329,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 	owner := &ownerImpl{
 		cancelWatchCapture: cancel,
-		changeFeedInfos:    changeFeedInfos,
+		changeFeeds:        changeFeeds,
 
 		// ddlHandler: handler,
 		cfRWriter: handler,
@@ -346,7 +346,7 @@ type changefeedInfoSuite struct {
 var _ = check.Suite(&changefeedInfoSuite{})
 
 func (s *changefeedInfoSuite) TestMinimumTables(c *check.C) {
-	cf := &changeFeedInfo{
+	cf := &changeFeed{
 		ProcessorInfos: map[model.CaptureID]*model.SubChangeFeedInfo{
 			"c1": {
 				TableInfos: make([]*model.ProcessTableInfo, 2),

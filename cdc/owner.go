@@ -46,7 +46,7 @@ type OwnerDDLHandler interface {
 	ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error
 }
 
-// ChangeFeedInfoRWriter defines the Reader and Writer for changeFeedInfo
+// ChangeFeedInfoRWriter defines the Reader and Writer for changeFeed
 type ChangeFeedInfoRWriter interface {
 	// Read the changefeed info from storage such as etcd.
 	Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedDetail, map[model.ChangeFeedID]model.ProcessorsInfos, error)
@@ -54,7 +54,7 @@ type ChangeFeedInfoRWriter interface {
 	Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error
 }
 
-type changeFeedInfo struct {
+type changeFeed struct {
 	ID     string
 	detail *model.ChangeFeedDetail
 	*model.ChangeFeedInfo
@@ -78,7 +78,7 @@ type changeFeedInfo struct {
 }
 
 // String implements fmt.Stringer interface.
-func (c *changeFeedInfo) String() string {
+func (c *changeFeed) String() string {
 	format := "{\n ID: %s\n detail: %+v\n info: %+v\n Status: %v\n ProcessorInfos: %+v\n tables: %+v\n orphanTables: %+v\n toCleanTables: %v\n DDLCurrentIndex: %d\n ddlResolvedTs: %d\n ddlJobHistory: %+v\n}\n\n"
 	s := fmt.Sprintf(format,
 		c.ID, c.detail, c.ChangeFeedInfo, c.Status, c.ProcessorInfos, c.tables,
@@ -108,7 +108,7 @@ func filter(_ *model.ChangeFeedDetail, table schema.TableName) bool {
 	return false
 }
 
-func (c *changeFeedInfo) addTable(id, startTs uint64, table schema.TableName) {
+func (c *changeFeed) addTable(id, startTs uint64, table schema.TableName) {
 	if filter(c.detail, table) {
 		return
 	}
@@ -120,7 +120,7 @@ func (c *changeFeedInfo) addTable(id, startTs uint64, table schema.TableName) {
 	}
 }
 
-func (c *changeFeedInfo) removeTable(id uint64) {
+func (c *changeFeed) removeTable(id uint64) {
 	delete(c.tables, id)
 
 	if _, ok := c.orphanTables[id]; ok {
@@ -130,11 +130,11 @@ func (c *changeFeedInfo) removeTable(id uint64) {
 	}
 }
 
-func (c *changeFeedInfo) selectCapture(captures map[string]*model.CaptureInfo) string {
+func (c *changeFeed) selectCapture(captures map[string]*model.CaptureInfo) string {
 	return c.minimumTablesCapture(captures)
 }
 
-func (c *changeFeedInfo) minimumTablesCapture(captures map[string]*model.CaptureInfo) string {
+func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo) string {
 	if len(captures) == 0 {
 		return ""
 	}
@@ -159,16 +159,16 @@ func (c *changeFeedInfo) minimumTablesCapture(captures map[string]*model.Capture
 	return minID
 }
 
-func (c *changeFeedInfo) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo) {
+func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo) {
 	c.cleanTables(ctx)
 	c.banlanceOrphanTables(ctx, captures)
 }
 
-func (c *changeFeedInfo) restoreTableInfos(infoSnapshot *model.SubChangeFeedInfo, captureID string) {
+func (c *changeFeed) restoreTableInfos(infoSnapshot *model.SubChangeFeedInfo, captureID string) {
 	c.ProcessorInfos[captureID].TableInfos = infoSnapshot.TableInfos
 }
 
-func (c *changeFeedInfo) cleanTables(ctx context.Context) {
+func (c *changeFeed) cleanTables(ctx context.Context) {
 	var cleanIDs []uint64
 
 cleanLoop:
@@ -223,7 +223,7 @@ func findSubChangefeedWithTable(infos model.ProcessorsInfos, tableID uint64) (ca
 	return "", nil, false
 }
 
-func (c *changeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo) {
+func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo) {
 	if len(captures) == 0 {
 		return
 	}
@@ -268,7 +268,7 @@ func (c *changeFeedInfo) banlanceOrphanTables(ctx context.Context, captures map[
 	}
 }
 
-func (c *changeFeedInfo) applyJob(job *pmodel.Job) error {
+func (c *changeFeed) applyJob(job *pmodel.Job) error {
 	log.Info("apply job", zap.String("sql", job.Query), zap.Int64("job id", job.ID))
 
 	schamaName, tableName, _, err := c.schema.HandleDDL(job)
@@ -300,7 +300,7 @@ func (c *changeFeedInfo) applyJob(job *pmodel.Job) error {
 }
 
 type ownerImpl struct {
-	changeFeedInfos   map[model.ChangeFeedID]*changeFeedInfo
+	changeFeeds       map[model.ChangeFeedID]*changeFeed
 	markDownProcessor map[string]struct{}
 
 	cfRWriter ChangeFeedInfoRWriter
@@ -341,7 +341,7 @@ func NewOwner(pdEndpoints []string, cli *clientv3.Client, manager roles.Manager)
 		pdEndpoints:        pdEndpoints,
 		pdClient:           pdClient,
 		markDownProcessor:  make(map[string]struct{}),
-		changeFeedInfos:    make(map[model.ChangeFeedID]*changeFeedInfo),
+		changeFeeds:        make(map[model.ChangeFeedID]*changeFeed),
 		cfRWriter:          storage.NewChangeFeedInfoEtcdRWriter(cli),
 		etcdClient:         cli,
 		manager:            manager,
@@ -382,7 +382,7 @@ func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 
 	delete(o.captures, info.ID)
 
-	for _, feed := range o.changeFeedInfos {
+	for _, feed := range o.changeFeeds {
 		pinfo, ok := feed.ProcessorInfos[info.ID]
 		if !ok {
 			continue
@@ -419,18 +419,15 @@ func (o *ownerImpl) handleWatchCapture() error {
 	return nil
 }
 
-func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
+func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 	changefeeds, pinfos, err := o.cfRWriter.Read(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	for changeFeedID, etcdChangeFeedInfo := range pinfos {
-		var cfInfo *changeFeedInfo
-		var exist bool
-
-		if cfInfo, exist = o.changeFeedInfos[changeFeedID]; exist {
-			for cid, pinfo := range etcdChangeFeedInfo {
+	for changeFeedID, changeFeedInfo := range pinfos {
+		if cfInfo, exist := o.changeFeeds[changeFeedID]; exist {
+			for cid, pinfo := range changeFeedInfo {
 				if _, ok := cfInfo.processorLastUpdateTime[cid]; !ok {
 					cfInfo.processorLastUpdateTime[cid] = time.Now()
 					continue
@@ -442,7 +439,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 				}
 			}
 
-			cfInfo.ProcessorInfos = etcdChangeFeedInfo
+			cfInfo.ProcessorInfos = changeFeedInfo
 
 			for id := range cfInfo.ProcessorInfos {
 				lastUpdateTime := cfInfo.processorLastUpdateTime[id]
@@ -497,7 +494,7 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			}
 		}
 
-		o.changeFeedInfos[changeFeedID] = &changeFeedInfo{
+		o.changeFeeds[changeFeedID] = &changeFeed{
 			detail:                  detail,
 			ID:                      changeFeedID,
 			client:                  o.etcdClient,
@@ -514,13 +511,13 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 			},
 			Status:          model.ChangeFeedSyncDML,
 			TargetTs:        targetTs,
-			ProcessorInfos:  etcdChangeFeedInfo,
+			ProcessorInfos:  changeFeedInfo,
 			DDLCurrentIndex: 0,
 			infoWriter:      storage.NewOwnerSubCFInfoEtcdWriter(o.etcdClient),
 		}
 	}
 
-	for _, info := range o.changeFeedInfos {
+	for _, info := range o.changeFeeds {
 		info.tryBalance(ctx, o.captures)
 	}
 
@@ -528,14 +525,14 @@ func (o *ownerImpl) loadChangeFeedInfos(ctx context.Context) error {
 }
 
 func (o *ownerImpl) flushChangeFeedInfos(ctx context.Context) error {
-	infos := make(map[model.CaptureID]*model.ChangeFeedInfo)
-	for id, info := range o.changeFeedInfos {
+	infos := make(map[model.ChangeFeedID]*model.ChangeFeedInfo, len(o.changeFeeds))
+	for id, info := range o.changeFeeds {
 		infos[id] = info.ChangeFeedInfo
 	}
 	return errors.Trace(o.cfRWriter.Write(ctx, infos))
 }
 
-func (c *changeFeedInfo) pullDDLJob() error {
+func (c *changeFeed) pullDDLJob() error {
 	ddlResolvedTs, ddlJobs, err := c.ddlHandler.PullDDL()
 	if err != nil {
 		return errors.Trace(err)
@@ -547,7 +544,7 @@ func (c *changeFeedInfo) pullDDLJob() error {
 
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
 func (o *ownerImpl) calcResolvedTs() error {
-	for _, cfInfo := range o.changeFeedInfos {
+	for _, cfInfo := range o.changeFeeds {
 		if cfInfo.Status != model.ChangeFeedSyncDML {
 			continue
 		}
@@ -615,7 +612,7 @@ func (o *ownerImpl) calcResolvedTs() error {
 // After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
 func (o *ownerImpl) handleDDL(ctx context.Context) error {
 waitCheckpointTsLoop:
-	for changeFeedID, cfInfo := range o.changeFeedInfos {
+	for changeFeedID, cfInfo := range o.changeFeeds {
 		if cfInfo.Status != model.ChangeFeedWaitToExecDDL {
 			continue
 		}
@@ -715,7 +712,7 @@ func (o *ownerImpl) run(ctx context.Context) error {
 
 	o.handleMarkdownProcessor(cctx)
 
-	err := o.loadChangeFeedInfos(cctx)
+	err := o.loadChangeFeeds(cctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -742,7 +739,7 @@ func (o *ownerImpl) IsOwner(_ context.Context) bool {
 }
 
 func (o *ownerImpl) writeDebugInfo(w io.Writer) {
-	for _, info := range o.changeFeedInfos {
+	for _, info := range o.changeFeeds {
 		// fmt.Fprintf(w, "%+v\n", *info)
 		fmt.Fprintf(w, "%s\n", info)
 	}
