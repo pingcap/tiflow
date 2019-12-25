@@ -139,7 +139,6 @@ var caseInsertBitClean = []string{`
 `,
 }
 
-/*
 // Test issue: TOOL-1407
 var caseRecoverAndInsert = []string{`
 CREATE TABLE binlog_recover_and_insert(id INT PRIMARY KEY, a INT);
@@ -166,7 +165,6 @@ var caseRecoverAndInsertClean = []string{`
 	DROP TABLE binlog_recover_and_insert;
 `,
 }
-*/
 
 type testRunner struct {
 	src    *sql.DB
@@ -212,10 +210,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr.execSQLs(caseInsertBit)
 	tr.execSQLs(caseInsertBitClean)
 
-	// TODO: fix me
 	// run caseRecoverAndInsert
-	// tr.execSQLs(caseRecoverAndInsert)
-	// tr.execSQLs(caseRecoverAndInsertClean)
+	tr.execSQLs(caseRecoverAndInsert)
+	tr.execSQLs(caseRecoverAndInsertClean)
 
 	tr.run(caseTblWithGeneratedCol)
 	tr.execSQLs([]string{"DROP TABLE gen_contacts;"})

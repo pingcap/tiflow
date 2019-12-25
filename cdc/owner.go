@@ -293,6 +293,10 @@ func (c *changeFeed) applyJob(job *pmodel.Job) error {
 
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
 		c.addTable(addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
+	case pmodel.ActionRecoverTable:
+		addID := uint64(job.BinlogInfo.TableInfo.ID)
+		c.addTable(addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
+
 	default:
 	}
 

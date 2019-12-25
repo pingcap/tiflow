@@ -1,0 +1,12 @@
+#!/bin/sh
+# parameter 1: sql
+# parameter 2: database host
+# parameter 3: database port
+
+set -e
+
+host=${2:-127.0.0.1}
+port=${3:-3306}
+
+echo "[$(date)] Executing SQL in Downstream: $1" > "$OUT_DIR/sql_res.$TEST_NAME.txt"
+mysql -uroot -h${host} -P${port} --default-character-set utf8mb4 -E -e "$1" > "$OUT_DIR/sql_res.$TEST_NAME.txt"

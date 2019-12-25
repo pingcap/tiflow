@@ -22,15 +22,29 @@ cat - > "$OUT_DIR/pd-config.toml" <<EOF
 max-replicas = 1
 EOF
 
-echo "Starting PD..."
+echo "Starting Upstream PD..."
 pd-server \
-    --client-urls http://${PD_HOST}:${PD_PORT}\
+    --client-urls http://${US_PD_HOST}:${US_PD_PORT}\
+    --peer-urls http://${US_PD_HOST}:${US_PD_PEER_PORT}\
     --config "$OUT_DIR/pd-config.toml" \
     --log-file "$OUT_DIR/pd.log" \
     --data-dir "$OUT_DIR/pd" &
 
 # wait until PD is online...
-while ! curl -o /dev/null -sf http://${PD_HOST}:${PD_PORT}/pd/api/v1/version; do
+while ! curl -o /dev/null -sf http://${US_PD_HOST}:${US_PD_PORT}/pd/api/v1/version; do
+    sleep 1
+done
+
+echo "Starting Downstream PD..."
+pd-server \
+    --client-urls http://${DOWN_PD_HOST}:${DOWN_PD_PORT}\
+    --peer-urls http://${DOWN_PD_HOST}:${DOWN_PD_PEER_PORT}\
+    --config "$OUT_DIR/pd-config.toml" \
+    --log-file "$OUT_DIR/down_pd.log" \
+    --data-dir "$OUT_DIR/down_pd" &
+
+# wait until PD is online...
+while ! curl -o /dev/null -sf http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/version; do
     sleep 1
 done
 
@@ -50,26 +64,43 @@ cat - > "$OUT_DIR/tidb-config.toml" <<EOF
 split-table = true
 EOF
 
-echo "Starting TiKV..."
+echo "Starting Upstream TiKV..."
 tikv-server \
-    --pd ${PD_HOST}:${PD_PORT} \
-    -A ${TIKV_HOST}:${TIKV_PORT} \
+    --pd ${US_PD_HOST}:${US_PD_PORT} \
+    -A ${US_TIKV_HOST}:${US_TIKV_PORT} \
     --log-file "$OUT_DIR/tikv.log" \
     -C "$OUT_DIR/tikv-config.toml" \
     -s "$OUT_DIR/tikv" &
 
+echo "Starting Downstream TiKV..."
+tikv-server \
+    --pd ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
+    -A ${DOWN_TIKV_HOST}:${DOWN_TIKV_PORT} \
+    --log-file "$OUT_DIR/tikv_down.log" \
+    -C "$OUT_DIR/tikv-config.toml" \
+    -s "$OUT_DIR/tikv_down" &
+
 sleep 2
 
-echo "Starting TiDB..."
+echo "Starting Upstream TiDB..."
 tidb-server \
     -P ${US_TIDB_PORT} \
     -config "$OUT_DIR/tidb-config.toml" \
     --store tikv \
-    --path ${PD_HOST}:${PD_PORT} \
+    --path ${US_PD_HOST}:${US_PD_PORT} \
     --status=${US_TIDB_STATUS} \
     --log-file "$OUT_DIR/tidb.log" &
 
-echo "Verifying TiDB is started..."
+echo "Starting Downstream TiDB..."
+tidb-server \
+    -P ${DOWN_TIDB_PORT} \
+    -config "$OUT_DIR/tidb-config.toml" \
+    --store tikv \
+    --path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
+    --status=${DOWN_TIDB_STATUS} \
+    --log-file "$OUT_DIR/down_tidb.log" &
+
+echo "Verifying Upstream TiDB is started..."
 i=0
 while ! mysql -uroot -h${US_TIDB_HOST} -P${US_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
     i=$((i+1))
@@ -79,15 +110,6 @@ while ! mysql -uroot -h${US_TIDB_HOST} -P${US_TIDB_PORT} --default-character-set
     fi
     sleep 1
 done
-
-echo "Starting Downstream TiDB..."
-tidb-server \
-    -P ${DOWN_TIDB_PORT} \
-    -config "$OUT_DIR/tidb-config.toml" \
-    --store mocktikv \
-    --path "$OUT_DIR/down_tidb" \
-    --status=${DOWN_TIDB_STATUS} \
-    --log-file "$OUT_DIR/down_tidb.log" &
 
 echo "Verifying Downstream TiDB is started..."
 i=0
@@ -101,3 +123,4 @@ while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character
 done
 
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';"
+run_sql_down "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';"
