@@ -46,7 +46,7 @@ function run() {
     done
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
-    killall $CDC_BINARY || true
+    cleanup_process $CDC_BINARY
 }
 
 trap stop_tidb_cluster EXIT
