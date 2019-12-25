@@ -10,7 +10,7 @@ CDC_BINARY=cdc.test
 function prepare() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
     stop_tidb_cluster
-    killall -9 cdc.test || true
+    killall -9 $WORK_DIR || true
 
     start_tidb_cluster $WORK_DIR
 
@@ -27,6 +27,6 @@ trap stop_tidb_cluster EXIT
 prepare $*
 
 cd "$(dirname "$0")"
-GO111MODULE=on go run cdc.go -config ./config.toml > $WORK_DIR/tester.log 2>&1
+GO111MODULE=on go run cdc.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log
 cleanup_process $CDC_BINARY
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
