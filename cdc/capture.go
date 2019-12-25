@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -44,10 +43,7 @@ type Capture struct {
 	ownerWorker  *ownerImpl
 
 	processors map[string]*processor
-	procState  struct {
-		sync.Mutex
-		closed int32
-	}
+	procLock   sync.Mutex
 
 	info *model.CaptureInfo
 }
@@ -102,11 +98,8 @@ func (c *Capture) OnRunProcessor(p *processor) {
 func (c *Capture) OnStopProcessor(p *processor, err error) {
 	// TODO: handle processor error
 	log.Info("stop to run processor", zap.String("changefeed id", p.changefeedID), zap.Error(err))
-	c.procState.Lock()
-	defer c.procState.Unlock()
-	if atomic.LoadInt32(&c.procState.closed) == 1 {
-		return
-	}
+	c.procLock.Lock()
+	defer c.procLock.Unlock()
 	p.wait()
 	delete(c.processors, p.changefeedID)
 }
@@ -140,9 +133,8 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 
 // Cleanup cleans all dynamic resources
 func (c *Capture) Cleanup() {
-	c.procState.Lock()
-	defer c.procState.Unlock()
-	atomic.StoreInt32(&c.procState.closed, 1)
+	c.procLock.Lock()
+	defer c.procLock.Unlock()
 
 	for _, processor := range c.processors {
 		processor.wait()
