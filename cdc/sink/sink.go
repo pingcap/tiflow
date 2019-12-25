@@ -22,8 +22,10 @@ import (
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
-	// Emit saves the specified transactions to the sink backend
-	Emit(ctx context.Context, txns ...model.Txn) error
+	// EmitDMLs saves the specified DMLs to the sink backend
+	EmitDMLs(ctx context.Context, txn ...model.Txn) error
+	// EmitDDL saves the specified DDL to the sink backend
+	EmitDDL(ctx context.Context, txn model.Txn) error
 	// Close does not guarantee delivery of outstanding messages.
 	Close() error
 }

@@ -65,7 +65,7 @@ func (s EmitSuite) TestShouldExecDDL(c *check.C) {
 	mock.ExpectCommit()
 
 	// Execute
-	err = sink.Emit(context.Background(), t)
+	err = sink.EmitDDL(context.Background(), t)
 
 	// Validate
 	c.Assert(err, check.IsNil)
@@ -101,7 +101,7 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 	mock.ExpectExec(t.DDL.Job.Query).WillReturnError(&ignorable)
 
 	// Execute
-	err = sink.Emit(context.Background(), t)
+	err = sink.EmitDDL(context.Background(), t)
 
 	// Validate
 	c.Assert(err, check.IsNil)
@@ -185,7 +185,7 @@ func (s EmitSuite) TestShouldExecReplaceInto(c *check.C) {
 	mock.ExpectCommit()
 
 	// Execute
-	err = sink.Emit(context.Background(), t)
+	err = sink.EmitDMLs(context.Background(), t)
 
 	// Validate
 	c.Assert(err, check.IsNil)
@@ -226,7 +226,7 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 	mock.ExpectCommit()
 
 	// Execute
-	err = sink.Emit(context.Background(), t)
+	err = sink.EmitDMLs(context.Background(), t)
 
 	// Validate
 	c.Assert(err, check.IsNil)

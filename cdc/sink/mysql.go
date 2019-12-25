@@ -113,20 +113,24 @@ func newMySQLSink(db *sql.DB, infoGetter TableInfoGetter, tblInspector tableInsp
 	}
 }
 
-func (s *mysqlSink) Emit(ctx context.Context, txns ...model.Txn) error {
+func (s *mysqlSink) EmitDDL(ctx context.Context, t model.Txn) error {
+	if !t.IsDDL() {
+		return errors.New("not a DDL")
+	}
+	err := s.execDDLWithMaxRetries(ctx, t.DDL, 5)
+	if err == nil && !s.ddlOnly && isTableChanged(t.DDL) {
+		s.tblInspector.Refresh(t.DDL.Database, t.DDL.Table)
+	}
+	return errors.Trace(err)
+}
+
+func (s *mysqlSink) EmitDMLs(ctx context.Context, txns ...model.Txn) error {
+	if s.ddlOnly {
+		return errors.New("dmls disallowed in ddl-only mode")
+	}
 	// TODO: Merge txns to reduce the number of transactions needed
 	// TODO: Run txns concurrently
 	for _, t := range txns {
-		if t.IsDDL() {
-			err := s.execDDLWithMaxRetries(ctx, t.DDL, 5)
-			if err == nil && !s.ddlOnly && isTableChanged(t.DDL) {
-				s.tblInspector.Refresh(t.DDL.Database, t.DDL.Table)
-			}
-			return errors.Trace(err)
-		}
-		if s.ddlOnly {
-			return errors.New("dmls disallowed in ddl-only mode")
-		}
 		dmls, err := s.formatDMLs(t.DMLs)
 		if err != nil {
 			return errors.Trace(err)

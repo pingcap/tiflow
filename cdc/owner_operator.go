@@ -116,7 +116,7 @@ func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, txn model.Txn)
 	defer db.Close()
 	s := sink.NewMySQLSinkDDLOnly(db)
 
-	err = s.Emit(ctx, txn)
+	err = s.EmitDDL(ctx, txn)
 	return errors.Trace(err)
 }
 
