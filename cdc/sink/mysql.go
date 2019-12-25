@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -118,11 +117,6 @@ func (s *mysqlSink) Emit(ctx context.Context, txns ...model.Txn) error {
 	// TODO: Merge txns to reduce the number of transactions needed
 	// TODO: Run txns concurrently
 	for _, t := range txns {
-		filterBySchemaAndTable(&t)
-		if len(t.DMLs) == 0 && t.DDL == nil {
-			log.Info("Whole txn ignored", zap.Uint64("ts", t.Ts))
-			continue
-		}
 		if t.IsDDL() {
 			err := s.execDDLWithMaxRetries(ctx, t.DDL, 5)
 			if err == nil && !s.ddlOnly && isTableChanged(t.DDL) {
@@ -143,23 +137,6 @@ func (s *mysqlSink) Emit(ctx context.Context, txns ...model.Txn) error {
 		}
 	}
 	return nil
-}
-
-func filterBySchemaAndTable(t *model.Txn) {
-	toIgnore := regexp.MustCompile("(?i)^(INFORMATION_SCHEMA|PERFORMANCE_SCHEMA|MYSQL)$")
-	if t.IsDDL() {
-		if toIgnore.MatchString(t.DDL.Database) {
-			t.DDL = nil
-		}
-	} else {
-		filteredDMLs := make([]*model.DML, 0, len(t.DMLs))
-		for _, dml := range t.DMLs {
-			if !toIgnore.MatchString(dml.Database) {
-				filteredDMLs = append(filteredDMLs, dml)
-			}
-		}
-		t.DMLs = filteredDMLs
-	}
 }
 
 func (s *mysqlSink) Close() error {

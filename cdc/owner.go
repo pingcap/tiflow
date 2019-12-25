@@ -43,7 +43,7 @@ type OwnerDDLHandler interface {
 	PullDDL() (resolvedTs uint64, jobs []*model.DDL, err error)
 
 	// ExecDDL executes the ddl job
-	ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDL) error
+	ExecDDL(ctx context.Context, sinkURI string, txn model.Txn) error
 }
 
 // ChangeFeedInfoRWriter defines the Reader and Writer for changeFeed
@@ -643,22 +643,30 @@ waitCheckpointTsLoop:
 		}
 
 		cfInfo.banlanceOrphanTables(context.Background(), o.captures)
-
-		err = cfInfo.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, todoDDLJob)
-		// o.l.Lock()
-		// defer o.l.Unlock()
-		// If DDL executing failed, pause the changefeed and print log
-		if err != nil {
-			cfInfo.Status = model.ChangeFeedDDLExecuteFailed
-			log.Error("Execute DDL failed",
+		ddlTxn := model.Txn{Ts: todoDDLJob.Job.BinlogInfo.FinishedTS, DDL: todoDDLJob}
+		filterBySchemaAndTable(&ddlTxn)
+		if ddlTxn.DDL == nil {
+			log.Warn(
+				"DDL ignored",
+				zap.Int64("ID", todoDDLJob.Job.ID),
+				zap.String("db", todoDDLJob.Database),
+				zap.String("tbl", todoDDLJob.Table),
+			)
+		} else {
+			err = cfInfo.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, ddlTxn)
+			// If DDL executing failed, pause the changefeed and print log
+			if err != nil {
+				cfInfo.Status = model.ChangeFeedDDLExecuteFailed
+				log.Error("Execute DDL failed",
+					zap.String("ChangeFeedID", changeFeedID),
+					zap.Error(err),
+					zap.Reflect("ddlJob", todoDDLJob))
+				return errors.Trace(err)
+			}
+			log.Info("Execute DDL succeeded",
 				zap.String("ChangeFeedID", changeFeedID),
-				zap.Error(err),
 				zap.Reflect("ddlJob", todoDDLJob))
-			return errors.Trace(err)
 		}
-		log.Info("Execute DDL succeeded",
-			zap.String("ChangeFeedID", changeFeedID),
-			zap.Reflect("ddlJob", todoDDLJob))
 		if cfInfo.Status != model.ChangeFeedExecDDL {
 			log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
 				zap.String("ChangeFeedID", changeFeedID),

@@ -616,6 +616,10 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			filterBySchemaAndTable(&txn)
+			if len(txn.DMLs) == 0 {
+				continue
+			}
 			pendingTxns = append(pendingTxns, txn)
 			if len(pendingTxns) >= bulkLimit {
 				if err := flush(ctx); err != nil {
