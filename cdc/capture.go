@@ -100,7 +100,6 @@ func (c *Capture) OnStopProcessor(p *processor, err error) {
 	log.Info("stop to run processor", zap.String("changefeed id", p.changefeedID), zap.Error(err))
 	c.procLock.Lock()
 	defer c.procLock.Unlock()
-	p.wait()
 	delete(c.processors, p.changefeedID)
 }
 
