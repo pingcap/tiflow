@@ -64,3 +64,13 @@ type Txn struct {
 func (t Txn) IsDDL() bool {
 	return t.DDL != nil
 }
+
+// IsDML returns true if it's a DML transaction
+func (t Txn) IsDML() bool {
+	return len(t.DMLs) != 0
+}
+
+// IsFake returns true if it's a Fake transaction
+func (t Txn) IsFake() bool {
+	return !t.IsDDL() && !t.IsDML()
+}

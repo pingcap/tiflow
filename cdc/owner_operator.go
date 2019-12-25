@@ -84,11 +84,13 @@ func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn model.RawTxn) error 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if !t.IsDDL() {
+	if t.IsDML() {
 		log.Warn("should not be DML here", zap.Reflect("txn", t))
 		return nil
 	}
-	h.ddlJobs = append(h.ddlJobs, t.DDL)
+	if t.IsDDL() {
+		h.ddlJobs = append(h.ddlJobs, t.DDL)
+	}
 	return nil
 }
 

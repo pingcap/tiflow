@@ -270,7 +270,7 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 	var job *model.Job
 	for i, job = range s.jobs {
 		if skipJob(job) {
-			log.Info("skip ddl job", zap.Stringer("job", job))
+			log.Info("skip DDL job because the job isn't synced and done", zap.Stringer("job", job))
 			continue
 		}
 
@@ -278,7 +278,7 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 			break
 		}
 		if job.BinlogInfo.FinishedTS <= s.lastHandledTs {
-			log.Warn("skip job", zap.Stringer("job", job))
+			log.Debug("skip DDL job because the job is already handled", zap.Stringer("job", job))
 			continue
 		}
 
