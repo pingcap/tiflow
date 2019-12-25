@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
@@ -42,6 +43,7 @@ type Capture struct {
 	ownerWorker  *ownerImpl
 
 	processors map[string]*processor
+	procLock   sync.Mutex
 
 	info *model.CaptureInfo
 }
@@ -93,7 +95,11 @@ func (c *Capture) OnRunProcessor(p *processor) {
 }
 
 // OnStopProcessor implements processorCallback.
-func (c *Capture) OnStopProcessor(p *processor) {
+func (c *Capture) OnStopProcessor(p *processor, err error) {
+	// TODO: handle processor error
+	log.Info("stop to run processor", zap.String("changefeed id", p.changefeedID), zap.Error(err))
+	c.procLock.Lock()
+	defer c.procLock.Unlock()
 	delete(c.processors, p.changefeedID)
 }
 
@@ -122,6 +128,16 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	})
 
 	return errg.Wait()
+}
+
+// Cleanup cleans all dynamic resources
+func (c *Capture) Cleanup() {
+	c.procLock.Lock()
+	defer c.procLock.Unlock()
+
+	for _, processor := range c.processors {
+		processor.wait()
+	}
 }
 
 // Close closes the capture by unregistering it from etcd

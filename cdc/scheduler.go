@@ -228,7 +228,7 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	feedErrCh, err := runProcessor(cctx, w.pdEndpoints, w.detail, w.changefeedID, w.captureID, cb)
+	err = runProcessor(cctx, w.pdEndpoints, w.detail, w.changefeedID, w.captureID, cb)
 	if err != nil {
 		errCh <- err
 		return
@@ -241,9 +241,6 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 			if err != context.Canceled {
 				errCh <- err
 			}
-			return
-		case err := <-feedErrCh:
-			errCh <- err
 			return
 		case <-time.After(time.Second):
 			resp, err := w.etcdCli.Get(ctx, key)
@@ -263,7 +260,7 @@ type processorCallback interface {
 	// OnRunProcessor is called when the processor is started.
 	OnRunProcessor(p *processor)
 	// OnStopProcessor is called when the processor is stopped.
-	OnStopProcessor(p *processor)
+	OnStopProcessor(p *processor, err error)
 }
 
 // realRunProcessorWatcher creates a new ProcessorWatcher and executes the Watch method.
@@ -291,10 +288,10 @@ func realRunProcessor(
 	changefeedID string,
 	captureID string,
 	cb processorCallback,
-) (chan error, error) {
+) error {
 	processor, err := NewProcessor(pdEndpoints, detail, changefeedID, captureID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
@@ -306,17 +303,12 @@ func realRunProcessor(
 	errCh := make(chan error, 1)
 	processor.Run(ctx, errCh)
 
-	returnErrCh := make(chan error, 1)
-
 	go func() {
 		err := <-errCh
-		log.Info("stop to run processor", zap.String("changefeed id", changefeedID))
 		if cb != nil {
-			cb.OnStopProcessor(processor)
+			cb.OnStopProcessor(processor, err)
 		}
-
-		returnErrCh <- err
 	}()
 
-	return returnErrCh, nil
+	return nil
 }

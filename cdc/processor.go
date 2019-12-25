@@ -265,6 +265,18 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	}()
 }
 
+// wait blocks until all routines in processor are returned
+func (p *processor) wait() {
+	err := p.wg.Wait()
+	if err != nil && errors.Cause(err) != context.Canceled {
+		log.Error("processor wait error",
+			zap.String("captureID", p.captureID),
+			zap.String("changefeedID", p.changefeedID),
+			zap.Error(err),
+		)
+	}
+}
+
 func (p *processor) writeDebugInfo(w io.Writer) {
 	fmt.Fprintf(w, "changefeedID: %s, detail: %+v, subInfo: %+v\n", p.changefeedID, p.changefeed, p.subInfo)
 

@@ -44,6 +44,7 @@ var _ = check.Suite(&schedulerSuite{})
 var (
 	runProcessorCount         int32
 	runChangeFeedWatcherCount int32
+	errRunProcessor           = errors.New("mock run processor error")
 )
 
 // Set up a embed etcd using free ports.
@@ -72,10 +73,9 @@ func mockRunProcessor(
 	changefeedID string,
 	captureID string,
 	_ processorCallback,
-) (chan error, error) {
-	errCh := make(chan error, 1)
+) error {
 	atomic.AddInt32(&runProcessorCount, 1)
-	return errCh, nil
+	return nil
 }
 
 func mockRunProcessorError(
@@ -85,12 +85,8 @@ func mockRunProcessorError(
 	changefeedID string,
 	captureID string,
 	_ processorCallback,
-) (chan error, error) {
-	errCh := make(chan error, 1)
-	defer func() {
-		errCh <- errors.New("mock run error")
-	}()
-	return errCh, nil
+) error {
+	return errRunProcessor
 }
 
 func mockRunProcessorWatcher(
@@ -198,9 +194,18 @@ func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 
 	errCh := make(chan error, 1)
 	sw := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh, nil)
+	sw.wg.Add(1)
+	go sw.Watch(context.Background(), errCh, nil)
+
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
-		return len(errCh) == 1
+		select {
+		case err := <-errCh:
+			return errors.Cause(err) == errRunProcessor
+		default:
+			return false
+		}
 	}), check.IsTrue)
+
 	sw.close()
 	c.Assert(sw.isClosed(), check.IsTrue)
 }

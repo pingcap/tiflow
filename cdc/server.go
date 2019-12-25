@@ -113,4 +113,5 @@ func (s *Server) Close(ctx context.Context, cancel context.CancelFunc) {
 		s.statusServer = nil
 	}
 	cancel()
+	s.capture.Cleanup()
 }
