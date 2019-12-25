@@ -372,6 +372,7 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 	}
 
 	for _, id := range deleted {
+		log.Info("delete capture info", zap.String("id", id))
 		delete(o.markDownProcessor, id)
 	}
 }
@@ -441,10 +442,12 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 
 			cfInfo.ProcessorInfos = changeFeedInfo
 
-			for id := range cfInfo.ProcessorInfos {
+			for id, info := range cfInfo.ProcessorInfos {
 				lastUpdateTime := cfInfo.processorLastUpdateTime[id]
 				if time.Since(lastUpdateTime) > markProcessorDownTime {
 					o.markDownProcessor[id] = struct{}{}
+					log.Info("markdown processor", zap.String("id", id),
+						zap.Reflect("info", info), zap.Time("update time", lastUpdateTime))
 				}
 			}
 			continue
@@ -619,8 +622,11 @@ waitCheckpointTsLoop:
 		todoDDLJob := cfInfo.ddlJobHistory[cfInfo.DDLCurrentIndex]
 
 		// Check if all the checkpointTs of capture are achieving global resolvedTs(which is equal to todoDDLJob.FinishedTS)
-		for _, pInfo := range cfInfo.ProcessorInfos {
+		for cid, pInfo := range cfInfo.ProcessorInfos {
 			if pInfo.CheckPointTs != todoDDLJob.Job.BinlogInfo.FinishedTS {
+				log.Debug("wait checkpoint ts", zap.String("cid", cid),
+					zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
+					zap.Uint64("finish ts", todoDDLJob.Job.BinlogInfo.FinishedTS))
 				continue waitCheckpointTsLoop
 			}
 		}

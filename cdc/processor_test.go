@@ -223,7 +223,7 @@ func (p *processorSuite) TestDiffProcessTableInfos(c *check.C) {
 			{emptyInfo, []*model.ProcessTableInfo{infos[0]}, nil, []*model.ProcessTableInfo{infos[0]}},
 			{[]*model.ProcessTableInfo{infos[0]}, emptyInfo, []*model.ProcessTableInfo{infos[0]}, nil},
 			{[]*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[1]}, []*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[1]}},
-			{[]*model.ProcessTableInfo{infos[0], infos[1]}, []*model.ProcessTableInfo{infos[1], infos[2]}, []*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[2]}},
+			{[]*model.ProcessTableInfo{infos[1], infos[0]}, []*model.ProcessTableInfo{infos[2], infos[1]}, []*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[2]}},
 			{[]*model.ProcessTableInfo{infos[1]}, []*model.ProcessTableInfo{infos[0]}, []*model.ProcessTableInfo{infos[1]}, []*model.ProcessTableInfo{infos[0]}},
 		}
 	)
