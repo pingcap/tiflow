@@ -11,21 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package txn
+package puller
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"testing"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 )
-
-// Hook up gocheck into the "go test" runner.
-func Test(t *testing.T) { check.TestingT(t) }
 
 type CollectRawTxnsSuite struct{}
 
@@ -90,7 +86,7 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	}
 
 	ctx := context.Background()
-	err := CollectRawTxns(ctx, input, output, &mockTracker{})
+	err := collectRawTxns(ctx, input, output, &mockTracker{})
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, 2)
@@ -158,7 +154,7 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 	ctx := context.Background()
 	// Set up the tracker so that only the last resolve event forwards the global minimum Ts
 	tracker := mockTracker{forwarded: []bool{false, false, true}}
-	err := CollectRawTxns(ctx, input, output, &tracker)
+	err := collectRawTxns(ctx, input, output, &tracker)
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, 1)
@@ -194,7 +190,7 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputBinlogEvenWhenThereIsNoRealEvent(
 
 	ctx := context.Background()
 	tracker := mockTracker{forwarded: []bool{true, true}}
-	err := CollectRawTxns(ctx, input, output, &tracker)
+	err := collectRawTxns(ctx, input, output, &tracker)
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, len(entries))
