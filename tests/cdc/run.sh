@@ -24,7 +24,7 @@ function prepare() {
 }
 
 trap stop_tidb_cluster EXIT
-# prepare $*
+prepare $*
 
 cd "$(dirname "$0")"
 set -o pipefail
