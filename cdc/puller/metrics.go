@@ -23,9 +23,18 @@ var (
 			Name:      "event_count",
 			Help:      "The number of events received.",
 		}, []string{"captureID", "type"})
+	resolvedTxnsBatchSize = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "resolved_txns_batch_size",
+			Help:      "The number of txns resolved in one go.",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 16),
+		})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(eventCounter)
+	registry.MustRegister(resolvedTxnsBatchSize)
 }

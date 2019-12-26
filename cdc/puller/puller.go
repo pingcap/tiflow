@@ -200,6 +200,7 @@ func collectRawTxns(
 					return errors.Trace(err)
 				}
 			}
+			resolvedTxnsBatchSize.Observe(float64(len(readyTxns)))
 			if len(readyTxns) == 0 {
 				log.Info("Forwarding fake txn", zap.Uint64("ts", resolvedTs))
 				fakeTxn := model.RawTxn{
