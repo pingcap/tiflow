@@ -30,11 +30,6 @@ pd-server \
     --log-file "$OUT_DIR/pd.log" \
     --data-dir "$OUT_DIR/pd" &
 
-# wait until PD is online...
-while ! curl -o /dev/null -sf http://${UP_PD_HOST}:${UP_PD_PORT}/pd/api/v1/version; do
-    sleep 1
-done
-
 echo "Starting Downstream PD..."
 pd-server \
     --client-urls http://${DOWN_PD_HOST}:${DOWN_PD_PORT}\
@@ -44,6 +39,10 @@ pd-server \
     --data-dir "$OUT_DIR/down_pd" &
 
 # wait until PD is online...
+while ! curl -o /dev/null -sf http://${UP_PD_HOST}:${UP_PD_PORT}/pd/api/v1/version; do
+    sleep 1
+done
+
 while ! curl -o /dev/null -sf http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/version; do
     sleep 1
 done
