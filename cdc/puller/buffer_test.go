@@ -64,9 +64,14 @@ func (bs *bufferSuite) TestWaitsCanBeCanceled(c *check.C) {
 	defer cancel()
 	stopped := make(chan struct{})
 	go func() {
-		err := b.AddEntry(timeout, BufferEntry{KV: &model.RawKVEntry{Ts: 111}})
-		c.Assert(err, check.Equals, context.DeadlineExceeded)
-		close(stopped)
+		for {
+			err := b.AddEntry(timeout, BufferEntry{KV: &model.RawKVEntry{Ts: 111}})
+			if err == context.DeadlineExceeded {
+				close(stopped)
+				return
+			}
+			c.Assert(err, check.Equals, nil)
+		}
 	}()
 	select {
 	case <-stopped:
