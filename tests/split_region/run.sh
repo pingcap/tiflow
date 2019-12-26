@@ -15,9 +15,9 @@ function run() {
     cd $WORK_DIR
 
     # record tso before we create tables to skip the system table DDLs
-    start_ts=$(cdc ctrl --cmd=get-tso http://$PD_HOST:$PD_PORT)
+    start_ts=$(cdc ctrl --cmd=get-tso http://$UP_PD_HOST:$UP_PD_PORT)
 
-    run_sql_file $CUR/data/prepare.sql ${US_TIDB_HOST} ${US_TIDB_PORT}
+    run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
     run_cdc_server $WORK_DIR $CDC_BINARY
     cdc cli --start-ts=$start_ts
@@ -30,7 +30,7 @@ function run() {
     # split table into 5 regions, run some other DMLs and check data is synchronized to downstream
     run_sql "split table split_region.test1 between (1) and (10000) regions 5;"
     run_sql "split table split_region.test2 between (1) and (10000) regions 5;"
-    run_sql_file $CUR/data/increment.sql ${US_TIDB_HOST} ${US_TIDB_PORT}
+    run_sql_file $CUR/data/increment.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     cleanup_process $CDC_BINARY
