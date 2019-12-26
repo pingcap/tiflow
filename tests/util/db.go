@@ -118,6 +118,24 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 			return false
 		}
 	}
+
+	// check whether the tables in the targetDB is match that in the sourceDB
+	targetTables, err := dbutil.GetTables(ctx, targetDB, schema)
+	if err != nil {
+		log.Print(err)
+		return false
+	}
+	sourceTableMap := make(map[string]struct{}, len(tables))
+	for _, table := range tables {
+		sourceTableMap[table] = struct{}{}
+	}
+	for _, table := range targetTables {
+		if _, exist := sourceTableMap[table]; !exist {
+			log.Print("The table in target db is not exist in source db:", table)
+			return false
+		}
+	}
+
 	return true
 }
 

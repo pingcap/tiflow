@@ -23,8 +23,9 @@ if [ "${1-}" = '--debug' ]; then
     sleep 1
     cdc cli
 
-    echo 'You may now debug from another terminal. Press [ENTER] to continue.'
+    echo 'You may now debug from another terminal. Press [ENTER] to exit.'
     read line
+    exit 0
 fi
 
 run_case() {
