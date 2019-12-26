@@ -15,6 +15,7 @@ package model
 
 import (
 	"encoding/json"
+	"math"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -33,7 +34,7 @@ type ChangeFeedDetail struct {
 	Info     *ChangeFeedInfo `json:"-"`
 }
 
-// GetStartTs return StartTs if it's  specified or using the CreateTime of changefeed.
+// GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
 func (detail *ChangeFeedDetail) GetStartTs() uint64 {
 	if detail.StartTs > 0 {
 		return detail.StartTs
@@ -42,7 +43,15 @@ func (detail *ChangeFeedDetail) GetStartTs() uint64 {
 	return oracle.EncodeTSO(detail.CreateTime.Unix() * 1000)
 }
 
-// GetCheckpointTs return the checkpoint ts of changefeed.
+// GetTargetTs returns TargetTs if it's specified, otherwise MaxUint64 is returned.
+func (detail *ChangeFeedDetail) GetTargetTs() uint64 {
+	if detail.TargetTs > 0 {
+		return detail.TargetTs
+	}
+	return uint64(math.MaxUint64)
+}
+
+// GetCheckpointTs returns the checkpoint ts of changefeed.
 func (detail *ChangeFeedDetail) GetCheckpointTs() uint64 {
 	if detail.Info != nil {
 		return detail.Info.CheckpointTs
