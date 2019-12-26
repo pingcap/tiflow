@@ -16,6 +16,7 @@ package model
 import (
 	"encoding/json"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -56,6 +57,9 @@ func (detail *ChangeFeedDetail) getFilter() *filter.Filter {
 // ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
 // Set `tbl` to an empty string to test against the whole database.
 func (detail *ChangeFeedDetail) ShouldIgnoreTable(db, tbl string) bool {
+	if isSysSchema(db) {
+		return true
+	}
 	f := detail.getFilter()
 	// TODO: Change filter to support simple check directly
 	left := f.ApplyOn([]*filter.Table{{Schema: db, Name: tbl}})
@@ -116,4 +120,14 @@ func (detail *ChangeFeedDetail) Marshal() (string, error) {
 func (detail *ChangeFeedDetail) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, &detail)
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
+}
+
+func isSysSchema(db string) bool {
+	db = strings.ToUpper(db)
+	for _, schema := range []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "MYSQL"} {
+		if schema == db {
+			return true
+		}
+	}
+	return false
 }

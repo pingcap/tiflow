@@ -55,6 +55,7 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 	assertIgnore("ecom", "order", check.IsFalse)
 	assertIgnore("ecom", "test", check.IsTrue)
 	assertIgnore("sns", "log", check.IsTrue)
+	assertIgnore("information_schema", "", check.IsTrue)
 	txn := Txn{DMLs: []*DML{
 		{Database: "other"},
 		{Database: "sns"},

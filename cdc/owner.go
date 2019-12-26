@@ -440,7 +440,7 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 	tables := make(map[uint64]schema.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
 	for id, table := range schemaStorage.CloneTables() {
-		if filter(detail, table) {
+		if detail.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
 		}
 
