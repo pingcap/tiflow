@@ -697,7 +697,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 		inputTxn: make(chan model.RawTxn, 1),
 	}
 
-	tc := newTxnChannel(table.inputTxn, 1, func(resolvedTs uint64) {
+	tc := newTxnChannel(table.inputTxn, 64, func(resolvedTs uint64) {
 		table.storeResolvedTS(resolvedTs)
 	})
 	table.inputChan = tc
