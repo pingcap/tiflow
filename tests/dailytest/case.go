@@ -334,7 +334,7 @@ CREATE TABLE growing_cols (
 
 		// Keep updating to generate DMLs while the other goroutine's adding columns
 		updateSQL := `UPDATE growing_cols SET val = ? WHERE id = ?;`
-		for i := 0; i < 300; i++ {
+		for i := 0; i < 1000; i++ {
 			mustExec(db, updateSQL, i, 1)
 		}
 	}()
@@ -342,7 +342,7 @@ CREATE TABLE growing_cols (
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 300; i++ {
+		for i := 0; i < 100; i++ {
 			updateSQL := fmt.Sprintf(`ALTER TABLE growing_cols ADD COLUMN col%d VARCHAR(50);`, i)
 			mustExec(db, updateSQL)
 		}
