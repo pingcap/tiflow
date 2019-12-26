@@ -14,7 +14,7 @@ type BufferEntry = model.KvOrResolved
 type Buffer chan BufferEntry
 
 func makeBuffer() Buffer {
-	return make(Buffer)
+	return make(Buffer, 8)
 }
 
 // AddEntry adds an entry to the buffer
