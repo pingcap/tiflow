@@ -599,6 +599,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				log.Warn("Receive non-DDL txn from ddlJobsCh", zap.Uint64("ts", t.Ts))
 				continue
 			}
+			log.Info("add ddl job", zap.Any("job", t.DDL.Job))
 			p.schemaStorage.AddJob(t.DDL.Job)
 			if err := flush(ctx); err != nil {
 				return errors.Trace(err)
@@ -620,7 +621,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 					return errors.Trace(ctx.Err())
 				}
 			}
-
+			log.Info("handle ddl", zap.Uint64("ts", rawTxn.Ts))
 			if err := p.schemaStorage.HandlePreviousDDLJobIfNeed(rawTxn.Ts); err != nil {
 				return errors.Trace(err)
 			}
@@ -697,7 +698,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 		inputTxn: make(chan model.RawTxn, 1),
 	}
 
-	tc := newTxnChannel(table.inputTxn, 1, func(resolvedTs uint64) {
+	tc := newTxnChannel(table.inputTxn, 64, func(resolvedTs uint64) {
 		table.storeResolvedTS(resolvedTs)
 	})
 	table.inputChan = tc
