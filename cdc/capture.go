@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/pkg/flags"
+	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
@@ -97,7 +98,7 @@ func (c *Capture) OnRunProcessor(p *processor) {
 // OnStopProcessor implements processorCallback.
 func (c *Capture) OnStopProcessor(p *processor, err error) {
 	// TODO: handle processor error
-	log.Info("stop to run processor", zap.String("changefeed id", p.changefeedID), zap.Error(err))
+	log.Info("stop to run processor", zap.String("changefeed id", p.changefeedID), util.ZapErrorFilter(err, context.Canceled))
 	c.procLock.Lock()
 	defer c.procLock.Unlock()
 	delete(c.processors, p.changefeedID)
@@ -142,7 +143,15 @@ func (c *Capture) Cleanup() {
 
 // Close closes the capture by unregistering it from etcd
 func (c *Capture) Close(ctx context.Context) error {
-	return errors.Trace(DeleteCaptureInfo(ctx, c.info.ID, c.etcdClient))
+	err := DeleteCaptureInfo(ctx, c.info.ID, c.etcdClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = kv.DeleteCaptureFeeds(ctx, c.etcdClient, c.info.ID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 // register registers the capture information in etcd
