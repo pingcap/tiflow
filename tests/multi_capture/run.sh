@@ -18,13 +18,13 @@ function run() {
     cd $WORK_DIR
 
     # record tso before we create tables to skip the system table DDLs
-    start_ts=$(cdc ctrl --cmd=get-tso http://$PD_HOST:$PD_PORT)
+    start_ts=$(cdc ctrl --cmd=get-tso http://$UP_PD_HOST:$UP_PD_PORT)
 
     # create $DB_COUNT databases and import initial workload
     for i in $(seq $DB_COUNT); do
         db="multi_capture_$i"
         run_sql "CREATE DATABASE $db;"
-        go-ycsb load mysql -P $CUR/conf/workload1 -p mysql.host=${US_TIDB_HOST} -p mysql.port=${US_TIDB_PORT} -p mysql.user=root -p mysql.db=$db
+        go-ycsb load mysql -P $CUR/conf/workload1 -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=$db
     done
 
     # start $CDC_COUNT cdc servers, and create a changefeed
@@ -42,7 +42,7 @@ function run() {
     # add more data in upstream and check again
     for i in $(seq $DB_COUNT); do
         db="multi_capture_$i"
-        go-ycsb load mysql -P $CUR/conf/workload2 -p mysql.host=${US_TIDB_HOST} -p mysql.port=${US_TIDB_PORT} -p mysql.user=root -p mysql.db=$db
+        go-ycsb load mysql -P $CUR/conf/workload2 -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=$db
     done
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
