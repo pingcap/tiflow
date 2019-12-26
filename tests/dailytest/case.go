@@ -386,14 +386,15 @@ CREATE TABLE many_cols (
 	}
 	placeholders := builder.String()
 
+	// Insert a row with all columns set to empty string
+	insertSQL := fmt.Sprintf(`INSERT INTO many_cols(id, %s) VALUES (?, %s);`, cols, placeholders)
+	mustExec(db, insertSQL, 1)
+
 	var wg sync.WaitGroup
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// Insert a row with all columns set to empty string
-		insertSQL := fmt.Sprintf(`INSERT INTO many_cols(id, %s) VALUES (?, %s);`, cols, placeholders)
-		mustExec(db, insertSQL, 1)
 
 		// Keep updating to generate DMLs while the other goroutine's dropping columns
 		updateSQL := `UPDATE many_cols SET val = ? WHERE id = ?;`
