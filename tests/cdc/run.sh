@@ -24,9 +24,10 @@ function prepare() {
 }
 
 trap stop_tidb_cluster EXIT
-prepare $*
+# prepare $*
 
 cd "$(dirname "$0")"
+set -o pipefail
 GO111MODULE=on go run cdc.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log
 cleanup_process $CDC_BINARY
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
