@@ -119,6 +119,7 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 		}
 	}
 
+	// check whether the tables in the targetDB is match that in the sourceDB
 	targetTables, err := dbutil.GetTables(ctx, targetDB, schema)
 	if err != nil {
 		log.Print(err)
