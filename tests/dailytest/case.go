@@ -19,6 +19,7 @@ import (
 	"math"
 	"math/rand"
 	"strings"
+	"sync"
 
 	"github.com/pingcap/log"
 )
@@ -166,6 +167,16 @@ var caseRecoverAndInsertClean = []string{`
 `,
 }
 
+var (
+	caseAlterDatabase = []string{
+		`CREATE DATABASE to_be_altered CHARACTER SET utf8;`,
+		`ALTER DATABASE to_be_altered CHARACTER SET utf8mb4;`,
+	}
+	caseAlterDatabaseClean = []string{
+		`DROP DATABASE to_be_altered;`,
+	}
+)
+
 type testRunner struct {
 	src    *sql.DB
 	dst    *sql.DB
@@ -191,22 +202,31 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 	runPKorUKcases(tr)
 
+	tr.run(caseUpdateWhileAddingCol)
+	tr.execSQLs([]string{"DROP TABLE growing_cols;"})
+
 	tr.execSQLs(caseMultiDataType)
 	tr.execSQLs(caseMultiDataTypeClean)
 
 	tr.execSQLs(caseUKWithNoPK)
 	tr.execSQLs(caseUKWithNoPKClean)
 
+	tr.execSQLs(caseAlterDatabase)
+	tr.execSQLs(caseAlterDatabaseClean)
+
 	// run casePKAddDuplicateUK
 	tr.run(func(src *sql.DB) {
 		err := execSQLs(src, casePKAddDuplicateUK)
+		// the add unique index will failed by duplicate entry
 		if err != nil && !strings.Contains(err.Error(), "Duplicate") {
 			log.S().Fatal(err)
 		}
 	})
 	tr.execSQLs(casePKAddDuplicateUKClean)
 
-	// run caseInsertBit
+	tr.run(caseUpdateWhileDroppingCol)
+	tr.execSQLs([]string{"DROP TABLE many_cols;"})
+
 	tr.execSQLs(caseInsertBit)
 	tr.execSQLs(caseInsertBitClean)
 
@@ -292,6 +312,104 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	// 	}
 	// })
 	// tr.execSQLs([]string{"DROP TABLE binlog_big;"})
+}
+
+func caseUpdateWhileAddingCol(db *sql.DB) {
+	mustExec(db, `
+CREATE TABLE growing_cols (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	val INT DEFAULT 0
+);`)
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		insertSQL := `INSERT INTO growing_cols(id, val) VALUES (?, ?);`
+		mustExec(db, insertSQL, 1, 0)
+
+		// Keep updating to generate DMLs while the other goroutine's adding columns
+		updateSQL := `UPDATE growing_cols SET val = ? WHERE id = ?;`
+		for i := 0; i < 1000; i++ {
+			mustExec(db, updateSQL, i, 1)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			updateSQL := fmt.Sprintf(`ALTER TABLE growing_cols ADD COLUMN col%d VARCHAR(50);`, i)
+			mustExec(db, updateSQL)
+		}
+	}()
+
+	wg.Wait()
+}
+
+func caseUpdateWhileDroppingCol(db *sql.DB) {
+	const nCols = 50
+	var builder strings.Builder
+	for i := 0; i < nCols; i++ {
+		if i != 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(fmt.Sprintf("col%d VARCHAR(50) NOT NULL", i))
+	}
+	createSQL := fmt.Sprintf(`
+CREATE TABLE many_cols (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	val INT DEFAULT 0,
+	%s
+);`, builder.String())
+	mustExec(db, createSQL)
+
+	builder.Reset()
+	for i := 0; i < nCols; i++ {
+		if i != 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(fmt.Sprintf("col%d", i))
+	}
+	cols := builder.String()
+
+	builder.Reset()
+	for i := 0; i < nCols; i++ {
+		if i != 0 {
+			builder.WriteRune(',')
+		}
+		builder.WriteString(`""`)
+	}
+	placeholders := builder.String()
+
+	// Insert a row with all columns set to empty string
+	insertSQL := fmt.Sprintf(`INSERT INTO many_cols(id, %s) VALUES (?, %s);`, cols, placeholders)
+	mustExec(db, insertSQL, 1)
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		// Keep updating to generate DMLs while the other goroutine's dropping columns
+		updateSQL := `UPDATE many_cols SET val = ? WHERE id = ?;`
+		for i := 0; i < 100; i++ {
+			mustExec(db, updateSQL, i, 1)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for i := 0; i < nCols; i++ {
+			mustExec(db, fmt.Sprintf("ALTER TABLE many_cols DROP COLUMN col%d;", i))
+		}
+	}()
+
+	wg.Wait()
 }
 
 // caseTblWithGeneratedCol creates a table with generated column,
