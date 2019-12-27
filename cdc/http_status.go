@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/pprof"
+	"os"
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/log"
@@ -62,6 +63,8 @@ func (s *Server) startStatusHTTP() {
 type status struct {
 	Version string `json:"version"`
 	GitHash string `json:"git_hash"`
+	ID      string `json:"id"`
+	Pid     int    `json:"pid"`
 }
 
 func (s *Server) writeEtcdInfo(ctx context.Context, cli *clientv3.Client, w io.Writer) {
@@ -94,6 +97,10 @@ func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
 	st := status{
 		Version: "0.0.1",
 		GitHash: "",
+		Pid:     os.Getpid(),
+	}
+	if s.capture != nil {
+		st.ID = s.capture.info.ID
 	}
 	writeData(w, st)
 }
