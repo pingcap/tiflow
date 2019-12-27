@@ -573,7 +573,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		if len(pendingTxns) == 0 {
 			return nil
 		}
-		if err := p.sink.Emit(ctx2, pendingTxns...); err != nil {
+		if err := p.sink.EmitDMLs(ctx2, pendingTxns...); err != nil {
 			return errors.Trace(err)
 		}
 		txnCounter.WithLabelValues("executed", p.changefeedID, p.captureID).Add(float64(len(pendingTxns)))
