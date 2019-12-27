@@ -22,7 +22,6 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/schema"
 )
 
 var (
@@ -78,7 +77,7 @@ func getTableInfo(db *gosql.DB, schema string, table string) (info *tableInfo, e
 	return
 }
 
-func getTableInfoFromSchemaStorage(schemaStorage *schema.Storage, schemaName, tableName string) (info *tableInfo, err error) {
+func getTableInfoFromSchemaStorage(schemaStorage TableInfoGetter, schemaName, tableName string) (info *tableInfo, err error) {
 	info = new(tableInfo)
 	tableID, exist := schemaStorage.GetTableIDByName(schemaName, tableName)
 	if !exist {

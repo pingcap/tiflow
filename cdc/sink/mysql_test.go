@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/types"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/tidb/infoschema"
 	dbtypes "github.com/pingcap/tidb/types"
 )
@@ -122,8 +123,8 @@ func (h *tableHelper) Get(schema, table string) (*tableInfo, error) {
 	}, nil
 }
 
-func (h *tableHelper) TableByID(id int64) (info *timodel.TableInfo, ok bool) {
-	return &timodel.TableInfo{
+func (h *tableHelper) TableByID(id int64) (info *schema.TableInfo, ok bool) {
+	return schema.FromTableInfo(&timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
 				Name:  timodel.CIStr{O: "id"},
@@ -144,7 +145,7 @@ func (h *tableHelper) TableByID(id int64) (info *timodel.TableInfo, ok bool) {
 				},
 			},
 		},
-	}, true
+	}), true
 }
 
 func (h *tableHelper) GetTableIDByName(schema, table string) (int64, bool) {

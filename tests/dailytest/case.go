@@ -349,7 +349,7 @@ CREATE TABLE growing_cols (
 }
 
 func caseUpdateWhileDroppingCol(db *sql.DB) {
-	const nCols = 50
+	const nCols = 10
 	var builder strings.Builder
 	for i := 0; i < nCols; i++ {
 		if i != 0 {
@@ -387,29 +387,26 @@ CREATE TABLE many_cols (
 	insertSQL := fmt.Sprintf(`INSERT INTO many_cols(id, %s) VALUES (?, %s);`, cols, placeholders)
 	mustExec(db, insertSQL, 1)
 
-	var wg sync.WaitGroup
-
-	wg.Add(1)
+	closeCh := make(chan struct{})
 	go func() {
-		defer wg.Done()
-
 		// Keep updating to generate DMLs while the other goroutine's dropping columns
 		updateSQL := `UPDATE many_cols SET val = ? WHERE id = ?;`
-		for i := 0; i < 100; i++ {
+		i := 0
+		for {
+			i++
 			mustExec(db, updateSQL, i, 1)
+			select {
+			case <-closeCh:
+				return
+			default:
+			}
 		}
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		for i := 0; i < nCols; i++ {
-			mustExec(db, fmt.Sprintf("ALTER TABLE many_cols DROP COLUMN col%d;", i))
-		}
-	}()
-
-	wg.Wait()
+	for i := 0; i < nCols; i++ {
+		mustExec(db, fmt.Sprintf("ALTER TABLE many_cols DROP COLUMN col%d;", i))
+	}
+	close(closeCh)
 }
 
 // caseTblWithGeneratedCol creates a table with generated column,
