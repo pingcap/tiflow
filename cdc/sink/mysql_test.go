@@ -15,6 +15,7 @@ package sink
 
 import (
 	"context"
+	"sort"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
@@ -266,6 +267,14 @@ func (s *splitSuite) TestShouldSplitByTable(c *check.C) {
 		}
 	}
 	c.Assert(groups, check.HasLen, 3)
+	sort.Slice(groups, func(i, j int) bool {
+		tblI := groups[i][0]
+		tblJ := groups[j][0]
+		if tblI.Database != tblJ.Database {
+			return tblI.Database < tblJ.Database
+		}
+		return tblI.Table < tblJ.Table
+	})
 	assertAllAreFromTbl(groups[0], "db", "tbl1")
 	assertAllAreFromTbl(groups[1], "db", "tbl2")
 	assertAllAreFromTbl(groups[2], "db2", "tbl2")
