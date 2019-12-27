@@ -49,7 +49,7 @@ var (
 	fNewPDCli     = pd.NewClient
 	fNewTsRWriter = createTsRWriter
 	fNewMounter   = newMounter
-	fNewMySQLSink = sink.NewMySQLSinkUsingSchema
+	fNewMySQLSink = sink.NewMySQLSink
 )
 
 type mounter interface {

@@ -76,8 +76,8 @@ func configureSinkURI(sinkURI string) (string, error) {
 	return dsnCfg.FormatDSN(), nil
 }
 
-// NewMySQLSinkUsingSchema creates a new MySQL sink using schema storage
-func NewMySQLSinkUsingSchema(sinkURI string, infoGetter TableInfoGetter, _ map[string]string) (Sink, error) {
+// NewMySQLSink creates a new MySQL sink using schema storage
+func NewMySQLSink(sinkURI string, infoGetter TableInfoGetter, opts map[string]string) (Sink, error) {
 	sinkURI, err := configureSinkURI(sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)

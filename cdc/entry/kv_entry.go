@@ -68,9 +68,9 @@ func (idx *indexKVEntry) unflatten(tableInfo *schema.TableInfo) error {
 	if tableInfo.ID != idx.TableID {
 		return errors.New("wrong table info in unflatten")
 	}
-	index, err := tableInfo.GetIndexInfo(idx.IndexID)
-	if err != nil {
-		return errors.Trace(err)
+	index, exist := tableInfo.GetIndexInfo(idx.IndexID)
+	if !exist {
+		return errors.NotFoundf("column info, colID: %d", index)
 	}
 	if !isDistinct(index, idx.IndexValue) {
 		idx.RecordID = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
@@ -108,9 +108,9 @@ func (row *rowKVEntry) unflatten(tableInfo *schema.TableInfo) error {
 		return errors.New("wrong table info in unflatten")
 	}
 	for colID, v := range row.Row {
-		colInfo, err := tableInfo.GetColumnInfo(colID)
-		if err != nil {
-			return errors.Trace(err)
+		colInfo, exist := tableInfo.GetColumnInfo(colID)
+		if !exist {
+			return errors.NotFoundf("column info, colID: %d", colID)
 		}
 		fieldType := &colInfo.FieldType
 		datum, err := unflatten(v, fieldType)

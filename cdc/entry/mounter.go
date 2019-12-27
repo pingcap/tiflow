@@ -96,9 +96,9 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 
 	values := make(map[string]types.Datum, len(row.Row)+1)
 	for index, colValue := range row.Row {
-		colInfo, err := tableInfo.GetColumnInfo(index)
-		if err != nil {
-			return nil, errors.Trace(err)
+		colInfo, exist := tableInfo.GetColumnInfo(index)
+		if !exist {
+			return nil, errors.NotFoundf("column info, colID: %d", index)
 		}
 		colName := colInfo.Name.O
 		values[colName] = colValue

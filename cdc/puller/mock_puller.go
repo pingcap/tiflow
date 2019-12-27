@@ -253,7 +253,7 @@ func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *schema.T
 	is := m.domain.InfoSchema()
 	tbl, err := is.TableByName(timodel.NewCIStr(schemaName), timodel.NewCIStr(tableName))
 	m.c.Assert(err, check.IsNil)
-	return schema.FromTableInfo(tbl.Meta())
+	return schema.WrapTableInfo(tbl.Meta())
 }
 
 // GetDDLJobs returns the ddl jobs

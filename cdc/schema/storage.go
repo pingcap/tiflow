@@ -68,8 +68,8 @@ type TableInfo struct {
 	IndicesOffset map[int64]int
 }
 
-// FromTableInfo creates a TableInfo from a model.TableInfo
-func FromTableInfo(info *model.TableInfo) *TableInfo {
+// WrapTableInfo creates a TableInfo from a model.TableInfo
+func WrapTableInfo(info *model.TableInfo) *TableInfo {
 	columnsOffset := make(map[int64]int, len(info.Columns))
 	for i, col := range info.Columns {
 		columnsOffset[col.ID] = i
@@ -86,21 +86,21 @@ func FromTableInfo(info *model.TableInfo) *TableInfo {
 }
 
 // GetColumnInfo returns the column info by ID
-func (ti *TableInfo) GetColumnInfo(colID int64) (*model.ColumnInfo, error) {
+func (ti *TableInfo) GetColumnInfo(colID int64) (info *model.ColumnInfo, exist bool) {
 	colOffset, exist := ti.ColumnsOffset[colID]
 	if !exist {
-		return nil, errors.Errorf("not found column info, colID: %d, table:%s, tableID:%d", colID, ti.Name.String(), ti.ID)
+		return nil, false
 	}
-	return ti.Columns[colOffset], nil
+	return ti.Columns[colOffset], true
 }
 
 // GetIndexInfo returns the index info by ID
-func (ti *TableInfo) GetIndexInfo(indexID int64) (*model.IndexInfo, error) {
+func (ti *TableInfo) GetIndexInfo(indexID int64) (info *model.IndexInfo, exist bool) {
 	indexOffset, exist := ti.IndicesOffset[indexID]
 	if !exist {
-		return nil, errors.Errorf("not found index info, indexID: %d, table:%s, tableID:%d", indexID, ti.Name.String(), ti.ID)
+		return nil, false
 	}
-	return ti.Indices[indexOffset], nil
+	return ti.Indices[indexOffset], true
 }
 
 // NewStorage returns the Schema object
@@ -256,7 +256,7 @@ func (s *Storage) CreateTable(schema *model.DBInfo, table *model.TableInfo) erro
 	}
 
 	schema.Tables = append(schema.Tables, table)
-	s.tables[table.ID] = FromTableInfo(table)
+	s.tables[table.ID] = WrapTableInfo(table)
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
 	s.tableNameToID[s.tableIDToName[table.ID]] = table.ID
 
@@ -275,7 +275,7 @@ func (s *Storage) ReplaceTable(table *model.TableInfo) error {
 		addImplicitColumn(table)
 	}
 
-	s.tables[table.ID] = FromTableInfo(table)
+	s.tables[table.ID] = WrapTableInfo(table)
 
 	return nil
 }

@@ -391,9 +391,7 @@ CREATE TABLE many_cols (
 	go func() {
 		// Keep updating to generate DMLs while the other goroutine's dropping columns
 		updateSQL := `UPDATE many_cols SET val = ? WHERE id = ?;`
-		i := 0
-		for {
-			i++
+		for i := 0; ; i++ {
 			mustExec(db, updateSQL, i, 1)
 			select {
 			case <-closeCh:

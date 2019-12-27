@@ -125,7 +125,7 @@ func (h *tableHelper) Get(schema, table string) (*tableInfo, error) {
 }
 
 func (h *tableHelper) TableByID(id int64) (info *schema.TableInfo, ok bool) {
-	return schema.FromTableInfo(&timodel.TableInfo{
+	return schema.WrapTableInfo(&timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
 				Name:  timodel.CIStr{O: "id"},
