@@ -376,7 +376,6 @@ func (o *ownerImpl) addCapture(info *model.CaptureInfo) {
 }
 
 func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
-	var deleted []string
 	for id := range o.markDownProcessor {
 		err := DeleteCaptureInfo(ctx, id, o.etcdClient)
 		if err != nil {
@@ -384,10 +383,6 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 			continue
 		}
 
-		deleted = append(deleted, id)
-	}
-
-	for _, id := range deleted {
 		log.Info("delete capture info", zap.String("id", id))
 		delete(o.markDownProcessor, id)
 	}

@@ -10,7 +10,7 @@ CDC_BINARY=cdc.test
 function prepare() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
     stop_tidb_cluster
-    killall -9 $WORK_DIR || true
+    killall -9 $CDC_BINARY || true
 
     start_tidb_cluster $WORK_DIR
 

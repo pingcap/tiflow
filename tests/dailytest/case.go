@@ -226,8 +226,8 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	})
 	tr.execSQLs(casePKAddDuplicateUKClean)
 
-	tr.run(caseUpdateWhileDroppingCol)
-	tr.execSQLs([]string{"DROP TABLE many_cols;"})
+	// tr.run(caseUpdateWhileDroppingCol)
+	// tr.execSQLs([]string{"DROP TABLE many_cols;"})
 
 	tr.execSQLs(caseInsertBit)
 	tr.execSQLs(caseInsertBitClean)
@@ -334,7 +334,7 @@ CREATE TABLE growing_cols (
 
 		// Keep updating to generate DMLs while the other goroutine's adding columns
 		updateSQL := `UPDATE growing_cols SET val = ? WHERE id = ?;`
-		for i := 0; i < 1000; i++ {
+		for i := 0; i < 256; i++ {
 			mustExec(db, updateSQL, i, 1)
 		}
 	}()
@@ -342,7 +342,7 @@ CREATE TABLE growing_cols (
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 100; i++ {
+		for i := 0; i < 32; i++ {
 			updateSQL := fmt.Sprintf(`ALTER TABLE growing_cols ADD COLUMN col%d VARCHAR(50);`, i)
 			mustExec(db, updateSQL)
 		}
@@ -351,6 +351,7 @@ CREATE TABLE growing_cols (
 	wg.Wait()
 }
 
+/*
 func caseUpdateWhileDroppingCol(db *sql.DB) {
 	const nCols = 50
 	var builder strings.Builder
@@ -414,7 +415,7 @@ CREATE TABLE many_cols (
 
 	wg.Wait()
 }
-
+*/
 // caseTblWithGeneratedCol creates a table with generated column,
 // and insert values into the table
 func caseTblWithGeneratedCol(db *sql.DB) {
