@@ -36,7 +36,7 @@ type Storage struct {
 	schemaNameToID map[string]int64
 
 	schemas map[int64]*model.DBInfo
-	tables  map[int64]*model.TableInfo
+	tables  map[int64]*TableInfo
 
 	truncateTableID map[int64]struct{}
 
@@ -61,6 +61,48 @@ func (t TableName) String() string {
 	return fmt.Sprintf("%s.%s", t.Schema, t.Table)
 }
 
+// TableInfo provides meta data describing a DB table.
+type TableInfo struct {
+	*model.TableInfo
+	ColumnsOffset map[int64]int
+	IndicesOffset map[int64]int
+}
+
+// WrapTableInfo creates a TableInfo from a model.TableInfo
+func WrapTableInfo(info *model.TableInfo) *TableInfo {
+	columnsOffset := make(map[int64]int, len(info.Columns))
+	for i, col := range info.Columns {
+		columnsOffset[col.ID] = i
+	}
+	indicesOffset := make(map[int64]int, len(info.Indices))
+	for i, idx := range info.Indices {
+		indicesOffset[idx.ID] = i
+	}
+	return &TableInfo{
+		TableInfo:     info,
+		ColumnsOffset: columnsOffset,
+		IndicesOffset: indicesOffset,
+	}
+}
+
+// GetColumnInfo returns the column info by ID
+func (ti *TableInfo) GetColumnInfo(colID int64) (info *model.ColumnInfo, exist bool) {
+	colOffset, exist := ti.ColumnsOffset[colID]
+	if !exist {
+		return nil, false
+	}
+	return ti.Columns[colOffset], true
+}
+
+// GetIndexInfo returns the index info by ID
+func (ti *TableInfo) GetIndexInfo(indexID int64) (info *model.IndexInfo, exist bool) {
+	indexOffset, exist := ti.IndicesOffset[indexID]
+	if !exist {
+		return nil, false
+	}
+	return ti.Indices[indexOffset], true
+}
+
 // NewStorage returns the Schema object
 func NewStorage(jobs []*model.Job, hasImplicitCol bool) (*Storage, error) {
 	sort.Slice(jobs, func(i, j int) bool {
@@ -78,7 +120,7 @@ func NewStorage(jobs []*model.Job, hasImplicitCol bool) (*Storage, error) {
 	s.tableNameToID = make(map[TableName]int64)
 	s.schemas = make(map[int64]*model.DBInfo)
 	s.schemaNameToID = make(map[string]int64)
-	s.tables = make(map[int64]*model.TableInfo)
+	s.tables = make(map[int64]*TableInfo)
 
 	return s, nil
 }
@@ -144,7 +186,7 @@ func (s *Storage) SchemaByTableID(tableID int64) (*model.DBInfo, bool) {
 }
 
 // TableByID returns the TableInfo by table id
-func (s *Storage) TableByID(id int64) (val *model.TableInfo, ok bool) {
+func (s *Storage) TableByID(id int64) (val *TableInfo, ok bool) {
 	val, ok = s.tables[id]
 	return
 }
@@ -214,7 +256,7 @@ func (s *Storage) CreateTable(schema *model.DBInfo, table *model.TableInfo) erro
 	}
 
 	schema.Tables = append(schema.Tables, table)
-	s.tables[table.ID] = table
+	s.tables[table.ID] = WrapTableInfo(table)
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
 	s.tableNameToID[s.tableIDToName[table.ID]] = table.ID
 
@@ -233,7 +275,7 @@ func (s *Storage) ReplaceTable(table *model.TableInfo) error {
 		addImplicitColumn(table)
 	}
 
-	s.tables[table.ID] = table
+	s.tables[table.ID] = WrapTableInfo(table)
 
 	return nil
 }

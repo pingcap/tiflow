@@ -3,7 +3,6 @@ package entry
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/schema"
@@ -97,7 +96,11 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 
 	values := make(map[string]types.Datum, len(row.Row)+1)
 	for index, colValue := range row.Row {
-		colName := tableInfo.Columns[index-1].Name.O
+		colInfo, exist := tableInfo.GetColumnInfo(index)
+		if !exist {
+			return nil, errors.NotFoundf("column info, colID: %d", index)
+		}
+		colName := colInfo.Name.O
 		values[colName] = colValue
 	}
 	if tableInfo.PKIsHandle {
@@ -143,7 +146,7 @@ func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
 	}, nil
 }
 
-func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *timodel.TableInfo, tableName *schema.TableName, err error) {
+func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *schema.TableInfo, tableName *schema.TableName, err error) {
 	tableInfo, exist := m.schemaStorage.TableByID(tableID)
 	if !exist {
 		return nil, nil, errors.Errorf("can not find table, id: %d", tableID)
@@ -157,7 +160,7 @@ func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *timodel.TableInfo, t
 	return
 }
 
-func fetchHandleValue(tableInfo *timodel.TableInfo, row *rowKVEntry) (pkColName string, pkValue *types.Datum, err error) {
+func fetchHandleValue(tableInfo *schema.TableInfo, row *rowKVEntry) (pkColName string, pkValue *types.Datum, err error) {
 	handleColOffset := -1
 	for i, col := range tableInfo.Columns {
 		if mysql.HasPriKeyFlag(col.Flag) {

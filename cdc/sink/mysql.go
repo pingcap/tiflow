@@ -40,11 +40,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// TODO: remove this interface
 type tableInspector interface {
 	// Get returns information about the specified table
 	Get(schema, table string) (*tableInfo, error)
-	// Refresh invalidates any cached information about the specified table
-	Refresh(schema, table string)
+}
+
+type tableInspectorImpl struct {
+	tableGetter func(schemaName string, tableName string) (*tableInfo, error)
+}
+
+func (t *tableInspectorImpl) Get(schema, table string) (*tableInfo, error) {
+	return t.tableGetter(schema, table)
 }
 
 type mysqlSink struct {
@@ -55,25 +62,6 @@ type mysqlSink struct {
 }
 
 var _ Sink = &mysqlSink{}
-
-// NewMySQLSink creates a new MySQL sink
-func NewMySQLSink(
-	sinkURI string,
-	infoGetter TableInfoGetter,
-	opts map[string]string,
-) (Sink, error) {
-	sinkURI, err := configureSinkURI(sinkURI)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	db, err := sql.Open("mysql", sinkURI)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	cachedInspector := newCachedInspector(db)
-	sink := newMySQLSink(db, infoGetter, cachedInspector, false)
-	return sink, nil
-}
 
 func configureSinkURI(sinkURI string) (string, error) {
 	dsnCfg, err := dmysql.ParseDSN(sinkURI)
@@ -88,17 +76,23 @@ func configureSinkURI(sinkURI string) (string, error) {
 	return dsnCfg.FormatDSN(), nil
 }
 
-// NewMySQLSinkUsingSchema creates a new MySQL sink
-func NewMySQLSinkUsingSchema(db *sql.DB, schemaStorage *schema.Storage) Sink {
-	inspector := &cachedInspector{
-		db:    db,
-		cache: make(map[string]*tableInfo),
-		tableGetter: func(_ *sql.DB, schemaName string, tableName string) (*tableInfo, error) {
-			info, err := getTableInfoFromSchemaStorage(schemaStorage, schemaName, tableName)
+// NewMySQLSink creates a new MySQL sink using schema storage
+func NewMySQLSink(sinkURI string, infoGetter TableInfoGetter, opts map[string]string) (Sink, error) {
+	sinkURI, err := configureSinkURI(sinkURI)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	db, err := sql.Open("mysql", sinkURI)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	inspector := &tableInspectorImpl{
+		tableGetter: func(schemaName string, tableName string) (*tableInfo, error) {
+			info, err := getTableInfoFromSchemaStorage(infoGetter, schemaName, tableName)
 			return info, err
 		},
 	}
-	return newMySQLSink(db, schemaStorage, inspector, false)
+	return newMySQLSink(db, infoGetter, inspector, false), nil
 }
 
 // NewMySQLSinkDDLOnly returns a sink that only processes DDL
@@ -120,9 +114,6 @@ func (s *mysqlSink) EmitDDL(ctx context.Context, t model.Txn) error {
 		return errors.New("not a DDL")
 	}
 	err := s.execDDLWithMaxRetries(ctx, t.DDL, 5)
-	if err == nil && !s.ddlOnly && isTableChanged(t.DDL) {
-		s.tblInspector.Refresh(t.DDL.Database, t.DDL.Table)
-	}
 	return errors.Trace(err)
 }
 
@@ -273,7 +264,7 @@ func (s *mysqlSink) formatDMLs(dmls []*model.DML) ([]*model.DML, error) {
 	return result, nil
 }
 
-func (s *mysqlSink) getTableDefinition(schema, table string) (*timodel.TableInfo, bool) {
+func (s *mysqlSink) getTableDefinition(schema, table string) (*schema.TableInfo, bool) {
 	tblID, ok := s.infoGetter.GetTableIDByName(schema, table)
 	if !ok {
 		return nil, false
@@ -332,7 +323,7 @@ func (s *mysqlSink) prepareDelete(dml *model.DML) (string, []interface{}, error)
 	return sql, args, nil
 }
 
-func formatValues(table *timodel.TableInfo, colVals map[string]types.Datum) (map[string]types.Datum, error) {
+func formatValues(table *schema.TableInfo, colVals map[string]types.Datum) (map[string]types.Datum, error) {
 	columns := writableColumns(table)
 
 	formatted := make(map[string]types.Datum, len(columns))
@@ -354,7 +345,7 @@ func formatValues(table *timodel.TableInfo, colVals map[string]types.Datum) (map
 
 // writableColumns returns all columns which can be written. This excludes
 // generated and non-public columns.
-func writableColumns(table *timodel.TableInfo) []*timodel.ColumnInfo {
+func writableColumns(table *schema.TableInfo) []*timodel.ColumnInfo {
 	cols := make([]*timodel.ColumnInfo, 0, len(table.Columns))
 	for _, col := range table.Columns {
 		if col.State == timodel.StatePublic && !col.IsGenerated() {

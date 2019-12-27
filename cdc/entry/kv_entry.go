@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -63,11 +64,14 @@ type unknownKVEntry struct {
 	model.RawKVEntry
 }
 
-func (idx *indexKVEntry) unflatten(tableInfo *timodel.TableInfo) error {
+func (idx *indexKVEntry) unflatten(tableInfo *schema.TableInfo) error {
 	if tableInfo.ID != idx.TableID {
 		return errors.New("wrong table info in unflatten")
 	}
-	index := tableInfo.Indices[idx.IndexID-1]
+	index, exist := tableInfo.GetIndexInfo(idx.IndexID)
+	if !exist {
+		return errors.NotFoundf("index info, indexID: %d", idx.IndexID)
+	}
 	if !isDistinct(index, idx.IndexValue) {
 		idx.RecordID = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
 		idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-1]
@@ -99,17 +103,21 @@ func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
 	return false
 }
 
-func (row *rowKVEntry) unflatten(tableInfo *timodel.TableInfo) error {
+func (row *rowKVEntry) unflatten(tableInfo *schema.TableInfo) error {
 	if tableInfo.ID != row.TableID {
 		return errors.New("wrong table info in unflatten")
 	}
-	for i, v := range row.Row {
-		fieldType := &tableInfo.Columns[i-1].FieldType
+	for colID, v := range row.Row {
+		colInfo, exist := tableInfo.GetColumnInfo(colID)
+		if !exist {
+			return errors.NotFoundf("column info, colID: %d", colID)
+		}
+		fieldType := &colInfo.FieldType
 		datum, err := unflatten(v, fieldType)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		row.Row[i] = datum
+		row.Row[colID] = datum
 	}
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -248,11 +249,11 @@ func (m *MockPullerManager) MustExec(sql string, args ...interface{}) {
 }
 
 // GetTableInfo queries the info schema with the table name and returns the TableInfo
-func (m *MockPullerManager) GetTableInfo(schema, table string) *timodel.TableInfo {
+func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *schema.TableInfo {
 	is := m.domain.InfoSchema()
-	tbl, err := is.TableByName(timodel.NewCIStr(schema), timodel.NewCIStr(table))
+	tbl, err := is.TableByName(timodel.NewCIStr(schemaName), timodel.NewCIStr(tableName))
 	m.c.Assert(err, check.IsNil)
-	return tbl.Meta()
+	return schema.WrapTableInfo(tbl.Meta())
 }
 
 // GetDDLJobs returns the ddl jobs

@@ -12,6 +12,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/types"
@@ -423,7 +424,7 @@ func startPullerManager(c *check.C) (*puller.MockPullerManager, context.Context,
 	return pm, pmCtx, pmCancel
 }
 
-func checkDMLKVEntries(ctx context.Context, c *check.C, tableInfo *timodel.TableInfo, plr puller.Puller, expect []kvEntry) {
+func checkDMLKVEntries(ctx context.Context, c *check.C, tableInfo *schema.TableInfo, plr puller.Puller, expect []kvEntry) {
 	ctx, cancel := context.WithCancel(ctx)
 	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
 		eventSum := 0
