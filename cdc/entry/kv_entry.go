@@ -70,7 +70,7 @@ func (idx *indexKVEntry) unflatten(tableInfo *schema.TableInfo) error {
 	}
 	index, exist := tableInfo.GetIndexInfo(idx.IndexID)
 	if !exist {
-		return errors.NotFoundf("index info, indexID: %d", index)
+		return errors.NotFoundf("index info, indexID: %d", idx.IndexID)
 	}
 	if !isDistinct(index, idx.IndexValue) {
 		idx.RecordID = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
