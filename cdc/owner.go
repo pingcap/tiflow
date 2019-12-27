@@ -108,6 +108,29 @@ func (c *changeFeed) updateProcessorInfos(processInfos model.ProcessorsInfos) {
 	c.ProcessorInfos = processInfos
 }
 
+// filter return true if we should not sync the table to downstream.
+// we can add configuration support at the detail.
+func filter(_ *model.ChangeFeedDetail, table schema.TableName) bool {
+	ignoreSchema := []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "mysql"}
+
+	log.Debug("filter table", zap.Stringer("table", table))
+
+	for _, schema := range ignoreSchema {
+		if schema == table.Schema {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *changeFeed) reAddTable(id, startTs uint64) {
+	c.orphanTables[id] = model.ProcessTableInfo{
+		ID:      id,
+		StartTs: startTs,
+	}
+}
+
 func (c *changeFeed) addTable(id, startTs uint64, table schema.TableName) {
 	if c.detail.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
@@ -299,9 +322,16 @@ func (c *changeFeed) applyJob(job *pmodel.Job) error {
 	return nil
 }
 
+// procInfoSnap holds most important replication information of a processor
+type procInfoSnap struct {
+	cfID      string
+	captureID string
+	tables    []*model.ProcessTableInfo
+}
+
 type ownerImpl struct {
 	changeFeeds       map[model.ChangeFeedID]*changeFeed
-	markDownProcessor map[string]struct{}
+	markDownProcessor []*procInfoSnap
 
 	cfRWriter ChangeFeedInfoRWriter
 
@@ -340,7 +370,6 @@ func NewOwner(pdEndpoints []string, cli *clientv3.Client, manager roles.Manager)
 	owner := &ownerImpl{
 		pdEndpoints:        pdEndpoints,
 		pdClient:           pdClient,
-		markDownProcessor:  make(map[string]struct{}),
 		changeFeeds:        make(map[model.ChangeFeedID]*changeFeed),
 		cfRWriter:          storage.NewChangeFeedInfoEtcdRWriter(cli),
 		etcdClient:         cli,
@@ -360,20 +389,36 @@ func (o *ownerImpl) addCapture(info *model.CaptureInfo) {
 }
 
 func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
-	for id := range o.markDownProcessor {
+	var deletedCapture = make(map[string]struct{})
+	for i := len(o.markDownProcessor) - 1; i >= 0; i-- {
+		snap := o.markDownProcessor[i]
+		changefeed, ok := o.changeFeeds[snap.cfID]
+		if !ok {
+			log.Error("changefeed not found in owner cache, can't rebalance",
+				zap.String("changefeedID", snap.cfID))
+			continue
+		}
+		for _, tbl := range snap.tables {
+			changefeed.reAddTable(tbl.ID, tbl.StartTs)
+		}
+		err := kv.DeleteSubChangeFeedInfo(ctx, o.etcdClient, snap.cfID, snap.captureID)
+		if err != nil {
+			log.Warn("failed to delete subchangefeed info",
+				zap.String("changefeedID", snap.cfID),
+				zap.String("captureID", snap.captureID),
+				zap.Error(err),
+			)
+			continue
+		}
+		o.markDownProcessor = append(o.markDownProcessor[:i], o.markDownProcessor[i+1:]...)
+		deletedCapture[snap.captureID] = struct{}{}
+	}
+
+	for id := range deletedCapture {
 		err := DeleteCaptureInfo(ctx, id, o.etcdClient)
 		if err != nil {
-			log.Warn("failed to delete key", zap.Error(err))
-			continue
+			log.Warn("failed to delete capture info", zap.Error(err))
 		}
-		err = kv.DeleteCaptureFeeds(ctx, o.etcdClient, id)
-		if err != nil {
-			log.Warn("failed to delete all subchangefeed infos", zap.Error(err))
-			continue
-		}
-
-		log.Info("delete capture info", zap.String("id", id))
-		delete(o.markDownProcessor, id)
 	}
 }
 
@@ -487,7 +532,22 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 			for id, info := range cf.ProcessorInfos {
 				lastUpdateTime := cf.processorLastUpdateTime[id]
 				if time.Since(lastUpdateTime) > markProcessorDownTime {
-					o.markDownProcessor[id] = struct{}{}
+					snap := &procInfoSnap{
+						cfID:      changeFeedID,
+						captureID: id,
+						tables:    make([]*model.ProcessTableInfo, 0, len(info.TableInfos)),
+					}
+					for _, tbl := range info.TableInfos {
+						ts := info.CheckPointTs
+						if ts < tbl.StartTs {
+							ts = tbl.StartTs
+						}
+						snap.tables = append(snap.tables, &model.ProcessTableInfo{
+							ID:      tbl.ID,
+							StartTs: ts,
+						})
+					}
+					o.markDownProcessor = append(o.markDownProcessor, snap)
 					log.Info("markdown processor", zap.String("id", id),
 						zap.Reflect("info", info), zap.Time("update time", lastUpdateTime))
 				}
