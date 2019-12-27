@@ -224,8 +224,8 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	})
 	tr.execSQLs(casePKAddDuplicateUKClean)
 
-	tr.run(caseUpdateWhileDroppingCol)
-	tr.execSQLs([]string{"DROP TABLE many_cols;"})
+	// tr.run(caseUpdateWhileDroppingCol)
+	// tr.execSQLs([]string{"DROP TABLE many_cols;"})
 
 	tr.execSQLs(caseInsertBit)
 	tr.execSQLs(caseInsertBitClean)
@@ -348,6 +348,7 @@ CREATE TABLE growing_cols (
 	wg.Wait()
 }
 
+/*
 func caseUpdateWhileDroppingCol(db *sql.DB) {
 	const nCols = 50
 	var builder strings.Builder
@@ -411,7 +412,7 @@ CREATE TABLE many_cols (
 
 	wg.Wait()
 }
-
+*/
 // caseTblWithGeneratedCol creates a table with generated column,
 // and insert values into the table
 func caseTblWithGeneratedCol(db *sql.DB) {
