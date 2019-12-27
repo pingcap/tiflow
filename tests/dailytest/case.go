@@ -20,7 +20,9 @@ import (
 	"math/rand"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 )
 
@@ -240,18 +242,19 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr.execSQLs([]string{"DROP TABLE base_for_view;"})
 	tr.execSQLs([]string{"DROP VIEW view_user_sum;"})
 
-	// TODO: fix me
 	// random op on have both pk and uk table
-	// var start time.Time
-	// tr.run(func(src *sql.DB) {
-	// 	start = time.Now()
+	var start time.Time
+	tr.run(func(src *sql.DB) {
+		start = time.Now()
 
-	// 	err := updatePKUK(src, 1000)
-	// 	if err != nil {
-	// 		log.S().Fatal(errors.ErrorStack(err))
-	// 	}
-	// })
-	// log.S().Info("sync updatePKUK take: ", time.Since(start))
+		err := updatePKUK(src, 1000)
+		if err != nil {
+			log.S().Fatal(errors.ErrorStack(err))
+		}
+	})
+
+	tr.execSQLs([]string{"DROP TABLE pkuk"})
+	log.S().Info("sync updatePKUK take: ", time.Since(start))
 
 	// swap unique index value
 	tr.run(func(src *sql.DB) {
@@ -470,7 +473,6 @@ AS SELECT user_id, SUM(amount) FROM base_for_view GROUP BY user_id;`)
 
 // updatePKUK create a table with primary key and unique key
 // then do opNum randomly DML
-/*
 func updatePKUK(db *sql.DB, opNum int) error {
 	maxKey := 20
 	mustExec(db, "create table pkuk(pk int primary key, uk int, v int, unique key uk(uk));")
@@ -564,11 +566,8 @@ func updatePKUK(db *sql.DB, opNum int) error {
 		}
 		i++
 	}
-
-	_, err := db.Exec("DROP TABLE pkuk")
-	return errors.Trace(err)
+	return nil
 }
-*/
 
 // create a table with one column id with different type
 // test the case whether it is primary key too, this can
