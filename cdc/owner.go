@@ -366,6 +366,11 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 			log.Warn("failed to delete key", zap.Error(err))
 			continue
 		}
+		err = kv.DeleteCaptureFeeds(ctx, o.etcdClient, id)
+		if err != nil {
+			log.Warn("failed to delete all subchangefeed infos", zap.Error(err))
+			continue
+		}
 
 		log.Info("delete capture info", zap.String("id", id))
 		delete(o.markDownProcessor, id)

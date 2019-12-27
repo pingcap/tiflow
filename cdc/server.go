@@ -17,10 +17,10 @@ import (
 	"context"
 	"net/http"
 	"strings"
-
-	"github.com/pingcap/ticdc/pkg/util"
+	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -98,13 +98,7 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 // Close closes the server.
-func (s *Server) Close(ctx context.Context, cancel context.CancelFunc) {
-	if s.capture != nil {
-		err := s.capture.Close(ctx)
-		if err != nil {
-			log.Error("close capture", zap.Error(err))
-		}
-	}
+func (s *Server) Close() {
 	if s.statusServer != nil {
 		err := s.statusServer.Close()
 		if err != nil {
@@ -112,6 +106,14 @@ func (s *Server) Close(ctx context.Context, cancel context.CancelFunc) {
 		}
 		s.statusServer = nil
 	}
-	cancel()
-	s.capture.Cleanup()
+	if s.capture != nil {
+		s.capture.Cleanup()
+
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), time.Second*2)
+		err := s.capture.Close(closeCtx)
+		if err != nil {
+			log.Error("close capture", zap.Error(err))
+		}
+		closeCancel()
+	}
 }

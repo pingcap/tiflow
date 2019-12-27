@@ -14,6 +14,7 @@
 package util
 
 import (
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 )
@@ -83,4 +84,15 @@ func InitLogger(cfg *Config) error {
 	log.ReplaceGlobals(lg, _globalP)
 
 	return nil
+}
+
+// ZapErrorFilter wraps zap.Error, if err is in given filterErrors, it will be set to nil
+func ZapErrorFilter(err error, filterErrors ...error) zap.Field {
+	cause := errors.Cause(err)
+	for _, ferr := range filterErrors {
+		if cause == ferr {
+			return zap.Error(nil)
+		}
+	}
+	return zap.Error(err)
 }

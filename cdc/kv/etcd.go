@@ -239,3 +239,24 @@ func PutChangeFeedStatus(
 	_, err = client.Put(ctx, key, value, opts...)
 	return errors.Trace(err)
 }
+
+// DeleteCaptureFeeds removes all subchangefeedinfo belongs to a capture in etcd
+func DeleteCaptureFeeds(
+	ctx context.Context,
+	cli *clientv3.Client,
+	captureID string,
+	opts ...clientv3.OpOption,
+) error {
+	_, changefeeds, err := GetChangeFeeds(ctx, cli, opts...)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for cfID := range changefeeds {
+		key := GetEtcdKeySubChangeFeed(cfID, captureID)
+		_, err = cli.Delete(ctx, key)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
