@@ -294,7 +294,7 @@ func (c *changeFeed) applyJob(job *pmodel.Job) error {
 
 	// case table id set may change
 	switch job.Type {
-	case pmodel.ActionCreateTable:
+	case pmodel.ActionCreateTable, pmodel.ActionRecoverTable:
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
 		c.addTable(addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
 	case pmodel.ActionDropTable:

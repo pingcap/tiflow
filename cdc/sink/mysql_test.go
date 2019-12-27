@@ -65,7 +65,7 @@ func (s EmitSuite) TestShouldExecDDL(c *check.C) {
 	mock.ExpectCommit()
 
 	// Execute
-	err = sink.Emit(context.Background(), t)
+	err = sink.EmitDDL(context.Background(), t)
 
 	// Validate
 	c.Assert(err, check.IsNil)
@@ -101,7 +101,7 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 	mock.ExpectExec(t.DDL.Job.Query).WillReturnError(&ignorable)
 
 	// Execute
-	err = sink.Emit(context.Background(), t)
+	err = sink.EmitDDL(context.Background(), t)
 
 	// Validate
 	c.Assert(err, check.IsNil)
@@ -185,7 +185,7 @@ func (s EmitSuite) TestShouldExecReplaceInto(c *check.C) {
 	mock.ExpectCommit()
 
 	// Execute
-	err = sink.Emit(context.Background(), t)
+	err = sink.EmitDMLs(context.Background(), t)
 
 	// Validate
 	c.Assert(err, check.IsNil)
@@ -226,9 +226,47 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 	mock.ExpectCommit()
 
 	// Execute
-	err = sink.Emit(context.Background(), t)
+	err = sink.EmitDMLs(context.Background(), t)
 
 	// Validate
 	c.Assert(err, check.IsNil)
 	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
+}
+
+type splitSuite struct{}
+
+var _ = check.Suite(&splitSuite{})
+
+func (s *splitSuite) TestCanHandleEmptyInput(c *check.C) {
+	c.Assert(splitIndependentGroups(nil), check.HasLen, 0)
+}
+
+func (s *splitSuite) TestShouldSplitByTable(c *check.C) {
+	var dmls []*model.DML
+	addDMLs := func(n int, db, tbl string) {
+		for i := 0; i < n; i++ {
+			dml := model.DML{
+				Database: db,
+				Table:    tbl,
+			}
+			dmls = append(dmls, &dml)
+		}
+	}
+	addDMLs(3, "db", "tbl1")
+	addDMLs(2, "db", "tbl2")
+	addDMLs(2, "db", "tbl1")
+	addDMLs(2, "db2", "tbl2")
+
+	groups := splitIndependentGroups(dmls)
+
+	assertAllAreFromTbl := func(dmls []*model.DML, db, tbl string) {
+		for _, dml := range dmls {
+			c.Assert(dml.Database, check.Equals, db)
+			c.Assert(dml.Table, check.Equals, tbl)
+		}
+	}
+	c.Assert(groups, check.HasLen, 3)
+	assertAllAreFromTbl(groups[0], "db", "tbl1")
+	assertAllAreFromTbl(groups[1], "db", "tbl2")
+	assertAllAreFromTbl(groups[2], "db2", "tbl2")
 }
