@@ -143,15 +143,7 @@ func (c *Capture) Cleanup() {
 
 // Close closes the capture by unregistering it from etcd
 func (c *Capture) Close(ctx context.Context) error {
-	err := DeleteCaptureInfo(ctx, c.info.ID, c.etcdClient)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = kv.DeleteCaptureFeeds(ctx, c.etcdClient, c.info.ID)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	return errors.Trace(DeleteCaptureInfo(ctx, c.info.ID, c.etcdClient))
 }
 
 // register registers the capture information in etcd
