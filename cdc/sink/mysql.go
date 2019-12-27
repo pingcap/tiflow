@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/pingcap/ticdc/pkg/retry"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -113,30 +115,58 @@ func newMySQLSink(db *sql.DB, infoGetter TableInfoGetter, tblInspector tableInsp
 	}
 }
 
-func (s *mysqlSink) Emit(ctx context.Context, txns ...model.Txn) error {
-	// TODO: Merge txns to reduce the number of transactions needed
-	// TODO: Run txns concurrently
+func (s *mysqlSink) EmitDDL(ctx context.Context, t model.Txn) error {
+	if !t.IsDDL() {
+		return errors.New("not a DDL")
+	}
+	err := s.execDDLWithMaxRetries(ctx, t.DDL, 5)
+	if err == nil && !s.ddlOnly && isTableChanged(t.DDL) {
+		s.tblInspector.Refresh(t.DDL.Database, t.DDL.Table)
+	}
+	return errors.Trace(err)
+}
+
+func (s *mysqlSink) EmitDMLs(ctx context.Context, txns ...model.Txn) error {
+	if s.ddlOnly {
+		return errors.New("dmls disallowed in ddl-only mode")
+	}
+	var allDMLs []*model.DML
 	for _, t := range txns {
-		if t.IsDDL() {
-			err := s.execDDLWithMaxRetries(ctx, t.DDL, 5)
-			if err == nil && !s.ddlOnly && isTableChanged(t.DDL) {
-				s.tblInspector.Refresh(t.DDL.Database, t.DDL.Table)
-			}
-			return errors.Trace(err)
-		}
-		if s.ddlOnly {
-			return errors.New("dmls disallowed in ddl-only mode")
-		}
 		dmls, err := s.formatDMLs(t.DMLs)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		// TODO: Add retry
-		if err := s.execDMLs(ctx, dmls); err != nil {
-			return errors.Trace(err)
-		}
+		allDMLs = append(allDMLs, dmls...)
 	}
-	return nil
+
+	dmlGroups := splitIndependentGroups(allDMLs)
+	return s.concurrentExec(ctx, dmlGroups)
+}
+
+func (s *mysqlSink) concurrentExec(ctx context.Context, dmlGroups [][]*model.DML) error {
+	jobs := make(chan []*model.DML, len(dmlGroups))
+	for _, dmls := range dmlGroups {
+		jobs <- dmls
+	}
+	close(jobs)
+
+	nWorkers := 16
+	if len(dmlGroups) < nWorkers {
+		nWorkers = len(dmlGroups)
+	}
+	eg, _ := errgroup.WithContext(ctx)
+	for i := 0; i < nWorkers; i++ {
+		eg.Go(func() error {
+			for dmls := range jobs {
+				// TODO: Add retry
+				if err := s.execDMLs(ctx, dmls); err != nil {
+					return errors.Trace(err)
+				}
+			}
+			return nil
+		})
+	}
+	return eg.Wait()
 }
 
 func (s *mysqlSink) Close() error {
@@ -378,6 +408,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) types.Datum {
 
 	return table.GetZeroValue(col)
 }
+
 func whereValues(colVals map[string]types.Datum, names []string) (values []types.Datum) {
 	for _, name := range names {
 		v := colVals[name]
@@ -446,4 +477,21 @@ func buildColumnList(names []string) string {
 	}
 
 	return b.String()
+}
+
+// splitIndependentGroups splits DMLs into independent groups.
+// Two groups of DMLs are considered independent if they can be
+// executed concurrently.
+func splitIndependentGroups(dmls []*model.DML) [][]*model.DML {
+	// TODO: Detect causality of changes to achieve more fine-grain split
+	tables := make(map[string][]*model.DML)
+	for _, dml := range dmls {
+		tbl := dml.TableName()
+		tables[tbl] = append(tables[tbl], dml)
+	}
+	groups := make([][]*model.DML, 0, len(tables))
+	for _, dmls := range tables {
+		groups = append(groups, dmls)
+	}
+	return groups
 }
