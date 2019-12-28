@@ -628,7 +628,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			filterBySchemaAndTable(&txn)
+			p.changefeed.FilterTxn(&txn)
 			if len(txn.DMLs) == 0 {
 				continue
 			}

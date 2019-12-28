@@ -16,7 +16,10 @@ package model
 import (
 	"encoding/json"
 	"math"
+	"strings"
 	"time"
+
+	"github.com/pingcap/tidb-tools/pkg/filter"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -32,6 +35,53 @@ type ChangeFeedDetail struct {
 	// The ChangeFeed will exits until sync to timestamp TargetTs
 	TargetTs uint64          `json:"target-ts"`
 	Info     *ChangeFeedInfo `json:"-"`
+
+	filter              *filter.Filter
+	FilterCaseSensitive bool          `json:"filter-case-sensitive"`
+	FilterRules         *filter.Rules `json:"filter-rules"`
+}
+
+func (detail *ChangeFeedDetail) getFilter() *filter.Filter {
+	if detail.filter == nil {
+		rules := detail.FilterRules
+		if rules == nil {
+			rules = &filter.Rules{
+				IgnoreDBs: []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "mysql"},
+			}
+		}
+		detail.filter = filter.New(detail.FilterCaseSensitive, rules)
+	}
+	return detail.filter
+}
+
+// ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
+// Set `tbl` to an empty string to test against the whole database.
+func (detail *ChangeFeedDetail) ShouldIgnoreTable(db, tbl string) bool {
+	if isSysSchema(db) {
+		return true
+	}
+	f := detail.getFilter()
+	// TODO: Change filter to support simple check directly
+	left := f.ApplyOn([]*filter.Table{{Schema: db, Name: tbl}})
+	return len(left) == 0
+}
+
+// FilterTxn removes DDL/DMLs that's not wanted by this change feed.
+// CDC only supports filtering by database/table now.
+func (detail *ChangeFeedDetail) FilterTxn(t *Txn) {
+	if t.IsDDL() {
+		if detail.ShouldIgnoreTable(t.DDL.Database, "") {
+			t.DDL = nil
+		}
+	} else {
+		var filteredDMLs []*DML
+		for _, dml := range t.DMLs {
+			if !detail.ShouldIgnoreTable(dml.Database, dml.Table) {
+				filteredDMLs = append(filteredDMLs, dml)
+			}
+		}
+		t.DMLs = filteredDMLs
+	}
 }
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
@@ -70,4 +120,14 @@ func (detail *ChangeFeedDetail) Marshal() (string, error) {
 func (detail *ChangeFeedDetail) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, &detail)
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
+}
+
+func isSysSchema(db string) bool {
+	db = strings.ToUpper(db)
+	for _, schema := range []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "MYSQL"} {
+		if schema == db {
+			return true
+		}
+	}
+	return false
 }

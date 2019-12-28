@@ -312,6 +312,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
 			tables:                  tables,
+			detail:                  &model.ChangeFeedDetail{},
 			ChangeFeedInfo:          &model.ChangeFeedInfo{},
 			processorLastUpdateTime: make(map[string]time.Time),
 			TargetTs:                100,

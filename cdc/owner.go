@@ -108,24 +108,8 @@ func (c *changeFeed) updateProcessorInfos(processInfos model.ProcessorsInfos) {
 	c.ProcessorInfos = processInfos
 }
 
-// filter return true if we should not sync the table to downstream.
-// we can add configuration support at the detail.
-func filter(_ *model.ChangeFeedDetail, table schema.TableName) bool {
-	ignoreSchema := []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "mysql"}
-
-	log.Debug("filter table", zap.Stringer("table", table))
-
-	for _, schema := range ignoreSchema {
-		if schema == table.Schema {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (c *changeFeed) addTable(id, startTs uint64, table schema.TableName) {
-	if filter(c.detail, table) {
+	if c.detail.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
 	}
 
@@ -451,7 +435,7 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 	tables := make(map[uint64]schema.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
 	for id, table := range schemaStorage.CloneTables() {
-		if filter(detail, table) {
+		if detail.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
 		}
 
@@ -643,7 +627,7 @@ waitCheckpointTsLoop:
 
 		cfInfo.banlanceOrphanTables(context.Background(), o.captures)
 		ddlTxn := model.Txn{Ts: todoDDLJob.Job.BinlogInfo.FinishedTS, DDL: todoDDLJob}
-		filterBySchemaAndTable(&ddlTxn)
+		cfInfo.detail.FilterTxn(&ddlTxn)
 		if ddlTxn.DDL == nil {
 			log.Warn(
 				"DDL ignored",
