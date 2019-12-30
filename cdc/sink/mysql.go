@@ -247,7 +247,7 @@ func (s *mysqlSink) prepareReplace(dml *model.DML) (string, []interface{}, error
 	if !ok {
 		return "", nil, fmt.Errorf("Table not found: %s", dml.TableName())
 	}
-	columns := info.ColNames()
+	columns := getColNames(info.WritableColumns())
 	var builder strings.Builder
 	cols := "(" + buildColumnList(columns) + ")"
 	tblName := util.QuoteSchema(dml.Database, dml.Table)
@@ -294,7 +294,7 @@ func (s *mysqlSink) prepareDelete(dml *model.DML) (string, []interface{}, error)
 }
 
 func formatValues(table *schema.TableInfo, colVals map[string]types.Datum) (map[string]types.Datum, error) {
-	columns := writableColumns(table)
+	columns := table.WritableColumns()
 
 	formatted := make(map[string]types.Datum, len(columns))
 	for _, col := range columns {
@@ -311,18 +311,6 @@ func formatValues(table *schema.TableInfo, colVals map[string]types.Datum) (map[
 	}
 
 	return formatted, nil
-}
-
-// writableColumns returns all columns which can be written. This excludes
-// generated and non-public columns.
-func writableColumns(table *schema.TableInfo) []*timodel.ColumnInfo {
-	cols := make([]*timodel.ColumnInfo, 0, len(table.Columns))
-	for _, col := range table.Columns {
-		if col.State == timodel.StatePublic && !col.IsGenerated() {
-			cols = append(cols, col)
-		}
-	}
-	return cols
 }
 
 func formatColVal(datum types.Datum, ft types.FieldType) (types.Datum, error) {
@@ -395,7 +383,7 @@ func whereSlice(table *schema.TableInfo, colVals map[string]types.Datum) (colNam
 	}
 
 	// Fallback to use all columns
-	cols := table.ColNames()
+	cols := getColNames(table.WritableColumns())
 	return cols, whereValues(colVals, cols)
 }
 
@@ -439,6 +427,14 @@ func buildColumnList(names []string) string {
 	}
 
 	return b.String()
+}
+
+func getColNames(cols []*timodel.ColumnInfo) []string {
+	names := make([]string, 0, len(cols))
+	for _, c := range cols {
+		names = append(names, c.Name.O)
+	}
+	return names
 }
 
 // splitIndependentGroups splits DMLs into independent groups.

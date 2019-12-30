@@ -103,15 +103,15 @@ func (ti *TableInfo) GetIndexInfo(indexID int64) (info *model.IndexInfo, exist b
 	return ti.Indices[indexOffset], true
 }
 
-// ColNames returns the names of all columns
-func (ti *TableInfo) ColNames() []string {
-	var names []string
-	for _, c := range ti.Cols() {
-		if !c.IsGenerated() {
-			names = append(names, c.Name.O)
+// WritableColumns returns all public and non-generated columns
+func (ti *TableInfo) WritableColumns() []*model.ColumnInfo {
+	cols := make([]*model.ColumnInfo, 0, len(ti.Columns))
+	for _, col := range ti.Columns {
+		if col.State == model.StatePublic && !col.IsGenerated() {
+			cols = append(cols, col)
 		}
 	}
-	return names
+	return cols
 }
 
 // GetUniqueKeys returns all unique keys of the table as a slice of column names
