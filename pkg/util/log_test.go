@@ -14,23 +14,26 @@
 package util
 
 import (
+	"context"
 	"path"
 	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 func TestSuite(t *testing.T) {
-	TestingT(t)
+	check.TestingT(t)
 }
 
 type logSuite struct{}
 
-var _ = Suite(&logSuite{})
+var _ = check.Suite(&logSuite{})
 
-func (s *logSuite) TestInitLogger(c *C) {
+func (s *logSuite) TestInitLogger(c *check.C) {
 	f := path.Join(c.MkDir(), "test")
 	cfg := &Config{
 		Level: "warning",
@@ -38,6 +41,27 @@ func (s *logSuite) TestInitLogger(c *C) {
 	}
 	cfg.Adjust()
 	err := InitLogger(cfg)
-	c.Assert(err, IsNil)
-	c.Assert(log.GetLevel(), Equals, zapcore.WarnLevel)
+	c.Assert(err, check.IsNil)
+	c.Assert(log.GetLevel(), check.Equals, zapcore.WarnLevel)
+}
+
+func (s *logSuite) TestZapErrorFilter(c *check.C) {
+	var (
+		err       = errors.New("test error")
+		testCases = []struct {
+			err      error
+			filters  []error
+			expected zap.Field
+		}{
+			{nil, []error{}, zap.Error(nil)},
+			{err, []error{}, zap.Error(err)},
+			{err, []error{context.Canceled}, zap.Error(err)},
+			{err, []error{err}, zap.Error(nil)},
+			{context.Canceled, []error{context.Canceled}, zap.Error(nil)},
+			{errors.Annotate(context.Canceled, "annotate error"), []error{context.Canceled}, zap.Error(nil)},
+		}
+	)
+	for _, tc := range testCases {
+		c.Assert(ZapErrorFilter(tc.err, tc.filters...), check.DeepEquals, tc.expected)
+	}
 }

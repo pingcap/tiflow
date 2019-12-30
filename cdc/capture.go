@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/pkg/flags"
+	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
@@ -97,7 +98,7 @@ func (c *Capture) OnRunProcessor(p *processor) {
 // OnStopProcessor implements processorCallback.
 func (c *Capture) OnStopProcessor(p *processor, err error) {
 	// TODO: handle processor error
-	log.Info("stop to run processor", zap.String("changefeed id", p.changefeedID), zap.Error(err))
+	log.Info("stop to run processor", zap.String("changefeed id", p.changefeedID), util.ZapErrorFilter(err, context.Canceled))
 	c.procLock.Lock()
 	defer c.procLock.Unlock()
 	delete(c.processors, p.changefeedID)

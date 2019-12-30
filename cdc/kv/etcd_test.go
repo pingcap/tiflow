@@ -122,3 +122,24 @@ func (s *etcdSuite) TestGetPutSubchangeFeed(c *check.C) {
 	_, _, err = GetSubChangeFeedInfo(ctx, s.client, feedID, captureID)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrSubChangeFeedInfoNotExists)
 }
+
+func (s *etcdSuite) TestDeleteSubChangeFeedInfo(c *check.C) {
+	ctx := context.Background()
+	info := &model.SubChangeFeedInfo{
+		CheckPointTs: 100,
+		ResolvedTs:   200,
+		TableInfos: []*model.ProcessTableInfo{
+			{ID: 1, StartTs: 100},
+		},
+	}
+	feedID := "feedid"
+	captureID := "captureid"
+
+	err := PutSubChangeFeedInfo(ctx, s.client, feedID, captureID, info)
+	c.Assert(err, check.IsNil)
+
+	err = DeleteSubChangeFeedInfo(ctx, s.client, feedID, captureID)
+	c.Assert(err, check.IsNil)
+	_, _, err = GetSubChangeFeedInfo(ctx, s.client, feedID, captureID)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrSubChangeFeedInfoNotExists)
+}

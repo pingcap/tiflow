@@ -69,17 +69,16 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	go func() {
 		sig := <-sc
 		log.Info("got signal to exit", zap.Stringer("signal", sig))
-		server.Close(ctx, cancel)
+		cancel()
 	}()
 
 	err = server.Run(ctx)
-	if err != nil {
-		if errors.Cause(err) == context.Canceled {
-			return nil
-		}
+	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("run server", zap.String("error", errors.ErrorStack(err)))
 		return errors.Annotate(err, "run server")
 	}
+	server.Close()
+	log.Info("cdc server exits successfully")
 
 	return nil
 }

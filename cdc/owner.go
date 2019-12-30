@@ -108,6 +108,13 @@ func (c *changeFeed) updateProcessorInfos(processInfos model.ProcessorsInfos) {
 	c.ProcessorInfos = processInfos
 }
 
+func (c *changeFeed) reAddTable(id, startTs uint64) {
+	c.orphanTables[id] = model.ProcessTableInfo{
+		ID:      id,
+		StartTs: startTs,
+	}
+}
+
 func (c *changeFeed) addTable(id, startTs uint64, table schema.TableName) {
 	if c.detail.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
@@ -301,7 +308,7 @@ func (c *changeFeed) applyJob(job *pmodel.Job) error {
 
 type ownerImpl struct {
 	changeFeeds       map[model.ChangeFeedID]*changeFeed
-	markDownProcessor map[string]struct{}
+	markDownProcessor []*model.ProcInfoSnap
 
 	cfRWriter ChangeFeedInfoRWriter
 
@@ -340,7 +347,6 @@ func NewOwner(pdEndpoints []string, cli *clientv3.Client, manager roles.Manager)
 	owner := &ownerImpl{
 		pdEndpoints:        pdEndpoints,
 		pdClient:           pdClient,
-		markDownProcessor:  make(map[string]struct{}),
 		changeFeeds:        make(map[model.ChangeFeedID]*changeFeed),
 		cfRWriter:          storage.NewChangeFeedInfoEtcdRWriter(cli),
 		etcdClient:         cli,
@@ -360,15 +366,37 @@ func (o *ownerImpl) addCapture(info *model.CaptureInfo) {
 }
 
 func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
-	for id := range o.markDownProcessor {
-		err := DeleteCaptureInfo(ctx, id, o.etcdClient)
-		if err != nil {
-			log.Warn("failed to delete key", zap.Error(err))
+	var deletedCapture = make(map[string]struct{})
+	remainProcs := make([]*model.ProcInfoSnap, 0)
+	for _, snap := range o.markDownProcessor {
+		changefeed, ok := o.changeFeeds[snap.CfID]
+		if !ok {
+			log.Error("changefeed not found in owner cache, can't rebalance",
+				zap.String("changefeedID", snap.CfID))
 			continue
 		}
+		for _, tbl := range snap.Tables {
+			changefeed.reAddTable(tbl.ID, tbl.StartTs)
+		}
+		err := kv.DeleteSubChangeFeedInfo(ctx, o.etcdClient, snap.CfID, snap.CaptureID)
+		if err != nil {
+			log.Warn("failed to delete subchangefeed info",
+				zap.String("changefeedID", snap.CfID),
+				zap.String("captureID", snap.CaptureID),
+				zap.Error(err),
+			)
+			remainProcs = append(remainProcs, snap)
+			continue
+		}
+		deletedCapture[snap.CaptureID] = struct{}{}
+	}
+	o.markDownProcessor = remainProcs
 
-		log.Info("delete capture info", zap.String("id", id))
-		delete(o.markDownProcessor, id)
+	for id := range deletedCapture {
+		err := DeleteCaptureInfo(ctx, id, o.etcdClient)
+		if err != nil {
+			log.Warn("failed to delete capture info", zap.Error(err))
+		}
 	}
 }
 
@@ -482,7 +510,8 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 			for id, info := range cf.ProcessorInfos {
 				lastUpdateTime := cf.processorLastUpdateTime[id]
 				if time.Since(lastUpdateTime) > markProcessorDownTime {
-					o.markDownProcessor[id] = struct{}{}
+					snap := info.Snapshot(changeFeedID, id)
+					o.markDownProcessor = append(o.markDownProcessor, snap)
 					log.Info("markdown processor", zap.String("id", id),
 						zap.Reflect("info", info), zap.Time("update time", lastUpdateTime))
 				}
