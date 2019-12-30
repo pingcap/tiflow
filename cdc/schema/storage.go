@@ -105,9 +105,11 @@ func (ti *TableInfo) GetIndexInfo(indexID int64) (info *model.IndexInfo, exist b
 
 // ColNames returns the names of all columns
 func (ti *TableInfo) ColNames() []string {
-	names := make([]string, 0, len(ti.Cols()))
+	var names []string
 	for _, c := range ti.Cols() {
-		names = append(names, c.Name.O)
+		if !c.IsGenerated() {
+			names = append(names, c.Name.O)
+		}
 	}
 	return names
 }
@@ -127,7 +129,8 @@ func (ti *TableInfo) GetUniqueKeys() [][]string {
 	if ti.PKIsHandle {
 		for _, col := range ti.Columns {
 			if mysql.HasPriKeyFlag(col.Flag) {
-				uniqueKeys = append(uniqueKeys, []string{col.Name.O})
+				// Prepend to make sure the primary key ends up at the front
+				uniqueKeys = append([][]string{{col.Name.O}}, uniqueKeys...)
 				break
 			}
 		}
