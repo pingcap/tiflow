@@ -198,6 +198,8 @@ func (s *Storage) GetTableIDByName(schemaName string, tableName string) (int64, 
 	return id, ok
 }
 
+// GetTableByName queries a table by name,
+// the second returned value is false if no table with the specified name is found.
 func (s *Storage) GetTableByName(schema, table string) (info *TableInfo, ok bool) {
 	id, ok := s.GetTableIDByName(schema, table)
 	if !ok {
