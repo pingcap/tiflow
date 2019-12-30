@@ -446,7 +446,7 @@ func (o *ownerImpl) handleWatchCapture() error {
 func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.ProcessorsInfos, detail *model.ChangeFeedDetail) (*changeFeed, error) {
 	checkpointTs := detail.GetCheckpointTs()
 	log.Info("Find new changefeed", zap.Reflect("detail", detail),
-		zap.Uint64("checkpoint ts", checkpointTs))
+		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
 	schemaStorage, err := createSchemaStore(o.pdEndpoints)
 	if err != nil {
@@ -460,16 +460,27 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 
 	ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
 
+	existingTables := make(map[uint64]uint64)
+	for _, subCfInfo := range processorsInfos {
+		for _, tbl := range subCfInfo.TableInfos {
+			existingTables[tbl.ID] = subCfInfo.CheckPointTs
+		}
+	}
+
 	tables := make(map[uint64]schema.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
-	for id, table := range schemaStorage.CloneTables() {
+	for tid, table := range schemaStorage.CloneTables() {
 		if detail.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
 		}
 
-		tables[id] = table
-		orphanTables[id] = model.ProcessTableInfo{
-			ID:      id,
+		tables[tid] = table
+		if ts, ok := existingTables[tid]; ok {
+			log.Debug("ignore known table", zap.Uint64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
+			continue
+		}
+		orphanTables[tid] = model.ProcessTableInfo{
+			ID:      tid,
 			StartTs: checkpointTs,
 		}
 	}
@@ -504,9 +515,9 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	for changeFeedID, changeFeedInfo := range pinfos {
+	for changeFeedID, procInfos := range pinfos {
 		if cf, exist := o.changeFeeds[changeFeedID]; exist {
-			cf.updateProcessorInfos(changeFeedInfo)
+			cf.updateProcessorInfos(procInfos)
 			for id, info := range cf.ProcessorInfos {
 				lastUpdateTime := cf.processorLastUpdateTime[id]
 				if time.Since(lastUpdateTime) > markProcessorDownTime {
@@ -525,7 +536,7 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 			return errors.Annotatef(model.ErrChangeFeedNotExists, "id:%s", changeFeedID)
 		}
 
-		newCf, err := o.newChangeFeed(changeFeedID, changeFeedInfo, detail)
+		newCf, err := o.newChangeFeed(changeFeedID, procInfos, detail)
 		if err != nil {
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
