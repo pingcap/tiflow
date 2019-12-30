@@ -108,22 +108,6 @@ func (c *changeFeed) updateProcessorInfos(processInfos model.ProcessorsInfos) {
 	c.ProcessorInfos = processInfos
 }
 
-// filter return true if we should not sync the table to downstream.
-// we can add configuration support at the detail.
-func filter(_ *model.ChangeFeedDetail, table schema.TableName) bool {
-	ignoreSchema := []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "mysql"}
-
-	log.Debug("filter table", zap.Stringer("table", table))
-
-	for _, schema := range ignoreSchema {
-		if schema == table.Schema {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (c *changeFeed) reAddTable(id, startTs uint64) {
 	c.orphanTables[id] = model.ProcessTableInfo{
 		ID:      id,

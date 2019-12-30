@@ -240,6 +240,7 @@ func PutChangeFeedStatus(
 	return errors.Trace(err)
 }
 
+// DeleteSubChangeFeedInfo deletes subchangefeedinfo from etcd
 func DeleteSubChangeFeedInfo(
 	ctx context.Context,
 	cli *clientv3.Client,
