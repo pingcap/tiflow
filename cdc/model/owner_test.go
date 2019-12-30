@@ -64,16 +64,16 @@ func (s *cloneSubChangeFeedInfoSuite) TestProcSnapshot(c *check.C) {
 		CheckPointTs: 0,
 		ResolvedTs:   20,
 		TableInfos: []*ProcessTableInfo{
-			{ID: 10},
+			{ID: 10, StartTs: 100},
 		},
 	}
 	cfID := "changefeed-1"
 	captureID := "capture-1"
 	snap := info.Snapshot(cfID, captureID)
 	c.Assert(snap.CfID, check.Equals, cfID)
-	c.Assert(snap.CaptureID, check.Equals, cfID)
+	c.Assert(snap.CaptureID, check.Equals, captureID)
 	c.Assert(snap.Tables, check.HasLen, 1)
-	c.Assert(snap.Tables[0].StartTs, check.Equals, 10)
+	c.Assert(snap.Tables[0].StartTs, check.Equals, uint64(100))
 }
 
 type removeTableSuite struct{}
