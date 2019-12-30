@@ -418,7 +418,7 @@ func (o *ownerImpl) handleWatchCapture() error {
 func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.ProcessorsInfos, detail *model.ChangeFeedDetail) (*changeFeed, error) {
 	checkpointTs := detail.GetCheckpointTs()
 	log.Info("Find new changefeed", zap.Reflect("detail", detail),
-		zap.Uint64("checkpoint ts", checkpointTs))
+		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
 	schemaStorage, err := createSchemaStore(o.pdEndpoints)
 	if err != nil {
@@ -448,9 +448,7 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 
 		tables[tid] = table
 		if ts, ok := existingTables[tid]; ok {
-			log.Info("ignore existing replication table",
-				zap.Uint64("tableID", tid), zap.Stringer("table", table),
-				zap.String("changefeedID", id), zap.Uint64("checkpointTs", ts))
+			log.Debug("ignore known table", zap.Uint64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
 			continue
 		}
 		orphanTables[tid] = model.ProcessTableInfo{
