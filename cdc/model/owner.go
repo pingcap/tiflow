@@ -87,6 +87,26 @@ func (scfi *SubChangeFeedInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) 
 	return nil, false
 }
 
+// Snapshot takes a snapshot of `*SubChangeFeedInfo` and returns a new `*ProcInfoSnap`
+func (scfi *SubChangeFeedInfo) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcInfoSnap {
+	snap := &ProcInfoSnap{
+		CfID:      cfID,
+		CaptureID: captureID,
+		Tables:    make([]ProcessTableInfo, 0, len(scfi.TableInfos)),
+	}
+	for _, tbl := range scfi.TableInfos {
+		ts := scfi.CheckPointTs
+		if ts < tbl.StartTs {
+			ts = tbl.StartTs
+		}
+		snap.Tables = append(snap.Tables, ProcessTableInfo{
+			ID:      tbl.ID,
+			StartTs: ts,
+		})
+	}
+	return snap
+}
+
 // Marshal returns the json marshal format of a SubChangeFeedInfo
 func (scfi *SubChangeFeedInfo) Marshal() (string, error) {
 	data, err := json.Marshal(scfi)
@@ -188,4 +208,11 @@ func (info *ChangeFeedInfo) Marshal() (string, error) {
 func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, info)
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
+}
+
+// ProcInfoSnap holds most important replication information of a processor
+type ProcInfoSnap struct {
+	CfID      string
+	CaptureID string
+	Tables    []ProcessTableInfo
 }

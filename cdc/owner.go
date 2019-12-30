@@ -306,16 +306,9 @@ func (c *changeFeed) applyJob(job *pmodel.Job) error {
 	return nil
 }
 
-// procInfoSnap holds most important replication information of a processor
-type procInfoSnap struct {
-	cfID      string
-	captureID string
-	tables    []*model.ProcessTableInfo
-}
-
 type ownerImpl struct {
 	changeFeeds       map[model.ChangeFeedID]*changeFeed
-	markDownProcessor []*procInfoSnap
+	markDownProcessor []*model.ProcInfoSnap
 
 	cfRWriter ChangeFeedInfoRWriter
 
@@ -374,29 +367,30 @@ func (o *ownerImpl) addCapture(info *model.CaptureInfo) {
 
 func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 	var deletedCapture = make(map[string]struct{})
-	for i := len(o.markDownProcessor) - 1; i >= 0; i-- {
-		snap := o.markDownProcessor[i]
-		changefeed, ok := o.changeFeeds[snap.cfID]
+	remainProcs := make([]*model.ProcInfoSnap, 0)
+	for _, snap := range o.markDownProcessor {
+		changefeed, ok := o.changeFeeds[snap.CfID]
 		if !ok {
 			log.Error("changefeed not found in owner cache, can't rebalance",
-				zap.String("changefeedID", snap.cfID))
+				zap.String("changefeedID", snap.CfID))
 			continue
 		}
-		for _, tbl := range snap.tables {
+		for _, tbl := range snap.Tables {
 			changefeed.reAddTable(tbl.ID, tbl.StartTs)
 		}
-		err := kv.DeleteSubChangeFeedInfo(ctx, o.etcdClient, snap.cfID, snap.captureID)
+		err := kv.DeleteSubChangeFeedInfo(ctx, o.etcdClient, snap.CfID, snap.CaptureID)
 		if err != nil {
 			log.Warn("failed to delete subchangefeed info",
-				zap.String("changefeedID", snap.cfID),
-				zap.String("captureID", snap.captureID),
+				zap.String("changefeedID", snap.CfID),
+				zap.String("captureID", snap.CaptureID),
 				zap.Error(err),
 			)
+			remainProcs = append(remainProcs, snap)
 			continue
 		}
-		o.markDownProcessor = append(o.markDownProcessor[:i], o.markDownProcessor[i+1:]...)
-		deletedCapture[snap.captureID] = struct{}{}
+		deletedCapture[snap.CaptureID] = struct{}{}
 	}
+	o.markDownProcessor = remainProcs
 
 	for id := range deletedCapture {
 		err := DeleteCaptureInfo(ctx, id, o.etcdClient)
@@ -516,21 +510,7 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 			for id, info := range cf.ProcessorInfos {
 				lastUpdateTime := cf.processorLastUpdateTime[id]
 				if time.Since(lastUpdateTime) > markProcessorDownTime {
-					snap := &procInfoSnap{
-						cfID:      changeFeedID,
-						captureID: id,
-						tables:    make([]*model.ProcessTableInfo, 0, len(info.TableInfos)),
-					}
-					for _, tbl := range info.TableInfos {
-						ts := info.CheckPointTs
-						if ts < tbl.StartTs {
-							ts = tbl.StartTs
-						}
-						snap.tables = append(snap.tables, &model.ProcessTableInfo{
-							ID:      tbl.ID,
-							StartTs: ts,
-						})
-					}
+					snap := info.Snapshot(changeFeedID, id)
 					o.markDownProcessor = append(o.markDownProcessor, snap)
 					log.Info("markdown processor", zap.String("id", id),
 						zap.Reflect("info", info), zap.Time("update time", lastUpdateTime))
