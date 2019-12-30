@@ -40,25 +40,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// TODO: remove this interface
-type tableInspector interface {
-	// Get returns information about the specified table
-	Get(schema, table string) (*tableInfo, error)
-}
-
-type tableInspectorImpl struct {
-	tableGetter func(schemaName string, tableName string) (*tableInfo, error)
-}
-
-func (t *tableInspectorImpl) Get(schema, table string) (*tableInfo, error) {
-	return t.tableGetter(schema, table)
-}
-
 type mysqlSink struct {
-	db           *sql.DB
-	tblInspector tableInspector
-	infoGetter   TableInfoGetter
-	ddlOnly      bool
+	db         *sql.DB
+	infoGetter TableInfoGetter
+	ddlOnly    bool
 }
 
 var _ Sink = &mysqlSink{}
@@ -86,26 +71,19 @@ func NewMySQLSink(sinkURI string, infoGetter TableInfoGetter, opts map[string]st
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	inspector := &tableInspectorImpl{
-		tableGetter: func(schemaName string, tableName string) (*tableInfo, error) {
-			info, err := getTableInfoFromSchemaStorage(infoGetter, schemaName, tableName)
-			return info, err
-		},
-	}
-	return newMySQLSink(db, infoGetter, inspector, false), nil
+	return newMySQLSink(db, infoGetter, false), nil
 }
 
 // NewMySQLSinkDDLOnly returns a sink that only processes DDL
 func NewMySQLSinkDDLOnly(db *sql.DB) Sink {
-	return newMySQLSink(db, nil, nil, true)
+	return newMySQLSink(db, nil, true)
 }
 
-func newMySQLSink(db *sql.DB, infoGetter TableInfoGetter, tblInspector tableInspector, ddlOnly bool) Sink {
+func newMySQLSink(db *sql.DB, infoGetter TableInfoGetter, ddlOnly bool) Sink {
 	return &mysqlSink{
-		db:           db,
-		infoGetter:   infoGetter,
-		tblInspector: tblInspector,
-		ddlOnly:      ddlOnly,
+		db:         db,
+		infoGetter: infoGetter,
+		ddlOnly:    ddlOnly,
 	}
 }
 
@@ -250,7 +228,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*model.DML) error {
 func (s *mysqlSink) formatDMLs(dmls []*model.DML) ([]*model.DML, error) {
 	result := make([]*model.DML, 0, len(dmls))
 	for _, dml := range dmls {
-		tableInfo, ok := s.getTableDefinition(dml.Database, dml.Table)
+		tableInfo, ok := s.infoGetter.GetTableByName(dml.Database, dml.Table)
 		if !ok {
 			return nil, fmt.Errorf("table not found: %s.%s", dml.Database, dml.Table)
 		}
@@ -264,28 +242,20 @@ func (s *mysqlSink) formatDMLs(dmls []*model.DML) ([]*model.DML, error) {
 	return result, nil
 }
 
-func (s *mysqlSink) getTableDefinition(schema, table string) (*schema.TableInfo, bool) {
-	tblID, ok := s.infoGetter.GetTableIDByName(schema, table)
-	if !ok {
-		return nil, false
-	}
-	tableInfo, ok := s.infoGetter.TableByID(tblID)
-	return tableInfo, ok
-}
-
 func (s *mysqlSink) prepareReplace(dml *model.DML) (string, []interface{}, error) {
-	info, err := s.tblInspector.Get(dml.Database, dml.Table)
-	if err != nil {
-		return "", nil, err
+	info, ok := s.infoGetter.GetTableByName(dml.Database, dml.Table)
+	if !ok {
+		return "", nil, fmt.Errorf("Table not found: %s", dml.TableName())
 	}
+	columns := info.ColNames()
 	var builder strings.Builder
-	cols := "(" + buildColumnList(info.columns) + ")"
+	cols := "(" + buildColumnList(columns) + ")"
 	tblName := util.QuoteSchema(dml.Database, dml.Table)
 	builder.WriteString("REPLACE INTO " + tblName + cols + " VALUES ")
-	builder.WriteString("(" + util.HolderString(len(info.columns)) + ");")
+	builder.WriteString("(" + util.HolderString(len(columns)) + ");")
 
-	args := make([]interface{}, 0, len(info.columns))
-	for _, name := range info.columns {
+	args := make([]interface{}, 0, len(columns))
+	for _, name := range columns {
 		val, ok := dml.Values[name]
 		if !ok {
 			return "", nil, fmt.Errorf("missing value for column: %s", name)
@@ -297,9 +267,9 @@ func (s *mysqlSink) prepareReplace(dml *model.DML) (string, []interface{}, error
 }
 
 func (s *mysqlSink) prepareDelete(dml *model.DML) (string, []interface{}, error) {
-	info, err := s.tblInspector.Get(dml.Database, dml.Table)
-	if err != nil {
-		return "", nil, err
+	info, ok := s.infoGetter.GetTableByName(dml.Database, dml.Table)
+	if !ok {
+		return "", nil, fmt.Errorf("Table not found: %s", dml.TableName())
 	}
 
 	var builder strings.Builder
@@ -408,10 +378,10 @@ func whereValues(colVals map[string]types.Datum, names []string) (values []types
 	return
 }
 
-func whereSlice(table *tableInfo, colVals map[string]types.Datum) (colNames []string, args []types.Datum) {
+func whereSlice(table *schema.TableInfo, colVals map[string]types.Datum) (colNames []string, args []types.Datum) {
 	// Try to use unique key values when available
-	for _, index := range table.uniqueKeys {
-		values := whereValues(colVals, index.columns)
+	for _, idxCols := range table.GetUniqueKeys() {
+		values := whereValues(colVals, idxCols)
 		notAnyNil := true
 		for i := 0; i < len(values); i++ {
 			if values[i].IsNull() {
@@ -420,12 +390,13 @@ func whereSlice(table *tableInfo, colVals map[string]types.Datum) (colNames []st
 			}
 		}
 		if notAnyNil {
-			return index.columns, values
+			return idxCols, values
 		}
 	}
 
 	// Fallback to use all columns
-	return table.columns, whereValues(colVals, table.columns)
+	cols := table.ColNames()
+	return cols, whereValues(colVals, cols)
 }
 
 func isIgnorableDDLError(err error) bool {

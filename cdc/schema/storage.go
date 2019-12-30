@@ -103,6 +103,38 @@ func (ti *TableInfo) GetIndexInfo(indexID int64) (info *model.IndexInfo, exist b
 	return ti.Indices[indexOffset], true
 }
 
+// ColNames returns the names of all columns
+func (ti *TableInfo) ColNames() []string {
+	names := make([]string, 0, len(ti.Cols()))
+	for _, c := range ti.Cols() {
+		names = append(names, c.Name.O)
+	}
+	return names
+}
+
+// GetUniqueKeys returns all unique keys of the table as a slice of column names
+func (ti *TableInfo) GetUniqueKeys() [][]string {
+	var uniqueKeys [][]string
+	for _, idx := range ti.Indices {
+		if idx.Primary || idx.Unique {
+			colNames := make([]string, 0, len(idx.Columns))
+			for _, col := range idx.Columns {
+				colNames = append(colNames, col.Name.O)
+			}
+			uniqueKeys = append(uniqueKeys, colNames)
+		}
+	}
+	if ti.PKIsHandle {
+		for _, col := range ti.Columns {
+			if mysql.HasPriKeyFlag(col.Flag) {
+				uniqueKeys = append(uniqueKeys, []string{col.Name.O})
+				break
+			}
+		}
+	}
+	return uniqueKeys
+}
+
 // NewStorage returns the Schema object
 func NewStorage(jobs []*model.Job, hasImplicitCol bool) (*Storage, error) {
 	sort.Slice(jobs, func(i, j int) bool {
@@ -164,6 +196,14 @@ func (s *Storage) GetTableIDByName(schemaName string, tableName string) (int64, 
 		Table:  tableName,
 	}]
 	return id, ok
+}
+
+func (s *Storage) GetTableByName(schema, table string) (info *TableInfo, ok bool) {
+	id, ok := s.GetTableIDByName(schema, table)
+	if !ok {
+		return nil, ok
+	}
+	return s.TableByID(id)
 }
 
 // SchemaByID returns the DBInfo by schema id
