@@ -432,10 +432,10 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 
 	ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
 
-	existingTables := make(map[uint64]struct{})
+	existingTables := make(map[uint64]uint64)
 	for _, subCfInfo := range processorsInfos {
 		for _, tbl := range subCfInfo.TableInfos {
-			existingTables[tbl.ID] = struct{}{}
+			existingTables[tbl.ID] = subCfInfo.CheckPointTs
 		}
 	}
 
@@ -447,10 +447,10 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 		}
 
 		tables[tid] = table
-		if _, ok := existingTables[tid]; ok {
+		if ts, ok := existingTables[tid]; ok {
 			log.Info("ignore existing replication table",
 				zap.Uint64("tableID", tid), zap.Stringer("table", table),
-				zap.String("changefeedID", id))
+				zap.String("changefeedID", id), zap.Uint64("checkpointTs", ts))
 			continue
 		}
 		orphanTables[tid] = model.ProcessTableInfo{
