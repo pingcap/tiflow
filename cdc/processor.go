@@ -475,9 +475,7 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 		lastGlobalResolvedTs uint64
 	)
 
-	defer func() {
-		close(p.resolvedTxns)
-	}()
+	defer close(p.resolvedTxns)
 
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
@@ -580,9 +578,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		return nil
 	}
 
-	defer func() {
-		close(p.executedTxns)
-	}()
+	defer close(p.executedTxns)
 
 	for {
 		select {
