@@ -117,21 +117,18 @@ func (ti *TableInfo) WritableColumns() []*model.ColumnInfo {
 // GetUniqueKeys returns all unique keys of the table as a slice of column names
 func (ti *TableInfo) GetUniqueKeys() [][]string {
 	var uniqueKeys [][]string
-	pkPos := -1
-	for i, idx := range ti.Indices {
+	for _, idx := range ti.Indices {
 		if idx.Primary || idx.Unique {
 			colNames := make([]string, 0, len(idx.Columns))
 			for _, col := range idx.Columns {
 				colNames = append(colNames, col.Name.O)
 			}
 			if idx.Primary {
-				pkPos = i
+				uniqueKeys = append([][]string{colNames}, uniqueKeys...)
+			} else {
+				uniqueKeys = append(uniqueKeys, colNames)
 			}
-			uniqueKeys = append(uniqueKeys, colNames)
 		}
-	}
-	if pkPos > 0 && len(uniqueKeys) > 1 {
-		uniqueKeys[0], uniqueKeys[pkPos] = uniqueKeys[pkPos], uniqueKeys[0]
 	}
 	if ti.PKIsHandle {
 		for _, col := range ti.Columns {
