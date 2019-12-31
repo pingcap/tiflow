@@ -21,12 +21,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	"go.uber.org/zap"
 )
-
-const implicitColName = "_tidb_rowid"
-const implicitColID = -1
 
 // Storage stores the source TiDB all schema infomations
 // schema infomations could be changed by drainer init and ddls appear
@@ -42,8 +38,6 @@ type Storage struct {
 
 	schemaMetaVersion int64
 	lastHandledTs     uint64
-
-	hasImplicitCol bool
 
 	jobs                []*model.Job
 	version2SchemaTable map[int64]TableName
@@ -104,13 +98,12 @@ func (ti *TableInfo) GetIndexInfo(indexID int64) (info *model.IndexInfo, exist b
 }
 
 // NewStorage returns the Schema object
-func NewStorage(jobs []*model.Job, hasImplicitCol bool) (*Storage, error) {
+func NewStorage(jobs []*model.Job) (*Storage, error) {
 	sort.Slice(jobs, func(i, j int) bool {
 		return jobs[i].BinlogInfo.FinishedTS < jobs[j].BinlogInfo.FinishedTS
 	})
 
 	s := &Storage{
-		hasImplicitCol:      hasImplicitCol,
 		version2SchemaTable: make(map[int64]TableName),
 		truncateTableID:     make(map[int64]struct{}),
 		jobs:                jobs,
@@ -134,7 +127,6 @@ func (s *Storage) String() string {
 		// "schemas":           s.schemas,
 		// "tables":            s.tables,
 		"schemaMetaVersion": s.schemaMetaVersion,
-		"hasImplicitCol":    s.hasImplicitCol,
 	}
 
 	data, _ := json.MarshalIndent(mp, "\t", "\t")
@@ -251,10 +243,6 @@ func (s *Storage) CreateTable(schema *model.DBInfo, table *model.TableInfo) erro
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
 	}
 
-	if s.hasImplicitCol && !table.PKIsHandle {
-		addImplicitColumn(table)
-	}
-
 	schema.Tables = append(schema.Tables, table)
 	s.tables[table.ID] = WrapTableInfo(table)
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
@@ -269,10 +257,6 @@ func (s *Storage) ReplaceTable(table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if !ok {
 		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
-	}
-
-	if s.hasImplicitCol && !table.PKIsHandle {
-		addImplicitColumn(table)
 	}
 
 	s.tables[table.ID] = WrapTableInfo(table)
@@ -523,21 +507,6 @@ func (s *Storage) CloneTables() map[uint64]TableName {
 func (s *Storage) IsTruncateTableID(id int64) bool {
 	_, ok := s.truncateTableID[id]
 	return ok
-}
-
-func addImplicitColumn(table *model.TableInfo) {
-	newColumn := &model.ColumnInfo{
-		ID:   implicitColID,
-		Name: model.NewCIStr(implicitColName),
-	}
-	newColumn.Tp = mysql.TypeInt24
-	table.Columns = append(table.Columns, newColumn)
-
-	newIndex := &model.IndexInfo{
-		Primary: true,
-		Columns: []*model.IndexColumn{{Name: model.NewCIStr(implicitColName)}},
-	}
-	table.Indices = []*model.IndexInfo{newIndex}
 }
 
 // TiDB write DDL Binlog for every DDL Job, we must ignore jobs that are cancelled or rollback
