@@ -19,9 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tidb-tools/pkg/filter"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -33,8 +32,12 @@ type ChangeFeedDetail struct {
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
 	StartTs uint64 `json:"start-ts"`
 	// The ChangeFeed will exits until sync to timestamp TargetTs
-	TargetTs uint64          `json:"target-ts"`
-	Info     *ChangeFeedInfo `json:"-"`
+	TargetTs uint64 `json:"target-ts"`
+	// ChangeFeed can be resumed from stop state, this field is used to trigger a watch event in each capture
+	ResumeTs uint64 `json:"resume-ts"`
+	// used for admin job notification
+	Admin AdminJobType    `json:"admin"`
+	Info  *ChangeFeedInfo `json:"-"`
 
 	filter              *filter.Filter
 	FilterCaseSensitive bool          `json:"filter-case-sensitive"`
@@ -86,6 +89,10 @@ func (detail *ChangeFeedDetail) FilterTxn(t *Txn) {
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
 func (detail *ChangeFeedDetail) GetStartTs() uint64 {
+	if detail.ResumeTs > 0 {
+		return detail.ResumeTs
+	}
+
 	if detail.StartTs > 0 {
 		return detail.StartTs
 	}

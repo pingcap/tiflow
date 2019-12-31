@@ -143,3 +143,24 @@ func (s *etcdSuite) TestDeleteSubChangeFeedInfo(c *check.C) {
 	_, _, err = GetSubChangeFeedInfo(ctx, s.client, feedID, captureID)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrSubChangeFeedInfoNotExists)
 }
+
+func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
+	ctx := context.Background()
+	detail := &model.ChangeFeedDetail{
+		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
+	}
+	cfID := "test-op-cf"
+
+	err := SaveChangeFeedDetail(ctx, s.client, detail, cfID)
+	c.Assert(err, check.IsNil)
+
+	d, err := GetChangeFeedDetail(ctx, s.client, cfID)
+	c.Assert(err, check.IsNil)
+	c.Assert(d.SinkURI, check.Equals, detail.SinkURI)
+
+	err = DeleteChangeFeedDetail(ctx, s.client, cfID)
+	c.Assert(err, check.IsNil)
+
+	_, err = GetChangeFeedDetail(ctx, s.client, cfID)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
+}

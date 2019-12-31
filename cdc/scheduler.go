@@ -70,7 +70,11 @@ func (w *ChangeFeedWatcher) processPutKv(kv *mvccpb.KeyValue) (bool, string, mod
 	if !ok {
 		needRunWatcher = true
 	}
-	w.details[changefeedID] = detail
+	if detail.Admin == model.AdminStop {
+		delete(w.details, changefeedID)
+	} else {
+		w.details[changefeedID] = detail
+	}
 	w.lock.Unlock()
 	// TODO: this detail is not copied, should be readonly
 	return needRunWatcher, changefeedID, detail, nil

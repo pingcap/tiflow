@@ -50,6 +50,38 @@ const (
 	TablePLockCommited
 )
 
+// AdminJob represents for admin job type, both used in owner and processor
+type AdminJobType int
+
+// AdminJob holds an admin job
+type AdminJob struct {
+	CfID string
+	Type AdminJobType
+}
+
+// All AdminJob types
+const (
+	AdminNone AdminJobType = iota
+	AdminStop
+	AdminResume
+	AdminRemove
+)
+
+// String implements fmt.Stringer interface.
+func (t AdminJobType) String() string {
+	switch t {
+	case AdminNone:
+		return "noop"
+	case AdminStop:
+		return "stop changefeed"
+	case AdminResume:
+		return "resume changefeed"
+	case AdminRemove:
+		return "remove changefeed"
+	}
+	return "unknown"
+}
+
 // SubChangeFeedInfo records the process information of a capture
 type SubChangeFeedInfo struct {
 	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.
@@ -61,6 +93,7 @@ type SubChangeFeedInfo struct {
 	TableInfos  []*ProcessTableInfo `json:"table-infos"`
 	TablePLock  *TableLock          `json:"table-p-lock"`
 	TableCLock  *TableLock          `json:"table-c-lock"`
+	Admin       AdminJobType        `json:"admin"`
 	ModRevision int64               `json:"-"`
 }
 
@@ -193,9 +226,11 @@ func (s ChangeFeedStatus) String() string {
 
 // ChangeFeedInfo stores information about a ChangeFeed
 type ChangeFeedInfo struct {
-	SinkURI      string `json:"sink-uri"`
-	ResolvedTs   uint64 `json:"resolved-ts"`
-	CheckpointTs uint64 `json:"checkpoint-ts"`
+	SinkURI      string           `json:"sink-uri"`
+	ResolvedTs   uint64           `json:"resolved-ts"`
+	CheckpointTs uint64           `json:"checkpoint-ts"`
+	Status       ChangeFeedStatus `json:"status"`
+	Admin        AdminJobType     `json:"admin"`
 }
 
 // Marshal returns json encoded string of ChangeFeedInfo, only contains necessary fields stored in storage
