@@ -33,13 +33,6 @@ type EmitSuite struct{}
 
 var _ = check.Suite(&EmitSuite{})
 
-type dummyInspector struct {
-	tableInspector
-}
-
-func (dummyInspector) Refresh(schema, table string) {
-}
-
 func (s EmitSuite) TestShouldExecDDL(c *check.C) {
 	// Set up
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
@@ -47,8 +40,7 @@ func (s EmitSuite) TestShouldExecDDL(c *check.C) {
 	defer db.Close()
 
 	sink := mysqlSink{
-		db:           db,
-		tblInspector: dummyInspector{},
+		db: db,
 	}
 
 	t := model.Txn{
@@ -81,8 +73,7 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 	defer db.Close()
 
 	sink := mysqlSink{
-		db:           db,
-		tblInspector: dummyInspector{},
+		db: db,
 	}
 
 	t := model.Txn{
@@ -111,17 +102,6 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 }
 
 type tableHelper struct {
-	tableInspector
-	TableInfoGetter
-}
-
-func (h *tableHelper) Get(schema, table string) (*tableInfo, error) {
-	return &tableInfo{
-		columns: []string{"id", "name"},
-		uniqueKeys: []indexInfo{
-			{name: "pk", columns: []string{"id"}},
-		},
-	}, nil
 }
 
 func (h *tableHelper) TableByID(id int64) (info *schema.TableInfo, ok bool) {
@@ -149,6 +129,10 @@ func (h *tableHelper) TableByID(id int64) (info *schema.TableInfo, ok bool) {
 	}), true
 }
 
+func (h *tableHelper) GetTableByName(schema, table string) (*schema.TableInfo, bool) {
+	return h.TableByID(42)
+}
+
 func (h *tableHelper) GetTableIDByName(schema, table string) (int64, bool) {
 	return 42, true
 }
@@ -161,9 +145,8 @@ func (s EmitSuite) TestShouldExecReplaceInto(c *check.C) {
 
 	helper := tableHelper{}
 	sink := mysqlSink{
-		db:           db,
-		tblInspector: &helper,
-		infoGetter:   &helper,
+		db:         db,
+		infoGetter: &helper,
 	}
 
 	t := model.Txn{
@@ -202,9 +185,8 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 
 	helper := tableHelper{}
 	sink := mysqlSink{
-		db:           db,
-		tblInspector: &helper,
-		infoGetter:   &helper,
+		db:         db,
+		infoGetter: &helper,
 	}
 
 	t := model.Txn{

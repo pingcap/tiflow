@@ -97,6 +97,45 @@ func (ti *TableInfo) GetIndexInfo(indexID int64) (info *model.IndexInfo, exist b
 	return ti.Indices[indexOffset], true
 }
 
+// WritableColumns returns all public and non-generated columns
+func (ti *TableInfo) WritableColumns() []*model.ColumnInfo {
+	cols := make([]*model.ColumnInfo, 0, len(ti.Columns))
+	for _, col := range ti.Columns {
+		if col.State == model.StatePublic && !col.IsGenerated() {
+			cols = append(cols, col)
+		}
+	}
+	return cols
+}
+
+// GetUniqueKeys returns all unique keys of the table as a slice of column names
+func (ti *TableInfo) GetUniqueKeys() [][]string {
+	var uniqueKeys [][]string
+	for _, idx := range ti.Indices {
+		if idx.Primary || idx.Unique {
+			colNames := make([]string, 0, len(idx.Columns))
+			for _, col := range idx.Columns {
+				colNames = append(colNames, col.Name.O)
+			}
+			if idx.Primary {
+				uniqueKeys = append([][]string{colNames}, uniqueKeys...)
+			} else {
+				uniqueKeys = append(uniqueKeys, colNames)
+			}
+		}
+	}
+	if ti.PKIsHandle {
+		for _, col := range ti.Columns {
+			if mysql.HasPriKeyFlag(col.Flag) {
+				// Prepend to make sure the primary key ends up at the front
+				uniqueKeys = append([][]string{{col.Name.O}}, uniqueKeys...)
+				break
+			}
+		}
+	}
+	return uniqueKeys
+}
+
 // NewStorage returns the Schema object
 func NewStorage(jobs []*model.Job) (*Storage, error) {
 	sort.Slice(jobs, func(i, j int) bool {
@@ -156,6 +195,16 @@ func (s *Storage) GetTableIDByName(schemaName string, tableName string) (int64, 
 		Table:  tableName,
 	}]
 	return id, ok
+}
+
+// GetTableByName queries a table by name,
+// the second returned value is false if no table with the specified name is found.
+func (s *Storage) GetTableByName(schema, table string) (info *TableInfo, ok bool) {
+	id, ok := s.GetTableIDByName(schema, table)
+	if !ok {
+		return nil, ok
+	}
+	return s.TableByID(id)
 }
 
 // SchemaByID returns the DBInfo by schema id

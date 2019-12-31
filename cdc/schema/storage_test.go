@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	parser_types "github.com/pingcap/parser/types"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -399,4 +400,76 @@ func testDoDDLAndCheck(c *C, schema *Storage, job *model.Job, isErr bool, sql st
 	c.Assert(sql, Equals, resSQL)
 	c.Assert(schemaName, Equals, expectedSchema)
 	c.Assert(tableName, Equals, expectedTable)
+}
+
+type getUniqueKeysSuite struct{}
+
+var _ = Suite(&getUniqueKeysSuite{})
+
+func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *C) {
+	t := model.TableInfo{
+		Indices: []*model.IndexInfo{
+			{
+				Name: model.CIStr{
+					O: "name",
+				},
+				Columns: []*model.IndexColumn{
+					{Name: model.CIStr{O: "name"}},
+				},
+				Unique: true,
+			},
+			{
+				Name: model.CIStr{
+					O: "PRIMARY",
+				},
+				Columns: []*model.IndexColumn{
+					{Name: model.CIStr{O: "id"}},
+				},
+				Primary: true,
+			},
+		},
+		PKIsHandle: false,
+	}
+	info := WrapTableInfo(&t)
+	cols := info.GetUniqueKeys()
+	c.Assert(cols, DeepEquals, [][]string{
+		{"id"}, {"name"},
+	})
+}
+
+func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
+	t := model.TableInfo{
+		Indices: []*model.IndexInfo{
+			{
+				Name: model.CIStr{
+					O: "uniq_job",
+				},
+				Columns: []*model.IndexColumn{
+					{Name: model.CIStr{O: "job"}},
+				},
+				Unique: true,
+			},
+		},
+		Columns: []*model.ColumnInfo{
+			{
+				Name: model.CIStr{
+					O: "job",
+				},
+			},
+			{
+				Name: model.CIStr{
+					O: "uid",
+				},
+				FieldType: parser_types.FieldType{
+					Flag: mysql.PriKeyFlag,
+				},
+			},
+		},
+		PKIsHandle: true,
+	}
+	info := WrapTableInfo(&t)
+	cols := info.GetUniqueKeys()
+	c.Assert(cols, DeepEquals, [][]string{
+		{"uid"}, {"job"},
+	})
 }

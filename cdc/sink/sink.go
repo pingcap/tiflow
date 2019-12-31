@@ -34,4 +34,5 @@ type Sink interface {
 type TableInfoGetter interface {
 	TableByID(id int64) (info *schema.TableInfo, ok bool)
 	GetTableIDByName(schema, table string) (int64, bool)
+	GetTableByName(schema, table string) (info *schema.TableInfo, ok bool)
 }
