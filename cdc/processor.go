@@ -475,10 +475,7 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 		lastGlobalResolvedTs uint64
 	)
 
-	defer func() {
-		close(p.resolvedTxns)
-		close(p.executedTxns)
-	}()
+	defer close(p.resolvedTxns)
 
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
@@ -580,6 +577,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		pendingTxns = pendingTxns[:0]
 		return nil
 	}
+
+	defer close(p.executedTxns)
+
 	for {
 		select {
 		case rawTxn, ok := <-p.ddlJobsCh:
