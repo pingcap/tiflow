@@ -27,7 +27,7 @@ func setUpPullerAndSchema(ctx context.Context, c *check.C, sqls ...string) (*pul
 	}
 
 	jobs := pm.GetDDLJobs()
-	schemaStorage, err := schema.NewStorage(jobs, false)
+	schemaStorage, err := schema.NewStorage(jobs)
 	c.Assert(err, check.IsNil)
 	err = schemaStorage.HandlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
 	c.Assert(err, check.IsNil)

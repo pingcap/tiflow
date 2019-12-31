@@ -667,7 +667,7 @@ func createSchemaStore(pdEndpoints []string) (*schema.Storage, error) {
 	if err != nil {
 		return nil, err
 	}
-	schemaStorage, err := schema.NewStorage(jobs, false)
+	schemaStorage, err := schema.NewStorage(jobs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
