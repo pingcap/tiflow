@@ -269,8 +269,8 @@ func (*schemaSuite) TestTable(c *C) {
 
 	_, ok = schema2.TableByID(tblInfo.ID)
 	c.Assert(ok, IsFalse)
-	// test schemaAndTableName
-	_, _, ok = schema1.SchemaAndTableName(9)
+	// test GetTableNameByID
+	_, ok = schema1.GetTableNameByID(9)
 	c.Assert(ok, IsTrue)
 	// drop schema
 	_, err = schema1.DropSchema(3)
