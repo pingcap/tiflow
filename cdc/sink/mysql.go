@@ -35,7 +35,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )
@@ -332,27 +331,6 @@ func formatColVal(datum types.Datum, ft types.FieldType) (types.Datum, error) {
 	}
 
 	return datum, nil
-}
-
-func getDefaultOrZeroValue(col *timodel.ColumnInfo) types.Datum {
-	// see https://github.com/pingcap/tidb/issues/9304
-	// must use null if TiDB not write the column value when default value is null
-	// and the value is null
-	if !mysql.HasNotNullFlag(col.Flag) {
-		return types.NewDatum(nil)
-	}
-
-	if col.GetDefaultValue() != nil {
-		return types.NewDatum(col.GetDefaultValue())
-	}
-
-	if col.Tp == mysql.TypeEnum {
-		// For enum type, if no default value and not null is set,
-		// the default value is the first element of the enum list
-		return types.NewDatum(col.FieldType.Elems[0])
-	}
-
-	return table.GetZeroValue(col)
 }
 
 func whereValues(colVals map[string]types.Datum, names []string) (values []types.Datum) {
