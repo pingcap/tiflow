@@ -7,7 +7,6 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -16,7 +15,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/types"
-	"go.uber.org/zap"
 )
 
 type kvEntrySuite struct {
@@ -429,7 +427,6 @@ func checkDMLKVEntries(ctx context.Context, c *check.C, tableInfo *schema.TableI
 	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
 		eventSum := 0
 		for _, raw := range rawTxn.Entries {
-			log.Info("test", zap.Any("raw", raw))
 			entry, err := unmarshal(raw)
 			c.Assert(err, check.IsNil)
 			switch e := entry.(type) {

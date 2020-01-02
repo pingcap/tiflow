@@ -243,23 +243,6 @@ func (cs *mountTxnsSuite) TestUk(c *check.C) {
 			{
 				Database: "testDB",
 				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"a": types.NewIntDatum(1),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"c": types.NewIntDatum(3),
-					"d": types.NewIntDatum(4),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
 				Tp:       model.InsertDMLType,
 				Values: map[string]types.Datum{
 					"a": types.NewIntDatum(1),
@@ -302,18 +285,18 @@ func (cs *mountTxnsSuite) TestUk(c *check.C) {
 				Table:    "test1",
 				Tp:       model.InsertDMLType,
 				Values: map[string]types.Datum{
-					"a": types.NewIntDatum(1),
-					"b": types.NewIntDatum(2),
-					"c": types.NewIntDatum(3),
-					"d": types.NewIntDatum(4),
-					"e": types.NewIntDatum(5),
-					"f": types.NewIntDatum(6),
+					"a": types.NewIntDatum(11),
+					"b": types.NewIntDatum(22),
+					"c": types.NewIntDatum(33),
+					"d": types.NewIntDatum(44),
+					"e": types.NewIntDatum(55),
+					"f": types.NewIntDatum(66),
 				},
 			},
 		},
 	})
 
-	pm.MustExec("delete from testDB.test1 where a = 999")
+	pm.MustExec("delete from testDB.test1 where a = 11")
 	rawTxn = getFirstRealTxn(ctx, c, plr)
 	t, err = mounter.Mount(rawTxn)
 	c.Assert(err, check.IsNil)
@@ -325,7 +308,7 @@ func (cs *mountTxnsSuite) TestUk(c *check.C) {
 				Table:    "test1",
 				Tp:       model.DeleteDMLType,
 				Values: map[string]types.Datum{
-					"a": types.NewIntDatum(1),
+					"a": types.NewIntDatum(11),
 				},
 			},
 			{
@@ -333,8 +316,8 @@ func (cs *mountTxnsSuite) TestUk(c *check.C) {
 				Table:    "test1",
 				Tp:       model.DeleteDMLType,
 				Values: map[string]types.Datum{
-					"c": types.NewIntDatum(3),
-					"d": types.NewIntDatum(4),
+					"c": types.NewIntDatum(33),
+					"d": types.NewIntDatum(44),
 				},
 			},
 		},
