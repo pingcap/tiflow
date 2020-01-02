@@ -620,15 +620,23 @@ func (o *ownerImpl) calcResolvedTs() error {
 			cfInfo.Status = model.ChangeFeedWaitToExecDDL
 		}
 
-		cfInfo.ResolvedTs = minResolvedTs
+		var tsUpdated bool
+
+		if minResolvedTs > cfInfo.ResolvedTs {
+			cfInfo.ResolvedTs = minResolvedTs
+			tsUpdated = true
+		}
 
 		if minCheckpointTs > cfInfo.CheckpointTs {
 			cfInfo.CheckpointTs = minCheckpointTs
+			tsUpdated = true
 		}
 
-		log.Debug("update changefeed", zap.String("id", cfInfo.ID),
-			zap.Uint64("checkpoint ts", minCheckpointTs),
-			zap.Uint64("resolved ts", minResolvedTs))
+		if tsUpdated {
+			log.Debug("update changefeed", zap.String("id", cfInfo.ID),
+				zap.Uint64("checkpoint ts", minCheckpointTs),
+				zap.Uint64("resolved ts", minResolvedTs))
+		}
 	}
 	return nil
 }
