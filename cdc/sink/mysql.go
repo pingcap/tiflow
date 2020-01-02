@@ -295,22 +295,19 @@ func (s *mysqlSink) prepareDelete(dml *model.DML) (string, []interface{}, error)
 
 func formatValues(table *schema.TableInfo, colVals map[string]types.Datum) (map[string]types.Datum, error) {
 	columns := table.WritableColumns()
-
-	formatted := make(map[string]types.Datum, len(columns))
+	// TODO get table infos from txn for emit interface
 	for _, col := range columns {
-		val, ok := colVals[col.Name.O]
+		value, ok := colVals[col.Name.O]
 		if !ok {
-			val = getDefaultOrZeroValue(col)
+			continue
 		}
-
-		value, err := formatColVal(val, col.FieldType)
+		value, err := formatColVal(value, col.FieldType)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		formatted[col.Name.O] = value
+		colVals[col.Name.O] = value
 	}
-
-	return formatted, nil
+	return colVals, nil
 }
 
 func formatColVal(datum types.Datum, ft types.FieldType) (types.Datum, error) {

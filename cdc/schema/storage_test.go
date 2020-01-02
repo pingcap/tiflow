@@ -455,6 +455,9 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
 				Name: model.CIStr{
 					O: "job",
 				},
+				FieldType: parser_types.FieldType{
+					Flag: mysql.NotNullFlag,
+				},
 			},
 			{
 				Name: model.CIStr{

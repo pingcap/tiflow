@@ -123,15 +123,18 @@ func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	if !tableInfo.IsIndexUnique(idx.IndexID) {
+		return nil, nil
+	}
+
+	indexInfo, exist := tableInfo.GetIndexInfo(idx.IndexID)
+	if !exist {
+		return nil, errors.NotFoundf("index info %d", idx.IndexID)
+	}
 
 	err = idx.unflatten(tableInfo)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-
-	indexInfo := tableInfo.Indices[idx.IndexID-1]
-	if !indexInfo.Primary && !indexInfo.Unique {
-		return nil, nil
 	}
 
 	values := make(map[string]types.Datum, len(idx.IndexValue))
