@@ -73,14 +73,6 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 			{
 				Database: "testDB",
 				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("ttt")),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
 				Tp:       model.InsertDMLType,
 				Values: map[string]types.Datum{
 					"id": types.NewBytesDatum([]byte("ttt")),
@@ -97,14 +89,6 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 	cs.assertTableTxnEquals(c, t, model.Txn{
 		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("vvv")),
-				},
-			},
 			{
 				Database: "testDB",
 				Table:    "test1",
@@ -166,14 +150,6 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 			{
 				Database: "testDB",
 				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"a": types.NewIntDatum(888),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
 				Tp:       model.InsertDMLType,
 				Values: map[string]types.Datum{
 					"id": types.NewIntDatum(777),
@@ -190,14 +166,6 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 	cs.assertTableTxnEquals(c, t, model.Txn{
 		Ts: rawTxn.Entries[0].Ts,
 		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"a": types.NewIntDatum(888),
-				},
-			},
 			{
 				Database: "testDB",
 				Table:    "test1",
