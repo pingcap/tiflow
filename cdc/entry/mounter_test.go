@@ -128,6 +128,67 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 	})
 }
 
+func (cs *mountTxnsSuite) TestIncompleteRow(c *check.C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pm, schema := setUpPullerAndSchema(ctx, c,
+		"create database testDB",
+		"create table testDB.test1 (id int primary key, val int);",
+	)
+	tableInfo := pm.GetTableInfo("testDB", "test1")
+	tableID := tableInfo.ID
+	mounter := NewTxnMounter(schema)
+	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+
+	pm.MustExec("insert into testDB.test1(id) values (16),(32);")
+	rawTxn := getFirstRealTxn(ctx, c, plr)
+	t, err := mounter.Mount(rawTxn)
+	c.Assert(err, check.IsNil)
+	cs.assertTableTxnEquals(c, t, model.Txn{
+		Ts: rawTxn.Entries[0].Ts,
+		DMLs: []*model.DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       model.InsertDMLType,
+				Values: map[string]types.Datum{
+					"id":  types.NewIntDatum(16),
+					"val": types.NewDatum(nil),
+				},
+			},
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       model.InsertDMLType,
+				Values: map[string]types.Datum{
+					"id":  types.NewIntDatum(32),
+					"val": types.NewDatum(nil),
+				},
+			},
+		},
+	})
+
+	pm.MustExec("insert into testDB.test1(id,val) values (18, 6);")
+	rawTxn = getFirstRealTxn(ctx, c, plr)
+	t, err = mounter.Mount(rawTxn)
+	c.Assert(err, check.IsNil)
+	cs.assertTableTxnEquals(c, t, model.Txn{
+		Ts: rawTxn.Entries[0].Ts,
+		DMLs: []*model.DML{
+			{
+				Database: "testDB",
+				Table:    "test1",
+				Tp:       model.InsertDMLType,
+				Values: map[string]types.Datum{
+					"id":  types.NewIntDatum(18),
+					"val": types.NewIntDatum(6),
+				},
+			},
+		},
+	})
+
+}
+
 func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
