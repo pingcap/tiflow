@@ -47,7 +47,7 @@ func Run(sourceDB *sql.DB, targetDB *sql.DB, schema string, workerCount int, job
 			a int,
 			b double NOT NULL DEFAULT 2.0,
 			c varchar(10) NOT NULL,
-			d time unique
+			d time unique not null
 		);
 		`}
 
