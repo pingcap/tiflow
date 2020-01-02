@@ -70,7 +70,7 @@ func (detail *ChangeFeedDetail) ShouldIgnoreTable(db, tbl string) bool {
 // CDC only supports filtering by database/table now.
 func (detail *ChangeFeedDetail) FilterTxn(t *Txn) {
 	if t.IsDDL() {
-		if detail.ShouldIgnoreTable(t.DDL.Database, "") {
+		if detail.ShouldIgnoreTable(t.DDL.Database, t.DDL.Table) {
 			t.DDL = nil
 		}
 	} else {
