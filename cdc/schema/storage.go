@@ -179,14 +179,10 @@ func (s *Storage) SchemaMetaVersion() int64 {
 	return s.schemaMetaVersion
 }
 
-// SchemaAndTableName returns the tableName by table id
-func (s *Storage) SchemaAndTableName(id int64) (string, string, bool) {
-	tn, ok := s.tableIDToName[id]
-	if !ok {
-		return "", "", false
-	}
-
-	return tn.Schema, tn.Table, true
+// GetTableNameByID looks up a TableName with the given table id
+func (s *Storage) GetTableNameByID(id int64) (TableName, bool) {
+	name, ok := s.tableIDToName[id]
+	return name, ok
 }
 
 // GetTableIDByName returns the tableID by table schemaName and tableName

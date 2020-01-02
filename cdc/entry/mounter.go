@@ -146,17 +146,17 @@ func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
 	}, nil
 }
 
-func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *schema.TableInfo, tableName *schema.TableName, err error) {
+func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *schema.TableInfo, tableName schema.TableName, err error) {
 	tableInfo, exist := m.schemaStorage.TableByID(tableID)
 	if !exist {
-		return nil, nil, errors.Errorf("can not find table, id: %d", tableID)
+		err = errors.Errorf("can not find table, id: %d", tableID)
+		return
 	}
 
-	database, table, exist := m.schemaStorage.SchemaAndTableName(tableID)
+	tableName, exist = m.schemaStorage.GetTableNameByID(tableID)
 	if !exist {
-		return nil, nil, errors.Errorf("can not find table, id: %d", tableID)
+		err = errors.Errorf("can not find table, id: %d", tableID)
 	}
-	tableName = &schema.TableName{Schema: database, Table: table}
 	return
 }
 
