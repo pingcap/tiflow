@@ -119,6 +119,10 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 }
 
 func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
+	// skip set index KV
+	if !idx.Delete {
+		return nil, nil
+	}
 	tableInfo, tableName, err := m.fetchTableInfo(idx.TableID)
 	if err != nil {
 		return nil, errors.Trace(err)
