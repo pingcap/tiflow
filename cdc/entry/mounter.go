@@ -137,13 +137,13 @@ func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if !tableInfo.IsIndexUnique(idx.IndexID) {
-		return nil, nil
-	}
-
 	indexInfo, exist := tableInfo.GetIndexInfo(idx.IndexID)
 	if !exist {
 		return nil, errors.NotFoundf("index info %d", idx.IndexID)
+	}
+
+	if !tableInfo.IsIndexUnique(indexInfo) {
+		return nil, nil
 	}
 
 	err = idx.unflatten(tableInfo)

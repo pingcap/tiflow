@@ -231,8 +231,7 @@ func (s *mysqlSink) formatDMLs(dmls []*model.DML) ([]*model.DML, error) {
 		if !ok {
 			return nil, fmt.Errorf("table not found: %s.%s", dml.Database, dml.Table)
 		}
-		var err error
-		dml.Values, err = formatValues(tableInfo, dml.Values)
+		err := formatValues(tableInfo, dml.Values)
 		if err != nil {
 			return nil, err
 		}
@@ -292,7 +291,7 @@ func (s *mysqlSink) prepareDelete(dml *model.DML) (string, []interface{}, error)
 	return sql, args, nil
 }
 
-func formatValues(table *schema.TableInfo, colVals map[string]types.Datum) (map[string]types.Datum, error) {
+func formatValues(table *schema.TableInfo, colVals map[string]types.Datum) error {
 	columns := table.WritableColumns()
 	// TODO get table infos from txn for emit interface
 	for _, col := range columns {
@@ -302,11 +301,11 @@ func formatValues(table *schema.TableInfo, colVals map[string]types.Datum) (map[
 		}
 		value, err := formatColVal(value, col.FieldType)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
 		colVals[col.Name.O] = value
 	}
-	return colVals, nil
+	return nil
 }
 
 func formatColVal(datum types.Datum, ft types.FieldType) (types.Datum, error) {

@@ -222,7 +222,7 @@ func (m *MockPullerManager) Run(ctx context.Context) {
 				close(m.closeCh)
 				return
 			case r, ok := <-m.rawTxnCh:
-				log.Debug("send raw transaction", zap.Reflect("raw transaction", r))
+				m.c.Log("send raw transaction", r)
 				if !ok {
 					return
 				}

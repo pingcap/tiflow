@@ -122,7 +122,7 @@ func (ti *TableInfo) GetUniqueKeys() [][]string {
 		}
 	}
 	for _, idx := range ti.Indices {
-		if ti.IsIndexUnique(idx.ID) {
+		if ti.IsIndexUnique(idx) {
 			colNames := make([]string, 0, len(idx.Columns))
 			for _, col := range idx.Columns {
 				colNames = append(colNames, col.Name.O)
@@ -138,16 +138,12 @@ func (ti *TableInfo) GetUniqueKeys() [][]string {
 }
 
 // IsIndexUnique returns whether the index is unique
-func (ti *TableInfo) IsIndexUnique(indexID int64) bool {
-	idx, exist := ti.GetIndexInfo(indexID)
-	if !exist {
-		return false
-	}
-	if idx.Primary {
+func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
+	if indexInfo.Primary {
 		return true
 	}
-	if idx.Unique {
-		for _, col := range idx.Columns {
+	if indexInfo.Unique {
+		for _, col := range indexInfo.Columns {
 			if !mysql.HasNotNullFlag(ti.Columns[col.Offset].Flag) {
 				return false
 			}
