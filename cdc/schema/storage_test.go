@@ -408,13 +408,22 @@ var _ = Suite(&getUniqueKeysSuite{})
 
 func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *C) {
 	t := model.TableInfo{
+		Columns: []*model.ColumnInfo{
+			{Name: model.CIStr{O: "name"},
+				FieldType: parser_types.FieldType{
+					Flag: mysql.NotNullFlag,
+				},
+			},
+			{Name: model.CIStr{O: "id"}},
+		},
 		Indices: []*model.IndexInfo{
 			{
 				Name: model.CIStr{
 					O: "name",
 				},
 				Columns: []*model.IndexColumn{
-					{Name: model.CIStr{O: "name"}},
+					{Name: model.CIStr{O: "name"},
+						Offset: 0},
 				},
 				Unique: true,
 			},
@@ -423,7 +432,8 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *C
 					O: "PRIMARY",
 				},
 				Columns: []*model.IndexColumn{
-					{Name: model.CIStr{O: "id"}},
+					{Name: model.CIStr{O: "id"},
+						Offset: 1},
 				},
 				Primary: true,
 			},
@@ -454,6 +464,9 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
 			{
 				Name: model.CIStr{
 					O: "job",
+				},
+				FieldType: parser_types.FieldType{
+					Flag: mysql.NotNullFlag,
 				},
 			},
 			{

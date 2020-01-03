@@ -112,8 +112,17 @@ func (ti *TableInfo) WritableColumns() []*model.ColumnInfo {
 // GetUniqueKeys returns all unique keys of the table as a slice of column names
 func (ti *TableInfo) GetUniqueKeys() [][]string {
 	var uniqueKeys [][]string
+	if ti.PKIsHandle {
+		for _, col := range ti.Columns {
+			if mysql.HasPriKeyFlag(col.Flag) {
+				// Prepend to make sure the primary key ends up at the front
+				uniqueKeys = [][]string{{col.Name.O}}
+				break
+			}
+		}
+	}
 	for _, idx := range ti.Indices {
-		if idx.Primary || idx.Unique {
+		if ti.IsIndexUnique(idx) {
 			colNames := make([]string, 0, len(idx.Columns))
 			for _, col := range idx.Columns {
 				colNames = append(colNames, col.Name.O)
@@ -125,16 +134,23 @@ func (ti *TableInfo) GetUniqueKeys() [][]string {
 			}
 		}
 	}
-	if ti.PKIsHandle {
-		for _, col := range ti.Columns {
-			if mysql.HasPriKeyFlag(col.Flag) {
-				// Prepend to make sure the primary key ends up at the front
-				uniqueKeys = append([][]string{{col.Name.O}}, uniqueKeys...)
-				break
+	return uniqueKeys
+}
+
+// IsIndexUnique returns whether the index is unique
+func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
+	if indexInfo.Primary {
+		return true
+	}
+	if indexInfo.Unique {
+		for _, col := range indexInfo.Columns {
+			if !mysql.HasNotNullFlag(ti.Columns[col.Offset].Flag) {
+				return false
 			}
 		}
+		return true
 	}
-	return uniqueKeys
+	return false
 }
 
 // NewStorage returns the Schema object

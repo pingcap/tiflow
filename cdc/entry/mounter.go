@@ -3,9 +3,11 @@ package entry
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/schema"
+	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )
@@ -110,6 +112,14 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 		}
 		values[pkColName] = *pkValue
 	}
+
+	for _, col := range tableInfo.Columns {
+		_, ok := values[col.Name.O]
+		if !ok {
+			values[col.Name.O] = getDefaultOrZeroValue(col)
+		}
+	}
+
 	return &model.DML{
 		Database: tableName.Schema,
 		Table:    tableName.Table,
@@ -127,15 +137,18 @@ func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	indexInfo, exist := tableInfo.GetIndexInfo(idx.IndexID)
+	if !exist {
+		return nil, errors.NotFoundf("index info %d", idx.IndexID)
+	}
+
+	if !tableInfo.IsIndexUnique(indexInfo) {
+		return nil, nil
+	}
 
 	err = idx.unflatten(tableInfo)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-
-	indexInfo := tableInfo.Indices[idx.IndexID-1]
-	if !indexInfo.Primary && !indexInfo.Unique {
-		return nil, nil
 	}
 
 	values := make(map[string]types.Datum, len(idx.IndexValue))
@@ -148,6 +161,27 @@ func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
 		Tp:       model.DeleteDMLType,
 		Values:   values,
 	}, nil
+}
+
+func getDefaultOrZeroValue(col *timodel.ColumnInfo) types.Datum {
+	// see https://github.com/pingcap/tidb/issues/9304
+	// must use null if TiDB not write the column value when default value is null
+	// and the value is null
+	if !mysql.HasNotNullFlag(col.Flag) {
+		return types.NewDatum(nil)
+	}
+
+	if col.GetDefaultValue() != nil {
+		return types.NewDatum(col.GetDefaultValue())
+	}
+
+	if col.Tp == mysql.TypeEnum {
+		// For enum type, if no default value and not null is set,
+		// the default value is the first element of the enum list
+		return types.NewDatum(col.FieldType.Elems[0])
+	}
+
+	return table.GetZeroValue(col)
 }
 
 func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *schema.TableInfo, tableName schema.TableName, err error) {

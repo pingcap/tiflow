@@ -35,7 +35,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )
@@ -232,8 +231,7 @@ func (s *mysqlSink) formatDMLs(dmls []*model.DML) ([]*model.DML, error) {
 		if !ok {
 			return nil, fmt.Errorf("table not found: %s.%s", dml.Database, dml.Table)
 		}
-		var err error
-		dml.Values, err = formatValues(tableInfo, dml.Values)
+		err := formatValues(tableInfo, dml.Values)
 		if err != nil {
 			return nil, err
 		}
@@ -293,24 +291,21 @@ func (s *mysqlSink) prepareDelete(dml *model.DML) (string, []interface{}, error)
 	return sql, args, nil
 }
 
-func formatValues(table *schema.TableInfo, colVals map[string]types.Datum) (map[string]types.Datum, error) {
+func formatValues(table *schema.TableInfo, colVals map[string]types.Datum) error {
 	columns := table.WritableColumns()
-
-	formatted := make(map[string]types.Datum, len(columns))
+	// TODO get table infos from txn for emit interface
 	for _, col := range columns {
-		val, ok := colVals[col.Name.O]
+		value, ok := colVals[col.Name.O]
 		if !ok {
-			val = getDefaultOrZeroValue(col)
+			continue
 		}
-
-		value, err := formatColVal(val, col.FieldType)
+		value, err := formatColVal(value, col.FieldType)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
-		formatted[col.Name.O] = value
+		colVals[col.Name.O] = value
 	}
-
-	return formatted, nil
+	return nil
 }
 
 func formatColVal(datum types.Datum, ft types.FieldType) (types.Datum, error) {
@@ -335,27 +330,6 @@ func formatColVal(datum types.Datum, ft types.FieldType) (types.Datum, error) {
 	}
 
 	return datum, nil
-}
-
-func getDefaultOrZeroValue(col *timodel.ColumnInfo) types.Datum {
-	// see https://github.com/pingcap/tidb/issues/9304
-	// must use null if TiDB not write the column value when default value is null
-	// and the value is null
-	if !mysql.HasNotNullFlag(col.Flag) {
-		return types.NewDatum(nil)
-	}
-
-	if col.GetDefaultValue() != nil {
-		return types.NewDatum(col.GetDefaultValue())
-	}
-
-	if col.Tp == mysql.TypeEnum {
-		// For enum type, if no default value and not null is set,
-		// the default value is the first element of the enum list
-		return types.NewDatum(col.FieldType.Elems[0])
-	}
-
-	return table.GetZeroValue(col)
 }
 
 func whereValues(colVals map[string]types.Datum, names []string) (values []types.Datum) {

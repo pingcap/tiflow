@@ -174,6 +174,11 @@ func NewMockPullerManager(c *check.C) *MockPullerManager {
 }
 
 func (m *MockPullerManager) setUp() {
+	// avoid to print too many logs
+	logLevel := log.GetLevel()
+	log.SetLevel(zap.FatalLevel)
+	defer log.SetLevel(logLevel)
+
 	m.cluster = mocktikv.NewCluster()
 	mocktikv.BootstrapWithSingleStore(m.cluster)
 
@@ -217,7 +222,7 @@ func (m *MockPullerManager) Run(ctx context.Context) {
 				close(m.closeCh)
 				return
 			case r, ok := <-m.rawTxnCh:
-				log.Info("send raw transaction", zap.Reflect("raw transaction", r))
+				m.c.Log("send raw transaction", r)
 				if !ok {
 					return
 				}
