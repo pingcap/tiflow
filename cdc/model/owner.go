@@ -50,7 +50,7 @@ const (
 	TablePLockCommited
 )
 
-// AdminJob represents for admin job type, both used in owner and processor
+// AdminJobType represents for admin job type, both used in owner and processor
 type AdminJobType int
 
 // AdminJob holds an admin job
@@ -226,11 +226,10 @@ func (s ChangeFeedStatus) String() string {
 
 // ChangeFeedInfo stores information about a ChangeFeed
 type ChangeFeedInfo struct {
-	SinkURI      string           `json:"sink-uri"`
-	ResolvedTs   uint64           `json:"resolved-ts"`
-	CheckpointTs uint64           `json:"checkpoint-ts"`
-	Status       ChangeFeedStatus `json:"status"`
-	Admin        AdminJobType     `json:"admin"`
+	SinkURI      string       `json:"sink-uri"`
+	ResolvedTs   uint64       `json:"resolved-ts"`
+	CheckpointTs uint64       `json:"checkpoint-ts"`
+	Admin        AdminJobType `json:"admin"`
 }
 
 // Marshal returns json encoded string of ChangeFeedInfo, only contains necessary fields stored in storage

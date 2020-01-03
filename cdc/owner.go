@@ -61,6 +61,7 @@ type changeFeed struct {
 	*model.ChangeFeedInfo
 
 	schema                  *schema.Storage
+	Status                  model.ChangeFeedStatus
 	TargetTs                uint64
 	ProcessorInfos          model.ProcessorsInfos
 	processorLastUpdateTime map[string]time.Time
@@ -502,8 +503,8 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 			SinkURI:      detail.SinkURI,
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
-			Status:       model.ChangeFeedSyncDML,
 		},
+		Status:          model.ChangeFeedSyncDML,
 		TargetTs:        detail.GetTargetTs(),
 		ProcessorInfos:  processorsInfos,
 		DDLCurrentIndex: 0,
