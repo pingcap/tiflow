@@ -71,6 +71,7 @@ func (w *ChangeFeedWatcher) processPutKv(kv *mvccpb.KeyValue) (bool, string, mod
 		needRunWatcher = true
 	}
 	if detail.Admin == model.AdminStop {
+		// only handle model.AdminStop, the model.AdminRemove case will be handled in `processDeleteKv`
 		delete(w.details, changefeedID)
 	} else {
 		w.details[changefeedID] = detail
