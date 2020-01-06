@@ -324,8 +324,8 @@ type ownerImpl struct {
 	cancelWatchCapture func()
 	captures           map[model.CaptureID]*model.CaptureInfo
 
-	jobs     []*model.AdminJob
-	jobsLock sync.Mutex
+	adminJobs     []*model.AdminJob
+	adminJobsLock sync.Mutex
 }
 
 // NewOwner creates a new ownerImpl instance
@@ -754,12 +754,12 @@ func (o *ownerImpl) dispatchJob(ctx context.Context, job *model.AdminJob) error 
 
 func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
 	removeIdx := 0
-	o.jobsLock.Lock()
+	o.adminJobsLock.Lock()
 	defer func() {
-		o.jobs = o.jobs[removeIdx:]
-		o.jobsLock.Unlock()
+		o.adminJobs = o.adminJobs[removeIdx:]
+		o.adminJobsLock.Unlock()
 	}()
-	for i, job := range o.jobs {
+	for i, job := range o.adminJobs {
 		log.Info("handle admin job", zap.String("changefeed", job.CfID), zap.Stringer("type", job.Type))
 		switch job.Type {
 		case model.AdminStop:
@@ -910,9 +910,9 @@ func (o *ownerImpl) EnqueueJob(job *model.AdminJob) error {
 	default:
 		return errors.Errorf("invalid admin job type: %d", job.Type)
 	}
-	o.jobsLock.Lock()
-	o.jobs = append(o.jobs, job)
-	o.jobsLock.Unlock()
+	o.adminJobsLock.Lock()
+	o.adminJobs = append(o.adminJobs, job)
+	o.adminJobsLock.Unlock()
 	return nil
 }
 

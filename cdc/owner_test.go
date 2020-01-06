@@ -374,9 +374,9 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}
 	checkAdminJobLen := func(length int) {
-		owner.jobsLock.Lock()
-		c.Assert(owner.jobs, check.HasLen, length)
-		owner.jobsLock.Unlock()
+		owner.adminJobsLock.Lock()
+		c.Assert(owner.adminJobs, check.HasLen, length)
+		owner.adminJobsLock.Unlock()
 	}
 
 	err := owner.EnqueueJob(&model.AdminJob{CfID: cfID, Type: model.AdminStop})
