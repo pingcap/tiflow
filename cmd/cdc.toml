@@ -1,0 +1,12 @@
+filter-case-sensitive = false
+
+[filter-rules]
+ignore-dbs = ["test", "sys"]
+
+[[filter-rules.do-tables]]
+db-name = "sns"
+tbl-name = "user"
+
+[[filter-rules.do-tables]]
+db-name = "sns"
+tbl-name = "following"
