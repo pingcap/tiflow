@@ -64,4 +64,11 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 	}}
 	detail.FilterTxn(&txn)
 	c.Assert(txn.DMLs, check.HasLen, 2)
+
+	txn = Txn{DDL: &DDL{
+		Database: "sns",
+		Table:    "log",
+	}}
+	detail.FilterTxn(&txn)
+	c.Assert(txn.DDL, check.IsNil)
 }
