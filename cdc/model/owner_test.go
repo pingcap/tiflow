@@ -21,12 +21,12 @@ import (
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
 
-type cloneTaskInfoSuite struct{}
+type cloneTaskStatusSuite struct{}
 
-var _ = check.Suite(&cloneTaskInfoSuite{})
+var _ = check.Suite(&cloneTaskStatusSuite{})
 
-func (s *cloneTaskInfoSuite) TestShouldBeDeepCopy(c *check.C) {
-	info := TaskInfo{
+func (s *cloneTaskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
+	info := TaskStatus{
 		CheckPointTs: 12,
 		ResolvedTs:   20,
 		TableInfos: []*ProcessTableInfo{
@@ -59,8 +59,8 @@ func (s *cloneTaskInfoSuite) TestShouldBeDeepCopy(c *check.C) {
 	assertIsSnapshot()
 }
 
-func (s *cloneTaskInfoSuite) TestProcSnapshot(c *check.C) {
-	info := TaskInfo{
+func (s *cloneTaskStatusSuite) TestProcSnapshot(c *check.C) {
+	info := TaskStatus{
 		CheckPointTs: 0,
 		ResolvedTs:   20,
 		TableInfos: []*ProcessTableInfo{
@@ -81,7 +81,7 @@ type removeTableSuite struct{}
 var _ = check.Suite(&removeTableSuite{})
 
 func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
-	info := TaskInfo{
+	info := TaskStatus{
 		TableInfos: []*ProcessTableInfo{
 			{ID: 1},
 			{ID: 2},
@@ -95,7 +95,7 @@ func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
 }
 
 func (s *removeTableSuite) TestShouldHandleTableNotFoundCorrectly(c *check.C) {
-	info := TaskInfo{}
+	info := TaskStatus{}
 	t, found := info.RemoveTable(404)
 	c.Assert(found, check.IsFalse)
 	c.Assert(t, check.IsNil)

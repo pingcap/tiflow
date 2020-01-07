@@ -59,7 +59,7 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeed
 			return nil, nil, err
 		}
 
-		pinfo, err := kv.GetAllTaskInfos(ctx, rw.etcdClient, changefeedID)
+		pinfo, err := kv.GetAllTaskStatus(ctx, rw.etcdClient, changefeedID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -118,11 +118,11 @@ type ProcessorTsRWriter interface {
 	ReadGlobalResolvedTs(ctx context.Context) (uint64, error)
 
 	// The flowing methods *IS NOT* thread safe.
-	// GetTaskInfo returns the in memory cache *model.TaskInfo
-	GetTaskInfo() *model.TaskInfo
+	// GetTaskStatus returns the in memory cache *model.TaskStatus
+	GetTaskStatus() *model.TaskStatus
 	// UpdateInfo update the in memory cache as info in storage.
 	// oldInfo and newInfo is the old and new in memory cache info.
-	UpdateInfo(ctx context.Context) (oldInfo *model.TaskInfo, newInfo *model.TaskInfo, err error)
+	UpdateInfo(ctx context.Context) (oldInfo *model.TaskStatus, newInfo *model.TaskStatus, err error)
 	// WriteInfoIntoStorage update info into storage, return model.ErrWriteTsConflict if in last learn info is out dated and must call UpdateInfo.
 	WriteInfoIntoStorage(ctx context.Context) error
 }
@@ -135,7 +135,7 @@ type ProcessorTsEtcdRWriter struct {
 	changefeedID string
 	captureID    string
 	modRevision  int64
-	info         *model.TaskInfo
+	info         *model.TaskStatus
 	logger       *zap.Logger
 }
 
@@ -148,12 +148,12 @@ func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 		etcdClient:   cli,
 		changefeedID: changefeedID,
 		captureID:    captureID,
-		info:         &model.TaskInfo{},
+		info:         &model.TaskStatus{},
 		logger:       logger,
 	}
 
 	var err error
-	rw.modRevision, rw.info, err = kv.GetTaskInfo(context.Background(), rw.etcdClient, rw.changefeedID, rw.captureID)
+	rw.modRevision, rw.info, err = kv.GetTaskStatus(context.Background(), rw.etcdClient, rw.changefeedID, rw.captureID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -164,8 +164,8 @@ func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 // UpdateInfo implements ProcessorTsRWriter interface.
 func (rw *ProcessorTsEtcdRWriter) UpdateInfo(
 	ctx context.Context,
-) (oldInfo *model.TaskInfo, newInfo *model.TaskInfo, err error) {
-	modRevision, info, err := kv.GetTaskInfo(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
+) (oldInfo *model.TaskStatus, newInfo *model.TaskStatus, err error) {
+	modRevision, info, err := kv.GetTaskStatus(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -219,12 +219,12 @@ func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uin
 	return info.ResolvedTs, nil
 }
 
-// GetTaskInfo returns the in memory cache of *model.TaskInfo stored in ProcessorTsEtcdRWriter
-func (rw *ProcessorTsEtcdRWriter) GetTaskInfo() *model.TaskInfo {
+// GetTaskStatus returns the in memory cache of *model.TaskStatus stored in ProcessorTsEtcdRWriter
+func (rw *ProcessorTsEtcdRWriter) GetTaskStatus() *model.TaskStatus {
 	return rw.info
 }
 
-// OwnerSubCFInfoEtcdWriter encapsulates TaskInfo write operation
+// OwnerSubCFInfoEtcdWriter encapsulates TaskStatus write operation
 type OwnerSubCFInfoEtcdWriter struct {
 	etcdClient *clientv3.Client
 }
@@ -236,11 +236,11 @@ func NewOwnerSubCFInfoEtcdWriter(cli *clientv3.Client) *OwnerSubCFInfoEtcdWriter
 	}
 }
 
-// updateInfo updates the local TaskInfo with etcd value, except for TableInfos and TablePLock
+// updateInfo updates the local TaskStatus with etcd value, except for TableInfos and TablePLock
 func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
-	ctx context.Context, changefeedID, captureID string, oldInfo *model.TaskInfo,
-) (newInfo *model.TaskInfo, err error) {
-	modRevision, info, err := kv.GetTaskInfo(ctx, ow.etcdClient, changefeedID, captureID)
+	ctx context.Context, changefeedID, captureID string, oldInfo *model.TaskStatus,
+) (newInfo *model.TaskStatus, err error) {
+	modRevision, info, err := kv.GetTaskStatus(ctx, ow.etcdClient, changefeedID, captureID)
 	if err != nil {
 		return
 	}
@@ -269,9 +269,9 @@ func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
 func (ow *OwnerSubCFInfoEtcdWriter) checkLock(
 	ctx context.Context, changefeedID, captureID string,
 ) (status model.TableLockStatus, err error) {
-	_, info, err := kv.GetTaskInfo(ctx, ow.etcdClient, changefeedID, captureID)
+	_, info, err := kv.GetTaskStatus(ctx, ow.etcdClient, changefeedID, captureID)
 	if err != nil {
-		if errors.Cause(err) == model.ErrTaskInfoNotExists {
+		if errors.Cause(err) == model.ErrTaskStatusNotExists {
 			return model.TableNoLock, nil
 		}
 		return
@@ -292,14 +292,14 @@ func (ow *OwnerSubCFInfoEtcdWriter) checkLock(
 	return
 }
 
-// Write persists given `TaskInfo` into etcd.
+// Write persists given `TaskStatus` into etcd.
 // If returned err is not nil, don't use the returned newInfo as it may be not a reasonable value.
 func (ow *OwnerSubCFInfoEtcdWriter) Write(
 	ctx context.Context,
 	changefeedID, captureID string,
-	info *model.TaskInfo,
+	info *model.TaskStatus,
 	writePLock bool,
-) (newInfo *model.TaskInfo, err error) {
+) (newInfo *model.TaskStatus, err error) {
 
 	// check p-lock not exists or is already resolved
 	lockStatus, err := ow.checkLock(ctx, changefeedID, captureID)
@@ -348,7 +348,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) Write(
 			case model.ErrFindPLockNotCommit:
 				return backoff.Permanent(err)
 			case nil:
-				return errors.Trace(model.ErrWriteTaskInfoConlict)
+				return errors.Trace(model.ErrWriteTaskStatusConlict)
 			default:
 				return errors.Trace(err)
 			}

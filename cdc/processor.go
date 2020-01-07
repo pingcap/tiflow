@@ -146,7 +146,7 @@ type processor struct {
 	resolvedTxns chan model.RawTxn
 	executedTxns chan model.RawTxn
 
-	info *model.TaskInfo
+	info *model.TaskStatus
 
 	tablesMu sync.Mutex
 	tables   map[int64]*tableInfo
@@ -222,7 +222,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		ddlPuller:     ddlPuller,
 
 		tsRWriter:    tsRWriter,
-		info:         tsRWriter.GetTaskInfo(),
+		info:         tsRWriter.GetTaskStatus(),
 		resolvedTxns: make(chan model.RawTxn, 1),
 		executedTxns: make(chan model.RawTxn, 1),
 		ddlJobsCh:    make(chan model.RawTxn, 16),
@@ -292,7 +292,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // localResolvedWorker do the flowing works.
 // 1, update resolve ts by scaning all table's resolve ts.
 // 2, update checkpoint ts by consuming entry from p.executedTxns.
-// 3, sync TaskInfo between in memory and storage.
+// 3, sync TaskStatus between in memory and storage.
 func (p *processor) localResolvedWorker(ctx context.Context) error {
 	updateInfoTick := time.NewTicker(time.Second)
 	defer updateInfoTick.Stop()
@@ -365,7 +365,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 
-		p.info = p.tsRWriter.GetTaskInfo()
+		p.info = p.tsRWriter.GetTaskStatus()
 
 		p.handleTables(ctx, oldInfo, p.info, oldInfo.CheckPointTs)
 		syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.info.TableInfos)))
@@ -444,7 +444,7 @@ func (p *processor) removeTable(tableID int64) {
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
-func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.TaskInfo, checkpointTs uint64) {
+func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.TaskStatus, checkpointTs uint64) {
 	removedTables, addedTables := diffProcessTableInfos(oldInfo.TableInfos, newInfo.TableInfos)
 
 	// remove tables

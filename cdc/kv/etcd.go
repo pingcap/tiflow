@@ -150,21 +150,21 @@ func SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, detail *
 	return errors.Trace(err)
 }
 
-// GetAllTaskInfos queries all task info of a changefeed, and returns a map
-// mapping from captureID to TaskInfo
-func GetAllTaskInfos(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
+// GetAllTaskStatus queries all task info of a changefeed, and returns a map
+// mapping from captureID to TaskStatus
+func GetAllTaskStatus(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
 	key := GetEtcdKeyTaskList(changefeedID)
 	resp, err := client.Get(ctx, key, append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)...)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	pinfo := make(map[string]*model.TaskInfo, resp.Count)
+	pinfo := make(map[string]*model.TaskStatus, resp.Count)
 	for _, rawKv := range resp.Kvs {
 		captureID, err := util.ExtractKeySuffix(string(rawKv.Key))
 		if err != nil {
 			return nil, err
 		}
-		info := &model.TaskInfo{}
+		info := &model.TaskStatus{}
 		err = info.Unmarshal(rawKv.Value)
 		if err != nil {
 			return nil, err
@@ -175,37 +175,37 @@ func GetAllTaskInfos(ctx context.Context, client *clientv3.Client, changefeedID 
 	return pinfo, nil
 }
 
-// GetTaskInfo queries task info from etcd, returns
+// GetTaskStatus queries task info from etcd, returns
 //  - ModRevision of the given key
-//  - *model.TaskInfo unmarshaled from the value
+//  - *model.TaskStatus unmarshaled from the value
 //  - error if error happens
-func GetTaskInfo(
+func GetTaskStatus(
 	ctx context.Context,
 	client *clientv3.Client,
 	changefeedID string,
 	captureID string,
 	opts ...clientv3.OpOption,
-) (int64, *model.TaskInfo, error) {
+) (int64, *model.TaskStatus, error) {
 	key := GetEtcdKeyTask(changefeedID, captureID)
 	resp, err := client.Get(ctx, key, opts...)
 	if err != nil {
 		return 0, nil, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return 0, nil, errors.Annotatef(model.ErrTaskInfoNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
+		return 0, nil, errors.Annotatef(model.ErrTaskStatusNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
 	}
-	info := &model.TaskInfo{}
+	info := &model.TaskStatus{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
 	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
 }
 
-// PutTaskInfo puts task info into etcd.
-func PutTaskInfo(
+// PutTaskStatus puts task info into etcd.
+func PutTaskStatus(
 	ctx context.Context,
 	client *clientv3.Client,
 	changefeedID string,
 	captureID string,
-	info *model.TaskInfo,
+	info *model.TaskStatus,
 	opts ...clientv3.OpOption,
 ) error {
 	data, err := info.Marshal()
@@ -240,8 +240,8 @@ func PutChangeFeedStatus(
 	return errors.Trace(err)
 }
 
-// DeleteTaskInfo deletes task info from etcd
-func DeleteTaskInfo(
+// DeleteTaskStatus deletes task info from etcd
+func DeleteTaskStatus(
 	ctx context.Context,
 	cli *clientv3.Client,
 	cfID string,

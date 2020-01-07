@@ -171,7 +171,7 @@ func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.
 	c.banlanceOrphanTables(ctx, captures)
 }
 
-func (c *changeFeed) restoreTableInfos(infoSnapshot *model.TaskInfo, captureID string) {
+func (c *changeFeed) restoreTableInfos(infoSnapshot *model.TaskStatus, captureID string) {
 	c.ProcessorInfos[captureID].TableInfos = infoSnapshot.TableInfos
 }
 
@@ -180,7 +180,7 @@ func (c *changeFeed) cleanTables(ctx context.Context) {
 
 cleanLoop:
 	for id := range c.toCleanTables {
-		captureID, subInfo, ok := findTaskInfoWithTable(c.ProcessorInfos, id)
+		captureID, subInfo, ok := findTaskStatusWithTable(c.ProcessorInfos, id)
 		if !ok {
 			log.Warn("ignore clean table id", zap.Uint64("id", id))
 			cleanIDs = append(cleanIDs, id)
@@ -218,7 +218,7 @@ cleanLoop:
 	}
 }
 
-func findTaskInfoWithTable(infos model.ProcessorsInfos, tableID uint64) (captureID string, info *model.TaskInfo, ok bool) {
+func findTaskStatusWithTable(infos model.ProcessorsInfos, tableID uint64) (captureID string, info *model.TaskStatus, ok bool) {
 	for id, info := range infos {
 		for _, table := range info.TableInfos {
 			if table.ID == tableID {
@@ -243,7 +243,7 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 
 		info := c.ProcessorInfos[captureID]
 		if info == nil {
-			info = new(model.TaskInfo)
+			info = new(model.TaskStatus)
 		}
 		infoClone := info.Clone()
 		info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{
@@ -378,7 +378,7 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 		for _, tbl := range snap.Tables {
 			changefeed.reAddTable(tbl.ID, tbl.StartTs)
 		}
-		err := kv.DeleteTaskInfo(ctx, o.etcdClient, snap.CfID, snap.CaptureID)
+		err := kv.DeleteTaskStatus(ctx, o.etcdClient, snap.CfID, snap.CaptureID)
 		if err != nil {
 			log.Warn("failed to delete processor info",
 				zap.String("changefeedID", snap.CfID),

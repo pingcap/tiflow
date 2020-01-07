@@ -137,7 +137,7 @@ var ctrlCmd = &cobra.Command{
 			}
 			return jsonPrint(captures)
 		case CtrlQuerySubCf:
-			_, info, err := kv.GetTaskInfo(context.Background(), cli, ctrlCfID, ctrlCaptureID)
+			_, info, err := kv.GetTaskStatus(context.Background(), cli, ctrlCfID, ctrlCaptureID)
 			if err != nil && err != concurrency.ErrElectionNoLeader {
 				return err
 			}

@@ -69,7 +69,7 @@ func (s *etcdSuite) TearDownTest(c *check.C) {
 
 func (s *etcdSuite) TestInfoReader(c *check.C) {
 	var (
-		info1 = map[model.CaptureID]*model.TaskInfo{
+		info1 = map[model.CaptureID]*model.TaskStatus{
 			"capture1": {
 				CheckPointTs: 1000,
 				ResolvedTs:   1024,
@@ -185,7 +185,7 @@ func (s *etcdSuite) TestNewProcessorTsEtcdRWriter(c *check.C) {
 	c.Assert(err, check.NotNil)
 
 	// create a task record in etcd
-	info := new(model.TaskInfo)
+	info := new(model.TaskStatus)
 	sinfo, err := info.Marshal()
 	c.Assert(err, check.IsNil)
 	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTask(changefeedID, captureID), sinfo)
@@ -201,12 +201,12 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 		captureID    = "test-ts-writer-capture"
 		err          error
 		revision     int64
-		info         = &model.TaskInfo{
+		info         = &model.TaskStatus{
 			TableInfos: []*model.ProcessTableInfo{
 				{ID: 11}, {ID: 12},
 			},
 		}
-		getInfo *model.TaskInfo
+		getInfo *model.TaskStatus
 	)
 
 	// create a task record in etcd
@@ -218,14 +218,14 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	// test WriteResolvedTs
 	rw, err := NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
-	c.Assert(rw.GetTaskInfo(), check.DeepEquals, info)
+	c.Assert(rw.GetTaskStatus(), check.DeepEquals, info)
 
-	info = rw.GetTaskInfo()
+	info = rw.GetTaskStatus()
 	info.ResolvedTs = 128
 	err = rw.WriteInfoIntoStorage(context.Background())
 	c.Assert(err, check.IsNil)
 
-	revision, getInfo, err = kv.GetTaskInfo(context.Background(), s.client, changefeedID, captureID)
+	revision, getInfo, err = kv.GetTaskStatus(context.Background(), s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(revision, check.Equals, rw.modRevision)
 	c.Assert(getInfo.ResolvedTs, check.Equals, uint64(128))
@@ -235,7 +235,7 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	err = rw.WriteInfoIntoStorage(context.Background())
 	c.Assert(err, check.IsNil)
 
-	revision, getInfo, err = kv.GetTaskInfo(context.Background(), s.client, changefeedID, captureID)
+	revision, getInfo, err = kv.GetTaskStatus(context.Background(), s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(revision, check.Equals, rw.modRevision)
 	c.Assert(getInfo.CheckPointTs, check.Equals, uint64(96))
@@ -256,13 +256,13 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(oldInfo, check.DeepEquals, info)
 	c.Assert(newInfo, check.DeepEquals, getInfo)
-	info = rw.GetTaskInfo()
+	info = rw.GetTaskStatus()
 
 	// update success again.
 	info.ResolvedTs = 196
 	err = rw.WriteInfoIntoStorage(context.Background())
 	c.Assert(err, check.IsNil)
-	revision, getInfo, err = kv.GetTaskInfo(context.Background(), s.client, changefeedID, captureID)
+	revision, getInfo, err = kv.GetTaskStatus(context.Background(), s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(revision, check.Equals, rw.modRevision)
 	c.Assert(getInfo.ResolvedTs, check.Equals, uint64(196))
@@ -287,7 +287,7 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// create a task record in etcd
-	subInfo := new(model.TaskInfo)
+	subInfo := new(model.TaskStatus)
 	subInfoData, err := subInfo.Marshal()
 	c.Assert(err, check.IsNil)
 	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTask(changefeedID, captureID), subInfoData)
@@ -305,7 +305,7 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 	var (
 		changefeedID = "test-owner-table-writer-changefeed"
 		captureID    = "test-owner-table-writer-capture"
-		info         = &model.TaskInfo{}
+		info         = &model.TaskStatus{}
 		err          error
 	)
 
@@ -321,7 +321,7 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 	infoClone := info.Clone()
 	infoClone.ResolvedTs = 200
 	infoClone.CheckPointTs = 100
-	err = kv.PutTaskInfo(context.Background(), s.client, changefeedID, captureID, infoClone)
+	err = kv.PutTaskStatus(context.Background(), s.client, changefeedID, captureID, infoClone)
 	c.Assert(err, check.IsNil)
 
 	// owner adds table to processor when remote data is updated
@@ -330,7 +330,7 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(info.TableInfos, check.HasLen, 2)
 	// check ModRevision after write
-	revision, _, err := kv.GetTaskInfo(context.Background(), s.client, changefeedID, captureID)
+	revision, _, err := kv.GetTaskStatus(context.Background(), s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(info.ModRevision, check.Equals, revision)
 
@@ -355,7 +355,7 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 
 	// simulate processor removes table and commit table p-lock
 	info.TableCLock = &model.TableLock{Ts: info.TablePLock.Ts, CheckpointTs: 200}
-	err = kv.PutTaskInfo(context.Background(), s.client, changefeedID, captureID, info)
+	err = kv.PutTaskStatus(context.Background(), s.client, changefeedID, captureID, info)
 	c.Assert(err, check.IsNil)
 	info.TableCLock = nil
 
