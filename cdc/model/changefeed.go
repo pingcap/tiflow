@@ -37,17 +37,25 @@ type ChangeFeedDetail struct {
 	AdminJobType AdminJobType    `json:"admin-job-type"`
 	Info         *ChangeFeedInfo `json:"-"`
 
-	filter              *filter.Filter
-	FilterCaseSensitive bool          `json:"filter-case-sensitive"`
-	FilterRules         *filter.Rules `json:"filter-rules"`
+	filter *filter.Filter
+	Config *ReplicaConfig `json:"config"`
 }
 
 func (detail *ChangeFeedDetail) getFilter() *filter.Filter {
 	if detail.filter == nil {
-		rules := detail.FilterRules
-		detail.filter = filter.New(detail.FilterCaseSensitive, rules)
+		rules := detail.Config.FilterRules
+		detail.filter = filter.New(detail.Config.FilterCaseSensitive, rules)
 	}
 	return detail.filter
+}
+
+func (detail *ChangeFeedDetail) isIgnoreTxnCommitTs(t *Txn) bool {
+	for _, ignoreTs := range detail.Config.IgnoreTxnCommitTs {
+		if ignoreTs == t.Ts {
+			return true
+		}
+	}
+	return false
 }
 
 // ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
@@ -66,13 +74,13 @@ func (detail *ChangeFeedDetail) ShouldIgnoreTable(db, tbl string) bool {
 // CDC only supports filtering by database/table now.
 func (detail *ChangeFeedDetail) FilterTxn(t *Txn) {
 	if t.IsDDL() {
-		if detail.ShouldIgnoreTable(t.DDL.Database, t.DDL.Table) {
+		if detail.isIgnoreTxnCommitTs(t) || detail.ShouldIgnoreTable(t.DDL.Database, t.DDL.Table) {
 			t.DDL = nil
 		}
 	} else {
 		var filteredDMLs []*DML
 		for _, dml := range t.DMLs {
-			if !detail.ShouldIgnoreTable(dml.Database, dml.Table) {
+			if !detail.isIgnoreTxnCommitTs(t) && !detail.ShouldIgnoreTable(dml.Database, dml.Table) {
 				filteredDMLs = append(filteredDMLs, dml)
 			}
 		}

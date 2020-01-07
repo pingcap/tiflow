@@ -6,14 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tidb-tools/pkg/filter"
-
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/errors"
-
 	"github.com/coreos/etcd/clientv3"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/google/uuid"
+	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -39,11 +36,6 @@ var (
 	sinkURI    string
 	configFile string
 )
-
-type config struct {
-	FilterCaseSensitive bool          `toml:"filter-case-sensitive"`
-	FilterRules         *filter.Rules `toml:"filter-rules"`
-}
 
 var cliCmd = &cobra.Command{
 	Use:   "cli",
@@ -73,7 +65,7 @@ var cliCmd = &cobra.Command{
 			startTs = oracle.ComposeTS(ts, logical)
 		}
 
-		cfg := new(config)
+		cfg := new(model.ReplicaConfig)
 		if len(configFile) > 0 {
 			if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
 				return err
@@ -81,13 +73,12 @@ var cliCmd = &cobra.Command{
 		}
 
 		detail := &model.ChangeFeedDetail{
-			SinkURI:             sinkURI,
-			Opts:                make(map[string]string),
-			CreateTime:          time.Now(),
-			StartTs:             startTs,
-			TargetTs:            targetTs,
-			FilterRules:         cfg.FilterRules,
-			FilterCaseSensitive: cfg.FilterCaseSensitive,
+			SinkURI:    sinkURI,
+			Opts:       make(map[string]string),
+			CreateTime: time.Now(),
+			StartTs:    startTs,
+			TargetTs:   targetTs,
+			Config:     cfg,
 		}
 		d, err := detail.Marshal()
 		if err != nil {

@@ -38,11 +38,13 @@ func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
 
 func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 	detail := ChangeFeedDetail{
-		FilterRules: &filter.Rules{
-			DoDBs: []string{"sns", "ecom"},
-			IgnoreTables: []*filter.Table{
-				{Schema: "sns", Name: "log"},
-				{Schema: "ecom", Name: "test"},
+		Config: &ReplicaConfig{
+			FilterRules: &filter.Rules{
+				DoDBs: []string{"sns", "ecom"},
+				IgnoreTables: []*filter.Table{
+					{Schema: "sns", Name: "log"},
+					{Schema: "ecom", Name: "test"},
+				},
 			},
 		},
 	}
@@ -72,4 +74,24 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 	}}
 	detail.FilterTxn(&txn)
 	c.Assert(txn.DDL, check.IsNil)
+}
+
+func (s *filterSuite) TestIsIgnoreTxnCommitTs(c *check.C) {
+	detail := ChangeFeedDetail{
+		Config: &ReplicaConfig{
+			IgnoreTxnCommitTs: []uint64{1, 3},
+		},
+	}
+	testCases := []struct {
+		txn    *Txn
+		ignore bool
+	}{
+		{&Txn{DDL: &DDL{Database: "sns"}, Ts: 1}, true},
+		{&Txn{DDL: &DDL{Database: "ecom"}, Ts: 2}, false},
+		{&Txn{DMLs: []*DML{{Database: "sns", Table: "log"}}, Ts: 3}, true},
+	}
+
+	for _, tc := range testCases {
+		c.Assert(detail.isIgnoreTxnCommitTs(tc.txn), check.Equals, tc.ignore)
+	}
 }

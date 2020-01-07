@@ -10,3 +10,5 @@ tbl-name = "user"
 [[filter-rules.do-tables]]
 db-name = "sns"
 tbl-name = "following"
+
+ignore-txn-commit-ts = []
