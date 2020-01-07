@@ -539,7 +539,7 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 		if !ok {
 			return errors.Annotatef(model.ErrChangeFeedNotExists, "id:%s", changeFeedID)
 		}
-		if detail.Info != nil && (detail.Info.Admin == model.AdminStop || detail.Info.Admin == model.AdminRemove) {
+		if detail.Info != nil && (detail.Info.AdminJobType == model.AdminStop || detail.Info.AdminJobType == model.AdminRemove) {
 			continue
 		}
 
@@ -742,7 +742,7 @@ func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
 		}
 	}
 	// record admin job in changefeed status
-	cf.ChangeFeedInfo.Admin = job.Type
+	cf.ChangeFeedInfo.AdminJobType = job.Type
 	infos := map[model.ChangeFeedID]*model.ChangeFeedInfo{job.CfID: cf.ChangeFeedInfo}
 	err := o.cfRWriter.Write(ctx, infos)
 	if err != nil {
@@ -800,7 +800,7 @@ func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
 			}
 
 			// set admin job in changefeed status to tell owner resume changefeed
-			cfInfo.Admin = model.AdminResume
+			cfInfo.AdminJobType = model.AdminResume
 			err = kv.PutChangeFeedStatus(ctx, o.etcdClient, job.CfID, cfInfo)
 			if err != nil {
 				return errors.Trace(err)

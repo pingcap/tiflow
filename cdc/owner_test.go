@@ -391,17 +391,17 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	// check changefeed detail is set admin job
 	d, err := kv.GetChangeFeedDetail(ctx, owner.etcdClient, cfID)
 	c.Assert(err, check.IsNil)
-	c.Assert(d.Admin, check.Equals, model.AdminStop)
+	c.Assert(d.AdminJobType, check.Equals, model.AdminStop)
 	// check processor is set admin job
 	for cid := range sampleCF.ProcessorInfos {
 		_, subInfo, err := kv.GetSubChangeFeedInfo(ctx, owner.etcdClient, cfID, cid)
 		c.Assert(err, check.IsNil)
-		c.Assert(subInfo.Admin, check.Equals, model.AdminStop)
+		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminStop)
 	}
 	// check changefeed status is set admin job
 	st, err := kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
 	c.Assert(err, check.IsNil)
-	c.Assert(st.Admin, check.Equals, model.AdminStop)
+	c.Assert(st.AdminJobType, check.Equals, model.AdminStop)
 
 	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminResume}), check.IsNil)
 	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
@@ -409,11 +409,11 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	// check changefeed detail is set admin job
 	d, err = kv.GetChangeFeedDetail(ctx, owner.etcdClient, cfID)
 	c.Assert(err, check.IsNil)
-	c.Assert(d.Admin, check.Equals, model.AdminResume)
+	c.Assert(d.AdminJobType, check.Equals, model.AdminResume)
 	// check changefeed status is set admin job
 	st, err = kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
 	c.Assert(err, check.IsNil)
-	c.Assert(st.Admin, check.Equals, model.AdminResume)
+	c.Assert(st.AdminJobType, check.Equals, model.AdminResume)
 
 	owner.changeFeeds[cfID] = sampleCF
 	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminRemove}), check.IsNil)
@@ -427,12 +427,12 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	for cid := range sampleCF.ProcessorInfos {
 		_, subInfo, err := kv.GetSubChangeFeedInfo(ctx, owner.etcdClient, cfID, cid)
 		c.Assert(err, check.IsNil)
-		c.Assert(subInfo.Admin, check.Equals, model.AdminRemove)
+		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminRemove)
 	}
 	// check changefeed status is set admin job
 	st, err = kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
 	c.Assert(err, check.IsNil)
-	c.Assert(st.Admin, check.Equals, model.AdminRemove)
+	c.Assert(st.AdminJobType, check.Equals, model.AdminRemove)
 }
 
 type changefeedInfoSuite struct {
