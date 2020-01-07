@@ -218,9 +218,9 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	// test WriteResolvedTs
 	rw, err := NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
-	c.Assert(rw.GetProcessorInfo(), check.DeepEquals, info)
+	c.Assert(rw.GetTaskInfo(), check.DeepEquals, info)
 
-	info = rw.GetProcessorInfo()
+	info = rw.GetTaskInfo()
 	info.ResolvedTs = 128
 	err = rw.WriteInfoIntoStorage(context.Background())
 	c.Assert(err, check.IsNil)
@@ -256,7 +256,7 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(oldInfo, check.DeepEquals, info)
 	c.Assert(newInfo, check.DeepEquals, getInfo)
-	info = rw.GetProcessorInfo()
+	info = rw.GetTaskInfo()
 
 	// update success again.
 	info.ResolvedTs = 196

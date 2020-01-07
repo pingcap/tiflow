@@ -21,11 +21,11 @@ import (
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
 
-type cloneProcessorInfoSuite struct{}
+type cloneTaskInfoSuite struct{}
 
-var _ = check.Suite(&cloneProcessorInfoSuite{})
+var _ = check.Suite(&cloneTaskInfoSuite{})
 
-func (s *cloneProcessorInfoSuite) TestShouldBeDeepCopy(c *check.C) {
+func (s *cloneTaskInfoSuite) TestShouldBeDeepCopy(c *check.C) {
 	info := TaskInfo{
 		CheckPointTs: 12,
 		ResolvedTs:   20,
@@ -59,7 +59,7 @@ func (s *cloneProcessorInfoSuite) TestShouldBeDeepCopy(c *check.C) {
 	assertIsSnapshot()
 }
 
-func (s *cloneProcessorInfoSuite) TestProcSnapshot(c *check.C) {
+func (s *cloneTaskInfoSuite) TestProcSnapshot(c *check.C) {
 	info := TaskInfo{
 		CheckPointTs: 0,
 		ResolvedTs:   20,

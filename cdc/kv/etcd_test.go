@@ -97,7 +97,7 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 	c.Assert(len(result), check.Equals, 0)
 }
 
-func (s *etcdSuite) TestGetPutProcessorInfo(c *check.C) {
+func (s *etcdSuite) TestGetPutTaskInfo(c *check.C) {
 	ctx := context.Background()
 	info := &model.TaskInfo{
 		CheckPointTs: 100,
@@ -123,7 +123,7 @@ func (s *etcdSuite) TestGetPutProcessorInfo(c *check.C) {
 	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskInfoNotExists)
 }
 
-func (s *etcdSuite) TestDeleteProcessorInfo(c *check.C) {
+func (s *etcdSuite) TestDeleteTaskInfo(c *check.C) {
 	ctx := context.Background()
 	info := &model.TaskInfo{
 		CheckPointTs: 100,

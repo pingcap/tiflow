@@ -119,7 +119,7 @@ type ProcessorTsRWriter interface {
 
 	// The flowing methods *IS NOT* thread safe.
 	// GetTaskInfo returns the in memory cache *model.TaskInfo
-	GetProcessorInfo() *model.TaskInfo
+	GetTaskInfo() *model.TaskInfo
 	// UpdateInfo update the in memory cache as info in storage.
 	// oldInfo and newInfo is the old and new in memory cache info.
 	UpdateInfo(ctx context.Context) (oldInfo *model.TaskInfo, newInfo *model.TaskInfo, err error)
@@ -220,7 +220,7 @@ func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uin
 }
 
 // GetTaskInfo returns the in memory cache of *model.TaskInfo stored in ProcessorTsEtcdRWriter
-func (rw *ProcessorTsEtcdRWriter) GetProcessorInfo() *model.TaskInfo {
+func (rw *ProcessorTsEtcdRWriter) GetTaskInfo() *model.TaskInfo {
 	return rw.info
 }
 

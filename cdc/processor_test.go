@@ -48,8 +48,8 @@ func (s *mockTsRWriter) ReadGlobalResolvedTs(ctx context.Context) (uint64, error
 	return s.globalResolvedTs, nil
 }
 
-// GetProcessorInfo implement ProcessorTsRWriter interface.
-func (s *mockTsRWriter) GetProcessorInfo() *model.TaskInfo {
+// GetTaskInfo implement ProcessorTsRWriter interface.
+func (s *mockTsRWriter) GetTaskInfo() *model.TaskInfo {
 	return s.memInfo
 }
 

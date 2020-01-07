@@ -222,7 +222,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		ddlPuller:     ddlPuller,
 
 		tsRWriter:    tsRWriter,
-		info:         tsRWriter.GetProcessorInfo(),
+		info:         tsRWriter.GetTaskInfo(),
 		resolvedTxns: make(chan model.RawTxn, 1),
 		executedTxns: make(chan model.RawTxn, 1),
 		ddlJobsCh:    make(chan model.RawTxn, 16),
@@ -365,7 +365,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 
-		p.info = p.tsRWriter.GetProcessorInfo()
+		p.info = p.tsRWriter.GetTaskInfo()
 
 		p.handleTables(ctx, oldInfo, p.info, oldInfo.CheckPointTs)
 		syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.info.TableInfos)))
