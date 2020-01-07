@@ -379,11 +379,11 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		owner.adminJobsLock.Unlock()
 	}
 
-	err := owner.EnqueueJob(&model.AdminJob{CfID: cfID, Type: model.AdminStop})
+	err := owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminStop})
 	c.Assert(errors.Cause(err), check.Equals, concurrency.ErrElectionNotLeader)
 	c.Assert(manager.CampaignOwner(ctx), check.IsNil)
 
-	c.Assert(owner.EnqueueJob(&model.AdminJob{CfID: cfID, Type: model.AdminStop}), check.IsNil)
+	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminStop}), check.IsNil)
 	checkAdminJobLen(1)
 	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
 	checkAdminJobLen(0)
@@ -403,7 +403,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(st.Admin, check.Equals, model.AdminStop)
 
-	c.Assert(owner.EnqueueJob(&model.AdminJob{CfID: cfID, Type: model.AdminResume}), check.IsNil)
+	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminResume}), check.IsNil)
 	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
 	checkAdminJobLen(0)
 	// check changefeed detail is set admin job
@@ -416,7 +416,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(st.Admin, check.Equals, model.AdminResume)
 
 	owner.changeFeeds[cfID] = sampleCF
-	c.Assert(owner.EnqueueJob(&model.AdminJob{CfID: cfID, Type: model.AdminRemove}), check.IsNil)
+	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminRemove}), check.IsNil)
 	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
 	checkAdminJobLen(0)
 	c.Assert(len(owner.changeFeeds), check.Equals, 0)

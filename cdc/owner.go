@@ -324,7 +324,7 @@ type ownerImpl struct {
 	cancelWatchCapture func()
 	captures           map[model.CaptureID]*model.CaptureInfo
 
-	adminJobs     []*model.AdminJob
+	adminJobs     []model.AdminJob
 	adminJobsLock sync.Mutex
 }
 
@@ -700,7 +700,7 @@ handleEachChangefeed:
 					zap.String("ChangeFeedID", changeFeedID),
 					zap.Error(err),
 					zap.Reflect("ddlJob", todoDDLJob))
-				err = o.EnqueueJob(&model.AdminJob{
+				err = o.EnqueueJob(model.AdminJob{
 					CfID: changeFeedID,
 					Type: model.AdminStop,
 				})
@@ -727,7 +727,7 @@ handleEachChangefeed:
 }
 
 // dispatchJob dispatches job to processors
-func (o *ownerImpl) dispatchJob(ctx context.Context, job *model.AdminJob) error {
+func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	cf, ok := o.changeFeeds[job.CfID]
 	if !ok {
 		return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
@@ -896,7 +896,7 @@ func (o *ownerImpl) IsOwner(_ context.Context) bool {
 	return o.manager.IsOwner()
 }
 
-func (o *ownerImpl) EnqueueJob(job *model.AdminJob) error {
+func (o *ownerImpl) EnqueueJob(job model.AdminJob) error {
 	if !o.manager.IsOwner() {
 		return errors.Trace(concurrency.ErrElectionNotLeader)
 	}

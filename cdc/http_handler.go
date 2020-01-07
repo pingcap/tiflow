@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	opVarAdminJob     = "job"
+	opVarAdminJob     = "admin-job"
 	opVarChangefeedID = "cf-id"
 )
 
@@ -69,7 +69,7 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		writeError(w, http.StatusBadRequest, errors.Errorf("invalid admin job type: %s", typeStr))
 		return
 	}
-	job := &model.AdminJob{
+	job := model.AdminJob{
 		CfID: req.Form.Get(opVarChangefeedID),
 		Type: model.AdminJobType(typ),
 	}
