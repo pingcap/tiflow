@@ -27,6 +27,7 @@ func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
 	c.Assert(detail.ShouldIgnoreTable("information_schema", ""), check.IsTrue)
 	c.Assert(detail.ShouldIgnoreTable("information_schema", "statistics"), check.IsTrue)
 	c.Assert(detail.ShouldIgnoreTable("performance_schema", ""), check.IsTrue)
+	c.Assert(detail.ShouldIgnoreTable("metric_schema", "query_duration"), check.IsTrue)
 	c.Assert(detail.ShouldIgnoreTable("sns", "user"), check.IsFalse)
 	txn := Txn{DDL: &DDL{
 		Database: "information_schema",

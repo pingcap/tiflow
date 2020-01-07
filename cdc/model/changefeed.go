@@ -44,11 +44,6 @@ type ChangeFeedDetail struct {
 func (detail *ChangeFeedDetail) getFilter() *filter.Filter {
 	if detail.filter == nil {
 		rules := detail.FilterRules
-		if rules == nil {
-			rules = &filter.Rules{
-				IgnoreDBs: []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "mysql"},
-			}
-		}
 		detail.filter = filter.New(detail.FilterCaseSensitive, rules)
 	}
 	return detail.filter
@@ -124,7 +119,7 @@ func (detail *ChangeFeedDetail) Unmarshal(data []byte) error {
 
 func isSysSchema(db string) bool {
 	db = strings.ToUpper(db)
-	for _, schema := range []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "MYSQL"} {
+	for _, schema := range []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "MYSQL", "METRIC_SCHEMA"} {
 		if schema == db {
 			return true
 		}
