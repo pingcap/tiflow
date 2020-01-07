@@ -190,7 +190,7 @@ func (w *ProcessorWatcher) reopen() error {
 // Watch wait for the key `/changefeed/processor/<fid>/cid>` appear and run the processor.
 func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb processorCallback) {
 	defer w.wg.Done()
-	key := kv.GetEtcdKeyProcessor(w.changefeedID, w.captureID)
+	key := kv.GetEtcdKeyTask(w.changefeedID, w.captureID)
 
 	getResp, err := w.etcdCli.Get(ctx, key)
 	if err != nil {

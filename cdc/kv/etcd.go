@@ -46,14 +46,14 @@ func GetEtcdKeyChangeFeedStatus(changefeedID string) string {
 	return fmt.Sprintf("%s/changefeed/status/%s", EtcdKeyBase, changefeedID)
 }
 
-// GetEtcdKeyProcessorList returns the key of a processor info without captureID part
-func GetEtcdKeyProcessorList(changefeedID string) string {
-	return fmt.Sprintf("%s/changefeed/processor/%s", EtcdKeyBase, changefeedID)
+// GetEtcdKeyTaskList returns the key of a task info without captureID part
+func GetEtcdKeyTaskList(changefeedID string) string {
+	return fmt.Sprintf("%s/changefeed/task/%s", EtcdKeyBase, changefeedID)
 }
 
-// GetEtcdKeyProcessor returns the key of a processor information
-func GetEtcdKeyProcessor(changefeedID, captureID string) string {
-	return fmt.Sprintf("%s/%s", GetEtcdKeyProcessorList(changefeedID), captureID)
+// GetEtcdKeyTask returns the key of a task information
+func GetEtcdKeyTask(changefeedID, captureID string) string {
+	return fmt.Sprintf("%s/%s", GetEtcdKeyTaskList(changefeedID), captureID)
 }
 
 // GetEtcdKeyCaptureList returns the prefix key of all capture info
@@ -150,21 +150,21 @@ func SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, detail *
 	return errors.Trace(err)
 }
 
-// GetProcessorsInfos queries all processor info of a changefeed, and returns a map
+// GetAllTaskInfos queries all task info of a changefeed, and returns a map
 // mapping from captureID to ProcessorsInfos
-func GetProcessorsInfos(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
-	key := GetEtcdKeyProcessorList(changefeedID)
+func GetAllTaskInfos(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
+	key := GetEtcdKeyTaskList(changefeedID)
 	resp, err := client.Get(ctx, key, append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)...)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	pinfo := make(map[string]*model.ProcessorInfo, resp.Count)
+	pinfo := make(map[string]*model.TaskInfo, resp.Count)
 	for _, rawKv := range resp.Kvs {
 		captureID, err := util.ExtractKeySuffix(string(rawKv.Key))
 		if err != nil {
 			return nil, err
 		}
-		info := &model.ProcessorInfo{}
+		info := &model.TaskInfo{}
 		err = info.Unmarshal(rawKv.Value)
 		if err != nil {
 			return nil, err
@@ -175,37 +175,37 @@ func GetProcessorsInfos(ctx context.Context, client *clientv3.Client, changefeed
 	return pinfo, nil
 }
 
-// GetProcessorInfo queries processor info from etcd, returns
+// GetTaskInfo queries task info from etcd, returns
 //  - ModRevision of the given key
-//  - *model.ProcessorInfo unmarshaled from the value
+//  - *model.TaskInfo unmarshaled from the value
 //  - error if error happens
-func GetProcessorInfo(
+func GetTaskInfo(
 	ctx context.Context,
 	client *clientv3.Client,
 	changefeedID string,
 	captureID string,
 	opts ...clientv3.OpOption,
-) (int64, *model.ProcessorInfo, error) {
-	key := GetEtcdKeyProcessor(changefeedID, captureID)
+) (int64, *model.TaskInfo, error) {
+	key := GetEtcdKeyTask(changefeedID, captureID)
 	resp, err := client.Get(ctx, key, opts...)
 	if err != nil {
 		return 0, nil, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return 0, nil, errors.Annotatef(model.ErrProcessorInfoNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
+		return 0, nil, errors.Annotatef(model.ErrTaskInfoNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
 	}
-	info := &model.ProcessorInfo{}
+	info := &model.TaskInfo{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
 	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
 }
 
-// PutProcessorInfo puts processor info into etcd.
-func PutProcessorInfo(
+// PutTaskInfo puts processor info into etcd.
+func PutTaskInfo(
 	ctx context.Context,
 	client *clientv3.Client,
 	changefeedID string,
 	captureID string,
-	info *model.ProcessorInfo,
+	info *model.TaskInfo,
 	opts ...clientv3.OpOption,
 ) error {
 	data, err := info.Marshal()
@@ -213,7 +213,7 @@ func PutProcessorInfo(
 		return errors.Trace(err)
 	}
 
-	key := GetEtcdKeyProcessor(changefeedID, captureID)
+	key := GetEtcdKeyTask(changefeedID, captureID)
 
 	_, err = client.Put(ctx, key, data)
 	if err != nil {
@@ -240,15 +240,15 @@ func PutChangeFeedStatus(
 	return errors.Trace(err)
 }
 
-// DeleteProcessorInfo deletes processor info from etcd
-func DeleteProcessorInfo(
+// DeleteTaskInfo deletes processor info from etcd
+func DeleteTaskInfo(
 	ctx context.Context,
 	cli *clientv3.Client,
 	cfID string,
 	captureID string,
 	opts ...clientv3.OpOption,
 ) error {
-	key := GetEtcdKeyProcessor(cfID, captureID)
+	key := GetEtcdKeyTask(cfID, captureID)
 	_, err := cli.Delete(ctx, key)
 	return errors.Trace(err)
 }

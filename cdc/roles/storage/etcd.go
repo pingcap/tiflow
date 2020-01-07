@@ -59,7 +59,7 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeed
 			return nil, nil, err
 		}
 
-		pinfo, err := kv.GetProcessorsInfos(ctx, rw.etcdClient, changefeedID)
+		pinfo, err := kv.GetAllTaskInfos(ctx, rw.etcdClient, changefeedID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -118,11 +118,11 @@ type ProcessorTsRWriter interface {
 	ReadGlobalResolvedTs(ctx context.Context) (uint64, error)
 
 	// The flowing methods *IS NOT* thread safe.
-	// GetProcessorInfo returns the in memory cache *model.ProcessorInfo
-	GetProcessorInfo() *model.ProcessorInfo
+	// GetTaskInfo returns the in memory cache *model.TaskInfo
+	GetProcessorInfo() *model.TaskInfo
 	// UpdateInfo update the in memory cache as info in storage.
 	// oldInfo and newInfo is the old and new in memory cache info.
-	UpdateInfo(ctx context.Context) (oldInfo *model.ProcessorInfo, newInfo *model.ProcessorInfo, err error)
+	UpdateInfo(ctx context.Context) (oldInfo *model.TaskInfo, newInfo *model.TaskInfo, err error)
 	// WriteInfoIntoStorage update info into storage, return model.ErrWriteTsConflict if in last learn info is out dated and must call UpdateInfo.
 	WriteInfoIntoStorage(ctx context.Context) error
 }
@@ -135,7 +135,7 @@ type ProcessorTsEtcdRWriter struct {
 	changefeedID string
 	captureID    string
 	modRevision  int64
-	info         *model.ProcessorInfo
+	info         *model.TaskInfo
 	logger       *zap.Logger
 }
 
@@ -148,12 +148,12 @@ func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 		etcdClient:   cli,
 		changefeedID: changefeedID,
 		captureID:    captureID,
-		info:         &model.ProcessorInfo{},
+		info:         &model.TaskInfo{},
 		logger:       logger,
 	}
 
 	var err error
-	rw.modRevision, rw.info, err = kv.GetProcessorInfo(context.Background(), rw.etcdClient, rw.changefeedID, rw.captureID)
+	rw.modRevision, rw.info, err = kv.GetTaskInfo(context.Background(), rw.etcdClient, rw.changefeedID, rw.captureID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -164,8 +164,8 @@ func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 // UpdateInfo implements ProcessorTsRWriter interface.
 func (rw *ProcessorTsEtcdRWriter) UpdateInfo(
 	ctx context.Context,
-) (oldInfo *model.ProcessorInfo, newInfo *model.ProcessorInfo, err error) {
-	modRevision, info, err := kv.GetProcessorInfo(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
+) (oldInfo *model.TaskInfo, newInfo *model.TaskInfo, err error) {
+	modRevision, info, err := kv.GetTaskInfo(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -181,7 +181,7 @@ func (rw *ProcessorTsEtcdRWriter) UpdateInfo(
 func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 	ctx context.Context,
 ) error {
-	key := kv.GetEtcdKeyProcessor(rw.changefeedID, rw.captureID)
+	key := kv.GetEtcdKeyTask(rw.changefeedID, rw.captureID)
 	value, err := rw.info.Marshal()
 	if err != nil {
 		return errors.Trace(err)
@@ -219,12 +219,12 @@ func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uin
 	return info.ResolvedTs, nil
 }
 
-// GetProcessorInfo returns the in memory cache of *model.ProcessorInfo stored in ProcessorTsEtcdRWriter
-func (rw *ProcessorTsEtcdRWriter) GetProcessorInfo() *model.ProcessorInfo {
+// GetTaskInfo returns the in memory cache of *model.TaskInfo stored in ProcessorTsEtcdRWriter
+func (rw *ProcessorTsEtcdRWriter) GetProcessorInfo() *model.TaskInfo {
 	return rw.info
 }
 
-// OwnerSubCFInfoEtcdWriter encapsulates ProcessorInfo write operation
+// OwnerSubCFInfoEtcdWriter encapsulates TaskInfo write operation
 type OwnerSubCFInfoEtcdWriter struct {
 	etcdClient *clientv3.Client
 }
@@ -236,11 +236,11 @@ func NewOwnerSubCFInfoEtcdWriter(cli *clientv3.Client) *OwnerSubCFInfoEtcdWriter
 	}
 }
 
-// updateInfo updates the local ProcessorInfo with etcd value, except for TableInfos and TablePLock
+// updateInfo updates the local TaskInfo with etcd value, except for TableInfos and TablePLock
 func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
-	ctx context.Context, changefeedID, captureID string, oldInfo *model.ProcessorInfo,
-) (newInfo *model.ProcessorInfo, err error) {
-	modRevision, info, err := kv.GetProcessorInfo(ctx, ow.etcdClient, changefeedID, captureID)
+	ctx context.Context, changefeedID, captureID string, oldInfo *model.TaskInfo,
+) (newInfo *model.TaskInfo, err error) {
+	modRevision, info, err := kv.GetTaskInfo(ctx, ow.etcdClient, changefeedID, captureID)
 	if err != nil {
 		return
 	}
@@ -269,9 +269,9 @@ func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
 func (ow *OwnerSubCFInfoEtcdWriter) checkLock(
 	ctx context.Context, changefeedID, captureID string,
 ) (status model.TableLockStatus, err error) {
-	_, info, err := kv.GetProcessorInfo(ctx, ow.etcdClient, changefeedID, captureID)
+	_, info, err := kv.GetTaskInfo(ctx, ow.etcdClient, changefeedID, captureID)
 	if err != nil {
-		if errors.Cause(err) == model.ErrProcessorInfoNotExists {
+		if errors.Cause(err) == model.ErrTaskInfoNotExists {
 			return model.TableNoLock, nil
 		}
 		return
@@ -292,14 +292,14 @@ func (ow *OwnerSubCFInfoEtcdWriter) checkLock(
 	return
 }
 
-// Write persists given `ProcessorInfo` into etcd.
+// Write persists given `TaskInfo` into etcd.
 // If returned err is not nil, don't use the returned newInfo as it may be not a reasonable value.
 func (ow *OwnerSubCFInfoEtcdWriter) Write(
 	ctx context.Context,
 	changefeedID, captureID string,
-	info *model.ProcessorInfo,
+	info *model.TaskInfo,
 	writePLock bool,
-) (newInfo *model.ProcessorInfo, err error) {
+) (newInfo *model.TaskInfo, err error) {
 
 	// check p-lock not exists or is already resolved
 	lockStatus, err := ow.checkLock(ctx, changefeedID, captureID)
@@ -324,7 +324,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) Write(
 		}
 	}
 
-	key := kv.GetEtcdKeyProcessor(changefeedID, captureID)
+	key := kv.GetEtcdKeyTask(changefeedID, captureID)
 	err = retry.Run(func() error {
 		value, err := newInfo.Marshal()
 		if err != nil {
@@ -348,7 +348,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) Write(
 			case model.ErrFindPLockNotCommit:
 				return backoff.Permanent(err)
 			case nil:
-				return errors.Trace(model.ErrWriteProcessorInfoConlict)
+				return errors.Trace(model.ErrWriteTaskInfoConlict)
 			default:
 				return errors.Trace(err)
 			}

@@ -99,7 +99,7 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 
 func (s *etcdSuite) TestGetPutProcessorInfo(c *check.C) {
 	ctx := context.Background()
-	info := &model.ProcessorInfo{
+	info := &model.TaskInfo{
 		CheckPointTs: 100,
 		ResolvedTs:   200,
 		TableInfos: []*model.ProcessTableInfo{
@@ -110,22 +110,22 @@ func (s *etcdSuite) TestGetPutProcessorInfo(c *check.C) {
 	feedID := "feedid"
 	captureID := "captureid"
 
-	err := PutProcessorInfo(ctx, s.client, feedID, captureID, info)
+	err := PutTaskInfo(ctx, s.client, feedID, captureID, info)
 	c.Assert(err, check.IsNil)
 
-	_, getInfo, err := GetProcessorInfo(ctx, s.client, feedID, captureID)
+	_, getInfo, err := GetTaskInfo(ctx, s.client, feedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(getInfo, check.DeepEquals, info)
 
 	err = ClearAllCDCInfo(context.Background(), s.client)
 	c.Assert(err, check.IsNil)
-	_, _, err = GetProcessorInfo(ctx, s.client, feedID, captureID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrProcessorInfoNotExists)
+	_, _, err = GetTaskInfo(ctx, s.client, feedID, captureID)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskInfoNotExists)
 }
 
 func (s *etcdSuite) TestDeleteProcessorInfo(c *check.C) {
 	ctx := context.Background()
-	info := &model.ProcessorInfo{
+	info := &model.TaskInfo{
 		CheckPointTs: 100,
 		ResolvedTs:   200,
 		TableInfos: []*model.ProcessTableInfo{
@@ -135,11 +135,11 @@ func (s *etcdSuite) TestDeleteProcessorInfo(c *check.C) {
 	feedID := "feedid"
 	captureID := "captureid"
 
-	err := PutProcessorInfo(ctx, s.client, feedID, captureID, info)
+	err := PutTaskInfo(ctx, s.client, feedID, captureID, info)
 	c.Assert(err, check.IsNil)
 
-	err = DeleteProcessorInfo(ctx, s.client, feedID, captureID)
+	err = DeleteTaskInfo(ctx, s.client, feedID, captureID)
 	c.Assert(err, check.IsNil)
-	_, _, err = GetProcessorInfo(ctx, s.client, feedID, captureID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrProcessorInfoNotExists)
+	_, _, err = GetTaskInfo(ctx, s.client, feedID, captureID)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskInfoNotExists)
 }

@@ -171,7 +171,7 @@ func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.
 	c.banlanceOrphanTables(ctx, captures)
 }
 
-func (c *changeFeed) restoreTableInfos(infoSnapshot *model.ProcessorInfo, captureID string) {
+func (c *changeFeed) restoreTableInfos(infoSnapshot *model.TaskInfo, captureID string) {
 	c.ProcessorInfos[captureID].TableInfos = infoSnapshot.TableInfos
 }
 
@@ -218,7 +218,7 @@ cleanLoop:
 	}
 }
 
-func findProcessorInfoWithTable(infos model.ProcessorsInfos, tableID uint64) (captureID string, info *model.ProcessorInfo, ok bool) {
+func findProcessorInfoWithTable(infos model.ProcessorsInfos, tableID uint64) (captureID string, info *model.TaskInfo, ok bool) {
 	for id, info := range infos {
 		for _, table := range info.TableInfos {
 			if table.ID == tableID {
@@ -243,7 +243,7 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 
 		info := c.ProcessorInfos[captureID]
 		if info == nil {
-			info = new(model.ProcessorInfo)
+			info = new(model.TaskInfo)
 		}
 		infoClone := info.Clone()
 		info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{
@@ -378,7 +378,7 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 		for _, tbl := range snap.Tables {
 			changefeed.reAddTable(tbl.ID, tbl.StartTs)
 		}
-		err := kv.DeleteProcessorInfo(ctx, o.etcdClient, snap.CfID, snap.CaptureID)
+		err := kv.DeleteTaskInfo(ctx, o.etcdClient, snap.CfID, snap.CaptureID)
 		if err != nil {
 			log.Warn("failed to delete processor info",
 				zap.String("changefeedID", snap.CfID),
@@ -419,7 +419,7 @@ func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 			}
 		}
 
-		key := kv.GetEtcdKeyProcessor(feed.ID, info.ID)
+		key := kv.GetEtcdKeyTask(feed.ID, info.ID)
 		if _, err := o.etcdClient.Delete(context.Background(), key); err != nil {
 			log.Warn("failed to delete key", zap.Error(err))
 		}

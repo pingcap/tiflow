@@ -40,7 +40,7 @@ type TableLock struct {
 	CheckpointTs uint64 `json:"checkpoint-ts"`
 }
 
-// TableLockStatus for the table lock in ProcessorInfo
+// TableLockStatus for the table lock in TaskInfo
 type TableLockStatus int
 
 // Table lock status
@@ -50,8 +50,8 @@ const (
 	TablePLockCommited
 )
 
-// ProcessorInfo records the process information of a capture
-type ProcessorInfo struct {
+// TaskInfo records the process information of a capture
+type TaskInfo struct {
 	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.
 	CheckPointTs uint64 `json:"checkpoint-ts"`
 	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
@@ -65,13 +65,13 @@ type ProcessorInfo struct {
 }
 
 // String implements fmt.Stringer interface.
-func (pi *ProcessorInfo) String() string {
+func (pi *TaskInfo) String() string {
 	data, _ := pi.Marshal()
 	return string(data)
 }
 
 // RemoveTable remove the table in TableInfos.
-func (pi *ProcessorInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
+func (pi *TaskInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
 	for idx, table := range pi.TableInfos {
 		if table.ID == id {
 			last := pi.TableInfos[len(pi.TableInfos)-1]
@@ -87,8 +87,8 @@ func (pi *ProcessorInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
 	return nil, false
 }
 
-// Snapshot takes a snapshot of `*ProcessorInfo` and returns a new `*ProcInfoSnap`
-func (pi *ProcessorInfo) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcInfoSnap {
+// Snapshot takes a snapshot of `*TaskInfo` and returns a new `*ProcInfoSnap`
+func (pi *TaskInfo) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcInfoSnap {
 	snap := &ProcInfoSnap{
 		CfID:      cfID,
 		CaptureID: captureID,
@@ -107,20 +107,20 @@ func (pi *ProcessorInfo) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcI
 	return snap
 }
 
-// Marshal returns the json marshal format of a ProcessorInfo
-func (pi *ProcessorInfo) Marshal() (string, error) {
+// Marshal returns the json marshal format of a TaskInfo
+func (pi *TaskInfo) Marshal() (string, error) {
 	data, err := json.Marshal(pi)
 	return string(data), errors.Trace(err)
 }
 
-// Unmarshal unmarshals into *ProcessorInfo from json marshal byte slice
-func (pi *ProcessorInfo) Unmarshal(data []byte) error {
+// Unmarshal unmarshals into *TaskInfo from json marshal byte slice
+func (pi *TaskInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, pi)
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 
 // Clone returns a deep-clone of the struct
-func (pi *ProcessorInfo) Clone() *ProcessorInfo {
+func (pi *TaskInfo) Clone() *TaskInfo {
 	clone := *pi
 	infos := make([]*ProcessTableInfo, 0, len(pi.TableInfos))
 	for _, ti := range pi.TableInfos {
@@ -145,8 +145,8 @@ type CaptureID = string
 // ChangeFeedID is the type for change feed ID
 type ChangeFeedID = string
 
-// ProcessorsInfos maps from capture IDs to ProcessorInfo
-type ProcessorsInfos map[CaptureID]*ProcessorInfo
+// ProcessorsInfos maps from capture IDs to TaskInfo
+type ProcessorsInfos map[CaptureID]*TaskInfo
 
 // ChangeFeedStatus is the type for change feed status
 type ChangeFeedStatus int

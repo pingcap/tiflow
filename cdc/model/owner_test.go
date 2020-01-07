@@ -26,7 +26,7 @@ type cloneProcessorInfoSuite struct{}
 var _ = check.Suite(&cloneProcessorInfoSuite{})
 
 func (s *cloneProcessorInfoSuite) TestShouldBeDeepCopy(c *check.C) {
-	info := ProcessorInfo{
+	info := TaskInfo{
 		CheckPointTs: 12,
 		ResolvedTs:   20,
 		TableInfos: []*ProcessTableInfo{
@@ -60,7 +60,7 @@ func (s *cloneProcessorInfoSuite) TestShouldBeDeepCopy(c *check.C) {
 }
 
 func (s *cloneProcessorInfoSuite) TestProcSnapshot(c *check.C) {
-	info := ProcessorInfo{
+	info := TaskInfo{
 		CheckPointTs: 0,
 		ResolvedTs:   20,
 		TableInfos: []*ProcessTableInfo{
@@ -81,7 +81,7 @@ type removeTableSuite struct{}
 var _ = check.Suite(&removeTableSuite{})
 
 func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
-	info := ProcessorInfo{
+	info := TaskInfo{
 		TableInfos: []*ProcessTableInfo{
 			{ID: 1},
 			{ID: 2},
@@ -95,7 +95,7 @@ func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
 }
 
 func (s *removeTableSuite) TestShouldHandleTableNotFoundCorrectly(c *check.C) {
-	info := ProcessorInfo{}
+	info := TaskInfo{}
 	t, found := info.RemoveTable(404)
 	c.Assert(found, check.IsFalse)
 	c.Assert(t, check.IsNil)

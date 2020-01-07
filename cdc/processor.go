@@ -146,7 +146,7 @@ type processor struct {
 	resolvedTxns chan model.RawTxn
 	executedTxns chan model.RawTxn
 
-	info *model.ProcessorInfo
+	info *model.TaskInfo
 
 	tablesMu sync.Mutex
 	tables   map[int64]*tableInfo
@@ -292,7 +292,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // localResolvedWorker do the flowing works.
 // 1, update resolve ts by scaning all table's resolve ts.
 // 2, update checkpoint ts by consuming entry from p.executedTxns.
-// 3, sync ProcessorInfo between in memory and storage.
+// 3, sync TaskInfo between in memory and storage.
 func (p *processor) localResolvedWorker(ctx context.Context) error {
 	updateInfoTick := time.NewTicker(time.Second)
 	defer updateInfoTick.Stop()
@@ -444,7 +444,7 @@ func (p *processor) removeTable(tableID int64) {
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
-func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.ProcessorInfo, checkpointTs uint64) {
+func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.TaskInfo, checkpointTs uint64) {
 	removedTables, addedTables := diffProcessTableInfos(oldInfo.TableInfos, newInfo.TableInfos)
 
 	// remove tables
