@@ -240,7 +240,7 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	c.Assert(revision, check.Equals, rw.modRevision)
 	c.Assert(getInfo.CheckPointTs, check.Equals, uint64(96))
 
-	// test table info changed, should return ErrWriteTsConflict.
+	// test table taskStatus changed, should return ErrWriteTsConflict.
 	getInfo = info.Clone()
 	getInfo.TableInfos = []*model.ProcessTableInfo{{ID: 11}, {ID: 12}, {ID: 13}}
 	sinfo, err = getInfo.Marshal()
@@ -280,7 +280,7 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 		}
 	)
 
-	// create a changefeed info in etcd
+	// create a changefeed taskStatus in etcd
 	sinfo, err := info.Marshal()
 	c.Assert(err, check.IsNil)
 	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID), sinfo)
@@ -317,7 +317,7 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(info.TableInfos, check.HasLen, 1)
 
-	// simulate processor updates the task info
+	// simulate processor updates the task status
 	infoClone := info.Clone()
 	infoClone.ResolvedTs = 200
 	infoClone.CheckPointTs = 100

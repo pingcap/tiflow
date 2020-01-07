@@ -24,5 +24,5 @@ var (
 	ErrChangeFeedNotExists    = errors.New("changefeed not exists")
 	ErrTaskStatusNotExists    = errors.New("task not exists")
 	ErrWriteTaskStatusConlict = errors.New("write task status conflict")
-	ErrFindPLockNotCommit     = errors.New("task info has p-lock not committed")
+	ErrFindPLockNotCommit     = errors.New("task status has p-lock not committed")
 )

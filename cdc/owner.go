@@ -180,17 +180,17 @@ func (c *changeFeed) cleanTables(ctx context.Context) {
 
 cleanLoop:
 	for id := range c.toCleanTables {
-		captureID, subInfo, ok := findTaskStatusWithTable(c.ProcessorInfos, id)
+		captureID, taskStatus, ok := findTaskStatusWithTable(c.ProcessorInfos, id)
 		if !ok {
 			log.Warn("ignore clean table id", zap.Uint64("id", id))
 			cleanIDs = append(cleanIDs, id)
 			continue
 		}
 
-		infoClone := subInfo.Clone()
-		subInfo.RemoveTable(id)
+		infoClone := taskStatus.Clone()
+		taskStatus.RemoveTable(id)
 
-		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, subInfo, true)
+		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, taskStatus, true)
 		if err == nil {
 			c.ProcessorInfos[captureID] = newInfo
 		}
@@ -204,7 +204,7 @@ cleanLoop:
 			log.Info("cleanup table success",
 				zap.Uint64("table id", id),
 				zap.String("capture id", captureID))
-			log.Debug("after remove", zap.Stringer("processor info", subInfo))
+			log.Debug("after remove", zap.Stringer("task status", taskStatus))
 			cleanIDs = append(cleanIDs, id)
 		default:
 			c.restoreTableInfos(infoClone, captureID)

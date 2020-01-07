@@ -65,20 +65,20 @@ type TaskStatus struct {
 }
 
 // String implements fmt.Stringer interface.
-func (ti *TaskStatus) String() string {
-	data, _ := ti.Marshal()
+func (ts *TaskStatus) String() string {
+	data, _ := ts.Marshal()
 	return string(data)
 }
 
 // RemoveTable remove the table in TableInfos.
-func (ti *TaskStatus) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
-	for idx, table := range ti.TableInfos {
+func (ts *TaskStatus) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
+	for idx, table := range ts.TableInfos {
 		if table.ID == id {
-			last := ti.TableInfos[len(ti.TableInfos)-1]
-			removedTable := ti.TableInfos[idx]
+			last := ts.TableInfos[len(ts.TableInfos)-1]
+			removedTable := ts.TableInfos[idx]
 
-			ti.TableInfos[idx] = last
-			ti.TableInfos = ti.TableInfos[:len(ti.TableInfos)-1]
+			ts.TableInfos[idx] = last
+			ts.TableInfos = ts.TableInfos[:len(ts.TableInfos)-1]
 
 			return removedTable, true
 		}
@@ -88,14 +88,14 @@ func (ti *TaskStatus) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
 }
 
 // Snapshot takes a snapshot of `*TaskStatus` and returns a new `*ProcInfoSnap`
-func (ti *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcInfoSnap {
+func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcInfoSnap {
 	snap := &ProcInfoSnap{
 		CfID:      cfID,
 		CaptureID: captureID,
-		Tables:    make([]ProcessTableInfo, 0, len(ti.TableInfos)),
+		Tables:    make([]ProcessTableInfo, 0, len(ts.TableInfos)),
 	}
-	for _, tbl := range ti.TableInfos {
-		ts := ti.CheckPointTs
+	for _, tbl := range ts.TableInfos {
+		ts := ts.CheckPointTs
 		if ts < tbl.StartTs {
 			ts = tbl.StartTs
 		}
@@ -108,32 +108,32 @@ func (ti *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcInfo
 }
 
 // Marshal returns the json marshal format of a TaskStatus
-func (ti *TaskStatus) Marshal() (string, error) {
-	data, err := json.Marshal(ti)
+func (ts *TaskStatus) Marshal() (string, error) {
+	data, err := json.Marshal(ts)
 	return string(data), errors.Trace(err)
 }
 
 // Unmarshal unmarshals into *TaskStatus from json marshal byte slice
-func (ti *TaskStatus) Unmarshal(data []byte) error {
-	err := json.Unmarshal(data, ti)
+func (ts *TaskStatus) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, ts)
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 
 // Clone returns a deep-clone of the struct
-func (ti *TaskStatus) Clone() *TaskStatus {
-	clone := *ti
-	infos := make([]*ProcessTableInfo, 0, len(ti.TableInfos))
-	for _, ti := range ti.TableInfos {
+func (ts *TaskStatus) Clone() *TaskStatus {
+	clone := *ts
+	infos := make([]*ProcessTableInfo, 0, len(ts.TableInfos))
+	for _, ti := range ts.TableInfos {
 		c := *ti
 		infos = append(infos, &c)
 	}
 	clone.TableInfos = infos
-	if ti.TablePLock != nil {
-		pLock := *ti.TablePLock
+	if ts.TablePLock != nil {
+		pLock := *ts.TablePLock
 		clone.TablePLock = &pLock
 	}
-	if ti.TableCLock != nil {
-		cLock := *ti.TableCLock
+	if ts.TableCLock != nil {
+		cLock := *ts.TableCLock
 		clone.TableCLock = &cLock
 	}
 	return &clone

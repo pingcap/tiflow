@@ -46,12 +46,12 @@ func GetEtcdKeyChangeFeedStatus(changefeedID string) string {
 	return fmt.Sprintf("%s/changefeed/status/%s", EtcdKeyBase, changefeedID)
 }
 
-// GetEtcdKeyTaskList returns the key of a task info without captureID part
+// GetEtcdKeyTaskList returns the key of a task status without captureID part
 func GetEtcdKeyTaskList(changefeedID string) string {
 	return fmt.Sprintf("%s/changefeed/task/%s", EtcdKeyBase, changefeedID)
 }
 
-// GetEtcdKeyTask returns the key of a task information
+// GetEtcdKeyTask returns the key of a task status
 func GetEtcdKeyTask(changefeedID, captureID string) string {
 	return fmt.Sprintf("%s/%s", GetEtcdKeyTaskList(changefeedID), captureID)
 }
@@ -150,7 +150,7 @@ func SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, detail *
 	return errors.Trace(err)
 }
 
-// GetAllTaskStatus queries all task info of a changefeed, and returns a map
+// GetAllTaskStatus queries all task status of a changefeed, and returns a map
 // mapping from captureID to TaskStatus
 func GetAllTaskStatus(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
 	key := GetEtcdKeyTaskList(changefeedID)
@@ -175,7 +175,7 @@ func GetAllTaskStatus(ctx context.Context, client *clientv3.Client, changefeedID
 	return pinfo, nil
 }
 
-// GetTaskStatus queries task info from etcd, returns
+// GetTaskStatus queries task status from etcd, returns
 //  - ModRevision of the given key
 //  - *model.TaskStatus unmarshaled from the value
 //  - error if error happens
@@ -199,7 +199,7 @@ func GetTaskStatus(
 	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
 }
 
-// PutTaskStatus puts task info into etcd.
+// PutTaskStatus puts task status into etcd.
 func PutTaskStatus(
 	ctx context.Context,
 	client *clientv3.Client,
@@ -240,7 +240,7 @@ func PutChangeFeedStatus(
 	return errors.Trace(err)
 }
 
-// DeleteTaskStatus deletes task info from etcd
+// DeleteTaskStatus deletes task status from etcd
 func DeleteTaskStatus(
 	ctx context.Context,
 	cli *clientv3.Client,
