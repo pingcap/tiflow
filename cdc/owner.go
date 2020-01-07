@@ -808,7 +808,6 @@ func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
 
 			// set admin job in changefeed detail to trigger each capture's changefeed list watch event
 			detail.AdminJobType = model.AdminResume
-			detail.ResumeTs = cfInfo.CheckpointTs
 			err = kv.SaveChangeFeedDetail(ctx, o.etcdClient, detail, job.CfID)
 			if err != nil {
 				return errors.Trace(err)

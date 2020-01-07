@@ -33,9 +33,7 @@ type ChangeFeedDetail struct {
 	StartTs uint64 `json:"start-ts"`
 	// The ChangeFeed will exits until sync to timestamp TargetTs
 	TargetTs uint64 `json:"target-ts"`
-	// ChangeFeed can be resumed from stop state, this field is used to trigger a watch event in each capture
-	ResumeTs uint64 `json:"resume-ts"`
-	// used for admin job notification
+	// used for admin job notification, trigger watch event in capture
 	AdminJobType AdminJobType    `json:"admin-job-type"`
 	Info         *ChangeFeedInfo `json:"-"`
 
@@ -89,10 +87,6 @@ func (detail *ChangeFeedDetail) FilterTxn(t *Txn) {
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
 func (detail *ChangeFeedDetail) GetStartTs() uint64 {
-	if detail.ResumeTs > 0 {
-		return detail.ResumeTs
-	}
-
 	if detail.StartTs > 0 {
 		return detail.StartTs
 	}
