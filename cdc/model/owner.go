@@ -65,20 +65,20 @@ type TaskInfo struct {
 }
 
 // String implements fmt.Stringer interface.
-func (pi *TaskInfo) String() string {
-	data, _ := pi.Marshal()
+func (ti *TaskInfo) String() string {
+	data, _ := ti.Marshal()
 	return string(data)
 }
 
 // RemoveTable remove the table in TableInfos.
-func (pi *TaskInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
-	for idx, table := range pi.TableInfos {
+func (ti *TaskInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
+	for idx, table := range ti.TableInfos {
 		if table.ID == id {
-			last := pi.TableInfos[len(pi.TableInfos)-1]
-			removedTable := pi.TableInfos[idx]
+			last := ti.TableInfos[len(ti.TableInfos)-1]
+			removedTable := ti.TableInfos[idx]
 
-			pi.TableInfos[idx] = last
-			pi.TableInfos = pi.TableInfos[:len(pi.TableInfos)-1]
+			ti.TableInfos[idx] = last
+			ti.TableInfos = ti.TableInfos[:len(ti.TableInfos)-1]
 
 			return removedTable, true
 		}
@@ -88,14 +88,14 @@ func (pi *TaskInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
 }
 
 // Snapshot takes a snapshot of `*TaskInfo` and returns a new `*ProcInfoSnap`
-func (pi *TaskInfo) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcInfoSnap {
+func (ti *TaskInfo) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcInfoSnap {
 	snap := &ProcInfoSnap{
 		CfID:      cfID,
 		CaptureID: captureID,
-		Tables:    make([]ProcessTableInfo, 0, len(pi.TableInfos)),
+		Tables:    make([]ProcessTableInfo, 0, len(ti.TableInfos)),
 	}
-	for _, tbl := range pi.TableInfos {
-		ts := pi.CheckPointTs
+	for _, tbl := range ti.TableInfos {
+		ts := ti.CheckPointTs
 		if ts < tbl.StartTs {
 			ts = tbl.StartTs
 		}
@@ -108,32 +108,32 @@ func (pi *TaskInfo) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcInfoSn
 }
 
 // Marshal returns the json marshal format of a TaskInfo
-func (pi *TaskInfo) Marshal() (string, error) {
-	data, err := json.Marshal(pi)
+func (ti *TaskInfo) Marshal() (string, error) {
+	data, err := json.Marshal(ti)
 	return string(data), errors.Trace(err)
 }
 
 // Unmarshal unmarshals into *TaskInfo from json marshal byte slice
-func (pi *TaskInfo) Unmarshal(data []byte) error {
-	err := json.Unmarshal(data, pi)
+func (ti *TaskInfo) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, ti)
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 
 // Clone returns a deep-clone of the struct
-func (pi *TaskInfo) Clone() *TaskInfo {
-	clone := *pi
-	infos := make([]*ProcessTableInfo, 0, len(pi.TableInfos))
-	for _, ti := range pi.TableInfos {
+func (ti *TaskInfo) Clone() *TaskInfo {
+	clone := *ti
+	infos := make([]*ProcessTableInfo, 0, len(ti.TableInfos))
+	for _, ti := range ti.TableInfos {
 		c := *ti
 		infos = append(infos, &c)
 	}
 	clone.TableInfos = infos
-	if pi.TablePLock != nil {
-		pLock := *pi.TablePLock
+	if ti.TablePLock != nil {
+		pLock := *ti.TablePLock
 		clone.TablePLock = &pLock
 	}
-	if pi.TableCLock != nil {
-		cLock := *pi.TableCLock
+	if ti.TableCLock != nil {
+		cLock := *ti.TableCLock
 		clone.TableCLock = &cLock
 	}
 	return &clone

@@ -184,7 +184,7 @@ func (s *etcdSuite) TestNewProcessorTsEtcdRWriter(c *check.C) {
 	_, err := NewProcessorTsEtcdRWriter(s.client, captureID, changefeedID)
 	c.Assert(err, check.NotNil)
 
-	// create a processor record in etcd
+	// create a task record in etcd
 	info := new(model.TaskInfo)
 	sinfo, err := info.Marshal()
 	c.Assert(err, check.IsNil)
@@ -209,7 +209,7 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 		getInfo *model.TaskInfo
 	)
 
-	// create a processor record in etcd
+	// create a task record in etcd
 	sinfo, err := info.Marshal()
 	c.Assert(err, check.IsNil)
 	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTask(changefeedID, captureID), sinfo)
@@ -286,7 +286,7 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID), sinfo)
 	c.Assert(err, check.IsNil)
 
-	// create a processor record in etcd
+	// create a task record in etcd
 	subInfo := new(model.TaskInfo)
 	subInfoData, err := subInfo.Marshal()
 	c.Assert(err, check.IsNil)
@@ -317,7 +317,7 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(info.TableInfos, check.HasLen, 1)
 
-	// simulate processor updates the processor info
+	// simulate processor updates the task info
 	infoClone := info.Clone()
 	infoClone.ResolvedTs = 200
 	infoClone.CheckPointTs = 100

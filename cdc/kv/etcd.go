@@ -151,7 +151,7 @@ func SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, detail *
 }
 
 // GetAllTaskInfos queries all task info of a changefeed, and returns a map
-// mapping from captureID to ProcessorsInfos
+// mapping from captureID to TaskInfo
 func GetAllTaskInfos(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
 	key := GetEtcdKeyTaskList(changefeedID)
 	resp, err := client.Get(ctx, key, append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)...)
@@ -199,7 +199,7 @@ func GetTaskInfo(
 	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
 }
 
-// PutTaskInfo puts processor info into etcd.
+// PutTaskInfo puts task info into etcd.
 func PutTaskInfo(
 	ctx context.Context,
 	client *clientv3.Client,
@@ -240,7 +240,7 @@ func PutChangeFeedStatus(
 	return errors.Trace(err)
 }
 
-// DeleteTaskInfo deletes processor info from etcd
+// DeleteTaskInfo deletes task info from etcd
 func DeleteTaskInfo(
 	ctx context.Context,
 	cli *clientv3.Client,

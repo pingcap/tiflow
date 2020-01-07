@@ -377,7 +377,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			p.info.ResolvedTs = oldInfo.ResolvedTs
 		}
 
-		log.Info("update processor info", zap.Stringer("info", p.info))
+		log.Info("update task info", zap.Stringer("info", p.info))
 		return nil
 	case nil:
 		return nil

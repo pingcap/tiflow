@@ -202,7 +202,7 @@ func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 		return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
 	}
 
-	rw.logger.Debug("update processor info success",
+	rw.logger.Debug("update task info success",
 		zap.Int64("modRevision", rw.modRevision),
 		zap.Stringer("info", rw.info))
 

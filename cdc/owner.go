@@ -180,7 +180,7 @@ func (c *changeFeed) cleanTables(ctx context.Context) {
 
 cleanLoop:
 	for id := range c.toCleanTables {
-		captureID, subInfo, ok := findProcessorInfoWithTable(c.ProcessorInfos, id)
+		captureID, subInfo, ok := findTaskInfoWithTable(c.ProcessorInfos, id)
 		if !ok {
 			log.Warn("ignore clean table id", zap.Uint64("id", id))
 			cleanIDs = append(cleanIDs, id)
@@ -218,7 +218,7 @@ cleanLoop:
 	}
 }
 
-func findProcessorInfoWithTable(infos model.ProcessorsInfos, tableID uint64) (captureID string, info *model.TaskInfo, ok bool) {
+func findTaskInfoWithTable(infos model.ProcessorsInfos, tableID uint64) (captureID string, info *model.TaskInfo, ok bool) {
 	for id, info := range infos {
 		for _, table := range info.TableInfos {
 			if table.ID == tableID {
