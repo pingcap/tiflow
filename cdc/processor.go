@@ -146,7 +146,7 @@ type processor struct {
 	resolvedTxns chan model.RawTxn
 	executedTxns chan model.RawTxn
 
-	subInfo *model.SubChangeFeedInfo
+	info *model.ProcessorInfo
 
 	tablesMu sync.Mutex
 	tables   map[int64]*tableInfo
@@ -222,7 +222,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		ddlPuller:     ddlPuller,
 
 		tsRWriter:    tsRWriter,
-		subInfo:      tsRWriter.GetSubChangeFeedInfo(),
+		info:         tsRWriter.GetProcessorInfo(),
 		resolvedTxns: make(chan model.RawTxn, 1),
 		executedTxns: make(chan model.RawTxn, 1),
 		ddlJobsCh:    make(chan model.RawTxn, 16),
@@ -230,7 +230,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		tables: make(map[int64]*tableInfo),
 	}
 
-	for _, table := range p.subInfo.TableInfos {
+	for _, table := range p.info.TableInfos {
 		p.addTable(context.Background(), int64(table.ID), table.StartTs)
 	}
 
@@ -278,7 +278,7 @@ func (p *processor) wait() {
 }
 
 func (p *processor) writeDebugInfo(w io.Writer) {
-	fmt.Fprintf(w, "changefeedID: %s, detail: %+v, subInfo: %+v\n", p.changefeedID, p.changefeed, p.subInfo)
+	fmt.Fprintf(w, "changefeedID: %s, detail: %+v, info: %+v\n", p.changefeedID, p.changefeed, p.info)
 
 	p.tablesMu.Lock()
 	for _, table := range p.tables {
@@ -292,7 +292,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // localResolvedWorker do the flowing works.
 // 1, update resolve ts by scaning all table's resolve ts.
 // 2, update checkpoint ts by consuming entry from p.executedTxns.
-// 3, sync SubChangeFeedInfo between in memory and storage.
+// 3, sync ProcessorInfo between in memory and storage.
 func (p *processor) localResolvedWorker(ctx context.Context) error {
 	updateInfoTick := time.NewTicker(time.Second)
 	defer updateInfoTick.Stop()
@@ -331,7 +331,7 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 				}
 			}
 			p.tablesMu.Unlock()
-			p.subInfo.ResolvedTs = minResolvedTs
+			p.info.ResolvedTs = minResolvedTs
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case e, ok := <-p.executedTxns:
 			if !ok {
@@ -339,7 +339,7 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 				return nil
 			}
 			if e.IsResolved {
-				p.subInfo.CheckPointTs = e.Ts
+				p.info.CheckPointTs = e.Ts
 				checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(e.Ts)))
 			}
 		case <-updateInfoTick.C:
@@ -365,19 +365,19 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 
-		p.subInfo = p.tsRWriter.GetSubChangeFeedInfo()
+		p.info = p.tsRWriter.GetProcessorInfo()
 
-		p.handleTables(ctx, oldInfo, p.subInfo, oldInfo.CheckPointTs)
-		syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.subInfo.TableInfos)))
+		p.handleTables(ctx, oldInfo, p.info, oldInfo.CheckPointTs)
+		syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.info.TableInfos)))
 
-		if len(oldInfo.TableInfos) > len(p.subInfo.TableInfos) {
+		if len(oldInfo.TableInfos) > len(p.info.TableInfos) {
 			// some table is removed, we will not both remove and add table in one operation.
 			// keep CheckpointTs and ResolvedTs as the old in memory cache one.
-			p.subInfo.CheckPointTs = oldInfo.CheckPointTs
-			p.subInfo.ResolvedTs = oldInfo.ResolvedTs
+			p.info.CheckPointTs = oldInfo.CheckPointTs
+			p.info.ResolvedTs = oldInfo.ResolvedTs
 		}
 
-		log.Info("update subchangefeed info", zap.Stringer("info", p.subInfo))
+		log.Info("update processor info", zap.Stringer("info", p.info))
 		return nil
 	case nil:
 		return nil
@@ -444,7 +444,7 @@ func (p *processor) removeTable(tableID int64) {
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
-func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.SubChangeFeedInfo, checkpointTs uint64) {
+func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.ProcessorInfo, checkpointTs uint64) {
 	removedTables, addedTables := diffProcessTableInfos(oldInfo.TableInfos, newInfo.TableInfos)
 
 	// remove tables

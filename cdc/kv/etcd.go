@@ -46,14 +46,14 @@ func GetEtcdKeyChangeFeedStatus(changefeedID string) string {
 	return fmt.Sprintf("%s/changefeed/status/%s", EtcdKeyBase, changefeedID)
 }
 
-// GetEtcdKeySubChangeFeedList returns the key of a subchangefeed info without captureID part
-func GetEtcdKeySubChangeFeedList(changefeedID string) string {
-	return fmt.Sprintf("%s/changefeed/subchangfeed/%s", EtcdKeyBase, changefeedID)
+// GetEtcdKeyProcessorList returns the key of a processor info without captureID part
+func GetEtcdKeyProcessorList(changefeedID string) string {
+	return fmt.Sprintf("%s/changefeed/processor/%s", EtcdKeyBase, changefeedID)
 }
 
-// GetEtcdKeySubChangeFeed returns the key of a subchangefeed infoformation
-func GetEtcdKeySubChangeFeed(changefeedID, captureID string) string {
-	return fmt.Sprintf("%s/%s", GetEtcdKeySubChangeFeedList(changefeedID), captureID)
+// GetEtcdKeyProcessor returns the key of a processor information
+func GetEtcdKeyProcessor(changefeedID, captureID string) string {
+	return fmt.Sprintf("%s/%s", GetEtcdKeyProcessorList(changefeedID), captureID)
 }
 
 // GetEtcdKeyCaptureList returns the prefix key of all capture info
@@ -150,21 +150,21 @@ func SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, detail *
 	return errors.Trace(err)
 }
 
-// GetSubChangeFeedInfos queries all subchangefeed info of a changefeed, and returns a map
-// mapping from captureID to SubChangeFeedInfo
-func GetSubChangeFeedInfos(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
-	key := GetEtcdKeySubChangeFeedList(changefeedID)
+// GetProcessorsInfos queries all processor info of a changefeed, and returns a map
+// mapping from captureID to ProcessorsInfos
+func GetProcessorsInfos(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
+	key := GetEtcdKeyProcessorList(changefeedID)
 	resp, err := client.Get(ctx, key, append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)...)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	pinfo := make(map[string]*model.SubChangeFeedInfo, resp.Count)
+	pinfo := make(map[string]*model.ProcessorInfo, resp.Count)
 	for _, rawKv := range resp.Kvs {
 		captureID, err := util.ExtractKeySuffix(string(rawKv.Key))
 		if err != nil {
 			return nil, err
 		}
-		info := &model.SubChangeFeedInfo{}
+		info := &model.ProcessorInfo{}
 		err = info.Unmarshal(rawKv.Value)
 		if err != nil {
 			return nil, err
@@ -175,37 +175,37 @@ func GetSubChangeFeedInfos(ctx context.Context, client *clientv3.Client, changef
 	return pinfo, nil
 }
 
-// GetSubChangeFeedInfo queries subchangefeed info from etcd, returns
+// GetProcessorInfo queries processor info from etcd, returns
 //  - ModRevision of the given key
-//  - *model.SubChangeFeedInfo unmarshaled from the value
+//  - *model.ProcessorInfo unmarshaled from the value
 //  - error if error happens
-func GetSubChangeFeedInfo(
+func GetProcessorInfo(
 	ctx context.Context,
 	client *clientv3.Client,
 	changefeedID string,
 	captureID string,
 	opts ...clientv3.OpOption,
-) (int64, *model.SubChangeFeedInfo, error) {
-	key := GetEtcdKeySubChangeFeed(changefeedID, captureID)
+) (int64, *model.ProcessorInfo, error) {
+	key := GetEtcdKeyProcessor(changefeedID, captureID)
 	resp, err := client.Get(ctx, key, opts...)
 	if err != nil {
 		return 0, nil, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return 0, nil, errors.Annotatef(model.ErrSubChangeFeedInfoNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
+		return 0, nil, errors.Annotatef(model.ErrProcessorInfoNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
 	}
-	info := &model.SubChangeFeedInfo{}
+	info := &model.ProcessorInfo{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
 	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
 }
 
-// PutSubChangeFeedInfo puts subchangefeed info into etcd.
-func PutSubChangeFeedInfo(
+// PutProcessorInfo puts processor info into etcd.
+func PutProcessorInfo(
 	ctx context.Context,
 	client *clientv3.Client,
 	changefeedID string,
 	captureID string,
-	info *model.SubChangeFeedInfo,
+	info *model.ProcessorInfo,
 	opts ...clientv3.OpOption,
 ) error {
 	data, err := info.Marshal()
@@ -213,7 +213,7 @@ func PutSubChangeFeedInfo(
 		return errors.Trace(err)
 	}
 
-	key := GetEtcdKeySubChangeFeed(changefeedID, captureID)
+	key := GetEtcdKeyProcessor(changefeedID, captureID)
 
 	_, err = client.Put(ctx, key, data)
 	if err != nil {
@@ -240,15 +240,15 @@ func PutChangeFeedStatus(
 	return errors.Trace(err)
 }
 
-// DeleteSubChangeFeedInfo deletes subchangefeedinfo from etcd
-func DeleteSubChangeFeedInfo(
+// DeleteProcessorInfo deletes processor info from etcd
+func DeleteProcessorInfo(
 	ctx context.Context,
 	cli *clientv3.Client,
 	cfID string,
 	captureID string,
 	opts ...clientv3.OpOption,
 ) error {
-	key := GetEtcdKeySubChangeFeed(cfID, captureID)
+	key := GetEtcdKeyProcessor(cfID, captureID)
 	_, err := cli.Delete(ctx, key)
 	return errors.Trace(err)
 }

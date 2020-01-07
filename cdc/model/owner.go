@@ -40,7 +40,7 @@ type TableLock struct {
 	CheckpointTs uint64 `json:"checkpoint-ts"`
 }
 
-// TableLockStatus for the table lock in SubChangeFeedInfo
+// TableLockStatus for the table lock in ProcessorInfo
 type TableLockStatus int
 
 // Table lock status
@@ -50,8 +50,8 @@ const (
 	TablePLockCommited
 )
 
-// SubChangeFeedInfo records the process information of a capture
-type SubChangeFeedInfo struct {
+// ProcessorInfo records the process information of a capture
+type ProcessorInfo struct {
 	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.
 	CheckPointTs uint64 `json:"checkpoint-ts"`
 	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
@@ -65,20 +65,20 @@ type SubChangeFeedInfo struct {
 }
 
 // String implements fmt.Stringer interface.
-func (scfi *SubChangeFeedInfo) String() string {
-	data, _ := scfi.Marshal()
+func (pi *ProcessorInfo) String() string {
+	data, _ := pi.Marshal()
 	return string(data)
 }
 
 // RemoveTable remove the table in TableInfos.
-func (scfi *SubChangeFeedInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
-	for idx, table := range scfi.TableInfos {
+func (pi *ProcessorInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
+	for idx, table := range pi.TableInfos {
 		if table.ID == id {
-			last := scfi.TableInfos[len(scfi.TableInfos)-1]
-			removedTable := scfi.TableInfos[idx]
+			last := pi.TableInfos[len(pi.TableInfos)-1]
+			removedTable := pi.TableInfos[idx]
 
-			scfi.TableInfos[idx] = last
-			scfi.TableInfos = scfi.TableInfos[:len(scfi.TableInfos)-1]
+			pi.TableInfos[idx] = last
+			pi.TableInfos = pi.TableInfos[:len(pi.TableInfos)-1]
 
 			return removedTable, true
 		}
@@ -87,15 +87,15 @@ func (scfi *SubChangeFeedInfo) RemoveTable(id uint64) (*ProcessTableInfo, bool) 
 	return nil, false
 }
 
-// Snapshot takes a snapshot of `*SubChangeFeedInfo` and returns a new `*ProcInfoSnap`
-func (scfi *SubChangeFeedInfo) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcInfoSnap {
+// Snapshot takes a snapshot of `*ProcessorInfo` and returns a new `*ProcInfoSnap`
+func (pi *ProcessorInfo) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcInfoSnap {
 	snap := &ProcInfoSnap{
 		CfID:      cfID,
 		CaptureID: captureID,
-		Tables:    make([]ProcessTableInfo, 0, len(scfi.TableInfos)),
+		Tables:    make([]ProcessTableInfo, 0, len(pi.TableInfos)),
 	}
-	for _, tbl := range scfi.TableInfos {
-		ts := scfi.CheckPointTs
+	for _, tbl := range pi.TableInfos {
+		ts := pi.CheckPointTs
 		if ts < tbl.StartTs {
 			ts = tbl.StartTs
 		}
@@ -107,33 +107,33 @@ func (scfi *SubChangeFeedInfo) Snapshot(cfID ChangeFeedID, captureID CaptureID) 
 	return snap
 }
 
-// Marshal returns the json marshal format of a SubChangeFeedInfo
-func (scfi *SubChangeFeedInfo) Marshal() (string, error) {
-	data, err := json.Marshal(scfi)
+// Marshal returns the json marshal format of a ProcessorInfo
+func (pi *ProcessorInfo) Marshal() (string, error) {
+	data, err := json.Marshal(pi)
 	return string(data), errors.Trace(err)
 }
 
-// Unmarshal unmarshals into *SubChangeFeedInfo from json marshal byte slice
-func (scfi *SubChangeFeedInfo) Unmarshal(data []byte) error {
-	err := json.Unmarshal(data, scfi)
+// Unmarshal unmarshals into *ProcessorInfo from json marshal byte slice
+func (pi *ProcessorInfo) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, pi)
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 
 // Clone returns a deep-clone of the struct
-func (scfi *SubChangeFeedInfo) Clone() *SubChangeFeedInfo {
-	clone := *scfi
-	infos := make([]*ProcessTableInfo, 0, len(scfi.TableInfos))
-	for _, ti := range scfi.TableInfos {
+func (pi *ProcessorInfo) Clone() *ProcessorInfo {
+	clone := *pi
+	infos := make([]*ProcessTableInfo, 0, len(pi.TableInfos))
+	for _, ti := range pi.TableInfos {
 		c := *ti
 		infos = append(infos, &c)
 	}
 	clone.TableInfos = infos
-	if scfi.TablePLock != nil {
-		pLock := *scfi.TablePLock
+	if pi.TablePLock != nil {
+		pLock := *pi.TablePLock
 		clone.TablePLock = &pLock
 	}
-	if scfi.TableCLock != nil {
-		cLock := *scfi.TableCLock
+	if pi.TableCLock != nil {
+		cLock := *pi.TableCLock
 		clone.TableCLock = &cLock
 	}
 	return &clone
@@ -145,8 +145,8 @@ type CaptureID = string
 // ChangeFeedID is the type for change feed ID
 type ChangeFeedID = string
 
-// ProcessorsInfos maps from capture IDs to SubChangeFeedInfo
-type ProcessorsInfos map[CaptureID]*SubChangeFeedInfo
+// ProcessorsInfos maps from capture IDs to ProcessorInfo
+type ProcessorsInfos map[CaptureID]*ProcessorInfo
 
 // ChangeFeedStatus is the type for change feed status
 type ChangeFeedStatus int

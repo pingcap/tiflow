@@ -20,9 +20,9 @@ import (
 // common errors
 // use a language builtin error type without error trace stack
 var (
-	ErrWriteTsConflict               = errors.New("write ts conflict")
-	ErrChangeFeedNotExists           = errors.New("changefeed not exists")
-	ErrSubChangeFeedInfoNotExists    = errors.New("subchangefeedinfo not exists")
-	ErrWriteSubChangeFeedInfoConlict = errors.New("write subchangefeedinfo conflict")
-	ErrFindPLockNotCommit            = errors.New("subchangefeedinfo has p-lock not commited")
+	ErrWriteTsConflict           = errors.New("write ts conflict")
+	ErrChangeFeedNotExists       = errors.New("changefeed not exists")
+	ErrProcessorInfoNotExists    = errors.New("processor not exists")
+	ErrWriteProcessorInfoConlict = errors.New("write processor conflict")
+	ErrFindPLockNotCommit        = errors.New("processor has p-lock not committed")
 )

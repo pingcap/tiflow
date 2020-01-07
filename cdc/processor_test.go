@@ -35,8 +35,8 @@ type mockTsRWriter struct {
 	l                sync.Mutex
 	globalResolvedTs uint64
 
-	memInfo     *model.SubChangeFeedInfo
-	storageInfo *model.SubChangeFeedInfo
+	memInfo     *model.ProcessorInfo
+	storageInfo *model.ProcessorInfo
 }
 
 var _ storage.ProcessorTsRWriter = &mockTsRWriter{}
@@ -48,8 +48,8 @@ func (s *mockTsRWriter) ReadGlobalResolvedTs(ctx context.Context) (uint64, error
 	return s.globalResolvedTs, nil
 }
 
-// GetSubChangeFeedInfo implement ProcessorTsRWriter interface.
-func (s *mockTsRWriter) GetSubChangeFeedInfo() *model.SubChangeFeedInfo {
+// GetProcessorInfo implement ProcessorTsRWriter interface.
+func (s *mockTsRWriter) GetProcessorInfo() *model.ProcessorInfo {
 	return s.memInfo
 }
 
@@ -60,7 +60,7 @@ func (s *mockTsRWriter) WriteInfoIntoStorage(ctx context.Context) error {
 }
 
 // UpdateInfo implement ProcessorTsRWriter interface.
-func (s *mockTsRWriter) UpdateInfo(ctx context.Context) (oldInfo *model.SubChangeFeedInfo, newInfo *model.SubChangeFeedInfo, err error) {
+func (s *mockTsRWriter) UpdateInfo(ctx context.Context) (oldInfo *model.ProcessorInfo, newInfo *model.ProcessorInfo, err error) {
 	oldInfo = s.memInfo
 	newInfo = s.storageInfo
 

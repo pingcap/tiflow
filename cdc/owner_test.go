@@ -348,7 +348,7 @@ var _ = check.Suite(&changefeedInfoSuite{})
 
 func (s *changefeedInfoSuite) TestMinimumTables(c *check.C) {
 	cf := &changeFeed{
-		ProcessorInfos: map[model.CaptureID]*model.SubChangeFeedInfo{
+		ProcessorInfos: map[model.CaptureID]*model.ProcessorInfo{
 			"c1": {
 				TableInfos: make([]*model.ProcessTableInfo, 2),
 			},
