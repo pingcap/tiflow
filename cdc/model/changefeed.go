@@ -36,8 +36,8 @@ type ChangeFeedDetail struct {
 	// ChangeFeed can be resumed from stop state, this field is used to trigger a watch event in each capture
 	ResumeTs uint64 `json:"resume-ts"`
 	// used for admin job notification
-	Admin AdminJobType    `json:"admin"`
-	Info  *ChangeFeedInfo `json:"-"`
+	AdminJobType AdminJobType    `json:"admin-job-type"`
+	Info         *ChangeFeedInfo `json:"-"`
 
 	filter              *filter.Filter
 	FilterCaseSensitive bool          `json:"filter-case-sensitive"`

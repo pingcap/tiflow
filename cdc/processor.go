@@ -372,7 +372,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 
 		p.subInfo = p.tsRWriter.GetSubChangeFeedInfo()
 
-		if p.subInfo.Admin == model.AdminStop || p.subInfo.Admin == model.AdminRemove {
+		if p.subInfo.AdminJobType == model.AdminStop || p.subInfo.AdminJobType == model.AdminRemove {
 			err = p.stop(ctx)
 			if err != nil {
 				return errors.Trace(err)

@@ -248,7 +248,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
 	// TableInfos and TablePLock is updated by owner only
 	newInfo = info
 	newInfo.TableInfos = oldInfo.TableInfos
-	newInfo.Admin = oldInfo.Admin
+	newInfo.AdminJobType = oldInfo.AdminJobType
 	newInfo.TablePLock = oldInfo.TablePLock
 	newInfo.ModRevision = modRevision
 

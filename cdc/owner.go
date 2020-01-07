@@ -735,7 +735,7 @@ func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	for captureID, pinfo := range cf.ProcessorInfos {
 		pinfo.TablePLock = nil
 		pinfo.TableCLock = nil
-		pinfo.Admin = job.Type
+		pinfo.AdminJobType = job.Type
 		_, err := cf.infoWriter.Write(ctx, cf.ID, captureID, pinfo, false)
 		if err != nil {
 			return errors.Trace(err)
@@ -768,7 +768,7 @@ func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
 			if !ok {
 				return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
 			}
-			cf.detail.Admin = model.AdminStop
+			cf.detail.AdminJobType = model.AdminStop
 			err := kv.SaveChangeFeedDetail(ctx, o.etcdClient, cf.detail, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
@@ -807,7 +807,7 @@ func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
 			}
 
 			// set admin job in changefeed detail to trigger each capture's changefeed list watch event
-			detail.Admin = model.AdminResume
+			detail.AdminJobType = model.AdminResume
 			detail.ResumeTs = cfInfo.CheckpointTs
 			err = kv.SaveChangeFeedDetail(ctx, o.etcdClient, detail, job.CfID)
 			if err != nil {

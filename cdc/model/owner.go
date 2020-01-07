@@ -90,11 +90,11 @@ type SubChangeFeedInfo struct {
 	ResolvedTs uint64 `json:"resolved-ts"`
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
 	// TODO change to be a map for easy update.
-	TableInfos  []*ProcessTableInfo `json:"table-infos"`
-	TablePLock  *TableLock          `json:"table-p-lock"`
-	TableCLock  *TableLock          `json:"table-c-lock"`
-	Admin       AdminJobType        `json:"admin"`
-	ModRevision int64               `json:"-"`
+	TableInfos   []*ProcessTableInfo `json:"table-infos"`
+	TablePLock   *TableLock          `json:"table-p-lock"`
+	TableCLock   *TableLock          `json:"table-c-lock"`
+	AdminJobType AdminJobType        `json:"admin-job-type"`
+	ModRevision  int64               `json:"-"`
 }
 
 // String implements fmt.Stringer interface.

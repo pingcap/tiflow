@@ -70,7 +70,7 @@ func (w *ChangeFeedWatcher) processPutKv(kv *mvccpb.KeyValue) (bool, string, mod
 	if !ok {
 		needRunWatcher = true
 	}
-	if detail.Admin == model.AdminStop {
+	if detail.AdminJobType == model.AdminStop {
 		// only handle model.AdminStop, the model.AdminRemove case will be handled in `processDeleteKv`
 		delete(w.details, changefeedID)
 	} else {

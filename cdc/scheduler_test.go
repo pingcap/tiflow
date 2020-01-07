@@ -281,7 +281,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	w.lock.RUnlock()
 
 	// dispatch a stop changefeed admin job
-	detail.Admin = model.AdminStop
+	detail.AdminJobType = model.AdminStop
 	err = kv.SaveChangeFeedDetail(context.Background(), cli, detail, changefeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
