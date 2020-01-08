@@ -708,7 +708,7 @@ func resetFinishedTs(kvStore tikv.Storage, job *timodel.Job) error {
 	if mvcc == nil || len(mvcc.Writes) == 0 {
 		return errors.NotFoundf("mvcc info, ddl job id: %d, schema version: %d", job.ID, job.BinlogInfo.SchemaVersion)
 	}
-	finishedTS := uint64(0)
+	var finishedTS uint64
 	for _, w := range mvcc.Writes {
 		if finishedTS < w.CommitTs {
 			finishedTS = w.CommitTs
