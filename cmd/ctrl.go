@@ -39,7 +39,7 @@ const (
 	CtrlQueryCfs = "query-cf-list"
 	// query capture list
 	CtrlQueryCaptures = "query-capture-list"
-	// query subchangefeed replication status
+	// query processor replication status
 	CtrlQuerySubCf = "query-sub-cf"
 	// clear all key-values created by CDC
 	CtrlClearAll = "clear-all"
@@ -137,7 +137,7 @@ var ctrlCmd = &cobra.Command{
 			}
 			return jsonPrint(captures)
 		case CtrlQuerySubCf:
-			_, info, err := kv.GetSubChangeFeedInfo(context.Background(), cli, ctrlCfID, ctrlCaptureID)
+			_, info, err := kv.GetTaskStatus(context.Background(), cli, ctrlCfID, ctrlCaptureID)
 			if err != nil && err != concurrency.ErrElectionNoLeader {
 				return err
 			}

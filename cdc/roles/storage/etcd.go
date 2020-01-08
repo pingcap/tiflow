@@ -59,12 +59,12 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeed
 			return nil, nil, err
 		}
 
-		pinfo, err := kv.GetSubChangeFeedInfos(ctx, rw.etcdClient, changefeedID)
+		pinfo, err := kv.GetAllTaskStatus(ctx, rw.etcdClient, changefeedID)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		// Set changefeed info if exists.
+		// Set changefeed taskStatus if exists.
 		changefeedInfo, err := kv.GetChangeFeedInfo(ctx, rw.etcdClient, changefeedID)
 
 		switch errors.Cause(err) {
@@ -118,12 +118,12 @@ type ProcessorTsRWriter interface {
 	ReadGlobalResolvedTs(ctx context.Context) (uint64, error)
 
 	// The flowing methods *IS NOT* thread safe.
-	// GetSubChangeFeedInfo returns the in memory cache *model.SubChangeFeedInfo
-	GetSubChangeFeedInfo() *model.SubChangeFeedInfo
-	// UpdateInfo update the in memory cache as info in storage.
-	// oldInfo and newInfo is the old and new in memory cache info.
-	UpdateInfo(ctx context.Context) (oldInfo *model.SubChangeFeedInfo, newInfo *model.SubChangeFeedInfo, err error)
-	// WriteInfoIntoStorage update info into storage, return model.ErrWriteTsConflict if in last learn info is out dated and must call UpdateInfo.
+	// GetTaskStatus returns the in memory cache *model.TaskStatus
+	GetTaskStatus() *model.TaskStatus
+	// UpdateInfo update the in memory cache as taskStatus in storage.
+	// oldInfo and newInfo is the old and new in memory cache taskStatus.
+	UpdateInfo(ctx context.Context) (oldInfo *model.TaskStatus, newInfo *model.TaskStatus, err error)
+	// WriteInfoIntoStorage update taskStatus into storage, return model.ErrWriteTsConflict if in last learn taskStatus is out dated and must call UpdateInfo.
 	WriteInfoIntoStorage(ctx context.Context) error
 }
 
@@ -135,7 +135,7 @@ type ProcessorTsEtcdRWriter struct {
 	changefeedID string
 	captureID    string
 	modRevision  int64
-	info         *model.SubChangeFeedInfo
+	taskStatus   *model.TaskStatus
 	logger       *zap.Logger
 }
 
@@ -148,12 +148,12 @@ func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 		etcdClient:   cli,
 		changefeedID: changefeedID,
 		captureID:    captureID,
-		info:         &model.SubChangeFeedInfo{},
+		taskStatus:   &model.TaskStatus{},
 		logger:       logger,
 	}
 
 	var err error
-	rw.modRevision, rw.info, err = kv.GetSubChangeFeedInfo(context.Background(), rw.etcdClient, rw.changefeedID, rw.captureID)
+	rw.modRevision, rw.taskStatus, err = kv.GetTaskStatus(context.Background(), rw.etcdClient, rw.changefeedID, rw.captureID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -164,25 +164,25 @@ func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 // UpdateInfo implements ProcessorTsRWriter interface.
 func (rw *ProcessorTsEtcdRWriter) UpdateInfo(
 	ctx context.Context,
-) (oldInfo *model.SubChangeFeedInfo, newInfo *model.SubChangeFeedInfo, err error) {
-	modRevision, info, err := kv.GetSubChangeFeedInfo(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
+) (oldInfo *model.TaskStatus, newInfo *model.TaskStatus, err error) {
+	modRevision, info, err := kv.GetTaskStatus(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
-	oldInfo = rw.info
+	oldInfo = rw.taskStatus
 	newInfo = info
-	rw.info = newInfo
+	rw.taskStatus = newInfo
 	rw.modRevision = modRevision
 	return
 }
 
-// WriteInfoIntoStorage write info into storage, return model.ErrWriteTsConflict if the latest info is outdated.
+// WriteInfoIntoStorage write taskStatus into storage, return model.ErrWriteTsConflict if the latest taskStatus is outdated.
 func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 	ctx context.Context,
 ) error {
-	key := kv.GetEtcdKeySubChangeFeed(rw.changefeedID, rw.captureID)
-	value, err := rw.info.Marshal()
+	key := kv.GetEtcdKeyTask(rw.changefeedID, rw.captureID)
+	value, err := rw.taskStatus.Marshal()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -198,13 +198,13 @@ func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 	}
 
 	if !resp.Succeeded {
-		log.Info("outdated table infos, ignore update info")
+		log.Info("outdated table infos, ignore update taskStatus")
 		return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
 	}
 
-	rw.logger.Debug("update subchangefeed info success",
+	rw.logger.Debug("update task status success",
 		zap.Int64("modRevision", rw.modRevision),
-		zap.Stringer("info", rw.info))
+		zap.Stringer("status", rw.taskStatus))
 
 	rw.modRevision = resp.Header.Revision
 	return nil
@@ -219,28 +219,28 @@ func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uin
 	return info.ResolvedTs, nil
 }
 
-// GetSubChangeFeedInfo returns the in memory cache of *model.SubChangeFeedInfo stored in ProcessorTsEtcdRWriter
-func (rw *ProcessorTsEtcdRWriter) GetSubChangeFeedInfo() *model.SubChangeFeedInfo {
-	return rw.info
+// GetTaskStatus returns the in memory cache of *model.TaskStatus stored in ProcessorTsEtcdRWriter
+func (rw *ProcessorTsEtcdRWriter) GetTaskStatus() *model.TaskStatus {
+	return rw.taskStatus
 }
 
-// OwnerSubCFInfoEtcdWriter encapsulates SubChangeFeedInfo write operation
-type OwnerSubCFInfoEtcdWriter struct {
+// OwnerTaskStatusEtcdWriter encapsulates TaskStatus write operation
+type OwnerTaskStatusEtcdWriter struct {
 	etcdClient *clientv3.Client
 }
 
-// NewOwnerSubCFInfoEtcdWriter returns a new `*OwnerSubCFInfoEtcdWriter` instance
-func NewOwnerSubCFInfoEtcdWriter(cli *clientv3.Client) *OwnerSubCFInfoEtcdWriter {
-	return &OwnerSubCFInfoEtcdWriter{
+// NewOwnerTaskStatusEtcdWriter returns a new `*OwnerTaskStatusEtcdWriter` instance
+func NewOwnerTaskStatusEtcdWriter(cli *clientv3.Client) *OwnerTaskStatusEtcdWriter {
+	return &OwnerTaskStatusEtcdWriter{
 		etcdClient: cli,
 	}
 }
 
-// updateInfo updates the local SubChangeFeedInfo with etcd value, except for TableInfos, Admin and TablePLock
-func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
-	ctx context.Context, changefeedID, captureID string, oldInfo *model.SubChangeFeedInfo,
-) (newInfo *model.SubChangeFeedInfo, err error) {
-	modRevision, info, err := kv.GetSubChangeFeedInfo(ctx, ow.etcdClient, changefeedID, captureID)
+// updateInfo updates the local TaskStatus with etcd value, except for TableInfos, Admin and TablePLock
+func (ow *OwnerTaskStatusEtcdWriter) updateInfo(
+	ctx context.Context, changefeedID, captureID string, oldInfo *model.TaskStatus,
+) (newInfo *model.TaskStatus, err error) {
+	modRevision, info, err := kv.GetTaskStatus(ctx, ow.etcdClient, changefeedID, captureID)
 	if err != nil {
 		return
 	}
@@ -265,12 +265,12 @@ func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
 }
 
 // checkLock checks whether there exists p-lock or whether p-lock is committed if it exists
-func (ow *OwnerSubCFInfoEtcdWriter) checkLock(
+func (ow *OwnerTaskStatusEtcdWriter) checkLock(
 	ctx context.Context, changefeedID, captureID string,
 ) (status model.TableLockStatus, err error) {
-	_, info, err := kv.GetSubChangeFeedInfo(ctx, ow.etcdClient, changefeedID, captureID)
+	_, info, err := kv.GetTaskStatus(ctx, ow.etcdClient, changefeedID, captureID)
 	if err != nil {
-		if errors.Cause(err) == model.ErrSubChangeFeedInfoNotExists {
+		if errors.Cause(err) == model.ErrTaskStatusNotExists {
 			return model.TableNoLock, nil
 		}
 		return
@@ -291,14 +291,14 @@ func (ow *OwnerSubCFInfoEtcdWriter) checkLock(
 	return
 }
 
-// Write persists given `SubChangeFeedInfo` into etcd.
+// Write persists given `TaskStatus` into etcd.
 // If returned err is not nil, don't use the returned newInfo as it may be not a reasonable value.
-func (ow *OwnerSubCFInfoEtcdWriter) Write(
+func (ow *OwnerTaskStatusEtcdWriter) Write(
 	ctx context.Context,
 	changefeedID, captureID string,
-	info *model.SubChangeFeedInfo,
+	info *model.TaskStatus,
 	writePLock bool,
-) (newInfo *model.SubChangeFeedInfo, err error) {
+) (newInfo *model.TaskStatus, err error) {
 
 	// check p-lock not exists or is already resolved
 	lockStatus, err := ow.checkLock(ctx, changefeedID, captureID)
@@ -323,7 +323,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) Write(
 		}
 	}
 
-	key := kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
+	key := kv.GetEtcdKeyTask(changefeedID, captureID)
 	err = retry.Run(func() error {
 		value, err := newInfo.Marshal()
 		if err != nil {
@@ -347,7 +347,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) Write(
 			case model.ErrFindPLockNotCommit:
 				return backoff.Permanent(err)
 			case nil:
-				return errors.Trace(model.ErrWriteSubChangeFeedInfoConlict)
+				return errors.Trace(model.ErrWriteTaskStatusConlict)
 			default:
 				return errors.Trace(err)
 			}

@@ -69,7 +69,7 @@ func (s *etcdSuite) TearDownTest(c *check.C) {
 
 func (s *etcdSuite) TestInfoReader(c *check.C) {
 	var (
-		info1 = map[model.CaptureID]*model.SubChangeFeedInfo{
+		info1 = map[model.CaptureID]*model.TaskStatus{
 			"capture1": {
 				CheckPointTs: 1000,
 				ResolvedTs:   1024,
@@ -103,7 +103,7 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 		_, err = s.client.Delete(context.Background(), kv.GetEtcdKeyChangeFeedList(), clientv3.WithPrefix())
 		c.Assert(err, check.IsNil)
 		for _, changefeedID := range tc.ids {
-			_, err = s.client.Delete(context.Background(), kv.GetEtcdKeySubChangeFeedList(changefeedID), clientv3.WithPrefix())
+			_, err = s.client.Delete(context.Background(), kv.GetEtcdKeyTaskList(changefeedID), clientv3.WithPrefix())
 			c.Assert(err, check.IsNil)
 		}
 		for i := 0; i < len(tc.ids); i++ {
@@ -113,7 +113,7 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 			for captureID, cinfo := range tc.pinfos[changefeedID] {
 				sinfo, err := cinfo.Marshal()
 				c.Assert(err, check.IsNil)
-				_, err = s.client.Put(context.Background(), kv.GetEtcdKeySubChangeFeed(changefeedID, captureID), sinfo)
+				_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTask(changefeedID, captureID), sinfo)
 				c.Assert(err, check.IsNil)
 			}
 		}
@@ -184,11 +184,11 @@ func (s *etcdSuite) TestNewProcessorTsEtcdRWriter(c *check.C) {
 	_, err := NewProcessorTsEtcdRWriter(s.client, captureID, changefeedID)
 	c.Assert(err, check.NotNil)
 
-	// create a subchangefeed record in etcd
-	info := new(model.SubChangeFeedInfo)
+	// create a task record in etcd
+	info := new(model.TaskStatus)
 	sinfo, err := info.Marshal()
 	c.Assert(err, check.IsNil)
-	_, err = s.client.Put(context.Background(), kv.GetEtcdKeySubChangeFeed(changefeedID, captureID), sinfo)
+	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTask(changefeedID, captureID), sinfo)
 	c.Assert(err, check.IsNil)
 
 	_, err = NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
@@ -201,31 +201,31 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 		captureID    = "test-ts-writer-capture"
 		err          error
 		revision     int64
-		info         = &model.SubChangeFeedInfo{
+		info         = &model.TaskStatus{
 			TableInfos: []*model.ProcessTableInfo{
 				{ID: 11}, {ID: 12},
 			},
 		}
-		getInfo *model.SubChangeFeedInfo
+		getInfo *model.TaskStatus
 	)
 
-	// create a subchangefeed record in etcd
+	// create a task record in etcd
 	sinfo, err := info.Marshal()
 	c.Assert(err, check.IsNil)
-	_, err = s.client.Put(context.Background(), kv.GetEtcdKeySubChangeFeed(changefeedID, captureID), sinfo)
+	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTask(changefeedID, captureID), sinfo)
 	c.Assert(err, check.IsNil)
 
 	// test WriteResolvedTs
 	rw, err := NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
-	c.Assert(rw.GetSubChangeFeedInfo(), check.DeepEquals, info)
+	c.Assert(rw.GetTaskStatus(), check.DeepEquals, info)
 
-	info = rw.GetSubChangeFeedInfo()
+	info = rw.GetTaskStatus()
 	info.ResolvedTs = 128
 	err = rw.WriteInfoIntoStorage(context.Background())
 	c.Assert(err, check.IsNil)
 
-	revision, getInfo, err = kv.GetSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID)
+	revision, getInfo, err = kv.GetTaskStatus(context.Background(), s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(revision, check.Equals, rw.modRevision)
 	c.Assert(getInfo.ResolvedTs, check.Equals, uint64(128))
@@ -235,17 +235,17 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	err = rw.WriteInfoIntoStorage(context.Background())
 	c.Assert(err, check.IsNil)
 
-	revision, getInfo, err = kv.GetSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID)
+	revision, getInfo, err = kv.GetTaskStatus(context.Background(), s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(revision, check.Equals, rw.modRevision)
 	c.Assert(getInfo.CheckPointTs, check.Equals, uint64(96))
 
-	// test table info changed, should return ErrWriteTsConflict.
+	// test table taskStatus changed, should return ErrWriteTsConflict.
 	getInfo = info.Clone()
 	getInfo.TableInfos = []*model.ProcessTableInfo{{ID: 11}, {ID: 12}, {ID: 13}}
 	sinfo, err = getInfo.Marshal()
 	c.Assert(err, check.IsNil)
-	_, err = s.client.Put(context.Background(), kv.GetEtcdKeySubChangeFeed(changefeedID, captureID), sinfo)
+	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTask(changefeedID, captureID), sinfo)
 	c.Assert(err, check.IsNil)
 
 	info.ResolvedTs = 196
@@ -256,13 +256,13 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(oldInfo, check.DeepEquals, info)
 	c.Assert(newInfo, check.DeepEquals, getInfo)
-	info = rw.GetSubChangeFeedInfo()
+	info = rw.GetTaskStatus()
 
 	// update success again.
 	info.ResolvedTs = 196
 	err = rw.WriteInfoIntoStorage(context.Background())
 	c.Assert(err, check.IsNil)
-	revision, getInfo, err = kv.GetSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID)
+	revision, getInfo, err = kv.GetTaskStatus(context.Background(), s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(revision, check.Equals, rw.modRevision)
 	c.Assert(getInfo.ResolvedTs, check.Equals, uint64(196))
@@ -280,17 +280,17 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 		}
 	)
 
-	// create a changefeed info in etcd
+	// create a changefeed taskStatus in etcd
 	sinfo, err := info.Marshal()
 	c.Assert(err, check.IsNil)
 	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID), sinfo)
 	c.Assert(err, check.IsNil)
 
-	// create a subchangefeed record in etcd
-	subInfo := new(model.SubChangeFeedInfo)
+	// create a task record in etcd
+	subInfo := new(model.TaskStatus)
 	subInfoData, err := subInfo.Marshal()
 	c.Assert(err, check.IsNil)
-	_, err = s.client.Put(context.Background(), kv.GetEtcdKeySubChangeFeed(changefeedID, captureID), subInfoData)
+	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTask(changefeedID, captureID), subInfoData)
 	c.Assert(err, check.IsNil)
 
 	rw, err := NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
@@ -305,36 +305,36 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 	var (
 		changefeedID = "test-owner-table-writer-changefeed"
 		captureID    = "test-owner-table-writer-capture"
-		info         = &model.SubChangeFeedInfo{}
+		info         = &model.TaskStatus{}
 		err          error
 	)
 
-	ow := NewOwnerSubCFInfoEtcdWriter(s.client)
+	ow := NewOwnerTaskStatusEtcdWriter(s.client)
 
-	// owner adds table to subchangefeed
+	// owner adds table to processor
 	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 50, StartTs: 100})
 	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
 	c.Assert(err, check.IsNil)
 	c.Assert(info.TableInfos, check.HasLen, 1)
 
-	// simulate processor updates the subchangefeedinfo
+	// simulate processor updates the task status
 	infoClone := info.Clone()
 	infoClone.ResolvedTs = 200
 	infoClone.CheckPointTs = 100
-	err = kv.PutSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID, infoClone)
+	err = kv.PutTaskStatus(context.Background(), s.client, changefeedID, captureID, infoClone)
 	c.Assert(err, check.IsNil)
 
-	// owner adds table to subchangefeed when remote data is updated
+	// owner adds table to processor when remote data is updated
 	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 52, StartTs: 100})
 	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
 	c.Assert(err, check.IsNil)
 	c.Assert(info.TableInfos, check.HasLen, 2)
 	// check ModRevision after write
-	revision, _, err := kv.GetSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID)
+	revision, _, err := kv.GetTaskStatus(context.Background(), s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(info.ModRevision, check.Equals, revision)
 
-	// owner removes table from subchangefeed
+	// owner removes table from processor
 	info.TableInfos = info.TableInfos[:len(info.TableInfos)-1]
 	info, err = ow.Write(context.Background(), changefeedID, captureID, info, true)
 	c.Assert(err, check.IsNil)
@@ -355,11 +355,11 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 
 	// simulate processor removes table and commit table p-lock
 	info.TableCLock = &model.TableLock{Ts: info.TablePLock.Ts, CheckpointTs: 200}
-	err = kv.PutSubChangeFeedInfo(context.Background(), s.client, changefeedID, captureID, info)
+	err = kv.PutTaskStatus(context.Background(), s.client, changefeedID, captureID, info)
 	c.Assert(err, check.IsNil)
 	info.TableCLock = nil
 
-	// owner adds table to subchangefeed again
+	// owner adds table to processor again
 	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 54, StartTs: 300})
 	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
 	c.Assert(err, check.IsNil)

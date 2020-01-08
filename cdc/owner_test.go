@@ -355,7 +355,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 			"capture_1": {ResolvedTs: 10001},
 			"capture_2": {},
 		},
-		infoWriter: storage.NewOwnerSubCFInfoEtcdWriter(s.client),
+		infoWriter: storage.NewOwnerTaskStatusEtcdWriter(s.client),
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	manager := roles.NewMockManager(uuid.New().String(), cancel)
@@ -367,7 +367,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	}
 	owner.changeFeeds = map[model.ChangeFeedID]*changeFeed{cfID: sampleCF}
 	for cid, pinfo := range sampleCF.ProcessorInfos {
-		key := kv.GetEtcdKeySubChangeFeed(cfID, cid)
+		key := kv.GetEtcdKeyTask(cfID, cid)
 		pinfoStr, err := pinfo.Marshal()
 		c.Assert(err, check.IsNil)
 		_, err = s.client.Put(ctx, key, pinfoStr)
@@ -394,7 +394,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(d.AdminJobType, check.Equals, model.AdminStop)
 	// check processor is set admin job
 	for cid := range sampleCF.ProcessorInfos {
-		_, subInfo, err := kv.GetSubChangeFeedInfo(ctx, owner.etcdClient, cfID, cid)
+		_, subInfo, err := kv.GetTaskStatus(ctx, owner.etcdClient, cfID, cid)
 		c.Assert(err, check.IsNil)
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminStop)
 	}
@@ -425,7 +425,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
 	// check processor is set admin job
 	for cid := range sampleCF.ProcessorInfos {
-		_, subInfo, err := kv.GetSubChangeFeedInfo(ctx, owner.etcdClient, cfID, cid)
+		_, subInfo, err := kv.GetTaskStatus(ctx, owner.etcdClient, cfID, cid)
 		c.Assert(err, check.IsNil)
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminRemove)
 	}
@@ -442,7 +442,7 @@ var _ = check.Suite(&changefeedInfoSuite{})
 
 func (s *changefeedInfoSuite) TestMinimumTables(c *check.C) {
 	cf := &changeFeed{
-		ProcessorInfos: map[model.CaptureID]*model.SubChangeFeedInfo{
+		ProcessorInfos: map[model.CaptureID]*model.TaskStatus{
 			"c1": {
 				TableInfos: make([]*model.ProcessTableInfo, 2),
 			},

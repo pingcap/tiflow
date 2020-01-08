@@ -97,9 +97,9 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 	c.Assert(len(result), check.Equals, 0)
 }
 
-func (s *etcdSuite) TestGetPutSubchangeFeed(c *check.C) {
+func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 	ctx := context.Background()
-	info := &model.SubChangeFeedInfo{
+	info := &model.TaskStatus{
 		CheckPointTs: 100,
 		ResolvedTs:   200,
 		TableInfos: []*model.ProcessTableInfo{
@@ -110,22 +110,22 @@ func (s *etcdSuite) TestGetPutSubchangeFeed(c *check.C) {
 	feedID := "feedid"
 	captureID := "captureid"
 
-	err := PutSubChangeFeedInfo(ctx, s.client, feedID, captureID, info)
+	err := PutTaskStatus(ctx, s.client, feedID, captureID, info)
 	c.Assert(err, check.IsNil)
 
-	_, getInfo, err := GetSubChangeFeedInfo(ctx, s.client, feedID, captureID)
+	_, getInfo, err := GetTaskStatus(ctx, s.client, feedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(getInfo, check.DeepEquals, info)
 
 	err = ClearAllCDCInfo(context.Background(), s.client)
 	c.Assert(err, check.IsNil)
-	_, _, err = GetSubChangeFeedInfo(ctx, s.client, feedID, captureID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrSubChangeFeedInfoNotExists)
+	_, _, err = GetTaskStatus(ctx, s.client, feedID, captureID)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskStatusNotExists)
 }
 
-func (s *etcdSuite) TestDeleteSubChangeFeedInfo(c *check.C) {
+func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
 	ctx := context.Background()
-	info := &model.SubChangeFeedInfo{
+	info := &model.TaskStatus{
 		CheckPointTs: 100,
 		ResolvedTs:   200,
 		TableInfos: []*model.ProcessTableInfo{
@@ -135,13 +135,13 @@ func (s *etcdSuite) TestDeleteSubChangeFeedInfo(c *check.C) {
 	feedID := "feedid"
 	captureID := "captureid"
 
-	err := PutSubChangeFeedInfo(ctx, s.client, feedID, captureID, info)
+	err := PutTaskStatus(ctx, s.client, feedID, captureID, info)
 	c.Assert(err, check.IsNil)
 
-	err = DeleteSubChangeFeedInfo(ctx, s.client, feedID, captureID)
+	err = DeleteTaskStatus(ctx, s.client, feedID, captureID)
 	c.Assert(err, check.IsNil)
-	_, _, err = GetSubChangeFeedInfo(ctx, s.client, feedID, captureID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrSubChangeFeedInfoNotExists)
+	_, _, err = GetTaskStatus(ctx, s.client, feedID, captureID)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskStatusNotExists)
 }
 
 func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
