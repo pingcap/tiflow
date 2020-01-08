@@ -355,7 +355,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 			"capture_1": {ResolvedTs: 10001},
 			"capture_2": {},
 		},
-		infoWriter: storage.NewOwnerSubCFInfoEtcdWriter(s.client),
+		infoWriter: storage.NewOwnerTaskStatusEtcdWriter(s.client),
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	manager := roles.NewMockManager(uuid.New().String(), cancel)

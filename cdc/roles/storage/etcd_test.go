@@ -309,7 +309,7 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 		err          error
 	)
 
-	ow := NewOwnerSubCFInfoEtcdWriter(s.client)
+	ow := NewOwnerTaskStatusEtcdWriter(s.client)
 
 	// owner adds table to processor
 	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 50, StartTs: 100})

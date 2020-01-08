@@ -75,7 +75,7 @@ type changeFeed struct {
 	tables        map[uint64]schema.TableName
 	orphanTables  map[uint64]model.ProcessTableInfo
 	toCleanTables map[uint64]struct{}
-	infoWriter    *storage.OwnerSubCFInfoEtcdWriter
+	infoWriter    *storage.OwnerTaskStatusEtcdWriter
 }
 
 // String implements fmt.Stringer interface.
@@ -508,7 +508,7 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 		TargetTs:        detail.GetTargetTs(),
 		ProcessorInfos:  processorsInfos,
 		DDLCurrentIndex: 0,
-		infoWriter:      storage.NewOwnerSubCFInfoEtcdWriter(o.etcdClient),
+		infoWriter:      storage.NewOwnerTaskStatusEtcdWriter(o.etcdClient),
 	}
 	return cf, nil
 }

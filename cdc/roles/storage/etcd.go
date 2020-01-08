@@ -224,20 +224,20 @@ func (rw *ProcessorTsEtcdRWriter) GetTaskStatus() *model.TaskStatus {
 	return rw.taskStatus
 }
 
-// OwnerSubCFInfoEtcdWriter encapsulates TaskStatus write operation
-type OwnerSubCFInfoEtcdWriter struct {
+// OwnerTaskStatusEtcdWriter encapsulates TaskStatus write operation
+type OwnerTaskStatusEtcdWriter struct {
 	etcdClient *clientv3.Client
 }
 
-// NewOwnerSubCFInfoEtcdWriter returns a new `*OwnerSubCFInfoEtcdWriter` instance
-func NewOwnerSubCFInfoEtcdWriter(cli *clientv3.Client) *OwnerSubCFInfoEtcdWriter {
-	return &OwnerSubCFInfoEtcdWriter{
+// NewOwnerTaskStatusEtcdWriter returns a new `*OwnerTaskStatusEtcdWriter` instance
+func NewOwnerTaskStatusEtcdWriter(cli *clientv3.Client) *OwnerTaskStatusEtcdWriter {
+	return &OwnerTaskStatusEtcdWriter{
 		etcdClient: cli,
 	}
 }
 
 // updateInfo updates the local TaskStatus with etcd value, except for TableInfos, Admin and TablePLock
-func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
+func (ow *OwnerTaskStatusEtcdWriter) updateInfo(
 	ctx context.Context, changefeedID, captureID string, oldInfo *model.TaskStatus,
 ) (newInfo *model.TaskStatus, err error) {
 	modRevision, info, err := kv.GetTaskStatus(ctx, ow.etcdClient, changefeedID, captureID)
@@ -265,7 +265,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
 }
 
 // checkLock checks whether there exists p-lock or whether p-lock is committed if it exists
-func (ow *OwnerSubCFInfoEtcdWriter) checkLock(
+func (ow *OwnerTaskStatusEtcdWriter) checkLock(
 	ctx context.Context, changefeedID, captureID string,
 ) (status model.TableLockStatus, err error) {
 	_, info, err := kv.GetTaskStatus(ctx, ow.etcdClient, changefeedID, captureID)
@@ -293,7 +293,7 @@ func (ow *OwnerSubCFInfoEtcdWriter) checkLock(
 
 // Write persists given `TaskStatus` into etcd.
 // If returned err is not nil, don't use the returned newInfo as it may be not a reasonable value.
-func (ow *OwnerSubCFInfoEtcdWriter) Write(
+func (ow *OwnerTaskStatusEtcdWriter) Write(
 	ctx context.Context,
 	changefeedID, captureID string,
 	info *model.TaskStatus,
