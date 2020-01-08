@@ -19,9 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tidb-tools/pkg/filter"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -33,8 +32,10 @@ type ChangeFeedDetail struct {
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
 	StartTs uint64 `json:"start-ts"`
 	// The ChangeFeed will exits until sync to timestamp TargetTs
-	TargetTs uint64          `json:"target-ts"`
-	Info     *ChangeFeedInfo `json:"-"`
+	TargetTs uint64 `json:"target-ts"`
+	// used for admin job notification, trigger watch event in capture
+	AdminJobType AdminJobType    `json:"admin-job-type"`
+	Info         *ChangeFeedInfo `json:"-"`
 
 	filter              *filter.Filter
 	FilterCaseSensitive bool          `json:"filter-case-sensitive"`

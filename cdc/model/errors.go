@@ -25,4 +25,5 @@ var (
 	ErrSubChangeFeedInfoNotExists    = errors.New("subchangefeedinfo not exists")
 	ErrWriteSubChangeFeedInfoConlict = errors.New("write subchangefeedinfo conflict")
 	ErrFindPLockNotCommit            = errors.New("subchangefeedinfo has p-lock not commited")
+	ErrAdminStopProcessor            = errors.New("stop processor by admin command")
 )

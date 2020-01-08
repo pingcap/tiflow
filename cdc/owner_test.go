@@ -8,14 +8,17 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/coreos/etcd/embed"
 	"github.com/google/uuid"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
+	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -339,6 +342,97 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	s.owner = owner
 	err = owner.Run(ctx, 50*time.Millisecond)
 	c.Assert(errors.Cause(err), check.DeepEquals, context.Canceled)
+}
+
+func (s *ownerSuite) TestHandleAdmin(c *check.C) {
+	cfID := "test_handle_admin"
+	sampleCF := &changeFeed{
+		ID:             cfID,
+		detail:         &model.ChangeFeedDetail{},
+		ChangeFeedInfo: &model.ChangeFeedInfo{},
+		Status:         model.ChangeFeedSyncDML,
+		ProcessorInfos: model.ProcessorsInfos{
+			"capture_1": {ResolvedTs: 10001},
+			"capture_2": {},
+		},
+		infoWriter: storage.NewOwnerSubCFInfoEtcdWriter(s.client),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	manager := roles.NewMockManager(uuid.New().String(), cancel)
+	owner := &ownerImpl{
+		cancelWatchCapture: cancel,
+		manager:            manager,
+		etcdClient:         s.client,
+		cfRWriter:          storage.NewChangeFeedInfoEtcdRWriter(s.client),
+	}
+	owner.changeFeeds = map[model.ChangeFeedID]*changeFeed{cfID: sampleCF}
+	for cid, pinfo := range sampleCF.ProcessorInfos {
+		key := kv.GetEtcdKeySubChangeFeed(cfID, cid)
+		pinfoStr, err := pinfo.Marshal()
+		c.Assert(err, check.IsNil)
+		_, err = s.client.Put(ctx, key, pinfoStr)
+		c.Assert(err, check.IsNil)
+	}
+	checkAdminJobLen := func(length int) {
+		owner.adminJobsLock.Lock()
+		c.Assert(owner.adminJobs, check.HasLen, length)
+		owner.adminJobsLock.Unlock()
+	}
+
+	err := owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminStop})
+	c.Assert(errors.Cause(err), check.Equals, concurrency.ErrElectionNotLeader)
+	c.Assert(manager.CampaignOwner(ctx), check.IsNil)
+
+	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminStop}), check.IsNil)
+	checkAdminJobLen(1)
+	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
+	checkAdminJobLen(0)
+	c.Assert(len(owner.changeFeeds), check.Equals, 0)
+	// check changefeed detail is set admin job
+	d, err := kv.GetChangeFeedDetail(ctx, owner.etcdClient, cfID)
+	c.Assert(err, check.IsNil)
+	c.Assert(d.AdminJobType, check.Equals, model.AdminStop)
+	// check processor is set admin job
+	for cid := range sampleCF.ProcessorInfos {
+		_, subInfo, err := kv.GetSubChangeFeedInfo(ctx, owner.etcdClient, cfID, cid)
+		c.Assert(err, check.IsNil)
+		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminStop)
+	}
+	// check changefeed status is set admin job
+	st, err := kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
+	c.Assert(err, check.IsNil)
+	c.Assert(st.AdminJobType, check.Equals, model.AdminStop)
+
+	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminResume}), check.IsNil)
+	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
+	checkAdminJobLen(0)
+	// check changefeed detail is set admin job
+	d, err = kv.GetChangeFeedDetail(ctx, owner.etcdClient, cfID)
+	c.Assert(err, check.IsNil)
+	c.Assert(d.AdminJobType, check.Equals, model.AdminResume)
+	// check changefeed status is set admin job
+	st, err = kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
+	c.Assert(err, check.IsNil)
+	c.Assert(st.AdminJobType, check.Equals, model.AdminResume)
+
+	owner.changeFeeds[cfID] = sampleCF
+	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminRemove}), check.IsNil)
+	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
+	checkAdminJobLen(0)
+	c.Assert(len(owner.changeFeeds), check.Equals, 0)
+	// check changefeed detail is deleted
+	_, err = kv.GetChangeFeedDetail(ctx, owner.etcdClient, cfID)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
+	// check processor is set admin job
+	for cid := range sampleCF.ProcessorInfos {
+		_, subInfo, err := kv.GetSubChangeFeedInfo(ctx, owner.etcdClient, cfID, cid)
+		c.Assert(err, check.IsNil)
+		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminRemove)
+	}
+	// check changefeed status is set admin job
+	st, err = kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
+	c.Assert(err, check.IsNil)
+	c.Assert(st.AdminJobType, check.Equals, model.AdminRemove)
 }
 
 type changefeedInfoSuite struct {
