@@ -146,7 +146,7 @@ type processor struct {
 	resolvedTxns chan model.RawTxn
 	executedTxns chan model.RawTxn
 
-	info *model.TaskStatus
+	status *model.TaskStatus
 
 	tablesMu sync.Mutex
 	tables   map[int64]*tableInfo
@@ -222,7 +222,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		ddlPuller:     ddlPuller,
 
 		tsRWriter:    tsRWriter,
-		info:         tsRWriter.GetTaskStatus(),
+		status:       tsRWriter.GetTaskStatus(),
 		resolvedTxns: make(chan model.RawTxn, 1),
 		executedTxns: make(chan model.RawTxn, 1),
 		ddlJobsCh:    make(chan model.RawTxn, 16),
@@ -230,7 +230,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, chang
 		tables: make(map[int64]*tableInfo),
 	}
 
-	for _, table := range p.info.TableInfos {
+	for _, table := range p.status.TableInfos {
 		p.addTable(context.Background(), int64(table.ID), table.StartTs)
 	}
 
@@ -278,7 +278,7 @@ func (p *processor) wait() {
 }
 
 func (p *processor) writeDebugInfo(w io.Writer) {
-	fmt.Fprintf(w, "changefeedID: %s, detail: %+v, info: %+v\n", p.changefeedID, p.changefeed, p.info)
+	fmt.Fprintf(w, "changefeedID: %s, detail: %+v, status: %+v\n", p.changefeedID, p.changefeed, p.status)
 
 	p.tablesMu.Lock()
 	for _, table := range p.tables {
@@ -332,7 +332,7 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 				}
 			}
 			p.tablesMu.Unlock()
-			p.info.ResolvedTs = minResolvedTs
+			p.status.ResolvedTs = minResolvedTs
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case e, ok := <-p.executedTxns:
 			if !ok {
@@ -340,7 +340,7 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 				return nil
 			}
 			if e.IsResolved {
-				p.info.CheckPointTs = e.Ts
+				p.status.CheckPointTs = e.Ts
 				checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(e.Ts)))
 			}
 		case <-updateInfoTick.C:
@@ -370,9 +370,9 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 
-		p.info = p.tsRWriter.GetTaskStatus()
+		p.status = p.tsRWriter.GetTaskStatus()
 
-		if p.info.AdminJobType == model.AdminStop || p.info.AdminJobType == model.AdminRemove {
+		if p.status.AdminJobType == model.AdminStop || p.status.AdminJobType == model.AdminRemove {
 			err = p.stop(ctx)
 			if err != nil {
 				return errors.Trace(err)
@@ -380,17 +380,17 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			return errors.Trace(model.ErrAdminStopProcessor)
 		}
 
-		p.handleTables(ctx, oldInfo, p.info, oldInfo.CheckPointTs)
-		syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.info.TableInfos)))
+		p.handleTables(ctx, oldInfo, p.status, oldInfo.CheckPointTs)
+		syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
 
-		if len(oldInfo.TableInfos) > len(p.info.TableInfos) {
+		if len(oldInfo.TableInfos) > len(p.status.TableInfos) {
 			// some table is removed, we will not both remove and add table in one operation.
 			// keep CheckpointTs and ResolvedTs as the old in memory cache one.
-			p.info.CheckPointTs = oldInfo.CheckPointTs
-			p.info.ResolvedTs = oldInfo.ResolvedTs
+			p.status.CheckPointTs = oldInfo.CheckPointTs
+			p.status.ResolvedTs = oldInfo.ResolvedTs
 		}
 
-		log.Info("update task status", zap.Stringer("status", p.info))
+		log.Info("update task status", zap.Stringer("status", p.status))
 		return nil
 	case nil:
 		return nil
