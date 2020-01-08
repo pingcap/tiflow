@@ -19,9 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tidb-tools/pkg/filter"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -33,8 +32,10 @@ type ChangeFeedDetail struct {
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
 	StartTs uint64 `json:"start-ts"`
 	// The ChangeFeed will exits until sync to timestamp TargetTs
-	TargetTs uint64          `json:"target-ts"`
-	Info     *ChangeFeedInfo `json:"-"`
+	TargetTs uint64 `json:"target-ts"`
+	// used for admin job notification, trigger watch event in capture
+	AdminJobType AdminJobType    `json:"admin-job-type"`
+	Info         *ChangeFeedInfo `json:"-"`
 
 	filter              *filter.Filter
 	FilterCaseSensitive bool          `json:"filter-case-sensitive"`
@@ -52,7 +53,7 @@ func (detail *ChangeFeedDetail) getFilter() *filter.Filter {
 // ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
 // Set `tbl` to an empty string to test against the whole database.
 func (detail *ChangeFeedDetail) ShouldIgnoreTable(db, tbl string) bool {
-	if isSysSchema(db) {
+	if IsSysSchema(db) {
 		return true
 	}
 	f := detail.getFilter()
@@ -117,7 +118,8 @@ func (detail *ChangeFeedDetail) Unmarshal(data []byte) error {
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 
-func isSysSchema(db string) bool {
+// IsSysSchema returns true if the given schema is a system schema
+func IsSysSchema(db string) bool {
 	db = strings.ToUpper(db)
 	for _, schema := range []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "MYSQL", "METRIC_SCHEMA"} {
 		if schema == db {

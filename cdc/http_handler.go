@@ -15,9 +15,16 @@ package cdc
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/cdc/model"
+)
+
+const (
+	opVarAdminJob     = "admin-job"
+	opVarChangefeedID = "cf-id"
 )
 
 type commonResp struct {
@@ -25,12 +32,7 @@ type commonResp struct {
 	Message string `json:"message"`
 }
 
-func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
-		return
-	}
-	err := s.capture.ownerManager.ResignOwner(req.Context())
+func handleOwnerResp(w http.ResponseWriter, err error) {
 	if err != nil {
 		if errors.Cause(err) == concurrency.ErrElectionNotLeader {
 			writeError(w, http.StatusBadRequest, err)
@@ -40,4 +42,37 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	writeData(w, commonResp{Status: true})
+}
+
+func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
+		return
+	}
+	err := s.capture.ownerManager.ResignOwner(req.Context())
+	handleOwnerResp(w, err)
+}
+
+func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
+		return
+	}
+	err := req.ParseForm()
+	if err != nil {
+		writeInternalServerError(w, err)
+		return
+	}
+	typeStr := req.Form.Get(opVarAdminJob)
+	typ, err := strconv.ParseInt(typeStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid admin job type: %s", typeStr))
+		return
+	}
+	job := model.AdminJob{
+		CfID: req.Form.Get(opVarChangefeedID),
+		Type: model.AdminJobType(typ),
+	}
+	err = s.capture.ownerWorker.EnqueueJob(job)
+	handleOwnerResp(w, err)
 }

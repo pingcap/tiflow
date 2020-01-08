@@ -293,6 +293,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 1, update resolve ts by scaning all table's resolve ts.
 // 2, update checkpoint ts by consuming entry from p.executedTxns.
 // 3, sync TaskStatus between in memory and storage.
+// 4, check admin command in TaskStatus and apply corresponding command
 func (p *processor) localResolvedWorker(ctx context.Context) error {
 	updateInfoTick := time.NewTicker(time.Second)
 	defer updateInfoTick.Stop()
@@ -345,7 +346,11 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 		case <-updateInfoTick.C:
 			t0Update := time.Now()
 			err := retry.Run(func() error {
-				return p.updateInfo(ctx)
+				inErr := p.updateInfo(ctx)
+				if errors.Cause(inErr) == model.ErrAdminStopProcessor {
+					return backoff.Permanent(inErr)
+				}
+				return inErr
 			}, 3)
 			updateInfoDuration.WithLabelValues(p.captureID).Observe(time.Since(t0Update).Seconds())
 			if err != nil {
@@ -366,6 +371,14 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		}
 
 		p.info = p.tsRWriter.GetTaskStatus()
+
+		if p.info.AdminJobType == model.AdminStop || p.info.AdminJobType == model.AdminRemove {
+			err = p.stop(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			return errors.Trace(model.ErrAdminStopProcessor)
+		}
 
 		p.handleTables(ctx, oldInfo, p.info, oldInfo.CheckPointTs)
 		syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.info.TableInfos)))
@@ -746,6 +759,15 @@ func (p *processor) startPuller(ctx context.Context, span util.Span, checkpointT
 	}()
 
 	return puller
+}
+
+func (p *processor) stop(ctx context.Context) error {
+	p.tablesMu.Lock()
+	for _, tbl := range p.tables {
+		tbl.puller.Cancel()
+	}
+	p.tablesMu.Unlock()
+	return errors.Trace(kv.DeleteTaskStatus(ctx, p.etcdCli, p.changefeedID, p.captureID))
 }
 
 func newMounter(schema *schema.Storage) mounter {

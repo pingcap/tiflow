@@ -236,7 +236,7 @@ func NewOwnerSubCFInfoEtcdWriter(cli *clientv3.Client) *OwnerSubCFInfoEtcdWriter
 	}
 }
 
-// updateInfo updates the local TaskStatus with etcd value, except for TableInfos and TablePLock
+// updateInfo updates the local TaskStatus with etcd value, except for TableInfos, Admin and TablePLock
 func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
 	ctx context.Context, changefeedID, captureID string, oldInfo *model.TaskStatus,
 ) (newInfo *model.TaskStatus, err error) {
@@ -246,11 +246,10 @@ func (ow *OwnerSubCFInfoEtcdWriter) updateInfo(
 	}
 
 	// TableInfos and TablePLock is updated by owner only
-	tableInfos := oldInfo.TableInfos
-	pLock := oldInfo.TablePLock
 	newInfo = info
-	newInfo.TableInfos = tableInfos
-	newInfo.TablePLock = pLock
+	newInfo.TableInfos = oldInfo.TableInfos
+	newInfo.AdminJobType = oldInfo.AdminJobType
+	newInfo.TablePLock = oldInfo.TablePLock
 	newInfo.ModRevision = modRevision
 
 	if newInfo.TablePLock != nil {

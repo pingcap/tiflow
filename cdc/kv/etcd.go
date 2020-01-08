@@ -102,6 +102,13 @@ func GetChangeFeedDetail(ctx context.Context, cli *clientv3.Client, id string, o
 	return detail, errors.Trace(err)
 }
 
+// DeleteChangeFeedDetail deletes a changefeed config from etcd
+func DeleteChangeFeedDetail(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) error {
+	key := GetEtcdKeyChangeFeedConfig(id)
+	_, err := cli.Delete(ctx, key, opts...)
+	return errors.Trace(err)
+}
+
 // GetChangeFeedInfo queries the checkpointTs and resovledTs of a given changefeed
 func GetChangeFeedInfo(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) (*model.ChangeFeedInfo, error) {
 	key := GetEtcdKeyChangeFeedStatus(id)

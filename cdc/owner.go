@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pmodel "github.com/pingcap/parser/model"
@@ -322,6 +323,9 @@ type ownerImpl struct {
 	captureWatchC      <-chan *CaptureInfoWatchResp
 	cancelWatchCapture func()
 	captures           map[model.CaptureID]*model.CaptureInfo
+
+	adminJobs     []model.AdminJob
+	adminJobsLock sync.Mutex
 }
 
 // NewOwner creates a new ownerImpl instance
@@ -535,6 +539,9 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 		if !ok {
 			return errors.Annotatef(model.ErrChangeFeedNotExists, "id:%s", changeFeedID)
 		}
+		if detail.Info != nil && (detail.Info.AdminJobType == model.AdminStop || detail.Info.AdminJobType == model.AdminRemove) {
+			continue
+		}
 
 		newCf, err := o.newChangeFeed(changeFeedID, procInfos, detail)
 		if err != nil {
@@ -645,7 +652,7 @@ func (o *ownerImpl) calcResolvedTs() error {
 // if the status is in ChangeFeedWaitToExecDDL.
 // After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
 func (o *ownerImpl) handleDDL(ctx context.Context) error {
-waitCheckpointTsLoop:
+handleEachChangefeed:
 	for changeFeedID, cfInfo := range o.changeFeeds {
 		if cfInfo.Status != model.ChangeFeedWaitToExecDDL {
 			continue
@@ -658,7 +665,7 @@ waitCheckpointTsLoop:
 				log.Debug("wait checkpoint ts", zap.String("cid", cid),
 					zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
 					zap.Uint64("finish ts", todoDDLJob.Job.BinlogInfo.FinishedTS))
-				continue waitCheckpointTsLoop
+				continue handleEachChangefeed
 			}
 		}
 
@@ -685,14 +692,22 @@ waitCheckpointTsLoop:
 			)
 		} else {
 			err = cfInfo.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, ddlTxn)
-			// If DDL executing failed, pause the changefeed and print log
+			// If DDL executing failed, pause the changefeed and print log, rather
+			// than return an error and break the running of this owner.
 			if err != nil {
 				cfInfo.Status = model.ChangeFeedDDLExecuteFailed
 				log.Error("Execute DDL failed",
 					zap.String("ChangeFeedID", changeFeedID),
 					zap.Error(err),
 					zap.Reflect("ddlJob", todoDDLJob))
-				return errors.Trace(err)
+				err = o.EnqueueJob(model.AdminJob{
+					CfID: changeFeedID,
+					Type: model.AdminStop,
+				})
+				if err != nil {
+					return errors.Trace(err)
+				}
+				continue handleEachChangefeed
 			}
 			log.Info("Execute DDL succeeded",
 				zap.String("ChangeFeedID", changeFeedID),
@@ -708,6 +723,98 @@ waitCheckpointTsLoop:
 		return nil
 	}
 
+	return nil
+}
+
+// dispatchJob dispatches job to processors
+func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
+	cf, ok := o.changeFeeds[job.CfID]
+	if !ok {
+		return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
+	}
+	for captureID, pinfo := range cf.ProcessorInfos {
+		pinfo.TablePLock = nil
+		pinfo.TableCLock = nil
+		pinfo.AdminJobType = job.Type
+		_, err := cf.infoWriter.Write(ctx, cf.ID, captureID, pinfo, false)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	// record admin job in changefeed status
+	cf.ChangeFeedInfo.AdminJobType = job.Type
+	infos := map[model.ChangeFeedID]*model.ChangeFeedInfo{job.CfID: cf.ChangeFeedInfo}
+	err := o.cfRWriter.Write(ctx, infos)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	delete(o.changeFeeds, job.CfID)
+	return nil
+}
+
+func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
+	removeIdx := 0
+	o.adminJobsLock.Lock()
+	defer func() {
+		o.adminJobs = o.adminJobs[removeIdx:]
+		o.adminJobsLock.Unlock()
+	}()
+	for i, job := range o.adminJobs {
+		log.Info("handle admin job", zap.String("changefeed", job.CfID), zap.Stringer("type", job.Type))
+		switch job.Type {
+		case model.AdminStop:
+			// update ChangeFeedDetail to tell capture ChangeFeedDetail watcher to cleanup
+			cf, ok := o.changeFeeds[job.CfID]
+			if !ok {
+				return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
+			}
+			cf.detail.AdminJobType = model.AdminStop
+			err := kv.SaveChangeFeedDetail(ctx, o.etcdClient, cf.detail, job.CfID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			err = o.dispatchJob(ctx, job)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		case model.AdminRemove:
+			err := o.dispatchJob(ctx, job)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			// remove changefeed detail
+			err = kv.DeleteChangeFeedDetail(ctx, o.etcdClient, job.CfID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		case model.AdminResume:
+			cfInfo, err := kv.GetChangeFeedInfo(ctx, o.etcdClient, job.CfID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			detail, err := kv.GetChangeFeedDetail(ctx, o.etcdClient, job.CfID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			// set admin job in changefeed status to tell owner resume changefeed
+			cfInfo.AdminJobType = model.AdminResume
+			err = kv.PutChangeFeedStatus(ctx, o.etcdClient, job.CfID, cfInfo)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			// set admin job in changefeed detail to trigger each capture's changefeed list watch event
+			detail.AdminJobType = model.AdminResume
+			err = kv.SaveChangeFeedDetail(ctx, o.etcdClient, detail, job.CfID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		removeIdx = i + 1
+	}
 	return nil
 }
 
@@ -772,6 +879,11 @@ func (o *ownerImpl) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	err = o.handleAdminJob(cctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	err = o.flushChangeFeedInfos(cctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -781,6 +893,26 @@ func (o *ownerImpl) run(ctx context.Context) error {
 
 func (o *ownerImpl) IsOwner(_ context.Context) bool {
 	return o.manager.IsOwner()
+}
+
+func (o *ownerImpl) EnqueueJob(job model.AdminJob) error {
+	if !o.manager.IsOwner() {
+		return errors.Trace(concurrency.ErrElectionNotLeader)
+	}
+	switch job.Type {
+	case model.AdminResume:
+	case model.AdminStop, model.AdminRemove:
+		_, ok := o.changeFeeds[job.CfID]
+		if !ok {
+			return errors.Errorf("changefeed [%s] not found", job.CfID)
+		}
+	default:
+		return errors.Errorf("invalid admin job type: %d", job.Type)
+	}
+	o.adminJobsLock.Lock()
+	o.adminJobs = append(o.adminJobs, job)
+	o.adminJobsLock.Unlock()
+	return nil
 }
 
 func (o *ownerImpl) writeDebugInfo(w io.Writer) {

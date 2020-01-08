@@ -270,6 +270,26 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 		return len(w.details) == 0
 	}), check.IsTrue)
 
+	// create a changefeed
+	err = kv.SaveChangeFeedDetail(context.Background(), cli, detail, changefeedID)
+	c.Assert(err, check.IsNil)
+	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
+		return atomic.LoadInt32(&runChangeFeedWatcherCount) == 2
+	}), check.IsTrue)
+	w.lock.RLock()
+	c.Assert(len(w.details), check.Equals, 1)
+	w.lock.RUnlock()
+
+	// dispatch a stop changefeed admin job
+	detail.AdminJobType = model.AdminStop
+	err = kv.SaveChangeFeedDetail(context.Background(), cli, detail, changefeedID)
+	c.Assert(err, check.IsNil)
+	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
+		w.lock.RLock()
+		defer w.lock.RUnlock()
+		return len(w.details) == 0
+	}), check.IsTrue)
+
 	cancel()
 	wg.Wait()
 }
