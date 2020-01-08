@@ -76,7 +76,7 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 	c.Assert(txn.DDL, check.IsNil)
 }
 
-func (s *filterSuite) TestIsIgnoreTxnCommitTs(c *check.C) {
+func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 	detail := ChangeFeedDetail{
 		Config: &ReplicaConfig{
 			IgnoreTxnCommitTs: []uint64{1, 3},
@@ -92,6 +92,6 @@ func (s *filterSuite) TestIsIgnoreTxnCommitTs(c *check.C) {
 	}
 
 	for _, tc := range testCases {
-		c.Assert(detail.isIgnoreTxnCommitTs(tc.txn), check.Equals, tc.ignore)
+		c.Assert(detail.ShouldIgnoreTxn(tc.txn), check.Equals, tc.ignore)
 	}
 }

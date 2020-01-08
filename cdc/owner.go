@@ -682,36 +682,45 @@ handleEachChangefeed:
 
 		cfInfo.banlanceOrphanTables(context.Background(), o.captures)
 		ddlTxn := model.Txn{Ts: todoDDLJob.Job.BinlogInfo.FinishedTS, DDL: todoDDLJob}
-		cfInfo.detail.FilterTxn(&ddlTxn)
-		if ddlTxn.DDL == nil {
-			log.Warn(
-				"DDL ignored",
+		if cfInfo.detail.ShouldIgnoreTxn(&ddlTxn) {
+			log.Info(
+				"DDL txn ignored",
 				zap.Int64("ID", todoDDLJob.Job.ID),
-				zap.String("db", todoDDLJob.Database),
-				zap.String("tbl", todoDDLJob.Table),
+				zap.String("query", todoDDLJob.Job.Query),
+				zap.Uint64("ts", ddlTxn.Ts),
 			)
 		} else {
-			err = cfInfo.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, ddlTxn)
-			// If DDL executing failed, pause the changefeed and print log, rather
-			// than return an error and break the running of this owner.
-			if err != nil {
-				cfInfo.Status = model.ChangeFeedDDLExecuteFailed
-				log.Error("Execute DDL failed",
-					zap.String("ChangeFeedID", changeFeedID),
-					zap.Error(err),
-					zap.Reflect("ddlJob", todoDDLJob))
-				err = o.EnqueueJob(model.AdminJob{
-					CfID: changeFeedID,
-					Type: model.AdminStop,
-				})
+			cfInfo.detail.FilterTxn(&ddlTxn)
+			if ddlTxn.DDL == nil {
+				log.Warn(
+					"DDL ignored",
+					zap.Int64("ID", todoDDLJob.Job.ID),
+					zap.String("query", todoDDLJob.Job.Query),
+					zap.Uint64("ts", todoDDLJob.Job.BinlogInfo.FinishedTS),
+				)
+			} else {
+				err = cfInfo.ddlHandler.ExecDDL(ctx, cfInfo.SinkURI, ddlTxn)
+				// If DDL executing failed, pause the changefeed and print log, rather
+				// than return an error and break the running of this owner.
 				if err != nil {
-					return errors.Trace(err)
+					cfInfo.Status = model.ChangeFeedDDLExecuteFailed
+					log.Error("Execute DDL failed",
+						zap.String("ChangeFeedID", changeFeedID),
+						zap.Error(err),
+						zap.Reflect("ddlJob", todoDDLJob))
+					err = o.EnqueueJob(model.AdminJob{
+						CfID: changeFeedID,
+						Type: model.AdminStop,
+					})
+					if err != nil {
+						return errors.Trace(err)
+					}
+					continue handleEachChangefeed
 				}
-				continue handleEachChangefeed
+				log.Info("Execute DDL succeeded",
+					zap.String("ChangeFeedID", changeFeedID),
+					zap.Reflect("ddlJob", todoDDLJob))
 			}
-			log.Info("Execute DDL succeeded",
-				zap.String("ChangeFeedID", changeFeedID),
-				zap.Reflect("ddlJob", todoDDLJob))
 		}
 		if cfInfo.Status != model.ChangeFeedExecDDL {
 			log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",

@@ -56,7 +56,8 @@ func (detail *ChangeFeedDetail) getFilter() *filter.Filter {
 	return detail.filter
 }
 
-func (detail *ChangeFeedDetail) isIgnoreTxnCommitTs(t *Txn) bool {
+// ShouldIgnoreTxn returns true is the given txn should be ignored
+func (detail *ChangeFeedDetail) ShouldIgnoreTxn(t *Txn) bool {
 	for _, ignoreTs := range detail.getConfig().IgnoreTxnCommitTs {
 		if ignoreTs == t.Ts {
 			return true
@@ -81,13 +82,13 @@ func (detail *ChangeFeedDetail) ShouldIgnoreTable(db, tbl string) bool {
 // CDC only supports filtering by database/table now.
 func (detail *ChangeFeedDetail) FilterTxn(t *Txn) {
 	if t.IsDDL() {
-		if detail.isIgnoreTxnCommitTs(t) || detail.ShouldIgnoreTable(t.DDL.Database, t.DDL.Table) {
+		if detail.ShouldIgnoreTable(t.DDL.Database, t.DDL.Table) {
 			t.DDL = nil
 		}
 	} else {
 		var filteredDMLs []*DML
 		for _, dml := range t.DMLs {
-			if !detail.isIgnoreTxnCommitTs(t) && !detail.ShouldIgnoreTable(dml.Database, dml.Table) {
+			if !detail.ShouldIgnoreTable(dml.Database, dml.Table) {
 				filteredDMLs = append(filteredDMLs, dml)
 			}
 		}
