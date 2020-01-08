@@ -20,10 +20,10 @@ import (
 // common errors
 // use a language builtin error type without error trace stack
 var (
-	ErrWriteTsConflict               = errors.New("write ts conflict")
-	ErrChangeFeedNotExists           = errors.New("changefeed not exists")
-	ErrSubChangeFeedInfoNotExists    = errors.New("subchangefeedinfo not exists")
-	ErrWriteSubChangeFeedInfoConlict = errors.New("write subchangefeedinfo conflict")
-	ErrFindPLockNotCommit            = errors.New("subchangefeedinfo has p-lock not commited")
-	ErrAdminStopProcessor            = errors.New("stop processor by admin command")
+	ErrWriteTsConflict        = errors.New("write ts conflict")
+	ErrChangeFeedNotExists    = errors.New("changefeed not exists")
+	ErrTaskStatusNotExists    = errors.New("task not exists")
+	ErrWriteTaskStatusConlict = errors.New("write task status conflict")
+	ErrFindPLockNotCommit     = errors.New("task status has p-lock not committed")
+	ErrAdminStopProcessor     = errors.New("stop processor by admin command")
 )

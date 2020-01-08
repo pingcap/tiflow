@@ -109,7 +109,7 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 		captureID    = "test-capture"
 		pdEndpoints  = []string{}
 		detail       = model.ChangeFeedDetail{}
-		key          = kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
+		key          = kv.GetEtcdKeyTask(changefeedID, captureID)
 	)
 
 	oriRunProcessor := runProcessor
@@ -126,25 +126,25 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer cli.Close()
 
-	// create a subchangefeed
+	// create a processor
 	_, err = cli.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
 
-	// subchangefeed exists before watch starts
+	// processor exists before watch starts
 	errCh := make(chan error, 1)
 	sw := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh, nil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runProcessorCount) == 1
 	}), check.IsTrue)
 
-	// delete the subchangefeed
+	// delete the processor
 	_, err = cli.Delete(context.Background(), key)
 	c.Assert(err, check.IsNil)
 	time.Sleep(time.Second)
 	sw.close()
 	c.Assert(sw.isClosed(), check.IsTrue)
 
-	// check ProcessorWatcher watch subchangefeed key can ben canceled
+	// check ProcessorWatcher watch processor key can ben canceled
 	err = sw.reopen()
 	c.Assert(err, check.IsNil)
 	c.Assert(sw.isClosed(), check.IsFalse)
@@ -155,7 +155,7 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 	sw.close()
 	c.Assert(sw.isClosed(), check.IsTrue)
 
-	// check watcher can find new subchangefeed in watch loop
+	// check watcher can find new processor in watch loop
 	errCh2 := make(chan error, 1)
 	runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2, nil)
 	_, err = cli.Put(context.Background(), key, "{}")
@@ -171,7 +171,7 @@ func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 		captureID    = "test-capture-err"
 		pdEndpoints  = []string{}
 		detail       = model.ChangeFeedDetail{}
-		key          = kv.GetEtcdKeySubChangeFeed(changefeedID, captureID)
+		key          = kv.GetEtcdKeyTask(changefeedID, captureID)
 	)
 
 	oriRunProcessor := runProcessor
@@ -188,7 +188,7 @@ func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer cli.Close()
 
-	// create a subchangefeed
+	// create a processor
 	_, err = cli.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
 

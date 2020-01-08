@@ -46,14 +46,14 @@ func GetEtcdKeyChangeFeedStatus(changefeedID string) string {
 	return fmt.Sprintf("%s/changefeed/status/%s", EtcdKeyBase, changefeedID)
 }
 
-// GetEtcdKeySubChangeFeedList returns the key of a subchangefeed info without captureID part
-func GetEtcdKeySubChangeFeedList(changefeedID string) string {
-	return fmt.Sprintf("%s/changefeed/subchangfeed/%s", EtcdKeyBase, changefeedID)
+// GetEtcdKeyTaskList returns the key of a task status without captureID part
+func GetEtcdKeyTaskList(changefeedID string) string {
+	return fmt.Sprintf("%s/changefeed/task/%s", EtcdKeyBase, changefeedID)
 }
 
-// GetEtcdKeySubChangeFeed returns the key of a subchangefeed infoformation
-func GetEtcdKeySubChangeFeed(changefeedID, captureID string) string {
-	return fmt.Sprintf("%s/%s", GetEtcdKeySubChangeFeedList(changefeedID), captureID)
+// GetEtcdKeyTask returns the key of a task status
+func GetEtcdKeyTask(changefeedID, captureID string) string {
+	return fmt.Sprintf("%s/%s", GetEtcdKeyTaskList(changefeedID), captureID)
 }
 
 // GetEtcdKeyCaptureList returns the prefix key of all capture info
@@ -157,21 +157,21 @@ func SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, detail *
 	return errors.Trace(err)
 }
 
-// GetSubChangeFeedInfos queries all subchangefeed info of a changefeed, and returns a map
-// mapping from captureID to SubChangeFeedInfo
-func GetSubChangeFeedInfos(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
-	key := GetEtcdKeySubChangeFeedList(changefeedID)
+// GetAllTaskStatus queries all task status of a changefeed, and returns a map
+// mapping from captureID to TaskStatus
+func GetAllTaskStatus(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
+	key := GetEtcdKeyTaskList(changefeedID)
 	resp, err := client.Get(ctx, key, append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)...)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	pinfo := make(map[string]*model.SubChangeFeedInfo, resp.Count)
+	pinfo := make(map[string]*model.TaskStatus, resp.Count)
 	for _, rawKv := range resp.Kvs {
 		captureID, err := util.ExtractKeySuffix(string(rawKv.Key))
 		if err != nil {
 			return nil, err
 		}
-		info := &model.SubChangeFeedInfo{}
+		info := &model.TaskStatus{}
 		err = info.Unmarshal(rawKv.Value)
 		if err != nil {
 			return nil, err
@@ -182,37 +182,37 @@ func GetSubChangeFeedInfos(ctx context.Context, client *clientv3.Client, changef
 	return pinfo, nil
 }
 
-// GetSubChangeFeedInfo queries subchangefeed info from etcd, returns
+// GetTaskStatus queries task status from etcd, returns
 //  - ModRevision of the given key
-//  - *model.SubChangeFeedInfo unmarshaled from the value
+//  - *model.TaskStatus unmarshaled from the value
 //  - error if error happens
-func GetSubChangeFeedInfo(
+func GetTaskStatus(
 	ctx context.Context,
 	client *clientv3.Client,
 	changefeedID string,
 	captureID string,
 	opts ...clientv3.OpOption,
-) (int64, *model.SubChangeFeedInfo, error) {
-	key := GetEtcdKeySubChangeFeed(changefeedID, captureID)
+) (int64, *model.TaskStatus, error) {
+	key := GetEtcdKeyTask(changefeedID, captureID)
 	resp, err := client.Get(ctx, key, opts...)
 	if err != nil {
 		return 0, nil, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return 0, nil, errors.Annotatef(model.ErrSubChangeFeedInfoNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
+		return 0, nil, errors.Annotatef(model.ErrTaskStatusNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
 	}
-	info := &model.SubChangeFeedInfo{}
+	info := &model.TaskStatus{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
 	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
 }
 
-// PutSubChangeFeedInfo puts subchangefeed info into etcd.
-func PutSubChangeFeedInfo(
+// PutTaskStatus puts task status into etcd.
+func PutTaskStatus(
 	ctx context.Context,
 	client *clientv3.Client,
 	changefeedID string,
 	captureID string,
-	info *model.SubChangeFeedInfo,
+	info *model.TaskStatus,
 	opts ...clientv3.OpOption,
 ) error {
 	data, err := info.Marshal()
@@ -220,7 +220,7 @@ func PutSubChangeFeedInfo(
 		return errors.Trace(err)
 	}
 
-	key := GetEtcdKeySubChangeFeed(changefeedID, captureID)
+	key := GetEtcdKeyTask(changefeedID, captureID)
 
 	_, err = client.Put(ctx, key, data)
 	if err != nil {
@@ -247,15 +247,15 @@ func PutChangeFeedStatus(
 	return errors.Trace(err)
 }
 
-// DeleteSubChangeFeedInfo deletes subchangefeedinfo from etcd
-func DeleteSubChangeFeedInfo(
+// DeleteTaskStatus deletes task status from etcd
+func DeleteTaskStatus(
 	ctx context.Context,
 	cli *clientv3.Client,
 	cfID string,
 	captureID string,
 	opts ...clientv3.OpOption,
 ) error {
-	key := GetEtcdKeySubChangeFeed(cfID, captureID)
+	key := GetEtcdKeyTask(cfID, captureID)
 	_, err := cli.Delete(ctx, key)
 	return errors.Trace(err)
 }

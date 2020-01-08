@@ -75,7 +75,7 @@ type changeFeed struct {
 	tables        map[uint64]schema.TableName
 	orphanTables  map[uint64]model.ProcessTableInfo
 	toCleanTables map[uint64]struct{}
-	infoWriter    *storage.OwnerSubCFInfoEtcdWriter
+	infoWriter    *storage.OwnerTaskStatusEtcdWriter
 }
 
 // String implements fmt.Stringer interface.
@@ -172,7 +172,7 @@ func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.
 	c.banlanceOrphanTables(ctx, captures)
 }
 
-func (c *changeFeed) restoreTableInfos(infoSnapshot *model.SubChangeFeedInfo, captureID string) {
+func (c *changeFeed) restoreTableInfos(infoSnapshot *model.TaskStatus, captureID string) {
 	c.ProcessorInfos[captureID].TableInfos = infoSnapshot.TableInfos
 }
 
@@ -181,17 +181,17 @@ func (c *changeFeed) cleanTables(ctx context.Context) {
 
 cleanLoop:
 	for id := range c.toCleanTables {
-		captureID, subInfo, ok := findSubChangefeedWithTable(c.ProcessorInfos, id)
+		captureID, taskStatus, ok := findTaskStatusWithTable(c.ProcessorInfos, id)
 		if !ok {
 			log.Warn("ignore clean table id", zap.Uint64("id", id))
 			cleanIDs = append(cleanIDs, id)
 			continue
 		}
 
-		infoClone := subInfo.Clone()
-		subInfo.RemoveTable(id)
+		infoClone := taskStatus.Clone()
+		taskStatus.RemoveTable(id)
 
-		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, subInfo, true)
+		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, taskStatus, true)
 		if err == nil {
 			c.ProcessorInfos[captureID] = newInfo
 		}
@@ -205,7 +205,7 @@ cleanLoop:
 			log.Info("cleanup table success",
 				zap.Uint64("table id", id),
 				zap.String("capture id", captureID))
-			log.Debug("after remove", zap.Stringer("subchangefeed info", subInfo))
+			log.Debug("after remove", zap.Stringer("task status", taskStatus))
 			cleanIDs = append(cleanIDs, id)
 		default:
 			c.restoreTableInfos(infoClone, captureID)
@@ -219,7 +219,7 @@ cleanLoop:
 	}
 }
 
-func findSubChangefeedWithTable(infos model.ProcessorsInfos, tableID uint64) (captureID string, info *model.SubChangeFeedInfo, ok bool) {
+func findTaskStatusWithTable(infos model.ProcessorsInfos, tableID uint64) (captureID string, info *model.TaskStatus, ok bool) {
 	for id, info := range infos {
 		for _, table := range info.TableInfos {
 			if table.ID == tableID {
@@ -244,7 +244,7 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 
 		info := c.ProcessorInfos[captureID]
 		if info == nil {
-			info = new(model.SubChangeFeedInfo)
+			info = new(model.TaskStatus)
 		}
 		infoClone := info.Clone()
 		info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{
@@ -382,9 +382,9 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 		for _, tbl := range snap.Tables {
 			changefeed.reAddTable(tbl.ID, tbl.StartTs)
 		}
-		err := kv.DeleteSubChangeFeedInfo(ctx, o.etcdClient, snap.CfID, snap.CaptureID)
+		err := kv.DeleteTaskStatus(ctx, o.etcdClient, snap.CfID, snap.CaptureID)
 		if err != nil {
-			log.Warn("failed to delete subchangefeed info",
+			log.Warn("failed to delete processor info",
 				zap.String("changefeedID", snap.CfID),
 				zap.String("captureID", snap.CaptureID),
 				zap.Error(err),
@@ -423,7 +423,7 @@ func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 			}
 		}
 
-		key := kv.GetEtcdKeySubChangeFeed(feed.ID, info.ID)
+		key := kv.GetEtcdKeyTask(feed.ID, info.ID)
 		if _, err := o.etcdClient.Delete(context.Background(), key); err != nil {
 			log.Warn("failed to delete key", zap.Error(err))
 		}
@@ -508,7 +508,7 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 		TargetTs:        detail.GetTargetTs(),
 		ProcessorInfos:  processorsInfos,
 		DDLCurrentIndex: 0,
-		infoWriter:      storage.NewOwnerSubCFInfoEtcdWriter(o.etcdClient),
+		infoWriter:      storage.NewOwnerTaskStatusEtcdWriter(o.etcdClient),
 	}
 	return cf, nil
 }

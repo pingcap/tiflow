@@ -36,7 +36,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Capture represents a Capture server, it monitors the changefeed information in etcd and schedules SubChangeFeed on it.
+// Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	pdEndpoints  []string
 	etcdClient   *clientv3.Client
