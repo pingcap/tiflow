@@ -41,16 +41,23 @@ type ChangeFeedDetail struct {
 	Config *ReplicaConfig `json:"config"`
 }
 
+func (detail *ChangeFeedDetail) getConfig() *ReplicaConfig {
+	if detail.Config == nil {
+		detail.Config = &ReplicaConfig{}
+	}
+	return detail.Config
+}
+
 func (detail *ChangeFeedDetail) getFilter() *filter.Filter {
 	if detail.filter == nil {
-		rules := detail.Config.FilterRules
-		detail.filter = filter.New(detail.Config.FilterCaseSensitive, rules)
+		rules := detail.getConfig().FilterRules
+		detail.filter = filter.New(detail.getConfig().FilterCaseSensitive, rules)
 	}
 	return detail.filter
 }
 
 func (detail *ChangeFeedDetail) isIgnoreTxnCommitTs(t *Txn) bool {
-	for _, ignoreTs := range detail.Config.IgnoreTxnCommitTs {
+	for _, ignoreTs := range detail.getConfig().IgnoreTxnCommitTs {
 		if ignoreTs == t.Ts {
 			return true
 		}
