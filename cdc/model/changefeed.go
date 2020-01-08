@@ -53,7 +53,7 @@ func (detail *ChangeFeedDetail) getFilter() *filter.Filter {
 // ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
 // Set `tbl` to an empty string to test against the whole database.
 func (detail *ChangeFeedDetail) ShouldIgnoreTable(db, tbl string) bool {
-	if isSysSchema(db) {
+	if IsSysSchema(db) {
 		return true
 	}
 	f := detail.getFilter()
@@ -118,7 +118,8 @@ func (detail *ChangeFeedDetail) Unmarshal(data []byte) error {
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 
-func isSysSchema(db string) bool {
+// IsSysSchema returns true if the given schema is a system schema
+func IsSysSchema(db string) bool {
 	db = strings.ToUpper(db)
 	for _, schema := range []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "MYSQL", "METRIC_SCHEMA"} {
 		if schema == db {
