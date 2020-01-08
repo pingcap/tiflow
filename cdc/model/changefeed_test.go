@@ -23,7 +23,7 @@ type filterSuite struct{}
 var _ = check.Suite(&filterSuite{})
 
 func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
-	detail := ChangeFeedDetail{}
+	detail := ChangeFeedDetail{Config: &ReplicaConfig{}}
 	c.Assert(detail.ShouldIgnoreTable("information_schema", ""), check.IsTrue)
 	c.Assert(detail.ShouldIgnoreTable("information_schema", "statistics"), check.IsTrue)
 	c.Assert(detail.ShouldIgnoreTable("performance_schema", ""), check.IsTrue)
