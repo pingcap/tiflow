@@ -23,21 +23,21 @@ type filterSuite struct{}
 var _ = check.Suite(&filterSuite{})
 
 func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
-	detail := ChangeFeedDetail{Config: &ReplicaConfig{}}
-	c.Assert(detail.ShouldIgnoreTable("information_schema", ""), check.IsTrue)
-	c.Assert(detail.ShouldIgnoreTable("information_schema", "statistics"), check.IsTrue)
-	c.Assert(detail.ShouldIgnoreTable("performance_schema", ""), check.IsTrue)
-	c.Assert(detail.ShouldIgnoreTable("metric_schema", "query_duration"), check.IsTrue)
-	c.Assert(detail.ShouldIgnoreTable("sns", "user"), check.IsFalse)
+	info := ChangeFeedInfo{Config: &ReplicaConfig{}}
+	c.Assert(info.ShouldIgnoreTable("information_schema", ""), check.IsTrue)
+	c.Assert(info.ShouldIgnoreTable("information_schema", "statistics"), check.IsTrue)
+	c.Assert(info.ShouldIgnoreTable("performance_schema", ""), check.IsTrue)
+	c.Assert(info.ShouldIgnoreTable("metric_schema", "query_duration"), check.IsTrue)
+	c.Assert(info.ShouldIgnoreTable("sns", "user"), check.IsFalse)
 	txn := Txn{DDL: &DDL{
 		Database: "information_schema",
 	}}
-	detail.FilterTxn(&txn)
+	info.FilterTxn(&txn)
 	c.Assert(txn.DDL, check.IsNil)
 }
 
 func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
-	detail := ChangeFeedDetail{
+	info := ChangeFeedInfo{
 		Config: &ReplicaConfig{
 			FilterRules: &filter.Rules{
 				DoDBs: []string{"sns", "ecom"},
@@ -49,7 +49,7 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 		},
 	}
 	assertIgnore := func(db, tbl string, boolCheck check.Checker) {
-		c.Assert(detail.ShouldIgnoreTable(db, tbl), boolCheck)
+		c.Assert(info.ShouldIgnoreTable(db, tbl), boolCheck)
 	}
 	assertIgnore("other", "", check.IsTrue)
 	assertIgnore("other", "what", check.IsTrue)
@@ -65,19 +65,19 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 		{Database: "ecom"},
 		{Database: "ecom", Table: "test"},
 	}}
-	detail.FilterTxn(&txn)
+	info.FilterTxn(&txn)
 	c.Assert(txn.DMLs, check.HasLen, 2)
 
 	txn = Txn{DDL: &DDL{
 		Database: "sns",
 		Table:    "log",
 	}}
-	detail.FilterTxn(&txn)
+	info.FilterTxn(&txn)
 	c.Assert(txn.DDL, check.IsNil)
 }
 
 func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
-	detail := ChangeFeedDetail{
+	info := ChangeFeedInfo{
 		Config: &ReplicaConfig{
 			IgnoreTxnCommitTs: []uint64{1, 3},
 		},
@@ -92,6 +92,6 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 	}
 
 	for _, tc := range testCases {
-		c.Assert(detail.ShouldIgnoreTxn(tc.txn), check.Equals, tc.ignore)
+		c.Assert(info.ShouldIgnoreTxn(tc.txn), check.Equals, tc.ignore)
 	}
 }

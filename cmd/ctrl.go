@@ -100,13 +100,13 @@ var ctrlCmd = &cobra.Command{
 		}
 		switch ctrlCommand {
 		case CtrlQueryCfInfo:
-			info, err := kv.GetChangeFeedDetail(context.Background(), cli, ctrlCfID)
+			info, err := kv.GetChangeFeedInfo(context.Background(), cli, ctrlCfID)
 			if err != nil {
 				return err
 			}
 			return jsonPrint(info)
 		case CtrlQueryCfStatus:
-			info, err := kv.GetChangeFeedInfo(context.Background(), cli, ctrlCfID)
+			info, err := kv.GetChangeFeedStatus(context.Background(), cli, ctrlCfID)
 			if err != nil {
 				return err
 			}

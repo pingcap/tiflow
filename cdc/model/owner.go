@@ -181,12 +181,12 @@ type ChangeFeedID = string
 // ProcessorsInfos maps from capture IDs to TaskStatus
 type ProcessorsInfos map[CaptureID]*TaskStatus
 
-// ChangeFeedStatus is the type for change feed status
-type ChangeFeedStatus int
+// ChangeFeedState is the type for change feed status
+type ChangeFeedState int
 
 const (
 	// ChangeFeedUnknown stands for all unknown status
-	ChangeFeedUnknown ChangeFeedStatus = iota
+	ChangeFeedUnknown ChangeFeedState = iota
 	// ChangeFeedSyncDML means DMLs are being processed
 	ChangeFeedSyncDML
 	// ChangeFeedWaitToExecDDL means we are waiting to execute a DDL
@@ -210,7 +210,7 @@ func (p ProcessorsInfos) String() string {
 }
 
 // String implements fmt.Stringer interface.
-func (s ChangeFeedStatus) String() string {
+func (s ChangeFeedState) String() string {
 	switch s {
 	case ChangeFeedSyncDML:
 		return "SyncDML"
@@ -224,23 +224,23 @@ func (s ChangeFeedStatus) String() string {
 	return "Unknown"
 }
 
-// ChangeFeedInfo stores information about a ChangeFeed
-type ChangeFeedInfo struct {
+// ChangeFeedStatus stores information about a ChangeFeed
+type ChangeFeedStatus struct {
 	SinkURI      string       `json:"sink-uri"`
 	ResolvedTs   uint64       `json:"resolved-ts"`
 	CheckpointTs uint64       `json:"checkpoint-ts"`
 	AdminJobType AdminJobType `json:"admin-job-type"`
 }
 
-// Marshal returns json encoded string of ChangeFeedInfo, only contains necessary fields stored in storage
-func (info *ChangeFeedInfo) Marshal() (string, error) {
-	data, err := json.Marshal(info)
+// Marshal returns json encoded string of ChangeFeedStatus, only contains necessary fields stored in storage
+func (status *ChangeFeedStatus) Marshal() (string, error) {
+	data, err := json.Marshal(status)
 	return string(data), errors.Trace(err)
 }
 
-// Unmarshal unmarshals into *ChangeFeedInfo from json marshal byte slice
-func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
-	err := json.Unmarshal(data, info)
+// Unmarshal unmarshals into *ChangeFeedStatus from json marshal byte slice
+func (status *ChangeFeedStatus) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, status)
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 

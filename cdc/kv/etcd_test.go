@@ -73,7 +73,7 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 	}
 	for _, tc := range testCases {
 		for i := 0; i < len(tc.ids); i++ {
-			_, err := s.client.Put(context.Background(), GetEtcdKeyChangeFeedConfig(tc.ids[i]), tc.details[i])
+			_, err := s.client.Put(context.Background(), GetEtcdKeyChangeFeedInfo(tc.ids[i]), tc.details[i])
 			c.Assert(err, check.IsNil)
 		}
 		_, result, err := GetChangeFeeds(context.Background(), s.client)
@@ -146,21 +146,21 @@ func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
 
 func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
 	ctx := context.Background()
-	detail := &model.ChangeFeedDetail{
+	detail := &model.ChangeFeedInfo{
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
 	}
 	cfID := "test-op-cf"
 
-	err := SaveChangeFeedDetail(ctx, s.client, detail, cfID)
+	err := SaveChangeFeedInfo(ctx, s.client, detail, cfID)
 	c.Assert(err, check.IsNil)
 
-	d, err := GetChangeFeedDetail(ctx, s.client, cfID)
+	d, err := GetChangeFeedInfo(ctx, s.client, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(d.SinkURI, check.Equals, detail.SinkURI)
 
-	err = DeleteChangeFeedDetail(ctx, s.client, cfID)
+	err = DeleteChangeFeedInfo(ctx, s.client, cfID)
 	c.Assert(err, check.IsNil)
 
-	_, err = GetChangeFeedDetail(ctx, s.client, cfID)
+	_, err = GetChangeFeedInfo(ctx, s.client, cfID)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
 }

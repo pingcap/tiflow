@@ -82,14 +82,14 @@ func (h *handlerForPrueDMLTest) Close() error {
 	return nil
 }
 
-var _ ChangeFeedInfoRWriter = &handlerForPrueDMLTest{}
+var _ ChangeFeedRWriter = &handlerForPrueDMLTest{}
 
-// Read implements ChangeFeedInfoRWriter interface.
-func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedDetail, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+// Read implements ChangeFeedRWriter interface.
+func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	h.index++
-	return map[model.ChangeFeedID]*model.ChangeFeedDetail{
+	return map[model.ChangeFeedID]*model.ChangeFeedInfo{
 			"test_change_feed": {
 				TargetTs: 100,
 			},
@@ -105,14 +105,14 @@ func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedI
 		}, nil
 }
 
-// Read implements ChangeFeedInfoRWriter interface.
-func (h *handlerForPrueDMLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
+// Read implements ChangeFeedRWriter interface.
+func (h *handlerForPrueDMLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	info, exist := infos["test_change_feed"]
 	h.c.Assert(exist, check.IsTrue)
 	h.c.Assert(info.ResolvedTs, check.Equals, h.expectResolvedTs[h.index])
-	// h.c.Assert(info.Status, check.Equals, model.ChangeFeedSyncDML)
+	// h.c.Assert(info.State, check.Equals, model.ChangeFeedSyncDML)
 	if h.index >= len(h.expectResolvedTs)-1 {
 		log.Info("cancel")
 		h.cancel()
@@ -136,10 +136,10 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
 			tables:                  tables,
-			ChangeFeedInfo:          &model.ChangeFeedInfo{},
+			ChangeFeedStatus:        &model.ChangeFeedStatus{},
 			processorLastUpdateTime: make(map[string]time.Time),
 			TargetTs:                100,
-			Status:                  model.ChangeFeedSyncDML,
+			State:                   model.ChangeFeedSyncDML,
 			ProcessorInfos: model.ProcessorsInfos{
 				"capture_1": {},
 				"capture_2": {},
@@ -178,7 +178,7 @@ type handlerForDDLTest struct {
 
 	dmlExpectIndex   int
 	expectResolvedTs []uint64
-	expectStatus     []model.ChangeFeedStatus
+	expectStatus     []model.ChangeFeedState
 
 	c      *check.C
 	cancel func()
@@ -206,13 +206,13 @@ func (h *handlerForDDLTest) Close() error {
 	return nil
 }
 
-func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.CaptureID]*model.ChangeFeedDetail, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.CaptureID]*model.ChangeFeedInfo, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if h.dmlIndex < len(h.resolvedTs1)-1 {
 		h.dmlIndex++
 	}
-	return map[model.ChangeFeedID]*model.ChangeFeedDetail{
+	return map[model.ChangeFeedID]*model.ChangeFeedInfo{
 			"test_change_feed": {
 				TargetTs: 100,
 			},
@@ -230,7 +230,7 @@ func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.CaptureID]*mode
 		}, nil
 }
 
-func (h *handlerForDDLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
+func (h *handlerForDDLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.dmlExpectIndex++
@@ -238,7 +238,7 @@ func (h *handlerForDDLTest) Write(ctx context.Context, infos map[model.ChangeFee
 	h.c.Assert(exist, check.IsTrue)
 	h.currentGlobalResolvedTs = info.ResolvedTs
 	h.c.Assert(info.ResolvedTs, check.Equals, h.expectResolvedTs[h.dmlExpectIndex])
-	// h.c.Assert(info.Status, check.Equals, h.expectStatus[h.dmlExpectIndex])
+	// h.c.Assert(info.State, check.Equals, h.expectStatus[h.dmlExpectIndex])
 	if h.dmlExpectIndex >= len(h.expectResolvedTs)-1 {
 		log.Info("cancel")
 		h.cancel()
@@ -299,7 +299,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 			11, 11,
 			89, 89,
 			100},
-		expectStatus: []model.ChangeFeedStatus{
+		expectStatus: []model.ChangeFeedState{
 			model.ChangeFeedWaitToExecDDL, model.ChangeFeedExecDDL,
 			model.ChangeFeedWaitToExecDDL, model.ChangeFeedExecDDL,
 			model.ChangeFeedWaitToExecDDL, model.ChangeFeedExecDDL,
@@ -315,11 +315,11 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
 			tables:                  tables,
-			detail:                  &model.ChangeFeedDetail{},
-			ChangeFeedInfo:          &model.ChangeFeedInfo{},
+			info:                    &model.ChangeFeedInfo{},
+			ChangeFeedStatus:        &model.ChangeFeedStatus{},
 			processorLastUpdateTime: make(map[string]time.Time),
 			TargetTs:                100,
-			Status:                  model.ChangeFeedSyncDML,
+			State:                   model.ChangeFeedSyncDML,
 			ProcessorInfos: model.ProcessorsInfos{
 				"capture_1": {},
 				"capture_2": {},
@@ -347,10 +347,10 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	cfID := "test_handle_admin"
 	sampleCF := &changeFeed{
-		ID:             cfID,
-		detail:         &model.ChangeFeedDetail{},
-		ChangeFeedInfo: &model.ChangeFeedInfo{},
-		Status:         model.ChangeFeedSyncDML,
+		ID:               cfID,
+		info:             &model.ChangeFeedInfo{},
+		ChangeFeedStatus: &model.ChangeFeedStatus{},
+		State:            model.ChangeFeedSyncDML,
 		ProcessorInfos: model.ProcessorsInfos{
 			"capture_1": {ResolvedTs: 10001},
 			"capture_2": {},
@@ -363,7 +363,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		cancelWatchCapture: cancel,
 		manager:            manager,
 		etcdClient:         s.client,
-		cfRWriter:          storage.NewChangeFeedInfoEtcdRWriter(s.client),
+		cfRWriter:          storage.NewChangeFeedEtcdRWriter(s.client),
 	}
 	owner.changeFeeds = map[model.ChangeFeedID]*changeFeed{cfID: sampleCF}
 	for cid, pinfo := range sampleCF.ProcessorInfos {
@@ -388,10 +388,10 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
 	checkAdminJobLen(0)
 	c.Assert(len(owner.changeFeeds), check.Equals, 0)
-	// check changefeed detail is set admin job
-	d, err := kv.GetChangeFeedDetail(ctx, owner.etcdClient, cfID)
+	// check changefeed info is set admin job
+	info, err := kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
 	c.Assert(err, check.IsNil)
-	c.Assert(d.AdminJobType, check.Equals, model.AdminStop)
+	c.Assert(info.AdminJobType, check.Equals, model.AdminStop)
 	// check processor is set admin job
 	for cid := range sampleCF.ProcessorInfos {
 		_, subInfo, err := kv.GetTaskStatus(ctx, owner.etcdClient, cfID, cid)
@@ -399,19 +399,19 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminStop)
 	}
 	// check changefeed status is set admin job
-	st, err := kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
+	st, err := kv.GetChangeFeedStatus(ctx, owner.etcdClient, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminStop)
 
 	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminResume}), check.IsNil)
 	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
 	checkAdminJobLen(0)
-	// check changefeed detail is set admin job
-	d, err = kv.GetChangeFeedDetail(ctx, owner.etcdClient, cfID)
+	// check changefeed info is set admin job
+	info, err = kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
 	c.Assert(err, check.IsNil)
-	c.Assert(d.AdminJobType, check.Equals, model.AdminResume)
+	c.Assert(info.AdminJobType, check.Equals, model.AdminResume)
 	// check changefeed status is set admin job
-	st, err = kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
+	st, err = kv.GetChangeFeedStatus(ctx, owner.etcdClient, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminResume)
 
@@ -420,8 +420,8 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
 	checkAdminJobLen(0)
 	c.Assert(len(owner.changeFeeds), check.Equals, 0)
-	// check changefeed detail is deleted
-	_, err = kv.GetChangeFeedDetail(ctx, owner.etcdClient, cfID)
+	// check changefeed info is deleted
+	_, err = kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
 	// check processor is set admin job
 	for cid := range sampleCF.ProcessorInfos {
@@ -430,7 +430,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminRemove)
 	}
 	// check changefeed status is set admin job
-	st, err = kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
+	st, err = kv.GetChangeFeedStatus(ctx, owner.etcdClient, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminRemove)
 }

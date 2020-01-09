@@ -69,7 +69,7 @@ func (s *schedulerSuite) TearDownTest(c *check.C) {
 func mockRunProcessor(
 	ctx context.Context,
 	pdEndpoints []string,
-	detail model.ChangeFeedDetail,
+	detail model.ChangeFeedInfo,
 	changefeedID string,
 	captureID string,
 	_ processorCallback,
@@ -81,7 +81,7 @@ func mockRunProcessor(
 func mockRunProcessorError(
 	ctx context.Context,
 	pdEndpoints []string,
-	detail model.ChangeFeedDetail,
+	detail model.ChangeFeedInfo,
 	changefeedID string,
 	captureID string,
 	_ processorCallback,
@@ -95,7 +95,7 @@ func mockRunProcessorWatcher(
 	captureID string,
 	pdEndpoints []string,
 	etcdCli *clientv3.Client,
-	detail model.ChangeFeedDetail,
+	detail model.ChangeFeedInfo,
 	errCh chan error,
 	_ processorCallback,
 ) *ProcessorWatcher {
@@ -108,7 +108,7 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 		changefeedID = "test-changefeed"
 		captureID    = "test-capture"
 		pdEndpoints  = []string{}
-		detail       = model.ChangeFeedDetail{}
+		detail       = model.ChangeFeedInfo{}
 		key          = kv.GetEtcdKeyTask(changefeedID, captureID)
 	)
 
@@ -170,7 +170,7 @@ func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 		changefeedID = "test-changefeed-err"
 		captureID    = "test-capture-err"
 		pdEndpoints  = []string{}
-		detail       = model.ChangeFeedDetail{}
+		detail       = model.ChangeFeedInfo{}
 		key          = kv.GetEtcdKeyTask(changefeedID, captureID)
 	)
 
@@ -216,8 +216,8 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 		captureID    = "test-capture"
 		pdEndpoints  = []string{}
 		sinkURI      = "root@tcp(127.0.0.1:3306)/test"
-		detail       = &model.ChangeFeedDetail{SinkURI: sinkURI}
-		key          = kv.GetEtcdKeyChangeFeedConfig(changefeedID)
+		detail       = &model.ChangeFeedInfo{SinkURI: sinkURI}
+		key          = kv.GetEtcdKeyChangeFeedInfo(changefeedID)
 	)
 
 	oriRunProcessorWatcher := runProcessorWatcher
@@ -252,13 +252,13 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	time.Sleep(time.Millisecond * 100)
 
 	// create a changefeed
-	err = kv.SaveChangeFeedDetail(context.Background(), cli, detail, changefeedID)
+	err = kv.SaveChangeFeedInfo(context.Background(), cli, detail, changefeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runChangeFeedWatcherCount) == 1
 	}), check.IsTrue)
 	w.lock.RLock()
-	c.Assert(len(w.details), check.Equals, 1)
+	c.Assert(len(w.infos), check.Equals, 1)
 	w.lock.RUnlock()
 
 	// delete the changefeed
@@ -267,27 +267,27 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		w.lock.RLock()
 		defer w.lock.RUnlock()
-		return len(w.details) == 0
+		return len(w.infos) == 0
 	}), check.IsTrue)
 
 	// create a changefeed
-	err = kv.SaveChangeFeedDetail(context.Background(), cli, detail, changefeedID)
+	err = kv.SaveChangeFeedInfo(context.Background(), cli, detail, changefeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runChangeFeedWatcherCount) == 2
 	}), check.IsTrue)
 	w.lock.RLock()
-	c.Assert(len(w.details), check.Equals, 1)
+	c.Assert(len(w.infos), check.Equals, 1)
 	w.lock.RUnlock()
 
 	// dispatch a stop changefeed admin job
 	detail.AdminJobType = model.AdminStop
-	err = kv.SaveChangeFeedDetail(context.Background(), cli, detail, changefeedID)
+	err = kv.SaveChangeFeedInfo(context.Background(), cli, detail, changefeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		w.lock.RLock()
 		defer w.lock.RUnlock()
-		return len(w.details) == 0
+		return len(w.infos) == 0
 	}), check.IsTrue)
 
 	cancel()

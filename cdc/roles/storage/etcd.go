@@ -30,30 +30,30 @@ import (
 	"go.uber.org/zap"
 )
 
-// ChangeFeedInfoRWriter implements `roles.ChangeFeedInfoRWriter` interface
-type ChangeFeedInfoRWriter struct {
+// ChangeFeedRWriter implements `roles.ChangeFeedRWriter` interface
+type ChangeFeedRWriter struct {
 	etcdClient *clientv3.Client
 }
 
-// NewChangeFeedInfoEtcdRWriter returns a new `*ChangeFeedInfoRWriter` instance
-func NewChangeFeedInfoEtcdRWriter(cli *clientv3.Client) *ChangeFeedInfoRWriter {
-	return &ChangeFeedInfoRWriter{
+// NewChangeFeedEtcdRWriter returns a new `*ChangeFeedRWriter` instance
+func NewChangeFeedEtcdRWriter(cli *clientv3.Client) *ChangeFeedRWriter {
+	return &ChangeFeedRWriter{
 		etcdClient: cli,
 	}
 }
 
 // Read reads from etcd, and returns
-// - map mapping from changefeedID to `*model.ChangeFeedDetail`
+// - map mapping from changefeedID to `*model.ChangeFeedInfo`
 // - map mapping from changefeedID to `model.ProcessorsInfos`
-func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedDetail, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+func (rw *ChangeFeedRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
 	_, details, err := kv.GetChangeFeeds(ctx, rw.etcdClient)
 	if err != nil {
 		return nil, nil, err
 	}
-	changefeeds := make(map[string]*model.ChangeFeedDetail, len(details))
+	changefeeds := make(map[string]*model.ChangeFeedInfo, len(details))
 	pinfos := make(map[string]model.ProcessorsInfos, len(details))
 	for changefeedID, rawKv := range details {
-		changefeed := &model.ChangeFeedDetail{}
+		changefeed := &model.ChangeFeedInfo{}
 		err := changefeed.Unmarshal(rawKv.Value)
 		if err != nil {
 			return nil, nil, err
@@ -64,12 +64,12 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeed
 			return nil, nil, err
 		}
 
-		// Set changefeed taskStatus if exists.
-		changefeedInfo, err := kv.GetChangeFeedInfo(ctx, rw.etcdClient, changefeedID)
+		// Set changefeed info if exists.
+		changefeedInfo, err := kv.GetChangeFeedStatus(ctx, rw.etcdClient, changefeedID)
 
 		switch errors.Cause(err) {
 		case nil:
-			changefeed.Info = changefeedInfo
+			changefeed.Status = changefeedInfo
 		case model.ErrChangeFeedNotExists:
 		default:
 			return nil, nil, err
@@ -81,8 +81,8 @@ func (rw *ChangeFeedInfoRWriter) Read(ctx context.Context) (map[model.ChangeFeed
 	return changefeeds, pinfos, nil
 }
 
-// Write writes ChangeFeedInfo of each changefeed into etcd
-func (rw *ChangeFeedInfoRWriter) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedInfo) error {
+// Write writes ChangeFeedStatus of each changefeed into etcd
+func (rw *ChangeFeedRWriter) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
 	var (
 		txn = rw.etcdClient.KV.Txn(ctx)
 		ops = make([]clientv3.Op, 0, embed.DefaultMaxTxnOps)
@@ -139,7 +139,7 @@ type ProcessorTsEtcdRWriter struct {
 	logger       *zap.Logger
 }
 
-// NewProcessorTsEtcdRWriter returns a new `*ChangeFeedInfoRWriter` instance
+// NewProcessorTsEtcdRWriter returns a new `*ChangeFeedRWriter` instance
 func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID string) (*ProcessorTsEtcdRWriter, error) {
 	logger := log.L().With(zap.String("changefeed id", changefeedID)).
 		With(zap.String("capture id", captureID))
@@ -212,7 +212,7 @@ func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 
 // ReadGlobalResolvedTs reads the global resolvedTs from etcd
 func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uint64, error) {
-	info, err := kv.GetChangeFeedInfo(ctx, rw.etcdClient, rw.changefeedID)
+	info, err := kv.GetChangeFeedStatus(ctx, rw.etcdClient, rw.changefeedID)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}

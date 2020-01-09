@@ -133,7 +133,7 @@ func newTxnChannel(inputTxn <-chan model.RawTxn, chanSize int, handleResolvedTs 
 type processor struct {
 	captureID    string
 	changefeedID string
-	changefeed   model.ChangeFeedDetail
+	changefeed   model.ChangeFeedInfo
 
 	pdCli   pd.Client
 	etcdCli *clientv3.Client
@@ -176,7 +176,7 @@ func (t *tableInfo) storeResolvedTS(ts uint64) {
 }
 
 // NewProcessor creates and returns a processor for the specified change feed
-func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedDetail, changefeedID, captureID string) (*processor, error) {
+func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changefeedID, captureID string) (*processor, error) {
 	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
@@ -282,7 +282,7 @@ func (p *processor) wait() {
 }
 
 func (p *processor) writeDebugInfo(w io.Writer) {
-	fmt.Fprintf(w, "changefeedID: %s, detail: %+v, status: %+v\n", p.changefeedID, p.changefeed, p.status)
+	fmt.Fprintf(w, "changefeedID: %s, info: %+v, status: %+v\n", p.changefeedID, p.changefeed, p.status)
 
 	p.tablesMu.Lock()
 	for _, table := range p.tables {
