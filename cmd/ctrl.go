@@ -70,8 +70,9 @@ type cf struct {
 
 // capture holds capture information
 type capture struct {
-	ID      string `json:"id"`
-	IsOwner bool   `json:"is-owner"`
+	ID       string `json:"id"`
+	HostName string `json:"hostname"`
+	IsOwner  bool   `json:"is-owner"`
 }
 
 func jsonPrint(v interface{}) error {
@@ -133,7 +134,7 @@ var ctrlCmd = &cobra.Command{
 			captures := make([]*capture, 0, len(raw))
 			for _, c := range raw {
 				isOwner := c.ID == ownerID
-				captures = append(captures, &capture{ID: c.ID, IsOwner: isOwner})
+				captures = append(captures, &capture{ID: c.ID, HostName: c.HostName, IsOwner: isOwner})
 			}
 			return jsonPrint(captures)
 		case CtrlQuerySubCf:
