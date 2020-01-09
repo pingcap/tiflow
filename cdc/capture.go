@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -63,8 +64,14 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	}
 
 	id := uuid.New().String()
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "Unknown"
+		log.Warn("can not get hostname", zap.Error(err))
+	}
 	info := &model.CaptureInfo{
-		ID: id,
+		ID:       id,
+		HostName: hostname,
 	}
 
 	log.Info("creating capture", zap.String("capture-id", id))
