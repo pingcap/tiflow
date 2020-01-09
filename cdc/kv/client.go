@@ -371,7 +371,7 @@ func (c *CDCClient) singleEventFeed(
 
 	conn, err := c.getConnByMeta(ctx, meta)
 	if err != nil {
-		return uint64(req.CheckpointTs), err
+		return req.CheckpointTs, err
 	}
 
 	client := cdcpb.NewChangeDataClient(conn)
@@ -398,10 +398,7 @@ func (c *CDCClient) singleEventFeed(
 				ResolvedTs: item.commit,
 			},
 		}
-		if item.commit > req.CheckpointTs {
-			req.CheckpointTs = item.commit
-		}
-
+		updateCheckpointTS(&req.CheckpointTs, item.commit)
 		select {
 		case eventCh <- revent:
 		case <-ctx.Done():
@@ -416,11 +413,11 @@ func (c *CDCClient) singleEventFeed(
 	for {
 		cevent, err := stream.Recv()
 		if err == io.EOF {
-			return req.CheckpointTs, nil
+			return atomic.LoadUint64(&req.CheckpointTs), nil
 		}
 
 		if err != nil {
-			return req.CheckpointTs, errors.Trace(err)
+			return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(err)
 		}
 
 		// log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
@@ -442,7 +439,7 @@ func (c *CDCClient) singleEventFeed(
 						case cdcpb.Event_Row_PUT:
 							opType = model.OpTypePut
 						default:
-							return req.CheckpointTs, errors.Errorf("unknow tp: %v", row.GetOpType())
+							return atomic.LoadUint64(&req.CheckpointTs), errors.Errorf("unknow tp: %v", row.GetOpType())
 						}
 
 						revent := &model.RegionFeedEvent{
@@ -456,7 +453,7 @@ func (c *CDCClient) singleEventFeed(
 						select {
 						case eventCh <- revent:
 						case <-ctx.Done():
-							return req.CheckpointTs, errors.Trace(ctx.Err())
+							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
 						}
 					case cdcpb.Event_PREWRITE:
 						notMatch[string(row.Key)] = row.GetValue()
@@ -482,7 +479,7 @@ func (c *CDCClient) singleEventFeed(
 						case cdcpb.Event_Row_PUT:
 							opType = model.OpTypePut
 						default:
-							return req.CheckpointTs, errors.Errorf("unknow tp: %v", row.GetOpType())
+							return atomic.LoadUint64(&req.CheckpointTs), errors.Errorf("unknow tp: %v", row.GetOpType())
 						}
 
 						revent := &model.RegionFeedEvent{
@@ -497,7 +494,7 @@ func (c *CDCClient) singleEventFeed(
 						select {
 						case eventCh <- revent:
 						case <-ctx.Done():
-							return req.CheckpointTs, errors.Trace(ctx.Err())
+							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
 						}
 						sorter.pushTsItem(sortItem{
 							start:  row.GetStartTs(),
@@ -516,7 +513,7 @@ func (c *CDCClient) singleEventFeed(
 			case *cdcpb.Event_Admin_:
 				log.Info("receive admin event", zap.Stringer("event", event))
 			case *cdcpb.Event_Error_:
-				return req.CheckpointTs, errors.Trace(&eventError{Event_Error: x.Error})
+				return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(&eventError{Event_Error: x.Error})
 			case *cdcpb.Event_ResolvedTs:
 				if atomic.LoadUint32(&initialized) == 1 {
 					// emit a checkpoint
@@ -527,18 +524,24 @@ func (c *CDCClient) singleEventFeed(
 						},
 					}
 
-					if x.ResolvedTs > req.CheckpointTs {
-						req.CheckpointTs = x.ResolvedTs
-					}
-
+					updateCheckpointTS(&req.CheckpointTs, x.ResolvedTs)
 					select {
 					case eventCh <- revent:
 					case <-ctx.Done():
-						return req.CheckpointTs, errors.Trace(ctx.Err())
+						return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
 					}
 
 				}
 			}
+		}
+	}
+}
+
+func updateCheckpointTS(checkpointTs *uint64, newValue uint64) {
+	for {
+		oldValue := atomic.LoadUint64(checkpointTs)
+		if oldValue >= newValue || atomic.CompareAndSwapUint64(checkpointTs, oldValue, newValue) {
+			return
 		}
 	}
 }
