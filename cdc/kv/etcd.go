@@ -33,11 +33,11 @@ const (
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
 func GetEtcdKeyChangeFeedList() string {
-	return fmt.Sprintf("%s/changefeed/config", EtcdKeyBase)
+	return fmt.Sprintf("%s/changefeed/info", EtcdKeyBase)
 }
 
-// GetEtcdKeyChangeFeedConfig returns the key of a changefeed config
-func GetEtcdKeyChangeFeedConfig(changefeedID string) string {
+// GetEtcdKeyChangeFeedInfo returns the key of a changefeed config
+func GetEtcdKeyChangeFeedInfo(changefeedID string) string {
 	return fmt.Sprintf("%s/%s", GetEtcdKeyChangeFeedList(), changefeedID)
 }
 
@@ -87,9 +87,9 @@ func GetChangeFeeds(ctx context.Context, cli *clientv3.Client, opts ...clientv3.
 	return revision, details, nil
 }
 
-// GetChangeFeedDetail queries the config of a given changefeed
-func GetChangeFeedDetail(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) (*model.ChangeFeedDetail, error) {
-	key := GetEtcdKeyChangeFeedConfig(id)
+// GetChangeFeedInfo queries the config of a given changefeed
+func GetChangeFeedInfo(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) (*model.ChangeFeedInfo, error) {
+	key := GetEtcdKeyChangeFeedInfo(id)
 	resp, err := cli.Get(ctx, key, opts...)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -97,20 +97,20 @@ func GetChangeFeedDetail(ctx context.Context, cli *clientv3.Client, id string, o
 	if resp.Count == 0 {
 		return nil, errors.Annotatef(model.ErrChangeFeedNotExists, "query detail id %s", id)
 	}
-	detail := &model.ChangeFeedDetail{}
+	detail := &model.ChangeFeedInfo{}
 	err = detail.Unmarshal(resp.Kvs[0].Value)
 	return detail, errors.Trace(err)
 }
 
-// DeleteChangeFeedDetail deletes a changefeed config from etcd
-func DeleteChangeFeedDetail(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) error {
-	key := GetEtcdKeyChangeFeedConfig(id)
+// DeleteChangeFeedInfo deletes a changefeed config from etcd
+func DeleteChangeFeedInfo(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) error {
+	key := GetEtcdKeyChangeFeedInfo(id)
 	_, err := cli.Delete(ctx, key, opts...)
 	return errors.Trace(err)
 }
 
-// GetChangeFeedInfo queries the checkpointTs and resovledTs of a given changefeed
-func GetChangeFeedInfo(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) (*model.ChangeFeedInfo, error) {
+// GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
+func GetChangeFeedStatus(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) (*model.ChangeFeedStatus, error) {
 	key := GetEtcdKeyChangeFeedStatus(id)
 	resp, err := cli.Get(ctx, key, opts...)
 	if err != nil {
@@ -119,7 +119,7 @@ func GetChangeFeedInfo(ctx context.Context, cli *clientv3.Client, id string, opt
 	if resp.Count == 0 {
 		return nil, errors.Annotatef(model.ErrChangeFeedNotExists, "query status id %s", id)
 	}
-	info := &model.ChangeFeedInfo{}
+	info := &model.ChangeFeedStatus{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
 	return info, errors.Trace(err)
 }
@@ -145,11 +145,11 @@ func GetCaptures(ctx context.Context, cli *clientv3.Client, opts ...clientv3.OpO
 	return revision, infos, nil
 }
 
-// SaveChangeFeedDetail stores change feed detail into etcd
+// SaveChangeFeedInfo stores change feed info into etcd
 // TODO: this should be called from outer system, such as from a TiDB client
-func SaveChangeFeedDetail(ctx context.Context, client *clientv3.Client, detail *model.ChangeFeedDetail, changeFeedID string) error {
-	key := GetEtcdKeyChangeFeedConfig(changeFeedID)
-	value, err := detail.Marshal()
+func SaveChangeFeedInfo(ctx context.Context, client *clientv3.Client, info *model.ChangeFeedInfo, changeFeedID string) error {
+	key := GetEtcdKeyChangeFeedInfo(changeFeedID)
+	value, err := info.Marshal()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -235,11 +235,11 @@ func PutChangeFeedStatus(
 	ctx context.Context,
 	client *clientv3.Client,
 	changefeedID string,
-	info *model.ChangeFeedInfo,
+	status *model.ChangeFeedStatus,
 	opts ...clientv3.OpOption,
 ) error {
 	key := GetEtcdKeyChangeFeedStatus(changefeedID)
-	value, err := info.Marshal()
+	value, err := status.Marshal()
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -69,7 +69,7 @@ func (s *etcdSuite) TearDownTest(c *check.C) {
 
 func (s *etcdSuite) TestInfoReader(c *check.C) {
 	var (
-		info1 = map[model.CaptureID]*model.TaskStatus{
+		status1 = map[model.CaptureID]*model.TaskStatus{
 			"capture1": {
 				CheckPointTs: 1000,
 				ResolvedTs:   1024,
@@ -94,11 +94,11 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 		pinfos map[string]model.ProcessorsInfos
 	}{
 		{ids: nil, pinfos: nil},
-		{ids: []string{"changefeed1"}, pinfos: map[string]model.ProcessorsInfos{"changefeed1": info1}},
-		{ids: []string{"changefeed1", "changefeed2"}, pinfos: map[string]model.ProcessorsInfos{"changefeed1": info1, "changefeed2": info1}},
+		{ids: []string{"changefeed1"}, pinfos: map[string]model.ProcessorsInfos{"changefeed1": status1}},
+		{ids: []string{"changefeed1", "changefeed2"}, pinfos: map[string]model.ProcessorsInfos{"changefeed1": status1, "changefeed2": status1}},
 	}
 
-	rw := NewChangeFeedInfoEtcdRWriter(s.client)
+	rw := NewChangeFeedEtcdRWriter(s.client)
 	for _, tc := range testCases {
 		_, err = s.client.Delete(context.Background(), kv.GetEtcdKeyChangeFeedList(), clientv3.WithPrefix())
 		c.Assert(err, check.IsNil)
@@ -108,7 +108,7 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 		}
 		for i := 0; i < len(tc.ids); i++ {
 			changefeedID := tc.ids[i]
-			err = kv.SaveChangeFeedDetail(context.Background(), s.client, &model.ChangeFeedDetail{}, changefeedID)
+			err = kv.SaveChangeFeedInfo(context.Background(), s.client, &model.ChangeFeedInfo{}, changefeedID)
 			c.Assert(err, check.IsNil)
 			for captureID, cinfo := range tc.pinfos[changefeedID] {
 				sinfo, err := cinfo.Marshal()
@@ -133,31 +133,31 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 
 func (s *etcdSuite) TestInfoWriter(c *check.C) {
 	var (
-		info1 = &model.ChangeFeedInfo{
+		status1 = &model.ChangeFeedStatus{
 			ResolvedTs:   2200,
 			CheckpointTs: 2000,
 		}
-		info2 = &model.ChangeFeedInfo{
+		status2 = &model.ChangeFeedStatus{
 			ResolvedTs:   2600,
 			CheckpointTs: 2500,
 		}
 		err error
 	)
-	largeTxnInfo := make(map[string]*model.ChangeFeedInfo, embed.DefaultMaxTxnOps+1)
+	largeTxnInfo := make(map[string]*model.ChangeFeedStatus, embed.DefaultMaxTxnOps+1)
 	for i := 0; i < int(embed.DefaultMaxTxnOps)+1; i++ {
 		changefeedID := fmt.Sprintf("changefeed%d", i+1)
-		largeTxnInfo[changefeedID] = info1
+		largeTxnInfo[changefeedID] = status1
 	}
 	testCases := []struct {
-		infos map[model.ChangeFeedID]*model.ChangeFeedInfo
+		infos map[model.ChangeFeedID]*model.ChangeFeedStatus
 	}{
 		{infos: nil},
-		{infos: map[string]*model.ChangeFeedInfo{"changefeed1": info1}},
-		{infos: map[string]*model.ChangeFeedInfo{"changefeed1": info1, "changefeed2": info2}},
+		{infos: map[string]*model.ChangeFeedStatus{"changefeed1": status1}},
+		{infos: map[string]*model.ChangeFeedStatus{"changefeed1": status1, "changefeed2": status2}},
 		{infos: largeTxnInfo},
 	}
 
-	rw := NewChangeFeedInfoEtcdRWriter(s.client)
+	rw := NewChangeFeedEtcdRWriter(s.client)
 	for _, tc := range testCases {
 		for changefeedID := range tc.infos {
 			_, err = s.client.Delete(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))
@@ -274,7 +274,7 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 		captureID    = "test-ts-reader-capture"
 		resolvedTs   uint64
 		err          error
-		info         = &model.ChangeFeedInfo{
+		info         = &model.ChangeFeedStatus{
 			ResolvedTs:   1000,
 			CheckpointTs: 900,
 		}

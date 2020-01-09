@@ -24,8 +24,8 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
-// ChangeFeedDetail describes the detail of a ChangeFeed
-type ChangeFeedDetail struct {
+// ChangeFeedInfo describes the detail of a ChangeFeed
+type ChangeFeedInfo struct {
 	SinkURI    string            `json:"sink-uri"`
 	Opts       map[string]string `json:"opts"`
 	CreateTime time.Time         `json:"create-time"`
@@ -34,31 +34,31 @@ type ChangeFeedDetail struct {
 	// The ChangeFeed will exits until sync to timestamp TargetTs
 	TargetTs uint64 `json:"target-ts"`
 	// used for admin job notification, trigger watch event in capture
-	AdminJobType AdminJobType    `json:"admin-job-type"`
-	Info         *ChangeFeedInfo `json:"-"`
+	AdminJobType AdminJobType      `json:"admin-job-type"`
+	Status       *ChangeFeedStatus `json:"-"`
 
 	filter *filter.Filter
 	Config *ReplicaConfig `json:"config"`
 }
 
-func (detail *ChangeFeedDetail) getConfig() *ReplicaConfig {
-	if detail.Config == nil {
-		detail.Config = &ReplicaConfig{}
+func (info *ChangeFeedInfo) getConfig() *ReplicaConfig {
+	if info.Config == nil {
+		info.Config = &ReplicaConfig{}
 	}
-	return detail.Config
+	return info.Config
 }
 
-func (detail *ChangeFeedDetail) getFilter() *filter.Filter {
-	if detail.filter == nil {
-		rules := detail.getConfig().FilterRules
-		detail.filter = filter.New(detail.getConfig().FilterCaseSensitive, rules)
+func (info *ChangeFeedInfo) getFilter() *filter.Filter {
+	if info.filter == nil {
+		rules := info.getConfig().FilterRules
+		info.filter = filter.New(info.getConfig().FilterCaseSensitive, rules)
 	}
-	return detail.filter
+	return info.filter
 }
 
 // ShouldIgnoreTxn returns true is the given txn should be ignored
-func (detail *ChangeFeedDetail) ShouldIgnoreTxn(t *Txn) bool {
-	for _, ignoreTs := range detail.getConfig().IgnoreTxnCommitTs {
+func (info *ChangeFeedInfo) ShouldIgnoreTxn(t *Txn) bool {
+	for _, ignoreTs := range info.getConfig().IgnoreTxnCommitTs {
 		if ignoreTs == t.Ts {
 			return true
 		}
@@ -68,11 +68,11 @@ func (detail *ChangeFeedDetail) ShouldIgnoreTxn(t *Txn) bool {
 
 // ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
 // Set `tbl` to an empty string to test against the whole database.
-func (detail *ChangeFeedDetail) ShouldIgnoreTable(db, tbl string) bool {
+func (info *ChangeFeedInfo) ShouldIgnoreTable(db, tbl string) bool {
 	if IsSysSchema(db) {
 		return true
 	}
-	f := detail.getFilter()
+	f := info.getFilter()
 	// TODO: Change filter to support simple check directly
 	left := f.ApplyOn([]*filter.Table{{Schema: db, Name: tbl}})
 	return len(left) == 0
@@ -80,15 +80,15 @@ func (detail *ChangeFeedDetail) ShouldIgnoreTable(db, tbl string) bool {
 
 // FilterTxn removes DDL/DMLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
-func (detail *ChangeFeedDetail) FilterTxn(t *Txn) {
+func (info *ChangeFeedInfo) FilterTxn(t *Txn) {
 	if t.IsDDL() {
-		if detail.ShouldIgnoreTable(t.DDL.Database, t.DDL.Table) {
+		if info.ShouldIgnoreTable(t.DDL.Database, t.DDL.Table) {
 			t.DDL = nil
 		}
 	} else {
 		var filteredDMLs []*DML
 		for _, dml := range t.DMLs {
-			if !detail.ShouldIgnoreTable(dml.Database, dml.Table) {
+			if !info.ShouldIgnoreTable(dml.Database, dml.Table) {
 				filteredDMLs = append(filteredDMLs, dml)
 			}
 		}
@@ -97,40 +97,40 @@ func (detail *ChangeFeedDetail) FilterTxn(t *Txn) {
 }
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
-func (detail *ChangeFeedDetail) GetStartTs() uint64 {
-	if detail.StartTs > 0 {
-		return detail.StartTs
+func (info *ChangeFeedInfo) GetStartTs() uint64 {
+	if info.StartTs > 0 {
+		return info.StartTs
 	}
 
-	return oracle.EncodeTSO(detail.CreateTime.Unix() * 1000)
+	return oracle.EncodeTSO(info.CreateTime.Unix() * 1000)
 }
 
 // GetTargetTs returns TargetTs if it's specified, otherwise MaxUint64 is returned.
-func (detail *ChangeFeedDetail) GetTargetTs() uint64 {
-	if detail.TargetTs > 0 {
-		return detail.TargetTs
+func (info *ChangeFeedInfo) GetTargetTs() uint64 {
+	if info.TargetTs > 0 {
+		return info.TargetTs
 	}
 	return uint64(math.MaxUint64)
 }
 
 // GetCheckpointTs returns the checkpoint ts of changefeed.
-func (detail *ChangeFeedDetail) GetCheckpointTs() uint64 {
-	if detail.Info != nil {
-		return detail.Info.CheckpointTs
+func (info *ChangeFeedInfo) GetCheckpointTs() uint64 {
+	if info.Status != nil {
+		return info.Status.CheckpointTs
 	}
 
-	return detail.GetStartTs()
+	return info.GetStartTs()
 }
 
-// Marshal returns the json marshal format of a ChangeFeedDetail
-func (detail *ChangeFeedDetail) Marshal() (string, error) {
-	data, err := json.Marshal(detail)
+// Marshal returns the json marshal format of a ChangeFeedInfo
+func (info *ChangeFeedInfo) Marshal() (string, error) {
+	data, err := json.Marshal(info)
 	return string(data), errors.Trace(err)
 }
 
-// Unmarshal unmarshals into *ChangeFeedDetail from json marshal byte slice
-func (detail *ChangeFeedDetail) Unmarshal(data []byte) error {
-	err := json.Unmarshal(data, &detail)
+// Unmarshal unmarshals into *ChangeFeedInfo from json marshal byte slice
+func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, &info)
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 

@@ -40,7 +40,7 @@ type ChangeFeedWatcher struct {
 	captureID   string
 	pdEndpoints []string
 	etcdCli     *clientv3.Client
-	details     map[string]model.ChangeFeedDetail
+	infos       map[string]model.ChangeFeedInfo
 }
 
 // NewChangeFeedWatcher creates a new changefeed watcher
@@ -49,36 +49,36 @@ func NewChangeFeedWatcher(captureID string, pdEndpoints []string, cli *clientv3.
 		captureID:   captureID,
 		pdEndpoints: pdEndpoints,
 		etcdCli:     cli,
-		details:     make(map[string]model.ChangeFeedDetail),
+		infos:       make(map[string]model.ChangeFeedInfo),
 	}
 	return w
 }
 
-func (w *ChangeFeedWatcher) processPutKv(kv *mvccpb.KeyValue) (bool, string, model.ChangeFeedDetail, error) {
+func (w *ChangeFeedWatcher) processPutKv(kv *mvccpb.KeyValue) (bool, string, model.ChangeFeedInfo, error) {
 	needRunWatcher := false
 	changefeedID, err := util.ExtractKeySuffix(string(kv.Key))
 	if err != nil {
-		return needRunWatcher, "", model.ChangeFeedDetail{}, err
+		return needRunWatcher, "", model.ChangeFeedInfo{}, err
 	}
-	detail := model.ChangeFeedDetail{}
-	err = detail.Unmarshal(kv.Value)
+	info := model.ChangeFeedInfo{}
+	err = info.Unmarshal(kv.Value)
 	if err != nil {
-		return needRunWatcher, changefeedID, detail, err
+		return needRunWatcher, changefeedID, info, err
 	}
 	w.lock.Lock()
-	_, ok := w.details[changefeedID]
+	_, ok := w.infos[changefeedID]
 	if !ok {
 		needRunWatcher = true
 	}
-	if detail.AdminJobType == model.AdminStop {
+	if info.AdminJobType == model.AdminStop {
 		// only handle model.AdminStop, the model.AdminRemove case will be handled in `processDeleteKv`
-		delete(w.details, changefeedID)
+		delete(w.infos, changefeedID)
 	} else {
-		w.details[changefeedID] = detail
+		w.infos[changefeedID] = info
 	}
 	w.lock.Unlock()
-	// TODO: this detail is not copied, should be readonly
-	return needRunWatcher, changefeedID, detail, nil
+	// TODO: this info is not copied, should be readonly
+	return needRunWatcher, changefeedID, info, nil
 }
 
 func (w *ChangeFeedWatcher) processDeleteKv(kv *mvccpb.KeyValue) error {
@@ -87,7 +87,7 @@ func (w *ChangeFeedWatcher) processDeleteKv(kv *mvccpb.KeyValue) error {
 		return errors.Trace(err)
 	}
 	w.lock.Lock()
-	delete(w.details, changefeedID)
+	delete(w.infos, changefeedID)
 	w.lock.Unlock()
 	return nil
 }
@@ -96,17 +96,17 @@ func (w *ChangeFeedWatcher) processDeleteKv(kv *mvccpb.KeyValue) error {
 func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) error {
 	errCh := make(chan error, 1)
 
-	revision, details, err := kv.GetChangeFeeds(ctx, w.etcdCli)
+	revision, infos, err := kv.GetChangeFeeds(ctx, w.etcdCli)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	for changefeedID, kv := range details {
-		needRunWatcher, _, detail, err := w.processPutKv(kv)
+	for changefeedID, kv := range infos {
+		needRunWatcher, _, info, err := w.processPutKv(kv)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if needRunWatcher {
-			runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh, cb)
+			runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, info, errCh, cb)
 		}
 	}
 
@@ -129,12 +129,12 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) err
 			for _, ev := range resp.Events {
 				switch ev.Type {
 				case mvccpb.PUT:
-					needRunWatcher, changefeedID, detail, err := w.processPutKv(ev.Kv)
+					needRunWatcher, changefeedID, info, err := w.processPutKv(ev.Kv)
 					if err != nil {
 						return errors.Trace(err)
 					}
 					if needRunWatcher {
-						runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, detail, errCh, cb)
+						runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, info, errCh, cb)
 					}
 				case mvccpb.DELETE:
 					err := w.processDeleteKv(ev.Kv)
@@ -153,7 +153,7 @@ type ProcessorWatcher struct {
 	changefeedID string
 	captureID    string
 	etcdCli      *clientv3.Client
-	detail       model.ChangeFeedDetail
+	info         model.ChangeFeedInfo
 	wg           sync.WaitGroup
 	closed       int32
 }
@@ -164,14 +164,14 @@ func NewProcessorWatcher(
 	captureID string,
 	pdEndpoints []string,
 	cli *clientv3.Client,
-	detail model.ChangeFeedDetail,
+	info model.ChangeFeedInfo,
 ) *ProcessorWatcher {
 	return &ProcessorWatcher{
 		changefeedID: changefeedID,
 		captureID:    captureID,
 		pdEndpoints:  pdEndpoints,
 		etcdCli:      cli,
-		detail:       detail,
+		info:         info,
 	}
 }
 
@@ -233,7 +233,7 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	err = runProcessor(cctx, w.pdEndpoints, w.detail, w.changefeedID, w.captureID, cb)
+	err = runProcessor(cctx, w.pdEndpoints, w.info, w.changefeedID, w.captureID, cb)
 	if err != nil {
 		errCh <- err
 		return
@@ -275,11 +275,11 @@ func realRunProcessorWatcher(
 	captureID string,
 	pdEndpoints []string,
 	etcdCli *clientv3.Client,
-	detail model.ChangeFeedDetail,
+	info model.ChangeFeedInfo,
 	errCh chan error,
 	cb processorCallback,
 ) *ProcessorWatcher {
-	sw := NewProcessorWatcher(changefeedID, captureID, pdEndpoints, etcdCli, detail)
+	sw := NewProcessorWatcher(changefeedID, captureID, pdEndpoints, etcdCli, info)
 	sw.wg.Add(1)
 	go sw.Watch(ctx, errCh, cb)
 	return sw
@@ -289,12 +289,12 @@ func realRunProcessorWatcher(
 func realRunProcessor(
 	ctx context.Context,
 	pdEndpoints []string,
-	detail model.ChangeFeedDetail,
+	info model.ChangeFeedInfo,
 	changefeedID string,
 	captureID string,
 	cb processorCallback,
 ) error {
-	processor, err := NewProcessor(pdEndpoints, detail, changefeedID, captureID)
+	processor, err := NewProcessor(pdEndpoints, info, changefeedID, captureID)
 	if err != nil {
 		return err
 	}

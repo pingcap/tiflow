@@ -72,7 +72,7 @@ var cliCmd = &cobra.Command{
 			}
 		}
 
-		detail := &model.ChangeFeedDetail{
+		detail := &model.ChangeFeedInfo{
 			SinkURI:    sinkURI,
 			Opts:       make(map[string]string),
 			CreateTime: time.Now(),
@@ -85,7 +85,7 @@ var cliCmd = &cobra.Command{
 			return err
 		}
 		fmt.Printf("create changefeed ID: %s detail %s\n", id, d)
-		return kv.SaveChangeFeedDetail(context.Background(), cli, detail, id)
+		return kv.SaveChangeFeedInfo(context.Background(), cli, detail, id)
 	},
 }
 
