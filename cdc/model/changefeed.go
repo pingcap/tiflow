@@ -37,17 +37,33 @@ type ChangeFeedDetail struct {
 	AdminJobType AdminJobType    `json:"admin-job-type"`
 	Info         *ChangeFeedInfo `json:"-"`
 
-	filter              *filter.Filter
-	FilterCaseSensitive bool          `json:"filter-case-sensitive"`
-	FilterRules         *filter.Rules `json:"filter-rules"`
+	filter *filter.Filter
+	Config *ReplicaConfig `json:"config"`
+}
+
+func (detail *ChangeFeedDetail) getConfig() *ReplicaConfig {
+	if detail.Config == nil {
+		detail.Config = &ReplicaConfig{}
+	}
+	return detail.Config
 }
 
 func (detail *ChangeFeedDetail) getFilter() *filter.Filter {
 	if detail.filter == nil {
-		rules := detail.FilterRules
-		detail.filter = filter.New(detail.FilterCaseSensitive, rules)
+		rules := detail.getConfig().FilterRules
+		detail.filter = filter.New(detail.getConfig().FilterCaseSensitive, rules)
 	}
 	return detail.filter
+}
+
+// ShouldIgnoreTxn returns true is the given txn should be ignored
+func (detail *ChangeFeedDetail) ShouldIgnoreTxn(t *Txn) bool {
+	for _, ignoreTs := range detail.getConfig().IgnoreTxnCommitTs {
+		if ignoreTs == t.Ts {
+			return true
+		}
+	}
+	return false
 }
 
 // ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.

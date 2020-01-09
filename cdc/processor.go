@@ -641,6 +641,10 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			if p.changefeed.ShouldIgnoreTxn(&txn) {
+				log.Info("DML txn ignored", zap.Uint64("ts", txn.Ts))
+				continue
+			}
 			p.changefeed.FilterTxn(&txn)
 			if len(txn.DMLs) == 0 {
 				continue
