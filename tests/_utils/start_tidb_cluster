@@ -90,6 +90,14 @@ tidb-server \
     --status=${UP_TIDB_STATUS} \
     --log-file "$OUT_DIR/tidb.log" &
 
+tidb-server \
+    -P ${UP_TIDB_OTHER_PORT} \
+    -config "$OUT_DIR/tidb-config.toml" \
+    --store tikv \
+    --path ${UP_PD_HOST}:${UP_PD_PORT} \
+    --status=${UP_TIDB_OTHER_STATUS} \
+    --log-file "$OUT_DIR/tidb_other.log" &
+
 echo "Starting Downstream TiDB..."
 tidb-server \
     -P ${DOWN_TIDB_PORT} \
@@ -102,6 +110,16 @@ tidb-server \
 echo "Verifying Upstream TiDB is started..."
 i=0
 while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
+    i=$((i+1))
+    if [ "$i" -gt 40 ]; then
+        echo 'Failed to start upstream TiDB'
+        exit 2
+    fi
+    sleep 1
+done
+
+i=0
+while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_OTHER_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
     i=$((i+1))
     if [ "$i" -gt 40 ]; then
         echo 'Failed to start upstream TiDB'

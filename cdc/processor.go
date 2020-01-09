@@ -28,6 +28,7 @@ import (
 	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -38,7 +39,10 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/helper"
+	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tidb/util/codec"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -295,10 +299,10 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
 func (p *processor) localResolvedWorker(ctx context.Context) error {
-	updateInfoTick := time.NewTicker(time.Second)
+	updateInfoTick := time.NewTicker(time.Millisecond * 100)
 	defer updateInfoTick.Stop()
 
-	resolveTsTick := time.NewTicker(time.Second)
+	resolveTsTick := time.NewTicker(time.Millisecond * 100)
 	defer resolveTsTick.Stop()
 
 	for {
@@ -684,11 +688,50 @@ func createSchemaStore(pdEndpoints []string) (*schema.Storage, error) {
 	if err != nil {
 		return nil, err
 	}
+	for _, job := range jobs {
+		err := resetFinishedTs(kvStore.(tikv.Storage), job)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
 	schemaStorage, err := schema.NewStorage(jobs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	return schemaStorage, nil
+}
+
+func resetFinishedTs(kvStore tikv.Storage, job *timodel.Job) error {
+	helper := helper.NewHelper(kvStore)
+	diffKey := schemaDiffKey(job.BinlogInfo.SchemaVersion)
+	resp, err := helper.GetMvccByEncodedKey(diffKey)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	mvcc := resp.GetInfo()
+	if mvcc == nil || len(mvcc.Writes) == 0 {
+		return errors.NotFoundf("mvcc info, ddl job id: %d, schema version: %d", job.ID, job.BinlogInfo.SchemaVersion)
+	}
+	var finishedTS uint64
+	for _, w := range mvcc.Writes {
+		if finishedTS < w.CommitTs {
+			finishedTS = w.CommitTs
+		}
+	}
+	job.BinlogInfo.FinishedTS = finishedTS
+	return nil
+}
+
+func schemaDiffKey(schemaVersion int64) []byte {
+	metaPrefix := []byte("m")
+	mSchemaDiffPrefix := "Diff"
+	StringData := 's'
+	key := []byte(fmt.Sprintf("%s:%d", mSchemaDiffPrefix, schemaVersion))
+
+	ek := make([]byte, 0, len(metaPrefix)+len(key)+24)
+	ek = append(ek, metaPrefix...)
+	ek = codec.EncodeBytes(ek, key)
+	return codec.EncodeUint(ek, uint64(StringData))
 }
 
 func createTsRWriter(cli *clientv3.Client, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {

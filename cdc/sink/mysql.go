@@ -56,6 +56,7 @@ func configureSinkURI(sinkURI string) (string, error) {
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
+	dsnCfg.DBName = ""
 	dsnCfg.Params["time_zone"] = "UTC"
 	return dsnCfg.FormatDSN(), nil
 }

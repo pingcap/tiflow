@@ -211,7 +211,7 @@ func getFunctionName(i interface{}) string {
 
 // for every DDL, run the DDL continuously, and one goroutine for one TiDB instance to do some DML op
 func runDDLTest(srcs []*sql.DB, targetDB *sql.DB, schema string) {
-	runTime := time.Second * 3
+	runTime := time.Second * 2
 	start := time.Now()
 	defer func() {
 		log.S().Infof("runDDLTest take %v", time.Since(start))

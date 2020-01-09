@@ -120,7 +120,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	errg, cctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
-		return c.ownerWorker.Run(cctx, time.Second*1)
+		return c.ownerWorker.Run(cctx, time.Millisecond*100)
 	})
 
 	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)

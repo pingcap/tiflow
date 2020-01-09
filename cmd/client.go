@@ -25,7 +25,7 @@ func init() {
 	cliCmd.Flags().StringVar(&pdAddress, "pd-addr", "localhost:2379", "address of PD")
 	cliCmd.Flags().Uint64Var(&startTs, "start-ts", 0, "start ts of changefeed")
 	cliCmd.Flags().Uint64Var(&startTs, "target-ts", 0, "target ts of changefeed")
-	cliCmd.Flags().StringVar(&sinkURI, "sink-uri", "root@tcp(127.0.0.1:3306)/test", "sink uri")
+	cliCmd.Flags().StringVar(&sinkURI, "sink-uri", "root@tcp(127.0.0.1:3306)/", "sink uri")
 	cliCmd.Flags().StringVar(&configFile, "config", "", "path of the configuration file")
 }
 

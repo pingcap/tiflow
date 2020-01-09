@@ -16,6 +16,7 @@ package sink
 import (
 	"context"
 	"sort"
+	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
@@ -30,6 +31,8 @@ import (
 )
 
 type EmitSuite struct{}
+
+func Test(t *testing.T) { check.TestingT(t) }
 
 var _ = check.Suite(&EmitSuite{})
 
@@ -204,8 +207,8 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 	}
 
 	mock.ExpectBegin()
-	mock.ExpectExec("DELETE FROM `test`.`user` WHERE `id` = ? LIMIT 1;").
-		WithArgs(123).
+	mock.ExpectExec("DELETE FROM `test`.`user` WHERE `id` = ? AND `name` = ? LIMIT 1;").
+		WithArgs(123, "tester1").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
@@ -215,6 +218,30 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 	// Validate
 	c.Assert(err, check.IsNil)
 	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
+}
+
+func (s EmitSuite) TestConfigureSinkURI(c *check.C) {
+	cases := []struct {
+		input    string
+		expected string
+	}{{
+		input:    "root@tcp(127.0.0.1:3306)/mysql",
+		expected: "root@tcp(127.0.0.1:3306)/?time_zone=UTC",
+	}, {
+		input:    "root@tcp(127.0.0.1:3306)/",
+		expected: "root@tcp(127.0.0.1:3306)/?time_zone=UTC",
+	}, {
+		input:    "root@tcp(127.0.0.1:3306)/?time_zone=AA",
+		expected: "root@tcp(127.0.0.1:3306)/?time_zone=UTC",
+	}, {
+		input:    "root@tcp(127.0.0.1:3306)/?time_zone=AA&some_option=BB",
+		expected: "root@tcp(127.0.0.1:3306)/?some_option=BB&time_zone=UTC",
+	}}
+	for _, cs := range cases {
+		sink, err := configureSinkURI(cs.input)
+		c.Assert(err, check.IsNil)
+		c.Assert(sink, check.Equals, cs.expected)
+	}
 }
 
 type splitSuite struct{}

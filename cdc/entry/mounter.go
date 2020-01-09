@@ -70,12 +70,16 @@ func (m *Mounter) Mount(rawTxn model.RawTxn) (model.Txn, error) {
 }
 
 func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
-	tableInfo, tableName, err := m.fetchTableInfo(row.TableID)
-	if err != nil {
-		return nil, errors.Trace(err)
+	tableInfo, tableName, exist := m.fetchTableInfo(row.TableID)
+	if !exist {
+		if m.schemaStorage.IsTruncateTableID(row.TableID) {
+			log.Debug("skip the DML of truncated table", zap.Uint64("ts", row.Ts), zap.Int64("tableID", row.TableID))
+			return nil, nil
+		}
+		return nil, errors.NotFoundf("table in schema storage, id: %d", row.TableID)
 	}
 
-	err = row.unflatten(tableInfo)
+	err := row.unflatten(tableInfo)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -133,9 +137,13 @@ func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
 	if !idx.Delete {
 		return nil, nil
 	}
-	tableInfo, tableName, err := m.fetchTableInfo(idx.TableID)
-	if err != nil {
-		return nil, errors.Trace(err)
+	tableInfo, tableName, exist := m.fetchTableInfo(idx.TableID)
+	if !exist {
+		if m.schemaStorage.IsTruncateTableID(idx.TableID) {
+			log.Debug("skip the DML of truncated table", zap.Uint64("ts", idx.Ts), zap.Int64("tableID", idx.TableID))
+			return nil, nil
+		}
+		return nil, errors.NotFoundf("table in schema storage, id: %d", idx.TableID)
 	}
 	indexInfo, exist := tableInfo.GetIndexInfo(idx.IndexID)
 	if !exist {
@@ -146,7 +154,7 @@ func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
 		return nil, nil
 	}
 
-	err = idx.unflatten(tableInfo)
+	err := idx.unflatten(tableInfo)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -184,17 +192,12 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) types.Datum {
 	return table.GetZeroValue(col)
 }
 
-func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *schema.TableInfo, tableName schema.TableName, err error) {
-	tableInfo, exist := m.schemaStorage.TableByID(tableID)
+func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *schema.TableInfo, tableName schema.TableName, exist bool) {
+	tableInfo, exist = m.schemaStorage.TableByID(tableID)
 	if !exist {
-		err = errors.Errorf("can not find table, id: %d", tableID)
 		return
 	}
-
 	tableName, exist = m.schemaStorage.GetTableNameByID(tableID)
-	if !exist {
-		err = errors.Errorf("can not find table, id: %d", tableID)
-	}
 	return
 }
 
