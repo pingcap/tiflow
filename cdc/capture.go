@@ -98,7 +98,7 @@ func (c *Capture) OnRunProcessor(p *processor) {
 // OnStopProcessor implements processorCallback.
 func (c *Capture) OnStopProcessor(p *processor, err error) {
 	// TODO: handle processor error
-	log.Info("stop to run processor", zap.String("changefeed id", p.changefeedID), util.ZapErrorFilter(err, context.Canceled))
+	log.Info("stop to run processor", zap.String("changefeed id", p.changefeedID), util.ZapErrorFilter(err, context.Canceled), zap.Error(err))
 	c.procLock.Lock()
 	defer c.procLock.Unlock()
 	delete(c.processors, p.changefeedID)
@@ -120,7 +120,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	errg, cctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
-		return c.ownerWorker.Run(cctx, time.Millisecond*100)
+		return c.ownerWorker.Run(cctx, time.Millisecond*500)
 	})
 
 	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)

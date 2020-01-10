@@ -614,37 +614,47 @@ func runPKorUKcases(tr *testRunner) {
 		},
 	}
 
+	var g sync.WaitGroup
+
 	tr.run(func(src *sql.DB) {
 		for i, c := range cases {
 			for j, pkOrUK := range []string{"UNIQUE NOT NULL", "PRIMARY KEY"} {
+				g.Add(1)
 				tableName := fmt.Sprintf("pk_or_uk_%d_%d", i, j)
-				sql := fmt.Sprintf("CREATE TABLE %s(id %s %s)", tableName, c.Tp, pkOrUK)
-				mustExec(src, sql)
+				pkOrUK := pkOrUK
+				c := c
+				go func() {
+					sql := fmt.Sprintf("CREATE TABLE %s(id %s %s)", tableName, c.Tp, pkOrUK)
+					mustExec(src, sql)
+
+					sql = fmt.Sprintf("INSERT INTO %s(id) values( ? )", tableName)
+					mustExec(src, sql, c.Value)
+					sql = fmt.Sprintf("UPDATE %s set id = ? where id = ?", tableName)
+					mustExec(src, sql, c.Update, c.Value)
+					sql = fmt.Sprintf("INSERT INTO %s(id) values( ? )", tableName)
+					mustExec(src, sql, c.Value)
+					sql = fmt.Sprintf("DELETE from %s where id = ?", tableName)
+					mustExec(src, sql, c.Update)
+					g.Done()
+				}()
 			}
 		}
+		g.Wait()
 	})
-	tr.run(func(src *sql.DB) {
-		for i, c := range cases {
-			for j := range []string{"UNIQUE NOT NULL", "PRIMARY KEY"} {
-				tableName := fmt.Sprintf("pk_or_uk_%d_%d", i, j)
-				sql := fmt.Sprintf("INSERT INTO %s(id) values( ? )", tableName)
-				mustExec(src, sql, c.Value)
-				sql = fmt.Sprintf("UPDATE %s set id = ? where id = ?", tableName)
-				mustExec(src, sql, c.Update, c.Value)
-				sql = fmt.Sprintf("INSERT INTO %s(id) values( ? )", tableName)
-				mustExec(src, sql, c.Value)
-				sql = fmt.Sprintf("DELETE from %s where id = ?", tableName)
-				mustExec(src, sql, c.Update)
-			}
-		}
-	})
+
 	tr.run(func(src *sql.DB) {
 		for i := range cases {
 			for j := range []string{"UNIQUE NOT NULL", "PRIMARY KEY"} {
-				sql := fmt.Sprintf("DROP TABLE pk_or_uk_%d_%d", i, j)
-				mustExec(src, sql)
+				g.Add(1)
+				tableName := fmt.Sprintf("pk_or_uk_%d_%d", i, j)
+				go func() {
+					sql := fmt.Sprintf("DROP TABLE %s", tableName)
+					mustExec(src, sql)
+					g.Done()
+				}()
 			}
 		}
+		g.Wait()
 	})
 }
 

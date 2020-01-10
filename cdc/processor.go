@@ -247,19 +247,35 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	p.errCh = errCh
 
 	wg.Go(func() error {
-		return p.localResolvedWorker(cctx)
+		err := p.localResolvedWorker(cctx)
+		if err != nil {
+			log.Error("", zap.Error(err))
+		}
+		return err
 	})
 
 	wg.Go(func() error {
-		return p.globalResolvedWorker(cctx)
+		err := p.globalResolvedWorker(cctx)
+		if err != nil {
+			log.Error("", zap.Error(err))
+		}
+		return err
 	})
 
 	wg.Go(func() error {
-		return p.syncResolved(cctx)
+		err := p.syncResolved(cctx)
+		if err != nil {
+			log.Error("", zap.Error(err))
+		}
+		return err
 	})
 
 	wg.Go(func() error {
-		return p.pullDDLJob(cctx)
+		err := p.pullDDLJob(cctx)
+		if err != nil {
+			log.Error("", zap.Error(err))
+		}
+		return err
 	})
 
 	go func() {
@@ -299,16 +315,16 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
 func (p *processor) localResolvedWorker(ctx context.Context) error {
-	updateInfoTick := time.NewTicker(time.Millisecond * 100)
+	updateInfoTick := time.NewTicker(time.Millisecond * 500)
 	defer updateInfoTick.Stop()
 
-	resolveTsTick := time.NewTicker(time.Millisecond * 100)
+	resolveTsTick := time.NewTicker(time.Millisecond * 500)
 	defer resolveTsTick.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			timedCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			timedCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 			err := p.updateInfo(timedCtx)
 			if err != nil {
 				log.Error("failed to update info", zap.Error(err))
@@ -643,7 +659,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			txn, err := p.mounter.Mount(rawTxn)
 			if err != nil {
-				return errors.Trace(err)
+				return errors.Annotatef(err, "ts: %d", rawTxn.Ts)
 			}
 			if p.changefeed.ShouldIgnoreTxn(&txn) {
 				log.Info("DML txn ignored", zap.Uint64("ts", txn.Ts))
