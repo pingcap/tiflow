@@ -643,8 +643,8 @@ func runPKorUKcases(tr *testRunner) {
 	})
 
 	tr.run(func(src *sql.DB) {
-		for i, _ := range cases {
-			for j, _ := range []string{"UNIQUE NOT NULL", "PRIMARY KEY"} {
+		for i := range cases {
+			for j := range []string{"UNIQUE NOT NULL", "PRIMARY KEY"} {
 				g.Add(1)
 				tableName := fmt.Sprintf("pk_or_uk_%d_%d", i, j)
 				go func() {
