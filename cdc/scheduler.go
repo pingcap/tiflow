@@ -292,7 +292,7 @@ func realRunProcessorWatcher(
 	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 		return nil, errors.Trace(err)
 	}
-	checkpointTs := info.StartTs
+	checkpointTs := info.GetStartTs()
 	if status != nil {
 		checkpointTs = status.CheckpointTs
 	}

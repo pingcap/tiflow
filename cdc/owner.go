@@ -69,7 +69,7 @@ type changeFeed struct {
 	TargetTs                uint64
 	ProcessorInfos          model.ProcessorsInfos
 	processorLastUpdateTime map[string]time.Time
-	filter                  *TxnFilter
+	filter                  *txnFilter
 
 	client        *clientv3.Client
 	ddlHandler    OwnerDDLHandler
@@ -474,7 +474,7 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 		}
 	}
 
-	filter := NewTxnFilter(info.GetConfig())
+	filter := newTxnFilter(info.GetConfig())
 
 	tables := make(map[uint64]schema.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
@@ -549,7 +549,7 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 		if status != nil && (status.AdminJobType == model.AdminStop || status.AdminJobType == model.AdminRemove) {
 			continue
 		}
-		checkpointTs := info.StartTs
+		checkpointTs := info.GetStartTs()
 		if status != nil {
 			checkpointTs = status.CheckpointTs
 		}

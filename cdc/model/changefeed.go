@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -35,10 +34,10 @@ type ChangeFeedInfo struct {
 	// used for admin job notification, trigger watch event in capture
 	AdminJobType AdminJobType `json:"admin-job-type"`
 
-	filter *filter.Filter
 	Config *ReplicaConfig `json:"config"`
 }
 
+// GetConfig returns ReplicaConfig.
 func (info *ChangeFeedInfo) GetConfig() *ReplicaConfig {
 	if info.Config == nil {
 		info.Config = &ReplicaConfig{}

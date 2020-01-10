@@ -134,7 +134,7 @@ type processor struct {
 	captureID    string
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
-	filter       *TxnFilter
+	filter       *txnFilter
 
 	pdCli   pd.Client
 	etcdCli *clientv3.Client
@@ -215,7 +215,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 		return nil, err
 	}
 
-	filter := NewTxnFilter(changefeed.GetConfig())
+	filter := newTxnFilter(changefeed.GetConfig())
 
 	p := &processor{
 		captureID:     captureID,

@@ -160,7 +160,8 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 
 	// check watcher can find new processor in watch loop
 	errCh2 := make(chan error, 1)
-	runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2, nil)
+	_, err = runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2, nil)
+	c.Assert(err, check.IsNil)
 	_, err = cli.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {

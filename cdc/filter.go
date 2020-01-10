@@ -7,21 +7,21 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
-type TxnFilter struct {
+type txnFilter struct {
 	filter            *filter.Filter
 	ignoreTxnCommitTs []uint64
 }
 
-func NewTxnFilter(config *model.ReplicaConfig) *TxnFilter {
+func newTxnFilter(config *model.ReplicaConfig) *txnFilter {
 	filter := filter.New(config.FilterCaseSensitive, config.FilterRules)
-	return &TxnFilter{
+	return &txnFilter{
 		filter:            filter,
 		ignoreTxnCommitTs: config.IgnoreTxnCommitTs,
 	}
 }
 
 // ShouldIgnoreTxn returns true is the given txn should be ignored
-func (f *TxnFilter) ShouldIgnoreTxn(t *model.Txn) bool {
+func (f *txnFilter) ShouldIgnoreTxn(t *model.Txn) bool {
 	for _, ignoreTs := range f.ignoreTxnCommitTs {
 		if ignoreTs == t.Ts {
 			return true
@@ -32,7 +32,7 @@ func (f *TxnFilter) ShouldIgnoreTxn(t *model.Txn) bool {
 
 // ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
 // Set `tbl` to an empty string to test against the whole database.
-func (f *TxnFilter) ShouldIgnoreTable(db, tbl string) bool {
+func (f *txnFilter) ShouldIgnoreTable(db, tbl string) bool {
 	if IsSysSchema(db) {
 		return true
 	}
@@ -43,7 +43,7 @@ func (f *TxnFilter) ShouldIgnoreTable(db, tbl string) bool {
 
 // FilterTxn removes DDL/DMLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
-func (f *TxnFilter) FilterTxn(t *model.Txn) {
+func (f *txnFilter) FilterTxn(t *model.Txn) {
 	if t.IsDDL() {
 		if f.ShouldIgnoreTable(t.DDL.Database, t.DDL.Table) {
 			t.DDL = nil

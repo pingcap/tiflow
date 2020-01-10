@@ -316,7 +316,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 
 	tables := map[uint64]schema.TableName{1: {Schema: "any"}}
 
-	filter := NewTxnFilter(&model.ReplicaConfig{})
+	filter := newTxnFilter(&model.ReplicaConfig{})
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
 			tables:                  tables,
