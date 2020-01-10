@@ -85,7 +85,7 @@ func (h *handlerForPrueDMLTest) Close() error {
 var _ ChangeFeedRWriter = &handlerForPrueDMLTest{}
 
 // Read implements ChangeFeedRWriter interface.
-func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]*model.ChangeFeedStatus, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	h.index++
@@ -93,7 +93,9 @@ func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedI
 			"test_change_feed": {
 				TargetTs: 100,
 			},
-		}, map[model.ChangeFeedID]model.ProcessorsInfos{
+		},
+		map[model.ChangeFeedID]*model.ChangeFeedStatus{},
+		map[model.ChangeFeedID]model.ProcessorsInfos{
 			"test_change_feed": {
 				"capture_1": {
 					ResolvedTs: h.resolvedTs1[h.index],
@@ -136,10 +138,10 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
 			tables:                  tables,
-			ChangeFeedStatus:        &model.ChangeFeedStatus{},
+			status:                  &model.ChangeFeedStatus{},
 			processorLastUpdateTime: make(map[string]time.Time),
 			TargetTs:                100,
-			State:                   model.ChangeFeedSyncDML,
+			DDLState:                model.ChangeFeedSyncDML,
 			ProcessorInfos: model.ProcessorsInfos{
 				"capture_1": {},
 				"capture_2": {},
@@ -206,7 +208,7 @@ func (h *handlerForDDLTest) Close() error {
 	return nil
 }
 
-func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.CaptureID]*model.ChangeFeedInfo, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.CaptureID]*model.ChangeFeedInfo, map[model.CaptureID]*model.ChangeFeedStatus, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if h.dmlIndex < len(h.resolvedTs1)-1 {
@@ -216,7 +218,9 @@ func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.CaptureID]*mode
 			"test_change_feed": {
 				TargetTs: 100,
 			},
-		}, map[model.ChangeFeedID]model.ProcessorsInfos{
+		},
+		map[model.ChangeFeedID]*model.ChangeFeedStatus{},
+		map[model.ChangeFeedID]model.ProcessorsInfos{
 			"test_change_feed": {
 				"capture_1": {
 					ResolvedTs:   h.resolvedTs1[h.dmlIndex],
@@ -312,19 +316,21 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 
 	tables := map[uint64]schema.TableName{1: {Schema: "any"}}
 
+	filter := NewTxnFilter(&model.ReplicaConfig{})
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
 			tables:                  tables,
 			info:                    &model.ChangeFeedInfo{},
-			ChangeFeedStatus:        &model.ChangeFeedStatus{},
+			status:                  &model.ChangeFeedStatus{},
 			processorLastUpdateTime: make(map[string]time.Time),
 			TargetTs:                100,
-			State:                   model.ChangeFeedSyncDML,
+			DDLState:                model.ChangeFeedSyncDML,
 			ProcessorInfos: model.ProcessorsInfos{
 				"capture_1": {},
 				"capture_2": {},
 			},
 			ddlHandler: handler,
+			filter:     filter,
 		},
 	}
 
@@ -347,10 +353,10 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	cfID := "test_handle_admin"
 	sampleCF := &changeFeed{
-		ID:               cfID,
-		info:             &model.ChangeFeedInfo{},
-		ChangeFeedStatus: &model.ChangeFeedStatus{},
-		State:            model.ChangeFeedSyncDML,
+		ID:       cfID,
+		info:     &model.ChangeFeedInfo{},
+		status:   &model.ChangeFeedStatus{},
+		DDLState: model.ChangeFeedSyncDML,
 		ProcessorInfos: model.ProcessorsInfos{
 			"capture_1": {ResolvedTs: 10001},
 			"capture_2": {},

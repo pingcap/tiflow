@@ -8,7 +8,7 @@ import (
 	"time"
 
 	pd "github.com/pingcap/pd/client"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -50,7 +50,7 @@ func getTableIDs() (tableIDs []int64, err error) {
 		if err != nil {
 			return
 		}
-		if model.IsSysSchema(schema) {
+		if cdc.IsSysSchema(schema) {
 			continue
 		}
 		schemas = append(schemas, schema)

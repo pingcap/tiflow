@@ -45,40 +45,36 @@ func NewChangeFeedEtcdRWriter(cli *clientv3.Client) *ChangeFeedRWriter {
 // Read reads from etcd, and returns
 // - map mapping from changefeedID to `*model.ChangeFeedInfo`
 // - map mapping from changefeedID to `model.ProcessorsInfos`
-func (rw *ChangeFeedRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+func (rw *ChangeFeedRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]*model.ChangeFeedStatus, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
 	_, details, err := kv.GetChangeFeeds(ctx, rw.etcdClient)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	changefeeds := make(map[string]*model.ChangeFeedInfo, len(details))
+	changefeedInfos := make(map[string]*model.ChangeFeedInfo, len(details))
+	changefeedStatus := make(map[string]*model.ChangeFeedStatus, len(details))
 	pinfos := make(map[string]model.ProcessorsInfos, len(details))
 	for changefeedID, rawKv := range details {
 		changefeed := &model.ChangeFeedInfo{}
 		err := changefeed.Unmarshal(rawKv.Value)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		pinfo, err := kv.GetAllTaskStatus(ctx, rw.etcdClient, changefeedID)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
-		// Set changefeed info if exists.
-		changefeedInfo, err := kv.GetChangeFeedStatus(ctx, rw.etcdClient, changefeedID)
-
-		switch errors.Cause(err) {
-		case nil:
-			changefeed.Status = changefeedInfo
-		case model.ErrChangeFeedNotExists:
-		default:
-			return nil, nil, err
+		status, err := kv.GetChangeFeedStatus(ctx, rw.etcdClient, changefeedID)
+		if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+			return nil, nil, nil, err
 		}
 
-		changefeeds[changefeedID] = changefeed
+		changefeedStatus[changefeedID] = status
+		changefeedInfos[changefeedID] = changefeed
 		pinfos[changefeedID] = pinfo
 	}
-	return changefeeds, pinfos, nil
+	return changefeedInfos, changefeedStatus, pinfos, nil
 }
 
 // Write writes ChangeFeedStatus of each changefeed into etcd
