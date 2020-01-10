@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/schema"
+	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -45,6 +46,9 @@ type OwnerDDLHandler interface {
 
 	// ExecDDL executes the ddl job
 	ExecDDL(ctx context.Context, sinkURI string, txn model.Txn) error
+
+	// Close cancels the executing of OwnerDDLHandler and releases resource
+	Close() error
 }
 
 // ChangeFeedRWriter defines the Reader and Writer for changeFeed
@@ -757,6 +761,8 @@ func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	err = cf.ddlHandler.Close()
+	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
 	delete(o.changeFeeds, job.CfID)
 	return nil
 }
