@@ -303,10 +303,10 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
 func (p *processor) localResolvedWorker(ctx context.Context) error {
-	updateInfoTick := time.NewTicker(time.Millisecond * 100)
+	updateInfoTick := time.NewTicker(time.Millisecond * 500)
 	defer updateInfoTick.Stop()
 
-	resolveTsTick := time.NewTicker(time.Millisecond * 100)
+	resolveTsTick := time.NewTicker(time.Millisecond * 500)
 	defer resolveTsTick.Stop()
 
 	for {
