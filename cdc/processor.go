@@ -247,35 +247,19 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	p.errCh = errCh
 
 	wg.Go(func() error {
-		err := p.localResolvedWorker(cctx)
-		if err != nil {
-			log.Error("", zap.Error(err))
-		}
-		return err
+		return p.localResolvedWorker(cctx)
 	})
 
 	wg.Go(func() error {
-		err := p.globalResolvedWorker(cctx)
-		if err != nil {
-			log.Error("", zap.Error(err))
-		}
-		return err
+		return p.globalResolvedWorker(cctx)
 	})
 
 	wg.Go(func() error {
-		err := p.syncResolved(cctx)
-		if err != nil {
-			log.Error("", zap.Error(err))
-		}
-		return err
+		return p.syncResolved(cctx)
 	})
 
 	wg.Go(func() error {
-		err := p.pullDDLJob(cctx)
-		if err != nil {
-			log.Error("", zap.Error(err))
-		}
-		return err
+		return p.pullDDLJob(cctx)
 	})
 
 	go func() {
@@ -659,7 +643,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			txn, err := p.mounter.Mount(rawTxn)
 			if err != nil {
-				return errors.Annotatef(err, "ts: %d", rawTxn.Ts)
+				return errors.Trace(err)
 			}
 			if p.changefeed.ShouldIgnoreTxn(&txn) {
 				log.Info("DML txn ignored", zap.Uint64("ts", txn.Ts))
