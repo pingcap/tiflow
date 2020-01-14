@@ -60,14 +60,14 @@ type ChangeFeedRWriter interface {
 }
 
 type changeFeed struct {
-	ID     string
+	id     string
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
 
 	schema                  *schema.Storage
-	DDLState                model.ChangeFeedState
-	TargetTs                uint64
-	ProcessorInfos          model.ProcessorsInfos
+	ddlState                model.ChangeFeedDDLState
+	targetTs                uint64
+	processorInfos          model.ProcessorsInfos
 	processorLastUpdateTime map[string]time.Time
 	filter                  *txnFilter
 
@@ -86,7 +86,7 @@ type changeFeed struct {
 func (c *changeFeed) String() string {
 	format := "{\n ID: %s\n info: %+v\n status: %+v\n State: %v\n ProcessorInfos: %+v\n tables: %+v\n orphanTables: %+v\n toCleanTables: %v\n ddlResolvedTs: %d\n ddlJobHistory: %+v\n}\n\n"
 	s := fmt.Sprintf(format,
-		c.ID, c.info, c.status, c.DDLState, c.ProcessorInfos, c.tables,
+		c.id, c.info, c.status, c.ddlState, c.processorInfos, c.tables,
 		c.orphanTables, c.toCleanTables, c.ddlResolvedTs, c.ddlJobHistory)
 
 	if len(c.ddlJobHistory) > 0 {
@@ -104,13 +104,13 @@ func (c *changeFeed) updateProcessorInfos(processInfos model.ProcessorsInfos) {
 			continue
 		}
 
-		oldPinfo, ok := c.ProcessorInfos[cid]
+		oldPinfo, ok := c.processorInfos[cid]
 		if !ok || oldPinfo.ResolvedTs != pinfo.ResolvedTs || oldPinfo.CheckPointTs != pinfo.CheckPointTs {
 			c.processorLastUpdateTime[cid] = time.Now()
 		}
 	}
 
-	c.ProcessorInfos = processInfos
+	c.processorInfos = processInfos
 }
 
 func (c *changeFeed) reAddTable(id, startTs uint64) {
@@ -153,7 +153,7 @@ func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo
 
 	for id := range captures {
 		// We have not dispatch any table to this capture yet.
-		if _, ok := c.ProcessorInfos[id]; !ok {
+		if _, ok := c.processorInfos[id]; !ok {
 			return id
 		}
 	}
@@ -161,7 +161,7 @@ func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo
 	var minCount int = math.MaxInt64
 	var minID string
 
-	for id, pinfo := range c.ProcessorInfos {
+	for id, pinfo := range c.processorInfos {
 		if len(pinfo.TableInfos) < minCount {
 			minID = id
 			minCount = len(pinfo.TableInfos)
@@ -177,7 +177,7 @@ func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.
 }
 
 func (c *changeFeed) restoreTableInfos(infoSnapshot *model.TaskStatus, captureID string) {
-	c.ProcessorInfos[captureID].TableInfos = infoSnapshot.TableInfos
+	c.processorInfos[captureID].TableInfos = infoSnapshot.TableInfos
 }
 
 func (c *changeFeed) cleanTables(ctx context.Context) {
@@ -185,7 +185,7 @@ func (c *changeFeed) cleanTables(ctx context.Context) {
 
 cleanLoop:
 	for id := range c.toCleanTables {
-		captureID, taskStatus, ok := findTaskStatusWithTable(c.ProcessorInfos, id)
+		captureID, taskStatus, ok := findTaskStatusWithTable(c.processorInfos, id)
 		if !ok {
 			log.Warn("ignore clean table id", zap.Uint64("id", id))
 			cleanIDs = append(cleanIDs, id)
@@ -195,15 +195,15 @@ cleanLoop:
 		infoClone := taskStatus.Clone()
 		taskStatus.RemoveTable(id)
 
-		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, taskStatus, true)
+		newInfo, err := c.infoWriter.Write(ctx, c.id, captureID, taskStatus, true)
 		if err == nil {
-			c.ProcessorInfos[captureID] = newInfo
+			c.processorInfos[captureID] = newInfo
 		}
 		switch errors.Cause(err) {
 		case model.ErrFindPLockNotCommit:
 			c.restoreTableInfos(infoClone, captureID)
 			log.Info("write table info delay, wait plock resolve",
-				zap.String("changefeed", c.ID),
+				zap.String("changefeed", c.id),
 				zap.String("capture", captureID))
 		case nil:
 			log.Info("cleanup table success",
@@ -246,7 +246,7 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 			return
 		}
 
-		info := c.ProcessorInfos[captureID]
+		info := c.processorInfos[captureID]
 		if info == nil {
 			info = new(model.TaskStatus)
 		}
@@ -256,15 +256,15 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 			StartTs: orphan.StartTs,
 		})
 
-		newInfo, err := c.infoWriter.Write(ctx, c.ID, captureID, info, false)
+		newInfo, err := c.infoWriter.Write(ctx, c.id, captureID, info, false)
 		if err == nil {
-			c.ProcessorInfos[captureID] = newInfo
+			c.processorInfos[captureID] = newInfo
 		}
 		switch errors.Cause(err) {
 		case model.ErrFindPLockNotCommit:
 			c.restoreTableInfos(infoClone, captureID)
 			log.Info("write table info delay, wait plock resolve",
-				zap.String("changefeed", c.ID),
+				zap.String("changefeed", c.id),
 				zap.String("capture", captureID))
 		case nil:
 			log.Info("dispatch table success",
@@ -415,7 +415,7 @@ func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 	delete(o.captures, info.ID)
 
 	for _, feed := range o.changeFeeds {
-		pinfo, ok := feed.ProcessorInfos[info.ID]
+		pinfo, ok := feed.processorInfos[info.ID]
 		if !ok {
 			continue
 		}
@@ -427,7 +427,7 @@ func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 			}
 		}
 
-		key := kv.GetEtcdKeyTask(feed.ID, info.ID)
+		key := kv.GetEtcdKeyTask(feed.id, info.ID)
 		if _, err := o.etcdClient.Delete(context.Background(), key); err != nil {
 			log.Warn("failed to delete key", zap.Error(err))
 		}
@@ -496,7 +496,7 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 
 	cf := &changeFeed{
 		info:                    info,
-		ID:                      id,
+		id:                      id,
 		client:                  o.etcdClient,
 		ddlHandler:              ddlHandler,
 		schema:                  schemaStorage,
@@ -509,9 +509,9 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
 		},
-		DDLState:       model.ChangeFeedSyncDML,
-		TargetTs:       info.GetTargetTs(),
-		ProcessorInfos: processorsInfos,
+		ddlState:       model.ChangeFeedSyncDML,
+		targetTs:       info.GetTargetTs(),
+		processorInfos: processorsInfos,
 		infoWriter:     storage.NewOwnerTaskStatusEtcdWriter(o.etcdClient),
 		filter:         filter,
 	}
@@ -527,7 +527,7 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 	for changeFeedID, procInfos := range pinfos {
 		if cf, exist := o.changeFeeds[changeFeedID]; exist {
 			cf.updateProcessorInfos(procInfos)
-			for id, info := range cf.ProcessorInfos {
+			for id, info := range cf.processorInfos {
 				lastUpdateTime := cf.processorLastUpdateTime[id]
 				if time.Since(lastUpdateTime) > markProcessorDownTime {
 					snap := info.Snapshot(changeFeedID, id)
@@ -588,7 +588,7 @@ func (c *changeFeed) pullDDLJob() error {
 
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
 func (c *changeFeed) calcResolvedTs() error {
-	if c.DDLState != model.ChangeFeedSyncDML {
+	if c.ddlState != model.ChangeFeedSyncDML {
 		return nil
 	}
 
@@ -597,14 +597,14 @@ func (c *changeFeed) calcResolvedTs() error {
 		return nil
 	}
 
-	minResolvedTs := c.TargetTs
-	minCheckpointTs := c.TargetTs
+	minResolvedTs := c.targetTs
+	minCheckpointTs := c.targetTs
 
 	if len(c.tables) == 0 {
 		minCheckpointTs = c.status.CheckpointTs
 	} else {
 		// calc the min of all resolvedTs in captures
-		for _, pStatus := range c.ProcessorInfos {
+		for _, pStatus := range c.processorInfos {
 			if minResolvedTs > pStatus.ResolvedTs {
 				minResolvedTs = pStatus.ResolvedTs
 			}
@@ -633,7 +633,7 @@ func (c *changeFeed) calcResolvedTs() error {
 	// we need to execute this ddl job
 	if len(c.ddlJobHistory) > 0 && minResolvedTs > c.ddlJobHistory[0].Job.BinlogInfo.FinishedTS {
 		minResolvedTs = c.ddlJobHistory[0].Job.BinlogInfo.FinishedTS
-		c.DDLState = model.ChangeFeedWaitToExecDDL
+		c.ddlState = model.ChangeFeedWaitToExecDDL
 	}
 
 	var tsUpdated bool
@@ -649,7 +649,7 @@ func (c *changeFeed) calcResolvedTs() error {
 	}
 
 	if tsUpdated {
-		log.Debug("update changefeed", zap.String("id", c.ID),
+		log.Debug("update changefeed", zap.String("id", c.id),
 			zap.Uint64("checkpoint ts", minCheckpointTs),
 			zap.Uint64("resolved ts", minResolvedTs))
 	}
@@ -672,10 +672,10 @@ func (o *ownerImpl) handleDDL(ctx context.Context) error {
 		err := cf.handleDDL(ctx, o.captures)
 		switch errors.Cause(err) {
 		case nil:
-			// do nothing, continue
+			continue
 		case model.ErrExecDDLFailed:
 			err = o.EnqueueJob(model.AdminJob{
-				CfID: cf.ID,
+				CfID: cf.id,
 				Type: model.AdminStop,
 			})
 			if err != nil {
@@ -693,7 +693,7 @@ func (o *ownerImpl) handleDDL(ctx context.Context) error {
 // After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
 func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.CaptureInfo) error {
 
-	if c.DDLState != model.ChangeFeedWaitToExecDDL {
+	if c.ddlState != model.ChangeFeedWaitToExecDDL {
 		return nil
 	}
 	if len(c.ddlJobHistory) == 0 {
@@ -702,7 +702,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	todoDDLJob := c.ddlJobHistory[0]
 
 	// Check if all the checkpointTs of capture are achieving global resolvedTs(which is equal to todoDDLJob.FinishedTS)
-	for cid, pInfo := range c.ProcessorInfos {
+	for cid, pInfo := range c.processorInfos {
 		if pInfo.CheckPointTs != todoDDLJob.Job.BinlogInfo.FinishedTS {
 			log.Debug("wait checkpoint ts", zap.String("cid", cid),
 				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
@@ -712,7 +712,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	}
 
 	// Execute DDL Job asynchronously
-	c.DDLState = model.ChangeFeedExecDDL
+	c.ddlState = model.ChangeFeedExecDDL
 	log.Debug("apply job", zap.Stringer("job", todoDDLJob.Job),
 		zap.String("query", todoDDLJob.Job.Query),
 		zap.Uint64("ts", todoDDLJob.Job.BinlogInfo.FinishedTS))
@@ -745,25 +745,25 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 			// If DDL executing failed, pause the changefeed and print log, rather
 			// than return an error and break the running of this owner.
 			if err != nil {
-				c.DDLState = model.ChangeFeedDDLExecuteFailed
+				c.ddlState = model.ChangeFeedDDLExecuteFailed
 				log.Error("Execute DDL failed",
-					zap.String("ChangeFeedID", c.ID),
+					zap.String("ChangeFeedID", c.id),
 					zap.Error(err),
 					zap.Reflect("ddlJob", todoDDLJob))
 				return model.ErrExecDDLFailed
 			}
 			log.Info("Execute DDL succeeded",
-				zap.String("ChangeFeedID", c.ID),
+				zap.String("ChangeFeedID", c.id),
 				zap.Reflect("ddlJob", todoDDLJob))
 		}
 	}
-	if c.DDLState != model.ChangeFeedExecDDL {
+	if c.ddlState != model.ChangeFeedExecDDL {
 		log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
-			zap.String("ChangeFeedID", c.ID),
-			zap.String("ChangeFeedState", c.DDLState.String()))
+			zap.String("ChangeFeedID", c.id),
+			zap.String("ChangeFeedDDLState", c.ddlState.String()))
 	}
 	c.ddlJobHistory = c.ddlJobHistory[1:]
-	c.DDLState = model.ChangeFeedSyncDML
+	c.ddlState = model.ChangeFeedSyncDML
 	return nil
 }
 
@@ -773,11 +773,11 @@ func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	if !ok {
 		return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
 	}
-	for captureID, pinfo := range cf.ProcessorInfos {
+	for captureID, pinfo := range cf.processorInfos {
 		pinfo.TablePLock = nil
 		pinfo.TableCLock = nil
 		pinfo.AdminJobType = job.Type
-		_, err := cf.infoWriter.Write(ctx, cf.ID, captureID, pinfo, false)
+		_, err := cf.infoWriter.Write(ctx, cf.id, captureID, pinfo, false)
 		if err != nil {
 			return errors.Trace(err)
 		}

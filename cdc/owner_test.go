@@ -140,9 +140,9 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 			tables:                  tables,
 			status:                  &model.ChangeFeedStatus{},
 			processorLastUpdateTime: make(map[string]time.Time),
-			TargetTs:                100,
-			DDLState:                model.ChangeFeedSyncDML,
-			ProcessorInfos: model.ProcessorsInfos{
+			targetTs:                100,
+			ddlState:                model.ChangeFeedSyncDML,
+			processorInfos: model.ProcessorsInfos{
 				"capture_1": {},
 				"capture_2": {},
 			},
@@ -180,7 +180,7 @@ type handlerForDDLTest struct {
 
 	dmlExpectIndex   int
 	expectResolvedTs []uint64
-	expectStatus     []model.ChangeFeedState
+	expectStatus     []model.ChangeFeedDDLState
 
 	c      *check.C
 	cancel func()
@@ -303,7 +303,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 			11, 11,
 			89, 89,
 			100},
-		expectStatus: []model.ChangeFeedState{
+		expectStatus: []model.ChangeFeedDDLState{
 			model.ChangeFeedWaitToExecDDL, model.ChangeFeedExecDDL,
 			model.ChangeFeedWaitToExecDDL, model.ChangeFeedExecDDL,
 			model.ChangeFeedWaitToExecDDL, model.ChangeFeedExecDDL,
@@ -323,9 +323,9 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 			info:                    &model.ChangeFeedInfo{},
 			status:                  &model.ChangeFeedStatus{},
 			processorLastUpdateTime: make(map[string]time.Time),
-			TargetTs:                100,
-			DDLState:                model.ChangeFeedSyncDML,
-			ProcessorInfos: model.ProcessorsInfos{
+			targetTs:                100,
+			ddlState:                model.ChangeFeedSyncDML,
+			processorInfos: model.ProcessorsInfos{
 				"capture_1": {},
 				"capture_2": {},
 			},
@@ -353,11 +353,11 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	cfID := "test_handle_admin"
 	sampleCF := &changeFeed{
-		ID:       cfID,
+		id:       cfID,
 		info:     &model.ChangeFeedInfo{},
 		status:   &model.ChangeFeedStatus{},
-		DDLState: model.ChangeFeedSyncDML,
-		ProcessorInfos: model.ProcessorsInfos{
+		ddlState: model.ChangeFeedSyncDML,
+		processorInfos: model.ProcessorsInfos{
 			"capture_1": {ResolvedTs: 10001},
 			"capture_2": {},
 		},
@@ -373,7 +373,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		cfRWriter:          storage.NewChangeFeedEtcdRWriter(s.client),
 	}
 	owner.changeFeeds = map[model.ChangeFeedID]*changeFeed{cfID: sampleCF}
-	for cid, pinfo := range sampleCF.ProcessorInfos {
+	for cid, pinfo := range sampleCF.processorInfos {
 		key := kv.GetEtcdKeyTask(cfID, cid)
 		pinfoStr, err := pinfo.Marshal()
 		c.Assert(err, check.IsNil)
@@ -400,7 +400,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(info.AdminJobType, check.Equals, model.AdminStop)
 	// check processor is set admin job
-	for cid := range sampleCF.ProcessorInfos {
+	for cid := range sampleCF.processorInfos {
 		_, subInfo, err := kv.GetTaskStatus(ctx, owner.etcdClient, cfID, cid)
 		c.Assert(err, check.IsNil)
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminStop)
@@ -431,7 +431,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	_, err = kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
 	// check processor is set admin job
-	for cid := range sampleCF.ProcessorInfos {
+	for cid := range sampleCF.processorInfos {
 		_, subInfo, err := kv.GetTaskStatus(ctx, owner.etcdClient, cfID, cid)
 		c.Assert(err, check.IsNil)
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminRemove)
@@ -449,7 +449,7 @@ var _ = check.Suite(&changefeedInfoSuite{})
 
 func (s *changefeedInfoSuite) TestMinimumTables(c *check.C) {
 	cf := &changeFeed{
-		ProcessorInfos: map[model.CaptureID]*model.TaskStatus{
+		processorInfos: map[model.CaptureID]*model.TaskStatus{
 			"c1": {
 				TableInfos: make([]*model.ProcessTableInfo, 2),
 			},
