@@ -462,7 +462,7 @@ func (c *CDCClient) singleEventFeed(
 						})
 					case cdcpb.Event_COMMIT:
 						// emit a value
-						err := matcher.matchRow(row)
+						row, err := matcher.matchRow(row)
 						if err != nil {
 							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(err)
 						}
