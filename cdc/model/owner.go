@@ -226,7 +226,6 @@ func (s ChangeFeedDDLState) String() string {
 
 // ChangeFeedStatus stores information about a ChangeFeed
 type ChangeFeedStatus struct {
-	SinkURI      string       `json:"sink-uri"`
 	ResolvedTs   uint64       `json:"resolved-ts"`
 	CheckpointTs uint64       `json:"checkpoint-ts"`
 	AdminJobType AdminJobType `json:"admin-job-type"`

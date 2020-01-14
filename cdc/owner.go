@@ -505,7 +505,6 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 		toCleanTables:           make(map[uint64]struct{}),
 		processorLastUpdateTime: make(map[string]time.Time),
 		status: &model.ChangeFeedStatus{
-			SinkURI:      info.SinkURI,
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
 		},
