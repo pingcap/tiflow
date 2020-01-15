@@ -155,14 +155,13 @@ func CreateSourceDBs() (dbs []*sql.DB, err error) {
 		return nil, errors.Trace(err)
 	}
 
-	//cfg.Port = 4001
-	//src2, err := CreateDB(cfg)
-	//if err != nil {
-	//	return nil, errors.Trace(err)
-	//}
+	cfg.Port = 4001
+	src2, err := CreateDB(cfg)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
-	//dbs = append(dbs, src1, src2)
-	dbs = append(dbs, src1)
+	dbs = append(dbs, src1, src2)
 	return
 }
 
