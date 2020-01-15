@@ -292,10 +292,7 @@ func realRunProcessorWatcher(
 	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 		return nil, errors.Trace(err)
 	}
-	checkpointTs := info.GetStartTs()
-	if status != nil {
-		checkpointTs = status.CheckpointTs
-	}
+	checkpointTs := info.GetCheckpointTs(status)
 	sw := NewProcessorWatcher(changefeedID, captureID, pdEndpoints, etcdCli, info, checkpointTs)
 	sw.wg.Add(1)
 	go sw.Watch(ctx, errCh, cb)

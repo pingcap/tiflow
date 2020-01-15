@@ -548,10 +548,7 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 		if status != nil && (status.AdminJobType == model.AdminStop || status.AdminJobType == model.AdminRemove) {
 			continue
 		}
-		checkpointTs := info.GetStartTs()
-		if status != nil {
-			checkpointTs = status.CheckpointTs
-		}
+		checkpointTs := info.GetCheckpointTs(status)
 
 		newCf, err := o.newChangeFeed(changeFeedID, procInfos, info, checkpointTs)
 		if err != nil {
@@ -749,7 +746,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 					zap.String("ChangeFeedID", c.id),
 					zap.Error(err),
 					zap.Reflect("ddlJob", todoDDLJob))
-				return model.ErrExecDDLFailed
+				return errors.Trace(model.ErrExecDDLFailed)
 			}
 			log.Info("Execute DDL succeeded",
 				zap.String("ChangeFeedID", c.id),
