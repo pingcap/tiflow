@@ -54,6 +54,7 @@ func (info *ChangeFeedInfo) GetStartTs() uint64 {
 	return oracle.EncodeTSO(info.CreateTime.Unix() * 1000)
 }
 
+// GetCheckpointTs returns CheckpointTs if it's specified in ChangeFeedStatus, otherwise StartTs is returned.
 func (info *ChangeFeedInfo) GetCheckpointTs(status *ChangeFeedStatus) uint64 {
 	if status != nil {
 		return status.CheckpointTs
