@@ -20,8 +20,10 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/mvcc"
 	"github.com/coreos/etcd/mvcc/mvccpb"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -125,6 +127,9 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) err
 				log.Info("watcher is closed")
 				return nil
 			}
+			failpoint.Inject("WatchChangeFeedInfoCompactionErr", func() {
+				failpoint.Return(errors.Trace(mvcc.ErrCompacted))
+			})
 			respErr := resp.Err()
 			if respErr != nil {
 				return errors.Trace(respErr)

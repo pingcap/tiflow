@@ -13,6 +13,7 @@ require (
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20190102082844-67f458068fc8
 	github.com/pingcap/errors v0.11.4
+	github.com/pingcap/failpoint v0.0.0-20200115060041-f2180fbf0df8
 	github.com/pingcap/kvproto v0.0.0-20200108025604-a4dc183d2af5
 	github.com/pingcap/log v0.0.0-20191012051959-b742a5d432e9
 	github.com/pingcap/parser v0.0.0-20191012071233-32876040fefb

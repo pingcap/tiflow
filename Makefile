@@ -25,6 +25,11 @@ PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor')
 CDC_PKG := github.com/pingcap/ticdc
+FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/$(PROJECT)/"}|grep -v "github.com/pingcap/$(PROJECT)"; done)
+FAILPOINT := bin/failpoint-ctl
+
+FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
+FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
 LDFLAGS += -X "$(CDC_PKG)/pkg/util.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
 LDFLAGS += -X "$(CDC_PKG)/pkg/util.GitHash=$(shell git rev-parse HEAD)"
@@ -63,6 +68,7 @@ check_third_party_binary:
 	@which bin/pd-ctl
 	@which bin/sync_diff_inspector
 	@which bin/go-ycsb
+	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILD) -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl
 
 integration_test_build:
 	$(GOTEST) -c -cover -covemode=atomic \
@@ -120,3 +126,9 @@ tools/bin/revive: tools/check/go.mod
 tools/bin/golangci-lint: tools/check/go.mod
 	cd tools/check; \
 	$(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
+
+failpoint-enable:
+	$(FAILPOINT_ENABLE)
+
+failpoint-disable:
+	$(FAILPOINT_DISABLE)

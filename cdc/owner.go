@@ -876,8 +876,9 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 	defer o.cancelWatchCapture()
 	handleWatchCaptureC := make(chan error, 1)
 	go func() {
+		var err error
 		for {
-			err := o.handleWatchCapture()
+			err = o.handleWatchCapture()
 			if errors.Cause(err) != mvcc.ErrCompacted {
 				break
 			}
