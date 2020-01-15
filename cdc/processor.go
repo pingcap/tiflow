@@ -134,6 +134,7 @@ type processor struct {
 	captureID    string
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
+	filter       *txnFilter
 
 	pdCli   pd.Client
 	etcdCli *clientv3.Client
@@ -176,7 +177,7 @@ func (t *tableInfo) storeResolvedTS(ts uint64) {
 }
 
 // NewProcessor creates and returns a processor for the specified change feed
-func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changefeedID, captureID string) (*processor, error) {
+func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changefeedID, captureID string, checkpointTs uint64) (*processor, error) {
 	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
@@ -205,7 +206,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	ddlPuller := puller.NewPuller(pdCli, changefeed.GetCheckpointTs(), []util.Span{util.GetDDLSpan()}, false)
+	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan()}, false)
 
 	mounter := fNewMounter(schemaStorage)
 
@@ -213,6 +214,8 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 	if err != nil {
 		return nil, err
 	}
+
+	filter := newTxnFilter(changefeed.GetConfig())
 
 	p := &processor{
 		captureID:     captureID,
@@ -224,6 +227,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 		schemaStorage: schemaStorage,
 		sink:          sink,
 		ddlPuller:     ddlPuller,
+		filter:        filter,
 
 		tsRWriter:    tsRWriter,
 		status:       tsRWriter.GetTaskStatus(),
@@ -299,10 +303,10 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
 func (p *processor) localResolvedWorker(ctx context.Context) error {
-	updateInfoTick := time.NewTicker(time.Millisecond * 100)
+	updateInfoTick := time.NewTicker(time.Millisecond * 500)
 	defer updateInfoTick.Stop()
 
-	resolveTsTick := time.NewTicker(time.Millisecond * 100)
+	resolveTsTick := time.NewTicker(time.Millisecond * 500)
 	defer resolveTsTick.Stop()
 
 	for {
@@ -645,11 +649,11 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if p.changefeed.ShouldIgnoreTxn(&txn) {
+			if p.filter.ShouldIgnoreTxn(&txn) {
 				log.Info("DML txn ignored", zap.Uint64("ts", txn.Ts))
 				continue
 			}
-			p.changefeed.FilterTxn(&txn)
+			p.filter.FilterTxn(&txn)
 			if len(txn.DMLs) == 0 {
 				continue
 			}

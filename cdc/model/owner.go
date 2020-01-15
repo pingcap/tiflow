@@ -181,12 +181,12 @@ type ChangeFeedID = string
 // ProcessorsInfos maps from capture IDs to TaskStatus
 type ProcessorsInfos map[CaptureID]*TaskStatus
 
-// ChangeFeedState is the type for change feed status
-type ChangeFeedState int
+// ChangeFeedDDLState is the type for change feed status
+type ChangeFeedDDLState int
 
 const (
 	// ChangeFeedUnknown stands for all unknown status
-	ChangeFeedUnknown ChangeFeedState = iota
+	ChangeFeedUnknown ChangeFeedDDLState = iota
 	// ChangeFeedSyncDML means DMLs are being processed
 	ChangeFeedSyncDML
 	// ChangeFeedWaitToExecDDL means we are waiting to execute a DDL
@@ -210,7 +210,7 @@ func (p ProcessorsInfos) String() string {
 }
 
 // String implements fmt.Stringer interface.
-func (s ChangeFeedState) String() string {
+func (s ChangeFeedDDLState) String() string {
 	switch s {
 	case ChangeFeedSyncDML:
 		return "SyncDML"
@@ -226,7 +226,6 @@ func (s ChangeFeedState) String() string {
 
 // ChangeFeedStatus stores information about a ChangeFeed
 type ChangeFeedStatus struct {
-	SinkURI      string       `json:"sink-uri"`
 	ResolvedTs   uint64       `json:"resolved-ts"`
 	CheckpointTs uint64       `json:"checkpoint-ts"`
 	AdminJobType AdminJobType `json:"admin-job-type"`

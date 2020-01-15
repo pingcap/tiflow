@@ -157,7 +157,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 	c.Assert(err, check.IsNil)
 	defer etcd.Close()
 
-	p, err := NewProcessor([]string{etcdURL.String()}, model.ChangeFeedInfo{}, "", "")
+	p, err := NewProcessor([]string{etcdURL.String()}, model.ChangeFeedInfo{}, "", "", 0)
 	c.Assert(err, check.IsNil)
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
