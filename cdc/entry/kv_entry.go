@@ -112,7 +112,7 @@ func (row *rowKVEntry) unflatten(tableInfo *schema.TableInfo) error {
 	for colID, v := range row.Row {
 		colInfo, exist := tableInfo.GetColumnInfo(colID)
 		if !exist {
-			log.Info("can not find column info, ignore this column", zap.Int64("colID", colID))
+			log.Info("can not find column info, ignore this column because the column should be in WRITE ONLY state", zap.Int64("colID", colID), zap.Uint64("ts", row.Ts))
 			delete(row.Row, colID)
 			continue
 		}
