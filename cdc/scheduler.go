@@ -106,7 +106,10 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) err
 			return errors.Trace(err)
 		}
 		if needRunWatcher {
-			runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, info, errCh, cb)
+			_, err := runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, info, errCh, cb)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 
@@ -134,7 +137,10 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) err
 						return errors.Trace(err)
 					}
 					if needRunWatcher {
-						runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, info, errCh, cb)
+						_, err := runProcessorWatcher(ctx, changefeedID, w.captureID, w.pdEndpoints, w.etcdCli, info, errCh, cb)
+						if err != nil {
+							return errors.Trace(err)
+						}
 					}
 				case mvccpb.DELETE:
 					err := w.processDeleteKv(ev.Kv)
@@ -154,6 +160,7 @@ type ProcessorWatcher struct {
 	captureID    string
 	etcdCli      *clientv3.Client
 	info         model.ChangeFeedInfo
+	checkpointTs uint64
 	wg           sync.WaitGroup
 	closed       int32
 }
@@ -165,6 +172,7 @@ func NewProcessorWatcher(
 	pdEndpoints []string,
 	cli *clientv3.Client,
 	info model.ChangeFeedInfo,
+	checkpointTs uint64,
 ) *ProcessorWatcher {
 	return &ProcessorWatcher{
 		changefeedID: changefeedID,
@@ -172,6 +180,7 @@ func NewProcessorWatcher(
 		pdEndpoints:  pdEndpoints,
 		etcdCli:      cli,
 		info:         info,
+		checkpointTs: checkpointTs,
 	}
 }
 
@@ -233,7 +242,7 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	err = runProcessor(cctx, w.pdEndpoints, w.info, w.changefeedID, w.captureID, cb)
+	err = runProcessor(cctx, w.pdEndpoints, w.info, w.changefeedID, w.captureID, w.checkpointTs, cb)
 	if err != nil {
 		errCh <- err
 		return
@@ -278,11 +287,16 @@ func realRunProcessorWatcher(
 	info model.ChangeFeedInfo,
 	errCh chan error,
 	cb processorCallback,
-) *ProcessorWatcher {
-	sw := NewProcessorWatcher(changefeedID, captureID, pdEndpoints, etcdCli, info)
+) (*ProcessorWatcher, error) {
+	status, err := kv.GetChangeFeedStatus(ctx, etcdCli, changefeedID)
+	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+		return nil, errors.Trace(err)
+	}
+	checkpointTs := info.GetCheckpointTs(status)
+	sw := NewProcessorWatcher(changefeedID, captureID, pdEndpoints, etcdCli, info, checkpointTs)
 	sw.wg.Add(1)
 	go sw.Watch(ctx, errCh, cb)
-	return sw
+	return sw, nil
 }
 
 // realRunProcessor creates a new processor then starts it, and returns a channel to pass error.
@@ -292,9 +306,10 @@ func realRunProcessor(
 	info model.ChangeFeedInfo,
 	changefeedID string,
 	captureID string,
+	checkpointTs uint64,
 	cb processorCallback,
 ) error {
-	processor, err := NewProcessor(pdEndpoints, info, changefeedID, captureID)
+	processor, err := NewProcessor(pdEndpoints, info, changefeedID, captureID, checkpointTs)
 	if err != nil {
 		return err
 	}

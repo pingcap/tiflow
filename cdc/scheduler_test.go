@@ -72,6 +72,7 @@ func mockRunProcessor(
 	detail model.ChangeFeedInfo,
 	changefeedID string,
 	captureID string,
+	checkpointTs uint64,
 	_ processorCallback,
 ) error {
 	atomic.AddInt32(&runProcessorCount, 1)
@@ -84,6 +85,7 @@ func mockRunProcessorError(
 	detail model.ChangeFeedInfo,
 	changefeedID string,
 	captureID string,
+	checkpointTs uint64,
 	_ processorCallback,
 ) error {
 	return errRunProcessor
@@ -98,9 +100,9 @@ func mockRunProcessorWatcher(
 	detail model.ChangeFeedInfo,
 	errCh chan error,
 	_ processorCallback,
-) *ProcessorWatcher {
+) (*ProcessorWatcher, error) {
 	atomic.AddInt32(&runChangeFeedWatcherCount, 1)
-	return nil
+	return nil, nil
 }
 
 func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
@@ -132,7 +134,8 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 
 	// processor exists before watch starts
 	errCh := make(chan error, 1)
-	sw := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh, nil)
+	sw, err := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh, nil)
+	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runProcessorCount) == 1
 	}), check.IsTrue)
@@ -157,7 +160,8 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 
 	// check watcher can find new processor in watch loop
 	errCh2 := make(chan error, 1)
-	runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2, nil)
+	_, err = runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2, nil)
+	c.Assert(err, check.IsNil)
 	_, err = cli.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
@@ -193,7 +197,8 @@ func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	errCh := make(chan error, 1)
-	sw := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh, nil)
+	sw, err := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh, nil)
+	c.Assert(err, check.IsNil)
 	sw.wg.Add(1)
 	go sw.Watch(context.Background(), errCh, nil)
 

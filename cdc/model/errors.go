@@ -26,4 +26,5 @@ var (
 	ErrWriteTaskStatusConlict = errors.New("write task status conflict")
 	ErrFindPLockNotCommit     = errors.New("task status has p-lock not committed")
 	ErrAdminStopProcessor     = errors.New("stop processor by admin command")
+	ErrExecDDLFailed          = errors.New("exec DDL failed")
 )

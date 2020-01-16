@@ -117,9 +117,10 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 				c.Assert(err, check.IsNil)
 			}
 		}
-		cfs, pinfos, err := rw.Read(context.Background())
+		cfInfo, cfStatus, pinfos, err := rw.Read(context.Background())
 		c.Assert(err, check.IsNil)
-		c.Assert(len(cfs), check.Equals, len(tc.ids))
+		c.Assert(len(cfInfo), check.Equals, len(tc.ids))
+		c.Assert(len(cfStatus), check.Equals, len(tc.ids))
 		c.Assert(len(pinfos), check.Equals, len(tc.ids))
 		for _, changefeedID := range tc.ids {
 			// don't check ModRevision

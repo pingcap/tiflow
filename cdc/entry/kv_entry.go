@@ -21,10 +21,12 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/tidb/types"
+	"go.uber.org/zap"
 )
 
 type kvEntry interface {
@@ -110,7 +112,9 @@ func (row *rowKVEntry) unflatten(tableInfo *schema.TableInfo) error {
 	for colID, v := range row.Row {
 		colInfo, exist := tableInfo.GetColumnInfo(colID)
 		if !exist {
-			return errors.NotFoundf("column info, colID: %d", colID)
+			log.Info("can not find column info, ignore this column because the column should be in WRITE ONLY state", zap.Int64("colID", colID), zap.Uint64("ts", row.Ts))
+			delete(row.Row, colID)
+			continue
 		}
 		fieldType := &colInfo.FieldType
 		datum, err := unflatten(v, fieldType)

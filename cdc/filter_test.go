@@ -11,10 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package cdc
 
 import (
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -23,33 +24,31 @@ type filterSuite struct{}
 var _ = check.Suite(&filterSuite{})
 
 func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
-	info := ChangeFeedInfo{Config: &ReplicaConfig{}}
-	c.Assert(info.ShouldIgnoreTable("information_schema", ""), check.IsTrue)
-	c.Assert(info.ShouldIgnoreTable("information_schema", "statistics"), check.IsTrue)
-	c.Assert(info.ShouldIgnoreTable("performance_schema", ""), check.IsTrue)
-	c.Assert(info.ShouldIgnoreTable("metric_schema", "query_duration"), check.IsTrue)
-	c.Assert(info.ShouldIgnoreTable("sns", "user"), check.IsFalse)
-	txn := Txn{DDL: &DDL{
+	filter := newTxnFilter(&model.ReplicaConfig{})
+	c.Assert(filter.ShouldIgnoreTable("information_schema", ""), check.IsTrue)
+	c.Assert(filter.ShouldIgnoreTable("information_schema", "statistics"), check.IsTrue)
+	c.Assert(filter.ShouldIgnoreTable("performance_schema", ""), check.IsTrue)
+	c.Assert(filter.ShouldIgnoreTable("metric_schema", "query_duration"), check.IsTrue)
+	c.Assert(filter.ShouldIgnoreTable("sns", "user"), check.IsFalse)
+	txn := model.Txn{DDL: &model.DDL{
 		Database: "information_schema",
 	}}
-	info.FilterTxn(&txn)
+	filter.FilterTxn(&txn)
 	c.Assert(txn.DDL, check.IsNil)
 }
 
 func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
-	info := ChangeFeedInfo{
-		Config: &ReplicaConfig{
-			FilterRules: &filter.Rules{
-				DoDBs: []string{"sns", "ecom"},
-				IgnoreTables: []*filter.Table{
-					{Schema: "sns", Name: "log"},
-					{Schema: "ecom", Name: "test"},
-				},
+	filter := newTxnFilter(&model.ReplicaConfig{
+		FilterRules: &filter.Rules{
+			DoDBs: []string{"sns", "ecom"},
+			IgnoreTables: []*filter.Table{
+				{Schema: "sns", Name: "log"},
+				{Schema: "ecom", Name: "test"},
 			},
 		},
-	}
+	})
 	assertIgnore := func(db, tbl string, boolCheck check.Checker) {
-		c.Assert(info.ShouldIgnoreTable(db, tbl), boolCheck)
+		c.Assert(filter.ShouldIgnoreTable(db, tbl), boolCheck)
 	}
 	assertIgnore("other", "", check.IsTrue)
 	assertIgnore("other", "what", check.IsTrue)
@@ -59,39 +58,37 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 	assertIgnore("ecom", "test", check.IsTrue)
 	assertIgnore("sns", "log", check.IsTrue)
 	assertIgnore("information_schema", "", check.IsTrue)
-	txn := Txn{DMLs: []*DML{
+	txn := model.Txn{DMLs: []*model.DML{
 		{Database: "other"},
 		{Database: "sns"},
 		{Database: "ecom"},
 		{Database: "ecom", Table: "test"},
 	}}
-	info.FilterTxn(&txn)
+	filter.FilterTxn(&txn)
 	c.Assert(txn.DMLs, check.HasLen, 2)
 
-	txn = Txn{DDL: &DDL{
+	txn = model.Txn{DDL: &model.DDL{
 		Database: "sns",
 		Table:    "log",
 	}}
-	info.FilterTxn(&txn)
+	filter.FilterTxn(&txn)
 	c.Assert(txn.DDL, check.IsNil)
 }
 
 func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
-	info := ChangeFeedInfo{
-		Config: &ReplicaConfig{
-			IgnoreTxnCommitTs: []uint64{1, 3},
-		},
-	}
+	filter := newTxnFilter(&model.ReplicaConfig{
+		IgnoreTxnCommitTs: []uint64{1, 3},
+	})
 	testCases := []struct {
-		txn    *Txn
+		txn    *model.Txn
 		ignore bool
 	}{
-		{&Txn{DDL: &DDL{Database: "sns"}, Ts: 1}, true},
-		{&Txn{DDL: &DDL{Database: "ecom"}, Ts: 2}, false},
-		{&Txn{DMLs: []*DML{{Database: "sns", Table: "log"}}, Ts: 3}, true},
+		{&model.Txn{DDL: &model.DDL{Database: "sns"}, Ts: 1}, true},
+		{&model.Txn{DDL: &model.DDL{Database: "ecom"}, Ts: 2}, false},
+		{&model.Txn{DMLs: []*model.DML{{Database: "sns", Table: "log"}}, Ts: 3}, true},
 	}
 
 	for _, tc := range testCases {
-		c.Assert(info.ShouldIgnoreTxn(tc.txn), check.Equals, tc.ignore)
+		c.Assert(filter.ShouldIgnoreTxn(tc.txn), check.Equals, tc.ignore)
 	}
 }
