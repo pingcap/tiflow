@@ -56,10 +56,16 @@ cdc:
 install:
 	go install ./...
 
-unit_test:
+unit_test: check_failpoint_ctl
 	mkdir -p "$(TEST_DIR)"
+	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
-	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES)
+	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES) \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+
+check_failpoint_ctl:
+	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILD) -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl
 
 check_third_party_binary:
 	@which bin/tidb-server
@@ -68,12 +74,14 @@ check_third_party_binary:
 	@which bin/pd-ctl
 	@which bin/sync_diff_inspector
 	@which bin/go-ycsb
-	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILD) -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl
 
-integration_test_build:
+integration_test_build: check_failpoint_ctl
+	$(FAILPOINT_ENABLE)
 	$(GOTEST) -c -cover -covemode=atomic \
 		-coverpkg=github.com/pingcap/ticdc/... \
-		-o bin/cdc.test github.com/pingcap/ticdc
+		-o bin/cdc.test github.com/pingcap/ticdc \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
 
 integration_test: check_third_party_binary
 	tests/run.sh $(CASE)
