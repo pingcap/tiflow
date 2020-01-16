@@ -146,15 +146,14 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 		c.Assert(len(owner.captures), check.Equals, expected)
 	}
 
-	failpoint.Enable("github.com/pingcap/ticdc/cdc/WatchCaptureInfoCompactionErr", "1*return")
-
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/WatchCaptureInfoCompactionErr", "1*return"), check.IsNil)
 	err = PutCaptureInfo(ctx, info2, ci.client)
 	c.Assert(err, check.IsNil)
 	resp := mustGetResp()
 	c.Assert(resp, check.IsNil)
 	c.Assert(atomic.LoadInt64(&watcherRetry), check.Equals, int64(1))
 	checkCaptureLen(2)
-	failpoint.Disable("github.com/pingcap/ticdc/cdc/WatchCaptureInfoCompactionErr")
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/cdc/WatchCaptureInfoCompactionErr"), check.IsNil)
 
 	err = PutCaptureInfo(ctx, info3, ci.client)
 	c.Assert(err, check.IsNil)

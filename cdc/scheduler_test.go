@@ -286,7 +286,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 		return len(w.infos) == 0
 	}), check.IsTrue)
 
-	failpoint.Enable("github.com/pingcap/ticdc/cdc/WatchChangeFeedInfoCompactionErr", "1*return")
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/WatchChangeFeedInfoCompactionErr", "1*return"), check.IsNil)
 
 	// create a changefeed
 	err = kv.SaveChangeFeedInfo(context.Background(), cli, detail, changefeedID)
@@ -299,7 +299,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	w.lock.RUnlock()
 	c.Assert(atomic.LoadInt64(&watcherRetry), check.Equals, int64(1))
 
-	failpoint.Disable("github.com/pingcap/ticdc/cdc/WatchChangeFeedInfoCompactionErr")
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/cdc/WatchChangeFeedInfoCompactionErr"), check.IsNil)
 
 	// dispatch a stop changefeed admin job
 	detail.AdminJobType = model.AdminStop

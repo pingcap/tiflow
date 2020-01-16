@@ -103,7 +103,7 @@ func newCaptureInfoWatch(
 		for resp := range etcdWatchC {
 			failpoint.Inject("WatchCaptureInfoCompactionErr", func() {
 				watchResp <- &CaptureInfoWatchResp{Err: errors.Trace(mvcc.ErrCompacted)}
-				return
+				failpoint.Return()
 			})
 			if resp.Err() != nil {
 				watchResp <- &CaptureInfoWatchResp{Err: errors.Trace(resp.Err())}
