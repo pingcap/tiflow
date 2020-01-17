@@ -3,7 +3,6 @@ package entry
 import (
 	"context"
 	"reflect"
-	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -13,7 +12,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -22,9 +20,10 @@ type kvEntrySuite struct {
 
 var _ = check.Suite(&kvEntrySuite{})
 
-func (s *kvEntrySuite) TestCreateTable(c *check.C) {
-	pm, pmCtx, pmCancel := startPullerManager(c)
-	defer pmCancel()
+func (s *kvEntrySuite) testCreateTable(c *check.C, newRowFormat bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat)
+	m := NewTxnMounter(schema)
 
 	pm.MustExec("create table test.test1(id varchar(255) primary key, a int, index i1 (a))")
 
@@ -32,10 +31,10 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 	existDDLJobHistoryKVEntry := false
 
 	// create another context with canceled, we can close this puller but not affect puller manager
-	plrCtx, plrCancel := context.WithCancel(pmCtx)
+	plrCtx, plrCancel := context.WithCancel(ctx)
 	err := plr.CollectRawTxns(plrCtx, func(ctx context.Context, rawTxn model.RawTxn) error {
 		for _, raw := range rawTxn.Entries {
-			entry, err := unmarshal(raw)
+			entry, err := m.unmarshal(raw)
 			c.Assert(err, check.IsNil)
 			if e, ok := entry.(*ddlJobKVEntry); ok {
 				existDDLJobHistoryKVEntry = true
@@ -73,17 +72,21 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 	})
 	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	c.Assert(existDDLJobHistoryKVEntry, check.IsTrue)
+	cancel()
 
 	// create another puller, pull KVs from now
-	nowTso := oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond))
-	plr = pm.CreatePuller(nowTso, []util.Span{util.GetDDLSpan()})
+	ctx, cancel = context.WithCancel(context.Background())
+	pm, schema = setUpPullerAndSchema(ctx, c, newRowFormat)
+	m = NewTxnMounter(schema)
+
 	pm.MustExec("create table test.test2(id int primary key, b varchar(255) unique key)")
 
+	plr = pm.CreatePuller(0, []util.Span{util.GetDDLSpan()})
 	existDDLJobHistoryKVEntry = false
-	plrCtx, plrCancel = context.WithCancel(pmCtx)
+	plrCtx, plrCancel = context.WithCancel(ctx)
 	err = plr.CollectRawTxns(plrCtx, func(ctx context.Context, rawTxn model.RawTxn) error {
 		for _, raw := range rawTxn.Entries {
-			entry, err := unmarshal(raw)
+			entry, err := m.unmarshal(raw)
 			c.Assert(err, check.IsNil)
 			if e, ok := entry.(*ddlJobKVEntry); ok {
 				existDDLJobHistoryKVEntry = true
@@ -113,13 +116,17 @@ func (s *kvEntrySuite) TestCreateTable(c *check.C) {
 	})
 	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	c.Assert(existDDLJobHistoryKVEntry, check.IsTrue)
+	cancel()
 }
 
-func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
-	pm, pmCtx, pmCancel := startPullerManager(c)
-	defer pmCancel()
+func (s *kvEntrySuite) testPkIsNotHandleDML(c *check.C, newRowFormat bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
+		"create table test.test1(id varchar(255) primary key, a int, index ci (a))",
+	)
+	m := NewTxnMounter(schema)
 
-	pm.MustExec("create table test.test1(id varchar(255) primary key, a int, index ci (a))")
 	tableInfo := pm.GetTableInfo("test", "test1")
 	tableID := tableInfo.ID
 
@@ -145,7 +152,7 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("ttt"))},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
 
 	pm.MustExec("update test.test1 set id = '777' where a = 666")
 	expect = []kvEntry{
@@ -167,7 +174,7 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 			Delete:     true,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("ttt"))},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
 
 	pm.MustExec("delete from test.test1 where id = '777'")
 	expect = []kvEntry{
@@ -189,14 +196,17 @@ func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
 			Delete:     true,
 			IndexValue: []types.Datum{types.NewIntDatum(666)},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
 }
 
-func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
-	pm, pmCtx, pmCancel := startPullerManager(c)
-	defer pmCancel()
+func (s *kvEntrySuite) testPkIsHandleDML(c *check.C, newRowFormat bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
+		"create table test.test2(id int primary key, b varchar(255) unique key)",
+	)
+	m := NewTxnMounter(schema)
 
-	pm.MustExec("create table test.test2(id int primary key, b varchar(255) unique key)")
 	tableInfo := pm.GetTableInfo("test", "test2")
 	tableID := tableInfo.ID
 
@@ -208,7 +218,7 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 			TableID:  tableInfo.ID,
 			RecordID: 666,
 			Delete:   false,
-			Row:      map[int64]types.Datum{2: types.NewBytesDatum([]byte("aaa"))},
+			Row:      map[int64]types.Datum{1: types.NewIntDatum(666), 2: types.NewBytesDatum([]byte("aaa"))},
 		}, &indexKVEntry{
 			TableID:    tableInfo.ID,
 			RecordID:   666,
@@ -216,7 +226,7 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("aaa"))},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
 
 	pm.MustExec("update test.test2 set id = 888,b = 'bbb' where id = 666")
 	expect = []kvEntry{
@@ -224,12 +234,12 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 			TableID:  tableInfo.ID,
 			RecordID: 666,
 			Delete:   true,
-			Row:      map[int64]types.Datum{},
+			Row:      map[int64]types.Datum{1: types.NewIntDatum(666)},
 		}, &rowKVEntry{
 			TableID:  tableInfo.ID,
 			RecordID: 888,
 			Delete:   false,
-			Row:      map[int64]types.Datum{2: types.NewBytesDatum([]byte("bbb"))},
+			Row:      map[int64]types.Datum{1: types.NewIntDatum(888), 2: types.NewBytesDatum([]byte("bbb"))},
 		}, &indexKVEntry{
 			TableID:    tableInfo.ID,
 			RecordID:   0,
@@ -243,7 +253,7 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("bbb"))},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
 
 	pm.MustExec("delete from test.test2 where id = 888")
 	expect = []kvEntry{
@@ -251,7 +261,7 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 			TableID:  tableInfo.ID,
 			RecordID: 888,
 			Delete:   true,
-			Row:      map[int64]types.Datum{},
+			Row:      map[int64]types.Datum{1: types.NewIntDatum(888)},
 		}, &indexKVEntry{
 			TableID:    tableInfo.ID,
 			RecordID:   0,
@@ -259,14 +269,17 @@ func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
 			Delete:     true,
 			IndexValue: []types.Datum{types.NewBytesDatum([]byte("bbb"))},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
 }
 
-func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
-	pm, pmCtx, pmCancel := startPullerManager(c)
-	defer pmCancel()
+func (s *kvEntrySuite) testUkWithNull(c *check.C, newRowFormat bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
+		"create table test.test2( a int, b varchar(255), c date, unique key(a,b,c))",
+	)
+	m := NewTxnMounter(schema)
 
-	pm.MustExec("create table test.test2( a int, b varchar(255), c date, unique key(a,b,c))")
 	tableInfo := pm.GetTableInfo("test", "test2")
 	tableID := tableInfo.ID
 
@@ -289,7 +302,7 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 			Delete:     false,
 			IndexValue: []types.Datum{{}, types.NewBytesDatum([]byte("aa")), types.NewTimeDatum(time)},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
 
 	pm.MustExec("insert into test.test2 values(null, null, '1996-11-20')")
 	expect = []kvEntry{
@@ -306,7 +319,7 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 			Delete:     false,
 			IndexValue: []types.Datum{{}, {}, types.NewTimeDatum(time)},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
 
 	pm.MustExec("insert into test.test2 values(null, null, null)")
 	expect = []kvEntry{
@@ -323,7 +336,7 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 			Delete:     false,
 			IndexValue: []types.Datum{{}, {}, {}},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
 
 	pm.MustExec("delete from test.test2 where c is null")
 	expect = []kvEntry{
@@ -340,7 +353,7 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 			Delete:     true,
 			IndexValue: []types.Datum{{}, {}, {}},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
 
 	pm.MustExec("update test.test2 set a = 1, b = null where a is null and b is not null")
 	expect = []kvEntry{
@@ -364,14 +377,17 @@ func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
 			Delete:     true,
 			IndexValue: []types.Datum{{}, types.NewBytesDatum([]byte("aa")), types.NewTimeDatum(time)},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
 }
 
-func (s *kvEntrySuite) TestUkWithNoPk(c *check.C) {
-	pm, pmCtx, pmCancel := startPullerManager(c)
-	defer pmCancel()
+func (s *kvEntrySuite) testUkWithNoPk(c *check.C, newRowFormat bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
+		"CREATE TABLE test.cdc_uk_with_no_pk (id INT, a1 INT, a3 INT, UNIQUE KEY dex1(a1, a3));",
+	)
+	m := NewTxnMounter(schema)
 
-	pm.MustExec("CREATE TABLE test.cdc_uk_with_no_pk (id INT, a1 INT, a3 INT, UNIQUE KEY dex1(a1, a3));")
 	tableInfo := pm.GetTableInfo("test", "cdc_uk_with_no_pk")
 	tableID := tableInfo.ID
 
@@ -392,7 +408,7 @@ func (s *kvEntrySuite) TestUkWithNoPk(c *check.C) {
 			Delete:     false,
 			IndexValue: []types.Datum{types.NewIntDatum(6), {}},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
 
 	pm.MustExec("UPDATE test.cdc_uk_with_no_pk SET id = 10 WHERE id = 5;")
 	expect = []kvEntry{
@@ -402,7 +418,28 @@ func (s *kvEntrySuite) TestUkWithNoPk(c *check.C) {
 			Delete:   false,
 			Row:      map[int64]types.Datum{1: types.NewIntDatum(10), 2: types.NewIntDatum(6)},
 		}}
-	checkDMLKVEntries(pmCtx, c, tableInfo, plr, expect)
+	checkDMLKVEntries(ctx, c, tableInfo, m, plr, expect)
+}
+
+func (s *kvEntrySuite) TestCreateTable(c *check.C) {
+	s.testCreateTable(c, true)
+	s.testCreateTable(c, false)
+}
+func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
+	s.testPkIsNotHandleDML(c, true)
+	s.testPkIsNotHandleDML(c, false)
+}
+func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
+	s.testPkIsHandleDML(c, true)
+	s.testPkIsHandleDML(c, false)
+}
+func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
+	s.testUkWithNull(c, true)
+	s.testUkWithNull(c, false)
+}
+func (s *kvEntrySuite) TestUkWithNoPk(c *check.C) {
+	s.testUkWithNoPk(c, true)
+	s.testUkWithNoPk(c, false)
 }
 
 func assertIn(c *check.C, item kvEntry, expect []kvEntry) {
@@ -414,24 +451,15 @@ func assertIn(c *check.C, item kvEntry, expect []kvEntry) {
 	c.Fatalf("item {%#v} is not exist in expect {%#v}", item, expect)
 }
 
-func startPullerManager(c *check.C) (*puller.MockPullerManager, context.Context, context.CancelFunc) {
-	// create and run mock puller manager
-	pm := puller.NewMockPullerManager(c)
-	pmCtx, pmCancel := context.WithCancel(context.Background())
-	go pm.Run(pmCtx)
-	return pm, pmCtx, pmCancel
-}
-
-func checkDMLKVEntries(ctx context.Context, c *check.C, tableInfo *schema.TableInfo, plr puller.Puller, expect []kvEntry) {
+func checkDMLKVEntries(ctx context.Context, c *check.C, tableInfo *schema.TableInfo, m *Mounter, plr puller.Puller, expect []kvEntry) {
 	ctx, cancel := context.WithCancel(ctx)
 	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
 		eventSum := 0
 		for _, raw := range rawTxn.Entries {
-			entry, err := unmarshal(raw)
+			entry, err := m.unmarshal(raw)
 			c.Assert(err, check.IsNil)
 			switch e := entry.(type) {
 			case *rowKVEntry:
-				c.Assert(e.unflatten(tableInfo), check.IsNil)
 				e.Ts = 0
 				assertIn(c, e, expect)
 				eventSum++

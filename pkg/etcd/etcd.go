@@ -18,9 +18,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/coreos/etcd/embed"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/errors"
+	"go.etcd.io/etcd/embed"
 )
 
 // getFreeListenURLs get free ports and localhost as url.
@@ -54,6 +54,7 @@ func SetupEmbedEtcd(dir string) (clientURL *url.URL, e *embed.Etcd, err error) {
 	}
 	cfg.LPUrls = []url.URL{*urls[0]}
 	cfg.LCUrls = []url.URL{*urls[1]}
+	cfg.Logger = "zap"
 	clientURL = urls[1]
 
 	e, err = embed.StartEtcd(cfg)
