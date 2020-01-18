@@ -38,6 +38,8 @@ import (
 
 var markProcessorDownTime = 1 * time.Minute
 
+type tableIDMap = map[uint64]struct{}
+
 // OwnerDDLHandler defines the ddl handler for Owner
 // which can pull ddl jobs and execute ddl jobs
 type OwnerDDLHandler interface {
@@ -76,6 +78,7 @@ type changeFeed struct {
 	ddlResolvedTs uint64
 	ddlJobHistory []*model.DDL
 
+	schemas       map[uint64]tableIDMap
 	tables        map[uint64]schema.TableName
 	orphanTables  map[uint64]model.ProcessTableInfo
 	toCleanTables map[uint64]struct{}
@@ -120,25 +123,35 @@ func (c *changeFeed) reAddTable(id, startTs uint64) {
 	}
 }
 
-func (c *changeFeed) addTable(id, startTs uint64, table schema.TableName) {
+func (c *changeFeed) addTable(sid, tid, startTs uint64, table schema.TableName) {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
 	}
 
-	c.tables[id] = table
-	c.orphanTables[id] = model.ProcessTableInfo{
-		ID:      id,
+	if _, ok := c.schemas[sid]; !ok {
+		c.schemas[sid] = make(tableIDMap)
+	}
+	c.schemas[sid][tid] = struct{}{}
+	c.tables[tid] = table
+	c.orphanTables[tid] = model.ProcessTableInfo{
+		ID:      tid,
 		StartTs: startTs,
 	}
 }
 
-func (c *changeFeed) removeTable(id uint64) {
-	delete(c.tables, id)
+func (c *changeFeed) removeTable(sid, tid uint64) {
+	if _, ok := c.schemas[sid]; ok {
+		delete(c.schemas[sid], tid)
+		if len(c.schemas[sid]) == 0 {
+			delete(c.schemas, sid)
+		}
+	}
+	delete(c.tables, tid)
 
-	if _, ok := c.orphanTables[id]; ok {
-		delete(c.orphanTables, id)
+	if _, ok := c.orphanTables[tid]; ok {
+		delete(c.orphanTables, tid)
 	} else {
-		c.toCleanTables[id] = struct{}{}
+		c.toCleanTables[tid] = struct{}{}
 	}
 }
 
@@ -290,21 +303,34 @@ func (c *changeFeed) applyJob(job *pmodel.Job) error {
 
 	// case table id set may change
 	switch job.Type {
+	case pmodel.ActionCreateSchema:
+		c.schemas[uint64(job.SchemaID)] = make(map[uint64]struct{})
+	case pmodel.ActionDropSchema:
+		schemaID := uint64(job.SchemaID)
+		if _, ok := c.schemas[schemaID]; !ok {
+			return nil
+		}
+		for tid := range c.schemas[schemaID] {
+			c.removeTable(schemaID, tid)
+		}
 	case pmodel.ActionCreateTable, pmodel.ActionRecoverTable:
+		schemaID := uint64(job.SchemaID)
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		c.addTable(addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
+		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
 	case pmodel.ActionDropTable:
+		schemaID := uint64(job.SchemaID)
 		dropID := uint64(job.TableID)
-		c.removeTable(dropID)
+		c.removeTable(schemaID, dropID)
 	case pmodel.ActionRenameTable:
 		// no id change just update name
 		c.tables[uint64(job.TableID)] = schema.TableName{Schema: schamaName, Table: tableName}
 	case pmodel.ActionTruncateTable:
+		schemaID := uint64(job.SchemaID)
 		dropID := uint64(job.TableID)
-		c.removeTable(dropID)
+		c.removeTable(schemaID, dropID)
 
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		c.addTable(addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
+		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
 	default:
 	}
 
@@ -476,6 +502,7 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 
 	filter := newTxnFilter(info.GetConfig())
 
+	schemas := make(map[uint64]tableIDMap)
 	tables := make(map[uint64]schema.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
 	for tid, table := range schemaStorage.CloneTables() {
@@ -487,6 +514,16 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 		if ts, ok := existingTables[tid]; ok {
 			log.Debug("ignore known table", zap.Uint64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
 			continue
+		}
+		schema, ok := schemaStorage.SchemaByTableID(int64(tid))
+		if !ok {
+			log.Warn("schema not found for table", zap.Uint64("tid", tid))
+		} else {
+			sid := uint64(schema.ID)
+			if _, ok := schemas[sid]; !ok {
+				schemas[sid] = make(tableIDMap)
+			}
+			schemas[sid][tid] = struct{}{}
 		}
 		orphanTables[tid] = model.ProcessTableInfo{
 			ID:      tid,
@@ -500,6 +537,7 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 		client:                  o.etcdClient,
 		ddlHandler:              ddlHandler,
 		schema:                  schemaStorage,
+		schemas:                 schemas,
 		tables:                  tables,
 		orphanTables:            orphanTables,
 		toCleanTables:           make(map[uint64]struct{}),
