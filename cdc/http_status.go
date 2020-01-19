@@ -68,8 +68,8 @@ type status struct {
 	Pid     int    `json:"pid"`
 }
 
-func (s *Server) writeEtcdInfo(ctx context.Context, cli *clientv3.Client, w io.Writer) {
-	resp, err := cli.Get(ctx, kv.EtcdKeyBase, clientv3.WithPrefix())
+func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.Writer) {
+	resp, err := cli.Client.Get(ctx, kv.EtcdKeyBase, clientv3.WithPrefix())
 	if err != nil {
 		fmt.Fprintf(w, "failed to get info: %s\n\n", err.Error())
 		return

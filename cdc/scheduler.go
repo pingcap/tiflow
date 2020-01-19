@@ -39,12 +39,12 @@ type ChangeFeedWatcher struct {
 	lock        sync.RWMutex
 	captureID   string
 	pdEndpoints []string
-	etcdCli     *clientv3.Client
+	etcdCli     kv.CDCEtcdClient
 	infos       map[string]model.ChangeFeedInfo
 }
 
 // NewChangeFeedWatcher creates a new changefeed watcher
-func NewChangeFeedWatcher(captureID string, pdEndpoints []string, cli *clientv3.Client) *ChangeFeedWatcher {
+func NewChangeFeedWatcher(captureID string, pdEndpoints []string, cli kv.CDCEtcdClient) *ChangeFeedWatcher {
 	w := &ChangeFeedWatcher{
 		captureID:   captureID,
 		pdEndpoints: pdEndpoints,
@@ -96,7 +96,7 @@ func (w *ChangeFeedWatcher) processDeleteKv(kv *mvccpb.KeyValue) error {
 func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) error {
 	errCh := make(chan error, 1)
 
-	revision, infos, err := kv.GetChangeFeeds(ctx, w.etcdCli)
+	revision, infos, err := w.etcdCli.GetChangeFeeds(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -113,7 +113,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) err
 		}
 	}
 
-	watchCh := w.etcdCli.Watch(ctx, kv.GetEtcdKeyChangeFeedList(), clientv3.WithPrefix(), clientv3.WithRev(revision))
+	watchCh := w.etcdCli.Client.Watch(ctx, kv.GetEtcdKeyChangeFeedList(), clientv3.WithPrefix(), clientv3.WithRev(revision))
 	for {
 		select {
 		case <-ctx.Done():
@@ -158,7 +158,7 @@ type ProcessorWatcher struct {
 	pdEndpoints  []string
 	changefeedID string
 	captureID    string
-	etcdCli      *clientv3.Client
+	etcdCli      kv.CDCEtcdClient
 	info         model.ChangeFeedInfo
 	checkpointTs uint64
 	wg           sync.WaitGroup
@@ -170,7 +170,7 @@ func NewProcessorWatcher(
 	changefeedID string,
 	captureID string,
 	pdEndpoints []string,
-	cli *clientv3.Client,
+	cli kv.CDCEtcdClient,
 	info model.ChangeFeedInfo,
 	checkpointTs uint64,
 ) *ProcessorWatcher {
@@ -206,7 +206,7 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 	defer w.wg.Done()
 	key := kv.GetEtcdKeyTask(w.changefeedID, w.captureID)
 
-	getResp, err := w.etcdCli.Get(ctx, key)
+	getResp, err := w.etcdCli.Client.Get(ctx, key)
 	if err != nil {
 		errCh <- errors.Trace(err)
 		return
@@ -214,7 +214,7 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 	revision := getResp.Header.Revision
 	if getResp.Count == 0 {
 		// wait for key to appear
-		watchCh := w.etcdCli.Watch(ctx, key, clientv3.WithRev(revision))
+		watchCh := w.etcdCli.Client.Watch(ctx, key, clientv3.WithRev(revision))
 	waitKeyLoop:
 		for {
 			select {
@@ -257,7 +257,7 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 			}
 			return
 		case <-time.After(time.Second):
-			resp, err := w.etcdCli.Get(ctx, key)
+			resp, err := w.etcdCli.Client.Get(ctx, key)
 			if err != nil {
 				errCh <- errors.Trace(err)
 				return
@@ -283,12 +283,12 @@ func realRunProcessorWatcher(
 	changefeedID string,
 	captureID string,
 	pdEndpoints []string,
-	etcdCli *clientv3.Client,
+	etcdCli kv.CDCEtcdClient,
 	info model.ChangeFeedInfo,
 	errCh chan error,
 	cb processorCallback,
 ) (*ProcessorWatcher, error) {
-	status, err := kv.GetChangeFeedStatus(ctx, etcdCli, changefeedID)
+	status, err := etcdCli.GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 		return nil, errors.Trace(err)
 	}

@@ -96,7 +96,7 @@ func mockRunProcessorWatcher(
 	changefeedID string,
 	captureID string,
 	pdEndpoints []string,
-	etcdCli *clientv3.Client,
+	etcdCli kv.CDCEtcdClient,
 	detail model.ChangeFeedInfo,
 	errCh chan error,
 	_ processorCallback,
@@ -121,15 +121,17 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 	}()
 
 	curl := s.clientURL.String()
-	cli, err := clientv3.New(clientv3.Config{
+	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{curl},
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	defer cli.Close()
+	defer etcdCli.Close()
+
+	cli := kv.NewCDCEtcdClient(etcdCli)
 
 	// create a processor
-	_, err = cli.Put(context.Background(), key, "{}")
+	_, err = cli.Client.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
 
 	// processor exists before watch starts
@@ -141,7 +143,7 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 	}), check.IsTrue)
 
 	// delete the processor
-	_, err = cli.Delete(context.Background(), key)
+	_, err = cli.Client.Delete(context.Background(), key)
 	c.Assert(err, check.IsNil)
 	time.Sleep(time.Second)
 	sw.close()
@@ -162,7 +164,7 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 	errCh2 := make(chan error, 1)
 	_, err = runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2, nil)
 	c.Assert(err, check.IsNil)
-	_, err = cli.Put(context.Background(), key, "{}")
+	_, err = cli.Client.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runProcessorCount) == 2
@@ -185,15 +187,16 @@ func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 	}()
 
 	curl := s.clientURL.String()
-	cli, err := clientv3.New(clientv3.Config{
+	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{curl},
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	defer cli.Close()
+	defer etcdCli.Close()
+	cli := kv.NewCDCEtcdClient(etcdCli)
 
 	// create a processor
-	_, err = cli.Put(context.Background(), key, "{}")
+	_, err = cli.Client.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
 
 	errCh := make(chan error, 1)
@@ -232,12 +235,13 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	}()
 
 	curl := s.clientURL.String()
-	cli, err := clientv3.New(clientv3.Config{
+	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{curl},
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	defer cli.Close()
+	defer etcdCli.Close()
+	cli := kv.NewCDCEtcdClient(etcdCli)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	w := NewChangeFeedWatcher(captureID, pdEndpoints, cli)
@@ -257,7 +261,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	time.Sleep(time.Millisecond * 100)
 
 	// create a changefeed
-	err = kv.SaveChangeFeedInfo(context.Background(), cli, detail, changefeedID)
+	err = cli.SaveChangeFeedInfo(context.Background(), detail, changefeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runChangeFeedWatcherCount) == 1
@@ -267,7 +271,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	w.lock.RUnlock()
 
 	// delete the changefeed
-	_, err = cli.Delete(context.Background(), key)
+	_, err = cli.Client.Delete(context.Background(), key)
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		w.lock.RLock()
@@ -276,7 +280,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	}), check.IsTrue)
 
 	// create a changefeed
-	err = kv.SaveChangeFeedInfo(context.Background(), cli, detail, changefeedID)
+	err = cli.SaveChangeFeedInfo(context.Background(), detail, changefeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runChangeFeedWatcherCount) == 2
@@ -287,7 +291,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 
 	// dispatch a stop changefeed admin job
 	detail.AdminJobType = model.AdminStop
-	err = kv.SaveChangeFeedInfo(context.Background(), cli, detail, changefeedID)
+	err = cli.SaveChangeFeedInfo(context.Background(), detail, changefeedID)
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		w.lock.RLock()

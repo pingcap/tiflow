@@ -50,14 +50,15 @@ func (s *managerSuite) TearDownTest(c *check.C) {
 
 func (s *managerSuite) TestManager(c *check.C) {
 	curl := s.clientURL.String()
-	cli, err := clientv3.New(clientv3.Config{
+	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{curl},
 		DialTimeout: 3 * time.Second,
 	})
 	if err != nil {
 		c.Fatal(err)
 	}
-	defer cli.Close()
+	defer etcdCli.Close()
+	cli := kv.NewCDCEtcdClient(etcdCli)
 
 	m1Ctx, m1cancel := context.WithCancel(context.Background())
 	m1 := NewOwnerManager(cli, "m1", "/test/owner")
@@ -109,7 +110,7 @@ func (s *managerSuite) TestManager(c *check.C) {
 	c.Assert(m1.IsOwner(), check.IsFalse)
 	c.Assert(m2.IsOwner(), check.IsTrue)
 
-	resp, err := cli.Get(context.Background(), kv.CaptureOwnerKey+"/"+m2.ID())
+	resp, err := cli.Client.Get(context.Background(), kv.CaptureOwnerKey+"/"+m2.ID())
 	c.Assert(err, check.IsNil)
 	rev1 := resp.Header.Revision
 
@@ -121,7 +122,7 @@ func (s *managerSuite) TestManager(c *check.C) {
 	}), check.IsTrue)
 
 	// check m2 is re-campaigned
-	resp, err = cli.Get(context.Background(), kv.CaptureOwnerKey+"/"+m2.ID())
+	resp, err = cli.Client.Get(context.Background(), kv.CaptureOwnerKey+"/"+m2.ID())
 	c.Assert(err, check.IsNil)
 	rev2 := resp.Header.Revision
 	c.Assert(rev1, check.Less, rev2)
