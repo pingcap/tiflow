@@ -464,7 +464,7 @@ func (c *CDCClient) singleEventFeed(
 						// emit a value
 						value, err := matcher.matchRow(row)
 						if err != nil {
-							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(err)
+							log.Warn("match row error", zap.Error(err), zap.Stringer("row", row))
 						}
 
 						var opType model.OpType
