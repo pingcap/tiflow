@@ -312,7 +312,7 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			timedCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			timedCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 			err := p.updateInfo(timedCtx)
 			if err != nil {
 				log.Error("failed to update info", zap.Error(err))

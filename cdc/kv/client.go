@@ -375,8 +375,7 @@ func (c *CDCClient) singleEventFeed(
 	}
 
 	client := cdcpb.NewChangeDataClient(conn)
-
-	notMatch := make(map[string][]byte)
+	matcher := newMatcher()
 
 	log.Debug("start new request", zap.Reflect("request", req))
 	stream, err := client.EventFeed(ctx, req)
@@ -456,21 +455,17 @@ func (c *CDCClient) singleEventFeed(
 							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
 						}
 					case cdcpb.Event_PREWRITE:
-						notMatch[string(row.Key)] = row.GetValue()
+						matcher.putPrewriteRow(row)
 						sorter.pushTsItem(sortItem{
 							start: row.GetStartTs(),
 							tp:    cdcpb.Event_PREWRITE,
 						})
 					case cdcpb.Event_COMMIT:
 						// emit a value
-						value := row.GetValue()
-						if pvalue, ok := notMatch[string(row.Key)]; ok {
-							if len(pvalue) > 0 {
-								value = pvalue
-							}
+						value, err := matcher.matchRow(row)
+						if err != nil {
+							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(err)
 						}
-
-						delete(notMatch, string(row.Key))
 
 						var opType model.OpType
 						switch row.GetOpType() {
@@ -502,7 +497,7 @@ func (c *CDCClient) singleEventFeed(
 							tp:     cdcpb.Event_COMMIT,
 						})
 					case cdcpb.Event_ROLLBACK:
-						delete(notMatch, string(row.Key))
+						matcher.rollbackRow(row)
 						sorter.pushTsItem(sortItem{
 							start:  row.GetStartTs(),
 							commit: row.GetCommitTs(),
