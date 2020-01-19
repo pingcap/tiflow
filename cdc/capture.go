@@ -130,6 +130,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 			err := watcher.Watch(cctx, c)
 			if errors.Cause(err) == mvcc.ErrCompacted {
 				log.Warn("changefeed watcher watch retryable error", zap.Error(err))
+				time.Sleep(time.Millisecond * 500)
 				continue
 			}
 			return errors.Trace(err)

@@ -883,6 +883,7 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 				break
 			}
 			log.Warn("capture info watcher retryable error", zap.Error(err))
+			time.Sleep(time.Millisecond * 500)
 			err = o.resetCaptureInfoWatcher(ctx)
 			if err != nil {
 				break
