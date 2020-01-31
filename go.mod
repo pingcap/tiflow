@@ -21,7 +21,7 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20200115060041-f2180fbf0df8
 	github.com/pingcap/kvproto v0.0.0-20200108025604-a4dc183d2af5
 	github.com/pingcap/log v0.0.0-20200117041106-d28c14d3b1cd
-	github.com/pingcap/parser v0.0.0-20200120100653-1d87b3907217
+	github.com/pingcap/parser v0.0.0-20200207090844-d65f5147dd9f
 	github.com/pingcap/pd v1.1.0-beta.0.20191219054547-4d65bbefbc6d
 	github.com/pingcap/tidb v1.1.0-beta.0.20200204134155-ebc6a2d39dd7
 	github.com/pingcap/tidb-tools v3.1.0-beta.1.0.20200108061154-356b0e2e2282+incompatible
@@ -43,3 +43,5 @@ require (
 	google.golang.org/grpc v1.26.0
 	gopkg.in/yaml.v2 v2.2.7 // indirect
 )
+
+replace github.com/pingcap/tidb => github.com/amyangfei/tidb v1.1.0-beta.0.20200209074037-bbcecb5e6a1c
