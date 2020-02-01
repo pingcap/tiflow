@@ -19,8 +19,8 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 )
 
-// CheckRegionsCover checks whether the regions completely cover the given span
-func CheckRegionsCover(regions []*metapb.Region, span Span) bool {
+// CheckRegionsLeftCover checks whether the regions cover the left part of given span
+func CheckRegionsLeftCover(regions []*metapb.Region, span Span) bool {
 	if len(regions) == 0 {
 		return false
 	}
@@ -29,9 +29,6 @@ func CheckRegionsCover(regions []*metapb.Region, span Span) bool {
 	})
 
 	if StartCompare(regions[0].StartKey, span.Start) == 1 {
-		return false
-	}
-	if EndCompare(regions[len(regions)-1].EndKey, span.End) == -1 {
 		return false
 	}
 

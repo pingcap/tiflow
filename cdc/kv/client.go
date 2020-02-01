@@ -303,8 +303,8 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if !util.CheckRegionsCover(regions, nextSpan) {
-				err = errors.New("regions not completely cover span")
+			if !util.CheckRegionsLeftCover(regions, nextSpan) {
+				err = errors.New("regions not completely left cover span")
 				log.Warn("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
 				return err
 			}
