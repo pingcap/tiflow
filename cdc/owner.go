@@ -116,6 +116,18 @@ func (c *changeFeed) updateProcessorInfos(processInfos model.ProcessorsInfos) {
 	c.processorInfos = processInfos
 }
 
+func (c *changeFeed) addSchema(schemaID uint64) {
+	c.schemas[schemaID] = make(map[uint64]struct{})
+}
+
+func (c *changeFeed) dropSchema(schemaID uint64) {
+	if schema, ok := c.schemas[schemaID]; ok {
+		for tid := range schema {
+			c.removeTable(schemaID, tid)
+		}
+	}
+}
+
 func (c *changeFeed) reAddTable(id, startTs uint64) {
 	c.orphanTables[id] = model.ProcessTableInfo{
 		ID:      id,
@@ -301,31 +313,23 @@ func (c *changeFeed) applyJob(job *pmodel.Job) error {
 		return errors.Trace(err)
 	}
 
+	schemaID := uint64(job.SchemaID)
 	// case table id set may change
 	switch job.Type {
 	case pmodel.ActionCreateSchema:
-		c.schemas[uint64(job.SchemaID)] = make(map[uint64]struct{})
+		c.addSchema(schemaID)
 	case pmodel.ActionDropSchema:
-		schemaID := uint64(job.SchemaID)
-		if _, ok := c.schemas[schemaID]; !ok {
-			return nil
-		}
-		for tid := range c.schemas[schemaID] {
-			c.removeTable(schemaID, tid)
-		}
+		c.dropSchema(schemaID)
 	case pmodel.ActionCreateTable, pmodel.ActionRecoverTable:
-		schemaID := uint64(job.SchemaID)
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
 		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
 	case pmodel.ActionDropTable:
-		schemaID := uint64(job.SchemaID)
 		dropID := uint64(job.TableID)
 		c.removeTable(schemaID, dropID)
 	case pmodel.ActionRenameTable:
 		// no id change just update name
 		c.tables[uint64(job.TableID)] = schema.TableName{Schema: schamaName, Table: tableName}
 	case pmodel.ActionTruncateTable:
-		schemaID := uint64(job.SchemaID)
 		dropID := uint64(job.TableID)
 		c.removeTable(schemaID, dropID)
 
