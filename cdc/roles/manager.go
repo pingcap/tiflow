@@ -289,6 +289,12 @@ func (m *ownerManager) watchOwner(ctx context.Context, etcdSession *concurrency.
 				return
 			}
 
+			err := resp.Err()
+			if err != nil {
+				m.logger.Error("watch owner key error", zap.Error(err))
+				return
+			}
+
 			for _, ev := range resp.Events {
 				if ev.Type == mvccpb.DELETE {
 					m.logger.Info("watch failed, owner is deleted")

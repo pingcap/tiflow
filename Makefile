@@ -25,6 +25,11 @@ PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor')
 CDC_PKG := github.com/pingcap/ticdc
+FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/$(PROJECT)/"}|grep -v "github.com/pingcap/$(PROJECT)"; done)
+FAILPOINT := bin/failpoint-ctl
+
+FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
+FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
 LDFLAGS += -X "$(CDC_PKG)/pkg/util.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
 LDFLAGS += -X "$(CDC_PKG)/pkg/util.GitHash=$(shell git rev-parse HEAD)"
@@ -51,10 +56,16 @@ cdc:
 install:
 	go install ./...
 
-unit_test:
+unit_test: check_failpoint_ctl
 	mkdir -p "$(TEST_DIR)"
+	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
-	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES)
+	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES) \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+
+check_failpoint_ctl:
+	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILD) -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl
 
 check_third_party_binary:
 	@which bin/tidb-server
@@ -64,10 +75,13 @@ check_third_party_binary:
 	@which bin/sync_diff_inspector
 	@which bin/go-ycsb
 
-integration_test_build:
+integration_test_build: check_failpoint_ctl
+	$(FAILPOINT_ENABLE)
 	$(GOTEST) -c -cover -covemode=atomic \
 		-coverpkg=github.com/pingcap/ticdc/... \
-		-o bin/cdc.test github.com/pingcap/ticdc
+		-o bin/cdc.test github.com/pingcap/ticdc \
+	|| { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
 
 integration_test: check_third_party_binary
 	tests/run.sh $(CASE)
@@ -92,8 +106,8 @@ check: fmt lint check-static tidy
 
 coverage:
 	GO111MODULE=off go get github.com/zhouqiang-cl/gocovmerge
-	gocovmerge "$(TEST_DIR)"/cov.* | grep -v "$(CDC_PKG)/cdc/kv/testing.go" > "$(TEST_DIR)/all_cov.out"
-	grep -v "$(CDC_PKG)/cdc/kv/testing.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
+	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE "$(CDC_PKG)/cdc/kv/testing.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
+	grep -vE "$(CDC_PKG)/cdc/kv/testing.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls
 	@goveralls -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
@@ -120,3 +134,9 @@ tools/bin/revive: tools/check/go.mod
 tools/bin/golangci-lint: tools/check/go.mod
 	cd tools/check; \
 	$(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
+
+failpoint-enable:
+	$(FAILPOINT_ENABLE)
+
+failpoint-disable:
+	$(FAILPOINT_DISABLE)

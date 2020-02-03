@@ -23,6 +23,7 @@ import (
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/concurrency"
+	"github.com/coreos/etcd/mvcc"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pmodel "github.com/pingcap/parser/model"
@@ -432,6 +433,19 @@ func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 			log.Warn("failed to delete key", zap.Error(err))
 		}
 	}
+}
+
+func (o *ownerImpl) resetCaptureInfoWatcher(ctx context.Context) error {
+	infos, watchC, err := newCaptureInfoWatch(ctx, o.etcdClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for _, info := range infos {
+		// use addCapture is ok, old info will be covered
+		o.addCapture(info)
+	}
+	o.captureWatchC = watchC
+	return nil
 }
 
 func (o *ownerImpl) handleWatchCapture() error {
@@ -862,7 +876,19 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 	defer o.cancelWatchCapture()
 	handleWatchCaptureC := make(chan error, 1)
 	go func() {
-		err := o.handleWatchCapture()
+		var err error
+		for {
+			err = o.handleWatchCapture()
+			if errors.Cause(err) != mvcc.ErrCompacted {
+				break
+			}
+			log.Warn("capture info watcher retryable error", zap.Error(err))
+			time.Sleep(time.Millisecond * 500)
+			err = o.resetCaptureInfoWatcher(ctx)
+			if err != nil {
+				break
+			}
+		}
 		if err != nil {
 			handleWatchCaptureC <- err
 		}
