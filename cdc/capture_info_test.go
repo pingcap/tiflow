@@ -143,7 +143,7 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 	checkCaptureLen := func(expected int) {
 		owner.l.RLock()
 		defer owner.l.RUnlock()
-		c.Assert(len(owner.captures), check.Equals, expected)
+		c.Assert(owner.captures, check.HasLen, expected)
 	}
 
 	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/WatchCaptureInfoCompactionErr", "1*return"), check.IsNil)
