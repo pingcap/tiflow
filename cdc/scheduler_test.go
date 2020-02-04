@@ -22,8 +22,10 @@ import (
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
+	"github.com/coreos/etcd/mvcc"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -217,12 +219,13 @@ func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 
 func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	var (
-		changefeedID = "test-changefeed-watcher"
-		captureID    = "test-capture"
-		pdEndpoints  = []string{}
-		sinkURI      = "root@tcp(127.0.0.1:3306)/test"
-		detail       = &model.ChangeFeedInfo{SinkURI: sinkURI}
-		key          = kv.GetEtcdKeyChangeFeedInfo(changefeedID)
+		changefeedID       = "test-changefeed-watcher"
+		captureID          = "test-capture"
+		pdEndpoints        = []string{}
+		sinkURI            = "root@tcp(127.0.0.1:3306)/test"
+		detail             = &model.ChangeFeedInfo{SinkURI: sinkURI}
+		key                = kv.GetEtcdKeyChangeFeedInfo(changefeedID)
+		watcherRetry int64 = 0
 	)
 
 	oriRunProcessorWatcher := runProcessorWatcher
@@ -246,9 +249,17 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err2 := w.Watch(ctx, nil)
-		if err2 != nil && errors.Cause(err2) != context.Canceled {
-			c.Fatal(err2)
+		for {
+			err2 := w.Watch(ctx, nil)
+			switch errors.Cause(err2) {
+			case nil, context.Canceled:
+				return
+			case mvcc.ErrCompacted:
+				atomic.AddInt64(&watcherRetry, 1)
+				continue
+			default:
+				c.Fatal(err2)
+			}
 		}
 	}()
 
@@ -275,6 +286,8 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 		return len(w.infos) == 0
 	}), check.IsTrue)
 
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/WatchChangeFeedInfoCompactionErr", "1*return"), check.IsNil)
+
 	// create a changefeed
 	err = kv.SaveChangeFeedInfo(context.Background(), cli, detail, changefeedID)
 	c.Assert(err, check.IsNil)
@@ -284,6 +297,9 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	w.lock.RLock()
 	c.Assert(len(w.infos), check.Equals, 1)
 	w.lock.RUnlock()
+	c.Assert(atomic.LoadInt64(&watcherRetry), check.Equals, int64(1))
+
+	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/cdc/WatchChangeFeedInfoCompactionErr"), check.IsNil)
 
 	// dispatch a stop changefeed admin job
 	detail.AdminJobType = model.AdminStop

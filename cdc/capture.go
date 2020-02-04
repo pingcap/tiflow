@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/mvcc"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -125,7 +126,15 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 
 	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)
 	errg.Go(func() error {
-		return watcher.Watch(cctx, c)
+		for {
+			err := watcher.Watch(cctx, c)
+			if errors.Cause(err) == mvcc.ErrCompacted {
+				log.Warn("changefeed watcher watch retryable error", zap.Error(err))
+				time.Sleep(time.Millisecond * 500)
+				continue
+			}
+			return errors.Trace(err)
+		}
 	})
 
 	return errg.Wait()
