@@ -4,10 +4,12 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/mvcc"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 )
 
@@ -99,6 +101,10 @@ func newCaptureInfoWatch(
 		etcdWatchC := cli.Watch(ctx, captureEinfoKeyPrefix, clientv3.WithPrefix(), clientv3.WithRev(revision+1), clientv3.WithPrevKV())
 
 		for resp := range etcdWatchC {
+			failpoint.Inject("WatchCaptureInfoCompactionErr", func() {
+				watchResp <- &CaptureInfoWatchResp{Err: errors.Trace(mvcc.ErrCompacted)}
+				failpoint.Return()
+			})
 			if resp.Err() != nil {
 				watchResp <- &CaptureInfoWatchResp{Err: errors.Trace(resp.Err())}
 				return

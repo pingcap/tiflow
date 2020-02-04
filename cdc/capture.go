@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -134,7 +135,15 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 
 	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)
 	errg.Go(func() error {
-		return watcher.Watch(cctx, c)
+		for {
+			err := watcher.Watch(cctx, c)
+			if errors.Cause(err) == mvcc.ErrCompacted {
+				log.Warn("changefeed watcher watch retryable error", zap.Error(err))
+				time.Sleep(time.Millisecond * 500)
+				continue
+			}
+			return errors.Trace(err)
+		}
 	})
 
 	return errg.Wait()

@@ -20,11 +20,13 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/mvcc"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 )
@@ -125,6 +127,9 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) err
 				log.Info("watcher is closed")
 				return nil
 			}
+			failpoint.Inject("WatchChangeFeedInfoCompactionErr", func() {
+				failpoint.Return(errors.Trace(mvcc.ErrCompacted))
+			})
 			respErr := resp.Err()
 			if respErr != nil {
 				return errors.Trace(respErr)
@@ -211,10 +216,9 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 		errCh <- errors.Trace(err)
 		return
 	}
-	revision := getResp.Header.Revision
 	if getResp.Count == 0 {
 		// wait for key to appear
-		watchCh := w.etcdCli.Watch(ctx, key, clientv3.WithRev(revision))
+		watchCh := w.etcdCli.Watch(ctx, key)
 	waitKeyLoop:
 		for {
 			select {
