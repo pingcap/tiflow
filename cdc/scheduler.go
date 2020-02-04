@@ -31,6 +31,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	checkTaskKeyInterval = time.Second * 1
+)
+
 var (
 	runProcessorWatcher = realRunProcessorWatcher
 	runProcessor        = realRunProcessor
@@ -260,7 +264,7 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 				errCh <- err
 			}
 			return
-		case <-time.After(time.Second):
+		case <-time.After(checkTaskKeyInterval):
 			resp, err := w.etcdCli.Get(ctx, key)
 			if err != nil {
 				errCh <- errors.Trace(err)
