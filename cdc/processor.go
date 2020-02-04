@@ -48,6 +48,13 @@ import (
 	"google.golang.org/grpc"
 )
 
+const (
+	updateInfoInterval        = time.Millisecond * 500
+	resolveTsInterval         = time.Millisecond * 500
+	waitGlobalResolvedTsDelay = time.Millisecond * 500
+	flushDMLsInterval         = time.Millisecond * 10
+)
+
 var (
 	fCreateSchema = createSchemaStore
 	fNewPDCli     = pd.NewClient
@@ -303,10 +310,10 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
 func (p *processor) localResolvedWorker(ctx context.Context) error {
-	updateInfoTick := time.NewTicker(time.Millisecond * 500)
+	updateInfoTick := time.NewTicker(updateInfoInterval)
 	defer updateInfoTick.Stop()
 
-	resolveTsTick := time.NewTicker(time.Millisecond * 500)
+	resolveTsTick := time.NewTicker(resolveTsInterval)
 	defer resolveTsTick.Stop()
 
 	for {
@@ -523,7 +530,7 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 		}
 
 		if lastGlobalResolvedTs == globalResolvedTs {
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(waitGlobalResolvedTsDelay)
 			continue
 		}
 
@@ -677,7 +684,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if err := flush(ctx); err != nil {
 				return errors.Trace(err)
 			}
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(flushDMLsInterval)
 		}
 	}
 }
