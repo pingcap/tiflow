@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 var markProcessorDownTime = 1 * time.Minute
@@ -875,9 +876,14 @@ func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
 func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 	defer o.cancelWatchCapture()
 	handleWatchCaptureC := make(chan error, 1)
+	rl := rate.NewLimiter(0.1, 5)
 	go func() {
 		var err error
 		for {
+			if !rl.Allow() {
+				err = errors.New("capture info watcher exceeds rate limit")
+				break
+			}
 			err = o.handleWatchCapture()
 			if errors.Cause(err) != mvcc.ErrCompacted {
 				break

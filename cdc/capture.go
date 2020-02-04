@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 )
 
@@ -124,9 +125,13 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		return c.ownerWorker.Run(cctx, time.Millisecond*500)
 	})
 
+	rl := rate.NewLimiter(0.1, 5)
 	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)
 	errg.Go(func() error {
 		for {
+			if !rl.Allow() {
+				return errors.New("changefeed watcher exceeds rate limit")
+			}
 			err := watcher.Watch(cctx, c)
 			if errors.Cause(err) == mvcc.ErrCompacted {
 				log.Warn("changefeed watcher watch retryable error", zap.Error(err))
