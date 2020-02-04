@@ -22,7 +22,7 @@ type regionSuite struct{}
 
 var _ = check.Suite(&regionSuite{})
 
-func (s *regionSuite) TestCheckRegionsCover(c *check.C) {
+func (s *regionSuite) TestCheckRegionsLeftCover(c *check.C) {
 	cases := []struct {
 		regions []*metapb.Region
 		span    Span
@@ -43,13 +43,13 @@ func (s *regionSuite) TestCheckRegionsCover(c *check.C) {
 		{[]*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, Span{[]byte{1}, []byte{4}}, false},
+		}, Span{[]byte{1}, []byte{4}}, true},
 		{[]*metapb.Region{
 			{StartKey: []byte{2}, EndKey: []byte{3}},
 		}, Span{[]byte{1}, []byte{3}}, false},
 	}
 
 	for _, tc := range cases {
-		c.Assert(CheckRegionsCover(tc.regions, tc.span), check.Equals, tc.cover)
+		c.Assert(CheckRegionsLeftCover(tc.regions, tc.span), check.Equals, tc.cover)
 	}
 }
