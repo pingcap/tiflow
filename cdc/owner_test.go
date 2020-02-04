@@ -536,11 +536,30 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 			{
 				ID:       2,
 				SchemaID: 1,
+				TableID:  51,
+				Type:     timodel.ActionDropTable,
+				State:    timodel.JobStateSynced,
+				Query:    "drop table t1",
+				BinlogInfo: &timodel.HistoryInfo{
+					SchemaVersion: 5,
+					DBInfo: &timodel.DBInfo{
+						ID:   1,
+						Name: timodel.NewCIStr("test"),
+					},
+					TableInfo: &timodel.TableInfo{
+						ID:   51,
+						Name: timodel.NewCIStr("t1"),
+					},
+				},
+			},
+			{
+				ID:       2,
+				SchemaID: 1,
 				Type:     timodel.ActionDropSchema,
 				State:    timodel.JobStateSynced,
 				Query:    "drop database test",
 				BinlogInfo: &timodel.HistoryInfo{
-					SchemaVersion: 5,
+					SchemaVersion: 6,
 					DBInfo: &timodel.DBInfo{
 						ID:   1,
 						Name: timodel.NewCIStr("test"),
@@ -555,6 +574,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 			{1: {47: struct{}{}, 49: struct{}{}}},
 			{1: {47: struct{}{}}},
 			{1: {51: struct{}{}}},
+			{1: make(tableIDMap)},
 			{},
 		}
 
@@ -564,6 +584,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 			{47: {Schema: "test", Table: "t1"}, 49: {Schema: "test", Table: "t2"}},
 			{47: {Schema: "test", Table: "t1"}},
 			{51: {Schema: "test", Table: "t1"}},
+			{},
 			{},
 		}
 	)

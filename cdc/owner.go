@@ -126,6 +126,7 @@ func (c *changeFeed) dropSchema(schemaID uint64) {
 			c.removeTable(schemaID, tid)
 		}
 	}
+	delete(c.schemas, schemaID)
 }
 
 func (c *changeFeed) reAddTable(id, startTs uint64) {
@@ -154,9 +155,6 @@ func (c *changeFeed) addTable(sid, tid, startTs uint64, table schema.TableName) 
 func (c *changeFeed) removeTable(sid, tid uint64) {
 	if _, ok := c.schemas[sid]; ok {
 		delete(c.schemas[sid], tid)
-		if len(c.schemas[sid]) == 0 {
-			delete(c.schemas, sid)
-		}
 	}
 	delete(c.tables, tid)
 
