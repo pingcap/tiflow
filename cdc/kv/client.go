@@ -121,7 +121,7 @@ func (c *CDCClient) getConn(
 		grpc.WithConnectParams(grpc.ConnectParams{
 			Backoff: gbackoff.Config{
 				BaseDelay:  time.Second,
-				Multiplier: 0.1,
+				Multiplier: 1.1,
 				Jitter:     0.1,
 				MaxDelay:   3 * time.Second,
 			},

@@ -191,7 +191,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: pbackoff.Config{
 					BaseDelay:  time.Second,
-					Multiplier: 0.1,
+					Multiplier: 1.1,
 					Jitter:     0.1,
 					MaxDelay:   3 * time.Second,
 				},
