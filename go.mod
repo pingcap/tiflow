@@ -20,10 +20,10 @@ require (
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
 	github.com/pingcap/failpoint v0.0.0-20200115060041-f2180fbf0df8
 	github.com/pingcap/kvproto v0.0.0-20200108025604-a4dc183d2af5
-	github.com/pingcap/log v0.0.0-20191012051959-b742a5d432e9
-	github.com/pingcap/parser v0.0.0-20200109073933-a9496438d77d
+	github.com/pingcap/log v0.0.0-20200117041106-d28c14d3b1cd
+	github.com/pingcap/parser v0.0.0-20200120100653-1d87b3907217
 	github.com/pingcap/pd v1.1.0-beta.0.20191219054547-4d65bbefbc6d
-	github.com/pingcap/tidb v1.1.0-beta.0.20200116051450-6e648401e44d
+	github.com/pingcap/tidb v1.1.0-beta.0.20200204134155-ebc6a2d39dd7
 	github.com/pingcap/tidb-tools v3.1.0-beta.1.0.20200108061154-356b0e2e2282+incompatible
 	github.com/prometheus/client_golang v1.3.0
 	github.com/prometheus/common v0.8.0 // indirect
@@ -38,7 +38,6 @@ require (
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 	golang.org/x/sys v0.0.0-20200113162924-86b910548bc1 // indirect
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
-	golang.org/x/tools v0.0.0-20200114052453-d31a08c2edf2 // indirect
 	google.golang.org/appengine v1.6.2 // indirect
 	google.golang.org/genproto v0.0.0-20200113173426-e1de0a7b01eb // indirect
 	google.golang.org/grpc v1.26.0
