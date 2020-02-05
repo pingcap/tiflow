@@ -303,8 +303,8 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if !util.CheckRegionsCover(regions, nextSpan) {
-				err = errors.New("regions not completely cover span")
+			if !util.CheckRegionsLeftCover(regions, nextSpan) {
+				err = errors.New("regions not completely left cover span")
 				log.Warn("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
 				return err
 			}
@@ -464,7 +464,7 @@ func (c *CDCClient) singleEventFeed(
 						// emit a value
 						value, err := matcher.matchRow(row)
 						if err != nil {
-							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(err)
+							log.Warn("match row error", zap.Error(err), zap.Stringer("row", row))
 						}
 
 						var opType model.OpType
