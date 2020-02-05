@@ -688,15 +688,20 @@ func createSchemaStore(pdEndpoints []string) (*schema.Storage, error) {
 	if err != nil {
 		return nil, err
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	originalJobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	jobs := make([]*timodel.Job, len(originalJobs))
 	if err != nil {
 		return nil, err
 	}
-	for _, job := range jobs {
+	for _, job := range originalJobs {
+		if job.State != timodel.JobStateSynced && job.State != timodel.JobStateDone {
+			continue
+		}
 		err := resetFinishedTs(kvStore.(tikv.Storage), job)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		jobs = append(jobs, job)
 	}
 	schemaStorage, err := schema.NewStorage(jobs)
 	if err != nil {
