@@ -58,6 +58,9 @@ func SetupEmbedEtcd(dir string) (clientURL *url.URL, e *embed.Etcd, err error) {
 	clientURL = urls[1]
 
 	e, err = embed.StartEtcd(cfg)
+	if err != nil {
+		return
+	}
 
 	select {
 	case <-e.Server.ReadyNotify():
