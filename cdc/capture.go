@@ -38,6 +38,11 @@ import (
 	"google.golang.org/grpc"
 )
 
+const (
+	ownerRunInterval    = time.Millisecond * 500
+	cfWatcherRetryDelay = time.Millisecond * 500
+)
+
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	pdEndpoints  []string
@@ -122,7 +127,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	errg, cctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
-		return c.ownerWorker.Run(cctx, time.Millisecond*500)
+		return c.ownerWorker.Run(cctx, ownerRunInterval)
 	})
 
 	rl := rate.NewLimiter(0.1, 5)
@@ -135,7 +140,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 			err := watcher.Watch(cctx, c)
 			if errors.Cause(err) == mvcc.ErrCompacted {
 				log.Warn("changefeed watcher watch retryable error", zap.Error(err))
-				time.Sleep(time.Millisecond * 500)
+				time.Sleep(cfWatcherRetryDelay)
 				continue
 			}
 			return errors.Trace(err)
