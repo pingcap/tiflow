@@ -689,7 +689,7 @@ func createSchemaStore(pdEndpoints []string) (*schema.Storage, error) {
 		return nil, err
 	}
 	originalJobs, err := kv.LoadHistoryDDLJobs(kvStore)
-	jobs := make([]*timodel.Job, len(originalJobs))
+	jobs := make([]*timodel.Job, 0, len(originalJobs))
 	if err != nil {
 		return nil, err
 	}
