@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 var (
@@ -217,10 +218,16 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 		return
 	}
 	if getResp.Count == 0 {
+		rl := rate.NewLimiter(0.1, 5)
+		revision := getResp.Header.Revision
 		// wait for key to appear
-		watchCh := w.etcdCli.Watch(ctx, key)
+		watchCh := w.etcdCli.Watch(ctx, key, clientv3.WithRev(revision))
 	waitKeyLoop:
 		for {
+			if !rl.Allow() {
+				errCh <- errors.New("task key watcher exceeds rate limit")
+				return
+			}
 			select {
 			case <-ctx.Done():
 				return
@@ -231,6 +238,9 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 				}
 				respErr := resp.Err()
 				if respErr != nil {
+					if respErr == mvcc.ErrCompacted {
+						continue waitKeyLoop
+					}
 					errCh <- errors.Trace(respErr)
 					return
 				}
