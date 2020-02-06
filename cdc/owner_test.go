@@ -7,9 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coreos/etcd/clientv3"
-	"github.com/coreos/etcd/clientv3/concurrency"
-	"github.com/coreos/etcd/embed"
 	"github.com/google/uuid"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -22,6 +19,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -316,7 +316,8 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 
 	tables := map[uint64]schema.TableName{1: {Schema: "any"}}
 
-	filter := newTxnFilter(&model.ReplicaConfig{})
+	filter, err := newTxnFilter(&model.ReplicaConfig{})
+	c.Assert(err, check.IsNil)
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
 			tables:                  tables,
@@ -335,7 +336,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	}
 
 	manager := roles.NewMockManager(uuid.New().String(), cancel)
-	err := manager.CampaignOwner(ctx)
+	err = manager.CampaignOwner(ctx)
 	c.Assert(err, check.IsNil)
 	owner := &ownerImpl{
 		cancelWatchCapture: cancel,

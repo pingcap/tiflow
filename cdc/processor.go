@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -43,9 +42,18 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/codec"
+	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	pbackoff "google.golang.org/grpc/backoff"
+)
+
+const (
+	updateInfoInterval        = time.Millisecond * 500
+	resolveTsInterval         = time.Millisecond * 500
+	waitGlobalResolvedTsDelay = time.Millisecond * 500
+	flushDMLsInterval         = time.Millisecond * 10
 )
 
 var (
@@ -187,7 +195,15 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 		Endpoints:   pdEndpoints,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
-			grpc.WithBackoffMaxDelay(time.Second * 3),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: pbackoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
 		},
 	})
 	if err != nil {
@@ -215,7 +231,10 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 		return nil, err
 	}
 
-	filter := newTxnFilter(changefeed.GetConfig())
+	filter, err := newTxnFilter(changefeed.GetConfig())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	p := &processor{
 		captureID:     captureID,
@@ -303,10 +322,10 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
 func (p *processor) localResolvedWorker(ctx context.Context) error {
-	updateInfoTick := time.NewTicker(time.Millisecond * 500)
+	updateInfoTick := time.NewTicker(updateInfoInterval)
 	defer updateInfoTick.Stop()
 
-	resolveTsTick := time.NewTicker(time.Millisecond * 500)
+	resolveTsTick := time.NewTicker(resolveTsInterval)
 	defer resolveTsTick.Stop()
 
 	for {
@@ -523,7 +542,7 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 		}
 
 		if lastGlobalResolvedTs == globalResolvedTs {
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(waitGlobalResolvedTsDelay)
 			continue
 		}
 
@@ -677,7 +696,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if err := flush(ctx); err != nil {
 				return errors.Trace(err)
 			}
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(flushDMLsInterval)
 		}
 	}
 }
@@ -688,15 +707,20 @@ func createSchemaStore(pdEndpoints []string) (*schema.Storage, error) {
 	if err != nil {
 		return nil, err
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	originalJobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	jobs := make([]*timodel.Job, 0, len(originalJobs))
 	if err != nil {
 		return nil, err
 	}
-	for _, job := range jobs {
+	for _, job := range originalJobs {
+		if job.State != timodel.JobStateSynced && job.State != timodel.JobStateDone {
+			continue
+		}
 		err := resetFinishedTs(kvStore.(tikv.Storage), job)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		jobs = append(jobs, job)
 	}
 	schemaStorage, err := schema.NewStorage(jobs)
 	if err != nil {

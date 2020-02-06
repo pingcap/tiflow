@@ -19,14 +19,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/coreos/etcd/clientv3"
-	"github.com/coreos/etcd/clientv3/concurrency"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
+	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 // command type
@@ -92,7 +93,15 @@ var ctrlCmd = &cobra.Command{
 			Endpoints:   []string{ctrlPdAddr},
 			DialTimeout: 5 * time.Second,
 			DialOptions: []grpc.DialOption{
-				grpc.WithBackoffMaxDelay(time.Second * 3),
+				grpc.WithConnectParams(grpc.ConnectParams{
+					Backoff: backoff.Config{
+						BaseDelay:  time.Second,
+						Multiplier: 1.1,
+						Jitter:     0.1,
+						MaxDelay:   3 * time.Second,
+					},
+					MinConnectTimeout: 3 * time.Second,
+				}),
 			},
 		})
 		if err != nil {

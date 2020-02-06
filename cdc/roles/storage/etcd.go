@@ -18,8 +18,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-	"github.com/coreos/etcd/clientv3"
-	"github.com/coreos/etcd/embed"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -27,6 +25,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/embed"
 	"go.uber.org/zap"
 )
 

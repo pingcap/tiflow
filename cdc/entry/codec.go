@@ -20,8 +20,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
+	"github.com/pingcap/tidb/util/rowcodec"
 )
 
 var (
@@ -180,14 +182,29 @@ func decodeMetaKey(ek []byte) (meta, error) {
 }
 
 // decodeRow decodes a byte slice into datums with a existing row map.
-// Row layout: colID1, value1, colID2, value2, .....
-func decodeRow(b []byte) (map[int64]types.Datum, error) {
-	row := make(map[int64]types.Datum)
-	if b == nil {
-		return row, nil
+func decodeRow(b []byte, recordID int64, tableInfo *schema.TableInfo) (map[int64]types.Datum, error) {
+	if len(b) == 0 {
+		if tableInfo.PKIsHandle {
+			id, pkValue, err := fetchHandleValue(tableInfo, recordID)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			return map[int64]types.Datum{id: *pkValue}, nil
+		}
+		return map[int64]types.Datum{}, nil
 	}
+	if rowcodec.IsNewFormat(b) {
+		return decodeRowV2(b, recordID, tableInfo)
+	}
+	return decodeRowV1(b, recordID, tableInfo)
+}
+
+// decodeRowV1 decodes value data using old encoding format.
+// Row layout: colID1, value1, colID2, value2, .....
+func decodeRowV1(b []byte, recordID int64, tableInfo *schema.TableInfo) (map[int64]types.Datum, error) {
+	row := make(map[int64]types.Datum)
 	if len(b) == 1 && b[0] == codec.NilFlag {
-		return row, nil
+		b = b[1:]
 	}
 	var err error
 	var data []byte
@@ -213,9 +230,37 @@ func decodeRow(b []byte) (map[int64]types.Datum, error) {
 			return nil, errors.Trace(err)
 		}
 
-		row[id] = v
+		// unflatten value
+		colInfo, exist := tableInfo.GetColumnInfo(id)
+		if !exist {
+			// can not find column info, ignore this column because the column should be in WRITE ONLY state
+			continue
+		}
+		fieldType := &colInfo.FieldType
+		datum, err := unflatten(v, fieldType)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		row[id] = datum
+	}
+
+	if tableInfo.PKIsHandle {
+		id, pkValue, err := fetchHandleValue(tableInfo, recordID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		row[id] = *pkValue
 	}
 	return row, nil
+}
+
+// decodeRowV2 decodes value data using new encoding format.
+// Ref: https://github.com/pingcap/tidb/pull/12634
+//      https://github.com/pingcap/tidb/blob/master/docs/design/2018-07-19-row-format.md
+func decodeRowV2(data []byte, recordID int64, tableInfo *schema.TableInfo) (map[int64]types.Datum, error) {
+	handleColID, reqCols := tableInfo.GetRowColInfos()
+	decoder := rowcodec.NewDatumMapDecoder(reqCols, handleColID, time.UTC)
+	return decoder.DecodeToDatumMap(data, recordID, nil)
 }
 
 // unflatten converts a raw datum to a column datum.
@@ -233,9 +278,7 @@ func unflatten(datum types.Datum, ft *types.FieldType) (types.Datum, error) {
 		mysql.TypeString:
 		return datum, nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		var t types.Time
-		t.Type = ft.Tp
-		t.Fsp = int8(ft.Decimal)
+		t := types.NewTime(types.ZeroCoreTime, ft.Tp, int8(ft.Decimal))
 		var err error
 		err = t.FromPackedUint(datum.GetUint64())
 		if err != nil {
