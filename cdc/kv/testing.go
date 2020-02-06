@@ -146,7 +146,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		regions := preRegions
 		// In second loop try split every region.
 		if i == 1 {
-			splitStore, ok := storage.(kv.SplitableStore)
+			splitStore, ok := storage.(kv.SplittableStore)
 			require.True(t, ok)
 			for _, r := range preRegions {
 				splitKey := r.GetStartKey()

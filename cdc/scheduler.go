@@ -19,16 +19,21 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coreos/etcd/clientv3"
-	"github.com/coreos/etcd/mvcc"
-	"github.com/coreos/etcd/mvcc/mvccpb"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/mvcc"
+	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
+)
+
+const (
+	checkTaskKeyInterval = time.Second * 1
 )
 
 var (
@@ -217,10 +222,16 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 		return
 	}
 	if getResp.Count == 0 {
+		rl := rate.NewLimiter(0.1, 5)
+		revision := getResp.Header.Revision
 		// wait for key to appear
-		watchCh := w.etcdCli.Client.Watch(ctx, key)
+		watchCh := w.etcdCli.Client.Watch(ctx, key, clientv3.WithRev(revision))
 	waitKeyLoop:
 		for {
+			if !rl.Allow() {
+				errCh <- errors.New("task key watcher exceeds rate limit")
+				return
+			}
 			select {
 			case <-ctx.Done():
 				return
@@ -231,6 +242,9 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 				}
 				respErr := resp.Err()
 				if respErr != nil {
+					if respErr == mvcc.ErrCompacted {
+						continue waitKeyLoop
+					}
 					errCh <- errors.Trace(respErr)
 					return
 				}
@@ -260,7 +274,7 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 				errCh <- err
 			}
 			return
-		case <-time.After(time.Second):
+		case <-time.After(checkTaskKeyInterval):
 			resp, err := w.etcdCli.Client.Get(ctx, key)
 			if err != nil {
 				errCh <- errors.Trace(err)

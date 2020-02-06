@@ -12,12 +12,15 @@ type txnFilter struct {
 	ignoreTxnCommitTs []uint64
 }
 
-func newTxnFilter(config *model.ReplicaConfig) *txnFilter {
-	filter := filter.New(config.FilterCaseSensitive, config.FilterRules)
+func newTxnFilter(config *model.ReplicaConfig) (*txnFilter, error) {
+	filter, err := filter.New(config.FilterCaseSensitive, config.FilterRules)
+	if err != nil {
+		return nil, err
+	}
 	return &txnFilter{
 		filter:            filter,
 		ignoreTxnCommitTs: config.IgnoreTxnCommitTs,
-	}
+	}, nil
 }
 
 // ShouldIgnoreTxn returns true is the given txn should be ignored

@@ -19,8 +19,8 @@ type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
-func setUpPullerAndSchema(ctx context.Context, c *check.C, sqls ...string) (*puller.MockPullerManager, *schema.Storage) {
-	pm := puller.NewMockPullerManager(c)
+func setUpPullerAndSchema(ctx context.Context, c *check.C, newRowFormat bool, sqls ...string) (*puller.MockPullerManager, *schema.Storage) {
+	pm := puller.NewMockPullerManager(c, newRowFormat)
 	go pm.Run(ctx)
 	for _, sql := range sqls {
 		pm.MustExec(sql)
@@ -51,10 +51,10 @@ func getFirstRealTxn(ctx context.Context, c *check.C, plr puller.Puller) (result
 	return
 }
 
-func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
+func (cs *mountTxnsSuite) testInsertPkNotHandle(c *check.C, newRowFormat bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	pm, schema := setUpPullerAndSchema(ctx, c,
+	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
 		"create database testDB",
 		"create table testDB.test1(id varchar(255) primary key, a int, index ci (a))",
 	)
@@ -128,10 +128,10 @@ func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
 	})
 }
 
-func (cs *mountTxnsSuite) TestIncompleteRow(c *check.C) {
+func (cs *mountTxnsSuite) testIncompleteRow(c *check.C, newRowFormat bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	pm, schema := setUpPullerAndSchema(ctx, c,
+	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
 		"create database testDB",
 		"create table testDB.test1 (id int primary key, val int);",
 	)
@@ -189,10 +189,10 @@ func (cs *mountTxnsSuite) TestIncompleteRow(c *check.C) {
 
 }
 
-func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
+func (cs *mountTxnsSuite) testInsertPkIsHandle(c *check.C, newRowFormat bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	pm, schema := setUpPullerAndSchema(ctx, c,
+	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
 		"create database testDB",
 		"create table testDB.test1(id int primary key, a int unique key not null)",
 	)
@@ -274,10 +274,10 @@ func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
 	})
 }
 
-func (cs *mountTxnsSuite) TestUk(c *check.C) {
+func (cs *mountTxnsSuite) testUk(c *check.C, newRowFormat bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	pm, schema := setUpPullerAndSchema(ctx, c,
+	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
 		"create database testDB",
 		`create table testDB.test1(
 			a int unique key not null, 
@@ -385,10 +385,10 @@ func (cs *mountTxnsSuite) TestUk(c *check.C) {
 	})
 }
 
-func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
+func (cs *mountTxnsSuite) testLargeInteger(c *check.C, newRowFormat bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	pm, schema := setUpPullerAndSchema(ctx, c,
+	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
 		"create database testDB",
 		"CREATE TABLE testDB.large_int(id BIGINT UNSIGNED PRIMARY KEY, a int)",
 	)
@@ -418,7 +418,7 @@ func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
 
 	ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
-	pm, schema = setUpPullerAndSchema(ctx, c,
+	pm, schema = setUpPullerAndSchema(ctx, c, newRowFormat,
 		"create database testDB",
 		"CREATE TABLE testDB.large_int(id BIGINT PRIMARY KEY, a int)",
 	)
@@ -446,6 +446,27 @@ func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
 		},
 	})
 
+}
+
+func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
+	cs.testInsertPkNotHandle(c, true)
+	cs.testInsertPkNotHandle(c, false)
+}
+func (cs *mountTxnsSuite) TestIncompleteRow(c *check.C) {
+	cs.testIncompleteRow(c, true)
+	cs.testIncompleteRow(c, false)
+}
+func (cs *mountTxnsSuite) TestInsertPkIsHandle(c *check.C) {
+	cs.testInsertPkIsHandle(c, true)
+	cs.testInsertPkIsHandle(c, false)
+}
+func (cs *mountTxnsSuite) TestUk(c *check.C) {
+	cs.testUk(c, true)
+	cs.testUk(c, false)
+}
+func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
+	cs.testLargeInteger(c, true)
+	cs.testLargeInteger(c, false)
 }
 
 func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C,

@@ -128,7 +128,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 		return nil, nil
 	}
 	origFNewPD := fNewPDCli
-	fNewPDCli = func(pdAddrs []string, security pd.SecurityOption) (pd.Client, error) {
+	fNewPDCli = func(pdAddrs []string, security pd.SecurityOption, opts ...pd.ClientOption) (pd.Client, error) {
 		return nil, nil
 	}
 	origFNewTsRw := fNewTsRWriter

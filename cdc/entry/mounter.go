@@ -29,7 +29,7 @@ func (m *Mounter) Mount(rawTxn model.RawTxn) (model.Txn, error) {
 	}
 	var replaceDMLs, deleteDMLs []*model.DML
 	for _, raw := range rawTxn.Entries {
-		kvEntry, err := unmarshal(raw)
+		kvEntry, err := m.unmarshal(raw)
 		if err != nil {
 			return model.Txn{}, errors.Trace(err)
 		}
@@ -72,35 +72,18 @@ func (m *Mounter) Mount(rawTxn model.RawTxn) (model.Txn, error) {
 func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 	tableInfo, tableName, exist := m.fetchTableInfo(row.TableID)
 	if !exist {
-		if m.schemaStorage.IsTruncateTableID(row.TableID) {
-			log.Debug("skip the DML of truncated table", zap.Uint64("ts", row.Ts), zap.Int64("tableID", row.TableID))
-			return nil, nil
-		}
 		return nil, errors.NotFoundf("table in schema storage, id: %d", row.TableID)
 	}
 
-	err := row.unflatten(tableInfo)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	if row.Delete {
-		if tableInfo.PKIsHandle {
-			pkColName, pkValue, err := fetchHandleValue(tableInfo, row)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			return &model.DML{
-				Database: tableName.Schema,
-				Table:    tableName.Table,
-				Tp:       model.DeleteDMLType,
-				Values:   map[string]types.Datum{pkColName: *pkValue},
-			}, nil
-		}
+	if row.Delete && !tableInfo.PKIsHandle {
 		return nil, nil
 	}
 
-	values := make(map[string]types.Datum, len(row.Row)+1)
+	datumsNum := 1
+	if !row.Delete {
+		datumsNum = len(tableInfo.Columns)
+	}
+	values := make(map[string]types.Datum, datumsNum)
 	for index, colValue := range row.Row {
 		colInfo, exist := tableInfo.GetColumnInfo(index)
 		if !exist {
@@ -109,25 +92,24 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 		colName := colInfo.Name.O
 		values[colName] = colValue
 	}
-	if tableInfo.PKIsHandle {
-		pkColName, pkValue, err := fetchHandleValue(tableInfo, row)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		values[pkColName] = *pkValue
-	}
 
-	for _, col := range tableInfo.Columns {
-		_, ok := values[col.Name.O]
-		if !ok {
-			values[col.Name.O] = getDefaultOrZeroValue(col)
+	var tp model.DMLType
+	if row.Delete {
+		tp = model.DeleteDMLType
+	} else {
+		tp = model.InsertDMLType
+		for _, col := range tableInfo.Columns {
+			_, ok := values[col.Name.O]
+			if !ok {
+				values[col.Name.O] = getDefaultOrZeroValue(col)
+			}
 		}
 	}
 
 	return &model.DML{
 		Database: tableName.Schema,
 		Table:    tableName.Table,
-		Tp:       model.InsertDMLType,
+		Tp:       tp,
 		Values:   values,
 	}, nil
 }
@@ -201,7 +183,7 @@ func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *schema.TableInfo, ta
 	return
 }
 
-func fetchHandleValue(tableInfo *schema.TableInfo, row *rowKVEntry) (pkColName string, pkValue *types.Datum, err error) {
+func fetchHandleValue(tableInfo *schema.TableInfo, recordID int64) (pkCoID int64, pkValue *types.Datum, err error) {
 	handleColOffset := -1
 	for i, col := range tableInfo.Columns {
 		if mysql.HasPriKeyFlag(col.Flag) {
@@ -210,15 +192,15 @@ func fetchHandleValue(tableInfo *schema.TableInfo, row *rowKVEntry) (pkColName s
 		}
 	}
 	if handleColOffset == -1 {
-		return "", nil, errors.New("can't find handle column, please check if the pk is handle")
+		return -1, nil, errors.New("can't find handle column, please check if the pk is handle")
 	}
 	handleCol := tableInfo.Columns[handleColOffset]
-	pkColName = handleCol.Name.O
+	pkCoID = handleCol.ID
 	pkValue = &types.Datum{}
 	if mysql.HasUnsignedFlag(handleCol.Flag) {
-		pkValue.SetUint64(uint64(row.RecordID))
+		pkValue.SetUint64(uint64(recordID))
 	} else {
-		pkValue.SetInt64(row.RecordID)
+		pkValue.SetInt64(recordID)
 	}
 	return
 }

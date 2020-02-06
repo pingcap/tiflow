@@ -21,8 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coreos/etcd/clientv3/concurrency"
-	"github.com/coreos/etcd/mvcc"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pmodel "github.com/pingcap/parser/model"
@@ -33,10 +31,16 @@ import (
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
-var markProcessorDownTime = 1 * time.Minute
+const (
+	markProcessorDownTime      = time.Minute
+	captureInfoWatchRetryDelay = time.Millisecond * 500
+)
 
 // OwnerDDLHandler defines the ddl handler for Owner
 // which can pull ddl jobs and execute ddl jobs
@@ -487,7 +491,10 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 		}
 	}
 
-	filter := newTxnFilter(info.GetConfig())
+	filter, err := newTxnFilter(info.GetConfig())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	tables := make(map[uint64]schema.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
@@ -874,15 +881,20 @@ func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
 func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 	defer o.cancelWatchCapture()
 	handleWatchCaptureC := make(chan error, 1)
+	rl := rate.NewLimiter(0.1, 5)
 	go func() {
 		var err error
 		for {
+			if !rl.Allow() {
+				err = errors.New("capture info watcher exceeds rate limit")
+				break
+			}
 			err = o.handleWatchCapture()
 			if errors.Cause(err) != mvcc.ErrCompacted {
 				break
 			}
 			log.Warn("capture info watcher retryable error", zap.Error(err))
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(captureInfoWatchRetryDelay)
 			err = o.resetCaptureInfoWatcher(ctx)
 			if err != nil {
 				break

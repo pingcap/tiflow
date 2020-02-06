@@ -19,7 +19,7 @@ type mockPullerSuite struct{}
 var _ = check.Suite(&mockPullerSuite{})
 
 func (s *mockPullerSuite) TestTxnSort(c *check.C) {
-	pm := NewMockPullerManager(c)
+	pm := NewMockPullerManager(c, true)
 	plr := pm.CreatePuller(0, []util.Span{util.Span{}.Hack()})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -43,7 +43,7 @@ func (s *mockPullerSuite) TestTxnSort(c *check.C) {
 }
 
 func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
-	pm := NewMockPullerManager(c)
+	pm := NewMockPullerManager(c, true)
 	plr := pm.CreatePuller(0, []util.Span{util.GetDDLSpan()})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -81,7 +81,7 @@ func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 }
 
 func (s *mockPullerSuite) TestStartTs(c *check.C) {
-	pm := NewMockPullerManager(c)
+	pm := NewMockPullerManager(c, true)
 	plrA := pm.CreatePuller(0, []util.Span{util.Span{}.Hack()})
 	ctx, cancel := context.WithCancel(context.Background())
 	ts := uint64(0)

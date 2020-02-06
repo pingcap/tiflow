@@ -22,11 +22,11 @@ import (
 	"net/http/pprof"
 	"os"
 
-	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 )
 

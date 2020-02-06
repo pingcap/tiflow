@@ -162,18 +162,18 @@ func (p *mockPuller) Output() Buffer {
 }
 
 // NewMockPullerManager creates and sets up a mock puller manager
-func NewMockPullerManager(c *check.C) *MockPullerManager {
+func NewMockPullerManager(c *check.C, newRowFormat bool) *MockPullerManager {
 	m := &MockPullerManager{
 		txnMap:   make(map[uint64]*kvrpcpb.PrewriteRequest),
 		rawTxnCh: make(chan model.RawTxn, 16),
 		closeCh:  make(chan struct{}),
 		c:        c,
 	}
-	m.setUp()
+	m.setUp(newRowFormat)
 	return m
 }
 
-func (m *MockPullerManager) setUp() {
+func (m *MockPullerManager) setUp(newRowFormat bool) {
 	// avoid to print too many logs
 	logLevel := log.GetLevel()
 	log.SetLevel(zap.FatalLevel)
@@ -205,6 +205,7 @@ func (m *MockPullerManager) setUp() {
 
 	m.tidbKit = testkit.NewTestKit(m.c, m.store)
 	m.MustExec("use test;")
+	m.tidbKit.Se.GetSessionVars().RowEncoder.Enable = newRowFormat
 
 	mvccListener.registerPostPrewrite(m.postPrewrite)
 	mvccListener.registerPostCommit(m.postCommit)

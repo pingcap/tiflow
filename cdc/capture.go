@@ -19,8 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coreos/etcd/clientv3"
-	"github.com/coreos/etcd/mvcc"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -32,9 +30,18 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
+	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
+)
+
+const (
+	ownerRunInterval    = time.Millisecond * 500
+	cfWatcherRetryDelay = time.Millisecond * 500
 )
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
@@ -56,7 +63,15 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 		Endpoints:   pdEndpoints,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
-			grpc.WithBackoffMaxDelay(time.Second * 3),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
 		},
 	})
 	if err != nil {
@@ -121,16 +136,20 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	errg, cctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
-		return c.ownerWorker.Run(cctx, time.Millisecond*500)
+		return c.ownerWorker.Run(cctx, ownerRunInterval)
 	})
 
+	rl := rate.NewLimiter(0.1, 5)
 	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)
 	errg.Go(func() error {
 		for {
+			if !rl.Allow() {
+				return errors.New("changefeed watcher exceeds rate limit")
+			}
 			err := watcher.Watch(cctx, c)
 			if errors.Cause(err) == mvcc.ErrCompacted {
 				log.Warn("changefeed watcher watch retryable error", zap.Error(err))
-				time.Sleep(time.Millisecond * 500)
+				time.Sleep(cfWatcherRetryDelay)
 				continue
 			}
 			return errors.Trace(err)
