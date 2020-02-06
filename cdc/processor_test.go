@@ -19,7 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/check"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -27,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"go.etcd.io/etcd/clientv3"
 )
 
 type processorSuite struct{}
@@ -128,7 +128,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 		return nil, nil
 	}
 	origFNewPD := fNewPDCli
-	fNewPDCli = func(pdAddrs []string, security pd.SecurityOption) (pd.Client, error) {
+	fNewPDCli = func(pdAddrs []string, security pd.SecurityOption, opts ...pd.ClientOption) (pd.Client, error) {
 		return nil, nil
 	}
 	origFNewTsRw := fNewTsRWriter

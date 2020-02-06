@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/coreos/etcd/clientv3"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -16,7 +15,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
+	"go.etcd.io/etcd/clientv3"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 func init() {
@@ -46,7 +47,15 @@ var cliCmd = &cobra.Command{
 			Endpoints:   []string{pdAddress},
 			DialTimeout: 5 * time.Second,
 			DialOptions: []grpc.DialOption{
-				grpc.WithBackoffMaxDelay(time.Second * 3),
+				grpc.WithConnectParams(grpc.ConnectParams{
+					Backoff: backoff.Config{
+						BaseDelay:  time.Second,
+						Multiplier: 1.1,
+						Jitter:     0.1,
+						MaxDelay:   3 * time.Second,
+					},
+					MinConnectTimeout: 3 * time.Second,
+				}),
 			},
 		})
 		if err != nil {

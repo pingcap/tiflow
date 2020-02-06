@@ -105,41 +105,28 @@ func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
 	return false
 }
 
-func (row *rowKVEntry) unflatten(tableInfo *schema.TableInfo) error {
-	if tableInfo.ID != row.TableID {
-		return errors.New("wrong table info in unflatten")
-	}
-	for colID, v := range row.Row {
-		colInfo, exist := tableInfo.GetColumnInfo(colID)
-		if !exist {
-			log.Info("can not find column info, ignore this column because the column should be in WRITE ONLY state", zap.Int64("colID", colID), zap.Uint64("ts", row.Ts))
-			delete(row.Row, colID)
-			continue
-		}
-		fieldType := &colInfo.FieldType
-		datum, err := unflatten(v, fieldType)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		row.Row[colID] = datum
-	}
-	return nil
-}
-
-func unmarshal(raw *model.RawKVEntry) (kvEntry, error) {
+func (m *Mounter) unmarshal(raw *model.RawKVEntry) (kvEntry, error) {
 	switch {
 	case bytes.HasPrefix(raw.Key, tablePrefix):
-		return unmarshalTableKVEntry(raw)
+		return m.unmarshalTableKVEntry(raw)
 	case bytes.HasPrefix(raw.Key, metaPrefix) && raw.OpType == model.OpTypePut:
-		return unmarshalMetaKVEntry(raw)
+		return m.unmarshalMetaKVEntry(raw)
 	}
-	return &unknownKVEntry{*raw}, nil
+	return nil, nil
 }
 
-func unmarshalTableKVEntry(raw *model.RawKVEntry) (kvEntry, error) {
+func (m *Mounter) unmarshalTableKVEntry(raw *model.RawKVEntry) (kvEntry, error) {
 	key, tableID, err := decodeTableID(raw.Key)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+	tableInfo, exist := m.schemaStorage.TableByID(tableID)
+	if !exist {
+		if m.schemaStorage.IsTruncateTableID(tableID) {
+			log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.Ts), zap.Int64("tableID", tableID))
+			return nil, nil
+		}
+		return nil, errors.NotFoundf("table in schema storage, id: %d", tableID)
 	}
 	switch {
 	case bytes.HasPrefix(key, recordPrefix):
@@ -150,7 +137,7 @@ func unmarshalTableKVEntry(raw *model.RawKVEntry) (kvEntry, error) {
 		if len(key) != 0 {
 			return nil, errors.New("invalid record key")
 		}
-		row, err := decodeRow(raw.Value)
+		row, err := decodeRow(raw.Value, recordID, tableInfo)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -196,7 +183,7 @@ const (
 	tableMetaPrefix = "Table:"
 )
 
-func unmarshalMetaKVEntry(raw *model.RawKVEntry) (kvEntry, error) {
+func (m *Mounter) unmarshalMetaKVEntry(raw *model.RawKVEntry) (kvEntry, error) {
 	meta, err := decodeMetaKey(raw.Key)
 	if err != nil {
 		return nil, errors.Trace(err)

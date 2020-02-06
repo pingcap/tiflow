@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-	"github.com/coreos/etcd/clientv3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -43,9 +42,11 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/codec"
+	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	pbackoff "google.golang.org/grpc/backoff"
 )
 
 const (
@@ -194,7 +195,15 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 		Endpoints:   pdEndpoints,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
-			grpc.WithBackoffMaxDelay(time.Second * 3),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: pbackoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
 		},
 	})
 	if err != nil {
@@ -222,7 +231,10 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 		return nil, err
 	}
 
-	filter := newTxnFilter(changefeed.GetConfig())
+	filter, err := newTxnFilter(changefeed.GetConfig())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	p := &processor{
 		captureID:     captureID,

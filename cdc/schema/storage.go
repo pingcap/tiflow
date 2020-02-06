@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"go.uber.org/zap"
 )
 
@@ -61,6 +62,8 @@ type TableInfo struct {
 	*model.TableInfo
 	ColumnsOffset map[int64]int
 	IndicesOffset map[int64]int
+	handleColID   int64
+	rowColInfos   []rowcodec.ColInfo
 }
 
 // WrapTableInfo creates a TableInfo from a model.TableInfo
@@ -96,6 +99,33 @@ func (ti *TableInfo) GetIndexInfo(indexID int64) (info *model.IndexInfo, exist b
 		return nil, false
 	}
 	return ti.Indices[indexOffset], true
+}
+
+// GetRowColInfos returns all column infos for rowcodec
+func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
+	if len(ti.rowColInfos) != 0 {
+		return ti.handleColID, ti.rowColInfos
+	}
+	handleColID := int64(-1)
+	reqCols := make([]rowcodec.ColInfo, len(ti.Columns))
+	for i, col := range ti.Columns {
+		isPK := (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == model.ExtraHandleID
+		if isPK {
+			handleColID = col.ID
+		}
+		reqCols[i] = rowcodec.ColInfo{
+			ID:         col.ID,
+			Tp:         int32(col.Tp),
+			Flag:       int32(col.Flag),
+			Flen:       col.Flen,
+			Decimal:    col.Decimal,
+			Elems:      col.Elems,
+			IsPKHandle: isPK,
+		}
+	}
+	ti.rowColInfos = reqCols
+	ti.handleColID = handleColID
+	return ti.handleColID, ti.rowColInfos
 }
 
 // WritableColumns returns all public and non-generated columns

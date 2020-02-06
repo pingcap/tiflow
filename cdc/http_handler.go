@@ -17,9 +17,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
 const (

@@ -104,6 +104,7 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 			SourceTables: []*diff.TableInstance{sourceTableInstance},
 			TargetTable:  targetTableInstance,
 			UseChecksum:  true,
+			CpDB:         targetDB,
 		}
 		structEqual, dataEqual, err := tableDiff.Equal(context.Background(), func(sql string) error {
 			log.Print(sql)

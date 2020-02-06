@@ -24,7 +24,8 @@ type filterSuite struct{}
 var _ = check.Suite(&filterSuite{})
 
 func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
-	filter := newTxnFilter(&model.ReplicaConfig{})
+	filter, err := newTxnFilter(&model.ReplicaConfig{})
+	c.Assert(err, check.IsNil)
 	c.Assert(filter.ShouldIgnoreTable("information_schema", ""), check.IsTrue)
 	c.Assert(filter.ShouldIgnoreTable("information_schema", "statistics"), check.IsTrue)
 	c.Assert(filter.ShouldIgnoreTable("performance_schema", ""), check.IsTrue)
@@ -38,7 +39,7 @@ func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
 }
 
 func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
-	filter := newTxnFilter(&model.ReplicaConfig{
+	filter, err := newTxnFilter(&model.ReplicaConfig{
 		FilterRules: &filter.Rules{
 			DoDBs: []string{"sns", "ecom"},
 			IgnoreTables: []*filter.Table{
@@ -47,6 +48,7 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 			},
 		},
 	})
+	c.Assert(err, check.IsNil)
 	assertIgnore := func(db, tbl string, boolCheck check.Checker) {
 		c.Assert(filter.ShouldIgnoreTable(db, tbl), boolCheck)
 	}
@@ -76,9 +78,10 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 }
 
 func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
-	filter := newTxnFilter(&model.ReplicaConfig{
+	filter, err := newTxnFilter(&model.ReplicaConfig{
 		IgnoreTxnCommitTs: []uint64{1, 3},
 	})
+	c.Assert(err, check.IsNil)
 	testCases := []struct {
 		txn    *model.Txn
 		ignore bool
