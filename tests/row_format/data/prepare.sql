@@ -2,6 +2,8 @@ drop database if exists `row_format`;
 create database `row_format`;
 use `row_format`;
 
+SET GLOBAL tidb_row_format_version = 2;
+
 CREATE TABLE multi_data_type
 (
     id          INT AUTO_INCREMENT,
@@ -51,7 +53,7 @@ UPDATE multi_data_type
 SET t_bigint = 555
 WHERE id = 1;
 
-SET GLOBAL tidb_row_format_version = 1;
+SET GLOBAL tidb_row_format_version = 2;
 
 INSERT INTO multi_data_type( t_boolean, t_bigint, t_double, t_decimal, t_bit
                            , t_date, t_datetime, t_timestamp, t_time, t_year
