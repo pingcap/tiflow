@@ -591,13 +591,15 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 	)
 	schemaStorage, err := schema.NewStorage(nil)
 	c.Assert(err, check.IsNil)
+	filter, err := newTxnFilter(&model.ReplicaConfig{})
+	c.Assert(err, check.IsNil)
 	cf := &changeFeed{
 		schema:        schemaStorage,
 		schemas:       make(map[uint64]map[uint64]struct{}),
 		tables:        make(map[uint64]schema.TableName),
 		orphanTables:  make(map[uint64]model.ProcessTableInfo),
 		toCleanTables: make(map[uint64]struct{}),
-		filter:        newTxnFilter(&model.ReplicaConfig{}),
+		filter:        filter,
 	}
 	for i, job := range jobs {
 		err = cf.applyJob(job)

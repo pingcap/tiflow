@@ -122,6 +122,10 @@ func (c *changeFeed) updateProcessorInfos(processInfos model.ProcessorsInfos) {
 }
 
 func (c *changeFeed) addSchema(schemaID uint64) {
+	if _, ok := c.schemas[schemaID]; ok {
+		log.Warn("add schema already exists", zap.Uint64("schemaID", schemaID))
+		return
+	}
 	c.schemas[schemaID] = make(map[uint64]struct{})
 }
 
@@ -143,6 +147,11 @@ func (c *changeFeed) reAddTable(id, startTs uint64) {
 
 func (c *changeFeed) addTable(sid, tid, startTs uint64, table schema.TableName) {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
+		return
+	}
+
+	if _, ok := c.tables[tid]; ok {
+		log.Warn("add table already exists", zap.Uint64("tableID", tid), zap.Stringer("table", table))
 		return
 	}
 
