@@ -501,9 +501,6 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 			Ts:           newInfo.TablePLock.Ts,
 			CheckpointTs: checkpointTs,
 		}
-		log.Info("show write clock",
-			zap.Reflect("plock", newInfo.TablePLock),
-			zap.Reflect("clock", newInfo.TableCLock))
 	}
 
 	// add tables
