@@ -270,7 +270,6 @@ func (c CDCEtcdClient) DeleteTaskStatus(
 
 // PutCaptureInfo put capture info into etcd.
 func (c CDCEtcdClient) PutCaptureInfo(ctx context.Context, info *model.CaptureInfo, opts ...clientv3.OpOption) error {
-	var data []byte
 	data, err := info.Marshal()
 	if err != nil {
 		return errors.Trace(err)
