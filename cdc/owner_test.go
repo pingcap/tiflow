@@ -443,6 +443,172 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(st.AdminJobType, check.Equals, model.AdminRemove)
 }
 
+func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
+	var (
+		jobs = []*timodel.Job{
+			{
+				ID:       1,
+				SchemaID: 1,
+				Type:     timodel.ActionCreateSchema,
+				State:    timodel.JobStateSynced,
+				Query:    "create database test",
+				BinlogInfo: &timodel.HistoryInfo{
+					SchemaVersion: 1,
+					DBInfo: &timodel.DBInfo{
+						ID:   1,
+						Name: timodel.NewCIStr("test"),
+					},
+				},
+			},
+			{
+				ID:       2,
+				SchemaID: 1,
+				Type:     timodel.ActionCreateTable,
+				State:    timodel.JobStateSynced,
+				Query:    "create table t1 (id int primary key)",
+				BinlogInfo: &timodel.HistoryInfo{
+					SchemaVersion: 2,
+					DBInfo: &timodel.DBInfo{
+						ID:   1,
+						Name: timodel.NewCIStr("test"),
+					},
+					TableInfo: &timodel.TableInfo{
+						ID:   47,
+						Name: timodel.NewCIStr("t1"),
+					},
+				},
+			},
+			{
+				ID:       2,
+				SchemaID: 1,
+				Type:     timodel.ActionCreateTable,
+				State:    timodel.JobStateSynced,
+				Query:    "create table t2 (id int primary key)",
+				BinlogInfo: &timodel.HistoryInfo{
+					SchemaVersion: 2,
+					DBInfo: &timodel.DBInfo{
+						ID:   1,
+						Name: timodel.NewCIStr("test"),
+					},
+					TableInfo: &timodel.TableInfo{
+						ID:   49,
+						Name: timodel.NewCIStr("t2"),
+					},
+				},
+			},
+			{
+				ID:       2,
+				SchemaID: 1,
+				TableID:  49,
+				Type:     timodel.ActionDropTable,
+				State:    timodel.JobStateSynced,
+				Query:    "drop table t2",
+				BinlogInfo: &timodel.HistoryInfo{
+					SchemaVersion: 3,
+					DBInfo: &timodel.DBInfo{
+						ID:   1,
+						Name: timodel.NewCIStr("test"),
+					},
+					TableInfo: &timodel.TableInfo{
+						ID:   49,
+						Name: timodel.NewCIStr("t2"),
+					},
+				},
+			},
+			{
+				ID:       2,
+				SchemaID: 1,
+				TableID:  47,
+				Type:     timodel.ActionTruncateTable,
+				State:    timodel.JobStateSynced,
+				Query:    "truncate table t1",
+				BinlogInfo: &timodel.HistoryInfo{
+					SchemaVersion: 4,
+					DBInfo: &timodel.DBInfo{
+						ID:   1,
+						Name: timodel.NewCIStr("test"),
+					},
+					TableInfo: &timodel.TableInfo{
+						ID:   51,
+						Name: timodel.NewCIStr("t1"),
+					},
+				},
+			},
+			{
+				ID:       2,
+				SchemaID: 1,
+				TableID:  51,
+				Type:     timodel.ActionDropTable,
+				State:    timodel.JobStateSynced,
+				Query:    "drop table t1",
+				BinlogInfo: &timodel.HistoryInfo{
+					SchemaVersion: 5,
+					DBInfo: &timodel.DBInfo{
+						ID:   1,
+						Name: timodel.NewCIStr("test"),
+					},
+					TableInfo: &timodel.TableInfo{
+						ID:   51,
+						Name: timodel.NewCIStr("t1"),
+					},
+				},
+			},
+			{
+				ID:       2,
+				SchemaID: 1,
+				Type:     timodel.ActionDropSchema,
+				State:    timodel.JobStateSynced,
+				Query:    "drop database test",
+				BinlogInfo: &timodel.HistoryInfo{
+					SchemaVersion: 6,
+					DBInfo: &timodel.DBInfo{
+						ID:   1,
+						Name: timodel.NewCIStr("test"),
+					},
+				},
+			},
+		}
+
+		expectSchemas = []map[uint64]tableIDMap{
+			{1: make(tableIDMap)},
+			{1: {47: struct{}{}}},
+			{1: {47: struct{}{}, 49: struct{}{}}},
+			{1: {47: struct{}{}}},
+			{1: {51: struct{}{}}},
+			{1: make(tableIDMap)},
+			{},
+		}
+
+		expectTables = []map[uint64]schema.TableName{
+			{},
+			{47: {Schema: "test", Table: "t1"}},
+			{47: {Schema: "test", Table: "t1"}, 49: {Schema: "test", Table: "t2"}},
+			{47: {Schema: "test", Table: "t1"}},
+			{51: {Schema: "test", Table: "t1"}},
+			{},
+			{},
+		}
+	)
+	schemaStorage, err := schema.NewStorage(nil)
+	c.Assert(err, check.IsNil)
+	filter, err := newTxnFilter(&model.ReplicaConfig{})
+	c.Assert(err, check.IsNil)
+	cf := &changeFeed{
+		schema:        schemaStorage,
+		schemas:       make(map[uint64]map[uint64]struct{}),
+		tables:        make(map[uint64]schema.TableName),
+		orphanTables:  make(map[uint64]model.ProcessTableInfo),
+		toCleanTables: make(map[uint64]struct{}),
+		filter:        filter,
+	}
+	for i, job := range jobs {
+		err = cf.applyJob(job)
+		c.Assert(err, check.IsNil)
+		c.Assert(cf.schemas, check.DeepEquals, expectSchemas[i])
+		c.Assert(cf.tables, check.DeepEquals, expectTables[i])
+	}
+}
+
 type changefeedInfoSuite struct {
 }
 

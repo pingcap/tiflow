@@ -473,6 +473,7 @@ func (c *CDCClient) singleEventFeed(
 						// emit a value
 						value, err := matcher.matchRow(row)
 						if err != nil {
+							// FIXME: need a better event match mechanism
 							log.Warn("match row error", zap.Error(err), zap.Stringer("row", row))
 						}
 
