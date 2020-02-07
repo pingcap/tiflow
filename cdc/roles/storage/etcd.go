@@ -45,36 +45,43 @@ func NewChangeFeedEtcdRWriter(cli *clientv3.Client) *ChangeFeedRWriter {
 // Read reads from etcd, and returns
 // - map mapping from changefeedID to `*model.ChangeFeedInfo`
 // - map mapping from changefeedID to `model.ProcessorsInfos`
-func (rw *ChangeFeedRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]*model.ChangeFeedStatus, map[model.ChangeFeedID]model.ProcessorsInfos, error) {
+// FIXME: the return value of this function is too many, split this function
+func (rw *ChangeFeedRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]*model.ChangeFeedStatus, map[model.ChangeFeedID]model.ProcessorsInfos, map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition, error) {
 	_, details, err := kv.GetChangeFeeds(ctx, rw.etcdClient)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	changefeedInfos := make(map[string]*model.ChangeFeedInfo, len(details))
 	changefeedStatus := make(map[string]*model.ChangeFeedStatus, len(details))
 	pinfos := make(map[string]model.ProcessorsInfos, len(details))
+	postitions := make(map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition, len(details))
 	for changefeedID, rawKv := range details {
 		changefeed := &model.ChangeFeedInfo{}
 		err := changefeed.Unmarshal(rawKv.Value)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		pinfo, err := kv.GetAllTaskStatus(ctx, rw.etcdClient, changefeedID)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
+		}
+		postition, err := kv.GetAllTaskPositions(ctx, rw.etcdClient, changefeedID)
+		if err != nil {
+			return nil, nil, nil, nil, err
 		}
 
 		status, err := kv.GetChangeFeedStatus(ctx, rw.etcdClient, changefeedID)
 		if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		changefeedStatus[changefeedID] = status
 		changefeedInfos[changefeedID] = changefeed
 		pinfos[changefeedID] = pinfo
+		postitions[changefeedID] = postition
 	}
-	return changefeedInfos, changefeedStatus, pinfos, nil
+	return changefeedInfos, changefeedStatus, pinfos, postitions, nil
 }
 
 // Write writes ChangeFeedStatus of each changefeed into etcd
@@ -113,12 +120,15 @@ type ProcessorTsRWriter interface {
 	// ReadGlobalResolvedTs read the bloable resolved ts.
 	ReadGlobalResolvedTs(ctx context.Context) (uint64, error)
 
+	// WritePosition update taskPosition into storage, return model.ErrWriteTsConflict if in last learn taskPosition is out dated and must call UpdateInfo.
+	WritePosition(ctx context.Context, taskPosition *model.TaskPosition) error
+
 	// The flowing methods *IS NOT* thread safe.
 	// GetTaskStatus returns the in memory cache *model.TaskStatus
 	GetTaskStatus() *model.TaskStatus
 	// UpdateInfo update the in memory cache as taskStatus in storage.
 	// oldInfo and newInfo is the old and new in memory cache taskStatus.
-	UpdateInfo(ctx context.Context) (oldInfo *model.TaskStatus, newInfo *model.TaskStatus, err error)
+	UpdateInfo(ctx context.Context) (bool, error)
 	// WriteInfoIntoStorage update taskStatus into storage, return model.ErrWriteTsConflict if in last learn taskStatus is out dated and must call UpdateInfo.
 	WriteInfoIntoStorage(ctx context.Context) error
 }
@@ -157,19 +167,24 @@ func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 	return rw, nil
 }
 
+// WritePosition implements ProcessorTsRWriter interface.
+func (rw *ProcessorTsEtcdRWriter) WritePosition(ctx context.Context, taskPosition *model.TaskPosition) error {
+	return errors.Trace(kv.PutTaskPosition(ctx, rw.etcdClient, rw.changefeedID, rw.captureID, taskPosition))
+}
+
 // UpdateInfo implements ProcessorTsRWriter interface.
 func (rw *ProcessorTsEtcdRWriter) UpdateInfo(
 	ctx context.Context,
-) (oldInfo *model.TaskStatus, newInfo *model.TaskStatus, err error) {
+) (changed bool, err error) {
 	modRevision, info, err := kv.GetTaskStatus(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
 	if err != nil {
-		return nil, nil, errors.Trace(err)
+		return false, errors.Trace(err)
 	}
-
-	oldInfo = rw.taskStatus
-	newInfo = info
-	rw.taskStatus = newInfo
-	rw.modRevision = modRevision
+	changed = rw.modRevision != modRevision
+	if changed {
+		rw.taskStatus = info
+		rw.modRevision = modRevision
+	}
 	return
 }
 
@@ -177,7 +192,8 @@ func (rw *ProcessorTsEtcdRWriter) UpdateInfo(
 func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 	ctx context.Context,
 ) error {
-	key := kv.GetEtcdKeyTask(rw.changefeedID, rw.captureID)
+
+	key := kv.GetEtcdKeyTaskStatus(rw.changefeedID, rw.captureID)
 	value, err := rw.taskStatus.Marshal()
 	if err != nil {
 		return errors.Trace(err)
@@ -271,6 +287,7 @@ func (ow *OwnerTaskStatusEtcdWriter) checkLock(
 		}
 		return
 	}
+	log.Info("show check lock", zap.Reflect("status", info))
 
 	// in most cases there is no p-lock
 	if info.TablePLock == nil {
@@ -319,13 +336,12 @@ func (ow *OwnerTaskStatusEtcdWriter) Write(
 		}
 	}
 
-	key := kv.GetEtcdKeyTask(changefeedID, captureID)
+	key := kv.GetEtcdKeyTaskStatus(changefeedID, captureID)
 	err = retry.Run(func() error {
 		value, err := newInfo.Marshal()
 		if err != nil {
 			return errors.Trace(err)
 		}
-
 		resp, err := ow.etcdClient.KV.Txn(ctx).If(
 			clientv3.Compare(clientv3.ModRevision(key), "=", newInfo.ModRevision),
 		).Then(

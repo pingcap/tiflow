@@ -22,7 +22,8 @@ import (
 var (
 	ErrWriteTsConflict        = errors.New("write ts conflict")
 	ErrChangeFeedNotExists    = errors.New("changefeed not exists")
-	ErrTaskStatusNotExists    = errors.New("task not exists")
+	ErrTaskStatusNotExists    = errors.New("task status not exists")
+	ErrTaskPositionNotExists  = errors.New("task position not exists")
 	ErrWriteTaskStatusConlict = errors.New("write task status conflict")
 	ErrFindPLockNotCommit     = errors.New("task status has p-lock not committed")
 	ErrAdminStopProcessor     = errors.New("stop processor by admin command")

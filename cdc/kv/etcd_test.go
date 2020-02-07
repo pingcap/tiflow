@@ -100,8 +100,6 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 	ctx := context.Background()
 	info := &model.TaskStatus{
-		CheckPointTs: 100,
-		ResolvedTs:   200,
 		TableInfos: []*model.ProcessTableInfo{
 			{ID: 1, StartTs: 100},
 		},
@@ -126,8 +124,6 @@ func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
 	ctx := context.Background()
 	info := &model.TaskStatus{
-		CheckPointTs: 100,
-		ResolvedTs:   200,
 		TableInfos: []*model.ProcessTableInfo{
 			{ID: 1, StartTs: 100},
 		},
@@ -142,6 +138,47 @@ func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
 	c.Assert(err, check.IsNil)
 	_, _, err = GetTaskStatus(ctx, s.client, feedID, captureID)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskStatusNotExists)
+}
+
+func (s *etcdSuite) TestGetPutTaskPosition(c *check.C) {
+	ctx := context.Background()
+	info := &model.TaskPosition{
+		ResolvedTs:   66,
+		CheckPointTs: 77,
+	}
+
+	feedID := "feedid"
+	captureID := "captureid"
+
+	err := PutTaskPosition(ctx, s.client, feedID, captureID, info)
+	c.Assert(err, check.IsNil)
+
+	_, getInfo, err := GetTaskPosition(ctx, s.client, feedID, captureID)
+	c.Assert(err, check.IsNil)
+	c.Assert(getInfo, check.DeepEquals, info)
+
+	err = ClearAllCDCInfo(context.Background(), s.client)
+	c.Assert(err, check.IsNil)
+	_, _, err = GetTaskStatus(ctx, s.client, feedID, captureID)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskStatusNotExists)
+}
+
+func (s *etcdSuite) TestDeleteTaskPosition(c *check.C) {
+	ctx := context.Background()
+	info := &model.TaskPosition{
+		ResolvedTs:   77,
+		CheckPointTs: 88,
+	}
+	feedID := "feedid"
+	captureID := "captureid"
+
+	err := PutTaskPosition(ctx, s.client, feedID, captureID, info)
+	c.Assert(err, check.IsNil)
+
+	err = DeleteTaskPosition(ctx, s.client, feedID, captureID)
+	c.Assert(err, check.IsNil)
+	_, _, err = GetTaskPosition(ctx, s.client, feedID, captureID)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskPositionNotExists)
 }
 
 func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
