@@ -204,7 +204,12 @@ func (c *CDCClient) partialRegionFeed(
 			return backoff.Permanent(errors.Trace(err))
 		}
 		if rpcCtx == nil {
-			err = &eventError{Event_Error: &cdcpb.Event_Error{EpochNotMatch: &errorpb.EpochNotMatch{}}}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				err = &eventError{Event_Error: &cdcpb.Event_Error{EpochNotMatch: &errorpb.EpochNotMatch{}}}
+			}
 		} else {
 			var maxTs uint64
 			maxTs, err = c.singleEventFeed(ctx, rpcCtx, regionInfo.span, regionInfo.ts, eventCh)
