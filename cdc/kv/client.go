@@ -175,7 +175,9 @@ func needReloadRegion(failStoreIDs map[uint64]struct{}, rpcCtx *tikv.RPCContext)
 	failStoreIDs[rpcCtx.GetStoreID()] = struct{}{}
 	need = len(failStoreIDs) == len(rpcCtx.Meta.GetPeers())
 	if need {
-		failStoreIDs = make(map[uint64]struct{})
+		for k := range failStoreIDs {
+			delete(failStoreIDs, k)
+		}
 	}
 	return
 }
