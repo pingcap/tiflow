@@ -244,7 +244,7 @@ func (c *CDCClient) partialRegionFeed(
 					return errors.Annotate(err, "receive empty or unknow error msg")
 				}
 			default:
-				if rpcCtx.Meta != nil {
+				if errors.Cause(err) != context.Canceled && rpcCtx.Meta != nil {
 					c.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(failStoreIDs, rpcCtx), err)
 				}
 				return errors.Trace(err)
