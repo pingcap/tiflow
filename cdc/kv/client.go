@@ -23,6 +23,7 @@ import (
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
+	"github.com/pingcap/kvproto/pkg/errorpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
@@ -202,12 +203,16 @@ func (c *CDCClient) partialRegionFeed(
 		if err != nil {
 			return backoff.Permanent(errors.Trace(err))
 		}
+		if rpcCtx == nil {
+			err = &eventError{Event_Error: &cdcpb.Event_Error{EpochNotMatch: &errorpb.EpochNotMatch{}}}
+		} else {
+			var maxTs uint64
+			maxTs, err = c.singleEventFeed(ctx, rpcCtx, regionInfo.span, regionInfo.ts, eventCh)
+			log.Debug("singleEventFeed quit")
 
-		maxTs, err := c.singleEventFeed(ctx, rpcCtx, regionInfo.span, regionInfo.ts, eventCh)
-		log.Debug("singleEventFeed quit")
-
-		if maxTs > ts {
-			ts = maxTs
+			if maxTs > ts {
+				ts = maxTs
+			}
 		}
 
 		if err != nil {
@@ -251,10 +256,7 @@ func (c *CDCClient) partialRegionFeed(
 	if errors.Cause(berr) == context.Canceled {
 		return nil
 	}
-	if berr != nil {
-		return errors.Trace(berr)
-	}
-	return nil
+	return errors.Trace(berr)
 }
 
 // divideAndSendEventFeedToRegions split up the input span
