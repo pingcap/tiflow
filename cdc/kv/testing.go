@@ -32,11 +32,11 @@ type eventChecker struct {
 	eventCh chan *model.RegionFeedEvent
 	closeCh chan struct{}
 
-	vals        []*model.RegionFeedValue
-	checkpoints []*model.RegionFeedCheckpoint
+	vals        []*model.RawKVEntry
+	checkpoints []*model.ResolvedSpan
 }
 
-func valInSlice(val *model.RegionFeedValue, vals []*model.RegionFeedValue) bool {
+func valInSlice(val *model.RawKVEntry, vals []*model.RawKVEntry) bool {
 	for _, v := range vals {
 		if val.Ts == v.Ts && bytes.Equal(val.Key, v.Key) {
 			return true
@@ -253,7 +253,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		checker.stop()
 
 		// filter the unrelated keys event.
-		var vals []*model.RegionFeedValue
+		var vals []*model.RawKVEntry
 		for _, v := range checker.vals {
 			if bytes.Equal(v.Key, key) {
 				vals = append(vals, v)
