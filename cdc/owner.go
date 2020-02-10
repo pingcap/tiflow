@@ -72,7 +72,7 @@ type ChangeFeedRWriter interface {
 
 	// GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
 	GetChangeFeedStatus(ctx context.Context, id string, opts ...clientv3.OpOption) (*model.ChangeFeedStatus, error)
-	// Write the changefeed info to storage such as etcd.
+	// PutAllChangeFeedStatus the changefeed info to storage such as etcd.
 	PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error
 }
 
