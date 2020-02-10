@@ -21,6 +21,9 @@ import (
 	"sync"
 	"time"
 
+	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/mvcc/mvccpb"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pmodel "github.com/pingcap/parser/model"
@@ -59,10 +62,18 @@ type OwnerDDLHandler interface {
 
 // ChangeFeedRWriter defines the Reader and Writer for changeFeed
 type ChangeFeedRWriter interface {
-	// Read the changefeed info from storage such as etcd.
-	Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]*model.ChangeFeedStatus, map[model.ChangeFeedID]model.ProcessorsInfos, error)
+
+	// GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
+	GetChangeFeeds(ctx context.Context, opts ...clientv3.OpOption) (int64, map[string]*mvccpb.KeyValue, error)
+
+	// GetAllTaskStatus queries all task status of a changefeed, and returns a map
+	// mapping from captureID to TaskStatus
+	GetAllTaskStatus(ctx context.Context, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error)
+
+	// GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
+	GetChangeFeedStatus(ctx context.Context, id string, opts ...clientv3.OpOption) (*model.ChangeFeedStatus, error)
 	// Write the changefeed info to storage such as etcd.
-	Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error
+	PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error
 }
 
 type changeFeed struct {
@@ -397,7 +408,7 @@ func NewOwner(pdEndpoints []string, cli kv.CDCEtcdClient, manager roles.Manager)
 		pdEndpoints:        pdEndpoints,
 		pdClient:           pdClient,
 		changeFeeds:        make(map[model.ChangeFeedID]*changeFeed),
-		cfRWriter:          storage.NewChangeFeedEtcdRWriter(cli),
+		cfRWriter:          cli,
 		etcdClient:         cli,
 		manager:            manager,
 		captureWatchC:      watchC,
@@ -587,14 +598,17 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 }
 
 func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
-	cfInfo, cfStatus, pinfos, err := o.cfRWriter.Read(ctx)
+	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
 	if err != nil {
-		return errors.Trace(err)
+		return err
 	}
-
-	for changeFeedID, procInfos := range pinfos {
+	for changeFeedID, cfInfoRawValue := range details {
+		taskStatus, err := o.cfRWriter.GetAllTaskStatus(ctx, changeFeedID)
+		if err != nil {
+			return err
+		}
 		if cf, exist := o.changeFeeds[changeFeedID]; exist {
-			cf.updateProcessorInfos(procInfos)
+			cf.updateProcessorInfos(taskStatus)
 			for id, info := range cf.processorInfos {
 				lastUpdateTime := cf.processorLastUpdateTime[id]
 				if time.Since(lastUpdateTime) > markProcessorDownTime {
@@ -608,18 +622,22 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 		}
 
 		// we find a new changefeed, init changefeed info here.
-		info, ok := cfInfo[changeFeedID]
-		if !ok {
-			return errors.Annotatef(model.ErrChangeFeedNotExists, "id:%s", changeFeedID)
+		status, err := o.cfRWriter.GetChangeFeedStatus(ctx, changeFeedID)
+		if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+			return err
 		}
-		status := cfStatus[changeFeedID]
-
 		if status != nil && (status.AdminJobType == model.AdminStop || status.AdminJobType == model.AdminRemove) {
 			continue
 		}
-		checkpointTs := info.GetCheckpointTs(status)
 
-		newCf, err := o.newChangeFeed(changeFeedID, procInfos, info, checkpointTs)
+		cfInfo := &model.ChangeFeedInfo{}
+		err = cfInfo.Unmarshal(cfInfoRawValue.Value)
+		if err != nil {
+			return err
+		}
+		checkpointTs := cfInfo.GetCheckpointTs(status)
+
+		newCf, err := o.newChangeFeed(changeFeedID, taskStatus, cfInfo, checkpointTs)
 		if err != nil {
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
@@ -638,7 +656,7 @@ func (o *ownerImpl) flushChangeFeedInfos(ctx context.Context) error {
 	for id, changefeed := range o.changeFeeds {
 		snapshot[id] = changefeed.status
 	}
-	return errors.Trace(o.cfRWriter.Write(ctx, snapshot))
+	return errors.Trace(o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot))
 }
 
 func (c *changeFeed) pullDDLJob() error {
@@ -850,7 +868,7 @@ func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	// record admin job in changefeed status
 	cf.status.AdminJobType = job.Type
 	infos := map[model.ChangeFeedID]*model.ChangeFeedStatus{job.CfID: cf.status}
-	err := o.cfRWriter.Write(ctx, infos)
+	err := o.cfRWriter.PutAllChangeFeedStatus(ctx, infos)
 	if err != nil {
 		return errors.Trace(err)
 	}

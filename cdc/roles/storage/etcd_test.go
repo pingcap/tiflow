@@ -15,7 +15,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -65,118 +64,6 @@ func (s *etcdSuite) TearDownTest(c *check.C) {
 	err := s.errg.Wait()
 	if err != nil {
 		c.Errorf("Error group error: %s", err)
-	}
-}
-
-func (s *etcdSuite) TestInfoReader(c *check.C) {
-	var (
-		status1 = map[model.CaptureID]*model.TaskStatus{
-			"capture1": {
-				CheckPointTs: 1000,
-				ResolvedTs:   1024,
-				TableInfos: []*model.ProcessTableInfo{
-					{ID: 1000, StartTs: 0},
-					{ID: 1001, StartTs: 100},
-				},
-			},
-			"capture2": {
-				CheckPointTs: 1000,
-				ResolvedTs:   1500,
-				TableInfos: []*model.ProcessTableInfo{
-					{ID: 1002, StartTs: 150},
-					{ID: 1003, StartTs: 200},
-				},
-			},
-		}
-		err error
-	)
-	testCases := []struct {
-		ids    []string
-		pinfos map[string]model.ProcessorsInfos
-	}{
-		{ids: nil, pinfos: nil},
-		{ids: []string{"changefeed1"}, pinfos: map[string]model.ProcessorsInfos{"changefeed1": status1}},
-		{ids: []string{"changefeed1", "changefeed2"}, pinfos: map[string]model.ProcessorsInfos{"changefeed1": status1, "changefeed2": status1}},
-	}
-
-	rw := NewChangeFeedEtcdRWriter(s.client)
-	for _, tc := range testCases {
-		_, err = s.client.Client.Delete(context.Background(), kv.GetEtcdKeyChangeFeedList(), clientv3.WithPrefix())
-		c.Assert(err, check.IsNil)
-		for _, changefeedID := range tc.ids {
-			_, err = s.client.Client.Delete(context.Background(), kv.GetEtcdKeyTaskList(changefeedID), clientv3.WithPrefix())
-			c.Assert(err, check.IsNil)
-		}
-		for i := 0; i < len(tc.ids); i++ {
-			changefeedID := tc.ids[i]
-			err = s.client.SaveChangeFeedInfo(context.Background(), &model.ChangeFeedInfo{}, changefeedID)
-			c.Assert(err, check.IsNil)
-			for captureID, cinfo := range tc.pinfos[changefeedID] {
-				sinfo, err := cinfo.Marshal()
-				c.Assert(err, check.IsNil)
-				_, err = s.client.Client.Put(context.Background(), kv.GetEtcdKeyTask(changefeedID, captureID), sinfo)
-				c.Assert(err, check.IsNil)
-			}
-		}
-		cfInfo, cfStatus, pinfos, err := rw.Read(context.Background())
-		c.Assert(err, check.IsNil)
-		c.Assert(len(cfInfo), check.Equals, len(tc.ids))
-		c.Assert(len(cfStatus), check.Equals, len(tc.ids))
-		c.Assert(len(pinfos), check.Equals, len(tc.ids))
-		for _, changefeedID := range tc.ids {
-			// don't check ModRevision
-			for _, si := range pinfos[changefeedID] {
-				si.ModRevision = 0
-			}
-			c.Assert(pinfos[changefeedID], check.DeepEquals, tc.pinfos[changefeedID])
-		}
-	}
-}
-
-func (s *etcdSuite) TestInfoWriter(c *check.C) {
-	var (
-		status1 = &model.ChangeFeedStatus{
-			ResolvedTs:   2200,
-			CheckpointTs: 2000,
-		}
-		status2 = &model.ChangeFeedStatus{
-			ResolvedTs:   2600,
-			CheckpointTs: 2500,
-		}
-		err error
-	)
-	largeTxnInfo := make(map[string]*model.ChangeFeedStatus, embed.DefaultMaxTxnOps+1)
-	for i := 0; i < int(embed.DefaultMaxTxnOps)+1; i++ {
-		changefeedID := fmt.Sprintf("changefeed%d", i+1)
-		largeTxnInfo[changefeedID] = status1
-	}
-	testCases := []struct {
-		infos map[model.ChangeFeedID]*model.ChangeFeedStatus
-	}{
-		{infos: nil},
-		{infos: map[string]*model.ChangeFeedStatus{"changefeed1": status1}},
-		{infos: map[string]*model.ChangeFeedStatus{"changefeed1": status1, "changefeed2": status2}},
-		{infos: largeTxnInfo},
-	}
-
-	rw := NewChangeFeedEtcdRWriter(s.client)
-	for _, tc := range testCases {
-		for changefeedID := range tc.infos {
-			_, err = s.client.Client.Delete(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))
-			c.Assert(err, check.IsNil)
-		}
-
-		err = rw.Write(context.Background(), tc.infos)
-		c.Assert(err, check.IsNil)
-
-		for changefeedID, info := range tc.infos {
-			resp, err := s.client.Client.Get(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))
-			c.Assert(err, check.IsNil)
-			c.Assert(resp.Count, check.Equals, int64(1))
-			infoStr, err := info.Marshal()
-			c.Assert(err, check.IsNil)
-			c.Assert(string(resp.Kvs[0].Value), check.Equals, infoStr)
-		}
 	}
 }
 

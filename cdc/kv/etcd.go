@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 
+	"go.etcd.io/etcd/embed"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -254,6 +256,37 @@ func (c CDCEtcdClient) PutChangeFeedStatus(
 	}
 	_, err = c.Client.Put(ctx, key, value, opts...)
 	return errors.Trace(err)
+}
+
+// PutAllChangeFeedStatus puts ChangeFeedStatus of each changefeed into etcd
+func (c CDCEtcdClient) PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
+	var (
+		txn = c.Client.KV.Txn(ctx)
+		ops = make([]clientv3.Op, 0, embed.DefaultMaxTxnOps)
+	)
+	for changefeedID, info := range infos {
+		storeVal, err := info.Marshal()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		key := GetEtcdKeyChangeFeedStatus(changefeedID)
+		ops = append(ops, clientv3.OpPut(key, storeVal))
+		if uint(len(ops)) >= embed.DefaultMaxTxnOps {
+			_, err = txn.Then(ops...).Commit()
+			if err != nil {
+				return errors.Trace(err)
+			}
+			txn = c.Client.KV.Txn(ctx)
+			ops = ops[:0]
+		}
+	}
+	if len(ops) > 0 {
+		_, err := txn.Then(ops...).Commit()
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
 }
 
 // DeleteTaskStatus deletes task status from etcd
