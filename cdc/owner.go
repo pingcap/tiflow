@@ -440,6 +440,16 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 			remainProcs = append(remainProcs, snap)
 			continue
 		}
+		err = kv.DeleteTaskPosition(ctx, o.etcdClient, snap.CfID, snap.CaptureID)
+		if err != nil {
+			log.Warn("failed to delete processor info",
+				zap.String("changefeedID", snap.CfID),
+				zap.String("captureID", snap.CaptureID),
+				zap.Error(err),
+			)
+			remainProcs = append(remainProcs, snap)
+			continue
+		}
 		deletedCapture[snap.CaptureID] = struct{}{}
 	}
 	o.markDownProcessor = remainProcs
@@ -610,10 +620,17 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 			taskPos := positions[changeFeedID]
 			cf.updateProcessorInfos(procInfos, taskPos)
 			for id, info := range cf.taskStatus {
-				lastUpdateTime := cf.processorLastUpdateTime[id]
-				pos := taskPos[id]
+				lastUpdateTime, exist := cf.processorLastUpdateTime[id]
+				if !exist {
+					lastUpdateTime = time.Now()
+					cf.processorLastUpdateTime[id] = lastUpdateTime
+				}
 				if time.Since(lastUpdateTime) > markProcessorDownTime {
-					snap := info.Snapshot(changeFeedID, id, pos.CheckPointTs)
+					var checkpointTs uint64
+					if pos, exist := taskPos[id]; exist {
+						checkpointTs = pos.CheckPointTs
+					}
+					snap := info.Snapshot(changeFeedID, id, checkpointTs)
 					o.markDownProcessor = append(o.markDownProcessor, snap)
 					log.Info("markdown processor", zap.String("id", id),
 						zap.Reflect("info", info), zap.Time("update time", lastUpdateTime))
