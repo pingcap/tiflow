@@ -29,7 +29,7 @@ type ownerSuite struct {
 	owner     *ownerImpl
 	e         *embed.Etcd
 	clientURL *url.URL
-	client    *clientv3.Client
+	client    kv.CDCEtcdClient
 	ctx       context.Context
 	cancel    context.CancelFunc
 	errg      *errgroup.Group
@@ -42,11 +42,12 @@ func (s *ownerSuite) SetUpTest(c *check.C) {
 	var err error
 	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
-	s.client, err = clientv3.New(clientv3.Config{
+	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{s.clientURL.String()},
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
+	s.client = kv.NewCDCEtcdClient(client)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
@@ -378,7 +379,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		key := kv.GetEtcdKeyTask(cfID, cid)
 		pinfoStr, err := pinfo.Marshal()
 		c.Assert(err, check.IsNil)
-		_, err = s.client.Put(ctx, key, pinfoStr)
+		_, err = s.client.Client.Put(ctx, key, pinfoStr)
 		c.Assert(err, check.IsNil)
 	}
 	checkAdminJobLen := func(length int) {
@@ -397,17 +398,17 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	checkAdminJobLen(0)
 	c.Assert(len(owner.changeFeeds), check.Equals, 0)
 	// check changefeed info is set admin job
-	info, err := kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
+	info, err := owner.etcdClient.GetChangeFeedInfo(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(info.AdminJobType, check.Equals, model.AdminStop)
 	// check processor is set admin job
 	for cid := range sampleCF.processorInfos {
-		_, subInfo, err := kv.GetTaskStatus(ctx, owner.etcdClient, cfID, cid)
+		_, subInfo, err := owner.etcdClient.GetTaskStatus(ctx, cfID, cid)
 		c.Assert(err, check.IsNil)
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminStop)
 	}
 	// check changefeed status is set admin job
-	st, err := kv.GetChangeFeedStatus(ctx, owner.etcdClient, cfID)
+	st, err := owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminStop)
 
@@ -415,11 +416,11 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
 	checkAdminJobLen(0)
 	// check changefeed info is set admin job
-	info, err = kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
+	info, err = owner.etcdClient.GetChangeFeedInfo(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(info.AdminJobType, check.Equals, model.AdminResume)
 	// check changefeed status is set admin job
-	st, err = kv.GetChangeFeedStatus(ctx, owner.etcdClient, cfID)
+	st, err = owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminResume)
 
@@ -429,16 +430,16 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	checkAdminJobLen(0)
 	c.Assert(len(owner.changeFeeds), check.Equals, 0)
 	// check changefeed info is deleted
-	_, err = kv.GetChangeFeedInfo(ctx, owner.etcdClient, cfID)
+	_, err = owner.etcdClient.GetChangeFeedInfo(ctx, cfID)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
 	// check processor is set admin job
 	for cid := range sampleCF.processorInfos {
-		_, subInfo, err := kv.GetTaskStatus(ctx, owner.etcdClient, cfID, cid)
+		_, subInfo, err := owner.etcdClient.GetTaskStatus(ctx, cfID, cid)
 		c.Assert(err, check.IsNil)
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminRemove)
 	}
 	// check changefeed status is set admin job
-	st, err = kv.GetChangeFeedStatus(ctx, owner.etcdClient, cfID)
+	st, err = owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminRemove)
 }

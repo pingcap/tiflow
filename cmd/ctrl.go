@@ -89,7 +89,7 @@ var ctrlCmd = &cobra.Command{
 	Short: "cdc controller",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cli, err := clientv3.New(clientv3.Config{
+		etcdCli, err := clientv3.New(clientv3.Config{
 			Endpoints:   []string{ctrlPdAddr},
 			DialTimeout: 5 * time.Second,
 			DialOptions: []grpc.DialOption{
@@ -104,24 +104,25 @@ var ctrlCmd = &cobra.Command{
 				}),
 			},
 		})
+		cli := kv.NewCDCEtcdClient(etcdCli)
 		if err != nil {
 			return err
 		}
 		switch ctrlCommand {
 		case CtrlQueryCfInfo:
-			info, err := kv.GetChangeFeedInfo(context.Background(), cli, ctrlCfID)
+			info, err := cli.GetChangeFeedInfo(context.Background(), ctrlCfID)
 			if err != nil {
 				return err
 			}
 			return jsonPrint(info)
 		case CtrlQueryCfStatus:
-			info, err := kv.GetChangeFeedStatus(context.Background(), cli, ctrlCfID)
+			info, err := cli.GetChangeFeedStatus(context.Background(), ctrlCfID)
 			if err != nil {
 				return err
 			}
 			return jsonPrint(info)
 		case CtrlQueryCfs:
-			_, raw, err := kv.GetChangeFeeds(context.Background(), cli)
+			_, raw, err := cli.GetChangeFeeds(context.Background())
 			if err != nil {
 				return err
 			}
@@ -131,7 +132,7 @@ var ctrlCmd = &cobra.Command{
 			}
 			return jsonPrint(cfs)
 		case CtrlQueryCaptures:
-			_, raw, err := kv.GetCaptures(context.Background(), cli)
+			_, raw, err := cli.GetCaptures(context.Background())
 			if err != nil {
 				return err
 			}
@@ -146,13 +147,13 @@ var ctrlCmd = &cobra.Command{
 			}
 			return jsonPrint(captures)
 		case CtrlQuerySubCf:
-			_, info, err := kv.GetTaskStatus(context.Background(), cli, ctrlCfID, ctrlCaptureID)
+			_, info, err := cli.GetTaskStatus(context.Background(), ctrlCfID, ctrlCaptureID)
 			if err != nil && err != concurrency.ErrElectionNoLeader {
 				return err
 			}
 			return jsonPrint(info)
 		case CtrlClearAll:
-			return kv.ClearAllCDCInfo(context.Background(), cli)
+			return cli.ClearAllCDCInfo(context.Background())
 		case CtrlGetTso:
 			pdCli, err := pd.NewClient([]string{ctrlPdAddr}, pd.SecurityOption{})
 			if err != nil {

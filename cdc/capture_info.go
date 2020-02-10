@@ -13,56 +13,6 @@ import (
 	"go.etcd.io/etcd/mvcc/mvccpb"
 )
 
-var captureEinfoKeyPrefix = kv.EtcdKeyBase + "/capture/info"
-var errCaptureNotExist = errors.New("capture not exists")
-
-func infoKey(id string) string {
-	return captureEinfoKeyPrefix + "/" + id
-}
-
-// PutCaptureInfo put capture info into etcd.
-func PutCaptureInfo(ctx context.Context, info *model.CaptureInfo, cli *clientv3.Client, opts ...clientv3.OpOption) error {
-	var data []byte
-	data, err := info.Marshal()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	key := infoKey(info.ID)
-	_, err = cli.Put(ctx, key, string(data), opts...)
-	return errors.Trace(err)
-}
-
-// DeleteCaptureInfo delete capture info from etcd.
-func DeleteCaptureInfo(ctx context.Context, id string, cli *clientv3.Client, opts ...clientv3.OpOption) error {
-	key := infoKey(id)
-	_, err := cli.Delete(ctx, key, opts...)
-	return errors.Trace(err)
-}
-
-// GetCaptureInfo get capture info from etcd.
-// return errCaptureNotExist if the capture not exists.
-func GetCaptureInfo(ctx context.Context, id string, cli *clientv3.Client, opts ...clientv3.OpOption) (info *model.CaptureInfo, err error) {
-	key := infoKey(id)
-
-	resp, err := cli.Get(ctx, key, opts...)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	if len(resp.Kvs) == 0 {
-		return nil, errCaptureNotExist
-	}
-
-	info = new(model.CaptureInfo)
-	err = info.Unmarshal(resp.Kvs[0].Value)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return
-}
-
 // CaptureInfoWatchResp represents the result of watching capture info
 type CaptureInfoWatchResp struct {
 	Info     *model.CaptureInfo
@@ -74,9 +24,9 @@ type CaptureInfoWatchResp struct {
 // An error is returned if the underlay watchC from etcd return a error, or will closed normally withou
 // returning an error when the ctx is Done.
 func newCaptureInfoWatch(
-	ctx context.Context, cli *clientv3.Client,
+	ctx context.Context, cli kv.CDCEtcdClient,
 ) (infos []*model.CaptureInfo, watchC <-chan *CaptureInfoWatchResp, err error) {
-	resp, err := cli.Get(ctx, captureEinfoKeyPrefix, clientv3.WithPrefix())
+	resp, err := cli.Client.Get(ctx, kv.CaptureInfoKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -98,7 +48,7 @@ func newCaptureInfoWatch(
 		defer close(watchResp)
 
 		revision := resp.Header.Revision
-		etcdWatchC := cli.Watch(ctx, captureEinfoKeyPrefix, clientv3.WithPrefix(), clientv3.WithRev(revision+1), clientv3.WithPrevKV())
+		etcdWatchC := cli.Client.Watch(ctx, kv.CaptureInfoKeyPrefix, clientv3.WithPrefix(), clientv3.WithRev(revision+1), clientv3.WithPrevKV())
 
 		for resp := range etcdWatchC {
 			failpoint.Inject("WatchCaptureInfoCompactionErr", func() {

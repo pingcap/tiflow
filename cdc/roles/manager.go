@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/terror"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
@@ -67,14 +68,14 @@ const (
 type ownerManager struct {
 	id       string // id is the ID of the manager.
 	key      string
-	etcdCli  *clientv3.Client
+	etcdCli  kv.CDCEtcdClient
 	elec     unsafe.Pointer
 	logger   *zap.Logger
 	retireCh chan struct{}
 }
 
 // NewOwnerManager creates a new Manager.
-func NewOwnerManager(etcdCli *clientv3.Client, id, key string) Manager {
+func NewOwnerManager(etcdCli kv.CDCEtcdClient, id, key string) Manager {
 	logger := log.L().With(zap.String("id", id))
 
 	return &ownerManager{
@@ -114,7 +115,7 @@ func setManagerSessionTTL() error {
 }
 
 // NewSession creates a new etcd session.
-func NewSession(ctx context.Context, etcdCli *clientv3.Client, retryCnt, ttl int) (*concurrency.Session, error) {
+func NewSession(ctx context.Context, etcdCli kv.CDCEtcdClient, retryCnt, ttl int) (*concurrency.Session, error) {
 	var err error
 
 	var etcdSession *concurrency.Session
@@ -124,7 +125,7 @@ func NewSession(ctx context.Context, etcdCli *clientv3.Client, retryCnt, ttl int
 			return etcdSession, errors.Trace(err)
 		}
 
-		etcdSession, err = concurrency.NewSession(etcdCli,
+		etcdSession, err = concurrency.NewSession(etcdCli.Client,
 			concurrency.WithTTL(ttl), concurrency.WithContext(ctx))
 		if err == nil {
 			break
@@ -234,7 +235,7 @@ func (m *ownerManager) revokeSession(leaseID clientv3.LeaseID) {
 	// If revoke takes longer than the ttl, lease is expired anyway.
 	cancelCtx, cancel := context.WithTimeout(context.Background(),
 		time.Duration(ManagerSessionTTLSeconds)*time.Second)
-	_, err := m.etcdCli.Revoke(cancelCtx, leaseID)
+	_, err := m.etcdCli.Client.Revoke(cancelCtx, leaseID)
 	cancel()
 	m.logger.Info("revoke session", zap.Error(err))
 }
@@ -275,7 +276,7 @@ func (m *ownerManager) watchOwner(ctx context.Context, etcdSession *concurrency.
 		}
 	}()
 
-	watchCh := m.etcdCli.Watch(ctx, key)
+	watchCh := m.etcdCli.Client.Watch(ctx, key)
 	for {
 		select {
 		case resp, ok := <-watchCh:
@@ -335,8 +336,8 @@ func contextDone(ctx context.Context, err error) error {
 }
 
 // GetOwnerID is a helper function used to get the owner ID.
-func GetOwnerID(ctx context.Context, cli *clientv3.Client, key string) (string, error) {
-	resp, err := cli.Get(ctx, key, clientv3.WithFirstCreate()...)
+func GetOwnerID(ctx context.Context, cli kv.CDCEtcdClient, key string) (string, error) {
+	resp, err := cli.Client.Get(ctx, key, clientv3.WithFirstCreate()...)
 	if err != nil {
 		return "", errors.Trace(err)
 	}

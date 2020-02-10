@@ -31,7 +31,7 @@ import (
 type etcdSuite struct {
 	e         *embed.Etcd
 	clientURL *url.URL
-	client    *clientv3.Client
+	client    CDCEtcdClient
 	ctx       context.Context
 	cancel    context.CancelFunc
 	errg      *errgroup.Group
@@ -44,11 +44,12 @@ func (s *etcdSuite) SetUpTest(c *check.C) {
 	var err error
 	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
-	s.client, err = clientv3.New(clientv3.Config{
+	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{s.clientURL.String()},
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
+	s.client = NewCDCEtcdClient(client)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
@@ -73,10 +74,10 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 	}
 	for _, tc := range testCases {
 		for i := 0; i < len(tc.ids); i++ {
-			_, err := s.client.Put(context.Background(), GetEtcdKeyChangeFeedInfo(tc.ids[i]), tc.details[i])
+			_, err := s.client.Client.Put(context.Background(), GetEtcdKeyChangeFeedInfo(tc.ids[i]), tc.details[i])
 			c.Assert(err, check.IsNil)
 		}
-		_, result, err := GetChangeFeeds(context.Background(), s.client)
+		_, result, err := s.client.GetChangeFeeds(context.Background())
 		c.Assert(err, check.IsNil)
 		c.Assert(len(result), check.Equals, len(tc.ids))
 		for i := 0; i < len(tc.ids); i++ {
@@ -85,14 +86,14 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 			c.Assert(string(rawKv.Value), check.Equals, tc.details[i])
 		}
 	}
-	_, result, err := GetChangeFeeds(context.Background(), s.client)
+	_, result, err := s.client.GetChangeFeeds(context.Background())
 	c.Assert(err, check.IsNil)
 	c.Assert(len(result), check.Equals, 3)
 
-	err = ClearAllCDCInfo(context.Background(), s.client)
+	err = s.client.ClearAllCDCInfo(context.Background())
 	c.Assert(err, check.IsNil)
 
-	_, result, err = GetChangeFeeds(context.Background(), s.client)
+	_, result, err = s.client.GetChangeFeeds(context.Background())
 	c.Assert(err, check.IsNil)
 	c.Assert(len(result), check.Equals, 0)
 }
@@ -110,16 +111,16 @@ func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 	feedID := "feedid"
 	captureID := "captureid"
 
-	err := PutTaskStatus(ctx, s.client, feedID, captureID, info)
+	err := s.client.PutTaskStatus(ctx, feedID, captureID, info)
 	c.Assert(err, check.IsNil)
 
-	_, getInfo, err := GetTaskStatus(ctx, s.client, feedID, captureID)
+	_, getInfo, err := s.client.GetTaskStatus(ctx, feedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(getInfo, check.DeepEquals, info)
 
-	err = ClearAllCDCInfo(context.Background(), s.client)
+	err = s.client.ClearAllCDCInfo(context.Background())
 	c.Assert(err, check.IsNil)
-	_, _, err = GetTaskStatus(ctx, s.client, feedID, captureID)
+	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskStatusNotExists)
 }
 
@@ -135,12 +136,12 @@ func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
 	feedID := "feedid"
 	captureID := "captureid"
 
-	err := PutTaskStatus(ctx, s.client, feedID, captureID, info)
+	err := s.client.PutTaskStatus(ctx, feedID, captureID, info)
 	c.Assert(err, check.IsNil)
 
-	err = DeleteTaskStatus(ctx, s.client, feedID, captureID)
+	err = s.client.DeleteTaskStatus(ctx, feedID, captureID)
 	c.Assert(err, check.IsNil)
-	_, _, err = GetTaskStatus(ctx, s.client, feedID, captureID)
+	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskStatusNotExists)
 }
 
@@ -151,16 +152,16 @@ func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
 	}
 	cfID := "test-op-cf"
 
-	err := SaveChangeFeedInfo(ctx, s.client, detail, cfID)
+	err := s.client.SaveChangeFeedInfo(ctx, detail, cfID)
 	c.Assert(err, check.IsNil)
 
-	d, err := GetChangeFeedInfo(ctx, s.client, cfID)
+	d, err := s.client.GetChangeFeedInfo(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(d.SinkURI, check.Equals, detail.SinkURI)
 
-	err = DeleteChangeFeedInfo(ctx, s.client, cfID)
+	err = s.client.DeleteChangeFeedInfo(ctx, cfID)
 	c.Assert(err, check.IsNil)
 
-	_, err = GetChangeFeedInfo(ctx, s.client, cfID)
+	_, err = s.client.GetChangeFeedInfo(ctx, cfID)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
 }

@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
-	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
@@ -78,7 +77,7 @@ type changeFeed struct {
 	processorLastUpdateTime map[string]time.Time
 	filter                  *txnFilter
 
-	client        *clientv3.Client
+	client        kv.CDCEtcdClient
 	ddlHandler    OwnerDDLHandler
 	ddlResolvedTs uint64
 	ddlJobHistory []*model.DDL
@@ -363,7 +362,7 @@ type ownerImpl struct {
 
 	pdEndpoints []string
 	pdClient    pd.Client
-	etcdClient  *clientv3.Client
+	etcdClient  kv.CDCEtcdClient
 	manager     roles.Manager
 
 	captureWatchC      <-chan *CaptureInfoWatchResp
@@ -375,7 +374,7 @@ type ownerImpl struct {
 }
 
 // NewOwner creates a new ownerImpl instance
-func NewOwner(pdEndpoints []string, cli *clientv3.Client, manager roles.Manager) (*ownerImpl, error) {
+func NewOwner(pdEndpoints []string, cli kv.CDCEtcdClient, manager roles.Manager) (*ownerImpl, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	infos, watchC, err := newCaptureInfoWatch(ctx, cli)
 	if err != nil {
@@ -428,7 +427,7 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 		for _, tbl := range snap.Tables {
 			changefeed.reAddTable(tbl.ID, tbl.StartTs)
 		}
-		err := kv.DeleteTaskStatus(ctx, o.etcdClient, snap.CfID, snap.CaptureID)
+		err := o.etcdClient.DeleteTaskStatus(ctx, snap.CfID, snap.CaptureID)
 		if err != nil {
 			log.Warn("failed to delete processor info",
 				zap.String("changefeedID", snap.CfID),
@@ -443,7 +442,7 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 	o.markDownProcessor = remainProcs
 
 	for id := range deletedCapture {
-		err := DeleteCaptureInfo(ctx, id, o.etcdClient)
+		err := o.etcdClient.DeleteCaptureInfo(ctx, id)
 		if err != nil {
 			log.Warn("failed to delete capture info", zap.Error(err))
 		}
@@ -470,7 +469,7 @@ func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 		}
 
 		key := kv.GetEtcdKeyTask(feed.id, info.ID)
-		if _, err := o.etcdClient.Delete(context.Background(), key); err != nil {
+		if _, err := o.etcdClient.Client.Delete(context.Background(), key); err != nil {
 			log.Warn("failed to delete key", zap.Error(err))
 		}
 	}
@@ -878,7 +877,7 @@ func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
 				return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
 			}
 			cf.info.AdminJobType = model.AdminStop
-			err := kv.SaveChangeFeedInfo(ctx, o.etcdClient, cf.info, job.CfID)
+			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -894,30 +893,30 @@ func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
 			}
 
 			// remove changefeed info
-			err = kv.DeleteChangeFeedInfo(ctx, o.etcdClient, job.CfID)
+			err = o.etcdClient.DeleteChangeFeedInfo(ctx, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		case model.AdminResume:
-			cfStatus, err := kv.GetChangeFeedStatus(ctx, o.etcdClient, job.CfID)
+			cfStatus, err := o.etcdClient.GetChangeFeedStatus(ctx, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			cfInfo, err := kv.GetChangeFeedInfo(ctx, o.etcdClient, job.CfID)
+			cfInfo, err := o.etcdClient.GetChangeFeedInfo(ctx, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
 			}
 
 			// set admin job in changefeed status to tell owner resume changefeed
 			cfStatus.AdminJobType = model.AdminResume
-			err = kv.PutChangeFeedStatus(ctx, o.etcdClient, job.CfID, cfStatus)
+			err = o.etcdClient.PutChangeFeedStatus(ctx, job.CfID, cfStatus)
 			if err != nil {
 				return errors.Trace(err)
 			}
 
 			// set admin job in changefeed cfInfo to trigger each capture's changefeed list watch event
 			cfInfo.AdminJobType = model.AdminResume
-			err = kv.SaveChangeFeedInfo(ctx, o.etcdClient, cfInfo, job.CfID)
+			err = o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
 			}

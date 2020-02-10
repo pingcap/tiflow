@@ -21,12 +21,12 @@ import (
 
 	"github.com/pingcap/check"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/etcd"
-	"go.etcd.io/etcd/clientv3"
 )
 
 type processorSuite struct{}
@@ -132,7 +132,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 		return nil, nil
 	}
 	origFNewTsRw := fNewTsRWriter
-	fNewTsRWriter = func(cli *clientv3.Client, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
+	fNewTsRWriter = func(cli kv.CDCEtcdClient, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
 		return &mockTsRWriter{}, nil
 	}
 	origFNewMounter := fNewMounter
