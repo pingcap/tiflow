@@ -543,9 +543,15 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 
 	existingTables := make(map[uint64]uint64)
 	for captureID, taskStatus := range processorsInfos {
-		pos := taskPositions[captureID]
+		var checkpointTs uint64
+		if pos, exist := taskPositions[captureID]; exist {
+			checkpointTs = pos.CheckPointTs
+		}
 		for _, tbl := range taskStatus.TableInfos {
-			existingTables[tbl.ID] = pos.CheckPointTs
+			if tbl.StartTs > checkpointTs {
+				checkpointTs = tbl.StartTs
+			}
+			existingTables[tbl.ID] = checkpointTs
 		}
 	}
 
