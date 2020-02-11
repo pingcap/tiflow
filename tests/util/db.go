@@ -134,7 +134,7 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 	}
 	for _, table := range targetTables {
 		if _, exist := sourceTableMap[table]; !exist {
-			log.Info("The table in target db is not exist in source db:", zap.String("table", table))
+			log.Info("The table in target db does not exist in source db", zap.String("table", table))
 			return false
 		}
 	}
