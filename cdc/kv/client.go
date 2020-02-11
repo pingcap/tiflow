@@ -356,7 +356,7 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 // singleEventFeed makes a EventFeed RPC call.
 // Results will be send to eventCh
 // EventFeed RPC will not return checkpoint event directly
-// Checkpoint event is generate while there's not non-match pre-write
+// Resolved event is generate while there's not non-match pre-write
 // Return the maximum checkpoint
 func (c *CDCClient) singleEventFeed(
 	ctx context.Context,
@@ -401,7 +401,7 @@ func (c *CDCClient) singleEventFeed(
 
 		// emit a checkpoint
 		revent := &model.RegionFeedEvent{
-			Checkpoint: &model.RegionFeedCheckpoint{
+			Resolved: &model.ResolvedSpan{
 				Span:       span,
 				ResolvedTs: item.commit,
 			},
@@ -414,7 +414,7 @@ func (c *CDCClient) singleEventFeed(
 	}
 
 	// TODO: drop this if we totally depends on the ResolvedTs event from
-	// tikv to emit the RegionFeedCheckpoint.
+	// tikv to emit the ResolvedSpan.
 	sorter := newSorter(maxItemFn)
 	defer sorter.close()
 
@@ -451,7 +451,7 @@ func (c *CDCClient) singleEventFeed(
 						}
 
 						revent := &model.RegionFeedEvent{
-							Val: &model.RegionFeedValue{
+							Val: &model.RawKVEntry{
 								OpType: opType,
 								Key:    row.Key,
 								Value:  row.GetValue(),
@@ -488,7 +488,7 @@ func (c *CDCClient) singleEventFeed(
 						}
 
 						revent := &model.RegionFeedEvent{
-							Val: &model.RegionFeedValue{
+							Val: &model.RawKVEntry{
 								OpType: opType,
 								Key:    row.Key,
 								Value:  value,
@@ -523,7 +523,7 @@ func (c *CDCClient) singleEventFeed(
 				if atomic.LoadUint32(&initialized) == 1 {
 					// emit a checkpoint
 					revent := &model.RegionFeedEvent{
-						Checkpoint: &model.RegionFeedCheckpoint{
+						Resolved: &model.ResolvedSpan{
 							Span:       span,
 							ResolvedTs: x.ResolvedTs,
 						},

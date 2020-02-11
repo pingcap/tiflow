@@ -37,20 +37,22 @@ func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
 		defer wg.Done()
 		first, err := b.Get(ctx)
 		c.Assert(err, check.IsNil)
-		c.Assert(first.KV.Ts, check.Equals, uint64(111))
+		c.Assert(first.Val.Ts, check.Equals, uint64(110))
 		second, err := b.Get(ctx)
 		c.Assert(err, check.IsNil)
-		c.Assert(second.Resolved.Timestamp, check.Equals, uint64(110))
-		third, err := b.Get(ctx)
-		c.Assert(err, check.IsNil)
-		c.Assert(third.KV.Ts, check.Equals, uint64(112))
+		c.Assert(second.Resolved.ResolvedTs, check.Equals, uint64(111))
 	}()
 
-	err := b.AddKVEntry(ctx, &model.RawKVEntry{Ts: 111})
+	err := b.AddEntry(ctx, model.RegionFeedEvent{
+		Val: &model.RawKVEntry{Ts: 110},
+	})
 	c.Assert(err, check.IsNil)
-	err = b.AddResolved(ctx, util.Span{}, 110)
-	c.Assert(err, check.IsNil)
-	err = b.AddKVEntry(ctx, &model.RawKVEntry{Ts: 112})
+	err = b.AddEntry(ctx, model.RegionFeedEvent{
+		Resolved: &model.ResolvedSpan{
+			Span:       util.Span{},
+			ResolvedTs: 111,
+		},
+	})
 	c.Assert(err, check.IsNil)
 
 	wg.Wait()
@@ -65,7 +67,12 @@ func (bs *bufferSuite) TestWaitsCanBeCanceled(c *check.C) {
 	stopped := make(chan struct{})
 	go func() {
 		for {
-			err := b.AddEntry(timeout, BufferEntry{KV: &model.RawKVEntry{Ts: 111}})
+			err := b.AddEntry(timeout, model.RegionFeedEvent{
+				Resolved: &model.ResolvedSpan{
+					Span:       util.Span{},
+					ResolvedTs: 111,
+				},
+			})
 			if err == context.DeadlineExceeded {
 				close(stopped)
 				return
