@@ -40,7 +40,7 @@ func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
 		c.Assert(first.Val.Ts, check.Equals, uint64(110))
 		second, err := b.Get(ctx)
 		c.Assert(err, check.IsNil)
-		c.Assert(second.Checkpoint.ResolvedTs, check.Equals, uint64(111))
+		c.Assert(second.Resolved.ResolvedTs, check.Equals, uint64(111))
 	}()
 
 	err := b.AddEntry(ctx, model.RegionFeedEvent{
@@ -48,7 +48,7 @@ func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 	err = b.AddEntry(ctx, model.RegionFeedEvent{
-		Checkpoint: &model.ResolvedSpan{
+		Resolved: &model.ResolvedSpan{
 			Span:       util.Span{},
 			ResolvedTs: 111,
 		},
@@ -68,7 +68,7 @@ func (bs *bufferSuite) TestWaitsCanBeCanceled(c *check.C) {
 	go func() {
 		for {
 			err := b.AddEntry(timeout, model.RegionFeedEvent{
-				Checkpoint: &model.ResolvedSpan{
+				Resolved: &model.ResolvedSpan{
 					Span:       util.Span{},
 					ResolvedTs: 111,
 				},

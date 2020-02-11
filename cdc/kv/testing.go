@@ -72,7 +72,7 @@ func newEventChecker(t require.TestingT) *eventChecker {
 
 					ec.vals = append(ec.vals, e.Val)
 				} else {
-					ec.checkpoints = append(ec.checkpoints, e.Checkpoint)
+					ec.checkpoints = append(ec.checkpoints, e.Resolved)
 				}
 			case <-ec.closeCh:
 				return

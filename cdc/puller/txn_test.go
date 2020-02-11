@@ -64,7 +64,7 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 	// Only add resolved entry for the first 2 transaction
 	for i = 0; i < 2; i++ {
 		e := model.RegionFeedEvent{
-			Checkpoint: &model.ResolvedSpan{ResolvedTs: startTs + i},
+			Resolved: &model.ResolvedSpan{ResolvedTs: startTs + i},
 		}
 		entries = append(entries, e)
 	}
@@ -121,7 +121,7 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 		var e model.RegionFeedEvent
 		if v.isResolvedTs {
 			e = model.RegionFeedEvent{
-				Checkpoint: &model.ResolvedSpan{ResolvedTs: v.ts},
+				Resolved: &model.ResolvedSpan{ResolvedTs: v.ts},
 			}
 		} else {
 			e = model.RegionFeedEvent{
@@ -168,8 +168,8 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 
 func (cs *CollectRawTxnsSuite) TestShouldOutputBinlogEvenWhenThereIsNoRealEvent(c *check.C) {
 	entries := []model.RegionFeedEvent{
-		{Checkpoint: &model.ResolvedSpan{ResolvedTs: 1024}},
-		{Checkpoint: &model.ResolvedSpan{ResolvedTs: 2000}},
+		{Resolved: &model.ResolvedSpan{ResolvedTs: 1024}},
+		{Resolved: &model.ResolvedSpan{ResolvedTs: 2000}},
 	}
 
 	cursor := 0
@@ -196,6 +196,6 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputBinlogEvenWhenThereIsNoRealEvent(
 	c.Assert(rawTxns, check.HasLen, len(entries))
 	for i, t := range rawTxns {
 		c.Assert(t.Entries, check.HasLen, 0)
-		c.Assert(t.Ts, check.Equals, entries[i].Checkpoint.ResolvedTs)
+		c.Assert(t.Ts, check.Equals, entries[i].Resolved.ResolvedTs)
 	}
 }

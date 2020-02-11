@@ -356,7 +356,7 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 // singleEventFeed makes a EventFeed RPC call.
 // Results will be send to eventCh
 // EventFeed RPC will not return checkpoint event directly
-// Checkpoint event is generate while there's not non-match pre-write
+// Resolved event is generate while there's not non-match pre-write
 // Return the maximum checkpoint
 func (c *CDCClient) singleEventFeed(
 	ctx context.Context,
@@ -401,7 +401,7 @@ func (c *CDCClient) singleEventFeed(
 
 		// emit a checkpoint
 		revent := &model.RegionFeedEvent{
-			Checkpoint: &model.ResolvedSpan{
+			Resolved: &model.ResolvedSpan{
 				Span:       span,
 				ResolvedTs: item.commit,
 			},
@@ -523,7 +523,7 @@ func (c *CDCClient) singleEventFeed(
 				if atomic.LoadUint32(&initialized) == 1 {
 					// emit a checkpoint
 					revent := &model.RegionFeedEvent{
-						Checkpoint: &model.ResolvedSpan{
+						Resolved: &model.ResolvedSpan{
 							Span:       span,
 							ResolvedTs: x.ResolvedTs,
 						},

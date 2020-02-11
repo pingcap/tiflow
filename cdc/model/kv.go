@@ -19,16 +19,16 @@ const (
 // RegionFeedEvent from the kv layer.
 // Only one of the event will be setted.
 type RegionFeedEvent struct {
-	Val        *RawKVEntry
-	Checkpoint *ResolvedSpan
+	Val      *RawKVEntry
+	Resolved *ResolvedSpan
 }
 
 // GetValue returns the underlying value
 func (e *RegionFeedEvent) GetValue() interface{} {
 	if e.Val != nil {
 		return e.Val
-	} else if e.Checkpoint != nil {
-		return e.Checkpoint
+	} else if e.Resolved != nil {
+		return e.Resolved
 	} else {
 		return nil
 	}

@@ -363,7 +363,7 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case e, ok := <-p.executedTxns:
 			if !ok {
-				log.Info("Checkpoint worker exited")
+				log.Info("Resolved worker exited")
 				return nil
 			}
 			if e.IsResolved {

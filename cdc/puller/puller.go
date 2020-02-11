@@ -127,7 +127,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						return errors.Trace(err)
 					}
 					eventCounter.WithLabelValues(captureID, "kv").Inc()
-				} else if e.Checkpoint != nil {
+				} else if e.Resolved != nil {
 					if err := p.buf.AddEntry(ctx, *e); err != nil {
 						return errors.Trace(err)
 					}
@@ -166,13 +166,13 @@ func collectRawTxns(
 		}
 		if be.Val != nil {
 			entryGroups[be.Val.Ts] = append(entryGroups[be.Val.Ts], be.Val)
-		} else if be.Checkpoint != nil {
-			resolvedTs := be.Checkpoint.ResolvedTs
+		} else if be.Resolved != nil {
+			resolvedTs := be.Resolved.ResolvedTs
 			// 1. Forward is called in a single thread
 			// 2. The only way the global minimum resolved Ts can be forwarded is that
 			// 	  the resolveTs we pass in replaces the original one
 			// Thus, we can just use resolvedTs here as the new global minimum resolved Ts.
-			forwarded := tracker.Forward(be.Checkpoint.Span, resolvedTs)
+			forwarded := tracker.Forward(be.Resolved.Span, resolvedTs)
 			if !forwarded {
 				continue
 			}
