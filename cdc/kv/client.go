@@ -145,14 +145,14 @@ func (c *CDCClient) getConn(
 }
 
 func (c *CDCClient) getConnByMeta(
-	ctx context.Context, meta *metapb.Region,
+	ctx context.Context, region *metapb.Region,
 ) (conn *grpc.ClientConn, err error) {
-	if len(meta.Peers) == 0 {
+	if len(region.Peers) == 0 {
 		return nil, errors.New("no peer")
 	}
 
 	// the first is leader in Peers?
-	peer := meta.Peers[0]
+	peer := region.Peers[0]
 
 	store, err := c.getStore(ctx, peer.GetStoreId())
 	if err != nil {
@@ -350,7 +350,6 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			}
 		}
 	}
-
 }
 
 // singleEventFeed makes a EventFeed RPC call.
@@ -361,24 +360,24 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 func (c *CDCClient) singleEventFeed(
 	ctx context.Context,
 	span util.Span,
-	ts uint64,
-	meta *metapb.Region,
+	checkpointTs uint64,
+	region *metapb.Region,
 	eventCh chan<- *model.RegionFeedEvent,
-) (checkpointTs uint64, err error) {
+) (uint64, error) {
 	req := &cdcpb.ChangeDataRequest{
 		Header: &cdcpb.Header{
 			ClusterId: c.clusterID,
 		},
-		RegionId:     meta.GetId(),
-		RegionEpoch:  meta.RegionEpoch,
-		CheckpointTs: ts,
+		RegionId:     region.GetId(),
+		RegionEpoch:  region.RegionEpoch,
+		CheckpointTs: checkpointTs,
 		StartKey:     span.Start,
 		EndKey:       span.End,
 	}
 
 	var initialized uint32
 
-	conn, err := c.getConnByMeta(ctx, meta)
+	conn, err := c.getConnByMeta(ctx, region)
 	if err != nil {
 		return req.CheckpointTs, err
 	}
@@ -399,7 +398,7 @@ func (c *CDCClient) singleEventFeed(
 			return
 		}
 
-		// emit a checkpoint
+		// emit a checkpointTs
 		revent := &model.RegionFeedEvent{
 			Resolved: &model.ResolvedSpan{
 				Span:       span,
@@ -418,6 +417,7 @@ func (c *CDCClient) singleEventFeed(
 	sorter := newSorter(maxItemFn)
 	defer sorter.close()
 
+	captureID := util.CaptureIDFromCtx(ctx)
 	for {
 		cevent, err := stream.Recv()
 		if err == io.EOF {
@@ -429,33 +429,32 @@ func (c *CDCClient) singleEventFeed(
 		}
 
 		// log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
-		captureID := util.CaptureIDFromCtx(ctx)
 
 		for _, event := range cevent.Events {
 			eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
 			switch x := event.Event.(type) {
 			case *cdcpb.Event_Entries_:
-				for _, row := range x.Entries.GetEntries() {
-					switch row.Type {
+				for _, entry := range x.Entries.GetEntries() {
+					switch entry.Type {
 					case cdcpb.Event_INITIALIZED:
 						atomic.StoreUint32(&initialized, 1)
 					case cdcpb.Event_COMMITTED:
 						var opType model.OpType
-						switch row.GetOpType() {
+						switch entry.GetOpType() {
 						case cdcpb.Event_Row_DELETE:
 							opType = model.OpTypeDelete
 						case cdcpb.Event_Row_PUT:
 							opType = model.OpTypePut
 						default:
-							return atomic.LoadUint64(&req.CheckpointTs), errors.Errorf("unknow tp: %v", row.GetOpType())
+							return atomic.LoadUint64(&req.CheckpointTs), errors.Errorf("unknown tp: %v", entry.GetOpType())
 						}
 
 						revent := &model.RegionFeedEvent{
 							Val: &model.RawKVEntry{
 								OpType: opType,
-								Key:    row.Key,
-								Value:  row.GetValue(),
-								Ts:     row.CommitTs,
+								Key:    entry.Key,
+								Value:  entry.GetValue(),
+								Ts:     entry.CommitTs,
 							},
 						}
 						select {
@@ -464,35 +463,35 @@ func (c *CDCClient) singleEventFeed(
 							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
 						}
 					case cdcpb.Event_PREWRITE:
-						matcher.putPrewriteRow(row)
+						matcher.putPrewriteRow(entry)
 						sorter.pushTsItem(sortItem{
-							start: row.GetStartTs(),
+							start: entry.GetStartTs(),
 							tp:    cdcpb.Event_PREWRITE,
 						})
 					case cdcpb.Event_COMMIT:
 						// emit a value
-						value, err := matcher.matchRow(row)
+						value, err := matcher.matchRow(entry)
 						if err != nil {
 							// FIXME: need a better event match mechanism
-							log.Warn("match row error", zap.Error(err), zap.Stringer("row", row))
+							log.Warn("match entry error", zap.Error(err), zap.Stringer("entry", entry))
 						}
 
 						var opType model.OpType
-						switch row.GetOpType() {
+						switch entry.GetOpType() {
 						case cdcpb.Event_Row_DELETE:
 							opType = model.OpTypeDelete
 						case cdcpb.Event_Row_PUT:
 							opType = model.OpTypePut
 						default:
-							return atomic.LoadUint64(&req.CheckpointTs), errors.Errorf("unknow tp: %v", row.GetOpType())
+							return atomic.LoadUint64(&req.CheckpointTs), errors.Errorf("unknow tp: %v", entry.GetOpType())
 						}
 
 						revent := &model.RegionFeedEvent{
 							Val: &model.RawKVEntry{
 								OpType: opType,
-								Key:    row.Key,
+								Key:    entry.Key,
 								Value:  value,
-								Ts:     row.CommitTs,
+								Ts:     entry.CommitTs,
 							},
 						}
 
@@ -502,15 +501,15 @@ func (c *CDCClient) singleEventFeed(
 							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
 						}
 						sorter.pushTsItem(sortItem{
-							start:  row.GetStartTs(),
-							commit: row.GetCommitTs(),
+							start:  entry.GetStartTs(),
+							commit: entry.GetCommitTs(),
 							tp:     cdcpb.Event_COMMIT,
 						})
 					case cdcpb.Event_ROLLBACK:
-						matcher.rollbackRow(row)
+						matcher.rollbackRow(entry)
 						sorter.pushTsItem(sortItem{
-							start:  row.GetStartTs(),
-							commit: row.GetCommitTs(),
+							start:  entry.GetStartTs(),
+							commit: entry.GetCommitTs(),
 							tp:     cdcpb.Event_ROLLBACK,
 						})
 					}
@@ -520,22 +519,22 @@ func (c *CDCClient) singleEventFeed(
 			case *cdcpb.Event_Error_:
 				return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(&eventError{Event_Error: x.Error})
 			case *cdcpb.Event_ResolvedTs:
-				if atomic.LoadUint32(&initialized) == 1 {
-					// emit a checkpoint
-					revent := &model.RegionFeedEvent{
-						Resolved: &model.ResolvedSpan{
-							Span:       span,
-							ResolvedTs: x.ResolvedTs,
-						},
-					}
+				if atomic.LoadUint32(&initialized) == 0 {
+					continue
+				}
+				// emit a checkpointTs
+				revent := &model.RegionFeedEvent{
+					Resolved: &model.ResolvedSpan{
+						Span:       span,
+						ResolvedTs: x.ResolvedTs,
+					},
+				}
 
-					updateCheckpointTS(&req.CheckpointTs, x.ResolvedTs)
-					select {
-					case eventCh <- revent:
-					case <-ctx.Done():
-						return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
-					}
-
+				updateCheckpointTS(&req.CheckpointTs, x.ResolvedTs)
+				select {
+				case eventCh <- revent:
+				case <-ctx.Done():
+					return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
 				}
 			}
 		}
