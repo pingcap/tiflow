@@ -88,7 +88,6 @@ type changeFeed struct {
 	processorLastUpdateTime map[string]time.Time
 	filter                  *txnFilter
 
-	client        kv.CDCEtcdClient
 	ddlHandler    OwnerDDLHandler
 	ddlResolvedTs uint64
 	ddlJobHistory []*model.DDL
@@ -576,7 +575,6 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 	cf := &changeFeed{
 		info:                    info,
 		id:                      id,
-		client:                  o.etcdClient,
 		ddlHandler:              ddlHandler,
 		schema:                  schemaStorage,
 		schemas:                 schemas,
