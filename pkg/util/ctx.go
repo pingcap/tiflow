@@ -18,7 +18,8 @@ import "context"
 type ctxKey string
 
 const (
-	ctxKeyCaptureID = ctxKey("captureID")
+	ctxKeyCaptureID    = ctxKey("captureID")
+	ctxKeyChangefeedID = ctxKey("changefeedID")
 )
 
 // CaptureIDFromCtx returns a capture ID stored in the specified context.
@@ -34,4 +35,19 @@ func CaptureIDFromCtx(ctx context.Context) string {
 // PutCaptureIDInCtx returns a new child context with the specified capture ID stored.
 func PutCaptureIDInCtx(ctx context.Context, captureID string) context.Context {
 	return context.WithValue(ctx, ctxKeyCaptureID, captureID)
+}
+
+// ChangefeedIDFromCtx returns a changefeedID stored in the specified context.
+// It returns an empty string if there's no valid changefeed ID found.
+func ChangefeedIDFromCtx(ctx context.Context) string {
+	changefeedID, ok := ctx.Value(ctxKeyChangefeedID).(string)
+	if !ok {
+		return ""
+	}
+	return changefeedID
+}
+
+// PutChangefeedIDInCtx returns a new child context with the specified changefeed ID stored.
+func PutChangefeedIDInCtx(ctx context.Context, changefeedID string) context.Context {
+	return context.WithValue(ctx, ctxKeyChangefeedID, changefeedID)
 }

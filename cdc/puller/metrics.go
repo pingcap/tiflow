@@ -16,13 +16,20 @@ package puller
 import "github.com/prometheus/client_golang/prometheus"
 
 var (
-	eventCounter = prometheus.NewCounterVec(
+	kvEventCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
-			Name:      "event_count",
-			Help:      "The number of events received.",
-		}, []string{"captureID", "type"})
+			Name:      "kv_event_count",
+			Help:      "The number of events received from kv client event channel",
+		}, []string{"capture", "changefeed", "type"})
+	txnCollectCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "txn_collect_event_count",
+			Help:      "The number of events received from txn collector",
+		}, []string{"capture", "changefeed", "type"})
 	resolvedTxnsBatchSize = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -35,6 +42,7 @@ var (
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(eventCounter)
+	registry.MustRegister(kvEventCounter)
+	registry.MustRegister(txnCollectCounter)
 	registry.MustRegister(resolvedTxnsBatchSize)
 }

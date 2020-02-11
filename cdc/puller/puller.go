@@ -108,10 +108,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	g.Go(func() error {
 		captureID := util.CaptureIDFromCtx(ctx)
+		changefeedID := util.ChangefeedIDFromCtx(ctx)
 		for {
 			select {
 			case e := <-eventCh:
 				if e.Val != nil {
+					kvEventCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
 					val := e.Val
 
 					// if a region with kv range [a, z)
@@ -126,12 +128,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					if err := p.buf.AddEntry(ctx, *e); err != nil {
 						return errors.Trace(err)
 					}
-					eventCounter.WithLabelValues(captureID, "kv").Inc()
 				} else if e.Resolved != nil {
+					kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
 					if err := p.buf.AddEntry(ctx, *e); err != nil {
 						return errors.Trace(err)
 					}
-					eventCounter.WithLabelValues(captureID, "resolved").Inc()
 				}
 			case <-ctx.Done():
 				return ctx.Err()
@@ -158,6 +159,8 @@ func collectRawTxns(
 	outputFn func(context.Context, model.RawTxn) error,
 	tracker resolveTsTracker,
 ) error {
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	entryGroups := make(map[uint64][]*model.RawKVEntry)
 	for {
 		be, err := inputFn(ctx)
@@ -165,8 +168,10 @@ func collectRawTxns(
 			return errors.Trace(err)
 		}
 		if be.Val != nil {
+			txnCollectCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
 			entryGroups[be.Val.Ts] = append(entryGroups[be.Val.Ts], be.Val)
 		} else if be.Resolved != nil {
+			txnCollectCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
 			resolvedTs := be.Resolved.ResolvedTs
 			// 1. Forward is called in a single thread
 			// 2. The only way the global minimum resolved Ts can be forwarded is that

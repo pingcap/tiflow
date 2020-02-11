@@ -46,6 +46,20 @@ var (
 			Help:      "Size of KV events.",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 25),
 		}, []string{"captureID"})
+	pullEventCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "pull_event_count",
+			Help:      "event count received by this puller",
+		}, []string{"type", "capture", "changefeed"})
+	sendEventCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "send_event_count",
+			Help:      "event count sent to event channel by this puller",
+		}, []string{"type", "capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in the kv package
@@ -54,4 +68,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(scanRegionsDuration)
 	registry.MustRegister(eventSize)
 	registry.MustRegister(eventFeedGauge)
+	registry.MustRegister(pullEventCounter)
+	registry.MustRegister(sendEventCounter)
 }

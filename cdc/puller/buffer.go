@@ -6,11 +6,15 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
+const (
+	defaultBufferSize = 8
+)
+
 // Buffer buffers kv entries
 type Buffer chan model.RegionFeedEvent
 
 func makeBuffer() Buffer {
-	return make(Buffer, 8)
+	return make(Buffer, defaultBufferSize)
 }
 
 // AddEntry adds an entry to the buffer
