@@ -36,7 +36,7 @@ func TestSuite(t *testing.T) { check.TestingT(t) }
 type etcdSuite struct {
 	e         *embed.Etcd
 	clientURL *url.URL
-	client    *clientv3.Client
+	client    kv.CDCEtcdClient
 	ctx       context.Context
 	cancel    context.CancelFunc
 	errg      *errgroup.Group
@@ -49,11 +49,12 @@ func (s *etcdSuite) SetUpTest(c *check.C) {
 	var err error
 	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
-	s.client, err = clientv3.New(clientv3.Config{
+	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{s.clientURL.String()},
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
+	s.client = kv.NewCDCEtcdClient(client)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
@@ -111,26 +112,26 @@ func (s *etcdSuite) TestInfoReader(c *check.C) {
 
 	rw := NewChangeFeedEtcdRWriter(s.client)
 	for _, tc := range testCases {
-		_, err = s.client.Delete(context.Background(), kv.GetEtcdKeyChangeFeedList(), clientv3.WithPrefix())
+		_, err = s.client.Client.Delete(context.Background(), kv.GetEtcdKeyChangeFeedList(), clientv3.WithPrefix())
 		c.Assert(err, check.IsNil)
 		for _, changefeedID := range tc.ids {
-			_, err = s.client.Delete(context.Background(), kv.GetEtcdKeyTaskStatusList(changefeedID), clientv3.WithPrefix())
+			_, err = s.client.Client.Delete(context.Background(), kv.GetEtcdKeyTaskStatusList(changefeedID), clientv3.WithPrefix())
 			c.Assert(err, check.IsNil)
 		}
 		for i := 0; i < len(tc.ids); i++ {
 			changefeedID := tc.ids[i]
-			err = kv.SaveChangeFeedInfo(context.Background(), s.client, &model.ChangeFeedInfo{}, changefeedID)
+			err = s.client.SaveChangeFeedInfo(context.Background(), &model.ChangeFeedInfo{}, changefeedID)
 			c.Assert(err, check.IsNil)
 			for captureID, cinfo := range tc.pinfos[changefeedID] {
 				sinfo, err := cinfo.Marshal()
 				c.Assert(err, check.IsNil)
-				_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTaskStatus(changefeedID, captureID), sinfo)
+				_, err = s.client.Client.Put(context.Background(), kv.GetEtcdKeyTaskStatus(changefeedID, captureID), sinfo)
 				c.Assert(err, check.IsNil)
 
 				pos := tc.ppos[changefeedID][captureID]
 				spos, err := pos.Marshal()
 				c.Assert(err, check.IsNil)
-				_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTaskPosition(changefeedID, captureID), spos)
+				_, err = s.client.Client.Put(context.Background(), kv.GetEtcdKeyTaskPosition(changefeedID, captureID), spos)
 				c.Assert(err, check.IsNil)
 			}
 		}
@@ -180,7 +181,7 @@ func (s *etcdSuite) TestInfoWriter(c *check.C) {
 	rw := NewChangeFeedEtcdRWriter(s.client)
 	for _, tc := range testCases {
 		for changefeedID := range tc.infos {
-			_, err = s.client.Delete(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))
+			_, err = s.client.Client.Delete(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))
 			c.Assert(err, check.IsNil)
 		}
 
@@ -188,7 +189,7 @@ func (s *etcdSuite) TestInfoWriter(c *check.C) {
 		c.Assert(err, check.IsNil)
 
 		for changefeedID, info := range tc.infos {
-			resp, err := s.client.Get(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))
+			resp, err := s.client.Client.Get(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID))
 			c.Assert(err, check.IsNil)
 			c.Assert(resp.Count, check.Equals, int64(1))
 			infoStr, err := info.Marshal()
@@ -208,7 +209,7 @@ func (s *etcdSuite) TestNewProcessorTsEtcdRWriter(c *check.C) {
 	info := new(model.TaskStatus)
 	sinfo, err := info.Marshal()
 	c.Assert(err, check.IsNil)
-	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTaskStatus(changefeedID, captureID), sinfo)
+	_, err = s.client.Client.Put(context.Background(), kv.GetEtcdKeyTaskStatus(changefeedID, captureID), sinfo)
 	c.Assert(err, check.IsNil)
 
 	_, err = NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
@@ -232,7 +233,7 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	// create a task record in etcd
 	sinfo, err := info.Marshal()
 	c.Assert(err, check.IsNil)
-	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTaskStatus(changefeedID, captureID), sinfo)
+	_, err = s.client.Client.Put(context.Background(), kv.GetEtcdKeyTaskStatus(changefeedID, captureID), sinfo)
 	c.Assert(err, check.IsNil)
 
 	// test WriteResolvedTs
@@ -247,7 +248,7 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	err = rw.WritePosition(context.Background(), pos)
 	c.Assert(err, check.IsNil)
 
-	_, getPos, err := kv.GetTaskPosition(context.Background(), s.client, changefeedID, captureID)
+	_, getPos, err := s.client.GetTaskPosition(context.Background(), changefeedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(getPos.ResolvedTs, check.Equals, pos.ResolvedTs)
 	c.Assert(getPos.CheckPointTs, check.Equals, pos.CheckPointTs)
@@ -255,7 +256,7 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	rw.GetTaskStatus().AdminJobType = model.AdminStop
 	err = rw.WriteInfoIntoStorage(context.Background())
 	c.Assert(err, check.IsNil)
-	revision, getStatus, err := kv.GetTaskStatus(context.Background(), s.client, changefeedID, captureID)
+	revision, getStatus, err := s.client.GetTaskStatus(context.Background(), changefeedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(getStatus, check.DeepEquals, rw.GetTaskStatus())
 	c.Assert(revision, check.Equals, rw.modRevision)
@@ -265,7 +266,7 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	getInfo.TableInfos = []*model.ProcessTableInfo{{ID: 11}, {ID: 12}, {ID: 13}}
 	sinfo, err = getInfo.Marshal()
 	c.Assert(err, check.IsNil)
-	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTaskStatus(changefeedID, captureID), sinfo)
+	_, err = s.client.Client.Put(context.Background(), kv.GetEtcdKeyTaskStatus(changefeedID, captureID), sinfo)
 	c.Assert(err, check.IsNil)
 
 	info.TableCLock = &model.TableLock{Ts: 6}
@@ -282,7 +283,7 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	info.TableCLock = &model.TableLock{Ts: 6}
 	err = rw.WriteInfoIntoStorage(context.Background())
 	c.Assert(err, check.IsNil)
-	revision, getInfo, err = kv.GetTaskStatus(context.Background(), s.client, changefeedID, captureID)
+	revision, getInfo, err = s.client.GetTaskStatus(context.Background(), changefeedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(revision, check.Equals, rw.modRevision)
 	c.Assert(getInfo.TableCLock.Ts, check.Equals, uint64(6))
@@ -307,14 +308,14 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 	// create a changefeed taskStatus in etcd
 	sinfo, err := info.Marshal()
 	c.Assert(err, check.IsNil)
-	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID), sinfo)
+	_, err = s.client.Client.Put(context.Background(), kv.GetEtcdKeyChangeFeedStatus(changefeedID), sinfo)
 	c.Assert(err, check.IsNil)
 
 	// create a task record in etcd
 	subInfo := new(model.TaskStatus)
 	subInfoData, err := subInfo.Marshal()
 	c.Assert(err, check.IsNil)
-	_, err = s.client.Put(context.Background(), kv.GetEtcdKeyTaskStatus(changefeedID, captureID), subInfoData)
+	_, err = s.client.Client.Put(context.Background(), kv.GetEtcdKeyTaskStatus(changefeedID, captureID), subInfoData)
 	c.Assert(err, check.IsNil)
 
 	rw, err := NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
@@ -347,7 +348,7 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(info.TableInfos, check.HasLen, 2)
 	// check ModRevision after write
-	revision, _, err := kv.GetTaskStatus(context.Background(), s.client, changefeedID, captureID)
+	revision, _, err := s.client.GetTaskStatus(context.Background(), changefeedID, captureID)
 	c.Assert(err, check.IsNil)
 	c.Assert(info.ModRevision, check.Equals, revision)
 
@@ -372,7 +373,7 @@ func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
 
 	// simulate processor removes table and commit table p-lock
 	info.TableCLock = &model.TableLock{Ts: info.TablePLock.Ts, CheckpointTs: 200}
-	err = kv.PutTaskStatus(context.Background(), s.client, changefeedID, captureID, info)
+	err = s.client.PutTaskStatus(context.Background(), changefeedID, captureID, info)
 	c.Assert(err, check.IsNil)
 	info.TableCLock = nil
 

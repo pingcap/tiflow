@@ -32,11 +32,11 @@ import (
 
 // ChangeFeedRWriter implements `roles.ChangeFeedRWriter` interface
 type ChangeFeedRWriter struct {
-	etcdClient *clientv3.Client
+	etcdClient kv.CDCEtcdClient
 }
 
 // NewChangeFeedEtcdRWriter returns a new `*ChangeFeedRWriter` instance
-func NewChangeFeedEtcdRWriter(cli *clientv3.Client) *ChangeFeedRWriter {
+func NewChangeFeedEtcdRWriter(cli kv.CDCEtcdClient) *ChangeFeedRWriter {
 	return &ChangeFeedRWriter{
 		etcdClient: cli,
 	}
@@ -47,7 +47,7 @@ func NewChangeFeedEtcdRWriter(cli *clientv3.Client) *ChangeFeedRWriter {
 // - map mapping from changefeedID to `model.ProcessorsInfos`
 // FIXME: the return value of this function is too many, split this function
 func (rw *ChangeFeedRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]*model.ChangeFeedStatus, map[model.ChangeFeedID]model.ProcessorsInfos, map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition, error) {
-	_, details, err := kv.GetChangeFeeds(ctx, rw.etcdClient)
+	_, details, err := rw.etcdClient.GetChangeFeeds(ctx)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -62,16 +62,16 @@ func (rw *ChangeFeedRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]*
 			return nil, nil, nil, nil, err
 		}
 
-		pinfo, err := kv.GetAllTaskStatus(ctx, rw.etcdClient, changefeedID)
+		pinfo, err := rw.etcdClient.GetAllTaskStatus(ctx, changefeedID)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
-		postition, err := kv.GetAllTaskPositions(ctx, rw.etcdClient, changefeedID)
+		postition, err := rw.etcdClient.GetAllTaskPositions(ctx, changefeedID)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
 
-		status, err := kv.GetChangeFeedStatus(ctx, rw.etcdClient, changefeedID)
+		status, err := rw.etcdClient.GetChangeFeedStatus(ctx, changefeedID)
 		if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 			return nil, nil, nil, nil, err
 		}
@@ -87,7 +87,7 @@ func (rw *ChangeFeedRWriter) Read(ctx context.Context) (map[model.ChangeFeedID]*
 // Write writes ChangeFeedStatus of each changefeed into etcd
 func (rw *ChangeFeedRWriter) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
 	var (
-		txn = rw.etcdClient.KV.Txn(ctx)
+		txn = rw.etcdClient.Client.KV.Txn(ctx)
 		ops = make([]clientv3.Op, 0, embed.DefaultMaxTxnOps)
 	)
 	for changefeedID, info := range infos {
@@ -102,7 +102,7 @@ func (rw *ChangeFeedRWriter) Write(ctx context.Context, infos map[model.ChangeFe
 			if err != nil {
 				return errors.Trace(err)
 			}
-			txn = rw.etcdClient.KV.Txn(ctx)
+			txn = rw.etcdClient.Client.KV.Txn(ctx)
 			ops = ops[:0]
 		}
 	}
@@ -137,7 +137,7 @@ var _ ProcessorTsRWriter = &ProcessorTsEtcdRWriter{}
 
 // ProcessorTsEtcdRWriter implements `ProcessorTsRWriter` interface
 type ProcessorTsEtcdRWriter struct {
-	etcdClient   *clientv3.Client
+	etcdClient   kv.CDCEtcdClient
 	changefeedID string
 	captureID    string
 	modRevision  int64
@@ -146,7 +146,7 @@ type ProcessorTsEtcdRWriter struct {
 }
 
 // NewProcessorTsEtcdRWriter returns a new `*ChangeFeedRWriter` instance
-func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID string) (*ProcessorTsEtcdRWriter, error) {
+func NewProcessorTsEtcdRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (*ProcessorTsEtcdRWriter, error) {
 	logger := log.L().With(zap.String("changefeed id", changefeedID)).
 		With(zap.String("capture id", captureID))
 
@@ -159,7 +159,7 @@ func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 	}
 
 	var err error
-	rw.modRevision, rw.taskStatus, err = kv.GetTaskStatus(context.Background(), rw.etcdClient, rw.changefeedID, rw.captureID)
+	rw.modRevision, rw.taskStatus, err = cli.GetTaskStatus(context.Background(), rw.changefeedID, rw.captureID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -169,14 +169,14 @@ func NewProcessorTsEtcdRWriter(cli *clientv3.Client, changefeedID, captureID str
 
 // WritePosition implements ProcessorTsRWriter interface.
 func (rw *ProcessorTsEtcdRWriter) WritePosition(ctx context.Context, taskPosition *model.TaskPosition) error {
-	return errors.Trace(kv.PutTaskPosition(ctx, rw.etcdClient, rw.changefeedID, rw.captureID, taskPosition))
+	return errors.Trace(rw.etcdClient.PutTaskPosition(ctx, rw.changefeedID, rw.captureID, taskPosition))
 }
 
 // UpdateInfo implements ProcessorTsRWriter interface.
 func (rw *ProcessorTsEtcdRWriter) UpdateInfo(
 	ctx context.Context,
 ) (changed bool, err error) {
-	modRevision, info, err := kv.GetTaskStatus(ctx, rw.etcdClient, rw.changefeedID, rw.captureID)
+	modRevision, info, err := rw.etcdClient.GetTaskStatus(ctx, rw.changefeedID, rw.captureID)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
@@ -199,7 +199,7 @@ func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 		return errors.Trace(err)
 	}
 
-	resp, err := rw.etcdClient.KV.Txn(ctx).If(
+	resp, err := rw.etcdClient.Client.KV.Txn(ctx).If(
 		clientv3.Compare(clientv3.ModRevision(key), "=", rw.modRevision),
 	).Then(
 		clientv3.OpPut(key, value),
@@ -224,7 +224,7 @@ func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 
 // ReadGlobalResolvedTs reads the global resolvedTs from etcd
 func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uint64, error) {
-	info, err := kv.GetChangeFeedStatus(ctx, rw.etcdClient, rw.changefeedID)
+	info, err := rw.etcdClient.GetChangeFeedStatus(ctx, rw.changefeedID)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -238,11 +238,11 @@ func (rw *ProcessorTsEtcdRWriter) GetTaskStatus() *model.TaskStatus {
 
 // OwnerTaskStatusEtcdWriter encapsulates TaskStatus write operation
 type OwnerTaskStatusEtcdWriter struct {
-	etcdClient *clientv3.Client
+	etcdClient kv.CDCEtcdClient
 }
 
 // NewOwnerTaskStatusEtcdWriter returns a new `*OwnerTaskStatusEtcdWriter` instance
-func NewOwnerTaskStatusEtcdWriter(cli *clientv3.Client) *OwnerTaskStatusEtcdWriter {
+func NewOwnerTaskStatusEtcdWriter(cli kv.CDCEtcdClient) *OwnerTaskStatusEtcdWriter {
 	return &OwnerTaskStatusEtcdWriter{
 		etcdClient: cli,
 	}
@@ -252,7 +252,7 @@ func NewOwnerTaskStatusEtcdWriter(cli *clientv3.Client) *OwnerTaskStatusEtcdWrit
 func (ow *OwnerTaskStatusEtcdWriter) updateInfo(
 	ctx context.Context, changefeedID, captureID string, oldInfo *model.TaskStatus,
 ) (newInfo *model.TaskStatus, err error) {
-	modRevision, info, err := kv.GetTaskStatus(ctx, ow.etcdClient, changefeedID, captureID)
+	modRevision, info, err := ow.etcdClient.GetTaskStatus(ctx, changefeedID, captureID)
 	if err != nil {
 		return
 	}
@@ -280,7 +280,7 @@ func (ow *OwnerTaskStatusEtcdWriter) updateInfo(
 func (ow *OwnerTaskStatusEtcdWriter) checkLock(
 	ctx context.Context, changefeedID, captureID string,
 ) (status model.TableLockStatus, err error) {
-	_, info, err := kv.GetTaskStatus(ctx, ow.etcdClient, changefeedID, captureID)
+	_, info, err := ow.etcdClient.GetTaskStatus(ctx, changefeedID, captureID)
 	if err != nil {
 		if errors.Cause(err) == model.ErrTaskStatusNotExists {
 			return model.TableNoLock, nil
@@ -342,7 +342,8 @@ func (ow *OwnerTaskStatusEtcdWriter) Write(
 		if err != nil {
 			return errors.Trace(err)
 		}
-		resp, err := ow.etcdClient.KV.Txn(ctx).If(
+
+		resp, err := ow.etcdClient.Client.KV.Txn(ctx).If(
 			clientv3.Compare(clientv3.ModRevision(key), "=", newInfo.ModRevision),
 		).Then(
 			clientv3.OpPut(key, value),

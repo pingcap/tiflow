@@ -47,7 +47,7 @@ const (
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	pdEndpoints  []string
-	etcdClient   *clientv3.Client
+	etcdClient   kv.CDCEtcdClient
 	ownerManager roles.Manager
 	ownerWorker  *ownerImpl
 
@@ -59,7 +59,7 @@ type Capture struct {
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdEndpoints []string) (c *Capture, err error) {
-	cli, err := clientv3.New(clientv3.Config{
+	ectdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   pdEndpoints,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
@@ -77,7 +77,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	if err != nil {
 		return nil, errors.Annotate(err, "new etcd client")
 	}
-
+	cli := kv.NewCDCEtcdClient(ectdCli)
 	id := uuid.New().String()
 	info := &model.CaptureInfo{
 		ID: id,
@@ -171,12 +171,12 @@ func (c *Capture) Cleanup() {
 
 // Close closes the capture by unregistering it from etcd
 func (c *Capture) Close(ctx context.Context) error {
-	return errors.Trace(DeleteCaptureInfo(ctx, c.info.ID, c.etcdClient))
+	return errors.Trace(c.etcdClient.DeleteCaptureInfo(ctx, c.info.ID))
 }
 
 // register registers the capture information in etcd
 func (c *Capture) register(ctx context.Context) error {
-	return errors.Trace(PutCaptureInfo(ctx, c.info, c.etcdClient))
+	return errors.Trace(c.etcdClient.PutCaptureInfo(ctx, c.info))
 }
 
 func createTiStore(urls string) (tidbkv.Storage, error) {

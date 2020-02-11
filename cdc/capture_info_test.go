@@ -9,6 +9,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -21,7 +22,7 @@ import (
 type captureInfoSuite struct {
 	etcd      *embed.Etcd
 	clientURL *url.URL
-	client    *clientv3.Client
+	client    kv.CDCEtcdClient
 	ctx       context.Context
 	cancel    context.CancelFunc
 	errg      *errgroup.Group
@@ -34,11 +35,12 @@ func (ci *captureInfoSuite) SetUpTest(c *check.C) {
 	var err error
 	ci.clientURL, ci.etcd, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
-	ci.client, err = clientv3.New(clientv3.Config{
+	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{ci.clientURL.String()},
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
+	ci.client = kv.NewCDCEtcdClient(client)
 	ci.ctx, ci.cancel = context.WithCancel(context.Background())
 	ci.errg = util.HandleErrWithErrGroup(ci.ctx, ci.etcd.Err(), func(e error) { c.Log(e) })
 }
@@ -58,28 +60,28 @@ func (ci *captureInfoSuite) TestPutDeleteGet(c *check.C) {
 	id := "1"
 
 	// get a not exist capture
-	info, err := GetCaptureInfo(ctx, id, ci.client)
-	c.Assert(err, check.Equals, errCaptureNotExist)
+	info, err := ci.client.GetCaptureInfo(ctx, id)
+	c.Assert(err, check.Equals, model.ErrCaptureNotExist)
 	c.Assert(info, check.IsNil)
 
 	// create
 	info = &model.CaptureInfo{
 		ID: id,
 	}
-	err = PutCaptureInfo(ctx, info, ci.client)
+	err = ci.client.PutCaptureInfo(ctx, info)
 	c.Assert(err, check.IsNil)
 
 	// get again,
-	getInfo, err := GetCaptureInfo(ctx, id, ci.client)
+	getInfo, err := ci.client.GetCaptureInfo(ctx, id)
 	c.Assert(err, check.IsNil)
 	c.Assert(getInfo, check.DeepEquals, info)
 
 	// delete it
-	err = DeleteCaptureInfo(ctx, id, ci.client)
+	err = ci.client.DeleteCaptureInfo(ctx, id)
 	c.Assert(err, check.IsNil)
 	// get again should not exist
-	info, err = GetCaptureInfo(ctx, id, ci.client)
-	c.Assert(err, check.Equals, errCaptureNotExist)
+	info, err = ci.client.GetCaptureInfo(ctx, id)
+	c.Assert(err, check.Equals, model.ErrCaptureNotExist)
 	c.Assert(info, check.IsNil)
 }
 
@@ -97,7 +99,7 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 	ctx := context.Background()
 	var err error
 	// put info1
-	err = PutCaptureInfo(ctx, info1, ci.client)
+	err = ci.client.PutCaptureInfo(ctx, info1)
 	c.Assert(err, check.IsNil)
 
 	watchCtx, watchCancel := context.WithCancel(ctx)
@@ -146,8 +148,9 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 		c.Assert(owner.captures, check.HasLen, expected)
 	}
 
+	// put info2 and info3
 	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/WatchCaptureInfoCompactionErr", "1*return"), check.IsNil)
-	err = PutCaptureInfo(ctx, info2, ci.client)
+	err = ci.client.PutCaptureInfo(ctx, info2)
 	c.Assert(err, check.IsNil)
 	resp := mustGetResp()
 	c.Assert(resp, check.IsNil)
@@ -155,7 +158,7 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 	checkCaptureLen(2)
 	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/cdc/WatchCaptureInfoCompactionErr"), check.IsNil)
 
-	err = PutCaptureInfo(ctx, info3, ci.client)
+	err = ci.client.PutCaptureInfo(ctx, info3)
 	c.Assert(err, check.IsNil)
 	resp = mustGetResp()
 	c.Assert(resp.IsDelete, check.IsFalse)
@@ -163,9 +166,9 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 	checkCaptureLen(3)
 
 	// delete info2 and info3
-	err = DeleteCaptureInfo(ctx, info2.ID, ci.client)
+	err = ci.client.DeleteCaptureInfo(ctx, info2.ID)
 	c.Assert(err, check.IsNil)
-	err = DeleteCaptureInfo(ctx, info3.ID, ci.client)
+	err = ci.client.DeleteCaptureInfo(ctx, info3.ID)
 	c.Assert(err, check.IsNil)
 
 	resp = mustGetResp()

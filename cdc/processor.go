@@ -145,7 +145,7 @@ type processor struct {
 	filter       *txnFilter
 
 	pdCli   pd.Client
-	etcdCli *clientv3.Client
+	etcdCli kv.CDCEtcdClient
 
 	mounter       mounter
 	schemaStorage *schema.Storage
@@ -210,13 +210,13 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 	if err != nil {
 		return nil, errors.Annotate(err, "new etcd client")
 	}
-
+	cdcEtcdCli := kv.NewCDCEtcdClient(etcdCli)
 	schemaStorage, err := fCreateSchema(pdEndpoints)
 	if err != nil {
 		return nil, err
 	}
 
-	tsRWriter, err := fNewTsRWriter(etcdCli, changefeedID, captureID)
+	tsRWriter, err := fNewTsRWriter(cdcEtcdCli, changefeedID, captureID)
 	if err != nil {
 		return nil, errors.Annotate(err, "failed to create ts RWriter")
 	}
@@ -242,7 +242,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 		changefeedID:  changefeedID,
 		changefeed:    changefeed,
 		pdCli:         pdCli,
-		etcdCli:       etcdCli,
+		etcdCli:       cdcEtcdCli,
 		mounter:       mounter,
 		schemaStorage: schemaStorage,
 		sink:          sink,
@@ -394,28 +394,26 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	statusChanged, err := p.tsRWriter.UpdateInfo(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !statusChanged {
+		return nil
+	}
+	oldStatus := p.status
+	p.status = p.tsRWriter.GetTaskStatus()
+	if p.status.AdminJobType == model.AdminStop || p.status.AdminJobType == model.AdminRemove {
+		err = p.stop(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		return errors.Trace(model.ErrAdminStopProcessor)
+	}
+	p.handleTables(ctx, oldStatus, p.status, p.position.CheckPointTs)
+	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
 
 	return retry.Run(func() error {
-		statusChanged, err := p.tsRWriter.UpdateInfo(ctx)
-		if err != nil {
-			return backoff.Permanent(errors.Trace(err))
-		}
-		if !statusChanged {
-			return nil
-		}
-		oldStatus := p.status
-		p.status = p.tsRWriter.GetTaskStatus()
-		if p.status.AdminJobType == model.AdminStop || p.status.AdminJobType == model.AdminRemove {
-			err = p.stop(ctx)
-			if err != nil {
-				return backoff.Permanent(errors.Trace(err))
-			}
-			return backoff.Permanent(errors.Trace(model.ErrAdminStopProcessor))
-		}
-
-		p.handleTables(ctx, oldStatus, p.status, p.position.CheckPointTs)
-		syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
-
 		err = p.tsRWriter.WriteInfoIntoStorage(ctx)
 		switch errors.Cause(err) {
 		case model.ErrWriteTsConflict:
@@ -765,7 +763,7 @@ func schemaDiffKey(schemaVersion int64) []byte {
 	return codec.EncodeUint(ek, uint64(StringData))
 }
 
-func createTsRWriter(cli *clientv3.Client, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
+func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
 	return storage.NewProcessorTsEtcdRWriter(cli, changefeedID, captureID)
 }
 
@@ -845,7 +843,7 @@ func (p *processor) stop(ctx context.Context) error {
 		tbl.puller.Cancel()
 	}
 	p.tablesMu.Unlock()
-	return errors.Trace(kv.DeleteTaskStatus(ctx, p.etcdCli, p.changefeedID, p.captureID))
+	return errors.Trace(p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID))
 }
 
 func newMounter(schema *schema.Storage) mounter {

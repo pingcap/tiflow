@@ -43,7 +43,7 @@ var cliCmd = &cobra.Command{
 	Short: "simulate client to create changefeed",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cli, err := clientv3.New(clientv3.Config{
+		etcdCli, err := clientv3.New(clientv3.Config{
 			Endpoints:   []string{pdAddress},
 			DialTimeout: 5 * time.Second,
 			DialOptions: []grpc.DialOption{
@@ -61,6 +61,7 @@ var cliCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		cli := kv.NewCDCEtcdClient(etcdCli)
 		pdCli, err := pd.NewClient([]string{pdAddress}, pd.SecurityOption{})
 		if err != nil {
 			return err
@@ -94,7 +95,7 @@ var cliCmd = &cobra.Command{
 			return err
 		}
 		fmt.Printf("create changefeed ID: %s detail %s\n", id, d)
-		return kv.SaveChangeFeedInfo(context.Background(), cli, detail, id)
+		return cli.SaveChangeFeedInfo(context.Background(), detail, id)
 	},
 }
 

@@ -29,6 +29,8 @@ const (
 	EtcdKeyBase = "/tidb/cdc"
 	// CaptureOwnerKey is the capture owner path that is saved to etcd
 	CaptureOwnerKey = EtcdKeyBase + "/capture/owner"
+	// CaptureInfoKeyPrefix is the capture info path that is saved to etcd
+	CaptureInfoKeyPrefix = EtcdKeyBase + "/capture/info"
 )
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
@@ -66,22 +68,32 @@ func GetEtcdKeyTaskPosition(changefeedID, captureID string) string {
 	return fmt.Sprintf("%s/%s", GetEtcdKeyTaskPositionList(changefeedID), captureID)
 }
 
-// GetEtcdKeyCaptureList returns the prefix key of all capture info
-func GetEtcdKeyCaptureList() string {
-	return EtcdKeyBase + "/capture/info"
+// GetEtcdKeyCaptureInfo returns the key of a capture info
+func GetEtcdKeyCaptureInfo(id string) string {
+	return CaptureInfoKeyPrefix + "/" + id
+}
+
+// CDCEtcdClient is a wrap of etcd client
+type CDCEtcdClient struct {
+	Client *clientv3.Client
+}
+
+//NewCDCEtcdClient returns a new CDCEtcdClient
+func NewCDCEtcdClient(cli *clientv3.Client) CDCEtcdClient {
+	return CDCEtcdClient{Client: cli}
 }
 
 // ClearAllCDCInfo delete all keys created by CDC
-func ClearAllCDCInfo(ctx context.Context, cli *clientv3.Client) error {
-	_, err := cli.Delete(ctx, EtcdKeyBase, clientv3.WithPrefix())
+func (c CDCEtcdClient) ClearAllCDCInfo(ctx context.Context) error {
+	_, err := c.Client.Delete(ctx, EtcdKeyBase, clientv3.WithPrefix())
 	return errors.Trace(err)
 }
 
 // GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
-func GetChangeFeeds(ctx context.Context, cli *clientv3.Client, opts ...clientv3.OpOption) (int64, map[string]*mvccpb.KeyValue, error) {
+func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context, opts ...clientv3.OpOption) (int64, map[string]*mvccpb.KeyValue, error) {
 	key := GetEtcdKeyChangeFeedList()
 
-	resp, err := cli.Get(ctx, key, clientv3.WithPrefix())
+	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
 		return 0, nil, errors.Trace(err)
 	}
@@ -98,9 +110,9 @@ func GetChangeFeeds(ctx context.Context, cli *clientv3.Client, opts ...clientv3.
 }
 
 // GetChangeFeedInfo queries the config of a given changefeed
-func GetChangeFeedInfo(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) (*model.ChangeFeedInfo, error) {
+func (c CDCEtcdClient) GetChangeFeedInfo(ctx context.Context, id string, opts ...clientv3.OpOption) (*model.ChangeFeedInfo, error) {
 	key := GetEtcdKeyChangeFeedInfo(id)
-	resp, err := cli.Get(ctx, key, opts...)
+	resp, err := c.Client.Get(ctx, key, opts...)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -113,16 +125,16 @@ func GetChangeFeedInfo(ctx context.Context, cli *clientv3.Client, id string, opt
 }
 
 // DeleteChangeFeedInfo deletes a changefeed config from etcd
-func DeleteChangeFeedInfo(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) error {
+func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context, id string, opts ...clientv3.OpOption) error {
 	key := GetEtcdKeyChangeFeedInfo(id)
-	_, err := cli.Delete(ctx, key, opts...)
+	_, err := c.Client.Delete(ctx, key, opts...)
 	return errors.Trace(err)
 }
 
 // GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
-func GetChangeFeedStatus(ctx context.Context, cli *clientv3.Client, id string, opts ...clientv3.OpOption) (*model.ChangeFeedStatus, error) {
+func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string, opts ...clientv3.OpOption) (*model.ChangeFeedStatus, error) {
 	key := GetEtcdKeyChangeFeedStatus(id)
-	resp, err := cli.Get(ctx, key, opts...)
+	resp, err := c.Client.Get(ctx, key, opts...)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -135,10 +147,10 @@ func GetChangeFeedStatus(ctx context.Context, cli *clientv3.Client, id string, o
 }
 
 // GetCaptures returns kv revision and CaptureInfo list
-func GetCaptures(ctx context.Context, cli *clientv3.Client, opts ...clientv3.OpOption) (int64, []*model.CaptureInfo, error) {
-	key := GetEtcdKeyCaptureList()
+func (c CDCEtcdClient) GetCaptures(ctx context.Context, opts ...clientv3.OpOption) (int64, []*model.CaptureInfo, error) {
+	key := CaptureInfoKeyPrefix
 
-	resp, err := cli.Get(ctx, key, clientv3.WithPrefix())
+	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
 		return 0, nil, errors.Trace(err)
 	}
@@ -157,21 +169,21 @@ func GetCaptures(ctx context.Context, cli *clientv3.Client, opts ...clientv3.OpO
 
 // SaveChangeFeedInfo stores change feed info into etcd
 // TODO: this should be called from outer system, such as from a TiDB client
-func SaveChangeFeedInfo(ctx context.Context, client *clientv3.Client, info *model.ChangeFeedInfo, changeFeedID string) error {
+func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context, info *model.ChangeFeedInfo, changeFeedID string) error {
 	key := GetEtcdKeyChangeFeedInfo(changeFeedID)
 	value, err := info.Marshal()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = client.Put(ctx, key, value)
+	_, err = c.Client.Put(ctx, key, value)
 	return errors.Trace(err)
 }
 
 // GetAllTaskPositions queries all task positions of a changefeed, and returns a map
 // mapping from captureID to TaskPositions
-func GetAllTaskPositions(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (map[string]*model.TaskPosition, error) {
+func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID string, opts ...clientv3.OpOption) (map[string]*model.TaskPosition, error) {
 	key := GetEtcdKeyTaskPositionList(changefeedID)
-	resp, err := client.Get(ctx, key, append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)...)
+	resp, err := c.Client.Get(ctx, key, append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)...)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -193,9 +205,9 @@ func GetAllTaskPositions(ctx context.Context, client *clientv3.Client, changefee
 
 // GetAllTaskStatus queries all task status of a changefeed, and returns a map
 // mapping from captureID to TaskStatus
-func GetAllTaskStatus(ctx context.Context, client *clientv3.Client, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
+func (c CDCEtcdClient) GetAllTaskStatus(ctx context.Context, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
 	key := GetEtcdKeyTaskStatusList(changefeedID)
-	resp, err := client.Get(ctx, key, append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)...)
+	resp, err := c.Client.Get(ctx, key, append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)...)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -220,15 +232,14 @@ func GetAllTaskStatus(ctx context.Context, client *clientv3.Client, changefeedID
 //  - ModRevision of the given key
 //  - *model.TaskStatus unmarshaled from the value
 //  - error if error happens
-func GetTaskStatus(
+func (c CDCEtcdClient) GetTaskStatus(
 	ctx context.Context,
-	client *clientv3.Client,
 	changefeedID string,
 	captureID string,
 	opts ...clientv3.OpOption,
 ) (int64, *model.TaskStatus, error) {
 	key := GetEtcdKeyTaskStatus(changefeedID, captureID)
-	resp, err := client.Get(ctx, key, opts...)
+	resp, err := c.Client.Get(ctx, key, opts...)
 	if err != nil {
 		return 0, nil, errors.Trace(err)
 	}
@@ -241,9 +252,8 @@ func GetTaskStatus(
 }
 
 // PutTaskStatus puts task status into etcd.
-func PutTaskStatus(
+func (c CDCEtcdClient) PutTaskStatus(
 	ctx context.Context,
-	client *clientv3.Client,
 	changefeedID string,
 	captureID string,
 	info *model.TaskStatus,
@@ -256,7 +266,7 @@ func PutTaskStatus(
 
 	key := GetEtcdKeyTaskStatus(changefeedID, captureID)
 
-	_, err = client.Put(ctx, key, data)
+	_, err = c.Client.Put(ctx, key, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -268,15 +278,14 @@ func PutTaskStatus(
 //  - ModRevision of the given key
 //  - *model.TaskPosition unmarshaled from the value
 //  - error if error happens
-func GetTaskPosition(
+func (c CDCEtcdClient) GetTaskPosition(
 	ctx context.Context,
-	client *clientv3.Client,
 	changefeedID string,
 	captureID string,
 	opts ...clientv3.OpOption,
 ) (int64, *model.TaskPosition, error) {
 	key := GetEtcdKeyTaskPosition(changefeedID, captureID)
-	resp, err := client.Get(ctx, key, opts...)
+	resp, err := c.Client.Get(ctx, key, opts...)
 	if err != nil {
 		return 0, nil, errors.Trace(err)
 	}
@@ -289,9 +298,8 @@ func GetTaskPosition(
 }
 
 // PutTaskPosition puts task process into etcd.
-func PutTaskPosition(
+func (c CDCEtcdClient) PutTaskPosition(
 	ctx context.Context,
-	client *clientv3.Client,
 	changefeedID string,
 	captureID string,
 	info *model.TaskPosition,
@@ -304,7 +312,7 @@ func PutTaskPosition(
 
 	key := GetEtcdKeyTaskPosition(changefeedID, captureID)
 
-	_, err = client.Put(ctx, key, data)
+	_, err = c.Client.Put(ctx, key, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -313,16 +321,15 @@ func PutTaskPosition(
 }
 
 // DeleteTaskPosition remove task position from etcd
-func DeleteTaskPosition(ctx context.Context, client *clientv3.Client, changefeedID string, captureID string) error {
+func (c CDCEtcdClient) DeleteTaskPosition(ctx context.Context, changefeedID string, captureID string) error {
 	key := GetEtcdKeyTaskPosition(changefeedID, captureID)
-	_, err := client.Delete(ctx, key)
+	_, err := c.Client.Delete(ctx, key)
 	return errors.Trace(err)
 }
 
 // PutChangeFeedStatus puts changefeed synchronization status into etcd
-func PutChangeFeedStatus(
+func (c CDCEtcdClient) PutChangeFeedStatus(
 	ctx context.Context,
-	client *clientv3.Client,
 	changefeedID string,
 	status *model.ChangeFeedStatus,
 	opts ...clientv3.OpOption,
@@ -332,19 +339,60 @@ func PutChangeFeedStatus(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = client.Put(ctx, key, value, opts...)
+	_, err = c.Client.Put(ctx, key, value, opts...)
 	return errors.Trace(err)
 }
 
 // DeleteTaskStatus deletes task status from etcd
-func DeleteTaskStatus(
+func (c CDCEtcdClient) DeleteTaskStatus(
 	ctx context.Context,
-	cli *clientv3.Client,
 	cfID string,
 	captureID string,
 	opts ...clientv3.OpOption,
 ) error {
 	key := GetEtcdKeyTaskStatus(cfID, captureID)
-	_, err := cli.Delete(ctx, key)
+	_, err := c.Client.Delete(ctx, key)
 	return errors.Trace(err)
+}
+
+// PutCaptureInfo put capture info into etcd.
+func (c CDCEtcdClient) PutCaptureInfo(ctx context.Context, info *model.CaptureInfo, opts ...clientv3.OpOption) error {
+	data, err := info.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	key := GetEtcdKeyCaptureInfo(info.ID)
+	_, err = c.Client.Put(ctx, key, string(data), opts...)
+	return errors.Trace(err)
+}
+
+// DeleteCaptureInfo delete capture info from etcd.
+func (c CDCEtcdClient) DeleteCaptureInfo(ctx context.Context, id string, opts ...clientv3.OpOption) error {
+	key := GetEtcdKeyCaptureInfo(id)
+	_, err := c.Client.Delete(ctx, key, opts...)
+	return errors.Trace(err)
+}
+
+// GetCaptureInfo get capture info from etcd.
+// return errCaptureNotExist if the capture not exists.
+func (c CDCEtcdClient) GetCaptureInfo(ctx context.Context, id string, opts ...clientv3.OpOption) (info *model.CaptureInfo, err error) {
+	key := GetEtcdKeyCaptureInfo(id)
+
+	resp, err := c.Client.Get(ctx, key, opts...)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if len(resp.Kvs) == 0 {
+		return nil, model.ErrCaptureNotExist
+	}
+
+	info = new(model.CaptureInfo)
+	err = info.Unmarshal(resp.Kvs[0].Value)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return
 }
