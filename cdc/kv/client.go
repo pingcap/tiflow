@@ -360,17 +360,17 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 func (c *CDCClient) singleEventFeed(
 	ctx context.Context,
 	span util.Span,
-	checkpoint uint64,
+	checkpointTs uint64,
 	region *metapb.Region,
 	eventCh chan<- *model.RegionFeedEvent,
-) (checkpointTs uint64, err error) {
+) (uint64, error) {
 	req := &cdcpb.ChangeDataRequest{
 		Header: &cdcpb.Header{
 			ClusterId: c.clusterID,
 		},
 		RegionId:     region.GetId(),
 		RegionEpoch:  region.RegionEpoch,
-		CheckpointTs: checkpoint,
+		CheckpointTs: checkpointTs,
 		StartKey:     span.Start,
 		EndKey:       span.End,
 	}
@@ -398,7 +398,7 @@ func (c *CDCClient) singleEventFeed(
 			return
 		}
 
-		// emit a checkpoint
+		// emit a checkpointTs
 		revent := &model.RegionFeedEvent{
 			Resolved: &model.ResolvedSpan{
 				Span:       span,
@@ -522,7 +522,7 @@ func (c *CDCClient) singleEventFeed(
 				if atomic.LoadUint32(&initialized) == 0 {
 					continue
 				}
-				// emit a checkpoint
+				// emit a checkpointTs
 				revent := &model.RegionFeedEvent{
 					Resolved: &model.ResolvedSpan{
 						Span:       span,
