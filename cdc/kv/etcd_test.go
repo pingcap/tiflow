@@ -15,6 +15,7 @@ package kv
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"time"
 
@@ -201,4 +202,50 @@ func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
 
 	_, err = s.client.GetChangeFeedInfo(ctx, cfID)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
+}
+
+func (s *etcdSuite) TestPutAllChangeFeedStatus(c *check.C) {
+	var (
+		status1 = &model.ChangeFeedStatus{
+			ResolvedTs:   2200,
+			CheckpointTs: 2000,
+		}
+		status2 = &model.ChangeFeedStatus{
+			ResolvedTs:   2600,
+			CheckpointTs: 2500,
+		}
+		err error
+	)
+	largeTxnInfo := make(map[string]*model.ChangeFeedStatus, embed.DefaultMaxTxnOps+1)
+	for i := 0; i < int(embed.DefaultMaxTxnOps)+1; i++ {
+		changefeedID := fmt.Sprintf("changefeed%d", i+1)
+		largeTxnInfo[changefeedID] = status1
+	}
+	testCases := []struct {
+		infos map[model.ChangeFeedID]*model.ChangeFeedStatus
+	}{
+		{infos: nil},
+		{infos: map[string]*model.ChangeFeedStatus{"changefeed1": status1}},
+		{infos: map[string]*model.ChangeFeedStatus{"changefeed1": status1, "changefeed2": status2}},
+		{infos: largeTxnInfo},
+	}
+
+	for _, tc := range testCases {
+		for changefeedID := range tc.infos {
+			_, err = s.client.Client.Delete(context.Background(), GetEtcdKeyChangeFeedStatus(changefeedID))
+			c.Assert(err, check.IsNil)
+		}
+
+		err = s.client.PutAllChangeFeedStatus(context.Background(), tc.infos)
+		c.Assert(err, check.IsNil)
+
+		for changefeedID, info := range tc.infos {
+			resp, err := s.client.Client.Get(context.Background(), GetEtcdKeyChangeFeedStatus(changefeedID))
+			c.Assert(err, check.IsNil)
+			c.Assert(resp.Count, check.Equals, int64(1))
+			infoStr, err := info.Marshal()
+			c.Assert(err, check.IsNil)
+			c.Assert(string(resp.Kvs[0].Value), check.Equals, infoStr)
+		}
+	}
 }

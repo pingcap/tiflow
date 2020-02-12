@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"go.etcd.io/etcd/mvcc/mvccpb"
+
 	"github.com/google/uuid"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -85,36 +87,57 @@ func (h *handlerForPrueDMLTest) Close() error {
 
 var _ ChangeFeedRWriter = &handlerForPrueDMLTest{}
 
-// Read implements ChangeFeedRWriter interface.
-func (h *handlerForPrueDMLTest) Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]*model.ChangeFeedStatus, map[model.ChangeFeedID]model.ProcessorsInfos, map[model.ChangeFeedID]map[string]*model.TaskPosition, error) {
+func (h *handlerForPrueDMLTest) GetChangeFeeds(ctx context.Context) (int64, map[string]*mvccpb.KeyValue, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	cfInfo := &model.ChangeFeedInfo{
+		TargetTs: 100,
+	}
+	cfInfoJSON, err := cfInfo.Marshal()
+	h.c.Assert(err, check.IsNil)
+	rawKV := &mvccpb.KeyValue{
+		Value: []byte(cfInfoJSON),
+	}
+	return 0, map[model.ChangeFeedID]*mvccpb.KeyValue{
+		"test_change_feed": rawKV,
+	}, nil
+}
+
+func (h *handlerForPrueDMLTest) GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
+	if changefeedID != "test_change_feed" {
+		return nil, model.ErrTaskStatusNotExists
+	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	h.index++
-	return map[model.ChangeFeedID]*model.ChangeFeedInfo{
-			"test_change_feed": {
-				TargetTs: 100,
-			},
-		},
-		map[model.ChangeFeedID]*model.ChangeFeedStatus{},
-		map[model.ChangeFeedID]model.ProcessorsInfos{
-			"test_change_feed": {
-				"capture_1": {},
-				"capture_2": {},
-			},
-		}, map[model.ChangeFeedID]map[string]*model.TaskPosition{
-			"test_change_feed": {
-				"capture_1": {
-					ResolvedTs: h.resolvedTs1[h.index],
-				},
-				"capture_2": {
-					ResolvedTs: h.resolvedTs2[h.index],
-				},
-			},
-		}, nil
+	return model.ProcessorsInfos{
+		"capture_1": {},
+		"capture_2": {},
+	}, nil
 }
 
-// Read implements ChangeFeedRWriter interface.
-func (h *handlerForPrueDMLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
+func (h *handlerForPrueDMLTest) GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error) {
+	if changefeedID != "test_change_feed" {
+		return nil, model.ErrTaskStatusNotExists
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	h.index++
+	return map[string]*model.TaskPosition{
+		"capture_1": {
+			ResolvedTs: h.resolvedTs1[h.index],
+		},
+		"capture_2": {
+			ResolvedTs: h.resolvedTs2[h.index],
+		},
+	}, nil
+}
+
+func (h *handlerForPrueDMLTest) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error) {
+	return nil, model.ErrChangeFeedNotExists
+}
+
+func (h *handlerForPrueDMLTest) PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	info, exist := infos["test_change_feed"]
@@ -218,38 +241,63 @@ func (h *handlerForDDLTest) Close() error {
 	return nil
 }
 
-func (h *handlerForDDLTest) Read(ctx context.Context) (map[model.CaptureID]*model.ChangeFeedInfo, map[model.CaptureID]*model.ChangeFeedStatus, map[model.ChangeFeedID]model.ProcessorsInfos, map[model.ChangeFeedID]map[string]*model.TaskPosition, error) {
+func (h *handlerForDDLTest) GetChangeFeeds(ctx context.Context) (int64, map[string]*mvccpb.KeyValue, error) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	cfInfo := &model.ChangeFeedInfo{
+		TargetTs: 100,
+	}
+	cfInfoJSON, err := cfInfo.Marshal()
+	h.c.Assert(err, check.IsNil)
+	rawKV := &mvccpb.KeyValue{
+		Value: []byte(cfInfoJSON),
+	}
+	return 0, map[model.ChangeFeedID]*mvccpb.KeyValue{
+		"test_change_feed": rawKV,
+	}, nil
+}
+
+func (h *handlerForDDLTest) GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
+	if changefeedID != "test_change_feed" {
+		return nil, model.ErrTaskStatusNotExists
+	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if h.dmlIndex < len(h.resolvedTs1)-1 {
 		h.dmlIndex++
 	}
-	return map[model.ChangeFeedID]*model.ChangeFeedInfo{
-			"test_change_feed": {
-				TargetTs: 100,
-			},
-		},
-		map[model.ChangeFeedID]*model.ChangeFeedStatus{},
-		map[model.ChangeFeedID]model.ProcessorsInfos{
-			"test_change_feed": {
-				"capture_1": {},
-				"capture_2": {},
-			},
-		}, map[model.ChangeFeedID]map[string]*model.TaskPosition{
-			"test_change_feed": {
-				"capture_1": {
-					ResolvedTs:   h.resolvedTs1[h.dmlIndex],
-					CheckPointTs: h.currentGlobalResolvedTs,
-				},
-				"capture_2": {
-					ResolvedTs:   h.resolvedTs2[h.dmlIndex],
-					CheckPointTs: h.currentGlobalResolvedTs,
-				},
-			},
-		}, nil
+	return model.ProcessorsInfos{
+		"capture_1": {},
+		"capture_2": {},
+	}, nil
 }
 
-func (h *handlerForDDLTest) Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
+func (h *handlerForDDLTest) GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error) {
+	if changefeedID != "test_change_feed" {
+		return nil, model.ErrTaskStatusNotExists
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.dmlIndex < len(h.resolvedTs1)-1 {
+		h.dmlIndex++
+	}
+	return map[string]*model.TaskPosition{
+		"capture_1": {
+			ResolvedTs:   h.resolvedTs1[h.dmlIndex],
+			CheckPointTs: h.currentGlobalResolvedTs,
+		},
+		"capture_2": {
+			ResolvedTs:   h.resolvedTs2[h.dmlIndex],
+			CheckPointTs: h.currentGlobalResolvedTs,
+		},
+	}, nil
+}
+
+func (h *handlerForDDLTest) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error) {
+	return nil, model.ErrChangeFeedNotExists
+}
+
+func (h *handlerForDDLTest) PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.dmlExpectIndex++
@@ -394,7 +442,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		cancelWatchCapture: cancel,
 		manager:            manager,
 		etcdClient:         s.client,
-		cfRWriter:          storage.NewChangeFeedEtcdRWriter(s.client),
+		cfRWriter:          s.client,
 	}
 	owner.changeFeeds = map[model.ChangeFeedID]*changeFeed{cfID: sampleCF}
 	for cid, pinfo := range sampleCF.taskPositions {
