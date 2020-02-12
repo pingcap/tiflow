@@ -48,6 +48,10 @@ func (s *mockTsRWriter) ReadGlobalResolvedTs(ctx context.Context) (uint64, error
 	return s.globalResolvedTs, nil
 }
 
+func (s *mockTsRWriter) WritePosition(ctx context.Context, taskPosition *model.TaskPosition) error {
+	return nil
+}
+
 // GetTaskStatus implement ProcessorTsRWriter interface.
 func (s *mockTsRWriter) GetTaskStatus() *model.TaskStatus {
 	return s.memInfo
@@ -60,14 +64,11 @@ func (s *mockTsRWriter) WriteInfoIntoStorage(ctx context.Context) error {
 }
 
 // UpdateInfo implement ProcessorTsRWriter interface.
-func (s *mockTsRWriter) UpdateInfo(ctx context.Context) (oldInfo *model.TaskStatus, newInfo *model.TaskStatus, err error) {
-	oldInfo = s.memInfo
-	newInfo = s.storageInfo
-
+func (s *mockTsRWriter) UpdateInfo(ctx context.Context) (bool, error) {
 	s.memInfo = s.storageInfo
 	s.storageInfo = s.memInfo.Clone()
 
-	return
+	return true, nil
 }
 
 func (s *mockTsRWriter) SetGlobalResolvedTs(ts uint64) {

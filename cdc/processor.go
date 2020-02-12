@@ -159,7 +159,8 @@ type processor struct {
 	resolvedTxns chan model.RawTxn
 	executedTxns chan model.RawTxn
 
-	status *model.TaskStatus
+	status   *model.TaskStatus
+	position *model.TaskPosition
 
 	tablesMu sync.Mutex
 	tables   map[int64]*tableInfo
@@ -250,6 +251,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 
 		tsRWriter:    tsRWriter,
 		status:       tsRWriter.GetTaskStatus(),
+		position:     &model.TaskPosition{},
 		resolvedTxns: make(chan model.RawTxn, 1),
 		executedTxns: make(chan model.RawTxn, 1),
 		ddlJobsCh:    make(chan model.RawTxn, 16),
@@ -359,7 +361,7 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 				}
 			}
 			p.tablesMu.Unlock()
-			p.status.ResolvedTs = minResolvedTs
+			p.position.ResolvedTs = minResolvedTs
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case e, ok := <-p.executedTxns:
 			if !ok {
@@ -367,7 +369,7 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 				return nil
 			}
 			if e.IsResolved {
-				p.status.CheckPointTs = e.Ts
+				p.position.CheckPointTs = e.Ts
 				checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(e.Ts)))
 			}
 		case <-updateInfoTick.C:
@@ -388,42 +390,41 @@ func (p *processor) localResolvedWorker(ctx context.Context) error {
 }
 
 func (p *processor) updateInfo(ctx context.Context) error {
-	err := p.tsRWriter.WriteInfoIntoStorage(ctx)
-
-	switch errors.Cause(err) {
-	case model.ErrWriteTsConflict:
-		oldInfo, _, err := p.tsRWriter.UpdateInfo(ctx)
+	err := p.tsRWriter.WritePosition(ctx, p.position)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	statusChanged, err := p.tsRWriter.UpdateInfo(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !statusChanged {
+		return nil
+	}
+	oldStatus := p.status
+	p.status = p.tsRWriter.GetTaskStatus()
+	if p.status.AdminJobType == model.AdminStop || p.status.AdminJobType == model.AdminRemove {
+		err = p.stop(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
-
-		p.status = p.tsRWriter.GetTaskStatus()
-
-		if p.status.AdminJobType == model.AdminStop || p.status.AdminJobType == model.AdminRemove {
-			err = p.stop(ctx)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			return errors.Trace(model.ErrAdminStopProcessor)
-		}
-
-		p.handleTables(ctx, oldInfo, p.status, oldInfo.CheckPointTs)
-		syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
-
-		if len(oldInfo.TableInfos) > len(p.status.TableInfos) {
-			// some table is removed, we will not both remove and add table in one operation.
-			// keep CheckpointTs and ResolvedTs as the old in memory cache one.
-			p.status.CheckPointTs = oldInfo.CheckPointTs
-			p.status.ResolvedTs = oldInfo.ResolvedTs
-		}
-
-		log.Info("update task status", zap.Stringer("status", p.status))
-		return nil
-	case nil:
-		return nil
-	default:
-		return errors.Trace(err)
+		return errors.Trace(model.ErrAdminStopProcessor)
 	}
+	p.handleTables(ctx, oldStatus, p.status, p.position.CheckPointTs)
+	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
+
+	return retry.Run(func() error {
+		err = p.tsRWriter.WriteInfoIntoStorage(ctx)
+		switch errors.Cause(err) {
+		case model.ErrWriteTsConflict:
+			return errors.Trace(err)
+		case nil:
+			log.Info("update task status", zap.Stringer("status", p.status))
+			return nil
+		default:
+			return backoff.Permanent(errors.Trace(err))
+		}
+	}, 5)
 }
 
 func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed, added []*model.ProcessTableInfo) {

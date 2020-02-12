@@ -60,7 +60,7 @@ type OwnerDDLHandler interface {
 // ChangeFeedRWriter defines the Reader and Writer for changeFeed
 type ChangeFeedRWriter interface {
 	// Read the changefeed info from storage such as etcd.
-	Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]*model.ChangeFeedStatus, map[model.ChangeFeedID]model.ProcessorsInfos, error)
+	Read(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, map[model.ChangeFeedID]*model.ChangeFeedStatus, map[model.ChangeFeedID]model.ProcessorsInfos, map[model.ChangeFeedID]map[model.CaptureID]*model.TaskPosition, error)
 	// Write the changefeed info to storage such as etcd.
 	Write(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error
 }
@@ -73,7 +73,8 @@ type changeFeed struct {
 	schema                  *schema.Storage
 	ddlState                model.ChangeFeedDDLState
 	targetTs                uint64
-	processorInfos          model.ProcessorsInfos
+	taskStatus              model.ProcessorsInfos
+	taskPositions           map[string]*model.TaskPosition
 	processorLastUpdateTime map[string]time.Time
 	filter                  *txnFilter
 
@@ -93,7 +94,7 @@ type changeFeed struct {
 func (c *changeFeed) String() string {
 	format := "{\n ID: %s\n info: %+v\n status: %+v\n State: %v\n ProcessorInfos: %+v\n tables: %+v\n orphanTables: %+v\n toCleanTables: %v\n ddlResolvedTs: %d\n ddlJobHistory: %+v\n}\n\n"
 	s := fmt.Sprintf(format,
-		c.id, c.info, c.status, c.ddlState, c.processorInfos, c.tables,
+		c.id, c.info, c.status, c.ddlState, c.taskStatus, c.tables,
 		c.orphanTables, c.toCleanTables, c.ddlResolvedTs, c.ddlJobHistory)
 
 	if len(c.ddlJobHistory) > 0 {
@@ -104,20 +105,21 @@ func (c *changeFeed) String() string {
 	return s
 }
 
-func (c *changeFeed) updateProcessorInfos(processInfos model.ProcessorsInfos) {
-	for cid, pinfo := range processInfos {
+func (c *changeFeed) updateProcessorInfos(processInfos model.ProcessorsInfos, positions map[string]*model.TaskPosition) {
+	for cid, position := range positions {
 		if _, ok := c.processorLastUpdateTime[cid]; !ok {
 			c.processorLastUpdateTime[cid] = time.Now()
 			continue
 		}
 
-		oldPinfo, ok := c.processorInfos[cid]
-		if !ok || oldPinfo.ResolvedTs != pinfo.ResolvedTs || oldPinfo.CheckPointTs != pinfo.CheckPointTs {
+		oldPosition, ok := c.taskPositions[cid]
+		if !ok || oldPosition.ResolvedTs != position.ResolvedTs || oldPosition.CheckPointTs != position.CheckPointTs {
 			c.processorLastUpdateTime[cid] = time.Now()
 		}
 	}
 
-	c.processorInfos = processInfos
+	c.taskStatus = processInfos
+	c.taskPositions = positions
 }
 
 func (c *changeFeed) addSchema(schemaID uint64) {
@@ -189,7 +191,7 @@ func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo
 
 	for id := range captures {
 		// We have not dispatch any table to this capture yet.
-		if _, ok := c.processorInfos[id]; !ok {
+		if _, ok := c.taskStatus[id]; !ok {
 			return id
 		}
 	}
@@ -197,7 +199,7 @@ func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo
 	var minCount int = math.MaxInt64
 	var minID string
 
-	for id, pinfo := range c.processorInfos {
+	for id, pinfo := range c.taskStatus {
 		if len(pinfo.TableInfos) < minCount {
 			minID = id
 			minCount = len(pinfo.TableInfos)
@@ -213,7 +215,7 @@ func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.
 }
 
 func (c *changeFeed) restoreTableInfos(infoSnapshot *model.TaskStatus, captureID string) {
-	c.processorInfos[captureID].TableInfos = infoSnapshot.TableInfos
+	c.taskStatus[captureID].TableInfos = infoSnapshot.TableInfos
 }
 
 func (c *changeFeed) cleanTables(ctx context.Context) {
@@ -221,7 +223,7 @@ func (c *changeFeed) cleanTables(ctx context.Context) {
 
 cleanLoop:
 	for id := range c.toCleanTables {
-		captureID, taskStatus, ok := findTaskStatusWithTable(c.processorInfos, id)
+		captureID, taskStatus, ok := findTaskStatusWithTable(c.taskStatus, id)
 		if !ok {
 			log.Warn("ignore clean table id", zap.Uint64("id", id))
 			cleanIDs = append(cleanIDs, id)
@@ -233,7 +235,7 @@ cleanLoop:
 
 		newInfo, err := c.infoWriter.Write(ctx, c.id, captureID, taskStatus, true)
 		if err == nil {
-			c.processorInfos[captureID] = newInfo
+			c.taskStatus[captureID] = newInfo
 		}
 		switch errors.Cause(err) {
 		case model.ErrFindPLockNotCommit:
@@ -282,7 +284,7 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 			return
 		}
 
-		info := c.processorInfos[captureID]
+		info := c.taskStatus[captureID]
 		if info == nil {
 			info = new(model.TaskStatus)
 		}
@@ -294,7 +296,7 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 
 		newInfo, err := c.infoWriter.Write(ctx, c.id, captureID, info, false)
 		if err == nil {
-			c.processorInfos[captureID] = newInfo
+			c.taskStatus[captureID] = newInfo
 		}
 		switch errors.Cause(err) {
 		case model.ErrFindPLockNotCommit:
@@ -437,6 +439,16 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 			remainProcs = append(remainProcs, snap)
 			continue
 		}
+		err = o.etcdClient.DeleteTaskPosition(ctx, snap.CfID, snap.CaptureID)
+		if err != nil {
+			log.Warn("failed to delete task position",
+				zap.String("changefeedID", snap.CfID),
+				zap.String("captureID", snap.CaptureID),
+				zap.Error(err),
+			)
+			remainProcs = append(remainProcs, snap)
+			continue
+		}
 		deletedCapture[snap.CaptureID] = struct{}{}
 	}
 	o.markDownProcessor = remainProcs
@@ -456,7 +468,11 @@ func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 	delete(o.captures, info.ID)
 
 	for _, feed := range o.changeFeeds {
-		pinfo, ok := feed.processorInfos[info.ID]
+		pinfo, ok := feed.taskStatus[info.ID]
+		if !ok {
+			continue
+		}
+		pos, ok := feed.taskPositions[info.ID]
 		if !ok {
 			continue
 		}
@@ -464,14 +480,18 @@ func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 		for _, table := range pinfo.TableInfos {
 			feed.orphanTables[table.ID] = model.ProcessTableInfo{
 				ID:      table.ID,
-				StartTs: pinfo.CheckPointTs,
+				StartTs: pos.CheckPointTs,
 			}
 		}
 
-		key := kv.GetEtcdKeyTask(feed.id, info.ID)
-		if _, err := o.etcdClient.Client.Delete(context.Background(), key); err != nil {
-			log.Warn("failed to delete key", zap.Error(err))
+		ctx := context.TODO()
+		if err := o.etcdClient.DeleteTaskStatus(ctx, feed.id, info.ID); err != nil {
+			log.Warn("failed to delete task status", zap.Error(err))
 		}
+		if err := o.etcdClient.DeleteTaskPosition(ctx, feed.id, info.ID); err != nil {
+			log.Warn("failed to delete task position", zap.Error(err))
+		}
+
 	}
 }
 
@@ -505,7 +525,7 @@ func (o *ownerImpl) handleWatchCapture() error {
 	return nil
 }
 
-func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.ProcessorsInfos, info *model.ChangeFeedInfo, checkpointTs uint64) (*changeFeed, error) {
+func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.ProcessorsInfos, taskPositions map[string]*model.TaskPosition, info *model.ChangeFeedInfo, checkpointTs uint64) (*changeFeed, error) {
 	log.Info("Find new changefeed", zap.Reflect("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
@@ -522,9 +542,16 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 	ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
 
 	existingTables := make(map[uint64]uint64)
-	for _, taskStatus := range processorsInfos {
+	for captureID, taskStatus := range processorsInfos {
+		var checkpointTs uint64
+		if pos, exist := taskPositions[captureID]; exist {
+			checkpointTs = pos.CheckPointTs
+		}
 		for _, tbl := range taskStatus.TableInfos {
-			existingTables[tbl.ID] = taskStatus.CheckPointTs
+			if tbl.StartTs > checkpointTs {
+				checkpointTs = tbl.StartTs
+			}
+			existingTables[tbl.ID] = checkpointTs
 		}
 	}
 
@@ -577,28 +604,38 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
 		},
-		ddlState:       model.ChangeFeedSyncDML,
-		targetTs:       info.GetTargetTs(),
-		processorInfos: processorsInfos,
-		infoWriter:     storage.NewOwnerTaskStatusEtcdWriter(o.etcdClient),
-		filter:         filter,
+		ddlState:      model.ChangeFeedSyncDML,
+		targetTs:      info.GetTargetTs(),
+		taskStatus:    processorsInfos,
+		taskPositions: taskPositions,
+		infoWriter:    storage.NewOwnerTaskStatusEtcdWriter(o.etcdClient),
+		filter:        filter,
 	}
 	return cf, nil
 }
 
 func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
-	cfInfo, cfStatus, pinfos, err := o.cfRWriter.Read(ctx)
+	cfInfo, cfStatus, pinfos, positions, err := o.cfRWriter.Read(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	for changeFeedID, procInfos := range pinfos {
 		if cf, exist := o.changeFeeds[changeFeedID]; exist {
-			cf.updateProcessorInfos(procInfos)
-			for id, info := range cf.processorInfos {
-				lastUpdateTime := cf.processorLastUpdateTime[id]
+			taskPos := positions[changeFeedID]
+			cf.updateProcessorInfos(procInfos, taskPos)
+			for id, info := range cf.taskStatus {
+				lastUpdateTime, exist := cf.processorLastUpdateTime[id]
+				if !exist {
+					lastUpdateTime = time.Now()
+					cf.processorLastUpdateTime[id] = lastUpdateTime
+				}
 				if time.Since(lastUpdateTime) > markProcessorDownTime {
-					snap := info.Snapshot(changeFeedID, id)
+					var checkpointTs uint64
+					if pos, exist := taskPos[id]; exist {
+						checkpointTs = pos.CheckPointTs
+					}
+					snap := info.Snapshot(changeFeedID, id, checkpointTs)
 					o.markDownProcessor = append(o.markDownProcessor, snap)
 					log.Info("markdown processor", zap.String("id", id),
 						zap.Reflect("info", info), zap.Time("update time", lastUpdateTime))
@@ -619,7 +656,8 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 		}
 		checkpointTs := info.GetCheckpointTs(status)
 
-		newCf, err := o.newChangeFeed(changeFeedID, procInfos, info, checkpointTs)
+		taskPos := positions[changeFeedID]
+		newCf, err := o.newChangeFeed(changeFeedID, procInfos, taskPos, info, checkpointTs)
 		if err != nil {
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
@@ -669,13 +707,13 @@ func (c *changeFeed) calcResolvedTs() error {
 		minCheckpointTs = c.status.CheckpointTs
 	} else {
 		// calc the min of all resolvedTs in captures
-		for _, pStatus := range c.processorInfos {
-			if minResolvedTs > pStatus.ResolvedTs {
-				minResolvedTs = pStatus.ResolvedTs
+		for _, position := range c.taskPositions {
+			if minResolvedTs > position.ResolvedTs {
+				minResolvedTs = position.ResolvedTs
 			}
 
-			if minCheckpointTs > pStatus.CheckPointTs {
-				minCheckpointTs = pStatus.CheckPointTs
+			if minCheckpointTs > position.CheckPointTs {
+				minCheckpointTs = position.CheckPointTs
 			}
 		}
 	}
@@ -767,7 +805,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	todoDDLJob := c.ddlJobHistory[0]
 
 	// Check if all the checkpointTs of capture are achieving global resolvedTs(which is equal to todoDDLJob.FinishedTS)
-	for cid, pInfo := range c.processorInfos {
+	for cid, pInfo := range c.taskPositions {
 		if pInfo.CheckPointTs != todoDDLJob.Job.BinlogInfo.FinishedTS {
 			log.Debug("wait checkpoint ts", zap.String("cid", cid),
 				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
@@ -838,7 +876,7 @@ func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	if !ok {
 		return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
 	}
-	for captureID, pinfo := range cf.processorInfos {
+	for captureID, pinfo := range cf.taskStatus {
 		pinfo.TablePLock = nil
 		pinfo.TableCLock = nil
 		pinfo.AdminJobType = job.Type

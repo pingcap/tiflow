@@ -82,12 +82,28 @@ func (t AdminJobType) String() string {
 	return "unknown"
 }
 
-// TaskStatus records the process information of a capture
-type TaskStatus struct {
+// TaskPosition records the process information of a capture
+type TaskPosition struct {
 	// The maximum event CommitTs that has been synchronized. This is updated by corresponding processor.
 	CheckPointTs uint64 `json:"checkpoint-ts"`
 	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
 	ResolvedTs uint64 `json:"resolved-ts"`
+}
+
+// Marshal returns the json marshal format of a TaskStatus
+func (ts *TaskPosition) Marshal() (string, error) {
+	data, err := json.Marshal(ts)
+	return string(data), errors.Trace(err)
+}
+
+// Unmarshal unmarshals into *TaskStatus from json marshal byte slice
+func (ts *TaskPosition) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, ts)
+	return errors.Annotatef(err, "Unmarshal data: %v", data)
+}
+
+// TaskStatus records the task information of a capture
+type TaskStatus struct {
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
 	// TODO change to be a map for easy update.
 	TableInfos   []*ProcessTableInfo `json:"table-infos"`
@@ -121,14 +137,14 @@ func (ts *TaskStatus) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
 }
 
 // Snapshot takes a snapshot of `*TaskStatus` and returns a new `*ProcInfoSnap`
-func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID) *ProcInfoSnap {
+func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID, checkpointTs uint64) *ProcInfoSnap {
 	snap := &ProcInfoSnap{
 		CfID:      cfID,
 		CaptureID: captureID,
 		Tables:    make([]ProcessTableInfo, 0, len(ts.TableInfos)),
 	}
 	for _, tbl := range ts.TableInfos {
-		ts := ts.CheckPointTs
+		ts := checkpointTs
 		if ts < tbl.StartTs {
 			ts = tbl.StartTs
 		}
