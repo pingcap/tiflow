@@ -111,6 +111,19 @@ func (h *handlerForPrueDMLTest) GetAllTaskStatus(ctx context.Context, changefeed
 	defer h.mu.RUnlock()
 	h.index++
 	return model.ProcessorsInfos{
+		"capture_1": {},
+		"capture_2": {},
+	}, nil
+}
+
+func (h *handlerForPrueDMLTest) GetAllTaskPositions(ctx context.Context, changefeedID string, opts ...clientv3.OpOption) (map[string]*model.TaskPosition, error) {
+	if changefeedID != "test_change_feed" {
+		return nil, model.ErrTaskStatusNotExists
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	h.index++
+	return map[string]*model.TaskPosition{
 		"capture_1": {
 			ResolvedTs: h.resolvedTs1[h.index],
 		},
@@ -158,7 +171,11 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 			processorLastUpdateTime: make(map[string]time.Time),
 			targetTs:                100,
 			ddlState:                model.ChangeFeedSyncDML,
-			processorInfos: model.ProcessorsInfos{
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
 				"capture_1": {},
 				"capture_2": {},
 			},
@@ -250,6 +267,21 @@ func (h *handlerForDDLTest) GetAllTaskStatus(ctx context.Context, changefeedID s
 		h.dmlIndex++
 	}
 	return model.ProcessorsInfos{
+		"capture_1": {},
+		"capture_2": {},
+	}, nil
+}
+
+func (h *handlerForDDLTest) GetAllTaskPositions(ctx context.Context, changefeedID string, opts ...clientv3.OpOption) (map[string]*model.TaskPosition, error) {
+	if changefeedID != "test_change_feed" {
+		return nil, model.ErrTaskStatusNotExists
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.dmlIndex < len(h.resolvedTs1)-1 {
+		h.dmlIndex++
+	}
+	return map[string]*model.TaskPosition{
 		"capture_1": {
 			ResolvedTs:   h.resolvedTs1[h.dmlIndex],
 			CheckPointTs: h.currentGlobalResolvedTs,
@@ -357,7 +389,11 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 			processorLastUpdateTime: make(map[string]time.Time),
 			targetTs:                100,
 			ddlState:                model.ChangeFeedSyncDML,
-			processorInfos: model.ProcessorsInfos{
+			taskStatus: model.ProcessorsInfos{
+				"capture_1": {},
+				"capture_2": {},
+			},
+			taskPositions: map[string]*model.TaskPosition{
 				"capture_1": {},
 				"capture_2": {},
 			},
@@ -389,7 +425,11 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		info:     &model.ChangeFeedInfo{},
 		status:   &model.ChangeFeedStatus{},
 		ddlState: model.ChangeFeedSyncDML,
-		processorInfos: model.ProcessorsInfos{
+		taskStatus: model.ProcessorsInfos{
+			"capture_1": {},
+			"capture_2": {},
+		},
+		taskPositions: map[string]*model.TaskPosition{
 			"capture_1": {ResolvedTs: 10001},
 			"capture_2": {},
 		},
@@ -405,8 +445,8 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		cfRWriter:          s.client,
 	}
 	owner.changeFeeds = map[model.ChangeFeedID]*changeFeed{cfID: sampleCF}
-	for cid, pinfo := range sampleCF.processorInfos {
-		key := kv.GetEtcdKeyTask(cfID, cid)
+	for cid, pinfo := range sampleCF.taskPositions {
+		key := kv.GetEtcdKeyTaskStatus(cfID, cid)
 		pinfoStr, err := pinfo.Marshal()
 		c.Assert(err, check.IsNil)
 		_, err = s.client.Client.Put(ctx, key, pinfoStr)
@@ -432,7 +472,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(info.AdminJobType, check.Equals, model.AdminStop)
 	// check processor is set admin job
-	for cid := range sampleCF.processorInfos {
+	for cid := range sampleCF.taskPositions {
 		_, subInfo, err := owner.etcdClient.GetTaskStatus(ctx, cfID, cid)
 		c.Assert(err, check.IsNil)
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminStop)
@@ -463,7 +503,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	_, err = owner.etcdClient.GetChangeFeedInfo(ctx, cfID)
 	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
 	// check processor is set admin job
-	for cid := range sampleCF.processorInfos {
+	for cid := range sampleCF.taskPositions {
 		_, subInfo, err := owner.etcdClient.GetTaskStatus(ctx, cfID, cid)
 		c.Assert(err, check.IsNil)
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminRemove)
@@ -647,7 +687,7 @@ var _ = check.Suite(&changefeedInfoSuite{})
 
 func (s *changefeedInfoSuite) TestMinimumTables(c *check.C) {
 	cf := &changeFeed{
-		processorInfos: map[model.CaptureID]*model.TaskStatus{
+		taskStatus: map[model.CaptureID]*model.TaskStatus{
 			"c1": {
 				TableInfos: make([]*model.ProcessTableInfo, 2),
 			},

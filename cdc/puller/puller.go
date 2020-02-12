@@ -123,20 +123,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						continue
 					}
 
-					kv := &model.RawKVEntry{
-						OpType: val.OpType,
-						Key:    val.Key,
-						Value:  val.Value,
-						Ts:     val.Ts,
-					}
-
-					if err := p.buf.AddKVEntry(ctx, kv); err != nil {
+					if err := p.buf.AddEntry(ctx, *e); err != nil {
 						return errors.Trace(err)
 					}
 					eventCounter.WithLabelValues(captureID, "kv").Inc()
-				} else if e.Checkpoint != nil {
-					cp := e.Checkpoint
-					if err := p.buf.AddResolved(ctx, cp.Span, cp.ResolvedTs); err != nil {
+				} else if e.Resolved != nil {
+					if err := p.buf.AddEntry(ctx, *e); err != nil {
 						return errors.Trace(err)
 					}
 					eventCounter.WithLabelValues(captureID, "resolved").Inc()
@@ -162,7 +154,7 @@ func (p *pullerImpl) CollectRawTxns(ctx context.Context, outputFn func(context.C
 // groups them by transactions and sends them to the outputFn.
 func collectRawTxns(
 	ctx context.Context,
-	inputFn func(context.Context) (model.KvOrResolved, error),
+	inputFn func(context.Context) (model.RegionFeedEvent, error),
 	outputFn func(context.Context, model.RawTxn) error,
 	tracker resolveTsTracker,
 ) error {
@@ -172,10 +164,10 @@ func collectRawTxns(
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if be.KV != nil {
-			entryGroups[be.KV.Ts] = append(entryGroups[be.KV.Ts], be.KV)
+		if be.Val != nil {
+			entryGroups[be.Val.Ts] = append(entryGroups[be.Val.Ts], be.Val)
 		} else if be.Resolved != nil {
-			resolvedTs := be.Resolved.Timestamp
+			resolvedTs := be.Resolved.ResolvedTs
 			// 1. Forward is called in a single thread
 			// 2. The only way the global minimum resolved Ts can be forwarded is that
 			// 	  the resolveTs we pass in replaces the original one

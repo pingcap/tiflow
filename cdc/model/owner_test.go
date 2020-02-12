@@ -21,14 +21,12 @@ import (
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
 
-type cloneTaskStatusSuite struct{}
+type taskStatusSuite struct{}
 
-var _ = check.Suite(&cloneTaskStatusSuite{})
+var _ = check.Suite(&taskStatusSuite{})
 
-func (s *cloneTaskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
+func (s *taskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
 	info := TaskStatus{
-		CheckPointTs: 12,
-		ResolvedTs:   20,
 		TableInfos: []*ProcessTableInfo{
 			{ID: 1},
 			{ID: 2},
@@ -39,8 +37,6 @@ func (s *cloneTaskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
 
 	clone := info.Clone()
 	assertIsSnapshot := func() {
-		c.Assert(clone.CheckPointTs, check.Equals, uint64(12))
-		c.Assert(clone.ResolvedTs, check.Equals, uint64(20))
 		c.Assert(clone.TableInfos, check.HasLen, 3)
 		for i, info := range clone.TableInfos {
 			c.Assert(info.ID, check.Equals, uint64(i+1))
@@ -51,7 +47,6 @@ func (s *cloneTaskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
 
 	assertIsSnapshot()
 
-	info.CheckPointTs = 1111
 	info.TableInfos[2] = &ProcessTableInfo{ID: 1212}
 	info.TablePLock.Ts = 100
 	info.TableCLock = &TableLock{Ts: 100}
@@ -59,21 +54,19 @@ func (s *cloneTaskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
 	assertIsSnapshot()
 }
 
-func (s *cloneTaskStatusSuite) TestProcSnapshot(c *check.C) {
+func (s *taskStatusSuite) TestProcSnapshot(c *check.C) {
 	info := TaskStatus{
-		CheckPointTs: 0,
-		ResolvedTs:   20,
 		TableInfos: []*ProcessTableInfo{
 			{ID: 10, StartTs: 100},
 		},
 	}
 	cfID := "changefeed-1"
 	captureID := "capture-1"
-	snap := info.Snapshot(cfID, captureID)
+	snap := info.Snapshot(cfID, captureID, 200)
 	c.Assert(snap.CfID, check.Equals, cfID)
 	c.Assert(snap.CaptureID, check.Equals, captureID)
 	c.Assert(snap.Tables, check.HasLen, 1)
-	c.Assert(snap.Tables[0].StartTs, check.Equals, uint64(100))
+	c.Assert(snap.Tables[0].StartTs, check.Equals, uint64(200))
 }
 
 type removeTableSuite struct{}
