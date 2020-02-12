@@ -18,13 +18,6 @@ import (
 )
 
 var (
-	execDMLCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "exec_dml_count",
-			Help:      "The count of DML that is executed",
-		}, []string{"capture", "changefeed"})
 	execBatchHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -45,7 +38,6 @@ var (
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(execDMLCounter)
 	registry.MustRegister(execBatchHistogram)
 	registry.MustRegister(execTxnHistogram)
 }

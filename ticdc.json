@@ -18,7 +18,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 18,
-  "iteration": 1581473815404,
+  "iteration": 1581499259290,
   "links": [],
   "panels": [
     {
@@ -1663,7 +1663,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (rate(ticdc_sink_exec_dml_count{changefeed=\"$changefeed\"}[5m])) by (instance)",
+          "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{changefeed=\"$changefeed\"}[5m])) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -1924,7 +1924,7 @@
       }
     }
   ],
-  "refresh": "10s",
+  "refresh": false,
   "schemaVersion": 18,
   "style": "dark",
   "tags": [],
@@ -1933,8 +1933,6 @@
       {
         "allValue": null,
         "current": {
-          "selected": false,
-          "tags": [],
           "text": "0496c67e-5490-40eb-afea-df4135cceb67",
           "value": "0496c67e-5490-40eb-afea-df4135cceb67"
         },
@@ -1960,8 +1958,8 @@
     ]
   },
   "time": {
-    "from": "now-30m",
-    "to": "now"
+    "from": "2020-02-12T02:04:32.048Z",
+    "to": "2020-02-12T02:55:57.097Z"
   },
   "timepicker": {
     "refresh_intervals": [
@@ -1991,5 +1989,5 @@
   "timezone": "",
   "title": "ticdc",
   "uid": "YiGL8hBZz",
-  "version": 15
+  "version": 16
 }

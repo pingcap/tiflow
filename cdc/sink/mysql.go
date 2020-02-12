@@ -225,7 +225,6 @@ func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*model.DML) error {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	execTxnHistogram.WithLabelValues(captureID, changefeedID).Observe(time.Since(startTime).Seconds())
 	execBatchHistogram.WithLabelValues(captureID, changefeedID).Observe(float64(len(dmls)))
-	execDMLCounter.WithLabelValues(captureID, changefeedID).Add(float64(len(dmls)))
 	log.Info("Exec DML succeeded", zap.Int("num of DMLs", len(dmls)))
 	return nil
 }
