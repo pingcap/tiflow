@@ -87,7 +87,7 @@ func (h *handlerForPrueDMLTest) Close() error {
 
 var _ ChangeFeedRWriter = &handlerForPrueDMLTest{}
 
-func (h *handlerForPrueDMLTest) GetChangeFeeds(ctx context.Context, opts ...clientv3.OpOption) (int64, map[string]*mvccpb.KeyValue, error) {
+func (h *handlerForPrueDMLTest) GetChangeFeeds(ctx context.Context) (int64, map[string]*mvccpb.KeyValue, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	cfInfo := &model.ChangeFeedInfo{
@@ -103,7 +103,7 @@ func (h *handlerForPrueDMLTest) GetChangeFeeds(ctx context.Context, opts ...clie
 	}, nil
 }
 
-func (h *handlerForPrueDMLTest) GetAllTaskStatus(ctx context.Context, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
+func (h *handlerForPrueDMLTest) GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
 	if changefeedID != "test_change_feed" {
 		return nil, model.ErrTaskStatusNotExists
 	}
@@ -116,7 +116,7 @@ func (h *handlerForPrueDMLTest) GetAllTaskStatus(ctx context.Context, changefeed
 	}, nil
 }
 
-func (h *handlerForPrueDMLTest) GetAllTaskPositions(ctx context.Context, changefeedID string, opts ...clientv3.OpOption) (map[string]*model.TaskPosition, error) {
+func (h *handlerForPrueDMLTest) GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error) {
 	if changefeedID != "test_change_feed" {
 		return nil, model.ErrTaskStatusNotExists
 	}
@@ -133,7 +133,7 @@ func (h *handlerForPrueDMLTest) GetAllTaskPositions(ctx context.Context, changef
 	}, nil
 }
 
-func (h *handlerForPrueDMLTest) GetChangeFeedStatus(ctx context.Context, id string, opts ...clientv3.OpOption) (*model.ChangeFeedStatus, error) {
+func (h *handlerForPrueDMLTest) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error) {
 	return nil, model.ErrChangeFeedNotExists
 }
 
@@ -241,7 +241,7 @@ func (h *handlerForDDLTest) Close() error {
 	return nil
 }
 
-func (h *handlerForDDLTest) GetChangeFeeds(ctx context.Context, opts ...clientv3.OpOption) (int64, map[string]*mvccpb.KeyValue, error) {
+func (h *handlerForDDLTest) GetChangeFeeds(ctx context.Context) (int64, map[string]*mvccpb.KeyValue, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	cfInfo := &model.ChangeFeedInfo{
@@ -257,7 +257,7 @@ func (h *handlerForDDLTest) GetChangeFeeds(ctx context.Context, opts ...clientv3
 	}, nil
 }
 
-func (h *handlerForDDLTest) GetAllTaskStatus(ctx context.Context, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error) {
+func (h *handlerForDDLTest) GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
 	if changefeedID != "test_change_feed" {
 		return nil, model.ErrTaskStatusNotExists
 	}
@@ -272,7 +272,7 @@ func (h *handlerForDDLTest) GetAllTaskStatus(ctx context.Context, changefeedID s
 	}, nil
 }
 
-func (h *handlerForDDLTest) GetAllTaskPositions(ctx context.Context, changefeedID string, opts ...clientv3.OpOption) (map[string]*model.TaskPosition, error) {
+func (h *handlerForDDLTest) GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error) {
 	if changefeedID != "test_change_feed" {
 		return nil, model.ErrTaskStatusNotExists
 	}
@@ -293,7 +293,7 @@ func (h *handlerForDDLTest) GetAllTaskPositions(ctx context.Context, changefeedI
 	}, nil
 }
 
-func (h *handlerForDDLTest) GetChangeFeedStatus(ctx context.Context, id string, opts ...clientv3.OpOption) (*model.ChangeFeedStatus, error) {
+func (h *handlerForDDLTest) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error) {
 	return nil, model.ErrChangeFeedNotExists
 }
 

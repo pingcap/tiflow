@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 
 	"github.com/pingcap/errors"
@@ -64,18 +63,18 @@ type OwnerDDLHandler interface {
 type ChangeFeedRWriter interface {
 
 	// GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
-	GetChangeFeeds(ctx context.Context, opts ...clientv3.OpOption) (int64, map[string]*mvccpb.KeyValue, error)
+	GetChangeFeeds(ctx context.Context) (int64, map[string]*mvccpb.KeyValue, error)
 
 	// GetAllTaskStatus queries all task status of a changefeed, and returns a map
 	// mapping from captureID to TaskStatus
-	GetAllTaskStatus(ctx context.Context, changefeedID string, opts ...clientv3.OpOption) (model.ProcessorsInfos, error)
+	GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error)
 
 	// GetAllTaskPositions queries all task positions of a changefeed, and returns a map
 	// mapping from captureID to TaskPositions
-	GetAllTaskPositions(ctx context.Context, changefeedID string, opts ...clientv3.OpOption) (map[string]*model.TaskPosition, error)
+	GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error)
 
 	// GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
-	GetChangeFeedStatus(ctx context.Context, id string, opts ...clientv3.OpOption) (*model.ChangeFeedStatus, error)
+	GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error)
 	// PutAllChangeFeedStatus the changefeed info to storage such as etcd.
 	PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error
 }
