@@ -42,7 +42,7 @@ import (
 const (
 	dialTimeout           = 10 * time.Second
 	maxRetry              = 10
-	tikvRequestMaxBackoff = 2000 // Maximum total sleep time(in ms)
+	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
 )
 
 type singleRegionInfo struct {
