@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/tests/util"
+	"go.uber.org/zap/zapcore"
 )
 
 func intRangeValue(column *column, min int64, max int64) (int64, int64) {
@@ -367,14 +368,19 @@ func RunTest(src *sql.DB, dst *sql.DB, schema string, writeSrc func(src *sql.DB)
 	defer tick.Stop()
 	timeout := time.After(time.Second * 240)
 
+	oldLevel := log.GetLevel()
+	defer log.SetLevel(oldLevel)
+
 	for {
 		select {
 		case <-tick.C:
+			log.SetLevel(zapcore.WarnLevel)
 			if util.CheckSyncState(src, dst, schema) {
 				return
 			}
 		case <-timeout:
 			// check last time
+			log.SetLevel(zapcore.InfoLevel)
 			if !util.CheckSyncState(src, dst, schema) {
 				log.S().Fatal("sourceDB don't equal targetDB")
 			}

@@ -17,13 +17,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"net/url"
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb-tools/pkg/dbutil"
 	"github.com/pingcap/tidb-tools/pkg/diff"
+	"go.uber.org/zap"
 )
 
 // DBConfig is the DB configuration.
@@ -84,7 +85,7 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 	defer cancel()
 	tables, err := dbutil.GetTables(ctx, sourceDB, schema)
 	if err != nil {
-		log.Print(err)
+		log.Error("get tables", zap.Error(err))
 		return false
 	}
 
@@ -104,15 +105,16 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 			SourceTables: []*diff.TableInstance{sourceTableInstance},
 			TargetTable:  targetTableInstance,
 			UseChecksum:  true,
+			ChunkSize:    1000,
 			CpDB:         targetDB,
 		}
 		structEqual, dataEqual, err := tableDiff.Equal(context.Background(), func(sql string) error {
-			log.Print(sql)
+			log.Info("check equal", zap.String("sql", sql))
 			return nil
 		})
 
 		if err != nil {
-			log.Print(errors.Trace(err))
+			log.Error("check equal", zap.String("err", errors.ErrorStack(err)))
 			return false
 		}
 		if !structEqual || !dataEqual {
@@ -123,7 +125,7 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 	// check whether the tables in the targetDB is match that in the sourceDB
 	targetTables, err := dbutil.GetTables(ctx, targetDB, schema)
 	if err != nil {
-		log.Print(err)
+		log.Error("get tables", zap.Error(err))
 		return false
 	}
 	sourceTableMap := make(map[string]struct{}, len(tables))
@@ -132,7 +134,7 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 	}
 	for _, table := range targetTables {
 		if _, exist := sourceTableMap[table]; !exist {
-			log.Print("The table in target db is not exist in source db:", table)
+			log.Info("The table in target db is not exist in source db:", zap.String("table", table))
 			return false
 		}
 	}
