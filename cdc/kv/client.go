@@ -364,6 +364,8 @@ func (c *CDCClient) singleEventFeed(
 	region *metapb.Region,
 	eventCh chan<- *model.RegionFeedEvent,
 ) (uint64, error) {
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	req := &cdcpb.ChangeDataRequest{
 		Header: &cdcpb.Header{
 			ClusterId: c.clusterID,
@@ -408,6 +410,7 @@ func (c *CDCClient) singleEventFeed(
 		updateCheckpointTS(&req.CheckpointTs, item.commit)
 		select {
 		case eventCh <- revent:
+			sendEventCounter.WithLabelValues("sorter resolved", captureID, changefeedID).Inc()
 		case <-ctx.Done():
 		}
 	}
@@ -417,7 +420,6 @@ func (c *CDCClient) singleEventFeed(
 	sorter := newSorter(maxItemFn)
 	defer sorter.close()
 
-	captureID := util.CaptureIDFromCtx(ctx)
 	for {
 		cevent, err := stream.Recv()
 		if err == io.EOF {
@@ -435,6 +437,7 @@ func (c *CDCClient) singleEventFeed(
 			switch x := event.Event.(type) {
 			case *cdcpb.Event_Entries_:
 				for _, entry := range x.Entries.GetEntries() {
+					pullEventCounter.WithLabelValues(entry.Type.String(), captureID, changefeedID).Inc()
 					switch entry.Type {
 					case cdcpb.Event_INITIALIZED:
 						atomic.StoreUint32(&initialized, 1)
@@ -459,6 +462,7 @@ func (c *CDCClient) singleEventFeed(
 						}
 						select {
 						case eventCh <- revent:
+							sendEventCounter.WithLabelValues("committed", captureID, changefeedID).Inc()
 						case <-ctx.Done():
 							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
 						}
@@ -497,6 +501,7 @@ func (c *CDCClient) singleEventFeed(
 
 						select {
 						case eventCh <- revent:
+							sendEventCounter.WithLabelValues("commit", captureID, changefeedID).Inc()
 						case <-ctx.Done():
 							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
 						}
@@ -533,6 +538,7 @@ func (c *CDCClient) singleEventFeed(
 				updateCheckpointTS(&req.CheckpointTs, x.ResolvedTs)
 				select {
 				case eventCh <- revent:
+					sendEventCounter.WithLabelValues("native resolved", captureID, changefeedID).Inc()
 				case <-ctx.Done():
 					return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
 				}

@@ -54,6 +54,9 @@ const (
 	resolveTsInterval         = time.Millisecond * 500
 	waitGlobalResolvedTsDelay = time.Millisecond * 500
 	flushDMLsInterval         = time.Millisecond * 10
+
+	defaultInputTxnChanSize  = 1
+	defaultOutputTxnChanSize = 64
 )
 
 var (
@@ -186,7 +189,7 @@ func (t *tableInfo) storeResolvedTS(ts uint64) {
 }
 
 // NewProcessor creates and returns a processor for the specified change feed
-func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changefeedID, captureID string, checkpointTs uint64) (*processor, error) {
+func NewProcessor(ctx context.Context, pdEndpoints []string, changefeed model.ChangeFeedInfo, changefeedID, captureID string, checkpointTs uint64) (*processor, error) {
 	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
@@ -260,7 +263,7 @@ func NewProcessor(pdEndpoints []string, changefeed model.ChangeFeedInfo, changef
 	}
 
 	for _, table := range p.status.TableInfos {
-		p.addTable(context.Background(), int64(table.ID), table.StartTs)
+		p.addTable(ctx, int64(table.ID), table.StartTs)
 	}
 
 	return p, nil
@@ -482,6 +485,7 @@ func (p *processor) removeTable(tableID int64) {
 	table.puller.Cancel()
 	delete(p.tables, tableID)
 	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureID, strconv.FormatInt(tableID, 10))
+	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Dec()
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
@@ -783,10 +787,10 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 
 	table := &tableInfo{
 		id:       tableID,
-		inputTxn: make(chan model.RawTxn, 1),
+		inputTxn: make(chan model.RawTxn, defaultInputTxnChanSize),
 	}
 
-	tc := newTxnChannel(table.inputTxn, 64, func(resolvedTs uint64) {
+	tc := newTxnChannel(table.inputTxn, defaultOutputTxnChanSize, func(resolvedTs uint64) {
 		table.storeResolvedTS(resolvedTs)
 	})
 	table.inputChan = tc
@@ -798,6 +802,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	table.puller = puller.CancellablePuller{Puller: plr, Cancel: cancel}
 
 	p.tables[tableID] = table
+	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Inc()
 }
 
 // startPuller start pull data with span and push resolved txn into txnChan in timestamp increasing order.

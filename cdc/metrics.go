@@ -16,6 +16,7 @@ package cdc
 import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -27,5 +28,6 @@ func init() {
 
 	kv.InitMetrics(registry)
 	puller.InitMetrics(registry)
+	sink.InitMetrics(registry)
 	initProcessorMetrics(registry)
 }

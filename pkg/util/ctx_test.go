@@ -19,17 +19,28 @@ import (
 	"github.com/pingcap/check"
 )
 
-type captureIDSuite struct{}
+type ctxValueSuite struct{}
 
-var _ = check.Suite(&captureIDSuite{})
+var _ = check.Suite(&ctxValueSuite{})
 
-func (s *captureIDSuite) TestShouldReturnCaptureID(c *check.C) {
+func (s *ctxValueSuite) TestShouldReturnCaptureID(c *check.C) {
 	ctx := PutCaptureIDInCtx(context.Background(), "ello")
 	c.Assert(CaptureIDFromCtx(ctx), check.Equals, "ello")
 }
 
-func (s *captureIDSuite) TestShouldReturnEmptyStr(c *check.C) {
+func (s *ctxValueSuite) TestCaptureIDNotSet(c *check.C) {
 	c.Assert(CaptureIDFromCtx(context.Background()), check.Equals, "")
 	ctx := context.WithValue(context.Background(), ctxKeyCaptureID, 1321)
 	c.Assert(CaptureIDFromCtx(ctx), check.Equals, "")
+}
+
+func (s *ctxValueSuite) TestShouldReturnChangefeedID(c *check.C) {
+	ctx := PutChangefeedIDInCtx(context.Background(), "ello")
+	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "ello")
+}
+
+func (s *ctxValueSuite) TestChangefeedIDNotSet(c *check.C) {
+	c.Assert(ChangefeedIDFromCtx(context.Background()), check.Equals, "")
+	ctx := context.WithValue(context.Background(), ctxKeyChangefeedID, 1321)
+	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "")
 }

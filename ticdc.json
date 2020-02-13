@@ -18,7 +18,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 18,
-  "iteration": 1578963537432,
+  "iteration": 1581499259290,
   "links": [],
   "panels": [
     {
@@ -731,6 +731,8 @@
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(ticdc_kvclient_event_size_bytes_bucket[1m])) by (le, instance))",
+          "format": "time_series",
+          "intervalFactor": 1,
           "legendFormat": "{{instance}} 95",
           "refId": "A"
         }
@@ -807,6 +809,7 @@
       },
       "lines": true,
       "linewidth": 1,
+      "links": [],
       "nullPointMode": "null",
       "options": {
         "dataLinks": []
@@ -821,8 +824,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(ticdc_kvclient_event_size_bytes_count[5m])) by (instance)",
-          "legendFormat": "{{instance}}",
+          "expr": "sum(rate(ticdc_kvclient_pull_event_count{changefeed=\"$changefeed\"}[5m])) by (instance, type)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}-{{type}}",
           "refId": "A"
         }
       ],
@@ -830,7 +835,101 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Event Count By Instance",
+      "title": "EventFeed Receive Event Count By Instance",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "cdc-server",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 11,
+        "x": 0,
+        "y": 40
+      },
+      "hiddenSeries": false,
+      "id": 31,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": true,
+        "hideZero": true,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(rate(ticdc_kvclient_send_event_count{changefeed=\"$changefeed\"}[5m])) by (instance, type)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}-{{type}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Dispatch Event Count By Instance",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -873,7 +972,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 47
       },
       "id": 11,
       "panels": [],
@@ -891,7 +990,7 @@
         "h": 8,
         "w": 11,
         "x": 0,
-        "y": 41
+        "y": 48
       },
       "hiddenSeries": false,
       "id": 2,
@@ -981,9 +1080,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 8,
-        "w": 11,
+        "w": 12,
         "x": 11,
-        "y": 41
+        "y": 48
       },
       "hiddenSeries": false,
       "id": 30,
@@ -1075,7 +1174,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 49
+        "y": 56
       },
       "hiddenSeries": false,
       "id": 4,
@@ -1165,7 +1264,7 @@
         "h": 7,
         "w": 12,
         "x": 11,
-        "y": 49
+        "y": 56
       },
       "hiddenSeries": false,
       "id": 3,
@@ -1249,16 +1348,17 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "description": "The number of events received from kv client event channel",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
-        "w": 12,
-        "x": 11,
-        "y": 56
+        "w": 11,
+        "x": 0,
+        "y": 63
       },
       "hiddenSeries": false,
-      "id": 5,
+      "id": 32,
       "legend": {
         "alignAsTable": true,
         "avg": false,
@@ -1272,6 +1372,7 @@
       },
       "lines": true,
       "linewidth": 1,
+      "links": [],
       "nullPointMode": "null",
       "options": {
         "dataLinks": []
@@ -1286,7 +1387,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (rate(ticdc_processor_txn_count{changefeed = \"$changefeed\"}[5m])) by (instance, type)",
+          "expr": "sum (rate(ticdc_puller_kv_event_count{changefeed=\"$changefeed\"}[5m])) by (instance, type)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} - {{type}}",
@@ -1297,7 +1398,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "ticdc_processor_txn_count",
+      "title": "puller receive kv event from chan",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1333,9 +1434,497 @@
         "align": false,
         "alignLevel": null
       }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The number of events received from txn collector",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 11,
+        "y": 63
+      },
+      "hiddenSeries": false,
+      "id": 5,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": false,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum (rate(ticdc_puller_txn_collect_event_count{changefeed=\"$changefeed\"}[5m])) by (instance, type)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}} - {{type}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Event Count Received in Txn Collector ",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "none",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The number of events received from kv client event channel",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 11,
+        "x": 0,
+        "y": 70
+      },
+      "hiddenSeries": false,
+      "id": 33,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": false,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum (rate(ticdc_processor_txn_count{changefeed=\"$changefeed\"}[5m])) by (instance, type)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}} - {{type}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "processor txn count",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "none",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The number of events received from kv client event channel",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 11,
+        "y": 70
+      },
+      "hiddenSeries": false,
+      "id": 34,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": false,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{changefeed=\"$changefeed\"}[5m])) by (instance)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "sink exec DML count",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "none",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The number of events received from kv client event channel",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 11,
+        "x": 0,
+        "y": 77
+      },
+      "hiddenSeries": false,
+      "id": 35,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": false,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_txn_exec_duration_bucket{changefeed=\"$changefeed\"}[1m])) by (le))",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "90",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_exec_duration_bucket{changefeed=\"$changefeed\"}[1m])) by (le))",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "99",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(ticdc_sink_txn_exec_duration_sum{changefeed=\"$changefeed\"}[1m]) / rate(ticdc_sink_txn_exec_duration_count{changefeed=\"$changefeed\"}[1m])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "avg",
+          "refId": "C"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "exec txn duration",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "s",
+          "label": null,
+          "logBase": 2,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "The number of events received from kv client event channel",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 11,
+        "y": 77
+      },
+      "hiddenSeries": false,
+      "id": 36,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": false,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ticdc_sink_txn_batch_size_bucket{changefeed=\"$changefeed\"}[1m])) by (le))",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_txn_batch_size_bucket{changefeed=\"$changefeed\"}[1m])) by (le))",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "90",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(ticdc_sink_txn_batch_size_sum{changefeed=\"$changefeed\"}[1m]) / rate(ticdc_sink_txn_batch_size_count{changefeed=\"$changefeed\"}[1m])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "avg",
+          "refId": "C"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "exec txn batch",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "none",
+          "label": null,
+          "logBase": 2,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
-  "refresh": "10s",
+  "refresh": false,
   "schemaVersion": 18,
   "style": "dark",
   "tags": [],
@@ -1344,10 +1933,8 @@
       {
         "allValue": null,
         "current": {
-          "selected": false,
-          "tags": [],
-          "text": "99e1f54e-4fb7-4275-aa5f-0efb8fb8920a",
-          "value": "99e1f54e-4fb7-4275-aa5f-0efb8fb8920a"
+          "text": "0496c67e-5490-40eb-afea-df4135cceb67",
+          "value": "0496c67e-5490-40eb-afea-df4135cceb67"
         },
         "datasource": "cdc-server",
         "definition": "label_values(ticdc_processor_resolved_ts, changefeed)",
@@ -1371,8 +1958,8 @@
     ]
   },
   "time": {
-    "from": "now-1h",
-    "to": "now"
+    "from": "2020-02-12T02:04:32.048Z",
+    "to": "2020-02-12T02:55:57.097Z"
   },
   "timepicker": {
     "refresh_intervals": [
@@ -1402,5 +1989,5 @@
   "timezone": "",
   "title": "ticdc",
   "uid": "YiGL8hBZz",
-  "version": 3
+  "version": 16
 }
