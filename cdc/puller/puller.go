@@ -15,9 +15,6 @@ package puller
 
 import (
 	"context"
-	"sort"
-
-	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -25,6 +22,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -161,7 +159,7 @@ func collectRawTxns(
 ) error {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	entryGroups := make(map[uint64][]*model.RawKVEntry)
+	entryGroup := NewEntryGroup()
 	for {
 		be, err := inputFn(ctx)
 		if err != nil {
@@ -169,7 +167,7 @@ func collectRawTxns(
 		}
 		if be.Val != nil {
 			txnCollectCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
-			entryGroups[be.Val.Ts] = append(entryGroups[be.Val.Ts], be.Val)
+			entryGroup.AddEntry(be.Val.Ts, be.Val)
 		} else if be.Resolved != nil {
 			txnCollectCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
 			resolvedTs := be.Resolved.ResolvedTs
@@ -181,16 +179,7 @@ func collectRawTxns(
 			if !forwarded {
 				continue
 			}
-			var readyTxns []model.RawTxn
-			for ts, entries := range entryGroups {
-				if ts <= resolvedTs {
-					readyTxns = append(readyTxns, model.RawTxn{Ts: ts, Entries: entries})
-					delete(entryGroups, ts)
-				}
-			}
-			sort.Slice(readyTxns, func(i, j int) bool {
-				return readyTxns[i].Ts < readyTxns[j].Ts
-			})
+			readyTxns := entryGroup.Consume(resolvedTs)
 			for _, t := range readyTxns {
 				err := outputFn(ctx, t)
 				if err != nil {
