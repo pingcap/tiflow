@@ -29,7 +29,6 @@ type EntryGroup struct {
 func NewEntryGroup() *EntryGroup {
 	return &EntryGroup{
 		entriesMap: make(map[uint64][]*model.RawKVEntry),
-		sortedTs:   make([]uint64, 0),
 	}
 }
 
