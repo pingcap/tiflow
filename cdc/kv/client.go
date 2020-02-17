@@ -23,30 +23,32 @@ import (
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
+	"github.com/pingcap/kvproto/pkg/errorpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
+	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	gbackoff "google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
-	"google.golang.org/grpc/status"
 )
 
 const (
-	dialTimeout = 10 * time.Second
-	maxRetry    = 10
+	dialTimeout           = 10 * time.Second
+	maxRetry              = 10
+	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
 )
 
 type singleRegionInfo struct {
-	meta *metapb.Region
-	span util.Span
-	ts   uint64
+	verID tikv.RegionVerID
+	span  util.Span
+	ts    uint64
 }
 
 // CDCClient to get events from TiKV
@@ -60,10 +62,7 @@ type CDCClient struct {
 		conns map[string]*grpc.ClientConn
 	}
 
-	storeMu struct {
-		sync.Mutex
-		stores map[uint64]*metapb.Store
-	}
+	regionCache *tikv.RegionCache
 }
 
 // NewCDCClient creates a CDCClient instance
@@ -72,19 +71,14 @@ func NewCDCClient(pd pd.Client) (c *CDCClient, err error) {
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
 	c = &CDCClient{
-		clusterID: clusterID,
-		pd:        pd,
+		clusterID:   clusterID,
+		pd:          pd,
+		regionCache: tikv.NewRegionCache(pd),
 		mu: struct {
 			sync.Mutex
 			conns map[string]*grpc.ClientConn
 		}{
 			conns: make(map[string]*grpc.ClientConn),
-		},
-		storeMu: struct {
-			sync.Mutex
-			stores map[uint64]*metapb.Store
-		}{
-			stores: make(map[uint64]*metapb.Store),
 		},
 	}
 
@@ -98,6 +92,7 @@ func (c *CDCClient) Close() error {
 		conn.Close()
 	}
 	c.mu.Unlock()
+	c.regionCache.Close()
 
 	return nil
 }
@@ -144,44 +139,6 @@ func (c *CDCClient) getConn(
 	return
 }
 
-func (c *CDCClient) getConnByMeta(
-	ctx context.Context, region *metapb.Region,
-) (conn *grpc.ClientConn, err error) {
-	if len(region.Peers) == 0 {
-		return nil, errors.New("no peer")
-	}
-
-	// the first is leader in Peers?
-	peer := region.Peers[0]
-
-	store, err := c.getStore(ctx, peer.GetStoreId())
-	if err != nil {
-		return nil, err
-	}
-
-	return c.getConn(ctx, store.Address)
-}
-
-func (c *CDCClient) getStore(
-	ctx context.Context, id uint64,
-) (store *metapb.Store, err error) {
-	c.storeMu.Lock()
-	defer c.storeMu.Unlock()
-
-	if store, ok := c.storeMu.stores[id]; ok {
-		return store, nil
-	}
-
-	store, err = c.pd.GetStore(ctx, id)
-	if err != nil {
-		return nil, errors.Annotatef(err, "get store %d failed", id)
-	}
-
-	c.storeMu.stores[id] = store
-
-	return
-}
-
 // EventFeed divides a EventFeed request on range boundaries and establishes
 // a EventFeed to each of the individual region. It streams back result on the
 // provided channel.
@@ -215,6 +172,17 @@ func (c *CDCClient) EventFeed(
 	return g.Wait()
 }
 
+func needReloadRegion(failStoreIDs map[uint64]struct{}, rpcCtx *tikv.RPCContext) (need bool) {
+	failStoreIDs[rpcCtx.GetStoreID()] = struct{}{}
+	need = len(failStoreIDs) == len(rpcCtx.Meta.GetPeers())
+	if need {
+		for k := range failStoreIDs {
+			delete(failStoreIDs, k)
+		}
+	}
+	return
+}
+
 // partialRegionFeed establishes a EventFeed to the region specified by regionInfo.
 // It manages lifecycle events of the region in order to maintain the EventFeed
 // connection, this may involve retry this region EventFeed or subdividing the region
@@ -226,24 +194,30 @@ func (c *CDCClient) partialRegionFeed(
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	ts := regionInfo.ts
-
+	failStoreIDs := make(map[uint64]struct{})
 	berr := retry.Run(func() error {
 		var err error
 
-		if regionInfo.meta == nil {
-			regionInfo.meta, _, err = c.pd.GetRegion(ctx, regionInfo.span.Start)
-		}
-
+		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+		rpcCtx, err := c.regionCache.GetTiKVRPCContext(bo, regionInfo.verID, tidbkv.ReplicaReadLeader, 0)
 		if err != nil {
-			log.Warn("get meta failed", zap.Error(err))
-			return errors.Trace(err)
+			return backoff.Permanent(errors.Trace(err))
 		}
+		if rpcCtx == nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				err = &eventError{Event_Error: &cdcpb.Event_Error{EpochNotMatch: &errorpb.EpochNotMatch{}}}
+			}
+		} else {
+			var maxTs uint64
+			maxTs, err = c.singleEventFeed(ctx, rpcCtx, regionInfo.span, regionInfo.ts, eventCh)
+			log.Debug("singleEventFeed quit")
 
-		maxTs, err := c.singleEventFeed(ctx, regionInfo.span, regionInfo.ts, regionInfo.meta, eventCh)
-		log.Debug("singleEventFeed quit")
-
-		if maxTs > ts {
-			ts = maxTs
+			if maxTs > ts {
+				ts = maxTs
+			}
 		}
 
 		if err != nil {
@@ -254,16 +228,20 @@ func (c *CDCClient) partialRegionFeed(
 
 			switch eerr := errors.Cause(err).(type) {
 			case *eventError:
-				if eerr.GetNotLeader() != nil {
+				if notLeader := eerr.GetNotLeader(); notLeader != nil {
 					eventFeedErrorCounter.WithLabelValues("NotLeader").Inc()
-					regionInfo.meta = nil
+					c.regionCache.UpdateLeader(regionInfo.verID, notLeader.GetLeader().GetStoreId(), rpcCtx.PeerIdx)
 					return errors.Trace(err)
 				} else if eerr.GetEpochNotMatch() != nil {
 					eventFeedErrorCounter.WithLabelValues("EpochNotMatch").Inc()
 					return c.divideAndSendEventFeedToRegions(ctx, regionInfo.span, ts, regionCh)
 				} else if eerr.GetRegionNotFound() != nil {
 					eventFeedErrorCounter.WithLabelValues("RegionNotFound").Inc()
-					regionInfo.meta = nil
+					keyLocation, err := c.regionCache.LocateKey(tikv.NewBackoffer(ctx, tikvRequestMaxBackoff), regionInfo.span.Start)
+					if err != nil {
+						return errors.Trace(err)
+					}
+					regionInfo.verID = keyLocation.Region
 					return errors.Trace(err)
 				} else {
 					eventFeedErrorCounter.WithLabelValues("Unknown").Inc()
@@ -271,16 +249,12 @@ func (c *CDCClient) partialRegionFeed(
 					return errors.Annotate(err, "receive empty or unknow error msg")
 				}
 			default:
-				if status.Code(err) == codes.Unavailable {
-					regionInfo.meta = nil
-					return errors.Trace(err)
+				if errors.Cause(err) != context.Canceled && rpcCtx.Meta != nil {
+					c.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(failStoreIDs, rpcCtx), err)
 				}
-
-				return backoff.Permanent(err)
-
+				return errors.Trace(err)
 			}
 		}
-
 		return nil
 	}, maxRetry)
 
@@ -302,17 +276,27 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 
 	for {
 		var (
-			regions []*metapb.Region
+			regions []*tikv.Region
 			err     error
 		)
 		retryErr := retry.Run(func() error {
 			scanT0 := time.Now()
-			regions, _, err = c.pd.ScanRegions(ctx, nextSpan.Start, nextSpan.End, limit)
+			bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+			regions, err = c.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
 			scanRegionsDuration.WithLabelValues(captureID).Observe(time.Since(scanT0).Seconds())
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if !util.CheckRegionsLeftCover(regions, nextSpan) {
+			metas := make([]*metapb.Region, 0, len(regions))
+			for _, region := range regions {
+				if region.GetMeta() == nil {
+					err = errors.New("meta not exists in region")
+					log.Warn("batch load region", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
+					return err
+				}
+				metas = append(metas, region.GetMeta())
+			}
+			if !util.CheckRegionsLeftCover(metas, nextSpan) {
 				err = errors.New("regions not completely left cover span")
 				log.Warn("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
 				return err
@@ -325,7 +309,8 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			return retryErr
 		}
 
-		for _, region := range regions {
+		for _, tiRegion := range regions {
+			region := tiRegion.GetMeta()
 			partialSpan, err := util.Intersect(nextSpan, util.Span{Start: region.StartKey, End: region.EndKey})
 			if err != nil {
 				return errors.Trace(err)
@@ -336,9 +321,9 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 
 			select {
 			case regionCh <- singleRegionInfo{
-				meta: region,
-				span: partialSpan,
-				ts:   ts,
+				verID: tiRegion.VerID(),
+				span:  partialSpan,
+				ts:    ts,
 			}:
 			case <-ctx.Done():
 				return ctx.Err()
@@ -359,9 +344,9 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 // Return the maximum checkpoint
 func (c *CDCClient) singleEventFeed(
 	ctx context.Context,
+	rpcCtx *tikv.RPCContext,
 	span util.Span,
 	checkpointTs uint64,
-	region *metapb.Region,
 	eventCh chan<- *model.RegionFeedEvent,
 ) (uint64, error) {
 	captureID := util.CaptureIDFromCtx(ctx)
@@ -370,8 +355,8 @@ func (c *CDCClient) singleEventFeed(
 		Header: &cdcpb.Header{
 			ClusterId: c.clusterID,
 		},
-		RegionId:     region.GetId(),
-		RegionEpoch:  region.RegionEpoch,
+		RegionId:     rpcCtx.Meta.GetId(),
+		RegionEpoch:  rpcCtx.Meta.RegionEpoch,
 		CheckpointTs: checkpointTs,
 		StartKey:     span.Start,
 		EndKey:       span.End,
@@ -379,7 +364,7 @@ func (c *CDCClient) singleEventFeed(
 
 	var initialized uint32
 
-	conn, err := c.getConnByMeta(ctx, region)
+	conn, err := c.getConn(ctx, rpcCtx.Addr)
 	if err != nil {
 		return req.CheckpointTs, err
 	}

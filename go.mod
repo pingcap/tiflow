@@ -18,12 +18,12 @@ require (
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20191216031241-8a5a85928f12
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
-	github.com/pingcap/failpoint v0.0.0-20200115060041-f2180fbf0df8
+	github.com/pingcap/failpoint v0.0.0-20200210140405-f8f9fb234798
 	github.com/pingcap/kvproto v0.0.0-20200108025604-a4dc183d2af5
 	github.com/pingcap/log v0.0.0-20200117041106-d28c14d3b1cd
-	github.com/pingcap/parser v0.0.0-20200120100653-1d87b3907217
-	github.com/pingcap/pd v1.1.0-beta.0.20191219054547-4d65bbefbc6d
-	github.com/pingcap/tidb v1.1.0-beta.0.20200204134155-ebc6a2d39dd7
+	github.com/pingcap/parser v0.0.0-20200207090844-d65f5147dd9f
+	github.com/pingcap/pd v1.1.0-beta.0.20200106144140-f5a7aa985497
+	github.com/pingcap/tidb v1.1.0-beta.0.20200212043647-e66daf3e04d0
 	github.com/pingcap/tidb-tools v3.1.0-beta.1.0.20200108061154-356b0e2e2282+incompatible
 	github.com/prometheus/client_golang v1.3.0
 	github.com/prometheus/common v0.8.0 // indirect
