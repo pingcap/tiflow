@@ -361,7 +361,6 @@ func (c *changeFeed) applyJob(job *pmodel.Job) error {
 
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
 		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
-	default:
 	}
 
 	return nil
@@ -816,7 +815,6 @@ func (o *ownerImpl) handleDDL(ctx context.Context) error {
 // if the status is in ChangeFeedWaitToExecDDL.
 // After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
 func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.CaptureInfo) error {
-
 	if c.ddlState != model.ChangeFeedWaitToExecDDL {
 		return nil
 	}

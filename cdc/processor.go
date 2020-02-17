@@ -559,6 +559,7 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 		for _, table := range p.tables {
 			input := table.inputChan
 			wg.Go(func() error {
+				// TODO: Forward should return an error if it's canceled
 				input.Forward(cctx, globalResolvedTs, p.resolvedTxns)
 				return nil
 			})
@@ -610,14 +611,27 @@ func (p *processor) pullDDLJob(ctx context.Context) error {
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
 	const bulkLimit = 128
+	var lastResolved model.RawTxn
 	pendingTxns := make([]model.Txn, 0, bulkLimit)
+
 	flush := func(ctx2 context.Context) error {
+		forwardResolved := func() {
+			if lastResolved.Ts > 0 {
+				select {
+				case p.executedTxns <- lastResolved:
+				case <-ctx2.Done():
+				}
+			}
+		}
 		if len(pendingTxns) == 0 {
+			forwardResolved()
 			return nil
 		}
 		if err := p.sink.EmitDMLs(ctx2, pendingTxns...); err != nil {
 			return errors.Trace(err)
 		}
+		log.Info("DMLs Flushed", zap.Any("resolved", lastResolved), zap.Int("bulk", len(pendingTxns)))
+		forwardResolved()
 		txnCounter.WithLabelValues("executed", p.changefeedID, p.captureID).Add(float64(len(pendingTxns)))
 		pendingTxns = pendingTxns[:0]
 		return nil
@@ -631,8 +645,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			if len(rawTxn.Entries) == 0 {
-				// fake txn
+			if rawTxn.IsFake() {
 				atomic.StoreUint64(&p.ddlResolveTS, rawTxn.Ts)
 				continue
 			}
@@ -641,7 +654,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			if !t.IsDDL() {
-				log.Warn("Receive non-DDL txn from ddlJobsCh", zap.Uint64("ts", t.Ts))
+				if t.IsDML() {
+					log.Warn("Receive DML txn from ddlJobsCh", zap.Any("txn", t))
+				}
 				continue
 			}
 			p.schemaStorage.AddJob(t.DDL.Job)
@@ -654,16 +669,8 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				return nil
 			}
 			if rawTxn.IsResolved {
-				// TODO: Avoid flushing for every resolved message
-				if err := flush(ctx); err != nil {
-					return errors.Trace(err)
-				}
-				select {
-				case p.executedTxns <- rawTxn:
-					continue
-				case <-ctx.Done():
-					return errors.Trace(ctx.Err())
-				}
+				lastResolved = rawTxn
+				continue
 			}
 
 			if err := p.schemaStorage.HandlePreviousDDLJobIfNeed(rawTxn.Ts); err != nil {
@@ -696,6 +703,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				}
 				cancel()
 			}
+			log.Info("syncResolved stopped")
 			return ctx.Err()
 		default:
 			if err := flush(ctx); err != nil {
