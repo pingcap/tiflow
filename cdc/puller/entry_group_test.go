@@ -22,11 +22,11 @@ type mockEntryGroupSuite struct{}
 
 var _ = check.Suite(&mockEntryGroupSuite{})
 
-func (s *mockEntryGroupSuite) TestEntryGroup(c *check.C) {
+func (s *mockEntryGroupSuite) TestEntryGroupCompleteTxn(c *check.C) {
 	testCases := []struct {
 		input       []*model.RawKVEntry
 		resolvedTs  uint64
-		expectTxns  []model.RawTxn
+		expectTxns  []model.RawRowGroup
 		remainEntry int
 	}{
 		{
@@ -38,19 +38,19 @@ func (s *mockEntryGroupSuite) TestEntryGroup(c *check.C) {
 		{
 			input:      []*model.RawKVEntry{{Ts: 3}, {Ts: 2}, {Ts: 5}},
 			resolvedTs: 3,
-			expectTxns: []model.RawTxn{
-				{Ts: 1, Entries: []*model.RawKVEntry{{Ts: 1}}},
-				{Ts: 2, Entries: []*model.RawKVEntry{{Ts: 2}, {Ts: 2}, {Ts: 2}}},
-				{Ts: 3, Entries: []*model.RawKVEntry{{Ts: 3}}},
+			expectTxns: []model.RawRowGroup{
+				{Ts: 1, IsCompleteTxn: true, Entries: []*model.RawKVEntry{{Ts: 1}}},
+				{Ts: 2, IsCompleteTxn: true, Entries: []*model.RawKVEntry{{Ts: 2}, {Ts: 2}, {Ts: 2}}},
+				{Ts: 3, IsCompleteTxn: true, Entries: []*model.RawKVEntry{{Ts: 3}}},
 			},
 			remainEntry: 2,
 		},
 		{
 			input:      nil,
 			resolvedTs: 6,
-			expectTxns: []model.RawTxn{
-				{Ts: 4, Entries: []*model.RawKVEntry{{Ts: 4}}},
-				{Ts: 5, Entries: []*model.RawKVEntry{{Ts: 5}}},
+			expectTxns: []model.RawRowGroup{
+				{Ts: 4, IsCompleteTxn: true, Entries: []*model.RawKVEntry{{Ts: 4}}},
+				{Ts: 5, IsCompleteTxn: true, Entries: []*model.RawKVEntry{{Ts: 5}}},
 			},
 			remainEntry: 0,
 		},
@@ -61,13 +61,65 @@ func (s *mockEntryGroupSuite) TestEntryGroup(c *check.C) {
 			remainEntry: 1,
 		},
 	}
-	eg := NewEntryGroup()
+	eg := NewEntryGroup(true)
 	for _, tc := range testCases {
 		for _, entry := range tc.input {
 			eg.AddEntry(entry.Ts, entry)
 		}
 		txns := eg.Consume(tc.resolvedTs)
 		c.Check(txns, check.DeepEquals, tc.expectTxns)
-		c.Check(eg.sortedTs, check.HasLen, tc.remainEntry)
+		c.Check(eg.sortedEntries, check.HasLen, tc.remainEntry)
+	}
+}
+
+func (s *mockEntryGroupSuite) ATestEntryGroupNotCompleteTxn(c *check.C) {
+	testCases := []struct {
+		input       []*model.RawKVEntry
+		resolvedTs  uint64
+		expectTxns  []model.RawRowGroup
+		remainEntry int
+	}{
+		{
+			input:       []*model.RawKVEntry{{Ts: 1}, {Ts: 2}, {Ts: 4}, {Ts: 2}},
+			resolvedTs:  0,
+			expectTxns:  nil,
+			remainEntry: 3,
+		},
+		{
+			input:      []*model.RawKVEntry{{Ts: 3}, {Ts: 2}, {Ts: 5}},
+			resolvedTs: 3,
+			expectTxns: []model.RawRowGroup{
+				{IsCompleteTxn: false, Entries: []*model.RawKVEntry{{Ts: 1}, {Ts: 2}, {Ts: 2}, {Ts: 2}, {Ts: 3}}},
+			},
+			remainEntry: 2,
+		},
+		//{
+		//	input:      nil,
+		//	resolvedTs: 6,
+		//	expectTxns: []model.RawRowGroup{
+		//		{IsCompleteTxn: false, Entries: []*model.RawKVEntry{{Ts: 4}, {Ts: 5}}},
+		//	},
+		//	remainEntry: 0,
+		//},
+		//{
+		//	input:       []*model.RawKVEntry{{Ts: 7}},
+		//	resolvedTs:  6,
+		//	expectTxns:  nil,
+		//	remainEntry: 1,
+		//},
+	}
+	eg := NewEntryGroup(false)
+	for _, tc := range testCases {
+		for _, entry := range tc.input {
+			eg.AddEntry(entry.Ts, entry)
+		}
+		txns := eg.Consume(tc.resolvedTs)
+		c.Check(txns, check.DeepEquals, tc.expectTxns)
+		for _, txn := range txns {
+			for _, t := range txn.Entries {
+				println(t.Ts)
+			}
+		}
+		c.Check(eg.sortedEntries, check.HasLen, tc.remainEntry)
 	}
 }

@@ -31,7 +31,7 @@ type Puller interface {
 	// Run the puller, continually fetch event from TiKV and add event into buffer
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
-	CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error
+	CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawRowGroup) error) error
 	Output() Buffer
 }
 
@@ -49,6 +49,7 @@ type pullerImpl struct {
 	tsTracker    resolveTsTracker
 	// needEncode represents whether we need to encode a key when checking it is in span
 	needEncode bool
+	collectTxn bool
 }
 
 // CancellablePuller is a puller that can be stopped with the Cancel function
@@ -65,6 +66,7 @@ func NewPuller(
 	checkpointTs uint64,
 	spans []util.Span,
 	needEncode bool,
+	collectTxn bool,
 ) *pullerImpl {
 	p := &pullerImpl{
 		pdCli:        pdCli,
@@ -73,6 +75,7 @@ func NewPuller(
 		buf:          makeBuffer(),
 		tsTracker:    makeSpanFrontier(spans...),
 		needEncode:   needEncode,
+		collectTxn:   collectTxn,
 	}
 
 	return p
@@ -145,21 +148,22 @@ func (p *pullerImpl) GetResolvedTs() uint64 {
 	return p.tsTracker.Frontier()
 }
 
-func (p *pullerImpl) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
-	return collectRawTxns(ctx, p.buf.Get, outputFn, p.tsTracker)
+// CollectRawTxns collects KV events from the inputFn,
+// groups them by transactions and sends them to the outputFn.
+func (p *pullerImpl) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawRowGroup) error) error {
+	return collectRawTxns(ctx, p.buf.Get, outputFn, p.tsTracker, p.collectTxn)
 }
 
-// collectRawTxns collects KV events from the inputFn,
-// groups them by transactions and sends them to the outputFn.
 func collectRawTxns(
 	ctx context.Context,
 	inputFn func(context.Context) (model.RegionFeedEvent, error),
-	outputFn func(context.Context, model.RawTxn) error,
+	outputFn func(context.Context, model.RawRowGroup) error,
 	tracker resolveTsTracker,
+	collectTxn bool,
 ) error {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	entryGroup := NewEntryGroup()
+	entryGroup := NewEntryGroup(collectTxn)
 	for {
 		be, err := inputFn(ctx)
 		if err != nil {
@@ -189,7 +193,7 @@ func collectRawTxns(
 			resolvedTxnsBatchSize.Observe(float64(len(readyTxns)))
 			if len(readyTxns) == 0 {
 				log.Debug("Forwarding fake txn", zap.Uint64("ts", resolvedTs))
-				fakeTxn := model.RawTxn{
+				fakeTxn := model.RawRowGroup{
 					Ts:      resolvedTs,
 					Entries: nil,
 				}

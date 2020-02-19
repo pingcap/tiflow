@@ -23,7 +23,7 @@ func NewTxnMounter(schema *schema.Storage) *Mounter {
 }
 
 // Mount parses a raw transaction and returns a transaction
-func (m *Mounter) Mount(rawTxn model.RawTxn) (model.Txn, error) {
+func (m *Mounter) Mount(rawTxn model.RawRowGroup) (model.Txn, error) {
 	t := model.Txn{
 		Ts: rawTxn.Ts,
 	}

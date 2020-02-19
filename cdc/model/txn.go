@@ -6,15 +6,17 @@ import (
 	"github.com/pingcap/tidb/types"
 )
 
-// RawTxn represents a complete collection of Entries that belong to the same transaction
-type RawTxn struct {
-	Ts         uint64
-	IsResolved bool
-	Entries    []*RawKVEntry
+// RawRowGroup represents a complete collection of Entries that belong to the same transaction
+type RawRowGroup struct {
+	Ts uint64
+	// IsCompleteTxn represents whether the RawRowGroup is a complete transaction
+	IsCompleteTxn bool
+	IsResolved    bool
+	Entries       []*RawKVEntry
 }
 
-// IsFake returns true if this RawTxn is fake txn.
-func (r RawTxn) IsFake() bool {
+// IsFake returns true if this RawRowGroup is fake txn.
+func (r RawRowGroup) IsFake() bool {
 	return len(r.Entries) == 0
 }
 

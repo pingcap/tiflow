@@ -77,10 +77,10 @@ func (s *mockTsRWriter) SetGlobalResolvedTs(ts uint64) {
 	s.globalResolvedTs = ts
 }
 
-// mockMounter pretend to decode a RawTxn by returning a Txn of the same Ts
+// mockMounter pretend to decode a RawRowGroup by returning a Txn of the same Ts
 type mockMounter struct{}
 
-func (m mockMounter) Mount(rawTxn model.RawTxn) (model.Txn, error) {
+func (m mockMounter) Mount(rawTxn model.RawRowGroup) (model.Txn, error) {
 	return model.Txn{Ts: rawTxn.Ts}, nil
 }
 
@@ -172,7 +172,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 
 		go func(rawTxnTs []uint64) {
 			for _, txnTs := range rawTxnTs {
-				input <- model.RawTxn{Ts: txnTs}
+				input <- model.RawRowGroup{Ts: txnTs}
 			}
 		}(rawTxnTs)
 	}
@@ -241,7 +241,7 @@ type txnChannelSuite struct{}
 var _ = check.Suite(&txnChannelSuite{})
 
 func (s *txnChannelSuite) TestShouldForwardTxnsByTs(c *check.C) {
-	input := make(chan model.RawTxn, 5)
+	input := make(chan model.RawRowGroup, 5)
 	var lastTs uint64
 	callback := func(ts uint64) {
 		lastTs = ts
@@ -249,14 +249,14 @@ func (s *txnChannelSuite) TestShouldForwardTxnsByTs(c *check.C) {
 	tc := newTxnChannel(input, 5, callback)
 	for _, ts := range []uint64{1, 2, 4, 6} {
 		select {
-		case input <- model.RawTxn{Ts: ts}:
+		case input <- model.RawRowGroup{Ts: ts}:
 		case <-time.After(time.Second):
 			c.Fatal("Timeout sending to input")
 		}
 	}
 	close(input)
 
-	output := make(chan model.RawTxn, 5)
+	output := make(chan model.RawRowGroup, 5)
 
 	assertCorrectOutput := func(expected []uint64) {
 		for _, ts := range expected {
@@ -286,12 +286,12 @@ func (s *txnChannelSuite) TestShouldForwardTxnsByTs(c *check.C) {
 }
 
 func (s *txnChannelSuite) TestShouldBeCancellable(c *check.C) {
-	input := make(chan model.RawTxn, 5)
+	input := make(chan model.RawRowGroup, 5)
 	tc := newTxnChannel(input, 5, func(ts uint64) {})
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
 	go func() {
-		tc.Forward(ctx, 1, make(chan model.RawTxn))
+		tc.Forward(ctx, 1, make(chan model.RawRowGroup))
 		close(stopped)
 	}()
 	cancel()

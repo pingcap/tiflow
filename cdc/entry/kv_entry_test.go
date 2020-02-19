@@ -32,7 +32,7 @@ func (s *kvEntrySuite) testCreateTable(c *check.C, newRowFormat bool) {
 
 	// create another context with canceled, we can close this puller but not affect puller manager
 	plrCtx, plrCancel := context.WithCancel(ctx)
-	err := plr.CollectRawTxns(plrCtx, func(ctx context.Context, rawTxn model.RawTxn) error {
+	err := plr.CollectRawTxns(plrCtx, func(ctx context.Context, rawTxn model.RawRowGroup) error {
 		for _, raw := range rawTxn.Entries {
 			entry, err := m.unmarshal(raw)
 			c.Assert(err, check.IsNil)
@@ -84,7 +84,7 @@ func (s *kvEntrySuite) testCreateTable(c *check.C, newRowFormat bool) {
 	plr = pm.CreatePuller(0, []util.Span{util.GetDDLSpan()})
 	existDDLJobHistoryKVEntry = false
 	plrCtx, plrCancel = context.WithCancel(ctx)
-	err = plr.CollectRawTxns(plrCtx, func(ctx context.Context, rawTxn model.RawTxn) error {
+	err = plr.CollectRawTxns(plrCtx, func(ctx context.Context, rawTxn model.RawRowGroup) error {
 		for _, raw := range rawTxn.Entries {
 			entry, err := m.unmarshal(raw)
 			c.Assert(err, check.IsNil)
@@ -453,7 +453,7 @@ func assertIn(c *check.C, item kvEntry, expect []kvEntry) {
 
 func checkDMLKVEntries(ctx context.Context, c *check.C, tableInfo *schema.TableInfo, m *Mounter, plr puller.Puller, expect []kvEntry) {
 	ctx, cancel := context.WithCancel(ctx)
-	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
+	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawRowGroup) error {
 		eventSum := 0
 		for _, raw := range rawTxn.Entries {
 			entry, err := m.unmarshal(raw)

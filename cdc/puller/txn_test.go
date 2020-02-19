@@ -79,14 +79,14 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
 		return e, nil
 	}
 
-	var rawTxns []model.RawTxn
-	output := func(ctx context.Context, txn model.RawTxn) error {
+	var rawTxns []model.RawRowGroup
+	output := func(ctx context.Context, txn model.RawRowGroup) error {
 		rawTxns = append(rawTxns, txn)
 		return nil
 	}
 
 	ctx := context.Background()
-	err := collectRawTxns(ctx, input, output, &mockTracker{})
+	err := collectRawTxns(ctx, input, output, &mockTracker{}, true)
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, 2)
@@ -145,8 +145,8 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 		return e, nil
 	}
 
-	var rawTxns []model.RawTxn
-	output := func(ctx context.Context, txn model.RawTxn) error {
+	var rawTxns []model.RawRowGroup
+	output := func(ctx context.Context, txn model.RawRowGroup) error {
 		rawTxns = append(rawTxns, txn)
 		return nil
 	}
@@ -154,7 +154,7 @@ func (cs *CollectRawTxnsSuite) TestShouldConsiderSpanResolvedTs(c *check.C) {
 	ctx := context.Background()
 	// Set up the tracker so that only the last resolve event forwards the global minimum Ts
 	tracker := mockTracker{forwarded: []bool{false, false, true}}
-	err := collectRawTxns(ctx, input, output, &tracker)
+	err := collectRawTxns(ctx, input, output, &tracker, true)
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, 1)
@@ -182,15 +182,15 @@ func (cs *CollectRawTxnsSuite) TestShouldOutputBinlogEvenWhenThereIsNoRealEvent(
 		return e, nil
 	}
 
-	var rawTxns []model.RawTxn
-	output := func(ctx context.Context, txn model.RawTxn) error {
+	var rawTxns []model.RawRowGroup
+	output := func(ctx context.Context, txn model.RawRowGroup) error {
 		rawTxns = append(rawTxns, txn)
 		return nil
 	}
 
 	ctx := context.Background()
 	tracker := mockTracker{forwarded: []bool{true, true}}
-	err := collectRawTxns(ctx, input, output, &tracker)
+	err := collectRawTxns(ctx, input, output, &tracker, true)
 	c.Assert(err, check.ErrorMatches, "End")
 
 	c.Assert(rawTxns, check.HasLen, len(entries))

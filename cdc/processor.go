@@ -68,17 +68,17 @@ var (
 )
 
 type mounter interface {
-	Mount(rawTxn model.RawTxn) (model.Txn, error)
+	Mount(rawTxn model.RawRowGroup) (model.Txn, error)
 }
 
 type txnChannel struct {
-	inputTxn   <-chan model.RawTxn
-	outputTxn  chan model.RawTxn
-	putBackTxn *model.RawTxn
+	inputTxn   <-chan model.RawRowGroup
+	outputTxn  chan model.RawRowGroup
+	putBackTxn *model.RawRowGroup
 }
 
 // Forward push all txn with commit ts not greater than ts into targetC.
-func (p *txnChannel) Forward(ctx context.Context, ts uint64, targetC chan<- model.RawTxn) {
+func (p *txnChannel) Forward(ctx context.Context, ts uint64, targetC chan<- model.RawRowGroup) {
 	if p.putBackTxn != nil {
 		t := *p.putBackTxn
 		if t.Ts > ts {
@@ -106,7 +106,7 @@ func (p *txnChannel) Forward(ctx context.Context, ts uint64, targetC chan<- mode
 	}
 }
 
-func pushTxn(ctx context.Context, targetC chan<- model.RawTxn, t model.RawTxn) {
+func pushTxn(ctx context.Context, targetC chan<- model.RawRowGroup, t model.RawRowGroup) {
 	select {
 	case <-ctx.Done():
 		log.Info("Dropped txn during canceling", zap.Any("txn", t))
@@ -115,17 +115,17 @@ func pushTxn(ctx context.Context, targetC chan<- model.RawTxn, t model.RawTxn) {
 	}
 }
 
-func (p *txnChannel) putBack(t model.RawTxn) {
+func (p *txnChannel) putBack(t model.RawRowGroup) {
 	if p.putBackTxn != nil {
 		log.Fatal("can not put back raw txn continuously")
 	}
 	p.putBackTxn = &t
 }
 
-func newTxnChannel(inputTxn <-chan model.RawTxn, chanSize int, handleResolvedTs func(uint64)) *txnChannel {
+func newTxnChannel(inputTxn <-chan model.RawRowGroup, chanSize int, handleResolvedTs func(uint64)) *txnChannel {
 	tc := &txnChannel{
 		inputTxn:  inputTxn,
-		outputTxn: make(chan model.RawTxn, chanSize),
+		outputTxn: make(chan model.RawRowGroup, chanSize),
 	}
 	go func() {
 		defer close(tc.outputTxn)
@@ -155,12 +155,12 @@ type processor struct {
 	sink          sink.Sink
 
 	ddlPuller    puller.Puller
-	ddlJobsCh    chan model.RawTxn
+	ddlJobsCh    chan model.RawRowGroup
 	ddlResolveTS uint64
 
 	tsRWriter    storage.ProcessorTsRWriter
-	resolvedTxns chan model.RawTxn
-	executedTxns chan model.RawTxn
+	resolvedTxns chan model.RawRowGroup
+	executedTxns chan model.RawRowGroup
 
 	status   *model.TaskStatus
 	position *model.TaskPosition
@@ -176,7 +176,7 @@ type tableInfo struct {
 	id         int64
 	puller     puller.CancellablePuller
 	inputChan  *txnChannel
-	inputTxn   chan model.RawTxn
+	inputTxn   chan model.RawRowGroup
 	resolvedTS uint64
 }
 
@@ -226,7 +226,7 @@ func NewProcessor(ctx context.Context, pdEndpoints []string, changefeed model.Ch
 
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan()}, false)
+	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan()}, false, true)
 
 	mounter := fNewMounter(schemaStorage)
 
@@ -255,9 +255,9 @@ func NewProcessor(ctx context.Context, pdEndpoints []string, changefeed model.Ch
 		tsRWriter:    tsRWriter,
 		status:       tsRWriter.GetTaskStatus(),
 		position:     &model.TaskPosition{},
-		resolvedTxns: make(chan model.RawTxn, 1),
-		executedTxns: make(chan model.RawTxn, 1),
-		ddlJobsCh:    make(chan model.RawTxn, 16),
+		resolvedTxns: make(chan model.RawRowGroup, 1),
+		executedTxns: make(chan model.RawRowGroup, 1),
+		ddlJobsCh:    make(chan model.RawRowGroup, 16),
 
 		tables: make(map[int64]*tableInfo),
 	}
@@ -574,7 +574,7 @@ func (p *processor) globalResolvedWorker(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case p.resolvedTxns <- model.RawTxn{
+		case p.resolvedTxns <- model.RawRowGroup{
 			Ts:         globalResolvedTs,
 			IsResolved: true,
 		}:
@@ -592,7 +592,7 @@ func (p *processor) pullDDLJob(ctx context.Context) error {
 	})
 
 	errg.Go(func() error {
-		err := p.ddlPuller.CollectRawTxns(ctx, func(ctxInner context.Context, rawTxn model.RawTxn) error {
+		err := p.ddlPuller.CollectRawTxns(ctx, func(ctxInner context.Context, rawTxn model.RawRowGroup) error {
 			select {
 			case <-ctxInner.Done():
 				return ctxInner.Err()
@@ -611,7 +611,7 @@ func (p *processor) pullDDLJob(ctx context.Context) error {
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
 	const bulkLimit = 128
-	var lastResolved model.RawTxn
+	var lastResolved model.RawRowGroup
 	pendingTxns := make([]model.Txn, 0, bulkLimit)
 
 	flush := func(ctx2 context.Context) error {
@@ -795,7 +795,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 
 	table := &tableInfo{
 		id:       tableID,
-		inputTxn: make(chan model.RawTxn, defaultInputTxnChanSize),
+		inputTxn: make(chan model.RawRowGroup, defaultInputTxnChanSize),
 	}
 
 	tc := newTxnChannel(table.inputTxn, defaultOutputTxnChanSize, func(resolvedTs uint64) {
@@ -814,13 +814,13 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 }
 
 // startPuller start pull data with span and push resolved txn into txnChan in timestamp increasing order.
-func (p *processor) startPuller(ctx context.Context, span util.Span, checkpointTs uint64, txnChan chan<- model.RawTxn, errCh chan<- error) puller.Puller {
+func (p *processor) startPuller(ctx context.Context, span util.Span, checkpointTs uint64, txnChan chan<- model.RawRowGroup, errCh chan<- error) puller.Puller {
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
 
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
-	puller := puller.NewPuller(p.pdCli, checkpointTs, []util.Span{span}, true)
+	puller := puller.NewPuller(p.pdCli, checkpointTs, []util.Span{span}, true, true)
 
 	errg.Go(func() error {
 		return puller.Run(ctx)
@@ -828,7 +828,7 @@ func (p *processor) startPuller(ctx context.Context, span util.Span, checkpointT
 
 	errg.Go(func() error {
 		defer close(txnChan)
-		err := puller.CollectRawTxns(ctx, func(ctxInner context.Context, rawTxn model.RawTxn) error {
+		err := puller.CollectRawTxns(ctx, func(ctxInner context.Context, rawTxn model.RawRowGroup) error {
 			select {
 			case <-ctxInner.Done():
 				return ctxInner.Err()

@@ -101,10 +101,10 @@ type MockPullerManager struct {
 	domain    *domain.Domain
 
 	txnMap   map[uint64]*kvrpcpb.PrewriteRequest
-	rawTxnCh chan model.RawTxn
+	rawTxnCh chan model.RawRowGroup
 	tidbKit  *testkit.TestKit
 
-	rawTxns []model.RawTxn
+	rawTxns []model.RawRowGroup
 
 	txnMapMu  sync.Mutex
 	rawTxnsMu sync.RWMutex
@@ -135,7 +135,7 @@ func (p *mockPuller) GetResolvedTs() uint64 {
 	return p.resolvedTs
 }
 
-func (p *mockPuller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
+func (p *mockPuller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawRowGroup) error) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -165,7 +165,7 @@ func (p *mockPuller) Output() Buffer {
 func NewMockPullerManager(c *check.C, newRowFormat bool) *MockPullerManager {
 	m := &MockPullerManager{
 		txnMap:   make(map[uint64]*kvrpcpb.PrewriteRequest),
-		rawTxnCh: make(chan model.RawTxn, 16),
+		rawTxnCh: make(chan model.RawRowGroup, 16),
 		closeCh:  make(chan struct{}),
 		c:        c,
 	}
@@ -232,7 +232,7 @@ func (m *MockPullerManager) Run(ctx context.Context) {
 				m.rawTxnsMu.Unlock()
 			case <-time.After(time.Second):
 				m.rawTxnsMu.Lock()
-				fakeTxn := model.RawTxn{Ts: oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond))}
+				fakeTxn := model.RawRowGroup{Ts: oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond))}
 				m.rawTxns = append(m.rawTxns, fakeTxn)
 				m.rawTxnsMu.Unlock()
 			}
@@ -269,8 +269,8 @@ func (m *MockPullerManager) GetDDLJobs() []*timodel.Job {
 	return jobs
 }
 
-func (p *mockPuller) sendRawTxn(ctx context.Context, rawTxn model.RawTxn, outputFn func(context.Context, model.RawTxn) error) {
-	toSend := model.RawTxn{Ts: rawTxn.Ts}
+func (p *mockPuller) sendRawTxn(ctx context.Context, rawTxn model.RawRowGroup, outputFn func(context.Context, model.RawRowGroup) error) {
+	toSend := model.RawRowGroup{Ts: rawTxn.Ts}
 	if len(rawTxn.Entries) > 0 {
 		for _, kvEntry := range rawTxn.Entries {
 			if util.KeyInSpans(kvEntry.Key, p.spans, false) {
@@ -319,7 +319,7 @@ func (m *MockPullerManager) postRollback(keys [][]byte, startTs uint64, result e
 	delete(m.txnMap, startTs)
 }
 
-func prewrite2RawTxn(req *kvrpcpb.PrewriteRequest, commitTs uint64) model.RawTxn {
+func prewrite2RawTxn(req *kvrpcpb.PrewriteRequest, commitTs uint64) model.RawRowGroup {
 	var entries []*model.RawKVEntry
 	for _, mut := range req.Mutations {
 		var op model.OpType
@@ -339,7 +339,7 @@ func prewrite2RawTxn(req *kvrpcpb.PrewriteRequest, commitTs uint64) model.RawTxn
 		}
 		entries = append(entries, rawKV)
 	}
-	return model.RawTxn{Ts: commitTs, Entries: entries}
+	return model.RawRowGroup{Ts: commitTs, Entries: entries}
 }
 
 func anyError(errs []error) bool {

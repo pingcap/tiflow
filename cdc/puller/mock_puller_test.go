@@ -25,7 +25,7 @@ func (s *mockPullerSuite) TestTxnSort(c *check.C) {
 	defer cancel()
 	ts := uint64(0)
 	go func() {
-		err := plr.CollectRawTxns(ctx, func(ctx context.Context, txn model.RawTxn) error {
+		err := plr.CollectRawTxns(ctx, func(ctx context.Context, txn model.RawRowGroup) error {
 			c.Assert(ts, check.Less, txn.Ts)
 			atomic.StoreUint64(&ts, txn.Ts)
 			return nil
@@ -50,7 +50,7 @@ func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 	ts := uint64(0)
 	txnMounter := entry.NewTxnMounter(nil)
 	go func() {
-		err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
+		err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawRowGroup) error {
 			c.Assert(ts, check.Less, rawTxn.Ts)
 			atomic.StoreUint64(&ts, rawTxn.Ts)
 			if len(rawTxn.Entries) == 0 {
@@ -85,10 +85,10 @@ func (s *mockPullerSuite) TestStartTs(c *check.C) {
 	plrA := pm.CreatePuller(0, []util.Span{util.Span{}.Hack()})
 	ctx, cancel := context.WithCancel(context.Background())
 	ts := uint64(0)
-	var rawTxns []model.RawTxn
+	var rawTxns []model.RawRowGroup
 	var mu sync.Mutex
 	go func() {
-		err := plrA.CollectRawTxns(ctx, func(ctx context.Context, txn model.RawTxn) error {
+		err := plrA.CollectRawTxns(ctx, func(ctx context.Context, txn model.RawRowGroup) error {
 			mu.Lock()
 			defer mu.Unlock()
 			c.Assert(ts, check.Less, txn.Ts)
@@ -112,7 +112,7 @@ func (s *mockPullerSuite) TestStartTs(c *check.C) {
 	plrB := pm.CreatePuller(rawTxns[index].Ts, []util.Span{util.Span{}.Hack()})
 	mu.Unlock()
 	ctx, cancel = context.WithCancel(context.Background())
-	err := plrB.CollectRawTxns(ctx, func(ctx context.Context, txn model.RawTxn) error {
+	err := plrB.CollectRawTxns(ctx, func(ctx context.Context, txn model.RawRowGroup) error {
 		mu.Lock()
 		defer mu.Unlock()
 		if index >= len(rawTxns) {

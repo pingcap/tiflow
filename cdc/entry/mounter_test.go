@@ -34,10 +34,10 @@ func setUpPullerAndSchema(ctx context.Context, c *check.C, newRowFormat bool, sq
 	return pm, schemaStorage
 }
 
-func getFirstRealTxn(ctx context.Context, c *check.C, plr puller.Puller) (result model.RawTxn) {
+func getFirstRealTxn(ctx context.Context, c *check.C, plr puller.Puller) (result model.RawRowGroup) {
 	ctx, cancel := context.WithCancel(ctx)
 	var once sync.Once
-	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
+	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawRowGroup) error {
 		if rawTxn.IsFake() {
 			return nil
 		}
