@@ -39,7 +39,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const dryRunOpt = "_dry-run"
+
 type mysqlSink struct {
+	dryRun     bool
 	db         *sql.DB
 	infoGetter TableInfoGetter
 	ddlOnly    bool
@@ -71,16 +74,23 @@ func NewMySQLSink(sinkURI string, infoGetter TableInfoGetter, opts map[string]st
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return newMySQLSink(db, infoGetter, false), nil
+
+	var dryRun bool
+	if _, ok := opts[dryRunOpt]; ok {
+		dryRun = true
+	}
+
+	return newMySQLSink(db, infoGetter, false, dryRun), nil
 }
 
 // NewMySQLSinkDDLOnly returns a sink that only processes DDL
 func NewMySQLSinkDDLOnly(db *sql.DB) Sink {
-	return newMySQLSink(db, nil, true)
+	return newMySQLSink(db, nil, true, false)
 }
 
-func newMySQLSink(db *sql.DB, infoGetter TableInfoGetter, ddlOnly bool) Sink {
+func newMySQLSink(db *sql.DB, infoGetter TableInfoGetter, ddlOnly bool, dryRun bool) Sink {
 	return &mysqlSink{
+		dryRun:     dryRun,
 		db:         db,
 		infoGetter: infoGetter,
 		ddlOnly:    ddlOnly,
@@ -91,6 +101,11 @@ func (s *mysqlSink) EmitDDL(ctx context.Context, t model.Txn) error {
 	if !t.IsDDL() {
 		return errors.New("not a DDL")
 	}
+
+	if s.dryRun {
+		return nil
+	}
+
 	err := s.execDDLWithMaxRetries(ctx, t.DDL, 5)
 	return errors.Trace(err)
 }
@@ -99,6 +114,11 @@ func (s *mysqlSink) EmitDMLs(ctx context.Context, txns ...model.Txn) error {
 	if s.ddlOnly {
 		return errors.New("dmls disallowed in ddl-only mode")
 	}
+
+	if s.dryRun {
+		return nil
+	}
+
 	var allDMLs []*model.DML
 	for _, t := range txns {
 		dmls, err := s.formatDMLs(t.DMLs)

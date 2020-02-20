@@ -53,7 +53,7 @@ type OwnerDDLHandler interface {
 	PullDDL() (resolvedTs uint64, jobs []*model.DDL, err error)
 
 	// ExecDDL executes the ddl job
-	ExecDDL(ctx context.Context, sinkURI string, txn model.Txn) error
+	ExecDDL(ctx context.Context, sinkURI string, opts map[string]string, txn model.Txn) error
 
 	// Close cancels the executing of OwnerDDLHandler and releases resource
 	Close() error
@@ -863,7 +863,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 				zap.Uint64("ts", todoDDLJob.Job.BinlogInfo.FinishedTS),
 			)
 		} else {
-			err = c.ddlHandler.ExecDDL(ctx, c.info.SinkURI, ddlTxn)
+			err = c.ddlHandler.ExecDDL(ctx, c.info.SinkURI, c.info.Opts, ddlTxn)
 			// If DDL executing failed, pause the changefeed and print log, rather
 			// than return an error and break the running of this owner.
 			if err != nil {
