@@ -38,7 +38,7 @@ func (eg *EntryGroup) AddEntry(ts uint64, entry *model.RawKVEntry) {
 	if i >= len(eg.sortedEntries) || eg.sortedEntries[i].Ts != ts {
 		eg.sortedEntries = append(eg.sortedEntries, nil)
 		copy(eg.sortedEntries[i+1:], eg.sortedEntries[i:])
-		eg.sortedEntries[i] = &model.RawRowGroup{Ts: ts, IsCompleteTxn: eg.collectTxn}
+		eg.sortedEntries[i] = &model.RawRowGroup{Ts: ts, IsCompleteTxn: true}
 	}
 	eg.sortedEntries[i].Entries = append(eg.sortedEntries[i].Entries, entry)
 }
