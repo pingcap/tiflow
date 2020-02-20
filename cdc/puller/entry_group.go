@@ -55,7 +55,7 @@ func (eg *EntryGroup) Consume(resolvedTs uint64) (txns []model.RawRowGroup) {
 		txns = append(txns, *eg.sortedEntries[i])
 	}
 	if !eg.collectTxn {
-		// find a more efficient way to sort entries
+		// TODO find a more efficient way to sort entries
 		result := model.RawRowGroup{IsCompleteTxn: false}
 		for _, txn := range txns {
 			result.Entries = append(result.Entries, txn.Entries...)
