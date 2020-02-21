@@ -61,6 +61,20 @@ var (
 			Help:      "The time it took to update sub change feed info.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"captureID"})
+	tableInputChanSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "table_input_chan_size",
+			Help:      "txn input channel size for a table",
+		}, []string{"changefeed", "capture", "table"})
+	tableOutputChanSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "txn_output_chan_size",
+			Help:      "txn output channel size for a table",
+		}, []string{"changefeed", "capture", "table"})
 )
 
 // initProcessorMetrics registers all metrics used in processor
@@ -71,4 +85,6 @@ func initProcessorMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(syncTableNumGauge)
 	registry.MustRegister(txnCounter)
 	registry.MustRegister(updateInfoDuration)
+	registry.MustRegister(tableInputChanSizeGauge)
+	registry.MustRegister(tableOutputChanSizeGauge)
 }

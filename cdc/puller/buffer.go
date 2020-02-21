@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	defaultBufferSize = 8
+	defaultBufferSize = 128
 )
 
 // Buffer buffers kv entries
