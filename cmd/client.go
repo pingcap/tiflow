@@ -25,12 +25,14 @@ func init() {
 
 	cliCmd.Flags().StringVar(&pdAddress, "pd-addr", "localhost:2379", "address of PD")
 	cliCmd.Flags().Uint64Var(&startTs, "start-ts", 0, "start ts of changefeed")
-	cliCmd.Flags().Uint64Var(&startTs, "target-ts", 0, "target ts of changefeed")
+	cliCmd.Flags().Uint64Var(&targetTs, "target-ts", 0, "target ts of changefeed")
 	cliCmd.Flags().StringVar(&sinkURI, "sink-uri", "root@tcp(127.0.0.1:3306)/", "sink uri")
 	cliCmd.Flags().StringVar(&configFile, "config", "", "path of the configuration file")
+	cliCmd.Flags().StringSliceVar(&opts, "opts", nil, "in key=value format")
 }
 
 var (
+	opts       []string
 	pdAddress  string
 	startTs    uint64
 	targetTs   uint64
@@ -90,6 +92,23 @@ var cliCmd = &cobra.Command{
 			TargetTs:   targetTs,
 			Config:     cfg,
 		}
+
+		for _, opt := range opts {
+			s := strings.Split(opt, "=")
+			if len(s) <= 0 || len(s) > 2 {
+				fmt.Printf("omit opt: %s", opt)
+			}
+
+			var key string
+			var value string
+
+			key = s[0]
+			if len(s) > 1 {
+				value = s[1]
+			}
+			detail.Opts[key] = value
+		}
+
 		d, err := detail.Marshal()
 		if err != nil {
 			return err

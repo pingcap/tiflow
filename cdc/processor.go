@@ -639,6 +639,8 @@ func (p *processor) syncResolved(ctx context.Context) error {
 
 	defer close(p.executedTxns)
 
+	flushTick := time.NewTicker(flushDMLsInterval)
+
 	for {
 		select {
 		case rawTxn, ok := <-p.ddlJobsCh:
@@ -705,11 +707,10 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			log.Info("syncResolved stopped")
 			return ctx.Err()
-		default:
+		case <-flushTick.C:
 			if err := flush(ctx); err != nil {
 				return errors.Trace(err)
 			}
-			time.Sleep(flushDMLsInterval)
 		}
 	}
 }

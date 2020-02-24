@@ -77,7 +77,7 @@ func (h *handlerForPrueDMLTest) PullDDL() (resolvedTs uint64, ddl []*model.DDL, 
 	return uint64(math.MaxUint64), nil, nil
 }
 
-func (h *handlerForPrueDMLTest) ExecDDL(context.Context, string, model.Txn) error {
+func (h *handlerForPrueDMLTest) ExecDDL(context.Context, string, map[string]string, model.Txn) error {
 	panic("unreachable")
 }
 
@@ -228,7 +228,7 @@ func (h *handlerForDDLTest) PullDDL() (resolvedTs uint64, jobs []*model.DDL, err
 	return h.ddlResolvedTs[h.ddlIndex], []*model.DDL{h.ddls[h.ddlIndex]}, nil
 }
 
-func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, txn model.Txn) error {
+func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, _ map[string]string, txn model.Txn) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.ddlExpectIndex++
