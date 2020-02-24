@@ -28,7 +28,7 @@ type bufferSuite struct{}
 var _ = check.Suite(&bufferSuite{})
 
 func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
-	b := makeBuffer()
+	b := makeChanBuffer()
 	ctx := context.Background()
 	var wg sync.WaitGroup
 
@@ -59,7 +59,7 @@ func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
 }
 
 func (bs *bufferSuite) TestWaitsCanBeCanceled(c *check.C) {
-	b := makeBuffer()
+	b := makeChanBuffer()
 	ctx := context.Background()
 
 	timeout, cancel := context.WithTimeout(ctx, time.Millisecond)
@@ -85,4 +85,44 @@ func (bs *bufferSuite) TestWaitsCanBeCanceled(c *check.C) {
 	case <-time.After(10 * time.Millisecond):
 		c.Fatal("AddEntry doesn't stop in time.")
 	}
+}
+
+type memBufferSuite struct{}
+
+var _ = check.Suite(&memBufferSuite{})
+
+func (bs *memBufferSuite) TestMemBuffer(c *check.C) {
+	limitter := NewBlurResourceLimmter(1024 * 1024)
+	bf := makeMemBuffer(limitter)
+
+	var err error
+	var entries []model.RegionFeedEvent
+	for {
+		entry := model.RegionFeedEvent{
+			Val: &model.RawKVEntry{
+				Value: make([]byte, 1024),
+			},
+		}
+		err = bf.AddEntry(context.Background(), entry)
+		if err != nil {
+			break
+		}
+
+		entries = append(entries, entry)
+	}
+
+	c.Assert(err, check.Equals, ErrReachLimit)
+	num := float64(bf.mu.entries.Len())
+	nearNum := 1024.0
+	c.Assert(num >= nearNum*0.9, check.IsTrue)
+	c.Assert(num <= nearNum*1.1, check.IsTrue)
+
+	// Check can get back the entries.
+	var getEntries []model.RegionFeedEvent
+	for len(getEntries) < len(entries) {
+		entry, err := bf.Get(context.Background())
+		c.Assert(err, check.IsNil)
+		getEntries = append(getEntries, entry)
+	}
+	c.Assert(getEntries, check.DeepEquals, entries)
 }

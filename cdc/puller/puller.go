@@ -32,7 +32,7 @@ type Puller interface {
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
 	CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error
-	Output() Buffer
+	Output() ChanBuffer
 }
 
 // resolveTsTracker checks resolved event of spans and moves the global resolved ts ahead
@@ -45,7 +45,8 @@ type pullerImpl struct {
 	pdCli        pd.Client
 	checkpointTs uint64
 	spans        []util.Span
-	buf          Buffer
+	buffer       *memBuffer
+	chanBuffer   ChanBuffer
 	tsTracker    resolveTsTracker
 	// needEncode represents whether we need to encode a key when checking it is in span
 	needEncode bool
@@ -65,12 +66,14 @@ func NewPuller(
 	checkpointTs uint64,
 	spans []util.Span,
 	needEncode bool,
+	limitter *BlurResourceLimitter,
 ) *pullerImpl {
 	p := &pullerImpl{
 		pdCli:        pdCli,
 		checkpointTs: checkpointTs,
 		spans:        spans,
-		buf:          makeBuffer(),
+		buffer:       makeMemBuffer(limitter),
+		chanBuffer:   makeChanBuffer(),
 		tsTracker:    makeSpanFrontier(spans...),
 		needEncode:   needEncode,
 	}
@@ -78,8 +81,8 @@ func NewPuller(
 	return p
 }
 
-func (p *pullerImpl) Output() Buffer {
-	return p.buf
+func (p *pullerImpl) Output() ChanBuffer {
+	return p.chanBuffer
 }
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
@@ -123,17 +126,31 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						continue
 					}
 
-					if err := p.buf.AddEntry(ctx, *e); err != nil {
+					if err := p.buffer.AddEntry(ctx, *e); err != nil {
 						return errors.Trace(err)
 					}
 				} else if e.Resolved != nil {
 					kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
-					if err := p.buf.AddEntry(ctx, *e); err != nil {
+					if err := p.buffer.AddEntry(ctx, *e); err != nil {
 						return errors.Trace(err)
 					}
 				}
 			case <-ctx.Done():
 				return ctx.Err()
+			}
+		}
+	})
+
+	g.Go(func() error {
+		for {
+			e, err := p.buffer.Get(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			err = p.chanBuffer.AddEntry(ctx, e)
+			if err != nil {
+				return errors.Trace(err)
 			}
 		}
 	})
@@ -146,7 +163,7 @@ func (p *pullerImpl) GetResolvedTs() uint64 {
 }
 
 func (p *pullerImpl) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
-	return collectRawTxns(ctx, p.buf.Get, outputFn, p.tsTracker)
+	return collectRawTxns(ctx, p.chanBuffer.Get, outputFn, p.tsTracker)
 }
 
 // collectRawTxns collects KV events from the inputFn,
