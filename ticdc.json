@@ -18,7 +18,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 18,
-  "iteration": 1581499259290,
+  "iteration": 1582512407867,
   "links": [],
   "panels": [
     {
@@ -824,7 +824,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(ticdc_kvclient_pull_event_count{changefeed=\"$changefeed\"}[5m])) by (instance, type)",
+          "expr": "sum(rate(ticdc_kvclient_pull_event_count{changefeed=\"$changefeed\"}[1m])) by (instance, type)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}-{{type}}",
@@ -918,7 +918,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(ticdc_kvclient_send_event_count{changefeed=\"$changefeed\"}[5m])) by (instance, type)",
+          "expr": "sum(rate(ticdc_kvclient_send_event_count{changefeed=\"$changefeed\"}[1m])) by (instance, type)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}-{{type}}",
@@ -967,12 +967,200 @@
       }
     },
     {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "cdc-server",
+      "description": "Puller event channel size",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 13,
+        "x": 11,
+        "y": 40
+      },
+      "hiddenSeries": false,
+      "id": 40,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": false,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ticdc_puller_event_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "puller_event_chan_size",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "cdc-server",
+      "description": "Puller entry buffer size",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 11,
+        "x": 0,
+        "y": 47
+      },
+      "hiddenSeries": false,
+      "id": 39,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": false,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ticdc_puller_entry_buffer_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "puller_entry_buffer_size",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 54
       },
       "id": 11,
       "panels": [],
@@ -990,7 +1178,7 @@
         "h": 8,
         "w": 11,
         "x": 0,
-        "y": 48
+        "y": 55
       },
       "hiddenSeries": false,
       "id": 2,
@@ -1082,7 +1270,7 @@
         "h": 8,
         "w": 12,
         "x": 11,
-        "y": 48
+        "y": 55
       },
       "hiddenSeries": false,
       "id": 30,
@@ -1174,7 +1362,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 56
+        "y": 63
       },
       "hiddenSeries": false,
       "id": 4,
@@ -1264,7 +1452,7 @@
         "h": 7,
         "w": 12,
         "x": 11,
-        "y": 56
+        "y": 63
       },
       "hiddenSeries": false,
       "id": 3,
@@ -1355,7 +1543,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 63
+        "y": 70
       },
       "hiddenSeries": false,
       "id": 32,
@@ -1387,7 +1575,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (rate(ticdc_puller_kv_event_count{changefeed=\"$changefeed\"}[5m])) by (instance, type)",
+          "expr": "sum (rate(ticdc_puller_kv_event_count{changefeed=\"$changefeed\"}[1m])) by (instance, type)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} - {{type}}",
@@ -1447,7 +1635,7 @@
         "h": 7,
         "w": 12,
         "x": 11,
-        "y": 63
+        "y": 70
       },
       "hiddenSeries": false,
       "id": 5,
@@ -1479,7 +1667,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (rate(ticdc_puller_txn_collect_event_count{changefeed=\"$changefeed\"}[5m])) by (instance, type)",
+          "expr": "sum (rate(ticdc_puller_txn_collect_event_count{changefeed=\"$changefeed\"}[1m])) by (instance, type)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} - {{type}}",
@@ -1539,7 +1727,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 70
+        "y": 77
       },
       "hiddenSeries": false,
       "id": 33,
@@ -1571,7 +1759,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (rate(ticdc_processor_txn_count{changefeed=\"$changefeed\"}[5m])) by (instance, type)",
+          "expr": "sum (rate(ticdc_processor_txn_count{changefeed=\"$changefeed\"}[1m])) by (instance, type)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} - {{type}}",
@@ -1631,7 +1819,7 @@
         "h": 7,
         "w": 12,
         "x": 11,
-        "y": 70
+        "y": 77
       },
       "hiddenSeries": false,
       "id": 34,
@@ -1663,7 +1851,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{changefeed=\"$changefeed\"}[5m])) by (instance)",
+          "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{changefeed=\"$changefeed\"}[1m])) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -1723,7 +1911,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 77
+        "y": 84
       },
       "hiddenSeries": false,
       "id": 35,
@@ -1829,7 +2017,7 @@
         "h": 7,
         "w": 12,
         "x": 11,
-        "y": 77
+        "y": 84
       },
       "hiddenSeries": false,
       "id": 36,
@@ -1922,6 +2110,194 @@
         "align": false,
         "alignLevel": null
       }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "txn input channel size for a table in processor",
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 11,
+        "x": 0,
+        "y": 91
+      },
+      "hiddenSeries": false,
+      "id": 37,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "sort": "current",
+        "sortDesc": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ticdc_processor_table_input_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}} - {{table}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "ticdc_processor_table_input_chan_size",
+      "tooltip": {
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "none",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "description": "txn output channel size for a table in processor",
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 11,
+        "y": 91
+      },
+      "hiddenSeries": false,
+      "id": 38,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "sort": "current",
+        "sortDesc": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ticdc_processor_txn_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}} - {{table}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "table_output_chan_size",
+      "tooltip": {
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "none",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
   "refresh": false,
@@ -1933,8 +2309,9 @@
       {
         "allValue": null,
         "current": {
-          "text": "0496c67e-5490-40eb-afea-df4135cceb67",
-          "value": "0496c67e-5490-40eb-afea-df4135cceb67"
+          "tags": [],
+          "text": "e8ad865c-b23e-42b8-9f46-29d1fe19af2e",
+          "value": "e8ad865c-b23e-42b8-9f46-29d1fe19af2e"
         },
         "datasource": "cdc-server",
         "definition": "label_values(ticdc_processor_resolved_ts, changefeed)",
@@ -1954,12 +2331,38 @@
         "tagsQuery": "",
         "type": "query",
         "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {
+          "tags": [],
+          "text": "7c105a2c-84b1-4260-bab3-85f2ea92189d",
+          "value": "7c105a2c-84b1-4260-bab3-85f2ea92189d"
+        },
+        "datasource": "cdc-server",
+        "definition": "label_values(ticdc_processor_resolved_ts, capture)",
+        "hide": 0,
+        "includeAll": false,
+        "label": null,
+        "multi": false,
+        "name": "capture",
+        "options": [],
+        "query": "label_values(ticdc_processor_resolved_ts, capture)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
       }
     ]
   },
   "time": {
-    "from": "2020-02-12T02:04:32.048Z",
-    "to": "2020-02-12T02:55:57.097Z"
+    "from": "now-30m",
+    "to": "now"
   },
   "timepicker": {
     "refresh_intervals": [
@@ -1989,5 +2392,5 @@
   "timezone": "",
   "title": "ticdc",
   "uid": "YiGL8hBZz",
-  "version": 16
+  "version": 25
 }
