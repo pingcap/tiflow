@@ -11,7 +11,7 @@ type RowChangedEvent struct {
 type Column struct {
 	Name   string
 	Type   byte
-	Unique bool
+	Handle bool
 	Value  interface{}
 }
 

@@ -11,9 +11,10 @@ type OpType int
 
 // OpType for kv
 const (
-	OpTypeUnknow OpType = 0
-	OpTypePut    OpType = 1
-	OpTypeDelete OpType = 2
+	OpTypeUnknow   OpType = 0
+	OpTypePut      OpType = 1
+	OpTypeDelete   OpType = 2
+	OpTypeResolved OpType = 3
 )
 
 // RegionFeedEvent from the kv layer.

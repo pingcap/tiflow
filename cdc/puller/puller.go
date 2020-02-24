@@ -82,6 +82,39 @@ func (p *pullerImpl) Output() Buffer {
 	return p.buf
 }
 
+func (p *pullerImpl) SortedOutput(ctx context.Context, errCh chan<- error) <-chan *model.RawKVEntry {
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	sorter := NewEntrySorter()
+	go func() {
+		sorter.Run(ctx)
+		for {
+			be, err := p.buf.Get(ctx)
+			if err != nil {
+				errCh <- errors.Trace(err)
+				break
+			}
+			if be.Val != nil {
+				txnCollectCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
+				sorter.AddEntry(be.Val)
+			} else if be.Resolved != nil {
+				txnCollectCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
+				resolvedTs := be.Resolved.ResolvedTs
+				// 1. Forward is called in a single thread
+				// 2. The only way the global minimum resolved Ts can be forwarded is that
+				// 	  the resolveTs we pass in replaces the original one
+				// Thus, we can just use resolvedTs here as the new global minimum resolved Ts.
+				forwarded := p.tsTracker.Forward(be.Resolved.Span, resolvedTs)
+				if !forwarded {
+					continue
+				}
+				sorter.AddEntry(&model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved})
+			}
+		}
+	}()
+	return sorter.Output()
+}
+
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
 	cli, err := kv.NewCDCClient(p.pdCli)
