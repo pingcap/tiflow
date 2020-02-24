@@ -33,6 +33,7 @@ type Puller interface {
 	GetResolvedTs() uint64
 	CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error
 	Output() Buffer
+	SortedOutput(ctx context.Context, errCh chan<- error) <-chan *model.RawKVEntry
 }
 
 // resolveTsTracker checks resolved event of spans and moves the global resolved ts ahead
