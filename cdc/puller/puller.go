@@ -38,12 +38,14 @@ type Puller interface {
 	GetResolvedTs() uint64
 	CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error
 	Output() ChanBuffer
+	CollectMetrics(ctx context.Context) error
 }
 
 // resolveTsTracker checks resolved event of spans and moves the global resolved ts ahead
 type resolveTsTracker interface {
 	Forward(span util.Span, ts uint64) bool
 	Frontier() uint64
+	Size() int
 }
 
 type pullerImpl struct {
@@ -128,6 +130,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	})
 
 	g.Go(func() error {
+		captureID := util.GetValueFromCtx(ctx, util.CtxKeyCaptureID)
+		changefeedID := util.GetValueFromCtx(ctx, util.CtxKeyChangefeedID)
 		for {
 			select {
 			case e := <-eventCh:
@@ -180,6 +184,20 @@ func (p *pullerImpl) GetResolvedTs() uint64 {
 	return p.tsTracker.Frontier()
 }
 
+func (p *pullerImpl) CollectMetrics(ctx context.Context) error {
+	captureID := util.GetValueFromCtx(ctx, util.CtxKeyCaptureID)
+	changefeedID := util.GetValueFromCtx(ctx, util.CtxKeyChangefeedID)
+	tableID := util.GetValueFromCtx(ctx, util.CtxKeyTableID)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(time.Minute):
+			trackerSizeGauge.WithLabelValues(captureID, changefeedID, tableID).Set(float64(p.tsTracker.Size()))
+		}
+	}
+}
+
 func (p *pullerImpl) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
 	return collectRawTxns(ctx, p.chanBuffer.Get, outputFn, p.tsTracker)
 }
@@ -192,8 +210,8 @@ func collectRawTxns(
 	outputFn func(context.Context, model.RawTxn) error,
 	tracker resolveTsTracker,
 ) error {
-	captureID := util.CaptureIDFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	captureID := util.GetValueFromCtx(ctx, util.CtxKeyCaptureID)
+	changefeedID := util.GetValueFromCtx(ctx, util.CtxKeyChangefeedID)
 	entryGroup := NewEntryGroup()
 	for {
 		be, err := inputFn(ctx)

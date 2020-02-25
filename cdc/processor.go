@@ -816,6 +816,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 
 	span := util.GetTableSpan(tableID, true)
 
+	ctx = util.PutValueInCtx(ctx, util.CtxKeyTableID, strconv.FormatInt(tableID, 10))
 	ctx, cancel := context.WithCancel(ctx)
 	plr := p.startPuller(ctx, span, startTs, table.inputTxn, p.errCh)
 	table.puller = puller.CancellablePuller{Puller: plr, Cancel: cancel}
@@ -865,6 +866,10 @@ func (p *processor) startPuller(ctx context.Context, span util.Span, checkpointT
 			}
 		})
 		return errors.Annotatef(err, "span: %v", span)
+	})
+
+	errg.Go(func() error {
+		return puller.CollectMetrics(ctx)
 	})
 
 	go func() {

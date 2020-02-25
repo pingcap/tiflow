@@ -161,6 +161,16 @@ func (p *mockPuller) Output() ChanBuffer {
 	panic("unreachable")
 }
 
+func (p *mockPuller) CollectMetrics(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(time.Minute):
+		}
+	}
+}
+
 // NewMockPullerManager creates and sets up a mock puller manager
 func NewMockPullerManager(c *check.C, newRowFormat bool) *MockPullerManager {
 	m := &MockPullerManager{

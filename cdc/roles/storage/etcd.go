@@ -246,7 +246,7 @@ func (ow *OwnerTaskStatusEtcdWriter) Write(
 	if writePLock {
 		newInfo.TablePLock = &model.TableLock{
 			Ts:        oracle.EncodeTSO(time.Now().UnixNano() / int64(time.Millisecond)),
-			CreatorID: util.CaptureIDFromCtx(ctx),
+			CreatorID: util.GetValueFromCtx(ctx, util.CtxKeyCaptureID),
 		}
 	}
 

@@ -187,6 +187,11 @@ func makeSpanFrontier(spans ...util.Span) *spanFrontier {
 	return s
 }
 
+// Size returns the span count in spanFrontier
+func (s *spanFrontier) Size() int {
+	return s.tree.Len()
+}
+
 // Frontier return the minimum tiemstamp.
 func (s *spanFrontier) Frontier() uint64 {
 	if s.minHeap.Len() == 0 {

@@ -18,36 +18,22 @@ import "context"
 type ctxKey string
 
 const (
-	ctxKeyCaptureID    = ctxKey("captureID")
-	ctxKeyChangefeedID = ctxKey("changefeedID")
+	CtxKeyCaptureID    = ctxKey("captureID")
+	CtxKeyChangefeedID = ctxKey("changefeedID")
+	CtxKeyTableID      = ctxKey("tableID")
 )
 
-// CaptureIDFromCtx returns a capture ID stored in the specified context.
-// It returns an empty string if there's no valid capture ID found.
-func CaptureIDFromCtx(ctx context.Context) string {
-	captureID, ok := ctx.Value(ctxKeyCaptureID).(string)
+// GetValueFromCtx returns a string value stored in context based on given ctxKey.
+// It returns an empty string if there's no valid ctxKey found.
+func GetValueFromCtx(ctx context.Context, key ctxKey) string {
+	value, ok := ctx.Value(key).(string)
 	if !ok {
 		return ""
 	}
-	return captureID
+	return value
 }
 
-// PutCaptureIDInCtx returns a new child context with the specified capture ID stored.
-func PutCaptureIDInCtx(ctx context.Context, captureID string) context.Context {
-	return context.WithValue(ctx, ctxKeyCaptureID, captureID)
-}
-
-// ChangefeedIDFromCtx returns a changefeedID stored in the specified context.
-// It returns an empty string if there's no valid changefeed ID found.
-func ChangefeedIDFromCtx(ctx context.Context) string {
-	changefeedID, ok := ctx.Value(ctxKeyChangefeedID).(string)
-	if !ok {
-		return ""
-	}
-	return changefeedID
-}
-
-// PutChangefeedIDInCtx returns a new child context with the specified changefeed ID stored.
-func PutChangefeedIDInCtx(ctx context.Context, changefeedID string) context.Context {
-	return context.WithValue(ctx, ctxKeyChangefeedID, changefeedID)
+// PutValueInCtx returns a new child context with the specified value stored.
+func PutValueInCtx(ctx context.Context, key ctxKey, value string) context.Context {
+	return context.WithValue(ctx, key, value)
 }

@@ -93,7 +93,7 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 // Run runs the server.
 func (s *Server) Run(ctx context.Context) error {
 	s.startStatusHTTP()
-	ctx = util.PutCaptureIDInCtx(ctx, s.capture.info.ID)
+	ctx = util.PutValueInCtx(ctx, util.CtxKeyCaptureID, s.capture.info.ID)
 	return s.capture.Start(ctx)
 }
 

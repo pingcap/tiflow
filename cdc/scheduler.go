@@ -312,7 +312,7 @@ func realRunProcessorWatcher(
 	}
 	checkpointTs := info.GetCheckpointTs(status)
 	sw := NewProcessorWatcher(changefeedID, captureID, pdEndpoints, etcdCli, info, checkpointTs)
-	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
+	ctx = util.PutValueInCtx(ctx, util.CtxKeyChangefeedID, changefeedID)
 	sw.wg.Add(1)
 	go sw.Watch(ctx, errCh, cb)
 	return sw, nil

@@ -198,6 +198,10 @@ func (c *CDCClient) partialRegionFeed(
 	regionCh chan<- singleRegionInfo,
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
+	captureID := util.GetValueFromCtx(ctx, util.CtxKeyCaptureID)
+	changefeedID := util.GetValueFromCtx(ctx, util.CtxKeyChangefeedID)
+	tableID := util.GetValueFromCtx(ctx, util.CtxKeyTableID)
+
 	ts := regionInfo.ts
 	failStoreIDs := make(map[uint64]struct{})
 	rl := rate.NewLimiter(0.1, 5)
@@ -230,6 +234,7 @@ func (c *CDCClient) partialRegionFeed(
 		log.Debug("singleEventFeed quit")
 
 		if err == nil || errors.Cause(err) == context.Canceled {
+			regionCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
 			break
 		}
 
@@ -249,6 +254,7 @@ func (c *CDCClient) partialRegionFeed(
 				c.regionCache.UpdateLeader(regionInfo.verID, notLeader.GetLeader().GetStoreId(), rpcCtx.PeerIdx)
 			} else if eerr.GetEpochNotMatch() != nil {
 				eventFeedErrorCounter.WithLabelValues("EpochNotMatch").Inc()
+				regionCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
 				return c.divideAndSendEventFeedToRegions(ctx, regionInfo.span, ts, regionCh)
 			} else if eerr.GetRegionNotFound() != nil {
 				eventFeedErrorCounter.WithLabelValues("RegionNotFound").Inc()
@@ -281,7 +287,9 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 	limit := 20
 
 	nextSpan := span
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureID := util.GetValueFromCtx(ctx, util.CtxKeyCaptureID)
+	changefeedID := util.GetValueFromCtx(ctx, util.CtxKeyChangefeedID)
+	tableID := util.GetValueFromCtx(ctx, util.CtxKeyTableID)
 
 	for {
 		var (
@@ -337,6 +345,7 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			case <-ctx.Done():
 				return ctx.Err()
 			}
+			regionCountGauge.WithLabelValues(captureID, changefeedID, tableID).Inc()
 
 			// return if no more regions
 			if util.EndCompare(nextSpan.Start, span.End) >= 0 {
@@ -358,8 +367,8 @@ func (c *CDCClient) singleEventFeed(
 	checkpointTs uint64,
 	eventCh chan<- *model.RegionFeedEvent,
 ) (uint64, error) {
-	captureID := util.CaptureIDFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	captureID := util.GetValueFromCtx(ctx, util.CtxKeyCaptureID)
+	changefeedID := util.GetValueFromCtx(ctx, util.CtxKeyChangefeedID)
 	req := &cdcpb.ChangeDataRequest{
 		Header: &cdcpb.Header{
 			ClusterId: c.clusterID,

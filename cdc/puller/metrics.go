@@ -52,6 +52,13 @@ var (
 			Name:      "event_chan_size",
 			Help:      "Puller event channel size",
 		}, []string{"capture", "changefeed"})
+	trackerSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "tracker_span_size",
+			Help:      "tracker span size collected in a puller",
+		}, []string{"capture", "changefeed", "table"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -61,4 +68,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(resolvedTxnsBatchSize)
 	registry.MustRegister(entryBufferSizeGauge)
 	registry.MustRegister(eventChanSizeGauge)
+	registry.MustRegister(trackerSizeGauge)
 }

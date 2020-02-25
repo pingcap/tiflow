@@ -241,8 +241,8 @@ func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*model.DML) error {
 	if err = tx.Commit(); err != nil {
 		return errors.Trace(err)
 	}
-	captureID := util.CaptureIDFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	captureID := util.GetValueFromCtx(ctx, util.CtxKeyCaptureID)
+	changefeedID := util.GetValueFromCtx(ctx, util.CtxKeyChangefeedID)
 	execTxnHistogram.WithLabelValues(captureID, changefeedID).Observe(time.Since(startTime).Seconds())
 	execBatchHistogram.WithLabelValues(captureID, changefeedID).Observe(float64(len(dmls)))
 	log.Info("Exec DML succeeded", zap.Int("num of DMLs", len(dmls)))
