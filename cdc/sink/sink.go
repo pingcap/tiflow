@@ -16,8 +16,9 @@ package sink
 import (
 	"context"
 
+	"github.com/pingcap/ticdc/cdc/entry"
+
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/schema"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
@@ -32,7 +33,7 @@ type Sink interface {
 
 // TableInfoGetter is used to get table info by table id of TiDB
 type TableInfoGetter interface {
-	TableByID(id int64) (info *schema.TableInfo, ok bool)
+	TableByID(id int64) (info *entry.TableInfo, ok bool)
 	GetTableIDByName(schema, table string) (int64, bool)
-	GetTableByName(schema, table string) (info *schema.TableInfo, ok bool)
+	GetTableByName(schema, table string) (info *entry.TableInfo, ok bool)
 }

@@ -11,11 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package schema
+package entry
 
 import (
 	"fmt"
-	"testing"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -26,8 +25,6 @@ import (
 )
 
 type schemaSuite struct{}
-
-func Test(t *testing.T) { TestingT(t) }
 
 var _ = Suite(&schemaSuite{})
 

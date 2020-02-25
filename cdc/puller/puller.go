@@ -33,7 +33,7 @@ type Puller interface {
 	GetResolvedTs() uint64
 	CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error
 	Output() Buffer
-	SortedOutput(ctx context.Context, errCh chan<- error) <-chan *model.RawKVEntry
+	SortedOutput(ctx context.Context) <-chan *model.RawKVEntry
 }
 
 // resolveTsTracker checks resolved event of spans and moves the global resolved ts ahead
@@ -83,7 +83,7 @@ func (p *pullerImpl) Output() Buffer {
 	return p.buf
 }
 
-func (p *pullerImpl) SortedOutput(ctx context.Context, errCh chan<- error) <-chan *model.RawKVEntry {
+func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	sorter := NewEntrySorter()
@@ -92,7 +92,9 @@ func (p *pullerImpl) SortedOutput(ctx context.Context, errCh chan<- error) <-cha
 		for {
 			be, err := p.buf.Get(ctx)
 			if err != nil {
-				errCh <- errors.Trace(err)
+				if errors.Cause(err) != context.Canceled {
+					log.Error("error in puller", zap.Error(err))
+				}
 				break
 			}
 			if be.Val != nil {

@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/entry"
+
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -31,7 +33,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
@@ -296,7 +297,7 @@ func (s *mysqlSink) prepareDelete(dml *model.DML) (string, []interface{}, error)
 	return sql, args, nil
 }
 
-func formatValues(table *schema.TableInfo, colVals map[string]types.Datum) error {
+func formatValues(table *entry.TableInfo, colVals map[string]types.Datum) error {
 	columns := table.WritableColumns()
 	// TODO get table infos from txn for emit interface
 	for _, col := range columns {
@@ -345,7 +346,7 @@ func whereValues(colVals map[string]types.Datum, names []string) (values []types
 	return
 }
 
-func whereSlice(table *schema.TableInfo, colVals map[string]types.Datum) (colNames []string, args []types.Datum) {
+func whereSlice(table *entry.TableInfo, colVals map[string]types.Datum) (colNames []string, args []types.Datum) {
 	// Try to use unique key values when available
 	for _, idxCols := range table.GetUniqueKeys() {
 		values := whereValues(colVals, idxCols)

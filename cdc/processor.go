@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
-	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -151,7 +150,7 @@ type processor struct {
 	etcdCli kv.CDCEtcdClient
 
 	mounter       mounter
-	schemaStorage *schema.Storage
+	schemaStorage *entry.Storage
 	sink          sink.Sink
 
 	ddlPuller    puller.Puller
@@ -714,7 +713,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	}
 }
 
-func createSchemaStore(pdEndpoints []string) (*schema.Storage, error) {
+func createSchemaStore(pdEndpoints []string) (*entry.Storage, error) {
 	// here we create another pb client,we should reuse them
 	kvStore, err := createTiStore(strings.Join(pdEndpoints, ","))
 	if err != nil {
@@ -735,7 +734,7 @@ func createSchemaStore(pdEndpoints []string) (*schema.Storage, error) {
 		}
 		jobs = append(jobs, job)
 	}
-	schemaStorage, err := schema.NewStorage(jobs)
+	schemaStorage, err := entry.NewStorage(jobs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -859,6 +858,6 @@ func (p *processor) stop(ctx context.Context) error {
 	return errors.Trace(p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID))
 }
 
-func newMounter(schema *schema.Storage) mounter {
+func newMounter(schema *entry.Storage) mounter {
 	return entry.NewTxnMounter(schema)
 }

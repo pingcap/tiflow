@@ -10,7 +10,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/types"
 )
@@ -19,7 +18,7 @@ type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
-func setUpPullerAndSchema(ctx context.Context, c *check.C, newRowFormat bool, sqls ...string) (*puller.MockPullerManager, *schema.Storage) {
+func setUpPullerAndSchema(ctx context.Context, c *check.C, newRowFormat bool, sqls ...string) (*puller.MockPullerManager, *Storage) {
 	pm := puller.NewMockPullerManager(c, newRowFormat)
 	go pm.Run(ctx)
 	for _, sql := range sqls {
@@ -27,7 +26,7 @@ func setUpPullerAndSchema(ctx context.Context, c *check.C, newRowFormat bool, sq
 	}
 
 	jobs := pm.GetDDLJobs()
-	schemaStorage, err := schema.NewStorage(jobs)
+	schemaStorage, err := NewStorage(jobs)
 	c.Assert(err, check.IsNil)
 	err = schemaStorage.HandlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
 	c.Assert(err, check.IsNil)

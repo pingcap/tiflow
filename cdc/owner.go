@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/entry"
+
 	"go.etcd.io/etcd/mvcc/mvccpb"
 
 	"github.com/pingcap/errors"
@@ -31,7 +33,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
-	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
@@ -84,7 +85,7 @@ type changeFeed struct {
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
 
-	schema                  *schema.Storage
+	schema                  *entry.Storage
 	ddlState                model.ChangeFeedDDLState
 	targetTs                uint64
 	taskStatus              model.ProcessorsInfos
@@ -97,7 +98,7 @@ type changeFeed struct {
 	ddlJobHistory []*model.DDL
 
 	schemas       map[uint64]tableIDMap
-	tables        map[uint64]schema.TableName
+	tables        map[uint64]entry.TableName
 	orphanTables  map[uint64]model.ProcessTableInfo
 	toCleanTables map[uint64]struct{}
 	infoWriter    *storage.OwnerTaskStatusEtcdWriter
@@ -159,7 +160,7 @@ func (c *changeFeed) reAddTable(id, startTs uint64) {
 	}
 }
 
-func (c *changeFeed) addTable(sid, tid, startTs uint64, table schema.TableName) {
+func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
 	}
@@ -348,19 +349,19 @@ func (c *changeFeed) applyJob(job *pmodel.Job) error {
 		c.dropSchema(schemaID)
 	case pmodel.ActionCreateTable, pmodel.ActionRecoverTable:
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
+		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, entry.TableName{Schema: schamaName, Table: tableName})
 	case pmodel.ActionDropTable:
 		dropID := uint64(job.TableID)
 		c.removeTable(schemaID, dropID)
 	case pmodel.ActionRenameTable:
 		// no id change just update name
-		c.tables[uint64(job.TableID)] = schema.TableName{Schema: schamaName, Table: tableName}
+		c.tables[uint64(job.TableID)] = entry.TableName{Schema: schamaName, Table: tableName}
 	case pmodel.ActionTruncateTable:
 		dropID := uint64(job.TableID)
 		c.removeTable(schemaID, dropID)
 
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, schema.TableName{Schema: schamaName, Table: tableName})
+		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, entry.TableName{Schema: schamaName, Table: tableName})
 	}
 
 	return nil
@@ -573,7 +574,7 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 	}
 
 	schemas := make(map[uint64]tableIDMap)
-	tables := make(map[uint64]schema.TableName)
+	tables := make(map[uint64]entry.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
 	for tid, table := range schemaStorage.CloneTables() {
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {

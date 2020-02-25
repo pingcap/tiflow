@@ -10,7 +10,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/types"
 )
@@ -451,7 +450,7 @@ func assertIn(c *check.C, item kvEntry, expect []kvEntry) {
 	c.Fatalf("item {%#v} is not exist in expect {%#v}", item, expect)
 }
 
-func checkDMLKVEntries(ctx context.Context, c *check.C, tableInfo *schema.TableInfo, m *Mounter, plr puller.Puller, expect []kvEntry) {
+func checkDMLKVEntries(ctx context.Context, c *check.C, tableInfo *TableInfo, m *Mounter, plr puller.Puller, expect []kvEntry) {
 	ctx, cancel := context.WithCancel(ctx)
 	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
 		eventSum := 0
