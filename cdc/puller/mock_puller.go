@@ -121,7 +121,7 @@ type mockPuller struct {
 	txnOffset  int
 }
 
-func (p *mockPuller) SortedOutput(ctx context.Context, errCh chan<- error) <-chan *model.RawKVEntry {
+func (p *mockPuller) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry {
 	panic("unreachable")
 }
 

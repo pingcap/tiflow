@@ -8,6 +8,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
+// EntrySorter is used to sort entries outputted from puller
 type EntrySorter struct {
 	unsorted   []*model.RawKVEntry
 	resolvedCh chan uint64
@@ -16,6 +17,7 @@ type EntrySorter struct {
 	output chan *model.RawKVEntry
 }
 
+// NewEntrySorter creates a new EntrySorter
 func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
 		resolvedCh: make(chan uint64, 1024),
@@ -23,6 +25,7 @@ func NewEntrySorter() *EntrySorter {
 	}
 }
 
+// Run runs the EntrySorter, sort the entries
 func (es *EntrySorter) Run(ctx context.Context) {
 	lessFunc := func(i *model.RawKVEntry, j *model.RawKVEntry) bool {
 		if i.Ts == j.Ts {
@@ -47,12 +50,11 @@ func (es *EntrySorter) Run(ctx context.Context) {
 		if lessFunc(kvsA[*i], kvsB[*j]) {
 			min = kvsA[*i]
 			*i += 1
-			return
 		} else {
 			min = kvsB[*j]
 			*j += 1
-			return
 		}
+		return
 	}
 
 	go func() {
@@ -113,6 +115,7 @@ func (es *EntrySorter) AddEntry(entry *model.RawKVEntry) {
 	es.unsorted = append(es.unsorted, entry)
 }
 
+// Output returns a channel with sorted entries
 func (es *EntrySorter) Output() <-chan *model.RawKVEntry {
 	return es.output
 }
