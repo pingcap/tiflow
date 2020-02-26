@@ -121,7 +121,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return nil
 			case <-time.After(time.Minute):
-				entryBufferSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(p.buf)))
+				entryBufferSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(p.chanBuffer)))
 				eventChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(eventCh)))
 			}
 		}
