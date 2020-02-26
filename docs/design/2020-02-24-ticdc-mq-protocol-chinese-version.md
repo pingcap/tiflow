@@ -26,7 +26,7 @@
 | CDC Owner | - | CDC 集群节点的角色之一，一个 CDC 集群有且只有一个 Owner 节点。Owner 节点负责协调各个 Processor 的进度，同步 DDL 等。|
 | CDC Processor | - | CDC 集群节点的角色之一，一个 CDC 集群有数个 Processor 节点。Processor 节点执行对一张或多张表的的数据变更进行同步。|
 | CDC Processor ResolvedTS | ResolvedTS < ∀(unapplied CommitTS) | ResolvedTS 保证单个对应 Processor 的任意 CommitTS 小于 ResolvedTS 的 Change Event 已经被输出到 CDC 集群。 |
-| CDC Processor CheckpointTS | CheckpointTS < ∀(unduplicated && unapplied CommitTS); CheckpointTS <=  ResolvedTS | CheckpointTS 保证单个对应 Processor 的任意 CommitTS 小于 ResolvedTS 的 Change Event 已经被同步到对应 Sink。|
+| CDC Processor CheckpointTS | CheckpointTS < ∀(unduplicated && unapplied CommitTS); CheckpointTS <=  ResolvedTS | CheckpointTS 保证单个对应 Processor 的任意 CommitTS 小于 CheckpointTs 的 Change Event 已经被同步到对应 Sink。|
 | CDC DDL Puller ResolvedTS | ResolvedTS < ∀(FinishedTS of undone DDL Job) | CDC DDLPuller ResolvedTS 保证任意 FinishedTS 小于 CDC DDLPuller ResolvedTS 的 DDL 已经被输出到 CDC 集群。
 | CDC Global ResolvedTS | Global ResolvedTS = min(all Processor ResolvedTS) | CDC Global ResolvedTS 是各个 Processor 当前 ResolvedTS 的最小值 |
 | CDC Global CheckpointTS | Global CheckpointTS = min(all Processor CheckpointTS) | CDC Global CheckpointTS 是各个 Processor 当前 CheckpointTS 的最小值 |
