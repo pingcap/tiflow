@@ -176,7 +176,7 @@ func makeSpanFrontier(spans ...util.Span) *spanFrontier {
 
 		s.idAlloc++
 
-		err := s.tree.Insert(e, true)
+		err := s.tree.Insert(e, false)
 		if err != nil {
 			panic(err)
 		}
@@ -184,7 +184,6 @@ func makeSpanFrontier(spans ...util.Span) *spanFrontier {
 		heap.Push(&s.minHeap, e)
 	}
 
-	s.tree.AdjustRanges()
 	return s
 }
 
@@ -267,7 +266,7 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 	// Delete old ones
 	for i := range overlap {
 		e := overlap[i].(*spanFrontierEntry)
-		err := s.tree.Delete(e, true)
+		err := s.tree.Delete(e, false)
 		if err != nil {
 			panic(err)
 		}
@@ -276,14 +275,12 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 
 	// Insert new ones
 	for i := range toInsert {
-		err := s.tree.Insert(&toInsert[i], true)
+		err := s.tree.Insert(&toInsert[i], false)
 		if err != nil {
 			panic(err)
 		}
 		heap.Push(&s.minHeap, &toInsert[i])
 	}
-
-	s.tree.AdjustRanges()
 }
 
 // Entries visit all traced spans.
