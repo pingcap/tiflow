@@ -45,7 +45,7 @@ type ddlHandler struct {
 func newDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan()}, false)
+	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan()}, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	// TODO get time loc from config
 	txnMounter := entry.NewTxnMounter(nil)
@@ -106,7 +106,7 @@ func (h *ddlHandler) PullDDL() (uint64, []*model.DDL, error) {
 }
 
 // ExecDDL implements roles.OwnerDDLHandler interface.
-func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, txn model.Txn) error {
+func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, opts map[string]string, txn model.Txn) error {
 	// TODO cache the sink
 	// TODO handle other target database, kile kafka, file
 	db, err := sql.Open("mysql", sinkURI)

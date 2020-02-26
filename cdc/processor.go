@@ -57,6 +57,9 @@ const (
 
 	defaultInputTxnChanSize  = 128
 	defaultOutputTxnChanSize = 128
+
+	// defaultMemBufferCapacity is the default memory buffer per change feed.
+	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 )
 
 var (
@@ -145,6 +148,7 @@ type processor struct {
 	captureID    string
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
+	limitter     *puller.BlurResourceLimitter
 	filter       *txnFilter
 
 	pdCli   pd.Client
@@ -224,9 +228,11 @@ func NewProcessor(ctx context.Context, pdEndpoints []string, changefeed model.Ch
 		return nil, errors.Annotate(err, "failed to create ts RWriter")
 	}
 
+	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
+
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan()}, false)
+	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan()}, false, limitter)
 
 	mounter := fNewMounter(schemaStorage)
 
@@ -241,6 +247,7 @@ func NewProcessor(ctx context.Context, pdEndpoints []string, changefeed model.Ch
 	}
 
 	p := &processor{
+		limitter:      limitter,
 		captureID:     captureID,
 		changefeedID:  changefeedID,
 		changefeed:    changefeed,
@@ -642,6 +649,8 @@ func (p *processor) syncResolved(ctx context.Context) error {
 
 	defer close(p.executedTxns)
 
+	flushTick := time.NewTicker(flushDMLsInterval)
+
 	for {
 		select {
 		case rawTxn, ok := <-p.ddlJobsCh:
@@ -708,11 +717,10 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			log.Info("syncResolved stopped")
 			return ctx.Err()
-		default:
+		case <-flushTick.C:
 			if err := flush(ctx); err != nil {
 				return errors.Trace(err)
 			}
-			time.Sleep(flushDMLsInterval)
 		}
 	}
 }
@@ -839,7 +847,7 @@ func (p *processor) startPuller(ctx context.Context, span util.Span, checkpointT
 
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
-	puller := puller.NewPuller(p.pdCli, checkpointTs, []util.Span{span}, true)
+	puller := puller.NewPuller(p.pdCli, checkpointTs, []util.Span{span}, true, p.limitter)
 
 	errg.Go(func() error {
 		return puller.Run(ctx)

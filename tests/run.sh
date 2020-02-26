@@ -19,9 +19,10 @@ if [ "${1-}" = '--debug' ]; then
     TEST_NAME="debug" \
     start_tidb_cluster $WORK_DIR
 
-    cdc server --log-file $WORK_DIR/cdc.log --log-level debug > $WORK_DIR/cdc.log 2>&1 &
+    cdc server --log-file $WORK_DIR/cdc.log --log-level debug --status-addr 0.0.0.0:8300 > $WORK_DIR/cdc.log 2>&1 &
     sleep 1
     cdc cli
+	# cdc cli --opts "_dry-run="
 
     echo 'You may now debug from another terminal. Press [ENTER] to exit.'
     read line
