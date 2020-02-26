@@ -1,6 +1,7 @@
 package kv
 
 import (
+	"context"
 	"math/rand"
 	"sync"
 	"testing"
@@ -58,4 +59,19 @@ func (s *clientSuite) TestUpdateCheckpointTS(c *check.C) {
 		}
 	}
 	c.Assert(checkpointTS, check.Equals, maxValue)
+}
+
+func (s *clientSuite) TestConnArray(c *check.C) {
+	addr := "127.0.0.1:2379"
+	ca, err := newConnArray(context.TODO(), 2, addr)
+	c.Assert(err, check.IsNil)
+
+	conn1 := ca.Get()
+	conn2 := ca.Get()
+	c.Assert(conn1, check.Not(check.Equals), conn2)
+
+	conn3 := ca.Get()
+	c.Assert(conn1, check.Equals, conn3)
+
+	ca.Close()
 }
