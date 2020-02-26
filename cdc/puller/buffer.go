@@ -16,7 +16,7 @@ import (
 var ErrReachLimit = errors.New("reach limit")
 
 const (
-	defaultBufferSize = 8
+	defaultBufferSize = 128
 )
 
 // EventBuffer in a interface for communicating kv entries.

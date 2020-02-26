@@ -55,8 +55,8 @@ const (
 	waitGlobalResolvedTsDelay = time.Millisecond * 500
 	flushDMLsInterval         = time.Millisecond * 10
 
-	defaultInputTxnChanSize  = 1
-	defaultOutputTxnChanSize = 64
+	defaultInputTxnChanSize  = 128
+	defaultOutputTxnChanSize = 128
 
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
@@ -491,7 +491,10 @@ func (p *processor) removeTable(tableID int64) {
 
 	table.puller.Cancel()
 	delete(p.tables, tableID)
-	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureID, strconv.FormatInt(tableID, 10))
+	tableIDStr := strconv.FormatInt(tableID, 10)
+	tableInputChanSizeGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
+	tableOutputChanSizeGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
+	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Dec()
 }
 
@@ -816,9 +819,25 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	ctx, cancel := context.WithCancel(ctx)
 	plr := p.startPuller(ctx, span, startTs, table.inputTxn, p.errCh)
 	table.puller = puller.CancellablePuller{Puller: plr, Cancel: cancel}
+	p.collectMetrics(ctx, tableID, tc)
 
 	p.tables[tableID] = table
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Inc()
+}
+
+func (p *processor) collectMetrics(ctx context.Context, tableID int64, tc *txnChannel) {
+	go func() {
+		for {
+			tableIDStr := strconv.FormatInt(tableID, 10)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Minute):
+				tableInputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureID, tableIDStr).Set(float64(len(tc.inputTxn)))
+				tableOutputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureID, tableIDStr).Set(float64(len(tc.outputTxn)))
+			}
+		}
+	}()
 }
 
 // startPuller start pull data with span and push resolved txn into txnChan in timestamp increasing order.

@@ -15,6 +15,7 @@ package puller
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -24,6 +25,10 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+)
+
+const (
+	defaultPullerEventChanSize = 128
 )
 
 // Puller pull data from tikv and push changes into a buffer
@@ -97,7 +102,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	checkpointTs := p.checkpointTs
-	eventCh := make(chan *model.RegionFeedEvent, 128)
+	eventCh := make(chan *model.RegionFeedEvent, defaultPullerEventChanSize)
 
 	for _, span := range p.spans {
 		span := span
@@ -107,9 +112,22 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		})
 	}
 
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+
 	g.Go(func() error {
-		captureID := util.CaptureIDFromCtx(ctx)
-		changefeedID := util.ChangefeedIDFromCtx(ctx)
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(time.Minute):
+				entryBufferSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(p.chanBuffer)))
+				eventChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(eventCh)))
+			}
+		}
+	})
+
+	g.Go(func() error {
 		for {
 			select {
 			case e := <-eventCh:
