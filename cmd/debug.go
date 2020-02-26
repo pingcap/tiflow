@@ -97,7 +97,7 @@ var pullCmd = &cobra.Command{
 		g, ctx := errgroup.WithContext(context.Background())
 		ts := oracle.ComposeTS(time.Now().Unix()*1000, 0)
 
-		ddlPuller := puller.NewPuller(cli, ts, []util.Span{util.GetDDLSpan()}, false)
+		ddlPuller := puller.NewPuller(cli, ts, []util.Span{util.GetDDLSpan()}, false, nil)
 		ddlBuf := ddlPuller.Output()
 		g.Go(func() error {
 			return ddlPuller.Run(ctx)
@@ -119,7 +119,7 @@ var pullCmd = &cobra.Command{
 			return
 		}
 		for _, tid := range tableIDs {
-			dmlPuller := puller.NewPuller(cli, ts, []util.Span{util.GetTableSpan(tid, true)}, true)
+			dmlPuller := puller.NewPuller(cli, ts, []util.Span{util.GetTableSpan(tid, true)}, true, nil)
 			dmlBuf := dmlPuller.Output()
 			g.Go(func() error {
 				return dmlPuller.Run(ctx)
