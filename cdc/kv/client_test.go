@@ -61,7 +61,11 @@ func (s *clientSuite) TestUpdateCheckpointTS(c *check.C) {
 	c.Assert(checkpointTS, check.Equals, maxValue)
 }
 
-func (s *clientSuite) TestConnArray(c *check.C) {
+// Use etcdSuite for some special reasons, the embed etcd uses zap as the only candidate
+// logger and in the logger initializtion it also initializes the grpclog/loggerv2, which
+// is not a thread-safe operation and it must be called before any gRPC functions
+// ref: https://github.com/grpc/grpc-go/blob/master/grpclog/loggerv2.go#L67-L72
+func (s *etcdSuite) TestConnArray(c *check.C) {
 	addr := "127.0.0.1:2379"
 	ca, err := newConnArray(context.TODO(), 2, addr)
 	c.Assert(err, check.IsNil)
