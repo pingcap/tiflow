@@ -17,7 +17,6 @@ import (
 	"container/list"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -221,11 +220,7 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 }
 
 // NewStorage returns the Schema object
-func NewStorage(jobs []*timodel.Job, resolvedTs *uint64, jobElement *list.Element, lock *sync.RWMutex) (*Storage, error) {
-	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].BinlogInfo.FinishedTS < jobs[j].BinlogInfo.FinishedTS
-	})
-
+func NewStorage(resolvedTs *uint64, jobElement *list.Element, lock *sync.RWMutex) (*Storage, error) {
 	s := &Storage{
 		version2SchemaTable: make(map[int64]TableName),
 		truncateTableID:     make(map[int64]struct{}),

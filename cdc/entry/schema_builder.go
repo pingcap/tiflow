@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"context"
 	"log"
+	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -37,7 +38,16 @@ func NewStorageBuilder(historyDDL []*timodel.Job, ddlEventCh <-chan *model.RawKV
 	// push a head element to list
 	builder.jobList.PushBack(&timodel.Job{})
 
-	baseStorage, err := NewStorage(historyDDL, &builder.resolvedTs, builder.jobList.Front(), builder.jobList.RWMutex)
+	sort.Slice(historyDDL, func(i, j int) bool {
+		return historyDDL[i].BinlogInfo.FinishedTS < historyDDL[j].BinlogInfo.FinishedTS
+	})
+
+	for _, job := range historyDDL {
+		builder.jobList.PushBack(job)
+		atomic.StoreUint64(&builder.resolvedTs, job.BinlogInfo.FinishedTS)
+	}
+
+	baseStorage, err := NewStorage(&builder.resolvedTs, builder.jobList.Front(), builder.jobList.RWMutex)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -53,6 +63,9 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case rawKV = <-b.ddlEventCh:
 		}
+		if rawKV.Ts <= b.resolvedTs {
+			continue
+		}
 
 		if rawKV.OpType == model.OpTypeResolved {
 			atomic.StoreUint64(&b.resolvedTs, rawKV.Ts)
@@ -63,6 +76,10 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		if job == nil {
+			continue
+		}
+		atomic.StoreUint64(&b.resolvedTs, rawKV.Ts)
 		b.jobList.Lock()
 		b.jobList.PushBack(job)
 		b.jobList.Unlock()

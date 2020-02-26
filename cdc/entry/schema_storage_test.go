@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,13 +14,16 @@
 package entry
 
 import (
+	"context"
 	"fmt"
+
+	parser_types "github.com/pingcap/parser/types"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/model"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	parser_types "github.com/pingcap/parser/types"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -28,111 +31,135 @@ type schemaSuite struct{}
 
 var _ = Suite(&schemaSuite{})
 
+func NewStorageForTest(ctx context.Context, c *C, jobs []*timodel.Job) *Storage {
+	jobCh := make(chan *model.RawKVEntry)
+	storageBuilder, err := NewStorageBuilder(jobs, jobCh)
+	c.Assert(err, IsNil)
+	go func() {
+		err := storageBuilder.Run(ctx)
+		if err != nil && errors.Cause(err) != context.Canceled {
+			c.Fatal(err)
+		}
+	}()
+	return storageBuilder.Build(0)
+}
+
 func (t *schemaSuite) TestSchema(c *C) {
-	var jobs []*model.Job
-	dbName := model.NewCIStr("Test")
+	var jobs []*timodel.Job
+	dbName := timodel.NewCIStr("Test")
 	// db and ignoreDB info
-	dbInfo := &model.DBInfo{
+	dbInfo := &timodel.DBInfo{
 		ID:    1,
 		Name:  dbName,
-		State: model.StatePublic,
+		State: timodel.StatePublic,
 	}
-	// `createSchema` job
-	job := &model.Job{
+	// `createSchema` job1
+	job1 := &timodel.Job{
 		ID:         3,
-		State:      model.JobStateSynced,
+		State:      timodel.JobStateSynced,
 		SchemaID:   1,
-		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
+		Type:       timodel.ActionCreateSchema,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database test",
 	}
-	jobDup := &model.Job{
+	jobDup := &timodel.Job{
 		ID:         3,
-		State:      model.JobStateSynced,
+		State:      timodel.JobStateSynced,
 		SchemaID:   1,
-		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 124},
+		Type:       timodel.ActionCreateSchema,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 124},
 		Query:      "create database test",
 	}
-	jobs = append(jobs, job)
-
-	// construct a rollbackdone job
-	jobs = append(jobs, &model.Job{
+	job2 := &timodel.Job{
 		ID:         5,
-		State:      model.JobStateRollbackDone,
-		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 125}})
+		State:      timodel.JobStateRollbackDone,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 125}}
+
+	jobs = append(jobs, job1, job2)
 
 	// reconstruct the local schema
-	schema, err := NewStorage(jobs)
+	ctx, cancel := context.WithCancel(context.Background())
+	schema := NewStorageForTest(ctx, c, jobs)
+	err := schema.HandlePreviousDDLJobIfNeed(123)
 	c.Assert(err, IsNil)
-	err = schema.HandlePreviousDDLJobIfNeed(123)
-	c.Assert(err, IsNil)
+	cancel()
 
 	// test drop schema
 	jobs = append(
 		jobs,
-		&model.Job{
+		&timodel.Job{
 			ID:         6,
-			State:      model.JobStateSynced,
+			State:      timodel.JobStateSynced,
 			SchemaID:   1,
-			Type:       model.ActionDropSchema,
-			BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, FinishedTS: 124},
+			Type:       timodel.ActionDropSchema,
+			BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 3, FinishedTS: 124},
 			Query:      "drop database test",
 		},
 	)
-	schema, err = NewStorage(jobs)
-	c.Assert(err, IsNil)
+	ctx, cancel = context.WithCancel(context.Background())
+	schema = NewStorageForTest(ctx, c, jobs)
 	err = schema.HandlePreviousDDLJobIfNeed(124)
 	c.Assert(err, IsNil)
+	cancel()
 
 	// test create schema already exist error
 	jobs = jobs[:0]
-	jobs = append(jobs, job)
-	jobs = append(jobs, jobDup)
-	schema, err = NewStorage(jobs)
-	c.Assert(err, IsNil)
+	jobs = append(jobs, job1, jobDup, job2)
+
+	ctx, cancel = context.WithCancel(context.Background())
+	schema = NewStorageForTest(ctx, c, jobs)
 	err = schema.HandlePreviousDDLJobIfNeed(125)
 	c.Log(err)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
+	cancel()
 
 	// test schema drop schema error
 	jobs = jobs[:0]
 	jobs = append(
 		jobs,
-		&model.Job{
+		&timodel.Job{
 			ID:         9,
-			State:      model.JobStateSynced,
+			State:      timodel.JobStateSynced,
 			SchemaID:   1,
-			Type:       model.ActionDropSchema,
-			BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, FinishedTS: 123},
+			Type:       timodel.ActionDropSchema,
+			BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, FinishedTS: 123},
 			Query:      "drop database test",
 		},
 	)
-	schema, err = NewStorage(jobs)
-	c.Assert(err, IsNil)
+	ctx, cancel = context.WithCancel(context.Background())
+	schema = NewStorageForTest(ctx, c, jobs)
 	err = schema.HandlePreviousDDLJobIfNeed(123)
 	c.Assert(errors.IsNotFound(err), IsTrue)
+	cancel()
+
+	// test unresolved error
+	jobs = append(jobs, job1, job2)
+	ctx, cancel = context.WithCancel(context.Background())
+	schema = NewStorageForTest(ctx, c, jobs)
+	err = schema.HandlePreviousDDLJobIfNeed(200)
+	c.Assert(errors.Cause(err), Equals, model.ErrUnresolved)
+	cancel()
 }
 
 func (*schemaSuite) TestTable(c *C) {
-	var jobs []*model.Job
-	dbName := model.NewCIStr("Test")
-	tbName := model.NewCIStr("T")
-	colName := model.NewCIStr("A")
-	idxName := model.NewCIStr("idx")
+	var jobs []*timodel.Job
+	dbName := timodel.NewCIStr("Test")
+	tbName := timodel.NewCIStr("T")
+	colName := timodel.NewCIStr("A")
+	idxName := timodel.NewCIStr("idx")
 	// column info
-	colInfo := &model.ColumnInfo{
+	colInfo := &timodel.ColumnInfo{
 		ID:        1,
 		Name:      colName,
 		Offset:    0,
 		FieldType: *types.NewFieldType(mysql.TypeLonglong),
-		State:     model.StatePublic,
+		State:     timodel.StatePublic,
 	}
 	// index info
-	idxInfo := &model.IndexInfo{
+	idxInfo := &timodel.IndexInfo{
 		Name:  idxName,
 		Table: tbName,
-		Columns: []*model.IndexColumn{
+		Columns: []*timodel.IndexColumn{
 			{
 				Name:   colName,
 				Offset: 0,
@@ -141,74 +168,74 @@ func (*schemaSuite) TestTable(c *C) {
 		},
 		Unique:  true,
 		Primary: true,
-		State:   model.StatePublic,
+		State:   timodel.StatePublic,
 	}
 	// table info
-	tblInfo := &model.TableInfo{
+	tblInfo := &timodel.TableInfo{
 		ID:    2,
 		Name:  tbName,
-		State: model.StatePublic,
+		State: timodel.StatePublic,
 	}
 	// db info
-	dbInfo := &model.DBInfo{
+	dbInfo := &timodel.DBInfo{
 		ID:    3,
 		Name:  dbName,
-		State: model.StatePublic,
+		State: timodel.StatePublic,
 	}
 
 	// `createSchema` job
-	job := &model.Job{
+	job := &timodel.Job{
 		ID:         5,
-		State:      model.JobStateSynced,
+		State:      timodel.JobStateSynced,
 		SchemaID:   3,
-		Type:       model.ActionCreateSchema,
-		BinlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
+		Type:       timodel.ActionCreateSchema,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "create database " + dbName.O,
 	}
 	jobs = append(jobs, job)
 
 	// `createTable` job
-	job = &model.Job{
+	job = &timodel.Job{
 		ID:         6,
-		State:      model.JobStateSynced,
+		State:      timodel.JobStateSynced,
 		SchemaID:   3,
 		TableID:    2,
-		Type:       model.ActionCreateTable,
-		BinlogInfo: &model.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 124},
+		Type:       timodel.ActionCreateTable,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 124},
 		Query:      "create table " + tbName.O,
 	}
 	jobs = append(jobs, job)
 
 	// `addColumn` job
-	tblInfo.Columns = []*model.ColumnInfo{colInfo}
-	job = &model.Job{
+	tblInfo.Columns = []*timodel.ColumnInfo{colInfo}
+	job = &timodel.Job{
 		ID:         7,
-		State:      model.JobStateSynced,
+		State:      timodel.JobStateSynced,
 		SchemaID:   3,
 		TableID:    2,
-		Type:       model.ActionAddColumn,
-		BinlogInfo: &model.HistoryInfo{SchemaVersion: 3, TableInfo: tblInfo, FinishedTS: 125},
+		Type:       timodel.ActionAddColumn,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 3, TableInfo: tblInfo, FinishedTS: 125},
 		Query:      "alter table " + tbName.O + " add column " + colName.O,
 	}
 	jobs = append(jobs, job)
 
 	// construct a historical `addIndex` job
-	tblInfo.Indices = []*model.IndexInfo{idxInfo}
-	job = &model.Job{
+	tblInfo.Indices = []*timodel.IndexInfo{idxInfo}
+	job = &timodel.Job{
 		ID:         8,
-		State:      model.JobStateSynced,
+		State:      timodel.JobStateSynced,
 		SchemaID:   3,
 		TableID:    2,
-		Type:       model.ActionAddIndex,
-		BinlogInfo: &model.HistoryInfo{SchemaVersion: 4, TableInfo: tblInfo, FinishedTS: 126},
+		Type:       timodel.ActionAddIndex,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 4, TableInfo: tblInfo, FinishedTS: 126},
 		Query:      fmt.Sprintf("alter table %s add index %s(%s)", tbName, idxName, colName),
 	}
 	jobs = append(jobs, job)
 
 	// reconstruct the local schema
-	schema, err := NewStorage(jobs)
-	c.Assert(err, IsNil)
-	err = schema.HandlePreviousDDLJobIfNeed(126)
+	ctx, cancel := context.WithCancel(context.Background())
+	schema := NewStorageForTest(ctx, c, jobs)
+	err := schema.HandlePreviousDDLJobIfNeed(126)
 	c.Assert(err, IsNil)
 
 	// check the historical db that constructed above whether in the schema list of local schema
@@ -219,26 +246,28 @@ func (*schemaSuite) TestTable(c *C) {
 	c.Assert(ok, IsTrue)
 	c.Assert(table.Columns, HasLen, 1)
 	c.Assert(table.Indices, HasLen, 1)
+	cancel()
 	// check truncate table
-	tblInfo1 := &model.TableInfo{
+	tblInfo1 := &timodel.TableInfo{
 		ID:    9,
 		Name:  tbName,
-		State: model.StatePublic,
+		State: timodel.StatePublic,
 	}
 	jobs = append(
 		jobs,
-		&model.Job{
+		&timodel.Job{
 			ID:         9,
-			State:      model.JobStateSynced,
+			State:      timodel.JobStateSynced,
 			SchemaID:   3,
 			TableID:    2,
-			Type:       model.ActionTruncateTable,
-			BinlogInfo: &model.HistoryInfo{SchemaVersion: 5, TableInfo: tblInfo1, FinishedTS: 127},
+			Type:       timodel.ActionTruncateTable,
+			BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 5, TableInfo: tblInfo1, FinishedTS: 127},
 			Query:      "truncate table " + tbName.O,
 		},
 	)
-	schema1, err := NewStorage(jobs)
-	c.Assert(err, IsNil)
+
+	ctx, cancel = context.WithCancel(context.Background())
+	schema1 := NewStorageForTest(ctx, c, jobs)
 	err = schema1.HandlePreviousDDLJobIfNeed(127)
 	c.Assert(err, IsNil)
 	_, ok = schema1.TableByID(tblInfo1.ID)
@@ -246,21 +275,22 @@ func (*schemaSuite) TestTable(c *C) {
 
 	_, ok = schema1.TableByID(2)
 	c.Assert(ok, IsFalse)
+	cancel()
 	// check drop table
 	jobs = append(
 		jobs,
-		&model.Job{
+		&timodel.Job{
 			ID:         9,
-			State:      model.JobStateSynced,
+			State:      timodel.JobStateSynced,
 			SchemaID:   3,
 			TableID:    9,
-			Type:       model.ActionDropTable,
-			BinlogInfo: &model.HistoryInfo{SchemaVersion: 6, FinishedTS: 128},
+			Type:       timodel.ActionDropTable,
+			BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 6, FinishedTS: 128},
 			Query:      "drop table " + tbName.O,
 		},
 	)
-	schema2, err := NewStorage(jobs)
-	c.Assert(err, IsNil)
+	ctx, cancel = context.WithCancel(context.Background())
+	schema2 := NewStorageForTest(ctx, c, jobs)
 	err = schema2.HandlePreviousDDLJobIfNeed(128)
 	c.Assert(err, IsNil)
 
@@ -274,77 +304,80 @@ func (*schemaSuite) TestTable(c *C) {
 	c.Assert(err, IsNil)
 	// test schema version
 	c.Assert(schema.SchemaMetaVersion(), Equals, int64(0))
+	cancel()
 }
 
 func (t *schemaSuite) TestHandleDDL(c *C) {
-	schema, err := NewStorage(nil)
-	c.Assert(err, IsNil)
-	dbName := model.NewCIStr("Test")
-	colName := model.NewCIStr("A")
-	tbName := model.NewCIStr("T")
-	newTbName := model.NewCIStr("RT")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	schema := NewStorageForTest(ctx, c, nil)
+	dbName := timodel.NewCIStr("Test")
+	colName := timodel.NewCIStr("A")
+	tbName := timodel.NewCIStr("T")
+	newTbName := timodel.NewCIStr("RT")
 
 	// check rollback done job
-	job := &model.Job{ID: 1, State: model.JobStateRollbackDone}
+	job := &timodel.Job{ID: 1, State: timodel.JobStateRollbackDone}
 	_, _, sql, err := schema.HandleDDL(job)
 	c.Assert(err, IsNil)
 	c.Assert(sql, Equals, "")
 
 	// check job.Query is empty
-	job = &model.Job{ID: 1, State: model.JobStateDone}
+	job = &timodel.Job{ID: 1, State: timodel.JobStateDone}
 	_, _, sql, err = schema.HandleDDL(job)
 	c.Assert(sql, Equals, "")
 	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
 
 	// db info
-	dbInfo := &model.DBInfo{
+	dbInfo := &timodel.DBInfo{
 		ID:    2,
 		Name:  dbName,
-		State: model.StatePublic,
+		State: timodel.StatePublic,
 	}
 	// table Info
-	tblInfo := &model.TableInfo{
+	tblInfo := &timodel.TableInfo{
 		ID:    6,
 		Name:  tbName,
-		State: model.StatePublic,
+		State: timodel.StatePublic,
 	}
 	// column info
-	colInfo := &model.ColumnInfo{
+	colInfo := &timodel.ColumnInfo{
 		ID:        8,
 		Name:      colName,
 		Offset:    0,
 		FieldType: *types.NewFieldType(mysql.TypeLonglong),
-		State:     model.StatePublic,
+		State:     timodel.StatePublic,
 	}
-	tblInfo.Columns = []*model.ColumnInfo{colInfo}
+	tblInfo.Columns = []*timodel.ColumnInfo{colInfo}
 
 	testCases := []struct {
 		name        string
 		jobID       int64
 		schemaID    int64
 		tableID     int64
-		jobType     model.ActionType
-		binlogInfo  *model.HistoryInfo
+		jobType     timodel.ActionType
+		binlogInfo  *timodel.HistoryInfo
 		query       string
 		resultQuery string
 		schemaName  string
 		tableName   string
 	}{
-		{name: "createSchema", jobID: 3, schemaID: 2, tableID: 0, jobType: model.ActionCreateSchema, binlogInfo: &model.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, TableInfo: nil, FinishedTS: 123}, query: "create database Test", resultQuery: "create database Test", schemaName: dbInfo.Name.O, tableName: ""},
-		{name: "updateSchema", jobID: 4, schemaID: 2, tableID: 0, jobType: model.ActionModifySchemaCharsetAndCollate, binlogInfo: &model.HistoryInfo{SchemaVersion: 8, DBInfo: dbInfo, TableInfo: nil, FinishedTS: 123}, query: "ALTER DATABASE Test CHARACTER SET utf8mb4;", resultQuery: "ALTER DATABASE Test CHARACTER SET utf8mb4;", schemaName: dbInfo.Name.O},
-		{name: "createTable", jobID: 7, schemaID: 2, tableID: 6, jobType: model.ActionCreateTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 3, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "create table T(id int);", resultQuery: "create table T(id int);", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
-		{name: "addColumn", jobID: 9, schemaID: 2, tableID: 6, jobType: model.ActionAddColumn, binlogInfo: &model.HistoryInfo{SchemaVersion: 4, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "alter table T add a varchar(45);", resultQuery: "alter table T add a varchar(45);", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
-		{name: "truncateTable", jobID: 10, schemaID: 2, tableID: 6, jobType: model.ActionTruncateTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 5, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "truncate table T;", resultQuery: "truncate table T;", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
-		{name: "renameTable", jobID: 11, schemaID: 2, tableID: 10, jobType: model.ActionRenameTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 6, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "rename table T to RT;", resultQuery: "rename table T to RT;", schemaName: dbInfo.Name.O, tableName: newTbName.O},
-		{name: "dropTable", jobID: 12, schemaID: 2, tableID: 12, jobType: model.ActionDropTable, binlogInfo: &model.HistoryInfo{SchemaVersion: 7, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop table RT;", resultQuery: "drop table RT;", schemaName: dbInfo.Name.O, tableName: newTbName.O},
-		{name: "dropSchema", jobID: 13, schemaID: 2, tableID: 0, jobType: model.ActionDropSchema, binlogInfo: &model.HistoryInfo{SchemaVersion: 8, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop database test;", resultQuery: "drop database test;", schemaName: dbInfo.Name.O, tableName: ""},
+		{name: "createSchema", jobID: 3, schemaID: 2, tableID: 0, jobType: timodel.ActionCreateSchema, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, TableInfo: nil, FinishedTS: 123}, query: "create database Test", resultQuery: "create database Test", schemaName: dbInfo.Name.O, tableName: ""},
+		{name: "updateSchema", jobID: 4, schemaID: 2, tableID: 0, jobType: timodel.ActionModifySchemaCharsetAndCollate, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 8, DBInfo: dbInfo, TableInfo: nil, FinishedTS: 123}, query: "ALTER DATABASE Test CHARACTER SET utf8mb4;", resultQuery: "ALTER DATABASE Test CHARACTER SET utf8mb4;", schemaName: dbInfo.Name.O},
+		{name: "createTable", jobID: 7, schemaID: 2, tableID: 6, jobType: timodel.ActionCreateTable, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 3, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "create table T(id int);", resultQuery: "create table T(id int);", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "addColumn", jobID: 9, schemaID: 2, tableID: 6, jobType: timodel.ActionAddColumn, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 4, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "alter table T add a varchar(45);", resultQuery: "alter table T add a varchar(45);", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "truncateTable", jobID: 10, schemaID: 2, tableID: 6, jobType: timodel.ActionTruncateTable, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 5, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "truncate table T;", resultQuery: "truncate table T;", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
+		{name: "renameTable", jobID: 11, schemaID: 2, tableID: 10, jobType: timodel.ActionRenameTable, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 6, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "rename table T to RT;", resultQuery: "rename table T to RT;", schemaName: dbInfo.Name.O, tableName: newTbName.O},
+		{name: "dropTable", jobID: 12, schemaID: 2, tableID: 12, jobType: timodel.ActionDropTable, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 7, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop table RT;", resultQuery: "drop table RT;", schemaName: dbInfo.Name.O, tableName: newTbName.O},
+		{name: "dropSchema", jobID: 13, schemaID: 2, tableID: 0, jobType: timodel.ActionDropSchema, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 8, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop database test;", resultQuery: "drop database test;", schemaName: dbInfo.Name.O, tableName: ""},
 	}
 
 	for _, testCase := range testCases {
 		// prepare for ddl
 		switch testCase.name {
 		case "addColumn":
-			tblInfo.Columns = []*model.ColumnInfo{colInfo}
+			tblInfo.Columns = []*timodel.ColumnInfo{colInfo}
 		case "truncateTable":
 			tblInfo.ID = 10
 		case "renameTable":
@@ -352,9 +385,9 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 			tblInfo.Name = newTbName
 		}
 
-		job = &model.Job{
+		job = &timodel.Job{
 			ID:         testCase.jobID,
-			State:      model.JobStateDone,
+			State:      timodel.JobStateDone,
 			SchemaID:   testCase.schemaID,
 			TableID:    testCase.tableID,
 			Type:       testCase.jobType,
@@ -389,7 +422,7 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 	}
 }
 
-func testDoDDLAndCheck(c *C, schema *Storage, job *model.Job, isErr bool, sql string, expectedSchema string, expectedTable string) {
+func testDoDDLAndCheck(c *C, schema *Storage, job *timodel.Job, isErr bool, sql string, expectedSchema string, expectedTable string) {
 	schemaName, tableName, resSQL, err := schema.HandleDDL(job)
 	c.Logf("handle: %s", job.Query)
 	c.Logf("result: %s, %s, %s, %v", schemaName, tableName, resSQL, err)
@@ -404,32 +437,32 @@ type getUniqueKeysSuite struct{}
 var _ = Suite(&getUniqueKeysSuite{})
 
 func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *C) {
-	t := model.TableInfo{
-		Columns: []*model.ColumnInfo{
-			{Name: model.CIStr{O: "name"},
+	t := timodel.TableInfo{
+		Columns: []*timodel.ColumnInfo{
+			{Name: timodel.CIStr{O: "name"},
 				FieldType: parser_types.FieldType{
 					Flag: mysql.NotNullFlag,
 				},
 			},
-			{Name: model.CIStr{O: "id"}},
+			{Name: timodel.CIStr{O: "id"}},
 		},
-		Indices: []*model.IndexInfo{
+		Indices: []*timodel.IndexInfo{
 			{
-				Name: model.CIStr{
+				Name: timodel.CIStr{
 					O: "name",
 				},
-				Columns: []*model.IndexColumn{
-					{Name: model.CIStr{O: "name"},
+				Columns: []*timodel.IndexColumn{
+					{Name: timodel.CIStr{O: "name"},
 						Offset: 0},
 				},
 				Unique: true,
 			},
 			{
-				Name: model.CIStr{
+				Name: timodel.CIStr{
 					O: "PRIMARY",
 				},
-				Columns: []*model.IndexColumn{
-					{Name: model.CIStr{O: "id"},
+				Columns: []*timodel.IndexColumn{
+					{Name: timodel.CIStr{O: "id"},
 						Offset: 1},
 				},
 				Primary: true,
@@ -445,21 +478,21 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *C
 }
 
 func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
-	t := model.TableInfo{
-		Indices: []*model.IndexInfo{
+	t := timodel.TableInfo{
+		Indices: []*timodel.IndexInfo{
 			{
-				Name: model.CIStr{
+				Name: timodel.CIStr{
 					O: "uniq_job",
 				},
-				Columns: []*model.IndexColumn{
-					{Name: model.CIStr{O: "job"}},
+				Columns: []*timodel.IndexColumn{
+					{Name: timodel.CIStr{O: "job"}},
 				},
 				Unique: true,
 			},
 		},
-		Columns: []*model.ColumnInfo{
+		Columns: []*timodel.ColumnInfo{
 			{
-				Name: model.CIStr{
+				Name: timodel.CIStr{
 					O: "job",
 				},
 				FieldType: parser_types.FieldType{
@@ -467,7 +500,7 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
 				},
 			},
 			{
-				Name: model.CIStr{
+				Name: timodel.CIStr{
 					O: "uid",
 				},
 				FieldType: parser_types.FieldType{
