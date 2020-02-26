@@ -41,9 +41,11 @@ import (
 )
 
 const (
-	dialTimeout           = 10 * time.Second
-	maxRetry              = 10
-	tikvRequestMaxBackoff = 20000 // Maximum total sleep time(in ms)
+	dialTimeout               = 10 * time.Second
+	maxRetry                  = 10
+	tikvRequestMaxBackoff     = 20000 // Maximum total sleep time(in ms)
+	grpcInitialWindowSize     = 1 << 30
+	grpcInitialConnWindowSize = 1 << 30
 )
 
 type singleRegionInfo struct {
@@ -113,6 +115,8 @@ func (c *CDCClient) getConn(
 	conn, err = grpc.DialContext(
 		ctx,
 		addr,
+		grpc.WithInitialWindowSize(grpcInitialWindowSize),
+		grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
 		grpc.WithInsecure(),
 		grpc.WithConnectParams(grpc.ConnectParams{
 			Backoff: gbackoff.Config{
