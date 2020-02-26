@@ -21,7 +21,7 @@ const (
 
 // EventBuffer in a interface for communicating kv entries.
 type EventBuffer interface {
-	// AddEntry adds an entry to the buffer, return ErrReachLimit if reach bucget limit.
+	// AddEntry adds an entry to the buffer, return ErrReachLimit if reach budget limit.
 	AddEntry(ctx context.Context, entry model.RegionFeedEvent) error
 	Get(ctx context.Context) (model.RegionFeedEvent, error)
 }
@@ -144,14 +144,14 @@ func entrySize(e model.RegionFeedEvent) int {
 
 // BlurResourceLimitter limit resource use.
 type BlurResourceLimitter struct {
-	bucget int64
+	budget int64
 	used   int64
 }
 
 // NewBlurResourceLimmter create a BlurResourceLimitter.
-func NewBlurResourceLimmter(bucget int64) *BlurResourceLimitter {
+func NewBlurResourceLimmter(budget int64) *BlurResourceLimitter {
 	return &BlurResourceLimitter{
-		bucget: bucget,
+		budget: budget,
 	}
 }
 
@@ -160,7 +160,7 @@ func (rl *BlurResourceLimitter) Add(n int64) {
 	atomic.AddInt64(&rl.used, n)
 }
 
-// OverBucget retun true if over bucget.
+// OverBucget retun true if over budget.
 func (rl *BlurResourceLimitter) OverBucget() bool {
-	return atomic.LoadInt64(&rl.used) >= atomic.LoadInt64(&rl.bucget)
+	return atomic.LoadInt64(&rl.used) >= atomic.LoadInt64(&rl.budget)
 }
