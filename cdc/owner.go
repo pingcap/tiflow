@@ -738,7 +738,7 @@ func (c *changeFeed) calcResolvedTs() error {
 	minCheckpointTs := c.targetTs
 	log.Info("calcResolvedTs init", zap.Uint64("c.targetTs", c.targetTs))
 
-	if len(c.tables) == 0 {
+	if len(c.taskPositions) == 0 {
 		minCheckpointTs = c.status.CheckpointTs
 		log.Info("calcResolvedTs c.table == 0", zap.Uint64("c.status.CheckpointTs", c.status.CheckpointTs))
 	} else {

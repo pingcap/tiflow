@@ -89,6 +89,10 @@ func (b *StorageBuilder) Build(ts uint64) *Storage {
 }
 
 func (b *StorageBuilder) DoGc(ts uint64) error {
+	resolvedTs := atomic.LoadUint64(&b.resolvedTs)
+	if ts > resolvedTs {
+		ts = resolvedTs
+	}
 	err := b.baseStorage.HandlePreviousDDLJobIfNeed(ts)
 	if err != nil {
 		return errors.Trace(err)
