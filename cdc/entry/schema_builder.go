@@ -96,7 +96,7 @@ func (b *StorageBuilder) DoGc(ts uint64) error {
 	}
 	b.jobList.Lock()
 	defer b.jobList.Unlock()
-	for e := b.jobList.Front(); e != nil; e = e.Next() {
+	for e := b.jobList.Front().Next(); e != nil; e = e.Next() {
 		job := e.Value.(*timodel.Job)
 		if job.BinlogInfo.FinishedTS > ts {
 			break
