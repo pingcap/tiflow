@@ -736,9 +736,11 @@ func (c *changeFeed) calcResolvedTs() error {
 
 	minResolvedTs := c.targetTs
 	minCheckpointTs := c.targetTs
+	log.Info("calcResolvedTs init", zap.Uint64("c.targetTs", c.targetTs))
 
 	if len(c.tables) == 0 {
 		minCheckpointTs = c.status.CheckpointTs
+		log.Info("calcResolvedTs c.table == 0", zap.Uint64("c.status.CheckpointTs", c.status.CheckpointTs))
 	} else {
 		// calc the min of all resolvedTs in captures
 		for _, position := range c.taskPositions {
@@ -749,8 +751,10 @@ func (c *changeFeed) calcResolvedTs() error {
 			if minCheckpointTs > position.CheckPointTs {
 				minCheckpointTs = position.CheckPointTs
 			}
+			log.Info("calcResolvedTs task position", zap.Uint64("position.CheckPointTs", position.CheckPointTs))
 		}
 	}
+	log.Info("minCheckpointTs", zap.Uint64("minCheckpointTs", minCheckpointTs))
 
 	// if minResolvedTs is greater than ddlResolvedTs,
 	// it means that ddlJobHistory in memory is not intact,
