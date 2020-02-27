@@ -140,6 +140,7 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		default:
 			return errors.Cause(err)
 		}
+		log.Info("mounterImpl output", zap.Uint64("ts", rawRow.Ts))
 
 		event, err := m.unmarshalAndMountRowChanged(rawRow)
 		if err != nil {

@@ -416,6 +416,7 @@ func (s *Storage) removeTable(tableID int64) error {
 
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
 func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
+	log.Info("HandlePreviousDDLJobIfNeed", zap.Uint64("commitTs", commitTs), zap.Uint64("resolvedTs", atomic.LoadUint64(s.resolvedTs)))
 	if commitTs > atomic.LoadUint64(s.resolvedTs) {
 		return model.ErrUnresolved
 	}

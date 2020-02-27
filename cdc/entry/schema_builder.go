@@ -63,8 +63,8 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 			continue
 		}
 
+		atomic.StoreUint64(&b.resolvedTs, rawKV.Ts)
 		if rawKV.OpType == model.OpTypeResolved {
-			atomic.StoreUint64(&b.resolvedTs, rawKV.Ts)
 			continue
 		}
 
@@ -75,7 +75,6 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 		if job == nil {
 			continue
 		}
-		atomic.StoreUint64(&b.resolvedTs, rawKV.Ts)
 		b.jobList.Lock()
 		b.jobList.PushBack(job)
 		b.jobList.Unlock()
