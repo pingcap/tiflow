@@ -19,7 +19,7 @@ if [ "${1-}" = '--debug' ]; then
     TEST_NAME="debug" \
     start_tidb_cluster $WORK_DIR
 
-    cdc server --log-file $WORK_DIR/cdc.log --log-level debug > $WORK_DIR/cdc.log 2>&1 &
+    cdc server --log-file $WORK_DIR/cdc.log --log-level debug > $WORK_DIR/stdout.log 2>&1 &
     sleep 1
     cdc cli
 

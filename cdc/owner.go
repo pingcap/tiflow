@@ -768,7 +768,7 @@ func (c *changeFeed) calcResolvedTs() error {
 
 	// if minResolvedTs is greater than the finishedTS of ddl job which is not executed,
 	// we need to execute this ddl job
-	for c.ddlJobHistory[0].BinlogInfo.FinishedTS <= c.ddlExecutedTs {
+	for len(c.ddlJobHistory) > 0 && c.ddlJobHistory[0].BinlogInfo.FinishedTS <= c.ddlExecutedTs {
 		c.ddlJobHistory = c.ddlJobHistory[1:]
 	}
 	if len(c.ddlJobHistory) > 0 && minResolvedTs > c.ddlJobHistory[0].BinlogInfo.FinishedTS {
