@@ -551,7 +551,7 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 		return nil, errors.Annotate(err, "handle ddl job failed")
 	}
 
-	ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
+	ddlHandler := newDDLHandler(o.pdClient, checkpointTs, schemaStorage)
 
 	existingTables := make(map[uint64]uint64)
 	for captureID, taskStatus := range processorsInfos {
@@ -836,6 +836,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
 	log.Debug("apply job", zap.Stringer("job", todoDDLJob.Job),
+		zap.String("schema", todoDDLJob.Job.SchemaName),
 		zap.String("query", todoDDLJob.Job.Query),
 		zap.Uint64("ts", todoDDLJob.Job.BinlogInfo.FinishedTS))
 
