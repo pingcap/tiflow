@@ -21,14 +21,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-
-	"go.etcd.io/etcd/mvcc/mvccpb"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	pmodel "github.com/pingcap/parser/model"
+	timodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
@@ -36,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
+	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -51,10 +49,10 @@ type tableIDMap = map[uint64]struct{}
 // which can pull ddl jobs and execute ddl jobs
 type OwnerDDLHandler interface {
 	// PullDDL pulls the ddl jobs and returns resolvedTs of DDL Puller and job list.
-	PullDDL() (resolvedTs uint64, jobs []*model.DDL, err error)
+	PullDDL() (resolvedTs uint64, jobs []*timodel.Job, err error)
 
 	// ExecDDL executes the ddl job
-	ExecDDL(ctx context.Context, sinkURI string, txn model.Txn) error
+	ExecDDL(ctx context.Context, sinkURI string, ddl *model.DDLEvent) error
 
 	// Close cancels the executing of OwnerDDLHandler and releases resource
 	Close() error
@@ -95,7 +93,8 @@ type changeFeed struct {
 
 	ddlHandler    OwnerDDLHandler
 	ddlResolvedTs uint64
-	ddlJobHistory []*model.DDL
+	ddlJobHistory []*timodel.Job
+	ddlExecutedTs uint64
 
 	schemas       map[uint64]tableIDMap
 	tables        map[uint64]entry.TableName
@@ -113,7 +112,7 @@ func (c *changeFeed) String() string {
 
 	if len(c.ddlJobHistory) > 0 {
 		job := c.ddlJobHistory[0]
-		s += fmt.Sprintf("next to exec job: %s query: %s\n\n", job, job.Job.Query)
+		s += fmt.Sprintf("next to exec job: %s query: %s\n\n", job, job.Query)
 	}
 
 	return s
@@ -332,7 +331,7 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 	}
 }
 
-func (c *changeFeed) applyJob(job *pmodel.Job) error {
+func (c *changeFeed) applyJob(job *timodel.Job) error {
 	log.Info("apply job", zap.String("sql", job.Query), zap.Int64("job id", job.ID))
 
 	schamaName, tableName, _, err := c.schema.HandleDDL(job)
@@ -343,20 +342,20 @@ func (c *changeFeed) applyJob(job *pmodel.Job) error {
 	schemaID := uint64(job.SchemaID)
 	// case table id set may change
 	switch job.Type {
-	case pmodel.ActionCreateSchema:
+	case timodel.ActionCreateSchema:
 		c.addSchema(schemaID)
-	case pmodel.ActionDropSchema:
+	case timodel.ActionDropSchema:
 		c.dropSchema(schemaID)
-	case pmodel.ActionCreateTable, pmodel.ActionRecoverTable:
+	case timodel.ActionCreateTable, timodel.ActionRecoverTable:
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
 		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, entry.TableName{Schema: schamaName, Table: tableName})
-	case pmodel.ActionDropTable:
+	case timodel.ActionDropTable:
 		dropID := uint64(job.TableID)
 		c.removeTable(schemaID, dropID)
-	case pmodel.ActionRenameTable:
+	case timodel.ActionRenameTable:
 		// no id change just update name
 		c.tables[uint64(job.TableID)] = entry.TableName{Schema: schamaName, Table: tableName}
-	case pmodel.ActionTruncateTable:
+	case timodel.ActionTruncateTable:
 		dropID := uint64(job.TableID)
 		c.removeTable(schemaID, dropID)
 
@@ -538,18 +537,30 @@ func (o *ownerImpl) handleWatchCapture() error {
 	return nil
 }
 
-func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.ProcessorsInfos, taskPositions map[string]*model.TaskPosition, info *model.ChangeFeedInfo, checkpointTs uint64) (*changeFeed, error) {
+func (o *ownerImpl) newChangeFeed(
+	id model.ChangeFeedID,
+	processorsInfos model.ProcessorsInfos,
+	taskPositions map[string]*model.TaskPosition,
+	info *model.ChangeFeedInfo,
+	checkpointTs uint64) (*changeFeed, error) {
 	log.Info("Find new changefeed", zap.Reflect("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
-	schemaStorage, err := createSchemaStore(o.pdEndpoints)
+	jobs, err := getHistoryDDLJobs(o.pdEndpoints)
 	if err != nil {
-		return nil, errors.Annotate(err, "create schema store failed")
+		return nil, errors.Trace(err)
 	}
 
-	err = schemaStorage.HandlePreviousDDLJobIfNeed(checkpointTs)
-	if err != nil {
-		return nil, errors.Annotate(err, "handle ddl job failed")
+	schemaStorage := entry.NewSingleStorage()
+
+	for _, job := range jobs {
+		if job.BinlogInfo.FinishedTS > checkpointTs {
+			break
+		}
+		_, _, _, err := schemaStorage.HandleDDL(job)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
@@ -617,6 +628,8 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 			CheckpointTs: checkpointTs,
 		},
 		ddlState:      model.ChangeFeedSyncDML,
+		ddlJobHistory: jobs,
+		ddlExecutedTs: checkpointTs,
 		targetTs:      info.GetTargetTs(),
 		taskStatus:    processorsInfos,
 		taskPositions: taskPositions,
@@ -755,8 +768,11 @@ func (c *changeFeed) calcResolvedTs() error {
 
 	// if minResolvedTs is greater than the finishedTS of ddl job which is not executed,
 	// we need to execute this ddl job
-	if len(c.ddlJobHistory) > 0 && minResolvedTs > c.ddlJobHistory[0].Job.BinlogInfo.FinishedTS {
-		minResolvedTs = c.ddlJobHistory[0].Job.BinlogInfo.FinishedTS
+	for c.ddlJobHistory[0].BinlogInfo.FinishedTS <= c.ddlExecutedTs {
+		c.ddlJobHistory = c.ddlJobHistory[1:]
+	}
+	if len(c.ddlJobHistory) > 0 && minResolvedTs > c.ddlJobHistory[0].BinlogInfo.FinishedTS {
+		minResolvedTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedWaitToExecDDL
 	}
 
@@ -826,59 +842,54 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 	// Check if all the checkpointTs of capture are achieving global resolvedTs(which is equal to todoDDLJob.FinishedTS)
 	for cid, pInfo := range c.taskPositions {
-		if pInfo.CheckPointTs != todoDDLJob.Job.BinlogInfo.FinishedTS {
+		if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
 			log.Debug("wait checkpoint ts", zap.String("cid", cid),
 				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
-				zap.Uint64("finish ts", todoDDLJob.Job.BinlogInfo.FinishedTS))
+				zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS))
 			return nil
 		}
 	}
 
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
-	log.Debug("apply job", zap.Stringer("job", todoDDLJob.Job),
-		zap.String("query", todoDDLJob.Job.Query),
-		zap.Uint64("ts", todoDDLJob.Job.BinlogInfo.FinishedTS))
+	log.Debug("apply job", zap.Stringer("job", todoDDLJob),
+		zap.String("query", todoDDLJob.Query),
+		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
-	err := c.applyJob(todoDDLJob.Job)
+	err := c.applyJob(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	c.banlanceOrphanTables(context.Background(), captures)
-	ddlTxn := model.Txn{Ts: todoDDLJob.Job.BinlogInfo.FinishedTS, DDL: todoDDLJob}
-	if c.filter.ShouldIgnoreTxn(&ddlTxn) {
+	ddlEvent := &model.DDLEvent{
+		Ts:     todoDDLJob.BinlogInfo.FinishedTS,
+		Query:  todoDDLJob.Query,
+		Schema: todoDDLJob.SchemaName,
+		Table:  todoDDLJob.BinlogInfo.TableInfo.Name.O,
+	}
+	if c.filter.ShouldIgnoreDDLEvent(ddlEvent) {
 		log.Info(
-			"DDL txn ignored",
-			zap.Int64("ID", todoDDLJob.Job.ID),
-			zap.String("query", todoDDLJob.Job.Query),
-			zap.Uint64("ts", ddlTxn.Ts),
+			"DDL event ignored",
+			zap.Int64("ID", todoDDLJob.ID),
+			zap.String("query", todoDDLJob.Query),
+			zap.Uint64("ts", ddlEvent.Ts),
 		)
 	} else {
-		c.filter.FilterTxn(&ddlTxn)
-		if ddlTxn.DDL == nil {
-			log.Warn(
-				"DDL ignored",
-				zap.Int64("ID", todoDDLJob.Job.ID),
-				zap.String("query", todoDDLJob.Job.Query),
-				zap.Uint64("ts", todoDDLJob.Job.BinlogInfo.FinishedTS),
-			)
-		} else {
-			err = c.ddlHandler.ExecDDL(ctx, c.info.SinkURI, ddlTxn)
-			// If DDL executing failed, pause the changefeed and print log, rather
-			// than return an error and break the running of this owner.
-			if err != nil {
-				c.ddlState = model.ChangeFeedDDLExecuteFailed
-				log.Error("Execute DDL failed",
-					zap.String("ChangeFeedID", c.id),
-					zap.Error(err),
-					zap.Reflect("ddlJob", todoDDLJob))
-				return errors.Trace(model.ErrExecDDLFailed)
-			}
-			log.Info("Execute DDL succeeded",
+		err = c.ddlHandler.ExecDDL(ctx, c.info.SinkURI, ddlEvent)
+		// If DDL executing failed, pause the changefeed and print log, rather
+		// than return an error and break the running of this owner.
+		if err != nil {
+			c.ddlState = model.ChangeFeedDDLExecuteFailed
+			log.Error("Execute DDL failed",
 				zap.String("ChangeFeedID", c.id),
+				zap.Error(err),
 				zap.Reflect("ddlJob", todoDDLJob))
+			return errors.Trace(model.ErrExecDDLFailed)
 		}
+		log.Info("Execute DDL succeeded",
+			zap.String("ChangeFeedID", c.id),
+			zap.Reflect("ddlJob", todoDDLJob))
 	}
 	if c.ddlState != model.ChangeFeedExecDDL {
 		log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
@@ -886,6 +897,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 			zap.String("ChangeFeedDDLState", c.ddlState.String()))
 	}
 	c.ddlJobHistory = c.ddlJobHistory[1:]
+	c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
 	c.ddlState = model.ChangeFeedSyncDML
 	return nil
 }

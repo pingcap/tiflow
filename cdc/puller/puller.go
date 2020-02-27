@@ -31,7 +31,6 @@ type Puller interface {
 	// Run the puller, continually fetch event from TiKV and add event into buffer
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
-	CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error
 	Output() Buffer
 	SortedOutput(ctx context.Context) <-chan *model.RawKVEntry
 }
@@ -179,10 +178,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 func (p *pullerImpl) GetResolvedTs() uint64 {
 	return p.tsTracker.Frontier()
-}
-
-func (p *pullerImpl) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
-	return collectRawTxns(ctx, p.buf.Get, outputFn, p.tsTracker)
 }
 
 // collectRawTxns collects KV events from the inputFn,

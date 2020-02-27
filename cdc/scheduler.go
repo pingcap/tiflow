@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/sink"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -328,11 +330,11 @@ func realRunProcessor(
 	checkpointTs uint64,
 	cb processorCallback,
 ) error {
-	processor, err := NewProcessor(ctx, pdEndpoints, info, changefeedID, captureID, checkpointTs)
+	sink := sink.NewBlackHoleSink()
+	processor, err := NewProcessor(ctx, pdEndpoints, info, sink, changefeedID, captureID, checkpointTs)
 	if err != nil {
 		return err
 	}
-
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
 
 	if cb != nil {

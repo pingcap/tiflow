@@ -46,6 +46,26 @@ type mysqlSink struct {
 	ddlOnly    bool
 }
 
+func (s *mysqlSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
+	panic("implement me")
+}
+
+func (s *mysqlSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
+	panic("implement me")
+}
+
+func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, txn ...*model.RowChangedEvent) error {
+	panic("implement me")
+}
+
+func (s *mysqlSink) EmitDDLEvent(ctx context.Context, txn *model.DDLEvent) error {
+	panic("implement me")
+}
+
+func (s *mysqlSink) CheckpointTs() uint64 {
+	panic("implement me")
+}
+
 var _ Sink = &mysqlSink{}
 
 func configureSinkURI(sinkURI string) (string, error) {

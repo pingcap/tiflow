@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -85,8 +86,13 @@ func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
 	return false
 }
 
+type Mounter interface {
+	Run(ctx context.Context) error
+	Output() <-chan *model.RowChangedEvent
+}
+
 // Mounter is used to parse SQL events from KV events
-type Mounter struct {
+type mounterImpl struct {
 	schemaStorage   *Storage
 	schemaBuilder   *StorageBuilder
 	rawRowChangedCh <-chan *model.RawKVEntry
@@ -94,21 +100,28 @@ type Mounter struct {
 }
 
 // NewMounter creates a mounter
-func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaBuilder *StorageBuilder) *Mounter {
-	return &Mounter{
+func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaBuilder *StorageBuilder) Mounter {
+	return &mounterImpl{
 		schemaBuilder:   schemaBuilder,
 		rawRowChangedCh: rawRowChangedCh,
 	}
 }
 
-func (m *Mounter) Run(ctx context.Context) error {
+func (m *mounterImpl) Run(ctx context.Context) error {
+	var lastRowChangedEvent *model.RawKVEntry
 	for {
 		var rawRow *model.RawKVEntry
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case rawRow = <-m.rawRowChangedCh:
+		if lastRowChangedEvent != nil {
+			rawRow = lastRowChangedEvent
+			lastRowChangedEvent = nil
+		} else {
+			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			case rawRow = <-m.rawRowChangedCh:
+			}
 		}
+
 		if rawRow.OpType == model.OpTypeResolved {
 			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
 			continue
@@ -118,8 +131,14 @@ func (m *Mounter) Run(ctx context.Context) error {
 			m.schemaStorage = m.schemaBuilder.Build(rawRow.Ts)
 		}
 		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts)
-		if err != nil {
-			return errors.Trace(err)
+		switch errors.Cause(err) {
+		case nil:
+		case model.ErrUnresolved:
+			lastRowChangedEvent = rawRow
+			time.Sleep(10 * time.Millisecond)
+			continue
+		default:
+			return errors.Cause(err)
 		}
 
 		event, err := m.unmarshalAndMountRowChanged(rawRow)
@@ -133,11 +152,11 @@ func (m *Mounter) Run(ctx context.Context) error {
 	}
 }
 
-func (m *Mounter) Output() <-chan *model.RowChangedEvent {
+func (m *mounterImpl) Output() <-chan *model.RowChangedEvent {
 	return m.output
 }
 
-func (m *Mounter) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
 	}
@@ -173,7 +192,7 @@ func (m *Mounter) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model.Row
 	return nil, nil
 }
 
-func (m *Mounter) unmarshalRowKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*rowKVEntry, error) {
+func (m *mounterImpl) unmarshalRowKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*rowKVEntry, error) {
 	tableID := base.TableID
 	tableInfo, exist := m.schemaStorage.TableByID(tableID)
 	if !exist {
@@ -202,7 +221,7 @@ func (m *Mounter) unmarshalRowKVEntry(restKey []byte, rawValue []byte, base base
 	}, nil
 }
 
-func (m *Mounter) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*indexKVEntry, error) {
+func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*indexKVEntry, error) {
 	indexID, indexValue, err := decodeIndexKey(restKey)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -227,7 +246,7 @@ func (m *Mounter) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, base ba
 
 const ddlJobListKey = "DDLJobList"
 
-func unmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
+func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	if raw.OpType != model.OpTypePut || !bytes.HasPrefix(raw.Key, metaPrefix) {
 		return nil, nil
 	}
@@ -256,7 +275,7 @@ func unmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	return job, nil
 }
 
-func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, error) {
 	tableInfo, tableName, exist := m.fetchTableInfo(row.TableID)
 	if !exist {
 		return nil, errors.NotFoundf("table in schema storage, id: %d", row.TableID)
@@ -310,7 +329,7 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, erro
 	return event, nil
 }
 
-func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) mountIndexKVEntry(idx *indexKVEntry) (*model.RowChangedEvent, error) {
 	// skip set index KV
 	if !idx.Delete {
 		return nil, nil
@@ -379,7 +398,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 	return d.GetValue()
 }
 
-func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *TableInfo, tableName TableName, exist bool) {
+func (m *mounterImpl) fetchTableInfo(tableID int64) (tableInfo *TableInfo, tableName TableName, exist bool) {
 	tableInfo, exist = m.schemaStorage.TableByID(tableID)
 	if !exist {
 		return

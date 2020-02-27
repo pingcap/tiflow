@@ -47,11 +47,7 @@ func NewStorageBuilder(historyDDL []*timodel.Job, ddlEventCh <-chan *model.RawKV
 		atomic.StoreUint64(&builder.resolvedTs, job.BinlogInfo.FinishedTS)
 	}
 
-	baseStorage, err := NewStorage(&builder.resolvedTs, builder.jobList.Front(), builder.jobList.RWMutex)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	builder.baseStorage = baseStorage
+	builder.baseStorage = newStorage(&builder.resolvedTs, builder.jobList.Front(), builder.jobList.RWMutex)
 	return builder, nil
 }
 
@@ -72,7 +68,7 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 			continue
 		}
 
-		job, err := unmarshalDDL(rawKV)
+		job, err := UnmarshalDDL(rawKV)
 		if err != nil {
 			return errors.Trace(err)
 		}

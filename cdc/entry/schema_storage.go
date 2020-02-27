@@ -219,16 +219,22 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 	return false
 }
 
-// NewStorage returns the Schema object
-func NewStorage(resolvedTs *uint64, jobElement *list.Element, lock *sync.RWMutex) (*Storage, error) {
+// newStorage returns the Schema object
+func newStorage(resolvedTs *uint64, jobElement *list.Element, lock *sync.RWMutex) *Storage {
+	s := NewSingleStorage()
+	s.resolvedTs = resolvedTs
+	s.currentJob = &struct {
+		*list.Element
+		*sync.RWMutex
+	}{Element: jobElement, RWMutex: lock}
+
+	return s
+}
+
+func NewSingleStorage() *Storage {
 	s := &Storage{
 		version2SchemaTable: make(map[int64]TableName),
 		truncateTableID:     make(map[int64]struct{}),
-		resolvedTs:          resolvedTs,
-		currentJob: &struct {
-			*list.Element
-			*sync.RWMutex
-		}{Element: jobElement, RWMutex: lock},
 	}
 
 	s.tableIDToName = make(map[int64]TableName)
@@ -237,7 +243,7 @@ func NewStorage(resolvedTs *uint64, jobElement *list.Element, lock *sync.RWMutex
 	s.schemaNameToID = make(map[string]int64)
 	s.tables = make(map[int64]*TableInfo)
 
-	return s, nil
+	return s
 }
 
 // String implements fmt.Stringer interface.
