@@ -363,6 +363,10 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				}
 			}
 			p.tablesMu.Unlock()
+			// some puller still
+			if minResolvedTs == 0 {
+				continue
+			}
 
 			p.position.ResolvedTs = minResolvedTs
 			select {
