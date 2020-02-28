@@ -373,7 +373,6 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case p.output <- &model.RowChangedEvent{Resolved: true, Ts: minResolvedTs}:
-				log.Info("send minResolvedTs ", zap.Uint64("minResolvedTs", minResolvedTs))
 			}
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case <-checkpointTsTick.C:

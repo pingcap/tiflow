@@ -66,6 +66,9 @@ func (b *blackHoleSink) EmitCheckpointEvent(ctx context.Context, ts uint64) erro
 func (b *blackHoleSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		if row.Resolved {
+			if row.Ts <= b.checkpointTs {
+				return nil
+			}
 			atomic.StoreUint64(&b.checkpointTs, row.Ts)
 		}
 		log.Info("BlockHoleSink: Row Changed Event", zap.Any("row", row))
