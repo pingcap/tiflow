@@ -18,6 +18,8 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/pingcap/ticdc/cdc/entry"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
@@ -25,7 +27,6 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/types"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/tidb/infoschema"
 	dbtypes "github.com/pingcap/tidb/types"
 )
@@ -107,8 +108,8 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 type tableHelper struct {
 }
 
-func (h *tableHelper) TableByID(id int64) (info *schema.TableInfo, ok bool) {
-	return schema.WrapTableInfo(&timodel.TableInfo{
+func (h *tableHelper) TableByID(id int64) (info *entry.TableInfo, ok bool) {
+	return entry.WrapTableInfo(&timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
 				Name:  timodel.CIStr{O: "id"},
@@ -132,7 +133,7 @@ func (h *tableHelper) TableByID(id int64) (info *schema.TableInfo, ok bool) {
 	}), true
 }
 
-func (h *tableHelper) GetTableByName(schema, table string) (*schema.TableInfo, bool) {
+func (h *tableHelper) GetTableByName(schema, table string) (*entry.TableInfo, bool) {
 	return h.TableByID(42)
 }
 
