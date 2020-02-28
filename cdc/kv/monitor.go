@@ -36,13 +36,14 @@ type regionActive struct {
 
 func newRegionActive(regionID uint64, threshold int64) *regionActive {
 	now := time.Now()
+
 	return &regionActive{
 		regionID:      regionID,
-		lastKv:        now,
-		lastResolve:   now,
+		lastKv:        now.Add(time.Second * time.Duration(-threshold)),
+		lastResolve:   now.Add(time.Second * time.Duration(-threshold)),
 		threshold:     threshold,
-		kvActive:      true,
-		resolveActive: true,
+		kvActive:      false,
+		resolveActive: false,
 	}
 }
 
@@ -56,6 +57,18 @@ func (aw *regionActive) SetResolve() {
 	aw.Lock()
 	aw.lastResolve = time.Now()
 	aw.Unlock()
+}
+
+func (aw *regionActive) IsKvActive() bool {
+	aw.RLock()
+	defer aw.RUnlock()
+	return aw.kvActive
+}
+
+func (aw *regionActive) IsResolveActive() bool {
+	aw.RLock()
+	defer aw.RUnlock()
+	return aw.resolveActive
 }
 
 func (aw *regionActive) Check(ctx context.Context) {
@@ -82,13 +95,12 @@ func (aw *regionActive) Check(ctx context.Context) {
 		aw.kvActive = true
 		regionActiveKvCountGauge.WithLabelValues(captureID, changefeedID, tableID).Inc()
 	}
-	if resolve >= aw.threshold {
-		log.Warn("region resolve not active", zap.Uint64("region", aw.regionID), zap.Int64("resolve duration", resolve))
-		if aw.resolveActive {
-			aw.resolveActive = false
-			regionActiveResolveCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
-		}
-	} else if !aw.resolveActive {
+	if resolve >= aw.threshold && aw.resolveActive {
+		log.Warn("region becomes resolve inactive", zap.Uint64("region", aw.regionID), zap.Int64("resolve duration", resolve))
+		aw.resolveActive = false
+		regionActiveResolveCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
+	}
+	if resolve < aw.threshold && !aw.resolveActive {
 		aw.resolveActive = true
 		regionActiveResolveCountGauge.WithLabelValues(captureID, changefeedID, tableID).Inc()
 	}

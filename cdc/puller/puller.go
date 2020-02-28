@@ -114,8 +114,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		})
 	}
 
-	captureID := util.CaptureIDFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	captureID := util.GetValueFromCtx(ctx, util.CtxKeyCaptureID)
+	changefeedID := util.GetValueFromCtx(ctx, util.CtxKeyChangefeedID)
 
 	g.Go(func() error {
 		for {
@@ -123,15 +123,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return nil
 			case <-time.After(time.Minute):
-				entryBufferSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(p.chanBuffer)))
+				entryMemBufferSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(p.buffer.Size()))
+				entryChanBufferSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(p.chanBuffer)))
 				eventChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(eventCh)))
 			}
 		}
 	})
 
 	g.Go(func() error {
-		captureID := util.GetValueFromCtx(ctx, util.CtxKeyCaptureID)
-		changefeedID := util.GetValueFromCtx(ctx, util.CtxKeyChangefeedID)
 		for {
 			select {
 			case e := <-eventCh:

@@ -147,14 +147,16 @@ func (c *CDCClient) getConn(
 
 func metricsRegionInc(captureID, changefeedID, tableID string) {
 	regionCountGauge.WithLabelValues(captureID, changefeedID, tableID).Inc()
-	regionActiveKvCountGauge.WithLabelValues(captureID, changefeedID, tableID).Inc()
-	regionActiveResolveCountGauge.WithLabelValues(captureID, changefeedID, tableID).Inc()
 }
 
-func metricsRegionDec(captureID, changefeedID, tableID string) {
+func metricsRegionDec(captureID, changefeedID, tableID string, ra *regionActive) {
 	regionCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
-	regionActiveKvCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
-	regionActiveResolveCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
+	if ra.IsKvActive() {
+		regionActiveKvCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
+	}
+	if ra.IsResolveActive() {
+		regionActiveResolveCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
+	}
 }
 
 // EventFeed divides a EventFeed request on range boundaries and establishes
@@ -211,10 +213,6 @@ func (c *CDCClient) partialRegionFeed(
 	regionCh chan<- singleRegionInfo,
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
-	captureID := util.GetValueFromCtx(ctx, util.CtxKeyCaptureID)
-	changefeedID := util.GetValueFromCtx(ctx, util.CtxKeyChangefeedID)
-	tableID := util.GetValueFromCtx(ctx, util.CtxKeyTableID)
-
 	ts := regionInfo.ts
 	failStoreIDs := make(map[uint64]struct{})
 	rl := rate.NewLimiter(0.1, 5)
@@ -247,7 +245,6 @@ func (c *CDCClient) partialRegionFeed(
 		log.Debug("singleEventFeed quit")
 
 		if err == nil || errors.Cause(err) == context.Canceled {
-			metricsRegionDec(captureID, changefeedID, tableID)
 			break
 		}
 
@@ -267,7 +264,6 @@ func (c *CDCClient) partialRegionFeed(
 				c.regionCache.UpdateLeader(regionInfo.verID, notLeader.GetLeader().GetStoreId(), rpcCtx.PeerIdx)
 			} else if eerr.GetEpochNotMatch() != nil {
 				eventFeedErrorCounter.WithLabelValues("EpochNotMatch").Inc()
-				metricsRegionDec(captureID, changefeedID, tableID)
 				return c.divideAndSendEventFeedToRegions(ctx, regionInfo.span, ts, regionCh)
 			} else if eerr.GetRegionNotFound() != nil {
 				eventFeedErrorCounter.WithLabelValues("RegionNotFound").Inc()
@@ -301,8 +297,6 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 
 	nextSpan := span
 	captureID := util.GetValueFromCtx(ctx, util.CtxKeyCaptureID)
-	changefeedID := util.GetValueFromCtx(ctx, util.CtxKeyChangefeedID)
-	tableID := util.GetValueFromCtx(ctx, util.CtxKeyTableID)
 
 	for {
 		var (
@@ -358,7 +352,6 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			case <-ctx.Done():
 				return ctx.Err()
 			}
-			metricsRegionInc(captureID, changefeedID, tableID)
 
 			// return if no more regions
 			if util.EndCompare(nextSpan.Start, span.End) >= 0 {
@@ -382,6 +375,7 @@ func (c *CDCClient) singleEventFeed(
 ) (uint64, error) {
 	captureID := util.GetValueFromCtx(ctx, util.CtxKeyCaptureID)
 	changefeedID := util.GetValueFromCtx(ctx, util.CtxKeyChangefeedID)
+	tableID := util.GetValueFromCtx(ctx, util.CtxKeyTableID)
 	req := &cdcpb.ChangeDataRequest{
 		Header: &cdcpb.Header{
 			ClusterId: c.clusterID,
@@ -408,6 +402,8 @@ func (c *CDCClient) singleEventFeed(
 			}
 		}
 	}()
+	metricsRegionInc(captureID, changefeedID, tableID)
+	defer metricsRegionDec(captureID, changefeedID, tableID, ra)
 
 	var initialized uint32
 
@@ -468,7 +464,7 @@ func (c *CDCClient) singleEventFeed(
 			eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
 			switch x := event.Event.(type) {
 			case *cdcpb.Event_Entries_:
-				ra.SetKv()
+				recvEffectedKv := false
 				for _, entry := range x.Entries.GetEntries() {
 					pullEventCounter.WithLabelValues(entry.Type.String(), captureID, changefeedID).Inc()
 					switch entry.Type {
@@ -500,12 +496,14 @@ func (c *CDCClient) singleEventFeed(
 							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
 						}
 					case cdcpb.Event_PREWRITE:
+						recvEffectedKv = true
 						matcher.putPrewriteRow(entry)
 						sorter.pushTsItem(sortItem{
 							start: entry.GetStartTs(),
 							tp:    cdcpb.Event_PREWRITE,
 						})
 					case cdcpb.Event_COMMIT:
+						recvEffectedKv = true
 						// emit a value
 						value, err := matcher.matchRow(entry)
 						if err != nil {
@@ -551,6 +549,9 @@ func (c *CDCClient) singleEventFeed(
 							tp:     cdcpb.Event_ROLLBACK,
 						})
 					}
+				}
+				if recvEffectedKv {
+					ra.SetKv()
 				}
 			case *cdcpb.Event_Admin_:
 				log.Info("receive admin event", zap.Stringer("event", event))

@@ -31,14 +31,14 @@ func (s *MonitorSuite) TestRegionActive(c *check.C) {
 	)
 
 	ra := newRegionActive(1000, threshold)
-	time.Sleep(time.Second * time.Duration(threshold))
-	ra.Check(ctx)
-	c.Assert(ra.resolveActive, check.IsFalse)
-	c.Assert(ra.kvActive, check.IsFalse)
-
 	ra.SetKv()
 	ra.SetResolve()
 	ra.Check(ctx)
-	c.Assert(ra.resolveActive, check.IsTrue)
-	c.Assert(ra.kvActive, check.IsTrue)
+	c.Assert(ra.IsResolveActive(), check.IsTrue)
+	c.Assert(ra.IsKvActive(), check.IsTrue)
+
+	time.Sleep(time.Second * time.Duration(threshold))
+	ra.Check(ctx)
+	c.Assert(ra.IsResolveActive(), check.IsFalse)
+	c.Assert(ra.IsKvActive(), check.IsFalse)
 }

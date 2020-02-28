@@ -38,12 +38,19 @@ var (
 			Help:      "The number of txns resolved in one go.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 16),
 		})
-	entryBufferSizeGauge = prometheus.NewGaugeVec(
+	entryMemBufferSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "entry_mem_buffer_size",
+			Help:      "Puller entry unlimited memory buffer size",
+		}, []string{"capture", "changefeed"})
+	entryChanBufferSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "entry_buffer_size",
-			Help:      "Puller entry buffer size",
+			Help:      "Puller entry channel buffer size",
 		}, []string{"capture", "changefeed"})
 	eventChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -66,7 +73,8 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(kvEventCounter)
 	registry.MustRegister(txnCollectCounter)
 	registry.MustRegister(resolvedTxnsBatchSize)
-	registry.MustRegister(entryBufferSizeGauge)
+	registry.MustRegister(entryMemBufferSizeGauge)
+	registry.MustRegister(entryChanBufferSizeGauge)
 	registry.MustRegister(eventChanSizeGauge)
 	registry.MustRegister(trackerSizeGauge)
 }

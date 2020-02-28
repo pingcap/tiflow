@@ -127,6 +127,16 @@ func (b *memBuffer) Get(ctx context.Context) (model.RegionFeedEvent, error) {
 	}
 }
 
+// Size returns the byte size used by buffer
+func (b *memBuffer) Size() int64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.limitter != nil {
+		return b.limitter.ResourceSize()
+	}
+	return 0
+}
+
 var sizeOfVal = unsafe.Sizeof(model.RawKVEntry{})
 var sizeOfResolve = unsafe.Sizeof(model.ResolvedSpan{})
 
@@ -163,4 +173,9 @@ func (rl *BlurResourceLimitter) Add(n int64) {
 // OverBucget retun true if over budget.
 func (rl *BlurResourceLimitter) OverBucget() bool {
 	return atomic.LoadInt64(&rl.used) >= atomic.LoadInt64(&rl.budget)
+}
+
+// ResourceSize returns the used byte size of limmter
+func (rl *BlurResourceLimitter) ResourceSize() int64 {
+	return atomic.LoadInt64(&rl.used)
 }
