@@ -422,6 +422,8 @@ func (o *ownerImpl) addCapture(info *model.CaptureInfo) {
 }
 
 func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
+	o.processorLock.Lock()
+	defer o.processorLock.Unlock()
 	var deletedCapture = make(map[string]struct{})
 	remainProcs := make([]*model.ProcInfoSnap, 0)
 	for _, snap := range o.markDownProcessor {
