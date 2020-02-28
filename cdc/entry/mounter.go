@@ -104,6 +104,7 @@ func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaBuilder *Storage
 	return &mounterImpl{
 		schemaBuilder:   schemaBuilder,
 		rawRowChangedCh: rawRowChangedCh,
+		output:          make(chan *model.RowChangedEvent),
 	}
 }
 
