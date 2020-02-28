@@ -17,6 +17,7 @@ import "context"
 
 type ctxKey string
 
+// list of context key
 const (
 	CtxKeyCaptureID    = ctxKey("captureID")
 	CtxKeyChangefeedID = ctxKey("changefeedID")
