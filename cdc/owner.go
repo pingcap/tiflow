@@ -1171,7 +1171,7 @@ func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
 			p := &model.ProcessorInfo{}
 			switch ev.Type {
 			case clientv3.EventTypeDelete:
-				if err := p.Unmarshal(ev.PrevKv.Value); err != nil {
+				if err := p.Unmarshal(ev.Kv.Value); err != nil {
 					return errors.Trace(err)
 				}
 				if err := o.markProcessorDown(ctx, p); err != nil {
