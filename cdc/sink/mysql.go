@@ -17,6 +17,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,61 +42,107 @@ import (
 )
 
 const dryRunOpt = "_dry-run"
+const defaultWorkerCount = 16
 
 type mysqlSink struct {
-	dryRun     bool
 	db         *sql.DB
 	infoGetter TableInfoGetter
 	ddlOnly    bool
+	params     params
 }
 
 var _ Sink = &mysqlSink{}
 
-func configureSinkURI(sinkURI string) (string, error) {
-	dsnCfg, err := dmysql.ParseDSN(sinkURI)
+type params struct {
+	workerCount int
+	dryRun      bool
+}
+
+var defaultParams = params{
+	workerCount: defaultWorkerCount,
+	dryRun:      false,
+}
+
+func buildDBAndParams(sinkURI string, opts map[string]string) (db *sql.DB, params params, err error) {
+	params = defaultParams
+	if _, ok := opts[dryRunOpt]; ok {
+		params.dryRun = true
+	}
+
+	// treat as dsn of the driver for compatibility...
+	if !strings.HasPrefix(sinkURI, "mysql://") && !strings.HasPrefix(sinkURI, "tidb://") {
+		db, err = sql.Open("mysql", sinkURI+"&time_zone=UTC")
+		if err != nil {
+			return nil, params, errors.Trace(err)
+		}
+
+		return
+	}
+
+	url, err := url.Parse(sinkURI)
 	if err != nil {
-		return "", errors.Trace(err)
+		return nil, params, errors.Trace(err)
 	}
-	dsnCfg.Loc = time.UTC
-	if dsnCfg.Params == nil {
-		dsnCfg.Params = make(map[string]string, 1)
+
+	s := url.Query().Get("worker-count")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, params, errors.Trace(err)
+		}
+		params.workerCount = c
 	}
-	dsnCfg.DBName = ""
-	dsnCfg.Params["time_zone"] = "UTC"
-	return dsnCfg.FormatDSN(), nil
+
+	// dsn format of the driver:
+	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+	username := url.User.Username()
+	password, _ := url.User.Password()
+	port := url.Port()
+	if username == "" {
+		username = "root"
+	}
+	if port == "" {
+		port = "4000"
+	}
+
+	// Assume all the timestamp type is in the UTC zone when passing into mysql sink.
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/test?interpolateParams=true&multiStatements=true&time_zone=UTC", username,
+		password, url.Hostname(), port)
+	db, err = sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, params, errors.Trace(err)
+	}
+
+	return
 }
 
 // NewMySQLSink creates a new MySQL sink using schema storage
 func NewMySQLSink(sinkURI string, infoGetter TableInfoGetter, opts map[string]string) (Sink, error) {
-	sinkURI, err := configureSinkURI(sinkURI)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	db, err := sql.Open("mysql", sinkURI)
+	db, params, err := buildDBAndParams(sinkURI, opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	var dryRun bool
-	if _, ok := opts[dryRunOpt]; ok {
-		dryRun = true
-	}
-
-	return newMySQLSink(db, infoGetter, false, dryRun), nil
+	return newMySQLSink(db, infoGetter, false, params), nil
 }
 
 // NewMySQLSinkDDLOnly returns a sink that only processes DDL
 func NewMySQLSinkDDLOnly(db *sql.DB) Sink {
-	return newMySQLSink(db, nil, true, false)
+	return newMySQLSink(db, nil, true, defaultParams)
 }
 
-func newMySQLSink(db *sql.DB, infoGetter TableInfoGetter, ddlOnly bool, dryRun bool) Sink {
-	return &mysqlSink{
-		dryRun:     dryRun,
+func newMySQLSink(db *sql.DB, infoGetter TableInfoGetter, ddlOnly bool, params params) *mysqlSink {
+	sink := &mysqlSink{
+		params:     params,
 		db:         db,
 		infoGetter: infoGetter,
 		ddlOnly:    ddlOnly,
 	}
+
+	sink.db.SetMaxIdleConns(params.workerCount)
+	sink.db.SetMaxOpenConns(params.workerCount)
+
+	return sink
 }
 
 func (s *mysqlSink) EmitDDL(ctx context.Context, t model.Txn) error {
@@ -102,7 +150,7 @@ func (s *mysqlSink) EmitDDL(ctx context.Context, t model.Txn) error {
 		return errors.New("not a DDL")
 	}
 
-	if s.dryRun {
+	if s.params.dryRun {
 		return nil
 	}
 
@@ -115,7 +163,7 @@ func (s *mysqlSink) EmitDMLs(ctx context.Context, txns ...model.Txn) error {
 		return errors.New("dmls disallowed in ddl-only mode")
 	}
 
-	if s.dryRun {
+	if s.params.dryRun {
 		return nil
 	}
 
@@ -139,7 +187,11 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, dmlGroups [][]*model.DML
 	}
 	close(jobs)
 
-	nWorkers := 16
+	nWorkers := s.params.workerCount
+	if nWorkers == 0 {
+		nWorkers = defaultParams.workerCount
+	}
+
 	if len(dmlGroups) < nWorkers {
 		nWorkers = len(dmlGroups)
 	}
