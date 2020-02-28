@@ -233,7 +233,7 @@ func NewProcessor(
 
 		tsRWriter: tsRWriter,
 		status:    tsRWriter.GetTaskStatus(),
-		position:  &model.TaskPosition{},
+		position:  &model.TaskPosition{CheckPointTs: checkpointTs},
 		output:    make(chan *model.RowChangedEvent, defaultOutputChanSize),
 
 		tables: make(map[int64]*tableInfo),
@@ -378,6 +378,9 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case <-checkpointTsTick.C:
 			checkpointTs := p.sink.CheckpointTs()
+			if p.position.CheckPointTs > checkpointTs {
+				continue
+			}
 			p.position.CheckPointTs = checkpointTs
 			log.Info("set checkpoint ", zap.Uint64("checkpoint", checkpointTs))
 			checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(checkpointTs)))
