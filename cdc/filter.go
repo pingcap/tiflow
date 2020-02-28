@@ -24,9 +24,9 @@ func newTxnFilter(config *model.ReplicaConfig) (*txnFilter, error) {
 }
 
 // ShouldIgnoreTxn returns true is the given txn should be ignored
-func (f *txnFilter) ShouldIgnoreTxn(t *model.Txn) bool {
+func (f *txnFilter) shouldIgnoreCommitTs(ts uint64) bool {
 	for _, ignoreTs := range f.ignoreTxnCommitTs {
-		if ignoreTs == t.Ts {
+		if ignoreTs == ts {
 			return true
 		}
 	}
@@ -46,20 +46,12 @@ func (f *txnFilter) ShouldIgnoreTable(db, tbl string) bool {
 
 // FilterTxn removes DDL/DMLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
-func (f *txnFilter) FilterTxn(t *model.Txn) {
-	if t.IsDDL() {
-		if f.ShouldIgnoreTable(t.DDL.Database, t.DDL.Table) {
-			t.DDL = nil
-		}
-	} else {
-		var filteredDMLs []*model.DML
-		for _, dml := range t.DMLs {
-			if !f.ShouldIgnoreTable(dml.Database, dml.Table) {
-				filteredDMLs = append(filteredDMLs, dml)
-			}
-		}
-		t.DMLs = filteredDMLs
-	}
+func (f *txnFilter) ShouldIgnoreRowChangedEvent(t *model.RowChangedEvent) bool {
+	return f.shouldIgnoreCommitTs(t.Ts) || f.ShouldIgnoreTable(t.Schema, t.Table)
+}
+
+func (f *txnFilter) ShouldIgnoreDDLEvent(t *model.DDLEvent) bool {
+	return f.shouldIgnoreCommitTs(t.Ts) || f.ShouldIgnoreTable(t.Schema, t.Table)
 }
 
 // IsSysSchema returns true if the given schema is a system schema
