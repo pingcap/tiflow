@@ -403,6 +403,7 @@ func NewOwner(pdEndpoints []string, cli kv.CDCEtcdClient, manager roles.Manager)
 		pdEndpoints:        pdEndpoints,
 		pdClient:           pdClient,
 		changeFeeds:        make(map[model.ChangeFeedID]*changeFeed),
+		activeProcessors:   make(map[string]*model.ProcessorInfo),
 		cfRWriter:          cli,
 		etcdClient:         cli,
 		manager:            manager,
