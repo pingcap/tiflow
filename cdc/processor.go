@@ -363,7 +363,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				}
 			}
 			p.tablesMu.Unlock()
-			// some puller still
+			// some puller still haven't received the row changed data
 			if minResolvedTs == 0 {
 				continue
 			}
@@ -712,6 +712,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 				}
 				return
 			case row := <-mounter.Output():
+				log.Info("mounter output", zap.Any("row", row))
 				if row.Resolved {
 					table.storeResolvedTS(row.Ts)
 					log.Info("storeResolvedTS", zap.Uint64("ts", row.Ts))
