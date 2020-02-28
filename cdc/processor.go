@@ -373,7 +373,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case p.output <- &model.RowChangedEvent{Resolved: true, Ts: minResolvedTs}:
-				log.Info("set minResolvedTs ", zap.Uint64("minResolvedTs", minResolvedTs))
+				log.Info("send minResolvedTs ", zap.Uint64("minResolvedTs", minResolvedTs))
 			}
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case <-checkpointTsTick.C:
@@ -382,7 +382,6 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				continue
 			}
 			p.position.CheckPointTs = checkpointTs
-			log.Info("set checkpoint ", zap.Uint64("checkpoint", checkpointTs))
 			checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(checkpointTs)))
 		case <-updateInfoTick.C:
 			err := updateInfo()
@@ -712,7 +711,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 				}
 				return
 			case row := <-mounter.Output():
-				log.Info("mounter output", zap.Any("row", row))
 				if row.Resolved {
 					table.storeResolvedTS(row.Ts)
 					log.Info("storeResolvedTS", zap.Uint64("ts", row.Ts))

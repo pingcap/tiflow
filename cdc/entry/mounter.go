@@ -122,7 +122,6 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			case rawRow = <-m.rawRowChangedCh:
 			}
 		}
-		log.Info("shoudoa rawRow in mounter", zap.Any("rawRow", rawRow))
 
 		if rawRow.OpType == model.OpTypeResolved {
 			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
@@ -137,7 +136,7 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		case nil:
 		case model.ErrUnresolved:
 			lastRowChangedEvent = rawRow
-			log.Info("ErrUnresolved", zap.Any("rawRow", rawRow))
+			log.Info("ErrUnresolved", zap.Any("ts", rawRow.Ts))
 			time.Sleep(10 * time.Millisecond)
 			continue
 		default:

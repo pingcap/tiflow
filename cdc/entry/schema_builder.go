@@ -3,10 +3,12 @@ package entry
 import (
 	"container/list"
 	"context"
-	"log"
 	"sort"
 	"sync"
 	"sync/atomic"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
@@ -64,6 +66,7 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 		}
 
 		atomic.StoreUint64(&b.resolvedTs, rawKV.Ts)
+		log.Info("DDL resolvedts", zap.Uint64("ts", rawKV.Ts))
 		if rawKV.OpType == model.OpTypeResolved {
 			continue
 		}
