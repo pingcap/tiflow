@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -43,6 +44,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/codec"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -145,6 +147,7 @@ func newTxnChannel(inputTxn <-chan model.RawTxn, chanSize int, handleResolvedTs 
 }
 
 type processor struct {
+	id           string
 	captureID    string
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
@@ -153,6 +156,7 @@ type processor struct {
 
 	pdCli   pd.Client
 	etcdCli kv.CDCEtcdClient
+	session *concurrency.Session
 
 	mounter       mounter
 	schemaStorage *schema.Storage
@@ -217,6 +221,10 @@ func NewProcessor(ctx context.Context, pdEndpoints []string, changefeed model.Ch
 	if err != nil {
 		return nil, errors.Annotate(err, "new etcd client")
 	}
+	sess, err := concurrency.NewSession(etcdCli)
+	if err != nil {
+		return nil, errors.Annotate(err, "new etcd session")
+	}
 	cdcEtcdCli := kv.NewCDCEtcdClient(etcdCli)
 	schemaStorage, err := fCreateSchema(pdEndpoints)
 	if err != nil {
@@ -247,12 +255,14 @@ func NewProcessor(ctx context.Context, pdEndpoints []string, changefeed model.Ch
 	}
 
 	p := &processor{
+		id:            uuid.New().String(),
 		limitter:      limitter,
 		captureID:     captureID,
 		changefeedID:  changefeedID,
 		changefeed:    changefeed,
 		pdCli:         pdCli,
 		etcdCli:       cdcEtcdCli,
+		session:       sess,
 		mounter:       mounter,
 		schemaStorage: schemaStorage,
 		sink:          sink,
@@ -298,9 +308,11 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	go func() {
+		p.register(ctx)
 		if err := wg.Wait(); err != nil {
 			errCh <- err
 		}
+		p.deregister(ctx)
 	}()
 }
 
@@ -883,7 +895,21 @@ func (p *processor) stop(ctx context.Context) error {
 		tbl.puller.Cancel()
 	}
 	p.tablesMu.Unlock()
+	p.session.Close()
+	p.deregister(ctx)
 	return errors.Trace(p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID))
+}
+
+func (p *processor) register(ctx context.Context) error {
+	info := &model.ProcessorInfo{
+		ID:           p.id,
+		CaptureID:    p.captureID,
+		ChangeFeedID: p.changefeedID,
+	}
+	return p.etcdCli.PutProcessorInfo(ctx, p.captureID, info, p.session.Lease())
+}
+func (p *processor) deregister(ctx context.Context) error {
+	return p.etcdCli.DeleteProcessorInfo(ctx, p.captureID, p.id)
 }
 
 func newMounter(schema *schema.Storage) mounter {

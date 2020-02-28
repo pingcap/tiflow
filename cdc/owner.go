@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 
 	"github.com/pingcap/errors"
@@ -84,13 +85,12 @@ type changeFeed struct {
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
 
-	schema                  *schema.Storage
-	ddlState                model.ChangeFeedDDLState
-	targetTs                uint64
-	taskStatus              model.ProcessorsInfos
-	taskPositions           map[string]*model.TaskPosition
-	processorLastUpdateTime map[string]time.Time
-	filter                  *txnFilter
+	schema        *schema.Storage
+	ddlState      model.ChangeFeedDDLState
+	targetTs      uint64
+	taskStatus    model.ProcessorsInfos
+	taskPositions map[string]*model.TaskPosition
+	filter        *txnFilter
 
 	ddlHandler    OwnerDDLHandler
 	ddlResolvedTs uint64
@@ -119,18 +119,6 @@ func (c *changeFeed) String() string {
 }
 
 func (c *changeFeed) updateProcessorInfos(processInfos model.ProcessorsInfos, positions map[string]*model.TaskPosition) {
-	for cid, position := range positions {
-		if _, ok := c.processorLastUpdateTime[cid]; !ok {
-			c.processorLastUpdateTime[cid] = time.Now()
-			continue
-		}
-
-		oldPosition, ok := c.taskPositions[cid]
-		if !ok || oldPosition.ResolvedTs != position.ResolvedTs || oldPosition.CheckPointTs != position.CheckPointTs {
-			c.processorLastUpdateTime[cid] = time.Now()
-		}
-	}
-
 	c.taskStatus = processInfos
 	c.taskPositions = positions
 }
@@ -367,8 +355,12 @@ func (c *changeFeed) applyJob(job *pmodel.Job) error {
 }
 
 type ownerImpl struct {
-	changeFeeds       map[model.ChangeFeedID]*changeFeed
+	changeFeeds map[model.ChangeFeedID]*changeFeed
+
+	// processorLock protects markDownProcessor and activeProcessors
+	processorLock     sync.RWMutex
 	markDownProcessor []*model.ProcInfoSnap
+	activeProcessors  map[string]*model.ProcessorInfo
 
 	cfRWriter ChangeFeedRWriter
 
@@ -602,15 +594,14 @@ func (o *ownerImpl) newChangeFeed(id model.ChangeFeedID, processorsInfos model.P
 	}
 
 	cf := &changeFeed{
-		info:                    info,
-		id:                      id,
-		ddlHandler:              ddlHandler,
-		schema:                  schemaStorage,
-		schemas:                 schemas,
-		tables:                  tables,
-		orphanTables:            orphanTables,
-		toCleanTables:           make(map[uint64]struct{}),
-		processorLastUpdateTime: make(map[string]time.Time),
+		info:          info,
+		id:            id,
+		ddlHandler:    ddlHandler,
+		schema:        schemaStorage,
+		schemas:       schemas,
+		tables:        tables,
+		orphanTables:  orphanTables,
+		toCleanTables: make(map[uint64]struct{}),
 		status: &model.ChangeFeedStatus{
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
@@ -641,23 +632,6 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 		}
 		if cf, exist := o.changeFeeds[changeFeedID]; exist {
 			cf.updateProcessorInfos(taskStatus, taskPositions)
-			for id, info := range cf.taskStatus {
-				lastUpdateTime, exist := cf.processorLastUpdateTime[id]
-				if !exist {
-					lastUpdateTime = time.Now()
-					cf.processorLastUpdateTime[id] = lastUpdateTime
-				}
-				if time.Since(lastUpdateTime) > markProcessorDownTime {
-					var checkpointTs uint64
-					if pos, exist := taskPositions[id]; exist {
-						checkpointTs = pos.CheckPointTs
-					}
-					snap := info.Snapshot(changeFeedID, id, checkpointTs)
-					o.markDownProcessor = append(o.markDownProcessor, snap)
-					log.Info("markdown processor", zap.String("id", id),
-						zap.Reflect("info", info), zap.Time("update time", lastUpdateTime))
-				}
-			}
 			continue
 		}
 
@@ -1011,6 +985,9 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 		}
 	}()
 
+	// Start a routine to keep watching on the liveness of processors
+	o.startProcessorInfoWatcher(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -1102,4 +1079,127 @@ func (o *ownerImpl) writeDebugInfo(w io.Writer) {
 		// fmt.Fprintf(w, "%+v\n", *info)
 		fmt.Fprintf(w, "%s\n", info)
 	}
+}
+
+func (o *ownerImpl) markProcessorDown(ctx context.Context,
+	p *model.ProcessorInfo) error {
+	statuses, err := o.cfRWriter.GetAllTaskStatus(ctx, p.ChangeFeedID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	positions, err := o.cfRWriter.GetAllTaskPositions(ctx, p.ChangeFeedID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// lookup the task position for the processor
+	pos, exist := positions[p.CaptureID]
+	if !exist {
+		log.Warn("unkown processor deletion detected",
+			zap.String("processorID", p.ID),
+			zap.String("captureID", p.CaptureID))
+		return nil
+	}
+	// lookup the task position for the processor
+	status, exist := statuses[p.CaptureID]
+	if !exist {
+		log.Warn("unkown processor deletion detected",
+			zap.String("processorID", p.ID),
+			zap.String("captureID", p.CaptureID))
+		return nil
+	}
+	snap := status.Snapshot(p.ChangeFeedID,
+		p.CaptureID,
+		pos.CheckPointTs)
+	o.processorLock.Lock()
+	o.markDownProcessor = append(o.markDownProcessor, snap)
+	delete(o.activeProcessors, p.ID)
+	o.processorLock.Unlock()
+	return nil
+}
+
+func (o *ownerImpl) markProcessorActive(ctx context.Context,
+	p *model.ProcessorInfo) error {
+	o.processorLock.Lock()
+	o.activeProcessors[p.ID] = p
+	o.processorLock.Unlock()
+	return nil
+}
+
+func (o *ownerImpl) rebuildProcessorEvents(ctx context.Context,
+	processors []*model.ProcessorInfo) error {
+	current := make(map[string]*model.ProcessorInfo)
+	for _, p := range processors {
+		current[p.ID] = p
+		if _, ok := o.activeProcessors[p.ID]; !ok {
+			if err := o.markProcessorActive(ctx, p); err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+	for _, p := range o.activeProcessors {
+		if _, ok := current[p.ID]; !ok {
+			if err := o.markProcessorDown(ctx, p); err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+	return nil
+}
+
+func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
+	ctx = clientv3.WithRequireLeader(ctx)
+
+	rev, processors, err := o.etcdClient.GetProcessors(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// before watching, rebuild events according to
+	// the existed processors. This is necessary because
+	// the etcd events may be compacted.
+	o.rebuildProcessorEvents(ctx, processors)
+
+	ch := o.etcdClient.Client.Watch(ctx, kv.ProcessorInfoKeyPrefix,
+		clientv3.WithPrefix(),
+		clientv3.WithRev(rev))
+
+	for resp := range ch {
+		if resp.Err() != nil {
+			return errors.Trace(resp.Err())
+		}
+		for _, ev := range resp.Events {
+			p := &model.ProcessorInfo{}
+			switch ev.Type {
+			case clientv3.EventTypeDelete:
+				if err := p.Unmarshal(ev.PrevKv.Value); err != nil {
+					return errors.Trace(err)
+				}
+				if err := o.markProcessorDown(ctx, p); err != nil {
+					return errors.Trace(err)
+				}
+			case clientv3.EventTypePut:
+				if err := p.Unmarshal(ev.Kv.Value); err != nil {
+					return errors.Trace(err)
+				}
+				if err := o.markProcessorActive(ctx, p); err != nil {
+					return errors.Trace(err)
+				}
+			}
+		}
+	}
+	return nil
+}
+func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
+	go func() {
+		if err := o.watchProcessorInfo(ctx); err != nil {
+			// When the watching routine returns, the error must not
+			// be nil, it may be caused by a temporary error or a context
+			// error(ctx.Err())
+			if ctx.Err() != nil {
+				// The context error indicates the termination of the server
+				return
+			}
+			// Otherwise, a temporary error occured(ErrCompact),
+			// restart the watching routine.
+		}
+	}()
 }
