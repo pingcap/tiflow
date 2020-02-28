@@ -67,6 +67,20 @@ var (
 			Name:      "region_count",
 			Help:      "active region count",
 		}, []string{"capture", "changefeed", "table"})
+	regionActiveKvCountGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "region_active_kv_count",
+			Help:      "region with active kv received count",
+		}, []string{"capture", "changefeed", "table"})
+	regionActiveResolveCountGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "region_active_resolve_count",
+			Help:      "region with active resolve received count",
+		}, []string{"capture", "changefeed", "table"})
 )
 
 // InitMetrics registers all metrics in the kv package
@@ -78,4 +92,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(pullEventCounter)
 	registry.MustRegister(sendEventCounter)
 	registry.MustRegister(regionCountGauge)
+	registry.MustRegister(regionActiveKvCountGauge)
+	registry.MustRegister(regionActiveResolveCountGauge)
 }

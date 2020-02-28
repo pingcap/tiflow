@@ -41,11 +41,12 @@ import (
 )
 
 const (
-	dialTimeout               = 10 * time.Second
-	maxRetry                  = 10
-	tikvRequestMaxBackoff     = 20000 // Maximum total sleep time(in ms)
-	grpcInitialWindowSize     = 1 << 30
-	grpcInitialConnWindowSize = 1 << 30
+	dialTimeout                     = 10 * time.Second
+	maxRetry                        = 10
+	tikvRequestMaxBackoff           = 20000 // Maximum total sleep time(in ms)
+	grpcInitialWindowSize           = 1 << 30
+	grpcInitialConnWindowSize       = 1 << 30
+	regionActiveThreshold     int64 = 30
 )
 
 type singleRegionInfo struct {
@@ -144,6 +145,18 @@ func (c *CDCClient) getConn(
 	return
 }
 
+func metricsRegionInc(captureID, changefeedID, tableID string) {
+	regionCountGauge.WithLabelValues(captureID, changefeedID, tableID).Inc()
+	regionActiveKvCountGauge.WithLabelValues(captureID, changefeedID, tableID).Inc()
+	regionActiveResolveCountGauge.WithLabelValues(captureID, changefeedID, tableID).Inc()
+}
+
+func metricsRegionDec(captureID, changefeedID, tableID string) {
+	regionCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
+	regionActiveKvCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
+	regionActiveResolveCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
+}
+
 // EventFeed divides a EventFeed request on range boundaries and establishes
 // a EventFeed to each of the individual region. It streams back result on the
 // provided channel.
@@ -234,7 +247,7 @@ func (c *CDCClient) partialRegionFeed(
 		log.Debug("singleEventFeed quit")
 
 		if err == nil || errors.Cause(err) == context.Canceled {
-			regionCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
+			metricsRegionDec(captureID, changefeedID, tableID)
 			break
 		}
 
@@ -254,7 +267,7 @@ func (c *CDCClient) partialRegionFeed(
 				c.regionCache.UpdateLeader(regionInfo.verID, notLeader.GetLeader().GetStoreId(), rpcCtx.PeerIdx)
 			} else if eerr.GetEpochNotMatch() != nil {
 				eventFeedErrorCounter.WithLabelValues("EpochNotMatch").Inc()
-				regionCountGauge.WithLabelValues(captureID, changefeedID, tableID).Dec()
+				metricsRegionDec(captureID, changefeedID, tableID)
 				return c.divideAndSendEventFeedToRegions(ctx, regionInfo.span, ts, regionCh)
 			} else if eerr.GetRegionNotFound() != nil {
 				eventFeedErrorCounter.WithLabelValues("RegionNotFound").Inc()
@@ -345,7 +358,7 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			case <-ctx.Done():
 				return ctx.Err()
 			}
-			regionCountGauge.WithLabelValues(captureID, changefeedID, tableID).Inc()
+			metricsRegionInc(captureID, changefeedID, tableID)
 
 			// return if no more regions
 			if util.EndCompare(nextSpan.Start, span.End) >= 0 {
@@ -379,6 +392,22 @@ func (c *CDCClient) singleEventFeed(
 		StartKey:     span.Start,
 		EndKey:       span.End,
 	}
+
+	ra := newRegionActive(rpcCtx.Meta.GetId(), regionActiveThreshold)
+	cctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		ticker := time.NewTicker(time.Second * 30)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-cctx.Done():
+				return
+			case <-ticker.C:
+				ra.Check(cctx)
+			}
+		}
+	}()
 
 	var initialized uint32
 
@@ -439,6 +468,7 @@ func (c *CDCClient) singleEventFeed(
 			eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
 			switch x := event.Event.(type) {
 			case *cdcpb.Event_Entries_:
+				ra.SetKv()
 				for _, entry := range x.Entries.GetEntries() {
 					pullEventCounter.WithLabelValues(entry.Type.String(), captureID, changefeedID).Inc()
 					switch entry.Type {
@@ -527,6 +557,7 @@ func (c *CDCClient) singleEventFeed(
 			case *cdcpb.Event_Error_:
 				return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(&eventError{Event_Error: x.Error})
 			case *cdcpb.Event_ResolvedTs:
+				ra.SetResolve()
 				if atomic.LoadUint32(&initialized) == 0 {
 					continue
 				}
