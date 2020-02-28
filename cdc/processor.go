@@ -62,6 +62,8 @@ const (
 
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
+
+	defaultProcessorSessionTTL = 3 // 3 seconds
 )
 
 var (
@@ -221,7 +223,8 @@ func NewProcessor(ctx context.Context, pdEndpoints []string, changefeed model.Ch
 	if err != nil {
 		return nil, errors.Annotate(err, "new etcd client")
 	}
-	sess, err := concurrency.NewSession(etcdCli)
+	sess, err := concurrency.NewSession(etcdCli,
+		concurrency.WithTTL(defaultProcessorSessionTTL))
 	if err != nil {
 		return nil, errors.Annotate(err, "new etcd session")
 	}
