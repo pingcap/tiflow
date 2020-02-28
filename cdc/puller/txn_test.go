@@ -43,6 +43,10 @@ func (t *mockTracker) Frontier() uint64 {
 	return 1
 }
 
+func (t *mockTracker) Size() int {
+	return 1
+}
+
 var _ = check.Suite(&CollectRawTxnsSuite{})
 
 func (cs *CollectRawTxnsSuite) TestShouldOutputTxnsInOrder(c *check.C) {
