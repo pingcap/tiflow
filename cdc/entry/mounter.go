@@ -124,6 +124,7 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		}
 
 		if rawRow.OpType == model.OpTypeResolved {
+			log.Info("mounter Resolved", zap.Uint64("ts", rawRow.Ts))
 			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
 			continue
 		}
@@ -142,7 +143,6 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		default:
 			return errors.Cause(err)
 		}
-		log.Info("mounterImpl output", zap.Uint64("ts", rawRow.Ts))
 
 		event, err := m.unmarshalAndMountRowChanged(rawRow)
 		if err != nil {
