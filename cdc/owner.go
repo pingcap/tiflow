@@ -992,9 +992,7 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 		}
 	}()
 
-	// Start a routine to keep watching on the liveness of processors
-	o.startProcessorInfoWatcher(ctx)
-
+	var once sync.Once
 	for {
 		select {
 		case <-ctx.Done():
@@ -1005,6 +1003,12 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 			if !o.IsOwner(ctx) {
 				continue
 			}
+
+			// Start a routine to keep watching on the liveness of processors.
+			// This can only be run once the capture becomes an owner.
+			once.Do(func() {
+				o.startProcessorInfoWatcher(ctx)
+			})
 			err := o.run(ctx)
 			// owner may be evicted during running, ignore the context canceled error directly
 			if err != nil && errors.Cause(err) != context.Canceled {
@@ -1028,12 +1032,19 @@ func (o *ownerImpl) run(ctx context.Context) error {
 	o.l.Lock()
 	defer o.l.Unlock()
 
-	o.handleMarkdownProcessor(cctx)
-
 	err := o.loadChangeFeeds(cctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	// Handle the down processors.
+	//
+	// Since the processor watcher runs asynchronously,
+	// it may detected a processor down before
+	// loading the the change feeds, in which case the down processor
+	// will be ignored when doing rebalance. So we must call this
+	// function after calling loadChangeFeeds.
+	o.handleMarkdownProcessor(cctx)
 
 	err = o.calcResolvedTs()
 	if err != nil {
