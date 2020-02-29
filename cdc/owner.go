@@ -1098,21 +1098,26 @@ func (o *ownerImpl) markProcessorDown(ctx context.Context,
 	pos, exist := positions[p.CaptureID]
 	if !exist {
 		log.Warn("unkown processor deletion detected",
-			zap.String("processorID", p.ID),
-			zap.String("captureID", p.CaptureID))
+			zap.String("processorid", p.ID),
+			zap.String("captureid", p.CaptureID))
 		return nil
 	}
 	// lookup the task position for the processor
 	status, exist := statuses[p.CaptureID]
 	if !exist {
 		log.Warn("unkown processor deletion detected",
-			zap.String("processorID", p.ID),
-			zap.String("captureID", p.CaptureID))
+			zap.String("processorid", p.ID),
+			zap.String("captureid", p.CaptureID))
 		return nil
 	}
 	snap := status.Snapshot(p.ChangeFeedID,
 		p.CaptureID,
 		pos.CheckPointTs)
+	log.Info("mark processor down",
+		zap.String("processorid", p.ID),
+		zap.String("captureid", p.CaptureID),
+		zap.String("changefeed", p.ChangeFeedID),
+		zap.Reflect("tables", snap.Tables))
 	o.processorLock.Lock()
 	o.markDownProcessor = append(o.markDownProcessor, snap)
 	delete(o.activeProcessors, p.ID)
