@@ -1166,7 +1166,8 @@ func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
 		zap.Int64("rev", rev))
 	ch := o.etcdClient.Client.Watch(ctx, kv.ProcessorInfoKeyPrefix,
 		clientv3.WithPrefix(),
-		clientv3.WithRev(rev))
+		clientv3.WithRev(rev),
+		clientv3.WithPrevKV())
 
 	for resp := range ch {
 		if resp.Err() != nil {
@@ -1176,9 +1177,7 @@ func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
 			p := &model.ProcessorInfo{}
 			switch ev.Type {
 			case clientv3.EventTypeDelete:
-				log.Debug("processor deletion event",
-					zap.ByteString("value", ev.Kv.Value))
-				if err := p.Unmarshal(ev.Kv.Value); err != nil {
+				if err := p.Unmarshal(ev.PrevKv.Value); err != nil {
 					return errors.Trace(err)
 				}
 				log.Debug("processor deleted",
@@ -1216,6 +1215,7 @@ func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
 				log.Error("watch processor failed", zap.Error(ctx.Err()))
 				return
 			}
+			log.Warn("watch processor failed", zap.Error(err))
 			// Otherwise, a temporary error occured(ErrCompact),
 			// restart the watching routine.
 		}
