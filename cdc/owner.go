@@ -1161,6 +1161,9 @@ func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
 	// the etcd events may be compacted.
 	o.rebuildProcessorEvents(ctx, processors)
 
+	log.Info("watching processors",
+		zap.String("key", kv.ProcessorInfoKeyPrefix),
+		zap.Int64("rev", rev))
 	ch := o.etcdClient.Client.Watch(ctx, kv.ProcessorInfoKeyPrefix,
 		clientv3.WithPrefix(),
 		clientv3.WithRev(rev))
@@ -1176,6 +1179,10 @@ func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
 				if err := p.Unmarshal(ev.Kv.Value); err != nil {
 					return errors.Trace(err)
 				}
+				log.Debug("processor deleted",
+					zap.String("processorid", p.ID),
+					zap.String("captureid", p.CaptureID),
+					zap.String("changefeedid", p.ChangeFeedID))
 				if err := o.markProcessorDown(ctx, p); err != nil {
 					return errors.Trace(err)
 				}
@@ -1183,6 +1190,10 @@ func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
 				if err := p.Unmarshal(ev.Kv.Value); err != nil {
 					return errors.Trace(err)
 				}
+				log.Debug("processor created",
+					zap.String("processorid", p.ID),
+					zap.String("captureid", p.CaptureID),
+					zap.String("changefeedid", p.ChangeFeedID))
 				if err := o.markProcessorActive(ctx, p); err != nil {
 					return errors.Trace(err)
 				}
@@ -1192,6 +1203,7 @@ func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
 	return nil
 }
 func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
+	log.Info("start to watch processors")
 	go func() {
 		if err := o.watchProcessorInfo(ctx); err != nil {
 			// When the watching routine returns, the error must not
@@ -1199,6 +1211,7 @@ func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
 			// error(ctx.Err())
 			if ctx.Err() != nil {
 				// The context error indicates the termination of the server
+				log.Error("watch processor failed", zap.Error(ctx.Err()))
 				return
 			}
 			// Otherwise, a temporary error occured(ErrCompact),
