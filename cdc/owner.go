@@ -434,8 +434,12 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 			continue
 		}
 		for _, tbl := range snap.Tables {
+			log.Debug("readd table", zap.Uint64("tid", tbl.ID),
+				zap.Uint64("startts", tbl.StartTs))
 			changefeed.reAddTable(tbl.ID, tbl.StartTs)
 		}
+		log.Debug("delete task status for down processor",
+			zap.String("captureid", snap.CaptureID))
 		err := o.etcdClient.DeleteTaskStatus(ctx, snap.CfID, snap.CaptureID)
 		if err != nil {
 			log.Warn("failed to delete processor info",
@@ -1107,7 +1111,7 @@ func (o *ownerImpl) markProcessorDown(ctx context.Context,
 	if !exist {
 		log.Warn("unkown processor deletion detected",
 			zap.String("processorid", p.ID),
-			zap.String("captureid", p.CaptureID))
+			zap.String("capture", p.CaptureID))
 		return nil
 	}
 	snap := status.Snapshot(p.ChangeFeedID,
