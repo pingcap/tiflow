@@ -1161,7 +1161,7 @@ func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
 	// the etcd events may be compacted.
 	o.rebuildProcessorEvents(ctx, processors)
 
-	log.Info("watching processors",
+	log.Info("monitoring processors",
 		zap.String("key", kv.ProcessorInfoKeyPrefix),
 		zap.Int64("rev", rev))
 	ch := o.etcdClient.Client.Watch(ctx, kv.ProcessorInfoKeyPrefix,
@@ -1176,6 +1176,8 @@ func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
 			p := &model.ProcessorInfo{}
 			switch ev.Type {
 			case clientv3.EventTypeDelete:
+				log.Debug("processor deletion event",
+					zap.ByteString("value", ev.Kv.Value))
 				if err := p.Unmarshal(ev.Kv.Value); err != nil {
 					return errors.Trace(err)
 				}
