@@ -189,6 +189,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 		cancelWatchCapture: cancel,
 		changeFeeds:        changeFeeds,
 		cfRWriter:          handler,
+		etcdClient:         s.client,
 		manager:            manager,
 	}
 	s.owner = owner
@@ -408,8 +409,9 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 		changeFeeds:        changeFeeds,
 
 		// ddlHandler: handler,
-		cfRWriter: handler,
-		manager:   manager,
+		etcdClient: s.client,
+		cfRWriter:  handler,
+		manager:    manager,
 	}
 	s.owner = owner
 	err = owner.Run(ctx, 50*time.Millisecond)
