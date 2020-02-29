@@ -1004,10 +1004,18 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 				continue
 			}
 
-			// Start a routine to keep watching on the liveness of processors.
-			// This can only be run once the capture becomes an owner.
+			// Do something initialize when the capture becomes an owner.
 			once.Do(func() {
+				// Start a routine to keep watching on the liveness of
+				// processors.
 				o.startProcessorInfoWatcher(ctx)
+
+				// When an owner crashed, its processors crashed too,
+				// clean up the tasks for these processors.
+				if err := o.cleanUpStaleTasks(ctx); err != nil {
+					log.Error("clean up stale tasks failed",
+						zap.Error(err))
+				}
 			})
 			err := o.run(ctx)
 			// owner may be evicted during running, ignore the context canceled error directly
@@ -1172,7 +1180,7 @@ func (o *ownerImpl) rebuildProcessorEvents(ctx context.Context,
 func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
 	ctx = clientv3.WithRequireLeader(ctx)
 
-	rev, processors, err := o.etcdClient.GetProcessors(ctx)
+	rev, processors, err := o.etcdClient.GetAllProcessors(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -1240,4 +1248,43 @@ func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
 			// restart the watching routine.
 		}
 	}()
+}
+
+// cleanUpStaleTasks cleans up the task status which does not associated
+// with an active processor.
+//
+// When a new owner is elected, it does not know the events occurs before, like
+// processor deletion. In this case, the new owner should check if the task
+// status is stale because of the processor deletion.
+func (o *ownerImpl) cleanUpStaleTasks(ctx context.Context) error {
+	_, changefeeds, err := o.etcdClient.GetChangeFeeds(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for changeFeedID := range changefeeds {
+		_, processors, err := o.etcdClient.GetProcessors(ctx, changeFeedID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		active := make(map[string]*model.ProcessorInfo)
+		for _, p := range processors {
+			active[p.CaptureID] = p
+		}
+		statuses, err := o.etcdClient.GetAllTaskStatus(ctx, changeFeedID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		for captureID := range statuses {
+			if _, ok := active[captureID]; !ok {
+				if err := o.etcdClient.DeleteTaskStatus(ctx, changeFeedID, captureID); err != nil {
+					return errors.Trace(err)
+				}
+				if err := o.etcdClient.DeleteTaskPosition(ctx, changeFeedID, captureID); err != nil {
+					return errors.Trace(err)
+				}
+			}
+		}
+	}
+	return nil
 }

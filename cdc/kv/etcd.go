@@ -177,10 +177,19 @@ func (c CDCEtcdClient) GetCaptures(ctx context.Context) (int64, []*model.Capture
 	return revision, infos, nil
 }
 
-// GetProcessors returns kv revison and the ProcessorInfo list
-func (c CDCEtcdClient) GetProcessors(ctx context.Context) (int64, []*model.ProcessorInfo, error) {
-	// list the existed processors
-	resp, err := c.Client.Get(ctx, ProcessorInfoKeyPrefix,
+// GetAllProcessors returns kv revison and the ProcessorInfo list
+func (c CDCEtcdClient) GetAllProcessors(ctx context.Context) (int64, []*model.ProcessorInfo, error) {
+	return c.getProcessorsFromPrefix(ctx, ProcessorInfoKeyPrefix)
+}
+
+// GetProcessors returns the ProcessorInfo list for a change feed
+func (c CDCEtcdClient) GetProcessors(ctx context.Context, changeFeedID string) (int64, []*model.ProcessorInfo, error) {
+	prefix := ProcessorInfoKeyPrefix + "/" + changeFeedID
+	return c.getProcessorsFromPrefix(ctx, prefix)
+}
+
+func (c CDCEtcdClient) getProcessorsFromPrefix(ctx context.Context, prefix string) (int64, []*model.ProcessorInfo, error) {
+	resp, err := c.Client.Get(ctx, prefix,
 		clientv3.WithPrefix())
 	if err != nil {
 		return 0, nil, errors.Trace(err)
@@ -195,6 +204,7 @@ func (c CDCEtcdClient) GetProcessors(ctx context.Context) (int64, []*model.Proce
 		processors = append(processors, p)
 	}
 	return resp.Header.GetRevision(), processors, nil
+
 }
 
 // SaveChangeFeedInfo stores change feed info into etcd

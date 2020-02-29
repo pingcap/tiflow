@@ -149,7 +149,7 @@ var ctrlCmd = &cobra.Command{
 			}
 			return jsonPrint(captures)
 		case CtrlQueryProcessors:
-			_, processors, err := cli.GetProcessors(context.Background())
+			_, processors, err := cli.GetAllProcessors(context.Background())
 			if err != nil {
 				return err
 			}
