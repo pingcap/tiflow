@@ -1,5 +1,7 @@
 package model
 
+import "github.com/pingcap/parser/model"
+
 type RowChangedEvent struct {
 	Ts       uint64
 	Resolved bool
@@ -20,4 +22,5 @@ type DDLEvent struct {
 	Schema string
 	Table  string
 	Query  string
+	Type   model.ActionType
 }

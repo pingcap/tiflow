@@ -330,7 +330,10 @@ func realRunProcessor(
 	checkpointTs uint64,
 	cb processorCallback,
 ) error {
-	sink := sink.NewBlackHoleSink()
+	sink, err := sink.NewMySQLSink(info.SinkURI, info.Opts)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	processor, err := NewProcessor(ctx, pdEndpoints, info, sink, changefeedID, captureID, checkpointTs)
 	if err != nil {
 		return err

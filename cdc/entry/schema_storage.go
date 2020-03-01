@@ -159,15 +159,8 @@ func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
 	return ti.handleColID, ti.rowColInfos
 }
 
-// WritableColumns returns all public and non-generated columns
-func (ti *TableInfo) WritableColumns() []*timodel.ColumnInfo {
-	cols := make([]*timodel.ColumnInfo, 0, len(ti.Columns))
-	for _, col := range ti.Columns {
-		if col.State == timodel.StatePublic && !col.IsGenerated() {
-			cols = append(cols, col)
-		}
-	}
-	return cols
+func (ti *TableInfo) IsColWritable(col *timodel.ColumnInfo) bool {
+	return col.State == timodel.StatePublic && !col.IsGenerated()
 }
 
 // GetUniqueKeys returns all unique keys of the table as a slice of column names

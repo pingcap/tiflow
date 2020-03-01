@@ -867,6 +867,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		Query:  todoDDLJob.Query,
 		Schema: todoDDLJob.SchemaName,
 		Table:  todoDDLJob.BinlogInfo.TableInfo.Name.O,
+		Type:   todoDDLJob.Type,
 	}
 	if c.filter.ShouldIgnoreDDLEvent(ddlEvent) {
 		log.Info(

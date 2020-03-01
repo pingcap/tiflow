@@ -17,10 +17,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
-
-	"github.com/pingcap/ticdc/cdc/entry"
 
 	"golang.org/x/sync/errgroup"
 
@@ -43,30 +44,172 @@ import (
 const dryRunOpt = "_dry-run"
 
 type mysqlSink struct {
-	dryRun     bool
-	db         *sql.DB
-	infoGetter TableInfoGetter
-	ddlOnly    bool
+	db               *sql.DB
+	globalResolvedTs uint64
+	checkpointTs     uint64
+	rowsGroups       []*struct {
+		maxTs uint64
+		minTs uint64
+		rows  map[string][]*model.RowChangedEvent
+	}
+	rowsGroupsMu   sync.Mutex
+	unresolvedRows map[string][]*model.RowChangedEvent
 }
 
 func (s *mysqlSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
-	panic("implement me")
+	atomic.StoreUint64(&s.globalResolvedTs, ts)
+	return nil
 }
 
 func (s *mysqlSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
-	panic("implement me")
+	return nil
 }
 
-func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, txn ...*model.RowChangedEvent) error {
-	panic("implement me")
+func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	for _, row := range rows {
+		if row.Resolved {
+			if len(s.unresolvedRows) == 0 {
+				return nil
+			}
+			minTs, resolvedRowsMap := splitRowsGroup(row.Ts, s.unresolvedRows)
+			s.rowsGroupsMu.Lock()
+			s.rowsGroups = append(s.rowsGroups, &struct {
+				maxTs uint64
+				minTs uint64
+				rows  map[string][]*model.RowChangedEvent
+			}{maxTs: row.Ts, minTs: minTs, rows: resolvedRowsMap})
+			s.rowsGroupsMu.Unlock()
+			return nil
+		}
+		key := util.QuoteSchema(row.Schema, row.Schema)
+		s.unresolvedRows[key] = append(s.unresolvedRows[key], row)
+	}
+	return nil
 }
 
-func (s *mysqlSink) EmitDDLEvent(ctx context.Context, txn *model.DDLEvent) error {
-	panic("implement me")
+func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	err := s.execDDLWithMaxRetries(ctx, ddl, 5)
+	return errors.Trace(err)
+}
+
+func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent, maxRetries uint64) error {
+	return retry.Run(func() error {
+		err := s.execDDL(ctx, ddl)
+		if isIgnorableDDLError(err) {
+			return nil
+		}
+		return err
+	}, maxRetries)
+}
+
+func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
+	shouldSwitchDB := len(ddl.Schema) > 0 && ddl.Type != timodel.ActionCreateSchema
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if shouldSwitchDB {
+		_, err = tx.ExecContext(ctx, "USE "+util.QuoteName(ddl.Schema)+";")
+		if err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Failed to rollback", zap.Error(err))
+			}
+			return errors.Trace(err)
+		}
+	}
+
+	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(err))
+		}
+		return errors.Trace(err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return errors.Trace(err)
+	}
+
+	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
+	return nil
 }
 
 func (s *mysqlSink) CheckpointTs() uint64 {
-	panic("implement me")
+	return atomic.LoadUint64(&s.checkpointTs)
+}
+
+func (s *mysqlSink) Run(ctx context.Context) error {
+	execRows := func(rowsMap map[string][]*model.RowChangedEvent) error {
+		groups := make([][]*model.RowChangedEvent, 0, len(rowsMap))
+		for _, rows := range rowsMap {
+			groups = append(groups, rows)
+		}
+		return s.concurrentExec(ctx, groups)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		globalResolvedTs := atomic.LoadUint64(&s.globalResolvedTs)
+		if globalResolvedTs == atomic.LoadUint64(&s.checkpointTs) {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		var i int
+		var rowsGroupToExec []map[string][]*model.RowChangedEvent
+		s.rowsGroupsMu.Lock()
+		for ; i < len(s.rowsGroups); i++ {
+			rowsGroup := s.rowsGroups[i]
+			if rowsGroup.maxTs <= globalResolvedTs {
+				rowsGroupToExec = append(rowsGroupToExec, rowsGroup.rows)
+				continue
+			}
+			if rowsGroup.minTs > globalResolvedTs {
+				break
+			}
+			// globalResolvedTs is between minTs and maxTs
+			_, resolvedRows := splitRowsGroup(globalResolvedTs, rowsGroup.rows)
+			rowsGroup.minTs = globalResolvedTs
+			rowsGroupToExec = append(rowsGroupToExec, resolvedRows)
+			break
+		}
+		s.rowsGroups = s.rowsGroups[i:]
+		s.rowsGroupsMu.Unlock()
+		for _, groups := range rowsGroupToExec {
+			if err := execRows(groups); err != nil {
+				return errors.Trace(err)
+			}
+		}
+		atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
+	}
+}
+
+func splitRowsGroup(resolvedTs uint64, unresolvedRows map[string][]*model.RowChangedEvent) (minTs uint64, resolvedRowsMap map[string][]*model.RowChangedEvent) {
+	resolvedRowsMap = make(map[string][]*model.RowChangedEvent, len(unresolvedRows))
+	minTs = resolvedTs
+	for key, rows := range unresolvedRows {
+		i := sort.Search(len(rows), func(i int) bool {
+			return rows[i].Ts > resolvedTs
+		})
+		var resolvedRows []*model.RowChangedEvent
+		if i == len(rows) {
+			resolvedRows = rows
+			delete(unresolvedRows, key)
+		} else {
+			resolvedRows = make([]*model.RowChangedEvent, i)
+			copy(resolvedRows, rows[:i])
+			unresolvedRows[key] = rows[i:]
+		}
+		resolvedRowsMap[key] = resolvedRows
+
+		if len(resolvedRows) > 0 && resolvedRows[0].Ts < minTs {
+			minTs = resolvedRows[0].Ts
+		}
+	}
+	return
 }
 
 var _ Sink = &mysqlSink{}
@@ -86,7 +229,7 @@ func configureSinkURI(sinkURI string) (string, error) {
 }
 
 // NewMySQLSink creates a new MySQL sink using schema storage
-func NewMySQLSink(sinkURI string, infoGetter TableInfoGetter, opts map[string]string) (Sink, error) {
+func NewMySQLSink(sinkURI string, opts map[string]string) (Sink, error) {
 	sinkURI, err := configureSinkURI(sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -96,80 +239,32 @@ func NewMySQLSink(sinkURI string, infoGetter TableInfoGetter, opts map[string]st
 		return nil, errors.Trace(err)
 	}
 
-	var dryRun bool
-	if _, ok := opts[dryRunOpt]; ok {
-		dryRun = true
-	}
-
-	return newMySQLSink(db, infoGetter, false, dryRun), nil
+	return newMySQLSink(db), nil
 }
 
-// NewMySQLSinkDDLOnly returns a sink that only processes DDL
-func NewMySQLSinkDDLOnly(db *sql.DB) Sink {
-	return newMySQLSink(db, nil, true, false)
-}
-
-func newMySQLSink(db *sql.DB, infoGetter TableInfoGetter, ddlOnly bool, dryRun bool) Sink {
+func newMySQLSink(db *sql.DB) Sink {
 	return &mysqlSink{
-		dryRun:     dryRun,
-		db:         db,
-		infoGetter: infoGetter,
-		ddlOnly:    ddlOnly,
+		db: db,
 	}
 }
 
-func (s *mysqlSink) EmitDDL(ctx context.Context, t model.Txn) error {
-	if !t.IsDDL() {
-		return errors.New("not a DDL")
-	}
-
-	if s.dryRun {
-		return nil
-	}
-
-	err := s.execDDLWithMaxRetries(ctx, t.DDL, 5)
-	return errors.Trace(err)
-}
-
-func (s *mysqlSink) EmitDMLs(ctx context.Context, txns ...model.Txn) error {
-	if s.ddlOnly {
-		return errors.New("dmls disallowed in ddl-only mode")
-	}
-
-	if s.dryRun {
-		return nil
-	}
-
-	var allDMLs []*model.DML
-	for _, t := range txns {
-		dmls, err := s.formatDMLs(t.DMLs)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		allDMLs = append(allDMLs, dmls...)
-	}
-
-	dmlGroups := splitIndependentGroups(allDMLs)
-	return s.concurrentExec(ctx, dmlGroups)
-}
-
-func (s *mysqlSink) concurrentExec(ctx context.Context, dmlGroups [][]*model.DML) error {
-	jobs := make(chan []*model.DML, len(dmlGroups))
-	for _, dmls := range dmlGroups {
+func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups [][]*model.RowChangedEvent) error {
+	jobs := make(chan []*model.RowChangedEvent, len(rowGroups))
+	for _, dmls := range rowGroups {
 		jobs <- dmls
 	}
 	close(jobs)
 
 	nWorkers := 16
-	if len(dmlGroups) < nWorkers {
-		nWorkers = len(dmlGroups)
+	if len(rowGroups) < nWorkers {
+		nWorkers = len(rowGroups)
 	}
 	eg, _ := errgroup.WithContext(ctx)
 	for i := 0; i < nWorkers; i++ {
 		eg.Go(func() error {
-			for dmls := range jobs {
+			for rows := range jobs {
 				// TODO: Add retry
-				if err := s.execDMLs(ctx, dmls); err != nil {
+				if err := s.execDMLs(ctx, rows); err != nil {
 					return errors.Trace(err)
 				}
 			}
@@ -183,74 +278,31 @@ func (s *mysqlSink) Close() error {
 	return nil
 }
 
-func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDL, maxRetries uint64) error {
-	return retry.Run(func() error {
-		err := s.execDDL(ctx, ddl)
-		if isIgnorableDDLError(err) {
-			return nil
-		}
-		return err
-	}, maxRetries)
-}
-
-func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDL) error {
-	shouldSwitchDB := len(ddl.Database) > 0 && ddl.Job.Type != timodel.ActionCreateSchema
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if shouldSwitchDB {
-		_, err = tx.ExecContext(ctx, "USE "+util.QuoteName(ddl.Database)+";")
-		if err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Failed to rollback", zap.Error(err))
-			}
-			return errors.Trace(err)
-		}
-	}
-
-	if _, err = tx.ExecContext(ctx, ddl.Job.Query); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Error("Failed to rollback", zap.String("sql", ddl.Job.Query), zap.Error(err))
-		}
-		return errors.Trace(err)
-	}
-
-	if err = tx.Commit(); err != nil {
-		return errors.Trace(err)
-	}
-
-	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Job.Query))
-	return nil
-}
-
-func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*model.DML) error {
+func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent) error {
 	startTime := time.Now()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	for _, dml := range dmls {
-		var fPrepare func(*model.DML) (string, []interface{}, error)
-		switch dml.Tp {
-		case model.InsertDMLType, model.UpdateDMLType:
-			fPrepare = s.prepareReplace
-		case model.DeleteDMLType:
-			fPrepare = s.prepareDelete
-		default:
-			return fmt.Errorf("invalid dml type: %v", dml.Tp)
+	for _, row := range rows {
+		var query string
+		var args []interface{}
+		var err error
+		if len(row.Delete) > 0 {
+			query, args, err = s.prepareDelete(row.Schema, row.Table, row.Delete)
+		} else if len(row.Update) > 0 {
+			query, args, err = s.prepareReplace(row.Schema, row.Table, row.Update)
+		} else {
+			continue
 		}
-		query, args, err := fPrepare(dml)
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.Error(err))
 			}
 			return errors.Trace(err)
 		}
-		log.Debug("exec dml", zap.String("sql", query), zap.Any("args", args))
+		log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.String("sql", query), zap.Error(err))
@@ -265,93 +317,46 @@ func (s *mysqlSink) execDMLs(ctx context.Context, dmls []*model.DML) error {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	execTxnHistogram.WithLabelValues(captureID, changefeedID).Observe(time.Since(startTime).Seconds())
-	execBatchHistogram.WithLabelValues(captureID, changefeedID).Observe(float64(len(dmls)))
-	log.Info("Exec DML succeeded", zap.Int("num of DMLs", len(dmls)))
+	execBatchHistogram.WithLabelValues(captureID, changefeedID).Observe(float64(len(rows)))
+	log.Info("Exec Rows succeeded", zap.Int("num of Rows", len(rows)))
 	return nil
 }
 
-func (s *mysqlSink) formatDMLs(dmls []*model.DML) ([]*model.DML, error) {
-	result := make([]*model.DML, 0, len(dmls))
-	for _, dml := range dmls {
-		tableInfo, ok := s.infoGetter.GetTableByName(dml.Database, dml.Table)
-		if !ok {
-			return nil, fmt.Errorf("table not found: %s.%s", dml.Database, dml.Table)
-		}
-		err := formatValues(tableInfo, dml.Values)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, dml)
-	}
-	return result, nil
-}
-
-func (s *mysqlSink) prepareReplace(dml *model.DML) (string, []interface{}, error) {
-	info, ok := s.infoGetter.GetTableByName(dml.Database, dml.Table)
-	if !ok {
-		return "", nil, fmt.Errorf("Table not found: %s", dml.TableName())
-	}
-	columns := getColNames(info.WritableColumns())
+func (s *mysqlSink) prepareReplace(schema, table string, cols map[string]model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
-	cols := "(" + buildColumnList(columns) + ")"
-	tblName := util.QuoteSchema(dml.Database, dml.Table)
-	builder.WriteString("REPLACE INTO " + tblName + cols + " VALUES ")
-	builder.WriteString("(" + util.HolderString(len(columns)) + ");")
+	columnNames := getColNames(cols)
+	colList := "(" + buildColumnList(columnNames) + ")"
+	tblName := util.QuoteSchema(schema, table)
+	builder.WriteString("REPLACE INTO " + tblName + colList + " VALUES ")
+	builder.WriteString("(" + util.HolderString(len(columnNames)) + ");")
 
-	args := make([]interface{}, 0, len(columns))
-	for _, name := range columns {
-		val, ok := dml.Values[name]
-		if !ok {
-			return "", nil, fmt.Errorf("missing value for column: %s", name)
-		}
-		args = append(args, val.GetValue())
+	args := make([]interface{}, 0, len(cols))
+	for _, col := range cols {
+		args = append(args, col.Value)
 	}
-
 	return builder.String(), args, nil
 }
 
-func (s *mysqlSink) prepareDelete(dml *model.DML) (string, []interface{}, error) {
-	info, ok := s.infoGetter.GetTableByName(dml.Database, dml.Table)
-	if !ok {
-		return "", nil, fmt.Errorf("Table not found: %s", dml.TableName())
-	}
-
+func (s *mysqlSink) prepareDelete(schema, table string, cols map[string]model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
-	builder.WriteString("DELETE FROM " + dml.TableName() + " WHERE ")
+	builder.WriteString(fmt.Sprintf("DELETE FROM %s WHERE ", util.QuoteSchema(schema, table)))
 
-	colNames, wargs := whereSlice(info, dml.Values)
+	colNames, wargs := whereSlice(cols)
 	args := make([]interface{}, 0, len(wargs))
 	for i := 0; i < len(colNames); i++ {
 		if i > 0 {
 			builder.WriteString(" AND ")
 		}
-		if wargs[i].IsNull() {
+		if wargs[i] == nil {
 			builder.WriteString(util.QuoteName(colNames[i]) + " IS NULL")
 		} else {
 			builder.WriteString(util.QuoteName(colNames[i]) + " = ?")
-			args = append(args, wargs[i].GetValue())
+			args = append(args, wargs[i])
 		}
 	}
 	builder.WriteString(" LIMIT 1;")
 	sql := builder.String()
 	return sql, args, nil
-}
-
-func formatValues(table *entry.TableInfo, colVals map[string]types.Datum) error {
-	columns := table.WritableColumns()
-	// TODO get table infos from txn for emit interface
-	for _, col := range columns {
-		value, ok := colVals[col.Name.O]
-		if !ok {
-			continue
-		}
-		value, err := formatColVal(value, col.FieldType)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		colVals[col.Name.O] = value
-	}
-	return nil
 }
 
 func formatColVal(datum types.Datum, ft types.FieldType) (types.Datum, error) {
@@ -378,33 +383,16 @@ func formatColVal(datum types.Datum, ft types.FieldType) (types.Datum, error) {
 	return datum, nil
 }
 
-func whereValues(colVals map[string]types.Datum, names []string) (values []types.Datum) {
-	for _, name := range names {
-		v := colVals[name]
-		values = append(values, v)
+func whereSlice(cols map[string]model.Column) (colNames []string, args []interface{}) {
+	// Try to use unique key values when available
+	for colName, col := range cols {
+		if !col.Unique {
+			continue
+		}
+		colNames = append(colNames, colName)
+		args = append(args, col.Value)
 	}
 	return
-}
-
-func whereSlice(table *entry.TableInfo, colVals map[string]types.Datum) (colNames []string, args []types.Datum) {
-	// Try to use unique key values when available
-	for _, idxCols := range table.GetUniqueKeys() {
-		values := whereValues(colVals, idxCols)
-		notAnyNil := true
-		for i := 0; i < len(values); i++ {
-			if values[i].IsNull() {
-				notAnyNil = false
-				break
-			}
-		}
-		if notAnyNil {
-			return idxCols, values
-		}
-	}
-
-	// Fallback to use all columns
-	cols := getColNames(table.WritableColumns())
-	return cols, whereValues(colVals, cols)
 }
 
 func isIgnorableDDLError(err error) bool {
@@ -449,10 +437,10 @@ func buildColumnList(names []string) string {
 	return b.String()
 }
 
-func getColNames(cols []*timodel.ColumnInfo) []string {
+func getColNames(cols map[string]model.Column) []string {
 	names := make([]string, 0, len(cols))
-	for _, c := range cols {
-		names = append(names, c.Name.O)
+	for k := range cols {
+		names = append(names, k)
 	}
 	return names
 }
@@ -460,16 +448,19 @@ func getColNames(cols []*timodel.ColumnInfo) []string {
 // splitIndependentGroups splits DMLs into independent groups.
 // Two groups of DMLs are considered independent if they can be
 // executed concurrently.
-func splitIndependentGroups(dmls []*model.DML) [][]*model.DML {
+func splitIndependentGroups(rows []*model.RowChangedEvent) [][]*model.RowChangedEvent {
 	// TODO: Detect causality of changes to achieve more fine-grain split
-	tables := make(map[string][]*model.DML)
-	for _, dml := range dmls {
-		tbl := dml.TableName()
-		tables[tbl] = append(tables[tbl], dml)
+	tables := make(map[string][]*model.RowChangedEvent)
+	for _, row := range rows {
+		if row.Resolved {
+			continue
+		}
+		tbl := row.Table
+		tables[tbl] = append(tables[tbl], row)
 	}
-	groups := make([][]*model.DML, 0, len(tables))
-	for _, dmls := range tables {
-		groups = append(groups, dmls)
+	groups := make([][]*model.RowChangedEvent, 0, len(tables))
+	for _, rows := range tables {
+		groups = append(groups, rows)
 	}
 	return groups
 }

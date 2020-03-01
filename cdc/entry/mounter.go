@@ -298,8 +298,13 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 		if !exist {
 			return nil, errors.NotFoundf("column info, colID: %d", index)
 		}
+		if !tableInfo.IsColWritable(colInfo) {
+			continue
+		}
 		colName := colInfo.Name.O
 		//TODO formatColVal
+		// formatColVal(value, col.FieldType)
+		// note: care about mounter index
 		values[colName] = model.Column{
 			Type:   colInfo.Tp,
 			Unique: tableInfo.IsColumnUnique(colInfo.ID),

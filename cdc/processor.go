@@ -372,7 +372,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 			p.tablesMu.Unlock()
 			// some puller still haven't received the row changed data
-			if minResolvedTs == 0 {
+			if minResolvedTs == 0 || minResolvedTs == p.position.ResolvedTs {
 				continue
 			}
 
