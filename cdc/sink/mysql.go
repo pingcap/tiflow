@@ -244,7 +244,8 @@ func NewMySQLSink(sinkURI string, opts map[string]string) (Sink, error) {
 
 func newMySQLSink(db *sql.DB) Sink {
 	return &mysqlSink{
-		db: db,
+		db:             db,
+		unresolvedRows: make(map[string][]*model.RowChangedEvent),
 	}
 }
 

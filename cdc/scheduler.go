@@ -334,6 +334,12 @@ func realRunProcessor(
 	if err != nil {
 		return errors.Trace(err)
 	}
+	errCh := make(chan error, 1)
+	go func() {
+		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
+			errCh <- err
+		}
+	}()
 	processor, err := NewProcessor(ctx, pdEndpoints, info, sink, changefeedID, captureID, checkpointTs)
 	if err != nil {
 		return err
@@ -344,7 +350,6 @@ func realRunProcessor(
 		cb.OnRunProcessor(processor)
 	}
 
-	errCh := make(chan error, 1)
 	processor.Run(ctx, errCh)
 
 	go func() {
