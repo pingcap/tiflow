@@ -645,6 +645,7 @@ func (s *Storage) Clone() *Storage {
 	n.schemaMetaVersion = s.schemaMetaVersion
 	n.lastHandledTs = s.lastHandledTs
 	n.resolvedTs = s.resolvedTs
+	n.jobList = s.jobList
 	n.currentJob = s.currentJob
 	n.currentVersion = s.currentVersion
 	return n
