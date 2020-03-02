@@ -411,7 +411,7 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 			continue
 		}
 		if job.BinlogInfo.FinishedTS <= s.lastHandledTs {
-			log.Info("skip DDL job because the job is already handled", zap.Stringer("job", job))
+			log.Debug("skip DDL job because the job is already handled", zap.Stringer("job", job))
 			continue
 		}
 		_, _, _, err := s.HandleDDL(job)

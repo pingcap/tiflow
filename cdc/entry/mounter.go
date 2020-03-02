@@ -120,6 +120,9 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
 			case rawRow = <-m.rawRowChangedCh:
+				if rawRow == nil {
+					panic("a")
+				}
 			}
 		}
 
