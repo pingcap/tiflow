@@ -316,6 +316,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent)
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.String("sql", query), zap.Error(err))
 			}
+			log.Info("exec row failed", zap.String("sql", query), zap.Any("args", args))
 			return errors.Trace(err)
 		}
 	}
