@@ -15,6 +15,7 @@ package kv
 
 import (
 	"context"
+	cerrors "errors"
 	"io"
 	"math/rand"
 	"sync"
@@ -47,6 +48,11 @@ const (
 	grpcInitialWindowSize           = 1 << 30
 	grpcInitialConnWindowSize       = 1 << 30
 	regionActiveThreshold     int64 = 30
+	regionReconnectThreshold  int64 = 60
+)
+
+var (
+	regionReconnectError = cerrors.New("force reconnect region")
 )
 
 type singleRegionInfo struct {
@@ -277,7 +283,7 @@ func (c *CDCClient) partialRegionFeed(
 				log.Warn("receive empty or unknown error msg", zap.Stringer("error", eerr))
 			}
 		default:
-			if rpcCtx.Meta != nil {
+			if rpcCtx.Meta != nil && errors.Cause(err) != regionReconnectError {
 				c.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(failStoreIDs, rpcCtx), err)
 			}
 		}
@@ -386,8 +392,9 @@ func (c *CDCClient) singleEventFeed(
 		StartKey:     span.Start,
 		EndKey:       span.End,
 	}
+	reconnectCh := make(chan struct{})
 
-	ra := newRegionActive(rpcCtx.Meta.GetId(), regionActiveThreshold)
+	ra := newRegionActive(rpcCtx.Meta.GetId(), regionActiveThreshold, regionReconnectThreshold)
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
@@ -398,7 +405,7 @@ func (c *CDCClient) singleEventFeed(
 			case <-cctx.Done():
 				return
 			case <-ticker.C:
-				ra.Check(cctx)
+				ra.Check(cctx, reconnectCh)
 			}
 		}
 	}()
@@ -456,6 +463,12 @@ func (c *CDCClient) singleEventFeed(
 
 		if err != nil {
 			return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(err)
+		}
+
+		select {
+		case <-reconnectCh:
+			return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(regionReconnectError)
+		default:
 		}
 
 		// log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))

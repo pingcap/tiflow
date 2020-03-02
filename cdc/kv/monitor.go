@@ -28,6 +28,7 @@ type regionActive struct {
 	sync.RWMutex
 	regionID      uint64
 	threshold     int64
+	reconnect     int64
 	lastKv        time.Time
 	lastResolve   time.Time
 	lastResolveTs uint64
@@ -35,7 +36,7 @@ type regionActive struct {
 	resolveActive bool
 }
 
-func newRegionActive(regionID uint64, threshold int64) *regionActive {
+func newRegionActive(regionID uint64, threshold, reconnect int64) *regionActive {
 	now := time.Now()
 
 	return &regionActive{
@@ -43,6 +44,7 @@ func newRegionActive(regionID uint64, threshold int64) *regionActive {
 		lastKv:        now.Add(time.Second * time.Duration(-threshold)),
 		lastResolve:   now.Add(time.Second * time.Duration(-threshold)),
 		threshold:     threshold,
+		reconnect:     reconnect,
 		kvActive:      false,
 		resolveActive: false,
 	}
@@ -56,12 +58,13 @@ func (aw *regionActive) SetKv() {
 
 func (aw *regionActive) SetResolve(resolvedTs uint64) {
 	aw.Lock()
-	aw.lastResolve = time.Now()
+	defer aw.Unlock()
 	if aw.lastResolveTs == resolvedTs {
 		log.Warn("resolve ts not forward", zap.Uint64("region", aw.regionID), zap.Uint64("ts", aw.lastResolveTs))
+		return
 	}
+	aw.lastResolve = time.Now()
 	aw.lastResolveTs = resolvedTs
-	aw.Unlock()
 }
 
 func (aw *regionActive) IsKvActive() bool {
@@ -76,7 +79,7 @@ func (aw *regionActive) IsResolveActive() bool {
 	return aw.resolveActive
 }
 
-func (aw *regionActive) Check(ctx context.Context) {
+func (aw *regionActive) Check(ctx context.Context, reconnectCh chan<- struct{}) {
 	select {
 	case <-ctx.Done():
 		return
@@ -108,5 +111,12 @@ func (aw *regionActive) Check(ctx context.Context) {
 	if resolve < aw.threshold && !aw.resolveActive {
 		aw.resolveActive = true
 		regionActiveResolveCountGauge.WithLabelValues(captureID, changefeedID, tableID).Inc()
+	}
+	if resolve >= aw.reconnect {
+		select {
+		case reconnectCh <- struct{}{}:
+			log.Warn("trigger region reconnect", zap.Uint64("region", aw.regionID), zap.Int64("resolve duration", resolve))
+		default:
+		}
 	}
 }
