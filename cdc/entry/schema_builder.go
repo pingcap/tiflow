@@ -15,42 +15,76 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
+type jobList struct {
+	list *list.List
+	mu   sync.RWMutex
+}
+
+func (l *jobList) FetchNextJobs(currentJob *list.Element, ts uint64) (*list.Element, []*timodel.Job) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	var jobs []*timodel.Job
+	if currentJob == nil {
+		currentJob = l.list.Front()
+	}
+	for ; currentJob != nil; currentJob = currentJob.Next() {
+		job := currentJob.Value.(*timodel.Job)
+		if job.BinlogInfo.FinishedTS > ts {
+			break
+		}
+		jobs = append(jobs, job)
+	}
+	return currentJob, jobs
+}
+
+func (l *jobList) AppendJob(jobs ...*timodel.Job) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, job := range jobs {
+		l.list.PushBack(job)
+	}
+}
+
+func (l *jobList) RemoveOverdueJobs(ts uint64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for e := l.list.Front(); e != nil; e = e.Next() {
+		job := e.Value.(*timodel.Job)
+		if job.BinlogInfo.FinishedTS >= ts {
+			break
+		}
+		l.list.Remove(e)
+	}
+}
+
 type StorageBuilder struct {
 	baseStorage *Storage
-
-	jobList *struct {
-		*list.List
-		*sync.RWMutex
-	}
+	jobList     *jobList
 
 	resolvedTs uint64
 	gcTs       uint64
 	ddlEventCh <-chan *model.RawKVEntry
 }
 
-func NewStorageBuilder(historyDDL []*timodel.Job, ddlEventCh <-chan *model.RawKVEntry) (*StorageBuilder, error) {
+func NewStorageBuilder(historyDDL []*timodel.Job, ddlEventCh <-chan *model.RawKVEntry) *StorageBuilder {
 	builder := &StorageBuilder{
-		jobList: &struct {
-			*list.List
-			*sync.RWMutex
-		}{List: list.New(), RWMutex: new(sync.RWMutex)},
+		jobList: &jobList{
+			list: list.New(),
+		},
 		ddlEventCh: ddlEventCh,
 	}
-
-	// push a head element to list
-	builder.jobList.PushBack(&timodel.Job{})
 
 	sort.Slice(historyDDL, func(i, j int) bool {
 		return historyDDL[i].BinlogInfo.FinishedTS < historyDDL[j].BinlogInfo.FinishedTS
 	})
 
-	for _, job := range historyDDL {
-		builder.jobList.PushBack(job)
-		atomic.StoreUint64(&builder.resolvedTs, job.BinlogInfo.FinishedTS)
+	if len(historyDDL) > 0 {
+		builder.jobList.AppendJob(historyDDL...)
+		atomic.StoreUint64(&builder.resolvedTs, historyDDL[len(historyDDL)-1].BinlogInfo.FinishedTS)
 	}
 
-	builder.baseStorage = newStorage(&builder.resolvedTs, builder.jobList.Front(), builder.jobList.RWMutex)
-	return builder, nil
+	builder.baseStorage = newStorage(&builder.resolvedTs, builder.jobList)
+	return builder
 }
 
 func (b *StorageBuilder) Run(ctx context.Context) error {
@@ -78,9 +112,7 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 		if job == nil {
 			continue
 		}
-		b.jobList.Lock()
-		b.jobList.PushBack(job)
-		b.jobList.Unlock()
+		b.jobList.AppendJob(job)
 	}
 }
 
@@ -100,14 +132,6 @@ func (b *StorageBuilder) DoGc(ts uint64) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	b.jobList.Lock()
-	defer b.jobList.Unlock()
-	for e := b.jobList.Front().Next(); e != nil; e = e.Next() {
-		job := e.Value.(*timodel.Job)
-		if job.BinlogInfo.FinishedTS > ts {
-			break
-		}
-		b.jobList.Remove(e)
-	}
+	b.jobList.RemoveOverdueJobs(ts)
 	return nil
 }

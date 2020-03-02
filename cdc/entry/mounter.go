@@ -306,9 +306,9 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 		// formatColVal(value, col.FieldType)
 		// note: care about mounter index
 		values[colName] = model.Column{
-			Type:   colInfo.Tp,
-			Unique: tableInfo.IsColumnUnique(colInfo.ID),
-			Value:  colValue.GetValue(),
+			Type:        colInfo.Tp,
+			WhereHandle: tableInfo.IsColumnUnique(colInfo.ID),
+			Value:       colValue.GetValue(),
 		}
 	}
 
@@ -326,9 +326,9 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 			_, ok := values[col.Name.O]
 			if !ok {
 				values[col.Name.O] = model.Column{
-					Type:   col.Tp,
-					Unique: tableInfo.IsColumnUnique(col.ID),
-					Value:  getDefaultOrZeroValue(col),
+					Type:        col.Tp,
+					WhereHandle: tableInfo.IsColumnUnique(col.ID),
+					Value:       getDefaultOrZeroValue(col),
 				}
 			}
 		}
@@ -367,9 +367,9 @@ func (m *mounterImpl) mountIndexKVEntry(idx *indexKVEntry) (*model.RowChangedEve
 	values := make(map[string]model.Column, len(idx.IndexValue))
 	for i, idxCol := range indexInfo.Columns {
 		values[idxCol.Name.O] = model.Column{
-			Type:   tableInfo.Columns[idxCol.Offset].Tp,
-			Unique: true,
-			Value:  idx.IndexValue[i].GetValue(),
+			Type:        tableInfo.Columns[idxCol.Offset].Tp,
+			WhereHandle: true,
+			Value:       idx.IndexValue[i].GetValue(),
 		}
 	}
 	return &model.RowChangedEvent{

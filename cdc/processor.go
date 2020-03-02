@@ -604,10 +604,7 @@ func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEnt
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	builder, err := entry.NewStorageBuilder(jobs, ddlEventCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	builder := entry.NewStorageBuilder(jobs, ddlEventCh)
 	return builder, nil
 }
 

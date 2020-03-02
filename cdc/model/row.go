@@ -12,9 +12,9 @@ type RowChangedEvent struct {
 }
 
 type Column struct {
-	Type   byte
-	Unique bool
-	Value  interface{}
+	Type        byte
+	WhereHandle bool
+	Value       interface{}
 }
 
 type DDLEvent struct {

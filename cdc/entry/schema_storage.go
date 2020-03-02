@@ -17,15 +17,13 @@ import (
 	"container/list"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"sync/atomic"
-
-	"github.com/pingcap/ticdc/cdc/model"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"go.uber.org/zap"
 )
@@ -46,10 +44,8 @@ type Storage struct {
 	lastHandledTs     uint64
 	resolvedTs        *uint64
 
-	currentJob *struct {
-		*list.Element
-		*sync.RWMutex
-	}
+	currentJob *list.Element
+	jobList    *jobList
 
 	version2SchemaTable map[int64]TableName
 	currentVersion      int64
@@ -213,14 +209,10 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 }
 
 // newStorage returns the Schema object
-func newStorage(resolvedTs *uint64, jobElement *list.Element, lock *sync.RWMutex) *Storage {
+func newStorage(resolvedTs *uint64, jobList *jobList) *Storage {
 	s := NewSingleStorage()
 	s.resolvedTs = resolvedTs
-	s.currentJob = &struct {
-		*list.Element
-		*sync.RWMutex
-	}{Element: jobElement, RWMutex: lock}
-
+	s.jobList = jobList
 	return s
 }
 
@@ -409,35 +401,25 @@ func (s *Storage) removeTable(tableID int64) error {
 
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
 func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
-	log.Info("HandlePreviousDDLJobIfNeed", zap.Uint64("commitTs", commitTs), zap.Uint64("resolvedTs", atomic.LoadUint64(s.resolvedTs)))
 	if commitTs > atomic.LoadUint64(s.resolvedTs) {
 		return model.ErrUnresolved
 	}
-	s.currentJob.RLock()
-	defer s.currentJob.RUnlock()
-	for e := s.currentJob.Next(); e != nil; e = e.Next() {
-		job := e.Value.(*timodel.Job)
+	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
+	for _, job := range jobs {
 		if skipJob(job) {
-			s.currentJob.Element = e
 			log.Info("skip DDL job because the job isn't synced and done", zap.Stringer("job", job))
 			continue
 		}
-
-		if job.BinlogInfo.FinishedTS > commitTs {
-			break
-		}
 		if job.BinlogInfo.FinishedTS <= s.lastHandledTs {
-			s.currentJob.Element = e
 			log.Debug("skip DDL job because the job is already handled", zap.Stringer("job", job))
 			continue
 		}
-
 		_, _, _, err := s.HandleDDL(job)
 		if err != nil {
 			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", job, s)
 		}
-		s.currentJob.Element = e
 	}
+	s.currentJob = currentJob
 	return nil
 }
 

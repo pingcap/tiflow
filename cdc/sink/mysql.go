@@ -395,7 +395,7 @@ func formatColVal(datum types.Datum, ft types.FieldType) (types.Datum, error) {
 func whereSlice(cols map[string]model.Column) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for colName, col := range cols {
-		if !col.Unique {
+		if !col.WhereHandle {
 			continue
 		}
 		colNames = append(colNames, colName)

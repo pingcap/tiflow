@@ -18,11 +18,8 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
-	"github.com/pingcap/ticdc/cdc/entry"
-
 	"github.com/pingcap/ticdc/cdc/model"
+	"go.uber.org/zap"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
@@ -37,13 +34,6 @@ type Sink interface {
 	Run(ctx context.Context) error
 	// Close does not guarantee delivery of outstanding messages.
 	Close() error
-}
-
-// TableInfoGetter is used to get table info by table id of TiDB
-type TableInfoGetter interface {
-	TableByID(id int64) (info *entry.TableInfo, ok bool)
-	GetTableIDByName(schema, table string) (int64, bool)
-	GetTableByName(schema, table string) (info *entry.TableInfo, ok bool)
 }
 
 func NewBlackHoleSink() *blackHoleSink {
