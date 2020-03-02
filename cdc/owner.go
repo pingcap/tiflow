@@ -862,11 +862,20 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	}
 
 	c.banlanceOrphanTables(context.Background(), captures)
+	var tableName, schemaName string
+	if todoDDLJob.BinlogInfo.TableInfo != nil {
+		tableName = todoDDLJob.BinlogInfo.TableInfo.Name.O
+	}
+	dbInfo, exist := c.schema.SchemaByID(todoDDLJob.SchemaID)
+	if !exist {
+		return errors.NotFoundf("schema %d not found", todoDDLJob.SchemaID)
+	}
+	schemaName = dbInfo.Name.O
 	ddlEvent := &model.DDLEvent{
 		Ts:     todoDDLJob.BinlogInfo.FinishedTS,
 		Query:  todoDDLJob.Query,
-		Schema: todoDDLJob.SchemaName,
-		Table:  todoDDLJob.BinlogInfo.TableInfo.Name.O,
+		Schema: schemaName,
+		Table:  tableName,
 	}
 	if c.filter.ShouldIgnoreDDLEvent(ddlEvent) {
 		log.Info(
