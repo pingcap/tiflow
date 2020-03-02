@@ -178,10 +178,8 @@ func (s *mysqlSink) Run(ctx context.Context) error {
 		}
 		s.rowsGroups = s.rowsGroups[i:]
 		s.rowsGroupsMu.Unlock()
-		for _, groups := range rowsGroupToExec {
-			if err := execRows(groups); err != nil {
-				return errors.Trace(err)
-			}
+		if err := execRows(mergeRowsGroup(rowsGroupToExec)); err != nil {
+			return errors.Trace(err)
 		}
 		atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
 	}
@@ -210,6 +208,16 @@ func splitRowsGroup(resolvedTs uint64, unresolvedRows map[string][]*model.RowCha
 		}
 	}
 	return
+}
+
+func mergeRowsGroup(rowsGroups []map[string][]*model.RowChangedEvent) map[string][]*model.RowChangedEvent {
+	result := make(map[string][]*model.RowChangedEvent)
+	for _, groups := range rowsGroups {
+		for k, v := range groups {
+			result[k] = append(result[k], v...)
+		}
+	}
+	return result
 }
 
 var _ Sink = &mysqlSink{}
