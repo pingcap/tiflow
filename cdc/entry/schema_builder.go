@@ -95,6 +95,9 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case rawKV = <-b.ddlEventCh:
 		}
+		if rawKV == nil {
+			panic("b")
+		}
 		if rawKV.Ts <= b.resolvedTs {
 			continue
 		}
