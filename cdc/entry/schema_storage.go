@@ -401,12 +401,10 @@ func (s *Storage) removeTable(tableID int64) error {
 
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
 func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
-	log.Info("HandlePreviousDDLJobIfNeed", zap.Uint64("commitTs", commitTs))
 	if commitTs > atomic.LoadUint64(s.resolvedTs) {
 		return model.ErrUnresolved
 	}
 	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
-	log.Info("handle ddl", zap.Any("jobs", jobs), zap.Any("currentJob", currentJob))
 	for _, job := range jobs {
 		if skipJob(job) {
 			log.Info("skip DDL job because the job isn't synced and done", zap.Stringer("job", job))
