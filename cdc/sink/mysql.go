@@ -334,16 +334,18 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent)
 
 func (s *mysqlSink) prepareReplace(schema, table string, cols map[string]model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
-	columnNames := getColNames(cols)
+	columnNames := make([]string, 0, len(cols))
+	args := make([]interface{}, 0, len(cols))
+	for k, v := range cols {
+		columnNames = append(columnNames, k)
+		args = append(args, v.Value)
+	}
+
 	colList := "(" + buildColumnList(columnNames) + ")"
 	tblName := util.QuoteSchema(schema, table)
 	builder.WriteString("REPLACE INTO " + tblName + colList + " VALUES ")
 	builder.WriteString("(" + util.HolderString(len(columnNames)) + ");")
 
-	args := make([]interface{}, 0, len(cols))
-	for _, col := range cols {
-		args = append(args, col.Value)
-	}
 	return builder.String(), args, nil
 }
 
@@ -445,14 +447,6 @@ func buildColumnList(names []string) string {
 	}
 
 	return b.String()
-}
-
-func getColNames(cols map[string]model.Column) []string {
-	names := make([]string, 0, len(cols))
-	for k := range cols {
-		names = append(names, k)
-	}
-	return names
 }
 
 // splitIndependentGroups splits DMLs into independent groups.
