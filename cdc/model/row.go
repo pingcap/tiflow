@@ -1,0 +1,23 @@
+package model
+
+type RowChangedEvent struct {
+	Ts       uint64
+	Resolved bool
+	Schema   string
+	Table    string
+	Update   map[string]Column
+	Delete   map[string]Column
+}
+
+type Column struct {
+	Type        byte
+	WhereHandle bool
+	Value       interface{}
+}
+
+type DDLEvent struct {
+	Ts     uint64
+	Schema string
+	Table  string
+	Query  string
+}
