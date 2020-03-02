@@ -1240,10 +1240,8 @@ func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
 	// the owner steps down, the ownerCtx would be canceled.
 	ownerCtx, cancel := context.WithCancel(ctx)
 	go func() {
-		select {
-		case <-o.manager.RetireNotify():
-			cancel()
-		}
+		<-o.manager.RetireNotify()
+		cancel()
 	}()
 	log.Info("start to watch processors")
 	go func() {
