@@ -30,6 +30,7 @@ type regionActive struct {
 	threshold     int64
 	lastKv        time.Time
 	lastResolve   time.Time
+	lastResolveTs uint64
 	kvActive      bool
 	resolveActive bool
 }
@@ -53,9 +54,13 @@ func (aw *regionActive) SetKv() {
 	aw.Unlock()
 }
 
-func (aw *regionActive) SetResolve() {
+func (aw *regionActive) SetResolve(resolvedTs uint64) {
 	aw.Lock()
 	aw.lastResolve = time.Now()
+	if aw.lastResolveTs == resolvedTs {
+		log.Warn("resolve ts not forward", zap.Uint64("region", aw.regionID), zap.Uint64("ts", aw.lastResolveTs))
+	}
+	aw.lastResolveTs = resolvedTs
 	aw.Unlock()
 }
 

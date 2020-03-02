@@ -464,7 +464,7 @@ func (c *CDCClient) singleEventFeed(
 			eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
 			switch x := event.Event.(type) {
 			case *cdcpb.Event_Entries_:
-				recvEffectedKv := false
+				recveffectiveKv := false
 				for _, entry := range x.Entries.GetEntries() {
 					pullEventCounter.WithLabelValues(entry.Type.String(), captureID, changefeedID).Inc()
 					switch entry.Type {
@@ -496,14 +496,14 @@ func (c *CDCClient) singleEventFeed(
 							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
 						}
 					case cdcpb.Event_PREWRITE:
-						recvEffectedKv = true
+						recveffectiveKv = true
 						matcher.putPrewriteRow(entry)
 						sorter.pushTsItem(sortItem{
 							start: entry.GetStartTs(),
 							tp:    cdcpb.Event_PREWRITE,
 						})
 					case cdcpb.Event_COMMIT:
-						recvEffectedKv = true
+						recveffectiveKv = true
 						// emit a value
 						value, err := matcher.matchRow(entry)
 						if err != nil {
@@ -550,7 +550,7 @@ func (c *CDCClient) singleEventFeed(
 						})
 					}
 				}
-				if recvEffectedKv {
+				if recveffectiveKv {
 					ra.SetKv()
 				}
 			case *cdcpb.Event_Admin_:
@@ -558,7 +558,7 @@ func (c *CDCClient) singleEventFeed(
 			case *cdcpb.Event_Error_:
 				return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(&eventError{Event_Error: x.Error})
 			case *cdcpb.Event_ResolvedTs:
-				ra.SetResolve()
+				ra.SetResolve(x.ResolvedTs)
 				if atomic.LoadUint32(&initialized) == 0 {
 					continue
 				}
