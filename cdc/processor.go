@@ -310,12 +310,14 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 		return p.pullDDLJob(cctx)
 	})
 
+	if err := p.register(ctx); err != nil {
+		errCh <- err
+	}
 	go func() {
-		p.register(ctx)
 		if err := wg.Wait(); err != nil {
 			errCh <- err
 		}
-		p.deregister(ctx)
+		_ = p.deregister(ctx)
 	}()
 }
 
@@ -899,7 +901,7 @@ func (p *processor) stop(ctx context.Context) error {
 	}
 	p.tablesMu.Unlock()
 	p.session.Close()
-	p.deregister(ctx)
+	_ = p.deregister(ctx)
 	return errors.Trace(p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID))
 }
 

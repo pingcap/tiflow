@@ -41,7 +41,6 @@ import (
 )
 
 const (
-	markProcessorDownTime      = time.Minute
 	captureInfoWatchRetryDelay = time.Millisecond * 500
 )
 
@@ -1187,7 +1186,9 @@ func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
 	// before watching, rebuild events according to
 	// the existed processors. This is necessary because
 	// the etcd events may be compacted.
-	o.rebuildProcessorEvents(ctx, processors)
+	if err := o.rebuildProcessorEvents(ctx, processors); err != nil {
+		return errors.Trace(err)
+	}
 
 	log.Info("monitoring processors",
 		zap.String("key", kv.ProcessorInfoKeyPrefix),
