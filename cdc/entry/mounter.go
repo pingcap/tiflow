@@ -176,6 +176,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model
 	case bytes.HasPrefix(key, recordPrefix):
 		rowKV, err := m.unmarshalRowKVEntry(key, raw.Value, baseInfo)
 		if err != nil {
+			log.Error("unmarshal error", zap.Error(err), zap.Uint64("ts", raw.Ts))
 			return nil, errors.Trace(err)
 		}
 		if rowKV == nil {
