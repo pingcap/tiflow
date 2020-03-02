@@ -102,7 +102,7 @@ func (es *EntrySorter) Run(ctx context.Context) {
 	}()
 }
 
-// AddEntry adds an RawKVEntry to the EntryGroup, this method *IS NOT* thread safe.
+// AddEntry adds an RawKVEntry to the EntryGroup
 func (es *EntrySorter) AddEntry(entry *model.RawKVEntry) {
 	if entry.OpType == model.OpTypeResolved {
 		es.resolvedCh <- entry.Ts
