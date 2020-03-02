@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3"
@@ -45,6 +47,7 @@ var cliCmd = &cobra.Command{
 	Short: "simulate client to create changefeed",
 	Long:  ``,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
 		etcdCli, err := clientv3.New(clientv3.Config{
 			Endpoints:   []string{pdAddress},
 			DialTimeout: 5 * time.Second,
@@ -70,11 +73,15 @@ var cliCmd = &cobra.Command{
 		}
 		id := uuid.New().String()
 		if startTs == 0 {
-			ts, logical, err := pdCli.GetTS(context.Background())
+			ts, logical, err := pdCli.GetTS(ctx)
 			if err != nil {
 				return err
 			}
 			startTs = oracle.ComposeTS(ts, logical)
+		}
+		err = verifyStartTs(ctx, startTs, cli)
+		if err != nil {
+			return err
 		}
 
 		cfg := new(model.ReplicaConfig)
@@ -114,8 +121,26 @@ var cliCmd = &cobra.Command{
 			return err
 		}
 		fmt.Printf("create changefeed ID: %s detail %s\n", id, d)
-		return cli.SaveChangeFeedInfo(context.Background(), detail, id)
+		return cli.SaveChangeFeedInfo(ctx, detail, id)
 	},
+}
+
+func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) error {
+	resp, err := cli.Client.Get(ctx, tikv.GcSavedSafePoint)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if resp.Count == 0 {
+		return nil
+	}
+	safePoint, err := strconv.ParseUint(string(resp.Kvs[0].Value), 10, 64)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if startTs < safePoint {
+		return errors.Errorf("startTs %d less than gcSafePoint %d", startTs, safePoint)
+	}
+	return nil
 }
 
 // strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
