@@ -991,7 +991,8 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 		}
 	}()
 
-	var once sync.Once
+	// ownerChanged
+	ownerChanged := true
 	for {
 		select {
 		case <-ctx.Done():
@@ -1000,11 +1001,12 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 			return errors.Annotate(err, "handleWatchCapture failed")
 		case <-time.After(tickTime):
 			if !o.IsOwner(ctx) {
+				ownerChanged = true
 				continue
 			}
-
-			// Do something initialize when the capture becomes an owner.
-			once.Do(func() {
+			if ownerChanged {
+				// Do something initialize when the capture becomes an owner.
+				ownerChanged = false
 				// Start a routine to keep watching on the liveness of
 				// processors.
 				o.startProcessorInfoWatcher(ctx)
@@ -1015,7 +1017,8 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 					log.Error("clean up stale tasks failed",
 						zap.Error(err))
 				}
-			})
+			}
+
 			err := o.run(ctx)
 			// owner may be evicted during running, ignore the context canceled error directly
 			if err != nil && errors.Cause(err) != context.Canceled {
@@ -1233,18 +1236,27 @@ func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
 	return nil
 }
 func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
+	// ownerCtx is valid only when the server is an owner, when
+	// the owner steps down, the ownerCtx would be canceled.
+	ownerCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		select {
+		case <-o.manager.RetireNotify():
+			cancel()
+		}
+	}()
 	log.Info("start to watch processors")
 	go func() {
-		if err := o.watchProcessorInfo(ctx); err != nil {
+		if err := o.watchProcessorInfo(ownerCtx); err != nil {
 			// When the watching routine returns, the error must not
 			// be nil, it may be caused by a temporary error or a context
 			// error(ctx.Err())
 			if ctx.Err() != nil {
-				// The context error indicates the termination of the server
+				// The context error indicates the termination of the owner
 				log.Error("watch processor failed", zap.Error(ctx.Err()))
 				return
 			}
-			log.Warn("watch processor failed", zap.Error(err))
+			log.Warn("watch processor returned", zap.Error(err))
 			// Otherwise, a temporary error occured(ErrCompact),
 			// restart the watching routine.
 		}
