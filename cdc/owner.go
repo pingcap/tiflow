@@ -866,11 +866,15 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if todoDDLJob.BinlogInfo.TableInfo != nil {
 		tableName = todoDDLJob.BinlogInfo.TableInfo.Name.O
 	}
-	dbInfo, exist := c.schema.SchemaByID(todoDDLJob.SchemaID)
-	if !exist {
-		return errors.NotFoundf("schema %d not found", todoDDLJob.SchemaID)
+	if todoDDLJob.Type != timodel.ActionCreateSchema {
+		dbInfo, exist := c.schema.SchemaByID(todoDDLJob.SchemaID)
+		if !exist {
+			return errors.NotFoundf("schema %d not found", todoDDLJob.SchemaID)
+		}
+		schemaName = dbInfo.Name.O
+	} else {
+		schemaName = todoDDLJob.BinlogInfo.DBInfo.Name.O
 	}
-	schemaName = dbInfo.Name.O
 	ddlEvent := &model.DDLEvent{
 		Ts:     todoDDLJob.BinlogInfo.FinishedTS,
 		Query:  todoDDLJob.Query,
