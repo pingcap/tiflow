@@ -273,7 +273,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if !job.IsDone() {
+	if !job.IsDone() && !job.IsSynced() {
 		return nil, nil
 	}
 	// FinishedTS is only set when the job is synced,
