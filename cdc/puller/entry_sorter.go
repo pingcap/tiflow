@@ -5,8 +5,6 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/pingcap/log"
-
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
@@ -62,7 +60,6 @@ func (es *EntrySorter) Run(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
-				log.Info("EntrySorter quit")
 				close(es.output)
 				close(es.resolvedCh)
 				return
