@@ -1245,18 +1245,20 @@ func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
 	}()
 	log.Info("start to watch processors")
 	go func() {
-		if err := o.watchProcessorInfo(ownerCtx); err != nil {
-			// When the watching routine returns, the error must not
-			// be nil, it may be caused by a temporary error or a context
-			// error(ctx.Err())
-			if ctx.Err() != nil {
-				// The context error indicates the termination of the owner
-				log.Error("watch processor failed", zap.Error(ctx.Err()))
-				return
+		for {
+			if err := o.watchProcessorInfo(ownerCtx); err != nil {
+				// When the watching routine returns, the error must not
+				// be nil, it may be caused by a temporary error or a context
+				// error(ctx.Err())
+				if ctx.Err() != nil {
+					// The context error indicates the termination of the owner
+					log.Error("watch processor failed", zap.Error(ctx.Err()))
+					return
+				}
+				log.Warn("watch processor returned", zap.Error(err))
+				// Otherwise, a temporary error occured(ErrCompact),
+				// restart the watching routine.
 			}
-			log.Warn("watch processor returned", zap.Error(err))
-			// Otherwise, a temporary error occured(ErrCompact),
-			// restart the watching routine.
 		}
 	}()
 }
