@@ -1249,8 +1249,8 @@ func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
 			if err := o.watchProcessorInfo(ownerCtx); err != nil {
 				// When the watching routine returns, the error must not
 				// be nil, it may be caused by a temporary error or a context
-				// error(ctx.Err())
-				if ctx.Err() != nil {
+				// error(ownerCtx.Err())
+				if ownerCtx.Err() != nil {
 					// The context error indicates the termination of the owner
 					log.Error("watch processor failed", zap.Error(ctx.Err()))
 					return
