@@ -29,7 +29,6 @@ func asRange(span util.Span) interval.Range {
 type spanFrontierEntry struct {
 	id     int64
 	irange interval.Range
-	span   util.Span
 	ts     uint64
 
 	// index in the head array
@@ -47,7 +46,7 @@ func (s *spanFrontierEntry) ID() int64 {
 }
 
 func (s *spanFrontierEntry) String() string {
-	return fmt.Sprintf("[%s @ %d]", s.span, s.ts)
+	return fmt.Sprintf("[%s @ %d]", s.irange, s.ts)
 }
 
 // spanFrontierHeap implements heap.Interface and holds `spanFrontierEntry`s.
@@ -61,7 +60,7 @@ func (h spanFrontierHeap) Len() int { return len(h) }
 // Less inplements heap.Interface
 func (h spanFrontierHeap) Less(i, j int) bool {
 	if h[i].ts == h[j].ts {
-		return util.StartCompare(h[i].span.Start, h[j].span.Start) < 0
+		return util.StartCompare(h[i].irange.Start, h[j].irange.Start) < 0
 	}
 
 	return h[i].ts < h[j].ts
@@ -117,7 +116,6 @@ func makeSpanFrontier(spans ...util.Span) *spanFrontier {
 		e := &spanFrontierEntry{
 			id:     s.idAlloc,
 			irange: asRange(span),
-			span:   span,
 			ts:     0,
 		}
 
@@ -170,8 +168,8 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 	for i, o := range overlap {
 		e := o.(*spanFrontierEntry)
 		overlapCov[i] = util.Range{
-			Start:   e.span.Start,
-			End:     e.span.End,
+			Start:   e.irange.Start,
+			End:     e.irange.End,
 			Payload: e,
 		}
 	}
@@ -204,7 +202,6 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 			toInsert = append(toInsert, spanFrontierEntry{
 				id:     s.idAlloc,
 				irange: interval.Range{Start: m.Start, End: m.End},
-				span:   util.Span{Start: m.Start, End: m.End},
 				ts:     mergeTs,
 			})
 			s.idAlloc++
@@ -256,10 +253,10 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 }
 
 // Entries visit all traced spans.
-func (s *spanFrontier) Entries(fn func(span util.Span, ts uint64)) {
+func (s *spanFrontier) Entries(fn func(irange interval.Range, ts uint64)) {
 	s.tree.Do(func(i interval.Interface) bool {
 		e := i.(*spanFrontierEntry)
-		fn(e.span, e.ts)
+		fn(e.irange, e.ts)
 		return false
 	})
 }
