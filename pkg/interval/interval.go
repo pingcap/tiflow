@@ -7,6 +7,7 @@
 package interval
 
 import (
+	"bytes"
 	"errors"
 
 	"github.com/biogo/store/llrb"
@@ -31,57 +32,67 @@ var ErrInvertedRange = errors.New("interval: inverted range")
 // An Overlapper can determine whether it overlaps a range.
 type Overlapper interface {
 	// Overlap returns a boolean indicating whether the receiver overlaps the parameter.
-	Overlap(Range) bool
+	Overlap(Range, Range) bool
 }
 
+// Comparable is the type describes the ends of a range.
+type Comparable []byte
+
 // A Range is a type that describes the basic characteristics of an interval.
-type Range interface {
+type Range struct {
 	// Return a Comparable equal to the start value of the Overlapper.
-	Start() Comparable
+	Start Comparable
 	// Return a Comparable equal to the end value of the Overlapper.
-	End() Comparable
+	End Comparable
+}
+
+type exclusiveOverlapper struct{}
+
+// ExclusiveOverlapper defines overlapping of two range.
+// Start are treated as inclusive and End are treated exclusive.
+var ExclusiveOverlapper = exclusiveOverlapper{}
+
+func (overlapper exclusiveOverlapper) Overlap(a Range, b Range) bool {
+	return a.Start.Compare(b.End) < 0 && b.Start.Compare(a.End) < 0
 }
 
 // An Interface is a type that can be inserted into a Tree.
 type Interface interface {
-	Overlapper
-	Range
-	ID() uintptr         // Returns a unique ID for the element.
-	NewMutable() Mutable // Returns an mutable copy of the Interface's range.
+	Range() Range
+	ID() int64 // Returns a unique ID for the element.
 }
 
-// A Mutable is a Range that can have its range altered.
-type Mutable interface {
-	Range
-	SetStart(Comparable) // Set the start value.
-	SetEnd(Comparable)   // Set the end value.
-}
-
-// A Comparable is a type that describes the ends of an Overlapper.
-type Comparable interface {
-	// Compare returns a value indicating the sort order relationship between the
-	// receiver and the parameter.
-	//
-	// Given c = a.Compare(b):
-	//  c < 0 if a < b;
-	//  c == 0 if a == b; and
-	//  c > 0 if a > b.
-	//
-	Compare(Comparable) int
+// Compare returns a value indicating the sort order relationship between the
+// receiver and the parameter.
+//
+// Given c = a.Compare(b):
+//  c < 0 if a < b;
+//  c == 0 if a == b; and
+//  c > 0 if a > b.
+func (c Comparable) Compare(other Comparable) int {
+	return bytes.Compare(c, other)
 }
 
 // A Node represents a node in a Tree.
 type Node struct {
 	Elem        Interface
-	Range       Mutable
+	Range       Range
 	Left, Right *Node
 	Color       llrb.Color
 }
 
 // A Tree manages the root node of an interval tree. Public methods are exposed through this type.
 type Tree struct {
-	Root  *Node // Root node of the tree.
-	Count int   // Number of elements stored.
+	Overlapper Overlapper
+	Root       *Node // Root node of the tree.
+	Count      int   // Number of elements stored.
+}
+
+// NewTree create a Tree instance.
+func NewTree(overlapper Overlapper) *Tree {
+	return &Tree{
+		Overlapper: overlapper,
+	}
 }
 
 // Helper methods
@@ -98,12 +109,12 @@ func (n *Node) color() llrb.Color {
 // rooted at root, assuming that the left and right nodes have correct
 // range extents.
 func maxRange(root, left, right *Node) Comparable {
-	end := root.Elem.End()
-	if left != nil && left.Range.End().Compare(end) > 0 {
-		end = left.Range.End()
+	end := root.Elem.Range().End
+	if left != nil && left.Range.End.Compare(end) > 0 {
+		end = left.Range.End
 	}
-	if right != nil && right.Range.End().Compare(end) > 0 {
-		end = right.Range.End()
+	if right != nil && right.Range.End.Compare(end) > 0 {
+		end = right.Range.End
 	}
 	return end
 }
@@ -117,13 +128,13 @@ func (n *Node) rotateLeft() (root *Node) {
 	root.Color = n.Color
 	n.Color = llrb.Red
 
-	root.Left.Range.SetEnd(maxRange(root.Left, root.Left.Left, root.Left.Right))
+	root.Left.Range.End = maxRange(root.Left, root.Left.Left, root.Left.Right)
 	if root.Left == nil {
-		root.Range.SetStart(root.Elem.Start())
+		root.Range.Start = root.Elem.Range().Start
 	} else {
-		root.Range.SetStart(root.Left.Range.Start())
+		root.Range.Start = root.Left.Range.Start
 	}
-	root.Range.SetEnd(maxRange(root, root.Left, root.Right))
+	root.Range.End = maxRange(root, root.Left, root.Right)
 
 	return
 }
@@ -138,12 +149,12 @@ func (n *Node) rotateRight() (root *Node) {
 	n.Color = llrb.Red
 
 	if root.Right.Left == nil {
-		root.Right.Range.SetStart(root.Right.Elem.Start())
+		root.Right.Range.Start = root.Right.Elem.Range().Start
 	} else {
-		root.Right.Range.SetStart(root.Right.Left.Range.Start())
+		root.Right.Range.Start = root.Right.Left.Range.Start
 	}
-	root.Right.Range.SetEnd(maxRange(root.Right, root.Right.Left, root.Right.Right))
-	root.Range.SetEnd(maxRange(root, root.Left, root.Right))
+	root.Right.Range.End = maxRange(root.Right, root.Right.Left, root.Right.Right)
+	root.Range.End = maxRange(root, root.Left, root.Right)
 
 	return
 }
@@ -182,11 +193,11 @@ func (n *Node) fixUp(fast bool) *Node {
 // spans and the node's Elem span.
 func (n *Node) adjustRange() {
 	if n.Left == nil {
-		n.Range.SetStart(n.Elem.Start())
+		n.Range.Start = n.Elem.Range().Start
 	} else {
-		n.Range.SetStart(n.Left.Range.Start())
+		n.Range.Start = n.Left.Range.Start
 	}
-	n.Range.SetEnd(maxRange(n, n.Left, n.Right))
+	n.Range.End = maxRange(n, n.Left, n.Right)
 }
 
 func (n *Node) moveRedLeft() *Node {
@@ -218,9 +229,14 @@ func (t *Tree) Len() int {
 
 // Get returns a slice of Interfaces that overlap q in the Tree according
 // to q.Overlap().
-func (t *Tree) Get(q Overlapper) (o []Interface) {
-	if t.Root != nil && q.Overlap(t.Root.Range) {
-		t.Root.doMatch(func(e Interface) (done bool) { o = append(o, e); return }, q)
+func (t *Tree) Get(r Range) (o []Interface) {
+	return t.GetWithOverlapper(r, t.Overlapper)
+}
+
+// GetWithOverlapper returns a slice of Interfaces that overlap q in the Tree according overlapper.
+func (t *Tree) GetWithOverlapper(r Range, overlapper Overlapper) (o []Interface) {
+	if t.Root != nil && overlapper.Overlap(r, t.Root.Range) {
+		t.Root.doMatch(func(e Interface) (done bool) { o = append(o, e); return }, r, overlapper.Overlap)
 	}
 	return
 }
@@ -247,19 +263,20 @@ func (n *Node) adjustRanges() {
 // Insert inserts the Interface e into the Tree. Insertions may replace
 // existing stored intervals.
 func (t *Tree) Insert(e Interface, fast bool) (err error) {
-	if e.Start().Compare(e.End()) > 0 {
+	r := e.Range()
+	if r.Start.Compare(r.End) > 0 {
 		return ErrInvertedRange
 	}
 	var d int
-	t.Root, d = t.Root.insert(e, e.Start(), e.ID(), fast)
+	t.Root, d = t.Root.insert(e, r.Start, e.ID(), fast)
 	t.Count += d
 	t.Root.Color = llrb.Black
 	return
 }
 
-func (n *Node) insert(e Interface, min Comparable, id uintptr, fast bool) (root *Node, d int) {
+func (n *Node) insert(e Interface, min Comparable, id int64, fast bool) (root *Node, d int) {
 	if n == nil {
-		return &Node{Elem: e, Range: e.NewMutable()}, 1
+		return &Node{Elem: e, Range: e.Range()}, 1
 	} else if n.Elem == nil {
 		n.Elem = e
 		if !fast {
@@ -274,13 +291,13 @@ func (n *Node) insert(e Interface, min Comparable, id uintptr, fast bool) (root 
 		}
 	}
 
-	switch c := min.Compare(n.Elem.Start()); {
+	switch c := min.Compare(n.Elem.Range().Start); {
 	case c == 0:
 		switch cid := id - n.Elem.ID(); {
 		case cid == 0:
 			n.Elem = e
 			if !fast {
-				n.Range.SetEnd(e.End())
+				n.Range.End = e.Range().End
 			}
 		case cid < 0:
 			n.Left, d = n.Left.insert(e, min, id, fast)
@@ -337,7 +354,7 @@ func (n *Node) deleteMin(fast bool) (root *Node, d int) {
 	}
 	n.Left, d = n.Left.deleteMin(fast)
 	if n.Left == nil {
-		n.Range.SetStart(n.Elem.Start())
+		n.Range.Start = n.Elem.Range().Start
 	}
 
 	root = n.fixUp(fast)
@@ -371,7 +388,7 @@ func (n *Node) deleteMax(fast bool) (root *Node, d int) {
 	}
 	n.Right, d = n.Right.deleteMax(fast)
 	if n.Right == nil {
-		n.Range.SetEnd(n.Elem.End())
+		n.Range.End = n.Elem.Range().End
 	}
 
 	root = n.fixUp(fast)
@@ -381,14 +398,17 @@ func (n *Node) deleteMax(fast bool) (root *Node, d int) {
 
 // Delete deletes the element e if it exists in the Tree.
 func (t *Tree) Delete(e Interface, fast bool) (err error) {
-	if e.Start().Compare(e.End()) > 0 {
+	r := e.Range()
+	if r.Start.Compare(r.End) > 0 {
 		return ErrInvertedRange
 	}
-	if t.Root == nil || !e.Overlap(t.Root.Range) {
+
+	if t.Root == nil || !t.Overlapper.Overlap(r, t.Root.Range) {
 		return
 	}
+
 	var d int
-	t.Root, d = t.Root.delete(e.Start(), e.ID(), fast)
+	t.Root, d = t.Root.delete(r.Start, e.ID(), fast)
 	t.Count += d
 	if t.Root == nil {
 		return
@@ -397,15 +417,15 @@ func (t *Tree) Delete(e Interface, fast bool) (err error) {
 	return
 }
 
-func (n *Node) delete(min Comparable, id uintptr, fast bool) (root *Node, d int) {
-	if p := min.Compare(n.Elem.Start()); p < 0 || (p == 0 && id < n.Elem.ID()) {
+func (n *Node) delete(min Comparable, id int64, fast bool) (root *Node, d int) {
+	if p := min.Compare(n.Elem.Range().Start); p < 0 || (p == 0 && id < n.Elem.ID()) {
 		if n.Left != nil {
 			if n.Left.color() == llrb.Black && n.Left.Left.color() == llrb.Black {
 				n = n.moveRedLeft()
 			}
 			n.Left, d = n.Left.delete(min, id, fast)
 			if n.Left == nil {
-				n.Range.SetStart(n.Elem.Start())
+				n.Range.Start = n.Elem.Range().Start
 			}
 		}
 	} else {
@@ -426,7 +446,7 @@ func (n *Node) delete(min Comparable, id uintptr, fast bool) (root *Node, d int)
 				n.Right, d = n.Right.delete(min, id, fast)
 			}
 			if n.Right == nil {
-				n.Range.SetEnd(n.Elem.End())
+				n.Range.End = n.Elem.Range().End
 			}
 		}
 	}
@@ -436,7 +456,7 @@ func (n *Node) delete(min Comparable, id uintptr, fast bool) (root *Node, d int)
 	return
 }
 
-// Return the left-most interval stored in the tree.
+// Min return the left-most interval stored in the tree.
 func (t *Tree) Min() Interface {
 	if t.Root == nil {
 		return nil
@@ -450,7 +470,7 @@ func (n *Node) min() *Node {
 	return n
 }
 
-// Return the right-most interval stored in the tree.
+// Max return the right-most interval stored in the tree.
 func (t *Tree) Max() Interface {
 	if t.Root == nil {
 		return nil
@@ -470,18 +490,18 @@ func (t *Tree) Floor(q Interface) (o Interface, err error) {
 	if t.Root == nil {
 		return
 	}
-	n := t.Root.floor(q.Start(), q.ID())
+	n := t.Root.floor(q.Range().Start, q.ID())
 	if n == nil {
 		return
 	}
 	return n.Elem, nil
 }
 
-func (n *Node) floor(m Comparable, id uintptr) *Node {
+func (n *Node) floor(m Comparable, id int64) *Node {
 	if n == nil {
 		return nil
 	}
-	switch c := m.Compare(n.Elem.Start()); {
+	switch c := m.Compare(n.Elem.Range().Start); {
 	case c == 0:
 		switch cid := id - n.Elem.ID(); {
 		case cid == 0:
@@ -509,18 +529,18 @@ func (t *Tree) Ceil(q Interface) (o Interface, err error) {
 	if t.Root == nil {
 		return
 	}
-	n := t.Root.ceil(q.Start(), q.ID())
+	n := t.Root.ceil(q.Range().Start, q.ID())
 	if n == nil {
 		return
 	}
 	return n.Elem, nil
 }
 
-func (n *Node) ceil(m Comparable, id uintptr) *Node {
+func (n *Node) ceil(m Comparable, id int64) *Node {
 	if n == nil {
 		return nil
 	}
-	switch c := m.Compare(n.Elem.Start()); {
+	switch c := m.Compare(n.Elem.Range().Start); {
 	case c == 0:
 		switch cid := id - n.Elem.ID(); {
 		case cid == 0:
@@ -601,66 +621,67 @@ func (n *Node) doReverse(fn Operation) (done bool) {
 	return
 }
 
-// DoMatch performs fn on all intervals stored in the tree that match q according to Overlap, with
+// DoMatching performs fn on all intervals stored in the tree that match q according to Overlap, with
 // q.Overlap() used to guide tree traversal, so DoMatching() will out perform Do() with a called
 // conditional function if the condition is based on sort order, but can not be reliably used if
 // the condition is independent of sort order. A boolean is returned indicating whether the Do
 // traversal was interrupted by an Operation returning true. If fn alters stored intervals' sort
 // relationships, future tree operation behaviors are undefined.
-func (t *Tree) DoMatching(fn Operation, q Overlapper) bool {
-	if t.Root != nil && q.Overlap(t.Root.Range) {
-		return t.Root.doMatch(fn, q)
+func (t *Tree) DoMatching(fn Operation, r Range) bool {
+	if t.Root != nil && t.Overlapper.Overlap(r, t.Root.Range) {
+		return t.Root.doMatch(fn, r, t.Overlapper.Overlap)
 	}
 	return false
 }
 
-func (n *Node) doMatch(fn Operation, q Overlapper) (done bool) {
-	if n.Left != nil && q.Overlap(n.Left.Range) {
-		done = n.Left.doMatch(fn, q)
+func (n *Node) doMatch(fn Operation, r Range, overlaps func(Range, Range) bool) (done bool) {
+	if n.Left != nil && overlaps(r, n.Left.Range) {
+		done = n.Left.doMatch(fn, r, overlaps)
 		if done {
 			return
 		}
 	}
-	if q.Overlap(n.Elem) {
+	if overlaps(r, n.Elem.Range()) {
 		done = fn(n.Elem)
 		if done {
 			return
 		}
 	}
-	if n.Right != nil && q.Overlap(n.Right.Range) {
-		done = n.Right.doMatch(fn, q)
+	if n.Right != nil && overlaps(r, n.Right.Range) {
+		done = n.Right.doMatch(fn, r, overlaps)
 	}
 	return
 }
 
-// DoMatchReverse performs fn on all intervals stored in the tree that match q according to Overlap,
+// DoMatchingReverse performs fn on all intervals stored in the tree that match q according to Overlap,
 // with q.Overlap() used to guide tree traversal, so DoMatching() will out perform Do() with a called
 // conditional function if the condition is based on sort order, but can not be reliably used if
 // the condition is independent of sort order. A boolean is returned indicating whether the Do
 // traversal was interrupted by an Operation returning true. If fn alters stored intervals' sort
 // relationships, future tree operation behaviors are undefined.
-func (t *Tree) DoMatchingReverse(fn Operation, q Overlapper) bool {
-	if t.Root != nil && q.Overlap(t.Root.Range) {
-		return t.Root.doMatch(fn, q)
+func (t *Tree) DoMatchingReverse(fn Operation, r Range) bool {
+	if t.Root != nil && t.Overlapper.Overlap(r, t.Root.Range) {
+		return t.Root.doMatchReverse(fn, r, t.Overlapper.Overlap)
 	}
 	return false
 }
 
-func (n *Node) doMatchReverse(fn Operation, q Overlapper) (done bool) {
-	if n.Right != nil && q.Overlap(n.Right.Range) {
-		done = n.Right.doMatchReverse(fn, q)
+func (n *Node) doMatchReverse(fn Operation, r Range, overlaps func(Range, Range) bool) (done bool) {
+	if n.Right != nil && overlaps(r, n.Right.Range) {
+		done = n.Right.doMatchReverse(fn, r, overlaps)
 		if done {
 			return
 		}
 	}
-	if q.Overlap(n.Elem) {
+	if overlaps(r, n.Elem.Range()) {
 		done = fn(n.Elem)
 		if done {
 			return
 		}
 	}
-	if n.Left != nil && q.Overlap(n.Left.Range) {
-		done = n.Left.doMatchReverse(fn, q)
+	if n.Left != nil && overlaps(r, n.Left.Range) {
+		done = n.Left.doMatchReverse(fn, r, overlaps)
 	}
+
 	return
 }

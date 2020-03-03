@@ -6,4 +6,5 @@
 
 package interval
 
+// Mode of the Tree.
 const Mode = BU23

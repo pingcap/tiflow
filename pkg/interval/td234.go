@@ -6,4 +6,5 @@
 
 package interval
 
+// Mode of the tree.
 const Mode = TD234
