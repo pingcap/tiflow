@@ -157,20 +157,20 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 	// Get all interval overlap with irange.
 	overlap := s.tree.Get(irange)
 
-	if len(overlap) == 0 {
-		return
-	}
-
 	// fast path
 	// in most times, the span we forward will match exactly one interval in the tree.
 	if len(overlap) == 1 {
 		e := overlap[0].(*spanFrontierEntry)
-		if ts > e.ts {
-			e.ts = ts
+		if irange.Start.Compare(e.Range().Start) == 0 &&
+			irange.End.Compare(e.Range().End) == 0 {
+
+			if ts > e.ts {
+				e.ts = ts
+			}
+			heap.Remove(&s.minHeap, e.index)
+			heap.Push(&s.minHeap, e)
+			return
 		}
-		heap.Remove(&s.minHeap, e.index)
-		heap.Push(&s.minHeap, e)
-		return
 	}
 
 	spanCov := util.Covering{{Start: span.Start, End: span.End, Payload: ts}}
