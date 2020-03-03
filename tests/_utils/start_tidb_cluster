@@ -58,9 +58,9 @@ max-open-files = 4096
 sync-log = false
 
 
-[coprocessor]
-region-max-keys = 6000
-region-split-keys = 5000
+# [coprocessor]
+# region-max-keys = 6000
+# region-split-keys = 5000
 EOF
 
 # tidb server config file
