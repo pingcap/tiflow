@@ -121,14 +121,13 @@ func makeSpanFrontier(spans ...util.Span) *spanFrontier {
 
 		s.idAlloc++
 
-		err := s.tree.Insert(e, true)
+		err := s.tree.Insert(e, false)
 		if err != nil {
 			panic(err)
 		}
 
 		heap.Push(&s.minHeap, e)
 	}
-	s.tree.AdjustRanges()
 
 	return s
 }
@@ -159,6 +158,18 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 	overlap := s.tree.Get(irange)
 
 	if len(overlap) == 0 {
+		return
+	}
+
+	// fast path
+	// in most times, the span we forward will match exactly one interval in the tree.
+	if len(overlap) == 1 {
+		e := overlap[0].(*spanFrontierEntry)
+		if ts > e.ts {
+			e.ts = ts
+		}
+		heap.Remove(&s.minHeap, e.index)
+		heap.Push(&s.minHeap, e)
 		return
 	}
 
@@ -208,47 +219,23 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 		}
 	}
 
-	needAdjust := false
-
 	// Delete old ones
-	if len(overlap) == 1 {
-		e := overlap[0].(*spanFrontierEntry)
+	for i := range overlap {
+		e := overlap[i].(*spanFrontierEntry)
 		err := s.tree.Delete(e, false)
 		if err != nil {
 			panic(err)
 		}
 		heap.Remove(&s.minHeap, e.index)
-	} else {
-		for i := range overlap {
-			e := overlap[i].(*spanFrontierEntry)
-			err := s.tree.Delete(e, true)
-			if err != nil {
-				panic(err)
-			}
-			heap.Remove(&s.minHeap, e.index)
-		}
-		needAdjust = true
 	}
 
 	// Insert new ones
-	if len(toInsert) == 1 {
-		err := s.tree.Insert(&toInsert[0], false)
+	for i := range toInsert {
+		err := s.tree.Insert(&toInsert[i], false)
 		if err != nil {
 			panic(err)
 		}
-		heap.Push(&s.minHeap, &toInsert[0])
-	} else {
-		for i := range toInsert {
-			err := s.tree.Insert(&toInsert[i], true)
-			if err != nil {
-				panic(err)
-			}
-			heap.Push(&s.minHeap, &toInsert[i])
-		}
-		needAdjust = true
-	}
-	if needAdjust {
-		s.tree.AdjustRanges()
+		heap.Push(&s.minHeap, &toInsert[i])
 	}
 }
 
