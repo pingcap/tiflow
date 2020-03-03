@@ -293,7 +293,8 @@ func teardownProcessors(s *etcdSuite, c *check.C, leaseID clientv3.LeaseID) {
 	c.Assert(s.client.DeleteProcessorInfo(ctx, "a", "b"), check.IsNil)
 	c.Assert(s.client.DeleteProcessorInfo(ctx, "a", "c"), check.IsNil)
 	c.Assert(s.client.DeleteProcessorInfo(ctx, "d", "e"), check.IsNil)
-	s.client.Client.Revoke(ctx, leaseID)
+	_, err := s.client.Client.Revoke(ctx, leaseID)
+	c.Assert(err, check.IsNil)
 }
 func (s *etcdSuite) TestGetProcessorsFromPrefix(c *check.C) {
 	ctx := context.Background()
