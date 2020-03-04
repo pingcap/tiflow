@@ -140,7 +140,6 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 
 		if rawKV.OpType == model.OpTypeResolved {
 			atomic.StoreUint64(&b.resolvedTs, rawKV.Ts)
-			log.Info("DDL resolvedts", zap.Uint64("ts", rawKV.Ts))
 			continue
 		}
 
