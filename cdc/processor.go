@@ -177,7 +177,7 @@ func NewProcessor(
 	}
 
 	for _, table := range p.status.TableInfos {
-		p.addTable(ctx, int64(table.ID), table.StartTs)
+		go p.addTable(ctx, int64(table.ID), table.StartTs)
 	}
 
 	return p, nil
