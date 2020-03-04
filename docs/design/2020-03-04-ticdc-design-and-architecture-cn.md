@@ -35,7 +35,7 @@ CDC 集群由多个无状态节点构成，通过 PD 内部的 etcd 实现高可
 
 ### EventFeed rpc
 
-TiKV 对 CDC 提供一个隐藏大部分内部实现细节的的 row changed event 的接口，该接口会扫描指定 region 的 kv range，通过 gRPC stream 持续返回 row changed event。协议的细节可以参考 [kvproto/cdcpb.proto](https://www.google.com/url?q=https://github.com/pingcap/kvproto/blob/cdc/proto/cdcpb.proto&sa=D&ust=1583312806249000)。
+TiKV 对 CDC 提供一个隐藏大部分内部实现细节的的 row changed event 的接口，该接口会扫描指定 region 的 kv range，通过 gRPC stream 持续返回 row changed event。协议的细节可以参考 [kvproto/cdcpb.proto](https://github.com/pingcap/kvproto/blob/master/proto/cdcpb.proto)。
 
 ```
 service ChangeData { rpc EventFeed(ChangeDataRequest) returns(stream ChangeDataEvent);}
@@ -95,7 +95,7 @@ Capture 运行过程中各组件需要持久化的数据，包括同步任务的
 ### Owner 选举策略
 
 1. 每个 capture 节点启动时生成一个 UUID 作为 Capture ID，并向 etcd 注册 capture 信息
-2. 每个 capture 都会使用 [Election](https://www.google.com/url?q=https://godoc.org/github.com/coreos/etcd/clientv3/concurrency%23Election&sa=D&ust=1583312806260000) 参与 owner 选举，最多只有一个 capture 节点会选举成功成为 owner
+2. 每个 capture 会使用 [Election](https://godoc.org/github.com/coreos/etcd/clientv3/concurrency#Election) 参与 owner 选举，最多只有一个 capture 节点会选举成功成为 owner
 
 ### Owner 角色
 
