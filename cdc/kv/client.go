@@ -69,9 +69,15 @@ type regionErrorInfo struct {
 	err    error
 }
 
-type regionHandlers struct {
+type regionHandlerSet struct {
 	sync.RWMutex
 	channels map[uint64]chan *cdcpb.Event
+}
+
+func newRegionHandlerMap() *regionHandlerSet {
+	return &regionHandlerSet{
+		channels: make(map[uint64]chan *cdcpb.Event),
+	}
 }
 
 // CDCClient to get events from TiKV
@@ -222,7 +228,7 @@ func (c *CDCClient) dispatchRequest(
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	streams := make(map[string]cdcpb.ChangeData_EventFeedClient)
-	regionHandlers := &regionHandlers{}
+	regionHandlers := newRegionHandlerMap()
 
 	for {
 		select {
@@ -479,7 +485,7 @@ func (c *CDCClient) receiveFromStream(
 	stream cdcpb.ChangeData_EventFeedClient,
 	regionCh <-chan singleRegionInfo,
 	errCh chan<- regionErrorInfo,
-	regionHandlers *regionHandlers,
+	regionHandlers *regionHandlerSet,
 ) error {
 	// Start the receive loop
 	for {
