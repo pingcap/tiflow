@@ -16,7 +16,6 @@ package kv
 import (
 	"context"
 	"io"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -49,9 +48,30 @@ const (
 )
 
 type singleRegionInfo struct {
-	verID tikv.RegionVerID
-	span  util.Span
-	ts    uint64
+	verID        tikv.RegionVerID
+	span         util.Span
+	ts           uint64
+	failStoreIDs map[uint64]struct{}
+}
+
+func newSingleRegionInfo(verID tikv.RegionVerID, span util.Span, ts uint64) singleRegionInfo {
+	return singleRegionInfo{
+		verID:        verID,
+		span:         span,
+		ts:           ts,
+		failStoreIDs: make(map[uint64]struct{}),
+	}
+}
+
+type regionErrorInfo struct {
+	singleRegionInfo
+	rpcCtx *tikv.RPCContext
+	err    error
+}
+
+type regionHandlers struct {
+	sync.RWMutex
+	channels map[uint64]chan *cdcpb.Event
 }
 
 // CDCClient to get events from TiKV
@@ -144,6 +164,16 @@ func (c *CDCClient) getConn(
 	return
 }
 
+func (c *CDCClient) getStream(ctx context.Context, addr string) (stream cdcpb.ChangeData_EventFeedClient, err error) {
+	conn, err := c.getConn(ctx, addr)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	client := cdcpb.NewChangeDataClient(conn)
+	stream, err = client.EventFeed(ctx)
+	return
+}
+
 // EventFeed divides a EventFeed request on range boundaries and establishes
 // a EventFeed to each of the individual region. It streams back result on the
 // provided channel.
@@ -156,25 +186,119 @@ func (c *CDCClient) EventFeed(
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	regionCh := make(chan singleRegionInfo, 16)
+	regionCh := make(chan singleRegionInfo)
+	errCh := make(chan regionErrorInfo, 16)
+
 	g.Go(func() error {
+		return c.dispatchRequest(ctx, g, regionCh, errCh, eventCh)
+	})
+
+	g.Go(func() error {
+		err := c.divideAndSendEventFeedToRegions(ctx, span, ts, regionCh)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		for {
 			select {
-			case sri := <-regionCh:
-				g.Go(func() error {
-					return c.partialRegionFeed(ctx, &sri, regionCh, eventCh)
-				})
 			case <-ctx.Done():
 				return ctx.Err()
+			case errInfo := <-errCh:
+				err = c.handleError(ctx, errInfo, regionCh)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 		}
 	})
 
-	g.Go(func() error {
-		return c.divideAndSendEventFeedToRegions(ctx, span, ts, regionCh)
-	})
-
 	return g.Wait()
+}
+
+func (c *CDCClient) dispatchRequest(
+	ctx context.Context,
+	g *errgroup.Group,
+	regionCh chan singleRegionInfo,
+	errCh chan<- regionErrorInfo,
+	eventCh chan<- *model.RegionFeedEvent,
+) error {
+	streams := make(map[string]cdcpb.ChangeData_EventFeedClient)
+	regionHandlers := &regionHandlers{}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case sri := <-regionCh:
+			rpcCtx, err := c.getRPCContextForRegion(ctx, sri.verID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if rpcCtx == nil {
+				// The region info is invalid. Retry the span.
+				err = c.divideAndSendEventFeedToRegions(ctx, sri.span, sri.ts, regionCh)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				continue
+			}
+
+			req := &cdcpb.ChangeDataRequest{
+				Header: &cdcpb.Header{
+					ClusterId: c.clusterID,
+				},
+				RegionId:     rpcCtx.Meta.GetId(),
+				RegionEpoch:  rpcCtx.Meta.RegionEpoch,
+				CheckpointTs: sri.ts,
+				StartKey:     sri.span.Start,
+				EndKey:       sri.span.End,
+			}
+
+			stream, ok := streams[rpcCtx.Addr]
+
+			// Establish the stream if it has not been connected yet.
+			if !ok {
+				stream, err = c.getStream(ctx, rpcCtx.Addr)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				streams[rpcCtx.Addr] = stream
+
+				g.Go(func() error {
+					return c.receiveFromStream(ctx, stream, regionCh, errCh, regionHandlers)
+				})
+			}
+
+			// The receiver thread need to know the span, which is only known in the sender thread. So create the
+			// receiver thread for region here so that it can know the span.
+			// TODO: Find a better way to handle this.
+			// TODO: Make sure there will not be goroutine leak.
+			// TODO: Here we use region id to index the channel. However, in case that region merge is enabled, there
+			// may be multiple streams to the same regions. Maybe we need to add a requestID field to the protocol for it.
+			regionHandlers.Lock()
+			ch, ok := regionHandlers.channels[sri.verID.GetID()]
+			if ok {
+				close(ch)
+			}
+			ch = make(chan *cdcpb.Event, 16)
+			regionHandlers.channels[sri.verID.GetID()] = ch
+			g.Go(func() error {
+				return c.partialRegionFeed(ctx, sri, rpcCtx, ch, errCh, eventCh)
+			})
+			regionHandlers.Unlock()
+
+			log.Debug("start new request", zap.Reflect("request", req))
+			err = stream.Send(req)
+
+			// TODO: Handle errors properly
+			if err == io.EOF {
+				return nil
+			}
+
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
 }
 
 func needReloadRegion(failStoreIDs map[uint64]struct{}, rpcCtx *tikv.RPCContext) (need bool) {
@@ -194,81 +318,47 @@ func needReloadRegion(failStoreIDs map[uint64]struct{}, rpcCtx *tikv.RPCContext)
 // further in the event of a split.
 func (c *CDCClient) partialRegionFeed(
 	ctx context.Context,
-	regionInfo *singleRegionInfo,
-	regionCh chan<- singleRegionInfo,
+	regionInfo singleRegionInfo,
+	rpcCtx *tikv.RPCContext,
+	receiver <-chan *cdcpb.Event,
+	errCh chan<- regionErrorInfo,
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	ts := regionInfo.ts
-	failStoreIDs := make(map[uint64]struct{})
+	// TODO: Pass this around
+	//failStoreIDs := make(map[uint64]struct{})
 	rl := rate.NewLimiter(0.1, 5)
-	for {
-		if !rl.Allow() {
-			return errors.New("partialRegionFeed exceeds rate limit")
-		}
 
-		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-		rpcCtx, err := c.regionCache.GetTiKVRPCContext(bo, regionInfo.verID, tidbkv.ReplicaReadLeader, 0)
-		if err != nil {
-			return backoff.Permanent(errors.Trace(err))
-		}
-		if rpcCtx == nil {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				keyLocation, err := c.regionCache.LocateKey(tikv.NewBackoffer(ctx, tikvRequestMaxBackoff), regionInfo.span.Start)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				regionInfo.verID = keyLocation.Region
-				continue
-			}
-		}
-
-		var maxTs uint64
-		maxTs, err = c.singleEventFeed(ctx, rpcCtx, regionInfo.span, regionInfo.ts, eventCh)
-		log.Debug("singleEventFeed quit")
-
-		if err == nil || errors.Cause(err) == context.Canceled {
-			break
-		}
-
-		if maxTs > ts {
-			ts = maxTs
-		}
-
-		log.Info("EventFeed disconnected",
-			zap.Reflect("span", regionInfo.span),
-			zap.Uint64("checkpoint", ts),
-			zap.Error(err))
-
-		switch eerr := errors.Cause(err).(type) {
-		case *eventError:
-			if notLeader := eerr.GetNotLeader(); notLeader != nil {
-				eventFeedErrorCounter.WithLabelValues("NotLeader").Inc()
-				c.regionCache.UpdateLeader(regionInfo.verID, notLeader.GetLeader().GetStoreId(), rpcCtx.PeerIdx)
-			} else if eerr.GetEpochNotMatch() != nil {
-				eventFeedErrorCounter.WithLabelValues("EpochNotMatch").Inc()
-				return c.divideAndSendEventFeedToRegions(ctx, regionInfo.span, ts, regionCh)
-			} else if eerr.GetRegionNotFound() != nil {
-				eventFeedErrorCounter.WithLabelValues("RegionNotFound").Inc()
-				keyLocation, err := c.regionCache.LocateKey(tikv.NewBackoffer(ctx, tikvRequestMaxBackoff), regionInfo.span.Start)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				regionInfo.verID = keyLocation.Region
-			} else {
-				eventFeedErrorCounter.WithLabelValues("Unknown").Inc()
-				log.Warn("receive empty or unknown error msg", zap.Stringer("error", eerr))
-			}
-		default:
-			if rpcCtx.Meta != nil {
-				c.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(failStoreIDs, rpcCtx), err)
-			}
-		}
-		// avoid too many kv clients retry at the same time, we should have a better solution
-		time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
+	if !rl.Allow() {
+		return errors.New("partialRegionFeed exceeds rate limit")
 	}
+
+	maxTs, err := c.singleEventFeed(ctx, regionInfo.span, regionInfo.ts, receiver, eventCh)
+	log.Debug("singleEventFeed quit")
+
+	if err == nil || errors.Cause(err) == context.Canceled {
+		return nil
+	}
+
+	if maxTs > ts {
+		ts = maxTs
+	}
+
+	log.Info("EventFeed disconnected",
+		zap.Reflect("span", regionInfo.span),
+		zap.Uint64("checkpoint", ts),
+		zap.Error(err))
+
+	regionInfo.ts = ts
+
+	errCh <- regionErrorInfo{
+		singleRegionInfo: regionInfo,
+		rpcCtx:           rpcCtx,
+		err:              err,
+	}
+
+	//	// avoid too many kv clients retry at the same time, we should have a better solution
+	//	time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
 
 	return nil
 }
@@ -329,11 +419,7 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			nextSpan.Start = region.EndKey
 
 			select {
-			case regionCh <- singleRegionInfo{
-				verID: tiRegion.VerID(),
-				span:  partialSpan,
-				ts:    ts,
-			}:
+			case regionCh <- newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts):
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -346,6 +432,86 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 	}
 }
 
+func (c *CDCClient) handleError(ctx context.Context, errInfo regionErrorInfo, regionCh chan<- singleRegionInfo) error {
+	err := errInfo.err
+	switch eerr := errors.Cause(err).(type) {
+	case *eventError:
+		if notLeader := eerr.GetNotLeader(); notLeader != nil {
+			eventFeedErrorCounter.WithLabelValues("NotLeader").Inc()
+			c.regionCache.UpdateLeader(errInfo.verID, notLeader.GetLeader().GetStoreId(), errInfo.rpcCtx.PeerIdx)
+		} else if eerr.GetEpochNotMatch() != nil {
+			eventFeedErrorCounter.WithLabelValues("EpochNotMatch").Inc()
+			return c.divideAndSendEventFeedToRegions(ctx, errInfo.span, errInfo.ts, regionCh)
+		} else if eerr.GetRegionNotFound() != nil {
+			eventFeedErrorCounter.WithLabelValues("RegionNotFound").Inc()
+			keyLocation, err := c.regionCache.LocateKey(tikv.NewBackoffer(ctx, tikvRequestMaxBackoff), errInfo.span.Start)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			errInfo.verID = keyLocation.Region
+		} else {
+			eventFeedErrorCounter.WithLabelValues("Unknown").Inc()
+			log.Warn("receive empty or unknown error msg", zap.Stringer("error", eerr))
+		}
+	default:
+		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+		if errInfo.rpcCtx.Meta != nil {
+			c.regionCache.OnSendFail(bo, errInfo.rpcCtx, needReloadRegion(errInfo.failStoreIDs, errInfo.rpcCtx), err)
+		}
+	}
+
+	regionCh <- errInfo.singleRegionInfo
+
+	return nil
+}
+
+func (c *CDCClient) getRPCContextForRegion(ctx context.Context, id tikv.RegionVerID) (*tikv.RPCContext, error) {
+	bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+	rpcCtx, err := c.regionCache.GetTiKVRPCContext(bo, id, tidbkv.ReplicaReadLeader, 0)
+	if err != nil {
+		return nil, backoff.Permanent(errors.Trace(err))
+	}
+	return rpcCtx, nil
+}
+
+func (c *CDCClient) receiveFromStream(
+	ctx context.Context,
+	stream cdcpb.ChangeData_EventFeedClient,
+	regionCh <-chan singleRegionInfo,
+	errCh chan<- regionErrorInfo,
+	regionHandlers *regionHandlers,
+) error {
+	// Start the receive loop
+	for {
+		cevent, err := stream.Recv()
+
+		log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
+
+		// TODO: Handle errors properly
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		for _, event := range cevent.Events {
+			regionHandlers.RLock()
+			ch, ok := regionHandlers.channels[event.RegionId]
+			regionHandlers.RUnlock()
+			if !ok {
+				return errors.New("cannot find corresponding span of an event")
+			}
+
+			select {
+			case ch <- event:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+}
+
 // singleEventFeed makes a EventFeed RPC call.
 // Results will be send to eventCh
 // EventFeed RPC will not return checkpoint event directly
@@ -353,41 +519,17 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 // Return the maximum checkpoint
 func (c *CDCClient) singleEventFeed(
 	ctx context.Context,
-	rpcCtx *tikv.RPCContext,
 	span util.Span,
 	checkpointTs uint64,
+	receiverCh <-chan *cdcpb.Event,
 	eventCh chan<- *model.RegionFeedEvent,
 ) (uint64, error) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	req := &cdcpb.ChangeDataRequest{
-		Header: &cdcpb.Header{
-			ClusterId: c.clusterID,
-		},
-		RegionId:     rpcCtx.Meta.GetId(),
-		RegionEpoch:  rpcCtx.Meta.RegionEpoch,
-		CheckpointTs: checkpointTs,
-		StartKey:     span.Start,
-		EndKey:       span.End,
-	}
 
 	var initialized uint32
 
-	conn, err := c.getConn(ctx, rpcCtx.Addr)
-	if err != nil {
-		return req.CheckpointTs, err
-	}
-
-	client := cdcpb.NewChangeDataClient(conn)
 	matcher := newMatcher()
-
-	log.Debug("start new request", zap.Reflect("request", req))
-	stream, err := client.EventFeed(ctx, req)
-
-	if err != nil {
-		log.Error("RPC error", zap.Error(err))
-		return req.CheckpointTs, errors.Trace(err)
-	}
 
 	maxItemFn := func(item sortItem) {
 		if atomic.LoadUint32(&initialized) == 0 {
@@ -401,7 +543,7 @@ func (c *CDCClient) singleEventFeed(
 				ResolvedTs: item.commit,
 			},
 		}
-		updateCheckpointTS(&req.CheckpointTs, item.commit)
+		updateCheckpointTS(&checkpointTs, item.commit)
 		select {
 		case eventCh <- revent:
 			sendEventCounter.WithLabelValues("sorter resolved", captureID, changefeedID).Inc()
@@ -415,129 +557,122 @@ func (c *CDCClient) singleEventFeed(
 	defer sorter.close()
 
 	for {
-		cevent, err := stream.Recv()
-		if err == io.EOF {
-			return atomic.LoadUint64(&req.CheckpointTs), nil
+		event, ok := <-receiverCh
+		if !ok {
+			return atomic.LoadUint64(&checkpointTs), nil
 		}
 
-		if err != nil {
-			return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(err)
-		}
-
-		// log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
-
-		for _, event := range cevent.Events {
-			eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
-			switch x := event.Event.(type) {
-			case *cdcpb.Event_Entries_:
-				for _, entry := range x.Entries.GetEntries() {
-					pullEventCounter.WithLabelValues(entry.Type.String(), captureID, changefeedID).Inc()
-					switch entry.Type {
-					case cdcpb.Event_INITIALIZED:
-						atomic.StoreUint32(&initialized, 1)
-					case cdcpb.Event_COMMITTED:
-						var opType model.OpType
-						switch entry.GetOpType() {
-						case cdcpb.Event_Row_DELETE:
-							opType = model.OpTypeDelete
-						case cdcpb.Event_Row_PUT:
-							opType = model.OpTypePut
-						default:
-							return atomic.LoadUint64(&req.CheckpointTs), errors.Errorf("unknown tp: %v", entry.GetOpType())
-						}
-
-						revent := &model.RegionFeedEvent{
-							Val: &model.RawKVEntry{
-								OpType: opType,
-								Key:    entry.Key,
-								Value:  entry.GetValue(),
-								Ts:     entry.CommitTs,
-							},
-						}
-						select {
-						case eventCh <- revent:
-							sendEventCounter.WithLabelValues("committed", captureID, changefeedID).Inc()
-						case <-ctx.Done():
-							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
-						}
-					case cdcpb.Event_PREWRITE:
-						matcher.putPrewriteRow(entry)
-						sorter.pushTsItem(sortItem{
-							start: entry.GetStartTs(),
-							tp:    cdcpb.Event_PREWRITE,
-						})
-					case cdcpb.Event_COMMIT:
-						// emit a value
-						value, err := matcher.matchRow(entry)
-						if err != nil {
-							// FIXME: need a better event match mechanism
-							log.Warn("match entry error", zap.Error(err), zap.Stringer("entry", entry))
-						}
-
-						var opType model.OpType
-						switch entry.GetOpType() {
-						case cdcpb.Event_Row_DELETE:
-							opType = model.OpTypeDelete
-						case cdcpb.Event_Row_PUT:
-							opType = model.OpTypePut
-						default:
-							return atomic.LoadUint64(&req.CheckpointTs), errors.Errorf("unknow tp: %v", entry.GetOpType())
-						}
-
-						revent := &model.RegionFeedEvent{
-							Val: &model.RawKVEntry{
-								OpType: opType,
-								Key:    entry.Key,
-								Value:  value,
-								Ts:     entry.CommitTs,
-							},
-						}
-
-						select {
-						case eventCh <- revent:
-							sendEventCounter.WithLabelValues("commit", captureID, changefeedID).Inc()
-						case <-ctx.Done():
-							return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
-						}
-						sorter.pushTsItem(sortItem{
-							start:  entry.GetStartTs(),
-							commit: entry.GetCommitTs(),
-							tp:     cdcpb.Event_COMMIT,
-						})
-					case cdcpb.Event_ROLLBACK:
-						matcher.rollbackRow(entry)
-						sorter.pushTsItem(sortItem{
-							start:  entry.GetStartTs(),
-							commit: entry.GetCommitTs(),
-							tp:     cdcpb.Event_ROLLBACK,
-						})
+		eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
+		switch x := event.Event.(type) {
+		case *cdcpb.Event_Entries_:
+			for _, entry := range x.Entries.GetEntries() {
+				pullEventCounter.WithLabelValues(entry.Type.String(), captureID, changefeedID).Inc()
+				switch entry.Type {
+				case cdcpb.Event_INITIALIZED:
+					atomic.StoreUint32(&initialized, 1)
+				case cdcpb.Event_COMMITTED:
+					var opType model.OpType
+					switch entry.GetOpType() {
+					case cdcpb.Event_Row_DELETE:
+						opType = model.OpTypeDelete
+					case cdcpb.Event_Row_PUT:
+						opType = model.OpTypePut
+					default:
+						return atomic.LoadUint64(&checkpointTs), errors.Errorf("unknown tp: %v", entry.GetOpType())
 					}
-				}
-			case *cdcpb.Event_Admin_:
-				log.Info("receive admin event", zap.Stringer("event", event))
-			case *cdcpb.Event_Error_:
-				return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(&eventError{Event_Error: x.Error})
-			case *cdcpb.Event_ResolvedTs:
-				if atomic.LoadUint32(&initialized) == 0 {
-					continue
-				}
-				// emit a checkpointTs
-				revent := &model.RegionFeedEvent{
-					Resolved: &model.ResolvedSpan{
-						Span:       span,
-						ResolvedTs: x.ResolvedTs,
-					},
-				}
 
-				updateCheckpointTS(&req.CheckpointTs, x.ResolvedTs)
-				select {
-				case eventCh <- revent:
-					sendEventCounter.WithLabelValues("native resolved", captureID, changefeedID).Inc()
-				case <-ctx.Done():
-					return atomic.LoadUint64(&req.CheckpointTs), errors.Trace(ctx.Err())
+					revent := &model.RegionFeedEvent{
+						Val: &model.RawKVEntry{
+							OpType: opType,
+							Key:    entry.Key,
+							Value:  entry.GetValue(),
+							Ts:     entry.CommitTs,
+						},
+					}
+					select {
+					case eventCh <- revent:
+						sendEventCounter.WithLabelValues("committed", captureID, changefeedID).Inc()
+					case <-ctx.Done():
+						return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
+					}
+				case cdcpb.Event_PREWRITE:
+					matcher.putPrewriteRow(entry)
+					sorter.pushTsItem(sortItem{
+						start: entry.GetStartTs(),
+						tp:    cdcpb.Event_PREWRITE,
+					})
+				case cdcpb.Event_COMMIT:
+					// emit a value
+					value, err := matcher.matchRow(entry)
+					if err != nil {
+						// FIXME: need a better event match mechanism
+						log.Warn("match entry error", zap.Error(err), zap.Stringer("entry", entry))
+					}
+
+					var opType model.OpType
+					switch entry.GetOpType() {
+					case cdcpb.Event_Row_DELETE:
+						opType = model.OpTypeDelete
+					case cdcpb.Event_Row_PUT:
+						opType = model.OpTypePut
+					default:
+						return atomic.LoadUint64(&checkpointTs), errors.Errorf("unknow tp: %v", entry.GetOpType())
+					}
+
+					revent := &model.RegionFeedEvent{
+						Val: &model.RawKVEntry{
+							OpType: opType,
+							Key:    entry.Key,
+							Value:  value,
+							Ts:     entry.CommitTs,
+						},
+					}
+
+					select {
+					case eventCh <- revent:
+						sendEventCounter.WithLabelValues("commit", captureID, changefeedID).Inc()
+					case <-ctx.Done():
+						return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
+					}
+					sorter.pushTsItem(sortItem{
+						start:  entry.GetStartTs(),
+						commit: entry.GetCommitTs(),
+						tp:     cdcpb.Event_COMMIT,
+					})
+				case cdcpb.Event_ROLLBACK:
+					matcher.rollbackRow(entry)
+					sorter.pushTsItem(sortItem{
+						start:  entry.GetStartTs(),
+						commit: entry.GetCommitTs(),
+						tp:     cdcpb.Event_ROLLBACK,
+					})
 				}
 			}
+		case *cdcpb.Event_Admin_:
+			log.Info("receive admin event", zap.Stringer("event", event))
+		case *cdcpb.Event_Error_:
+			return atomic.LoadUint64(&checkpointTs), errors.Trace(&eventError{Event_Error: x.Error})
+		case *cdcpb.Event_ResolvedTs:
+			if atomic.LoadUint32(&initialized) == 0 {
+				continue
+			}
+			// emit a checkpointTs
+			revent := &model.RegionFeedEvent{
+				Resolved: &model.ResolvedSpan{
+					Span:       span,
+					ResolvedTs: x.ResolvedTs,
+				},
+			}
+
+			updateCheckpointTS(&checkpointTs, x.ResolvedTs)
+			select {
+			case eventCh <- revent:
+				sendEventCounter.WithLabelValues("native resolved", captureID, changefeedID).Inc()
+			case <-ctx.Done():
+				return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
+			}
 		}
+
 	}
 }
 
