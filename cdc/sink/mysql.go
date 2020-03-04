@@ -63,23 +63,10 @@ func (s *mysqlSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
 }
 
 func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	checkpointTs := atomic.LoadUint64(&s.checkpointTs)
-	sinkResolvedTs := atomic.LoadUint64(&s.sinkResolvedTs)
-	globalResolvedTs := atomic.LoadUint64(&s.globalResolvedTs)
-
 	var resolvedTs uint64
 	s.unresolvedRowsMu.Lock()
 	defer s.unresolvedRowsMu.Unlock()
 	for _, row := range rows {
-		if row.Ts <= checkpointTs {
-			log.Info("sink unexpected row", zap.Uint64("cts", checkpointTs), zap.Reflect("row", row))
-		}
-		if row.Ts <= sinkResolvedTs {
-			log.Info("sink unexpected row resolvedTs", zap.Uint64("rts", sinkResolvedTs), zap.Reflect("row", row))
-		}
-		if row.Ts <= globalResolvedTs {
-			log.Info("sink unexpected row globalResolvedTs", zap.Uint64("rts", globalResolvedTs), zap.Reflect("row", row))
-		}
 		if row.Resolved {
 			resolvedTs = row.Ts
 			continue
@@ -182,55 +169,32 @@ func (s *mysqlSink) Run(ctx context.Context) error {
 		}
 		globalResolvedTs := atomic.LoadUint64(&s.globalResolvedTs)
 		if globalResolvedTs == atomic.LoadUint64(&s.checkpointTs) {
-			log.Info("wait for globalResolvedTs", zap.Uint64("globalResolvedTs", globalResolvedTs))
 			time.Sleep(50 * time.Millisecond)
 			continue
 		}
 		sinkResolvedTs := atomic.LoadUint64(&s.sinkResolvedTs)
 		for globalResolvedTs > sinkResolvedTs {
-			log.Info("wait for sinkResolvedTs", zap.Uint64("sinkResolvedTs", sinkResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
 			time.Sleep(10 * time.Millisecond)
 			sinkResolvedTs = atomic.LoadUint64(&s.sinkResolvedTs)
-		}
-		checkpointTs := atomic.LoadUint64(&s.checkpointTs)
-		if globalResolvedTs < checkpointTs {
-			log.Info("sink unexpected globalResolvedTs", zap.Uint64("globalResolvedTs", globalResolvedTs), zap.Uint64("checkpointTs", checkpointTs))
 		}
 
 		s.unresolvedRowsMu.Lock()
 		if len(s.unresolvedRows) == 0 {
-			log.Info("update checkpoint", zap.Uint64("checkpointTs", globalResolvedTs))
 			atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
 			s.unresolvedRowsMu.Unlock()
 			continue
 		}
-		checkMap("EmitRowChangedEvent unresolvedRows", s.unresolvedRows)
-		minTs, resolvedRowsMap := splitRowsGroup(globalResolvedTs, s.unresolvedRows)
+		_, resolvedRowsMap := splitRowsGroup(globalResolvedTs, s.unresolvedRows)
 		s.unresolvedRowsMu.Unlock()
 
-		eminTs, emaxTs := checkMap("EmitRowChangedEvent resolvedRowsMap", resolvedRowsMap)
 		if len(resolvedRowsMap) == 0 {
-			log.Info("update checkpoint", zap.Uint64("checkpointTs", globalResolvedTs))
 			atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
 			continue
 		}
-		if minTs != eminTs {
-			log.Info("aaa")
-		}
-		if emaxTs > globalResolvedTs {
-			log.Info("bbb")
-		}
-		for _, rows := range resolvedRowsMap {
-			for _, row := range rows {
-				if row.Ts <= checkpointTs {
-					log.Info("sink unexpected exec row", zap.Uint64("cts", checkpointTs), zap.Reflect("row", row))
-				}
-			}
-		}
+
 		if err := execRows(resolvedRowsMap); err != nil {
 			return errors.Trace(err)
 		}
-		log.Info("update checkpoint", zap.Uint64("checkpointTs", globalResolvedTs))
 		atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
 	}
 }
@@ -261,16 +225,6 @@ func splitRowsGroup(resolvedTs uint64, unresolvedRows map[string][]*model.RowCha
 		}
 	}
 	return
-}
-
-func mergeRowsGroup(rowsGroups []map[string][]*model.RowChangedEvent) map[string][]*model.RowChangedEvent {
-	result := make(map[string][]*model.RowChangedEvent)
-	for _, groups := range rowsGroups {
-		for k, v := range groups {
-			result[k] = append(result[k], v...)
-		}
-	}
-	return result
 }
 
 var _ Sink = &mysqlSink{}
