@@ -166,6 +166,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDL, m
 	return retry.Run(func() error {
 		err := s.execDDL(ctx, ddl)
 		if isIgnorableDDLError(err) {
+			log.Warn("exec DDL returns ignorable error", zap.Error(err))
 			return nil
 		}
 		return err

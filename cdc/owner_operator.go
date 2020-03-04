@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
@@ -42,13 +43,13 @@ type ddlHandler struct {
 	cancel func()
 }
 
-func newDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
+func newDDLHandler(pdCli pd.Client, checkpointTS uint64, s *schema.Storage) *ddlHandler {
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
 	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan()}, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	// TODO get time loc from config
-	txnMounter := entry.NewTxnMounter(nil)
+	txnMounter := entry.NewTxnMounter(s)
 	h := &ddlHandler{
 		puller:  puller,
 		cancel:  cancel,

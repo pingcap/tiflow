@@ -207,6 +207,14 @@ func fetchHandleValue(tableInfo *schema.TableInfo, recordID int64) (pkCoID int64
 
 func (m *Mounter) mountDDL(jobEntry *ddlJobKVEntry) (*model.DDL, error) {
 	databaseName := jobEntry.Job.SchemaName
+	// schema name in raw ddl job entry is always lowercase, try to find the
+	// correct value from schema storage
+	if m.schemaStorage != nil {
+		schemaName, ok := m.schemaStorage.SchemaByID(jobEntry.Job.SchemaID)
+		if ok {
+			databaseName = schemaName.Name.String()
+		}
+	}
 	var tableName string
 	table := jobEntry.Job.BinlogInfo.TableInfo
 	if table == nil {
