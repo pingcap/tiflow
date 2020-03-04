@@ -9,6 +9,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
+// EntrySorter accepts out-of-order raw kv entries and output sorted entries
 type EntrySorter struct {
 	unsorted   []*model.RawKVEntry
 	resolvedCh chan uint64
@@ -19,6 +20,7 @@ type EntrySorter struct {
 	output chan *model.RawKVEntry
 }
 
+// NewEntrySorter creates a new EntrySorter
 func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
 		resolvedCh: make(chan uint64, 1024),
@@ -26,6 +28,7 @@ func NewEntrySorter() *EntrySorter {
 	}
 }
 
+// Run runs EntrySorter
 func (es *EntrySorter) Run(ctx context.Context) {
 	lessFunc := func(i *model.RawKVEntry, j *model.RawKVEntry) bool {
 		if i.Ts == j.Ts {
@@ -102,6 +105,7 @@ func (es *EntrySorter) AddEntry(entry *model.RawKVEntry) {
 
 }
 
+// Output returns the sorted raw kv output channel
 func (es *EntrySorter) Output() <-chan *model.RawKVEntry {
 	return es.output
 }

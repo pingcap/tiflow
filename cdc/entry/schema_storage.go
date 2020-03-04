@@ -155,6 +155,7 @@ func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
 	return ti.handleColID, ti.rowColInfos
 }
 
+// IsColWritable returns is the col is writeable
 func (ti *TableInfo) IsColWritable(col *timodel.ColumnInfo) bool {
 	return col.State == timodel.StatePublic && !col.IsGenerated()
 }
@@ -187,6 +188,7 @@ func (ti *TableInfo) GetUniqueKeys() [][]string {
 	return uniqueKeys
 }
 
+// IsColumnUnique returns whether the column is unique
 func (ti *TableInfo) IsColumnUnique(colID int64) bool {
 	_, exist := ti.UniqueColumns[colID]
 	return exist
@@ -208,6 +210,7 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 	return false
 }
 
+// Clone clones the TableInfo
 func (ti *TableInfo) Clone() *TableInfo {
 	return WrapTableInfo(ti.TableInfo.Clone())
 }
@@ -221,6 +224,7 @@ func newStorage(resolvedTs *uint64, jobList *jobList) *Storage {
 	return s
 }
 
+// NewSingleStorage creates a new single storage
 func NewSingleStorage() *Storage {
 	s := &Storage{
 		version2SchemaTable: make(map[int64]TableName),
@@ -616,6 +620,7 @@ func (s *Storage) CloneTables() map[uint64]TableName {
 	return mp
 }
 
+// Clone clones Storage
 func (s *Storage) Clone() *Storage {
 	n := &Storage{
 		tableIDToName:  make(map[int64]TableName),

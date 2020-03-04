@@ -62,85 +62,13 @@ const (
 var (
 	fNewPDCli     = pd.NewClient
 	fNewTsRWriter = createTsRWriter
-	fNewMySQLSink = sink.NewMySQLSink
 )
-
-type txnChannel struct {
-	inputTxn   <-chan model.RawTxn
-	outputTxn  chan model.RawTxn
-	putBackTxn *model.RawTxn
-}
-
-// Forward push all txn with commit ts not greater than ts into targetC.
-func (p *txnChannel) Forward(ctx context.Context, ts uint64, targetC chan<- model.RawTxn) {
-	if p.putBackTxn != nil {
-		t := *p.putBackTxn
-		if t.Ts > ts {
-			return
-		}
-		p.putBackTxn = nil
-		pushTxn(ctx, targetC, t)
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case t, ok := <-p.outputTxn:
-			if !ok {
-				log.Info("Input channel of table closed")
-				return
-			}
-			if t.Ts > ts {
-				p.putBack(t)
-				return
-			}
-			pushTxn(ctx, targetC, t)
-		}
-	}
-}
-
-func pushTxn(ctx context.Context, targetC chan<- model.RawTxn, t model.RawTxn) {
-	select {
-	case <-ctx.Done():
-		log.Info("Dropped txn during canceling", zap.Any("txn", t))
-		return
-	case targetC <- t:
-	}
-}
-
-func (p *txnChannel) putBack(t model.RawTxn) {
-	if p.putBackTxn != nil {
-		log.Fatal("can not put back raw txn continuously")
-	}
-	p.putBackTxn = &t
-}
-
-func newTxnChannel(inputTxn <-chan model.RawTxn, chanSize int, handleResolvedTs func(uint64)) *txnChannel {
-	tc := &txnChannel{
-		inputTxn:  inputTxn,
-		outputTxn: make(chan model.RawTxn, chanSize),
-	}
-	go func() {
-		defer close(tc.outputTxn)
-		for {
-			t, ok := <-tc.inputTxn
-			if !ok {
-				return
-			}
-			handleResolvedTs(t.Ts)
-			tc.outputTxn <- t
-		}
-	}()
-	return tc
-}
 
 type processor struct {
 	captureID    string
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
 	limitter     *puller.BlurResourceLimitter
-	filter       *txnFilter
 
 	pdCli   pd.Client
 	etcdCli kv.CDCEtcdClient
@@ -682,9 +610,9 @@ func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (stor
 }
 
 // getTsRwriter is used in unit test only
-func (p *processor) getTsRwriter() storage.ProcessorTsRWriter {
-	return p.tsRWriter
-}
+//func (p *processor) getTsRwriter() storage.ProcessorTsRWriter {
+//	return p.tsRWriter
+//}
 
 func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) {
 	p.tablesMu.Lock()
@@ -718,7 +646,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 		p.errCh <- errors.Trace(err)
 	}
 	// start mounter
-	mounter := entry.NewMounter(puller.SortedOutput(ctx), storage, tableID)
+	mounter := entry.NewMounter(puller.SortedOutput(ctx), storage)
 	go func() {
 		err := mounter.Run(ctx)
 		if errors.Cause(err) != context.Canceled {
@@ -736,7 +664,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 			case row := <-mounter.Output():
 				if row.Resolved {
 					table.storeResolvedTS(row.Ts)
-					log.Info("storeResolvedTS", zap.Uint64("ts", row.Ts))
 					continue
 				}
 				select {

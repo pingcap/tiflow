@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -40,8 +39,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"go.uber.org/zap"
 )
-
-const dryRunOpt = "_dry-run"
 
 type mysqlSink struct {
 	db               *sql.DB
@@ -76,29 +73,6 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 	}
 	atomic.StoreUint64(&s.sinkResolvedTs, resolvedTs)
 	return nil
-}
-
-func checkMap(msg string, group map[string][]*model.RowChangedEvent) (minTs uint64, maxTs uint64) {
-	minTs = uint64(math.MaxUint64)
-	for k, rows := range group {
-		var ts uint64
-		for _, r := range rows {
-			if minTs > r.Ts {
-				minTs = r.Ts
-			}
-			if maxTs < r.Ts {
-				maxTs = r.Ts
-			}
-			if r.Ts < ts {
-				log.Info("checkMap ts fillback", zap.String("msg", msg), zap.Reflect("row", r))
-			}
-			ts = r.Ts
-			if util.QuoteSchema(r.Schema, r.Table) != k {
-				log.Info("checkMap ts wrong key", zap.String("msg", msg), zap.String("key", k), zap.Reflect("row", r))
-			}
-		}
-	}
-	return
 }
 
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -430,24 +404,4 @@ func buildColumnList(names []string) string {
 	}
 
 	return b.String()
-}
-
-// splitIndependentGroups splits DMLs into independent groups.
-// Two groups of DMLs are considered independent if they can be
-// executed concurrently.
-func splitIndependentGroups(rows []*model.RowChangedEvent) [][]*model.RowChangedEvent {
-	// TODO: Detect causality of changes to achieve more fine-grain split
-	tables := make(map[string][]*model.RowChangedEvent)
-	for _, row := range rows {
-		if row.Resolved {
-			continue
-		}
-		tbl := row.Table
-		tables[tbl] = append(tables[tbl], row)
-	}
-	groups := make([][]*model.RowChangedEvent, 0, len(tables))
-	for _, rows := range tables {
-		groups = append(groups, rows)
-	}
-	return groups
 }

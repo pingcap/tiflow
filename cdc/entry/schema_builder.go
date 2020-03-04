@@ -94,6 +94,7 @@ func (l *jobList) Head() *list.Element {
 	return l.list.Front()
 }
 
+// StorageBuilder creates and manages many schema storage
 type StorageBuilder struct {
 	baseStorage   *Storage
 	baseStorageMu sync.Mutex
@@ -104,6 +105,7 @@ type StorageBuilder struct {
 	ddlEventCh <-chan *model.RawKVEntry
 }
 
+// NewStorageBuilder creates a new StorageBuilder
 func NewStorageBuilder(historyDDL []*timodel.Job, ddlEventCh <-chan *model.RawKVEntry) *StorageBuilder {
 	builder := &StorageBuilder{
 		jobList:    newJobList(),
@@ -123,6 +125,7 @@ func NewStorageBuilder(historyDDL []*timodel.Job, ddlEventCh <-chan *model.RawKV
 	return builder
 }
 
+// Run runs the StorageBuilder
 func (b *StorageBuilder) Run(ctx context.Context) error {
 	for {
 		var rawKV *model.RawKVEntry
@@ -155,6 +158,9 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 	}
 }
 
+// Build creates a new schema storage,
+// every storage craeted by one builder is associated with each other,
+// they share the resolvedTs and job list
 func (b *StorageBuilder) Build(ts uint64) (*Storage, error) {
 	if ts < b.gcTs {
 		log.Fatal("the parameter `ts` in function `StorageBuilder.Build` should never less than gcTs, please report a bug.")
@@ -162,7 +168,7 @@ func (b *StorageBuilder) Build(ts uint64) (*Storage, error) {
 	b.baseStorageMu.Lock()
 	defer b.baseStorageMu.Unlock()
 	c := b.baseStorage.Clone()
-	retry.Run(func() error {
+	err := retry.Run(func() error {
 		err := c.HandlePreviousDDLJobIfNeed(ts)
 		if errors.Cause(err) != model.ErrUnresolved {
 			return backoff.Permanent(err)
@@ -172,13 +178,18 @@ func (b *StorageBuilder) Build(ts uint64) (*Storage, error) {
 		}
 		return err
 	}, 20)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	return c, nil
 }
 
+// GetResolvedTs return the resolvedTs of DDL puller in this StorageBuilder
 func (b *StorageBuilder) GetResolvedTs() uint64 {
 	return atomic.LoadUint64(&b.resolvedTs)
 }
 
+// DoGc removes the jobs which of finishedTs is less then gcTs
 func (b *StorageBuilder) DoGc(ts uint64) error {
 	if ts > atomic.LoadUint64(&b.resolvedTs) {
 		log.Fatal("gcTs is greater than resolvedTs in StorageBuilder, please report a bug", zap.Uint64("gcTs", ts))

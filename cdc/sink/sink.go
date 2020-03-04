@@ -36,6 +36,7 @@ type Sink interface {
 	Close() error
 }
 
+// NewBlackHoleSink creates a block hole sink
 func NewBlackHoleSink() *blackHoleSink {
 	return &blackHoleSink{}
 }

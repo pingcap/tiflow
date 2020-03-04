@@ -136,7 +136,7 @@ func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 	return nil
 }
 
-// ReadGlobalResolvedTs reads the global resolvedTs from etcd
+// GetChangeFeedStatus reads the changefeed status from etcd
 func (rw *ProcessorTsEtcdRWriter) GetChangeFeedStatus(ctx context.Context) (*model.ChangeFeedStatus, error) {
 	return rw.etcdClient.GetChangeFeedStatus(ctx, rw.changefeedID)
 }

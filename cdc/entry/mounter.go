@@ -87,26 +87,24 @@ func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
 	return false
 }
 
+// Mounter is used to parse SQL events from KV events
 type Mounter interface {
 	Run(ctx context.Context) error
 	Output() <-chan *model.RowChangedEvent
 }
 
-// Mounter is used to parse SQL events from KV events
 type mounterImpl struct {
 	schemaStorage   *Storage
 	rawRowChangedCh <-chan *model.RawKVEntry
 	output          chan *model.RowChangedEvent
-	tableId         int64
 }
 
 // NewMounter creates a mounter
-func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaStorage *Storage, tableId int64) Mounter {
+func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaStorage *Storage) Mounter {
 	return &mounterImpl{
 		schemaStorage:   schemaStorage,
 		rawRowChangedCh: rawRowChangedCh,
 		output:          make(chan *model.RowChangedEvent),
-		tableId:         tableId,
 	}
 }
 
@@ -249,6 +247,7 @@ func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, bas
 
 const ddlJobListKey = "DDLJobList"
 
+// UnmarshalDDL unmarshals the ddl job from RawKVEntry
 func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	if raw.OpType != model.OpTypePut || !bytes.HasPrefix(raw.Key, metaPrefix) {
 		return nil, nil

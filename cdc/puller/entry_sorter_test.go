@@ -86,7 +86,7 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 				{Ts: 15, OpType: model.OpTypeResolved}},
 		},
 	}
-	es := NewEntrySorter(false)
+	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	es.Run(ctx)
@@ -103,7 +103,7 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 }
 
 func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
-	es := NewEntrySorter(false)
+	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	es.Run(ctx)

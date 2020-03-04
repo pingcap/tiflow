@@ -330,11 +330,11 @@ func realRunProcessor(
 	checkpointTs uint64,
 	cb processorCallback,
 ) error {
-	ctx, cancel := context.WithCancel(ctx)
 	sink, err := sink.NewMySQLSink(info.SinkURI, info.Opts)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
 	go func() {
 		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
@@ -343,6 +343,7 @@ func realRunProcessor(
 	}()
 	processor, err := NewProcessor(ctx, pdEndpoints, info, sink, changefeedID, captureID, checkpointTs)
 	if err != nil {
+		cancel()
 		return err
 	}
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
