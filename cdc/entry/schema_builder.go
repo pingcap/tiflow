@@ -43,7 +43,7 @@ func (l *jobList) FetchNextJobs(currentJob *list.Element, ts uint64) (*list.Elem
 		log.Fatal("cannot fetch the jobs which of finishedTs is less then gcTs, please report a bug", zap.Uint64("gcTs", l.gcTs))
 	}
 
-	if currentJob.Value != (*timodel.Job)(nil) {
+	if currentJob != l.list.Front() {
 		job := currentJob.Value.(*timodel.Job)
 		if job.BinlogInfo.FinishedTS <= l.gcTs {
 			currentJob = l.list.Front()

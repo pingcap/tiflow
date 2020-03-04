@@ -860,6 +860,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if todoDDLJob.BinlogInfo.TableInfo != nil {
 		tableName = todoDDLJob.BinlogInfo.TableInfo.Name.O
 	}
+	// TODO consider some newly added DDL types such as `ActionCreateSequence`
 	if todoDDLJob.Type != timodel.ActionCreateSchema {
 		dbInfo, exist := c.schema.SchemaByID(todoDDLJob.SchemaID)
 		if !exist {
