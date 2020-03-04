@@ -19,12 +19,11 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/pingcap/ticdc/cdc/model"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"go.uber.org/zap"
 )
@@ -156,15 +155,8 @@ func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
 	return ti.handleColID, ti.rowColInfos
 }
 
-// WritableColumns returns all public and non-generated columns
-func (ti *TableInfo) WritableColumns() []*timodel.ColumnInfo {
-	cols := make([]*timodel.ColumnInfo, 0, len(ti.Columns))
-	for _, col := range ti.Columns {
-		if col.State == timodel.StatePublic && !col.IsGenerated() {
-			cols = append(cols, col)
-		}
-	}
-	return cols
+func (ti *TableInfo) IsColWritable(col *timodel.ColumnInfo) bool {
+	return col.State == timodel.StatePublic && !col.IsGenerated()
 }
 
 // GetUniqueKeys returns all unique keys of the table as a slice of column names
@@ -216,10 +208,15 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 	return false
 }
 
+func (ti *TableInfo) Clone() *TableInfo {
+	return WrapTableInfo(ti.TableInfo.Clone())
+}
+
 // newStorage returns the Schema object
 func newStorage(resolvedTs *uint64, jobList *jobList) *Storage {
 	s := NewSingleStorage()
 	s.resolvedTs = resolvedTs
+	s.currentJob = jobList.Head()
 	s.jobList = jobList
 	return s
 }
@@ -242,15 +239,19 @@ func NewSingleStorage() *Storage {
 // String implements fmt.Stringer interface.
 func (s *Storage) String() string {
 	mp := map[string]interface{}{
-		"tableIDToName":  s.tableIDToName,
-		"tableNameToID":  s.tableNameToID,
-		"schemaNameToID": s.schemaNameToID,
-		// "schemas":           s.schemas,
-		// "tables":            s.tables,
+		"tableIDToName":     s.tableIDToName,
+		"schemaNameToID":    s.schemaNameToID,
+		"schemas":           s.schemas,
+		"tables":            s.tables,
 		"schemaMetaVersion": s.schemaMetaVersion,
+		"resolvedTs":        *s.resolvedTs,
+		"cjob":              s.currentJob.Value,
 	}
 
-	data, _ := json.MarshalIndent(mp, "\t", "\t")
+	data, err := json.MarshalIndent(mp, "\t", "\t")
+	if err != nil {
+		panic(err)
+	}
 
 	return string(data)
 }
@@ -408,12 +409,15 @@ func (s *Storage) removeTable(tableID int64) error {
 }
 
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
-func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
+func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64, tableId int64) error {
+	log.Info("HandlePreviousDDLJobIfNeed", zap.Uint64("commitTs", commitTs), zap.Int64("tableId", tableId))
 	if commitTs > atomic.LoadUint64(s.resolvedTs) {
 		return model.ErrUnresolved
 	}
+	log.Info("currentJob", zap.Bool("not nil", s.currentJob != nil), zap.Int64("tableId", tableId))
 	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
 	for _, job := range jobs {
+		log.Info("accept job in storage", zap.String("sql", job.Query), zap.Uint64("fts", job.BinlogInfo.FinishedTS), zap.Int64("tableId", tableId))
 		if skipJob(job) {
 			log.Info("skip DDL job because the job isn't synced and done", zap.Stringer("job", job))
 			continue
@@ -422,8 +426,10 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 			log.Debug("skip DDL job because the job is already handled", zap.Stringer("job", job))
 			continue
 		}
+		log.Info("handle job in storage", zap.String("sql", job.Query), zap.Uint64("fts", job.BinlogInfo.FinishedTS), zap.Int64("tableId", tableId))
 		_, _, _, err := s.HandleDDL(job)
 		if err != nil {
+			log.Info("storage status", zap.String("s", s.String()))
 			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", job, s)
 		}
 	}
@@ -451,7 +457,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 	switch job.Type {
 	case timodel.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
-		schema := job.BinlogInfo.DBInfo
+		schema := job.BinlogInfo.DBInfo.Clone()
 
 		err := s.CreateSchema(schema)
 		if err != nil {
@@ -495,7 +501,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 			return "", "", "", errors.Trace(err)
 		}
 		// create table
-		table := job.BinlogInfo.TableInfo
+		table := job.BinlogInfo.TableInfo.Clone()
 		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
@@ -512,7 +518,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		tableName = table.Name.O
 
 	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
-		table := job.BinlogInfo.TableInfo
+		table := job.BinlogInfo.TableInfo.Clone()
 		if table == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
@@ -559,7 +565,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 			return "", "", "", errors.Trace(err)
 		}
 
-		table := job.BinlogInfo.TableInfo
+		table := job.BinlogInfo.TableInfo.Clone()
 		if table == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
@@ -637,10 +643,10 @@ func (s *Storage) Clone() *Storage {
 		n.schemaNameToID[k] = v
 	}
 	for k, v := range s.schemas {
-		n.schemas[k] = v
+		n.schemas[k] = v.Clone()
 	}
 	for k, v := range s.tables {
-		n.tables[k] = v
+		n.tables[k] = v.Clone()
 	}
 	for k, v := range s.truncateTableID {
 		n.truncateTableID[k] = v
@@ -651,6 +657,7 @@ func (s *Storage) Clone() *Storage {
 	n.schemaMetaVersion = s.schemaMetaVersion
 	n.lastHandledTs = s.lastHandledTs
 	n.resolvedTs = s.resolvedTs
+	n.jobList = s.jobList
 	n.currentJob = s.currentJob
 	n.currentVersion = s.currentVersion
 	return n

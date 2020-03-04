@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -154,8 +153,9 @@ type processor struct {
 	tsRWriter storage.ProcessorTsRWriter
 	output    chan *model.RowChangedEvent
 
-	status   *model.TaskStatus
-	position *model.TaskPosition
+	status             *model.TaskStatus
+	position           *model.TaskPosition
+	resolvedTsFallback int32
 
 	tablesMu sync.Mutex
 	tables   map[int64]*tableInfo
@@ -221,7 +221,7 @@ func NewProcessor(
 
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan()}, false, limitter)
+	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan()}, false, limitter, true)
 	ddlEventCh := ddlPuller.SortedOutput(ctx)
 	schemaBuilder, err := createSchemaBuilder(pdEndpoints, ddlEventCh)
 	if err != nil {
@@ -317,7 +317,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 4, check admin command in TaskStatus and apply corresponding command
 func (p *processor) positionWorker(ctx context.Context) error {
 	updateInfoTick := time.NewTicker(updateInfoInterval)
-	resolveTsTick := time.NewTicker(resolveTsInterval)
+	resolveTsTick := time.NewTicker(resolveTsInterval * 2)
 	checkpointTsTick := time.NewTicker(resolveTsInterval)
 
 	updateInfo := func() error {
@@ -354,14 +354,9 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-resolveTsTick.C:
+			minResolvedTs := p.schemaBuilder.GetResolvedTs()
+			log.Info("schema resolvedts", zap.Uint64("ts", minResolvedTs))
 			p.tablesMu.Lock()
-			// no table in this processor
-			if len(p.tables) == 0 {
-				p.tablesMu.Unlock()
-				continue
-			}
-
-			minResolvedTs := uint64(math.MaxUint64)
 			for _, table := range p.tables {
 				ts := table.loadResolvedTS()
 				tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID, strconv.FormatInt(table.id, 10)).Set(float64(oracle.ExtractPhysical(ts)))
@@ -369,14 +364,28 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				if ts < minResolvedTs {
 					minResolvedTs = ts
 				}
+				if ts == 0 {
+					log.Info("resolved == 0", zap.Int64("tableId", table.id))
+				}
 			}
 			p.tablesMu.Unlock()
+			log.Info("cal resolvedts", zap.Uint64("ts", minResolvedTs))
 			// some puller still haven't received the row changed data
-			if minResolvedTs == 0 {
+			if minResolvedTs < p.position.ResolvedTs {
+				log.Info("minResolvedTs < p.position.ResolvedTs", zap.Uint64("min", minResolvedTs), zap.Uint64("R", p.position.ResolvedTs))
+				atomic.StoreInt32(&p.resolvedTsFallback, 1)
 				continue
 			}
+			log.Info("minResolvedTs >= p.position.ResolvedTs")
+			atomic.StoreInt32(&p.resolvedTsFallback, 0)
+
+			if minResolvedTs == p.position.ResolvedTs {
+				continue
+			}
+			log.Info("minResolvedTs > p.position.ResolvedTs")
 
 			p.position.ResolvedTs = minResolvedTs
+			log.Info("update resolvedts", zap.Uint64("ts", minResolvedTs))
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -385,12 +394,14 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case <-checkpointTsTick.C:
 			checkpointTs := p.sink.CheckpointTs()
-			if p.position.CheckPointTs > checkpointTs {
+			if p.position.CheckPointTs >= checkpointTs {
 				continue
 			}
 			p.position.CheckPointTs = checkpointTs
+			log.Info("update checkpointTs", zap.Uint64("ts", checkpointTs))
 			checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(checkpointTs)))
 		case <-updateInfoTick.C:
+			log.Info("update Info", zap.Reflect("p", p.position))
 			err := updateInfo()
 			if err != nil {
 				return errors.Trace(err)
@@ -400,10 +411,12 @@ func (p *processor) positionWorker(ctx context.Context) error {
 }
 
 func (p *processor) updateInfo(ctx context.Context) error {
+	log.Info("updateInfo real")
 	err := p.tsRWriter.WritePosition(ctx, p.position)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("updateInfo successfully", zap.Reflect("p", p.position))
 	statusChanged, err := p.tsRWriter.UpdateInfo(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -526,8 +539,9 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 	log.Info("Global status worker started")
 
 	var (
-		changefeedStatus     *model.ChangeFeedStatus
-		lastChangefeedStatus *model.ChangeFeedStatus
+		changefeedStatus *model.ChangeFeedStatus
+		lastCheckPointTs uint64
+		lastResolvedTs   uint64
 	)
 
 	retryCfg := backoff.WithMaxRetries(
@@ -554,26 +568,40 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 
-		if lastChangefeedStatus != nil &&
-			lastChangefeedStatus.ResolvedTs == changefeedStatus.ResolvedTs &&
-			lastChangefeedStatus.CheckpointTs == changefeedStatus.CheckpointTs {
+		if lastResolvedTs == changefeedStatus.ResolvedTs &&
+			lastCheckPointTs == changefeedStatus.CheckpointTs {
+			log.Info("changefeedStatus eq", zap.Reflect("s", changefeedStatus))
+			time.Sleep(waitGlobalResolvedTsDelay)
+			continue
+		}
+		log.Info("changefeedStatus", zap.Reflect("s", changefeedStatus))
+
+		if lastCheckPointTs < changefeedStatus.CheckpointTs {
+			err = p.sink.EmitCheckpointEvent(ctx, changefeedStatus.CheckpointTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			err = p.schemaBuilder.DoGc(changefeedStatus.CheckpointTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			lastCheckPointTs = changefeedStatus.CheckpointTs
+		}
+
+		if atomic.LoadInt32(&p.resolvedTsFallback) != 0 {
+			log.Info("resolvedTsFallback in globalStatusWorker")
 			time.Sleep(waitGlobalResolvedTsDelay)
 			continue
 		}
 
-		lastChangefeedStatus = changefeedStatus
-		err = p.sink.EmitResolvedEvent(ctx, changefeedStatus.ResolvedTs)
-		if err != nil {
-			return errors.Trace(err)
+		if lastResolvedTs < changefeedStatus.ResolvedTs {
+			err = p.sink.EmitResolvedEvent(ctx, changefeedStatus.ResolvedTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			lastResolvedTs = changefeedStatus.ResolvedTs
 		}
-		err = p.sink.EmitCheckpointEvent(ctx, changefeedStatus.CheckpointTs)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = p.schemaBuilder.DoGc(changefeedStatus.CheckpointTs)
-		if err != nil {
-			return errors.Trace(err)
-		}
+
 	}
 }
 
@@ -604,10 +632,7 @@ func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEnt
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	builder, err := entry.NewStorageBuilder(jobs, ddlEventCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	builder := entry.NewStorageBuilder(jobs, ddlEventCh)
 	return builder, nil
 }
 
@@ -688,24 +713,28 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 
 	ctx, cancel := context.WithCancel(ctx)
 	table := &tableInfo{
-		id:     tableID,
-		cancel: cancel,
+		id:         tableID,
+		resolvedTS: startTs,
+		cancel:     cancel,
 	}
 
 	// start table puller
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
 	span := util.GetTableSpan(tableID, true)
-	puller := puller.NewPuller(p.pdCli, startTs, []util.Span{span}, true, p.limitter)
+	puller := puller.NewPuller(p.pdCli, startTs, []util.Span{span}, true, p.limitter, false)
 	go func() {
 		err := puller.Run(ctx)
 		if errors.Cause(err) != context.Canceled {
 			p.errCh <- err
 		}
 	}()
-
+	storage, err := p.schemaBuilder.Build(startTs, tableID)
+	if err != nil {
+		p.errCh <- errors.Trace(err)
+	}
 	// start mounter
-	mounter := entry.NewMounter(puller.SortedOutput(ctx), p.schemaBuilder)
+	mounter := entry.NewMounter(puller.SortedOutput(ctx), storage, tableID)
 	go func() {
 		err := mounter.Run(ctx)
 		if errors.Cause(err) != context.Canceled {

@@ -15,7 +15,6 @@ package cdc
 
 import (
 	"context"
-	"database/sql"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -43,7 +42,7 @@ type ddlHandler struct {
 func newDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan()}, false, nil)
+	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan()}, false, nil, false)
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &ddlHandler{
 		puller: puller,
@@ -83,7 +82,7 @@ func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
 		h.mu.Unlock()
 		return nil
 	}
-	job, err := entry.UnmarshalDDL(rawDDL)
+	job, err := entry.UnmarshalDDL(rawDDL, false)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -112,13 +111,10 @@ func (h *ddlHandler) PullDDL() (uint64, []*timodel.Job, error) {
 func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, opts map[string]string, ddl *model.DDLEvent) error {
 	// TODO cache the sink
 	// TODO handle other target database, kile kafka, file
-	db, err := sql.Open("mysql", sinkURI)
+	s, err := sink.NewMySQLSink(sinkURI, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer db.Close()
-	s := sink.NewBlackHoleSink()
-
 	err = s.EmitDDLEvent(ctx, ddl)
 	return errors.Trace(err)
 }

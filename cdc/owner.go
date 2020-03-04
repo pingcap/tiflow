@@ -332,7 +332,7 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 }
 
 func (c *changeFeed) applyJob(job *timodel.Job) error {
-	log.Info("apply job", zap.String("sql", job.Query), zap.Int64("job id", job.ID))
+	log.Info("apply job", zap.String("sql", job.Query), zap.Stringer("job", job))
 
 	schamaName, tableName, _, err := c.schema.HandleDDL(job)
 	if err != nil {
@@ -553,10 +553,12 @@ func (o *ownerImpl) newChangeFeed(
 
 	schemaStorage := entry.NewSingleStorage()
 
+	log.Info("owner checkpoint ts", zap.Uint64("owner checkpoint", checkpointTs))
 	for _, job := range jobs {
 		if job.BinlogInfo.FinishedTS > checkpointTs {
 			break
 		}
+		log.Info("init handle job", zap.Stringer("job", job))
 		_, _, _, err := schemaStorage.HandleDDL(job)
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -774,6 +776,7 @@ func (c *changeFeed) calcResolvedTs() error {
 	if len(c.ddlJobHistory) > 0 && minResolvedTs > c.ddlJobHistory[0].BinlogInfo.FinishedTS {
 		minResolvedTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedWaitToExecDDL
+		log.Info("ChangeFeedWaitToExecDDL", zap.Reflect("job", c.ddlJobHistory[0]))
 	}
 
 	var tsUpdated bool
@@ -843,7 +846,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	// Check if all the checkpointTs of capture are achieving global resolvedTs(which is equal to todoDDLJob.FinishedTS)
 	for cid, pInfo := range c.taskPositions {
 		if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
-			log.Debug("wait checkpoint ts", zap.String("cid", cid),
+			log.Info("wait checkpoint ts", zap.String("cid", cid),
 				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
 				zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS))
 			return nil
@@ -852,9 +855,30 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
-	log.Debug("apply job", zap.Stringer("job", todoDDLJob),
+	log.Info("apply job", zap.Stringer("job", todoDDLJob),
 		zap.String("query", todoDDLJob.Query),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
+
+	var tableName, schemaName string
+	if todoDDLJob.BinlogInfo.TableInfo != nil {
+		tableName = todoDDLJob.BinlogInfo.TableInfo.Name.O
+	}
+	if todoDDLJob.Type != timodel.ActionCreateSchema {
+		dbInfo, exist := c.schema.SchemaByID(todoDDLJob.SchemaID)
+		if !exist {
+			return errors.NotFoundf("schema %d not found", todoDDLJob.SchemaID)
+		}
+		schemaName = dbInfo.Name.O
+	} else {
+		schemaName = todoDDLJob.BinlogInfo.DBInfo.Name.O
+	}
+	ddlEvent := &model.DDLEvent{
+		Ts:     todoDDLJob.BinlogInfo.FinishedTS,
+		Query:  todoDDLJob.Query,
+		Schema: schemaName,
+		Table:  tableName,
+		Type:   todoDDLJob.Type,
+	}
 
 	err := c.applyJob(todoDDLJob)
 	if err != nil {
@@ -862,21 +886,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	}
 
 	c.banlanceOrphanTables(context.Background(), captures)
-	var tableName, schemaName string
-	if todoDDLJob.BinlogInfo.TableInfo != nil {
-		tableName = todoDDLJob.BinlogInfo.TableInfo.Name.O
-	}
-	dbInfo, exist := c.schema.SchemaByID(todoDDLJob.SchemaID)
-	if !exist {
-		return errors.NotFoundf("schema %d not found", todoDDLJob.SchemaID)
-	}
-	schemaName = dbInfo.Name.O
-	ddlEvent := &model.DDLEvent{
-		Ts:     todoDDLJob.BinlogInfo.FinishedTS,
-		Query:  todoDDLJob.Query,
-		Schema: schemaName,
-		Table:  tableName,
-	}
+
 	if c.filter.ShouldIgnoreDDLEvent(ddlEvent) {
 		log.Info(
 			"DDL event ignored",
