@@ -78,7 +78,7 @@ func (l *jobList) RemoveOverdueJobs(ts uint64) {
 	defer l.mu.Unlock()
 	for e := l.list.Front().Next(); e != nil; {
 		job := e.Value.(*timodel.Job)
-		if job.BinlogInfo.FinishedTS >= ts {
+		if job.BinlogInfo.FinishedTS > ts {
 			break
 		}
 		l.gcTs = job.BinlogInfo.FinishedTS
