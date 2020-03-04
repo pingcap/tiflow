@@ -409,15 +409,12 @@ func (s *Storage) removeTable(tableID int64) error {
 }
 
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
-func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64, tableId int64) error {
-	log.Info("HandlePreviousDDLJobIfNeed", zap.Uint64("commitTs", commitTs), zap.Int64("tableId", tableId))
+func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 	if commitTs > atomic.LoadUint64(s.resolvedTs) {
 		return model.ErrUnresolved
 	}
-	log.Info("currentJob", zap.Bool("not nil", s.currentJob != nil), zap.Int64("tableId", tableId))
 	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
 	for _, job := range jobs {
-		log.Info("accept job in storage", zap.String("sql", job.Query), zap.Uint64("fts", job.BinlogInfo.FinishedTS), zap.Int64("tableId", tableId))
 		if skipJob(job) {
 			log.Info("skip DDL job because the job isn't synced and done", zap.Stringer("job", job))
 			continue
@@ -426,10 +423,8 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64, tableId int64) err
 			log.Debug("skip DDL job because the job is already handled", zap.Stringer("job", job))
 			continue
 		}
-		log.Info("handle job in storage", zap.String("sql", job.Query), zap.Uint64("fts", job.BinlogInfo.FinishedTS), zap.Int64("tableId", tableId))
 		_, _, _, err := s.HandleDDL(job)
 		if err != nil {
-			log.Info("storage status", zap.String("s", s.String()))
 			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", job, s)
 		}
 	}

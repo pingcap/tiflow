@@ -221,7 +221,7 @@ func NewProcessor(
 
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan()}, false, limitter, true)
+	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan()}, false, limitter)
 	ddlEventCh := ddlPuller.SortedOutput(ctx)
 	schemaBuilder, err := createSchemaBuilder(pdEndpoints, ddlEventCh)
 	if err != nil {
@@ -317,7 +317,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 4, check admin command in TaskStatus and apply corresponding command
 func (p *processor) positionWorker(ctx context.Context) error {
 	updateInfoTick := time.NewTicker(updateInfoInterval)
-	resolveTsTick := time.NewTicker(resolveTsInterval * 2)
+	resolveTsTick := time.NewTicker(resolveTsInterval)
 	checkpointTsTick := time.NewTicker(resolveTsInterval)
 
 	updateInfo := func() error {
@@ -355,7 +355,6 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			return ctx.Err()
 		case <-resolveTsTick.C:
 			minResolvedTs := p.schemaBuilder.GetResolvedTs()
-			log.Info("schema resolvedts", zap.Uint64("ts", minResolvedTs))
 			p.tablesMu.Lock()
 			for _, table := range p.tables {
 				ts := table.loadResolvedTS()
@@ -364,28 +363,20 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				if ts < minResolvedTs {
 					minResolvedTs = ts
 				}
-				if ts == 0 {
-					log.Info("resolved == 0", zap.Int64("tableId", table.id))
-				}
 			}
 			p.tablesMu.Unlock()
-			log.Info("cal resolvedts", zap.Uint64("ts", minResolvedTs))
 			// some puller still haven't received the row changed data
 			if minResolvedTs < p.position.ResolvedTs {
-				log.Info("minResolvedTs < p.position.ResolvedTs", zap.Uint64("min", minResolvedTs), zap.Uint64("R", p.position.ResolvedTs))
 				atomic.StoreInt32(&p.resolvedTsFallback, 1)
 				continue
 			}
-			log.Info("minResolvedTs >= p.position.ResolvedTs")
 			atomic.StoreInt32(&p.resolvedTsFallback, 0)
 
 			if minResolvedTs == p.position.ResolvedTs {
 				continue
 			}
-			log.Info("minResolvedTs > p.position.ResolvedTs")
 
 			p.position.ResolvedTs = minResolvedTs
-			log.Info("update resolvedts", zap.Uint64("ts", minResolvedTs))
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -398,10 +389,8 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				continue
 			}
 			p.position.CheckPointTs = checkpointTs
-			log.Info("update checkpointTs", zap.Uint64("ts", checkpointTs))
 			checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(checkpointTs)))
 		case <-updateInfoTick.C:
-			log.Info("update Info", zap.Reflect("p", p.position))
 			err := updateInfo()
 			if err != nil {
 				return errors.Trace(err)
@@ -411,12 +400,10 @@ func (p *processor) positionWorker(ctx context.Context) error {
 }
 
 func (p *processor) updateInfo(ctx context.Context) error {
-	log.Info("updateInfo real")
 	err := p.tsRWriter.WritePosition(ctx, p.position)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("updateInfo successfully", zap.Reflect("p", p.position))
 	statusChanged, err := p.tsRWriter.UpdateInfo(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -570,11 +557,9 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
-			log.Info("changefeedStatus eq", zap.Reflect("s", changefeedStatus))
 			time.Sleep(waitGlobalResolvedTsDelay)
 			continue
 		}
-		log.Info("changefeedStatus", zap.Reflect("s", changefeedStatus))
 
 		if lastCheckPointTs < changefeedStatus.CheckpointTs {
 			err = p.sink.EmitCheckpointEvent(ctx, changefeedStatus.CheckpointTs)
@@ -589,7 +574,6 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		}
 
 		if atomic.LoadInt32(&p.resolvedTsFallback) != 0 {
-			log.Info("resolvedTsFallback in globalStatusWorker")
 			time.Sleep(waitGlobalResolvedTsDelay)
 			continue
 		}
@@ -722,14 +706,14 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
 	span := util.GetTableSpan(tableID, true)
-	puller := puller.NewPuller(p.pdCli, startTs, []util.Span{span}, true, p.limitter, false)
+	puller := puller.NewPuller(p.pdCli, startTs, []util.Span{span}, true, p.limitter)
 	go func() {
 		err := puller.Run(ctx)
 		if errors.Cause(err) != context.Canceled {
 			p.errCh <- err
 		}
 	}()
-	storage, err := p.schemaBuilder.Build(startTs, tableID)
+	storage, err := p.schemaBuilder.Build(startTs)
 	if err != nil {
 		p.errCh <- errors.Trace(err)
 	}

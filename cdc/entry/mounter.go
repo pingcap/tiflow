@@ -129,17 +129,15 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		}
 
 		if rawRow.OpType == model.OpTypeResolved {
-			log.Info("mounter Resolved", zap.Uint64("ts", rawRow.Ts))
 			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
 			continue
 		}
 
-		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts, m.tableId)
+		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts)
 		switch errors.Cause(err) {
 		case nil:
 		case model.ErrUnresolved:
 			lastRowChangedEvent = rawRow
-			log.Info("ErrUnresolved", zap.Any("ts", rawRow.Ts))
 			time.Sleep(50 * time.Millisecond)
 			continue
 		default:
@@ -178,7 +176,6 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model
 	case bytes.HasPrefix(key, recordPrefix):
 		rowKV, err := m.unmarshalRowKVEntry(key, raw.Value, baseInfo)
 		if err != nil {
-			log.Error("unmarshal error", zap.Error(err), zap.Uint64("ts", raw.Ts))
 			return nil, errors.Trace(err)
 		}
 		if rowKV == nil {
@@ -252,7 +249,7 @@ func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, bas
 
 const ddlJobListKey = "DDLJobList"
 
-func UnmarshalDDL(raw *model.RawKVEntry, p bool) (*timodel.Job, error) {
+func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	if raw.OpType != model.OpTypePut || !bytes.HasPrefix(raw.Key, metaPrefix) {
 		return nil, nil
 	}
@@ -272,13 +269,7 @@ func UnmarshalDDL(raw *model.RawKVEntry, p bool) (*timodel.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if p {
-		log.Info("accept job", zap.Reflect("job", job))
-	}
 	if !job.IsDone() && !job.IsSynced() {
-		if p {
-			log.Info("not done and not synced", zap.Reflect("job", job))
-		}
 		return nil, nil
 	}
 	// FinishedTS is only set when the job is synced,

@@ -18,8 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/client"
@@ -59,7 +57,6 @@ type pullerImpl struct {
 	resolvedTs   uint64
 	// needEncode represents whether we need to encode a key when checking it is in span
 	needEncode bool
-	debug      bool
 }
 
 // CancellablePuller is a puller that can be stopped with the Cancel function
@@ -77,7 +74,6 @@ func NewPuller(
 	spans []util.Span,
 	needEncode bool,
 	limitter *BlurResourceLimitter,
-	debug bool,
 ) *pullerImpl {
 	p := &pullerImpl{
 		pdCli:        pdCli,
@@ -87,7 +83,6 @@ func NewPuller(
 		chanBuffer:   makeChanBuffer(),
 		tsTracker:    makeSpanFrontier(spans...),
 		needEncode:   needEncode,
-		debug:        debug,
 	}
 
 	return p
@@ -100,7 +95,7 @@ func (p *pullerImpl) Output() ChanBuffer {
 func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	sorter := NewEntrySorter(p.debug)
+	sorter := NewEntrySorter()
 	go func() {
 		sorter.Run(ctx)
 		for {
@@ -112,20 +107,8 @@ func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 				break
 			}
 			if be.Val != nil {
-				if p.debug {
-					job, _ := entry.UnmarshalDDL(be.Val, false)
-					if job != nil {
-						log.Info("puller accept", zap.Reflect("job", job))
-					}
-				}
 				txnCollectCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
 				sorter.AddEntry(be.Val)
-				//if be.Val.Ts < atomic.LoadUint64(&p.resolvedTs) {
-				//	panic("a1")
-				//}
-				//if be.Val.Ts == atomic.LoadUint64(&p.resolvedTs) {
-				//	panic("a2")
-				//}
 			} else if be.Resolved != nil {
 				txnCollectCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
 				resolvedTs := be.Resolved.ResolvedTs

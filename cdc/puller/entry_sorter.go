@@ -6,10 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
-	ee "github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
@@ -18,17 +14,15 @@ type EntrySorter struct {
 	resolvedCh chan uint64
 	lock       sync.Mutex
 	resolvedTs uint64
-	debug      bool
 	closed     int32
 
 	output chan *model.RawKVEntry
 }
 
-func NewEntrySorter(debug bool) *EntrySorter {
+func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
 		resolvedCh: make(chan uint64, 1024),
 		output:     make(chan *model.RawKVEntry, 128),
-		debug:      debug,
 	}
 }
 
@@ -77,36 +71,12 @@ func (es *EntrySorter) Run(ctx context.Context) {
 					return lessFunc(toSort[i], toSort[j])
 				})
 
-				if es.debug {
-					log.Info("sorter resolved", zap.Uint64("ts", resolvedTs))
-					for _, entry := range toSort {
-						job, _ := ee.UnmarshalDDL(entry, false)
-						if job != nil {
-							log.Info("toSort accept", zap.Reflect("job", job))
-						}
-					}
-					for _, entry := range sorted {
-						job, _ := ee.UnmarshalDDL(entry, false)
-						if job != nil {
-							log.Info("sorted accept", zap.Reflect("job", job))
-						}
-					}
-				}
-
 				var merged []*model.RawKVEntry
 				mergeFunc(toSort, sorted, func(entry *model.RawKVEntry) {
 					if entry.Ts <= resolvedTs {
 						es.output <- entry
-						job, _ := ee.UnmarshalDDL(entry, false)
-						if job != nil {
-							log.Info("sort output accept", zap.Reflect("job", job))
-						}
 					} else {
 						merged = append(merged, entry)
-						job, _ := ee.UnmarshalDDL(entry, false)
-						if job != nil {
-							log.Info("append merged accept", zap.Reflect("job", job))
-						}
 					}
 				})
 				es.output <- &model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved}
@@ -128,19 +98,6 @@ func (es *EntrySorter) AddEntry(entry *model.RawKVEntry) {
 	}
 	es.lock.Lock()
 	defer es.lock.Unlock()
-	if es.debug {
-		job, _ := ee.UnmarshalDDL(entry, false)
-		if job != nil {
-			log.Info("sorter accept", zap.Reflect("job", job))
-		}
-	}
-	rts := atomic.LoadUint64(&es.resolvedTs)
-	if entry.Ts <= rts {
-		job, _ := ee.UnmarshalDDL(entry, false)
-		if job != nil {
-			log.Info("sorter less rts", zap.Bool("eq", rts == entry.Ts), zap.Reflect("job", job))
-		}
-	}
 	es.unsorted = append(es.unsorted, entry)
 
 }

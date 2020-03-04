@@ -553,12 +553,10 @@ func (o *ownerImpl) newChangeFeed(
 
 	schemaStorage := entry.NewSingleStorage()
 
-	log.Info("owner checkpoint ts", zap.Uint64("owner checkpoint", checkpointTs))
 	for _, job := range jobs {
 		if job.BinlogInfo.FinishedTS > checkpointTs {
 			break
 		}
-		log.Info("init handle job", zap.Stringer("job", job))
 		_, _, _, err := schemaStorage.HandleDDL(job)
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -776,7 +774,6 @@ func (c *changeFeed) calcResolvedTs() error {
 	if len(c.ddlJobHistory) > 0 && minResolvedTs > c.ddlJobHistory[0].BinlogInfo.FinishedTS {
 		minResolvedTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedWaitToExecDDL
-		log.Info("ChangeFeedWaitToExecDDL", zap.Reflect("job", c.ddlJobHistory[0]))
 	}
 
 	var tsUpdated bool
@@ -846,7 +843,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	// Check if all the checkpointTs of capture are achieving global resolvedTs(which is equal to todoDDLJob.FinishedTS)
 	for cid, pInfo := range c.taskPositions {
 		if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
-			log.Info("wait checkpoint ts", zap.String("cid", cid),
+			log.Debug("wait checkpoint ts", zap.String("cid", cid),
 				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
 				zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS))
 			return nil
@@ -855,7 +852,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
-	log.Info("apply job", zap.Stringer("job", todoDDLJob),
+	log.Debug("apply job", zap.Stringer("job", todoDDLJob),
 		zap.String("query", todoDDLJob.Query),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 

@@ -44,10 +44,10 @@ func (s *schemaBuilderSuite) TestStorageBuilder(c *C) {
 		c.Assert(errors.Cause(err), Equals, context.Canceled)
 	}()
 	for i := 3; i < 10; i++ {
-		storage, err := b.Build(uint64(i*10), 1)
+		storage, err := b.Build(uint64(i * 10))
 		c.Assert(err, IsNil)
 		for retry := 0; retry < 100; retry++ {
-			err = storage.HandlePreviousDDLJobIfNeed(uint64(i*10), int64(i-1))
+			err = storage.HandlePreviousDDLJobIfNeed(uint64(i * 10))
 			if errors.Cause(err) == model.ErrUnresolved {
 				time.Sleep(10 * time.Millisecond)
 			}

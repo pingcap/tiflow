@@ -9,14 +9,12 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-	"github.com/pingcap/ticdc/pkg/retry"
-
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/retry"
+	"go.uber.org/zap"
 )
 
 type jobList struct {
@@ -136,14 +134,7 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 		if rawKV == nil {
 			return errors.Trace(ctx.Err())
 		}
-		job, _ := UnmarshalDDL(rawKV, false)
-		if job != nil {
-			log.Info("storage builder accept", zap.Reflect("job", job))
-		}
 		if rawKV.Ts < b.resolvedTs {
-			if job != nil {
-				log.Info("storage builder drop", zap.Reflect("job", job))
-			}
 			continue
 		}
 
@@ -153,7 +144,7 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 			continue
 		}
 
-		job, err := UnmarshalDDL(rawKV, true)
+		job, err := UnmarshalDDL(rawKV)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -161,14 +152,11 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 			continue
 		}
 		b.jobList.AppendJob(job)
-		log.Info("job added", zap.Reflect("job", job))
-
 		atomic.StoreUint64(&b.resolvedTs, rawKV.Ts)
-		log.Info("DDL resolvedts", zap.Uint64("ts", rawKV.Ts))
 	}
 }
 
-func (b *StorageBuilder) Build(ts uint64, tableId int64) (*Storage, error) {
+func (b *StorageBuilder) Build(ts uint64) (*Storage, error) {
 	if ts < b.gcTs {
 		log.Fatal("the parameter `ts` in function `StorageBuilder.Build` should never less than gcTs, please report a bug.")
 	}
@@ -176,7 +164,7 @@ func (b *StorageBuilder) Build(ts uint64, tableId int64) (*Storage, error) {
 	defer b.baseStorageMu.Unlock()
 	c := b.baseStorage.Clone()
 	retry.Run(func() error {
-		err := c.HandlePreviousDDLJobIfNeed(ts, tableId)
+		err := c.HandlePreviousDDLJobIfNeed(ts)
 		if errors.Cause(err) != model.ErrUnresolved {
 			return backoff.Permanent(err)
 		}
@@ -198,7 +186,7 @@ func (b *StorageBuilder) DoGc(ts uint64) error {
 	}
 	b.baseStorageMu.Lock()
 	defer b.baseStorageMu.Unlock()
-	err := b.baseStorage.HandlePreviousDDLJobIfNeed(ts, -1)
+	err := b.baseStorage.HandlePreviousDDLJobIfNeed(ts)
 	if err != nil {
 		return errors.Trace(err)
 	}
