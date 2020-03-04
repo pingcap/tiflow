@@ -882,7 +882,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return errors.Trace(err)
 	}
 
-	c.banlanceOrphanTables(context.Background(), captures)
+	c.banlanceOrphanTables(ctx, captures)
 
 	if c.filter.ShouldIgnoreDDLEvent(ddlEvent) {
 		log.Info(
