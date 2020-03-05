@@ -345,7 +345,10 @@ func (c *CDCClient) partialRegionFeed(
 	receiver <-chan *cdcpb.Event,
 	errCh chan<- regionErrorInfo,
 	eventCh chan<- *model.RegionFeedEvent,
+	isStopped *int32,
 ) error {
+	defer atomic.StoreInt32(isStopped, 1)
+
 	ts := regionInfo.ts
 	rl := rate.NewLimiter(0.1, 5)
 
@@ -505,6 +508,7 @@ func (c *CDCClient) receiveFromStream(
 ) error {
 	// Start the receive loop
 	regionHandlers := make(map[uint64]chan *cdcpb.Event)
+	regionStopped := make(map[uint64]*int32)
 
 	for {
 		cevent, err := stream.Recv()
@@ -539,17 +543,20 @@ func (c *CDCClient) receiveFromStream(
 		}
 
 		for _, event := range cevent.Events {
+			isStopped := false
+			if pIsStopped, ok := regionStopped[event.RegionId]; ok {
+				isStopped = atomic.LoadInt32(pIsStopped) > 0
+			}
+
 			ch, ok := regionHandlers[event.RegionId]
-			if !ok {
+			if !ok || isStopped {
 				// Fetch the region info
 				regionInfoMapMu.Lock()
 				sri, ok := regionInfoMap[event.RegionId]
 				if !ok {
 					regionInfoMapMu.RUnlock()
-					return errors.Errorf("received event from region %v (to store %v, %v) but no region info available",
-						event.RegionId,
-						storeID,
-						addr)
+					log.Warn("drop event due to region stopped", zap.Uint64("regionID", event.RegionId))
+					continue
 				}
 				delete(regionInfoMap, event.RegionId)
 				regionInfoMapMu.Unlock()
@@ -557,8 +564,11 @@ func (c *CDCClient) receiveFromStream(
 				ch = make(chan *cdcpb.Event, 16)
 				regionHandlers[event.RegionId] = ch
 				log.Debug("spawning partialRegionFeed goroutine for regoin", zap.Uint64("regionID", event.RegionId))
+
+				isStopped := new(int32)
+				regionStopped[event.RegionId] = isStopped
 				g.Go(func() error {
-					return c.partialRegionFeed(ctx, sri, ch, errCh, eventCh)
+					return c.partialRegionFeed(ctx, sri, ch, errCh, eventCh, isStopped)
 				})
 			}
 
