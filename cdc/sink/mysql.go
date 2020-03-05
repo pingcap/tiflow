@@ -240,7 +240,7 @@ func buildDBAndParams(sinkURI string, opts map[string]string) (db *sql.DB, param
 
 	// treat as dsn of the driver for compatibility...
 	if !strings.HasPrefix(sinkURI, "mysql://") && !strings.HasPrefix(sinkURI, "tidb://") {
-		sinkURI, err := configureSinkURI(sinkURI)
+		sinkURI, err = configureSinkURI(sinkURI)
 		if err != nil {
 			return nil, params, errors.Trace(err)
 		}
@@ -248,7 +248,6 @@ func buildDBAndParams(sinkURI string, opts map[string]string) (db *sql.DB, param
 		if err != nil {
 			return nil, params, errors.Trace(err)
 		}
-
 		return
 	}
 
