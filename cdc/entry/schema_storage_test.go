@@ -13,6 +13,7 @@
 
 package entry
 
+/*
 import (
 	"context"
 	"fmt"
@@ -516,3 +517,4 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
 		{"uid"}, {"job"},
 	})
 }
+*/

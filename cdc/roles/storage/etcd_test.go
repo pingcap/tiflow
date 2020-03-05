@@ -165,7 +165,6 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 	var (
 		changefeedID = "test-ts-reader-changefeed"
 		captureID    = "test-ts-reader-capture"
-		resolvedTs   uint64
 		err          error
 		info         = &model.ChangeFeedStatus{
 			ResolvedTs:   1000,
@@ -188,10 +187,9 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 
 	rw, err := NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
-
-	resolvedTs, err = rw.ReadGlobalResolvedTs(context.Background())
+	changedFeed, err := rw.GetChangeFeedStatus(context.Background())
 	c.Assert(err, check.IsNil)
-	c.Assert(resolvedTs, check.Equals, info.ResolvedTs)
+	c.Assert(changedFeed, check.DeepEquals, info)
 }
 
 func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {

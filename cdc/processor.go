@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -50,9 +49,10 @@ import (
 )
 
 const (
-	updateInfoInterval        = time.Millisecond * 500
-	resolveTsInterval         = time.Millisecond * 500
-	waitGlobalResolvedTsDelay = time.Millisecond * 500
+	updateInfoInterval          = time.Millisecond * 500
+	resolveTsInterval           = time.Millisecond * 500
+	waitGlobalResolvedTsDelay   = time.Millisecond * 500
+	waitFallbackResolvedTsDelay = time.Millisecond * 500
 
 	defaultOutputChanSize = 128
 
@@ -63,85 +63,13 @@ const (
 var (
 	fNewPDCli     = pd.NewClient
 	fNewTsRWriter = createTsRWriter
-	fNewMySQLSink = sink.NewMySQLSink
 )
-
-type txnChannel struct {
-	inputTxn   <-chan model.RawTxn
-	outputTxn  chan model.RawTxn
-	putBackTxn *model.RawTxn
-}
-
-// Forward push all txn with commit ts not greater than ts into targetC.
-func (p *txnChannel) Forward(ctx context.Context, ts uint64, targetC chan<- model.RawTxn) {
-	if p.putBackTxn != nil {
-		t := *p.putBackTxn
-		if t.Ts > ts {
-			return
-		}
-		p.putBackTxn = nil
-		pushTxn(ctx, targetC, t)
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case t, ok := <-p.outputTxn:
-			if !ok {
-				log.Info("Input channel of table closed")
-				return
-			}
-			if t.Ts > ts {
-				p.putBack(t)
-				return
-			}
-			pushTxn(ctx, targetC, t)
-		}
-	}
-}
-
-func pushTxn(ctx context.Context, targetC chan<- model.RawTxn, t model.RawTxn) {
-	select {
-	case <-ctx.Done():
-		log.Info("Dropped txn during canceling", zap.Any("txn", t))
-		return
-	case targetC <- t:
-	}
-}
-
-func (p *txnChannel) putBack(t model.RawTxn) {
-	if p.putBackTxn != nil {
-		log.Fatal("can not put back raw txn continuously")
-	}
-	p.putBackTxn = &t
-}
-
-func newTxnChannel(inputTxn <-chan model.RawTxn, chanSize int, handleResolvedTs func(uint64)) *txnChannel {
-	tc := &txnChannel{
-		inputTxn:  inputTxn,
-		outputTxn: make(chan model.RawTxn, chanSize),
-	}
-	go func() {
-		defer close(tc.outputTxn)
-		for {
-			t, ok := <-tc.inputTxn
-			if !ok {
-				return
-			}
-			handleResolvedTs(t.Ts)
-			tc.outputTxn <- t
-		}
-	}()
-	return tc
-}
 
 type processor struct {
 	captureID    string
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
 	limitter     *puller.BlurResourceLimitter
-	filter       *txnFilter
 
 	pdCli   pd.Client
 	etcdCli kv.CDCEtcdClient
@@ -154,8 +82,9 @@ type processor struct {
 	tsRWriter storage.ProcessorTsRWriter
 	output    chan *model.RowChangedEvent
 
-	status   *model.TaskStatus
-	position *model.TaskPosition
+	status             *model.TaskStatus
+	position           *model.TaskPosition
+	resolvedTsFallback int32
 
 	tablesMu sync.Mutex
 	tables   map[int64]*tableInfo
@@ -248,7 +177,7 @@ func NewProcessor(
 	}
 
 	for _, table := range p.status.TableInfos {
-		p.addTable(ctx, int64(table.ID), table.StartTs)
+		go p.addTable(ctx, int64(table.ID), table.StartTs)
 	}
 
 	return p, nil
@@ -354,14 +283,8 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-resolveTsTick.C:
+			minResolvedTs := p.schemaBuilder.GetResolvedTs()
 			p.tablesMu.Lock()
-			// no table in this processor
-			if len(p.tables) == 0 {
-				p.tablesMu.Unlock()
-				continue
-			}
-
-			minResolvedTs := uint64(math.MaxUint64)
 			for _, table := range p.tables {
 				ts := table.loadResolvedTS()
 				tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID, strconv.FormatInt(table.id, 10)).Set(float64(oracle.ExtractPhysical(ts)))
@@ -372,7 +295,13 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 			p.tablesMu.Unlock()
 			// some puller still haven't received the row changed data
-			if minResolvedTs == 0 {
+			if minResolvedTs < p.position.ResolvedTs {
+				atomic.StoreInt32(&p.resolvedTsFallback, 1)
+				continue
+			}
+			atomic.StoreInt32(&p.resolvedTsFallback, 0)
+
+			if minResolvedTs == p.position.ResolvedTs {
 				continue
 			}
 
@@ -385,7 +314,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case <-checkpointTsTick.C:
 			checkpointTs := p.sink.CheckpointTs()
-			if p.position.CheckPointTs > checkpointTs {
+			if p.position.CheckPointTs >= checkpointTs {
 				continue
 			}
 			p.position.CheckPointTs = checkpointTs
@@ -526,8 +455,9 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 	log.Info("Global status worker started")
 
 	var (
-		changefeedStatus     *model.ChangeFeedStatus
-		lastChangefeedStatus *model.ChangeFeedStatus
+		changefeedStatus *model.ChangeFeedStatus
+		lastCheckPointTs uint64
+		lastResolvedTs   uint64
 	)
 
 	retryCfg := backoff.WithMaxRetries(
@@ -554,26 +484,37 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 
-		if lastChangefeedStatus != nil &&
-			lastChangefeedStatus.ResolvedTs == changefeedStatus.ResolvedTs &&
-			lastChangefeedStatus.CheckpointTs == changefeedStatus.CheckpointTs {
+		if lastResolvedTs == changefeedStatus.ResolvedTs &&
+			lastCheckPointTs == changefeedStatus.CheckpointTs {
 			time.Sleep(waitGlobalResolvedTsDelay)
 			continue
 		}
 
-		lastChangefeedStatus = changefeedStatus
-		err = p.sink.EmitResolvedEvent(ctx, changefeedStatus.ResolvedTs)
-		if err != nil {
-			return errors.Trace(err)
+		if lastCheckPointTs < changefeedStatus.CheckpointTs {
+			err = p.sink.EmitCheckpointEvent(ctx, changefeedStatus.CheckpointTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			err = p.schemaBuilder.DoGc(changefeedStatus.CheckpointTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			lastCheckPointTs = changefeedStatus.CheckpointTs
 		}
-		err = p.sink.EmitCheckpointEvent(ctx, changefeedStatus.CheckpointTs)
-		if err != nil {
-			return errors.Trace(err)
+
+		if atomic.LoadInt32(&p.resolvedTsFallback) != 0 {
+			time.Sleep(waitFallbackResolvedTsDelay)
+			continue
 		}
-		err = p.schemaBuilder.DoGc(changefeedStatus.CheckpointTs)
-		if err != nil {
-			return errors.Trace(err)
+
+		if lastResolvedTs < changefeedStatus.ResolvedTs {
+			err = p.sink.EmitResolvedEvent(ctx, changefeedStatus.ResolvedTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			lastResolvedTs = changefeedStatus.ResolvedTs
 		}
+
 	}
 }
 
@@ -587,12 +528,6 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			// should filter in sink
-			//if p.filter.ShouldIgnoreTxn(&txn) {
-			//	log.Info("DML txn ignored", zap.Uint64("ts", txn.Ts))
-			//	continue
-			//}
-			//p.filter.FilterTxn(&txn)
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -604,10 +539,7 @@ func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEnt
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	builder, err := entry.NewStorageBuilder(jobs, ddlEventCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	builder := entry.NewStorageBuilder(jobs, ddlEventCh)
 	return builder, nil
 }
 
@@ -673,9 +605,9 @@ func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (stor
 }
 
 // getTsRwriter is used in unit test only
-func (p *processor) getTsRwriter() storage.ProcessorTsRWriter {
-	return p.tsRWriter
-}
+//func (p *processor) getTsRwriter() storage.ProcessorTsRWriter {
+//	return p.tsRWriter
+//}
 
 func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) {
 	p.tablesMu.Lock()
@@ -688,8 +620,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 
 	ctx, cancel := context.WithCancel(ctx)
 	table := &tableInfo{
-		id:     tableID,
-		cancel: cancel,
+		id:         tableID,
+		resolvedTS: startTs,
+		cancel:     cancel,
 	}
 
 	// start table puller
@@ -703,9 +636,12 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 			p.errCh <- err
 		}
 	}()
-
+	storage, err := p.schemaBuilder.Build(startTs)
+	if err != nil {
+		p.errCh <- errors.Trace(err)
+	}
 	// start mounter
-	mounter := entry.NewMounter(puller.SortedOutput(ctx), p.schemaBuilder)
+	mounter := entry.NewMounter(puller.SortedOutput(ctx), storage)
 	go func() {
 		err := mounter.Run(ctx)
 		if errors.Cause(err) != context.Canceled {
@@ -723,7 +659,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 			case row := <-mounter.Output():
 				if row.Resolved {
 					table.storeResolvedTS(row.Ts)
-					log.Info("storeResolvedTS", zap.Uint64("ts", row.Ts))
 					continue
 				}
 				select {

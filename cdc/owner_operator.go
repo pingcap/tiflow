@@ -15,7 +15,6 @@ package cdc
 
 import (
 	"context"
-	"database/sql"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -112,13 +111,10 @@ func (h *ddlHandler) PullDDL() (uint64, []*timodel.Job, error) {
 func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, opts map[string]string, ddl *model.DDLEvent) error {
 	// TODO cache the sink
 	// TODO handle other target database, kile kafka, file
-	db, err := sql.Open("mysql", sinkURI)
+	s, err := sink.NewMySQLSink(sinkURI, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer db.Close()
-	s := sink.NewBlackHoleSink()
-
 	err = s.EmitDDLEvent(ctx, ddl)
 	return errors.Trace(err)
 }

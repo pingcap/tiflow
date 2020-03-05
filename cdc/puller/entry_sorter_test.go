@@ -15,6 +15,7 @@ package puller
 
 import (
 	"context"
+	"math/rand"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -78,6 +79,12 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 				{Ts: 7, OpType: model.OpTypePut},
 				{Ts: 8, OpType: model.OpTypeResolved}},
 		},
+		{
+			input:      []*model.RawKVEntry{},
+			resolvedTs: 15,
+			expect: []*model.RawKVEntry{
+				{Ts: 15, OpType: model.OpTypeResolved}},
+		},
 	}
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -91,6 +98,52 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 		for i := 0; i < len(tc.expect); i++ {
 			e := <-es.Output()
 			c.Check(e, check.DeepEquals, tc.expect[i])
+		}
+	}
+}
+
+func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
+	es := NewEntrySorter()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	es.Run(ctx)
+
+	maxTs := uint64(100000)
+	go func() {
+		for resolvedTs := uint64(1); resolvedTs <= maxTs; resolvedTs += 400 {
+			var opType model.OpType
+			if rand.Intn(2) == 0 {
+				opType = model.OpTypePut
+			} else {
+				opType = model.OpTypeDelete
+			}
+			for i := 0; i < 1000; i++ {
+				entry := &model.RawKVEntry{
+					Ts:     uint64(int64(resolvedTs) + rand.Int63n(int64(maxTs-resolvedTs))),
+					OpType: opType,
+				}
+				es.AddEntry(entry)
+			}
+			es.AddEntry(&model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved})
+		}
+		es.AddEntry(&model.RawKVEntry{Ts: maxTs, OpType: model.OpTypeResolved})
+	}()
+	var lastTs uint64
+	var resolvedTs uint64
+	lastOpType := model.OpTypePut
+	for entry := range es.Output() {
+		c.Assert(entry.Ts, check.GreaterEqual, lastTs)
+		c.Assert(entry.Ts, check.Greater, resolvedTs)
+		if lastOpType == model.OpTypePut && entry.OpType == model.OpTypeDelete {
+			c.Assert(entry.Ts, check.Greater, lastTs)
+		}
+		lastTs = entry.Ts
+		lastOpType = entry.OpType
+		if entry.OpType == model.OpTypeResolved {
+			resolvedTs = entry.Ts
+		}
+		if resolvedTs == maxTs {
+			break
 		}
 	}
 }

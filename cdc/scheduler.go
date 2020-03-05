@@ -330,9 +330,20 @@ func realRunProcessor(
 	checkpointTs uint64,
 	cb processorCallback,
 ) error {
-	sink := sink.NewBlackHoleSink()
+	sink, err := sink.NewMySQLSink(info.SinkURI, info.Opts)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	errCh := make(chan error, 1)
+	go func() {
+		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
+			errCh <- err
+		}
+	}()
 	processor, err := NewProcessor(ctx, pdEndpoints, info, sink, changefeedID, captureID, checkpointTs)
 	if err != nil {
+		cancel()
 		return err
 	}
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
@@ -341,7 +352,6 @@ func realRunProcessor(
 		cb.OnRunProcessor(processor)
 	}
 
-	errCh := make(chan error, 1)
 	processor.Run(ctx, errCh)
 
 	go func() {
@@ -349,6 +359,7 @@ func realRunProcessor(
 		if cb != nil {
 			cb.OnStopProcessor(processor, err)
 		}
+		cancel()
 	}()
 
 	return nil

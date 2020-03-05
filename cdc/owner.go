@@ -332,7 +332,7 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 }
 
 func (c *changeFeed) applyJob(job *timodel.Job) error {
-	log.Info("apply job", zap.String("sql", job.Query), zap.Int64("job id", job.ID))
+	log.Info("apply job", zap.String("sql", job.Query), zap.Stringer("job", job))
 
 	schamaName, tableName, _, err := c.schema.HandleDDL(job)
 	if err != nil {
@@ -856,27 +856,35 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		zap.String("query", todoDDLJob.Query),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
-	err := c.applyJob(todoDDLJob)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	c.banlanceOrphanTables(context.Background(), captures)
 	var tableName, schemaName string
 	if todoDDLJob.BinlogInfo.TableInfo != nil {
 		tableName = todoDDLJob.BinlogInfo.TableInfo.Name.O
 	}
-	dbInfo, exist := c.schema.SchemaByID(todoDDLJob.SchemaID)
-	if !exist {
-		return errors.NotFoundf("schema %d not found", todoDDLJob.SchemaID)
+	// TODO consider some newly added DDL types such as `ActionCreateSequence`
+	if todoDDLJob.Type != timodel.ActionCreateSchema {
+		dbInfo, exist := c.schema.SchemaByID(todoDDLJob.SchemaID)
+		if !exist {
+			return errors.NotFoundf("schema %d not found", todoDDLJob.SchemaID)
+		}
+		schemaName = dbInfo.Name.O
+	} else {
+		schemaName = todoDDLJob.BinlogInfo.DBInfo.Name.O
 	}
-	schemaName = dbInfo.Name.O
 	ddlEvent := &model.DDLEvent{
 		Ts:     todoDDLJob.BinlogInfo.FinishedTS,
 		Query:  todoDDLJob.Query,
 		Schema: schemaName,
 		Table:  tableName,
+		Type:   todoDDLJob.Type,
 	}
+
+	err := c.applyJob(todoDDLJob)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.banlanceOrphanTables(ctx, captures)
+
 	if c.filter.ShouldIgnoreDDLEvent(ddlEvent) {
 		log.Info(
 			"DDL event ignored",

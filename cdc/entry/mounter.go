@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -86,23 +87,22 @@ func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
 	return false
 }
 
+// Mounter is used to parse SQL events from KV events
 type Mounter interface {
 	Run(ctx context.Context) error
 	Output() <-chan *model.RowChangedEvent
 }
 
-// Mounter is used to parse SQL events from KV events
 type mounterImpl struct {
 	schemaStorage   *Storage
-	schemaBuilder   *StorageBuilder
 	rawRowChangedCh <-chan *model.RawKVEntry
 	output          chan *model.RowChangedEvent
 }
 
 // NewMounter creates a mounter
-func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaBuilder *StorageBuilder) Mounter {
+func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaStorage *Storage) Mounter {
 	return &mounterImpl{
-		schemaBuilder:   schemaBuilder,
+		schemaStorage:   schemaStorage,
 		rawRowChangedCh: rawRowChangedCh,
 		output:          make(chan *model.RowChangedEvent),
 	}
@@ -122,23 +122,21 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			case rawRow = <-m.rawRowChangedCh:
 			}
 		}
+		if rawRow == nil {
+			return errors.Trace(ctx.Err())
+		}
 
 		if rawRow.OpType == model.OpTypeResolved {
-			log.Info("mounter Resolved", zap.Uint64("ts", rawRow.Ts))
 			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
 			continue
 		}
 
-		if m.schemaStorage == nil {
-			m.schemaStorage = m.schemaBuilder.Build(rawRow.Ts)
-		}
 		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts)
 		switch errors.Cause(err) {
 		case nil:
 		case model.ErrUnresolved:
 			lastRowChangedEvent = rawRow
-			log.Info("ErrUnresolved", zap.Any("ts", rawRow.Ts))
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 			continue
 		default:
 			return errors.Cause(err)
@@ -249,6 +247,7 @@ func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, bas
 
 const ddlJobListKey = "DDLJobList"
 
+// UnmarshalDDL unmarshals the ddl job from RawKVEntry
 func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	if raw.OpType != model.OpTypePut || !bytes.HasPrefix(raw.Key, metaPrefix) {
 		return nil, nil
@@ -269,7 +268,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if !job.IsDone() {
+	if !job.IsDone() && !job.IsSynced() {
 		return nil, nil
 	}
 	// FinishedTS is only set when the job is synced,
@@ -298,12 +297,18 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 		if !exist {
 			return nil, errors.NotFoundf("column info, colID: %d", index)
 		}
+		if !tableInfo.IsColWritable(colInfo) {
+			continue
+		}
 		colName := colInfo.Name.O
-		//TODO formatColVal
+		value, err := formatColVal(colValue.GetValue(), colInfo.Tp)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		values[colName] = model.Column{
 			Type:        colInfo.Tp,
 			WhereHandle: tableInfo.IsColumnUnique(colInfo.ID),
-			Value:       colValue.GetValue(),
+			Value:       value,
 		}
 	}
 
@@ -319,7 +324,7 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 	} else {
 		for _, col := range tableInfo.Columns {
 			_, ok := values[col.Name.O]
-			if !ok {
+			if !ok && tableInfo.IsColWritable(col) {
 				values[col.Name.O] = model.Column{
 					Type:        col.Tp,
 					WhereHandle: tableInfo.IsColumnUnique(col.ID),
@@ -361,10 +366,14 @@ func (m *mounterImpl) mountIndexKVEntry(idx *indexKVEntry) (*model.RowChangedEve
 
 	values := make(map[string]model.Column, len(idx.IndexValue))
 	for i, idxCol := range indexInfo.Columns {
+		value, err := formatColVal(idx.IndexValue[i].GetValue(), tableInfo.Columns[idxCol.Offset].Tp)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		values[idxCol.Name.O] = model.Column{
 			Type:        tableInfo.Columns[idxCol.Offset].Tp,
 			WhereHandle: true,
-			Value:       idx.IndexValue[i].GetValue(),
+			Value:       value,
 		}
 	}
 	return &model.RowChangedEvent{
@@ -374,6 +383,29 @@ func (m *mounterImpl) mountIndexKVEntry(idx *indexKVEntry) (*model.RowChangedEve
 		Table:    tableName.Table,
 		Delete:   values,
 	}, nil
+}
+
+func formatColVal(value interface{}, tp byte) (interface{}, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	switch tp {
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeJSON:
+		value = fmt.Sprintf("%v", value)
+	case mysql.TypeEnum:
+		value = value.(types.Enum).Value
+	case mysql.TypeSet:
+		value = value.(types.Set).Value
+	case mysql.TypeBit:
+		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
+		var err error
+		value, err = value.(types.BinaryLiteral).ToInt(nil)
+		if err != nil {
+			return types.Datum{}, err
+		}
+	}
+	return value, nil
 }
 
 func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {

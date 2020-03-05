@@ -15,6 +15,7 @@ package puller
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -53,6 +54,7 @@ type pullerImpl struct {
 	buffer       *memBuffer
 	chanBuffer   ChanBuffer
 	tsTracker    resolveTsTracker
+	resolvedTs   uint64
 	// needEncode represents whether we need to encode a key when checking it is in span
 	needEncode bool
 }
@@ -118,6 +120,7 @@ func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 				if !forwarded {
 					continue
 				}
+				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 				sorter.AddEntry(&model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved})
 			}
 		}
