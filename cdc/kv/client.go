@@ -609,7 +609,7 @@ func (c *CDCClient) singleEventFeed(
 
 		if event == nil {
 			log.Debug("singleEventFeed closed by error")
-			return atomic.LoadUint64(&checkpointTs), nil
+			return atomic.LoadUint64(&checkpointTs), errors.New("single event feed aborted")
 		}
 
 		log.Debug("singleEventFeed got event", zap.Stringer("event", event))
