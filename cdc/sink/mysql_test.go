@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,6 +13,89 @@
 
 package sink
 
+import (
+	"testing"
+
+	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/model"
+)
+
+type EmitSuite struct{}
+
+func Test(t *testing.T) { check.TestingT(t) }
+
+var _ = check.Suite(&EmitSuite{})
+
+func (s EmitSuite) TestSplitRowsGroup(c *check.C) {
+	testCases := []struct {
+		inputGroup              map[string][]*model.RowChangedEvent
+		resolvedTs              uint64
+		expectedResolvedGroup   map[string][]*model.RowChangedEvent
+		expectedUnresolvedGroup map[string][]*model.RowChangedEvent
+		expectedMinTs           uint64
+	}{{
+		inputGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		resolvedTs:            5,
+		expectedResolvedGroup: map[string][]*model.RowChangedEvent{},
+		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		expectedMinTs: 5,
+	}, {
+		inputGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		resolvedTs: 23,
+		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}},
+			"t2": {{Ts: 23}},
+		},
+		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		expectedMinTs: 11,
+	}, {
+		inputGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		resolvedTs: 30,
+		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 33}, {Ts: 34}},
+		},
+		expectedMinTs: 11,
+	}, {
+		inputGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		resolvedTs: 40,
+		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{},
+		expectedMinTs:           11,
+	}}
+	for _, tc := range testCases {
+		minTs, resolvedGroup := splitRowsGroup(tc.resolvedTs, tc.inputGroup)
+		c.Assert(minTs, check.Equals, tc.expectedMinTs)
+		c.Assert(resolvedGroup, check.DeepEquals, tc.expectedResolvedGroup)
+		c.Assert(tc.inputGroup, check.DeepEquals, tc.expectedUnresolvedGroup)
+	}
+}
+
+/*
 import (
 	"context"
 	"sort"
@@ -307,3 +390,5 @@ func (s *mysqlSinkSuite) TestBuildDBAndParams(c *check.C) {
 		c.Assert(db, check.NotNil)
 	}
 }
+
+*/

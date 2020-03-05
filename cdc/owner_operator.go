@@ -15,45 +15,38 @@ package cdc
 
 import (
 	"context"
-	"database/sql"
 	"sync"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
+	timodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/util"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 //TODO: add tests
 type ddlHandler struct {
 	puller     puller.Puller
-	mounter    *entry.Mounter
 	resolvedTS uint64
-	ddlJobs    []*model.DDL
+	ddlJobs    []*timodel.Job
 
 	mu     sync.Mutex
 	wg     *errgroup.Group
 	cancel func()
 }
 
-func newDDLHandler(pdCli pd.Client, checkpointTS uint64, s *schema.Storage) *ddlHandler {
+func newDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
 	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan()}, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
-	// TODO get time loc from config
-	txnMounter := entry.NewTxnMounter(s)
 	h := &ddlHandler{
-		puller:  puller,
-		cancel:  cancel,
-		mounter: txnMounter,
+		puller: puller,
+		cancel: cancel,
 	}
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
@@ -63,42 +56,50 @@ func newDDLHandler(pdCli pd.Client, checkpointTS uint64, s *schema.Storage) *ddl
 		return puller.Run(ctx)
 	})
 
+	rawDDLCh := puller.SortedOutput(ctx)
+
 	errg.Go(func() error {
-		err := puller.CollectRawTxns(ctx, h.receiveDDL)
-		if err != nil {
-			return errors.Annotate(err, "ddl puller")
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case e := <-rawDDLCh:
+				err := h.receiveDDL(e)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			}
 		}
-		return nil
 	})
 	h.wg = errg
 	return h
 }
 
-func (h *ddlHandler) receiveDDL(ctx context.Context, rawTxn model.RawTxn) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.resolvedTS = rawTxn.Ts
-	if len(rawTxn.Entries) == 0 {
+func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
+	if rawDDL.OpType == model.OpTypeResolved {
+		h.mu.Lock()
+		h.resolvedTS = rawDDL.Ts
+		h.mu.Unlock()
 		return nil
 	}
-	t, err := h.mounter.Mount(rawTxn)
+	job, err := entry.UnmarshalDDL(rawDDL)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if t.IsDML() {
-		log.Warn("should not be DML here", zap.Reflect("txn", t))
+	if job == nil {
 		return nil
 	}
-	if t.IsDDL() {
-		h.ddlJobs = append(h.ddlJobs, t.DDL)
-	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.ddlJobs = append(h.ddlJobs, job)
 	return nil
 }
 
 var _ OwnerDDLHandler = &ddlHandler{}
 
 // PullDDL implements `roles.OwnerDDLHandler` interface.
-func (h *ddlHandler) PullDDL() (uint64, []*model.DDL, error) {
+func (h *ddlHandler) PullDDL() (uint64, []*timodel.Job, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	result := h.ddlJobs
@@ -107,17 +108,14 @@ func (h *ddlHandler) PullDDL() (uint64, []*model.DDL, error) {
 }
 
 // ExecDDL implements roles.OwnerDDLHandler interface.
-func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, opts map[string]string, txn model.Txn) error {
+func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, opts map[string]string, ddl *model.DDLEvent) error {
 	// TODO cache the sink
 	// TODO handle other target database, kile kafka, file
-	db, err := sql.Open("mysql", sinkURI)
+	s, err := sink.NewMySQLSink(sinkURI, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer db.Close()
-	s := sink.NewMySQLSinkDDLOnly(db)
-
-	err = s.EmitDDL(ctx, txn)
+	err = s.EmitDDLEvent(ctx, ddl)
 	return errors.Trace(err)
 }
 

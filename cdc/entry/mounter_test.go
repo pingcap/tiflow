@@ -1,5 +1,6 @@
 package entry
 
+/*
 import (
 	"context"
 	"math"
@@ -10,7 +11,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/types"
 )
@@ -19,16 +19,23 @@ type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
-func setUpPullerAndSchema(ctx context.Context, c *check.C, newRowFormat bool, sqls ...string) (*puller.MockPullerManager, *schema.Storage) {
+func setUpPullerAndSchema(ctx context.Context, c *check.C, newRowFormat bool, sqls ...string) (*puller.MockPullerManager, *Storage) {
 	pm := puller.NewMockPullerManager(c, newRowFormat)
-	go pm.Run(ctx)
 	for _, sql := range sqls {
 		pm.MustExec(sql)
 	}
+	ddlPlr := pm.CreatePuller(0, []util.Span{util.GetDDLSpan()})
+	go func() {
+		err := ddlPlr.Run(ctx)
+		if err != nil && errors.Cause(err) != context.Canceled {
+			c.Fail()
+		}
+	}()
 
 	jobs := pm.GetDDLJobs()
-	schemaStorage, err := schema.NewStorage(jobs)
+	schemaBuilder,err := NewStorageBuilder(jobs, ddlPlr.SortedOutput(ctx))
 	c.Assert(err, check.IsNil)
+	schemaStorage := schemaBuilder.Build(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
 	err = schemaStorage.HandlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
 	c.Assert(err, check.IsNil)
 	return pm, schemaStorage
@@ -280,8 +287,8 @@ func (cs *mountTxnsSuite) testUk(c *check.C, newRowFormat bool) {
 	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
 		"create database testDB",
 		`create table testDB.test1(
-			a int unique key not null, 
-			b int unique key, 
+			a int unique key not null,
+			b int unique key,
 			c int not null,
 			d int not null,
 			e int not null,
@@ -493,3 +500,4 @@ func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C,
 	}
 	assertContain(obtainedDMLs, expectedDMLs)
 }
+*/

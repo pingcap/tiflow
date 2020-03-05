@@ -29,4 +29,5 @@ var (
 	ErrAdminStopProcessor     = errors.New("stop processor by admin command")
 	ErrExecDDLFailed          = errors.New("exec DDL failed")
 	ErrCaptureNotExist        = errors.New("capture not exists")
+	ErrUnresolved             = errors.New("the ts more than resolvedTs")
 )

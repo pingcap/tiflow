@@ -1,5 +1,6 @@
 package puller
 
+/*
 import (
 	"context"
 	"sync"
@@ -135,3 +136,4 @@ func waitForGrowingTs(growingTs *uint64, targetTs uint64) {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+*/

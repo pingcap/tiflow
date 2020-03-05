@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,18 +13,20 @@
 
 package cdc
 
+/*
 import (
 	"context"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/entry"
+
 	"github.com/pingcap/check"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
-	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/etcd"
 )
@@ -125,7 +127,7 @@ func (p *processorSuite) TestProcessor(c *check.C) {
 
 func runCase(c *check.C, cases *processorTestCase) {
 	origFSchema := fCreateSchema
-	fCreateSchema = func(pdEndpoints []string) (*schema.Storage, error) {
+	fCreateSchema = func(pdEndpoints []string) (*entry.Storage, error) {
 		return nil, nil
 	}
 	origFNewPD := fNewPDCli
@@ -137,7 +139,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 		return &mockTsRWriter{}, nil
 	}
 	origFNewMounter := fNewMounter
-	fNewMounter = func(schema *schema.Storage) mounter {
+	fNewMounter = func(schema *entry.Storage) mounter {
 		return mockMounter{}
 	}
 	origFNewSink := fNewMySQLSink
@@ -301,3 +303,4 @@ func (s *txnChannelSuite) TestShouldBeCancellable(c *check.C) {
 		c.Fatal("Not stopped in time after cancelled")
 	}
 }
+*/

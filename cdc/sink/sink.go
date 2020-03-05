@@ -15,24 +15,65 @@ package sink
 
 import (
 	"context"
+	"sync/atomic"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/schema"
+	"go.uber.org/zap"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
+	EmitResolvedEvent(ctx context.Context, ts uint64) error
+	EmitCheckpointEvent(ctx context.Context, ts uint64) error
 	// EmitDMLs saves the specified DMLs to the sink backend
-	EmitDMLs(ctx context.Context, txn ...model.Txn) error
+	EmitRowChangedEvent(ctx context.Context, txn ...*model.RowChangedEvent) error
 	// EmitDDL saves the specified DDL to the sink backend
-	EmitDDL(ctx context.Context, txn model.Txn) error
+	EmitDDLEvent(ctx context.Context, txn *model.DDLEvent) error
+	CheckpointTs() uint64
+	Run(ctx context.Context) error
 	// Close does not guarantee delivery of outstanding messages.
 	Close() error
 }
 
-// TableInfoGetter is used to get table info by table id of TiDB
-type TableInfoGetter interface {
-	TableByID(id int64) (info *schema.TableInfo, ok bool)
-	GetTableIDByName(schema, table string) (int64, bool)
-	GetTableByName(schema, table string) (info *schema.TableInfo, ok bool)
+// NewBlackHoleSink creates a block hole sink
+func NewBlackHoleSink() *blackHoleSink {
+	return &blackHoleSink{}
+}
+
+type blackHoleSink struct {
+	checkpointTs uint64
+}
+
+func (b *blackHoleSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
+	log.Info("BlockHoleSink: Resolved Event", zap.Uint64("resolved ts", ts))
+	return nil
+}
+
+func (b *blackHoleSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
+	log.Info("BlockHoleSink: Checkpoint Event", zap.Uint64("checkpoint ts", ts))
+	return nil
+}
+
+func (b *blackHoleSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	for _, row := range rows {
+		if row.Resolved {
+			atomic.StoreUint64(&b.checkpointTs, row.Ts)
+		}
+		log.Info("BlockHoleSink: Row Changed Event", zap.Any("row", row))
+	}
+	return nil
+}
+
+func (b *blackHoleSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	log.Info("BlockHoleSink: DDL Event", zap.Any("ddl", ddl))
+	return nil
+}
+
+func (b *blackHoleSink) CheckpointTs() uint64 {
+	return atomic.LoadUint64(&b.checkpointTs)
+}
+
+func (b *blackHoleSink) Close() error {
+	return nil
 }

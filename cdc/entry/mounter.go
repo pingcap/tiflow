@@ -1,75 +1,283 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package entry
 
 import (
+	"bytes"
+	"context"
+	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"time"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )
 
-// Mounter is used to parse SQL events from KV events
-type Mounter struct {
-	schemaStorage *schema.Storage
+type baseKVEntry struct {
+	Ts       uint64
+	TableID  int64
+	RecordID int64
+	Delete   bool
 }
 
-// NewTxnMounter creates a mounter
-func NewTxnMounter(schema *schema.Storage) *Mounter {
-	return &Mounter{schemaStorage: schema}
+type rowKVEntry struct {
+	baseKVEntry
+	Row map[int64]types.Datum
 }
 
-// Mount parses a raw transaction and returns a transaction
-func (m *Mounter) Mount(rawTxn model.RawTxn) (model.Txn, error) {
-	t := model.Txn{
-		Ts: rawTxn.Ts,
+type indexKVEntry struct {
+	baseKVEntry
+	IndexID    int64
+	IndexValue []types.Datum
+}
+
+func (idx *indexKVEntry) unflatten(tableInfo *TableInfo) error {
+	if tableInfo.ID != idx.TableID {
+		return errors.New("wrong table info in unflatten")
 	}
-	var replaceDMLs, deleteDMLs []*model.DML
-	for _, raw := range rawTxn.Entries {
-		kvEntry, err := m.unmarshal(raw)
+	index, exist := tableInfo.GetIndexInfo(idx.IndexID)
+	if !exist {
+		return errors.NotFoundf("index info, indexID: %d", idx.IndexID)
+	}
+	if !isDistinct(index, idx.IndexValue) {
+		idx.RecordID = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
+		idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-1]
+	}
+	for i, v := range idx.IndexValue {
+		colOffset := index.Columns[i].Offset
+		fieldType := &tableInfo.Columns[colOffset].FieldType
+		datum, err := unflatten(v, fieldType)
 		if err != nil {
-			return model.Txn{}, errors.Trace(err)
+			return errors.Trace(err)
 		}
-
-		switch e := kvEntry.(type) {
-		case *rowKVEntry:
-			dml, err := m.mountRowKVEntry(e)
-			if err != nil {
-				return model.Txn{}, errors.Trace(err)
-			}
-			if dml != nil {
-				if dml.Tp == model.InsertDMLType {
-					replaceDMLs = append(replaceDMLs, dml)
-				} else {
-					deleteDMLs = append(deleteDMLs, dml)
-				}
-			}
-		case *indexKVEntry:
-			dml, err := m.mountIndexKVEntry(e)
-			if err != nil {
-				return model.Txn{}, errors.Trace(err)
-			}
-			if dml != nil {
-				deleteDMLs = append(deleteDMLs, dml)
-			}
-		case *ddlJobKVEntry:
-			t.DDL, err = m.mountDDL(e)
-			if err != nil {
-				return model.Txn{}, errors.Trace(err)
-			}
-			return t, nil
-		case *unknownKVEntry:
-			log.Debug("Found unknown kv entry", zap.Binary("unknownKey", e.Key))
-		}
+		idx.IndexValue[i] = datum
 	}
-	t.DMLs = append(deleteDMLs, replaceDMLs...)
-	return t, nil
+	return nil
+}
+func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
+	if index.Primary {
+		return true
+	}
+	if index.Unique {
+		for _, value := range indexValue {
+			if value.IsNull() {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
-func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
+// Mounter is used to parse SQL events from KV events
+type Mounter interface {
+	Run(ctx context.Context) error
+	Output() <-chan *model.RowChangedEvent
+}
+
+type mounterImpl struct {
+	schemaStorage   *Storage
+	rawRowChangedCh <-chan *model.RawKVEntry
+	output          chan *model.RowChangedEvent
+}
+
+// NewMounter creates a mounter
+func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaStorage *Storage) Mounter {
+	return &mounterImpl{
+		schemaStorage:   schemaStorage,
+		rawRowChangedCh: rawRowChangedCh,
+		output:          make(chan *model.RowChangedEvent),
+	}
+}
+
+func (m *mounterImpl) Run(ctx context.Context) error {
+	var lastRowChangedEvent *model.RawKVEntry
+	for {
+		var rawRow *model.RawKVEntry
+		if lastRowChangedEvent != nil {
+			rawRow = lastRowChangedEvent
+			lastRowChangedEvent = nil
+		} else {
+			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			case rawRow = <-m.rawRowChangedCh:
+			}
+		}
+		if rawRow == nil {
+			return errors.Trace(ctx.Err())
+		}
+
+		if rawRow.OpType == model.OpTypeResolved {
+			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
+			continue
+		}
+
+		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts)
+		switch errors.Cause(err) {
+		case nil:
+		case model.ErrUnresolved:
+			lastRowChangedEvent = rawRow
+			time.Sleep(50 * time.Millisecond)
+			continue
+		default:
+			return errors.Cause(err)
+		}
+
+		event, err := m.unmarshalAndMountRowChanged(rawRow)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if event == nil {
+			continue
+		}
+		m.output <- event
+	}
+}
+
+func (m *mounterImpl) Output() <-chan *model.RowChangedEvent {
+	return m.output
+}
+
+func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
+	if !bytes.HasPrefix(raw.Key, tablePrefix) {
+		return nil, nil
+	}
+	key, tableID, err := decodeTableID(raw.Key)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	baseInfo := baseKVEntry{
+		Ts:      raw.Ts,
+		TableID: tableID,
+		Delete:  raw.OpType == model.OpTypeDelete,
+	}
+	switch {
+	case bytes.HasPrefix(key, recordPrefix):
+		rowKV, err := m.unmarshalRowKVEntry(key, raw.Value, baseInfo)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if rowKV == nil {
+			return nil, nil
+		}
+		return m.mountRowKVEntry(rowKV)
+	case bytes.HasPrefix(key, indexPrefix):
+		indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, baseInfo)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if indexKV == nil {
+			return nil, nil
+		}
+		return m.mountIndexKVEntry(indexKV)
+	}
+	return nil, nil
+}
+
+func (m *mounterImpl) unmarshalRowKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*rowKVEntry, error) {
+	tableID := base.TableID
+	tableInfo, exist := m.schemaStorage.TableByID(tableID)
+	if !exist {
+		if m.schemaStorage.IsTruncateTableID(tableID) {
+			log.Debug("skip the DML of truncated table", zap.Uint64("ts", base.Ts), zap.Int64("tableID", tableID))
+			return nil, nil
+		}
+		return nil, errors.NotFoundf("table in schema storage, id: %d", tableID)
+	}
+
+	key, recordID, err := decodeRecordID(restKey)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if len(key) != 0 {
+		return nil, errors.New("invalid record key")
+	}
+	row, err := decodeRow(rawValue, recordID, tableInfo)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	base.RecordID = recordID
+	return &rowKVEntry{
+		baseKVEntry: base,
+		Row:         row,
+	}, nil
+}
+
+func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*indexKVEntry, error) {
+	indexID, indexValue, err := decodeIndexKey(restKey)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	var recordID int64
+
+	if len(rawValue) == 8 {
+		// primary key or unique index
+		buf := bytes.NewBuffer(rawValue)
+		err = binary.Read(buf, binary.BigEndian, &recordID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	base.RecordID = recordID
+	return &indexKVEntry{
+		baseKVEntry: base,
+		IndexID:     indexID,
+		IndexValue:  indexValue,
+	}, nil
+}
+
+const ddlJobListKey = "DDLJobList"
+
+// UnmarshalDDL unmarshals the ddl job from RawKVEntry
+func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
+	if raw.OpType != model.OpTypePut || !bytes.HasPrefix(raw.Key, metaPrefix) {
+		return nil, nil
+	}
+	meta, err := decodeMetaKey(raw.Key)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if meta.getType() != ListData {
+		return nil, nil
+	}
+	k := meta.(metaListData)
+	if k.key != ddlJobListKey {
+		return nil, nil
+	}
+	job := &timodel.Job{}
+	err = json.Unmarshal(raw.Value, job)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if !job.IsDone() && !job.IsSynced() {
+		return nil, nil
+	}
+	// FinishedTS is only set when the job is synced,
+	// but we can use the entry's ts here
+	job.BinlogInfo.FinishedTS = raw.Ts
+	return job, nil
+}
+
+func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, error) {
 	tableInfo, tableName, exist := m.fetchTableInfo(row.TableID)
 	if !exist {
 		return nil, errors.NotFoundf("table in schema storage, id: %d", row.TableID)
@@ -83,38 +291,53 @@ func (m *Mounter) mountRowKVEntry(row *rowKVEntry) (*model.DML, error) {
 	if !row.Delete {
 		datumsNum = len(tableInfo.Columns)
 	}
-	values := make(map[string]types.Datum, datumsNum)
+	values := make(map[string]model.Column, datumsNum)
 	for index, colValue := range row.Row {
 		colInfo, exist := tableInfo.GetColumnInfo(index)
 		if !exist {
 			return nil, errors.NotFoundf("column info, colID: %d", index)
 		}
+		if !tableInfo.IsColWritable(colInfo) {
+			continue
+		}
 		colName := colInfo.Name.O
-		values[colName] = colValue
-	}
-
-	var tp model.DMLType
-	if row.Delete {
-		tp = model.DeleteDMLType
-	} else {
-		tp = model.InsertDMLType
-		for _, col := range tableInfo.Columns {
-			_, ok := values[col.Name.O]
-			if !ok {
-				values[col.Name.O] = getDefaultOrZeroValue(col)
-			}
+		value, err := formatColVal(colValue.GetValue(), colInfo.Tp)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		values[colName] = model.Column{
+			Type:        colInfo.Tp,
+			WhereHandle: tableInfo.IsColumnUnique(colInfo.ID),
+			Value:       value,
 		}
 	}
 
-	return &model.DML{
-		Database: tableName.Schema,
+	event := &model.RowChangedEvent{
+		Ts:       row.Ts,
+		Resolved: false,
+		Schema:   tableName.Schema,
 		Table:    tableName.Table,
-		Tp:       tp,
-		Values:   values,
-	}, nil
+	}
+
+	if row.Delete {
+		event.Delete = values
+	} else {
+		for _, col := range tableInfo.Columns {
+			_, ok := values[col.Name.O]
+			if !ok && tableInfo.IsColWritable(col) {
+				values[col.Name.O] = model.Column{
+					Type:        col.Tp,
+					WhereHandle: tableInfo.IsColumnUnique(col.ID),
+					Value:       getDefaultOrZeroValue(col),
+				}
+			}
+		}
+		event.Update = values
+	}
+	return event, nil
 }
 
-func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
+func (m *mounterImpl) mountIndexKVEntry(idx *indexKVEntry) (*model.RowChangedEvent, error) {
 	// skip set index KV
 	if !idx.Delete {
 		return nil, nil
@@ -141,40 +364,76 @@ func (m *Mounter) mountIndexKVEntry(idx *indexKVEntry) (*model.DML, error) {
 		return nil, errors.Trace(err)
 	}
 
-	values := make(map[string]types.Datum, len(idx.IndexValue))
+	values := make(map[string]model.Column, len(idx.IndexValue))
 	for i, idxCol := range indexInfo.Columns {
-		values[idxCol.Name.O] = idx.IndexValue[i]
+		value, err := formatColVal(idx.IndexValue[i].GetValue(), tableInfo.Columns[idxCol.Offset].Tp)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		values[idxCol.Name.O] = model.Column{
+			Type:        tableInfo.Columns[idxCol.Offset].Tp,
+			WhereHandle: true,
+			Value:       value,
+		}
 	}
-	return &model.DML{
-		Database: tableName.Schema,
+	return &model.RowChangedEvent{
+		Ts:       idx.Ts,
+		Resolved: false,
+		Schema:   tableName.Schema,
 		Table:    tableName.Table,
-		Tp:       model.DeleteDMLType,
-		Values:   values,
+		Delete:   values,
 	}, nil
 }
 
-func getDefaultOrZeroValue(col *timodel.ColumnInfo) types.Datum {
+func formatColVal(value interface{}, tp byte) (interface{}, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	switch tp {
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeJSON:
+		value = fmt.Sprintf("%v", value)
+	case mysql.TypeEnum:
+		value = value.(types.Enum).Value
+	case mysql.TypeSet:
+		value = value.(types.Set).Value
+	case mysql.TypeBit:
+		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
+		var err error
+		value, err = value.(types.BinaryLiteral).ToInt(nil)
+		if err != nil {
+			return types.Datum{}, err
+		}
+	}
+	return value, nil
+}
+
+func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 	// see https://github.com/pingcap/tidb/issues/9304
 	// must use null if TiDB not write the column value when default value is null
 	// and the value is null
 	if !mysql.HasNotNullFlag(col.Flag) {
-		return types.NewDatum(nil)
+		d := types.NewDatum(nil)
+		return d.GetValue()
 	}
 
 	if col.GetDefaultValue() != nil {
-		return types.NewDatum(col.GetDefaultValue())
+		d := types.NewDatum(col.GetDefaultValue())
+		return d.GetValue()
 	}
 
 	if col.Tp == mysql.TypeEnum {
 		// For enum type, if no default value and not null is set,
 		// the default value is the first element of the enum list
-		return types.NewDatum(col.FieldType.Elems[0])
+		d := types.NewDatum(col.FieldType.Elems[0])
+		return d.GetValue()
 	}
 
-	return table.GetZeroValue(col)
+	d := table.GetZeroValue(col)
+	return d.GetValue()
 }
 
-func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *schema.TableInfo, tableName schema.TableName, exist bool) {
+func (m *mounterImpl) fetchTableInfo(tableID int64) (tableInfo *TableInfo, tableName TableName, exist bool) {
 	tableInfo, exist = m.schemaStorage.TableByID(tableID)
 	if !exist {
 		return
@@ -183,7 +442,7 @@ func (m *Mounter) fetchTableInfo(tableID int64) (tableInfo *schema.TableInfo, ta
 	return
 }
 
-func fetchHandleValue(tableInfo *schema.TableInfo, recordID int64) (pkCoID int64, pkValue *types.Datum, err error) {
+func fetchHandleValue(tableInfo *TableInfo, recordID int64) (pkCoID int64, pkValue *types.Datum, err error) {
 	handleColOffset := -1
 	for i, col := range tableInfo.Columns {
 		if mysql.HasPriKeyFlag(col.Flag) {
@@ -203,28 +462,4 @@ func fetchHandleValue(tableInfo *schema.TableInfo, recordID int64) (pkCoID int64
 		pkValue.SetInt64(recordID)
 	}
 	return
-}
-
-func (m *Mounter) mountDDL(jobEntry *ddlJobKVEntry) (*model.DDL, error) {
-	databaseName := jobEntry.Job.SchemaName
-	// schema name in raw ddl job entry is always lowercase, try to find the
-	// correct value from schema storage
-	if m.schemaStorage != nil {
-		schemaName, ok := m.schemaStorage.SchemaByID(jobEntry.Job.SchemaID)
-		if ok {
-			databaseName = schemaName.Name.String()
-		}
-	}
-	var tableName string
-	table := jobEntry.Job.BinlogInfo.TableInfo
-	if table == nil {
-		tableName = ""
-	} else {
-		tableName = table.Name.O
-	}
-	return &model.DDL{
-		Database: databaseName,
-		Table:    tableName,
-		Job:      jobEntry.Job,
-	}, nil
 }

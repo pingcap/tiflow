@@ -31,8 +31,8 @@ import (
 
 // ProcessorTsRWriter reads or writes the resolvedTs and checkpointTs from the storage
 type ProcessorTsRWriter interface {
-	// ReadGlobalResolvedTs read the bloable resolved ts.
-	ReadGlobalResolvedTs(ctx context.Context) (uint64, error)
+	// GetChangeFeedStatus read the changefeed status.
+	GetChangeFeedStatus(ctx context.Context) (*model.ChangeFeedStatus, error)
 
 	// WritePosition update taskPosition into storage, return model.ErrWriteTsConflict if in last learn taskPosition is out dated and must call UpdateInfo.
 	WritePosition(ctx context.Context, taskPosition *model.TaskPosition) error
@@ -136,13 +136,9 @@ func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 	return nil
 }
 
-// ReadGlobalResolvedTs reads the global resolvedTs from etcd
-func (rw *ProcessorTsEtcdRWriter) ReadGlobalResolvedTs(ctx context.Context) (uint64, error) {
-	info, err := rw.etcdClient.GetChangeFeedStatus(ctx, rw.changefeedID)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-	return info.ResolvedTs, nil
+// GetChangeFeedStatus reads the changefeed status from etcd
+func (rw *ProcessorTsEtcdRWriter) GetChangeFeedStatus(ctx context.Context) (*model.ChangeFeedStatus, error) {
+	return rw.etcdClient.GetChangeFeedStatus(ctx, rw.changefeedID)
 }
 
 // GetTaskStatus returns the in memory cache of *model.TaskStatus stored in ProcessorTsEtcdRWriter

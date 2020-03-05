@@ -15,6 +15,7 @@ package puller
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -36,8 +37,8 @@ type Puller interface {
 	// Run the puller, continually fetch event from TiKV and add event into buffer
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
-	CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error
 	Output() ChanBuffer
+	SortedOutput(ctx context.Context) <-chan *model.RawKVEntry
 }
 
 // resolveTsTracker checks resolved event of spans and moves the global resolved ts ahead
@@ -53,6 +54,7 @@ type pullerImpl struct {
 	buffer       *memBuffer
 	chanBuffer   ChanBuffer
 	tsTracker    resolveTsTracker
+	resolvedTs   uint64
 	// needEncode represents whether we need to encode a key when checking it is in span
 	needEncode bool
 }
@@ -88,6 +90,42 @@ func NewPuller(
 
 func (p *pullerImpl) Output() ChanBuffer {
 	return p.chanBuffer
+}
+
+func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry {
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	sorter := NewEntrySorter()
+	go func() {
+		sorter.Run(ctx)
+		for {
+			be, err := p.chanBuffer.Get(ctx)
+			if err != nil {
+				if errors.Cause(err) != context.Canceled {
+					log.Error("error in puller", zap.Error(err))
+				}
+				break
+			}
+			if be.Val != nil {
+				txnCollectCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
+				sorter.AddEntry(be.Val)
+			} else if be.Resolved != nil {
+				txnCollectCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
+				resolvedTs := be.Resolved.ResolvedTs
+				// 1. Forward is called in a single thread
+				// 2. The only way the global minimum resolved Ts can be forwarded is that
+				// 	  the resolveTs we pass in replaces the original one
+				// Thus, we can just use resolvedTs here as the new global minimum resolved Ts.
+				forwarded := p.tsTracker.Forward(be.Resolved.Span, resolvedTs)
+				if !forwarded {
+					continue
+				}
+				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
+				sorter.AddEntry(&model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved})
+			}
+		}
+	}()
+	return sorter.Output()
 }
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
@@ -180,10 +218,7 @@ func (p *pullerImpl) GetResolvedTs() uint64 {
 	return p.tsTracker.Frontier()
 }
 
-func (p *pullerImpl) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
-	return collectRawTxns(ctx, p.chanBuffer.Get, outputFn, p.tsTracker)
-}
-
+// TODO remove this function
 // collectRawTxns collects KV events from the inputFn,
 // groups them by transactions and sends them to the outputFn.
 func collectRawTxns(
