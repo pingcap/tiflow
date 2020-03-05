@@ -84,6 +84,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 	return retry.Run(func() error {
 		err := s.execDDL(ctx, ddl)
 		if isIgnorableDDLError(err) {
+			log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
 			return nil
 		}
 		return err
@@ -128,13 +129,6 @@ func (s *mysqlSink) CheckpointTs() uint64 {
 }
 
 func (s *mysqlSink) Run(ctx context.Context) error {
-	execRows := func(rowsMap map[string][]*model.RowChangedEvent) error {
-		groups := make([][]*model.RowChangedEvent, 0, len(rowsMap))
-		for _, rows := range rowsMap {
-			groups = append(groups, rows)
-		}
-		return s.concurrentExec(ctx, groups)
-	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -166,7 +160,7 @@ func (s *mysqlSink) Run(ctx context.Context) error {
 			continue
 		}
 
-		if err := execRows(resolvedRowsMap); err != nil {
+		if err := s.concurrentExec(ctx, resolvedRowsMap); err != nil {
 			return errors.Trace(err)
 		}
 		atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
@@ -238,7 +232,7 @@ func newMySQLSink(db *sql.DB) Sink {
 	}
 }
 
-func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups [][]*model.RowChangedEvent) error {
+func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChangedEvent) error {
 	jobs := make(chan []*model.RowChangedEvent, len(rowGroups))
 	for _, dmls := range rowGroups {
 		jobs <- dmls

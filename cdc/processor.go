@@ -49,9 +49,10 @@ import (
 )
 
 const (
-	updateInfoInterval        = time.Millisecond * 500
-	resolveTsInterval         = time.Millisecond * 500
-	waitGlobalResolvedTsDelay = time.Millisecond * 500
+	updateInfoInterval          = time.Millisecond * 500
+	resolveTsInterval           = time.Millisecond * 500
+	waitGlobalResolvedTsDelay   = time.Millisecond * 500
+	waitFallbackResolvedTsDelay = time.Millisecond * 500
 
 	defaultOutputChanSize = 128
 
@@ -502,7 +503,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		}
 
 		if atomic.LoadInt32(&p.resolvedTsFallback) != 0 {
-			time.Sleep(waitGlobalResolvedTsDelay)
+			time.Sleep(waitFallbackResolvedTsDelay)
 			continue
 		}
 
