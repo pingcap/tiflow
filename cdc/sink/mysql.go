@@ -25,10 +25,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
-	"github.com/pingcap/ticdc/pkg/retry"
-
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -36,14 +32,20 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const dryRunOpt = "_dry-run"
 const defaultWorkerCount = 16
+
+var (
+	printStatusInterval = 30 * time.Second
+)
 
 type mysqlSink struct {
 	db               *sql.DB
@@ -54,6 +56,10 @@ type mysqlSink struct {
 
 	unresolvedRowsMu sync.Mutex
 	unresolvedRows   map[string][]*model.RowChangedEvent
+
+	lastTime  time.Time
+	lastCount int64
+	count     int64
 }
 
 func (s *mysqlSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
@@ -131,6 +137,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		return errors.Trace(err)
 	}
 
+	atomic.AddInt64(&s.count, 1)
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
 	return nil
 }
@@ -303,6 +310,7 @@ func newMySQLSink(db *sql.DB, params params) Sink {
 		db:             db,
 		unresolvedRows: make(map[string][]*model.RowChangedEvent),
 		params:         params,
+		lastTime:       time.Now(),
 	}
 
 	sink.db.SetMaxIdleConns(params.workerCount)
@@ -343,6 +351,34 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*
 
 func (s *mysqlSink) Close() error {
 	return nil
+}
+
+func (s *mysqlSink) PrintStatus(ctx context.Context) error {
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	timer := time.NewTicker(printStatusInterval)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
+			now := time.Now()
+			seconds := now.Unix() - s.lastTime.Unix()
+			total := atomic.LoadInt64(&s.count)
+			last := atomic.LoadInt64(&s.lastCount)
+			count := total - last
+			qps := int64(0)
+			if seconds > 0 {
+				qps = count / seconds
+			}
+			atomic.StoreInt64(&s.lastCount, total)
+			s.lastTime = now
+			log.Info("mysql sink replication status",
+				zap.String("changefeed", changefeedID),
+				zap.Int64("count", count),
+				zap.Int64("qps", qps))
+		}
+	}
 }
 
 func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent) error {
@@ -386,7 +422,8 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	execTxnHistogram.WithLabelValues(captureID, changefeedID).Observe(time.Since(startTime).Seconds())
 	execBatchHistogram.WithLabelValues(captureID, changefeedID).Observe(float64(len(rows)))
-	log.Info("Exec Rows succeeded", zap.Int("num of Rows", len(rows)))
+	atomic.AddInt64(&s.count, int64(len(rows)))
+	log.Debug("Exec Rows succeeded", zap.Int("num of Rows", len(rows)))
 	return nil
 }
 

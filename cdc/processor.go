@@ -221,6 +221,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 		return p.schemaBuilder.Run(cctx)
 	})
 
+	wg.Go(func() error {
+		return p.sink.PrintStatus(cctx)
+	})
+
 	if err := p.register(ctx); err != nil {
 		errCh <- err
 	}

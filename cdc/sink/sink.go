@@ -34,6 +34,8 @@ type Sink interface {
 	Run(ctx context.Context) error
 	// Close does not guarantee delivery of outstanding messages.
 	Close() error
+	// PrintStatus prints necessary status periodically
+	PrintStatus(ctx context.Context) error
 }
 
 // NewBlackHoleSink creates a block hole sink
@@ -75,5 +77,10 @@ func (b *blackHoleSink) CheckpointTs() uint64 {
 }
 
 func (b *blackHoleSink) Close() error {
+	return nil
+}
+
+func (b *blackHoleSink) PrintStatus(ctx context.Context) error {
+	<-ctx.Done()
 	return nil
 }
