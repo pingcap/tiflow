@@ -225,6 +225,9 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 		rl := rate.NewLimiter(0.1, 5)
 		revision := getResp.Header.Revision
 		// wait for key to appear
+		log.Info("waiting dispatching tasks",
+			zap.String("key", key),
+			zap.Int64("rev", revision))
 		watchCh := w.etcdCli.Client.Watch(ctx, key, clientv3.WithRev(revision))
 	waitKeyLoop:
 		for {
