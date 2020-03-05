@@ -177,6 +177,7 @@ func (c *CDCClient) getStream(ctx context.Context, addr string) (stream cdcpb.Ch
 	}
 	client := cdcpb.NewChangeDataClient(conn)
 	stream, err = client.EventFeed(ctx)
+	log.Debug("created stream to store", zap.String("addr", addr))
 	return
 }
 
@@ -190,9 +191,11 @@ func (c *CDCClient) EventFeed(
 	eventFeedGauge.Inc()
 	defer eventFeedGauge.Dec()
 
+	log.Debug("event feed started", zap.Reflect("span", span), zap.Uint64("ts", ts))
+
 	g, ctx := errgroup.WithContext(ctx)
 
-	regionCh := make(chan singleRegionInfo)
+	regionCh := make(chan singleRegionInfo, 16)
 	errCh := make(chan regionErrorInfo, 16)
 
 	g.Go(func() error {
@@ -564,9 +567,13 @@ func (c *CDCClient) singleEventFeed(
 
 	for {
 		event, ok := <-receiverCh
+
 		if !ok {
+			log.Debug("singleEventFeed receiver closed")
 			return atomic.LoadUint64(&checkpointTs), nil
 		}
+
+		log.Debug("singleEventFeed got event", zap.Stringer("event", event))
 
 		eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
 		switch x := event.Event.(type) {
