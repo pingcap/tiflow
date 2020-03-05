@@ -335,56 +335,6 @@ func needReloadRegion(failStoreIDs map[uint64]struct{}, rpcCtx *tikv.RPCContext)
 	return
 }
 
-// partialRegionFeed establishes a EventFeed to the region specified by regionInfo.
-// It manages lifecycle events of the region in order to maintain the EventFeed
-// connection, this may involve retry this region EventFeed or subdividing the region
-// further in the event of a split.
-func (c *CDCClient) partialRegionFeed(
-	ctx context.Context,
-	regionInfo singleRegionInfo,
-	receiver <-chan *cdcpb.Event,
-	errCh chan<- regionErrorInfo,
-	eventCh chan<- *model.RegionFeedEvent,
-	isStopped *int32,
-) error {
-	defer atomic.StoreInt32(isStopped, 1)
-
-	ts := regionInfo.ts
-	rl := rate.NewLimiter(0.1, 5)
-
-	if !rl.Allow() {
-		return errors.New("partialRegionFeed exceeds rate limit")
-	}
-
-	maxTs, err := c.singleEventFeed(ctx, regionInfo.span, regionInfo.ts, receiver, eventCh)
-	log.Debug("singleEventFeed quit")
-
-	if err == nil || errors.Cause(err) == context.Canceled {
-		return nil
-	}
-
-	if maxTs > ts {
-		ts = maxTs
-	}
-
-	log.Info("EventFeed disconnected",
-		zap.Reflect("span", regionInfo.span),
-		zap.Uint64("checkpoint", ts),
-		zap.Error(err))
-
-	regionInfo.ts = ts
-
-	errCh <- regionErrorInfo{
-		singleRegionInfo: regionInfo,
-		err:              err,
-	}
-
-	//	// avoid too many kv clients retry at the same time, we should have a better solution
-	//	time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
-
-	return nil
-}
-
 // divideAndSendEventFeedToRegions split up the input span
 // into non-overlapping spans aligned to region boundaries.
 func (c *CDCClient) divideAndSendEventFeedToRegions(
@@ -506,9 +456,7 @@ func (c *CDCClient) receiveFromStream(
 	regionInfoMap map[uint64]singleRegionInfo,
 	regionInfoMapMu *sync.RWMutex,
 ) error {
-	// Start the receive loop
-	regionHandlers := make(map[uint64]chan *cdcpb.Event)
-	regionStopped := make(map[uint64]*int32)
+	regionStates := make(map[uint64]*regionFeedState)
 
 	for {
 		cevent, err := stream.Recv()
@@ -516,26 +464,21 @@ func (c *CDCClient) receiveFromStream(
 		log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
 
 		// TODO: Should we have better way to handle the errors?
-		if err == io.EOF {
-			for _, ch := range regionHandlers {
-				close(ch)
-			}
-			return nil
-		}
 		if err != nil {
+			for _, s := range regionStates {
+				// The region must be stopped after sending an error
+				_ = s.onReceiveEvent(nil, err)
+			}
+
+			if err == io.EOF {
+				return nil
+			}
+
 			log.Error(
 				"failed to receive from stream",
 				zap.String("addr", addr),
 				zap.Uint64("storeID", storeID),
 				zap.Error(err))
-
-			for _, ch := range regionHandlers {
-				select {
-				case ch <- nil:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
-			}
 
 			// Do no return error but gracefully stop the goroutine here. Then the whole job will not be canceled and
 			// connection will be retried.
@@ -543,13 +486,8 @@ func (c *CDCClient) receiveFromStream(
 		}
 
 		for _, event := range cevent.Events {
-			isStopped := false
-			if pIsStopped, ok := regionStopped[event.RegionId]; ok {
-				isStopped = atomic.LoadInt32(pIsStopped) > 0
-			}
-
-			ch, ok := regionHandlers[event.RegionId]
-			if !ok || isStopped {
+			state, ok := regionStates[event.RegionId]
+			if !ok {
 				// Fetch the region info
 				regionInfoMapMu.Lock()
 				sri, ok := regionInfoMap[event.RegionId]
@@ -561,59 +499,78 @@ func (c *CDCClient) receiveFromStream(
 				delete(regionInfoMap, event.RegionId)
 				regionInfoMapMu.Unlock()
 
-				ch = make(chan *cdcpb.Event, 16)
-				regionHandlers[event.RegionId] = ch
-				log.Debug("spawning partialRegionFeed goroutine for regoin", zap.Uint64("regionID", event.RegionId))
+				state, err = newRegionFeedState(ctx, sri, errCh, eventCh)
+				if err != nil {
+					return errors.Trace(err)
+				}
 
-				isStopped := new(int32)
-				regionStopped[event.RegionId] = isStopped
-				g.Go(func() error {
-					return c.partialRegionFeed(ctx, sri, ch, errCh, eventCh, isStopped)
-				})
+				regionStates[event.RegionId] = state
 			}
 
-			select {
-			case ch <- event:
-			case <-ctx.Done():
-				return ctx.Err()
+			stopped := state.onReceiveEvent(event, nil)
+			if stopped {
+				delete(regionStates, event.RegionId)
 			}
 		}
 	}
 }
 
-// singleEventFeed makes a EventFeed RPC call.
-// Results will be send to eventCh
-// EventFeed RPC will not return checkpoint event directly
-// Resolved event is generate while there's not non-match pre-write
-// Return the maximum checkpoint
-func (c *CDCClient) singleEventFeed(
+type regionFeedState struct {
+	ctx          context.Context
+	captureID    string
+	changefeedID string
+	started      bool
+	sri          singleRegionInfo
+	errCh        chan<- regionErrorInfo
+	eventCh      chan<- *model.RegionFeedEvent
+
+	initialized  uint32
+	checkpointTs uint64
+	matcher      *matcher
+	sorter       *sorter
+}
+
+func newRegionFeedState(
 	ctx context.Context,
-	span util.Span,
-	checkpointTs uint64,
-	receiverCh <-chan *cdcpb.Event,
+	sri singleRegionInfo,
+	errCh chan<- regionErrorInfo,
 	eventCh chan<- *model.RegionFeedEvent,
-) (uint64, error) {
+) (*regionFeedState, error) {
+	rl := rate.NewLimiter(0.1, 5)
+
+	if !rl.Allow() {
+		return nil, errors.New("onReceiveEvent exceeds rate limit")
+	}
+
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	log.Debug("singleRegionFeed started")
+	log.Debug("region feed state created", zap.Uint64("regionID", sri.verID.GetID()))
 
-	var initialized uint32
+	s := &regionFeedState{
+		ctx:          ctx,
+		captureID:    captureID,
+		changefeedID: changefeedID,
+		started:      false,
+		sri:          sri,
+		errCh:        errCh,
+		eventCh:      eventCh,
 
-	matcher := newMatcher()
+		matcher: newMatcher(),
+	}
 
 	maxItemFn := func(item sortItem) {
-		if atomic.LoadUint32(&initialized) == 0 {
+		if atomic.LoadUint32(&s.initialized) == 0 {
 			return
 		}
 
 		// emit a checkpointTs
 		revent := &model.RegionFeedEvent{
 			Resolved: &model.ResolvedSpan{
-				Span:       span,
+				Span:       sri.span,
 				ResolvedTs: item.commit,
 			},
 		}
-		updateCheckpointTS(&checkpointTs, item.commit)
+		updateCheckpointTS(&s.checkpointTs, item.commit)
 		select {
 		case eventCh <- revent:
 			sendEventCounter.WithLabelValues("sorter resolved", captureID, changefeedID).Inc()
@@ -623,143 +580,182 @@ func (c *CDCClient) singleEventFeed(
 
 	// TODO: drop this if we totally depends on the ResolvedTs event from
 	// tikv to emit the ResolvedSpan.
-	sorter := newSorter(maxItemFn)
-	defer sorter.close()
+	s.sorter = newSorter(maxItemFn)
 
-	for {
+	return s, nil
+}
 
-		var event *cdcpb.Event
-		var ok bool
-		select {
-		case <-ctx.Done():
-			return atomic.LoadUint64(&checkpointTs), ctx.Err()
-		case event, ok = <-receiverCh:
-		}
-
-		if !ok {
-			log.Debug("singleEventFeed receiver closed")
-			return atomic.LoadUint64(&checkpointTs), nil
-		}
-
-		if event == nil {
-			log.Debug("singleEventFeed closed by error")
-			return atomic.LoadUint64(&checkpointTs), errors.New("single event feed aborted")
-		}
-
-		log.Debug("singleEventFeed got event", zap.Stringer("event", event))
-
-		eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
-		switch x := event.Event.(type) {
-		case *cdcpb.Event_Entries_:
-			for _, entry := range x.Entries.GetEntries() {
-				pullEventCounter.WithLabelValues(entry.Type.String(), captureID, changefeedID).Inc()
-				switch entry.Type {
-				case cdcpb.Event_INITIALIZED:
-					atomic.StoreUint32(&initialized, 1)
-				case cdcpb.Event_COMMITTED:
-					var opType model.OpType
-					switch entry.GetOpType() {
-					case cdcpb.Event_Row_DELETE:
-						opType = model.OpTypeDelete
-					case cdcpb.Event_Row_PUT:
-						opType = model.OpTypePut
-					default:
-						return atomic.LoadUint64(&checkpointTs), errors.Errorf("unknown tp: %v", entry.GetOpType())
-					}
-
-					revent := &model.RegionFeedEvent{
-						Val: &model.RawKVEntry{
-							OpType: opType,
-							Key:    entry.Key,
-							Value:  entry.GetValue(),
-							Ts:     entry.CommitTs,
-						},
-					}
-					select {
-					case eventCh <- revent:
-						sendEventCounter.WithLabelValues("committed", captureID, changefeedID).Inc()
-					case <-ctx.Done():
-						return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
-					}
-				case cdcpb.Event_PREWRITE:
-					matcher.putPrewriteRow(entry)
-					sorter.pushTsItem(sortItem{
-						start: entry.GetStartTs(),
-						tp:    cdcpb.Event_PREWRITE,
-					})
-				case cdcpb.Event_COMMIT:
-					// emit a value
-					value, err := matcher.matchRow(entry)
-					if err != nil {
-						// FIXME: need a better event match mechanism
-						log.Warn("match entry error", zap.Error(err), zap.Stringer("entry", entry))
-					}
-
-					var opType model.OpType
-					switch entry.GetOpType() {
-					case cdcpb.Event_Row_DELETE:
-						opType = model.OpTypeDelete
-					case cdcpb.Event_Row_PUT:
-						opType = model.OpTypePut
-					default:
-						return atomic.LoadUint64(&checkpointTs), errors.Errorf("unknow tp: %v", entry.GetOpType())
-					}
-
-					revent := &model.RegionFeedEvent{
-						Val: &model.RawKVEntry{
-							OpType: opType,
-							Key:    entry.Key,
-							Value:  value,
-							Ts:     entry.CommitTs,
-						},
-					}
-
-					select {
-					case eventCh <- revent:
-						sendEventCounter.WithLabelValues("commit", captureID, changefeedID).Inc()
-					case <-ctx.Done():
-						return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
-					}
-					sorter.pushTsItem(sortItem{
-						start:  entry.GetStartTs(),
-						commit: entry.GetCommitTs(),
-						tp:     cdcpb.Event_COMMIT,
-					})
-				case cdcpb.Event_ROLLBACK:
-					matcher.rollbackRow(entry)
-					sorter.pushTsItem(sortItem{
-						start:  entry.GetStartTs(),
-						commit: entry.GetCommitTs(),
-						tp:     cdcpb.Event_ROLLBACK,
-					})
-				}
-			}
-		case *cdcpb.Event_Admin_:
-			log.Info("receive admin event", zap.Stringer("event", event))
-		case *cdcpb.Event_Error_:
-			return atomic.LoadUint64(&checkpointTs), errors.Trace(&eventError{Event_Error: x.Error})
-		case *cdcpb.Event_ResolvedTs:
-			if atomic.LoadUint32(&initialized) == 0 {
-				continue
-			}
-			// emit a checkpointTs
-			revent := &model.RegionFeedEvent{
-				Resolved: &model.ResolvedSpan{
-					Span:       span,
-					ResolvedTs: x.ResolvedTs,
-				},
-			}
-
-			updateCheckpointTS(&checkpointTs, x.ResolvedTs)
-			select {
-			case eventCh <- revent:
-				sendEventCounter.WithLabelValues("native resolved", captureID, changefeedID).Inc()
-			case <-ctx.Done():
-				return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
-			}
-		}
-
+// onReceiveEvent establishes a EventFeed to the region specified by regionInfo.
+// It manages lifecycle events of the region in order to maintain the EventFeed
+// connection, this may involve retry this region EventFeed or subdividing the region
+// further in the event of a split.
+func (s *regionFeedState) onReceiveEvent(
+	event *cdcpb.Event,
+	err error,
+) bool {
+	maxTs, stopped, err := s.singleEventFeed(event, err)
+	if !stopped && err == nil {
+		// If not stopped and no error occurs, the region will continue receiving events.
+		return false
 	}
+
+	// TODO: `close` does `wg.Wait`. Do we need to avoid blocking the curernt thread?
+	s.sorter.close()
+
+	log.Debug("singleEventFeed quit")
+
+	if err == nil || errors.Cause(err) == context.Canceled {
+		return true
+	}
+
+	if maxTs > s.sri.ts {
+		s.sri.ts = maxTs
+	}
+
+	log.Info("EventFeed disconnected",
+		zap.Reflect("span", s.sri.span),
+		zap.Uint64("checkpoint", s.sri.ts),
+		zap.Error(err))
+
+	s.errCh <- regionErrorInfo{
+		singleRegionInfo: s.sri,
+		err:              err,
+	}
+
+	//	// avoid too many kv clients retry at the same time, we should have a better solution
+	//	time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
+
+	return true
+}
+
+// singleEventFeed makes a EventFeed RPC call.
+// Results will be send to eventCh
+// EventFeed RPC will not return checkpoint event directly
+// Resolved event is generate while there's not non-match pre-write
+// Return the maximum checkpoint
+func (s *regionFeedState) singleEventFeed(
+	event *cdcpb.Event,
+	err error,
+) (uint64, bool, error) {
+	if err != nil {
+		return atomic.LoadUint64(&s.checkpointTs), true, err
+	}
+
+	log.Debug("singleEventFeed got event", zap.Stringer("event", event))
+
+	eventSize.WithLabelValues(s.captureID).Observe(float64(event.Event.Size()))
+	switch x := event.Event.(type) {
+	case *cdcpb.Event_Entries_:
+		for _, entry := range x.Entries.GetEntries() {
+			pullEventCounter.WithLabelValues(entry.Type.String(), s.captureID, s.changefeedID).Inc()
+			switch entry.Type {
+			case cdcpb.Event_INITIALIZED:
+				atomic.StoreUint32(&s.initialized, 1)
+			case cdcpb.Event_COMMITTED:
+				var opType model.OpType
+				switch entry.GetOpType() {
+				case cdcpb.Event_Row_DELETE:
+					opType = model.OpTypeDelete
+				case cdcpb.Event_Row_PUT:
+					opType = model.OpTypePut
+				default:
+					return atomic.LoadUint64(&s.checkpointTs), true, errors.Errorf("unknown tp: %v", entry.GetOpType())
+				}
+
+				revent := &model.RegionFeedEvent{
+					Val: &model.RawKVEntry{
+						OpType: opType,
+						Key:    entry.Key,
+						Value:  entry.GetValue(),
+						Ts:     entry.CommitTs,
+					},
+				}
+				select {
+				case s.eventCh <- revent:
+					sendEventCounter.WithLabelValues("committed", s.captureID, s.changefeedID).Inc()
+				case <-s.ctx.Done():
+					return atomic.LoadUint64(&s.checkpointTs), true, errors.Trace(s.ctx.Err())
+				}
+			case cdcpb.Event_PREWRITE:
+				s.matcher.putPrewriteRow(entry)
+				s.sorter.pushTsItem(sortItem{
+					start: entry.GetStartTs(),
+					tp:    cdcpb.Event_PREWRITE,
+				})
+			case cdcpb.Event_COMMIT:
+				// emit a value
+				value, err := s.matcher.matchRow(entry)
+				if err != nil {
+					// FIXME: need a better event match mechanism
+					log.Warn("match entry error", zap.Error(err), zap.Stringer("entry", entry))
+				}
+
+				var opType model.OpType
+				switch entry.GetOpType() {
+				case cdcpb.Event_Row_DELETE:
+					opType = model.OpTypeDelete
+				case cdcpb.Event_Row_PUT:
+					opType = model.OpTypePut
+				default:
+					return atomic.LoadUint64(&s.checkpointTs), true, errors.Errorf("unknow tp: %v", entry.GetOpType())
+				}
+
+				revent := &model.RegionFeedEvent{
+					Val: &model.RawKVEntry{
+						OpType: opType,
+						Key:    entry.Key,
+						Value:  value,
+						Ts:     entry.CommitTs,
+					},
+				}
+
+				select {
+				case s.eventCh <- revent:
+					sendEventCounter.WithLabelValues("commit", s.captureID, s.changefeedID).Inc()
+				case <-s.ctx.Done():
+					return atomic.LoadUint64(&s.checkpointTs), true, errors.Trace(s.ctx.Err())
+				}
+				s.sorter.pushTsItem(sortItem{
+					start:  entry.GetStartTs(),
+					commit: entry.GetCommitTs(),
+					tp:     cdcpb.Event_COMMIT,
+				})
+			case cdcpb.Event_ROLLBACK:
+				s.matcher.rollbackRow(entry)
+				s.sorter.pushTsItem(sortItem{
+					start:  entry.GetStartTs(),
+					commit: entry.GetCommitTs(),
+					tp:     cdcpb.Event_ROLLBACK,
+				})
+			}
+		}
+	case *cdcpb.Event_Admin_:
+		log.Info("receive admin event", zap.Stringer("event", event))
+	case *cdcpb.Event_Error_:
+		return atomic.LoadUint64(&s.checkpointTs), true, errors.Trace(&eventError{Event_Error: x.Error})
+	case *cdcpb.Event_ResolvedTs:
+		if atomic.LoadUint32(&s.initialized) == 0 {
+			return atomic.LoadUint64(&s.checkpointTs), false, nil
+		}
+		// emit a checkpointTs
+		revent := &model.RegionFeedEvent{
+			Resolved: &model.ResolvedSpan{
+				Span:       s.sri.span,
+				ResolvedTs: x.ResolvedTs,
+			},
+		}
+
+		updateCheckpointTS(&s.checkpointTs, x.ResolvedTs)
+		select {
+		case s.eventCh <- revent:
+			sendEventCounter.WithLabelValues("native resolved", s.captureID, s.changefeedID).Inc()
+		case <-s.ctx.Done():
+			return atomic.LoadUint64(&s.checkpointTs), true, errors.Trace(s.ctx.Err())
+		}
+	}
+
+	return atomic.LoadUint64(&s.checkpointTs), false, nil
+	//}
 }
 
 func updateCheckpointTS(checkpointTs *uint64, newValue uint64) {
