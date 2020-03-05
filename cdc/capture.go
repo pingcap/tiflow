@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -43,7 +42,6 @@ import (
 const (
 	ownerRunInterval    = time.Millisecond * 500
 	cfWatcherRetryDelay = time.Millisecond * 500
-	captureSessionTTL   = 3
 )
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
@@ -57,14 +55,11 @@ type Capture struct {
 	procLock   sync.Mutex
 
 	info *model.CaptureInfo
-
-	// session keeps alive between the capture and etcd
-	session *concurrency.Session
 }
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdEndpoints []string) (c *Capture, err error) {
-	etcdCli, err := clientv3.New(clientv3.Config{
+	ectdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   pdEndpoints,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
@@ -82,12 +77,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	if err != nil {
 		return nil, errors.Annotate(err, "new etcd client")
 	}
-	sess, err := concurrency.NewSession(etcdCli,
-		concurrency.WithTTL(captureSessionTTL))
-	if err != nil {
-		return nil, errors.Annotate(err, "create capture session")
-	}
-	cli := kv.NewCDCEtcdClient(etcdCli)
+	cli := kv.NewCDCEtcdClient(ectdCli)
 	id := uuid.New().String()
 	info := &model.CaptureInfo{
 		ID: id,
@@ -106,7 +96,6 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 		processors:   make(map[string]*processor),
 		pdEndpoints:  pdEndpoints,
 		etcdClient:   cli,
-		session:      sess,
 		ownerManager: manager,
 		ownerWorker:  worker,
 		info:         info,
