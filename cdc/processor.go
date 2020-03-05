@@ -528,12 +528,6 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			// should filter in sink
-			//if p.filter.ShouldIgnoreTxn(&txn) {
-			//	log.Info("DML txn ignored", zap.Uint64("ts", txn.Ts))
-			//	continue
-			//}
-			//p.filter.FilterTxn(&txn)
 		case <-ctx.Done():
 			return ctx.Err()
 		}

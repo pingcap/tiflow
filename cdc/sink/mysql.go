@@ -68,6 +68,11 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 			resolvedTs = row.Ts
 			continue
 		}
+		// TODO filter row
+		//if s.filter.ShouldIgnoreTxn(row) {
+		//	log.Info("Row changed event ignored", zap.Uint64("ts", txn.Ts))
+		//	continue
+		//}
 		key := util.QuoteSchema(row.Schema, row.Table)
 		s.unresolvedRows[key] = append(s.unresolvedRows[key], row)
 	}
