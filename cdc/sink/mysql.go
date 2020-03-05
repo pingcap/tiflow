@@ -218,6 +218,20 @@ var defaultParams = params{
 	dryRun:      false,
 }
 
+func configureSinkURI(sinkURI string) (string, error) {
+	dsnCfg, err := dmysql.ParseDSN(sinkURI)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	dsnCfg.Loc = time.UTC
+	if dsnCfg.Params == nil {
+		dsnCfg.Params = make(map[string]string, 1)
+	}
+	dsnCfg.DBName = ""
+	dsnCfg.Params["time_zone"] = "UTC"
+	return dsnCfg.FormatDSN(), nil
+}
+
 func buildDBAndParams(sinkURI string, opts map[string]string) (db *sql.DB, params params, err error) {
 	params = defaultParams
 	if _, ok := opts[dryRunOpt]; ok {
@@ -226,7 +240,11 @@ func buildDBAndParams(sinkURI string, opts map[string]string) (db *sql.DB, param
 
 	// treat as dsn of the driver for compatibility...
 	if !strings.HasPrefix(sinkURI, "mysql://") && !strings.HasPrefix(sinkURI, "tidb://") {
-		db, err = sql.Open("mysql", sinkURI+"&time_zone=UTC")
+		sinkURI, err := configureSinkURI(sinkURI)
+		if err != nil {
+			return nil, params, errors.Trace(err)
+		}
+		db, err = sql.Open("mysql", sinkURI)
 		if err != nil {
 			return nil, params, errors.Trace(err)
 		}
