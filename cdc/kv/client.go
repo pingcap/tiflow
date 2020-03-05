@@ -74,10 +74,34 @@ type regionHandlerSet struct {
 	channels map[uint64]chan *cdcpb.Event
 }
 
-func newRegionHandlerMap() *regionHandlerSet {
+func newRegionHandlerSet() *regionHandlerSet {
 	return &regionHandlerSet{
 		channels: make(map[uint64]chan *cdcpb.Event),
 	}
+}
+
+func (s *regionHandlerSet) closeAll() {
+	s.Lock()
+	defer s.Unlock()
+	for _, ch := range s.channels {
+		close(ch)
+	}
+	s.channels = make(map[uint64]chan *cdcpb.Event)
+}
+
+func (s *regionHandlerSet) stopAllWithError(ctx context.Context) error {
+	s.Lock()
+	defer s.Unlock()
+	for _, ch := range s.channels {
+		// Use nil to notify the underlying worker that there is error
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ch <- nil:
+		}
+	}
+	s.channels = make(map[uint64]chan *cdcpb.Event)
+	return nil
 }
 
 // CDCClient to get events from TiKV
@@ -231,7 +255,8 @@ func (c *CDCClient) dispatchRequest(
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	streams := make(map[string]cdcpb.ChangeData_EventFeedClient)
-	regionHandlers := newRegionHandlerMap()
+	// Stores regionHandlerSet for each stream, and each regionHandlerSet keeps the channels of each regions in a stream.
+	regionHandlerSets := make(map[string]*regionHandlerSet)
 
 	for {
 		select {
@@ -262,8 +287,13 @@ func (c *CDCClient) dispatchRequest(
 				EndKey:       sri.span.End,
 			}
 
-			stream, ok := streams[rpcCtx.Addr]
+			regionHandlers, ok := regionHandlerSets[rpcCtx.Addr]
+			if !ok {
+				regionHandlers = newRegionHandlerSet()
+				regionHandlerSets[rpcCtx.Addr] = regionHandlers
+			}
 
+			stream, ok := streams[rpcCtx.Addr]
 			// Establish the stream if it has not been connected yet.
 			if !ok {
 				stream, err = c.getStream(ctx, rpcCtx.Addr)
@@ -334,8 +364,6 @@ func (c *CDCClient) partialRegionFeed(
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	ts := regionInfo.ts
-	// TODO: Pass this around
-	//failStoreIDs := make(map[uint64]struct{})
 	rl := rate.NewLimiter(0.1, 5)
 
 	if !rl.Allow() {
@@ -498,13 +526,18 @@ func (c *CDCClient) receiveFromStream(
 
 		// TODO: Handle errors properly
 		if err == io.EOF {
+			regionHandlers.closeAll()
 			return nil
 		}
 		if err != nil {
+			err := regionHandlers.stopAllWithError(ctx)
+			// TODO: Print the addr
+			log.Debug("failed to close all channels for a region")
 			return errors.Trace(err)
 		}
 
 		for _, event := range cevent.Events {
+			// TODO: there may be performance issue.
 			regionHandlers.RLock()
 			ch, ok := regionHandlers.channels[event.RegionId]
 			regionHandlers.RUnlock()
@@ -566,10 +599,16 @@ func (c *CDCClient) singleEventFeed(
 	defer sorter.close()
 
 	for {
+
 		event, ok := <-receiverCh
 
 		if !ok {
 			log.Debug("singleEventFeed receiver closed")
+			return atomic.LoadUint64(&checkpointTs), nil
+		}
+
+		if event == nil {
+			log.Debug("singleEventFeed closed by error")
 			return atomic.LoadUint64(&checkpointTs), nil
 		}
 
