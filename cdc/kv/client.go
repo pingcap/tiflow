@@ -16,6 +16,7 @@ package kv
 import (
 	"context"
 	"io"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -258,11 +259,18 @@ func (c *CDCClient) dispatchRequest(
 	// Stores regionHandlerSet for each stream, and each regionHandlerSet keeps the channels of each regions in a stream.
 	regionHandlerSets := make(map[string]*regionHandlerSet)
 
+MainLoop:
 	for {
+		var sri singleRegionInfo
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case sri := <-regionCh:
+		case sri = <-regionCh:
+		}
+
+		// Loop for retrying in case the stream has disconnected.
+		// TODO: Should we break if retries and fails too many times?
+		for {
 			rpcCtx, err := c.getRPCContextForRegion(ctx, sri.verID)
 			if err != nil {
 				return errors.Trace(err)
@@ -273,7 +281,7 @@ func (c *CDCClient) dispatchRequest(
 				if err != nil {
 					return errors.Trace(err)
 				}
-				continue
+				continue MainLoop
 			}
 
 			req := &cdcpb.ChangeDataRequest{
@@ -328,14 +336,41 @@ func (c *CDCClient) dispatchRequest(
 			log.Debug("start new request", zap.Reflect("request", req))
 			err = stream.Send(req)
 
-			// TODO: Handle errors properly
-			if err == io.EOF {
-				return nil
+			//if err == io.EOF {
+			//	return nil
+			//}
+			//
+			//if err != nil {
+			//	return errors.Trace(err)
+			//}
+
+			// If Send error, the receiver should have received error too or will receive error soon. So we doesn't need
+			// to do extra work here.
+			if err != nil {
+				log.Error("send request to stream failed",
+					zap.String("addr", rpcCtx.Addr),
+					zap.Uint64("storeID", rpcCtx.GetStoreID()),
+					zap.Error(err))
+				err1 := stream.CloseSend()
+				if err1 != nil {
+					log.Error("failed to close stream", zap.Error(err1))
+				}
+				delete(streams, rpcCtx.Addr)
+				delete(regionHandlerSets, rpcCtx.Addr)
+
+				// Wait for a while and retry sending the request
+				time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
+				// Break if ctx has been canceled.
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+				}
+
+				continue
 			}
 
-			if err != nil {
-				return errors.Trace(err)
-			}
+			break
 		}
 	}
 }
@@ -475,17 +510,15 @@ func (c *CDCClient) handleError(ctx context.Context, errInfo regionErrorInfo, re
 	case *eventError:
 		if notLeader := eerr.GetNotLeader(); notLeader != nil {
 			eventFeedErrorCounter.WithLabelValues("NotLeader").Inc()
+			// TODO: Handle the case that notleader.GetLeader() is nil.
 			c.regionCache.UpdateLeader(errInfo.verID, notLeader.GetLeader().GetStoreId(), errInfo.rpcCtx.PeerIdx)
 		} else if eerr.GetEpochNotMatch() != nil {
+			// TODO: If only confver is updated, we don't need to reload the region from region cache.
 			eventFeedErrorCounter.WithLabelValues("EpochNotMatch").Inc()
 			return c.divideAndSendEventFeedToRegions(ctx, errInfo.span, errInfo.ts, regionCh)
 		} else if eerr.GetRegionNotFound() != nil {
 			eventFeedErrorCounter.WithLabelValues("RegionNotFound").Inc()
-			keyLocation, err := c.regionCache.LocateKey(tikv.NewBackoffer(ctx, tikvRequestMaxBackoff), errInfo.span.Start)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			errInfo.verID = keyLocation.Region
+			return c.divideAndSendEventFeedToRegions(ctx, errInfo.span, errInfo.ts, regionCh)
 		} else {
 			eventFeedErrorCounter.WithLabelValues("Unknown").Inc()
 			log.Warn("receive empty or unknown error msg", zap.Stringer("error", eerr))
@@ -530,10 +563,17 @@ func (c *CDCClient) receiveFromStream(
 			return nil
 		}
 		if err != nil {
-			err := regionHandlers.stopAllWithError(ctx)
-			// TODO: Print the addr
-			log.Debug("failed to close all channels for a region")
-			return errors.Trace(err)
+			// TODO: Print addr
+			log.Error("failed to receive from stream", zap.Error(err))
+			err1 := regionHandlers.stopAllWithError(ctx)
+			if err1 != nil {
+				log.Error("failed to send stop signals to workers of regions")
+				return errors.Trace(err)
+			}
+
+			// Do no return error but gracefully stop the goroutine here. Then the whole job will not be canceled and
+			// connection will be retried.
+			return nil
 		}
 
 		for _, event := range cevent.Events {
