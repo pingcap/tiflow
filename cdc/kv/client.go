@@ -311,7 +311,7 @@ MainLoop:
 				streams[rpcCtx.Addr] = stream
 
 				g.Go(func() error {
-					return c.receiveFromStream(ctx, stream, regionCh, errCh, regionHandlers)
+					return c.receiveFromStream(ctx, rpcCtx.Addr, rpcCtx.GetStoreID(), stream, regionCh, errCh, regionHandlers)
 				})
 			}
 
@@ -546,6 +546,8 @@ func (c *CDCClient) getRPCContextForRegion(ctx context.Context, id tikv.RegionVe
 
 func (c *CDCClient) receiveFromStream(
 	ctx context.Context,
+	addr string,
+	storeID uint64,
 	stream cdcpb.ChangeData_EventFeedClient,
 	regionCh <-chan singleRegionInfo,
 	errCh chan<- regionErrorInfo,
@@ -563,11 +565,18 @@ func (c *CDCClient) receiveFromStream(
 			return nil
 		}
 		if err != nil {
-			// TODO: Print addr
-			log.Error("failed to receive from stream", zap.Error(err))
+			log.Error(
+				"failed to receive from stream",
+				zap.String("addr", addr),
+				zap.Uint64("storeID", storeID),
+				zap.Error(err))
+
 			err1 := regionHandlers.stopAllWithError(ctx)
 			if err1 != nil {
-				log.Error("failed to send stop signals to workers of regions")
+				log.Error("failed to send stop signals to workers of regions",
+					zap.String("addr", addr),
+					zap.Uint64("storeID", storeID),
+					zap.Error(err1))
 				return errors.Trace(err)
 			}
 
