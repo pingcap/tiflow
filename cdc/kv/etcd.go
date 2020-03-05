@@ -33,9 +33,6 @@ const (
 	CaptureOwnerKey = EtcdKeyBase + "/capture/owner"
 	// CaptureInfoKeyPrefix is the capture info path that is saved to etcd
 	CaptureInfoKeyPrefix = EtcdKeyBase + "/capture/info"
-
-	// ProcessorInfoKeyPrefix is the processor info path that is saved to etcd
-	ProcessorInfoKeyPrefix = EtcdKeyBase + "/processor/info"
 )
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
@@ -76,11 +73,6 @@ func GetEtcdKeyTaskPosition(changefeedID, captureID string) string {
 // GetEtcdKeyCaptureInfo returns the key of a capture info
 func GetEtcdKeyCaptureInfo(id string) string {
 	return CaptureInfoKeyPrefix + "/" + id
-}
-
-// GetEtcdKeyProcessorInfo returns the key of a processor
-func GetEtcdKeyProcessorInfo(captureID, processorID string) string {
-	return ProcessorInfoKeyPrefix + "/" + captureID + "/" + processorID
 }
 
 // CDCEtcdClient is a wrap of etcd client
@@ -175,36 +167,6 @@ func (c CDCEtcdClient) GetCaptures(ctx context.Context) (int64, []*model.Capture
 		infos = append(infos, info)
 	}
 	return revision, infos, nil
-}
-
-// GetAllProcessors returns kv revison and the ProcessorInfo list
-func (c CDCEtcdClient) GetAllProcessors(ctx context.Context) (int64, []*model.ProcessorInfo, error) {
-	return c.getProcessorsFromPrefix(ctx, ProcessorInfoKeyPrefix)
-}
-
-// GetProcessors returns the ProcessorInfo list for a change feed
-func (c CDCEtcdClient) GetProcessors(ctx context.Context, changeFeedID string) (int64, []*model.ProcessorInfo, error) {
-	prefix := ProcessorInfoKeyPrefix + "/" + changeFeedID
-	return c.getProcessorsFromPrefix(ctx, prefix)
-}
-
-func (c CDCEtcdClient) getProcessorsFromPrefix(ctx context.Context, prefix string) (int64, []*model.ProcessorInfo, error) {
-	resp, err := c.Client.Get(ctx, prefix,
-		clientv3.WithPrefix())
-	if err != nil {
-		return 0, nil, errors.Trace(err)
-	}
-
-	var processors []*model.ProcessorInfo
-	for _, kv := range resp.Kvs {
-		p := &model.ProcessorInfo{}
-		if err := p.Unmarshal(kv.Value); err != nil {
-			return 0, nil, errors.Trace(err)
-		}
-		processors = append(processors, p)
-	}
-	return resp.Header.GetRevision(), processors, nil
-
 }
 
 // SaveChangeFeedInfo stores change feed info into etcd
@@ -460,29 +422,4 @@ func (c CDCEtcdClient) GetCaptureInfo(ctx context.Context, id string) (info *mod
 	}
 
 	return
-}
-
-// PutProcessorInfo writes the processor info into etcd
-func (c CDCEtcdClient) PutProcessorInfo(ctx context.Context, captureID string, info *model.ProcessorInfo, leaseID clientv3.LeaseID) error {
-	data, err := info.Marshal()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	key := GetEtcdKeyProcessorInfo(captureID, info.ID)
-
-	_, err = c.Client.Put(ctx, key, string(data), clientv3.WithLease(leaseID))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
-// DeleteProcessorInfo deletes the processor info from etcd
-func (c CDCEtcdClient) DeleteProcessorInfo(ctx context.Context, captureID, processorID string) error {
-	key := GetEtcdKeyProcessorInfo(captureID, processorID)
-	_, err := c.Client.Delete(ctx, key)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
 }
