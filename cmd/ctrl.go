@@ -46,6 +46,8 @@ const (
 	CtrlClearAll = "clear-all"
 	// get tso from pd
 	CtrlGetTso = "get-tso"
+	// query the processor list
+	CtrlQueryProcessors = "query-processor-list"
 )
 
 func init() {
@@ -146,6 +148,13 @@ var ctrlCmd = &cobra.Command{
 				captures = append(captures, &capture{ID: c.ID, IsOwner: isOwner})
 			}
 			return jsonPrint(captures)
+		case CtrlQueryProcessors:
+			_, processors, err := cli.GetAllProcessors(context.Background())
+			if err != nil {
+				return err
+			}
+			return jsonPrint(processors)
+
 		case CtrlQuerySubCf:
 			_, info, err := cli.GetTaskStatus(context.Background(), ctrlCfID, ctrlCaptureID)
 			if err != nil && err != concurrency.ErrElectionNoLeader {

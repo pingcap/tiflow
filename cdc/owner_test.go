@@ -168,11 +168,10 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
-			tables:                  tables,
-			status:                  &model.ChangeFeedStatus{},
-			processorLastUpdateTime: make(map[string]time.Time),
-			targetTs:                100,
-			ddlState:                model.ChangeFeedSyncDML,
+			tables:   tables,
+			status:   &model.ChangeFeedStatus{},
+			targetTs: 100,
+			ddlState: model.ChangeFeedSyncDML,
 			taskStatus: model.ProcessorsInfos{
 				"capture_1": {},
 				"capture_2": {},
@@ -192,6 +191,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 		cancelWatchCapture: cancel,
 		changeFeeds:        changeFeeds,
 		cfRWriter:          handler,
+		etcdClient:         s.client,
 		manager:            manager,
 	}
 	s.owner = owner
@@ -385,12 +385,11 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	c.Assert(err, check.IsNil)
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
-			tables:                  tables,
-			info:                    &model.ChangeFeedInfo{},
-			status:                  &model.ChangeFeedStatus{},
-			processorLastUpdateTime: make(map[string]time.Time),
-			targetTs:                100,
-			ddlState:                model.ChangeFeedSyncDML,
+			tables:   tables,
+			info:     &model.ChangeFeedInfo{},
+			status:   &model.ChangeFeedStatus{},
+			targetTs: 100,
+			ddlState: model.ChangeFeedSyncDML,
 			taskStatus: model.ProcessorsInfos{
 				"capture_1": {},
 				"capture_2": {},
@@ -412,8 +411,9 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 		changeFeeds:        changeFeeds,
 
 		// ddlHandler: handler,
-		cfRWriter: handler,
-		manager:   manager,
+		etcdClient: s.client,
+		cfRWriter:  handler,
+		manager:    manager,
 	}
 	s.owner = owner
 	err = owner.Run(ctx, 50*time.Millisecond)

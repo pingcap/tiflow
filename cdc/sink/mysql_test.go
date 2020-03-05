@@ -101,8 +101,6 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
@@ -110,6 +108,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/types"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/schema"
 	"github.com/pingcap/tidb/infoschema"
 	dbtypes "github.com/pingcap/tidb/types"
 )
@@ -191,8 +190,8 @@ func (s EmitSuite) TestShouldIgnoreCertainDDLError(c *check.C) {
 type tableHelper struct {
 }
 
-func (h *tableHelper) TableByID(id int64) (info *entry.TableInfo, ok bool) {
-	return entry.WrapTableInfo(&timodel.TableInfo{
+func (h *tableHelper) TableByID(id int64) (info *schema.TableInfo, ok bool) {
+	return schema.WrapTableInfo(&timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{
 				Name:  timodel.CIStr{O: "id"},
@@ -216,7 +215,7 @@ func (h *tableHelper) TableByID(id int64) (info *entry.TableInfo, ok bool) {
 	}), true
 }
 
-func (h *tableHelper) GetTableByName(schema, table string) (*entry.TableInfo, bool) {
+func (h *tableHelper) GetTableByName(schema, table string) (*schema.TableInfo, bool) {
 	return h.TableByID(42)
 }
 
@@ -304,30 +303,6 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }
 
-func (s EmitSuite) TestConfigureSinkURI(c *check.C) {
-	cases := []struct {
-		input    string
-		expected string
-	}{{
-		input:    "root@tcp(127.0.0.1:3306)/mysql",
-		expected: "root@tcp(127.0.0.1:3306)/?time_zone=UTC",
-	}, {
-		input:    "root@tcp(127.0.0.1:3306)/",
-		expected: "root@tcp(127.0.0.1:3306)/?time_zone=UTC",
-	}, {
-		input:    "root@tcp(127.0.0.1:3306)/?time_zone=AA",
-		expected: "root@tcp(127.0.0.1:3306)/?time_zone=UTC",
-	}, {
-		input:    "root@tcp(127.0.0.1:3306)/?time_zone=AA&some_option=BB",
-		expected: "root@tcp(127.0.0.1:3306)/?some_option=BB&time_zone=UTC",
-	}}
-	for _, cs := range cases {
-		sink, err := configureSinkURI(cs.input)
-		c.Assert(err, check.IsNil)
-		c.Assert(sink, check.Equals, cs.expected)
-	}
-}
-
 type splitSuite struct{}
 
 var _ = check.Suite(&splitSuite{})
@@ -373,4 +348,47 @@ func (s *splitSuite) TestShouldSplitByTable(c *check.C) {
 	assertAllAreFromTbl(groups[1], "db", "tbl2")
 	assertAllAreFromTbl(groups[2], "db2", "tbl2")
 }
+
+type mysqlSinkSuite struct{}
+
+var _ = check.Suite(&mysqlSinkSuite{})
+
+func (s *mysqlSinkSuite) TestBuildDBAndParams(c *check.C) {
+	tests := []struct {
+		sinkURI string
+		opts    map[string]string
+		params  params
+	}{
+		{
+			sinkURI: "mysql://root:123@localhost:4000?worker-count=20",
+			opts:    map[string]string{dryRunOpt: ""},
+			params: params{
+				workerCount: 20,
+				dryRun:      true,
+			},
+		},
+		{
+			sinkURI: "tidb://root:123@localhost:4000?worker-count=20",
+			opts:    map[string]string{dryRunOpt: ""},
+			params: params{
+				workerCount: 20,
+				dryRun:      true,
+			},
+		},
+		{
+			sinkURI: "root@tcp(127.0.0.1:3306)/", // dsn not uri
+			opts:    nil,
+			params:  defaultParams,
+		},
+	}
+
+	for _, t := range tests {
+		c.Log("case sink: ", t.sinkURI)
+		db, params, err := buildDBAndParams(t.sinkURI, t.opts)
+		c.Assert(err, check.IsNil)
+		c.Assert(params, check.Equals, t.params)
+		c.Assert(db, check.NotNil)
+	}
+}
+
 */

@@ -17,7 +17,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -40,11 +42,15 @@ import (
 	"go.uber.org/zap"
 )
 
+const dryRunOpt = "_dry-run"
+const defaultWorkerCount = 16
+
 type mysqlSink struct {
 	db               *sql.DB
 	globalResolvedTs uint64
 	sinkResolvedTs   uint64
 	checkpointTs     uint64
+	params           params
 
 	unresolvedRowsMu sync.Mutex
 	unresolvedRows   map[string][]*model.RowChangedEvent
@@ -202,39 +208,90 @@ func splitRowsGroup(resolvedTs uint64, unresolvedRows map[string][]*model.RowCha
 
 var _ Sink = &mysqlSink{}
 
-func configureSinkURI(sinkURI string) (string, error) {
-	dsnCfg, err := dmysql.ParseDSN(sinkURI)
+type params struct {
+	workerCount int
+	dryRun      bool
+}
+
+var defaultParams = params{
+	workerCount: defaultWorkerCount,
+	dryRun:      false,
+}
+
+func buildDBAndParams(sinkURI string, opts map[string]string) (db *sql.DB, params params, err error) {
+	params = defaultParams
+	if _, ok := opts[dryRunOpt]; ok {
+		params.dryRun = true
+	}
+
+	// treat as dsn of the driver for compatibility...
+	if !strings.HasPrefix(sinkURI, "mysql://") && !strings.HasPrefix(sinkURI, "tidb://") {
+		db, err = sql.Open("mysql", sinkURI+"&time_zone=UTC")
+		if err != nil {
+			return nil, params, errors.Trace(err)
+		}
+
+		return
+	}
+
+	url, err := url.Parse(sinkURI)
 	if err != nil {
-		return "", errors.Trace(err)
+		return nil, params, errors.Trace(err)
 	}
-	dsnCfg.Loc = time.UTC
-	if dsnCfg.Params == nil {
-		dsnCfg.Params = make(map[string]string, 1)
+
+	s := url.Query().Get("worker-count")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, params, errors.Trace(err)
+		}
+		params.workerCount = c
 	}
-	dsnCfg.DBName = ""
-	dsnCfg.Params["time_zone"] = "UTC"
-	return dsnCfg.FormatDSN(), nil
+
+	// dsn format of the driver:
+	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+	username := url.User.Username()
+	password, _ := url.User.Password()
+	port := url.Port()
+	if username == "" {
+		username = "root"
+	}
+	if port == "" {
+		port = "4000"
+	}
+
+	// Assume all the timestamp type is in the UTC zone when passing into mysql sink.
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/test?interpolateParams=true&multiStatements=true&time_zone=UTC", username,
+		password, url.Hostname(), port)
+	db, err = sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, params, errors.Trace(err)
+	}
+
+	return
 }
 
 // NewMySQLSink creates a new MySQL sink using schema storage
 func NewMySQLSink(sinkURI string, opts map[string]string) (Sink, error) {
-	sinkURI, err := configureSinkURI(sinkURI)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	db, err := sql.Open("mysql", sinkURI)
+	db, params, err := buildDBAndParams(sinkURI, opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	return newMySQLSink(db), nil
+	return newMySQLSink(db, params), nil
 }
 
-func newMySQLSink(db *sql.DB) Sink {
-	return &mysqlSink{
+func newMySQLSink(db *sql.DB, params params) Sink {
+	sink := &mysqlSink{
 		db:             db,
 		unresolvedRows: make(map[string][]*model.RowChangedEvent),
+		params:         params,
 	}
+
+	sink.db.SetMaxIdleConns(params.workerCount)
+	sink.db.SetMaxOpenConns(params.workerCount)
+
+	return sink
 }
 
 func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChangedEvent) error {
@@ -244,7 +301,11 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*
 	}
 	close(jobs)
 
-	nWorkers := 16
+	nWorkers := s.params.workerCount
+	if nWorkers == 0 {
+		nWorkers = defaultParams.workerCount
+	}
+
 	if len(rowGroups) < nWorkers {
 		nWorkers = len(rowGroups)
 	}

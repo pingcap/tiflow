@@ -46,12 +46,85 @@ const (
 	tikvRequestMaxBackoff     = 20000 // Maximum total sleep time(in ms)
 	grpcInitialWindowSize     = 1 << 30
 	grpcInitialConnWindowSize = 1 << 30
+	grpcConnCount             = 10
 )
 
 type singleRegionInfo struct {
 	verID tikv.RegionVerID
 	span  util.Span
 	ts    uint64
+}
+
+type connArray struct {
+	target string
+	index  uint32
+	v      []*grpc.ClientConn
+}
+
+func newConnArray(ctx context.Context, maxSize uint, addr string) (*connArray, error) {
+	a := &connArray{
+		target: addr,
+		index:  0,
+		v:      make([]*grpc.ClientConn, maxSize),
+	}
+	err := a.Init(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return a, nil
+}
+
+func (a *connArray) Init(ctx context.Context) error {
+	for i := range a.v {
+		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
+
+		conn, err := grpc.DialContext(
+			ctx,
+			a.target,
+			grpc.WithInitialWindowSize(grpcInitialWindowSize),
+			grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
+			grpc.WithInsecure(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: gbackoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:                10 * time.Second,
+				Timeout:             3 * time.Second,
+				PermitWithoutStream: true,
+			}),
+		)
+		cancel()
+
+		if err != nil {
+			a.Close()
+			return errors.Trace(err)
+		}
+		a.v[i] = conn
+	}
+	return nil
+}
+
+func (a *connArray) Get() *grpc.ClientConn {
+	next := atomic.AddUint32(&a.index, 1) % uint32(len(a.v))
+	return a.v[next]
+}
+
+func (a *connArray) Close() {
+	for i, c := range a.v {
+		if c != nil {
+			err := c.Close()
+			if err != nil {
+				log.Warn("close grpc conn", zap.Error(err))
+			}
+		}
+		a.v[i] = nil
+	}
 }
 
 // CDCClient to get events from TiKV
@@ -62,7 +135,7 @@ type CDCClient struct {
 
 	mu struct {
 		sync.Mutex
-		conns map[string]*grpc.ClientConn
+		conns map[string]*connArray
 	}
 
 	regionCache *tikv.RegionCache
@@ -79,9 +152,9 @@ func NewCDCClient(pd pd.Client) (c *CDCClient, err error) {
 		regionCache: tikv.NewRegionCache(pd),
 		mu: struct {
 			sync.Mutex
-			conns map[string]*grpc.ClientConn
+			conns map[string]*connArray
 		}{
-			conns: make(map[string]*grpc.ClientConn),
+			conns: make(map[string]*connArray),
 		},
 	}
 
@@ -100,48 +173,19 @@ func (c *CDCClient) Close() error {
 	return nil
 }
 
-func (c *CDCClient) getConn(
-	ctx context.Context, addr string,
-) (conn *grpc.ClientConn, err error) {
+func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if conn, ok := c.mu.conns[addr]; ok {
-		return conn, nil
+	if conns, ok := c.mu.conns[addr]; ok {
+		return conns.Get(), nil
 	}
-
-	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
-
-	conn, err = grpc.DialContext(
-		ctx,
-		addr,
-		grpc.WithInitialWindowSize(grpcInitialWindowSize),
-		grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
-		grpc.WithInsecure(),
-		grpc.WithConnectParams(grpc.ConnectParams{
-			Backoff: gbackoff.Config{
-				BaseDelay:  time.Second,
-				Multiplier: 1.1,
-				Jitter:     0.1,
-				MaxDelay:   3 * time.Second,
-			},
-			MinConnectTimeout: 3 * time.Second,
-		}),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                10 * time.Second,
-			Timeout:             3 * time.Second,
-			PermitWithoutStream: true,
-		}),
-	)
-	cancel()
-
+	ca, err := newConnArray(ctx, grpcConnCount, addr)
 	if err != nil {
-		return nil, errors.Annotatef(err, "dial %s fail", addr)
+		return nil, errors.Trace(err)
 	}
-
-	c.mu.conns[addr] = conn
-
-	return
+	c.mu.conns[addr] = ca
+	return ca.Get(), nil
 }
 
 // EventFeed divides a EventFeed request on range boundaries and establishes
