@@ -1011,9 +1011,6 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 			if ownerChanged {
 				// Do something initialize when the capture becomes an owner.
 				ownerChanged = false
-				// Start a routine to keep watching on the liveness of
-				// processors.
-				o.startProcessorInfoWatcher(ctx)
 
 				// When an owner crashed, its processors crashed too,
 				// clean up the tasks for these processors.
@@ -1021,6 +1018,10 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 					log.Error("clean up stale tasks failed",
 						zap.Error(err))
 				}
+
+				// Start a routine to keep watching on the liveness of
+				// processors.
+				o.startProcessorInfoWatcher(ctx)
 			}
 
 			err := o.run(ctx)
