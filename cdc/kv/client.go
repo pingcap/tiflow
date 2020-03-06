@@ -149,6 +149,7 @@ func (c *CDCClient) getConn(
 			Timeout:             3 * time.Second,
 			PermitWithoutStream: true,
 		}),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(32*1024*1024)),
 	)
 	cancel()
 
@@ -244,6 +245,7 @@ MainLoop:
 			}
 			if rpcCtx == nil {
 				// The region info is invalid. Retry the span.
+				log.Debug("cannot get rpcCtx, retry span", zap.Reflect("span", sri.span))
 				err = c.divideAndSendEventFeedToRegions(ctx, sri.span, sri.ts, regionCh)
 				if err != nil {
 					return errors.Trace(err)
