@@ -560,7 +560,7 @@ func (c *CDCClient) receiveFromStream(
 				regionInfoMapMu.Lock()
 				sri, ok := regionInfoMap[event.RegionId]
 				if !ok {
-					regionInfoMapMu.RUnlock()
+					regionInfoMapMu.Unlock()
 					log.Warn("drop event due to region stopped", zap.Uint64("regionID", event.RegionId))
 					continue
 				}
