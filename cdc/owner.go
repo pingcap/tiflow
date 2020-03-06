@@ -476,33 +476,6 @@ func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 	defer o.l.Unlock()
 
 	delete(o.captures, info.ID)
-
-	for _, feed := range o.changeFeeds {
-		pinfo, ok := feed.taskStatus[info.ID]
-		if !ok {
-			continue
-		}
-		pos, ok := feed.taskPositions[info.ID]
-		if !ok {
-			continue
-		}
-
-		for _, table := range pinfo.TableInfos {
-			feed.orphanTables[table.ID] = model.ProcessTableInfo{
-				ID:      table.ID,
-				StartTs: pos.CheckPointTs,
-			}
-		}
-
-		ctx := context.TODO()
-		if err := o.etcdClient.DeleteTaskStatus(ctx, feed.id, info.ID); err != nil {
-			log.Warn("failed to delete task status", zap.Error(err))
-		}
-		if err := o.etcdClient.DeleteTaskPosition(ctx, feed.id, info.ID); err != nil {
-			log.Warn("failed to delete task position", zap.Error(err))
-		}
-
-	}
 }
 
 func (o *ownerImpl) resetCaptureInfoWatcher(ctx context.Context) error {
