@@ -1301,6 +1301,7 @@ func (o *ownerImpl) cleanUpStaleTasks(ctx context.Context) error {
 				if err := o.etcdClient.DeleteTaskPosition(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
+				log.Debug("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
 			}
 		}
 	}
