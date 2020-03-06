@@ -223,9 +223,10 @@ func (c *CDCClient) dispatchRequest(
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	streams := make(map[string]cdcpb.ChangeData_EventFeedClient)
-	// Stores regionHandlerSet for each stream, and each regionHandlerSet keeps the channels of each regions in a stream.
-	regionInfoMap := make(map[uint64]singleRegionInfo)
-	regionInfoMapMu := &sync.RWMutex{}
+	// Stores dispatched region info for each stream, and each regionHandlerSet keeps the channels of each regions in a
+	// stream.
+	pendingRegionsMaps := make(map[string]map[uint64]singleRegionInfo)
+	pendingRegionsMus := make(map[string]*sync.Mutex)
 
 MainLoop:
 	for {
@@ -271,13 +272,28 @@ MainLoop:
 			// TODO: Make sure there will not be goroutine leak.
 			// TODO: Here we use region id to index the regionInfo. However, in case that region merge is enabled, there
 			// may be multiple streams to the same regions. Maybe we need to add a requestID field to the protocol for it.
-			regionInfoMapMu.Lock()
-			if _, ok := regionInfoMap[sri.verID.GetID()]; ok {
+
+			// Get the mutex of the addr
+			pendingRegionsMu, ok := pendingRegionsMus[rpcCtx.Addr]
+			if !ok {
+				pendingRegionsMu = &sync.Mutex{}
+				pendingRegionsMus[rpcCtx.Addr] = pendingRegionsMu
+			}
+
+			// Get the set of pending regions of the stream
+			pendingRegions, ok := pendingRegionsMaps[rpcCtx.Addr]
+			if !ok {
+				pendingRegions = make(map[uint64]singleRegionInfo)
+				pendingRegionsMaps[rpcCtx.Addr] = pendingRegions
+			}
+
+			pendingRegionsMu.Lock()
+			if _, ok := pendingRegions[sri.verID.GetID()]; ok {
 				log.Error("region is already pending for the first response while trying to send another request. region merge mast have happened which we didn't support yet",
 					zap.Uint64("regionID", sri.verID.GetID()))
 			}
-			regionInfoMap[sri.verID.GetID()] = sri
-			regionInfoMapMu.Unlock()
+			pendingRegions[sri.verID.GetID()] = sri
+			pendingRegionsMu.Unlock()
 
 			stream, ok := streams[rpcCtx.Addr]
 			// Establish the stream if it has not been connected yet.
@@ -289,7 +305,8 @@ MainLoop:
 				streams[rpcCtx.Addr] = stream
 
 				g.Go(func() error {
-					return c.receiveFromStream(ctx, g, rpcCtx.Addr, rpcCtx.GetStoreID(), stream, regionCh, eventCh, errCh, regionInfoMap, regionInfoMapMu)
+					// When the stream is stopped, the pending regions should be cancelled.
+					return c.receiveFromStream(ctx, g, rpcCtx.Addr, rpcCtx.GetStoreID(), stream, regionCh, eventCh, errCh, pendingRegions, pendingRegionsMu)
 				})
 			}
 
@@ -511,9 +528,25 @@ func (c *CDCClient) receiveFromStream(
 	regionCh <-chan singleRegionInfo,
 	eventCh chan<- *model.RegionFeedEvent,
 	errCh chan<- regionErrorInfo,
-	regionInfoMap map[uint64]singleRegionInfo,
-	regionInfoMapMu *sync.RWMutex,
+	pendingRegions map[uint64]singleRegionInfo,
+	pendingRegoinsMu *sync.Mutex,
 ) error {
+	// Cancel the pending regions if the stream failed.
+	defer func() {
+		for id, r := range pendingRegions {
+			select {
+			case <-ctx.Done():
+				return
+			case errCh <- regionErrorInfo{
+				singleRegionInfo: r,
+				err:              errors.New("pending region cancelled due to stream disconnecting"),
+			}:
+			}
+
+			delete(pendingRegions, id)
+		}
+	}()
+
 	// Start the receive loop
 	regionHandlers := make(map[uint64]chan *cdcpb.Event)
 	regionStopped := make(map[uint64]*int32)
@@ -559,15 +592,15 @@ func (c *CDCClient) receiveFromStream(
 			ch, ok := regionHandlers[event.RegionId]
 			if !ok || isStopped {
 				// Fetch the region info
-				regionInfoMapMu.Lock()
-				sri, ok := regionInfoMap[event.RegionId]
+				pendingRegoinsMu.Lock()
+				sri, ok := pendingRegions[event.RegionId]
 				if !ok {
-					regionInfoMapMu.Unlock()
+					pendingRegoinsMu.Unlock()
 					log.Warn("drop event due to region stopped", zap.Uint64("regionID", event.RegionId))
 					continue
 				}
-				delete(regionInfoMap, event.RegionId)
-				regionInfoMapMu.Unlock()
+				delete(pendingRegions, event.RegionId)
+				pendingRegoinsMu.Unlock()
 
 				ch = make(chan *cdcpb.Event, 16)
 				regionHandlers[event.RegionId] = ch
