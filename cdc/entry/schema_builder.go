@@ -189,8 +189,10 @@ func (b *StorageBuilder) GetResolvedTs() uint64 {
 
 // DoGc removes the jobs which of finishedTs is less then gcTs
 func (b *StorageBuilder) DoGc(ts uint64) error {
-	if ts > atomic.LoadUint64(&b.resolvedTs) {
-		log.Fatal("gcTs is greater than resolvedTs in StorageBuilder, please report a bug", zap.Uint64("gcTs", ts))
+	resolvedTs := atomic.LoadUint64(&b.resolvedTs)
+	if ts > resolvedTs {
+		log.Warn("gcTs is greater than resolvedTs in StorageBuilder", zap.Uint64("gcTs", ts), zap.Uint64("resolvedTs", resolvedTs))
+		return nil
 	}
 	b.baseStorageMu.Lock()
 	defer b.baseStorageMu.Unlock()
