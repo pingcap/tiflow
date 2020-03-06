@@ -498,7 +498,7 @@ func (c *CDCClient) receiveFromStream(
 				regionInfoMapMu.Lock()
 				sri, ok := regionInfoMap[event.RegionId]
 				if !ok {
-					regionInfoMapMu.RUnlock()
+					regionInfoMapMu.Unlock()
 					log.Warn("drop event due to region stopped", zap.Uint64("regionID", event.RegionId))
 					continue
 				}
@@ -605,7 +605,7 @@ func (s *regionFeedState) onReceiveEvent(
 		return false
 	}
 
-	// TODO: `close` does `wg.Wait`. Do we need to avoid blocking the curernt thread?
+	// TODO: `close` does `wg.Wait`. Do we need to avoid blocking the current thread?
 	s.sorter.close()
 
 	log.Debug("singleEventFeed quit")
