@@ -458,20 +458,26 @@ func (c *CDCClient) handleError(ctx context.Context, errInfo regionErrorInfo, re
 	err := errInfo.err
 	switch eerr := errors.Cause(err).(type) {
 	case *eventError:
-		if notLeader := eerr.GetNotLeader(); notLeader != nil {
+		innerErr := eerr.err
+		if notLeader := innerErr.GetNotLeader(); notLeader != nil {
 			eventFeedErrorCounter.WithLabelValues("NotLeader").Inc()
 			// TODO: Handle the case that notleader.GetLeader() is nil.
 			c.regionCache.UpdateLeader(errInfo.verID, notLeader.GetLeader().GetStoreId(), errInfo.rpcCtx.PeerIdx)
-		} else if eerr.GetEpochNotMatch() != nil {
+		} else if innerErr.GetEpochNotMatch() != nil {
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
 			eventFeedErrorCounter.WithLabelValues("EpochNotMatch").Inc()
 			return c.divideAndSendEventFeedToRegions(ctx, errInfo.span, errInfo.ts, regionCh)
-		} else if eerr.GetRegionNotFound() != nil {
+		} else if innerErr.GetRegionNotFound() != nil {
 			eventFeedErrorCounter.WithLabelValues("RegionNotFound").Inc()
 			return c.divideAndSendEventFeedToRegions(ctx, errInfo.span, errInfo.ts, regionCh)
+		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
+			eventFeedErrorCounter.WithLabelValues("DuplicateRequest").Inc()
+			log.Error("tikv reported duplicated request to the same region. region merge should happened which is not supported",
+				zap.Uint64("regionID", duplicatedRequest.RegionId))
+			return nil
 		} else {
 			eventFeedErrorCounter.WithLabelValues("Unknown").Inc()
-			log.Warn("receive empty or unknown error msg", zap.Stringer("error", eerr))
+			log.Warn("receive empty or unknown error msg", zap.Stringer("error", innerErr))
 		}
 	default:
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
@@ -736,8 +742,8 @@ func (c *CDCClient) singleEventFeed(
 			}
 		case *cdcpb.Event_Admin_:
 			log.Info("receive admin event", zap.Stringer("event", event))
-		case *cdcpb.Event_Error_:
-			return atomic.LoadUint64(&checkpointTs), errors.Trace(&eventError{Event_Error: x.Error})
+		case *cdcpb.Event_Error:
+			return atomic.LoadUint64(&checkpointTs), errors.Trace(&eventError{err: x.Error})
 		case *cdcpb.Event_ResolvedTs:
 			if atomic.LoadUint32(&initialized) == 0 {
 				continue
@@ -773,10 +779,10 @@ func updateCheckpointTS(checkpointTs *uint64, newValue uint64) {
 
 // eventError wrap cdcpb.Event_Error to implements error interface.
 type eventError struct {
-	*cdcpb.Event_Error
+	err *cdcpb.Error
 }
 
 // Error implement error interface.
 func (e *eventError) Error() string {
-	return e.Event_Error.String()
+	return e.err.String()
 }
