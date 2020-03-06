@@ -519,7 +519,7 @@ func (c *CDCClient) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
-		log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
+		//log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
 
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
@@ -652,7 +652,9 @@ func (c *CDCClient) singleEventFeed(
 			return atomic.LoadUint64(&checkpointTs), errors.New("single event feed aborted")
 		}
 
-		log.Debug("singleEventFeed got event", zap.Stringer("event", event))
+		if _, isEntry := event.Event.(*cdcpb.Event_Entries_); !isEntry {
+			log.Debug("singleEventFeed got event", zap.Stringer("event", event))
+		}
 
 		eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
 		switch x := event.Event.(type) {
