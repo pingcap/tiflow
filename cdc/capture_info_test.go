@@ -68,7 +68,7 @@ func (ci *captureInfoSuite) TestPutDeleteGet(c *check.C) {
 	info = &model.CaptureInfo{
 		ID: id,
 	}
-	err = ci.client.PutCaptureInfo(ctx, info)
+	err = ci.client.PutCaptureInfo(ctx, info, 0)
 	c.Assert(err, check.IsNil)
 
 	// get again,
@@ -99,7 +99,7 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 	ctx := context.Background()
 	var err error
 	// put info1
-	err = ci.client.PutCaptureInfo(ctx, info1)
+	err = ci.client.PutCaptureInfo(ctx, info1, 0)
 	c.Assert(err, check.IsNil)
 
 	watchCtx, watchCancel := context.WithCancel(ctx)
@@ -150,7 +150,7 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 
 	// put info2 and info3
 	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc/WatchCaptureInfoCompactionErr", "1*return"), check.IsNil)
-	err = ci.client.PutCaptureInfo(ctx, info2)
+	err = ci.client.PutCaptureInfo(ctx, info2, 0)
 	c.Assert(err, check.IsNil)
 	resp := mustGetResp()
 	c.Assert(resp, check.IsNil)
@@ -158,7 +158,7 @@ func (ci *captureInfoSuite) TestWatch(c *check.C) {
 	checkCaptureLen(2)
 	c.Assert(failpoint.Disable("github.com/pingcap/ticdc/cdc/WatchCaptureInfoCompactionErr"), check.IsNil)
 
-	err = ci.client.PutCaptureInfo(ctx, info3)
+	err = ci.client.PutCaptureInfo(ctx, info3, 0)
 	c.Assert(err, check.IsNil)
 	resp = mustGetResp()
 	c.Assert(resp.IsDelete, check.IsFalse)

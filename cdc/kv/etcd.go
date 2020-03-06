@@ -421,14 +421,14 @@ func (c CDCEtcdClient) DeleteTaskStatus(
 }
 
 // PutCaptureInfo put capture info into etcd.
-func (c CDCEtcdClient) PutCaptureInfo(ctx context.Context, info *model.CaptureInfo) error {
+func (c CDCEtcdClient) PutCaptureInfo(ctx context.Context, info *model.CaptureInfo, leaseID clientv3.LeaseID) error {
 	data, err := info.Marshal()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	key := GetEtcdKeyCaptureInfo(info.ID)
-	_, err = c.Client.Put(ctx, key, string(data))
+	_, err = c.Client.Put(ctx, key, string(data), clientv3.WithLease(leaseID))
 	return errors.Trace(err)
 }
 
