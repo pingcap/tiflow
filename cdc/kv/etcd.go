@@ -183,8 +183,8 @@ func (c CDCEtcdClient) GetAllProcessors(ctx context.Context) (int64, []*model.Pr
 }
 
 // GetProcessors returns the ProcessorInfo list for a change feed
-func (c CDCEtcdClient) GetProcessors(ctx context.Context, changeFeedID string) (int64, []*model.ProcessorInfo, error) {
-	prefix := ProcessorInfoKeyPrefix + "/" + changeFeedID
+func (c CDCEtcdClient) GetProcessors(ctx context.Context, captureID string) (int64, []*model.ProcessorInfo, error) {
+	prefix := ProcessorInfoKeyPrefix + "/" + captureID
 	return c.getProcessorsFromPrefix(ctx, prefix)
 }
 
