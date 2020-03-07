@@ -215,6 +215,13 @@ func (c *CDCClient) EventFeed(
 	return g.Wait()
 }
 
+// dispatchRequest manages a set of streams and dispatch event feed requests
+// to these streams. Streams to each store will be created on need. After
+// establishing new stream, a goroutine will be spawned to handle events from
+// the stream.
+// Regions from `regionCh` will be connected. If any error happens to a
+// region, the error will be send to `errCh` and the receiver of `errCh` is
+// responsible for handling the error.
 func (c *CDCClient) dispatchRequest(
 	ctx context.Context,
 	g *errgroup.Group,
@@ -223,8 +230,9 @@ func (c *CDCClient) dispatchRequest(
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	streams := make(map[string]cdcpb.ChangeData_EventFeedClient)
-	// Stores dispatched region info for each stream, and each regionHandlerSet keeps the channels of each regions in a
-	// stream.
+	// Stores pending regions info for each stream. After sending a new request, the region info wil be put to the map,
+	// and it will be loaded by the receiver thread when it receives the first response from that region. We need this
+	// to pass the region info to the receiver since the region info cannot be inferred from the response from TiKV.
 	pendingRegionsMaps := make(map[string]map[uint64]singleRegionInfo)
 	pendingRegionsMus := make(map[string]*sync.Mutex)
 
@@ -324,6 +332,8 @@ MainLoop:
 				if err1 != nil {
 					log.Error("failed to close stream", zap.Error(err1))
 				}
+				// Delete the stream from the map so that the next time the store is accessed, the stream will be
+				// re-established.
 				delete(streams, rpcCtx.Addr)
 
 				// Wait for a while and retry sending the request
@@ -356,8 +366,9 @@ func needReloadRegion(failStoreIDs map[uint64]struct{}, rpcCtx *tikv.RPCContext)
 
 // partialRegionFeed establishes a EventFeed to the region specified by regionInfo.
 // It manages lifecycle events of the region in order to maintain the EventFeed
-// connection, this may involve retry this region EventFeed or subdividing the region
-// further in the event of a split.
+// connection. If any error happens (region split, leader change, etc), the region
+// and error info will be sent to `errCh`, and the receiver of `errCh` is
+// responsible for handling the error and re-establish the connection to the region.
 func (c *CDCClient) partialRegionFeed(
 	ctx context.Context,
 	regionInfo singleRegionInfo,
@@ -473,6 +484,8 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 	}
 }
 
+// handleError handles error returned by a region. If some new EventFeed connection should be established, the region
+// info will be sent to `regionCh`.
 func (c *CDCClient) handleError(ctx context.Context, errInfo regionErrorInfo, regionCh chan<- singleRegionInfo) error {
 	err := errInfo.err
 	switch eerr := errors.Cause(err).(type) {
@@ -531,7 +544,8 @@ func (c *CDCClient) receiveFromStream(
 	pendingRegions map[uint64]singleRegionInfo,
 	pendingRegoinsMu *sync.Mutex,
 ) error {
-	// Cancel the pending regions if the stream failed.
+	// Cancel the pending regions if the stream failed. Otherwise it will remain unhandled in the pendingRegions list
+	// however not registered in the new reconnected stream.
 	defer func() {
 		for id, r := range pendingRegions {
 			select {
@@ -547,8 +561,13 @@ func (c *CDCClient) receiveFromStream(
 		}
 	}()
 
-	// Start the receive loop
+	// Each region has it's own goroutine to handle its messages. `regionHandlers` stores the channels to these
+	// channels.
+	// Maps from regionID to the channel.
 	regionHandlers := make(map[uint64]chan *cdcpb.Event)
+	// If an error occurs on a region, the goroutine to process messages of that region should exit, and therefore
+	// the channel to that goroutine is invalidated. We need to know whether it's exited here. If it exited,
+	// `regionStopped` will be set to false.
 	regionStopped := make(map[uint64]*int32)
 
 	for {
@@ -591,7 +610,10 @@ func (c *CDCClient) receiveFromStream(
 
 			ch, ok := regionHandlers[event.RegionId]
 			if !ok || isStopped {
-				// Fetch the region info
+				// It's the first response for this region. If the region is newly connected, the region info should
+				// have been put in `pendingRegions`. So here we load the region info from `pendingRegions` and start
+				// a new goroutine to handle messages from this region.
+				// Firstly load the region info.
 				pendingRegoinsMu.Lock()
 				sri, ok := pendingRegions[event.RegionId]
 				if !ok {
@@ -602,6 +624,7 @@ func (c *CDCClient) receiveFromStream(
 				delete(pendingRegions, event.RegionId)
 				pendingRegoinsMu.Unlock()
 
+				// Then spawn the goroutine to process messages of this region.
 				ch = make(chan *cdcpb.Event, 16)
 				regionHandlers[event.RegionId] = ch
 				log.Debug("spawning partialRegionFeed goroutine for regoin", zap.Uint64("regionID", event.RegionId))
@@ -622,7 +645,7 @@ func (c *CDCClient) receiveFromStream(
 	}
 }
 
-// singleEventFeed makes a EventFeed RPC call.
+// singleEventFeed handles events of a single EventFeed stream.
 // Results will be send to eventCh
 // EventFeed RPC will not return checkpoint event directly
 // Resolved event is generate while there's not non-match pre-write
