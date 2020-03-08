@@ -362,7 +362,7 @@ MainLoop:
 				})
 			}
 
-			log.Debug("start new request", zap.Reflect("request", req))
+			log.Debug("start new request", zap.Reflect("request", req), zap.String("addr", rpcCtx.Addr))
 			err = stream.Send(req)
 
 			// If Send error, the receiver should have received error too or will receive error soon. So we doesn't need
@@ -391,6 +391,8 @@ MainLoop:
 
 				continue
 			}
+
+			log.Debug("request to region successfully sent", zap.Reflect("verID", sri.verID), zap.String("addr", rpcCtx.Addr))
 
 			break
 		}
@@ -442,6 +444,7 @@ func (c *CDCClient) partialRegionFeed(
 	}
 
 	log.Info("EventFeed disconnected",
+		zap.Reflect("verID", regionInfo.verID),
 		zap.Reflect("span", regionInfo.span),
 		zap.Uint64("checkpoint", ts),
 		zap.Error(err))
@@ -593,6 +596,11 @@ func (c *CDCClient) receiveFromStream(
 	// Cancel the pending regions if the stream failed. Otherwise it will remain unhandled in the pendingRegions list
 	// however not registered in the new reconnected stream.
 	defer func() {
+		log.Info("stream to store closed", zap.String("addr", addr), zap.Uint64("storeID", storeID))
+
+		pendingRegoinsMu.Lock()
+		defer pendingRegoinsMu.Unlock()
+
 		for id, r := range pendingRegions {
 			select {
 			case <-ctx.Done():
@@ -619,7 +627,7 @@ func (c *CDCClient) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
-		//log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent))
+		log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent), zap.String("addr", addr))
 
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
@@ -673,13 +681,15 @@ func (c *CDCClient) receiveFromStream(
 				// Then spawn the goroutine to process messages of this region.
 				ch = make(chan *cdcpb.Event, 16)
 				regionHandlers[event.RegionId] = ch
-				log.Debug("spawning partialRegionFeed goroutine for regoin", zap.Uint64("regionID", event.RegionId))
+				log.Debug("spawning partialRegionFeed goroutine for region", zap.Uint64("regionID", event.RegionId))
 
 				isStopped := new(int32)
 				regionStopped[event.RegionId] = isStopped
 				g.Go(func() error {
 					return c.partialRegionFeed(ctx, sri, ch, errCh, eventCh, isStopped)
 				})
+			} else {
+				log.Debug("partialRegionFeed goroutine already spawned", zap.Uint64("regionID", event.RegionId))
 			}
 
 			select {
