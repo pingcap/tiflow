@@ -48,16 +48,19 @@ var _ = check.Suite(&decodeMetaKeySuite{})
 func (s *decodeMetaKeySuite) TestDecodeListData(c *check.C) {
 	key := []byte("hello")
 	var index int64 = 3
-	ek := make([]byte, 0, len(metaPrefix)+len(key)+36)
-	ek = append(ek, metaPrefix...)
-	ek = codec.EncodeBytes(ek, key)
-	ek = codec.EncodeUint(ek, uint64(ListData))
-	metaKey := codec.EncodeInt(ek, index)
 
-	meta, err := decodeMetaKey(metaKey)
+	meta, err := decodeMetaKey(buildMetaKey(key, index))
 	c.Assert(err, check.IsNil)
 	c.Assert(meta.getType(), check.Equals, ListData)
 	list := meta.(metaListData)
 	c.Assert(list.key, check.Equals, string(key))
 	c.Assert(list.index, check.Equals, index)
+}
+
+func buildMetaKey(key []byte, index int64) []byte {
+	ek := make([]byte, 0, len(metaPrefix)+len(key)+36)
+	ek = append(ek, metaPrefix...)
+	ek = codec.EncodeBytes(ek, key)
+	ek = codec.EncodeUint(ek, uint64(ListData))
+	return codec.EncodeInt(ek, index)
 }

@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/sink"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -225,6 +227,9 @@ func (w *ProcessorWatcher) Watch(ctx context.Context, errCh chan<- error, cb pro
 		rl := rate.NewLimiter(0.1, 5)
 		revision := getResp.Header.Revision
 		// wait for key to appear
+		log.Info("waiting dispatching tasks",
+			zap.String("key", key),
+			zap.Int64("rev", revision))
 		watchCh := w.etcdCli.Client.Watch(ctx, key, clientv3.WithRev(revision))
 	waitKeyLoop:
 		for {
@@ -328,18 +333,28 @@ func realRunProcessor(
 	checkpointTs uint64,
 	cb processorCallback,
 ) error {
-	processor, err := NewProcessor(ctx, pdEndpoints, info, changefeedID, captureID, checkpointTs)
+	sink, err := sink.NewMySQLSink(info.SinkURI, info.Opts)
 	if err != nil {
+		return errors.Trace(err)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	errCh := make(chan error, 1)
+	go func() {
+		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
+			errCh <- err
+		}
+	}()
+	processor, err := NewProcessor(ctx, pdEndpoints, info, sink, changefeedID, captureID, checkpointTs)
+	if err != nil {
+		cancel()
 		return err
 	}
-
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
 
 	if cb != nil {
 		cb.OnRunProcessor(processor)
 	}
 
-	errCh := make(chan error, 1)
 	processor.Run(ctx, errCh)
 
 	go func() {
@@ -347,6 +362,7 @@ func realRunProcessor(
 		if cb != nil {
 			cb.OnStopProcessor(processor, err)
 		}
+		cancel()
 	}()
 
 	return nil

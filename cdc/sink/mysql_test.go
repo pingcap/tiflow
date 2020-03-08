@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,6 +13,89 @@
 
 package sink
 
+import (
+	"testing"
+
+	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/model"
+)
+
+type EmitSuite struct{}
+
+func Test(t *testing.T) { check.TestingT(t) }
+
+var _ = check.Suite(&EmitSuite{})
+
+func (s EmitSuite) TestSplitRowsGroup(c *check.C) {
+	testCases := []struct {
+		inputGroup              map[string][]*model.RowChangedEvent
+		resolvedTs              uint64
+		expectedResolvedGroup   map[string][]*model.RowChangedEvent
+		expectedUnresolvedGroup map[string][]*model.RowChangedEvent
+		expectedMinTs           uint64
+	}{{
+		inputGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		resolvedTs:            5,
+		expectedResolvedGroup: map[string][]*model.RowChangedEvent{},
+		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		expectedMinTs: 5,
+	}, {
+		inputGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		resolvedTs: 23,
+		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}},
+			"t2": {{Ts: 23}},
+		},
+		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		expectedMinTs: 11,
+	}, {
+		inputGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		resolvedTs: 30,
+		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 33}, {Ts: 34}},
+		},
+		expectedMinTs: 11,
+	}, {
+		inputGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		resolvedTs: 40,
+		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
+			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
+			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		},
+		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{},
+		expectedMinTs:           11,
+	}}
+	for _, tc := range testCases {
+		minTs, resolvedGroup := splitRowsGroup(tc.resolvedTs, tc.inputGroup)
+		c.Assert(minTs, check.Equals, tc.expectedMinTs)
+		c.Assert(resolvedGroup, check.DeepEquals, tc.expectedResolvedGroup)
+		c.Assert(tc.inputGroup, check.DeepEquals, tc.expectedUnresolvedGroup)
+	}
+}
+
+/*
 import (
 	"context"
 	"sort"
@@ -220,30 +303,6 @@ func (s EmitSuite) TestShouldExecDelete(c *check.C) {
 	c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 }
 
-func (s EmitSuite) TestConfigureSinkURI(c *check.C) {
-	cases := []struct {
-		input    string
-		expected string
-	}{{
-		input:    "root@tcp(127.0.0.1:3306)/mysql",
-		expected: "root@tcp(127.0.0.1:3306)/?time_zone=UTC",
-	}, {
-		input:    "root@tcp(127.0.0.1:3306)/",
-		expected: "root@tcp(127.0.0.1:3306)/?time_zone=UTC",
-	}, {
-		input:    "root@tcp(127.0.0.1:3306)/?time_zone=AA",
-		expected: "root@tcp(127.0.0.1:3306)/?time_zone=UTC",
-	}, {
-		input:    "root@tcp(127.0.0.1:3306)/?time_zone=AA&some_option=BB",
-		expected: "root@tcp(127.0.0.1:3306)/?some_option=BB&time_zone=UTC",
-	}}
-	for _, cs := range cases {
-		sink, err := configureSinkURI(cs.input)
-		c.Assert(err, check.IsNil)
-		c.Assert(sink, check.Equals, cs.expected)
-	}
-}
-
 type splitSuite struct{}
 
 var _ = check.Suite(&splitSuite{})
@@ -289,3 +348,47 @@ func (s *splitSuite) TestShouldSplitByTable(c *check.C) {
 	assertAllAreFromTbl(groups[1], "db", "tbl2")
 	assertAllAreFromTbl(groups[2], "db2", "tbl2")
 }
+
+type mysqlSinkSuite struct{}
+
+var _ = check.Suite(&mysqlSinkSuite{})
+
+func (s *mysqlSinkSuite) TestBuildDBAndParams(c *check.C) {
+	tests := []struct {
+		sinkURI string
+		opts    map[string]string
+		params  params
+	}{
+		{
+			sinkURI: "mysql://root:123@localhost:4000?worker-count=20",
+			opts:    map[string]string{dryRunOpt: ""},
+			params: params{
+				workerCount: 20,
+				dryRun:      true,
+			},
+		},
+		{
+			sinkURI: "tidb://root:123@localhost:4000?worker-count=20",
+			opts:    map[string]string{dryRunOpt: ""},
+			params: params{
+				workerCount: 20,
+				dryRun:      true,
+			},
+		},
+		{
+			sinkURI: "root@tcp(127.0.0.1:3306)/", // dsn not uri
+			opts:    nil,
+			params:  defaultParams,
+		},
+	}
+
+	for _, t := range tests {
+		c.Log("case sink: ", t.sinkURI)
+		db, params, err := buildDBAndParams(t.sinkURI, t.opts)
+		c.Assert(err, check.IsNil)
+		c.Assert(params, check.Equals, t.params)
+		c.Assert(db, check.NotNil)
+	}
+}
+
+*/

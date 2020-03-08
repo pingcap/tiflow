@@ -11,17 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package schema
+package entry
 
 import (
+	"container/list"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/parser/model"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"go.uber.org/zap"
 )
@@ -33,15 +35,18 @@ type Storage struct {
 	tableNameToID  map[TableName]int64
 	schemaNameToID map[string]int64
 
-	schemas map[int64]*model.DBInfo
+	schemas map[int64]*timodel.DBInfo
 	tables  map[int64]*TableInfo
 
 	truncateTableID map[int64]struct{}
 
 	schemaMetaVersion int64
 	lastHandledTs     uint64
+	resolvedTs        *uint64
 
-	jobs                []*model.Job
+	currentJob *list.Element
+	jobList    *jobList
+
 	version2SchemaTable map[int64]TableName
 	currentVersion      int64
 }
@@ -59,15 +64,16 @@ func (t TableName) String() string {
 
 // TableInfo provides meta data describing a DB table.
 type TableInfo struct {
-	*model.TableInfo
+	*timodel.TableInfo
 	ColumnsOffset map[int64]int
 	IndicesOffset map[int64]int
+	UniqueColumns map[int64]struct{}
 	handleColID   int64
 	rowColInfos   []rowcodec.ColInfo
 }
 
-// WrapTableInfo creates a TableInfo from a model.TableInfo
-func WrapTableInfo(info *model.TableInfo) *TableInfo {
+// WrapTableInfo creates a TableInfo from a timodel.TableInfo
+func WrapTableInfo(info *timodel.TableInfo) *TableInfo {
 	columnsOffset := make(map[int64]int, len(info.Columns))
 	for i, col := range info.Columns {
 		columnsOffset[col.ID] = i
@@ -76,15 +82,36 @@ func WrapTableInfo(info *model.TableInfo) *TableInfo {
 	for i, idx := range info.Indices {
 		indicesOffset[idx.ID] = i
 	}
-	return &TableInfo{
+
+	ti := &TableInfo{
 		TableInfo:     info,
 		ColumnsOffset: columnsOffset,
 		IndicesOffset: indicesOffset,
+		UniqueColumns: make(map[int64]struct{}),
 	}
+	if ti.PKIsHandle {
+		for _, col := range ti.Columns {
+			if mysql.HasPriKeyFlag(col.Flag) {
+				// Prepend to make sure the primary key ends up at the front
+				ti.UniqueColumns[col.ID] = struct{}{}
+				break
+			}
+		}
+	}
+
+	for _, idx := range ti.Indices {
+		if ti.IsIndexUnique(idx) {
+			for _, col := range idx.Columns {
+				ti.UniqueColumns[ti.Columns[col.Offset].ID] = struct{}{}
+			}
+		}
+	}
+
+	return ti
 }
 
 // GetColumnInfo returns the column info by ID
-func (ti *TableInfo) GetColumnInfo(colID int64) (info *model.ColumnInfo, exist bool) {
+func (ti *TableInfo) GetColumnInfo(colID int64) (info *timodel.ColumnInfo, exist bool) {
 	colOffset, exist := ti.ColumnsOffset[colID]
 	if !exist {
 		return nil, false
@@ -93,7 +120,7 @@ func (ti *TableInfo) GetColumnInfo(colID int64) (info *model.ColumnInfo, exist b
 }
 
 // GetIndexInfo returns the index info by ID
-func (ti *TableInfo) GetIndexInfo(indexID int64) (info *model.IndexInfo, exist bool) {
+func (ti *TableInfo) GetIndexInfo(indexID int64) (info *timodel.IndexInfo, exist bool) {
 	indexOffset, exist := ti.IndicesOffset[indexID]
 	if !exist {
 		return nil, false
@@ -109,7 +136,7 @@ func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
 	handleColID := int64(-1)
 	reqCols := make([]rowcodec.ColInfo, len(ti.Columns))
 	for i, col := range ti.Columns {
-		isPK := (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == model.ExtraHandleID
+		isPK := (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == timodel.ExtraHandleID
 		if isPK {
 			handleColID = col.ID
 		}
@@ -128,15 +155,9 @@ func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
 	return ti.handleColID, ti.rowColInfos
 }
 
-// WritableColumns returns all public and non-generated columns
-func (ti *TableInfo) WritableColumns() []*model.ColumnInfo {
-	cols := make([]*model.ColumnInfo, 0, len(ti.Columns))
-	for _, col := range ti.Columns {
-		if col.State == model.StatePublic && !col.IsGenerated() {
-			cols = append(cols, col)
-		}
-	}
-	return cols
+// IsColWritable returns is the col is writeable
+func (ti *TableInfo) IsColWritable(col *timodel.ColumnInfo) bool {
+	return col.State == timodel.StatePublic && !col.IsGenerated()
 }
 
 // GetUniqueKeys returns all unique keys of the table as a slice of column names
@@ -167,8 +188,14 @@ func (ti *TableInfo) GetUniqueKeys() [][]string {
 	return uniqueKeys
 }
 
+// IsColumnUnique returns whether the column is unique
+func (ti *TableInfo) IsColumnUnique(colID int64) bool {
+	_, exist := ti.UniqueColumns[colID]
+	return exist
+}
+
 // IsIndexUnique returns whether the index is unique
-func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
+func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 	if indexInfo.Primary {
 		return true
 	}
@@ -183,39 +210,52 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
 	return false
 }
 
-// NewStorage returns the Schema object
-func NewStorage(jobs []*model.Job) (*Storage, error) {
-	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].BinlogInfo.FinishedTS < jobs[j].BinlogInfo.FinishedTS
-	})
+// Clone clones the TableInfo
+func (ti *TableInfo) Clone() *TableInfo {
+	return WrapTableInfo(ti.TableInfo.Clone())
+}
 
+// newStorage returns the Schema object
+func newStorage(resolvedTs *uint64, jobList *jobList) *Storage {
+	s := NewSingleStorage()
+	s.resolvedTs = resolvedTs
+	s.currentJob = jobList.Head()
+	s.jobList = jobList
+	return s
+}
+
+// NewSingleStorage creates a new single storage
+func NewSingleStorage() *Storage {
 	s := &Storage{
 		version2SchemaTable: make(map[int64]TableName),
 		truncateTableID:     make(map[int64]struct{}),
-		jobs:                jobs,
 	}
 
 	s.tableIDToName = make(map[int64]TableName)
 	s.tableNameToID = make(map[TableName]int64)
-	s.schemas = make(map[int64]*model.DBInfo)
+	s.schemas = make(map[int64]*timodel.DBInfo)
 	s.schemaNameToID = make(map[string]int64)
 	s.tables = make(map[int64]*TableInfo)
 
-	return s, nil
+	return s
 }
 
 // String implements fmt.Stringer interface.
 func (s *Storage) String() string {
 	mp := map[string]interface{}{
-		"tableIDToName":  s.tableIDToName,
-		"tableNameToID":  s.tableNameToID,
-		"schemaNameToID": s.schemaNameToID,
-		// "schemas":           s.schemas,
-		// "tables":            s.tables,
+		"tableIDToName":     s.tableIDToName,
+		"schemaNameToID":    s.schemaNameToID,
+		"schemas":           s.schemas,
+		"tables":            s.tables,
 		"schemaMetaVersion": s.schemaMetaVersion,
+		"resolvedTs":        *s.resolvedTs,
+		"cjob":              s.currentJob.Value,
 	}
 
-	data, _ := json.MarshalIndent(mp, "\t", "\t")
+	data, err := json.MarshalIndent(mp, "\t", "\t")
+	if err != nil {
+		panic(err)
+	}
 
 	return string(data)
 }
@@ -251,13 +291,13 @@ func (s *Storage) GetTableByName(schema, table string) (info *TableInfo, ok bool
 }
 
 // SchemaByID returns the DBInfo by schema id
-func (s *Storage) SchemaByID(id int64) (val *model.DBInfo, ok bool) {
+func (s *Storage) SchemaByID(id int64) (val *timodel.DBInfo, ok bool) {
 	val, ok = s.schemas[id]
 	return
 }
 
 // SchemaByTableID returns the schema ID by table ID
-func (s *Storage) SchemaByTableID(tableID int64) (*model.DBInfo, bool) {
+func (s *Storage) SchemaByTableID(tableID int64) (*timodel.DBInfo, bool) {
 	tn, ok := s.tableIDToName[tableID]
 	if !ok {
 		return nil, false
@@ -296,7 +336,7 @@ func (s *Storage) DropSchema(id int64) (string, error) {
 }
 
 // CreateSchema adds new DBInfo
-func (s *Storage) CreateSchema(db *model.DBInfo) error {
+func (s *Storage) CreateSchema(db *timodel.DBInfo) error {
 	if _, ok := s.schemas[db.ID]; ok {
 		return errors.AlreadyExistsf("schema %s(%d)", db.Name, db.ID)
 	}
@@ -329,7 +369,7 @@ func (s *Storage) DropTable(id int64) (string, error) {
 }
 
 // CreateTable creates new TableInfo
-func (s *Storage) CreateTable(schema *model.DBInfo, table *model.TableInfo) error {
+func (s *Storage) CreateTable(schema *timodel.DBInfo, table *timodel.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if ok {
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
@@ -345,7 +385,7 @@ func (s *Storage) CreateTable(schema *model.DBInfo, table *model.TableInfo) erro
 }
 
 // ReplaceTable replace the table by new tableInfo
-func (s *Storage) ReplaceTable(table *model.TableInfo) error {
+func (s *Storage) ReplaceTable(table *timodel.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if !ok {
 		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
@@ -372,42 +412,27 @@ func (s *Storage) removeTable(tableID int64) error {
 	return nil
 }
 
-// AddJob adds a DDL job to the schema storage
-func (s *Storage) AddJob(job *model.Job) {
-	if len(s.jobs) == 0 || s.jobs[len(s.jobs)-1].BinlogInfo.FinishedTS < job.BinlogInfo.FinishedTS {
-		s.jobs = append(s.jobs, job)
-		return
-	}
-
-	log.Debug("skip job in AddJob")
-}
-
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
 func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
-	var i int
-	var job *model.Job
-	for i, job = range s.jobs {
+	if commitTs > atomic.LoadUint64(s.resolvedTs) {
+		return model.ErrUnresolved
+	}
+	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
+	for _, job := range jobs {
 		if skipJob(job) {
 			log.Info("skip DDL job because the job isn't synced and done", zap.Stringer("job", job))
 			continue
-		}
-
-		if job.BinlogInfo.FinishedTS > commitTs {
-			break
 		}
 		if job.BinlogInfo.FinishedTS <= s.lastHandledTs {
 			log.Debug("skip DDL job because the job is already handled", zap.Stringer("job", job))
 			continue
 		}
-
 		_, _, _, err := s.HandleDDL(job)
 		if err != nil {
 			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", job, s)
 		}
 	}
-
-	s.jobs = s.jobs[i:]
-
+	s.currentJob = currentJob
 	return nil
 }
 
@@ -416,7 +441,7 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 // the second value[string]: the table name
 // the third value[string]: the sql that is corresponding to the job
 // the fourth value[error]: the handleDDL execution's err
-func (s *Storage) HandleDDL(job *model.Job) (schemaName string, tableName string, sql string, err error) {
+func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName string, sql string, err error) {
 	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
 
 	if skipJob(job) {
@@ -429,9 +454,9 @@ func (s *Storage) HandleDDL(job *model.Job) (schemaName string, tableName string
 	}
 
 	switch job.Type {
-	case model.ActionCreateSchema:
+	case timodel.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
-		schema := job.BinlogInfo.DBInfo
+		schema := job.BinlogInfo.DBInfo.Clone()
 
 		err := s.CreateSchema(schema)
 		if err != nil {
@@ -442,7 +467,7 @@ func (s *Storage) HandleDDL(job *model.Job) (schemaName string, tableName string
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		schemaName = schema.Name.O
 
-	case model.ActionModifySchemaCharsetAndCollate:
+	case timodel.ActionModifySchemaCharsetAndCollate:
 		db := job.BinlogInfo.DBInfo
 		if _, ok := s.schemas[db.ID]; !ok {
 			return "", "", "", errors.NotFoundf("schema %s(%d)", db.Name, db.ID)
@@ -454,7 +479,7 @@ func (s *Storage) HandleDDL(job *model.Job) (schemaName string, tableName string
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		schemaName = db.Name.O
 
-	case model.ActionDropSchema:
+	case timodel.ActionDropSchema:
 		schemaName, err = s.DropSchema(job.SchemaID)
 		if err != nil {
 			return "", "", "", errors.Trace(err)
@@ -463,7 +488,7 @@ func (s *Storage) HandleDDL(job *model.Job) (schemaName string, tableName string
 		s.version2SchemaTable[job.BinlogInfo.SchemaVersion] = TableName{Schema: schemaName, Table: ""}
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 
-	case model.ActionRenameTable:
+	case timodel.ActionRenameTable:
 		// ignore schema doesn't support reanme ddl
 		_, ok := s.SchemaByTableID(job.TableID)
 		if !ok {
@@ -475,7 +500,7 @@ func (s *Storage) HandleDDL(job *model.Job) (schemaName string, tableName string
 			return "", "", "", errors.Trace(err)
 		}
 		// create table
-		table := job.BinlogInfo.TableInfo
+		table := job.BinlogInfo.TableInfo.Clone()
 		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
@@ -491,8 +516,8 @@ func (s *Storage) HandleDDL(job *model.Job) (schemaName string, tableName string
 		schemaName = schema.Name.O
 		tableName = table.Name.O
 
-	case model.ActionCreateTable, model.ActionCreateView, model.ActionRecoverTable:
-		table := job.BinlogInfo.TableInfo
+	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
+		table := job.BinlogInfo.TableInfo.Clone()
 		if table == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
@@ -512,7 +537,7 @@ func (s *Storage) HandleDDL(job *model.Job) (schemaName string, tableName string
 		schemaName = schema.Name.O
 		tableName = table.Name.O
 
-	case model.ActionDropTable, model.ActionDropView:
+	case timodel.ActionDropTable, timodel.ActionDropView:
 		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
@@ -527,7 +552,7 @@ func (s *Storage) HandleDDL(job *model.Job) (schemaName string, tableName string
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 		schemaName = schema.Name.O
 
-	case model.ActionTruncateTable:
+	case timodel.ActionTruncateTable:
 		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
@@ -539,7 +564,7 @@ func (s *Storage) HandleDDL(job *model.Job) (schemaName string, tableName string
 			return "", "", "", errors.Trace(err)
 		}
 
-		table := job.BinlogInfo.TableInfo
+		table := job.BinlogInfo.TableInfo.Clone()
 		if table == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
@@ -595,6 +620,49 @@ func (s *Storage) CloneTables() map[uint64]TableName {
 	return mp
 }
 
+// Clone clones Storage
+func (s *Storage) Clone() *Storage {
+	n := &Storage{
+		tableIDToName:  make(map[int64]TableName),
+		tableNameToID:  make(map[TableName]int64),
+		schemaNameToID: make(map[string]int64),
+
+		schemas: make(map[int64]*timodel.DBInfo),
+		tables:  make(map[int64]*TableInfo),
+
+		truncateTableID:     make(map[int64]struct{}),
+		version2SchemaTable: make(map[int64]TableName),
+	}
+	for k, v := range s.tableIDToName {
+		n.tableIDToName[k] = v
+	}
+	for k, v := range s.tableNameToID {
+		n.tableNameToID[k] = v
+	}
+	for k, v := range s.schemaNameToID {
+		n.schemaNameToID[k] = v
+	}
+	for k, v := range s.schemas {
+		n.schemas[k] = v.Clone()
+	}
+	for k, v := range s.tables {
+		n.tables[k] = v.Clone()
+	}
+	for k, v := range s.truncateTableID {
+		n.truncateTableID[k] = v
+	}
+	for k, v := range s.version2SchemaTable {
+		n.version2SchemaTable[k] = v
+	}
+	n.schemaMetaVersion = s.schemaMetaVersion
+	n.lastHandledTs = s.lastHandledTs
+	n.resolvedTs = s.resolvedTs
+	n.jobList = s.jobList
+	n.currentJob = s.currentJob
+	n.currentVersion = s.currentVersion
+	return n
+}
+
 // IsTruncateTableID returns true if the table id have been truncated by truncate table DDL
 func (s *Storage) IsTruncateTableID(id int64) bool {
 	_, ok := s.truncateTableID[id]
@@ -605,6 +673,6 @@ func (s *Storage) IsTruncateTableID(id int64) bool {
 // For older version TiDB, it write DDL Binlog in the txn that the state of job is changed to *synced*
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
-func skipJob(job *model.Job) bool {
+func skipJob(job *timodel.Job) bool {
 	return !job.IsSynced() && !job.IsDone()
 }
