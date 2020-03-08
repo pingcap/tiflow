@@ -423,7 +423,21 @@ func (c *CDCClient) partialRegionFeed(
 	eventCh chan<- *model.RegionFeedEvent,
 	isStopped *int32,
 ) error {
-	defer atomic.StoreInt32(isStopped, 1)
+	defer func() {
+		atomic.StoreInt32(isStopped, 1)
+		// Workaround to avoid remaining messages in the channel blocks the receiver thread.
+		// TODO: Find a better solution.
+		go func() {
+			timer := time.After(time.Second * 2)
+			for {
+				select {
+				case <-receiver:
+				case <-timer:
+					return
+				}
+			}
+		}()
+	}()
 
 	ts := regionInfo.ts
 	rl := rate.NewLimiter(0.1, 5)
