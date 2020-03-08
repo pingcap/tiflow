@@ -448,6 +448,8 @@ func (c *CDCClient) partialRegionFeed(
 
 	regionInfo.ts = ts
 
+	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
+	atomic.StoreInt32(isStopped, 1)
 	errCh <- regionErrorInfo{
 		singleRegionInfo: regionInfo,
 		err:              err,
