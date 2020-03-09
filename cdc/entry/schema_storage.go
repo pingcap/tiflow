@@ -69,6 +69,7 @@ type TableInfo struct {
 	IndicesOffset map[int64]int
 	UniqueColumns map[int64]struct{}
 	handleColID   int64
+	IndieMarkCol  string
 	rowColInfos   []rowcodec.ColInfo
 }
 
@@ -89,6 +90,9 @@ func WrapTableInfo(info *timodel.TableInfo) *TableInfo {
 		IndicesOffset: indicesOffset,
 		UniqueColumns: make(map[int64]struct{}),
 	}
+
+	uniqueIndexNum := 0
+
 	if ti.PKIsHandle {
 		for _, col := range ti.Columns {
 			if mysql.HasPriKeyFlag(col.Flag) {
@@ -97,6 +101,7 @@ func WrapTableInfo(info *timodel.TableInfo) *TableInfo {
 				break
 			}
 		}
+		uniqueIndexNum++
 	}
 
 	for _, idx := range ti.Indices {
@@ -104,6 +109,17 @@ func WrapTableInfo(info *timodel.TableInfo) *TableInfo {
 			for _, col := range idx.Columns {
 				ti.UniqueColumns[ti.Columns[col.Offset].ID] = struct{}{}
 			}
+		}
+		if idx.Primary || idx.Unique {
+			uniqueIndexNum++
+		}
+	}
+
+	// this table has only one unique column
+	if uniqueIndexNum == 1 && len(ti.UniqueColumns) == 1 {
+		for col := range ti.UniqueColumns {
+			info, _ := ti.GetColumnInfo(col)
+			ti.IndieMarkCol = info.Name.O
 		}
 	}
 
