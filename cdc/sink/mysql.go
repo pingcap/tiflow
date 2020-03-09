@@ -25,10 +25,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
-	"github.com/pingcap/ticdc/pkg/retry"
-
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -36,14 +32,19 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
-const dryRunOpt = "_dry-run"
 const defaultWorkerCount = 16
+
+var (
+	printStatusInterval = 30 * time.Second
+)
 
 type mysqlSink struct {
 	db               *sql.DB
@@ -54,6 +55,10 @@ type mysqlSink struct {
 
 	unresolvedRowsMu sync.Mutex
 	unresolvedRows   map[string][]*model.RowChangedEvent
+
+	lastTime  time.Time
+	lastCount int64
+	count     int64
 }
 
 func (s *mysqlSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
@@ -131,6 +136,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		return errors.Trace(err)
 	}
 
+	atomic.AddInt64(&s.count, 1)
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
 	return nil
 }
@@ -209,8 +215,10 @@ func splitRowsGroup(resolvedTs uint64, unresolvedRows map[string][]*model.RowCha
 var _ Sink = &mysqlSink{}
 
 type params struct {
-	workerCount int
-	dryRun      bool
+	workerCount  int
+	dryRun       bool
+	changefeedID string
+	captureID    string
 }
 
 var defaultParams = params{
@@ -234,8 +242,14 @@ func configureSinkURI(sinkURI string) (string, error) {
 
 func buildDBAndParams(sinkURI string, opts map[string]string) (db *sql.DB, params params, err error) {
 	params = defaultParams
-	if _, ok := opts[dryRunOpt]; ok {
+	if _, ok := opts[OptDryRun]; ok {
 		params.dryRun = true
+	}
+	if cid, ok := opts[OptChangefeedID]; ok {
+		params.changefeedID = cid
+	}
+	if cid, ok := opts[OptCaptureID]; ok {
+		params.captureID = cid
 	}
 
 	// treat as dsn of the driver for compatibility...
@@ -303,6 +317,7 @@ func newMySQLSink(db *sql.DB, params params) Sink {
 		db:             db,
 		unresolvedRows: make(map[string][]*model.RowChangedEvent),
 		params:         params,
+		lastTime:       time.Now(),
 	}
 
 	sink.db.SetMaxIdleConns(params.workerCount)
@@ -345,6 +360,33 @@ func (s *mysqlSink) Close() error {
 	return nil
 }
 
+func (s *mysqlSink) PrintStatus(ctx context.Context) error {
+	timer := time.NewTicker(printStatusInterval)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
+			now := time.Now()
+			seconds := now.Unix() - s.lastTime.Unix()
+			total := atomic.LoadInt64(&s.count)
+			last := atomic.LoadInt64(&s.lastCount)
+			count := total - last
+			qps := int64(0)
+			if seconds > 0 {
+				qps = count / seconds
+			}
+			atomic.StoreInt64(&s.lastCount, total)
+			s.lastTime = now
+			log.Info("mysql sink replication status",
+				zap.String("changefeed", s.params.changefeedID),
+				zap.Int64("count", count),
+				zap.Int64("qps", qps))
+		}
+	}
+}
+
 func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent) error {
 	startTime := time.Now()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -382,11 +424,10 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent)
 	if err = tx.Commit(); err != nil {
 		return errors.Trace(err)
 	}
-	captureID := util.CaptureIDFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	execTxnHistogram.WithLabelValues(captureID, changefeedID).Observe(time.Since(startTime).Seconds())
-	execBatchHistogram.WithLabelValues(captureID, changefeedID).Observe(float64(len(rows)))
-	log.Info("Exec Rows succeeded", zap.Int("num of Rows", len(rows)))
+	execTxnHistogram.WithLabelValues(s.params.captureID, s.params.changefeedID).Observe(time.Since(startTime).Seconds())
+	execBatchHistogram.WithLabelValues(s.params.captureID, s.params.changefeedID).Observe(float64(len(rows)))
+	atomic.AddInt64(&s.count, int64(len(rows)))
+	log.Debug("Exec Rows succeeded", zap.Int("num of Rows", len(rows)))
 	return nil
 }
 

@@ -22,6 +22,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// Sink options keys
+const (
+	OptDryRun       = "_dry_run"
+	OptChangefeedID = "_changefeed_id"
+	OptCaptureID    = "_capture_id"
+)
+
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
 	EmitResolvedEvent(ctx context.Context, ts uint64) error
@@ -34,6 +41,8 @@ type Sink interface {
 	Run(ctx context.Context) error
 	// Close does not guarantee delivery of outstanding messages.
 	Close() error
+	// PrintStatus prints necessary status periodically
+	PrintStatus(ctx context.Context) error
 }
 
 // NewBlackHoleSink creates a block hole sink
@@ -75,5 +84,10 @@ func (b *blackHoleSink) CheckpointTs() uint64 {
 }
 
 func (b *blackHoleSink) Close() error {
+	return nil
+}
+
+func (b *blackHoleSink) PrintStatus(ctx context.Context) error {
+	<-ctx.Done()
 	return nil
 }
