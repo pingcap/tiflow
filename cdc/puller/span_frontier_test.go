@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/interval"
 	"github.com/pingcap/ticdc/pkg/util"
 )
 
@@ -17,7 +18,7 @@ var _ = check.Suite(&spanFrontierSuite{})
 
 func (s *spanFrontier) testStr() string {
 	var buf strings.Builder
-	s.Entries(func(sp util.Span, ts uint64) {
+	s.Entries(func(sp interval.Range, ts uint64) {
 		if buf.Len() != 0 {
 			buf.WriteString(` `)
 		}
