@@ -15,7 +15,6 @@ package sink
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"strings"
 

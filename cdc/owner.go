@@ -761,13 +761,9 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		c.ddlState = model.ChangeFeedWaitToExecDDL
 	}
 
-	if minCheckpointTs > c.ddlResolvedTs {
-		log.Info("minCheckpointTs > c.ddlResolvedTs", zap.Uint64("minCheckpointTs", minCheckpointTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs))
-		minCheckpointTs = c.ddlResolvedTs
-	}
-	if len(c.ddlJobHistory) > 0 && minCheckpointTs > c.ddlJobHistory[0].BinlogInfo.FinishedTS {
-		log.Info("minCheckpointTs > finishedts", zap.Uint64("minCheckpointTs", minCheckpointTs), zap.Reflect("job", c.ddlJobHistory[0]))
-		minCheckpointTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
+	// if downstream sink is the MQ sink, the MQ sink do not promise that checkpoint is less than globalResolvedTs
+	if minCheckpointTs > minResolvedTs {
+		minCheckpointTs = minResolvedTs
 	}
 
 	var tsUpdated bool
