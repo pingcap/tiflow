@@ -216,21 +216,15 @@ var _ Sink = &mysqlSink{}
 
 type params struct {
 	workerCount  int
-	dryRun       bool
 	changefeedID string
 	captureID    string
 }
 
 var defaultParams = params{
 	workerCount: defaultWorkerCount,
-	dryRun:      false,
 }
 
-func configureSinkURI(sinkURI string) (string, error) {
-	dsnCfg, err := dmysql.ParseDSN(sinkURI)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
+func configureSinkURI(dsnCfg *dmysql.Config) (string, error) {
 	dsnCfg.Loc = time.UTC
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
@@ -240,11 +234,11 @@ func configureSinkURI(sinkURI string) (string, error) {
 	return dsnCfg.FormatDSN(), nil
 }
 
-func buildDBAndParams(sinkURI string, opts map[string]string) (db *sql.DB, params params, err error) {
-	params = defaultParams
-	if _, ok := opts[OptDryRun]; ok {
-		params.dryRun = true
-	}
+// newMySQLSink creates a new MySQL sink using schema storage
+func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, opts map[string]string) (Sink, error) {
+	var db *sql.DB
+	params := defaultParams
+
 	if cid, ok := opts[OptChangefeedID]; ok {
 		params.changefeedID = cid
 	}
@@ -252,67 +246,51 @@ func buildDBAndParams(sinkURI string, opts map[string]string) (db *sql.DB, param
 		params.captureID = cid
 	}
 
-	// treat as dsn of the driver for compatibility...
-	if !strings.HasPrefix(sinkURI, "mysql://") && !strings.HasPrefix(sinkURI, "tidb://") {
-		sinkURI, err = configureSinkURI(sinkURI)
-		if err != nil {
-			return nil, params, errors.Trace(err)
+	switch {
+	case sinkURI != nil:
+		scheme := strings.ToLower(sinkURI.Scheme)
+		if scheme != "mysql" && scheme != "tidb" {
+			return nil, errors.New("can create mysql sink with unsupported scheme")
 		}
-		db, err = sql.Open("mysql", sinkURI)
-		if err != nil {
-			return nil, params, errors.Trace(err)
+		s := sinkURI.Query().Get("worker-count")
+		if s != "" {
+			c, err := strconv.Atoi(s)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			params.workerCount = c
 		}
-		return
-	}
-
-	url, err := url.Parse(sinkURI)
-	if err != nil {
-		return nil, params, errors.Trace(err)
-	}
-
-	s := url.Query().Get("worker-count")
-	if s != "" {
-		c, err := strconv.Atoi(s)
-		if err != nil {
-			return nil, params, errors.Trace(err)
+		// dsn format of the driver:
+		// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+		username := sinkURI.User.Username()
+		password, _ := sinkURI.User.Password()
+		port := sinkURI.Port()
+		if username == "" {
+			username = "root"
 		}
-		params.workerCount = c
+		if port == "" {
+			port = "4000"
+		}
+
+		// Assume all the timestamp type is in the UTC zone when passing into mysql sink.
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/test?interpolateParams=true&multiStatements=true&time_zone=UTC", username,
+			password, sinkURI.Hostname(), port)
+		var err error
+		db, err = sql.Open("mysql", dsn)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	case dsn != nil:
+		dsnStr, err := configureSinkURI(dsn)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		db, err = sql.Open("mysql", dsnStr)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
-	// dsn format of the driver:
-	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
-	username := url.User.Username()
-	password, _ := url.User.Password()
-	port := url.Port()
-	if username == "" {
-		username = "root"
-	}
-	if port == "" {
-		port = "4000"
-	}
-
-	// Assume all the timestamp type is in the UTC zone when passing into mysql sink.
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/test?interpolateParams=true&multiStatements=true&time_zone=UTC", username,
-		password, url.Hostname(), port)
-	db, err = sql.Open("mysql", dsn)
-	if err != nil {
-		return nil, params, errors.Trace(err)
-	}
-
-	return
-}
-
-// NewMySQLSink creates a new MySQL sink using schema storage
-func NewMySQLSink(sinkURI string, opts map[string]string) (Sink, error) {
-	db, params, err := buildDBAndParams(sinkURI, opts)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return newMySQLSink(db, params), nil
-}
-
-func newMySQLSink(db *sql.DB, params params) Sink {
 	sink := &mysqlSink{
 		db:             db,
 		unresolvedRows: make(map[string][]*model.RowChangedEvent),
@@ -323,7 +301,7 @@ func newMySQLSink(db *sql.DB, params params) Sink {
 	sink.db.SetMaxIdleConns(params.workerCount)
 	sink.db.SetMaxOpenConns(params.workerCount)
 
-	return sink
+	return sink, nil
 }
 
 func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChangedEvent) error {
@@ -398,12 +376,10 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent)
 		var query string
 		var args []interface{}
 		var err error
-		if len(row.Delete) > 0 {
-			query, args, err = s.prepareDelete(row.Schema, row.Table, row.Delete)
-		} else if len(row.Update) > 0 {
-			query, args, err = s.prepareReplace(row.Schema, row.Table, row.Update)
+		if row.Delete {
+			query, args, err = s.prepareDelete(row.Schema, row.Table, row.Columns)
 		} else {
-			continue
+			query, args, err = s.prepareReplace(row.Schema, row.Table, row.Columns)
 		}
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
@@ -431,7 +407,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent)
 	return nil
 }
 
-func (s *mysqlSink) prepareReplace(schema, table string, cols map[string]model.Column) (string, []interface{}, error) {
+func (s *mysqlSink) prepareReplace(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols))
@@ -448,7 +424,7 @@ func (s *mysqlSink) prepareReplace(schema, table string, cols map[string]model.C
 	return builder.String(), args, nil
 }
 
-func (s *mysqlSink) prepareDelete(schema, table string, cols map[string]model.Column) (string, []interface{}, error) {
+func (s *mysqlSink) prepareDelete(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("DELETE FROM %s WHERE ", util.QuoteSchema(schema, table)))
 
@@ -470,7 +446,7 @@ func (s *mysqlSink) prepareDelete(schema, table string, cols map[string]model.Co
 	return sql, args, nil
 }
 
-func whereSlice(cols map[string]model.Column) (colNames []string, args []interface{}) {
+func whereSlice(cols map[string]*model.Column) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for colName, col := range cols {
 		if !col.WhereHandle {

@@ -15,11 +15,13 @@ package sink
 
 import (
 	"context"
-	"sync/atomic"
+	"net/url"
+	"strings"
 
-	"github.com/pingcap/log"
+	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/errors"
+
 	"github.com/pingcap/ticdc/cdc/model"
-	"go.uber.org/zap"
 )
 
 // Sink options keys
@@ -31,13 +33,17 @@ const (
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
+	// EmitResolvedEvent saves the global resolved to the sink backend
 	EmitResolvedEvent(ctx context.Context, ts uint64) error
+	// EmitCheckpointEvent saves the global checkpoint to the sink backend
 	EmitCheckpointEvent(ctx context.Context, ts uint64) error
 	// EmitDMLs saves the specified DMLs to the sink backend
-	EmitRowChangedEvent(ctx context.Context, txn ...*model.RowChangedEvent) error
+	EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error
 	// EmitDDL saves the specified DDL to the sink backend
-	EmitDDLEvent(ctx context.Context, txn *model.DDLEvent) error
+	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
+	// CheckpointTs returns the sink checkpoint
 	CheckpointTs() uint64
+	// Run runs the sink
 	Run(ctx context.Context) error
 	// Close does not guarantee delivery of outstanding messages.
 	Close() error
@@ -45,49 +51,25 @@ type Sink interface {
 	PrintStatus(ctx context.Context) error
 }
 
-// NewBlackHoleSink creates a block hole sink
-func NewBlackHoleSink() *blackHoleSink {
-	return &blackHoleSink{}
-}
-
-type blackHoleSink struct {
-	checkpointTs uint64
-}
-
-func (b *blackHoleSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
-	log.Info("BlockHoleSink: Resolved Event", zap.Uint64("resolved ts", ts))
-	return nil
-}
-
-func (b *blackHoleSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
-	log.Info("BlockHoleSink: Checkpoint Event", zap.Uint64("checkpoint ts", ts))
-	return nil
-}
-
-func (b *blackHoleSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	for _, row := range rows {
-		if row.Resolved {
-			atomic.StoreUint64(&b.checkpointTs, row.Ts)
+// NewSink creates a new sink with the sink-uri
+func NewSink(sinkURIStr string, opts map[string]string) (Sink, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		// try to parse the sinkURI as DSN
+		dsnCfg, err := dmysql.ParseDSN(sinkURIStr)
+		if err != nil {
+			return nil, errors.Annotatef(err, "parse sinkURI failed")
 		}
-		log.Info("BlockHoleSink: Row Changed Event", zap.Any("row", row))
+		return newMySQLSink(nil, dsnCfg, opts)
 	}
-	return nil
-}
-
-func (b *blackHoleSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	log.Info("BlockHoleSink: DDL Event", zap.Any("ddl", ddl))
-	return nil
-}
-
-func (b *blackHoleSink) CheckpointTs() uint64 {
-	return atomic.LoadUint64(&b.checkpointTs)
-}
-
-func (b *blackHoleSink) Close() error {
-	return nil
-}
-
-func (b *blackHoleSink) PrintStatus(ctx context.Context) error {
-	<-ctx.Done()
-	return nil
+	switch strings.ToLower(sinkURI.Scheme) {
+	case "blackhole":
+		return newBlackHoleSink(), nil
+	case "mysql", "tidb":
+		return newMySQLSink(sinkURI, nil, opts)
+	case "kafka":
+		return newKafkaSaramaSink(sinkURI)
+	default:
+		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
+	}
 }

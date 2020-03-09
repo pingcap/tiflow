@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
+	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -50,9 +51,6 @@ type tableIDMap = map[uint64]struct{}
 type OwnerDDLHandler interface {
 	// PullDDL pulls the ddl jobs and returns resolvedTs of DDL Puller and job list.
 	PullDDL() (resolvedTs uint64, jobs []*timodel.Job, err error)
-
-	// ExecDDL executes the ddl job
-	ExecDDL(ctx context.Context, sinkURI string, opts map[string]string, ddl *model.DDLEvent) error
 
 	// Close cancels the executing of OwnerDDLHandler and releases resource
 	Close() error
@@ -89,6 +87,7 @@ type changeFeed struct {
 	taskStatus    model.ProcessorsInfos
 	taskPositions map[string]*model.TaskPosition
 	filter        *txnFilter
+	sink          sink.Sink
 
 	ddlHandler    OwnerDDLHandler
 	ddlResolvedTs uint64
@@ -584,6 +583,11 @@ func (o *ownerImpl) newChangeFeed(
 		}
 	}
 
+	sink, err := sink.NewSink(info.SinkURI, info.Opts)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	cf := &changeFeed{
 		info:          info,
 		id:            id,
@@ -605,6 +609,7 @@ func (o *ownerImpl) newChangeFeed(
 		taskPositions: taskPositions,
 		infoWriter:    storage.NewOwnerTaskStatusEtcdWriter(o.etcdClient),
 		filter:        filter,
+		sink:          sink,
 	}
 	return cf, nil
 }
@@ -677,7 +682,7 @@ func (c *changeFeed) pullDDLJob() error {
 }
 
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
-func (c *changeFeed) calcResolvedTs() error {
+func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if c.ddlState != model.ChangeFeedSyncDML {
 		return nil
 	}
@@ -729,6 +734,11 @@ func (c *changeFeed) calcResolvedTs() error {
 		c.ddlState = model.ChangeFeedWaitToExecDDL
 	}
 
+	// if downstream sink is the MQ sink, the MQ sink do not promise that checkpoint is less than globalResolvedTs
+	if minCheckpointTs > minResolvedTs {
+		minCheckpointTs = minResolvedTs
+	}
+
 	var tsUpdated bool
 
 	if minResolvedTs > c.status.ResolvedTs {
@@ -738,6 +748,10 @@ func (c *changeFeed) calcResolvedTs() error {
 
 	if minCheckpointTs > c.status.CheckpointTs {
 		c.status.CheckpointTs = minCheckpointTs
+		err := c.sink.EmitCheckpointEvent(ctx, minCheckpointTs)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		tsUpdated = true
 	}
 
@@ -750,9 +764,9 @@ func (c *changeFeed) calcResolvedTs() error {
 }
 
 // calcResolvedTs call calcResolvedTs of every changefeeds
-func (o *ownerImpl) calcResolvedTs() error {
+func (o *ownerImpl) calcResolvedTs(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
-		if err := cf.calcResolvedTs(); err != nil {
+		if err := cf.calcResolvedTs(ctx); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -794,11 +808,15 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	todoDDLJob := c.ddlJobHistory[0]
 
 	// Check if all the checkpointTs of capture are achieving global resolvedTs(which is equal to todoDDLJob.FinishedTS)
+	if len(c.taskStatus) > len(c.taskPositions) {
+		return nil
+	}
 	for cid, pInfo := range c.taskPositions {
 		if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
 			log.Debug("wait checkpoint ts", zap.String("cid", cid),
 				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
-				zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS))
+				zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
+				zap.String("ddl query", todoDDLJob.Query))
 			return nil
 		}
 	}
@@ -847,7 +865,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 			zap.Uint64("ts", ddlEvent.Ts),
 		)
 	} else {
-		err = c.ddlHandler.ExecDDL(ctx, c.info.SinkURI, c.info.Opts, ddlEvent)
+		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
 		// If DDL executing failed, pause the changefeed and print log, rather
 		// than return an error and break the running of this owner.
 		if err != nil {
@@ -1061,7 +1079,7 @@ func (o *ownerImpl) run(ctx context.Context) error {
 	// function after calling loadChangeFeeds.
 	o.handleMarkdownProcessor(cctx)
 
-	err = o.calcResolvedTs()
+	err = o.calcResolvedTs(cctx)
 	if err != nil {
 		return errors.Trace(err)
 	}

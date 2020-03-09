@@ -62,6 +62,16 @@ INSERT INTO binlog_multi_data_type(t_boolean, t_bigint, t_double, t_decimal, t_b
 	,'a,b', NULL);
 `,
 	`
+INSERT INTO binlog_multi_data_type(t_boolean, t_bigint, t_double, t_decimal, t_bit
+	,t_date, t_datetime, t_timestamp, t_time, t_year
+	,t_char, t_varchar, t_blob, t_text, t_enum
+	,t_set, t_json) VALUES
+	(true, 9223372036854775807, 678, 321, b'1000001'
+	,'1000-01-01', '9999-12-31 23:59:59', '19731230153000', '23:59:59', 1970
+	,'测', '测试', 'blob', '测试text', 'enum2'
+	,'a,b', NULL);
+`,
+	`
 INSERT INTO binlog_multi_data_type(t_boolean) VALUES(TRUE);
 `,
 	`
@@ -127,13 +137,13 @@ var casePKAddDuplicateUKClean = []string{
 
 // Test issue: TOOL-1346
 var caseInsertBit = []string{`
-CREATE TABLE binlog_insert_bit(a BIT(1) PRIMARY KEY, b BIT(1));
+CREATE TABLE binlog_insert_bit(a BIT(1) PRIMARY KEY, b BIT(64));
 `,
 	`
-INSERT INTO binlog_insert_bit VALUES (0x01, 0x00);
+INSERT INTO binlog_insert_bit VALUES (0x01, 0xffffffff);
 `,
 	`
-UPDATE binlog_insert_bit SET a = 0x00, b = 0x01;
+UPDATE binlog_insert_bit SET a = 0x00, b = 0xfffffffe;
 `,
 }
 

@@ -339,7 +339,7 @@ func realRunProcessor(
 	}
 	opts[sink.OptChangefeedID] = changefeedID
 	opts[sink.OptCaptureID] = captureID
-	sink, err := sink.NewMySQLSink(info.SinkURI, opts)
+	sink, err := sink.NewSink(info.SinkURI, info.Opts)
 	if err != nil {
 		return errors.Trace(err)
 	}
