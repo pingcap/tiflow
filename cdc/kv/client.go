@@ -343,10 +343,13 @@ MainLoop:
 			if rpcCtx == nil {
 				// The region info is invalid. Retry the span.
 				log.Debug("cannot get rpcCtx, retry span", zap.Reflect("span", sri.span))
-				err = c.divideAndSendEventFeedToRegions(ctx, sri.span, sri.ts, regionCh)
-				if err != nil {
+				// Workaround: spawn to a new goroutine, otherwise the function may blocks when sending to regionCh but
+				// regionCh can only be received from `dispatchRequest`.
+				// TODO: Find better solution after a refactoring
+				g.Go(func() error {
+					err := c.divideAndSendEventFeedToRegions(ctx, sri.span, sri.ts, regionCh)
 					return errors.Trace(err)
-				}
+				})
 				continue MainLoop
 			}
 			sri.rpcCtx = rpcCtx
