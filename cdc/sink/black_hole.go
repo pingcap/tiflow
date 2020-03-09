@@ -37,7 +37,6 @@ func (b *blackHoleSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.
 		if row.Resolved {
 			atomic.StoreUint64(&b.checkpointTs, row.Ts)
 		}
-		log.Info("BlockHoleSink: Row Changed Event", zap.Any("row", row))
 	}
 	return nil
 }
