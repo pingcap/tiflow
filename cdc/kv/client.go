@@ -15,8 +15,10 @@ package kv
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math/rand"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -329,6 +331,8 @@ MainLoop:
 		case sri = <-regionCh:
 		}
 
+		log.Debug("dispatching region", zap.Uint64("regionID", sri.verID.GetID()))
+
 		// Loop for retrying in case the stream has disconnected.
 		// TODO: Should we break if retries and fails too many times?
 		for {
@@ -393,7 +397,7 @@ MainLoop:
 				})
 			}
 
-			log.Debug("start new request", zap.Reflect("request", req), zap.String("addr", rpcCtx.Addr))
+			log.Info("start new request", zap.Reflect("request", req), zap.String("addr", rpcCtx.Addr))
 			err = stream.Send(req)
 
 			// If Send error, the receiver should have received error too or will receive error soon. So we doesn't need
@@ -430,7 +434,7 @@ MainLoop:
 				continue
 			}
 
-			log.Debug("request to region successfully sent", zap.Reflect("verID", sri.verID), zap.String("addr", rpcCtx.Addr))
+			log.Debug("request to region successfully sent", zap.Uint64("regionID", sri.verID.GetID()), zap.String("addr", rpcCtx.Addr))
 
 			break
 		}
@@ -496,7 +500,7 @@ func (c *CDCClient) partialRegionFeed(
 	}
 
 	log.Info("EventFeed disconnected",
-		zap.Reflect("verID", regionInfo.verID),
+		zap.Reflect("regionID", regionInfo.verID.GetID()),
 		zap.Reflect("span", regionInfo.span),
 		zap.Uint64("checkpoint", ts),
 		zap.Error(err))
@@ -675,7 +679,22 @@ func (c *CDCClient) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
-		log.Debug("recv ChangeDataEvent", zap.Stringer("event", cevent), zap.String("addr", addr))
+		eventsStr := make([]string, 0, len(cevent.Events))
+		for _, e := range cevent.Events {
+			content := ""
+			switch x := e.Event.(type) {
+			case *cdcpb.Event_Entries_:
+				content = "entries"
+			case *cdcpb.Event_Admin_:
+				content = "admin:" + x.Admin.String()
+			case *cdcpb.Event_Error:
+				content = "error:" + x.Error.String()
+			case *cdcpb.Event_ResolvedTs:
+				content = "resolved_ts:" + strconv.FormatUint(x.ResolvedTs, 10)
+			}
+			eventsStr = append(eventsStr, fmt.Sprintf("regionID:%v, %v;", e.RegionId, content))
+		}
+		log.Debug("recv ChangeDataEvent", zap.Strings("event", eventsStr), zap.String("addr", addr))
 
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
