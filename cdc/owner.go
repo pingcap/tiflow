@@ -476,33 +476,6 @@ func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
 	defer o.l.Unlock()
 
 	delete(o.captures, info.ID)
-
-	for _, feed := range o.changeFeeds {
-		pinfo, ok := feed.taskStatus[info.ID]
-		if !ok {
-			continue
-		}
-		pos, ok := feed.taskPositions[info.ID]
-		if !ok {
-			continue
-		}
-
-		for _, table := range pinfo.TableInfos {
-			feed.orphanTables[table.ID] = model.ProcessTableInfo{
-				ID:      table.ID,
-				StartTs: pos.CheckPointTs,
-			}
-		}
-
-		ctx := context.TODO()
-		if err := o.etcdClient.DeleteTaskStatus(ctx, feed.id, info.ID); err != nil {
-			log.Warn("failed to delete task status", zap.Error(err))
-		}
-		if err := o.etcdClient.DeleteTaskPosition(ctx, feed.id, info.ID); err != nil {
-			log.Warn("failed to delete task position", zap.Error(err))
-		}
-
-	}
 }
 
 func (o *ownerImpl) resetCaptureInfoWatcher(ctx context.Context) error {
@@ -1038,9 +1011,6 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 			if ownerChanged {
 				// Do something initialize when the capture becomes an owner.
 				ownerChanged = false
-				// Start a routine to keep watching on the liveness of
-				// processors.
-				o.startProcessorInfoWatcher(ctx)
 
 				// When an owner crashed, its processors crashed too,
 				// clean up the tasks for these processors.
@@ -1048,6 +1018,10 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 					log.Error("clean up stale tasks failed",
 						zap.Error(err))
 				}
+
+				// Start a routine to keep watching on the liveness of
+				// processors.
+				o.startProcessorInfoWatcher(ctx)
 			}
 
 			err := o.run(ctx)
@@ -1306,20 +1280,20 @@ func (o *ownerImpl) cleanUpStaleTasks(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	for changeFeedID := range changefeeds {
-		_, processors, err := o.etcdClient.GetProcessors(ctx, changeFeedID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		active := make(map[string]*model.ProcessorInfo)
-		for _, p := range processors {
-			active[p.CaptureID] = p
-		}
 		statuses, err := o.etcdClient.GetAllTaskStatus(ctx, changeFeedID)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
+		active := make(map[string]*model.ProcessorInfo)
 		for captureID := range statuses {
+			_, processors, err := o.etcdClient.GetProcessors(ctx, captureID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			for _, p := range processors {
+				active[p.CaptureID] = p
+			}
 			if _, ok := active[captureID]; !ok {
 				if err := o.etcdClient.DeleteTaskStatus(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
@@ -1327,6 +1301,7 @@ func (o *ownerImpl) cleanUpStaleTasks(ctx context.Context) error {
 				if err := o.etcdClient.DeleteTaskPosition(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
+				log.Debug("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
 			}
 		}
 	}

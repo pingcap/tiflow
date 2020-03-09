@@ -705,8 +705,7 @@ func (p *processor) stop(ctx context.Context) error {
 	}
 	p.tablesMu.Unlock()
 	p.session.Close()
-	_ = p.deregister(ctx)
-	return errors.Trace(p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID))
+	return errors.Trace(p.deregister(ctx))
 }
 
 func (p *processor) register(ctx context.Context) error {
