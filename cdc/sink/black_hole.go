@@ -37,7 +37,6 @@ func (b *blackHoleSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.
 		if row.Resolved {
 			atomic.StoreUint64(&b.checkpointTs, row.Ts)
 		}
-		log.Info("BlockHoleSink: Row Changed Event", zap.Any("row", row))
 	}
 	return nil
 }
@@ -49,6 +48,11 @@ func (b *blackHoleSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) e
 
 func (b *blackHoleSink) CheckpointTs() uint64 {
 	return atomic.LoadUint64(&b.checkpointTs)
+}
+
+func (b *blackHoleSink) PrintStatus(ctx context.Context) error {
+	<-ctx.Done()
+	return nil
 }
 
 func (b *blackHoleSink) Close() error {

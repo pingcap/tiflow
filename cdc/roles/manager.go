@@ -98,7 +98,7 @@ func (m *ownerManager) IsOwner() bool {
 }
 
 // ManagerSessionTTLSeconds is the etcd session's TTL in seconds. It's exported for testing.
-var ManagerSessionTTLSeconds = 60
+var ManagerSessionTTLSeconds = 5
 
 // setManagerSessionTTL sets the ManagerSessionTTLSeconds value, it's used for testing.
 func setManagerSessionTTL() error {

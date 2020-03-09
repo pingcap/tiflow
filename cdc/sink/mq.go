@@ -129,11 +129,19 @@ func (k *mqSink) Run(ctx context.Context) error {
 		case sinkCheckpointTs = <-k.sinkCheckpointTsCh:
 		}
 		globalResolvedTs := atomic.LoadUint64(&k.globalResolvedTs)
+		// when local resolvedTS is fallback, we will postpone to pushing global resolvedTS
+		// check if the global resolvedTS is postponed
 		if globalResolvedTs < sinkCheckpointTs {
 			sinkCheckpointTs = globalResolvedTs
 		}
 		atomic.StoreUint64(&k.checkpointTs, sinkCheckpointTs)
 	}
+}
+
+func (k *mqSink) PrintStatus(ctx context.Context) error {
+	// TODO implement this function
+	<-ctx.Done()
+	return nil
 }
 
 func (k *mqSink) Close() error {
