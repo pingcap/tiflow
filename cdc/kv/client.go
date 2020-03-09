@@ -357,7 +357,6 @@ MainLoop:
 				streams[rpcCtx.Addr] = stream
 
 				g.Go(func() error {
-					// When the stream is stopped, the pending regions should be cancelled.
 					return c.receiveFromStream(ctx, g, rpcCtx.Addr, rpcCtx.GetStoreID(), stream, regionCh, eventCh, errCh, pendingRegions, pendingRegionsMu)
 				})
 			}
@@ -379,6 +378,16 @@ MainLoop:
 				// Delete the stream from the map so that the next time the store is accessed, the stream will be
 				// re-established.
 				delete(streams, rpcCtx.Addr)
+
+				// Remove the region from pendingRegions. If it's already removed, it should be already retried by
+				// `receiveFromStream`, so no need to retry here.
+				pendingRegionsMu.Lock()
+				_, ok := pendingRegions[sri.verID.GetID()]
+				delete(pendingRegions, sri.verID.GetID())
+				pendingRegionsMu.Unlock()
+				if !ok {
+					break
+				}
 
 				// Wait for a while and retry sending the request
 				time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
