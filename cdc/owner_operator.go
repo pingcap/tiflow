@@ -108,10 +108,10 @@ func (h *ddlHandler) PullDDL() (uint64, []*timodel.Job, error) {
 }
 
 // ExecDDL implements roles.OwnerDDLHandler interface.
-func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, opts map[string]string, ddl *model.DDLEvent) error {
+func (h *ddlHandler) ExecDDL(ctx context.Context, sinkURI string, opts map[string]string, ddl *model.DDLEvent, filter *util.Filter) error {
 	// TODO cache the sink
 	// TODO handle other target database, kile kafka, file
-	s, err := sink.NewMySQLSink(sinkURI, nil)
+	s, err := sink.NewMySQLSink(sinkURI, filter, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}

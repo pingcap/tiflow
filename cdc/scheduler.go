@@ -333,7 +333,11 @@ func realRunProcessor(
 	checkpointTs uint64,
 	cb processorCallback,
 ) error {
-	sink, err := sink.NewMySQLSink(info.SinkURI, info.Opts)
+	filter, err := util.NewFilter(info.GetConfig())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	sink, err := sink.NewMySQLSink(info.SinkURI, filter, info.Opts)
 	if err != nil {
 		return errors.Trace(err)
 	}

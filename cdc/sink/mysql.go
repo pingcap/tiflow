@@ -52,6 +52,8 @@ type mysqlSink struct {
 	checkpointTs     uint64
 	params           params
 
+	filter *util.Filter
+
 	unresolvedRowsMu sync.Mutex
 	unresolvedRows   map[string][]*model.RowChangedEvent
 }
@@ -74,11 +76,10 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 			resolvedTs = row.Ts
 			continue
 		}
-		// TODO filter row
-		//if s.filter.ShouldIgnoreTxn(row) {
-		//	log.Info("Row changed event ignored", zap.Uint64("ts", txn.Ts))
-		//	continue
-		//}
+		if s.filter.ShouldIgnoreEvent(row.Ts, row.Schema, row.Table) {
+			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
+			continue
+		}
 		key := util.QuoteSchema(row.Schema, row.Table)
 		s.unresolvedRows[key] = append(s.unresolvedRows[key], row)
 	}
@@ -87,6 +88,14 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 }
 
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	if s.filter.ShouldIgnoreEvent(ddl.Ts, ddl.Schema, ddl.Table) {
+		log.Info(
+			"DDL event ignored",
+			zap.String("query", ddl.Query),
+			zap.Uint64("ts", ddl.Ts),
+		)
+		return nil
+	}
 	err := s.execDDLWithMaxRetries(ctx, ddl, 5)
 	return errors.Trace(err)
 }
@@ -289,20 +298,21 @@ func buildDBAndParams(sinkURI string, opts map[string]string) (db *sql.DB, param
 }
 
 // NewMySQLSink creates a new MySQL sink using schema storage
-func NewMySQLSink(sinkURI string, opts map[string]string) (Sink, error) {
+func NewMySQLSink(sinkURI string, filter *util.Filter, opts map[string]string) (Sink, error) {
 	db, params, err := buildDBAndParams(sinkURI, opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	return newMySQLSink(db, params), nil
+	return newMySQLSink(db, params, filter), nil
 }
 
-func newMySQLSink(db *sql.DB, params params) Sink {
+func newMySQLSink(db *sql.DB, params params, filter *util.Filter) Sink {
 	sink := &mysqlSink{
 		db:             db,
 		unresolvedRows: make(map[string][]*model.RowChangedEvent),
 		params:         params,
+		filter:         filter,
 	}
 
 	sink.db.SetMaxIdleConns(params.workerCount)
