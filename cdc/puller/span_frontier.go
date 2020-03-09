@@ -1,23 +1,16 @@
 package puller
 
 import (
-	"bytes"
 	"container/heap"
 	"fmt"
-	"reflect"
 	"strings"
 
-	"github.com/biogo/store/interval"
+	"github.com/pingcap/ticdc/pkg/interval"
 	"github.com/pingcap/ticdc/pkg/util"
 )
 
 // Bytes represents generic intervals
 type Bytes []byte
-
-// Compare implements interval.Comparable.
-func (b Bytes) Compare(a interval.Comparable) int {
-	return bytes.Compare(b, a.(Bytes))
-}
 
 // Range represents a kv range interval
 // [Start, End), close Start and open End.
@@ -26,8 +19,8 @@ type Range struct {
 	End   Bytes
 }
 
-func asRange(span util.Span) Range {
-	return Range{
+func asRange(span util.Span) interval.Range {
+	return interval.Range{
 		Start: span.Start,
 		End:   span.End,
 	}
@@ -35,72 +28,25 @@ func asRange(span util.Span) Range {
 
 type spanFrontierEntry struct {
 	id     int64
-	irange Range
-	span   util.Span
+	irange interval.Range
 	ts     uint64
 
 	// index in the head array
 	index int
 }
 
-// Mutable implements interval.Mutable
-type Mutable struct{ start, end Bytes }
-
-// Start implements interval.Mutable
-func (m *Mutable) Start() interval.Comparable { return m.start }
-
-// End implements interval.Mutable
-func (m *Mutable) End() interval.Comparable { return m.end }
-
-// SetStart implements interval.Mutable
-func (m *Mutable) SetStart(c interval.Comparable) { m.start = c.(Bytes) }
-
-// SetEnd implements interval.Mutable
-func (m *Mutable) SetEnd(c interval.Comparable) { m.end = c.(Bytes) }
-
-// Overlap implements interval.Overlapper
-func (s spanFrontierEntry) Overlap(b interval.Range) bool {
-	return s.irange.Overlap(b)
-}
-
-// Overlap implements interval.Overlapper
-func (s Range) Overlap(b interval.Range) bool {
-	var start, end Bytes
-	switch bc := b.(type) {
-	case *spanFrontierEntry:
-		start, end = bc.irange.Start, bc.irange.End
-	case *Mutable:
-		start, end = bc.start, bc.end
-	default:
-		s := fmt.Sprintf("unknown type: %v", reflect.TypeOf(b))
-		panic(s)
-	}
-
-	return util.EndCompare(s.End, start) > 0 && util.StartCompare(s.Start, end) < 0
-}
-
-// Start implements interval.Interface.
-func (s spanFrontierEntry) Start() interval.Comparable {
-	return s.irange.Start
-}
-
-// End implements interval.Interface.
-func (s spanFrontierEntry) End() interval.Comparable {
-	return s.irange.End
+// Range implements interval.Interface.
+func (s *spanFrontierEntry) Range() interval.Range {
+	return s.irange
 }
 
 // ID implements interval.Interface.
-func (s *spanFrontierEntry) ID() uintptr {
-	return uintptr(s.id)
-}
-
-// NewMutable implements interval.Interface.
-func (s *spanFrontierEntry) NewMutable() interval.Mutable {
-	return &Mutable{s.irange.Start, s.irange.End}
+func (s *spanFrontierEntry) ID() int64 {
+	return s.id
 }
 
 func (s *spanFrontierEntry) String() string {
-	return fmt.Sprintf("[%s @ %d]", s.span, s.ts)
+	return fmt.Sprintf("[%s @ %d]", s.irange, s.ts)
 }
 
 // spanFrontierHeap implements heap.Interface and holds `spanFrontierEntry`s.
@@ -114,7 +60,7 @@ func (h spanFrontierHeap) Len() int { return len(h) }
 // Less inplements heap.Interface
 func (h spanFrontierHeap) Less(i, j int) bool {
 	if h[i].ts == h[j].ts {
-		return util.StartCompare(h[i].span.Start, h[j].span.Start) < 0
+		return util.StartCompare(h[i].irange.Start, h[j].irange.Start) < 0
 	}
 
 	return h[i].ts < h[j].ts
@@ -163,14 +109,13 @@ func makeSpanFrontier(spans ...util.Span) *spanFrontier {
 	}
 
 	s := &spanFrontier{
-		tree: &interval.Tree{},
+		tree: interval.NewTree(interval.ExclusiveOverlapper),
 	}
 
 	for _, span := range spans {
 		e := &spanFrontierEntry{
 			id:     s.idAlloc,
 			irange: asRange(span),
-			span:   span,
 			ts:     0,
 		}
 
@@ -212,8 +157,20 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 	// Get all interval overlap with irange.
 	overlap := s.tree.Get(irange)
 
-	if len(overlap) == 0 {
-		return
+	// fast path
+	// in most times, the span we forward will match exactly one interval in the tree.
+	if len(overlap) == 1 {
+		e := overlap[0].(*spanFrontierEntry)
+		if irange.Start.Compare(e.Range().Start) == 0 &&
+			irange.End.Compare(e.Range().End) == 0 {
+
+			if ts > e.ts {
+				e.ts = ts
+			}
+			heap.Remove(&s.minHeap, e.index)
+			heap.Push(&s.minHeap, e)
+			return
+		}
 	}
 
 	spanCov := util.Covering{{Start: span.Start, End: span.End, Payload: ts}}
@@ -222,8 +179,8 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 	for i, o := range overlap {
 		e := o.(*spanFrontierEntry)
 		overlapCov[i] = util.Range{
-			Start:   e.span.Start,
-			End:     e.span.End,
+			Start:   e.irange.Start,
+			End:     e.irange.End,
 			Payload: e,
 		}
 	}
@@ -255,8 +212,7 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 		if tracked {
 			toInsert = append(toInsert, spanFrontierEntry{
 				id:     s.idAlloc,
-				irange: Range{Start: m.Start, End: m.End},
-				span:   util.Span{Start: m.Start, End: m.End},
+				irange: interval.Range{Start: m.Start, End: m.End},
 				ts:     mergeTs,
 			})
 			s.idAlloc++
@@ -284,10 +240,10 @@ func (s *spanFrontier) insert(span util.Span, ts uint64) {
 }
 
 // Entries visit all traced spans.
-func (s *spanFrontier) Entries(fn func(span util.Span, ts uint64)) {
+func (s *spanFrontier) Entries(fn func(irange interval.Range, ts uint64)) {
 	s.tree.Do(func(i interval.Interface) bool {
 		e := i.(*spanFrontierEntry)
-		fn(e.span, e.ts)
+		fn(e.irange, e.ts)
 		return false
 	})
 }

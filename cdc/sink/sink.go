@@ -15,7 +15,6 @@ package sink
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"strings"
 
@@ -23,6 +22,12 @@ import (
 	"github.com/pingcap/errors"
 
 	"github.com/pingcap/ticdc/cdc/model"
+)
+
+// Sink options keys
+const (
+	OptChangefeedID = "_changefeed_id"
+	OptCaptureID    = "_capture_id"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
@@ -41,6 +46,8 @@ type Sink interface {
 	Run(ctx context.Context) error
 	// Close does not guarantee delivery of outstanding messages.
 	Close() error
+	// PrintStatus prints necessary status periodically
+	PrintStatus(ctx context.Context) error
 }
 
 // NewSink creates a new sink with the sink-uri
@@ -62,6 +69,6 @@ func NewSink(sinkURIStr string, opts map[string]string) (Sink, error) {
 	case "kafka":
 		return newKafkaSaramaSink(sinkURI)
 	default:
-		return nil, errors.New(fmt.Sprintf("the sink scheme (%s) is not supported", sinkURI.Scheme))
+		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}
 }
