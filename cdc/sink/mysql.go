@@ -18,7 +18,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -86,38 +85,10 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 		//	continue
 		//}
 		key := util.QuoteSchema(row.Schema, row.Table)
-		checkDecode(row)
 		s.unresolvedRows[key] = append(s.unresolvedRows[key], row)
 	}
 	atomic.StoreUint64(&s.sinkResolvedTs, resolvedTs)
 	return nil
-}
-
-func checkDecode(row *model.RowChangedEvent) {
-	key, value1 := row.ToMqMessage()
-	v, err := value1.Encode()
-	if err != nil {
-		log.Error("find error", zap.Error(err))
-	}
-	value2 := new(model.MqMessageRow)
-	err = value2.Decode(v)
-	if err != nil {
-		log.Error("find error", zap.Error(err))
-	}
-	if reflect.DeepEqual(value1, value2) {
-		return
-	}
-	log.Error("not equal", zap.Reflect("value1", value1), zap.Reflect("value2", value2))
-	row1 := new(model.RowChangedEvent)
-	row1.FromMqMessage(key, value1)
-	row2 := new(model.RowChangedEvent)
-	row2.FromMqMessage(key, value2)
-	for k, v := range row1.Columns {
-		log.Error("value1 col", zap.String("name", k), zap.Stringer("type", reflect.TypeOf(v.Value)), zap.Any("value", v.Value))
-	}
-	for k, v := range row2.Columns {
-		log.Error("value2 col", zap.String("name", k), zap.Stringer("type", reflect.TypeOf(v.Value)), zap.Any("value", v.Value))
-	}
 }
 
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
