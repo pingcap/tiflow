@@ -62,6 +62,6 @@ func NewSink(sinkURIStr string, opts map[string]string) (Sink, error) {
 	case "kafka":
 		return newKafkaSaramaSink(sinkURI)
 	default:
-		return nil, errors.New(fmt.Sprintf("the sink scheme (%s) is not supported", sinkURI.Scheme))
+		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}
 }
