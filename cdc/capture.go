@@ -187,7 +187,7 @@ func (c *Capture) Close(ctx context.Context) error {
 
 // register registers the capture information in etcd
 func (c *Capture) register(ctx context.Context) error {
-	return errors.Trace(c.etcdClient.PutCaptureInfo(ctx, c.info))
+	return errors.Trace(c.etcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease()))
 }
 
 func createTiStore(urls string) (tidbkv.Storage, error) {

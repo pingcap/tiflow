@@ -50,6 +50,11 @@ func (b *blackHoleSink) CheckpointTs() uint64 {
 	return atomic.LoadUint64(&b.checkpointTs)
 }
 
+func (b *blackHoleSink) PrintStatus(ctx context.Context) error {
+	<-ctx.Done()
+	return nil
+}
+
 func (b *blackHoleSink) Close() error {
 	return nil
 }

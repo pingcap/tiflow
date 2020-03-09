@@ -24,6 +24,13 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
+// Sink options keys
+const (
+	OptDryRun       = "_dry_run"
+	OptChangefeedID = "_changefeed_id"
+	OptCaptureID    = "_capture_id"
+)
+
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
 	// EmitResolvedEvent saves the global resolved to the sink backend
@@ -40,6 +47,8 @@ type Sink interface {
 	Run(ctx context.Context) error
 	// Close does not guarantee delivery of outstanding messages.
 	Close() error
+	// PrintStatus prints necessary status periodically
+	PrintStatus(ctx context.Context) error
 }
 
 // NewSink creates a new sink with the sink-uri

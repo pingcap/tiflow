@@ -136,6 +136,12 @@ func (k *mqSink) Run(ctx context.Context) error {
 	}
 }
 
+func (k *mqSink) PrintStatus(ctx context.Context) error {
+	// TODO implement this function
+	<-ctx.Done()
+	return nil
+}
+
 func (k *mqSink) Close() error {
 	return nil
 }

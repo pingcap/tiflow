@@ -221,6 +221,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 		return p.schemaBuilder.Run(cctx)
 	})
 
+	wg.Go(func() error {
+		return p.sink.PrintStatus(cctx)
+	})
+
 	if err := p.register(ctx); err != nil {
 		errCh <- err
 	}
@@ -697,8 +701,7 @@ func (p *processor) stop(ctx context.Context) error {
 	}
 	p.tablesMu.Unlock()
 	p.session.Close()
-	_ = p.deregister(ctx)
-	return errors.Trace(p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID))
+	return errors.Trace(p.deregister(ctx))
 }
 
 func (p *processor) register(ctx context.Context) error {

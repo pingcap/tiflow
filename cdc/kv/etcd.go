@@ -183,8 +183,8 @@ func (c CDCEtcdClient) GetAllProcessors(ctx context.Context) (int64, []*model.Pr
 }
 
 // GetProcessors returns the ProcessorInfo list for a change feed
-func (c CDCEtcdClient) GetProcessors(ctx context.Context, changeFeedID string) (int64, []*model.ProcessorInfo, error) {
-	prefix := ProcessorInfoKeyPrefix + "/" + changeFeedID
+func (c CDCEtcdClient) GetProcessors(ctx context.Context, captureID string) (int64, []*model.ProcessorInfo, error) {
+	prefix := ProcessorInfoKeyPrefix + "/" + captureID
 	return c.getProcessorsFromPrefix(ctx, prefix)
 }
 
@@ -421,14 +421,14 @@ func (c CDCEtcdClient) DeleteTaskStatus(
 }
 
 // PutCaptureInfo put capture info into etcd.
-func (c CDCEtcdClient) PutCaptureInfo(ctx context.Context, info *model.CaptureInfo) error {
+func (c CDCEtcdClient) PutCaptureInfo(ctx context.Context, info *model.CaptureInfo, leaseID clientv3.LeaseID) error {
 	data, err := info.Marshal()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	key := GetEtcdKeyCaptureInfo(info.ID)
-	_, err = c.Client.Put(ctx, key, string(data))
+	_, err = c.Client.Put(ctx, key, string(data), clientv3.WithLease(leaseID))
 	return errors.Trace(err)
 }
 

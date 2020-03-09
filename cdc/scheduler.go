@@ -333,6 +333,12 @@ func realRunProcessor(
 	checkpointTs uint64,
 	cb processorCallback,
 ) error {
+	opts := make(map[string]string, len(info.Opts)+2)
+	for k, v := range info.Opts {
+		opts[k] = v
+	}
+	opts[sink.OptChangefeedID] = changefeedID
+	opts[sink.OptCaptureID] = captureID
 	sink, err := sink.NewSink(info.SinkURI, info.Opts)
 	if err != nil {
 		return errors.Trace(err)
