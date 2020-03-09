@@ -22,7 +22,7 @@ if [ "${1-}" = '--debug' ]; then
     cdc server --log-file $WORK_DIR/cdc.log --log-level debug --status-addr 0.0.0.0:8300 > $WORK_DIR/stdout.log 2>&1 &
     sleep 1
     cdc cli
-	# cdc cli --opts "_dry-run="
+	# cdc cli --opts "_dry_run="
 
     echo 'You may now debug from another terminal. Press [ENTER] to exit.'
     read line
