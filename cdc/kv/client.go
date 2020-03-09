@@ -751,8 +751,6 @@ func (c *CDCClient) receiveFromStream(
 				g.Go(func() error {
 					return c.partialRegionFeed(ctx, sri, ch, errCh, eventCh, isStopped)
 				})
-			} else {
-				log.Debug("partialRegionFeed goroutine already spawned", zap.Uint64("regionID", event.RegionId))
 			}
 
 			select {
