@@ -22,6 +22,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// Sink options keys
+const (
+	OptDryRun       = "_dry_run"
+	OptChangefeedID = "_changefeed_id"
+	OptCaptureID    = "_capture_id"
+)
+
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
 	EmitResolvedEvent(ctx context.Context, ts uint64) error

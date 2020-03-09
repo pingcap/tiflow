@@ -40,7 +40,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const dryRunOpt = "_dry-run"
 const defaultWorkerCount = 16
 
 var (
@@ -216,8 +215,10 @@ func splitRowsGroup(resolvedTs uint64, unresolvedRows map[string][]*model.RowCha
 var _ Sink = &mysqlSink{}
 
 type params struct {
-	workerCount int
-	dryRun      bool
+	workerCount  int
+	dryRun       bool
+	changefeedID string
+	captureID    string
 }
 
 var defaultParams = params{
@@ -241,8 +242,14 @@ func configureSinkURI(sinkURI string) (string, error) {
 
 func buildDBAndParams(sinkURI string, opts map[string]string) (db *sql.DB, params params, err error) {
 	params = defaultParams
-	if _, ok := opts[dryRunOpt]; ok {
+	if _, ok := opts[OptDryRun]; ok {
 		params.dryRun = true
+	}
+	if cid, ok := opts[OptChangefeedID]; ok {
+		params.changefeedID = cid
+	}
+	if cid, ok := opts[OptCaptureID]; ok {
+		params.captureID = cid
 	}
 
 	// treat as dsn of the driver for compatibility...
@@ -354,7 +361,6 @@ func (s *mysqlSink) Close() error {
 }
 
 func (s *mysqlSink) PrintStatus(ctx context.Context) error {
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	timer := time.NewTicker(printStatusInterval)
 	defer timer.Stop()
 	for {
@@ -374,7 +380,7 @@ func (s *mysqlSink) PrintStatus(ctx context.Context) error {
 			atomic.StoreInt64(&s.lastCount, total)
 			s.lastTime = now
 			log.Info("mysql sink replication status",
-				zap.String("changefeed", changefeedID),
+				zap.String("changefeed", s.params.changefeedID),
 				zap.Int64("count", count),
 				zap.Int64("qps", qps))
 		}
@@ -418,10 +424,8 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent)
 	if err = tx.Commit(); err != nil {
 		return errors.Trace(err)
 	}
-	captureID := util.CaptureIDFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	execTxnHistogram.WithLabelValues(captureID, changefeedID).Observe(time.Since(startTime).Seconds())
-	execBatchHistogram.WithLabelValues(captureID, changefeedID).Observe(float64(len(rows)))
+	execTxnHistogram.WithLabelValues(s.params.captureID, s.params.changefeedID).Observe(time.Since(startTime).Seconds())
+	execBatchHistogram.WithLabelValues(s.params.captureID, s.params.changefeedID).Observe(float64(len(rows)))
 	atomic.AddInt64(&s.count, int64(len(rows)))
 	log.Debug("Exec Rows succeeded", zap.Int("num of Rows", len(rows)))
 	return nil
