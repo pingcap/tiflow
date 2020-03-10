@@ -28,7 +28,6 @@ import (
 
 // Sink options keys
 const (
-	OptDryRun       = "_dry_run"
 	OptChangefeedID = "_changefeed_id"
 	OptCaptureID    = "_capture_id"
 )
@@ -70,7 +69,7 @@ func NewSink(sinkURIStr string, filter *util.Filter, opts map[string]string) (Si
 	case "mysql", "tidb":
 		return newMySQLSink(sinkURI, nil, filter, opts)
 	case "kafka":
-		return newKafkaSaramaSink(sinkURI, filter)
+		return newKafkaSaramaSink(sinkURI, filter, opts)
 	default:
 		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}
