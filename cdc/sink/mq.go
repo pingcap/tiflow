@@ -167,7 +167,7 @@ func (k *mqSink) PrintStatus(ctx context.Context) error {
 			}
 			lastCount = total
 			lastTime = now
-			log.Info("mysql sink replication status",
+			log.Info("MQ sink replication status",
 				zap.String("changefeed", k.changefeedID),
 				zap.Int64("count", count),
 				zap.Int64("qps", qps))
