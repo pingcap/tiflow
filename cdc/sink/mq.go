@@ -165,7 +165,7 @@ func newKafkaSaramaSink(sinkURI *url.URL) (*mqSink, error) {
 	}
 
 	s = sinkURI.Query().Get("kafka-version")
-	if s == "" {
+	if s != "" {
 		config.Version = s
 	}
 
