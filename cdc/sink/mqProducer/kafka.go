@@ -13,14 +13,18 @@ import (
 
 // KafkaConfig stores the Kafka configuration
 type KafkaConfig struct {
+	PartitionNum      int32
+	ReplicationFactor int16
+
 	Version         string
 	MaxMessageBytes int
 }
 
 // DefaultKafkaConfig is the default Kafka configuration
 var DefaultKafkaConfig = KafkaConfig{
-	Version:         "2.4.0",
-	MaxMessageBytes: 1 << 26, // 64M
+	Version:           "2.4.0",
+	MaxMessageBytes:   1 << 26, // 64M
+	ReplicationFactor: 1,
 }
 
 type kafkaSaramaProducer struct {
@@ -30,15 +34,44 @@ type kafkaSaramaProducer struct {
 }
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(address string, topic string, partitionNum int32, config KafkaConfig) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(address string, topic string, config KafkaConfig) (*kafkaSaramaProducer, error) {
 	cfg, err := newSaramaConfig(config)
 	if err != nil {
 		return nil, err
 	}
-	// TODO create topic automatically, get partition number automatically
 	client, err := sarama.NewSyncProducer(strings.Split(address, ","), cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+
+	// get partition number or create topic automatically
+	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	topics, err := admin.ListTopics()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	var partitionNum int32
+	topicDetail, exist := topics[topic]
+	if exist {
+		log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
+		if config.PartitionNum == 0 {
+			partitionNum = topicDetail.NumPartitions
+		} else if config.PartitionNum < topicDetail.NumPartitions {
+			log.Warn("partition number assigned in sink-uri is less than that of topic")
+		} else {
+			return nil, errors.Errorf("partition number assigned in sink-uri is more than that of topic")
+		}
+	} else {
+		err := admin.CreateTopic(topic, &sarama.TopicDetail{
+			NumPartitions:     config.PartitionNum,
+			ReplicationFactor: config.ReplicationFactor,
+		}, false)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	return &kafkaSaramaProducer{
@@ -97,4 +130,8 @@ func (k *kafkaSaramaProducer) BroadcastMessage(ctx context.Context, key []byte, 
 
 func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
 	return k.partitionNum
+}
+
+func (k *kafkaSaramaProducer) Close() error {
+	return k.client.Close()
 }
