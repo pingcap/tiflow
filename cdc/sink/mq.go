@@ -170,7 +170,7 @@ func newKafkaSaramaSink(sinkURI *url.URL) (*mqSink, error) {
 	}
 
 	s = sinkURI.Query().Get("max-message-bytes")
-	if s == "" {
+	if s != "" {
 		c, err := strconv.Atoi(s)
 		if err != nil {
 			return nil, errors.Trace(err)
