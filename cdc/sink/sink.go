@@ -26,7 +26,6 @@ import (
 
 // Sink options keys
 const (
-	OptDryRun       = "_dry_run"
 	OptChangefeedID = "_changefeed_id"
 	OptCaptureID    = "_capture_id"
 )

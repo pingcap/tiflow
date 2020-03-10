@@ -163,6 +163,21 @@ func newKafkaSaramaSink(sinkURI *url.URL) (*mqSink, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	s = sinkURI.Query().Get("kafka-version")
+	if s != "" {
+		config.Version = s
+	}
+
+	s = sinkURI.Query().Get("max-message-bytes")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		config.MaxMessageBytes = c
+	}
+
 	partitionNum := int32(c)
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
