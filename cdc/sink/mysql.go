@@ -53,6 +53,8 @@ type mysqlSink struct {
 	checkpointTs     uint64
 	params           params
 
+	globalForwardCh chan struct{}
+
 	unresolvedRowsMu sync.Mutex
 	unresolvedRows   map[string][]*model.RowChangedEvent
 
@@ -63,6 +65,10 @@ type mysqlSink struct {
 
 func (s *mysqlSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
 	atomic.StoreUint64(&s.globalResolvedTs, ts)
+	select {
+	case s.globalForwardCh <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
@@ -150,37 +156,36 @@ func (s *mysqlSink) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
-		}
-		globalResolvedTs := atomic.LoadUint64(&s.globalResolvedTs)
-		if globalResolvedTs == atomic.LoadUint64(&s.checkpointTs) {
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
-		sinkResolvedTs := atomic.LoadUint64(&s.sinkResolvedTs)
-		for globalResolvedTs > sinkResolvedTs {
-			time.Sleep(10 * time.Millisecond)
-			sinkResolvedTs = atomic.LoadUint64(&s.sinkResolvedTs)
-		}
+		case <-s.globalForwardCh:
+			globalResolvedTs := atomic.LoadUint64(&s.globalResolvedTs)
+			if globalResolvedTs == atomic.LoadUint64(&s.checkpointTs) {
+				continue
+			}
 
-		s.unresolvedRowsMu.Lock()
-		if len(s.unresolvedRows) == 0 {
-			atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
+			sinkResolvedTs := atomic.LoadUint64(&s.sinkResolvedTs)
+			for globalResolvedTs > sinkResolvedTs {
+				time.Sleep(10 * time.Millisecond)
+				sinkResolvedTs = atomic.LoadUint64(&s.sinkResolvedTs)
+			}
+
+			s.unresolvedRowsMu.Lock()
+			if len(s.unresolvedRows) == 0 {
+				atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
+				s.unresolvedRowsMu.Unlock()
+				continue
+			}
+			_, resolvedRowsMap := splitRowsGroup(globalResolvedTs, s.unresolvedRows)
 			s.unresolvedRowsMu.Unlock()
-			continue
-		}
-		_, resolvedRowsMap := splitRowsGroup(globalResolvedTs, s.unresolvedRows)
-		s.unresolvedRowsMu.Unlock()
+			if len(resolvedRowsMap) == 0 {
+				atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
+				continue
+			}
 
-		if len(resolvedRowsMap) == 0 {
+			if err := s.concurrentExec(ctx, resolvedRowsMap); err != nil {
+				return errors.Trace(err)
+			}
 			atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
-			continue
 		}
-
-		if err := s.concurrentExec(ctx, resolvedRowsMap); err != nil {
-			return errors.Trace(err)
-		}
-		atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
 	}
 }
 
@@ -292,10 +297,11 @@ func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, opts map[string]string) 
 	}
 
 	sink := &mysqlSink{
-		db:             db,
-		unresolvedRows: make(map[string][]*model.RowChangedEvent),
-		params:         params,
-		lastTime:       time.Now(),
+		db:              db,
+		unresolvedRows:  make(map[string][]*model.RowChangedEvent),
+		params:          params,
+		lastTime:        time.Now(),
+		globalForwardCh: make(chan struct{}, 1),
 	}
 
 	sink.db.SetMaxIdleConns(params.workerCount)
