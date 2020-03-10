@@ -24,7 +24,7 @@ var (
 			Subsystem: "sink",
 			Name:      "txn_batch_size",
 			Help:      "Bucketed histogram of batch size of a txn.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 18),
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
 		}, []string{"capture", "changefeed"})
 	execTxnHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{

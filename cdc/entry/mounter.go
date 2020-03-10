@@ -291,7 +291,7 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 	if !row.Delete {
 		datumsNum = len(tableInfo.Columns)
 	}
-	values := make(map[string]model.Column, datumsNum)
+	values := make(map[string]*model.Column, datumsNum)
 	for index, colValue := range row.Row {
 		colInfo, exist := tableInfo.GetColumnInfo(index)
 		if !exist {
@@ -305,7 +305,7 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		values[colName] = model.Column{
+		values[colName] = &model.Column{
 			Type:        colInfo.Tp,
 			WhereHandle: tableInfo.IsColumnUnique(colInfo.ID),
 			Value:       value,
@@ -319,21 +319,20 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 		Table:    tableName.Table,
 	}
 
-	if row.Delete {
-		event.Delete = values
-	} else {
+	if !row.Delete {
 		for _, col := range tableInfo.Columns {
 			_, ok := values[col.Name.O]
 			if !ok && tableInfo.IsColWritable(col) {
-				values[col.Name.O] = model.Column{
+				values[col.Name.O] = &model.Column{
 					Type:        col.Tp,
 					WhereHandle: tableInfo.IsColumnUnique(col.ID),
 					Value:       getDefaultOrZeroValue(col),
 				}
 			}
 		}
-		event.Update = values
 	}
+	event.Delete = row.Delete
+	event.Columns = values
 	return event, nil
 }
 
@@ -364,13 +363,13 @@ func (m *mounterImpl) mountIndexKVEntry(idx *indexKVEntry) (*model.RowChangedEve
 		return nil, errors.Trace(err)
 	}
 
-	values := make(map[string]model.Column, len(idx.IndexValue))
+	values := make(map[string]*model.Column, len(idx.IndexValue))
 	for i, idxCol := range indexInfo.Columns {
 		value, err := formatColVal(idx.IndexValue[i].GetValue(), tableInfo.Columns[idxCol.Offset].Tp)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		values[idxCol.Name.O] = model.Column{
+		values[idxCol.Name.O] = &model.Column{
 			Type:        tableInfo.Columns[idxCol.Offset].Tp,
 			WhereHandle: true,
 			Value:       value,
@@ -381,7 +380,8 @@ func (m *mounterImpl) mountIndexKVEntry(idx *indexKVEntry) (*model.RowChangedEve
 		Resolved: false,
 		Schema:   tableName.Schema,
 		Table:    tableName.Table,
-		Delete:   values,
+		Delete:   true,
+		Columns:  values,
 	}, nil
 }
 
@@ -402,7 +402,7 @@ func formatColVal(value interface{}, tp byte) (interface{}, error) {
 		var err error
 		value, err = value.(types.BinaryLiteral).ToInt(nil)
 		if err != nil {
-			return types.Datum{}, err
+			return nil, err
 		}
 	}
 	return value, nil

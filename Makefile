@@ -1,5 +1,5 @@
 ### Makefile for ticdc
-.PHONY: build test check clean fmt cdc coverage \
+.PHONY: build test check clean fmt cdc kafka_consumer coverage \
 	integration_test_build integration_test
 
 PROJECT=ticdc
@@ -52,6 +52,9 @@ build: cdc
 
 cdc:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
+
+kafka_consumer:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./kafka_consumer/main.go
 
 install:
 	go install ./...

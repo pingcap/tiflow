@@ -512,10 +512,6 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		}
 
 		if lastCheckPointTs < changefeedStatus.CheckpointTs {
-			err = p.sink.EmitCheckpointEvent(ctx, changefeedStatus.CheckpointTs)
-			if err != nil {
-				return errors.Trace(err)
-			}
 			err = p.schemaBuilder.DoGc(changefeedStatus.CheckpointTs)
 			if err != nil {
 				return errors.Trace(err)

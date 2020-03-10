@@ -343,7 +343,7 @@ func realRunProcessor(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	sink, err := sink.NewMySQLSink(info.SinkURI, filter, info.Opts)
+	sink, err := sink.NewSink(info.SinkURI, filter, info.Opts)
 	if err != nil {
 		return errors.Trace(err)
 	}
