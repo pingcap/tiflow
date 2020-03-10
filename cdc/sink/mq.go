@@ -25,14 +25,16 @@ type mqSink struct {
 	sinkCheckpointTsCh chan uint64
 	globalResolvedTs   uint64
 	checkpointTs       uint64
+	filter             *util.Filter
 }
 
-func newMqSink(mqProducer mqProducer.Producer) *mqSink {
+func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter) *mqSink {
 	partitionNum := mqProducer.GetPartitionNum()
 	return &mqSink{
 		mqProducer:         mqProducer,
 		partitionNum:       partitionNum,
 		sinkCheckpointTsCh: make(chan uint64, 128),
+		filter:             filter,
 	}
 }
 
@@ -58,6 +60,10 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 	for _, row := range rows {
 		if row.Resolved {
 			sinkCheckpointTs = row.Ts
+			continue
+		}
+		if k.filter.ShouldIgnoreEvent(row.Ts, row.Schema, row.Table) {
+			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
 			continue
 		}
 		partition := k.calPartition(row)
@@ -102,6 +108,14 @@ func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	if k.filter.ShouldIgnoreEvent(ddl.Ts, ddl.Schema, ddl.Table) {
+		log.Info(
+			"DDL event ignored",
+			zap.String("query", ddl.Query),
+			zap.Uint64("ts", ddl.Ts),
+		)
+		return nil
+	}
 	key, value := ddl.ToMqMessage()
 	keyByte, err := key.Encode()
 	if err != nil {
@@ -173,5 +187,5 @@ func newKafkaSaramaSink(sinkURI *url.URL, filter *util.Filter) (*mqSink, error) 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return newMqSink(producer), nil
+	return newMqSink(producer, filter), nil
 }
