@@ -58,9 +58,7 @@ type mysqlSink struct {
 	unresolvedRowsMu sync.Mutex
 	unresolvedRows   map[string][]*model.RowChangedEvent
 
-	lastTime  time.Time
-	lastCount int64
-	count     int64
+	count int64
 }
 
 func (s *mysqlSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
@@ -300,7 +298,6 @@ func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, opts map[string]string) 
 		db:              db,
 		unresolvedRows:  make(map[string][]*model.RowChangedEvent),
 		params:          params,
-		lastTime:        time.Now(),
 		globalForwardCh: make(chan struct{}, 1),
 	}
 
@@ -345,6 +342,8 @@ func (s *mysqlSink) Close() error {
 }
 
 func (s *mysqlSink) PrintStatus(ctx context.Context) error {
+	lastTime := time.Now()
+	var lastCount int64
 	timer := time.NewTicker(printStatusInterval)
 	defer timer.Stop()
 	for {
@@ -353,16 +352,15 @@ func (s *mysqlSink) PrintStatus(ctx context.Context) error {
 			return nil
 		case <-timer.C:
 			now := time.Now()
-			seconds := now.Unix() - s.lastTime.Unix()
+			seconds := now.Unix() - lastTime.Unix()
 			total := atomic.LoadInt64(&s.count)
-			last := atomic.LoadInt64(&s.lastCount)
-			count := total - last
+			count := total - lastCount
 			qps := int64(0)
 			if seconds > 0 {
 				qps = count / seconds
 			}
-			atomic.StoreInt64(&s.lastCount, total)
-			s.lastTime = now
+			lastCount = total
+			lastTime = now
 			log.Info("mysql sink replication status",
 				zap.String("changefeed", s.params.changefeedID),
 				zap.Int64("count", count),

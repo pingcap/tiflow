@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -23,14 +24,20 @@ type mqSink struct {
 	sinkCheckpointTsCh chan uint64
 	globalResolvedTs   uint64
 	checkpointTs       uint64
+
+	changefeedID string
+
+	count int64
 }
 
-func newMqSink(mqProducer mqProducer.Producer) *mqSink {
+func newMqSink(mqProducer mqProducer.Producer, opts map[string]string) *mqSink {
 	partitionNum := mqProducer.GetPartitionNum()
+	changefeedID := opts[OptChangefeedID]
 	return &mqSink{
 		mqProducer:         mqProducer,
 		partitionNum:       partitionNum,
 		sinkCheckpointTsCh: make(chan uint64, 128),
+		changefeedID:       changefeedID,
 	}
 }
 
@@ -73,6 +80,7 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 			log.Error("send message failed", zap.ByteStrings("row", [][]byte{keyByte, valueByte}), zap.Int32("partition", partition))
 			return errors.Trace(err)
 		}
+		atomic.AddInt64(&k.count, 1)
 	}
 	if sinkCheckpointTs == 0 {
 		return nil
@@ -113,6 +121,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	atomic.AddInt64(&k.count, 1)
 	return nil
 }
 
@@ -139,16 +148,38 @@ func (k *mqSink) Run(ctx context.Context) error {
 }
 
 func (k *mqSink) PrintStatus(ctx context.Context) error {
-	// TODO implement this function
-	<-ctx.Done()
-	return nil
+	lastTime := time.Now()
+	var lastCount int64
+	timer := time.NewTicker(printStatusInterval)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
+			now := time.Now()
+			seconds := now.Unix() - lastTime.Unix()
+			total := atomic.LoadInt64(&k.count)
+			count := total - lastCount
+			qps := int64(0)
+			if seconds > 0 {
+				qps = count / seconds
+			}
+			lastCount = total
+			lastTime = now
+			log.Info("MQ sink replication status",
+				zap.String("changefeed", k.changefeedID),
+				zap.Int64("count", count),
+				zap.Int64("qps", qps))
+		}
+	}
 }
 
 func (k *mqSink) Close() error {
 	return nil
 }
 
-func newKafkaSaramaSink(sinkURI *url.URL) (*mqSink, error) {
+func newKafkaSaramaSink(sinkURI *url.URL, opts map[string]string) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
 	scheme := strings.ToLower(sinkURI.Scheme)
@@ -186,5 +217,5 @@ func newKafkaSaramaSink(sinkURI *url.URL) (*mqSink, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return newMqSink(producer), nil
+	return newMqSink(producer, opts), nil
 }

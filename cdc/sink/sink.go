@@ -67,7 +67,7 @@ func NewSink(sinkURIStr string, opts map[string]string) (Sink, error) {
 	case "mysql", "tidb":
 		return newMySQLSink(sinkURI, nil, opts)
 	case "kafka":
-		return newKafkaSaramaSink(sinkURI)
+		return newKafkaSaramaSink(sinkURI, opts)
 	default:
 		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}
