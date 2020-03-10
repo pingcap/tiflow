@@ -74,6 +74,11 @@ func NewKafkaSaramaProducer(address string, topic string, config KafkaConfig) (*
 		}
 	}
 
+	err = admin.Close()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &kafkaSaramaProducer{
 		client:       client,
 		topic:        topic,
