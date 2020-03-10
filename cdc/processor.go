@@ -354,6 +354,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("update task position", zap.Stringer("status", p.position))
 	statusChanged, err := p.tsRWriter.UpdateInfo(ctx)
 	if err != nil {
 		return errors.Trace(err)

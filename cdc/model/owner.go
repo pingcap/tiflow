@@ -91,15 +91,21 @@ type TaskPosition struct {
 }
 
 // Marshal returns the json marshal format of a TaskStatus
-func (ts *TaskPosition) Marshal() (string, error) {
-	data, err := json.Marshal(ts)
+func (tp *TaskPosition) Marshal() (string, error) {
+	data, err := json.Marshal(tp)
 	return string(data), errors.Trace(err)
 }
 
 // Unmarshal unmarshals into *TaskStatus from json marshal byte slice
-func (ts *TaskPosition) Unmarshal(data []byte) error {
-	err := json.Unmarshal(data, ts)
+func (tp *TaskPosition) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, tp)
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
+}
+
+// String implements fmt.Stringer interface.
+func (tp *TaskPosition) String() string {
+	data, _ := tp.Marshal()
+	return string(data)
 }
 
 // TaskStatus records the task information of a capture
