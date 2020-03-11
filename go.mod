@@ -18,7 +18,7 @@ require (
 	github.com/pingcap/check v0.0.0-20191216031241-8a5a85928f12
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
 	github.com/pingcap/failpoint v0.0.0-20200210140405-f8f9fb234798
-	github.com/pingcap/kvproto v0.0.0-20200311033452-ee50d594859d // indirect
+	github.com/pingcap/kvproto v0.0.0-20200311033452-ee50d594859d
 	github.com/pingcap/log v0.0.0-20200117041106-d28c14d3b1cd
 	github.com/pingcap/parser v0.0.0-20200207090844-d65f5147dd9f
 	github.com/pingcap/pd v1.1.0-beta.0.20200106144140-f5a7aa985497
