@@ -15,10 +15,8 @@ package kv
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"math/rand"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -342,7 +340,9 @@ MainLoop:
 			}
 			if rpcCtx == nil {
 				// The region info is invalid. Retry the span.
-				log.Debug("cannot get rpcCtx, retry span", zap.Reflect("span", sri.span))
+				log.Info("cannot get rpcCtx, retry span",
+					zap.Uint64("regionID", sri.verID.GetID()),
+					zap.Reflect("span", sri.span))
 				// Workaround: spawn to a new goroutine, otherwise the function may blocks when sending to regionCh but
 				// regionCh can only be received from `dispatchRequest`.
 				// TODO: Find better solution after a refactoring
@@ -437,8 +437,6 @@ MainLoop:
 				continue
 			}
 
-			log.Debug("request to region successfully sent", zap.Uint64("regionID", sri.verID.GetID()), zap.String("addr", rpcCtx.Addr))
-
 			break
 		}
 	}
@@ -516,9 +514,6 @@ func (c *CDCClient) partialRegionFeed(
 		singleRegionInfo: regionInfo,
 		err:              err,
 	}
-
-	//	// avoid too many kv clients retry at the same time, we should have a better solution
-	//	time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
 
 	return nil
 }
@@ -682,23 +677,6 @@ func (c *CDCClient) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
-		eventsStr := make([]string, 0, len(cevent.Events))
-		for _, e := range cevent.Events {
-			content := ""
-			switch x := e.Event.(type) {
-			case *cdcpb.Event_Entries_:
-				content = "entries"
-			case *cdcpb.Event_Admin_:
-				content = "admin:" + x.Admin.String()
-			case *cdcpb.Event_Error:
-				content = "error:" + x.Error.String()
-			case *cdcpb.Event_ResolvedTs:
-				content = "resolved_ts:" + strconv.FormatUint(x.ResolvedTs, 10)
-			}
-			eventsStr = append(eventsStr, fmt.Sprintf("regionID:%v, %v;", e.RegionId, content))
-		}
-		log.Debug("recv ChangeDataEvent", zap.Strings("event", eventsStr), zap.String("addr", addr))
-
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
 			for _, ch := range regionHandlers {
@@ -747,7 +725,6 @@ func (c *CDCClient) receiveFromStream(
 				// Then spawn the goroutine to process messages of this region.
 				ch = make(chan *cdcpb.Event, 16)
 				regionHandlers[event.RegionId] = ch
-				log.Debug("spawning partialRegionFeed goroutine for region", zap.Uint64("regionID", event.RegionId))
 
 				isStopped := new(int32)
 				regionStopped[event.RegionId] = isStopped
@@ -779,7 +756,6 @@ func (c *CDCClient) singleEventFeed(
 ) (uint64, error) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	log.Debug("singleRegionFeed started")
 
 	var initialized uint32
 
@@ -828,10 +804,6 @@ func (c *CDCClient) singleEventFeed(
 		if event == nil {
 			log.Debug("singleEventFeed closed by error")
 			return atomic.LoadUint64(&checkpointTs), errors.New("single event feed aborted")
-		}
-
-		if _, isEntry := event.Event.(*cdcpb.Event_Entries_); !isEntry {
-			log.Debug("singleEventFeed got event", zap.Stringer("event", event))
 		}
 
 		eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
