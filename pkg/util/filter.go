@@ -1,30 +1,38 @@
-package cdc
+package util
 
 import (
 	"strings"
 
-	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
-type txnFilter struct {
+// Filter is a event filter implementation
+type Filter struct {
 	filter            *filter.Filter
 	ignoreTxnCommitTs []uint64
 }
 
-func newTxnFilter(config *model.ReplicaConfig) (*txnFilter, error) {
+// ReplicaConfig represents some addition replication config for a changefeed
+type ReplicaConfig struct {
+	FilterCaseSensitive bool          `toml:"filter-case-sensitive" json:"filter-case-sensitive"`
+	FilterRules         *filter.Rules `toml:"filter-rules" json:"filter-rules"`
+	IgnoreTxnCommitTs   []uint64      `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
+}
+
+// NewFilter creates a filter
+func NewFilter(config *ReplicaConfig) (*Filter, error) {
 	filter, err := filter.New(config.FilterCaseSensitive, config.FilterRules)
 	if err != nil {
 		return nil, err
 	}
-	return &txnFilter{
+	return &Filter{
 		filter:            filter,
 		ignoreTxnCommitTs: config.IgnoreTxnCommitTs,
 	}, nil
 }
 
 // ShouldIgnoreTxn returns true is the given txn should be ignored
-func (f *txnFilter) shouldIgnoreCommitTs(ts uint64) bool {
+func (f *Filter) shouldIgnoreCommitTs(ts uint64) bool {
 	for _, ignoreTs := range f.ignoreTxnCommitTs {
 		if ignoreTs == ts {
 			return true
@@ -35,7 +43,7 @@ func (f *txnFilter) shouldIgnoreCommitTs(ts uint64) bool {
 
 // ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
 // Set `tbl` to an empty string to test against the whole database.
-func (f *txnFilter) ShouldIgnoreTable(db, tbl string) bool {
+func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 	if IsSysSchema(db) {
 		return true
 	}
@@ -44,14 +52,10 @@ func (f *txnFilter) ShouldIgnoreTable(db, tbl string) bool {
 	return len(left) == 0
 }
 
-// FilterTxn removes DDL/DMLs that's not wanted by this change feed.
+// ShouldIgnoreEvent removes DDL/DMLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
-func (f *txnFilter) ShouldIgnoreRowChangedEvent(t *model.RowChangedEvent) bool {
-	return f.shouldIgnoreCommitTs(t.Ts) || f.ShouldIgnoreTable(t.Schema, t.Table)
-}
-
-func (f *txnFilter) ShouldIgnoreDDLEvent(t *model.DDLEvent) bool {
-	return f.shouldIgnoreCommitTs(t.Ts) || f.ShouldIgnoreTable(t.Schema, t.Table)
+func (f *Filter) ShouldIgnoreEvent(ts uint64, schema, table string) bool {
+	return f.shouldIgnoreCommitTs(ts) || f.ShouldIgnoreTable(schema, table)
 }
 
 // IsSysSchema returns true if the given schema is a system schema

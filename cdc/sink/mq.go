@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
@@ -24,19 +26,21 @@ type mqSink struct {
 	sinkCheckpointTsCh chan uint64
 	globalResolvedTs   uint64
 	checkpointTs       uint64
+	filter             *util.Filter
 
 	changefeedID string
 
 	count int64
 }
 
-func newMqSink(mqProducer mqProducer.Producer, opts map[string]string) *mqSink {
+func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, opts map[string]string) *mqSink {
 	partitionNum := mqProducer.GetPartitionNum()
 	changefeedID := opts[OptChangefeedID]
 	return &mqSink{
 		mqProducer:         mqProducer,
 		partitionNum:       partitionNum,
 		sinkCheckpointTsCh: make(chan uint64, 128),
+		filter:             filter,
 		changefeedID:       changefeedID,
 	}
 }
@@ -63,6 +67,10 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 	for _, row := range rows {
 		if row.Resolved {
 			sinkCheckpointTs = row.Ts
+			continue
+		}
+		if k.filter.ShouldIgnoreEvent(row.Ts, row.Schema, row.Table) {
+			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
 			continue
 		}
 		partition := k.calPartition(row)
@@ -108,6 +116,14 @@ func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	if k.filter.ShouldIgnoreEvent(ddl.Ts, ddl.Schema, ddl.Table) {
+		log.Info(
+			"DDL event ignored",
+			zap.String("query", ddl.Query),
+			zap.Uint64("ts", ddl.Ts),
+		)
+		return nil
+	}
 	key, value := ddl.ToMqMessage()
 	keyByte, err := key.Encode()
 	if err != nil {
@@ -179,7 +195,7 @@ func (k *mqSink) Close() error {
 	return nil
 }
 
-func newKafkaSaramaSink(sinkURI *url.URL, opts map[string]string) (*mqSink, error) {
+func newKafkaSaramaSink(sinkURI *url.URL, filter *util.Filter, opts map[string]string) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
 	scheme := strings.ToLower(sinkURI.Scheme)
@@ -217,5 +233,5 @@ func newKafkaSaramaSink(sinkURI *url.URL, opts map[string]string) (*mqSink, erro
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return newMqSink(producer, opts), nil
+	return newMqSink(producer, filter, opts), nil
 }

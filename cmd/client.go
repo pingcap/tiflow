@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/BurntSushi/toml"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/google/uuid"
@@ -84,7 +86,7 @@ var cliCmd = &cobra.Command{
 			return err
 		}
 
-		cfg := new(model.ReplicaConfig)
+		cfg := new(util.ReplicaConfig)
 		if len(configFile) > 0 {
 			if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
 				return err

@@ -86,7 +86,7 @@ type changeFeed struct {
 	targetTs      uint64
 	taskStatus    model.ProcessorsInfos
 	taskPositions map[string]*model.TaskPosition
-	filter        *txnFilter
+	filter        *util.Filter
 	sink          sink.Sink
 
 	ddlHandler    OwnerDDLHandler
@@ -549,7 +549,7 @@ func (o *ownerImpl) newChangeFeed(
 		}
 	}
 
-	filter, err := newTxnFilter(info.GetConfig())
+	filter, err := util.NewFilter(info.GetConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -583,7 +583,7 @@ func (o *ownerImpl) newChangeFeed(
 		}
 	}
 
-	sink, err := sink.NewSink(info.SinkURI, info.Opts)
+	sink, err := sink.NewSink(info.SinkURI, filter, info.Opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -859,29 +859,21 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 	c.banlanceOrphanTables(ctx, captures)
 
-	if c.filter.ShouldIgnoreDDLEvent(ddlEvent) {
-		log.Info(
-			"DDL event ignored",
-			zap.Int64("ID", todoDDLJob.ID),
-			zap.String("query", todoDDLJob.Query),
-			zap.Uint64("ts", ddlEvent.Ts),
-		)
-	} else {
-		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
-		// If DDL executing failed, pause the changefeed and print log, rather
-		// than return an error and break the running of this owner.
-		if err != nil {
-			c.ddlState = model.ChangeFeedDDLExecuteFailed
-			log.Error("Execute DDL failed",
-				zap.String("ChangeFeedID", c.id),
-				zap.Error(err),
-				zap.Reflect("ddlJob", todoDDLJob))
-			return errors.Trace(model.ErrExecDDLFailed)
-		}
-		log.Info("Execute DDL succeeded",
+	err = c.sink.EmitDDLEvent(ctx, ddlEvent)
+	// If DDL executing failed, pause the changefeed and print log, rather
+	// than return an error and break the running of this owner.
+	if err != nil {
+		c.ddlState = model.ChangeFeedDDLExecuteFailed
+		log.Error("Execute DDL failed",
 			zap.String("ChangeFeedID", c.id),
+			zap.Error(err),
 			zap.Reflect("ddlJob", todoDDLJob))
+		return errors.Trace(model.ErrExecDDLFailed)
 	}
+	log.Info("Execute DDL succeeded",
+		zap.String("ChangeFeedID", c.id),
+		zap.Reflect("ddlJob", todoDDLJob))
+
 	if c.ddlState != model.ChangeFeedExecDDL {
 		log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
 			zap.String("ChangeFeedID", c.id),
