@@ -630,7 +630,7 @@ func (c *CDCClient) getRPCContextForRegion(ctx context.Context, id tikv.RegionVe
 	bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 	rpcCtx, err := c.regionCache.GetTiKVRPCContext(bo, id, tidbkv.ReplicaReadLeader, 0)
 	if err != nil {
-		return nil, backoff.Permanent(errors.Trace(err))
+		return nil, errors.Trace(err)
 	}
 	return rpcCtx, nil
 }
