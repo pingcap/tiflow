@@ -339,7 +339,7 @@ func realRunProcessor(
 	}
 	opts[sink.OptChangefeedID] = changefeedID
 	opts[sink.OptCaptureID] = captureID
-	sink, err := sink.NewSink(info.SinkURI, info.Opts)
+	sink, err := sink.NewSink(info.SinkURI, opts)
 	if err != nil {
 		return errors.Trace(err)
 	}
