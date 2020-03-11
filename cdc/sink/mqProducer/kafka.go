@@ -53,22 +53,27 @@ func NewKafkaSaramaProducer(address string, topic string, config KafkaConfig) (*
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	var partitionNum int32
+	partitionNum := config.PartitionNum
 	topicDetail, exist := topics[topic]
 	if exist {
 		log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
-		if config.PartitionNum == 0 {
+		if partitionNum == 0 {
 			partitionNum = topicDetail.NumPartitions
-		} else if config.PartitionNum < topicDetail.NumPartitions {
+		} else if partitionNum < topicDetail.NumPartitions {
 			log.Warn("partition number assigned in sink-uri is less than that of topic")
-		} else {
+		} else if partitionNum > topicDetail.NumPartitions {
 			return nil, errors.Errorf("partition number assigned in sink-uri is more than that of topic")
 		}
 	} else {
+		if partitionNum == 0 {
+			partitionNum = 4
+			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
+		}
 		err := admin.CreateTopic(topic, &sarama.TopicDetail{
-			NumPartitions:     config.PartitionNum,
+			NumPartitions:     partitionNum,
 			ReplicationFactor: config.ReplicationFactor,
 		}, false)
+		log.Info("create a topic", zap.String("topic", topic), zap.Int32("partition_num", partitionNum), zap.Int16("replication_factor", config.ReplicationFactor))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
