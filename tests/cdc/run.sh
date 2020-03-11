@@ -19,7 +19,7 @@ function prepare() {
     start_ts=$(cdc ctrl --cmd=get-tso http://$UP_PD_HOST:$UP_PD_PORT)
 
     run_cdc_server $WORK_DIR $CDC_BINARY
-    cdc cli --start-ts=$start_ts
+    cdc cli create --start-ts=$start_ts
 }
 
 trap stop_tidb_cluster EXIT

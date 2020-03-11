@@ -21,7 +21,7 @@ function prepare() {
     run_sql "CREATE table test.simple2(id int primary key, val int);"
 
     run_cdc_server $WORK_DIR $CDC_BINARY
-    cdc cli --start-ts=$start_ts
+    cdc cli create --start-ts=$start_ts
 }
 
 function sql_check() {

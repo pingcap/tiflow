@@ -31,7 +31,7 @@ function run() {
     for i in $(seq $CDC_COUNT); do
         run_cdc_server $WORK_DIR $CDC_BINARY "$i"
     done
-    cdc cli --start-ts=$start_ts
+    cdc cli create --start-ts=$start_ts
 
     # check tables are created and data is synchronized
     for i in $(seq $DB_COUNT); do
