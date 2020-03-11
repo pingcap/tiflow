@@ -124,7 +124,7 @@ func newListProcessorCommand() *cobra.Command {
 func newQueryChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "query-changefeed",
-		Short: "query information and status of a replicaiton task (changefeed)",
+		Short: "Query information and status of a replicaiton task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			info, err := cdcEtcdCli.GetChangeFeedInfo(context.Background(), changefeedID)
 			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
@@ -145,7 +145,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 func newQueryProcessorCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "query-processor",
-		Short: "query information and status of a sub replication task (processor)",
+		Short: "Query information and status of a sub replication task (processor)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, status, err := cdcEtcdCli.GetTaskStatus(context.Background(), changefeedID, captureID)
 			if err != nil && errors.Cause(err) != model.ErrTaskStatusNotExists {
@@ -167,7 +167,7 @@ func newQueryProcessorCommand() *cobra.Command {
 func newGetTsoCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "tso",
-		Short: "get tso from PD",
+		Short: "Get tso from PD",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ts, logic, err := pdCli.GetTS(context.Background())
 			if err != nil {
@@ -183,7 +183,7 @@ func newGetTsoCommand() *cobra.Command {
 func newTruncateCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "truncate",
-		Short: "truncate all meta data in etcd, confirm that you know what this command does and use it at your own risk",
+		Short: "Truncate all meta data in etcd, confirm that you know what this command does and use it at your own risk",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := cdcEtcdCli.ClearAllCDCInfo(context.Background())
 			if err == nil {

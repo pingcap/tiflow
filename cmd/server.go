@@ -22,8 +22,7 @@ var (
 
 	serverCmd = &cobra.Command{
 		Use:              "server",
-		Short:            "runs a TiCDC capture server",
-		Long:             "runs a TiCDC capture server",
+		Short:            "Start a TiCDC capture server",
 		PersistentPreRun: preRunLogInfo,
 		RunE:             runEServer,
 	}

@@ -23,8 +23,7 @@ import (
 )
 
 func init() {
-	cliCmd := NewCliCommand()
-	rootCmd.AddCommand(cliCmd)
+	rootCmd.AddCommand(newCliCommand())
 }
 
 var (
@@ -39,10 +38,10 @@ var (
 	pdCli      pd.Client
 )
 
-func NewCliCommand() *cobra.Command {
+func newCliCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "cli",
-		Short: "create and manage replication task and TiCDC cluster",
+		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
