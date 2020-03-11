@@ -14,6 +14,7 @@ import (
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
@@ -104,7 +105,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 				return err
 			}
 
-			cfg := new(model.ReplicaConfig)
+			cfg := new(util.ReplicaConfig)
 			if len(configFile) > 0 {
 				if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
 					return err

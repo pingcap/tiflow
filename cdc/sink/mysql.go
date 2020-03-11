@@ -53,6 +53,8 @@ type mysqlSink struct {
 	checkpointTs     uint64
 	params           params
 
+	filter *util.Filter
+
 	globalForwardCh chan struct{}
 
 	unresolvedRowsMu sync.Mutex
@@ -83,11 +85,10 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 			resolvedTs = row.Ts
 			continue
 		}
-		// TODO filter row
-		//if s.filter.ShouldIgnoreTxn(row) {
-		//	log.Info("Row changed event ignored", zap.Uint64("ts", txn.Ts))
-		//	continue
-		//}
+		if s.filter.ShouldIgnoreEvent(row.Ts, row.Schema, row.Table) {
+			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
+			continue
+		}
 		key := util.QuoteSchema(row.Schema, row.Table)
 		s.unresolvedRows[key] = append(s.unresolvedRows[key], row)
 	}
@@ -96,6 +97,14 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 }
 
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	if s.filter.ShouldIgnoreEvent(ddl.Ts, ddl.Schema, ddl.Table) {
+		log.Info(
+			"DDL event ignored",
+			zap.String("query", ddl.Query),
+			zap.Uint64("ts", ddl.Ts),
+		)
+		return nil
+	}
 	err := s.execDDLWithMaxRetries(ctx, ddl, 5)
 	return errors.Trace(err)
 }
@@ -238,7 +247,7 @@ func configureSinkURI(dsnCfg *dmysql.Config) (string, error) {
 }
 
 // newMySQLSink creates a new MySQL sink using schema storage
-func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, opts map[string]string) (Sink, error) {
+func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, filter *util.Filter, opts map[string]string) (Sink, error) {
 	var db *sql.DB
 	params := defaultParams
 
@@ -298,6 +307,7 @@ func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, opts map[string]string) 
 		db:              db,
 		unresolvedRows:  make(map[string][]*model.RowChangedEvent),
 		params:          params,
+		filter:          filter,
 		globalForwardCh: make(chan struct{}, 1),
 	}
 

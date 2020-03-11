@@ -18,6 +18,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 
@@ -51,7 +53,7 @@ type Sink interface {
 }
 
 // NewSink creates a new sink with the sink-uri
-func NewSink(sinkURIStr string, opts map[string]string) (Sink, error) {
+func NewSink(sinkURIStr string, filter *util.Filter, opts map[string]string) (Sink, error) {
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
 		// try to parse the sinkURI as DSN
@@ -59,15 +61,15 @@ func NewSink(sinkURIStr string, opts map[string]string) (Sink, error) {
 		if err != nil {
 			return nil, errors.Annotatef(err, "parse sinkURI failed")
 		}
-		return newMySQLSink(nil, dsnCfg, opts)
+		return newMySQLSink(nil, dsnCfg, filter, opts)
 	}
 	switch strings.ToLower(sinkURI.Scheme) {
 	case "blackhole":
 		return newBlackHoleSink(), nil
 	case "mysql", "tidb":
-		return newMySQLSink(sinkURI, nil, opts)
+		return newMySQLSink(sinkURI, nil, filter, opts)
 	case "kafka":
-		return newKafkaSaramaSink(sinkURI, opts)
+		return newKafkaSaramaSink(sinkURI, filter, opts)
 	default:
 		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}
