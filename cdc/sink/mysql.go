@@ -229,12 +229,14 @@ var _ Sink = &mysqlSink{}
 
 type params struct {
 	workerCount  int
+	maxTxnRow    int
 	changefeedID string
 	captureID    string
 }
 
 var defaultParams = params{
 	workerCount: defaultWorkerCount,
+	maxTxnRow:   defaultMaxTxnRow,
 }
 
 func configureSinkURI(dsnCfg *dmysql.Config) (string, error) {
@@ -272,6 +274,14 @@ func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, filter *util.Filter, opt
 				return nil, errors.Trace(err)
 			}
 			params.workerCount = c
+		}
+		s = sinkURI.Query().Get("max-txn-row")
+		if s != "" {
+			c, err := strconv.Atoi(s)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			params.maxTxnRow = c
 		}
 		// dsn format of the driver:
 		// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
@@ -337,7 +347,7 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*
 	for i := 0; i < nWorkers; i++ {
 		eg.Go(func() error {
 			for rows := range jobs {
-				rowsGroup := txnRowLimiter(rows, defaultMaxTxnRow)
+				rowsGroup := txnRowLimiter(rows, s.params.maxTxnRow)
 				for _, r := range rowsGroup {
 					// TODO: Add retry
 					if err := s.execDMLs(ctx, r); err != nil {
