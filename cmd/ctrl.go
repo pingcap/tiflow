@@ -16,7 +16,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -54,12 +53,12 @@ type processorMeta struct {
 	Position *model.TaskPosition `json:"position"`
 }
 
-func jsonPrint(v interface{}) error {
+func jsonPrint(cmd *cobra.Command, v interface{}) error {
 	data, err := json.MarshalIndent(v, "", "\t")
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s\n", data)
+	cmd.Printf("%s\n", data)
 	return nil
 }
 
@@ -81,7 +80,7 @@ func newListCaptureCommand() *cobra.Command {
 				isOwner := c.ID == ownerID
 				captures = append(captures, &capture{ID: c.ID, IsOwner: isOwner})
 			}
-			return jsonPrint(captures)
+			return jsonPrint(cmd, captures)
 		},
 	}
 	return command
@@ -100,7 +99,7 @@ func newListChangefeedCommand() *cobra.Command {
 			for id := range raw {
 				cfs = append(cfs, &cf{ID: id})
 			}
-			return jsonPrint(cfs)
+			return jsonPrint(cmd, cfs)
 		},
 	}
 	return command
@@ -115,7 +114,7 @@ func newListProcessorCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return jsonPrint(processors)
+			return jsonPrint(cmd, processors)
 		},
 	}
 	return command
@@ -135,7 +134,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 				return err
 			}
 			meta := &cfMeta{Info: info, Status: status}
-			return jsonPrint(meta)
+			return jsonPrint(cmd, meta)
 		},
 	}
 	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
@@ -156,7 +155,7 @@ func newQueryProcessorCommand() *cobra.Command {
 				return err
 			}
 			meta := &processorMeta{Status: status, Position: position}
-			return jsonPrint(meta)
+			return jsonPrint(cmd, meta)
 		},
 	}
 	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
@@ -173,7 +172,7 @@ func newGetTsoCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Println(oracle.ComposeTS(ts, logic))
+			cmd.Println(oracle.ComposeTS(ts, logic))
 			return nil
 		},
 	}
@@ -187,7 +186,7 @@ func newTruncateCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := cdcEtcdCli.ClearAllCDCInfo(context.Background())
 			if err == nil {
-				fmt.Println("already truncate all meta in etcd!")
+				cmd.Println("already truncate all meta in etcd!")
 			}
 			return err
 		},

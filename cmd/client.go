@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -122,9 +121,10 @@ func newCreateChangefeedCommand() *cobra.Command {
 			}
 
 			for _, opt := range opts {
-				s := strings.Split(opt, "=")
-				if len(s) <= 0 || len(s) > 2 {
-					fmt.Printf("omit opt: %s", opt)
+				s := strings.SplitN(opt, "=", 2)
+				if len(s) <= 0 {
+					cmd.Printf("omit opt: %s", opt)
+					continue
 				}
 
 				var key string
@@ -141,7 +141,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("create changefeed ID: %s info %s\n", id, d)
+			cmd.Printf("create changefeed ID: %s info %s\n", id, d)
 			return cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
 		},
 	}
