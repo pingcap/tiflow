@@ -64,7 +64,7 @@ func jsonPrint(cmd *cobra.Command, v interface{}) error {
 
 func newListCaptureCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "list-capture",
+		Use:   "list",
 		Short: "List all captures in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, raw, err := cdcEtcdCli.GetCaptures(context.Background())
@@ -88,7 +88,7 @@ func newListCaptureCommand() *cobra.Command {
 
 func newListChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "list-changefeed",
+		Use:   "list",
 		Short: "List all replication tasks (changefeeds) in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, raw, err := cdcEtcdCli.GetChangeFeeds(context.Background())
@@ -107,7 +107,7 @@ func newListChangefeedCommand() *cobra.Command {
 
 func newListProcessorCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "list-processor",
+		Use:   "list",
 		Short: "List all processors in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, processors, err := cdcEtcdCli.GetAllProcessors(context.Background())
@@ -122,7 +122,7 @@ func newListProcessorCommand() *cobra.Command {
 
 func newQueryChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "query-changefeed",
+		Use:   "query",
 		Short: "Query information and status of a replicaiton task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			info, err := cdcEtcdCli.GetChangeFeedInfo(context.Background(), changefeedID)
@@ -143,7 +143,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 
 func newQueryProcessorCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "query-processor",
+		Use:   "query",
 		Short: "Query information and status of a sub replication task (processor)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, status, err := cdcEtcdCli.GetTaskStatus(context.Background(), changefeedID, captureID)
@@ -163,9 +163,9 @@ func newQueryProcessorCommand() *cobra.Command {
 	return command
 }
 
-func newGetTsoCommand() *cobra.Command {
+func newQueryTsoCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "tso",
+		Use:   "query",
 		Short: "Get tso from PD",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ts, logic, err := pdCli.GetTS(context.Background())
@@ -179,10 +179,10 @@ func newGetTsoCommand() *cobra.Command {
 	return command
 }
 
-func newTruncateCommand() *cobra.Command {
+func newDeleteMetaCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "truncate",
-		Short: "Truncate all meta data in etcd, confirm that you know what this command does and use it at your own risk",
+		Use:   "delete",
+		Short: "Delete all meta data in etcd, confirm that you know what this command will do and use it at your own risk",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := cdcEtcdCli.ClearAllCDCInfo(context.Background())
 			if err == nil {

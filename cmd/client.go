@@ -71,24 +71,81 @@ func newCliCommand() *cobra.Command {
 		},
 	}
 	command.AddCommand(
-		newCreateChangefeedCommand(),
-		newListCaptureCommand(),
-		newListChangefeedCommand(),
-		newListProcessorCommand(),
-		newQueryChangefeedCommand(),
-		newQueryProcessorCommand(),
-		newGetTsoCommand(),
-		newTruncateCommand(),
+		newCaptureCommand(),
+		newChangefeedCommand(),
+		newProcessorCommand(),
+		newMetadataCommand(),
+		newTsoCommand(),
 	)
 	command.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address")
 
 	return command
 }
 
+func newCaptureCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "capture",
+		Short: "Manage capture (capture is a CDC server instance)",
+	}
+	command.AddCommand(
+		newListCaptureCommand(),
+		// TODO: add resign owner command
+	)
+	return command
+}
+
+func newChangefeedCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "changefeed",
+		Short: "Manage changefeed (changefeed is a replication task)",
+	}
+	command.AddCommand(
+		newListChangefeedCommand(),
+		newQueryChangefeedCommand(),
+		newCreateChangefeedCommand(),
+		// TODO: add stop, resume, delete changefeed
+	)
+	return command
+}
+
+func newProcessorCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "processor",
+		Short: "Manage processor (processor is a sub replication task running on a specified capture)",
+	}
+	command.AddCommand(
+		newListProcessorCommand(),
+		newQueryProcessorCommand(),
+	)
+	return command
+}
+
+func newMetadataCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "meta",
+		Short: "Manage metadata stored in PD",
+	}
+	command.AddCommand(
+		newDeleteMetaCommand(),
+	)
+	return command
+}
+
+func newTsoCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "tso",
+		Short: "Manage tso",
+	}
+	command.AddCommand(
+		newQueryTsoCommand(),
+	)
+	return command
+}
+
 func newCreateChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "create",
-		Short: "create a new replication task (changefeed)",
+		Short: "Create a new replication task (changefeed)",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
