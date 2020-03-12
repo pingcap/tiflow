@@ -26,7 +26,7 @@ func init() {
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
-	Short: "output version information",
+	Short: "Output version information",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println(util.GetRawInfo())
 	},

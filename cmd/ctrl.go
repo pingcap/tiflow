@@ -16,54 +16,20 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"time"
+	"os"
 
-	pd "github.com/pingcap/pd/client"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
-	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
 )
-
-// command type
-const (
-	// query changefeed info, returns a json marshalled ChangeFeedDetail
-	CtrlQueryCfInfo = "query-cf-info"
-	// query changefeed replication status
-	CtrlQueryCfStatus = "query-cf-status"
-	// query changefeed list
-	CtrlQueryCfs = "query-cf-list"
-	// query capture list
-	CtrlQueryCaptures = "query-capture-list"
-	// query processor replication status
-	CtrlQuerySubCf = "query-sub-cf"
-	// clear all key-values created by CDC
-	CtrlClearAll = "clear-all"
-	// get tso from pd
-	CtrlGetTso = "get-tso"
-	// query the processor list
-	CtrlQueryProcessors = "query-processor-list"
-)
-
-func init() {
-	rootCmd.AddCommand(ctrlCmd)
-
-	ctrlCmd.Flags().StringVar(&ctrlPdAddr, "pd-addr", "localhost:2379", "address of PD")
-	ctrlCmd.Flags().StringVar(&ctrlCfID, "changefeed-id", "", "changefeed ID")
-	ctrlCmd.Flags().StringVar(&ctrlCaptureID, "capture-id", "", "capture ID")
-	ctrlCmd.Flags().StringVar(&ctrlCommand, "cmd", CtrlQueryCaptures, "controller command type")
-}
 
 var (
-	ctrlPdAddr    string
-	ctrlCfID      string
-	ctrlCaptureID string
-	ctrlCommand   string
+	changefeedID string
+	captureID    string
 )
 
 // cf holds changefeed id, which is used for output only
@@ -77,69 +43,37 @@ type capture struct {
 	IsOwner bool   `json:"is-owner"`
 }
 
-func jsonPrint(v interface{}) error {
-	data, err := json.Marshal(v)
+// cfMeta holds changefeed info and changefeed status
+type cfMeta struct {
+	Info   *model.ChangeFeedInfo   `json:"info"`
+	Status *model.ChangeFeedStatus `json:"status"`
+}
+
+type processorMeta struct {
+	Status   *model.TaskStatus   `json:"status"`
+	Position *model.TaskPosition `json:"position"`
+}
+
+func jsonPrint(cmd *cobra.Command, v interface{}) error {
+	data, err := json.MarshalIndent(v, "", "\t")
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s\n", data)
+	cmd.Printf("%s\n", data)
 	return nil
 }
 
-var ctrlCmd = &cobra.Command{
-	Use:   "ctrl",
-	Short: "cdc controller",
-	Long:  ``,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		etcdCli, err := clientv3.New(clientv3.Config{
-			Endpoints:   []string{ctrlPdAddr},
-			DialTimeout: 5 * time.Second,
-			DialOptions: []grpc.DialOption{
-				grpc.WithConnectParams(grpc.ConnectParams{
-					Backoff: backoff.Config{
-						BaseDelay:  time.Second,
-						Multiplier: 1.1,
-						Jitter:     0.1,
-						MaxDelay:   3 * time.Second,
-					},
-					MinConnectTimeout: 3 * time.Second,
-				}),
-			},
-		})
-		cli := kv.NewCDCEtcdClient(etcdCli)
-		if err != nil {
-			return err
-		}
-		switch ctrlCommand {
-		case CtrlQueryCfInfo:
-			info, err := cli.GetChangeFeedInfo(context.Background(), ctrlCfID)
+func newListCaptureCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "list",
+		Short: "List all captures in TiCDC cluster",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, raw, err := cdcEtcdCli.GetCaptures(context.Background())
 			if err != nil {
 				return err
 			}
-			return jsonPrint(info)
-		case CtrlQueryCfStatus:
-			info, err := cli.GetChangeFeedStatus(context.Background(), ctrlCfID)
-			if err != nil {
-				return err
-			}
-			return jsonPrint(info)
-		case CtrlQueryCfs:
-			_, raw, err := cli.GetChangeFeeds(context.Background())
-			if err != nil {
-				return err
-			}
-			cfs := make([]*cf, 0, len(raw))
-			for id := range raw {
-				cfs = append(cfs, &cf{ID: id})
-			}
-			return jsonPrint(cfs)
-		case CtrlQueryCaptures:
-			_, raw, err := cli.GetCaptures(context.Background())
-			if err != nil {
-				return err
-			}
-			ownerID, err := roles.GetOwnerID(context.Background(), cli, kv.CaptureOwnerKey)
-			if err != nil {
+			ownerID, err := roles.GetOwnerID(context.Background(), cdcEtcdCli, kv.CaptureOwnerKey)
+			if err != nil && errors.Cause(err) != concurrency.ErrElectionNoLeader {
 				return err
 			}
 			captures := make([]*capture, 0, len(raw))
@@ -147,35 +81,117 @@ var ctrlCmd = &cobra.Command{
 				isOwner := c.ID == ownerID
 				captures = append(captures, &capture{ID: c.ID, IsOwner: isOwner})
 			}
-			return jsonPrint(captures)
-		case CtrlQueryProcessors:
-			_, processors, err := cli.GetAllProcessors(context.Background())
-			if err != nil {
-				return err
-			}
-			return jsonPrint(processors)
+			return jsonPrint(cmd, captures)
+		},
+	}
+	return command
+}
 
-		case CtrlQuerySubCf:
-			_, info, err := cli.GetTaskStatus(context.Background(), ctrlCfID, ctrlCaptureID)
-			if err != nil && err != concurrency.ErrElectionNoLeader {
-				return err
-			}
-			return jsonPrint(info)
-		case CtrlClearAll:
-			return cli.ClearAllCDCInfo(context.Background())
-		case CtrlGetTso:
-			pdCli, err := pd.NewClient([]string{ctrlPdAddr}, pd.SecurityOption{})
+func newListChangefeedCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "list",
+		Short: "List all replication tasks (changefeeds) in TiCDC cluster",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, raw, err := cdcEtcdCli.GetChangeFeeds(context.Background())
 			if err != nil {
 				return err
 			}
+			cfs := make([]*cf, 0, len(raw))
+			for id := range raw {
+				cfs = append(cfs, &cf{ID: id})
+			}
+			return jsonPrint(cmd, cfs)
+		},
+	}
+	return command
+}
+
+func newListProcessorCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "list",
+		Short: "List all processors in TiCDC cluster",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, processors, err := cdcEtcdCli.GetAllProcessors(context.Background())
+			if err != nil {
+				return err
+			}
+			return jsonPrint(cmd, processors)
+		},
+	}
+	return command
+}
+
+func newQueryChangefeedCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "query",
+		Short: "Query information and status of a replicaiton task (changefeed)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			info, err := cdcEtcdCli.GetChangeFeedInfo(context.Background(), changefeedID)
+			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+				return err
+			}
+			status, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
+			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+				return err
+			}
+			meta := &cfMeta{Info: info, Status: status}
+			return jsonPrint(cmd, meta)
+		},
+	}
+	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
+	return command
+}
+
+func newQueryProcessorCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "query",
+		Short: "Query information and status of a sub replication task (processor)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, status, err := cdcEtcdCli.GetTaskStatus(context.Background(), changefeedID, captureID)
+			if err != nil && errors.Cause(err) != model.ErrTaskStatusNotExists {
+				return err
+			}
+			_, position, err := cdcEtcdCli.GetTaskPosition(context.Background(), changefeedID, captureID)
+			if err != nil && errors.Cause(err) != model.ErrTaskPositionNotExists {
+				return err
+			}
+			meta := &processorMeta{Status: status, Position: position}
+			return jsonPrint(cmd, meta)
+		},
+	}
+	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
+	command.PersistentFlags().StringVar(&captureID, "capture-id", "", "Capture ID")
+	return command
+}
+
+func newQueryTsoCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "query",
+		Short: "Get tso from PD",
+		RunE: func(cmd *cobra.Command, args []string) error {
 			ts, logic, err := pdCli.GetTS(context.Background())
 			if err != nil {
 				return err
 			}
-			fmt.Println(oracle.ComposeTS(ts, logic))
-		default:
-			fmt.Printf("unknown controller command: %s\n", ctrlCommand)
-		}
-		return nil
-	},
+			cmd.Println(oracle.ComposeTS(ts, logic))
+			return nil
+		},
+	}
+	command.SetOutput(os.Stdout)
+	return command
+}
+
+func newDeleteMetaCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "delete",
+		Short: "Delete all meta data in etcd, confirm that you know what this command will do and use it at your own risk",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			err := cdcEtcdCli.ClearAllCDCInfo(context.Background())
+			if err == nil {
+				cmd.Println("already truncate all meta in etcd!")
+			}
+			return err
+		},
+	}
+	return command
 }
