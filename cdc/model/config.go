@@ -12,14 +12,3 @@
 // limitations under the License.
 
 package model
-
-import (
-	"github.com/pingcap/tidb-tools/pkg/filter"
-)
-
-// ReplicaConfig represents some addition replication config for a changefeed
-type ReplicaConfig struct {
-	FilterCaseSensitive bool          `toml:"filter-case-sensitive" json:"filter-case-sensitive"`
-	FilterRules         *filter.Rules `toml:"filter-rules" json:"filter-rules"`
-	IgnoreTxnCommitTs   []uint64      `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
-}

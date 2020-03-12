@@ -11,12 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package util
 
-/*
 import (
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -25,22 +23,17 @@ type filterSuite struct{}
 var _ = check.Suite(&filterSuite{})
 
 func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
-	filter, err := newTxnFilter(&model.ReplicaConfig{})
+	filter, err := NewFilter(&ReplicaConfig{})
 	c.Assert(err, check.IsNil)
 	c.Assert(filter.ShouldIgnoreTable("information_schema", ""), check.IsTrue)
 	c.Assert(filter.ShouldIgnoreTable("information_schema", "statistics"), check.IsTrue)
 	c.Assert(filter.ShouldIgnoreTable("performance_schema", ""), check.IsTrue)
 	c.Assert(filter.ShouldIgnoreTable("metric_schema", "query_duration"), check.IsTrue)
 	c.Assert(filter.ShouldIgnoreTable("sns", "user"), check.IsFalse)
-	txn := model.Txn{DDL: &model.DDL{
-		Database: "information_schema",
-	}}
-	filter.FilterTxn(&txn)
-	c.Assert(txn.DDL, check.IsNil)
 }
 
 func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
-	filter, err := newTxnFilter(&model.ReplicaConfig{
+	filter, err := NewFilter(&ReplicaConfig{
 		FilterRules: &filter.Rules{
 			DoDBs: []string{"sns", "ecom"},
 			IgnoreTables: []*filter.Table{
@@ -61,39 +54,34 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 	assertIgnore("ecom", "test", check.IsTrue)
 	assertIgnore("sns", "log", check.IsTrue)
 	assertIgnore("information_schema", "", check.IsTrue)
-	txn := model.Txn{DMLs: []*model.DML{
-		{Database: "other"},
-		{Database: "sns"},
-		{Database: "ecom"},
-		{Database: "ecom", Table: "test"},
-	}}
-	filter.FilterTxn(&txn)
-	c.Assert(txn.DMLs, check.HasLen, 2)
-
-	txn = model.Txn{DDL: &model.DDL{
-		Database: "sns",
-		Table:    "log",
-	}}
-	filter.FilterTxn(&txn)
-	c.Assert(txn.DDL, check.IsNil)
 }
 
 func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
-	filter, err := newTxnFilter(&model.ReplicaConfig{
+	filter, err := NewFilter(&ReplicaConfig{
 		IgnoreTxnCommitTs: []uint64{1, 3},
-	})
+		FilterRules: &filter.Rules{
+			DoDBs: []string{"sns", "ecom"},
+			IgnoreTables: []*filter.Table{
+				{Schema: "sns", Name: "log"},
+				{Schema: "ecom", Name: "test"},
+			}}})
 	c.Assert(err, check.IsNil)
 	testCases := []struct {
-		txn    *model.Txn
+		schema string
+		table  string
+		ts     uint64
 		ignore bool
 	}{
-		{&model.Txn{DDL: &model.DDL{Database: "sns"}, Ts: 1}, true},
-		{&model.Txn{DDL: &model.DDL{Database: "ecom"}, Ts: 2}, false},
-		{&model.Txn{DMLs: []*model.DML{{Database: "sns", Table: "log"}}, Ts: 3}, true},
+		{"sns", "ttta", 1, true},
+		{"ecom", "aabb", 2, false},
+		{"sns", "log", 3, true},
+		{"sns", "log", 4, true},
+		{"ecom", "test", 5, true},
+		{"test", "test", 6, true},
+		{"ecom", "log", 6, false},
 	}
 
 	for _, tc := range testCases {
-		c.Assert(filter.ShouldIgnoreTxn(tc.txn), check.Equals, tc.ignore)
+		c.Assert(filter.ShouldIgnoreEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
 	}
 }
-*/

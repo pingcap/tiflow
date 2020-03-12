@@ -18,6 +18,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
@@ -34,13 +36,13 @@ type ChangeFeedInfo struct {
 	// used for admin job notification, trigger watch event in capture
 	AdminJobType AdminJobType `json:"admin-job-type"`
 
-	Config *ReplicaConfig `json:"config"`
+	Config *util.ReplicaConfig `json:"config"`
 }
 
 // GetConfig returns ReplicaConfig.
-func (info *ChangeFeedInfo) GetConfig() *ReplicaConfig {
+func (info *ChangeFeedInfo) GetConfig() *util.ReplicaConfig {
 	if info.Config == nil {
-		info.Config = &ReplicaConfig{}
+		info.Config = &util.ReplicaConfig{}
 	}
 	return info.Config
 }

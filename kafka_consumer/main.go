@@ -195,13 +195,18 @@ type Consumer struct {
 
 // NewConsumer creates a new cdc kafka consumer
 func NewConsumer() (*Consumer, error) {
+	// TODO support filter in downstream sink
+	filter, err := util.NewFilter(&util.ReplicaConfig{})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	c := new(Consumer)
 	c.sinks = make([]*struct {
 		sink.Sink
 		resolvedTs uint64
 	}, kafkaPartitionNum)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.NewSink(downstreamURIStr, nil)
+		s, err := sink.NewSink(downstreamURIStr, filter, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -210,7 +215,7 @@ func NewConsumer() (*Consumer, error) {
 			resolvedTs uint64
 		}{Sink: s}
 	}
-	sink, err := sink.NewSink(downstreamURIStr, nil)
+	sink, err := sink.NewSink(downstreamURIStr, filter, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -10,10 +10,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	testPdAddr string
+)
+
 func init() {
 	rootCmd.AddCommand(testKVCmd)
 
-	testKVCmd.Flags().StringVar(&pdAddr, "pd-addr", "localhost:2379", "address of PD")
+	testKVCmd.Flags().StringVar(&testPdAddr, "pd", "http://127.0.0.1:2379", "address of PD")
 }
 
 type testingT struct {
@@ -35,7 +39,7 @@ var testKVCmd = &cobra.Command{
 	Short:  "test kv",
 	Long:   ``,
 	Run: func(cmd *cobra.Command, args []string) {
-		addrs := strings.Split(pdAddr, ",")
+		addrs := strings.Split(testPdAddr, ",")
 		cli, err := pd.NewClient(addrs, pd.SecurityOption{})
 		if err != nil {
 			fmt.Println(err)
