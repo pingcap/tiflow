@@ -102,7 +102,7 @@ func (s EmitSuite) TestTxnRowLimiter(c *check.C) {
 		maxTxnRow     int
 	}{{
 		inputGroup:    []*model.RowChangedEvent{},
-		expectedGroup: [][]*model.RowChangedEvent{},
+		expectedGroup: nil,
 		maxTxnRow:     4,
 	}, {
 		inputGroup:    []*model.RowChangedEvent{{Ts: 1}},
@@ -140,7 +140,12 @@ func (s EmitSuite) TestTxnRowLimiter(c *check.C) {
 	}}
 
 	for _, tc := range testCases {
-		output := txnRowLimiter(tc.inputGroup, tc.maxTxnRow)
+		var output [][]*model.RowChangedEvent
+		err := rowLimitIterator(tc.inputGroup, tc.maxTxnRow, func(rows []*model.RowChangedEvent) error {
+			output = append(output, rows)
+			return nil
+		})
+		c.Assert(err, check.IsNil)
 		c.Assert(output, check.DeepEquals, tc.expectedGroup)
 	}
 }

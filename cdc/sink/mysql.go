@@ -347,12 +347,13 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*
 	for i := 0; i < nWorkers; i++ {
 		eg.Go(func() error {
 			for rows := range jobs {
-				rowsGroup := txnRowLimiter(rows, s.params.maxTxnRow)
-				for _, r := range rowsGroup {
-					// TODO: Add retry
-					if err := s.execDMLs(ctx, r); err != nil {
-						return errors.Trace(err)
-					}
+				err := rowLimitIterator(rows, s.params.maxTxnRow,
+					func(rows []*model.RowChangedEvent) error {
+						// TODO: Add retry
+						return errors.Trace(s.execDMLs(ctx, rows))
+					})
+				if err != nil {
+					return errors.Trace(err)
 				}
 			}
 			return nil
@@ -361,24 +362,28 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*
 	return eg.Wait()
 }
 
-func txnRowLimiter(rows []*model.RowChangedEvent, maxTxnRow int) [][]*model.RowChangedEvent {
-	evaluateResultLength := (len(rows) / maxTxnRow) + 1
-	result := make([][]*model.RowChangedEvent, 0, evaluateResultLength)
-	for len(rows) > maxTxnRow {
-		lastTs := rows[maxTxnRow-1].Ts
-		i := maxTxnRow
-		for ; i < len(rows); i++ {
-			if lastTs < rows[i].Ts {
+func rowLimitIterator(rows []*model.RowChangedEvent, maxTxnRow int, fn func([]*model.RowChangedEvent) error) error {
+	start := 0
+	end := maxTxnRow
+	for end < len(rows) {
+		lastTs := rows[end-1].Ts
+		for ; end < len(rows); end++ {
+			if lastTs < rows[end].Ts {
 				break
 			}
 		}
-		result = append(result, rows[:i])
-		rows = rows[i:]
+		if err := fn(rows[start:end]); err != nil {
+			return errors.Trace(err)
+		}
+		start = end
+		end += maxTxnRow
 	}
-	if len(rows) > 0 {
-		result = append(result, rows)
+	if start < len(rows) {
+		if err := fn(rows[start:]); err != nil {
+			return errors.Trace(err)
+		}
 	}
-	return result
+	return nil
 }
 
 func (s *mysqlSink) Close() error {
