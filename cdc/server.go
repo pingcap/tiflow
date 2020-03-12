@@ -31,7 +31,7 @@ type options struct {
 }
 
 var defaultServerOptions = options{
-	pdEndpoints: "127.0.0.1:2379",
+	pdEndpoints: "http://127.0.0.1:2379",
 	statusHost:  "127.0.0.1",
 	statusPort:  defaultStatusPort,
 }

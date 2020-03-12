@@ -8,6 +8,9 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
+
+	"github.com/pingcap/ticdc/pkg/util"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -24,14 +27,22 @@ type mqSink struct {
 	sinkCheckpointTsCh chan uint64
 	globalResolvedTs   uint64
 	checkpointTs       uint64
+	filter             *util.Filter
+
+	changefeedID string
+
+	count int64
 }
 
-func newMqSink(mqProducer mqProducer.Producer) *mqSink {
+func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, opts map[string]string) *mqSink {
 	partitionNum := mqProducer.GetPartitionNum()
+	changefeedID := opts[OptChangefeedID]
 	return &mqSink{
 		mqProducer:         mqProducer,
 		partitionNum:       partitionNum,
 		sinkCheckpointTsCh: make(chan uint64, 128),
+		filter:             filter,
+		changefeedID:       changefeedID,
 	}
 }
 
@@ -59,6 +70,10 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 			sinkCheckpointTs = row.Ts
 			continue
 		}
+		if k.filter.ShouldIgnoreEvent(row.Ts, row.Schema, row.Table) {
+			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
+			continue
+		}
 		partition := k.calPartition(row)
 		key, value := row.ToMqMessage()
 		keyByte, err := key.Encode()
@@ -74,6 +89,7 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 			log.Error("send message failed", zap.ByteStrings("row", [][]byte{keyByte, valueByte}), zap.Int32("partition", partition))
 			return errors.Trace(err)
 		}
+		atomic.AddInt64(&k.count, 1)
 	}
 	if sinkCheckpointTs == 0 {
 		return nil
@@ -114,6 +130,14 @@ func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	if k.filter.ShouldIgnoreEvent(ddl.Ts, ddl.Schema, ddl.Table) {
+		log.Info(
+			"DDL event ignored",
+			zap.String("query", ddl.Query),
+			zap.Uint64("ts", ddl.Ts),
+		)
+		return nil
+	}
 	key, value := ddl.ToMqMessage()
 	keyByte, err := key.Encode()
 	if err != nil {
@@ -127,6 +151,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	atomic.AddInt64(&k.count, 1)
 	return nil
 }
 
@@ -153,16 +178,38 @@ func (k *mqSink) Run(ctx context.Context) error {
 }
 
 func (k *mqSink) PrintStatus(ctx context.Context) error {
-	// TODO implement this function
-	<-ctx.Done()
-	return nil
+	lastTime := time.Now()
+	var lastCount int64
+	timer := time.NewTicker(printStatusInterval)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
+			now := time.Now()
+			seconds := now.Unix() - lastTime.Unix()
+			total := atomic.LoadInt64(&k.count)
+			count := total - lastCount
+			qps := int64(0)
+			if seconds > 0 {
+				qps = count / seconds
+			}
+			lastCount = total
+			lastTime = now
+			log.Info("MQ sink replication status",
+				zap.String("changefeed", k.changefeedID),
+				zap.Int64("count", count),
+				zap.Int64("qps", qps))
+		}
+	}
 }
 
 func (k *mqSink) Close() error {
 	return nil
 }
 
-func newKafkaSaramaSink(sinkURI *url.URL) (*mqSink, error) {
+func newKafkaSaramaSink(sinkURI *url.URL, filter *util.Filter, opts map[string]string) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
 	scheme := strings.ToLower(sinkURI.Scheme)
@@ -177,6 +224,21 @@ func newKafkaSaramaSink(sinkURI *url.URL) (*mqSink, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	s = sinkURI.Query().Get("kafka-version")
+	if s != "" {
+		config.Version = s
+	}
+
+	s = sinkURI.Query().Get("max-message-bytes")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		config.MaxMessageBytes = c
+	}
+
 	partitionNum := int32(c)
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
@@ -185,5 +247,5 @@ func newKafkaSaramaSink(sinkURI *url.URL) (*mqSink, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return newMqSink(producer), nil
+	return newMqSink(producer, filter, opts), nil
 }

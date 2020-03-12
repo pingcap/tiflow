@@ -10,19 +10,17 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/go-sql-driver/mysql v1.4.1
-	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/golang/groupcache v0.0.0-20191227052852-215e87163ea7 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
-	github.com/grpc-ecosystem/grpc-gateway v1.12.1 // indirect
 	github.com/json-iterator/go v1.1.9 // indirect
 	github.com/klauspost/compress v1.10.2 // indirect
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20191216031241-8a5a85928f12
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
 	github.com/pingcap/failpoint v0.0.0-20200210140405-f8f9fb234798
-	github.com/pingcap/kvproto v0.0.0-20200108025604-a4dc183d2af5
+	github.com/pingcap/kvproto v0.0.0-20200311033452-ee50d594859d
 	github.com/pingcap/log v0.0.0-20200117041106-d28c14d3b1cd
 	github.com/pingcap/parser v0.0.0-20200207090844-d65f5147dd9f
 	github.com/pingcap/pd v1.1.0-beta.0.20200106144140-f5a7aa985497

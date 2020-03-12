@@ -18,8 +18,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -49,7 +50,7 @@ tbl-name = "following"
 	err := ioutil.WriteFile(path, []byte(content), 0644)
 	c.Assert(err, check.IsNil)
 
-	cfg := new(model.ReplicaConfig)
+	cfg := new(util.ReplicaConfig)
 	err = strictDecodeFile(path, "cdc", &cfg)
 	c.Assert(err, check.IsNil)
 
@@ -68,7 +69,7 @@ func (s *decodeFileSuite) TestShouldReturnErrForUnknownCfgs(c *check.C) {
 	err := ioutil.WriteFile(path, []byte(content), 0644)
 	c.Assert(err, check.IsNil)
 
-	cfg := new(model.ReplicaConfig)
+	cfg := new(util.ReplicaConfig)
 	err = strictDecodeFile(path, "cdc", &cfg)
 	c.Assert(err, check.NotNil)
 	c.Assert(err, check.ErrorMatches, ".*unknown config.*")
