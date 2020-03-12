@@ -69,8 +69,11 @@ type TableInfo struct {
 	IndicesOffset map[int64]int
 	UniqueColumns map[int64]struct{}
 	handleColID   int64
-	IndieMarkCol  string
-	rowColInfos   []rowcodec.ColInfo
+
+	// if the table of this row only has one unique index(includes primary key),
+	// IndieMarkCol will be set to the name of the unique index
+	IndieMarkCol string
+	rowColInfos  []rowcodec.ColInfo
 }
 
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
