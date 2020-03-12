@@ -36,6 +36,9 @@ const (
 
 	// ProcessorInfoKeyPrefix is the processor info path that is saved to etcd
 	ProcessorInfoKeyPrefix = EtcdKeyBase + "/processor/info"
+
+	// TaskKeyPrefix is the prefix of task keys
+	TaskKeyPrefix = EtcdKeyBase + "/task"
 )
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
@@ -81,6 +84,11 @@ func GetEtcdKeyCaptureInfo(id string) string {
 // GetEtcdKeyProcessorInfo returns the key of a processor
 func GetEtcdKeyProcessorInfo(captureID, processorID string) string {
 	return ProcessorInfoKeyPrefix + "/" + captureID + "/" + processorID
+}
+
+// GetEtcdKeyTask returns the key for a capture
+func GetEtcdKeyTask(captureID string) string {
+	return TaskKeyPrefix + "/" + captureID
 }
 
 // CDCEtcdClient is a wrap of etcd client

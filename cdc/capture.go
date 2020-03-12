@@ -32,10 +32,8 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -115,8 +113,6 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	return
 }
 
-var _ processorCallback = &Capture{}
-
 // OnRunProcessor implements processorCallback.
 func (c *Capture) OnRunProcessor(p *processor) {
 	c.processors[p.changefeedID] = p
@@ -150,22 +146,36 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		return c.ownerWorker.Run(cctx, ownerRunInterval)
 	})
 
-	rl := rate.NewLimiter(0.1, 5)
-	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)
-	errg.Go(func() error {
-		for {
-			if !rl.Allow() {
-				return errors.New("changefeed watcher exceeds rate limit")
-			}
-			err := watcher.Watch(cctx, c)
-			if errors.Cause(err) == mvcc.ErrCompacted {
-				log.Warn("changefeed watcher watch retryable error", zap.Error(err))
-				time.Sleep(cfWatcherRetryDelay)
-				continue
-			}
-			return errors.Trace(err)
-		}
+	taskWatcher := NewTaskWatcher(c, &TaskWatcherConfig{
+		Prefix:      kv.GetEtcdKeyTask(c.info.ID),
+		ChannelSize: 128,
 	})
+	for ev := range taskWatcher.Watch(ctx) {
+		if ev.Err != nil {
+			return errors.Trace(ev.Err)
+		}
+		task := ev.Task
+		if ev.Op == TaskOpCreate {
+			cf, err := c.etcdClient.GetChangeFeedInfo(ctx, task.ChangeFeedID)
+			if err != nil {
+				log.Error("get change feed info failed",
+					zap.String("changefeedid", task.ChangeFeedID),
+					zap.String("captureid", c.info.ID),
+					zap.Error(err))
+			}
+			p, err := runProcessor(ctx, c.pdEndpoints, *cf, task.ChangeFeedID,
+				c.info.ID, task.CheckpointTS)
+			if err != nil {
+				log.Error("run processor failed",
+					zap.String("changefeedid", task.ChangeFeedID),
+					zap.String("captureid", c.info.ID),
+					zap.Error(err))
+			}
+			c.processors[task.ChangeFeedID] = p
+		} else if ev.Op == TaskOpDelete {
+			delete(c.processors, task.ChangeFeedID)
+		}
+	}
 
 	return errg.Wait()
 }
