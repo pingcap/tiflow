@@ -46,8 +46,6 @@ type Sink interface {
 	CheckpointTs() uint64
 	// Run runs the sink
 	Run(ctx context.Context) error
-	// Close does not guarantee delivery of outstanding messages.
-	Close() error
 	// PrintStatus prints necessary status periodically
 	PrintStatus(ctx context.Context) error
 }

@@ -347,10 +347,6 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*
 	return eg.Wait()
 }
 
-func (s *mysqlSink) Close() error {
-	return nil
-}
-
 func (s *mysqlSink) PrintStatus(ctx context.Context) error {
 	lastTime := time.Now()
 	var lastCount int64
