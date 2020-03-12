@@ -17,13 +17,12 @@ import (
 )
 
 var (
-	pdEndpoints string
-	statusAddr  string
+	serverPdAddr string
+	statusAddr   string
 
 	serverCmd = &cobra.Command{
 		Use:              "server",
-		Short:            "runs capture server",
-		Long:             "runs capture server",
+		Short:            "Start a TiCDC capture server",
 		PersistentPreRun: preRunLogInfo,
 		RunE:             runEServer,
 	}
@@ -32,8 +31,8 @@ var (
 func init() {
 	rootCmd.AddCommand(serverCmd)
 
-	serverCmd.Flags().StringVar(&pdEndpoints, "pd-endpoints", "http://127.0.0.1:2379", "endpoints of PD, separated by comma")
-	serverCmd.Flags().StringVar(&statusAddr, "status-addr", "127.0.0.1:8300", "bind address for http status server")
+	serverCmd.Flags().StringVar(&serverPdAddr, "pd", "http://127.0.0.1:2379", "PD address, separated by comma")
+	serverCmd.Flags().StringVar(&statusAddr, "status-addr", "127.0.0.1:8300", "Bind address for http status server")
 }
 
 func preRunLogInfo(cmd *cobra.Command, args []string) {
@@ -51,7 +50,7 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	}
 
 	var opts []cdc.ServerOption
-	opts = append(opts, cdc.PDEndpoints(pdEndpoints), cdc.StatusHost(addrs[0]), cdc.StatusPort(int(statusPort)))
+	opts = append(opts, cdc.PDEndpoints(serverPdAddr), cdc.StatusHost(addrs[0]), cdc.StatusPort(int(statusPort)))
 
 	server, err := cdc.NewServer(opts...)
 	if err != nil {

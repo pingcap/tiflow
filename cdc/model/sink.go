@@ -18,8 +18,12 @@ type RowChangedEvent struct {
 	Schema string
 	Table  string
 
-	Delete  bool
-	Columns map[string]*Column
+	Delete bool
+
+	// if the table of this row only has one unique index(includes primary key),
+	// IndieMarkCol will be set to the name of the unique index
+	IndieMarkCol string
+	Columns      map[string]*Column
 }
 
 // ToMqMessage transforms to message key and value

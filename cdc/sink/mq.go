@@ -2,6 +2,7 @@ package sink
 
 import (
 	"context"
+	"encoding/json"
 	"hash/crc32"
 	"net/url"
 	"strconv"
@@ -103,6 +104,7 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 
 func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
 	hash := crc32.NewIEEE()
+	// distribute partition by table
 	_, err := hash.Write([]byte(row.Schema))
 	if err != nil {
 		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
@@ -112,6 +114,18 @@ func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
 		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
 	}
 
+	if len(row.IndieMarkCol) > 0 {
+		// distribute partition by rowid or unique column value
+		value := row.Columns[row.IndieMarkCol].Value
+		b, err := json.Marshal(value)
+		if err != nil {
+			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
+		}
+		_, err = hash.Write(b)
+		if err != nil {
+			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
+		}
+	}
 	return int32(hash.Sum32() % uint32(k.partitionNum))
 }
 
@@ -150,6 +164,10 @@ func (k *mqSink) Run(ctx context.Context) error {
 		var sinkCheckpointTs uint64
 		select {
 		case <-ctx.Done():
+			err := k.mqProducer.Close()
+			if err != nil {
+				log.Error("close MQ Producer failed", zap.Error(err))
+			}
 			return ctx.Err()
 		case sinkCheckpointTs = <-k.sinkCheckpointTsCh:
 		}
@@ -191,10 +209,6 @@ func (k *mqSink) PrintStatus(ctx context.Context) error {
 	}
 }
 
-func (k *mqSink) Close() error {
-	return nil
-}
-
 func newKafkaSaramaSink(sinkURI *url.URL, filter *util.Filter, opts map[string]string) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
@@ -203,12 +217,21 @@ func newKafkaSaramaSink(sinkURI *url.URL, filter *util.Filter, opts map[string]s
 		return nil, errors.New("can not create MQ sink with unsupported scheme")
 	}
 	s := sinkURI.Query().Get("partition-num")
-	if s == "" {
-		return nil, errors.New("partition-num can not be empty")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		config.PartitionNum = int32(c)
 	}
-	c, err := strconv.Atoi(s)
-	if err != nil {
-		return nil, errors.Trace(err)
+
+	s = sinkURI.Query().Get("replication-factor")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		config.ReplicationFactor = int16(c)
 	}
 
 	s = sinkURI.Query().Get("kafka-version")
@@ -225,11 +248,10 @@ func newKafkaSaramaSink(sinkURI *url.URL, filter *util.Filter, opts map[string]s
 		config.MaxMessageBytes = c
 	}
 
-	partitionNum := int32(c)
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-	producer, err := mqProducer.NewKafkaSaramaProducer(sinkURI.Host, topic, partitionNum, config)
+	producer, err := mqProducer.NewKafkaSaramaProducer(sinkURI.Host, topic, config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

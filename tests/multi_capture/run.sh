@@ -18,7 +18,7 @@ function run() {
     cd $WORK_DIR
 
     # record tso before we create tables to skip the system table DDLs
-    start_ts=$(cdc ctrl --cmd=get-tso http://$UP_PD_HOST:$UP_PD_PORT)
+    start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
 
     # create $DB_COUNT databases and import initial workload
     for i in $(seq $DB_COUNT); do
@@ -31,7 +31,7 @@ function run() {
     for i in $(seq $CDC_COUNT); do
         run_cdc_server $WORK_DIR $CDC_BINARY "$i"
     done
-    cdc cli --start-ts=$start_ts
+    cdc cli changefeed create --start-ts=$start_ts --sink-uri="mysql://root@127.0.0.1:3306/"
 
     # check tables are created and data is synchronized
     for i in $(seq $DB_COUNT); do
