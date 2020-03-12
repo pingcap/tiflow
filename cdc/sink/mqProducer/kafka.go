@@ -62,7 +62,7 @@ func NewKafkaSaramaProducer(address string, topic string, config KafkaConfig) (*
 		} else if partitionNum < topicDetail.NumPartitions {
 			log.Warn("partition number assigned in sink-uri is less than that of topic")
 		} else if partitionNum > topicDetail.NumPartitions {
-			return nil, errors.Errorf("partition number assigned in sink-uri is more than that of topic")
+			return nil, errors.Errorf("partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, topicDetail.NumPartitions)
 		}
 	} else {
 		if partitionNum == 0 {
