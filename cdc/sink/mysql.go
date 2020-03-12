@@ -41,6 +41,7 @@ import (
 )
 
 const defaultWorkerCount = 16
+const defaultMaxTxnRow = 16
 
 var (
 	printStatusInterval = 30 * time.Second
@@ -336,15 +337,38 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*
 	for i := 0; i < nWorkers; i++ {
 		eg.Go(func() error {
 			for rows := range jobs {
-				// TODO: Add retry
-				if err := s.execDMLs(ctx, rows); err != nil {
-					return errors.Trace(err)
+				rowsGroup := txnRowLimiter(rows, defaultMaxTxnRow)
+				for _, r := range rowsGroup {
+					// TODO: Add retry
+					if err := s.execDMLs(ctx, r); err != nil {
+						return errors.Trace(err)
+					}
 				}
 			}
 			return nil
 		})
 	}
 	return eg.Wait()
+}
+
+func txnRowLimiter(rows []*model.RowChangedEvent, maxTxnRow int) [][]*model.RowChangedEvent {
+	evaluateResultLength := (len(rows) / maxTxnRow) + 1
+	result := make([][]*model.RowChangedEvent, 0, evaluateResultLength)
+	for len(rows) > maxTxnRow {
+		lastTs := rows[maxTxnRow-1].Ts
+		i := maxTxnRow
+		for ; i < len(rows); i++ {
+			if lastTs < rows[i].Ts {
+				break
+			}
+		}
+		result = append(result, rows[:i])
+		rows = rows[i:]
+	}
+	if len(rows) > 0 {
+		result = append(result, rows)
+	}
+	return result
 }
 
 func (s *mysqlSink) Close() error {
