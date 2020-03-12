@@ -41,6 +41,7 @@ import (
 )
 
 const defaultWorkerCount = 16
+const defaultMaxTxnRow = 256
 
 var (
 	printStatusInterval = 30 * time.Second
@@ -228,12 +229,14 @@ var _ Sink = &mysqlSink{}
 
 type params struct {
 	workerCount  int
+	maxTxnRow    int
 	changefeedID string
 	captureID    string
 }
 
 var defaultParams = params{
 	workerCount: defaultWorkerCount,
+	maxTxnRow:   defaultMaxTxnRow,
 }
 
 func configureSinkURI(dsnCfg *dmysql.Config) (string, error) {
@@ -271,6 +274,14 @@ func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, filter *util.Filter, opt
 				return nil, errors.Trace(err)
 			}
 			params.workerCount = c
+		}
+		s = sinkURI.Query().Get("max-txn-row")
+		if s != "" {
+			c, err := strconv.Atoi(s)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			params.maxTxnRow = c
 		}
 		// dsn format of the driver:
 		// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
@@ -336,8 +347,12 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*
 	for i := 0; i < nWorkers; i++ {
 		eg.Go(func() error {
 			for rows := range jobs {
-				// TODO: Add retry
-				if err := s.execDMLs(ctx, rows); err != nil {
+				err := rowLimitIterator(rows, s.params.maxTxnRow,
+					func(rows []*model.RowChangedEvent) error {
+						// TODO: Add retry
+						return errors.Trace(s.execDMLs(ctx, rows))
+					})
+				if err != nil {
 					return errors.Trace(err)
 				}
 			}
@@ -345,6 +360,34 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*
 		})
 	}
 	return eg.Wait()
+}
+
+func rowLimitIterator(rows []*model.RowChangedEvent, maxTxnRow int, fn func([]*model.RowChangedEvent) error) error {
+	start := 0
+	end := maxTxnRow
+	for end < len(rows) {
+		lastTs := rows[end-1].Ts
+		for ; end < len(rows); end++ {
+			if lastTs < rows[end].Ts {
+				break
+			}
+		}
+		if err := fn(rows[start:end]); err != nil {
+			return errors.Trace(err)
+		}
+		start = end
+		end += maxTxnRow
+	}
+	if start < len(rows) {
+		if err := fn(rows[start:]); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+func (s *mysqlSink) Close() error {
+	return nil
 }
 
 func (s *mysqlSink) PrintStatus(ctx context.Context) error {
