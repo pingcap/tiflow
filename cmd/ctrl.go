@@ -16,6 +16,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"os"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -176,6 +177,7 @@ func newQueryTsoCommand() *cobra.Command {
 			return nil
 		},
 	}
+	command.SetOutput(os.Stdout)
 	return command
 }
 
