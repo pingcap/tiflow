@@ -41,7 +41,7 @@ import (
 )
 
 const defaultWorkerCount = 16
-const defaultMaxTxnRow = 16
+const defaultMaxTxnRow = 256
 
 var (
 	printStatusInterval = 30 * time.Second
