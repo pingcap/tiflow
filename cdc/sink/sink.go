@@ -52,6 +52,7 @@ type Sink interface {
 	PrintStatus(ctx context.Context) error
 }
 
+// DSNScheme is the scheme name of DSN
 const DSNScheme = "dsn://"
 
 // NewSink creates a new sink with the sink-uri
