@@ -354,7 +354,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("update task position", zap.Stringer("status", p.position))
+	log.Debug("update task position", zap.Stringer("status", p.position))
 	statusChanged, err := p.tsRWriter.UpdateInfo(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -380,7 +380,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		case model.ErrWriteTsConflict:
 			return errors.Trace(err)
 		case nil:
-			log.Info("update task status", zap.Stringer("status", p.status))
+			log.Info("update task status", zap.Stringer("status", p.status), zap.Stringer("position", p.position))
 			return nil
 		default:
 			return backoff.Permanent(errors.Trace(err))
