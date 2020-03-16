@@ -40,6 +40,9 @@ const (
 	// TaskKeyPrefix is the prefix of task keys
 	TaskKeyPrefix = EtcdKeyBase + "/task"
 
+	// TaskStatusKeyPrefix is the prefix of task status keys
+	TaskStatusKeyPrefix = TaskKeyPrefix + "/status"
+
 	// JobKeyPrefix is the prefix of job keys
 	JobKeyPrefix = EtcdKeyBase + "/job"
 )
@@ -262,7 +265,7 @@ func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID str
 // GetAllTaskStatus queries all task status of a changefeed, and returns a map
 // mapping from captureID to TaskStatus
 func (c CDCEtcdClient) GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
-	resp, err := c.Client.Get(ctx, TaskKeyPrefix, clientv3.WithPrefix())
+	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
