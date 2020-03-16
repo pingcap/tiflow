@@ -19,7 +19,7 @@ function prepare() {
     start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
 
     run_cdc_server $WORK_DIR $CDC_BINARY
-    cdc cli changefeed create --start-ts=$start_ts --sink-uri="mysql://root@127.0.0.1:3306/"
+    cdc cli changefeed create --start-ts=$start_ts --sink-uri="dsn://root@tcp(127.0.0.1:3306)/"
 }
 
 trap stop_tidb_cluster EXIT

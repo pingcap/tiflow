@@ -50,16 +50,25 @@ type Sink interface {
 	PrintStatus(ctx context.Context) error
 }
 
+// DSNScheme is the scheme name of DSN
+const DSNScheme = "dsn://"
+
 // NewSink creates a new sink with the sink-uri
 func NewSink(sinkURIStr string, filter *util.Filter, opts map[string]string) (Sink, error) {
-	sinkURI, err := url.Parse(sinkURIStr)
-	if err != nil {
-		// try to parse the sinkURI as DSN
-		dsnCfg, err := dmysql.ParseDSN(sinkURIStr)
+	// check if sinkURI is a DSN
+	if strings.HasPrefix(strings.ToLower(sinkURIStr), DSNScheme) {
+		dsnStr := sinkURIStr[len(DSNScheme):]
+		dsnCfg, err := dmysql.ParseDSN(dsnStr)
 		if err != nil {
 			return nil, errors.Annotatef(err, "parse sinkURI failed")
 		}
 		return newMySQLSink(nil, dsnCfg, filter, opts)
+	}
+
+	// parse sinkURI as a URI
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return nil, errors.Annotatef(err, "parse sinkURI failed")
 	}
 	switch strings.ToLower(sinkURI.Scheme) {
 	case "blackhole":
