@@ -50,7 +50,6 @@ type TaskWatcher struct {
 	capture *Capture
 	cfg     *TaskWatcherConfig
 
-	c     chan *TaskEvent
 	tasks []*Task
 }
 
@@ -68,6 +67,11 @@ func NewTaskWatcher(c *Capture, cfg *TaskWatcherConfig) *TaskWatcher {
 // Watch on the new tasks, a channel is returned
 func (w *TaskWatcher) Watch(ctx context.Context) <-chan *TaskEvent {
 	c := make(chan *TaskEvent, w.cfg.ChannelSize)
+	go w.watch(ctx, c)
+	return c
+}
+
+func (w *TaskWatcher) watch(ctx context.Context, c chan *TaskEvent) {
 	etcd := w.capture.etcdClient.Client
 
 	// Leader is required in this context to prevent read outdated data
@@ -88,7 +92,7 @@ restart:
 	resp, err := etcd.Get(ctx, w.cfg.Prefix, clientv3.WithPrefix())
 	if err != nil {
 		send(ctx, &TaskEvent{Err: err})
-		return c
+		return
 	}
 	for _, kv := range resp.Kvs {
 		task, err := w.parseTask(ctx, kv.Key, kv.Value)
@@ -130,6 +134,9 @@ restart:
 						zap.Error(err))
 					continue
 				}
+				if task == nil {
+					continue
+				}
 				send(ctx, &TaskEvent{Op: TaskOpCreate, Task: task})
 			} else if ev.Type == clientv3.EventTypeDelete {
 				task, err := w.parseTask(ctx, ev.PrevKv.Key, ev.PrevKv.Value)
@@ -139,11 +146,14 @@ restart:
 						zap.Error(err))
 					continue
 				}
+				if task == nil {
+					continue
+				}
 				send(ctx, &TaskEvent{Op: TaskOpDelete, Task: task})
 			}
 		}
 	}
-	return c
+
 }
 
 func (w *TaskWatcher) parseTask(ctx context.Context,
