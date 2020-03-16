@@ -89,7 +89,7 @@ func GetEtcdKeyProcessorInfo(captureID, processorID string) string {
 
 // GetEtcdKeyTaskStatus returns the key for the task status
 func GetEtcdKeyTaskStatus(changeFeedID, captureID string) string {
-	return TaskKeyPrefix + "/task/" + captureID + "/" + changeFeedID
+	return TaskStatusKeyPrefix + "/" + captureID + "/" + changeFeedID
 }
 
 // GetEtcdKeyJob returns the key for a replication job
