@@ -61,7 +61,7 @@ type TaskWatcherConfig struct {
 
 // NewTaskWatcher returns a TaskWatcher
 func NewTaskWatcher(c *Capture, cfg *TaskWatcherConfig) *TaskWatcher {
-	return &TaskWatcher{capture: c}
+	return &TaskWatcher{capture: c, cfg: cfg}
 }
 
 // Watch on the new tasks, a channel is returned
