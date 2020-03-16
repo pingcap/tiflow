@@ -39,6 +39,9 @@ const (
 
 	// TaskKeyPrefix is the prefix of task keys
 	TaskKeyPrefix = EtcdKeyBase + "/task"
+
+	// JobKeyPrefix is the prefix of job keys
+	JobKeyPrefix = EtcdKeyBase + "/job"
 )
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
@@ -68,12 +71,12 @@ func GetEtcdKeyTaskPositionList(changefeedID string) string {
 
 // GetEtcdKeyTaskStatus returns the key of a task status
 func GetEtcdKeyTaskStatus(changefeedID, captureID string) string {
-	return fmt.Sprintf("%s/%s", GetEtcdKeyTaskStatusList(changefeedID), captureID)
+	return GetEtcdKeyTask(captureID) + "/" + changefeedID + "/status"
 }
 
 // GetEtcdKeyTaskPosition returns the key of a task position
 func GetEtcdKeyTaskPosition(changefeedID, captureID string) string {
-	return fmt.Sprintf("%s/%s", GetEtcdKeyTaskPositionList(changefeedID), captureID)
+	return GetEtcdKeyTask(captureID) + "/" + changefeedID + "/position"
 }
 
 // GetEtcdKeyCaptureInfo returns the key of a capture info
@@ -89,6 +92,16 @@ func GetEtcdKeyProcessorInfo(captureID, processorID string) string {
 // GetEtcdKeyTask returns the key for a capture
 func GetEtcdKeyTask(captureID string) string {
 	return TaskKeyPrefix + "/" + captureID
+}
+
+// GetEtcdKeyJob returns the key for a replication job
+func GetEtcdKeyJob(changeFeedID string) string {
+	return JobKeyPrefix + "/" + changeFeedID
+}
+
+// GetEtcdKeyJobStatus returns the key for a job status
+func GetEtcdKeyJobStatus(changeFeedID string) string {
+	return GetEtcdKeyJob(changeFeedID) + "/status"
 }
 
 // CDCEtcdClient is a wrap of etcd client
@@ -397,7 +410,7 @@ func (c CDCEtcdClient) PutAllChangeFeedStatus(ctx context.Context, infos map[mod
 		if err != nil {
 			return errors.Trace(err)
 		}
-		key := GetEtcdKeyChangeFeedStatus(changefeedID)
+		key := GetEtcdKeyJobStatus(changefeedID)
 		ops = append(ops, clientv3.OpPut(key, storeVal))
 		if uint(len(ops)) >= embed.DefaultMaxTxnOps {
 			_, err = txn.Then(ops...).Commit()
