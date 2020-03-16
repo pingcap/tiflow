@@ -56,8 +56,7 @@ const DSNScheme = "dsn://"
 // NewSink creates a new sink with the sink-uri
 func NewSink(sinkURIStr string, filter *util.Filter, opts map[string]string) (Sink, error) {
 	// check if sinkURI is a DSN
-	schemePrefix := sinkURIStr[:len(DSNScheme)]
-	if strings.ToLower(schemePrefix) == DSNScheme {
+	if strings.HasPrefix(strings.ToLower(sinkURIStr), DSNScheme) {
 		dsnStr := sinkURIStr[len(DSNScheme):]
 		dsnCfg, err := dmysql.ParseDSN(dsnStr)
 		if err != nil {
