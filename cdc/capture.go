@@ -150,6 +150,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		Prefix:      kv.GetEtcdKeyTask(c.info.ID),
 		ChannelSize: 128,
 	})
+	log.Info("waiting for tasks", zap.String("captureid", c.info.ID))
 	for ev := range taskWatcher.Watch(ctx) {
 		if ev.Err != nil {
 			return errors.Trace(ev.Err)
@@ -163,6 +164,8 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 					zap.String("captureid", c.info.ID),
 					zap.Error(err))
 			}
+			log.Info("run processor", zap.String("captureid", c.info.ID),
+				zap.String("changefeedid", task.ChangeFeedID))
 			p, err := runProcessor(ctx, c.pdEndpoints, *cf, task.ChangeFeedID,
 				c.info.ID, task.CheckpointTS)
 			if err != nil {

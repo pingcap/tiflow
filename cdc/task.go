@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/pingcap/log"
 	"go.etcd.io/etcd/clientv3"
@@ -97,6 +98,9 @@ restart:
 				zap.Error(err))
 			continue
 		}
+		if task == nil {
+			continue
+		}
 		tasks = append(tasks, task)
 	}
 
@@ -147,7 +151,16 @@ func (w *TaskWatcher) parseTask(ctx context.Context,
 	if len(key) <= len(w.cfg.Prefix) {
 		return nil, errors.New("invalid task key: " + string(key))
 	}
-	changeFeedID := string(key[len(w.cfg.Prefix):])
+	remain := string(key[len(w.cfg.Prefix)+1:])
+	parts := strings.Split(remain, "/")
+	if len(parts) < 2 {
+		return nil, errors.New("invalid task key layout" + string(key))
+	}
+
+	changeFeedID, kind := parts[0], parts[1]
+	if kind != "status" {
+		return nil, nil
+	}
 
 	cf, err := w.capture.etcdClient.GetChangeFeedInfo(ctx, changeFeedID)
 	if err != nil {

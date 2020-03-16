@@ -164,7 +164,7 @@ func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context, id string) erro
 
 // GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
 func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error) {
-	key := GetEtcdKeyChangeFeedStatus(id)
+	key := GetEtcdKeyJobStatus(id)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
 		return nil, errors.Trace(err)
