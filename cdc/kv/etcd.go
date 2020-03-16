@@ -69,14 +69,9 @@ func GetEtcdKeyTaskPositionList(changefeedID string) string {
 	return fmt.Sprintf("%s/changefeed/task/position/%s", EtcdKeyBase, changefeedID)
 }
 
-// GetEtcdKeyTaskStatus returns the key of a task status
-func GetEtcdKeyTaskStatus(changefeedID, captureID string) string {
-	return GetEtcdKeyTask(captureID) + "/" + changefeedID + "/status"
-}
-
 // GetEtcdKeyTaskPosition returns the key of a task position
 func GetEtcdKeyTaskPosition(changefeedID, captureID string) string {
-	return GetEtcdKeyTask(captureID) + "/" + changefeedID + "/position"
+	return TaskKeyPrefix + "/position/" + captureID
 }
 
 // GetEtcdKeyCaptureInfo returns the key of a capture info
@@ -89,9 +84,9 @@ func GetEtcdKeyProcessorInfo(captureID, processorID string) string {
 	return ProcessorInfoKeyPrefix + "/" + captureID + "/" + processorID
 }
 
-// GetEtcdKeyTask returns the key for a capture
-func GetEtcdKeyTask(captureID string) string {
-	return TaskKeyPrefix + "/" + captureID
+// GetEtcdKeyTaskStatus returns the key for the task status
+func GetEtcdKeyTaskStatus(changeFeedID, captureID string) string {
+	return TaskKeyPrefix + "/task/" + captureID + "/" + changeFeedID
 }
 
 // GetEtcdKeyJob returns the key for a replication job
@@ -267,16 +262,23 @@ func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID str
 // GetAllTaskStatus queries all task status of a changefeed, and returns a map
 // mapping from captureID to TaskStatus
 func (c CDCEtcdClient) GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
-	key := GetEtcdKeyTaskStatusList(changefeedID)
-	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
+	resp, err := c.Client.Get(ctx, TaskKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	pinfo := make(map[string]*model.TaskStatus, resp.Count)
 	for _, rawKv := range resp.Kvs {
-		captureID, err := util.ExtractKeySuffix(string(rawKv.Key))
+		changeFeed, err := util.ExtractKeySuffix(string(rawKv.Key))
 		if err != nil {
 			return nil, err
+		}
+		endIndex := len(rawKv.Key) - len(changeFeed) - 1
+		captureID, err := util.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		if err != nil {
+			return nil, err
+		}
+		if changeFeed != changefeedID {
+			continue
 		}
 		info := &model.TaskStatus{}
 		err = info.Unmarshal(rawKv.Value)

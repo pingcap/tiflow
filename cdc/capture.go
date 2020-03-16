@@ -147,7 +147,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	})
 
 	taskWatcher := NewTaskWatcher(c, &TaskWatcherConfig{
-		Prefix:      kv.GetEtcdKeyTask(c.info.ID),
+		Prefix:      kv.TaskKeyPrefix + "/status/" + c.info.ID,
 		ChannelSize: 128,
 	})
 	log.Info("waiting for tasks", zap.String("captureid", c.info.ID))
