@@ -153,7 +153,7 @@ restart:
 			}
 		}
 	}
-
+	close(c)
 }
 
 func (w *TaskWatcher) parseTask(ctx context.Context,
