@@ -1,37 +1,11 @@
 catchError {
-    stage('Prepare') {
-        node ("${GO_TEST_SLAVE}") {
+    stage('Prepare Binaries') {
+        def prepares = [:]
+
+        prepares["download third binaries"] = {
             container("golang") {
                 def ws = pwd()
                 deleteDir()
-                dir("/home/jenkins/agent/git/ticdc") {
-                    if (sh(returnStatus: true, script: '[ -d .git ] && [ -f Makefile ] && git rev-parse --git-dir > /dev/null 2>&1') != 0) {
-                        deleteDir()
-                    }
-                    try {
-                        checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: 'master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'PruneStaleBranch'], [$class: 'CleanBeforeCheckout']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'github-sre-bot-ssh', refspec: '+refs/pull/*:refs/remotes/origin/pr/*', url: 'git@github.com:pingcap/ticdc.git']]]
-                    } catch (error) {
-                        retry(2) {
-                            echo "checkout failed, retry.."
-                            sleep 60
-                            if (sh(returnStatus: true, script: '[ -d .git ] && [ -f Makefile ] && git rev-parse --git-dir > /dev/null 2>&1') != 0) {
-                                deleteDir()
-                            }
-                            checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: 'master']], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'PruneStaleBranch'], [$class: 'CleanBeforeCheckout']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'github-sre-bot-ssh', refspec: '+refs/pull/*:refs/remotes/origin/pr/*', url: 'git@github.com:pingcap/ticdc.git']]]
-                        }
-                    }
-                }
-
-                dir("go/src/github.com/pingcap/ticdc") {
-                    sh """
-                        cp -R /home/jenkins/agent/git/ticdc/. ./
-                        git checkout -f ${ghprbActualCommit}
-                        mkdir -p bin
-                        make cdc
-                    """
-                }
-
-                stash includes: "go/src/github.com/pingcap/ticdc/**", name: "ticdc", useDefaultExcludes: false
 
                 sh "mkdir -p third_bin"
 
@@ -55,78 +29,97 @@ catchError {
 
                 sh "rm -rf tmp"
 
-                stash includes: "third_bin/**", name: "binaries"
+                stash includes: "third_bin/**", name: "third_binaries"
             }
         }
+
+        prepares["build binaries"] = {
+            container("golang") {
+                def ws = pwd()
+                deleteDir()
+                unstash 'ticdc'
+
+                dir("go/src/github.com/pingcap/ticdc") {
+                    sh """
+                        GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make cdc
+                        GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make integration_test_build
+                        GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make kafka_consumer
+                        GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make check_failpoint_ctl
+                    """
+                }
+                stash includes: "go/src/github.com/pingcap/ticdc/bin/**", name: "ticdc_binaries", useDefaultExcludes: false
+            }
+        }
+
+        parallel prepares
+
     }
 
     stage("Tests") {
         def tests = [:]
 
         tests["unit test"] = {
-            node("${GO_TEST_SLAVE}") {
-                container("golang") {
-                    def ws = pwd()
-                    deleteDir()
-                    unstash 'ticdc'
+            container("golang") {
+                def ws = pwd()
+                deleteDir()
+                unstash 'ticdc'
+                unstash 'ticdc_binaries'
 
-                    dir("go/src/github.com/pingcap/ticdc") {
-                        sh """
-                            rm -rf /tmp/tidb_cdc_test
-                            mkdir -p /tmp/tidb_cdc_test
-                            GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make test
-                            rm -rf cov_dir
-                            mkdir -p cov_dir
-                            ls /tmp/tidb_cdc_test
-                            cp /tmp/tidb_cdc_test/cov*out cov_dir
-                        """
-                        sh """
-                        tail /tmp/tidb_cdc_test/cov*
-                        """
-                    }
-                    stash includes: "go/src/github.com/pingcap/ticdc/cov_dir/**", name: "unit_test", useDefaultExcludes: false
+                dir("go/src/github.com/pingcap/ticdc") {
+                    sh """
+                        rm -rf /tmp/tidb_cdc_test
+                        mkdir -p /tmp/tidb_cdc_test
+                        GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make test
+                        rm -rf cov_dir
+                        mkdir -p cov_dir
+                        ls /tmp/tidb_cdc_test
+                        cp /tmp/tidb_cdc_test/cov*out cov_dir
+                    """
+                    sh """
+                    tail /tmp/tidb_cdc_test/cov*
+                    """
                 }
+                stash includes: "go/src/github.com/pingcap/ticdc/cov_dir/**", name: "unit_test", useDefaultExcludes: false
             }
         }
 
         def run_integration_test = { case_name ->
-            node("${GO_TEST_SLAVE}") {
-                container("golang") {
-                    def ws = pwd()
-                    deleteDir()
-                    unstash 'ticdc'
-                    unstash 'binaries'
+            container("golang") {
+                def ws = pwd()
+                deleteDir()
+                unstash 'ticdc'
+                unstash 'third_binaries'
+                unstash 'ticdc_binaries'
 
-                    dir("go/src/github.com/pingcap/ticdc") {
-                        sh "mv ${ws}/third_bin/* ./bin/"
-                        try {
-                            sh """
-                                rm -rf /tmp/tidb_cdc_test
-                                mkdir -p /tmp/tidb_cdc_test
-                                GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make integration_test_build && make integration_test CASE=${case_name}
-                                rm -rf cov_dir
-                                mkdir -p cov_dir
-                                ls /tmp/tidb_cdc_test
-                                cp /tmp/tidb_cdc_test/cov*out cov_dir || touch cov_dir/dummy_file_${case_name}
-                            """
-                            sh """
-                            tail /tmp/tidb_cdc_test/cov*
-                            """
-                        } catch (Exception e) {
-                            sh """
-                                echo "print all log"
-                                for log in `ls /tmp/tidb_cdc_test/*/*.log`; do
-                                    echo "____________________________________"
-                                    echo "\$log"
-                                    cat "\$log"
-                                    echo "____________________________________"
-                                done
-                            """
-                            throw e;
-                        }
+                dir("go/src/github.com/pingcap/ticdc") {
+                    sh "mv ${ws}/third_bin/* ./bin/"
+                    try {
+                        sh """
+                            rm -rf /tmp/tidb_cdc_test
+                            mkdir -p /tmp/tidb_cdc_test
+                            GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make integration_test CASE=${case_name}
+                            rm -rf cov_dir
+                            mkdir -p cov_dir
+                            ls /tmp/tidb_cdc_test
+                            cp /tmp/tidb_cdc_test/cov*out cov_dir || touch cov_dir/dummy_file_${case_name}
+                        """
+                        sh """
+                        tail /tmp/tidb_cdc_test/cov*
+                        """
+                    } catch (Exception e) {
+                        sh """
+                            echo "print all log"
+                            for log in `ls /tmp/tidb_cdc_test/*/*.log`; do
+                                echo "____________________________________"
+                                echo "\$log"
+                                cat "\$log"
+                                echo "____________________________________"
+                            done
+                        """
+                        throw e;
                     }
-                    stash includes: "go/src/github.com/pingcap/ticdc/cov_dir/**", name: "integration_test_${case_name}", useDefaultExcludes: false
                 }
+                stash includes: "go/src/github.com/pingcap/ticdc/cov_dir/**", name: "integration_test_${case_name}", useDefaultExcludes: false
             }
         }
 
@@ -134,9 +127,9 @@ catchError {
             run_integration_test("simple")
         }
 
-        tests["integration test cdc"] = {
-            run_integration_test("cdc")
-        }
+        // tests["integration test cdc"] = {
+        //     run_integration_test("cdc")
+        // }
 
         tests["integration test multi_capture"] = {
             run_integration_test("multi_capture")
@@ -180,10 +173,8 @@ catchError {
                     }
                 }
             }
-
         }
     }
-
     currentBuild.result = "SUCCESS"
 }
 
