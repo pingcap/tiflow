@@ -65,7 +65,7 @@ func runProcessor(
 	processor.Run(ctx, errCh)
 
 	go func() {
-		_ = <-errCh
+		<-errCh
 		cancel()
 	}()
 

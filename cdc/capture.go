@@ -39,9 +39,8 @@ import (
 )
 
 const (
-	ownerRunInterval    = time.Millisecond * 500
-	cfWatcherRetryDelay = time.Millisecond * 500
-	captureSessionTTL   = 3
+	ownerRunInterval  = time.Millisecond * 500
+	captureSessionTTL = 3
 )
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.

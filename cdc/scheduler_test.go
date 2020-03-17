@@ -18,7 +18,6 @@ import (
 	"net/url"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/embed"
@@ -34,12 +33,6 @@ type schedulerSuite struct {
 }
 
 var _ = check.Suite(&schedulerSuite{})
-
-var (
-	runProcessorCount         int32
-	runChangeFeedWatcherCount int32
-	errRunProcessor           = errors.New("mock run processor error")
-)
 
 // Set up a embed etcd using free ports.
 func (s *schedulerSuite) SetUpTest(c *check.C) {
