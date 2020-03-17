@@ -1,7 +1,7 @@
 catchError {
 
     stage("Check") {    
-        node("${GO_TEST_SLAVE}") {
+        node("${GO_BUILD_SLAVE}") {
             container("golang") {
                 def ws = pwd()
                 deleteDir()
