@@ -1,3 +1,4 @@
+def test_case_names = ["simple", "multi_capture", "split_region", "row_format"]
 catchError {
     stage('Prepare Binaries') {
         def prepares = [:]
@@ -127,24 +128,10 @@ catchError {
             }
         }
 
-        tests["integration test simple"] = {
-            run_integration_test("simple")
-        }
-
-        // tests["integration test cdc"] = {
-        //     run_integration_test("cdc")
-        // }
-
-        tests["integration test multi_capture"] = {
-            run_integration_test("multi_capture")
-        }
-
-        tests["integration test split_region"] = {
-            run_integration_test("split_region")
-        }
-
-        tests["integration test row_format"] = {
-            run_integration_test("row_format")
+        test_case_names.each{ case_name ->
+            tests["integration test ${case_name}"] = {
+                run_integration_test(case_name)
+            }
         }
 
         parallel tests
@@ -156,9 +143,10 @@ catchError {
             deleteDir()
             unstash 'ticdc'
             unstash 'unit_test'
-            unstash 'integration_test_simple'
-            unstash 'integration_test_multi_capture'
-            unstash 'integration_test_split_region'
+
+            test_case_names.each{ case_name ->
+                unstash "integration_test_${case_name}"
+            }
 
             dir("go/src/github.com/pingcap/ticdc") {
                 container("golang") {
