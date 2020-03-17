@@ -27,6 +27,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/pkg/flags"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
@@ -49,6 +51,7 @@ const (
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	pdEndpoints  []string
+	security     *Security
 	etcdClient   kv.CDCEtcdClient
 	ownerManager roles.Manager
 	ownerWorker  *ownerImpl
@@ -63,9 +66,14 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdEndpoints []string) (c *Capture, err error) {
+func NewCapture(pdEndpoints []string, security *Security) (c *Capture, err error) {
+	tlsConfig, err := utils.ToTLSConfig(security.CAPath, security.CertPath, security.KeyPath)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   pdEndpoints,
+		TLS:         tlsConfig,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
 			grpc.WithConnectParams(grpc.ConnectParams{
@@ -97,7 +105,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 
 	manager := roles.NewOwnerManager(cli, id, kv.CaptureOwnerKey)
 
-	worker, err := NewOwner(pdEndpoints, cli, manager)
+	worker, err := NewOwner(pdEndpoints, security, cli, manager)
 	if err != nil {
 		return nil, errors.Annotate(err, "new owner failed")
 	}
@@ -105,6 +113,7 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	c = &Capture{
 		processors:   make(map[string]*processor),
 		pdEndpoints:  pdEndpoints,
+		security:     security,
 		etcdClient:   cli,
 		session:      sess,
 		ownerManager: manager,
@@ -151,7 +160,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 	})
 
 	rl := rate.NewLimiter(0.1, 5)
-	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)
+	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.security, c.etcdClient)
 	errg.Go(func() error {
 		for {
 			if !rl.Allow() {
@@ -190,7 +199,7 @@ func (c *Capture) register(ctx context.Context) error {
 	return errors.Trace(c.etcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease()))
 }
 
-func createTiStore(urls string) (tidbkv.Storage, error) {
+func createTiStore(urls string, security *Security) (tidbkv.Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -198,6 +207,14 @@ func createTiStore(urls string) (tidbkv.Storage, error) {
 
 	// Ignore error if it is already registered.
 	_ = store.Register("tikv", tikv.Driver{})
+
+	if security.CAPath != "" {
+		conf := config.GetGlobalConfig()
+		conf.Security.ClusterSSLCA = security.CAPath
+		conf.Security.ClusterSSLCert = security.CertPath
+		conf.Security.ClusterSSLKey = security.KeyPath
+		config.StoreGlobalConfig(conf)
+	}
 
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := store.New(tiPath)

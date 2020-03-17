@@ -19,6 +19,9 @@ import (
 var (
 	serverPdAddr string
 	statusAddr   string
+	caPath       string
+	certPath     string
+	keyPath      string
 
 	serverCmd = &cobra.Command{
 		Use:              "server",
@@ -33,6 +36,9 @@ func init() {
 
 	serverCmd.Flags().StringVar(&serverPdAddr, "pd", "http://127.0.0.1:2379", "PD address, separated by comma")
 	serverCmd.Flags().StringVar(&statusAddr, "status-addr", "127.0.0.1:8300", "Bind address for http status server")
+	serverCmd.Flags().StringVar(&caPath, "ca", "", "CA certificate path for TLS connection")
+	serverCmd.Flags().StringVar(&certPath, "cert", "", "Certificate path for TLS connection")
+	serverCmd.Flags().StringVar(&keyPath, "key", "", "Private key path for TLS connection")
 }
 
 func preRunLogInfo(cmd *cobra.Command, args []string) {
@@ -44,15 +50,22 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	if len(addrs) != 2 {
 		return errors.Errorf("invalid status address: %s", statusAddr)
 	}
-	statusPort, err := strconv.ParseInt(addrs[1], 10, 64)
+	_, err := strconv.ParseInt(addrs[1], 10, 64)
 	if err != nil {
 		return errors.Annotatef(err, "invalid status address: %s", statusAddr)
 	}
 
-	var opts []cdc.ServerOption
-	opts = append(opts, cdc.PDEndpoints(serverPdAddr), cdc.StatusHost(addrs[0]), cdc.StatusPort(int(statusPort)))
+	config := &cdc.Config{
+		PD:         serverPdAddr,
+		StatusAddr: statusAddr,
+		Security: &cdc.Security{
+			CAPath:   caPath,
+			CertPath: certPath,
+			KeyPath:  keyPath,
+		},
+	}
 
-	server, err := cdc.NewServer(opts...)
+	server, err := cdc.NewServer(config)
 	if err != nil {
 		return errors.Annotate(err, "new server")
 	}

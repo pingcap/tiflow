@@ -29,7 +29,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/store/helper"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -118,17 +119,23 @@ func (t *tableInfo) storeResolvedTS(ts uint64) {
 func NewProcessor(
 	ctx context.Context,
 	pdEndpoints []string,
+	security *Security,
 	changefeed model.ChangeFeedInfo,
 	sink sink.Sink,
 	changefeedID, captureID string,
 	checkpointTs uint64) (*processor, error) {
-	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
+	pdCli, err := fNewPDCli(pdEndpoints, security.PDSecurityOption())
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
 	}
 
+	tlsConfig, err := utils.ToTLSConfig(security.CAPath, security.CertPath, security.KeyPath)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   pdEndpoints,
+		TLS:         tlsConfig,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
 			grpc.WithConnectParams(grpc.ConnectParams{
@@ -163,7 +170,7 @@ func NewProcessor(
 	// so we set `needEncode` to false.
 	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan()}, false, limitter)
 	ddlEventCh := ddlPuller.SortedOutput(ctx)
-	schemaBuilder, err := createSchemaBuilder(pdEndpoints, ddlEventCh)
+	schemaBuilder, err := createSchemaBuilder(pdEndpoints, security, ddlEventCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -552,8 +559,8 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	}
 }
 
-func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEntry) (*entry.StorageBuilder, error) {
-	jobs, err := getHistoryDDLJobs(pdEndpoints)
+func createSchemaBuilder(pdEndpoints []string, security *Security, ddlEventCh <-chan *model.RawKVEntry) (*entry.StorageBuilder, error) {
+	jobs, err := getHistoryDDLJobs(pdEndpoints, security)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -561,9 +568,9 @@ func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEnt
 	return builder, nil
 }
 
-func getHistoryDDLJobs(pdEndpoints []string) ([]*timodel.Job, error) {
+func getHistoryDDLJobs(pdEndpoints []string, security *Security) ([]*timodel.Job, error) {
 	// TODO here we create another pb client,we should reuse them
-	kvStore, err := createTiStore(strings.Join(pdEndpoints, ","))
+	kvStore, err := createTiStore(strings.Join(pdEndpoints, ","), security)
 	if err != nil {
 		return nil, err
 	}

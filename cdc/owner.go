@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -365,6 +365,7 @@ type ownerImpl struct {
 	l sync.RWMutex
 
 	pdEndpoints []string
+	security    *Security
 	pdClient    pd.Client
 	etcdClient  kv.CDCEtcdClient
 	manager     roles.Manager
@@ -378,7 +379,7 @@ type ownerImpl struct {
 }
 
 // NewOwner creates a new ownerImpl instance
-func NewOwner(pdEndpoints []string, cli kv.CDCEtcdClient, manager roles.Manager) (*ownerImpl, error) {
+func NewOwner(pdEndpoints []string, security *Security, cli kv.CDCEtcdClient, manager roles.Manager) (*ownerImpl, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	infos, watchC, err := newCaptureInfoWatch(ctx, cli)
 	if err != nil {
@@ -391,7 +392,7 @@ func NewOwner(pdEndpoints []string, cli kv.CDCEtcdClient, manager roles.Manager)
 		captures[info.ID] = info
 	}
 
-	pdClient, err := pd.NewClient(pdEndpoints, pd.SecurityOption{})
+	pdClient, err := pd.NewClient(pdEndpoints, security.PDSecurityOption())
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
@@ -399,6 +400,7 @@ func NewOwner(pdEndpoints []string, cli kv.CDCEtcdClient, manager roles.Manager)
 
 	owner := &ownerImpl{
 		pdEndpoints:        pdEndpoints,
+		security:           security,
 		pdClient:           pdClient,
 		changeFeeds:        make(map[model.ChangeFeedID]*changeFeed),
 		activeProcessors:   make(map[string]*model.ProcessorInfo),
@@ -516,7 +518,7 @@ func (o *ownerImpl) newChangeFeed(
 	log.Info("Find new changefeed", zap.Reflect("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
-	jobs, err := getHistoryDDLJobs(o.pdEndpoints)
+	jobs, err := getHistoryDDLJobs(o.pdEndpoints, o.security)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

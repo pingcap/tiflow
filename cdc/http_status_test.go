@@ -26,10 +26,12 @@ type httpStatusSuite struct{}
 
 var _ = check.Suite(&httpStatusSuite{})
 
+var defaultStatusHost = "127.0.0.1"
+
 const retryTime = 20
 
 func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
-	statusURL := fmt.Sprintf("http://%s:%d/status", defaultServerOptions.statusHost, defaultServerOptions.statusPort)
+	statusURL := fmt.Sprintf("http://%s:%d/status", defaultStatusHost, defaultStatusPort)
 	for i := 0; i < retryTime; i++ {
 		resp, err := http.Get(statusURL)
 		if err == nil {
@@ -44,7 +46,8 @@ func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
 }
 
 func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
-	server := &Server{opts: defaultServerOptions}
+	cfg := &Config{PD: "http://127.0.0.1:2379", StatusAddr: fmt.Sprintf("%s:%d", defaultStatusHost, defaultStatusPort)}
+	server := &Server{config: cfg}
 	server.startStatusHTTP()
 	defer func() {
 		c.Assert(server.statusServer.Close(), check.IsNil)
@@ -57,7 +60,7 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 }
 
 func testPprof(c *check.C) {
-	resp, err := http.Get(fmt.Sprintf("http://%s:%d/debug/pprof/cmdline", defaultServerOptions.statusHost, defaultServerOptions.statusPort))
+	resp, err := http.Get(fmt.Sprintf("http://%s:%d/debug/pprof/cmdline", defaultStatusHost, defaultStatusPort))
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, 200)
@@ -66,7 +69,7 @@ func testPprof(c *check.C) {
 }
 
 func testReisgnOwner(c *check.C) {
-	uri := fmt.Sprintf("http://%s:%d/capture/owner/resign", defaultServerOptions.statusHost, defaultServerOptions.statusPort)
+	uri := fmt.Sprintf("http://%s:%d/capture/owner/resign", defaultStatusHost, defaultStatusPort)
 	resp, err := http.Get(uri)
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()

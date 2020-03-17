@@ -10,10 +10,12 @@ import (
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
+	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
@@ -27,12 +29,15 @@ func init() {
 }
 
 var (
-	opts       []string
-	startTs    uint64
-	targetTs   uint64
-	sinkURI    string
-	configFile string
-	cliPdAddr  string
+	opts        []string
+	startTs     uint64
+	targetTs    uint64
+	sinkURI     string
+	configFile  string
+	cliPdAddr   string
+	cliCAPath   string
+	cliCertPath string
+	cliKeyPath  string
 
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client
@@ -43,8 +48,18 @@ func newCliCommand() *cobra.Command {
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			security := &cdc.Security{
+				CAPath:   cliCAPath,
+				CertPath: cliCertPath,
+				KeyPath:  cliKeyPath,
+			}
+			tlsConfig, err := utils.ToTLSConfig(cliCAPath, cliCertPath, cliKeyPath)
+			if err != nil {
+				return errors.Trace(err)
+			}
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
+				TLS:         tlsConfig,
 				DialTimeout: 5 * time.Second,
 				DialOptions: []grpc.DialOption{
 					grpc.WithConnectParams(grpc.ConnectParams{
@@ -62,7 +77,7 @@ func newCliCommand() *cobra.Command {
 				return err
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
-			pdCli, err = pd.NewClient([]string{cliPdAddr}, pd.SecurityOption{})
+			pdCli, err = pd.NewClient([]string{cliPdAddr}, security.PDSecurityOption())
 			if err != nil {
 				return err
 			}
@@ -78,6 +93,9 @@ func newCliCommand() *cobra.Command {
 		newTsoCommand(),
 	)
 	command.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address")
+	command.PersistentFlags().StringVar(&cliCAPath, "ca", "", "CA certificate path for TLS connection")
+	command.PersistentFlags().StringVar(&cliCertPath, "cert", "", "Certificate path for TLS connection")
+	command.PersistentFlags().StringVar(&cliKeyPath, "key", "", "Private key path for TLS connection")
 
 	return command
 }

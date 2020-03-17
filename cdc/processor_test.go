@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 
 	"github.com/pingcap/check"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles/storage"

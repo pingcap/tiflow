@@ -15,76 +15,67 @@ package cdc
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/pingcap/log"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
-type options struct {
-	pdEndpoints string
-	statusHost  string
-	statusPort  int
+// Security holds necessary path parameter to build a tls.Config
+type Security struct {
+	CAPath   string `toml:"ca-path" json:"ca-path"`
+	CertPath string `toml:"cert-path" json:"cert-path"`
+	KeyPath  string `toml:"key-path" json:"key-path"`
 }
 
-var defaultServerOptions = options{
-	pdEndpoints: "http://127.0.0.1:2379",
-	statusHost:  "127.0.0.1",
-	statusPort:  defaultStatusPort,
-}
-
-// PDEndpoints returns a ServerOption that sets the endpoints of PD for the server.
-func PDEndpoints(s string) ServerOption {
-	return func(o *options) {
-		o.pdEndpoints = s
+// PDSecurityOption creates a new pd SecurityOption from Security
+func (s *Security) PDSecurityOption() pd.SecurityOption {
+	return pd.SecurityOption{
+		CAPath:   s.CAPath,
+		CertPath: s.CertPath,
+		KeyPath:  s.KeyPath,
 	}
 }
 
-// StatusHost returns a ServerOption that sets the status server host
-func StatusHost(s string) ServerOption {
-	return func(o *options) {
-		o.statusHost = s
-	}
+// Config holds config for cdc server
+type Config struct {
+	Security   *Security `json:"security"`
+	PD         string    `json:"pd"`
+	StatusAddr string    `json:"status-addr"`
 }
 
-// StatusPort returns a ServerOption that sets the status server port
-func StatusPort(p int) ServerOption {
-	return func(o *options) {
-		o.statusPort = p
+// String implements fmt.Stringer
+func (c *Config) String() string {
+	data, err := json.Marshal(c)
+	if err != nil {
+		log.Warn("marshal config error", zap.Error(err), zap.Reflect("config", c))
 	}
+	return string(data)
 }
-
-// A ServerOption sets options such as the addr of PD.
-type ServerOption func(*options)
 
 // Server is the capture server
 type Server struct {
-	opts         options
+	config       *Config
 	capture      *Capture
 	statusServer *http.Server
 }
 
 // NewServer creates a Server instance.
-func NewServer(opt ...ServerOption) (*Server, error) {
-	opts := defaultServerOptions
-	for _, o := range opt {
-		o(&opts)
-	}
-	log.Info("creating CDC server",
-		zap.String("pd-addr", opts.pdEndpoints),
-		zap.String("status-host", opts.statusHost),
-		zap.Int("status-port", opts.statusPort))
+func NewServer(cfg *Config) (*Server, error) {
+	log.Info("creating CDC server", zap.Stringer("config", cfg))
 
-	capture, err := NewCapture(strings.Split(opts.pdEndpoints, ","))
+	capture, err := NewCapture(strings.Split(cfg.PD, ","), cfg.Security)
 	if err != nil {
 		return nil, err
 	}
 
 	s := &Server{
-		opts:    opts,
+		config:  cfg,
 		capture: capture,
 	}
 	return s, nil

@@ -71,6 +71,7 @@ func (s *schedulerSuite) TearDownTest(c *check.C) {
 func mockRunProcessor(
 	ctx context.Context,
 	pdEndpoints []string,
+	security *Security,
 	detail model.ChangeFeedInfo,
 	changefeedID string,
 	captureID string,
@@ -84,6 +85,7 @@ func mockRunProcessor(
 func mockRunProcessorError(
 	ctx context.Context,
 	pdEndpoints []string,
+	security *Security,
 	detail model.ChangeFeedInfo,
 	changefeedID string,
 	captureID string,
@@ -98,6 +100,7 @@ func mockRunProcessorWatcher(
 	changefeedID string,
 	captureID string,
 	pdEndpoints []string,
+	security *Security,
 	etcdCli kv.CDCEtcdClient,
 	detail model.ChangeFeedInfo,
 	errCh chan error,
@@ -112,6 +115,7 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 		changefeedID = "test-changefeed"
 		captureID    = "test-capture"
 		pdEndpoints  = []string{}
+		security     = &Security{}
 		detail       = model.ChangeFeedInfo{}
 		key          = kv.GetEtcdKeyTaskStatus(changefeedID, captureID)
 	)
@@ -138,7 +142,7 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 
 	// processor exists before watch starts
 	errCh := make(chan error, 1)
-	sw, err := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh, nil)
+	sw, err := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, security, cli, detail, errCh, nil)
 	c.Assert(err, check.IsNil)
 	c.Assert(util.WaitSomething(10, time.Millisecond*50, func() bool {
 		return atomic.LoadInt32(&runProcessorCount) == 1
@@ -164,7 +168,7 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 
 	// check watcher can find new processor in watch loop
 	errCh2 := make(chan error, 1)
-	_, err = runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh2, nil)
+	_, err = runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, security, cli, detail, errCh2, nil)
 	c.Assert(err, check.IsNil)
 	_, err = cli.Client.Put(context.Background(), key, "{}")
 	c.Assert(err, check.IsNil)
@@ -178,6 +182,7 @@ func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 		changefeedID = "test-changefeed-err"
 		captureID    = "test-capture-err"
 		pdEndpoints  = []string{}
+		security     = &Security{}
 		detail       = model.ChangeFeedInfo{}
 		key          = kv.GetEtcdKeyTaskStatus(changefeedID, captureID)
 	)
@@ -202,7 +207,7 @@ func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	errCh := make(chan error, 1)
-	sw, err := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, cli, detail, errCh, nil)
+	sw, err := runProcessorWatcher(context.Background(), changefeedID, captureID, pdEndpoints, security, cli, detail, errCh, nil)
 	c.Assert(err, check.IsNil)
 	sw.wg.Add(1)
 	go sw.Watch(context.Background(), errCh, nil)
@@ -225,6 +230,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 		changefeedID       = "test-changefeed-watcher"
 		captureID          = "test-capture"
 		pdEndpoints        = []string{}
+		security           = &Security{}
 		sinkURI            = "root@tcp(127.0.0.1:3306)/test"
 		detail             = &model.ChangeFeedInfo{SinkURI: sinkURI}
 		key                = kv.GetEtcdKeyChangeFeedInfo(changefeedID)
@@ -247,7 +253,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 	cli := kv.NewCDCEtcdClient(etcdCli)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	w := NewChangeFeedWatcher(captureID, pdEndpoints, cli)
+	w := NewChangeFeedWatcher(captureID, pdEndpoints, security, cli)
 
 	var wg sync.WaitGroup
 	wg.Add(1)

@@ -24,6 +24,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.etcd.io/etcd/clientv3"
@@ -49,9 +50,14 @@ func (s *Server) startStatusHTTP() {
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
 
-	addr := fmt.Sprintf("%s:%d", s.opts.statusHost, s.opts.statusPort)
-	s.statusServer = &http.Server{Addr: addr, Handler: serverMux}
-	log.Info("status http server is running", zap.String("addr", addr))
+	security := s.config.Security
+	tlsConfig, err := utils.ToTLSConfig(security.CAPath, security.CertPath, security.KeyPath)
+	if err != nil {
+		log.Error("status server get tls config failed", zap.Error(err))
+		return
+	}
+	s.statusServer = &http.Server{Addr: s.config.StatusAddr, Handler: serverMux, TLSConfig: tlsConfig}
+	log.Info("status http server is running", zap.String("addr", s.config.StatusAddr))
 	go func() {
 		err := s.statusServer.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
