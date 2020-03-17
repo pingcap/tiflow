@@ -62,7 +62,7 @@ func GetEtcdKeyChangeFeedInfo(changefeedID string) string {
 
 // GetEtcdKeyChangeFeedStatus returns the key of a changefeed status
 func GetEtcdKeyChangeFeedStatus(changefeedID string) string {
-	return fmt.Sprintf("%s/changefeed/status/%s", EtcdKeyBase, changefeedID)
+	return GetEtcdKeyJob(changefeedID)
 }
 
 // GetEtcdKeyTaskStatusList returns the key of a task status without captureID part
@@ -400,7 +400,7 @@ func (c CDCEtcdClient) PutChangeFeedStatus(
 	changefeedID string,
 	status *model.ChangeFeedStatus,
 ) error {
-	key := GetEtcdKeyChangeFeedStatus(changefeedID)
+	key := GetEtcdKeyJob(changefeedID)
 	value, err := status.Marshal()
 	if err != nil {
 		return errors.Trace(err)
