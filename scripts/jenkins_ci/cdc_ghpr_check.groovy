@@ -9,7 +9,7 @@ catchError {
 
                 dir("go/src/github.com/pingcap/ticdc") {
                     sh """
-                        GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make check
+                        GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make check
                     """
                 }
             }
