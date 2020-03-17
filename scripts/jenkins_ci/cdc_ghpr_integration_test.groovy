@@ -157,7 +157,6 @@ catchError {
             unstash 'ticdc'
             unstash 'unit_test'
             unstash 'integration_test_simple'
-            unstash 'integration_test_cdc'
             unstash 'integration_test_multi_capture'
             unstash 'integration_test_split_region'
 
