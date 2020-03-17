@@ -43,6 +43,9 @@ const (
 	// TaskStatusKeyPrefix is the prefix of task status keys
 	TaskStatusKeyPrefix = TaskKeyPrefix + "/status"
 
+	// TaskPositionKeyPrefix is the prefix of task position keys
+	TaskPositionKeyPrefix = TaskKeyPrefix + "/position"
+
 	// JobKeyPrefix is the prefix of job keys
 	JobKeyPrefix = EtcdKeyBase + "/job"
 )
@@ -74,7 +77,7 @@ func GetEtcdKeyTaskPositionList(changefeedID string) string {
 
 // GetEtcdKeyTaskPosition returns the key of a task position
 func GetEtcdKeyTaskPosition(changefeedID, captureID string) string {
-	return TaskKeyPrefix + "/position/" + captureID
+	return TaskPositionKeyPrefix + "/" + captureID + "/" + changefeedID
 }
 
 // GetEtcdKeyCaptureInfo returns the key of a capture info
@@ -241,16 +244,23 @@ func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context, info *model.Chang
 // GetAllTaskPositions queries all task positions of a changefeed, and returns a map
 // mapping from captureID to TaskPositions
 func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error) {
-	key := GetEtcdKeyTaskPositionList(changefeedID)
-	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
+	resp, err := c.Client.Get(ctx, TaskPositionKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	positions := make(map[string]*model.TaskPosition, resp.Count)
 	for _, rawKv := range resp.Kvs {
-		captureID, err := util.ExtractKeySuffix(string(rawKv.Key))
+		changeFeed, err := util.ExtractKeySuffix(string(rawKv.Key))
 		if err != nil {
 			return nil, err
+		}
+		endIndex := len(rawKv.Key) - len(changeFeed) - 1
+		captureID, err := util.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		if err != nil {
+			return nil, err
+		}
+		if changeFeed != changefeedID {
+			continue
 		}
 		info := &model.TaskPosition{}
 		err = info.Unmarshal(rawKv.Value)
