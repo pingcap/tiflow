@@ -175,6 +175,9 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 			}
 			c.processors[task.ChangeFeedID] = p
 		} else if ev.Op == TaskOpDelete {
+			if err := c.processors[task.ChangeFeedID].stop(ctx); err != nil {
+				return errors.Trace(err)
+			}
 			delete(c.processors, task.ChangeFeedID)
 		}
 	}

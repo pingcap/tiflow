@@ -18,6 +18,7 @@ import (
 	"errors"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 )
@@ -122,7 +123,7 @@ restart:
 			goto restart
 		}
 		for _, ev := range wresp.Events {
-			if ev.IsCreate() { // a key is new created
+			if ev.Type == clientv3.EventTypePut {
 				task, err := w.parseTask(ctx, ev.Kv.Key, ev.Kv.Value)
 				if err != nil {
 					log.Warn("parse task failed",
@@ -130,7 +131,22 @@ restart:
 						zap.Error(err))
 					continue
 				}
-				send(ctx, &TaskEvent{Op: TaskOpCreate, Task: task})
+
+				taskStatus := &model.TaskStatus{}
+				if err := taskStatus.Unmarshal(ev.Kv.Value); err != nil {
+					log.Warn("unmarshal task status failed",
+						zap.String("captureid", w.capture.info.ID),
+						zap.Error(err))
+					continue
+				}
+				var op TaskEventOp
+				switch taskStatus.AdminJobType {
+				case model.AdminNone, model.AdminResume:
+					op = TaskOpCreate
+				case model.AdminStop, model.AdminRemove:
+					op = TaskOpDelete
+				}
+				send(ctx, &TaskEvent{Op: op, Task: task})
 			} else if ev.Type == clientv3.EventTypeDelete {
 				task, err := w.parseTask(ctx, ev.PrevKv.Key, ev.PrevKv.Value)
 				if err != nil {
