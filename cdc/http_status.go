@@ -50,7 +50,10 @@ func (s *Server) startStatusHTTP() {
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
 
-	security := s.config.Security
+	security := &Security{}
+	if s.config.Security != nil {
+		security = s.config.Security
+	}
 	tlsConfig, err := utils.ToTLSConfig(security.CAPath, security.CertPath, security.KeyPath)
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))
