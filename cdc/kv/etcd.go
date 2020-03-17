@@ -95,14 +95,9 @@ func GetEtcdKeyTaskStatus(changeFeedID, captureID string) string {
 	return TaskStatusKeyPrefix + "/" + captureID + "/" + changeFeedID
 }
 
-// GetEtcdKeyJob returns the key for a replication job
+// GetEtcdKeyJob returns the key for a job status
 func GetEtcdKeyJob(changeFeedID string) string {
 	return JobKeyPrefix + "/" + changeFeedID
-}
-
-// GetEtcdKeyJobStatus returns the key for a job status
-func GetEtcdKeyJobStatus(changeFeedID string) string {
-	return GetEtcdKeyJob(changeFeedID) + "/status"
 }
 
 // CDCEtcdClient is a wrap of etcd client
@@ -165,7 +160,7 @@ func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context, id string) erro
 
 // GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
 func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error) {
-	key := GetEtcdKeyJobStatus(id)
+	key := GetEtcdKeyJob(id)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -425,7 +420,7 @@ func (c CDCEtcdClient) PutAllChangeFeedStatus(ctx context.Context, infos map[mod
 		if err != nil {
 			return errors.Trace(err)
 		}
-		key := GetEtcdKeyJobStatus(changefeedID)
+		key := GetEtcdKeyJob(changefeedID)
 		ops = append(ops, clientv3.OpPut(key, storeVal))
 		if uint(len(ops)) >= embed.DefaultMaxTxnOps {
 			_, err = txn.Then(ops...).Commit()
