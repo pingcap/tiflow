@@ -1,4 +1,4 @@
-def test_case_names = ["simple", "multi_capture", "split_region", "row_format"]
+def test_case_names = ["simple", "cdc", "multi_capture", "split_region", "row_format"]
 catchError {
     stage('Prepare Binaries') {
         def prepares = [:]
@@ -16,11 +16,11 @@ catchError {
 
                 sh "curl ${FILE_SERVER_URL}/download/builds/pingcap/pd/08d927675c8feb30552f9fb27246b120cc9ed6d7/centos7/pd-server.tar.gz | tar xz -C ./tmp bin/*"
 
+                sh "curl ${FILE_SERVER_URL}/download/builds/pingcap/tikv/eeaf4be81fabb71c30f62bc9fd11e77860d47d02/centos7/tikv-server.tar.gz | tar xz -C ./tmp bin/tikv-server"
+
                 sh "mv tmp/bin/* third_bin"
 
                 sh "curl ${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb -o third_bin/go-ycsb"
-
-                sh "curl http://fileserver.pingcap.net/download/files/test/cdc/tikv-server -o third_bin/tikv-server"
 
                 sh "curl https://download.pingcap.org/tidb-tools-v2.1.6-linux-amd64.tar.gz | tar xz -C ./tmp tidb-tools-v2.1.6-linux-amd64/bin/sync_diff_inspector"
 
