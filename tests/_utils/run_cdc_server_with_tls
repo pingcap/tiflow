@@ -2,19 +2,21 @@
 
 # parameter 1: work directory
 # parameter 2: path to cdc test binary
-# parameter 3: log suffix
+# parameter 3: pd addr
 
 set -e
 
 workdir=$1
 binary=$2
-log_suffix=$3
+pd=$3
 pwd=$pwd
+TLS_DIR=$workdir/tls
 
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
-$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME$log_suffix.out" server \
-    --log-file=$workdir/cdc$log_suffix.log --log-level=info \
+$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.out" server \
+    --log-file=$workdir/cdc.log --log-level=info \
+    --pd=$pd \
     --ca=$TLS_DIR/ca.pem --cert=$TLS_DIR/cdc.pem --key=$TLS_DIR/cdc.key \
-    >> $workdir/stdout$log_suffix.log 2>&1 &
+    >> $workdir/stdout.log 2>&1 &
 cd $pwd
