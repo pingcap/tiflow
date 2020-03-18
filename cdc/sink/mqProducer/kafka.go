@@ -13,14 +13,18 @@ import (
 
 // KafkaConfig stores the Kafka configuration
 type KafkaConfig struct {
+	PartitionNum      int32
+	ReplicationFactor int16
+
 	Version         string
 	MaxMessageBytes int
 }
 
 // DefaultKafkaConfig is the default Kafka configuration
 var DefaultKafkaConfig = KafkaConfig{
-	Version:         "2.4.0",
-	MaxMessageBytes: 1 << 26, // 64M
+	Version:           "2.4.0",
+	MaxMessageBytes:   1 << 26, // 64M
+	ReplicationFactor: 1,
 }
 
 type kafkaSaramaProducer struct {
@@ -30,13 +34,52 @@ type kafkaSaramaProducer struct {
 }
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(address string, topic string, partitionNum int32, config KafkaConfig) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(address string, topic string, config KafkaConfig) (*kafkaSaramaProducer, error) {
 	cfg, err := newSaramaConfig(config)
 	if err != nil {
 		return nil, err
 	}
-	// TODO create topic automatically, get partition number automatically
 	client, err := sarama.NewSyncProducer(strings.Split(address, ","), cfg)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// get partition number or create topic automatically
+	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	topics, err := admin.ListTopics()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	partitionNum := config.PartitionNum
+	topicDetail, exist := topics[topic]
+	if exist {
+		log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
+		if partitionNum == 0 {
+			partitionNum = topicDetail.NumPartitions
+		} else if partitionNum < topicDetail.NumPartitions {
+			log.Warn("partition number assigned in sink-uri is less than that of topic")
+		} else if partitionNum > topicDetail.NumPartitions {
+			return nil, errors.Errorf("partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, topicDetail.NumPartitions)
+		}
+	} else {
+		if partitionNum == 0 {
+			partitionNum = 4
+			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
+		}
+		err := admin.CreateTopic(topic, &sarama.TopicDetail{
+			NumPartitions:     partitionNum,
+			ReplicationFactor: config.ReplicationFactor,
+		}, false)
+		log.Info("create a topic", zap.String("topic", topic), zap.Int32("partition_num", partitionNum), zap.Int16("replication_factor", config.ReplicationFactor))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	err = admin.Close()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -97,4 +140,8 @@ func (k *kafkaSaramaProducer) BroadcastMessage(ctx context.Context, key []byte, 
 
 func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
 	return k.partitionNum
+}
+
+func (k *kafkaSaramaProducer) Close() error {
+	return k.client.Close()
 }

@@ -313,10 +313,11 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 	}
 
 	event := &model.RowChangedEvent{
-		Ts:       row.Ts,
-		Resolved: false,
-		Schema:   tableName.Schema,
-		Table:    tableName.Table,
+		Ts:           row.Ts,
+		Resolved:     false,
+		Schema:       tableName.Schema,
+		Table:        tableName.Table,
+		IndieMarkCol: tableInfo.IndieMarkCol,
 	}
 
 	if !row.Delete {
@@ -376,12 +377,13 @@ func (m *mounterImpl) mountIndexKVEntry(idx *indexKVEntry) (*model.RowChangedEve
 		}
 	}
 	return &model.RowChangedEvent{
-		Ts:       idx.Ts,
-		Resolved: false,
-		Schema:   tableName.Schema,
-		Table:    tableName.Table,
-		Delete:   true,
-		Columns:  values,
+		Ts:           idx.Ts,
+		Resolved:     false,
+		Schema:       tableName.Schema,
+		Table:        tableName.Table,
+		IndieMarkCol: tableInfo.IndieMarkCol,
+		Delete:       true,
+		Columns:      values,
 	}, nil
 }
 

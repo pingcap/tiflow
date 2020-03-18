@@ -3,7 +3,8 @@ set -euo pipefail
 
 GO111MODULE=on go mod tidy
 
-if ! git diff-index --quiet HEAD --; then
+if [ `git --no-pager diff | wc -c` -ne 0 ]; then
   echo "Please run \`go mod tidy\` to clean up"
+  git --no-pager diff
   exit 1
 fi
