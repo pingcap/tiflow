@@ -29,13 +29,13 @@ if [ "${1-}" = '--debug' ]; then
 fi
 
 generate_tls_keys() {
-    # Ref: https://docs.microsoft.com/en-us/azure/application-gateway/self-signed-certificates
+        # Ref: https://docs.microsoft.com/en-us/azure/application-gateway/self-signed-certificates
     # gRPC only supports P-256 curves, see https://github.com/grpc/grpc/issues/6722
     echo "Generate TLS keys..."
-    target="$OUT_DIR/tls
-    mkdir -p $target || true
+    TLS_DIR="$OUT_DIR/tls"
+    mkdir -p $TLS_DIR || true
 
-    cat - > "$target/ipsan.cnf" <<EOF
+    cat - > "$TLS_DIR/ipsan.cnf" <<EOF
 [dn]
 CN = localhost
 [req]
@@ -48,14 +48,14 @@ extendedKeyUsage = clientAuth,serverAuth
 DNS.1 = localhost
 IP.1 = 127.0.0.1
 EOF
-    openssl ecparam -out "$target/ca.key" -name prime256v1 -genkey
-    openssl req -new -batch -sha256 -subj '/CN=localhost' -key "$target/ca.key" -out "$target/ca.csr"
-    openssl x509 -req -sha256 -days 2 -in "$target/ca.csr" -signkey "$target/ca.key" -out "$target/ca.pem" 2> /dev/null
+    openssl ecparam -out "$TLS_DIR/ca.key" -name prime256v1 -genkey
+    openssl req -new -batch -sha256 -subj '/CN=localhost' -key "$TLS_DIR/ca.key" -out "$TLS_DIR/ca.csr"
+    openssl x509 -req -sha256 -days 2 -in "$TLS_DIR/ca.csr" -signkey "$TLS_DIR/ca.key" -out "$TLS_DIR/ca.pem" 2> /dev/null
 
     for name in tidb pd tikv cdc cli curl; do
-        openssl ecparam -out "$target/$name.key" -name prime256v1 -genkey
-        openssl req -new -batch -sha256 -subj '/CN=localhost' -key "$target/$name.key" -out "$target/$name.csr"
-        openssl x509 -req -sha256 -days 1 -extensions EXT -extfile "$target/ipsan.cnf" -in "$target/$name.csr" -CA "$target/ca.pem" -CAkey "$target/ca.key" -CAcreateserial -out "$target/$name.pem" 2> /dev/null
+        openssl ecparam -out "$TLS_DIR/$name.key" -name prime256v1 -genkey
+        openssl req -new -batch -sha256 -subj '/CN=localhost' -key "$TLS_DIR/$name.key" -out "$TLS_DIR/$name.csr"
+        openssl x509 -req -sha256 -days 1 -extensions EXT -extfile "$TLS_DIR/ipsan.cnf" -in "$TLS_DIR/$name.csr" -CA "$TLS_DIR/ca.pem" -CAkey "$TLS_DIR/ca.key" -CAcreateserial -out "$TLS_DIR/$name.pem" 2> /dev/null
     done
 }
 
