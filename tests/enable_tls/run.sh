@@ -91,6 +91,7 @@ function sql_test() {
 }
 
 trap stop_tidb_cluster EXIT
+generate_tls_keys $TLS_DIR
 prepare $*
 sql_test $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
