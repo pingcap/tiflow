@@ -113,16 +113,18 @@ func (m *syncRegionInfoMap) takeAll() map[uint64]singleRegionInfo {
 }
 
 type connArray struct {
-	target string
-	index  uint32
-	v      []*grpc.ClientConn
+	security *util.Security
+	target   string
+	index    uint32
+	v        []*grpc.ClientConn
 }
 
-func newConnArray(ctx context.Context, maxSize uint, addr string) (*connArray, error) {
+func newConnArray(ctx context.Context, maxSize uint, addr string, security *util.Security) (*connArray, error) {
 	a := &connArray{
-		target: addr,
-		index:  0,
-		v:      make([]*grpc.ClientConn, maxSize),
+		target:   addr,
+		security: security,
+		index:    0,
+		v:        make([]*grpc.ClientConn, maxSize),
 	}
 	err := a.Init(ctx)
 	if err != nil {
@@ -132,6 +134,10 @@ func newConnArray(ctx context.Context, maxSize uint, addr string) (*connArray, e
 }
 
 func (a *connArray) Init(ctx context.Context) error {
+	securityOpt, err := a.security.ToGRPCDialOption()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	for i := range a.v {
 		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 
@@ -140,7 +146,7 @@ func (a *connArray) Init(ctx context.Context) error {
 			a.target,
 			grpc.WithInitialWindowSize(grpcInitialWindowSize),
 			grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
-			grpc.WithInsecure(),
+			securityOpt,
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: gbackoff.Config{
 					BaseDelay:  time.Second,
@@ -187,7 +193,8 @@ func (a *connArray) Close() {
 
 // CDCClient to get events from TiKV
 type CDCClient struct {
-	pd pd.Client
+	pd       pd.Client
+	security *util.Security
 
 	clusterID uint64
 
@@ -200,13 +207,14 @@ type CDCClient struct {
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(pd pd.Client) (c *CDCClient, err error) {
+func NewCDCClient(pd pd.Client, security *util.Security) (c *CDCClient, err error) {
 	clusterID := pd.GetClusterID(context.Background())
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
 	c = &CDCClient{
 		clusterID:   clusterID,
 		pd:          pd,
+		security:    security,
 		regionCache: tikv.NewRegionCache(pd),
 		mu: struct {
 			sync.Mutex
@@ -238,7 +246,7 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 	if conns, ok := c.mu.conns[addr]; ok {
 		return conns.Get(), nil
 	}
-	ca, err := newConnArray(ctx, grpcConnCount, addr)
+	ca, err := newConnArray(ctx, grpcConnCount, addr, c.security)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

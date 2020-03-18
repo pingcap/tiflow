@@ -23,7 +23,7 @@ function prepare() {
     run_sql "CREATE table test.simple2(id int primary key, val int);"
 
     run_cdc_server_with_tls $WORK_DIR $CDC_BINARY "https://$UP_PD_HOST:$UP_PD_PORT"
-    cdc cli changefeed create --start-ts=$start_ts --sink-uri="mysql://root@127.0.0.1:3306/" --ca=$TLS_DIR/ca.pem --cert=$TLS_DIR/cli.pem --key=$TLS_DIR/cli.key
+    cdc cli changefeed create -pd=https://$UP_PD_HOST:$UP_PD_PORT --start-ts=$start_ts --sink-uri="mysql://root@127.0.0.1:3306/" --ca=$TLS_DIR/ca.pem --cert=$TLS_DIR/cli.pem --key=$TLS_DIR/cli.key
 }
 
 function sql_check() {

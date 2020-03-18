@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/v4/client"
-	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -48,7 +47,7 @@ func newCliCommand() *cobra.Command {
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			security := &cdc.Security{
+			security := &util.Security{
 				CAPath:   cliCAPath,
 				CertPath: cliCertPath,
 				KeyPath:  cliKeyPath,

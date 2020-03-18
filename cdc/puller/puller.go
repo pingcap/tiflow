@@ -49,6 +49,7 @@ type resolveTsTracker interface {
 
 type pullerImpl struct {
 	pdCli        pd.Client
+	security     *util.Security
 	checkpointTs uint64
 	spans        []util.Span
 	buffer       *memBuffer
@@ -70,6 +71,7 @@ type CancellablePuller struct {
 // and put into buf.
 func NewPuller(
 	pdCli pd.Client,
+	security *util.Security,
 	checkpointTs uint64,
 	spans []util.Span,
 	needEncode bool,
@@ -77,6 +79,7 @@ func NewPuller(
 ) *pullerImpl {
 	p := &pullerImpl{
 		pdCli:        pdCli,
+		security:     security,
 		checkpointTs: checkpointTs,
 		spans:        spans,
 		buffer:       makeMemBuffer(limitter),
@@ -130,7 +133,7 @@ func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	cli, err := kv.NewCDCClient(p.pdCli)
+	cli, err := kv.NewCDCClient(p.pdCli, p.security)
 	if err != nil {
 		return errors.Annotate(err, "create cdc client failed")
 	}

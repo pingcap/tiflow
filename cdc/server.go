@@ -21,32 +21,15 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
 
-// Security holds necessary path parameter to build a tls.Config
-type Security struct {
-	CAPath   string `toml:"ca-path" json:"ca-path"`
-	CertPath string `toml:"cert-path" json:"cert-path"`
-	KeyPath  string `toml:"key-path" json:"key-path"`
-}
-
-// PDSecurityOption creates a new pd SecurityOption from Security
-func (s *Security) PDSecurityOption() pd.SecurityOption {
-	return pd.SecurityOption{
-		CAPath:   s.CAPath,
-		CertPath: s.CertPath,
-		KeyPath:  s.KeyPath,
-	}
-}
-
 // Config holds config for cdc server
 type Config struct {
-	Security   *Security `json:"security"`
-	PD         string    `json:"pd"`
-	StatusAddr string    `json:"status-addr"`
+	Security   *util.Security `json:"security"`
+	PD         string         `json:"pd"`
+	StatusAddr string         `json:"status-addr"`
 }
 
 // String implements fmt.Stringer

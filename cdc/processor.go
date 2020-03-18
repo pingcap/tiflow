@@ -77,9 +77,10 @@ type processor struct {
 	changefeed   model.ChangeFeedInfo
 	limitter     *puller.BlurResourceLimitter
 
-	pdCli   pd.Client
-	etcdCli kv.CDCEtcdClient
-	session *concurrency.Session
+	pdCli    pd.Client
+	etcdCli  kv.CDCEtcdClient
+	session  *concurrency.Session
+	security *util.Security
 
 	sink sink.Sink
 
@@ -119,7 +120,7 @@ func (t *tableInfo) storeResolvedTS(ts uint64) {
 func NewProcessor(
 	ctx context.Context,
 	pdEndpoints []string,
-	security *Security,
+	security *util.Security,
 	changefeed model.ChangeFeedInfo,
 	sink sink.Sink,
 	changefeedID, captureID string,
@@ -168,7 +169,7 @@ func NewProcessor(
 
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan()}, false, limitter)
+	ddlPuller := puller.NewPuller(pdCli, security, checkpointTs, []util.Span{util.GetDDLSpan()}, false, limitter)
 	ddlEventCh := ddlPuller.SortedOutput(ctx)
 	schemaBuilder, err := createSchemaBuilder(pdEndpoints, security, ddlEventCh)
 	if err != nil {
@@ -184,6 +185,7 @@ func NewProcessor(
 		pdCli:         pdCli,
 		etcdCli:       cdcEtcdCli,
 		session:       sess,
+		security:      security,
 		sink:          sink,
 		ddlPuller:     ddlPuller,
 		schemaBuilder: schemaBuilder,
@@ -559,7 +561,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	}
 }
 
-func createSchemaBuilder(pdEndpoints []string, security *Security, ddlEventCh <-chan *model.RawKVEntry) (*entry.StorageBuilder, error) {
+func createSchemaBuilder(pdEndpoints []string, security *util.Security, ddlEventCh <-chan *model.RawKVEntry) (*entry.StorageBuilder, error) {
 	jobs, err := getHistoryDDLJobs(pdEndpoints, security)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -568,7 +570,7 @@ func createSchemaBuilder(pdEndpoints []string, security *Security, ddlEventCh <-
 	return builder, nil
 }
 
-func getHistoryDDLJobs(pdEndpoints []string, security *Security) ([]*timodel.Job, error) {
+func getHistoryDDLJobs(pdEndpoints []string, security *util.Security) ([]*timodel.Job, error) {
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := createTiStore(strings.Join(pdEndpoints, ","), security)
 	if err != nil {
@@ -654,7 +656,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
 	span := util.GetTableSpan(tableID, true)
-	puller := puller.NewPuller(p.pdCli, startTs, []util.Span{span}, true, p.limitter)
+	puller := puller.NewPuller(p.pdCli, p.security, startTs, []util.Span{span}, true, p.limitter)
 	go func() {
 		err := puller.Run(ctx)
 		if errors.Cause(err) != context.Canceled {

@@ -19,13 +19,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/sink"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc"
@@ -48,13 +47,13 @@ type ChangeFeedWatcher struct {
 	lock        sync.RWMutex
 	captureID   string
 	pdEndpoints []string
-	security    *Security
+	security    *util.Security
 	etcdCli     kv.CDCEtcdClient
 	infos       map[string]model.ChangeFeedInfo
 }
 
 // NewChangeFeedWatcher creates a new changefeed watcher
-func NewChangeFeedWatcher(captureID string, pdEndpoints []string, security *Security, cli kv.CDCEtcdClient) *ChangeFeedWatcher {
+func NewChangeFeedWatcher(captureID string, pdEndpoints []string, security *util.Security, cli kv.CDCEtcdClient) *ChangeFeedWatcher {
 	w := &ChangeFeedWatcher{
 		captureID:   captureID,
 		pdEndpoints: pdEndpoints,
@@ -170,7 +169,7 @@ func (w *ChangeFeedWatcher) Watch(ctx context.Context, cb processorCallback) err
 // ProcessorWatcher is a processor watcher
 type ProcessorWatcher struct {
 	pdEndpoints  []string
-	security     *Security
+	security     *util.Security
 	changefeedID string
 	captureID    string
 	etcdCli      kv.CDCEtcdClient
@@ -185,7 +184,7 @@ func NewProcessorWatcher(
 	changefeedID string,
 	captureID string,
 	pdEndpoints []string,
-	security *Security,
+	security *util.Security,
 	cli kv.CDCEtcdClient,
 	info model.ChangeFeedInfo,
 	checkpointTs uint64,
@@ -311,7 +310,7 @@ func realRunProcessorWatcher(
 	changefeedID string,
 	captureID string,
 	pdEndpoints []string,
-	security *Security,
+	security *util.Security,
 	etcdCli kv.CDCEtcdClient,
 	info model.ChangeFeedInfo,
 	errCh chan error,
@@ -333,7 +332,7 @@ func realRunProcessorWatcher(
 func realRunProcessor(
 	ctx context.Context,
 	pdEndpoints []string,
-	security *Security,
+	security *util.Security,
 	info model.ChangeFeedInfo,
 	changefeedID string,
 	captureID string,

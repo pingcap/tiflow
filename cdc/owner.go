@@ -365,7 +365,7 @@ type ownerImpl struct {
 	l sync.RWMutex
 
 	pdEndpoints []string
-	security    *Security
+	security    *util.Security
 	pdClient    pd.Client
 	etcdClient  kv.CDCEtcdClient
 	manager     roles.Manager
@@ -379,7 +379,7 @@ type ownerImpl struct {
 }
 
 // NewOwner creates a new ownerImpl instance
-func NewOwner(pdEndpoints []string, security *Security, cli kv.CDCEtcdClient, manager roles.Manager) (*ownerImpl, error) {
+func NewOwner(pdEndpoints []string, security *util.Security, cli kv.CDCEtcdClient, manager roles.Manager) (*ownerImpl, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	infos, watchC, err := newCaptureInfoWatch(ctx, cli)
 	if err != nil {
@@ -535,7 +535,7 @@ func (o *ownerImpl) newChangeFeed(
 		}
 	}
 
-	ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
+	ddlHandler := newDDLHandler(o.pdClient, o.security, checkpointTs)
 
 	existingTables := make(map[uint64]uint64)
 	for captureID, taskStatus := range processorsInfos {

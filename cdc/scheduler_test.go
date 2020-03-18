@@ -71,7 +71,7 @@ func (s *schedulerSuite) TearDownTest(c *check.C) {
 func mockRunProcessor(
 	ctx context.Context,
 	pdEndpoints []string,
-	security *Security,
+	security *util.Security,
 	detail model.ChangeFeedInfo,
 	changefeedID string,
 	captureID string,
@@ -85,7 +85,7 @@ func mockRunProcessor(
 func mockRunProcessorError(
 	ctx context.Context,
 	pdEndpoints []string,
-	security *Security,
+	security *util.Security,
 	detail model.ChangeFeedInfo,
 	changefeedID string,
 	captureID string,
@@ -100,7 +100,7 @@ func mockRunProcessorWatcher(
 	changefeedID string,
 	captureID string,
 	pdEndpoints []string,
-	security *Security,
+	security *util.Security,
 	etcdCli kv.CDCEtcdClient,
 	detail model.ChangeFeedInfo,
 	errCh chan error,
@@ -115,7 +115,7 @@ func (s *schedulerSuite) TestProcessorWatcher(c *check.C) {
 		changefeedID = "test-changefeed"
 		captureID    = "test-capture"
 		pdEndpoints  = []string{}
-		security     = &Security{}
+		security     = &util.Security{}
 		detail       = model.ChangeFeedInfo{}
 		key          = kv.GetEtcdKeyTaskStatus(changefeedID, captureID)
 	)
@@ -182,7 +182,7 @@ func (s *schedulerSuite) TestProcessorWatcherError(c *check.C) {
 		changefeedID = "test-changefeed-err"
 		captureID    = "test-capture-err"
 		pdEndpoints  = []string{}
-		security     = &Security{}
+		security     = &util.Security{}
 		detail       = model.ChangeFeedInfo{}
 		key          = kv.GetEtcdKeyTaskStatus(changefeedID, captureID)
 	)

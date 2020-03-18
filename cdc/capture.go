@@ -51,7 +51,7 @@ const (
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	pdEndpoints  []string
-	security     *Security
+	security     *util.Security
 	etcdClient   kv.CDCEtcdClient
 	ownerManager roles.Manager
 	ownerWorker  *ownerImpl
@@ -66,7 +66,7 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdEndpoints []string, security *Security) (c *Capture, err error) {
+func NewCapture(pdEndpoints []string, security *util.Security) (c *Capture, err error) {
 	tlsConfig, err := utils.ToTLSConfig(security.CAPath, security.CertPath, security.KeyPath)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -199,7 +199,7 @@ func (c *Capture) register(ctx context.Context) error {
 	return errors.Trace(c.etcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease()))
 }
 
-func createTiStore(urls string, security *Security) (tidbkv.Storage, error) {
+func createTiStore(urls string, security *util.Security) (tidbkv.Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {
 		return nil, errors.Trace(err)

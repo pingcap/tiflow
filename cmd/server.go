@@ -58,7 +58,7 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	config := &cdc.Config{
 		PD:         serverPdAddr,
 		StatusAddr: statusAddr,
-		Security: &cdc.Security{
+		Security: &util.Security{
 			CAPath:   caPath,
 			CertPath: certPath,
 			KeyPath:  keyPath,
