@@ -44,11 +44,23 @@ pd-server \
     --data-dir "$OUT_DIR/down_pd" &
 
 # wait until PD is online...
-while ! run_curl https://${UP_PD_HOST}:${UP_PD_PORT}/pd/api/v1/version; do
+i=0
+while ! run_curl $TLS_DIR https://${UP_PD_HOST}:${UP_PD_PORT}/pd/api/v1/version; do
+    i=$((i+1))
+    if [ "$i" -gt 10 ]; then
+        echo 'Failed to start upstream PD'
+        exit 1
+    fi
     sleep 1
 done
 
-while ! run_curl https://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/version; do
+i=0
+while ! run_curl $TLS_DIR https://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/version; do
+    i=$((i+1))
+    if [ "$i" -gt 10 ]; then
+        echo 'Failed to start upstream PD'
+        exit 1
+    fi
     sleep 1
 done
 
