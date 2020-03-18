@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.etcd.io/etcd/clientv3"
@@ -55,7 +54,7 @@ func (s *Server) startStatusHTTP() {
 	if s.config.Security != nil {
 		security = s.config.Security
 	}
-	tlsConfig, err := utils.ToTLSConfig(security.CAPath, security.CertPath, security.KeyPath)
+	tlsConfig, err := security.ToTLSConfig()
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))
 		return

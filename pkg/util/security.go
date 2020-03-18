@@ -14,6 +14,8 @@
 package util
 
 import (
+	"crypto/tls"
+
 	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/tidb-tools/pkg/utils"
@@ -39,9 +41,13 @@ func (s *Security) PDSecurityOption() pd.SecurityOption {
 
 // ToGRPCDialOption constructs a gRPC dial option.
 func (s *Security) ToGRPCDialOption() (grpc.DialOption, error) {
-	tlsCfg, err := utils.ToTLSConfig(s.CAPath, s.CertPath, s.KeyPath)
+	tlsCfg, err := s.ToTLSConfig()
 	if err != nil || tlsCfg == nil {
 		return grpc.WithInsecure(), errors.Trace(err)
 	}
 	return grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)), nil
+}
+
+func (s *Security) ToTLSConfig() (*tls.Config, error) {
+	return utils.ToTLSConfig(security.CAPath, security.CertPath, security.KeyPath)
 }

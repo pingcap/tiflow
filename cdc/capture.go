@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/pkg/flags"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
@@ -67,7 +66,7 @@ type Capture struct {
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdEndpoints []string, security *util.Security) (c *Capture, err error) {
-	tlsConfig, err := utils.ToTLSConfig(security.CAPath, security.CertPath, security.KeyPath)
+	tlsConfig, err := security.ToTLSConfig()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

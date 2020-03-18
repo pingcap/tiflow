@@ -14,7 +14,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
@@ -52,7 +51,7 @@ func newCliCommand() *cobra.Command {
 				CertPath: cliCertPath,
 				KeyPath:  cliKeyPath,
 			}
-			tlsConfig, err := utils.ToTLSConfig(cliCAPath, cliCertPath, cliKeyPath)
+			tlsConfig, err := security.ToTLSConfig()
 			if err != nil {
 				return errors.Trace(err)
 			}
