@@ -230,7 +230,7 @@ func (s *schedulerSuite) TestChangeFeedWatcher(c *check.C) {
 		changefeedID       = "test-changefeed-watcher"
 		captureID          = "test-capture"
 		pdEndpoints        = []string{}
-		security           = &Security{}
+		security           = &util.Security{}
 		sinkURI            = "root@tcp(127.0.0.1:3306)/test"
 		detail             = &model.ChangeFeedInfo{SinkURI: sinkURI}
 		key                = kv.GetEtcdKeyChangeFeedInfo(changefeedID)

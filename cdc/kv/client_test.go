@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 )
 
@@ -21,7 +22,7 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 	cluster := mocktikv.NewCluster()
 	pdCli := mocktikv.NewPDClient(cluster)
 
-	cli, err := NewCDCClient(pdCli)
+	cli, err := NewCDCClient(pdCli, &util.Security{})
 	c.Assert(err, check.IsNil)
 
 	err = cli.Close()
@@ -67,7 +68,7 @@ func (s *clientSuite) TestUpdateCheckpointTS(c *check.C) {
 // ref: https://github.com/grpc/grpc-go/blob/master/grpclog/loggerv2.go#L67-L72
 func (s *etcdSuite) TestConnArray(c *check.C) {
 	addr := "127.0.0.1:2379"
-	ca, err := newConnArray(context.TODO(), 2, addr)
+	ca, err := newConnArray(context.TODO(), 2, addr, &util.Security{})
 	c.Assert(err, check.IsNil)
 
 	conn1 := ca.Get()
