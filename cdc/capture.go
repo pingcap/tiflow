@@ -166,7 +166,6 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 			log.Info("run processor", zap.String("captureid", c.info.ID),
 				zap.String("changefeedid", task.ChangeFeedID))
 			if _, ok := c.processors[task.ChangeFeedID]; !ok {
-
 				p, err := runProcessor(ctx, c.pdEndpoints, *cf, task.ChangeFeedID,
 					c.info.ID, task.CheckpointTS)
 				if err != nil {
@@ -176,13 +175,13 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 						zap.Error(err))
 				}
 				c.processors[task.ChangeFeedID] = p
-			} else if ev.Op == TaskOpDelete {
-				if p, ok := c.processors[task.ChangeFeedID]; ok {
-					if err := p.stop(ctx); err != nil {
-						return errors.Trace(err)
-					}
-					delete(c.processors, task.ChangeFeedID)
+			}
+		} else if ev.Op == TaskOpDelete {
+			if p, ok := c.processors[task.ChangeFeedID]; ok {
+				if err := p.stop(ctx); err != nil {
+					return errors.Trace(err)
 				}
+				delete(c.processors, task.ChangeFeedID)
 			}
 		}
 	}
