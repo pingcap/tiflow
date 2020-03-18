@@ -165,20 +165,25 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 			}
 			log.Info("run processor", zap.String("captureid", c.info.ID),
 				zap.String("changefeedid", task.ChangeFeedID))
-			p, err := runProcessor(ctx, c.pdEndpoints, *cf, task.ChangeFeedID,
-				c.info.ID, task.CheckpointTS)
-			if err != nil {
-				log.Error("run processor failed",
-					zap.String("changefeedid", task.ChangeFeedID),
-					zap.String("captureid", c.info.ID),
-					zap.Error(err))
+			if _, ok := c.processors[task.ChangeFeedID]; !ok {
+
+				p, err := runProcessor(ctx, c.pdEndpoints, *cf, task.ChangeFeedID,
+					c.info.ID, task.CheckpointTS)
+				if err != nil {
+					log.Error("run processor failed",
+						zap.String("changefeedid", task.ChangeFeedID),
+						zap.String("captureid", c.info.ID),
+						zap.Error(err))
+				}
+				c.processors[task.ChangeFeedID] = p
+			} else if ev.Op == TaskOpDelete {
+				if p, ok := c.processors[task.ChangeFeedID]; ok {
+					if err := p.stop(ctx); err != nil {
+						return errors.Trace(err)
+					}
+					delete(c.processors, task.ChangeFeedID)
+				}
 			}
-			c.processors[task.ChangeFeedID] = p
-		} else if ev.Op == TaskOpDelete {
-			if err := c.processors[task.ChangeFeedID].stop(ctx); err != nil {
-				return errors.Trace(err)
-			}
-			delete(c.processors, task.ChangeFeedID)
 		}
 	}
 

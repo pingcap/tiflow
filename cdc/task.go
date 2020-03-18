@@ -28,8 +28,8 @@ type TaskEventOp string
 
 // Task Event Operatrions
 const (
-	TaskOpCreate = "create"
-	TaskOpDelete = "delete"
+	TaskOpCreate TaskEventOp = "create"
+	TaskOpDelete TaskEventOp = "delete"
 )
 
 // Task is dispatched by the owner
@@ -50,7 +50,7 @@ type TaskWatcher struct {
 	capture *Capture
 	cfg     *TaskWatcherConfig
 
-	tasks []*Task
+	events map[string]*TaskEvent
 }
 
 // TaskWatcherConfig configures a watcher
@@ -79,19 +79,21 @@ func (w *TaskWatcher) watch(ctx context.Context, c chan *TaskEvent) {
 	ctx = clientv3.WithRequireLeader(ctx)
 
 	// Send a task event to the channel, checks ctx.Done() to avoid blocking
-	send := func(ctx context.Context, ev *TaskEvent) {
+	send := func(ctx context.Context, ev *TaskEvent) error {
 		select {
 		case <-ctx.Done():
 			close(c)
+			return ctx.Err()
 		case c <- ev:
 		}
+		return nil
 	}
 restart:
 	// Load all the existed tasks
-	var tasks []*Task
+	events := make(map[string]*TaskEvent)
 	resp, err := etcd.Get(ctx, w.cfg.Prefix, clientv3.WithPrefix())
 	if err != nil {
-		send(ctx, &TaskEvent{Err: err})
+		_ = send(ctx, &TaskEvent{Err: err})
 		return
 	}
 	for _, kv := range resp.Kvs {
@@ -102,22 +104,38 @@ restart:
 				zap.Error(err))
 			continue
 		}
-		tasks = append(tasks, task)
+		taskStatus := &model.TaskStatus{}
+		if err := taskStatus.Unmarshal(kv.Value); err != nil {
+			log.Warn("unmarshal task status failed",
+				zap.String("captureid", w.capture.info.ID),
+				zap.Error(err))
+			continue
+		}
+		var op TaskEventOp
+		switch taskStatus.AdminJobType {
+		case model.AdminNone, model.AdminResume:
+			op = TaskOpCreate
+		case model.AdminStop, model.AdminRemove:
+			op = TaskOpDelete
+		}
+		events[task.ChangeFeedID] = &TaskEvent{Op: op, Task: task}
 	}
 
 	// Rebuild the missed events
 	// When an error is occured during watch, the watch routine is restarted,
 	// in that case, some events maybe missed. Rebuild the events by comparing
 	// the new task list with the last successfully recorded tasks.
-	events := w.rebuildTaskEvents(tasks)
+	events = w.rebuildTaskEvents(events)
 	for _, ev := range events {
-		send(ctx, ev)
+		if err := send(ctx, ev); err != nil {
+			return
+		}
 	}
 
 	wch := etcd.Watch(ctx, w.cfg.Prefix,
 		clientv3.WithPrefix(),
 		clientv3.WithPrevKV(),
-		clientv3.WithRev(resp.Header.Revision))
+		clientv3.WithRev(resp.Header.Revision+1))
 	for wresp := range wch {
 		if wresp.Err() != nil {
 			goto restart
@@ -146,7 +164,9 @@ restart:
 				case model.AdminStop, model.AdminRemove:
 					op = TaskOpDelete
 				}
-				send(ctx, &TaskEvent{Op: op, Task: task})
+				if err := send(ctx, &TaskEvent{Op: op, Task: task}); err != nil {
+					return
+				}
 			} else if ev.Type == clientv3.EventTypeDelete {
 				task, err := w.parseTask(ctx, ev.PrevKv.Key, ev.PrevKv.Value)
 				if err != nil {
@@ -155,7 +175,9 @@ restart:
 						zap.Error(err))
 					continue
 				}
-				send(ctx, &TaskEvent{Op: TaskOpDelete, Task: task})
+				if err := send(ctx, &TaskEvent{Op: TaskOpDelete, Task: task}); err != nil {
+					return
+				}
 			}
 		}
 	}
@@ -180,32 +202,28 @@ func (w *TaskWatcher) parseTask(ctx context.Context,
 	return &Task{ChangeFeedID: changeFeedID, CheckpointTS: checkpointTs}, nil
 }
 
-func (w *TaskWatcher) rebuildTaskEvents(tasks []*Task) []*TaskEvent {
-	var events []*TaskEvent
-
-	latest := make(map[string]*Task)
-	for _, task := range tasks {
-		latest[task.ChangeFeedID] = task
-	}
-
-	outdated := make(map[string]*Task)
-	for _, task := range w.tasks {
-		outdated[task.ChangeFeedID] = task
-
+func (w *TaskWatcher) rebuildTaskEvents(latest map[string]*TaskEvent) map[string]*TaskEvent {
+	events := make(map[string]*TaskEvent)
+	outdated := w.events
+	for id, ev := range outdated {
 		// Check if the task still exists
-		if _, ok := latest[task.ChangeFeedID]; !ok {
-			events = append(events, &TaskEvent{Op: TaskOpDelete, Task: task})
+		if nev, ok := latest[id]; ok {
+			if ev.Op != nev.Op {
+				events[id] = nev
+			}
+		} else if ev.Op != TaskOpDelete {
+			events[id] = &TaskEvent{Op: TaskOpDelete, Task: ev.Task}
 		}
 	}
 
-	for _, task := range tasks {
-		if _, ok := outdated[task.ChangeFeedID]; !ok {
-			events = append(events, &TaskEvent{Op: TaskOpCreate, Task: task})
+	for id, ev := range latest {
+		if _, ok := outdated[id]; !ok {
+			events[id] = ev
 		}
 	}
 
 	// Update to the latest tasks
-	w.tasks = tasks
+	w.events = events
 
 	return events
 }
