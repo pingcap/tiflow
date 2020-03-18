@@ -189,6 +189,18 @@ func (s *taskSuite) TestWatch(c *check.C) {
 	c.Assert(ev.Task.ChangeFeedID, check.Equals, "changefeed-1")
 	c.Assert(ev.Task.CheckpointTS, check.Equals, uint64(1))
 
+	// Resume the task changefeed-1
+	c.Assert(client.PutTaskStatus(s.c.Ctx(), "changefeed-1",
+		s.w.capture.info.ID,
+		&model.TaskStatus{AdminJobType: model.AdminResume}), check.IsNil)
+	ev = <-ch
+	c.Assert(len(ch), check.Equals, 0)
+	c.Assert(ev, check.NotNil)
+	c.Assert(ev.Err, check.IsNil)
+	c.Assert(ev.Op, check.Equals, TaskOpCreate)
+	c.Assert(ev.Task.ChangeFeedID, check.Equals, "changefeed-1")
+	c.Assert(ev.Task.CheckpointTS, check.Equals, uint64(1))
+
 	// Delete the task changefeed-1
 	c.Assert(client.DeleteTaskStatus(ctx, "changefeed-1",
 		s.w.capture.info.ID), check.IsNil)
