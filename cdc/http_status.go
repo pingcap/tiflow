@@ -63,7 +63,12 @@ func (s *Server) startStatusHTTP() {
 	s.statusServer = &http.Server{Addr: s.config.StatusAddr, Handler: serverMux, TLSConfig: tlsConfig}
 	log.Info("status http server is running", zap.String("addr", s.config.StatusAddr))
 	go func() {
-		err := s.statusServer.ListenAndServe()
+		var err error
+		if tlsConfig != nil {
+			err = s.statusServer.ListenAndServeTLS(security.CertPath, security.KeyPath)
+		} else {
+			err = s.statusServer.ListenAndServe()
+		}
 		if err != nil && err != http.ErrServerClosed {
 			log.Error("status server error", zap.Error(err))
 		}
