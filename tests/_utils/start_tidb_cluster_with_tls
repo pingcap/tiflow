@@ -29,26 +29,26 @@ EOF
 
 echo "Starting Upstream PD..."
 pd-server \
-    --client-urls http://${UP_PD_HOST}:${UP_PD_PORT}\
-    --peer-urls http://${UP_PD_HOST}:${UP_PD_PEER_PORT}\
+    --client-urls https://${UP_PD_HOST}:${UP_PD_PORT}\
+    --peer-urls https://${UP_PD_HOST}:${UP_PD_PEER_PORT}\
     --config "$OUT_DIR/pd-config.toml" \
     --log-file "$OUT_DIR/pd.log" \
     --data-dir "$OUT_DIR/pd" &
 
 echo "Starting Downstream PD..."
 pd-server \
-    --client-urls http://${DOWN_PD_HOST}:${DOWN_PD_PORT}\
-    --peer-urls http://${DOWN_PD_HOST}:${DOWN_PD_PEER_PORT}\
+    --client-urls https://${DOWN_PD_HOST}:${DOWN_PD_PORT}\
+    --peer-urls https://${DOWN_PD_HOST}:${DOWN_PD_PEER_PORT}\
     --config "$OUT_DIR/pd-config.toml" \
     --log-file "$OUT_DIR/down_pd.log" \
     --data-dir "$OUT_DIR/down_pd" &
 
 # wait until PD is online...
-while ! run_curl http://${UP_PD_HOST}:${UP_PD_PORT}/pd/api/v1/version; do
+while ! run_curl https://${UP_PD_HOST}:${UP_PD_PORT}/pd/api/v1/version; do
     sleep 1
 done
 
-while ! run_curl http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/version; do
+while ! run_curl https://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/version; do
     sleep 1
 done
 

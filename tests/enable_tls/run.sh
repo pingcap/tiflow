@@ -5,11 +5,12 @@ set -e
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
-TLS_DIR=$OUT_DIR/tls
+TLS_DIR=$WORK_DIR/tls
 CDC_BINARY=cdc.test
 
 function prepare() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
+    generate_tls_keys $TLS_DIR
 
     start_tidb_cluster_with_tls $WORK_DIR
 
@@ -91,7 +92,6 @@ function sql_test() {
 }
 
 trap stop_tidb_cluster EXIT
-generate_tls_keys $TLS_DIR
 prepare $*
 sql_test $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
