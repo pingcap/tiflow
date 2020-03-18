@@ -1,4 +1,4 @@
-def test_case_names = ["simple", "cdc", "multi_capture", "split_region", "row_format"]
+def test_case_names = ["simple", "cdc", "multi_capture", "split_region", "row_format", "enable_tls"]
 catchError {
     stage('Prepare Binaries') {
         def prepares = [:]
