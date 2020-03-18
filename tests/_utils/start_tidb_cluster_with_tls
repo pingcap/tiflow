@@ -11,6 +11,7 @@ if [[ -z $OUT_DIR ]]; then
     echo "wrong out_dir value: $1"
     exit 1
 fi
+TLS_DIR="$OUT_DIR/tls"
 
 stop_tidb_cluster
 
@@ -20,6 +21,10 @@ cat - > "$OUT_DIR/pd-config.toml" <<EOF
 [replication]
 # The number of replicas for each region.
 max-replicas = 1
+[security]
+cacert-path = "$TLS_DIR/ca.pem"
+cert-path = "$TLS_DIR/pd.pem"
+key-path = "$TLS_DIR/pd.key"
 EOF
 
 echo "Starting Upstream PD..."
@@ -56,11 +61,22 @@ max-open-files = 4096
 [raftstore]
 # true (default value) for high reliability, this can prevent data loss when power failure.
 sync-log = false
+[security]
+ca-path = "$TLS_DIR/ca.pem"
+cert-path = "$TLS_DIR/tikv.pem"
+key-path = "$TLS_DIR/tikv.key"
 EOF
 
 # tidb server config file
 cat - > "$OUT_DIR/tidb-config.toml" <<EOF
 split-table = true
+[security]
+ssl-ca = "$TLS_DIR/ca.pem"
+ssl-cert = "$TLS_DIR/tidb.pem"
+ssl-key = "$TLS_DIR/tidb.key"
+cluster-ssl-ca = "$TLS_DIR/ca.pem"
+cluster-ssl-cert = "$TLS_DIR/tidb.pem"
+cluster-ssl-key = "$TLS_DIR/tidb.key"
 EOF
 
 echo "Starting Upstream TiKV..."
