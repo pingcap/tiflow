@@ -512,6 +512,7 @@ func (o *ownerImpl) handleWatchCapture() error {
 }
 
 func (o *ownerImpl) newChangeFeed(
+	ctx context.Context,
 	id model.ChangeFeedID,
 	processorsInfos model.ProcessorsInfos,
 	taskPositions map[string]*model.TaskPosition,
@@ -587,7 +588,7 @@ func (o *ownerImpl) newChangeFeed(
 		}
 	}
 
-	sink, err := sink.NewSink(info.SinkURI, filter, info.Opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.Opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -653,7 +654,7 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 		}
 		checkpointTs := cfInfo.GetCheckpointTs(status)
 
-		newCf, err := o.newChangeFeed(changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
+		newCf, err := o.newChangeFeed(ctx, changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
 		if err != nil {
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}

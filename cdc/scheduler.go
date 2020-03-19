@@ -343,7 +343,7 @@ func realRunProcessor(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	sink, err := sink.NewSink(info.SinkURI, filter, opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, opts)
 	if err != nil {
 		return errors.Trace(err)
 	}

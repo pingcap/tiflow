@@ -264,7 +264,7 @@ func (k *mqSink) PrintStatus(ctx context.Context) error {
 	}
 }
 
-func newKafkaSaramaSink(sinkURI *url.URL, filter *util.Filter, opts map[string]string) (*mqSink, error) {
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filter, opts map[string]string) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
 	scheme := strings.ToLower(sinkURI.Scheme)
@@ -306,7 +306,7 @@ func newKafkaSaramaSink(sinkURI *url.URL, filter *util.Filter, opts map[string]s
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-	producer, err := mqProducer.NewKafkaSaramaProducer(sinkURI.Host, topic, config)
+	producer, err := mqProducer.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

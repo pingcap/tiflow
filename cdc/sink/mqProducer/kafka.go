@@ -155,7 +155,7 @@ func (k *kafkaSaramaProducer) MaxSuccessesIndex() uint64 {
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config KafkaConfig) (*kafkaSaramaProducer, error) {
-	cfg, err := newSaramaConfig(config)
+	cfg, err := newSaramaConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}

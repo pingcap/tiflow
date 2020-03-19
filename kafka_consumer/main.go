@@ -178,7 +178,7 @@ func main() {
 	/**
 	 * Setup a new Sarama consumer group
 	 */
-	consumer, err := NewConsumer()
+	consumer, err := NewConsumer(context.TODO())
 	if err != nil {
 		log.Fatal("Error creating consumer", zap.Error(err))
 	}
@@ -252,7 +252,7 @@ type Consumer struct {
 }
 
 // NewConsumer creates a new cdc kafka consumer
-func NewConsumer() (*Consumer, error) {
+func NewConsumer(ctx context.Context) (*Consumer, error) {
 	// TODO support filter in downstream sink
 	filter, err := util.NewFilter(&util.ReplicaConfig{})
 	if err != nil {
@@ -264,7 +264,7 @@ func NewConsumer() (*Consumer, error) {
 		resolvedTs uint64
 	}, kafkaPartitionNum)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.NewSink(downstreamURIStr, filter, nil)
+		s, err := sink.NewSink(ctx, downstreamURIStr, filter, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -273,7 +273,7 @@ func NewConsumer() (*Consumer, error) {
 			resolvedTs uint64
 		}{Sink: s}
 	}
-	sink, err := sink.NewSink(downstreamURIStr, filter, nil)
+	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
