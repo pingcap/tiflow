@@ -152,7 +152,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 			log.Info("run processor", zap.String("captureid", c.info.ID),
 				zap.String("changefeedid", task.ChangeFeedID))
 			if _, ok := c.processors[task.ChangeFeedID]; !ok {
-				p, err := runProcessor(ctx, c.pdEndpoints, *cf, task.ChangeFeedID,
+				p, err := runProcessor(ctx, c.session, *cf, task.ChangeFeedID,
 					c.info.ID, task.CheckpointTS)
 				if err != nil {
 					log.Error("run processor failed",
