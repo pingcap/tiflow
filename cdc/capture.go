@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/pkg/flags"
-	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
@@ -110,20 +109,6 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	}
 
 	return
-}
-
-// OnRunProcessor implements processorCallback.
-func (c *Capture) OnRunProcessor(p *processor) {
-	c.processors[p.changefeedID] = p
-}
-
-// OnStopProcessor implements processorCallback.
-func (c *Capture) OnStopProcessor(p *processor, err error) {
-	// TODO: handle processor error
-	log.Info("stop to run processor", zap.String("changefeed id", p.changefeedID), util.ZapErrorFilter(err, context.Canceled))
-	c.procLock.Lock()
-	defer c.procLock.Unlock()
-	delete(c.processors, p.changefeedID)
 }
 
 // Start starts the Capture mainloop
