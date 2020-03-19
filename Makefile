@@ -15,7 +15,11 @@ SHELL	 := /usr/bin/env bash
 
 GO       := GO111MODULE=on go
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
+ifeq ($(GOVERSION114), 1)
+GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race -gcflags=all=-d=checkptr=0
+else
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race
+endif
 
 ARCH  := "`uname -s`"
 LINUX := "Linux"
