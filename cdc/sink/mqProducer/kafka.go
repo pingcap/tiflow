@@ -105,6 +105,7 @@ func (k *kafkaSaramaProducer) BroadcastMessage(ctx context.Context, key []byte, 
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error {
 	wg, cctx := errgroup.WithContext(ctx)
 	for i := int32(0); i < k.partitionNum; i++ {
+		i := i
 		wg.Go(func() error {
 			var err1, err2 error
 			done := make(chan struct{})
