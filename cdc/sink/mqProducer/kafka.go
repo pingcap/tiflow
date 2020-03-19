@@ -4,9 +4,10 @@ import (
 	"context"
 	"math"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/ticdc/pkg/util"
 
@@ -97,20 +98,23 @@ func (k *kafkaSaramaProducer) BroadcastMessage(ctx context.Context, key []byte, 
 }
 
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error {
-	var wg sync.WaitGroup
-	wg.Add(int(k.partitionNum))
-	var err error
-	_, err = k.BroadcastMessage(ctx, key, value, func(err2 error) {
-		if err2 != nil || err == nil {
-			err = err2
-		}
-		wg.Done()
-	})
-	if err != nil {
-		return errors.Trace(err)
+	wg, cctx := errgroup.WithContext(ctx)
+	for i := int32(0); i < k.partitionNum; i++ {
+		wg.Go(func() error {
+			var err1, err2 error
+			done := make(chan struct{})
+			_, err1 = k.SendMessage(cctx, key, value, i, func(err error) {
+				err2 = err
+				close(done)
+			})
+			if err1 != nil {
+				return err1
+			}
+			<-done
+			return err2
+		})
 	}
-	wg.Wait()
-	return nil
+	return wg.Wait()
 }
 
 func (k *kafkaSaramaProducer) MaxSuccessesIndex() uint64 {

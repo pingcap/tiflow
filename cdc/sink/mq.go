@@ -69,12 +69,7 @@ func (k *mqSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
 		return errors.Trace(err)
 	}
 	log.Info("emit cpoint ts", zap.ByteString("b", keyByte))
-	_, err = k.mqProducer.BroadcastMessage(ctx, keyByte, nil, func(err error) {
-		if err != nil {
-			log.Error("failed to send checkpoint event to kafka", zap.Error(err), zap.Uint64("ts", ts))
-			return
-		}
-	})
+	err = k.mqProducer.SyncBroadcastMessage(ctx, keyByte, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -173,13 +168,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = k.mqProducer.BroadcastMessage(ctx, keyByte, valueByte, func(err error) {
-		if err != nil {
-			log.Error("failed to send row changed event to kafka", zap.Error(err), zap.String("ddl", ddl.Query))
-			return
-		}
-		atomic.AddInt64(&k.count, 1)
-	})
+	err = k.mqProducer.SyncBroadcastMessage(ctx, keyByte, valueByte)
 	if err != nil {
 		return errors.Trace(err)
 	}
