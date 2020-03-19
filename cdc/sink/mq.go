@@ -169,6 +169,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return errors.Trace(err)
 	}
 	err = k.mqProducer.SyncBroadcastMessage(ctx, keyByte, valueByte)
+	log.Info("finished SyncBroadcastMessage")
 	if err != nil {
 		return errors.Trace(err)
 	}

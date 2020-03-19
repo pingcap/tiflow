@@ -44,14 +44,19 @@ type kafkaSaramaProducer struct {
 }
 
 func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
+	if util.IsOwnerFromCtx(ctx) {
+		log.Info("run kafkaSaramaProducer")
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case msg := <-k.asyncClient.Successes():
+			log.Info("successes", zap.Reflect("msg", msg))
 			cb := msg.Metadata.(func(error))
 			cb(nil)
 		case err := <-k.asyncClient.Errors():
+			log.Info("error", zap.Reflect("err", err))
 			cb := err.Msg.Metadata.(func(error))
 			cb(err.Err)
 		}
@@ -105,12 +110,14 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []by
 			done := make(chan struct{})
 			_, err1 = k.SendMessage(cctx, key, value, i, func(err error) {
 				err2 = err
+				log.Info("done")
 				close(done)
 			})
 			if err1 != nil {
 				return err1
 			}
 			<-done
+			log.Info("done2")
 			return err2
 		})
 	}
