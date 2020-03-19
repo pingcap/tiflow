@@ -160,8 +160,8 @@ func newQueryProcessorCommand() *cobra.Command {
 			return jsonPrint(cmd, meta)
 		},
 	}
-	command.PersistentFlags().String("changefeed-id", "", "Replication task (changefeed) ID")
-	command.PersistentFlags().String("capture-id", "", "Capture ID")
+	changefeedID = command.PersistentFlags().String("changefeed-id", "", "Replication task (changefeed) ID")
+	captureID = command.PersistentFlags().String("capture-id", "", "Capture ID")
 
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 	_ = command.MarkPersistentFlagRequired("capture-id")

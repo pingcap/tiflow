@@ -300,7 +300,7 @@ func loop() {
 
 		command := newCliCommand()
 		command.SetArgs(args)
-		command.ParseFlags(args)
+		_ = command.ParseFlags(args)
 		command.SetOutput((os.Stdout))
 		if err = command.Execute(); err != nil {
 			command.Println(err)
