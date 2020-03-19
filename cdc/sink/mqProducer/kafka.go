@@ -47,28 +47,16 @@ type kafkaSaramaProducer struct {
 }
 
 func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
-	if util.IsOwnerFromCtx(ctx) {
-		log.Info("run kafkaSaramaProducer")
-	}
 	for {
 		select {
 		case <-ctx.Done():
-			if util.IsOwnerFromCtx(ctx) {
-				log.Info("exit run kafkaSaramaProducer")
-			}
 			return errors.Trace(ctx.Err())
 		case <-k.closeCh:
 			return nil
 		case msg := <-k.asyncClient.Successes():
-			if util.IsOwnerFromCtx(ctx) {
-				log.Info("owner successes", zap.Reflect("msg", msg))
-			}
 			cb := msg.Metadata.(func(error))
 			cb(nil)
 		case err := <-k.asyncClient.Errors():
-			if util.IsOwnerFromCtx(ctx) {
-				log.Info("owner error", zap.Reflect("err", err))
-			}
 			cb := err.Msg.Metadata.(func(error))
 			cb(err.Err)
 		}
@@ -76,9 +64,6 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 }
 
 func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32, callback func(err error)) (uint64, error) {
-	if util.IsOwnerFromCtx(ctx) {
-		log.Info("owner send message", zap.ByteString("key", key), zap.ByteString("value", value), zap.Int32("partition", partition))
-	}
 	index := atomic.AddUint64(&k.currentIndex, 1)
 	atomic.StoreUint64(&k.partitionMaxSentIndex[partition], index)
 
@@ -98,9 +83,6 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 		Partition: partition,
 		Metadata:  cb,
 	}:
-	}
-	if util.IsOwnerFromCtx(ctx) {
-		log.Info("owner finish sent", zap.Uint64("index", index))
 	}
 	return index, nil
 }
@@ -123,14 +105,12 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []by
 			done := make(chan struct{})
 			_, err1 = k.SendMessage(cctx, key, value, i, func(err error) {
 				err2 = err
-				log.Info("done")
 				close(done)
 			})
 			if err1 != nil {
 				return err1
 			}
 			<-done
-			log.Info("done2")
 			return err2
 		})
 	}
@@ -150,12 +130,10 @@ func (k *kafkaSaramaProducer) MaxSuccessesIndex() uint64 {
 		if minSucceededIndex > succeedIndex && succeedIndex != sentIndex {
 			minSucceededIndex = succeedIndex
 		}
-		log.Info("find index", zap.Uint64("success", succeedIndex), zap.Uint64("sent", sentIndex), zap.Int("partition", i))
 	}
 	if minSucceededIndex == uint64(math.MaxUint64) {
 		minSucceededIndex = maxSentIndex
 	}
-	log.Info("get max success index", zap.Uint64("maxIndex", minSucceededIndex))
 	return minSucceededIndex
 }
 
@@ -235,10 +213,10 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 	} else {
 		role = "processor"
 	}
-	captureId := util.CaptureIDFromCtx(ctx)
+	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
-	config.ClientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureId, changefeedID)
+	config.ClientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureID, changefeedID)
 	config.Version = version
 
 	config.Producer.Flush.MaxMessages = c.MaxMessageBytes

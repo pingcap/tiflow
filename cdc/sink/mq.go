@@ -68,7 +68,6 @@ func (k *mqSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("owner emit cpoint ts", zap.ByteString("b", keyByte))
 	err = k.mqProducer.SyncBroadcastMessage(ctx, keyByte, nil)
 	if err != nil {
 		return errors.Trace(err)
@@ -168,9 +167,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("owner start finished SyncBroadcastMessage")
 	err = k.mqProducer.SyncBroadcastMessage(ctx, keyByte, valueByte)
-	log.Info("finished SyncBroadcastMessage")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -183,7 +180,6 @@ func (k *mqSink) CheckpointTs() uint64 {
 
 func (k *mqSink) Run(ctx context.Context) error {
 	wg, cctx := errgroup.WithContext(ctx)
-	log.Info("IsOwner", zap.Bool("b", util.IsOwnerFromCtx(ctx)))
 	if !util.IsOwnerFromCtx(ctx) {
 		wg.Go(func() error {
 			return k.run(cctx)
@@ -217,15 +213,12 @@ func (k *mqSink) run(ctx context.Context) error {
 
 		// wait mq producer send message successfully
 		for sinkCheckpoint.index > k.mqProducer.MaxSuccessesIndex() {
-			log.Info("wait index", zap.Uint64("sinkCheckpoint.index", sinkCheckpoint.index))
 			time.Sleep(20 * time.Millisecond)
 		}
 		globalResolvedTs := atomic.LoadUint64(&k.globalResolvedTs)
-		log.Info("global resolved", zap.Uint64("globalResolved", globalResolvedTs))
 		// when local resolvedTS is fallback, we will postpone to pushing global resolvedTS
 		// check if the global resolvedTS is postponed
 
-		log.Info("sinkCheckpoint.ts", zap.Uint64("sinkCheckpoint.ts", sinkCheckpoint.ts))
 		if globalResolvedTs < sinkCheckpoint.ts {
 			sinkCheckpoint.ts = globalResolvedTs
 		}
