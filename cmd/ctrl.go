@@ -28,8 +28,8 @@ import (
 )
 
 var (
-	changefeedID string
-	captureID    string
+	changefeedID *string
+	captureID    *string
 )
 
 // cf holds changefeed id, which is used for output only
@@ -126,11 +126,11 @@ func newQueryChangefeedCommand() *cobra.Command {
 		Use:   "query",
 		Short: "Query information and status of a replicaiton task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			info, err := cdcEtcdCli.GetChangeFeedInfo(context.Background(), changefeedID)
+			info, err := cdcEtcdCli.GetChangeFeedInfo(context.Background(), *changefeedID)
 			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 				return err
 			}
-			status, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
+			status, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), *changefeedID)
 			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 				return err
 			}
@@ -138,7 +138,8 @@ func newQueryChangefeedCommand() *cobra.Command {
 			return jsonPrint(cmd, meta)
 		},
 	}
-	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
+	changefeedID = command.PersistentFlags().String("changefeed-id", "", "Replication task (changefeed) ID")
+	_ = command.MarkPersistentFlagRequired("changefeed-id")
 	return command
 }
 
@@ -147,11 +148,11 @@ func newQueryProcessorCommand() *cobra.Command {
 		Use:   "query",
 		Short: "Query information and status of a sub replication task (processor)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, status, err := cdcEtcdCli.GetTaskStatus(context.Background(), changefeedID, captureID)
+			_, status, err := cdcEtcdCli.GetTaskStatus(context.Background(), *changefeedID, *captureID)
 			if err != nil && errors.Cause(err) != model.ErrTaskStatusNotExists {
 				return err
 			}
-			_, position, err := cdcEtcdCli.GetTaskPosition(context.Background(), changefeedID, captureID)
+			_, position, err := cdcEtcdCli.GetTaskPosition(context.Background(), *changefeedID, *captureID)
 			if err != nil && errors.Cause(err) != model.ErrTaskPositionNotExists {
 				return err
 			}
@@ -159,8 +160,11 @@ func newQueryProcessorCommand() *cobra.Command {
 			return jsonPrint(cmd, meta)
 		},
 	}
-	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
-	command.PersistentFlags().StringVar(&captureID, "capture-id", "", "Capture ID")
+	changefeedID = command.PersistentFlags().String("changefeed-id", "", "Replication task (changefeed) ID")
+	captureID = command.PersistentFlags().String("capture-id", "", "Capture ID")
+
+	_ = command.MarkPersistentFlagRequired("changefeed-id")
+	_ = command.MarkPersistentFlagRequired("capture-id")
 	return command
 }
 

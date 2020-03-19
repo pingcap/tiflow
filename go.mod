@@ -8,6 +8,7 @@ require (
 	github.com/Shopify/sarama v1.26.1
 	github.com/biogo/store v0.0.0-20190426020002-884f370e325d
 	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/chzyer/readline v0.0.0-20171208011716-f6d7a1f6fbf3
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/golang/groupcache v0.0.0-20191227052852-215e87163ea7 // indirect
@@ -16,6 +17,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.9 // indirect
 	github.com/klauspost/compress v1.10.2 // indirect
+	github.com/mattn/go-shellwords v1.0.3
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20191216031241-8a5a85928f12
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
