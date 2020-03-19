@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"math"
 	"net/url"
 	"os"
@@ -13,6 +14,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
@@ -29,7 +32,7 @@ var (
 	kafkaAddrs        []string
 	kafkaTopic        string
 	kafkaPartitionNum int32
-	kafkaGroupID      = "ticdc_kafka_consumer"
+	kafkaGroupID      = fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
 	kafkaVersion      = "2.4.0"
 
 	downstreamURIStr string
@@ -61,18 +64,9 @@ func init() {
 	}
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if scheme != "kafka" {
-		log.Fatal("invalid upstream-uri scheme, the scheme of upstream-uri must be `kafka`")
+		log.Fatal("invalid upstream-uri scheme, the scheme of upstream-uri must be `kafka`", zap.String("upstream-uri", upstreamURIStr))
 	}
-	s := upstreamURI.Query().Get("partition-num")
-	if s == "" {
-		log.Fatal("partition-num of upstream-uri can not be empty")
-	}
-	c, err := strconv.Atoi(s)
-	if err != nil {
-		log.Fatal("invalid partition-num of upstream-uri")
-	}
-	kafkaPartitionNum = int32(c)
-	s = upstreamURI.Query().Get("version")
+	s := upstreamURI.Query().Get("version")
 	if s != "" {
 		kafkaVersion = s
 	}
@@ -84,8 +78,69 @@ func init() {
 		return r == '/'
 	})
 	kafkaAddrs = strings.Split(upstreamURI.Host, ",")
+
+	config, err := newSaramaConfig()
+	if err != nil {
+		log.Fatal("Error creating sarama config", zap.Error(err))
+	}
+
+	s = upstreamURI.Query().Get("partition-num")
+	if s == "" {
+		partition, err := getPartitionNum(kafkaAddrs, kafkaTopic, config)
+		if err != nil {
+			log.Fatal("can not get partition number", zap.String("topic", kafkaTopic), zap.Error(err))
+		}
+		kafkaPartitionNum = partition
+	} else {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			log.Fatal("invalid partition-num of upstream-uri")
+		}
+		kafkaPartitionNum = int32(c)
+	}
 }
 
+func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
+	// get partition number or create topic automatically
+	admin, err := sarama.NewClusterAdmin(address, cfg)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	topics, err := admin.ListTopics()
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	err = admin.Close()
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	topicDetail, exist := topics[topic]
+	if !exist {
+		return 0, errors.Errorf("can not find topic %s", topic)
+	}
+	log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
+	return topicDetail.NumPartitions, nil
+}
+
+func waitTopicCreated(address []string, topic string, cfg *sarama.Config) error {
+	admin, err := sarama.NewClusterAdmin(address, cfg)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer admin.Close()
+	for i := 0; i <= 10; i++ {
+		topics, err := admin.ListTopics()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if _, ok := topics[topic]; ok {
+			return nil
+		}
+		log.Info("wait the topic created", zap.String("topic", topic))
+		time.Sleep(1 * time.Second)
+	}
+	return errors.Errorf("wait the topic(%s) created timeout", topic)
+}
 func newSaramaConfig() (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
@@ -116,7 +171,10 @@ func main() {
 	if err != nil {
 		log.Fatal("Error creating sarama config", zap.Error(err))
 	}
-
+	err = waitTopicCreated(kafkaAddrs, kafkaTopic, config)
+	if err != nil {
+		log.Fatal("wait topic created failed", zap.Error(err))
+	}
 	/**
 	 * Setup a new Sarama consumer group
 	 */

@@ -1,6 +1,6 @@
 ### Makefile for ticdc
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
-	integration_test_build integration_test
+	integration_test_build integration_test integration_test_mysql integration_test_kafka
 
 PROJECT=ticdc
 
@@ -86,8 +86,13 @@ integration_test_build: check_failpoint_ctl
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
-integration_test: check_third_party_binary
-	tests/run.sh $(CASE)
+integration_test: integration_test_mysql
+
+integration_test_mysql: check_third_party_binary
+	tests/run.sh $(CASE) mysql
+
+integration_test_kafka: check_third_party_binary
+	tests/run.sh $(CASE) kafka
 
 fmt:
 	@echo "gofmt (simplify)"

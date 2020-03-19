@@ -145,6 +145,10 @@ func (c *changeFeed) reAddTable(id, startTs uint64) {
 	}
 }
 
+func (c *changeFeed) run(ctx context.Context) error {
+	return c.sink.Run(ctx)
+}
+
 func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
@@ -654,6 +658,12 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
 		o.changeFeeds[changeFeedID] = newCf
+		go func() {
+			err := newCf.run(ctx)
+			if errors.Cause(err) != context.Canceled {
+				log.Error("run changefeed failed", zap.Error(err))
+			}
+		}()
 	}
 
 	for _, changefeed := range o.changeFeeds {
@@ -1020,6 +1030,7 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 				ownerChanged = true
 				continue
 			}
+			ctx := util.SetOwnerInCtx(ctx)
 			if ownerChanged {
 				// Do something initialize when the capture becomes an owner.
 				ownerChanged = false
