@@ -51,9 +51,11 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			if util.IsOwnerFromCtx(ctx) {
+				log.Info("exit run kafkaSaramaProducer")
+			}
 			return errors.Trace(ctx.Err())
 		case msg := <-k.asyncClient.Successes():
-
 			if util.IsOwnerFromCtx(ctx) {
 				log.Info("owner successes", zap.Reflect("msg", msg))
 			}
@@ -159,7 +161,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	if err != nil {
 		return nil, err
 	}
-	log.Info("Starting kafka sarama producer ...", zap.Any("config", cfg))
+	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", cfg))
 	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
