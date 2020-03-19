@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -93,6 +94,23 @@ func (k *kafkaSaramaProducer) BroadcastMessage(ctx context.Context, key []byte, 
 		lastIndex, err = k.SendMessage(ctx, key, value, i, callback)
 	}
 	return lastIndex, err
+}
+
+func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error {
+	var wg sync.WaitGroup
+	wg.Add(int(k.partitionNum))
+	var err error
+	_, err = k.BroadcastMessage(ctx, key, value, func(err2 error) {
+		if err2 != nil || err == nil {
+			err = err2
+		}
+		wg.Done()
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	wg.Wait()
+	return nil
 }
 
 func (k *kafkaSaramaProducer) MaxSuccessesIndex() uint64 {
