@@ -43,11 +43,10 @@ You can setup a CDC cluster for replication test manually as following:
 $ docker-compose -f docker-compose.yml up -d
 
 # Attach to control container to run TiCDC
-$ docker exec -it ticdc_control_1 sh
+$ docker exec -it ticdc_controller_1 sh
 
 # Start to feed the changes on the upstream tidb, and sink to the downstream tidb
-$ ./cdc cli changefeed create --pd http://upstream-pd:2379 --sink-uri mysql://root@dow
-nstream-tidb:4000/
+$ ./cdc cli changefeed create --pd http://upstream-pd:2379 --sink-uri mysql://root@downstream-tidb:4000/
 
 # Exit the control container
 $ exit
