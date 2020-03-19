@@ -6,6 +6,7 @@ CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
+SINK_TYPE=$1
 
 CDC_COUNT=3
 DB_COUNT=4
@@ -31,7 +32,17 @@ function run() {
     for i in $(seq $CDC_COUNT); do
         run_cdc_server $WORK_DIR $CDC_BINARY "$i"
     done
-    cdc cli changefeed create --start-ts=$start_ts --sink-uri="mysql://root@127.0.0.1:3306/"
+
+    TOPIC_NAME="ticdc-multi-capture-test-$RANDOM"
+    case $SINK_TYPE in
+        kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
+        mysql) ;&
+        *) SINK_URI="mysql://root@127.0.0.1:3306/";;
+    esac
+    cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+    if [ "$SINK_TYPE" == "kafka" ]; then
+      run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
+    fi
 
     # check tables are created and data is synchronized
     for i in $(seq $DB_COUNT); do
