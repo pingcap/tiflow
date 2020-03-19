@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -55,6 +57,9 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 }
 
 func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32, callback func(err error)) (uint64, error) {
+	if util.IsOwnerFromCtx(ctx) {
+		log.Info("send message", zap.ByteString("key", key), zap.ByteString("value", value), zap.Int32("partition", partition))
+	}
 	index := atomic.AddUint64(&k.currentIndex, 1)
 	atomic.StoreUint64(&k.partitionMaxSentIndex[partition], index)
 
@@ -74,6 +79,9 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 		Partition: partition,
 		Metadata:  cb,
 	}:
+	}
+	if util.IsOwnerFromCtx(ctx) {
+		log.Info("finish sent", zap.Uint64("index", index))
 	}
 	return index, nil
 }

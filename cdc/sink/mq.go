@@ -68,6 +68,7 @@ func (k *mqSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("emit cpoint ts", zap.ByteString("b", keyByte))
 	_, err = k.mqProducer.BroadcastMessage(ctx, keyByte, nil, func(err error) {
 		if err != nil {
 			log.Error("failed to send checkpoint event to kafka", zap.Error(err), zap.Uint64("ts", ts))
