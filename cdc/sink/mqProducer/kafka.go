@@ -2,6 +2,7 @@ package mqProducer
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strings"
 	"sync/atomic"
@@ -52,11 +53,16 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case msg := <-k.asyncClient.Successes():
-			log.Info("successes", zap.Reflect("msg", msg))
+
+			if util.IsOwnerFromCtx(ctx) {
+				log.Info("owner successes", zap.Reflect("msg", msg))
+			}
 			cb := msg.Metadata.(func(error))
 			cb(nil)
 		case err := <-k.asyncClient.Errors():
-			log.Info("error", zap.Reflect("err", err))
+			if util.IsOwnerFromCtx(ctx) {
+				log.Info("owner error", zap.Reflect("err", err))
+			}
 			cb := err.Msg.Metadata.(func(error))
 			cb(err.Err)
 		}
@@ -65,7 +71,7 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 
 func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32, callback func(err error)) (uint64, error) {
 	if util.IsOwnerFromCtx(ctx) {
-		log.Info("send message", zap.ByteString("key", key), zap.ByteString("value", value), zap.Int32("partition", partition))
+		log.Info("owner send message", zap.ByteString("key", key), zap.ByteString("value", value), zap.Int32("partition", partition))
 	}
 	index := atomic.AddUint64(&k.currentIndex, 1)
 	atomic.StoreUint64(&k.partitionMaxSentIndex[partition], index)
@@ -88,7 +94,7 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 	}:
 	}
 	if util.IsOwnerFromCtx(ctx) {
-		log.Info("finish sent", zap.Uint64("index", index))
+		log.Info("owner finish sent", zap.Uint64("index", index))
 	}
 	return index, nil
 }
@@ -148,11 +154,12 @@ func (k *kafkaSaramaProducer) MaxSuccessesIndex() uint64 {
 }
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(address string, topic string, config KafkaConfig) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config KafkaConfig) (*kafkaSaramaProducer, error) {
 	cfg, err := newSaramaConfig(config)
 	if err != nil {
 		return nil, err
 	}
+	log.Info("Starting kafka sarama producer ...", zap.Any("config", cfg))
 	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -208,17 +215,24 @@ func NewKafkaSaramaProducer(address string, topic string, config KafkaConfig) (*
 }
 
 // NewSaramaConfig return the default config and set the according version and metrics
-func newSaramaConfig(c KafkaConfig) (*sarama.Config, error) {
+func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
 	version, err := sarama.ParseKafkaVersion(c.Version)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	var role string
+	if util.IsOwnerFromCtx(ctx) {
+		role = "owner"
+	} else {
+		role = "processor"
+	}
+	captureId := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
-	config.ClientID = "ticdc_kafka_sarama_producer"
+	config.ClientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureId, changefeedID)
 	config.Version = version
-	log.Debug("kafka consumer", zap.Stringer("version", version))
 
 	config.Producer.Flush.MaxMessages = c.MaxMessageBytes
 	config.Metadata.Retry.Max = 10000

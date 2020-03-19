@@ -68,7 +68,7 @@ func (k *mqSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("emit cpoint ts", zap.ByteString("b", keyByte))
+	log.Info("owner emit cpoint ts", zap.ByteString("b", keyByte))
 	err = k.mqProducer.SyncBroadcastMessage(ctx, keyByte, nil)
 	if err != nil {
 		return errors.Trace(err)
@@ -168,6 +168,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("owner start finished SyncBroadcastMessage")
 	err = k.mqProducer.SyncBroadcastMessage(ctx, keyByte, valueByte)
 	log.Info("finished SyncBroadcastMessage")
 	if err != nil {
