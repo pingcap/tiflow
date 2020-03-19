@@ -145,10 +145,6 @@ func (c *changeFeed) reAddTable(id, startTs uint64) {
 	}
 }
 
-func (c *changeFeed) run(ctx context.Context) error {
-	return c.sink.Run(ctx)
-}
-
 func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
@@ -592,6 +588,12 @@ func (o *ownerImpl) newChangeFeed(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	go func() {
+		ctx := util.SetOwnerInCtx(context.TODO())
+		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
+			log.Error("failed to close sink", zap.Error(err))
+		}
+	}()
 
 	cf := &changeFeed{
 		info:          info,
@@ -659,12 +661,6 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
 		o.changeFeeds[changeFeedID] = newCf
-		go func() {
-			err := newCf.run(ctx)
-			if errors.Cause(err) != context.Canceled {
-				log.Error("run changefeed failed", zap.Error(err))
-			}
-		}()
 	}
 
 	for _, changefeed := range o.changeFeeds {
@@ -922,6 +918,8 @@ func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	}
 	err = cf.ddlHandler.Close()
 	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
+	err = cf.sink.Close()
+	log.Info("stop changefeed sink", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
 	delete(o.changeFeeds, job.CfID)
 	return nil
 }

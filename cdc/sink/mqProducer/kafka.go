@@ -42,6 +42,8 @@ type kafkaSaramaProducer struct {
 
 	partitionMaxSentIndex    []uint64
 	partitionMaxSucceedIndex []uint64
+
+	closeCh chan struct{}
 }
 
 func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
@@ -55,6 +57,8 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 				log.Info("exit run kafkaSaramaProducer")
 			}
 			return errors.Trace(ctx.Err())
+		case <-k.closeCh:
+			return nil
 		case msg := <-k.asyncClient.Successes():
 			if util.IsOwnerFromCtx(ctx) {
 				log.Info("owner successes", zap.Reflect("msg", msg))
@@ -213,6 +217,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 		partitionNum:             partitionNum,
 		partitionMaxSucceedIndex: make([]uint64, partitionNum),
 		partitionMaxSentIndex:    make([]uint64, partitionNum),
+		closeCh:                  make(chan struct{}),
 	}, nil
 }
 
@@ -256,5 +261,6 @@ func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
 }
 
 func (k *kafkaSaramaProducer) Close() error {
+	close(k.closeCh)
 	return k.asyncClient.Close()
 }

@@ -48,6 +48,7 @@ type Sink interface {
 	Run(ctx context.Context) error
 	// PrintStatus prints necessary status periodically
 	PrintStatus(ctx context.Context) error
+	Close() error
 }
 
 // DSNScheme is the scheme name of DSN

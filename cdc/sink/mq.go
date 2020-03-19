@@ -196,13 +196,6 @@ func (k *mqSink) Run(ctx context.Context) error {
 }
 
 func (k *mqSink) run(ctx context.Context) error {
-	closeSink := func() {
-		err := k.mqProducer.Close()
-		if err != nil {
-			log.Error("close MQ Producer failed", zap.Error(err))
-		}
-		close(k.errCh)
-	}
 	for {
 		var sinkCheckpoint struct {
 			ts    uint64
@@ -210,10 +203,14 @@ func (k *mqSink) run(ctx context.Context) error {
 		}
 		select {
 		case <-ctx.Done():
-			closeSink()
+			if err := k.Close(); err != nil {
+				log.Error("close mq sink failed", zap.Error(err))
+			}
 			return ctx.Err()
 		case err := <-k.errCh:
-			closeSink()
+			if err := k.Close(); err != nil {
+				log.Error("close mq sink failed", zap.Error(err))
+			}
 			return err
 		case sinkCheckpoint = <-k.sinkCheckpointTsCh:
 		}
@@ -234,6 +231,15 @@ func (k *mqSink) run(ctx context.Context) error {
 		}
 		atomic.StoreUint64(&k.checkpointTs, sinkCheckpoint.ts)
 	}
+}
+
+func (k *mqSink) Close() error {
+	err := k.mqProducer.Close()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	close(k.errCh)
+	return nil
 }
 
 func (k *mqSink) PrintStatus(ctx context.Context) error {
