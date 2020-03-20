@@ -121,7 +121,12 @@ func (s *Server) run(ctx context.Context) (err error) {
 	}()
 	defer cancel()
 
-	go s.capture.Run(ctx)
+	go func() {
+		if err := s.capture.Run(ctx); err != nil {
+			log.Error("capture run failed", zap.Error(err))
+			cancel()
+		}
+	}()
 
 	// Campaign to be an owner, it blocks until it becomes
 	// the owner
