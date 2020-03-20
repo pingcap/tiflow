@@ -693,5 +693,9 @@ func (s *Storage) IsTruncateTableID(id int64) bool {
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
 func skipJob(job *timodel.Job) bool {
+	switch job.Type {
+	case timodel.ActionSetTiFlashReplica, timodel.ActionUpdateTiFlashReplicaStatus:
+		return true
+	}
 	return !job.IsSynced() && !job.IsDone()
 }
