@@ -19,7 +19,7 @@ cd $OUT_DIR && echo "start tidb cluster in $OUT_DIR"
 cat - > "$OUT_DIR/pd-config.toml" <<EOF
 [replication]
 # The number of replicas for each region.
-max-replicas = 1
+# max-replicas = 1
 EOF
 
 echo "Starting Upstream PD..."
@@ -64,16 +64,38 @@ sync-log = false
 EOF
 
 # tidb server config file
-cat - > "$OUT_DIR/tidb-config.toml" <<EOF
+cat - > "$OUT_DIR/tidb-config1.toml" <<EOF
+split-table = true
+EOF
+
+cat - > "$OUT_DIR/tidb-config2.toml" <<EOF
+split-table = true
+EOF
+
+cat - > "$OUT_DIR/tidb-config3.toml" <<EOF
 split-table = true
 EOF
 
 echo "Starting Upstream TiKV..."
 tikv-server \
     --pd ${UP_PD_HOST}:${UP_PD_PORT} \
-    -A ${UP_TIKV_HOST}:${UP_TIKV_PORT} \
-    --log-file "$OUT_DIR/tikv.log" \
-    -C "$OUT_DIR/tikv-config.toml" \
+    -A ${UP_TIKV_HOST_1}:${UP_TIKV_PORT_1} \
+    --log-file "$OUT_DIR/tikv1.log" \
+    -C "$OUT_DIR/tikv-config1.toml" \
+    -s "$OUT_DIR/tikv" &
+
+tikv-server \
+    --pd ${UP_PD_HOST}:${UP_PD_PORT} \
+    -A ${UP_TIKV_HOST_2}:${UP_TIKV_PORT_2} \
+    --log-file "$OUT_DIR/tikv2.log" \
+    -C "$OUT_DIR/tikv-config2.toml" \
+    -s "$OUT_DIR/tikv" &
+
+tikv-server \
+    --pd ${UP_PD_HOST}:${UP_PD_PORT} \
+    -A ${UP_TIKV_HOST_3}:${UP_TIKV_PORT_3} \
+    --log-file "$OUT_DIR/tikv3.log" \
+    -C "$OUT_DIR/tikv-config3.toml" \
     -s "$OUT_DIR/tikv" &
 
 echo "Starting Downstream TiKV..."
