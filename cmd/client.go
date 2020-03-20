@@ -117,6 +117,7 @@ func newChangefeedCommand() *cobra.Command {
 		newListChangefeedCommand(),
 		newQueryChangefeedCommand(),
 		newCreateChangefeedCommand(),
+		newStatisticsChangefeedCommand(),
 		// TODO: add stop, resume, delete changefeed
 	)
 	return command
@@ -301,7 +302,7 @@ func loop() {
 		command := newCliCommand()
 		command.SetArgs(args)
 		_ = command.ParseFlags(args)
-		command.SetOutput((os.Stdout))
+		command.SetOutput(os.Stdout)
 		if err = command.Execute(); err != nil {
 			command.Println(err)
 		}

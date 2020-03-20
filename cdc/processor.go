@@ -338,7 +338,9 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			if p.position.CheckPointTs >= checkpointTs {
 				continue
 			}
+			count := p.sink.Count()
 			p.position.CheckPointTs = checkpointTs
+			p.position.Count = count
 			checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(checkpointTs)))
 		case <-updateInfoTick.C:
 			err := updateInfo()
@@ -713,6 +715,7 @@ func (p *processor) register(ctx context.Context) error {
 	}
 	return p.etcdCli.PutProcessorInfo(ctx, p.captureID, info, p.session.Lease())
 }
+
 func (p *processor) deregister(ctx context.Context) error {
 	return p.etcdCli.DeleteProcessorInfo(ctx, p.captureID, p.id)
 }
