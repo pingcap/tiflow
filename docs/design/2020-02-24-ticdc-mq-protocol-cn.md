@@ -127,6 +127,9 @@ Value:
 
 ## Kafka 分区策略
 
+* Row Changed Event 根据一定的分区算法分发至不同的 partition
+* Resolved Event 和 DDL Event 广播至所有的 partition
+
 ### Row Changed Event 划分 Partition 算法
 
 #### _tidb_row_id 分发
@@ -154,7 +157,7 @@ Value:
 
 * 无，但是这种分发方式粒度粗，partition 之间负载不均
 
-4、冲突检测分发
+#### 冲突检测分发
 
 检测 pk or uk 冲突，将不冲突的 row 写入不同的 partition。发生冲突时向下游写入用于对齐进度的 Event
 
@@ -243,14 +246,9 @@ CDC 同步模型中，CDC Global CheckpointTS 的意义是所有（CommitTS <= C
 
 * 对于一个 Row Event：
     * Msg Key = (SchemaName，TableName，CommitTS) , Msg Value = Change Event Value。
-    * 根据 (SchemaName，TableName，RowID) 计算 Hash，确定 partition，写入到对应的 partiton。
+    * 根据相应的分区算法计算 Hash，确定 partition，写入到对应的 partition。
 * 对于一个 Processor
     * Processor 需要保证按 CommitTS 递增顺序输出 Row Changed Event。
-
-#### Hash 分片：
-
-根据 (SchemaName，TableName，RowID) 计算 Hash 分片 ，可以保证同一行的 Row Event 一定会分配到同一个 partition。因此 partition 间的数据可以并发执行，互不影响。
-Kafka consumer 可以根据 Msg Key 对 Msg 进行初步过滤（过滤库/表）。
 
 ## Kafka Consumer 逻辑
 
