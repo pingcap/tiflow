@@ -52,9 +52,7 @@ type Owner struct {
 	pdClient    pd.Client
 	etcdClient  kv.CDCEtcdClient
 
-	captureWatchC      <-chan *CaptureInfoWatchResp
-	cancelWatchCapture func()
-	captures           map[model.CaptureID]*model.CaptureInfo
+	captures map[model.CaptureID]*model.CaptureInfo
 
 	adminJobs     []model.AdminJob
 	adminJobsLock sync.Mutex
