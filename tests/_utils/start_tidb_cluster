@@ -242,7 +242,6 @@ max-open-files = 1000
 block-cache-size = "1GB"
 EOF
 
-set -x
 echo "Starting Upstream TiFlash..."
 mkdir -p ${OUT_DIR}/tiflash/ && cp $CUR/tiflash-users.toml ${OUT_DIR}/tiflash/users.toml
 tiflash server --config-file "$OUT_DIR/tiflash-config.toml" &
