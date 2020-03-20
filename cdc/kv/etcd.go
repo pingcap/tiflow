@@ -30,9 +30,9 @@ const (
 	// EtcdKeyBase is the common prefix of the keys in CDC
 	EtcdKeyBase = "/tidb/cdc"
 	// CaptureOwnerKey is the capture owner path that is saved to etcd
-	CaptureOwnerKey = EtcdKeyBase + "/capture/owner"
+	CaptureOwnerKey = EtcdKeyBase + "/owner"
 	// CaptureInfoKeyPrefix is the capture info path that is saved to etcd
-	CaptureInfoKeyPrefix = EtcdKeyBase + "/capture/info"
+	CaptureInfoKeyPrefix = EtcdKeyBase + "/capture"
 
 	// ProcessorInfoKeyPrefix is the processor info path that is saved to etcd
 	ProcessorInfoKeyPrefix = EtcdKeyBase + "/processor/info"

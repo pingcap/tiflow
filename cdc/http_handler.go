@@ -49,7 +49,7 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
 		return
 	}
-	err := s.capture.ownerManager.ResignOwner(req.Context())
+	err := s.capture.Resign(req.Context())
 	handleOwnerResp(w, err)
 }
 
@@ -73,6 +73,6 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		CfID: req.Form.Get(opVarChangefeedID),
 		Type: model.AdminJobType(typ),
 	}
-	err = s.capture.ownerWorker.EnqueueJob(job)
+	err = s.owner.EnqueueJob(job)
 	handleOwnerResp(w, err)
 }
