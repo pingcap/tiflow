@@ -178,7 +178,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 
 func newStatisticsChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "statitics",
+		Use:   "statistics",
 		Short: "Periodically check and output the status of a replicaiton task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sc := make(chan os.Signal, 1)
@@ -229,7 +229,6 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
 	command.PersistentFlags().UintVar(&interval, "interval", 10, "Interval for outputing the latest statistics")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
-	_ = command.MarkPersistentFlagRequired("interval")
 	return command
 }
 

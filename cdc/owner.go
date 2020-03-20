@@ -210,7 +210,7 @@ func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo
 
 func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo) {
 	c.cleanTables(ctx)
-	c.banlanceOrphanTables(ctx, captures)
+	c.balanceOrphanTables(ctx, captures)
 }
 
 func (c *changeFeed) restoreTableInfos(infoSnapshot *model.TaskStatus, captureID string) {
@@ -272,7 +272,7 @@ func findTaskStatusWithTable(infos model.ProcessorsInfos, tableID uint64) (captu
 	return "", nil, false
 }
 
-func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo) {
+func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo) {
 	if len(captures) == 0 {
 		return
 	}
@@ -858,7 +858,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return errors.Trace(err)
 	}
 
-	c.banlanceOrphanTables(ctx, captures)
+	c.balanceOrphanTables(ctx, captures)
 
 	err = c.sink.EmitDDLEvent(ctx, ddlEvent)
 	// If DDL executing failed, pause the changefeed and print log, rather
