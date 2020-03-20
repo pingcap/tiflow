@@ -18,8 +18,9 @@ cd $OUT_DIR && echo "start tidb cluster in $OUT_DIR"
 
 cat - > "$OUT_DIR/pd-config.toml" <<EOF
 [replication]
-# The number of replicas for each region.
-# max-replicas = 1
+# Set it to 1 to make sure we have enough replicas to run placement-rules.
+max-replicas = 1
+enable-placement-rules = true
 EOF
 
 echo "Starting Upstream PD..."
@@ -212,6 +213,10 @@ EOF
 cat - > "$OUT_DIR/tiflash-proxy.toml" <<EOF
 log-level = "info"
 
+[server]
+engine-addr = "127.0.0.1:9500"
+status-addr = "127.0.0.1:17000"
+
 [raftstore]
 sync-log = true
 capacity = "100GB"
@@ -237,18 +242,18 @@ max-open-files = 1000
 block-cache-size = "1GB"
 EOF
 
+set -x
 echo "Starting Upstream TiFlash..."
 mkdir -p ${OUT_DIR}/tiflash/ && cp $CUR/tiflash-users.toml ${OUT_DIR}/tiflash/users.toml
 tiflash server --config-file "$OUT_DIR/tiflash-config.toml" &
 
 echo "Verifying Upsteam TiFlash is started..."
-sleep 3
-# TODO make sure TiFlash is started.
-# while ! nc -z "127.0.0.1" "5000" 1>/dev/null 2>&1 ; do
-#     i=$((i+1))
-#     if [ "$i" -gt 10 ]; then
-#         echo 'Failed to start TiFlash'
-#         exit 1
-#     fi
-#     sleep 2
-# done
+# Make sure TiFlash is started.
+while ! nc -z "127.0.0.1" "5000" 1>/dev/null 2>&1 ; do
+    i=$((i+1))
+    if [ "$i" -gt 10 ]; then
+        echo 'Failed to start TiFlash'
+        exit 1
+    fi
+    sleep 2
+done
