@@ -248,7 +248,7 @@ tiflash server --config-file "$OUT_DIR/tiflash-config.toml" &
 
 echo "Verifying Upsteam TiFlash is started..."
 # Make sure TiFlash is started.
-while ! nc -z "127.0.0.1" "5000" 1>/dev/null 2>&1 ; do
+while ! curl -o /dev/null -sf http://127.0.0.1:17000/metrics 1>/dev/null 2>&1 ; do
     i=$((i+1))
     if [ "$i" -gt 10 ]; then
         cat ${OUT_DIR}/tiflash/log/proxy.log
