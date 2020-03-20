@@ -625,7 +625,7 @@ func (o *Owner) watchProcessorInfo(ctx context.Context) error {
 		zap.Int64("rev", rev))
 	ch := o.etcdClient.Client.Watch(ctx, kv.ProcessorInfoKeyPrefix,
 		clientv3.WithPrefix(),
-		clientv3.WithRev(rev),
+		clientv3.WithRev(rev+1),
 		clientv3.WithPrevKV())
 
 	for resp := range ch {
@@ -742,7 +742,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 		zap.Int64("rev", rev))
 	ch := o.etcdClient.Client.Watch(ctx, kv.CaptureInfoKeyPrefix,
 		clientv3.WithPrefix(),
-		clientv3.WithRev(rev),
+		clientv3.WithRev(rev+1),
 		clientv3.WithPrevKV())
 
 	for resp := range ch {
