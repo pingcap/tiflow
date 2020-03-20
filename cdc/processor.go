@@ -338,9 +338,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			if p.position.CheckPointTs >= checkpointTs {
 				continue
 			}
-			count := p.sink.Count()
 			p.position.CheckPointTs = checkpointTs
-			p.position.Count = count
 			checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(checkpointTs)))
 		case <-updateInfoTick.C:
 			err := updateInfo()
@@ -352,6 +350,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 }
 
 func (p *processor) updateInfo(ctx context.Context) error {
+	p.position.Count = p.sink.Count()
 	err := p.tsRWriter.WritePosition(ctx, p.position)
 	if err != nil {
 		return errors.Trace(err)
