@@ -1,6 +1,6 @@
 ### Makefile for ticdc
 .PHONY: build test check clean fmt cdc kafka_consumer coverage \
-	integration_test_build integration_test
+	integration_test_build integration_test integration_test_mysql integration_test_kafka
 
 PROJECT=ticdc
 
@@ -15,7 +15,11 @@ SHELL	 := /usr/bin/env bash
 
 GO       := GO111MODULE=on go
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
+ifeq ($(GOVERSION114), 1)
+GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race -gcflags=all=-d=checkptr=0
+else
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race
+endif
 
 ARCH  := "`uname -s`"
 LINUX := "Linux"
@@ -86,8 +90,13 @@ integration_test_build: check_failpoint_ctl
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
-integration_test: check_third_party_binary
-	tests/run.sh $(CASE)
+integration_test: integration_test_mysql
+
+integration_test_mysql: check_third_party_binary
+	tests/run.sh $(CASE) mysql
+
+integration_test_kafka: check_third_party_binary
+	tests/run.sh $(CASE) kafka
 
 fmt:
 	@echo "gofmt (simplify)"

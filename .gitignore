@@ -38,3 +38,7 @@ cmd/cdc/cdc
 
 # Files generated when testing
 vendor/
+
+# Files generated when running docker-compose
+docker/data
+docker/logs

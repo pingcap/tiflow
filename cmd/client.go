@@ -2,13 +2,18 @@ package cmd
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/chzyer/readline"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/google/uuid"
+	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -23,7 +28,10 @@ import (
 )
 
 func init() {
-	rootCmd.AddCommand(newCliCommand())
+	cliCmd := newCliCommand()
+	cliCmd.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address")
+	cliCmd.PersistentFlags().BoolVarP(&interact, "interact", "i", false, "Run cdc cli with readline")
+	rootCmd.AddCommand(cliCmd)
 }
 
 var (
@@ -36,6 +44,8 @@ var (
 
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client
+
+	interact bool
 )
 
 func newCliCommand() *cobra.Command {
@@ -69,6 +79,11 @@ func newCliCommand() *cobra.Command {
 
 			return nil
 		},
+		Run: func(cmd *cobra.Command, args []string) {
+			if interact {
+				loop()
+			}
+		},
 	}
 	command.AddCommand(
 		newCaptureCommand(),
@@ -77,7 +92,6 @@ func newCliCommand() *cobra.Command {
 		newMetadataCommand(),
 		newTsoCommand(),
 	)
-	command.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address")
 
 	return command
 }
@@ -250,4 +264,46 @@ func strictDecodeFile(path, component string, cfg interface{}) error {
 	}
 
 	return errors.Trace(err)
+}
+
+func loop() {
+	l, err := readline.NewEx(&readline.Config{
+		Prompt:            "\033[31m»\033[0m ",
+		HistoryFile:       "/tmp/readline.tmp",
+		InterruptPrompt:   "^C",
+		EOFPrompt:         "^D",
+		HistorySearchFold: true,
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer l.Close()
+
+	for {
+		line, err := l.Readline()
+		if err != nil {
+			if err == readline.ErrInterrupt {
+				break
+			} else if err == io.EOF {
+				break
+			}
+			continue
+		}
+		if line == "exit" {
+			os.Exit(0)
+		}
+		args, err := shellwords.Parse(line)
+		if err != nil {
+			fmt.Printf("parse command err: %v\n", err)
+			continue
+		}
+
+		command := newCliCommand()
+		command.SetArgs(args)
+		_ = command.ParseFlags(args)
+		command.SetOutput((os.Stdout))
+		if err = command.Execute(); err != nil {
+			command.Println(err)
+		}
+	}
 }
