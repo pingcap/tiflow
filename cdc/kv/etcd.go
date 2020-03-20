@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 
+	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 
 	"github.com/pingcap/errors"
@@ -516,4 +517,16 @@ func (c CDCEtcdClient) DeleteProcessorInfo(ctx context.Context, captureID, proce
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+// GetOwnerID returns the owner id by querying etcd
+func (c CDCEtcdClient) GetOwnerID(ctx context.Context, key string) (string, error) {
+	resp, err := c.Client.Get(ctx, key, clientv3.WithFirstCreate()...)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	if len(resp.Kvs) == 0 {
+		return "", concurrency.ErrElectionNoLeader
+	}
+	return string(resp.Kvs[0].Value), nil
 }
