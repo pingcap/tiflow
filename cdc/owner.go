@@ -467,6 +467,7 @@ func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
 		if err != nil {
 			log.Warn("failed to delete capture info", zap.Error(err))
 		}
+		log.Info("delete capture info", zap.String("id", id))
 	}
 }
 

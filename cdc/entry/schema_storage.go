@@ -363,7 +363,7 @@ func (s *Storage) CreateSchema(db *timodel.DBInfo) error {
 	s.schemas[db.ID] = db
 	s.schemaNameToID[db.Name.O] = db.ID
 
-	log.Debug("create schema failed, schema id", zap.String("name", db.Name.O), zap.Int64("id", db.ID))
+	log.Debug("create schema success, schema id", zap.String("name", db.Name.O), zap.Int64("id", db.ID))
 	return nil
 }
 

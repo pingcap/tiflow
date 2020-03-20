@@ -292,7 +292,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		checkpointTsTick.Stop()
 
 		err := updateInfo()
-		if err != nil {
+		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Error("failed to update info", zap.Error(err))
 		}
 
