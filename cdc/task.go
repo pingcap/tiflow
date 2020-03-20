@@ -97,28 +97,14 @@ restart:
 		return
 	}
 	for _, kv := range resp.Kvs {
-		task, err := w.parseTask(ctx, kv.Key, kv.Value)
+		ev, err := w.parseTaskEvent(ctx, kv.Key, kv.Value)
 		if err != nil {
-			log.Warn("parse task failed",
+			log.Warn("parse task event failed",
 				zap.String("captureid", w.capture.info.ID),
 				zap.Error(err))
 			continue
 		}
-		taskStatus := &model.TaskStatus{}
-		if err := taskStatus.Unmarshal(kv.Value); err != nil {
-			log.Warn("unmarshal task status failed",
-				zap.String("captureid", w.capture.info.ID),
-				zap.Error(err))
-			continue
-		}
-		var op TaskEventOp
-		switch taskStatus.AdminJobType {
-		case model.AdminNone, model.AdminResume:
-			op = TaskOpCreate
-		case model.AdminStop, model.AdminRemove:
-			op = TaskOpDelete
-		}
-		events[task.ChangeFeedID] = &TaskEvent{Op: op, Task: task}
+		events[ev.Task.ChangeFeedID] = ev
 	}
 
 	// Rebuild the missed events
@@ -142,29 +128,15 @@ restart:
 		}
 		for _, ev := range wresp.Events {
 			if ev.Type == clientv3.EventTypePut {
-				task, err := w.parseTask(ctx, ev.Kv.Key, ev.Kv.Value)
+				ev, err := w.parseTaskEvent(ctx, ev.Kv.Key, ev.Kv.Value)
 				if err != nil {
-					log.Warn("parse task failed",
+					log.Warn("parse task event failed",
 						zap.String("captureid", w.capture.info.ID),
 						zap.Error(err))
 					continue
 				}
-
-				taskStatus := &model.TaskStatus{}
-				if err := taskStatus.Unmarshal(ev.Kv.Value); err != nil {
-					log.Warn("unmarshal task status failed",
-						zap.String("captureid", w.capture.info.ID),
-						zap.Error(err))
-					continue
-				}
-				var op TaskEventOp
-				switch taskStatus.AdminJobType {
-				case model.AdminNone, model.AdminResume:
-					op = TaskOpCreate
-				case model.AdminStop, model.AdminRemove:
-					op = TaskOpDelete
-				}
-				if err := send(ctx, &TaskEvent{Op: op, Task: task}); err != nil {
+				w.events[ev.Task.ChangeFeedID] = ev
+				if err := send(ctx, ev); err != nil {
 					return
 				}
 			} else if ev.Type == clientv3.EventTypeDelete {
@@ -175,6 +147,7 @@ restart:
 						zap.Error(err))
 					continue
 				}
+				delete(w.events, task.ChangeFeedID)
 				if err := send(ctx, &TaskEvent{Op: TaskOpDelete, Task: task}); err != nil {
 					return
 				}
@@ -200,6 +173,32 @@ func (w *TaskWatcher) parseTask(ctx context.Context,
 	}
 	checkpointTs := cf.GetCheckpointTs(status)
 	return &Task{ChangeFeedID: changeFeedID, CheckpointTS: checkpointTs}, nil
+}
+
+func (w *TaskWatcher) parseTaskEvent(ctx context.Context, key, val []byte) (*TaskEvent, error) {
+	task, err := w.parseTask(ctx, key, val)
+	if err != nil {
+		log.Warn("parse task failed",
+			zap.String("captureid", w.capture.info.ID),
+			zap.Error(err))
+		return nil, err
+	}
+
+	taskStatus := &model.TaskStatus{}
+	if err := taskStatus.Unmarshal(val); err != nil {
+		log.Warn("unmarshal task status failed",
+			zap.String("captureid", w.capture.info.ID),
+			zap.Error(err))
+		return nil, err
+	}
+	var op TaskEventOp
+	switch taskStatus.AdminJobType {
+	case model.AdminNone, model.AdminResume:
+		op = TaskOpCreate
+	case model.AdminStop, model.AdminRemove:
+		op = TaskOpDelete
+	}
+	return &TaskEvent{Op: op, Task: task}, nil
 }
 
 func (w *TaskWatcher) rebuildTaskEvents(latest map[string]*TaskEvent) map[string]*TaskEvent {
