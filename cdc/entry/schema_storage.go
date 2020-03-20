@@ -688,6 +688,7 @@ func (s *Storage) IsTruncateTableID(id int64) bool {
 	return ok
 }
 
+// SkipJob skip the job should not be executed
 // TiDB write DDL Binlog for every DDL Job, we must ignore jobs that are cancelled or rollback
 // For older version TiDB, it write DDL Binlog in the txn that the state of job is changed to *synced*
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
