@@ -13,7 +13,7 @@ def prepare_binaries() {
                     sh """
                         mkdir -p third_bin
                         mkdir -p tmp
-                        curl ${FILE_SERVER_URL}/download/builds/pingcap/tidb/700d9def026185fe836dd56b0c39e0b4df3c320b/centos7/tidb-server.tar.gz | tar xz -C ./tmp bin/tidb-server
+                        curl ${FILE_SERVER_URL}/download/builds/pingcap/tidb/af5ebef98204b1d8c11e8bfe85b9548caa711e40/centos7/tidb-server.tar.gz | tar xz -C ./tmp bin/tidb-server
                         curl ${FILE_SERVER_URL}/download/builds/pingcap/pd/08d927675c8feb30552f9fb27246b120cc9ed6d7/centos7/pd-server.tar.gz | tar xz -C ./tmp bin/*
                         curl ${FILE_SERVER_URL}/download/builds/pingcap/tikv/eeaf4be81fabb71c30f62bc9fd11e77860d47d02/centos7/tikv-server.tar.gz | tar xz -C ./tmp bin/tikv-server
                         mv tmp/bin/* third_bin
