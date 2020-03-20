@@ -5,3 +5,4 @@ killall -9 pd-server || true
 killall -9 tidb-server || true
 killall -9 cdc || true
 killall -9 cdc.test || true
+killall -9 tiflash || true

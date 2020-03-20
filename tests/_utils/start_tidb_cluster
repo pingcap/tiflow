@@ -160,3 +160,24 @@ done
 
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+
+echo "Starting Upstream TiFlash..."
+mkdir -p /tmp/cdc/tiflash
+cp $CUR/tiflash-users.toml /tmp/cdc/tiflash/users.toml
+tiflash server --config-file "$CUR/tiflash-config.toml" &
+
+echo "Verifying Upsteam TiFlash is started..."
+sleep 5
+# TODO make sure TiFlash is started.
+# for ((i=0; i<10; i++)); do
+#     nc -z "127.0.0.1" "5000" 1>/dev/null 2>&1
+#     if [ "$?" == "0" ]; then
+#         local failed='false'
+#         break
+#     else
+#         if [ $((${i} % 10)) = 0 ] && [ ${i} -ge 10 ]; then
+#             echo "#${i} waiting for tiflash raft port 127.0.0.1:5000 ready"
+#         fi
+#         sleep 1
+#     fi
+# done
