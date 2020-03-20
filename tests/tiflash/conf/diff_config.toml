@@ -10,7 +10,7 @@ fix-sql-file = "fix.sql"
 
 # tables need to check.
 [[check-tables]]
-    schema = "row_format"
+    schema = "cdc_tiflash_test"
     tables = ["~.*"]
 
 [[source-db]]
