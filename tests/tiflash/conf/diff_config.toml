@@ -11,7 +11,7 @@ fix-sql-file = "fix.sql"
 # tables need to check.
 [[check-tables]]
     schema = "cdc_tiflash_test"
-    tables = ["~test.*"]
+    tables = ["~.*"]
 
 [[source-db]]
     host = "127.0.0.1"
