@@ -65,7 +65,12 @@ func runProcessor(
 	processor.Run(ctx, errCh)
 
 	go func() {
-		<-errCh
+		err := <-errCh
+		log.Error("error on running processor",
+			zap.String("captureid", captureID),
+			zap.String("changefeedid", changefeedID),
+			zap.String("processorid", processor.id),
+			zap.Error(err))
 		cancel()
 	}()
 
