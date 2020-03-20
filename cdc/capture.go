@@ -147,6 +147,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 					zap.String("changefeedid", task.ChangeFeedID),
 					zap.String("captureid", c.info.ID),
 					zap.Error(err))
+				return err
 			}
 			log.Info("run processor", zap.String("captureid", c.info.ID),
 				zap.String("changefeedid", task.ChangeFeedID))
@@ -158,6 +159,7 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 						zap.String("changefeedid", task.ChangeFeedID),
 						zap.String("captureid", c.info.ID),
 						zap.Error(err))
+					return err
 				}
 				c.processors[task.ChangeFeedID] = p
 			}
