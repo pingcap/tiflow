@@ -73,6 +73,7 @@ func NewOwner(sess *concurrency.Session) (*Owner, error) {
 		changeFeeds:      make(map[model.ChangeFeedID]*changeFeed),
 		activeProcessors: make(map[string]*model.ProcessorInfo),
 		captures:         make(map[model.CaptureID]*model.CaptureInfo),
+		pdEndpoints:      endpoints,
 		cfRWriter:        cli,
 		etcdClient:       cli,
 	}
