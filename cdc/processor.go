@@ -57,8 +57,6 @@ const (
 
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
-
-	defaultProcessorSessionTTL = 3 // 3 seconds
 )
 
 var (

@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -29,10 +28,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
-)
-
-const (
-	captureInfoWatchRetryDelay = time.Millisecond * 500
 )
 
 type tableIDMap = map[uint64]struct{}
