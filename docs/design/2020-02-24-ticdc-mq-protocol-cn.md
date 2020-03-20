@@ -127,7 +127,41 @@ Value:
 
 ## Kafka 分区策略
 
-partition 数量不限，各个 partition 之间对等。
+### Row Changed Event 划分 Partition 算法
+
+#### _tidb_row_id 分发
+
+使用 _tidb_row_id 计算 hash 分发到 partition
+
+使用限制：
+
+* 下游非 RDMS，或下游接受维护 _tidb_row_id
+* 上游表 pk is handle
+		
+#### 基于 uk、pk 分发
+
+使用 pk(not handle) or uk(not null) 的 value 计算 hash 分发到 partition
+
+使用限制：
+
+* 表内只能包含一个 pk or uk
+
+#### 基于 table 分发
+
+使用 schemaID 和 tableID 计算 hash 分发到 partition
+
+使用限制：
+
+* 无，但是这种分发方式粒度粗，partition 之间负载不均
+
+4、冲突检测分发
+
+检测 pk or uk 冲突，将不冲突的 row 写入不同的 partition。发生冲突时向下游写入用于对齐进度的 Event
+
+使用限制：
+
+* 只有表中 pk or uk 数量大于 1 才适用这种方式
+* 下游消费端实现复杂
 
 ### Partition 扩容与缩容
 
