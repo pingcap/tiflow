@@ -438,7 +438,7 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 	}
 	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
 	for _, job := range jobs {
-		if skipJob(job) {
+		if SkipJob(job) {
 			log.Info("skip DDL job because the job isn't synced and done", zap.Stringer("job", job))
 			continue
 		}
@@ -463,7 +463,7 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName string, sql string, err error) {
 	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
 
-	if skipJob(job) {
+	if SkipJob(job) {
 		return "", "", "", nil
 	}
 
@@ -688,10 +688,15 @@ func (s *Storage) IsTruncateTableID(id int64) bool {
 	return ok
 }
 
+// SkipJob skip the job should not be executed
 // TiDB write DDL Binlog for every DDL Job, we must ignore jobs that are cancelled or rollback
 // For older version TiDB, it write DDL Binlog in the txn that the state of job is changed to *synced*
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
-func skipJob(job *timodel.Job) bool {
+func SkipJob(job *timodel.Job) bool {
+	switch job.Type {
+	case timodel.ActionSetTiFlashReplica, timodel.ActionUpdateTiFlashReplicaStatus:
+		return true
+	}
 	return !job.IsSynced() && !job.IsDone()
 }
