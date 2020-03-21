@@ -106,12 +106,6 @@ def tests(sink_type, node_label) {
                                 rm -rf cov_dir
                                 mkdir -p cov_dir
                                 ls /tmp/tidb_cdc_test
-                                echo "/tiflash/log/proxy.log"
-                                cat /tmp/tidb_cdc_test/${case_name}/tiflash/log/proxy.log
-                                echo "/tiflash/log/server.log"
-                                cat /tmp/tidb_cdc_test/${case_name}/tiflash/log/server.log
-                                echo "/tiflash/log/error.log"
-                                cat /tmp/tidb_cdc_test/${case_name}/tiflash/log/error.log
                                 cp /tmp/tidb_cdc_test/cov*out cov_dir || touch cov_dir/dummy_file_${case_name}
                             """
                             sh """
