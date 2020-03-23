@@ -81,14 +81,8 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 		zap.String("status-host", opts.statusHost),
 		zap.Int("status-port", opts.statusPort))
 
-	capture, err := NewCapture(strings.Split(opts.pdEndpoints, ","))
-	if err != nil {
-		return nil, err
-	}
-
 	s := &Server{
-		opts:    opts,
-		capture: capture,
+		opts: opts,
 	}
 	return s, nil
 }
@@ -102,10 +96,17 @@ func (s *Server) Run(ctx context.Context) error {
 		if err := s.run(ctx); err != ErrSuicide {
 			return err
 		}
+		log.Info("server recovered")
 	}
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
+	capture, err := NewCapture(strings.Split(s.opts.pdEndpoints, ","))
+	if err != nil {
+		return err
+	}
+	s.capture = capture
+
 	ctx, cancel := context.WithCancel(util.PutCaptureIDInCtx(ctx, s.capture.info.ID))
 
 	// when a goroutine paniced, cancel would be called first, which
@@ -114,6 +115,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 	// would restart this function when an error is ErrSuicide.
 	defer func() {
 		if r := recover(); r == ErrSuicide {
+			log.Error("server suiceded")
 			// assign the error value, which should be handled by
 			// the parent caller
 			err = ErrSuicide

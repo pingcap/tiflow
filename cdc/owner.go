@@ -436,8 +436,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 	return nil
 }
 
-func (o *Owner) throne() error {
-	ctx := o.session.Client().Ctx()
+func (o *Owner) throne(ctx context.Context) error {
 	// When an owner crashed, its processors crashed too,
 	// clean up the tasks for these processors.
 	if err := o.cleanUpStaleTasks(ctx); err != nil {
@@ -458,7 +457,7 @@ func (o *Owner) throne() error {
 // Run the owner
 // TODO avoid this tick style, this means we get `tickTime` latency here.
 func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
-	if err := o.throne(); err != nil {
+	if err := o.throne(ctx); err != nil {
 		return err
 	}
 	for {
@@ -466,7 +465,7 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-o.session.Done():
-			return errors.New("session done")
+			panic(ErrSuicide)
 		case <-time.After(tickTime):
 			err := o.run(ctx)
 			// owner may be evicted during running, ignore the context canceled error directly
