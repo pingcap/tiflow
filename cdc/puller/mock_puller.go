@@ -247,7 +247,6 @@ func (m *MockPullerManager) GetDDLJobs() []*timodel.Job {
 	jobs, err := kv.LoadHistoryDDLJobs(m.store)
 	m.c.Assert(err, check.IsNil)
 	return jobs
-	return nil
 }
 
 func (m *MockPullerManager) postPrewrite(req *kvrpcpb.PrewriteRequest, result []error) {
