@@ -119,6 +119,8 @@ func (s *Server) run(ctx context.Context) (err error) {
 			// assign the error value, which should be handled by
 			// the parent caller
 			err = ErrSuicide
+		} else {
+			panic(r)
 		}
 	}()
 	defer cancel()
