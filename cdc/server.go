@@ -115,7 +115,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 	// would restart this function when an error is ErrSuicide.
 	defer func() {
 		if r := recover(); r == ErrSuicide {
-			log.Error("server suiceded")
+			log.Error("server suicided")
 			// assign the error value, which should be handled by
 			// the parent caller
 			err = ErrSuicide
