@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -317,12 +318,34 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 	}
 }
 
-func (c *changeFeed) applyJob(job *timodel.Job) error {
+func (c *changeFeed) checkJob(job *timodel.Job) (skip bool) {
+	switch job.Type {
+	case timodel.ActionCreateTable:
+		tableInfo := entry.WrapTableInfo(job.BinlogInfo.TableInfo)
+		log.Warn("this table is not eligible to duplicate", zap.Reflect("job", job))
+		return !tableInfo.ExistTableUniqueColumn()
+	case timodel.ActionDropColumn, timodel.ActionDropIndex, timodel.ActionDropPrimaryKey:
+		tableInfo := entry.WrapTableInfo(job.BinlogInfo.TableInfo)
+		if tableInfo.ExistTableUniqueColumn() {
+			return false
+		}
+		log.Warn("this table is not eligible to duplicate, stop to duplicate this table", zap.Reflect("job", job))
+		c.removeTable(uint64(job.SchemaID), uint64(job.TableID))
+		return true
+	}
+	return false
+}
+
+func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 	log.Info("apply job", zap.String("sql", job.Query), zap.Stringer("job", job))
 
 	schamaName, tableName, _, err := c.schema.HandleDDL(job)
 	if err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
+	}
+
+	if c.checkJob(job) {
+		return true, nil
 	}
 
 	schemaID := uint64(job.SchemaID)
@@ -349,7 +372,7 @@ func (c *changeFeed) applyJob(job *timodel.Job) error {
 		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, entry.TableName{Schema: schamaName, Table: tableName})
 	}
 
-	return nil
+	return false, nil
 }
 
 type ownerImpl struct {
@@ -517,7 +540,12 @@ func (o *ownerImpl) newChangeFeed(
 	log.Info("Find new changefeed", zap.Reflect("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
-	jobs, err := getHistoryDDLJobs(o.pdEndpoints)
+	// TODO here we create another pb client,we should reuse them
+	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","))
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -823,7 +851,8 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 			return nil
 		}
 	}
-
+	ddlEvent := new(model.DDLEvent)
+	ddlEvent.FromJob(todoDDLJob)
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
 	log.Debug("apply job", zap.Stringer("job", todoDDLJob),
@@ -831,31 +860,15 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		zap.String("query", todoDDLJob.Query),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
-	var tableName, schemaName string
-	if todoDDLJob.BinlogInfo.TableInfo != nil {
-		tableName = todoDDLJob.BinlogInfo.TableInfo.Name.O
-	}
 	// TODO consider some newly added DDL types such as `ActionCreateSequence`
-	if todoDDLJob.Type != timodel.ActionCreateSchema {
-		dbInfo, exist := c.schema.SchemaByID(todoDDLJob.SchemaID)
-		if !exist {
-			return errors.NotFoundf("schema %d not found", todoDDLJob.SchemaID)
-		}
-		schemaName = dbInfo.Name.O
-	} else {
-		schemaName = todoDDLJob.BinlogInfo.DBInfo.Name.O
-	}
-	ddlEvent := &model.DDLEvent{
-		Ts:     todoDDLJob.BinlogInfo.FinishedTS,
-		Query:  todoDDLJob.Query,
-		Schema: schemaName,
-		Table:  tableName,
-		Type:   todoDDLJob.Type,
-	}
-
-	err := c.applyJob(todoDDLJob)
+	skip, err := c.applyJob(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
+	}
+	if skip {
+		c.ddlJobHistory = c.ddlJobHistory[1:]
+		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
+		c.ddlState = model.ChangeFeedSyncDML
 	}
 
 	c.banlanceOrphanTables(ctx, captures)

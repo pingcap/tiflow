@@ -213,6 +213,11 @@ func (ti *TableInfo) IsColumnUnique(colID int64) bool {
 	return exist
 }
 
+// ExistTableUniqueColumn returns whether the table has the unique column
+func (ti *TableInfo) ExistTableUniqueColumn() bool {
+	return len(ti.UniqueColumns) != 0
+}
+
 // IsIndexUnique returns whether the index is unique
 func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 	if indexInfo.Primary {

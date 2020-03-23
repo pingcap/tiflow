@@ -211,7 +211,7 @@ func (tr *testRunner) execSQLs(sqls []string) {
 // RunCase run some simple test case
 func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr := &testRunner{src: src, dst: dst, schema: schema}
-
+	ineligibleTable(tr, src, dst)
 	runPKorUKcases(tr)
 
 	tr.run(caseUpdateWhileAddingCol)
@@ -325,6 +325,47 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	// 	}
 	// })
 	// tr.execSQLs([]string{"DROP TABLE binlog_big;"})
+}
+
+func ineligibleTable(tr *testRunner, src *sql.DB, dst *sql.DB) {
+	sqls := []string{
+		"CREATE TABLE ineligible_test.ineligible_table1 (uk int UNIQUE null, ncol int);",
+		"CREATE TABLE ineligible_test.ineligible_table2 (ncol1 int, ncol2 int);",
+
+		"insert into ineligible_table1 (uk, ncol) values (1,1);",
+		"insert into ineligible_table1 (uk, ncol) values (null,2);",
+
+		"insert into ineligible_table2 (uk, ncol) values (1,1);",
+		"insert into ineligible_table2 (uk, ncol) values (2,2);",
+	}
+	// execute SQL but don't check
+	for _, sql := range sqls {
+		mustExec(src, sql)
+	}
+
+	sqls = []string{
+		"CREATE TABLE eligible_table (uk int UNIQUE not null, ncol int);",
+		"insert into eligible_table (uk, ncol) values (1,1);",
+		"insert into eligible_table (uk, ncol) values (2,2);",
+		"insert into eligible_table (uk, ncol) values (3,4);",
+	}
+	// execute SQL and check
+	tr.execSQLs(sqls)
+
+	rows, err := dst.Query("show tables")
+	if err != nil {
+		log.S().Fatalf("exec failed, sql: 'show tables', err: %+v", err)
+	}
+	for rows.Next() {
+		var tableName string
+		err := rows.Scan(&tableName)
+		if err != nil {
+			log.S().Fatalf("scan result set failed, err: %+v", err)
+		}
+		if tableName == "ineligible_table1" || tableName == "ineligible_table2" {
+			log.S().Fatalf("found unexpected table %s", tableName)
+		}
+	}
 }
 
 func caseUpdateWhileAddingCol(db *sql.DB) {
