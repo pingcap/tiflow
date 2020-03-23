@@ -62,7 +62,7 @@ type captureTaskStatus struct {
 
 type profileStatus struct {
 	OPS   uint64 `json:"ops"`
-	Gap   uint64 `json:"gap"`
+	Gap   int64  `json:"gap"`
 	Count uint64 `json:"count"`
 }
 
@@ -216,7 +216,7 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 					now := time.Now()
 					statistics := profileStatus{
 						OPS:   (count - lastCount) / uint64(now.Unix()-lastTime.Unix()),
-						Gap:   status.ResolvedTs - status.CheckpointTs,
+						Gap:   oracle.ExtractPhysical(status.ResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs),
 						Count: count,
 					}
 					jsonPrint(cmd, &statistics)
