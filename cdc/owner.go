@@ -669,7 +669,7 @@ func (o *Owner) startProcessorInfoWatcher(ctx context.Context) {
 				// When the watching routine returns, the error must not
 				// be nil, it may be caused by a temporary error or a context
 				// error(ctx.Err())
-				if ctx.Err() != nil {
+				if ctx.Err() != nil && ctx.Err() != context.Canceled {
 					// The context error indicates the termination of the owner
 					log.Error("watch processor failed", zap.Error(ctx.Err()))
 					return
@@ -796,7 +796,7 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 				// When the watching routine returns, the error must not
 				// be nil, it may be caused by a temporary error or a context
 				// error(ctx.Err())
-				if ctx.Err() != nil {
+				if ctx.Err() != nil && ctx.Err() != context.Canceled {
 					// The context error indicates the termination of the owner
 					log.Error("watch capture failed", zap.Error(ctx.Err()))
 					return
