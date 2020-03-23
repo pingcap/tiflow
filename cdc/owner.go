@@ -869,6 +869,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		c.ddlJobHistory = c.ddlJobHistory[1:]
 		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedSyncDML
+		return nil
 	}
 
 	c.banlanceOrphanTables(ctx, captures)
