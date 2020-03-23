@@ -103,6 +103,7 @@ func resetFinishedTs(kvStore tikv.Storage, job *model.Job) error {
 	return nil
 }
 
+// CreateTiStore creates a new tikv storage client
 func CreateTiStore(urls string) (tidbkv.Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {

@@ -551,6 +551,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEntry) (*entry.StorageBuilder, error) {
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
 	if err != nil {
 		return nil, errors.Trace(err)
