@@ -66,11 +66,18 @@ func runProcessor(
 
 	go func() {
 		err := <-errCh
-		log.Error("error on running processor",
-			zap.String("captureid", captureID),
-			zap.String("changefeedid", changefeedID),
-			zap.String("processorid", processor.id),
-			zap.Error(err))
+		if errors.Cause(err) != context.Canceled {
+			log.Error("error on running processor",
+				zap.String("captureid", captureID),
+				zap.String("changefeedid", changefeedID),
+				zap.String("processorid", processor.id),
+				zap.Error(err))
+		} else {
+			log.Info("processor exited",
+				zap.String("captureid", captureID),
+				zap.String("changefeedid", changefeedID),
+				zap.String("processorid", processor.id))
+		}
 		cancel()
 	}()
 
