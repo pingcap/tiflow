@@ -119,7 +119,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 			// assign the error value, which should be handled by
 			// the parent caller
 			err = ErrSuicide
-		} else {
+		} else if r != nil {
 			panic(r)
 		}
 	}()
