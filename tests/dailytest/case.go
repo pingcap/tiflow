@@ -337,33 +337,37 @@ func ineligibleTable(tr *testRunner, src *sql.DB, dst *sql.DB) {
 
 		"insert into ineligible_table2 (ncol1, ncol2) values (1,1);",
 		"insert into ineligible_table2 (ncol1, ncol2) values (2,2);",
+		"CREATE TABLE eligible_table (uk int UNIQUE not null, ncol int);",
+		"insert into eligible_table (uk, ncol) values (1,1);",
+		"insert into eligible_table (uk, ncol) values (2,2);",
+		"insert into eligible_table (uk, ncol) values (3,4);",
 	}
 	// execute SQL but don't check
 	for _, sql := range sqls {
 		mustExec(src, sql)
 	}
 
-	sqls = []string{
-		"CREATE TABLE eligible_table (uk int UNIQUE not null, ncol int);",
-		"insert into eligible_table (uk, ncol) values (1,1);",
-		"insert into eligible_table (uk, ncol) values (2,2);",
-		"insert into eligible_table (uk, ncol) values (3,4);",
-	}
-	// execute SQL and check
-	tr.execSQLs(sqls)
-
-	rows, err := dst.Query("show tables")
-	if err != nil {
-		log.S().Fatalf("exec failed, sql: 'show tables', err: %+v", err)
-	}
-	for rows.Next() {
-		var tableName string
-		err := rows.Scan(&tableName)
+	synced := false
+	for {
+		rows, err := dst.Query("show tables")
 		if err != nil {
-			log.S().Fatalf("scan result set failed, err: %+v", err)
+			log.S().Fatalf("exec failed, sql: 'show tables', err: %+v", err)
 		}
-		if tableName == "ineligible_table1" || tableName == "ineligible_table2" {
-			log.S().Fatalf("found unexpected table %s", tableName)
+		for rows.Next() {
+			var tableName string
+			err := rows.Scan(&tableName)
+			if err != nil {
+				log.S().Fatalf("scan result set failed, err: %+v", err)
+			}
+			if tableName == "ineligible_table1" || tableName == "ineligible_table2" {
+				log.S().Fatalf("found unexpected table %s", tableName)
+			}
+			if synced {
+				return
+			}
+			if tableName == "eligible_table" {
+				synced = true
+			}
 		}
 	}
 }
