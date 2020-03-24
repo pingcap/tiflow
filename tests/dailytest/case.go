@@ -329,8 +329,8 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 func ineligibleTable(tr *testRunner, src *sql.DB, dst *sql.DB) {
 	sqls := []string{
-		"CREATE TABLE ineligible_test.ineligible_table1 (uk int UNIQUE null, ncol int);",
-		"CREATE TABLE ineligible_test.ineligible_table2 (ncol1 int, ncol2 int);",
+		"CREATE TABLE ineligible_table1 (uk int UNIQUE null, ncol int);",
+		"CREATE TABLE ineligible_table2 (ncol1 int, ncol2 int);",
 
 		"insert into ineligible_table1 (uk, ncol) values (1,1);",
 		"insert into ineligible_table1 (uk, ncol) values (null,2);",
