@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/log"
+
 	"github.com/pingcap/ticdc/cdc/entry"
 
 	"github.com/BurntSushi/toml"
@@ -208,7 +210,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 						return err
 					}
 					if strings.TrimSpace(yOrN) != "Y" {
-						cmd.Printf("Failed to create changefeed\n")
+						log.S().Fatal("Failed to create changefeed\n")
 					}
 				}
 			}
