@@ -679,9 +679,6 @@ func (c *changeFeed) pullDDLJob() error {
 	}
 	c.ddlResolvedTs = ddlResolvedTs
 	c.ddlJobHistory = append(c.ddlJobHistory, ddlJobs...)
-	for _, ddl := range ddlJobs {
-		log.Warn("owner find ddl job", zap.Reflect("job", ddl))
-	}
 	return nil
 }
 

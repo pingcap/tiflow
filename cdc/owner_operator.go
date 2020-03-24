@@ -17,9 +17,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
@@ -84,7 +81,6 @@ func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
 		h.mu.Unlock()
 		return nil
 	}
-	log.Warn("owner listen origin ddl", zap.ByteString("k", rawDDL.Key), zap.ByteString("v", rawDDL.Value))
 	job, err := entry.UnmarshalDDL(rawDDL)
 	if err != nil {
 		return errors.Trace(err)
