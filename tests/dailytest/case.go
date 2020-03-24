@@ -376,7 +376,7 @@ TestLoop:
 	sqls = []string{
 		"DROP TABLE ineligible_table1;",
 		"DROP TABLE ineligible_table2;",
-		"DROP TABLE ineligible_table;",
+		"DROP TABLE eligible_table;",
 	}
 	for _, sql := range sqls {
 		mustExec(src, sql)
