@@ -142,10 +142,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 
 // Campaign to be an owner
 func (c *Capture) Campaign(ctx context.Context) error {
-	if err := c.election.Campaign(ctx, c.info.ID); err != nil {
-		return err
-	}
-	return nil
+	return c.election.Campaign(ctx, c.info.ID)
 }
 
 // Resign lets a owner start a new election.
