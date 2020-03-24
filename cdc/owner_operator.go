@@ -84,11 +84,11 @@ func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
 		h.mu.Unlock()
 		return nil
 	}
+	log.Warn("owner listen origin ddl", zap.ByteString("k", rawDDL.Key), zap.ByteString("v", rawDDL.Value))
 	job, err := entry.UnmarshalDDL(rawDDL)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Warn("owner listen origin ddl", zap.Reflect("job", job))
 	if job == nil || entry.SkipJob(job) {
 		return nil
 	}
