@@ -17,6 +17,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
@@ -85,6 +88,7 @@ func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Warn("owner listen origin ddl", zap.Reflect("job", job))
 	if job == nil || entry.SkipJob(job) {
 		return nil
 	}
