@@ -335,8 +335,8 @@ func ineligibleTable(tr *testRunner, src *sql.DB, dst *sql.DB) {
 		"insert into ineligible_table1 (uk, ncol) values (1,1);",
 		"insert into ineligible_table1 (uk, ncol) values (null,2);",
 
-		"insert into ineligible_table2 (uk, ncol) values (1,1);",
-		"insert into ineligible_table2 (uk, ncol) values (2,2);",
+		"insert into ineligible_table2 (ncol1, ncol2) values (1,1);",
+		"insert into ineligible_table2 (ncol1, ncol2) values (2,2);",
 	}
 	// execute SQL but don't check
 	for _, sql := range sqls {
