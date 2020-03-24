@@ -246,6 +246,7 @@ func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, bas
 }
 
 const ddlJobListKey = "DDLJobList"
+const ddlAddIndexJobListKey = "DDLJobAddIdxList"
 
 // UnmarshalDDL unmarshals the ddl job from RawKVEntry
 func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
@@ -260,7 +261,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 		return nil, nil
 	}
 	k := meta.(metaListData)
-	if k.key != ddlJobListKey {
+	if k.key != ddlJobListKey && k.key != ddlAddIndexJobListKey {
 		return nil, nil
 	}
 	job := &timodel.Job{}
