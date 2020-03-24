@@ -57,12 +57,21 @@ func GetTableSpan(tableID int64, needEncode bool) Span {
 
 // GetDDLSpan returns the span to watch for DDL related events
 func GetDDLSpan() Span {
+	return getMetaListKey("DDLJobList")
+}
+
+// GetAddIndexDDLSpan returns the span to watch for Add Index DDL related events
+func GetAddIndexDDLSpan() Span {
+	return getMetaListKey("DDLJobAddIdxList")
+}
+
+func getMetaListKey(key string) Span {
 	metaPrefix := []byte("m")
-	ddlJobListKey := []byte("DDLJobList")
+	metaKey := []byte(key)
 	listData := 'l'
-	start := make([]byte, 0, len(metaPrefix)+len(ddlJobListKey)+8)
+	start := make([]byte, 0, len(metaPrefix)+len(metaKey)+8)
 	start = append(start, metaPrefix...)
-	start = codec.EncodeBytes(start, ddlJobListKey)
+	start = codec.EncodeBytes(start, metaKey)
 	start = codec.EncodeUint(start, uint64(listData))
 	end := make([]byte, len(start))
 	copy(end, start)
