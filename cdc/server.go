@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
@@ -132,17 +133,21 @@ func (s *Server) run(ctx context.Context) (err error) {
 		}
 	}()
 
-	// Campaign to be an owner, it blocks until it becomes
-	// the owner
-	if err := s.capture.Campaign(ctx); err != nil {
-		return err
+	for {
+		// Campaign to be an owner, it blocks until it becomes
+		// the owner
+		if err := s.capture.Campaign(ctx); err != nil {
+			return errors.Trace(err)
+		}
+		owner, err := NewOwner(s.capture.session)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		s.owner = owner
+		if err := owner.Run(ctx, ownerRunInterval); err != nil {
+			return errors.Trace(err)
+		}
 	}
-	owner, err := NewOwner(s.capture.session)
-	if err != nil {
-		return err
-	}
-	s.owner = owner
-	return owner.Run(ctx, ownerRunInterval)
 }
 
 // Close closes the server.

@@ -36,6 +36,7 @@ import (
 
 // Owner manages the cdc cluster
 type Owner struct {
+	done        chan struct{}
 	session     *concurrency.Session
 	changeFeeds map[model.ChangeFeedID]*changeFeed
 
@@ -56,6 +57,8 @@ type Owner struct {
 
 	adminJobs     []model.AdminJob
 	adminJobsLock sync.Mutex
+
+	stepDown func(ctx context.Context) error
 }
 
 // NewOwner creates a new Owner instance
@@ -68,6 +71,7 @@ func NewOwner(sess *concurrency.Session) (*Owner, error) {
 	}
 
 	owner := &Owner{
+		done:             make(chan struct{}),
 		session:          sess,
 		pdClient:         pdClient,
 		changeFeeds:      make(map[model.ChangeFeedID]*changeFeed),
@@ -454,14 +458,43 @@ func (o *Owner) throne(ctx context.Context) error {
 	return nil
 }
 
+// Close stops a running owner
+func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) error) {
+	// stepDown is called after exiting the main loop by the owner, it is useful
+	// to clean up some resource, like dropping the leader key.
+	o.stepDown = stepDown
+
+	// Close and Run should be in separated goroutines
+	// A channel is used here to sychronize the steps.
+
+	// Single the Run function to exit
+	select {
+	case o.done <- struct{}{}:
+	case <-ctx.Done():
+	}
+
+	// Wait until it exited
+	select {
+	case <-o.done:
+	case <-ctx.Done():
+	}
+}
+
 // Run the owner
 // TODO avoid this tick style, this means we get `tickTime` latency here.
 func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	if err := o.throne(ctx); err != nil {
 		return err
 	}
+loop:
 	for {
 		select {
+		case <-o.done:
+			close(o.done)
+			break loop
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-o.session.Done():
@@ -474,6 +507,13 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 			}
 		}
 	}
+	if o.stepDown != nil {
+		if err := o.stepDown(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (o *Owner) run(ctx context.Context) error {

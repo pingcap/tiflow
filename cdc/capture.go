@@ -44,7 +44,6 @@ var ErrSuicide = errors.New("Suicide")
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
-	isOwner     bool
 	pdEndpoints []string
 	etcdClient  kv.CDCEtcdClient
 
@@ -146,7 +145,6 @@ func (c *Capture) Campaign(ctx context.Context) error {
 	if err := c.election.Campaign(ctx, c.info.ID); err != nil {
 		return err
 	}
-	c.isOwner = true
 	return nil
 }
 
