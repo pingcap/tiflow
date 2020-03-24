@@ -348,6 +348,7 @@ func ineligibleTable(tr *testRunner, src *sql.DB, dst *sql.DB) {
 	}
 
 	synced := false
+TestLoop:
 	for {
 		rows, err := dst.Query("show tables")
 		if err != nil {
@@ -363,12 +364,22 @@ func ineligibleTable(tr *testRunner, src *sql.DB, dst *sql.DB) {
 				log.S().Fatalf("found unexpected table %s", tableName)
 			}
 			if synced {
-				return
+				break TestLoop
 			}
 			if tableName == "eligible_table" {
 				synced = true
 			}
 		}
+	}
+
+	// clean up
+	sqls = []string{
+		"DROP TABLE ineligible_table1;",
+		"DROP TABLE ineligible_table2;",
+		"DROP TABLE ineligible_table;",
+	}
+	for _, sql := range sqls {
+		mustExec(src, sql)
 	}
 }
 
