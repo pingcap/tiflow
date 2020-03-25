@@ -28,7 +28,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -38,10 +37,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/helper"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tidb/util/codec"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
@@ -553,69 +549,17 @@ func (p *processor) syncResolved(ctx context.Context) error {
 }
 
 func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEntry) (*entry.StorageBuilder, error) {
-	jobs, err := getHistoryDDLJobs(pdEndpoints)
+	// TODO here we create another pb client,we should reuse them
+	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	builder := entry.NewStorageBuilder(jobs, ddlEventCh)
 	return builder, nil
-}
-
-func getHistoryDDLJobs(pdEndpoints []string) ([]*timodel.Job, error) {
-	// TODO here we create another pb client,we should reuse them
-	kvStore, err := createTiStore(strings.Join(pdEndpoints, ","))
-	if err != nil {
-		return nil, err
-	}
-	originalJobs, err := kv.LoadHistoryDDLJobs(kvStore)
-	jobs := make([]*timodel.Job, 0, len(originalJobs))
-	if err != nil {
-		return nil, err
-	}
-	for _, job := range originalJobs {
-		if job.State != timodel.JobStateSynced && job.State != timodel.JobStateDone {
-			continue
-		}
-		err := resetFinishedTs(kvStore.(tikv.Storage), job)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		jobs = append(jobs, job)
-	}
-	return jobs, nil
-}
-
-func resetFinishedTs(kvStore tikv.Storage, job *timodel.Job) error {
-	helper := helper.NewHelper(kvStore)
-	diffKey := schemaDiffKey(job.BinlogInfo.SchemaVersion)
-	resp, err := helper.GetMvccByEncodedKey(diffKey)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	mvcc := resp.GetInfo()
-	if mvcc == nil || len(mvcc.Writes) == 0 {
-		return errors.NotFoundf("mvcc info, ddl job id: %d, schema version: %d", job.ID, job.BinlogInfo.SchemaVersion)
-	}
-	var finishedTS uint64
-	for _, w := range mvcc.Writes {
-		if finishedTS < w.CommitTs {
-			finishedTS = w.CommitTs
-		}
-	}
-	job.BinlogInfo.FinishedTS = finishedTS
-	return nil
-}
-
-func schemaDiffKey(schemaVersion int64) []byte {
-	metaPrefix := []byte("m")
-	mSchemaDiffPrefix := "Diff"
-	StringData := 's'
-	key := []byte(fmt.Sprintf("%s:%d", mSchemaDiffPrefix, schemaVersion))
-
-	ek := make([]byte, 0, len(metaPrefix)+len(key)+24)
-	ek = append(ek, metaPrefix...)
-	ek = codec.EncodeBytes(ek, key)
-	return codec.EncodeUint(ek, uint64(StringData))
 }
 
 func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {

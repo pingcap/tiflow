@@ -38,7 +38,8 @@ type Storage struct {
 	schemas map[int64]*timodel.DBInfo
 	tables  map[int64]*TableInfo
 
-	truncateTableID map[int64]struct{}
+	truncateTableID   map[int64]struct{}
+	ineligibleTableID map[int64]struct{}
 
 	schemaMetaVersion int64
 	lastHandledTs     uint64
@@ -213,6 +214,11 @@ func (ti *TableInfo) IsColumnUnique(colID int64) bool {
 	return exist
 }
 
+// ExistTableUniqueColumn returns whether the table has the unique column
+func (ti *TableInfo) ExistTableUniqueColumn() bool {
+	return len(ti.UniqueColumns) != 0
+}
+
 // IsIndexUnique returns whether the index is unique
 func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 	if indexInfo.Primary {
@@ -248,6 +254,7 @@ func NewSingleStorage() *Storage {
 	s := &Storage{
 		version2SchemaTable: make(map[int64]TableName),
 		truncateTableID:     make(map[int64]struct{}),
+		ineligibleTableID:   make(map[int64]struct{}),
 	}
 
 	s.tableIDToName = make(map[int64]TableName)
@@ -382,6 +389,7 @@ func (s *Storage) DropTable(id int64) (string, error) {
 	tableName := s.tableIDToName[id]
 	delete(s.tableIDToName, id)
 	delete(s.tableNameToID, tableName)
+	delete(s.ineligibleTableID, id)
 
 	log.Debug("drop table success", zap.String("name", table.Name.O), zap.Int64("id", id))
 	return table.Name.O, nil
@@ -395,7 +403,12 @@ func (s *Storage) CreateTable(schema *timodel.DBInfo, table *timodel.TableInfo) 
 	}
 
 	schema.Tables = append(schema.Tables, table)
-	s.tables[table.ID] = WrapTableInfo(table)
+	tbl := WrapTableInfo(table)
+	s.tables[table.ID] = tbl
+	if !tbl.ExistTableUniqueColumn() {
+		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
+		s.ineligibleTableID[table.ID] = struct{}{}
+	}
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
 	s.tableNameToID[s.tableIDToName[table.ID]] = table.ID
 
@@ -409,9 +422,12 @@ func (s *Storage) ReplaceTable(table *timodel.TableInfo) error {
 	if !ok {
 		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
 	}
-
-	s.tables[table.ID] = WrapTableInfo(table)
-
+	tbl := WrapTableInfo(table)
+	s.tables[table.ID] = tbl
+	if !tbl.ExistTableUniqueColumn() {
+		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
+		s.ineligibleTableID[table.ID] = struct{}{}
+	}
 	return nil
 }
 
@@ -650,6 +666,7 @@ func (s *Storage) Clone() *Storage {
 		tables:  make(map[int64]*TableInfo),
 
 		truncateTableID:     make(map[int64]struct{}),
+		ineligibleTableID:   make(map[int64]struct{}),
 		version2SchemaTable: make(map[int64]TableName),
 	}
 	for k, v := range s.tableIDToName {
@@ -670,6 +687,9 @@ func (s *Storage) Clone() *Storage {
 	for k, v := range s.truncateTableID {
 		n.truncateTableID[k] = v
 	}
+	for k, v := range s.ineligibleTableID {
+		n.ineligibleTableID[k] = v
+	}
 	for k, v := range s.version2SchemaTable {
 		n.version2SchemaTable[k] = v
 	}
@@ -685,6 +705,12 @@ func (s *Storage) Clone() *Storage {
 // IsTruncateTableID returns true if the table id have been truncated by truncate table DDL
 func (s *Storage) IsTruncateTableID(id int64) bool {
 	_, ok := s.truncateTableID[id]
+	return ok
+}
+
+// IsIneligibleTableID returns true if the table is ineligible
+func (s *Storage) IsIneligibleTableID(id int64) bool {
+	_, ok := s.ineligibleTableID[id]
 	return ok
 }
 

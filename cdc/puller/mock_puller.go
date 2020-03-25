@@ -5,13 +5,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/kv"
+
 	"github.com/pingcap/ticdc/cdc/entry"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/domain"

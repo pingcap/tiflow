@@ -15,7 +15,6 @@ package cdc
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -25,10 +24,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
-	"github.com/pingcap/ticdc/pkg/flags"
-	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store"
-	"github.com/pingcap/tidb/store/tikv"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
@@ -194,22 +189,4 @@ func (c *Capture) Close(ctx context.Context) error {
 // register registers the capture information in etcd
 func (c *Capture) register(ctx context.Context) error {
 	return errors.Trace(c.etcdClient.PutCaptureInfo(ctx, c.info, c.session.Lease()))
-}
-
-func createTiStore(urls string) (tidbkv.Storage, error) {
-	urlv, err := flags.NewURLsValue(urls)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	// Ignore error if it is already registered.
-	_ = store.Register("tikv", tikv.Driver{})
-
-	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
-	tiStore, err := store.New(tiPath)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return tiStore, nil
 }
