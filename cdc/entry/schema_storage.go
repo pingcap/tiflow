@@ -666,6 +666,7 @@ func (s *Storage) Clone() *Storage {
 		tables:  make(map[int64]*TableInfo),
 
 		truncateTableID:     make(map[int64]struct{}),
+		ineligibleTableID:   make(map[int64]struct{}),
 		version2SchemaTable: make(map[int64]TableName),
 	}
 	for k, v := range s.tableIDToName {
