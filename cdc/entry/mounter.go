@@ -131,7 +131,8 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			continue
 		}
 
-		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts)
+		log.Info("processor HandlePreviousDDLJobIfNeed", zap.Uint64("ts", rawRow.Ts))
+		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts, true)
 		switch errors.Cause(err) {
 		case nil:
 		case model.ErrUnresolved:

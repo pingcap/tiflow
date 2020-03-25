@@ -433,7 +433,7 @@ func (s *Storage) removeTable(tableID int64) error {
 }
 
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
-func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
+func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64, processor bool) error {
 	if commitTs > atomic.LoadUint64(s.resolvedTs) {
 		return model.ErrUnresolved
 	}
@@ -446,6 +446,9 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 		if job.BinlogInfo.FinishedTS <= s.lastHandledTs {
 			log.Debug("skip DDL job because the job is already handled", zap.Stringer("job", job))
 			continue
+		}
+		if processor {
+			log.Info("handle ", zap.Reflect("job", job))
 		}
 		_, _, _, err := s.HandleDDL(job)
 		if err != nil {

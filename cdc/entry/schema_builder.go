@@ -170,7 +170,7 @@ func (b *StorageBuilder) Build(ts uint64) (*Storage, error) {
 	b.baseStorageMu.Unlock()
 
 	err := retry.Run(func() error {
-		err := c.HandlePreviousDDLJobIfNeed(ts)
+		err := c.HandlePreviousDDLJobIfNeed(ts, false)
 		if errors.Cause(err) != model.ErrUnresolved {
 			return backoff.Permanent(err)
 		}
@@ -196,7 +196,7 @@ func (b *StorageBuilder) DoGc(ts uint64) error {
 	}
 	b.baseStorageMu.Lock()
 	defer b.baseStorageMu.Unlock()
-	err := b.baseStorage.HandlePreviousDDLJobIfNeed(ts)
+	err := b.baseStorage.HandlePreviousDDLJobIfNeed(ts, false)
 	if err != nil {
 		return errors.Trace(err)
 	}
