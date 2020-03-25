@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -50,6 +52,7 @@ type Storage struct {
 
 	version2SchemaTable map[int64]TableName
 	currentVersion      int64
+	filter              *util.Filter
 }
 
 // TableName specify a Schema name and Table name
@@ -241,8 +244,8 @@ func (ti *TableInfo) Clone() *TableInfo {
 }
 
 // newStorage returns the Schema object
-func newStorage(resolvedTs *uint64, jobList *jobList) *Storage {
-	s := NewSingleStorage()
+func newStorage(resolvedTs *uint64, jobList *jobList, filter *util.Filter) *Storage {
+	s := NewSingleStorage(filter)
 	s.resolvedTs = resolvedTs
 	s.currentJob = jobList.Head()
 	s.jobList = jobList
@@ -250,11 +253,12 @@ func newStorage(resolvedTs *uint64, jobList *jobList) *Storage {
 }
 
 // NewSingleStorage creates a new single storage
-func NewSingleStorage() *Storage {
+func NewSingleStorage(filter *util.Filter) *Storage {
 	s := &Storage{
 		version2SchemaTable: make(map[int64]TableName),
 		truncateTableID:     make(map[int64]struct{}),
 		ineligibleTableID:   make(map[int64]struct{}),
+		filter:              filter,
 	}
 
 	s.tableIDToName = make(map[int64]TableName)
@@ -454,7 +458,7 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 	}
 	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
 	for _, job := range jobs {
-		if SkipJob(job) {
+		if s.skipJob(job) {
 			log.Info("skip DDL job because the job isn't synced and done", zap.Stringer("job", job))
 			continue
 		}
@@ -479,7 +483,7 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName string, sql string, err error) {
 	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
 
-	if SkipJob(job) {
+	if s.skipJob(job) {
 		return "", "", "", nil
 	}
 
@@ -699,6 +703,9 @@ func (s *Storage) Clone() *Storage {
 	n.jobList = s.jobList
 	n.currentJob = s.currentJob
 	n.currentVersion = s.currentVersion
+	if s.filter != nil {
+		n.filter = s.filter.Clone()
+	}
 	return n
 }
 
@@ -719,9 +726,8 @@ func (s *Storage) IsIneligibleTableID(id int64) bool {
 // For older version TiDB, it write DDL Binlog in the txn that the state of job is changed to *synced*
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
-func SkipJob(job *timodel.Job) bool {
-	switch job.Type {
-	case timodel.ActionSetTiFlashReplica, timodel.ActionUpdateTiFlashReplicaStatus:
+func (s *Storage) skipJob(job *timodel.Job) bool {
+	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
 		return true
 	}
 	return !job.IsSynced() && !job.IsDone()

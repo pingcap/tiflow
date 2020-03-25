@@ -159,7 +159,13 @@ func NewProcessor(
 	// so we set `needEncode` to false.
 	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
 	ddlEventCh := ddlPuller.SortedOutput(ctx)
-	schemaBuilder, err := createSchemaBuilder(pdEndpoints, ddlEventCh)
+
+	filter, err := util.NewFilter(changefeed.GetConfig())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	schemaBuilder, err := createSchemaBuilder(pdEndpoints, ddlEventCh, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -548,7 +554,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	}
 }
 
-func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEntry) (*entry.StorageBuilder, error) {
+func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEntry, filter *util.Filter) (*entry.StorageBuilder, error) {
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","))
 	if err != nil {
@@ -558,7 +564,7 @@ func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEnt
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	builder := entry.NewStorageBuilder(jobs, ddlEventCh)
+	builder := entry.NewStorageBuilder(jobs, ddlEventCh, filter)
 	return builder, nil
 }
 

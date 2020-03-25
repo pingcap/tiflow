@@ -536,7 +536,12 @@ func (o *ownerImpl) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
-	schemaStorage := entry.NewSingleStorage()
+	filter, err := util.NewFilter(info.GetConfig())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	schemaStorage := entry.NewSingleStorage(filter.Clone())
 
 	for _, job := range jobs {
 		if job.BinlogInfo.FinishedTS > checkpointTs {
@@ -562,11 +567,6 @@ func (o *ownerImpl) newChangeFeed(
 			}
 			existingTables[tbl.ID] = checkpointTs
 		}
-	}
-
-	filter, err := util.NewFilter(info.GetConfig())
-	if err != nil {
-		return nil, errors.Trace(err)
 	}
 
 	schemas := make(map[uint64]tableIDMap)
@@ -692,7 +692,11 @@ func (c *changeFeed) pullDDLJob() error {
 		return errors.Trace(err)
 	}
 	c.ddlResolvedTs = ddlResolvedTs
-	c.ddlJobHistory = append(c.ddlJobHistory, ddlJobs...)
+	for _, ddl := range ddlJobs {
+		if !c.filter.ShouldDiscardDDL(ddl.Type) {
+			c.ddlJobHistory = append(c.ddlJobHistory, ddl)
+		}
+	}
 	return nil
 }
 

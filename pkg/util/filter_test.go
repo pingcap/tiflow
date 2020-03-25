@@ -15,6 +15,7 @@ package util
 
 import (
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -84,4 +85,45 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 	for _, tc := range testCases {
 		c.Assert(filter.ShouldIgnoreEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
 	}
+}
+
+func (s *filterSuite) TestClone(c *check.C) {
+	config := &ReplicaConfig{
+		FilterRules: &filter.Rules{
+			DoDBs: []string{"sns", "ecom"},
+			IgnoreTables: []*filter.Table{
+				{Schema: "sns", Name: "log"},
+				{Schema: "ecom", Name: "test"},
+			},
+		},
+		DDLWhitelist: []model.ActionType{1},
+	}
+	filter, err := NewFilter(config)
+	c.Assert(err, check.IsNil)
+	c.Assert(config.Clone(), check.DeepEquals, config)
+	filter = filter.Clone()
+
+	assertIgnore := func(db, tbl string, boolCheck check.Checker) {
+		c.Assert(filter.ShouldIgnoreTable(db, tbl), boolCheck)
+	}
+	assertIgnore("other", "", check.IsTrue)
+	assertIgnore("other", "what", check.IsTrue)
+	assertIgnore("sns", "", check.IsFalse)
+	assertIgnore("ecom", "order", check.IsFalse)
+	assertIgnore("ecom", "order", check.IsFalse)
+	assertIgnore("ecom", "test", check.IsTrue)
+	assertIgnore("sns", "log", check.IsTrue)
+	assertIgnore("information_schema", "", check.IsTrue)
+}
+
+func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
+	config := &ReplicaConfig{
+		DDLWhitelist: []model.ActionType{model.ActionAddForeignKey},
+	}
+	filter, err := NewFilter(config)
+	c.Assert(err, check.IsNil)
+	c.Assert(filter.ShouldDiscardDDL(model.ActionDropSchema), check.IsFalse)
+	c.Assert(filter.ShouldDiscardDDL(model.ActionAddForeignKey), check.IsFalse)
+	c.Assert(filter.ShouldDiscardDDL(model.ActionCreateSequence), check.IsTrue)
+
 }

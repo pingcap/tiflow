@@ -3,6 +3,11 @@ package util
 import (
 	"strings"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
+	"github.com/pingcap/parser/model"
+
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -10,13 +15,66 @@ import (
 type Filter struct {
 	filter            *filter.Filter
 	ignoreTxnCommitTs []uint64
+	ddlWhitelist      []model.ActionType
+	config            *ReplicaConfig
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
 type ReplicaConfig struct {
-	FilterCaseSensitive bool          `toml:"filter-case-sensitive" json:"filter-case-sensitive"`
-	FilterRules         *filter.Rules `toml:"filter-rules" json:"filter-rules"`
-	IgnoreTxnCommitTs   []uint64      `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
+	DDLWhitelist        []model.ActionType `toml:"ddl-white-list" json:"ddl-white-list"`
+	FilterCaseSensitive bool               `toml:"filter-case-sensitive" json:"filter-case-sensitive"`
+	FilterRules         *filter.Rules      `toml:"filter-rules" json:"filter-rules"`
+	IgnoreTxnCommitTs   []uint64           `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
+}
+
+func (c *ReplicaConfig) Clone() *ReplicaConfig {
+	r := new(ReplicaConfig)
+	if c.DDLWhitelist != nil {
+		r.DDLWhitelist = make([]model.ActionType, len(c.DDLWhitelist))
+		for i, v := range c.DDLWhitelist {
+			r.DDLWhitelist[i] = v
+		}
+	}
+	r.FilterCaseSensitive = c.FilterCaseSensitive
+	r.FilterRules = cloneFilterRules(c.FilterRules)
+	if c.IgnoreTxnCommitTs != nil {
+		r.IgnoreTxnCommitTs = make([]uint64, len(c.IgnoreTxnCommitTs))
+		for i, v := range c.IgnoreTxnCommitTs {
+			r.IgnoreTxnCommitTs[i] = v
+		}
+	}
+	return r
+}
+
+func cloneFilterRules(c *filter.Rules) *filter.Rules {
+	r := new(filter.Rules)
+	if c.DoTables != nil {
+		r.DoTables = make([]*filter.Table, len(c.DoTables))
+		for i, v := range c.DoTables {
+			r.DoTables[i] = &filter.Table{Schema: v.Schema, Name: v.Name}
+		}
+	}
+	if c.DoDBs != nil {
+		r.DoDBs = make([]string, len(c.DoDBs))
+		for i, v := range c.DoDBs {
+			r.DoDBs[i] = v
+		}
+	}
+
+	if c.IgnoreTables != nil {
+		r.IgnoreTables = make([]*filter.Table, len(c.IgnoreTables))
+		for i, v := range c.IgnoreTables {
+			r.IgnoreTables[i] = &filter.Table{Schema: v.Schema, Name: v.Name}
+		}
+	}
+
+	if c.IgnoreDBs != nil {
+		r.IgnoreDBs = make([]string, len(c.IgnoreDBs))
+		for i, v := range c.IgnoreDBs {
+			r.IgnoreDBs[i] = v
+		}
+	}
+	return r
 }
 
 // NewFilter creates a filter
@@ -28,6 +86,8 @@ func NewFilter(config *ReplicaConfig) (*Filter, error) {
 	return &Filter{
 		filter:            filter,
 		ignoreTxnCommitTs: config.IgnoreTxnCommitTs,
+		ddlWhitelist:      config.DDLWhitelist,
+		config:            config,
 	}, nil
 }
 
@@ -56,6 +116,71 @@ func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 // CDC only supports filtering by database/table now.
 func (f *Filter) ShouldIgnoreEvent(ts uint64, schema, table string) bool {
 	return f.shouldIgnoreCommitTs(ts) || f.ShouldIgnoreTable(schema, table)
+}
+
+func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
+	if !f.shouldDiscardByBuiltInDDLWhitelist(ddlType) {
+		return false
+	}
+	for _, whiteDDLType := range f.ddlWhitelist {
+		if whiteDDLType == ddlType {
+			return false
+		}
+	}
+	return true
+}
+
+func (f *Filter) shouldDiscardByBuiltInDDLWhitelist(ddlType model.ActionType) bool {
+	/* The following DDL will be filter:
+	ActionAddForeignKey                 ActionType = 9
+	ActionDropForeignKey                ActionType = 10
+	ActionRebaseAutoID                  ActionType = 13
+	ActionShardRowID                    ActionType = 16
+	ActionLockTable                     ActionType = 27
+	ActionUnlockTable                   ActionType = 28
+	ActionRepairTable                   ActionType = 29
+	ActionSetTiFlashReplica             ActionType = 30
+	ActionUpdateTiFlashReplicaStatus    ActionType = 31
+	ActionCreateSequence                ActionType = 34
+	ActionAlterSequence                 ActionType = 35
+	ActionDropSequence                  ActionType = 36
+	*/
+	switch ddlType {
+	case model.ActionCreateSchema,
+		model.ActionDropSchema,
+		model.ActionCreateTable,
+		model.ActionDropTable,
+		model.ActionAddColumn,
+		model.ActionDropColumn,
+		model.ActionAddIndex,
+		model.ActionDropIndex,
+		model.ActionTruncateTable,
+		model.ActionModifyColumn,
+		model.ActionRenameTable,
+		model.ActionSetDefaultValue,
+		model.ActionModifyTableComment,
+		model.ActionRenameIndex,
+		model.ActionAddTablePartition,
+		model.ActionDropTablePartition,
+		model.ActionCreateView,
+		model.ActionModifyTableCharsetAndCollate,
+		model.ActionTruncateTablePartition,
+		model.ActionDropView,
+		model.ActionRecoverTable,
+		model.ActionModifySchemaCharsetAndCollate,
+		model.ActionAddPrimaryKey,
+		model.ActionDropPrimaryKey:
+		return false
+	}
+	return true
+}
+
+func (f *Filter) Clone() *Filter {
+	filter, err := NewFilter(f.config.Clone())
+	if err != nil {
+		log.Fatal("err must be nil", zap.Error(err))
+	}
+	return filter
 }
 
 // IsSysSchema returns true if the given schema is a system schema

@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -102,13 +104,16 @@ type StorageBuilder struct {
 	resolvedTs uint64
 	gcTs       uint64
 	ddlEventCh <-chan *model.RawKVEntry
+
+	filter *util.Filter
 }
 
 // NewStorageBuilder creates a new StorageBuilder
-func NewStorageBuilder(historyDDL []*timodel.Job, ddlEventCh <-chan *model.RawKVEntry) *StorageBuilder {
+func NewStorageBuilder(historyDDL []*timodel.Job, ddlEventCh <-chan *model.RawKVEntry, filter *util.Filter) *StorageBuilder {
 	builder := &StorageBuilder{
 		jobList:    newJobList(),
 		ddlEventCh: ddlEventCh,
+		filter:     filter,
 	}
 
 	sort.Slice(historyDDL, func(i, j int) bool {
@@ -120,7 +125,7 @@ func NewStorageBuilder(historyDDL []*timodel.Job, ddlEventCh <-chan *model.RawKV
 		atomic.StoreUint64(&builder.resolvedTs, historyDDL[len(historyDDL)-1].BinlogInfo.FinishedTS)
 	}
 
-	builder.baseStorage = newStorage(&builder.resolvedTs, builder.jobList)
+	builder.baseStorage = newStorage(&builder.resolvedTs, builder.jobList, filter.Clone())
 	return builder
 }
 
