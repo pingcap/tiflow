@@ -199,14 +199,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 		return p.sink.PrintStatus(cctx)
 	})
 
-	if err := p.register(ctx); err != nil {
-		errCh <- err
-	}
 	go func() {
 		if err := wg.Wait(); err != nil {
 			errCh <- err
 		}
-		_ = p.deregister(ctx)
 	}()
 }
 
@@ -683,20 +679,7 @@ func (p *processor) stop(ctx context.Context) error {
 	if err := p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID); err != nil {
 		return err
 	}
-
-	return errors.Trace(p.deregister(ctx))
-}
-
-func (p *processor) register(ctx context.Context) error {
-	info := &model.ProcessorInfo{
-		ID:           p.id,
-		CaptureID:    p.captureID,
-		ChangeFeedID: p.changefeedID,
-	}
-	return p.etcdCli.PutProcessorInfo(ctx, p.captureID, info, p.session.Lease())
-}
-func (p *processor) deregister(ctx context.Context) error {
-	return p.etcdCli.DeleteProcessorInfo(ctx, p.captureID, p.id)
+	return nil
 }
 
 // runProcessor creates a new processor then starts it.
