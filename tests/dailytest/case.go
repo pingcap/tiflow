@@ -333,14 +333,17 @@ func ineligibleTable(tr *testRunner, src *sql.DB, dst *sql.DB) {
 		"CREATE TABLE ineligible_table2 (ncol1 int, ncol2 int);",
 
 		"insert into ineligible_table1 (uk, ncol) values (1,1);",
-		"insert into ineligible_table1 (uk, ncol) values (null,2);",
-
-		"insert into ineligible_table2 (ncol1, ncol2) values (1,1);",
 		"insert into ineligible_table2 (ncol1, ncol2) values (2,2);",
+		"ALTER TABLE ineligible_table1 ADD COLUMN c1 INT NOT NULL;",
+		"ALTER TABLE ineligible_table2 ADD COLUMN c1 INT NOT NULL;",
+		"insert into ineligible_table1 (uk, ncol, c1) values (null,2,3);",
+		"insert into ineligible_table2 (ncol1, ncol2, c1) values (1,1,3);",
+
 		"CREATE TABLE eligible_table (uk int UNIQUE not null, ncol int);",
 		"insert into eligible_table (uk, ncol) values (1,1);",
 		"insert into eligible_table (uk, ncol) values (2,2);",
-		"insert into eligible_table (uk, ncol) values (3,4);",
+		"ALTER TABLE eligible_table ADD COLUMN c1 INT NOT NULL;",
+		"insert into eligible_table (uk, ncol, c1) values (3,4,5);",
 	}
 	// execute SQL but don't check
 	for _, sql := range sqls {
@@ -378,9 +381,7 @@ TestLoop:
 		"DROP TABLE ineligible_table2;",
 		"DROP TABLE eligible_table;",
 	}
-	for _, sql := range sqls {
-		mustExec(src, sql)
-	}
+	tr.execSQLs(sqls)
 }
 
 func caseUpdateWhileAddingCol(db *sql.DB) {

@@ -201,9 +201,9 @@ func newCreateChangefeedCommand() *cobra.Command {
 				return err
 			}
 			if len(ineligibleTables) != 0 {
-				cmd.Printf("[WARN] some tables are not eligible to duplicate, %#v\n", ineligibleTables)
+				cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", ineligibleTables)
 				if !noConfirm {
-					cmd.Printf("Could you agree to ignore those tables, and continue to duplicate [Y/N]\n")
+					cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
 					var yOrN string
 					_, err := fmt.Scan(&yOrN)
 					if err != nil {

@@ -322,14 +322,17 @@ func (c *changeFeed) checkJob(job *timodel.Job) (skip bool) {
 	switch job.Type {
 	case timodel.ActionCreateTable:
 		tableInfo := entry.WrapTableInfo(job.BinlogInfo.TableInfo)
-		log.Warn("this table is not eligible to duplicate", zap.Reflect("job", job))
-		return !tableInfo.ExistTableUniqueColumn()
+		if !tableInfo.ExistTableUniqueColumn() {
+			log.Warn("this table is not eligible to replicate", zap.Reflect("job", job))
+			return true
+		}
+		return false
 	case timodel.ActionDropColumn, timodel.ActionDropIndex, timodel.ActionDropPrimaryKey:
 		tableInfo := entry.WrapTableInfo(job.BinlogInfo.TableInfo)
 		if tableInfo.ExistTableUniqueColumn() {
 			return false
 		}
-		log.Warn("this table is not eligible to duplicate, stop to duplicate this table", zap.Reflect("job", job))
+		log.Warn("this table is not eligible to replicate, stop to replicate this table", zap.Reflect("job", job))
 		c.removeTable(uint64(job.SchemaID), uint64(job.TableID))
 		return true
 	}
@@ -344,11 +347,15 @@ func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 		return false, errors.Trace(err)
 	}
 
-	if c.checkJob(job) {
+	schemaID := uint64(job.SchemaID)
+	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
+		tableID := uint64(job.BinlogInfo.TableInfo.ID)
+		if _, exist := c.tables[tableID]; exist {
+			c.removeTable(schemaID, tableID)
+		}
 		return true, nil
 	}
 
-	schemaID := uint64(job.SchemaID)
 	// case table id set may change
 	switch job.Type {
 	case timodel.ActionCreateSchema:
