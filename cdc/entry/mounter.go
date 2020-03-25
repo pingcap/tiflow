@@ -196,6 +196,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model
 func (m *mounterImpl) unmarshalRowKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*rowKVEntry, error) {
 	tableID := base.TableID
 	tableInfo, exist := m.schemaStorage.TableByID(tableID)
+	log.Info("unmarshalRowKVEntry", zap.Reflect("tableInfo", tableInfo))
 	if !exist {
 		if m.schemaStorage.IsTruncateTableID(tableID) {
 			log.Debug("skip the DML of truncated table", zap.Uint64("ts", base.Ts), zap.Int64("tableID", tableID))
@@ -282,6 +283,7 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 	if !exist {
 		return nil, errors.NotFoundf("table in schema storage, id: %d", row.TableID)
 	}
+	log.Info("mountRowKVEntry", zap.Reflect("tableInfo", tableInfo), zap.Reflect("tableName", tableName))
 
 	if row.Delete && !tableInfo.PKIsHandle {
 		return nil, nil
