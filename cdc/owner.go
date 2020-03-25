@@ -1140,17 +1140,11 @@ func (o *ownerImpl) markProcessorDown(ctx context.Context,
 	// lookup the task position for the processor
 	pos, exist := positions[p.CaptureID]
 	if !exist {
-		log.Warn("unkown processor deletion detected",
-			zap.String("processorid", p.ID),
-			zap.String("captureid", p.CaptureID))
 		return nil
 	}
 	// lookup the task position for the processor
 	status, exist := statuses[p.CaptureID]
 	if !exist {
-		log.Warn("unkown processor deletion detected",
-			zap.String("processorid", p.ID),
-			zap.String("capture", p.CaptureID))
 		return nil
 	}
 	snap := status.Snapshot(p.ChangeFeedID,

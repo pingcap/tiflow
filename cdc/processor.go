@@ -646,6 +646,14 @@ func (p *processor) stop(ctx context.Context) error {
 	}
 	p.tablesMu.Unlock()
 	p.session.Close()
+
+	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureID); err != nil {
+		return err
+	}
+	if err := p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID); err != nil {
+		return err
+	}
+
 	return errors.Trace(p.deregister(ctx))
 }
 
