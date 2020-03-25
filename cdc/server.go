@@ -19,7 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
@@ -127,27 +126,27 @@ func (s *Server) run(ctx context.Context) (err error) {
 	defer cancel()
 
 	go func() {
-		if err := s.capture.Run(ctx); err != nil {
-			log.Error("capture run failed", zap.Error(err))
-			cancel()
+		for {
+			// Campaign to be an owner, it blocks until it becomes
+			// the owner
+			if err := s.capture.Campaign(ctx); err != nil {
+				log.Error("campaign failed", zap.Error(err))
+				return
+			}
+			owner, err := NewOwner(s.capture.session)
+			if err != nil {
+				log.Error("new owner failed", zap.Error(err))
+				return
+			}
+			s.owner = owner
+			if err := owner.Run(ctx, ownerRunInterval); err != nil {
+				log.Error("run owner failed", zap.Error(err))
+				return
+			}
 		}
-	}()
 
-	for {
-		// Campaign to be an owner, it blocks until it becomes
-		// the owner
-		if err := s.capture.Campaign(ctx); err != nil {
-			return errors.Trace(err)
-		}
-		owner, err := NewOwner(s.capture.session)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		s.owner = owner
-		if err := owner.Run(ctx, ownerRunInterval); err != nil {
-			return errors.Trace(err)
-		}
-	}
+	}()
+	return s.capture.Run(ctx)
 }
 
 // Close closes the server.

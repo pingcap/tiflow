@@ -497,8 +497,6 @@ loop:
 			break loop
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-o.session.Done():
-			panic(ErrSuicide)
 		case <-time.After(tickTime):
 			err := o.run(ctx)
 			// owner may be evicted during running, ignore the context canceled error directly
