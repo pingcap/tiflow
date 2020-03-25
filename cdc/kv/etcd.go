@@ -36,7 +36,7 @@ const (
 	CaptureInfoKeyPrefix = EtcdKeyBase + "/capture"
 
 	// ProcessorInfoKeyPrefix is the processor info path that is saved to etcd
-	ProcessorInfoKeyPrefix = EtcdKeyBase + "/processor/info"
+	ProcessorInfoKeyPrefix = EtcdKeyBase + "/processor"
 
 	// TaskKeyPrefix is the prefix of task keys
 	TaskKeyPrefix = EtcdKeyBase + "/task"
