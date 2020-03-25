@@ -122,3 +122,16 @@ func (e *DDLEvent) FromMqMessage(key *MqMessageKey, value *MqMessageDDL) {
 	e.Type = value.Type
 	e.Query = value.Query
 }
+
+// FromJob fills the values of DDLEvent from DDL job
+func (e *DDLEvent) FromJob(job *model.Job) {
+	var tableName string
+	if job.BinlogInfo.TableInfo != nil {
+		tableName = job.BinlogInfo.TableInfo.Name.O
+	}
+	e.Ts = job.BinlogInfo.FinishedTS
+	e.Query = job.Query
+	e.Schema = job.SchemaName
+	e.Table = tableName
+	e.Type = job.Type
+}
