@@ -439,6 +439,9 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64, processor bool) er
 	}
 	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
 	for _, job := range jobs {
+		if processor {
+			log.Info("jobs in HandlePreviousDDLJobIfNeed processor", zap.Reflect("job", job))
+		}
 		if SkipJob(job) {
 			log.Info("skip DDL job because the job isn't synced and done", zap.Stringer("job", job))
 			continue
