@@ -126,13 +126,14 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		}
 
+		log.Info("processor HandlePreviousDDLJobIfNeed", zap.Uint64("ts", rawRow.Ts))
+		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts, true)
+
 		if rawRow.OpType == model.OpTypeResolved {
 			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
 			continue
 		}
 
-		log.Info("processor HandlePreviousDDLJobIfNeed", zap.Uint64("ts", rawRow.Ts))
-		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts, true)
 		switch errors.Cause(err) {
 		case nil:
 		case model.ErrUnresolved:
