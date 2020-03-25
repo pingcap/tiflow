@@ -604,7 +604,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		if binlogInfo == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
-		tbInfo := binlogInfo.TableInfo
+		tbInfo := binlogInfo.TableInfo.Clone()
 		if tbInfo == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
