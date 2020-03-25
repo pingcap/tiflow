@@ -12,22 +12,23 @@ require (
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/golang/groupcache v0.0.0-20191227052852-215e87163ea7 // indirect
+	github.com/google/btree v1.0.0
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
-	github.com/json-iterator/go v1.1.9 // indirect
 	github.com/klauspost/compress v1.10.2 // indirect
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
-	github.com/pingcap/check v0.0.0-20191216031241-8a5a85928f12
+	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
 	github.com/pingcap/failpoint v0.0.0-20200210140405-f8f9fb234798
 	github.com/pingcap/kvproto v0.0.0-20200311033452-ee50d594859d
 	github.com/pingcap/log v0.0.0-20200117041106-d28c14d3b1cd
-	github.com/pingcap/parser v0.0.0-20200207090844-d65f5147dd9f
+	github.com/pingcap/parser v0.0.0-20200317021010-cd90cc2a7d87
 	github.com/pingcap/pd v1.1.0-beta.0.20200106144140-f5a7aa985497
+	github.com/pingcap/pd/v4 v4.0.0-beta.1.0.20200305072537-61d9f9cc35d3
 	github.com/pingcap/tidb v1.1.0-beta.0.20200212043647-e66daf3e04d0
-	github.com/pingcap/tidb-tools v3.1.0-beta.1.0.20200108061154-356b0e2e2282+incompatible
+	github.com/pingcap/tidb-tools v4.0.0-beta.1.0.20200306084441-875bd09aa3d5+incompatible
 	github.com/prometheus/client_golang v1.3.0
 	github.com/prometheus/common v0.8.0 // indirect
 	github.com/spf13/cobra v0.0.5
@@ -35,11 +36,9 @@ require (
 	github.com/stretchr/testify v1.4.0
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20191211224106-0dc78a144b31
-	go.uber.org/zap v1.13.0
+	go.uber.org/zap v1.14.0
 	golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073 // indirect
-	golang.org/x/net v0.0.0-20200301022130-244492dfa37a // indirect
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
-	golang.org/x/sys v0.0.0-20200113162924-86b910548bc1 // indirect
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	google.golang.org/appengine v1.6.2 // indirect
 	google.golang.org/genproto v0.0.0-20200113173426-e1de0a7b01eb // indirect
@@ -47,3 +46,5 @@ require (
 )
 
 replace github.com/pingcap/kvproto => github.com/MyonKeminta/kvproto v0.0.0-20200323094912-0ad62f824695
+
+replace github.com/pingcap/tidb => github.com/MyonKeminta/tidb v1.1.0-alpha.1.0.20200325092028-b9f4e8c44d23
