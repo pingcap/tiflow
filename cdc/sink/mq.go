@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/retry"
+
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/ticdc/pkg/util"
@@ -99,6 +101,10 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 		k.lastSentMsgIndex, err = k.mqProducer.SendMessage(ctx, keyByte, valueByte, partition, func(err error) {
 			if err != nil {
 				log.Error("failed to send row changed event to kafka", zap.Error(err), zap.Reflect("row", row))
+				select {
+				case k.errCh <- err:
+				default:
+				}
 				return
 			}
 			atomic.AddInt64(&k.count, 1)
@@ -204,6 +210,7 @@ func (k *mqSink) run(ctx context.Context) error {
 			}
 			return ctx.Err()
 		case err := <-k.errCh:
+			log.Error("found err in MQ Sink, exiting", zap.Error(err))
 			if err := k.Close(); err != nil {
 				log.Error("close mq sink failed", zap.Error(err))
 			}
@@ -212,8 +219,14 @@ func (k *mqSink) run(ctx context.Context) error {
 		}
 
 		// wait mq producer send message successfully
-		for sinkCheckpoint.index > k.mqProducer.MaxSuccessesIndex() {
-			time.Sleep(20 * time.Millisecond)
+		err := retry.Run(func() error {
+			if sinkCheckpoint.index > k.mqProducer.MaxSuccessesIndex() {
+				return errors.New("wait MQ producer successes index")
+			}
+			return nil
+		}, 5)
+		if err != nil {
+			return errors.Trace(err)
 		}
 		globalResolvedTs := atomic.LoadUint64(&k.globalResolvedTs)
 		// when local resolvedTS is fallback, we will postpone to pushing global resolvedTS
