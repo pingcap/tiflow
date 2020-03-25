@@ -397,6 +397,7 @@ func (s *Storage) CreateTable(schema *timodel.DBInfo, table *timodel.TableInfo) 
 	schema.Tables = append(schema.Tables, table)
 	s.tables[table.ID] = WrapTableInfo(table)
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
+	log.Info("create table in schema", zap.String("table", table.Name.O))
 	s.tableNameToID[s.tableIDToName[table.ID]] = table.ID
 
 	log.Debug("create table success", zap.String("name", schema.Name.O+"."+table.Name.O), zap.Int64("id", table.ID))
@@ -487,7 +488,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		schemaName = schema.Name.O
 
 	case timodel.ActionModifySchemaCharsetAndCollate:
-		db := job.BinlogInfo.DBInfo
+		db := job.BinlogInfo.DBInfo.Clone()
 		if _, ok := s.schemas[db.ID]; !ok {
 			return "", "", "", errors.NotFoundf("schema %s(%d)", db.Name, db.ID)
 		}
@@ -508,7 +509,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 
 	case timodel.ActionRenameTable:
-		// ignore schema doesn't support reanme ddl
+		// ignore schema doesn't support rename ddl
 		_, ok := s.SchemaByTableID(job.TableID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
@@ -520,6 +521,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		}
 		// create table
 		table := job.BinlogInfo.TableInfo.Clone()
+		log.Info("rename table in schema ", zap.Reflect("new table", table))
 		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)
@@ -604,10 +606,11 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		if binlogInfo == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
-		tbInfo := binlogInfo.TableInfo.Clone()
+		tbInfo := binlogInfo.TableInfo
 		if tbInfo == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
+		tbInfo = tbInfo.Clone()
 
 		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
