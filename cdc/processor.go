@@ -600,8 +600,8 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	}()
 	storage, err := p.schemaBuilder.Build(startTs)
 	if err != nil {
-		log.Error("failed to build schema storage", zap.Error(err))
 		p.errCh <- errors.Trace(err)
+		return
 	}
 	// start mounter
 	mounter := entry.NewMounter(puller.SortedOutput(ctx), storage)
