@@ -7,12 +7,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/retry"
 	"go.uber.org/zap"
 )
 
@@ -173,14 +171,7 @@ func (b *StorageBuilder) Build(ts uint64) (*Storage, error) {
 	c := b.baseStorage.Clone()
 	b.baseStorageMu.Unlock()
 
-	err := retry.Run(func() error {
-		err := c.HandlePreviousDDLJobIfNeed(ts)
-		if errors.Cause(err) != model.ErrUnresolved {
-			return backoff.Permanent(err)
-		}
-		return err
-	}, 5)
-	if err != nil {
+	if err := c.HandlePreviousDDLJobIfNeed(ts); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return c, nil

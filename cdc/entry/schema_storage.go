@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/cenkalti/backoff"
+	"github.com/pingcap/ticdc/pkg/retry"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -433,6 +436,22 @@ func (s *Storage) removeTable(tableID int64) error {
 
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
 func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
+	err := retry.Run(func() error {
+		err := s.handlePreviousDDLJobIfNeed(commitTs)
+		if errors.Cause(err) != model.ErrUnresolved {
+			return backoff.Permanent(err)
+		}
+		return err
+	}, 5)
+	switch err.(type) {
+	case *backoff.PermanentError:
+		return errors.New("timeout when waiting resolved ts of ddl puller")
+	default:
+		return err
+	}
+}
+
+func (s *Storage) handlePreviousDDLJobIfNeed(commitTs uint64) error {
 	if commitTs > atomic.LoadUint64(s.resolvedTs) {
 		return model.ErrUnresolved
 	}
