@@ -196,10 +196,10 @@ func (b *StorageBuilder) DoGc(ts uint64) error {
 	}
 	b.baseStorageMu.Lock()
 	defer b.baseStorageMu.Unlock()
-	//err := b.baseStorage.HandlePreviousDDLJobIfNeed(ts, false)
-	//if err != nil {
-	//	return errors.Trace(err)
-	//}
+	err := b.baseStorage.HandlePreviousDDLJobIfNeed(ts, false)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	//b.jobList.RemoveOverdueJobs(ts)
 	return nil
 }
