@@ -397,7 +397,6 @@ func (s *Storage) CreateTable(schema *timodel.DBInfo, table *timodel.TableInfo) 
 	schema.Tables = append(schema.Tables, table)
 	s.tables[table.ID] = WrapTableInfo(table)
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
-	log.Info("create table in schema", zap.String("table", table.Name.O))
 	s.tableNameToID[s.tableIDToName[table.ID]] = table.ID
 
 	log.Debug("create table success", zap.String("name", schema.Name.O+"."+table.Name.O), zap.Int64("id", table.ID))
@@ -433,15 +432,12 @@ func (s *Storage) removeTable(tableID int64) error {
 }
 
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
-func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64, processor bool) error {
+func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 	if commitTs > atomic.LoadUint64(s.resolvedTs) {
 		return model.ErrUnresolved
 	}
 	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
 	for _, job := range jobs {
-		if processor {
-			log.Info("jobs in HandlePreviousDDLJobIfNeed processor", zap.Reflect("job", job))
-		}
 		if SkipJob(job) {
 			log.Info("skip DDL job because the job isn't synced and done", zap.Stringer("job", job))
 			continue
@@ -449,9 +445,6 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64, processor bool) er
 		if job.BinlogInfo.FinishedTS <= s.lastHandledTs {
 			log.Debug("skip DDL job because the job is already handled", zap.Stringer("job", job))
 			continue
-		}
-		if processor {
-			log.Info("handle ", zap.Reflect("job", job))
 		}
 		_, _, _, err := s.HandleDDL(job)
 		if err != nil {
@@ -527,7 +520,6 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		}
 		// create table
 		table := job.BinlogInfo.TableInfo.Clone()
-		log.Info("rename table in schema ", zap.Reflect("new table", table))
 		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("schema %d", job.SchemaID)

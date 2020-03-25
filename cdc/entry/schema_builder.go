@@ -34,6 +34,9 @@ func (l *jobList) FetchNextJobs(currentJob *list.Element, ts uint64) (*list.Elem
 	if currentJob == nil {
 		log.Fatal("param `currentJob` in `FetchNextJobs` can't be nil, please report a bug")
 	}
+	if ts == 0 {
+		return currentJob, nil
+	}
 
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -76,7 +79,6 @@ func (l *jobList) AppendJob(jobs ...*timodel.Job) {
 func (l *jobList) RemoveOverdueJobs(ts uint64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	log.Info("BUGFOUNDER gcts", zap.Uint64("gcts", ts))
 	for e := l.list.Front().Next(); e != nil; {
 		job := e.Value.(*timodel.Job)
 		if job.BinlogInfo.FinishedTS >= ts {
@@ -85,7 +87,6 @@ func (l *jobList) RemoveOverdueJobs(ts uint64) {
 		l.gcTs = job.BinlogInfo.FinishedTS
 		lastE := e
 		e = e.Next()
-		log.Info("BUGFOUNDER gc job", zap.Reflect("job", lastE.Value))
 		l.list.Remove(lastE)
 	}
 }
@@ -173,7 +174,7 @@ func (b *StorageBuilder) Build(ts uint64) (*Storage, error) {
 	b.baseStorageMu.Unlock()
 
 	err := retry.Run(func() error {
-		err := c.HandlePreviousDDLJobIfNeed(ts, false)
+		err := c.HandlePreviousDDLJobIfNeed(ts)
 		if errors.Cause(err) != model.ErrUnresolved {
 			return backoff.Permanent(err)
 		}
@@ -199,7 +200,7 @@ func (b *StorageBuilder) DoGc(ts uint64) error {
 	}
 	b.baseStorageMu.Lock()
 	defer b.baseStorageMu.Unlock()
-	err := b.baseStorage.HandlePreviousDDLJobIfNeed(ts, false)
+	err := b.baseStorage.HandlePreviousDDLJobIfNeed(ts)
 	if err != nil {
 		return errors.Trace(err)
 	}

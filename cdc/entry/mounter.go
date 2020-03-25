@@ -126,8 +126,7 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		}
 
-		log.Info("processor HandlePreviousDDLJobIfNeed", zap.Uint64("ts", rawRow.Ts))
-		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts, true)
+		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts)
 
 		if rawRow.OpType == model.OpTypeResolved {
 			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
@@ -198,7 +197,6 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model
 func (m *mounterImpl) unmarshalRowKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*rowKVEntry, error) {
 	tableID := base.TableID
 	tableInfo, exist := m.schemaStorage.TableByID(tableID)
-	log.Info("unmarshalRowKVEntry", zap.Reflect("tableInfo", tableInfo))
 	if !exist {
 		if m.schemaStorage.IsTruncateTableID(tableID) {
 			log.Debug("skip the DML of truncated table", zap.Uint64("ts", base.Ts), zap.Int64("tableID", tableID))
@@ -285,7 +283,6 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 	if !exist {
 		return nil, errors.NotFoundf("table in schema storage, id: %d", row.TableID)
 	}
-	log.Info("mountRowKVEntry", zap.Reflect("tableInfo", tableInfo), zap.Reflect("tableName", tableName))
 
 	if row.Delete && !tableInfo.PKIsHandle {
 		return nil, nil
