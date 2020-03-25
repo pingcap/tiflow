@@ -26,24 +26,20 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/ticdc/pkg/flags"
-	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
-	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
 
 const (
-	ownerRunInterval    = time.Millisecond * 500
-	cfWatcherRetryDelay = time.Millisecond * 500
-	captureSessionTTL   = 3
+	ownerRunInterval  = time.Millisecond * 500
+	captureSessionTTL = 3
 )
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
@@ -115,22 +111,6 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	return
 }
 
-var _ processorCallback = &Capture{}
-
-// OnRunProcessor implements processorCallback.
-func (c *Capture) OnRunProcessor(p *processor) {
-	c.processors[p.changefeedID] = p
-}
-
-// OnStopProcessor implements processorCallback.
-func (c *Capture) OnStopProcessor(p *processor, err error) {
-	// TODO: handle processor error
-	log.Info("stop to run processor", zap.String("changefeed id", p.changefeedID), util.ZapErrorFilter(err, context.Canceled))
-	c.procLock.Lock()
-	defer c.procLock.Unlock()
-	delete(c.processors, p.changefeedID)
-}
-
 // Start starts the Capture mainloop
 func (c *Capture) Start(ctx context.Context) (err error) {
 	// TODO: better channgefeed model with etcd storage
@@ -150,22 +130,48 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		return c.ownerWorker.Run(cctx, ownerRunInterval)
 	})
 
-	rl := rate.NewLimiter(0.1, 5)
-	watcher := NewChangeFeedWatcher(c.info.ID, c.pdEndpoints, c.etcdClient)
-	errg.Go(func() error {
-		for {
-			if !rl.Allow() {
-				return errors.New("changefeed watcher exceeds rate limit")
-			}
-			err := watcher.Watch(cctx, c)
-			if errors.Cause(err) == mvcc.ErrCompacted {
-				log.Warn("changefeed watcher watch retryable error", zap.Error(err))
-				time.Sleep(cfWatcherRetryDelay)
-				continue
-			}
-			return errors.Trace(err)
-		}
+	taskWatcher := NewTaskWatcher(c, &TaskWatcherConfig{
+		Prefix:      kv.TaskStatusKeyPrefix + "/" + c.info.ID,
+		ChannelSize: 128,
 	})
+	log.Info("waiting for tasks", zap.String("captureid", c.info.ID))
+	for ev := range taskWatcher.Watch(ctx) {
+		if ev.Err != nil {
+			return errors.Trace(ev.Err)
+		}
+		task := ev.Task
+		if ev.Op == TaskOpCreate {
+			cf, err := c.etcdClient.GetChangeFeedInfo(ctx, task.ChangeFeedID)
+			if err != nil {
+				log.Error("get change feed info failed",
+					zap.String("changefeedid", task.ChangeFeedID),
+					zap.String("captureid", c.info.ID),
+					zap.Error(err))
+				return err
+			}
+			log.Info("run processor", zap.String("captureid", c.info.ID),
+				zap.String("changefeedid", task.ChangeFeedID))
+			if _, ok := c.processors[task.ChangeFeedID]; !ok {
+				p, err := runProcessor(ctx, c.pdEndpoints, *cf, task.ChangeFeedID,
+					c.info.ID, task.CheckpointTS)
+				if err != nil {
+					log.Error("run processor failed",
+						zap.String("changefeedid", task.ChangeFeedID),
+						zap.String("captureid", c.info.ID),
+						zap.Error(err))
+					return err
+				}
+				c.processors[task.ChangeFeedID] = p
+			}
+		} else if ev.Op == TaskOpDelete {
+			if p, ok := c.processors[task.ChangeFeedID]; ok {
+				if err := p.stop(ctx); err != nil {
+					return errors.Trace(err)
+				}
+				delete(c.processors, task.ChangeFeedID)
+			}
+		}
+	}
 
 	return errg.Wait()
 }
