@@ -38,12 +38,13 @@ func (l *jobList) FetchNextJobs(currentJob *list.Element, ts uint64) (*list.Elem
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	if ts < l.gcTs {
+	if ts <= l.gcTs {
 		log.Fatal("cannot fetch the jobs which of finishedTs is less then gcTs, please report a bug", zap.Uint64("gcTs", l.gcTs))
 	}
 
 	if currentJob != l.list.Front() {
 		job := currentJob.Value.(*timodel.Job)
+		// check if element was already gced.
 		if job.BinlogInfo.FinishedTS <= l.gcTs {
 			currentJob = l.list.Front()
 		}
@@ -65,7 +66,7 @@ func (l *jobList) AppendJob(jobs ...*timodel.Job) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for _, job := range jobs {
-		if job.BinlogInfo.FinishedTS < l.gcTs {
+		if job.BinlogInfo.FinishedTS <= l.gcTs {
 			log.Fatal("cannot append a job which of finishedTs is less then gcTs, please report a bug", zap.Uint64("gcTs", l.gcTs), zap.Reflect("job", job))
 		}
 		l.list.PushBack(job)
@@ -75,14 +76,16 @@ func (l *jobList) AppendJob(jobs ...*timodel.Job) {
 func (l *jobList) RemoveOverdueJobs(ts uint64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	log.Info("BUGFOUNDER gcts", zap.Uint64("gcts", ts))
 	for e := l.list.Front().Next(); e != nil; {
 		job := e.Value.(*timodel.Job)
-		if job.BinlogInfo.FinishedTS > ts {
+		if job.BinlogInfo.FinishedTS >= ts {
 			break
 		}
 		l.gcTs = job.BinlogInfo.FinishedTS
 		lastE := e
 		e = e.Next()
+		log.Info("BUGFOUNDER gc job", zap.Reflect("job", lastE.Value))
 		l.list.Remove(lastE)
 	}
 }
@@ -200,6 +203,6 @@ func (b *StorageBuilder) DoGc(ts uint64) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	//b.jobList.RemoveOverdueJobs(ts)
+	b.jobList.RemoveOverdueJobs(ts)
 	return nil
 }
