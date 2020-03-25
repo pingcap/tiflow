@@ -124,13 +124,6 @@ func (c *changeFeed) dropSchema(schemaID uint64) {
 	delete(c.schemas, schemaID)
 }
 
-func (c *changeFeed) reAddTable(id, startTs uint64) {
-	c.orphanTables[id] = model.ProcessTableInfo{
-		ID:      id,
-		StartTs: startTs,
-	}
-}
-
 func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
