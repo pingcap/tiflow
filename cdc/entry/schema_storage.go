@@ -707,7 +707,7 @@ func (s *Storage) IsTruncateTableID(id int64) bool {
 	return ok
 }
 
-// IsTruncateTableID returns true if the table is ineligible
+// IsIneligibleTableID returns true if the table is ineligible
 func (s *Storage) IsIneligibleTableID(id int64) bool {
 	_, ok := s.ineligibleTableID[id]
 	return ok

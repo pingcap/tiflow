@@ -318,27 +318,6 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 	}
 }
 
-func (c *changeFeed) checkJob(job *timodel.Job) (skip bool) {
-	switch job.Type {
-	case timodel.ActionCreateTable:
-		tableInfo := entry.WrapTableInfo(job.BinlogInfo.TableInfo)
-		if !tableInfo.ExistTableUniqueColumn() {
-			log.Warn("this table is not eligible to replicate", zap.Reflect("job", job))
-			return true
-		}
-		return false
-	case timodel.ActionDropColumn, timodel.ActionDropIndex, timodel.ActionDropPrimaryKey:
-		tableInfo := entry.WrapTableInfo(job.BinlogInfo.TableInfo)
-		if tableInfo.ExistTableUniqueColumn() {
-			return false
-		}
-		log.Warn("this table is not eligible to replicate, stop to replicate this table", zap.Reflect("job", job))
-		c.removeTable(uint64(job.SchemaID), uint64(job.TableID))
-		return true
-	}
-	return false
-}
-
 func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 	log.Info("apply job", zap.String("sql", job.Query), zap.Stringer("job", job))
 
