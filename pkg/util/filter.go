@@ -32,17 +32,13 @@ func (c *ReplicaConfig) Clone() *ReplicaConfig {
 	r := new(ReplicaConfig)
 	if c.DDLWhitelist != nil {
 		r.DDLWhitelist = make([]model.ActionType, len(c.DDLWhitelist))
-		for i, v := range c.DDLWhitelist {
-			r.DDLWhitelist[i] = v
-		}
+		copy(r.DDLWhitelist, c.DDLWhitelist)
 	}
 	r.FilterCaseSensitive = c.FilterCaseSensitive
 	r.FilterRules = cloneFilterRules(c.FilterRules)
 	if c.IgnoreTxnCommitTs != nil {
 		r.IgnoreTxnCommitTs = make([]uint64, len(c.IgnoreTxnCommitTs))
-		for i, v := range c.IgnoreTxnCommitTs {
-			r.IgnoreTxnCommitTs[i] = v
-		}
+		copy(r.IgnoreTxnCommitTs, c.IgnoreTxnCommitTs)
 	}
 	return r
 }
@@ -60,9 +56,7 @@ func cloneFilterRules(c *filter.Rules) *filter.Rules {
 	}
 	if c.DoDBs != nil {
 		r.DoDBs = make([]string, len(c.DoDBs))
-		for i, v := range c.DoDBs {
-			r.DoDBs[i] = v
-		}
+		copy(r.DoDBs, c.DoDBs)
 	}
 
 	if c.IgnoreTables != nil {
@@ -74,9 +68,7 @@ func cloneFilterRules(c *filter.Rules) *filter.Rules {
 
 	if c.IgnoreDBs != nil {
 		r.IgnoreDBs = make([]string, len(c.IgnoreDBs))
-		for i, v := range c.IgnoreDBs {
-			r.IgnoreDBs[i] = v
-		}
+		copy(r.IgnoreDBs, c.IgnoreDBs)
 	}
 	return r
 }
