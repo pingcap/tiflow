@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"log"
 
+	"github.com/pingcap/errors"
+
+	"github.com/pingcap/ticdc/cdc/entry"
+
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"go.uber.org/zap"
@@ -124,14 +128,25 @@ func (e *DDLEvent) FromMqMessage(key *MqMessageKey, value *MqMessageDDL) {
 }
 
 // FromJob fills the values of DDLEvent from DDL job
-func (e *DDLEvent) FromJob(job *model.Job) {
-	var tableName string
+func (e *DDLEvent) FromJob(s *entry.Storage, job *model.Job) error {
+
+	var tableName, schemaName string
 	if job.BinlogInfo.TableInfo != nil {
 		tableName = job.BinlogInfo.TableInfo.Name.O
 	}
+	if job.Type != model.ActionCreateSchema {
+		dbInfo, exist := s.SchemaByID(job.SchemaID)
+		if !exist {
+			return errors.NotFoundf("schema %d not found", job.SchemaID)
+		}
+		schemaName = dbInfo.Name.O
+	} else {
+		schemaName = job.BinlogInfo.DBInfo.Name.O
+	}
 	e.Ts = job.BinlogInfo.FinishedTS
 	e.Query = job.Query
-	e.Schema = job.SchemaName
+	e.Schema = schemaName
 	e.Table = tableName
 	e.Type = job.Type
+	return nil
 }
