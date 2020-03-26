@@ -125,48 +125,51 @@ func (c *Capture) Start(ctx context.Context) (err error) {
 		return c.ownerWorker.Run(cctx, ownerRunInterval)
 	})
 
-	taskWatcher := NewTaskWatcher(c, &TaskWatcherConfig{
-		Prefix:      kv.TaskStatusKeyPrefix + "/" + c.info.ID,
-		ChannelSize: 128,
-	})
-	log.Info("waiting for tasks", zap.String("captureid", c.info.ID))
-	for ev := range taskWatcher.Watch(ctx) {
-		if ev.Err != nil {
-			return errors.Trace(ev.Err)
-		}
-		task := ev.Task
-		if ev.Op == TaskOpCreate {
-			cf, err := c.etcdClient.GetChangeFeedInfo(ctx, task.ChangeFeedID)
-			if err != nil {
-				log.Error("get change feed info failed",
-					zap.String("changefeedid", task.ChangeFeedID),
-					zap.String("captureid", c.info.ID),
-					zap.Error(err))
-				return err
+	errg.Go(func() error {
+		taskWatcher := NewTaskWatcher(c, &TaskWatcherConfig{
+			Prefix:      kv.TaskStatusKeyPrefix + "/" + c.info.ID,
+			ChannelSize: 128,
+		})
+		log.Info("waiting for tasks", zap.String("captureid", c.info.ID))
+		for ev := range taskWatcher.Watch(cctx) {
+			if ev.Err != nil {
+				return errors.Trace(ev.Err)
 			}
-			log.Info("run processor", zap.String("captureid", c.info.ID),
-				zap.String("changefeedid", task.ChangeFeedID))
-			if _, ok := c.processors[task.ChangeFeedID]; !ok {
-				p, err := runProcessor(ctx, c.pdEndpoints, *cf, task.ChangeFeedID,
-					c.info.ID, task.CheckpointTS)
+			task := ev.Task
+			if ev.Op == TaskOpCreate {
+				cf, err := c.etcdClient.GetChangeFeedInfo(cctx, task.ChangeFeedID)
 				if err != nil {
-					log.Error("run processor failed",
+					log.Error("get change feed info failed",
 						zap.String("changefeedid", task.ChangeFeedID),
 						zap.String("captureid", c.info.ID),
 						zap.Error(err))
 					return err
 				}
-				c.processors[task.ChangeFeedID] = p
-			}
-		} else if ev.Op == TaskOpDelete {
-			if p, ok := c.processors[task.ChangeFeedID]; ok {
-				if err := p.stop(ctx); err != nil {
-					return errors.Trace(err)
+				log.Info("run processor", zap.String("captureid", c.info.ID),
+					zap.String("changefeedid", task.ChangeFeedID))
+				if _, ok := c.processors[task.ChangeFeedID]; !ok {
+					p, err := runProcessor(cctx, c.pdEndpoints, *cf, task.ChangeFeedID,
+						c.info.ID, task.CheckpointTS)
+					if err != nil {
+						log.Error("run processor failed",
+							zap.String("changefeedid", task.ChangeFeedID),
+							zap.String("captureid", c.info.ID),
+							zap.Error(err))
+						return err
+					}
+					c.processors[task.ChangeFeedID] = p
 				}
-				delete(c.processors, task.ChangeFeedID)
+			} else if ev.Op == TaskOpDelete {
+				if p, ok := c.processors[task.ChangeFeedID]; ok {
+					if err := p.stop(cctx); err != nil {
+						return errors.Trace(err)
+					}
+					delete(c.processors, task.ChangeFeedID)
+				}
 			}
 		}
-	}
+		return nil
+	})
 
 	return errg.Wait()
 }
