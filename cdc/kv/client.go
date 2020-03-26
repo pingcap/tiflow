@@ -532,31 +532,32 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			regions []*tikv.Region
 			err     error
 		)
-		retryErr := retry.Run(func() error {
-			scanT0 := time.Now()
-			bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-			regions, err = c.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
-			scanRegionsDuration.WithLabelValues(captureID).Observe(time.Since(scanT0).Seconds())
-			if err != nil {
-				return errors.Trace(err)
-			}
-			metas := make([]*metapb.Region, 0, len(regions))
-			for _, region := range regions {
-				if region.GetMeta() == nil {
-					err = errors.New("meta not exists in region")
-					log.Warn("batch load region", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
+		retryErr := retry.Run(500*time.Millisecond, maxRetry,
+			func() error {
+				scanT0 := time.Now()
+				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+				regions, err = c.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
+				scanRegionsDuration.WithLabelValues(captureID).Observe(time.Since(scanT0).Seconds())
+				if err != nil {
+					return errors.Trace(err)
+				}
+				metas := make([]*metapb.Region, 0, len(regions))
+				for _, region := range regions {
+					if region.GetMeta() == nil {
+						err = errors.New("meta not exists in region")
+						log.Warn("batch load region", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
+						return err
+					}
+					metas = append(metas, region.GetMeta())
+				}
+				if !util.CheckRegionsLeftCover(metas, nextSpan) {
+					err = errors.New("regions not completely left cover span")
+					log.Warn("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
 					return err
 				}
-				metas = append(metas, region.GetMeta())
-			}
-			if !util.CheckRegionsLeftCover(metas, nextSpan) {
-				err = errors.New("regions not completely left cover span")
-				log.Warn("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
-				return err
-			}
-			log.Debug("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions))
-			return nil
-		}, maxRetry)
+				log.Debug("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions))
+				return nil
+			})
 
 		if retryErr != nil {
 			return retryErr

@@ -268,13 +268,13 @@ func (p *processor) positionWorker(ctx context.Context) error {
 
 	updateInfo := func() error {
 		t0Update := time.Now()
-		err := retry.Run(func() error {
+		err := retry.Run(500*time.Millisecond, 3, func() error {
 			inErr := p.updateInfo(ctx)
 			if errors.Cause(inErr) == model.ErrAdminStopProcessor {
 				return backoff.Permanent(inErr)
 			}
 			return inErr
-		}, 3)
+		})
 		updateInfoDuration.WithLabelValues(p.captureID).Observe(time.Since(t0Update).Seconds())
 		if err != nil {
 			return errors.Annotate(err, "failed to update info")
@@ -370,7 +370,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	p.handleTables(ctx, oldStatus, p.status, p.position.CheckPointTs)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
 
-	return retry.Run(func() error {
+	return retry.Run(500*time.Millisecond, 5, func() error {
 		err = p.tsRWriter.WriteInfoIntoStorage(ctx)
 		switch errors.Cause(err) {
 		case model.ErrWriteTsConflict:
@@ -381,7 +381,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		default:
 			return backoff.Permanent(errors.Trace(err))
 		}
-	}, 5)
+	})
 }
 
 func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed, added []*model.ProcessTableInfo) {
