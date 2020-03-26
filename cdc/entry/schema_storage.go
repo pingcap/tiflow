@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/ticdc/pkg/retry"
@@ -452,24 +453,26 @@ func (s *Storage) removeTable(tableID int64) error {
 
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
 func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
-	err := retry.Run(func() error {
-		err := s.handlePreviousDDLJobIfNeed(commitTs)
-		if errors.Cause(err) != model.ErrUnresolved {
-			return backoff.Permanent(err)
-		}
-		return err
-	}, 5)
+	err := retry.Run(10*time.Millisecond, 25,
+		func() error {
+			err := s.handlePreviousDDLJobIfNeed(commitTs)
+			if errors.Cause(err) != model.ErrUnresolved {
+				return backoff.Permanent(err)
+			}
+			return err
+		})
 	switch err.(type) {
 	case *backoff.PermanentError:
-		return errors.New("timeout when waiting resolved ts of ddl puller")
+		return errors.Annotate(err, "timeout")
 	default:
 		return err
 	}
 }
 
 func (s *Storage) handlePreviousDDLJobIfNeed(commitTs uint64) error {
-	if commitTs > atomic.LoadUint64(s.resolvedTs) {
-		return model.ErrUnresolved
+	resolvedTs := atomic.LoadUint64(s.resolvedTs)
+	if commitTs > resolvedTs {
+		return errors.Annotatef(model.ErrUnresolved, "waiting resolved ts of ddl puller, resolvedTs(%d), commitTs(%d)", resolvedTs, commitTs)
 	}
 	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
 	for _, job := range jobs {
