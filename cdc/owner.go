@@ -547,21 +547,22 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	active := make(map[string]struct{})
+	_, captures, err := o.etcdClient.GetCaptures(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	for _, c := range captures {
+		active[c.ID] = struct{}{}
+	}
 	for changeFeedID := range changefeeds {
 		statuses, err := o.etcdClient.GetAllTaskStatus(ctx, changeFeedID)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		active := make(map[string]*model.ProcessorInfo)
 		for captureID := range statuses {
-			_, processors, err := o.etcdClient.GetProcessors(ctx, captureID)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			for _, p := range processors {
-				active[p.CaptureID] = p
-			}
 			if _, ok := active[captureID]; !ok {
 				if err := o.etcdClient.DeleteTaskStatus(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
