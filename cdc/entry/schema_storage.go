@@ -728,6 +728,7 @@ func (s *Storage) IsIneligibleTableID(id int64) bool {
 // At state *done*, it will be always and only changed to *synced*.
 func (s *Storage) skipJob(job *timodel.Job) bool {
 	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
+		log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
 		return true
 	}
 	return !job.IsSynced() && !job.IsDone()
