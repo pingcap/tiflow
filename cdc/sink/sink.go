@@ -15,12 +15,13 @@ package sink
 
 import (
 	"context"
+	"net/url"
+	"strings"
 
-	"github.com/pingcap/ticdc/pkg/util"
-
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 // Sink options keys
@@ -53,30 +54,29 @@ const DSNScheme = "dsn://"
 
 // NewSink creates a new sink with the sink-uri
 func NewSink(ctx context.Context, sinkURIStr string, filter *util.Filter, opts map[string]string) (Sink, error) {
-	//// check if sinkURI is a DSN
-	//if strings.HasPrefix(strings.ToLower(sinkURIStr), DSNScheme) {
-	//	dsnStr := sinkURIStr[len(DSNScheme):]
-	//	dsnCfg, err := dmysql.ParseDSN(dsnStr)
-	//	if err != nil {
-	//		return nil, errors.Annotatef(err, "parse sinkURI failed")
-	//	}
-	//	return newMySQLSink(nil, dsnCfg, filter, opts)
-	//}
-	//
-	//// parse sinkURI as a URI
-	//sinkURI, err := url.Parse(sinkURIStr)
-	//if err != nil {
-	//	return nil, errors.Annotatef(err, "parse sinkURI failed")
-	//}
-	//switch strings.ToLower(sinkURI.Scheme) {
-	//case "blackhole":
-	//	return newBlackHoleSink(), nil
-	//case "mysql", "tidb":
-	//	return newMySQLSink(sinkURI, nil, filter, opts)
-	//case "kafka":
-	//	return newKafkaSaramaSink(ctx, sinkURI, filter, opts)
-	//default:
-	//	return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
-	//}
-	return nil, errors.New("test")
+	// check if sinkURI is a DSN
+	if strings.HasPrefix(strings.ToLower(sinkURIStr), DSNScheme) {
+		dsnStr := sinkURIStr[len(DSNScheme):]
+		dsnCfg, err := dmysql.ParseDSN(dsnStr)
+		if err != nil {
+			return nil, errors.Annotatef(err, "parse sinkURI failed")
+		}
+		return newMySQLSink(nil, dsnCfg, filter, opts)
+	}
+
+	// parse sinkURI as a URI
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return nil, errors.Annotatef(err, "parse sinkURI failed")
+	}
+	switch strings.ToLower(sinkURI.Scheme) {
+	case "blackhole":
+		return newBlackHoleSink(), nil
+	case "mysql", "tidb":
+		return newMySQLSink(sinkURI, nil, filter, opts)
+	case "kafka":
+		return newKafkaSaramaSink(ctx, sinkURI, filter, opts)
+	default:
+		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
+	}
 }
