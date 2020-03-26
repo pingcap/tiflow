@@ -160,6 +160,10 @@ func (s *mysqlSink) CheckpointTs() uint64 {
 }
 
 func (s *mysqlSink) Run(ctx context.Context) error {
+	if util.IsOwnerFromCtx(ctx) {
+		<-ctx.Done()
+		return ctx.Err()
+	}
 	for {
 		select {
 		case <-ctx.Done():
