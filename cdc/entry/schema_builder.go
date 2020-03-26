@@ -6,6 +6,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
@@ -169,13 +170,14 @@ func (b *StorageBuilder) Build(ts uint64) (*Storage, error) {
 	c := b.baseStorage.Clone()
 	b.baseStorageMu.Unlock()
 
-	err := retry.Run(func() error {
-		err := c.HandlePreviousDDLJobIfNeed(ts)
-		if errors.Cause(err) != model.ErrUnresolved {
-			return backoff.Permanent(err)
-		}
-		return err
-	}, 5)
+	err := retry.Run(10*time.Millisecond, 25,
+		func() error {
+			err := c.HandlePreviousDDLJobIfNeed(ts)
+			if errors.Cause(err) != model.ErrUnresolved {
+				return backoff.Permanent(err)
+			}
+			return err
+		})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
