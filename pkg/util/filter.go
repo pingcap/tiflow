@@ -27,6 +27,7 @@ type ReplicaConfig struct {
 	IgnoreTxnCommitTs   []uint64           `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
 }
 
+// Clone clones a ReplicaConfig
 func (c *ReplicaConfig) Clone() *ReplicaConfig {
 	r := new(ReplicaConfig)
 	if c.DDLWhitelist != nil {
@@ -118,6 +119,7 @@ func (f *Filter) ShouldIgnoreEvent(ts uint64, schema, table string) bool {
 	return f.shouldIgnoreCommitTs(ts) || f.ShouldIgnoreTable(schema, table)
 }
 
+// ShouldDiscardDDL returns true if this kind of DDL should be discarded
 func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
 	if !f.shouldDiscardByBuiltInDDLWhitelist(ddlType) {
 		return false
@@ -175,6 +177,7 @@ func (f *Filter) shouldDiscardByBuiltInDDLWhitelist(ddlType model.ActionType) bo
 	return true
 }
 
+// Clone clones the Filter
 func (f *Filter) Clone() *Filter {
 	filter, err := NewFilter(f.config.Clone())
 	if err != nil {

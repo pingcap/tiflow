@@ -278,7 +278,12 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig) (ineligibleTable
 		return nil, errors.Trace(err)
 	}
 
-	schemaStorage := entry.NewSingleStorage()
+	filter, err := util.NewFilter(cfg)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	schemaStorage := entry.NewSingleStorage(filter)
 
 	for _, job := range jobs {
 		if job.BinlogInfo.FinishedTS > startTs {
@@ -288,10 +293,6 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig) (ineligibleTable
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-	}
-	filter, err := util.NewFilter(cfg)
-	if err != nil {
-		return nil, errors.Trace(err)
 	}
 
 	for tID, tableName := range schemaStorage.CloneTables() {
