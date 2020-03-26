@@ -518,6 +518,7 @@ func (o *ownerImpl) handleWatchCapture() error {
 }
 
 func (o *ownerImpl) newChangeFeed(
+	ctx context.Context,
 	id model.ChangeFeedID,
 	processorsInfos model.ProcessorsInfos,
 	taskPositions map[string]*model.TaskPosition,
@@ -598,10 +599,16 @@ func (o *ownerImpl) newChangeFeed(
 		}
 	}
 
-	sink, err := sink.NewSink(info.SinkURI, filter, info.Opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.Opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	go func() {
+		ctx := util.SetOwnerInCtx(context.TODO())
+		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
+			log.Error("failed to close sink", zap.Error(err))
+		}
+	}()
 
 	cf := &changeFeed{
 		info:          info,
@@ -664,7 +671,7 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 		}
 		checkpointTs := cfInfo.GetCheckpointTs(status)
 
-		newCf, err := o.newChangeFeed(changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
+		newCf, err := o.newChangeFeed(ctx, changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
 		if err != nil {
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
@@ -910,6 +917,8 @@ func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	}
 	err = cf.ddlHandler.Close()
 	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
+	err = cf.sink.Close()
+	log.Info("stop changefeed sink", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
 	delete(o.changeFeeds, job.CfID)
 	return nil
 }
@@ -1021,6 +1030,7 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 				ownerChanged = true
 				continue
 			}
+			ctx := util.SetOwnerInCtx(ctx)
 			if ownerChanged {
 				// Do something initialize when the capture becomes an owner.
 				ownerChanged = false

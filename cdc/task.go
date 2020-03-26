@@ -15,8 +15,8 @@ package cdc
 
 import (
 	"context"
-	"errors"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.etcd.io/etcd/clientv3"
@@ -169,7 +169,11 @@ func (w *TaskWatcher) parseTask(ctx context.Context,
 	}
 	status, err := w.capture.etcdClient.GetChangeFeedStatus(ctx, changeFeedID)
 	if err != nil {
-		return nil, err
+		if errors.Cause(err) == model.ErrChangeFeedNotExists {
+			status = &model.ChangeFeedStatus{}
+		} else {
+			return nil, err
+		}
 	}
 	checkpointTs := cf.GetCheckpointTs(status)
 	return &Task{ChangeFeedID: changeFeedID, CheckpointTS: checkpointTs}, nil
