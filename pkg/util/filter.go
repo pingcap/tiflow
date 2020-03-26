@@ -48,6 +48,9 @@ func (c *ReplicaConfig) Clone() *ReplicaConfig {
 }
 
 func cloneFilterRules(c *filter.Rules) *filter.Rules {
+	if c == nil {
+		return nil
+	}
 	r := new(filter.Rules)
 	if c.DoTables != nil {
 		r.DoTables = make([]*filter.Table, len(c.DoTables))
