@@ -219,12 +219,13 @@ func (k *mqSink) run(ctx context.Context) error {
 		}
 
 		// wait mq producer send message successfully
-		err := retry.Run(func() error {
-			if sinkCheckpoint.index > k.mqProducer.MaxSuccessesIndex() {
-				return errors.New("wait MQ producer successes index")
-			}
-			return nil
-		}, 5)
+		err := retry.Run(10*time.Millisecond, 25,
+			func() error {
+				if sinkCheckpoint.index > k.mqProducer.MaxSuccessesIndex() {
+					return errors.New("wait MQ producer successes index timeout")
+				}
+				return nil
+			})
 		if err != nil {
 			return errors.Trace(err)
 		}
