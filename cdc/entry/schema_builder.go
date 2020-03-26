@@ -124,8 +124,10 @@ func NewStorageBuilder(historyDDL []*timodel.Job, ddlEventCh <-chan *model.RawKV
 		builder.jobList.AppendJob(historyDDL...)
 		atomic.StoreUint64(&builder.resolvedTs, historyDDL[len(historyDDL)-1].BinlogInfo.FinishedTS)
 	}
-
-	builder.baseStorage = newStorage(&builder.resolvedTs, builder.jobList, filter.Clone())
+	if filter != nil {
+		filter = filter.Clone()
+	}
+	builder.baseStorage = newStorage(&builder.resolvedTs, builder.jobList, filter)
 	return builder
 }
 

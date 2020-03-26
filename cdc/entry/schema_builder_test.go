@@ -38,7 +38,7 @@ func (s *schemaBuilderSuite) TestStorageBuilder(c *C) {
 			ddlEventCh <- job2RawKvEntry(job)
 		}
 	}()
-	b := NewStorageBuilder(historyJobs, ddlEventCh)
+	b := NewStorageBuilder(historyJobs, ddlEventCh, nil)
 	go func() {
 		err := b.Run(ctx)
 		c.Assert(errors.Cause(err), Equals, context.Canceled)

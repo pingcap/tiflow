@@ -47,7 +47,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 		Query:      "create database test",
 	}
 	// reconstruct the local schema
-	schema := NewSingleStorage()
+	schema := NewSingleStorage(nil)
 	_, _, _, err := schema.HandleDDL(job)
 	c.Assert(err, IsNil)
 	_, exist := schema.SchemaByID(job.SchemaID)
@@ -190,7 +190,7 @@ func (*schemaSuite) TestTable(c *C) {
 	jobs = append(jobs, job)
 
 	// reconstruct the local schema
-	schema := NewSingleStorage()
+	schema := NewSingleStorage(nil)
 	for _, job := range jobs {
 		_, _, _, err := schema.HandleDDL(job)
 		c.Assert(err, IsNil)
@@ -265,7 +265,7 @@ func (*schemaSuite) TestTable(c *C) {
 
 func (t *schemaSuite) TestHandleDDL(c *C) {
 
-	schema := NewSingleStorage()
+	schema := NewSingleStorage(nil)
 	dbName := timodel.NewCIStr("Test")
 	colName := timodel.NewCIStr("A")
 	tbName := timodel.NewCIStr("T")
