@@ -1,0 +1,39 @@
+[quotas]
+
+[quotas.default]
+
+[quotas.default.interval]
+duration = 3600
+queries = 0
+errors = 0
+result_rows = 0
+read_rows = 0
+execution_time = 0
+
+[users]
+
+[users.readonly]
+password = ""
+profile = "readonly"
+quota = "default"
+
+[users.readonly.networks]
+ip = "::/0"
+
+[users.default]
+password = ""
+profile = "default"
+quota = "default"
+
+[users.default.networks]
+ip = "::/0"
+
+[profiles]
+
+[profiles.readonly]
+readonly = 1
+
+[profiles.default]
+max_memory_usage = 10000000000
+use_uncompressed_cache = 0
+load_balancing = "random"
