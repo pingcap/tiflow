@@ -837,11 +837,13 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 			return nil
 		}
 	}
-	ddlEvent := new(model.DDLEvent)
-	err := ddlEvent.FromJob(c.schema, todoDDLJob)
+
+	err := c.schema.FillSchemaName(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	ddlEvent := new(model.DDLEvent)
+	ddlEvent.FromJob(todoDDLJob)
 
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
