@@ -14,7 +14,6 @@
 package kv
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"math/rand"
@@ -22,7 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/btree"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
@@ -50,7 +48,7 @@ const (
 	grpcConnCount             = 10
 )
 
-type regionCmd interface{}
+//type regionCmd interface{}
 
 type singleRegionInfo struct {
 	verID        tikv.RegionVerID
@@ -77,14 +75,14 @@ type regionErrorInfo struct {
 
 type regionFeedState struct {
 	sri     singleRegionInfo
-	cmdCh   chan regionCmd
+	eventCh chan *cdcpb.Event
 	stopped int32
 }
 
 func newRegionFeedState(sri singleRegionInfo) *regionFeedState {
 	return &regionFeedState{
 		sri:     sri,
-		cmdCh:   make(chan regionCmd, 16),
+		eventCh: make(chan *cdcpb.Event, 16),
 		stopped: 0,
 	}
 }
@@ -313,22 +311,15 @@ type eventFeedSession struct {
 	// The channel to notify that an error is happening, so that the error will be handled and the affected region
 	// will be re-requested.
 	errCh chan regionErrorInfo
+	// The channel to schedule scanning and requesting regions in a specified range.
+	requestRangeCh chan rangeRequestTask
 
-	mu struct {
-		sync.Mutex
-		workingRegions *btree.BTree
-	}
+	rangeLock *util.RegionRangeLock
 }
 
-type workingRegionInfo struct {
-	span        util.Span
-	requestID   uint64
-	verID       tikv.RegionVerID
-	regionCmdCh chan regionCmd
-}
-
-func (r *workingRegionInfo) Less(than btree.Item) bool {
-	return bytes.Compare(r.span.Start, than.(*workingRegionInfo).span.Start) < 0
+type rangeRequestTask struct {
+	span util.Span
+	ts   uint64
 }
 
 func newEventFeedSession(
@@ -338,18 +329,14 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	return &eventFeedSession{
-		client:      client,
-		regionCache: regionCache,
-		totalSpan:   totalSpan,
-		eventCh:     eventCh,
-		regionCh:    make(chan singleRegionInfo, 16),
-		errCh:       make(chan regionErrorInfo, 16),
-		mu: struct {
-			sync.Mutex
-			workingRegions *btree.BTree
-		}{
-			workingRegions: btree.New(16),
-		},
+		client:         client,
+		regionCache:    regionCache,
+		totalSpan:      totalSpan,
+		eventCh:        eventCh,
+		regionCh:       make(chan singleRegionInfo, 16),
+		errCh:          make(chan regionErrorInfo, 16),
+		requestRangeCh: make(chan rangeRequestTask, 16),
+		rangeLock:      util.NewRegionRangeLock(),
 	}
 }
 
@@ -374,8 +361,8 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case errInfo := <-s.errCh:
-				err = s.handleError(ctx, errInfo)
+			case task := <-s.requestRangeCh:
+				err = s.divideAndSendEventFeedToRegions(ctx, task.span, task.ts)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -383,44 +370,88 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 		}
 	})
 
+	g.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case errInfo := <-s.errCh:
+				err := s.handleError(ctx, errInfo)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			}
+		}
+	})
+
+	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
+
 	return g.Wait()
 }
 
-//func (s *eventFeedSession) addWorkingRegion(region *workingRegionInfo) bool {
-//	s.mu.Lock()
-//	defer s.mu.Unlock()
-//
-//	s.mu.workingRegions.
-//}
-//
-//func (s *eventFeedSession) invalidateWorkingRegionInRange(span util.Span) util.Span {
-//
-//}
-//
-//func (s *eventFeedSession) removeWorkingRegionByKey(startKey []byte) {
-//
-//}
-//
-//func (s *eventFeedSession) removeWorkingRegion(verID tikv.RegionVerID) {
-//	s.mu.Lock()
-//	defer s.mu.Unlock()
-//
-//	r, ok := s.mu.workingRegions[verID.GetID()]
-//	if !ok {
-//		return
-//	}
-//	if r.verID.GetVer() > verID.GetVer() || r.verID.GetConfVer() > verID.GetConfVer() {
-//		log.Debug("stale removeWorkingRegion operation",
-//			zap.Uint64("regionID", verID.GetID()),
-//			zap.Uint64("ver", verID.GetVer()),
-//			zap.Uint64("confVer", verID.GetConfVer()),
-//			zap.Uint64("currVer", r.verID.GetVer()),
-//			zap.Uint64("currConfVer", r.verID.GetConfVer()))
-//		return
-//	}
-//
-//	delete(s.mu.workingRegions, verID.GetID())
-//}
+func (s *eventFeedSession) nonBlockingDivideAndRequest(ctx context.Context, span util.Span, ts uint64) {
+	task := rangeRequestTask{span: span, ts: ts}
+	// Try to send without blocking. If channel is full, spawn a goroutine to do the blocking sending.
+	select {
+	case s.requestRangeCh <- task:
+	default:
+		go func() {
+			select {
+			case s.requestRangeCh <- task:
+			case <-ctx.Done():
+			}
+		}()
+	}
+}
+
+func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri singleRegionInfo, blocking bool) {
+	handleResult := func(res util.LockRangeResult) {
+		switch res.Status {
+		case util.LockRangeResultSuccess:
+			if sri.ts > res.CheckpointTs {
+				sri.ts = res.CheckpointTs
+			}
+			select {
+			case s.regionCh <- sri:
+			case <-ctx.Done():
+			}
+
+		case util.LockRangeResultStale:
+			for _, r := range res.RetryRanges {
+				s.nonBlockingDivideAndRequest(ctx, r, sri.ts)
+			}
+		default:
+			panic("unreachable")
+		}
+	}
+
+	res := s.rangeLock.LockRange(sri.span.Start, sri.span.End, sri.verID.GetVer())
+
+	if res.Status == util.LockRangeResultWait {
+		if blocking {
+			res = res.WaitFn()
+		} else {
+			go func() {
+				res := res.WaitFn()
+				handleResult(res)
+			}()
+			return
+		}
+	}
+
+	handleResult(res)
+}
+
+func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) error {
+	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetVer(), errorInfo.ts)
+	select {
+	case s.errCh <- errorInfo:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	return nil
+}
 
 // dispatchRequest manages a set of streams and dispatch event feed requests
 // to these streams. Streams to each store will be created on need. After
@@ -596,7 +627,7 @@ func (s *eventFeedSession) partialRegionFeed(
 	ctx context.Context,
 	state *regionFeedState,
 ) error {
-	receiver := state.cmdCh
+	receiver := state.eventCh
 	defer func() {
 		state.markStopped()
 		// Workaround to avoid remaining messages in the channel blocks the receiver thread.
@@ -641,12 +672,10 @@ func (s *eventFeedSession) partialRegionFeed(
 
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
 	state.markStopped()
-	s.errCh <- regionErrorInfo{
+	return s.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	}
-
-	return nil
+	})
 }
 
 // divideAndSendEventFeedToRegions split up the input span into spans aligned
@@ -705,11 +734,8 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 
 			nextSpan.Start = region.EndKey
 
-			select {
-			case s.regionCh <- newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil):
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil)
+			s.scheduleRegionRequest(ctx, sri, true)
 
 			// return if no more regions
 			if util.EndCompare(nextSpan.Start, span.End) >= 0 {
@@ -733,10 +759,12 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		} else if innerErr.GetEpochNotMatch() != nil {
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
 			eventFeedErrorCounter.WithLabelValues("EpochNotMatch").Inc()
-			return s.divideAndSendEventFeedToRegions(ctx, errInfo.span, errInfo.ts)
+			s.nonBlockingDivideAndRequest(ctx, errInfo.span, errInfo.ts)
+			return nil
 		} else if innerErr.GetRegionNotFound() != nil {
 			eventFeedErrorCounter.WithLabelValues("RegionNotFound").Inc()
-			return s.divideAndSendEventFeedToRegions(ctx, errInfo.span, errInfo.ts)
+			s.nonBlockingDivideAndRequest(ctx, errInfo.span, errInfo.ts)
+			return nil
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			eventFeedErrorCounter.WithLabelValues("DuplicateRequest").Inc()
 			log.Error("tikv reported duplicated request to the same region. region merge should happened which is not supported",
@@ -753,7 +781,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		}
 	}
 
-	s.regionCh <- errInfo.singleRegionInfo
+	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo, true)
 
 	return nil
 }
@@ -783,13 +811,13 @@ func (s *eventFeedSession) receiveFromStream(
 		remainingRegions := pendingRegions.takeAll()
 
 		for _, state := range remainingRegions {
-			select {
-			case <-ctx.Done():
-				return
-			case s.errCh <- regionErrorInfo{
+			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              errors.New("pending region cancelled due to stream disconnecting"),
-			}:
+			})
+			if err != nil {
+				// The only possible is that the ctx is cancelled. Simply return.
+				return
 			}
 		}
 	}()
@@ -803,7 +831,7 @@ func (s *eventFeedSession) receiveFromStream(
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
 			for _, state := range regionStates {
-				close(state.cmdCh)
+				close(state.eventCh)
 			}
 			return nil
 		}
@@ -816,7 +844,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 			for _, state := range regionStates {
 				select {
-				case state.cmdCh <- nil:
+				case state.eventCh <- nil:
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -858,7 +886,7 @@ func (s *eventFeedSession) receiveFromStream(
 			}
 
 			select {
-			case state.cmdCh <- event:
+			case state.eventCh <- event:
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -875,7 +903,7 @@ func (s *eventFeedSession) singleEventFeed(
 	ctx context.Context,
 	span util.Span,
 	checkpointTs uint64,
-	receiverCh <-chan regionCmd,
+	receiverCh <-chan *cdcpb.Event,
 ) (uint64, error) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)

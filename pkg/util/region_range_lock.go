@@ -111,12 +111,17 @@ func (e *rangeLockEntry) Less(than btree.Item) bool {
 	return bytes.Compare(e.startKey, than.(*rangeLockEntry).startKey) < 0
 }
 
+// RegionRangeLock is specifically used for kv client to manage exclusive region ranges. Acquiring lock will be blocked
+// if part of its range is already locked. It also manages checkpoint ts of all ranges. The ranges are marked by a
+// version number, which should comes from the Region's Epoch version. The version is used to compare which range is
+// new and which is old if two ranges are overlapping.
 type RegionRangeLock struct {
 	cond              *sync.Cond
 	rangeCheckpointTs *rangeTsMap
 	rangeLock         *btree.BTree
 }
 
+// NewRegionRangeLock creates a new RegionRangeLock.
 func NewRegionRangeLock() *RegionRangeLock {
 	cond := sync.NewCond(&sync.Mutex{})
 
@@ -194,6 +199,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, version uint64) 
 	}
 }
 
+// LockRange locks a range with specified version.
 func (l *RegionRangeLock) LockRange(startKey, endKey []byte, version uint64) LockRangeResult {
 	l.cond.L.Lock()
 
@@ -218,6 +224,7 @@ func (l *RegionRangeLock) LockRange(startKey, endKey []byte, version uint64) Loc
 	return res
 }
 
+// UnlockRange unlocks a range and update checkpointTs of the range to specivied value.
 func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, checkpointTs uint64) {
 	l.cond.L.Lock()
 	defer l.cond.L.Unlock()
@@ -242,11 +249,15 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, c
 }
 
 const (
+	// LockRangeResultSuccess meaqns a LockRange operation succeeded.
 	LockRangeResultSuccess = 0
-	LockRangeResultWait    = 1
-	LockRangeResultStale   = 2
+	// LockRangeResultWait means a LockRange operation is blocked and should wait for it being finished.
+	LockRangeResultWait = 1
+	// LockRangeResultStale means a LockRange operation is rejected because of the range's version is stale.
+	LockRangeResultStale = 2
 )
 
+// LockRangeResult represents the result of LockRange method of RegionRangeLock.
 type LockRangeResult struct {
 	Status       int
 	CheckpointTs uint64

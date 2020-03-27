@@ -25,7 +25,6 @@ require (
 	github.com/pingcap/kvproto v0.0.0-20200311033452-ee50d594859d
 	github.com/pingcap/log v0.0.0-20200117041106-d28c14d3b1cd
 	github.com/pingcap/parser v0.0.0-20200317021010-cd90cc2a7d87
-	github.com/pingcap/pd v1.1.0-beta.0.20200106144140-f5a7aa985497
 	github.com/pingcap/pd/v4 v4.0.0-beta.1.0.20200305072537-61d9f9cc35d3
 	github.com/pingcap/tidb v1.1.0-beta.0.20200212043647-e66daf3e04d0
 	github.com/pingcap/tidb-tools v4.0.0-beta.1.0.20200306084441-875bd09aa3d5+incompatible
