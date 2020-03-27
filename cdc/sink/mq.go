@@ -100,7 +100,7 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 		}
 		k.lastSentMsgIndex, err = k.mqProducer.SendMessage(ctx, keyByte, valueByte, partition, func(err error) {
 			if err != nil {
-				log.Error("failed to send row changed event to kafka", zap.Error(err), zap.Reflect("row", row))
+				log.Error("failed to send row changed event to kafka", zap.Int("size", len(keyByte)+len(valueByte)), zap.Error(err), zap.Reflect("row", row))
 				select {
 				case k.errCh <- err:
 				default:

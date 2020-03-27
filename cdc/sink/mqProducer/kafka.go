@@ -30,7 +30,7 @@ type KafkaConfig struct {
 // DefaultKafkaConfig is the default Kafka configuration
 var DefaultKafkaConfig = KafkaConfig{
 	Version:           "2.4.0",
-	MaxMessageBytes:   1 << 26, // 64M
+	MaxMessageBytes:   512 * 1024 * 1024, // 512M
 	ReplicationFactor: 1,
 }
 
@@ -143,7 +143,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	if err != nil {
 		return nil, err
 	}
-	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", cfg))
+	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -218,13 +218,13 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 
 	config.ClientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureID, changefeedID)
 	config.Version = version
-
+	sarama.MaxRequestSize = int32(c.MaxMessageBytes)
 	config.Producer.Flush.MaxMessages = c.MaxMessageBytes
 	config.Metadata.Retry.Max = 10000
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
-	config.Producer.MaxMessageBytes = 1 << 30
+	config.Producer.MaxMessageBytes = c.MaxMessageBytes
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
