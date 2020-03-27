@@ -6,14 +6,11 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
-	"time"
 
-	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/retry"
 	"go.uber.org/zap"
 )
 
@@ -35,16 +32,20 @@ func (l *jobList) FetchNextJobs(currentJob *list.Element, ts uint64) (*list.Elem
 	if currentJob == nil {
 		log.Fatal("param `currentJob` in `FetchNextJobs` can't be nil, please report a bug")
 	}
+	if ts == 0 {
+		return currentJob, nil
+	}
 
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	if ts < l.gcTs {
+	if ts <= l.gcTs {
 		log.Fatal("cannot fetch the jobs which of finishedTs is less then gcTs, please report a bug", zap.Uint64("gcTs", l.gcTs))
 	}
 
 	if currentJob != l.list.Front() {
 		job := currentJob.Value.(*timodel.Job)
+		// check if element was already gced.
 		if job.BinlogInfo.FinishedTS <= l.gcTs {
 			currentJob = l.list.Front()
 		}
@@ -66,7 +67,7 @@ func (l *jobList) AppendJob(jobs ...*timodel.Job) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for _, job := range jobs {
-		if job.BinlogInfo.FinishedTS < l.gcTs {
+		if job.BinlogInfo.FinishedTS <= l.gcTs {
 			log.Fatal("cannot append a job which of finishedTs is less then gcTs, please report a bug", zap.Uint64("gcTs", l.gcTs), zap.Reflect("job", job))
 		}
 		l.list.PushBack(job)
@@ -78,7 +79,7 @@ func (l *jobList) RemoveOverdueJobs(ts uint64) {
 	defer l.mu.Unlock()
 	for e := l.list.Front().Next(); e != nil; {
 		job := e.Value.(*timodel.Job)
-		if job.BinlogInfo.FinishedTS > ts {
+		if job.BinlogInfo.FinishedTS >= ts {
 			break
 		}
 		l.gcTs = job.BinlogInfo.FinishedTS
@@ -170,15 +171,7 @@ func (b *StorageBuilder) Build(ts uint64) (*Storage, error) {
 	c := b.baseStorage.Clone()
 	b.baseStorageMu.Unlock()
 
-	err := retry.Run(10*time.Millisecond, 25,
-		func() error {
-			err := c.HandlePreviousDDLJobIfNeed(ts)
-			if errors.Cause(err) != model.ErrUnresolved {
-				return backoff.Permanent(err)
-			}
-			return err
-		})
-	if err != nil {
+	if err := c.HandlePreviousDDLJobIfNeed(ts); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return c, nil

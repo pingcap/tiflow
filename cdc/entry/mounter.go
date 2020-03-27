@@ -19,7 +19,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -109,37 +108,24 @@ func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaStorage *Storage
 }
 
 func (m *mounterImpl) Run(ctx context.Context) error {
-	var lastRowChangedEvent *model.RawKVEntry
 	for {
 		var rawRow *model.RawKVEntry
-		if lastRowChangedEvent != nil {
-			rawRow = lastRowChangedEvent
-			lastRowChangedEvent = nil
-		} else {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			case rawRow = <-m.rawRowChangedCh:
-			}
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case rawRow = <-m.rawRowChangedCh:
 		}
 		if rawRow == nil {
-			return errors.Trace(ctx.Err())
+			continue
+		}
+
+		if err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts); err != nil {
+			return errors.Trace(err)
 		}
 
 		if rawRow.OpType == model.OpTypeResolved {
 			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
 			continue
-		}
-
-		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts)
-		switch errors.Cause(err) {
-		case nil:
-		case model.ErrUnresolved:
-			lastRowChangedEvent = rawRow
-			time.Sleep(50 * time.Millisecond)
-			continue
-		default:
-			return errors.Cause(err)
 		}
 
 		event, err := m.unmarshalAndMountRowChanged(rawRow)

@@ -18,6 +18,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync/atomic"
+	"time"
+
+	"github.com/cenkalti/backoff"
+	"github.com/pingcap/ticdc/pkg/retry"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -449,8 +453,26 @@ func (s *Storage) removeTable(tableID int64) error {
 
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
 func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
-	if commitTs > atomic.LoadUint64(s.resolvedTs) {
-		return model.ErrUnresolved
+	err := retry.Run(10*time.Millisecond, 25,
+		func() error {
+			err := s.handlePreviousDDLJobIfNeed(commitTs)
+			if errors.Cause(err) != model.ErrUnresolved {
+				return backoff.Permanent(err)
+			}
+			return err
+		})
+	switch err.(type) {
+	case *backoff.PermanentError:
+		return errors.Annotate(err, "timeout")
+	default:
+		return err
+	}
+}
+
+func (s *Storage) handlePreviousDDLJobIfNeed(commitTs uint64) error {
+	resolvedTs := atomic.LoadUint64(s.resolvedTs)
+	if commitTs > resolvedTs {
+		return errors.Annotatef(model.ErrUnresolved, "waiting resolved ts of ddl puller, resolvedTs(%d), commitTs(%d)", resolvedTs, commitTs)
 	}
 	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
 	for _, job := range jobs {
@@ -503,7 +525,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		schemaName = schema.Name.O
 
 	case timodel.ActionModifySchemaCharsetAndCollate:
-		db := job.BinlogInfo.DBInfo
+		db := job.BinlogInfo.DBInfo.Clone()
 		if _, ok := s.schemas[db.ID]; !ok {
 			return "", "", "", errors.NotFoundf("schema %s(%d)", db.Name, db.ID)
 		}
@@ -524,7 +546,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 
 	case timodel.ActionRenameTable:
-		// ignore schema doesn't support reanme ddl
+		// ignore schema doesn't support rename ddl
 		_, ok := s.SchemaByTableID(job.TableID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
@@ -624,6 +646,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		if tbInfo == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
+		tbInfo = tbInfo.Clone()
 
 		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
