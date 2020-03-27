@@ -714,6 +714,22 @@ func (s *Storage) IsIneligibleTableID(id int64) bool {
 	return ok
 }
 
+// FillSchemaName fills the schema name in ddl job
+func (s *Storage) FillSchemaName(job *timodel.Job) error {
+	var schemaName string
+	if job.Type != timodel.ActionCreateSchema {
+		dbInfo, exist := s.SchemaByID(job.SchemaID)
+		if !exist {
+			return errors.NotFoundf("schema %d not found", job.SchemaID)
+		}
+		schemaName = dbInfo.Name.O
+	} else {
+		schemaName = job.BinlogInfo.DBInfo.Name.O
+	}
+	job.SchemaName = schemaName
+	return nil
+}
+
 // SkipJob skip the job should not be executed
 // TiDB write DDL Binlog for every DDL Job, we must ignore jobs that are cancelled or rollback
 // For older version TiDB, it write DDL Binlog in the txn that the state of job is changed to *synced*
