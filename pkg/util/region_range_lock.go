@@ -243,6 +243,7 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, c
 			entry.startKey, entry.endKey, entry.version, startKey, endKey, version))
 	}
 
+	l.rangeLock.Delete(entry)
 	l.rangeCheckpointTs.set(startKey, endKey, checkpointTs)
 
 	l.cond.Broadcast()
