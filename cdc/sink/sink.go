@@ -18,12 +18,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/ticdc/pkg/util"
-
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 // Sink options keys

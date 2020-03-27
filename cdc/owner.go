@@ -844,8 +844,14 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 			return nil
 		}
 	}
+
+	err := c.schema.FillSchemaName(todoDDLJob)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	ddlEvent := new(model.DDLEvent)
 	ddlEvent.FromJob(todoDDLJob)
+
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
 	log.Debug("apply job", zap.Stringer("job", todoDDLJob),
@@ -1263,6 +1269,7 @@ func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
 	ownerCtx, cancel := context.WithCancel(ctx)
 	go func() {
 		<-o.manager.RetireNotify()
+		log.Info("received retire owner notification")
 		cancel()
 	}()
 	log.Info("start to watch processors")
@@ -1274,7 +1281,7 @@ func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
 				// error(ownerCtx.Err())
 				if ownerCtx.Err() != nil {
 					// The context error indicates the termination of the owner
-					log.Error("watch processor failed", zap.Error(ctx.Err()))
+					log.Error("watch processor failed", zap.Error(ownerCtx.Err()))
 					return
 				}
 				log.Warn("watch processor returned", zap.Error(err))
