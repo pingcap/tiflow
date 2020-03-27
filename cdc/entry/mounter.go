@@ -115,6 +115,9 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case rawRow = <-m.rawRowChangedCh:
 		}
+		if rawRow == nil {
+			continue
+		}
 
 		if err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts); err != nil {
 			return errors.Trace(err)
