@@ -64,6 +64,7 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 }
 
 func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32, callback func(err error)) (uint64, error) {
+	log.Debug("send kafka message", zap.Int("size", len(key)+len(value)))
 	index := atomic.AddUint64(&k.currentIndex, 1)
 	atomic.StoreUint64(&k.partitionMaxSentIndex[partition], index)
 
