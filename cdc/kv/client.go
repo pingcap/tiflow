@@ -48,8 +48,6 @@ const (
 	grpcConnCount             = 10
 )
 
-//type regionCmd interface{}
-
 type singleRegionInfo struct {
 	verID        tikv.RegionVerID
 	span         util.Span
@@ -493,13 +491,7 @@ MainLoop:
 				log.Info("cannot get rpcCtx, retry span",
 					zap.Uint64("regionID", sri.verID.GetID()),
 					zap.Reflect("span", sri.span))
-				// Workaround: spawn to a new goroutine, otherwise the function may blocks when sending to regionCh but
-				// regionCh can only be received from `dispatchRequest`.
-				// TODO: Find better solution after a refactoring
-				g.Go(func() error {
-					err := s.divideAndSendEventFeedToRegions(ctx, sri.span, sri.ts)
-					return errors.Trace(err)
-				})
+				s.nonBlockingDivideAndRequest(ctx, sri.span, sri.ts)
 				continue MainLoop
 			}
 			sri.rpcCtx = rpcCtx
@@ -553,15 +545,6 @@ MainLoop:
 					return s.receiveFromStream(ctx, g, rpcCtx.Addr, rpcCtx.GetStoreID(), stream, pendingRegions)
 				})
 			}
-
-			//if !s.addWorkingRegion(&workingRegionInfo{
-			//	span:        sri.span,
-			//	requestID:   requestID,
-			//	verID:       sri.verID,
-			//	regionCmdCh: state.cmdCh,
-			//}) {
-			//	// TODO: Expand range if necessary
-			//}
 
 			log.Info("start new request", zap.Reflect("request", req), zap.String("addr", rpcCtx.Addr))
 			err = stream.Send(req)
