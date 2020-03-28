@@ -86,7 +86,7 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				toSort := es.unsorted
 				es.unsorted = nil
 				es.lock.Unlock()
-				log.Info("print buffer size", zap.Int("resolvedCh", len(es.resolvedCh)), zap.Int("toSort", len(toSort)), zap.Int("sorted", len(sorted)))
+				log.Info("print buffer size", zap.Int("resolvedCh", len(es.resolvedCh)), zap.Int("toSort", len(toSort)), zap.Int("sorted", len(sorted)), zap.Int("output", len(es.output)))
 
 				t1 := time.Now()
 				sort.Slice(toSort, func(i, j int) bool {
