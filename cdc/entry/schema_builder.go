@@ -7,6 +7,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -128,6 +131,9 @@ func NewStorageBuilder(historyDDL []*timodel.Job, ddlEventCh <-chan *model.RawKV
 
 // Run runs the StorageBuilder
 func (b *StorageBuilder) Run(ctx context.Context) error {
+
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	for {
 		var rawKV *model.RawKVEntry
 		select {
@@ -143,6 +149,8 @@ func (b *StorageBuilder) Run(ctx context.Context) error {
 		}
 
 		if rawKV.OpType == model.OpTypeResolved {
+			ddlResolvedTsGauge.WithLabelValues(changefeedID, captureID).Set(float64(oracle.ExtractPhysical(rawKV.Ts)))
+
 			atomic.StoreUint64(&b.resolvedTs, rawKV.Ts)
 			continue
 		}

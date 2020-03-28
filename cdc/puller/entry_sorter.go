@@ -3,8 +3,12 @@ package puller
 import (
 	"context"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
+
+	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 
 	"github.com/pingcap/ticdc/cdc/model"
 )
@@ -23,13 +27,16 @@ type EntrySorter struct {
 // NewEntrySorter creates a new EntrySorter
 func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
-		resolvedCh: make(chan uint64, 1024),
-		output:     make(chan *model.RawKVEntry, 128),
+		resolvedCh: make(chan uint64, 4096),
+		output:     make(chan *model.RawKVEntry, 1024),
 	}
 }
 
 // Run runs EntrySorter
 func (es *EntrySorter) Run(ctx context.Context) {
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	tableID := util.TableIDFromCtx(ctx)
 	lessFunc := func(i *model.RawKVEntry, j *model.RawKVEntry) bool {
 		if i.Ts == j.Ts {
 			return i.OpType == model.OpTypeDelete
@@ -82,6 +89,7 @@ func (es *EntrySorter) Run(ctx context.Context) {
 						merged = append(merged, entry)
 					}
 				})
+				tableSortedResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(tableID, 10)).Set(float64(oracle.ExtractPhysical(resolvedTs)))
 				es.output <- &model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved}
 				sorted = merged
 			}

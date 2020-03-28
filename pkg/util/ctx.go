@@ -18,6 +18,7 @@ import "context"
 type ctxKey string
 
 const (
+	ctxKeyTableID      = ctxKey("tableID")
 	ctxKeyCaptureID    = ctxKey("captureID")
 	ctxKeyChangefeedID = ctxKey("changefeedID")
 	ctxKeyIsOwner      = ctxKey("isOwner")
@@ -36,6 +37,18 @@ func CaptureIDFromCtx(ctx context.Context) string {
 // PutCaptureIDInCtx returns a new child context with the specified capture ID stored.
 func PutCaptureIDInCtx(ctx context.Context, captureID string) context.Context {
 	return context.WithValue(ctx, ctxKeyCaptureID, captureID)
+}
+
+func PutTableIDInCtx(ctx context.Context, tableID int64) context.Context {
+	return context.WithValue(ctx, ctxKeyTableID, tableID)
+}
+
+func TableIDFromCtx(ctx context.Context) int64 {
+	tableID, ok := ctx.Value(ctxKeyTableID).(int64)
+	if !ok {
+		return 0
+	}
+	return tableID
 }
 
 // SetOwnerInCtx returns a new child context with the owner flag set.

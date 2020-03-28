@@ -59,6 +59,27 @@ var (
 			Name:      "table_real_resolved_ts",
 			Help:      "real local resolved ts of processor",
 		}, []string{"changefeed", "capture", "table"})
+	tableSortedResolvedTsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "table_sorted_resolved_ts",
+			Help:      "real local resolved ts of processor",
+		}, []string{"changefeed", "capture", "table"})
+	tableMergedDDLResolvedTsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "table_merged_ddl_resolved_ts",
+			Help:      "real local resolved ts of processor",
+		}, []string{"changefeed", "capture", "table"})
+	tableMountedResolvedTsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "table_mounted_resolved_ts",
+			Help:      "real local resolved ts of processor",
+		}, []string{"changefeed", "capture", "table"})
 	maxTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -76,5 +97,8 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(entryBufferSizeGauge)
 	registry.MustRegister(eventChanSizeGauge)
 	registry.MustRegister(tableRealResolvedTsGauge)
+	registry.MustRegister(tableSortedResolvedTsGauge)
+	registry.MustRegister(tableMergedDDLResolvedTsGauge)
+	registry.MustRegister(tableMountedResolvedTsGauge)
 	registry.MustRegister(maxTsGauge)
 }
