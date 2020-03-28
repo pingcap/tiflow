@@ -394,10 +394,12 @@ MainLoop:
 			stream, ok := streams[rpcCtx.Addr]
 			// Establish the stream if it has not been connected yet.
 			if !ok {
-				// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
 				stream, err = c.getStream(ctx, rpcCtx.Addr)
 				if err != nil {
+					// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
 					log.Warn("get grpc stream client failed", zap.Error(err))
+					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+					c.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
 					continue MainLoop
 				}
 				streams[rpcCtx.Addr] = stream
