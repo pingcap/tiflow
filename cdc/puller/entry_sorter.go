@@ -7,6 +7,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 
@@ -76,6 +79,7 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				toSort := es.unsorted
 				es.unsorted = nil
 				es.lock.Unlock()
+				log.Info("print buffer size", zap.Int("resolvedCh", len(es.resolvedCh)), zap.Int("toSort", len(toSort)), zap.Int("sorted", len(sorted)))
 
 				sort.Slice(toSort, func(i, j int) bool {
 					return lessFunc(toSort[i], toSort[j])
