@@ -68,6 +68,7 @@ func (es *EntrySorter) Run(ctx context.Context) {
 
 	go func() {
 		var sorted []*model.RawKVEntry
+		var lastResolvedTs uint64
 		for {
 			select {
 			case <-ctx.Done():
@@ -76,6 +77,11 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				close(es.resolvedCh)
 				return
 			case resolvedTs := <-es.resolvedCh:
+				resolvedTs = atomic.LoadUint64(&es.resolvedTs)
+				if lastResolvedTs == resolvedTs {
+					continue
+				}
+				lastResolvedTs = resolvedTs
 				es.lock.Lock()
 				toSort := es.unsorted
 				es.unsorted = nil
