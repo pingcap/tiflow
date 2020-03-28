@@ -39,31 +39,29 @@ def prepare_binaries() {
                     def tidb_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tidb/${TIDB_BRANCH}/sha1").trim()
                     def tikv_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tikv/${TIKV_BRANCH}/sha1").trim()
                     def pd_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/pd/${PD_BRANCH}/sha1").trim()
-                    timeout(10) {
-                        sh """
-                            mkdir -p third_bin
-                            mkdir -p tmp
+                    sh """
+                        mkdir -p third_bin
+                        mkdir -p tmp
 
-                            tidb_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
-                            tikv_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
-                            pd_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
+                        tidb_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
+                        tikv_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
+                        pd_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
 
-                            curl \${tidb_url} | tar xz -C ./tmp bin/tidb-server
-                            curl \${pd_url} | tar xz -C ./tmp bin/*
-                            curl \${tikv_url} | tar xz -C ./tmp bin/tikv-server
-                            curl http://139.219.11.38:8000/5mpBK/tiflash.tar.gz | tar xz -C ./tmp/bin tiflash
-                            curl http://139.219.11.38:8000/OHIIL/libtiflash_proxy.tar.gz | tar xz -C ./tmp/bin libtiflash_proxy.so
-                            curl http://139.219.11.38:8000/buUKY/flash_cluster_manager.tgz | tar xz && mv flash_cluster_manager ./tmp/bin
-                            mv tmp/bin/* third_bin
-                            curl ${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb -o third_bin/go-ycsb
-                            curl https://download.pingcap.org/tidb-tools-v2.1.6-linux-amd64.tar.gz | tar xz -C ./tmp tidb-tools-v2.1.6-linux-amd64/bin/sync_diff_inspector
-                            mv tmp/tidb-tools-v2.1.6-linux-amd64/bin/* third_bin
-                            chmod a+x third_bin/*
-                            rm -rf tmp
-                        """
+                        curl \${tidb_url} | tar xz -C ./tmp bin/tidb-server
+                        curl \${pd_url} | tar xz -C ./tmp bin/*
+                        curl \${tikv_url} | tar xz -C ./tmp bin/tikv-server
+                        curl http://139.219.11.38:8000/5mpBK/tiflash.tar.gz | tar xz -C ./tmp/bin tiflash
+                        curl http://139.219.11.38:8000/OHIIL/libtiflash_proxy.tar.gz | tar xz -C ./tmp/bin libtiflash_proxy.so
+                        curl http://139.219.11.38:8000/buUKY/flash_cluster_manager.tgz | tar xz && mv flash_cluster_manager ./tmp/bin
+                        mv tmp/bin/* third_bin
+                        curl ${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb -o third_bin/go-ycsb
+                        curl https://download.pingcap.org/tidb-tools-v2.1.6-linux-amd64.tar.gz | tar xz -C ./tmp tidb-tools-v2.1.6-linux-amd64/bin/sync_diff_inspector
+                        mv tmp/tidb-tools-v2.1.6-linux-amd64/bin/* third_bin
+                        chmod a+x third_bin/*
+                        rm -rf tmp
+                    """
 
-                        stash includes: "third_bin/**", name: "third_binaries"
-                    }
+                    stash includes: "third_bin/**", name: "third_binaries"
                 }
             }
         }
