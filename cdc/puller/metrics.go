@@ -52,6 +52,20 @@ var (
 			Name:      "event_chan_size",
 			Help:      "Puller event channel size",
 		}, []string{"capture", "changefeed"})
+	tableRealResolvedTsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "table_real_resolved_ts",
+			Help:      "real local resolved ts of processor",
+		}, []string{"changefeed", "capture", "table"})
+	maxTsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "max_event_ts",
+			Help:      "real local resolved ts of processor",
+		}, []string{"changefeed", "capture", "table"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -61,4 +75,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(resolvedTxnsBatchSize)
 	registry.MustRegister(entryBufferSizeGauge)
 	registry.MustRegister(eventChanSizeGauge)
+	registry.MustRegister(tableRealResolvedTsGauge)
+	registry.MustRegister(maxTsGauge)
 }

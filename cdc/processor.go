@@ -591,7 +591,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
 	span := util.GetTableSpan(tableID, true)
-	puller := puller.NewPuller(p.pdCli, startTs, []util.Span{span}, true, p.limitter)
+	puller := puller.NewPuller(p.pdCli, startTs, tableID, []util.Span{span}, true, p.limitter)
 	go func() {
 		err := puller.Run(ctx)
 		if errors.Cause(err) != context.Canceled {
