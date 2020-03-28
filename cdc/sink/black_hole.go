@@ -39,8 +39,6 @@ func (b *blackHoleSink) Run(ctx context.Context) error {
 			atomic.StoreUint64(&b.checkpointTs, globalResolvedTs)
 		}
 	}
-	log.Info("newBlackHoleSink exits")
-	return ctx.Err()
 }
 
 func (b *blackHoleSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
