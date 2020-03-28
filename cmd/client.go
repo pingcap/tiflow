@@ -9,6 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/log"
+
+	"github.com/pingcap/ticdc/cdc/entry"
+
 	"github.com/BurntSushi/toml"
 	"github.com/chzyer/readline"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
@@ -41,6 +45,7 @@ var (
 	sinkURI    string
 	configFile string
 	cliPdAddr  string
+	noConfirm  bool
 
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client
@@ -191,6 +196,25 @@ func newCreateChangefeedCommand() *cobra.Command {
 				Config:     cfg,
 			}
 
+			ineligibleTables, err := verifyTables(ctx, cfg)
+			if err != nil {
+				return err
+			}
+			if len(ineligibleTables) != 0 {
+				cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", ineligibleTables)
+				if !noConfirm {
+					cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
+					var yOrN string
+					_, err := fmt.Scan(&yOrN)
+					if err != nil {
+						return err
+					}
+					if strings.TrimSpace(yOrN) != "Y" {
+						log.S().Fatal("Failed to create changefeed\n")
+					}
+				}
+			}
+
 			for _, opt := range opts {
 				s := strings.SplitN(opt, "=", 2)
 				if len(s) <= 0 {
@@ -221,6 +245,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 	command.PersistentFlags().StringVar(&sinkURI, "sink-uri", "mysql://root:123456@127.0.0.1:3306/", "sink uri")
 	command.PersistentFlags().StringVar(&configFile, "config", "", "Path of the configuration file")
 	command.PersistentFlags().StringSliceVar(&opts, "opts", nil, "Extra options, in the `key=value` format")
+	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 
 	return command
 }
@@ -241,6 +266,47 @@ func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) er
 		return errors.Errorf("startTs %d less than gcSafePoint %d", startTs, safePoint)
 	}
 	return nil
+}
+
+func verifyTables(ctx context.Context, cfg *util.ReplicaConfig) (ineligibleTables []entry.TableName, err error) {
+	kvStore, err := kv.CreateTiStore(cliPdAddr)
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	schemaStorage := entry.NewSingleStorage()
+
+	for _, job := range jobs {
+		if job.BinlogInfo.FinishedTS > startTs {
+			break
+		}
+		_, _, _, err := schemaStorage.HandleDDL(job)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	filter, err := util.NewFilter(cfg)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	for tID, tableName := range schemaStorage.CloneTables() {
+		tableInfo, exist := schemaStorage.TableByID(int64(tID))
+		if !exist {
+			return nil, errors.NotFoundf("table %d", int64(tID))
+		}
+		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
+			continue
+		}
+		if !tableInfo.ExistTableUniqueColumn() {
+			ineligibleTables = append(ineligibleTables, tableName)
+		}
+	}
+	return
 }
 
 // strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped

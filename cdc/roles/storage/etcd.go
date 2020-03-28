@@ -247,7 +247,7 @@ func (ow *OwnerTaskStatusEtcdWriter) Write(
 	}
 
 	key := kv.GetEtcdKeyTaskStatus(changefeedID, captureID)
-	err = retry.Run(func() error {
+	err = retry.Run(500*time.Millisecond, 5, func() error {
 		value, err := newInfo.Marshal()
 		if err != nil {
 			return errors.Trace(err)
@@ -279,7 +279,7 @@ func (ow *OwnerTaskStatusEtcdWriter) Write(
 		newInfo.ModRevision = resp.Header.Revision
 
 		return nil
-	}, 5)
+	})
 
 	return
 }

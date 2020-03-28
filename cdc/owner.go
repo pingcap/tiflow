@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -317,15 +318,23 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 	}
 }
 
-func (c *changeFeed) applyJob(job *timodel.Job) error {
+func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 	log.Info("apply job", zap.String("sql", job.Query), zap.Stringer("job", job))
 
 	schamaName, tableName, _, err := c.schema.HandleDDL(job)
 	if err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
 	}
 
 	schemaID := uint64(job.SchemaID)
+	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
+		tableID := uint64(job.BinlogInfo.TableInfo.ID)
+		if _, exist := c.tables[tableID]; exist {
+			c.removeTable(schemaID, tableID)
+		}
+		return true, nil
+	}
+
 	// case table id set may change
 	switch job.Type {
 	case timodel.ActionCreateSchema:
@@ -349,7 +358,7 @@ func (c *changeFeed) applyJob(job *timodel.Job) error {
 		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, entry.TableName{Schema: schamaName, Table: tableName})
 	}
 
-	return nil
+	return false, nil
 }
 
 type ownerImpl struct {
@@ -509,6 +518,7 @@ func (o *ownerImpl) handleWatchCapture() error {
 }
 
 func (o *ownerImpl) newChangeFeed(
+	ctx context.Context,
 	id model.ChangeFeedID,
 	processorsInfos model.ProcessorsInfos,
 	taskPositions map[string]*model.TaskPosition,
@@ -517,7 +527,12 @@ func (o *ownerImpl) newChangeFeed(
 	log.Info("Find new changefeed", zap.Reflect("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
-	jobs, err := getHistoryDDLJobs(o.pdEndpoints)
+	// TODO here we create another pb client,we should reuse them
+	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","))
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -584,10 +599,16 @@ func (o *ownerImpl) newChangeFeed(
 		}
 	}
 
-	sink, err := sink.NewSink(info.SinkURI, filter, info.Opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.Opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	go func() {
+		ctx := util.SetOwnerInCtx(context.TODO())
+		if err := sink.Run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+			log.Error("failed to close sink", zap.Error(err))
+		}
+	}()
 
 	cf := &changeFeed{
 		info:          info,
@@ -650,7 +671,7 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 		}
 		checkpointTs := cfInfo.GetCheckpointTs(status)
 
-		newCf, err := o.newChangeFeed(changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
+		newCf, err := o.newChangeFeed(ctx, changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
 		if err != nil {
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
@@ -824,6 +845,13 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		}
 	}
 
+	err := c.schema.FillSchemaName(todoDDLJob)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	ddlEvent := new(model.DDLEvent)
+	ddlEvent.FromJob(todoDDLJob)
+
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
 	log.Debug("apply job", zap.Stringer("job", todoDDLJob),
@@ -831,31 +859,16 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		zap.String("query", todoDDLJob.Query),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
-	var tableName, schemaName string
-	if todoDDLJob.BinlogInfo.TableInfo != nil {
-		tableName = todoDDLJob.BinlogInfo.TableInfo.Name.O
-	}
 	// TODO consider some newly added DDL types such as `ActionCreateSequence`
-	if todoDDLJob.Type != timodel.ActionCreateSchema {
-		dbInfo, exist := c.schema.SchemaByID(todoDDLJob.SchemaID)
-		if !exist {
-			return errors.NotFoundf("schema %d not found", todoDDLJob.SchemaID)
-		}
-		schemaName = dbInfo.Name.O
-	} else {
-		schemaName = todoDDLJob.BinlogInfo.DBInfo.Name.O
-	}
-	ddlEvent := &model.DDLEvent{
-		Ts:     todoDDLJob.BinlogInfo.FinishedTS,
-		Query:  todoDDLJob.Query,
-		Schema: schemaName,
-		Table:  tableName,
-		Type:   todoDDLJob.Type,
-	}
-
-	err := c.applyJob(todoDDLJob)
+	skip, err := c.applyJob(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
+	}
+	if skip {
+		c.ddlJobHistory = c.ddlJobHistory[1:]
+		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
+		c.ddlState = model.ChangeFeedSyncDML
+		return nil
 	}
 
 	c.banlanceOrphanTables(ctx, captures)
@@ -910,6 +923,8 @@ func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	}
 	err = cf.ddlHandler.Close()
 	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
+	err = cf.sink.Close()
+	log.Info("stop changefeed sink", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
 	delete(o.changeFeeds, job.CfID)
 	return nil
 }
@@ -1021,6 +1036,7 @@ func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
 				ownerChanged = true
 				continue
 			}
+			ctx := util.SetOwnerInCtx(ctx)
 			if ownerChanged {
 				// Do something initialize when the capture becomes an owner.
 				ownerChanged = false
@@ -1140,17 +1156,11 @@ func (o *ownerImpl) markProcessorDown(ctx context.Context,
 	// lookup the task position for the processor
 	pos, exist := positions[p.CaptureID]
 	if !exist {
-		log.Warn("unkown processor deletion detected",
-			zap.String("processorid", p.ID),
-			zap.String("captureid", p.CaptureID))
 		return nil
 	}
 	// lookup the task position for the processor
 	status, exist := statuses[p.CaptureID]
 	if !exist {
-		log.Warn("unkown processor deletion detected",
-			zap.String("processorid", p.ID),
-			zap.String("capture", p.CaptureID))
 		return nil
 	}
 	snap := status.Snapshot(p.ChangeFeedID,
@@ -1259,6 +1269,7 @@ func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
 	ownerCtx, cancel := context.WithCancel(ctx)
 	go func() {
 		<-o.manager.RetireNotify()
+		log.Info("received retire owner notification")
 		cancel()
 	}()
 	log.Info("start to watch processors")
@@ -1268,9 +1279,12 @@ func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
 				// When the watching routine returns, the error must not
 				// be nil, it may be caused by a temporary error or a context
 				// error(ownerCtx.Err())
-				if ownerCtx.Err() != nil {
+				err2 := ownerCtx.Err()
+				if err2 != nil {
 					// The context error indicates the termination of the owner
-					log.Error("watch processor failed", zap.Error(ctx.Err()))
+					if errors.Cause(err2) != context.Canceled {
+						log.Error("watch processor failed", zap.Error(err2))
+					}
 					return
 				}
 				log.Warn("watch processor returned", zap.Error(err))

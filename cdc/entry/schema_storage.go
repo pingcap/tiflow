@@ -18,6 +18,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync/atomic"
+	"time"
+
+	"github.com/cenkalti/backoff"
+	"github.com/pingcap/ticdc/pkg/retry"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -38,7 +42,8 @@ type Storage struct {
 	schemas map[int64]*timodel.DBInfo
 	tables  map[int64]*TableInfo
 
-	truncateTableID map[int64]struct{}
+	truncateTableID   map[int64]struct{}
+	ineligibleTableID map[int64]struct{}
 
 	schemaMetaVersion int64
 	lastHandledTs     uint64
@@ -213,6 +218,11 @@ func (ti *TableInfo) IsColumnUnique(colID int64) bool {
 	return exist
 }
 
+// ExistTableUniqueColumn returns whether the table has the unique column
+func (ti *TableInfo) ExistTableUniqueColumn() bool {
+	return len(ti.UniqueColumns) != 0
+}
+
 // IsIndexUnique returns whether the index is unique
 func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 	if indexInfo.Primary {
@@ -248,6 +258,7 @@ func NewSingleStorage() *Storage {
 	s := &Storage{
 		version2SchemaTable: make(map[int64]TableName),
 		truncateTableID:     make(map[int64]struct{}),
+		ineligibleTableID:   make(map[int64]struct{}),
 	}
 
 	s.tableIDToName = make(map[int64]TableName)
@@ -382,6 +393,7 @@ func (s *Storage) DropTable(id int64) (string, error) {
 	tableName := s.tableIDToName[id]
 	delete(s.tableIDToName, id)
 	delete(s.tableNameToID, tableName)
+	delete(s.ineligibleTableID, id)
 
 	log.Debug("drop table success", zap.String("name", table.Name.O), zap.Int64("id", id))
 	return table.Name.O, nil
@@ -395,7 +407,12 @@ func (s *Storage) CreateTable(schema *timodel.DBInfo, table *timodel.TableInfo) 
 	}
 
 	schema.Tables = append(schema.Tables, table)
-	s.tables[table.ID] = WrapTableInfo(table)
+	tbl := WrapTableInfo(table)
+	s.tables[table.ID] = tbl
+	if !tbl.ExistTableUniqueColumn() {
+		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
+		s.ineligibleTableID[table.ID] = struct{}{}
+	}
 	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
 	s.tableNameToID[s.tableIDToName[table.ID]] = table.ID
 
@@ -409,9 +426,12 @@ func (s *Storage) ReplaceTable(table *timodel.TableInfo) error {
 	if !ok {
 		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
 	}
-
-	s.tables[table.ID] = WrapTableInfo(table)
-
+	tbl := WrapTableInfo(table)
+	s.tables[table.ID] = tbl
+	if !tbl.ExistTableUniqueColumn() {
+		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
+		s.ineligibleTableID[table.ID] = struct{}{}
+	}
 	return nil
 }
 
@@ -433,8 +453,26 @@ func (s *Storage) removeTable(tableID int64) error {
 
 // HandlePreviousDDLJobIfNeed apply all jobs with FinishedTS less or equals `commitTs`.
 func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
-	if commitTs > atomic.LoadUint64(s.resolvedTs) {
-		return model.ErrUnresolved
+	err := retry.Run(10*time.Millisecond, 25,
+		func() error {
+			err := s.handlePreviousDDLJobIfNeed(commitTs)
+			if errors.Cause(err) != model.ErrUnresolved {
+				return backoff.Permanent(err)
+			}
+			return err
+		})
+	switch err.(type) {
+	case *backoff.PermanentError:
+		return errors.Annotate(err, "timeout")
+	default:
+		return err
+	}
+}
+
+func (s *Storage) handlePreviousDDLJobIfNeed(commitTs uint64) error {
+	resolvedTs := atomic.LoadUint64(s.resolvedTs)
+	if commitTs > resolvedTs {
+		return errors.Annotatef(model.ErrUnresolved, "waiting resolved ts of ddl puller, resolvedTs(%d), commitTs(%d)", resolvedTs, commitTs)
 	}
 	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
 	for _, job := range jobs {
@@ -487,7 +525,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		schemaName = schema.Name.O
 
 	case timodel.ActionModifySchemaCharsetAndCollate:
-		db := job.BinlogInfo.DBInfo
+		db := job.BinlogInfo.DBInfo.Clone()
 		if _, ok := s.schemas[db.ID]; !ok {
 			return "", "", "", errors.NotFoundf("schema %s(%d)", db.Name, db.ID)
 		}
@@ -508,7 +546,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		s.currentVersion = job.BinlogInfo.SchemaVersion
 
 	case timodel.ActionRenameTable:
-		// ignore schema doesn't support reanme ddl
+		// ignore schema doesn't support rename ddl
 		_, ok := s.SchemaByTableID(job.TableID)
 		if !ok {
 			return "", "", "", errors.NotFoundf("table(%d) or it's schema", job.TableID)
@@ -608,6 +646,7 @@ func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName stri
 		if tbInfo == nil {
 			return "", "", "", errors.NotFoundf("table %d", job.TableID)
 		}
+		tbInfo = tbInfo.Clone()
 
 		schema, ok := s.SchemaByID(job.SchemaID)
 		if !ok {
@@ -650,6 +689,7 @@ func (s *Storage) Clone() *Storage {
 		tables:  make(map[int64]*TableInfo),
 
 		truncateTableID:     make(map[int64]struct{}),
+		ineligibleTableID:   make(map[int64]struct{}),
 		version2SchemaTable: make(map[int64]TableName),
 	}
 	for k, v := range s.tableIDToName {
@@ -670,6 +710,9 @@ func (s *Storage) Clone() *Storage {
 	for k, v := range s.truncateTableID {
 		n.truncateTableID[k] = v
 	}
+	for k, v := range s.ineligibleTableID {
+		n.ineligibleTableID[k] = v
+	}
 	for k, v := range s.version2SchemaTable {
 		n.version2SchemaTable[k] = v
 	}
@@ -686,6 +729,28 @@ func (s *Storage) Clone() *Storage {
 func (s *Storage) IsTruncateTableID(id int64) bool {
 	_, ok := s.truncateTableID[id]
 	return ok
+}
+
+// IsIneligibleTableID returns true if the table is ineligible
+func (s *Storage) IsIneligibleTableID(id int64) bool {
+	_, ok := s.ineligibleTableID[id]
+	return ok
+}
+
+// FillSchemaName fills the schema name in ddl job
+func (s *Storage) FillSchemaName(job *timodel.Job) error {
+	var schemaName string
+	if job.Type != timodel.ActionCreateSchema {
+		dbInfo, exist := s.SchemaByID(job.SchemaID)
+		if !exist {
+			return errors.NotFoundf("schema %d not found", job.SchemaID)
+		}
+		schemaName = dbInfo.Name.O
+	} else {
+		schemaName = job.BinlogInfo.DBInfo.Name.O
+	}
+	job.SchemaName = schemaName
+	return nil
 }
 
 // SkipJob skip the job should not be executed
