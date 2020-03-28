@@ -6,8 +6,10 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/log"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -41,7 +43,12 @@ func (es *EntrySorter) Run(ctx context.Context) {
 	tableID := util.TableIDFromCtx(ctx)
 	lessFunc := func(i *model.RawKVEntry, j *model.RawKVEntry) bool {
 		if i.Ts == j.Ts {
-			return i.OpType == model.OpTypeDelete
+			if i.OpType == model.OpTypeDelete {
+				return true
+			}
+			if j.OpType == model.OpTypeResolved {
+				return true
+			}
 		}
 		return i.Ts < j.Ts
 	}
@@ -63,7 +70,16 @@ func (es *EntrySorter) Run(ctx context.Context) {
 			output(kvsB[j])
 		}
 	}
-
+	output := func(ctx context.Context, entry *model.RawKVEntry) {
+		select {
+		case <-ctx.Done():
+			return
+		case es.outputCh <- entry:
+			if entry.OpType == model.OpTypeResolved {
+				tableSortedResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(tableID, 10)).Set(float64(oracle.ExtractPhysical(entry.Ts)))
+			}
+		}
+	}
 	go func() {
 		var sorted []*model.RawKVEntry
 		for {
@@ -80,36 +96,39 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				resolvedTsGroup := es.resolvedTsGroup
 				es.resolvedTsGroup = nil
 				es.lock.Unlock()
-				log.Info("notf")
 				if len(resolvedTsGroup) == 0 {
 					continue
 				}
 
+				resEvents := make([]*model.RawKVEntry, len(resolvedTsGroup))
+				t1 := time.Now()
+				for i, rts := range resolvedTsGroup {
+					resEvents[i] = &model.RawKVEntry{Ts: rts, OpType: model.OpTypeResolved}
+				}
+				toSort = append(toSort, resEvents...)
 				sort.Slice(toSort, func(i, j int) bool {
 					return lessFunc(toSort[i], toSort[j])
 				})
-				log.Info("notf1")
-
+				sortCost := time.Now().Sub(t1)
+				t1 = time.Now()
+				maxResolvedTs := resolvedTsGroup[len(resolvedTsGroup)-1]
 				var merged []*model.RawKVEntry
-				resolvedTsIndex := 0
 				mergeFunc(toSort, sorted, func(entry *model.RawKVEntry) {
-					if resolvedTsIndex >= len(resolvedTsGroup) {
+					if entry.Ts <= maxResolvedTs {
+						output(ctx, entry)
+					} else {
 						merged = append(merged, entry)
-						return
-					}
-					var lastEvent *model.RawKVEntry
-					for ; resolvedTsIndex < len(resolvedTsGroup); resolvedTsIndex++ {
-						if entry.Ts <= resolvedTsGroup[resolvedTsIndex] {
-							es.output(ctx, entry)
-						} else {
-							es.output(ctx, &model.RawKVEntry{Ts: resolvedTsGroup[resolvedTsIndex], OpType: model.OpTypeResolved})
-							tableSortedResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(tableID, 10)).Set(float64(oracle.ExtractPhysical(resolvedTsGroup[resolvedTsIndex])))
-						}
 					}
 				})
-
-				log.Info("notf2")
+				mergeCost := time.Now().Sub(t1)
 				sorted = merged
+				log.Info("print buffer size",
+					zap.Int("resolvedCh", len(es.resolvedTsGroup)),
+					zap.Int("toSort", len(toSort)),
+					zap.Int("sorted", len(sorted)),
+					zap.Int("output", len(es.outputCh)),
+					zap.Duration("sort cost", sortCost),
+					zap.Duration("merge cost", mergeCost))
 			}
 		}
 	}()
@@ -123,22 +142,16 @@ func (es *EntrySorter) AddEntry(entry *model.RawKVEntry) {
 	es.lock.Lock()
 	if entry.OpType == model.OpTypeResolved {
 		es.resolvedTsGroup = append(es.resolvedTsGroup, entry.Ts)
-		es.resolvedNotify <- struct{}{}
 	} else {
 		es.unsorted = append(es.unsorted, entry)
 	}
 	es.lock.Unlock()
+	if entry.OpType == model.OpTypeResolved {
+		es.resolvedNotify <- struct{}{}
+	}
 }
 
 // Output returns the sorted raw kv output channel
 func (es *EntrySorter) Output() <-chan *model.RawKVEntry {
 	return es.outputCh
-}
-
-func (es *EntrySorter) output(ctx context.Context, entry *model.RawKVEntry) {
-	select {
-	case <-ctx.Done():
-		return
-	case es.outputCh <- entry:
-	}
 }

@@ -17,8 +17,6 @@ import (
 	"context"
 	"math/rand"
 
-	"github.com/pingcap/log"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 )
@@ -43,50 +41,55 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 			expect: []*model.RawKVEntry{
 				{Ts: 0, OpType: model.OpTypeResolved}},
 		},
-		//{
-		//	input: []*model.RawKVEntry{
-		//		{Ts: 3, OpType: model.OpTypePut},
-		//		{Ts: 2, OpType: model.OpTypePut},
-		//		{Ts: 5, OpType: model.OpTypePut}},
-		//	resolvedTs: 3,
-		//	expect: []*model.RawKVEntry{
-		//		{Ts: 1, OpType: model.OpTypePut},
-		//		{Ts: 2, OpType: model.OpTypeDelete},
-		//		{Ts: 2, OpType: model.OpTypePut},
-		//		{Ts: 2, OpType: model.OpTypePut},
-		//		{Ts: 3, OpType: model.OpTypePut},
-		//		{Ts: 3, OpType: model.OpTypeResolved}},
-		//},
-		//{
-		//	input: []*model.RawKVEntry{
-		//		{Ts: 7, OpType: model.OpTypePut}},
-		//	resolvedTs: 6,
-		//	expect: []*model.RawKVEntry{
-		//		{Ts: 4, OpType: model.OpTypeDelete},
-		//		{Ts: 5, OpType: model.OpTypePut},
-		//		{Ts: 6, OpType: model.OpTypeResolved}},
-		//},
-		//{
-		//	input:      []*model.RawKVEntry{{Ts: 7, OpType: model.OpTypeDelete}},
-		//	resolvedTs: 6,
-		//	expect: []*model.RawKVEntry{
-		//		{Ts: 6, OpType: model.OpTypeResolved}},
-		//},
-		//{
-		//	input:      []*model.RawKVEntry{{Ts: 7, OpType: model.OpTypeDelete}},
-		//	resolvedTs: 8,
-		//	expect: []*model.RawKVEntry{
-		//		{Ts: 7, OpType: model.OpTypeDelete},
-		//		{Ts: 7, OpType: model.OpTypeDelete},
-		//		{Ts: 7, OpType: model.OpTypePut},
-		//		{Ts: 8, OpType: model.OpTypeResolved}},
-		//},
-		//{
-		//	input:      []*model.RawKVEntry{},
-		//	resolvedTs: 15,
-		//	expect: []*model.RawKVEntry{
-		//		{Ts: 15, OpType: model.OpTypeResolved}},
-		//},
+		{
+			input: []*model.RawKVEntry{
+				{Ts: 3, OpType: model.OpTypePut},
+				{Ts: 2, OpType: model.OpTypePut},
+				{Ts: 5, OpType: model.OpTypePut}},
+			resolvedTs: 3,
+			expect: []*model.RawKVEntry{
+				{Ts: 1, OpType: model.OpTypePut},
+				{Ts: 2, OpType: model.OpTypeDelete},
+				{Ts: 2, OpType: model.OpTypePut},
+				{Ts: 2, OpType: model.OpTypePut},
+				{Ts: 3, OpType: model.OpTypePut},
+				{Ts: 3, OpType: model.OpTypeResolved}},
+		},
+		{
+			input:      []*model.RawKVEntry{},
+			resolvedTs: 3,
+			expect:     []*model.RawKVEntry{{Ts: 3, OpType: model.OpTypeResolved}},
+		},
+		{
+			input: []*model.RawKVEntry{
+				{Ts: 7, OpType: model.OpTypePut}},
+			resolvedTs: 6,
+			expect: []*model.RawKVEntry{
+				{Ts: 4, OpType: model.OpTypeDelete},
+				{Ts: 5, OpType: model.OpTypePut},
+				{Ts: 6, OpType: model.OpTypeResolved}},
+		},
+		{
+			input:      []*model.RawKVEntry{{Ts: 7, OpType: model.OpTypeDelete}},
+			resolvedTs: 6,
+			expect: []*model.RawKVEntry{
+				{Ts: 6, OpType: model.OpTypeResolved}},
+		},
+		{
+			input:      []*model.RawKVEntry{{Ts: 7, OpType: model.OpTypeDelete}},
+			resolvedTs: 8,
+			expect: []*model.RawKVEntry{
+				{Ts: 7, OpType: model.OpTypeDelete},
+				{Ts: 7, OpType: model.OpTypeDelete},
+				{Ts: 7, OpType: model.OpTypePut},
+				{Ts: 8, OpType: model.OpTypeResolved}},
+		},
+		{
+			input:      []*model.RawKVEntry{},
+			resolvedTs: 15,
+			expect: []*model.RawKVEntry{
+				{Ts: 15, OpType: model.OpTypeResolved}},
+		},
 	}
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -94,24 +97,17 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 	es.Run(ctx)
 	for _, tc := range testCases {
 		for _, entry := range tc.input {
-
-			log.Info("notf81")
 			es.AddEntry(entry)
-			log.Info("notf82")
 		}
 		es.AddEntry(&model.RawKVEntry{Ts: tc.resolvedTs, OpType: model.OpTypeResolved})
 		for i := 0; i < len(tc.expect); i++ {
-			log.Info("notf83")
-
 			e := <-es.Output()
-			log.Info("notf84")
-
 			c.Check(e, check.DeepEquals, tc.expect[i])
 		}
 	}
 }
 
-func (s *mockEntrySorterSuite) ATestEntrySorterRandomly(c *check.C) {
+func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
