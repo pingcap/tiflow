@@ -232,7 +232,7 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 	config.Producer.Retry.Max = 10000
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
 
-	config.Admin.Retry.Max = 100
+	config.Admin.Retry.Max = 10000
 	config.Admin.Retry.Backoff = 500 * time.Millisecond
 	config.Admin.Timeout = 10 * time.Second
 
