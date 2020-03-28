@@ -127,8 +127,9 @@ func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 					continue
 				}
 				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
-
-				tableRealResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(p.tableID, 10)).Set(float64(oracle.ExtractPhysical(resolvedTs)))
+				if p.tableID != 0 {
+					tableRealResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(p.tableID, 10)).Set(float64(oracle.ExtractPhysical(resolvedTs)))
+				}
 
 				sorter.AddEntry(&model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved})
 			}
@@ -180,7 +181,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			select {
 			case e := <-eventCh:
 				if e.Val != nil {
-					if maxTs < e.Val.Ts {
+					if p.tableID != 0 && maxTs < e.Val.Ts {
 						maxTs = e.Val.Ts
 						maxTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(p.tableID, 10)).Set(float64(oracle.ExtractPhysical(e.Val.Ts)))
 
@@ -202,7 +203,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					}
 				} else if e.Resolved != nil {
 
-					if maxTs < e.Resolved.ResolvedTs {
+					if p.tableID != 0 && maxTs < e.Resolved.ResolvedTs {
 						maxTs = e.Resolved.ResolvedTs
 						maxTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(p.tableID, 10)).Set(float64(oracle.ExtractPhysical(e.Resolved.ResolvedTs)))
 					}
