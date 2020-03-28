@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/pingcap/log"
+
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 
@@ -15,20 +17,20 @@ import (
 
 // EntrySorter accepts out-of-order raw kv entries and output sorted entries
 type EntrySorter struct {
-	unsorted   []*model.RawKVEntry
-	resolvedCh chan uint64
-	lock       sync.Mutex
-	resolvedTs uint64
-	closed     int32
+	unsorted        []*model.RawKVEntry
+	lock            sync.Mutex
+	resolvedTsGroup []uint64
+	closed          int32
 
-	output chan *model.RawKVEntry
+	outputCh       chan *model.RawKVEntry
+	resolvedNotify chan struct{}
 }
 
 // NewEntrySorter creates a new EntrySorter
 func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
-		resolvedCh: make(chan uint64, 4096),
-		output:     make(chan *model.RawKVEntry, 1024),
+		resolvedNotify: make(chan struct{}, 128),
+		outputCh:       make(chan *model.RawKVEntry, 1024),
 	}
 }
 
@@ -68,29 +70,45 @@ func (es *EntrySorter) Run(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				atomic.StoreInt32(&es.closed, 1)
-				close(es.output)
-				close(es.resolvedCh)
+				close(es.outputCh)
+				close(es.resolvedNotify)
 				return
-			case resolvedTs := <-es.resolvedCh:
+			case <-es.resolvedNotify:
 				es.lock.Lock()
 				toSort := es.unsorted
 				es.unsorted = nil
+				resolvedTsGroup := es.resolvedTsGroup
+				es.resolvedTsGroup = nil
 				es.lock.Unlock()
+				log.Info("notf")
+				if len(resolvedTsGroup) == 0 {
+					continue
+				}
 
 				sort.Slice(toSort, func(i, j int) bool {
 					return lessFunc(toSort[i], toSort[j])
 				})
+				log.Info("notf1")
 
 				var merged []*model.RawKVEntry
+				resolvedTsIndex := 0
 				mergeFunc(toSort, sorted, func(entry *model.RawKVEntry) {
-					if entry.Ts <= resolvedTs {
-						es.output <- entry
-					} else {
+					if resolvedTsIndex >= len(resolvedTsGroup) {
 						merged = append(merged, entry)
+						return
+					}
+					var lastEvent *model.RawKVEntry
+					for ; resolvedTsIndex < len(resolvedTsGroup); resolvedTsIndex++ {
+						if entry.Ts <= resolvedTsGroup[resolvedTsIndex] {
+							es.output(ctx, entry)
+						} else {
+							es.output(ctx, &model.RawKVEntry{Ts: resolvedTsGroup[resolvedTsIndex], OpType: model.OpTypeResolved})
+							tableSortedResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(tableID, 10)).Set(float64(oracle.ExtractPhysical(resolvedTsGroup[resolvedTsIndex])))
+						}
 					}
 				})
-				tableSortedResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(tableID, 10)).Set(float64(oracle.ExtractPhysical(resolvedTs)))
-				es.output <- &model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved}
+
+				log.Info("notf2")
 				sorted = merged
 			}
 		}
@@ -102,18 +120,25 @@ func (es *EntrySorter) AddEntry(entry *model.RawKVEntry) {
 	if atomic.LoadInt32(&es.closed) != 0 {
 		return
 	}
-	if entry.OpType == model.OpTypeResolved {
-		atomic.StoreUint64(&es.resolvedTs, entry.Ts)
-		es.resolvedCh <- entry.Ts
-		return
-	}
 	es.lock.Lock()
-	defer es.lock.Unlock()
-	es.unsorted = append(es.unsorted, entry)
-
+	if entry.OpType == model.OpTypeResolved {
+		es.resolvedTsGroup = append(es.resolvedTsGroup, entry.Ts)
+		es.resolvedNotify <- struct{}{}
+	} else {
+		es.unsorted = append(es.unsorted, entry)
+	}
+	es.lock.Unlock()
 }
 
 // Output returns the sorted raw kv output channel
 func (es *EntrySorter) Output() <-chan *model.RawKVEntry {
-	return es.output
+	return es.outputCh
+}
+
+func (es *EntrySorter) output(ctx context.Context, entry *model.RawKVEntry) {
+	select {
+	case <-ctx.Done():
+		return
+	case es.outputCh <- entry:
+	}
 }
