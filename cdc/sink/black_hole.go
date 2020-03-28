@@ -19,7 +19,8 @@ type blackHoleSink struct {
 }
 
 func (b *blackHoleSink) Run(ctx context.Context) error {
-	return nil
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func (b *blackHoleSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {

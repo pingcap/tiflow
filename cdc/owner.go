@@ -605,7 +605,7 @@ func (o *ownerImpl) newChangeFeed(
 	}
 	go func() {
 		ctx := util.SetOwnerInCtx(context.TODO())
-		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
+		if err := sink.Run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			log.Error("failed to close sink", zap.Error(err))
 		}
 	}()
