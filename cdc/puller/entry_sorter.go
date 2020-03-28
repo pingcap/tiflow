@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -81,10 +82,13 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				es.lock.Unlock()
 				log.Info("print buffer size", zap.Int("resolvedCh", len(es.resolvedCh)), zap.Int("toSort", len(toSort)), zap.Int("sorted", len(sorted)))
 
+				t1 := time.Now()
 				sort.Slice(toSort, func(i, j int) bool {
 					return lessFunc(toSort[i], toSort[j])
 				})
+				log.Info("sort cost", zap.Duration("c", time.Now().Sub(t1)))
 
+				t1 = time.Now()
 				var merged []*model.RawKVEntry
 				mergeFunc(toSort, sorted, func(entry *model.RawKVEntry) {
 					if entry.Ts <= resolvedTs {
@@ -93,6 +97,7 @@ func (es *EntrySorter) Run(ctx context.Context) {
 						merged = append(merged, entry)
 					}
 				})
+				log.Info("merge cost", zap.Duration("c", time.Now().Sub(t1)))
 				tableSortedResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(tableID, 10)).Set(float64(oracle.ExtractPhysical(resolvedTs)))
 				es.output <- &model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved}
 				sorted = merged
