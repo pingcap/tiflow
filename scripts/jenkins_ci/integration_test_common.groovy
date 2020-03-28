@@ -2,20 +2,54 @@ test_case_names = ["simple", "cdc", "multi_capture", "split_region", "row_format
 
 def prepare_binaries() {
     stage('Prepare Binaries') {
+        def TIDB_BRANCH = "master"
+        def TIKV_BRANCH = "master"
+        def PD_BRANCH = "master"
+
+        // parse tidb branch
+        def m1 = ghprbCommentBody =~ /tidb\s*=\s*([^\s\\]+)(\s|\\|$)/
+        if (m1) {
+            TIDB_BRANCH = "${m1[0][1]}"
+        }
+        m1 = null
+        println "TIDB_BRANCH=${TIDB_BRANCH}"
+
+        // parse tikv branch
+        def m2 = ghprbCommentBody =~ /tikv\s*=\s*([^\s\\]+)(\s|\\|$)/
+        if (m2) {
+            TIKV_BRANCH = "${m2[0][1]}"
+        }
+        m2 = null
+        println "TIKV_BRANCH=${TIKV_BRANCH}"
+
+        // parse pd branch
+        def m3 = ghprbCommentBody =~ /pd\s*=\s*([^\s\\]+)(\s|\\|$)/
+        if (m3) {
+            PD_BRANCH = "${m3[0][1]}"
+        }
+        m3 = null
+        println "PD_BRANCH=${PD_BRANCH}"
+
         def prepares = [:]
 
         prepares["download third binaries"] = {
             node ("${GO_TEST_SLAVE}") {
+                deleteDir()
                 container("golang") {
-                    def ws = pwd()
-                    deleteDir()
-
+                    def tidb_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tidb/${TIDB_BRANCH}/sha1").trim()
+                    def tikv_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tikv/${TIKV_BRANCH}/sha1").trim()
+                    def pd_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/pd/${PD_BRANCH}/sha1").trim()
                     sh """
                         mkdir -p third_bin
                         mkdir -p tmp
-                        curl ${FILE_SERVER_URL}/download/builds/pingcap/tidb/700d9def026185fe836dd56b0c39e0b4df3c320b/centos7/tidb-server.tar.gz | tar xz -C ./tmp bin/tidb-server
-                        curl ${FILE_SERVER_URL}/download/builds/pingcap/pd/08d927675c8feb30552f9fb27246b120cc9ed6d7/centos7/pd-server.tar.gz | tar xz -C ./tmp bin/*
-                        curl ${FILE_SERVER_URL}/download/builds/pingcap/tikv/eeaf4be81fabb71c30f62bc9fd11e77860d47d02/centos7/tikv-server.tar.gz | tar xz -C ./tmp bin/tikv-server
+
+                        tidb_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
+                        tikv_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
+                        pd_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
+
+                        curl \${tidb_url} | tar xz -C ./tmp bin/tidb-server
+                        curl \${pd_url} | tar xz -C ./tmp bin/*
+                        curl \${tikv_url} | tar xz -C ./tmp bin/tikv-server
                         curl http://139.219.11.38:8000/5mpBK/tiflash.tar.gz | tar xz -C ./tmp/bin tiflash
                         curl http://139.219.11.38:8000/OHIIL/libtiflash_proxy.tar.gz | tar xz -C ./tmp/bin libtiflash_proxy.so
                         curl http://139.219.11.38:8000/buUKY/flash_cluster_manager.tgz | tar xz && mv flash_cluster_manager ./tmp/bin
