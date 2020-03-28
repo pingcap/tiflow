@@ -19,14 +19,14 @@ var (
 	tableMountedResolvedTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
-			Subsystem: "puller",
+			Subsystem: "entry",
 			Name:      "table_mounted_resolved_ts",
 			Help:      "real local resolved ts of processor",
 		}, []string{"changefeed", "capture", "table"})
 	ddlResolvedTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
-			Subsystem: "puller",
+			Subsystem: "entry",
 			Name:      "table_ddl_resolved_ts",
 			Help:      "real local resolved ts of processor",
 		}, []string{"changefeed", "capture"})
