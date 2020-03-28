@@ -95,6 +95,7 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				es.unsorted = nil
 				resolvedTsGroup := es.resolvedTsGroup
 				es.resolvedTsGroup = nil
+				resolvedTsGroupSize := len(resolvedTsGroup)
 				es.lock.Unlock()
 				if len(resolvedTsGroup) == 0 {
 					continue
@@ -123,7 +124,7 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				mergeCost := time.Now().Sub(t1)
 				sorted = merged
 				log.Info("print buffer size",
-					zap.Int("resolvedCh", len(es.resolvedTsGroup)),
+					zap.Int("resolvedCh", resolvedTsGroupSize),
 					zap.Int("toSort", len(toSort)),
 					zap.Int("sorted", len(sorted)),
 					zap.Int("output", len(es.outputCh)),
