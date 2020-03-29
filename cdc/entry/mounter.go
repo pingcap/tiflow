@@ -190,6 +190,9 @@ func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
+				if event == nil {
+					continue
+				}
 				eventChs[i] <- event
 			}
 		})
