@@ -82,6 +82,7 @@ func (es *EntrySorter) Run(ctx context.Context) {
 	}
 	go func() {
 		var sorted []*model.RawKVEntry
+		var lastResolvedTs uint64
 		for {
 			select {
 			case <-ctx.Done():
