@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,10 +30,19 @@ var (
 			Name:      "table_ddl_resolved_ts",
 			Help:      "real local resolved ts of processor",
 		}, []string{"changefeed", "capture"})
+
+	mounterOutputChanSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "mounter",
+			Name:      "output_chan_size",
+			Help:      "mounter output chan size",
+		}, []string{"capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ddlResolvedTsGauge)
 	registry.MustRegister(tableMountedResolvedTsGauge)
+	registry.MustRegister(mounterOutputChanSizeGauge)
 }

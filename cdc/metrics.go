@@ -31,5 +31,6 @@ func init() {
 	kv.InitMetrics(registry)
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
+	entry.InitMetrics(registry)
 	initProcessorMetrics(registry)
 }

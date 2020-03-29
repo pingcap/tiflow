@@ -1289,10 +1289,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_puller_entry_sorter_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "expr": "sum(ticdc_puller_entry_sorter_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}}-{{table}}",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -1383,10 +1383,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_puller_entry_sorter_resolved_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "expr": "sum(ticdc_puller_entry_sorter_resolved_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}}-{{table}}",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],

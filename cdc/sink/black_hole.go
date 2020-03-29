@@ -11,10 +11,16 @@ import (
 )
 
 // newBlackHoleSink creates a block hole sink
-func newBlackHoleSink() *blackHoleSink {
-	return &blackHoleSink{
-		resolveCh: make(chan struct{}),
+func newBlackHoleSink(opts map[string]string) *blackHoleSink {
+	sink := &blackHoleSink{resolveCh: make(chan struct{})}
+	if cid, ok := opts[OptChangefeedID]; ok {
+		sink.changefeedID = cid
 	}
+	if cid, ok := opts[OptCaptureID]; ok {
+		sink.captureID = cid
+	}
+	return sink
+
 }
 
 type blackHoleSink struct {
@@ -22,6 +28,9 @@ type blackHoleSink struct {
 	resolveCh        chan struct{}
 	resolvedTs       uint64
 	globalResolvedTs uint64
+	captureID        string
+	changefeedID     string
+	accumulated      uint64
 }
 
 func (b *blackHoleSink) Run(ctx context.Context) error {
@@ -36,6 +45,8 @@ func (b *blackHoleSink) Run(ctx context.Context) error {
 				time.Sleep(5 * time.Millisecond)
 				resolvedTs = atomic.LoadUint64(&b.resolvedTs)
 			}
+			execBatchHistogram.WithLabelValues(b.captureID, b.changefeedID).Observe(float64(atomic.LoadUint64(&b.accumulated)))
+			atomic.StoreUint64(&b.accumulated, 0)
 			atomic.StoreUint64(&b.checkpointTs, globalResolvedTs)
 		}
 	}
@@ -58,11 +69,15 @@ func (b *blackHoleSink) EmitCheckpointEvent(ctx context.Context, ts uint64) erro
 }
 
 func (b *blackHoleSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	var count uint64 = 0
 	for _, row := range rows {
 		if row.Resolved {
 			atomic.StoreUint64(&b.resolvedTs, row.Ts)
+		} else {
+			count += 1
 		}
 	}
+	atomic.AddUint64(&b.accumulated, count)
 	return nil
 }
 
