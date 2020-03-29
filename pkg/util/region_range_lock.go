@@ -17,8 +17,11 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 	"math"
 	"sync"
+	"time"
 
 	"github.com/google/btree"
 )
@@ -211,6 +214,18 @@ func (l *RegionRangeLock) LockRange(startKey, endKey []byte, version uint64) Loc
 	}
 
 	res.WaitFn = func() LockRangeResult {
+		c := make(chan int, 1)
+		go func() {
+			select {
+			case <-c:
+			case <-time.After(time.Second * 30):
+				log.Error("cannot acquire range lock in 30 sec",
+					zap.Binary("startKey", startKey),
+					zap.Binary("endKey", endKey))
+			}
+		}()
+		defer func() { c <- 1 }()
+
 		for {
 			l.cond.Wait()
 			res1 := l.tryLockRange(startKey, endKey, version)

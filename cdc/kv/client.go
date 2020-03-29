@@ -15,8 +15,11 @@ package kv
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"io"
 	"math/rand"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -314,7 +317,9 @@ type eventFeedSession struct {
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
 
-	rangeLock *util.RegionRangeLock
+	rangeLock       *util.RegionRangeLock
+	checkpointTsMap map[uint64]rangeRequestTask
+	mu              sync.Mutex
 }
 
 type rangeRequestTask struct {
@@ -329,20 +334,23 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	return &eventFeedSession{
-		client:         client,
-		regionCache:    regionCache,
-		totalSpan:      totalSpan,
-		eventCh:        eventCh,
-		regionCh:       make(chan singleRegionInfo, 16),
-		errCh:          make(chan regionErrorInfo, 16),
-		requestRangeCh: make(chan rangeRequestTask, 16),
-		rangeLock:      util.NewRegionRangeLock(),
+		client:          client,
+		regionCache:     regionCache,
+		totalSpan:       totalSpan,
+		eventCh:         eventCh,
+		regionCh:        make(chan singleRegionInfo, 16),
+		errCh:           make(chan regionErrorInfo, 16),
+		requestRangeCh:  make(chan rangeRequestTask, 16),
+		rangeLock:       util.NewRegionRangeLock(),
+		checkpointTsMap: make(map[uint64]rangeRequestTask),
 	}
 }
 
 func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	eventFeedGauge.Inc()
 	defer eventFeedGauge.Dec()
+
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
 	log.Debug("event feed started", zap.Reflect("span", s.totalSpan), zap.Uint64("ts", ts))
 
@@ -380,6 +388,53 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 		}
 	})
 
+	go func() {
+		timer := time.NewTicker(time.Minute)
+		defer timer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				s.mu.Lock()
+				str := "{"
+				for id, data := range s.checkpointTsMap {
+					str += fmt.Sprintf(`"%v": { "start_key": "%v", "end_key": "%v", "ts": %v},`, id, hex.EncodeToString(data.span.Start), hex.EncodeToString(data.span.End), data.ts)
+					if str[len(str)-1] == ',' {
+						str = str[:len(str)-1]
+					}
+				}
+				str += "}"
+				s.mu.Unlock()
+				log.Debug("checkpointTs list", zap.String("data", str))
+			}
+		}
+	}()
+
+	go func() {
+		timer := time.NewTicker(time.Second * 10)
+		defer timer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				s.mu.Lock()
+				var regionID uint64
+				var ts uint64
+				for id, data := range s.checkpointTsMap {
+					if ts == 0 || ts > data.ts {
+						ts = data.ts
+						regionID = id
+					}
+				}
+				s.mu.Unlock()
+				eventFeedMinCheckpointTs.WithLabelValues(changefeedID).Set(float64(ts))
+				eventFeedMinCheckpointTsRegion.WithLabelValues(changefeedID).Set(float64(regionID))
+			}
+		}
+	}()
+
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
 
 	return g.Wait()
@@ -410,6 +465,8 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 			select {
 			case s.regionCh <- sri:
 			case <-ctx.Done():
+			case <-time.After(time.Second * 30):
+				log.Error("cannot send to regionCh in 30 sec", zap.Uint64("regionID", sri.verID.GetID()))
 			}
 
 		case util.LockRangeResultStale:
@@ -439,12 +496,14 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 }
 
 func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) error {
-	log.Debug("region failed", zap.Reflect("errInfo", errorInfo))
+	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetVer(), errorInfo.ts)
 	select {
 	case s.errCh <- errorInfo:
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-time.After(time.Second * 30):
+		log.Error("cannot send to errCh in 30 sec", zap.Uint64("regionID", errorInfo.verID.GetID()))
 	}
 
 	return nil
@@ -614,16 +673,14 @@ func (s *eventFeedSession) partialRegionFeed(
 		state.markStopped()
 		// Workaround to avoid remaining messages in the channel blocks the receiver thread.
 		// TODO: Find a better solution.
-		go func() {
-			timer := time.After(time.Second * 2)
-			for {
-				select {
-				case <-receiver:
-				case <-timer:
-					return
-				}
+		timer := time.After(time.Second * 2)
+		for {
+			select {
+			case <-receiver:
+			case <-timer:
+				return
 			}
-		}()
+		}
 	}()
 
 	ts := state.sri.ts
@@ -633,7 +690,7 @@ func (s *eventFeedSession) partialRegionFeed(
 		return errors.New("partialRegionFeed exceeds rate limit")
 	}
 
-	maxTs, err := s.singleEventFeed(ctx, state.sri.span, state.sri.ts, receiver)
+	maxTs, err := s.singleEventFeed(ctx, state.sri.verID.GetID(), state.sri.span, state.sri.ts, receiver)
 	log.Debug("singleEventFeed quit")
 
 	if err == nil || errors.Cause(err) == context.Canceled {
@@ -713,7 +770,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			if err != nil {
 				return errors.Trace(err)
 			}
-			log.Debug("get partialSpan", zap.Reflect("span", partialSpan))
+			log.Debug("get partialSpan", zap.Reflect("span", partialSpan), zap.Uint64("regionID", region.Id))
 
 			nextSpan.Start = region.EndKey
 
@@ -811,6 +868,27 @@ func (s *eventFeedSession) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
+		if err == nil {
+			eventsStr := make([]string, 0, len(cevent.Events))
+			for _, e := range cevent.Events {
+				content := ""
+				switch x := e.Event.(type) {
+				case *cdcpb.Event_Entries_:
+					content = "entries"
+				case *cdcpb.Event_Admin_:
+					content = "admin:" + x.Admin.String()
+				case *cdcpb.Event_Error:
+					content = "error:" + x.Error.String()
+				case *cdcpb.Event_ResolvedTs:
+					content = "resolved_ts:" + strconv.FormatUint(x.ResolvedTs, 10)
+				}
+				eventsStr = append(eventsStr, fmt.Sprintf("regionID:%v, %v;", e.RegionId, content))
+			}
+			log.Debug("recv ChangeDataEvent", zap.Strings("event", eventsStr), zap.String("addr", addr))
+		} else {
+			log.Debug("recv ChangeDataEvent err", zap.Error(err), zap.String("addr", addr))
+		}
+
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
 			for _, state := range regionStates {
@@ -830,6 +908,11 @@ func (s *eventFeedSession) receiveFromStream(
 				case state.eventCh <- nil:
 				case <-ctx.Done():
 					return ctx.Err()
+				case <-time.After(time.Second * 30):
+					log.Error("cannot send to region event ch in 30 sec while channel is failing",
+						zap.Uint64("regionID", state.sri.verID.GetID()),
+						zap.Uint64("requestID", state.requestID),
+						zap.String("addr", addr))
 				}
 			}
 
@@ -895,6 +978,11 @@ func (s *eventFeedSession) receiveFromStream(
 			case state.eventCh <- event:
 			case <-ctx.Done():
 				return ctx.Err()
+			case <-time.After(time.Second * 30):
+				log.Error("cannot send to region event ch in 30 sec",
+					zap.Uint64("regionID", state.sri.verID.GetID()),
+					zap.Uint64("requestID", state.requestID),
+					zap.String("addr", addr))
 			}
 		}
 	}
@@ -907,12 +995,20 @@ func (s *eventFeedSession) receiveFromStream(
 // Return the maximum checkpoint
 func (s *eventFeedSession) singleEventFeed(
 	ctx context.Context,
+	regionID uint64,
 	span util.Span,
 	checkpointTs uint64,
 	receiverCh <-chan *cdcpb.Event,
 ) (uint64, error) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
+
+	s.mu.Lock()
+	s.checkpointTsMap[regionID] = rangeRequestTask{
+		span: span,
+		ts:   atomic.LoadUint64(&checkpointTs),
+	}
+	s.mu.Unlock()
 
 	var initialized uint32
 
@@ -931,6 +1027,13 @@ func (s *eventFeedSession) singleEventFeed(
 			},
 		}
 		updateCheckpointTS(&checkpointTs, item.commit)
+
+		s.mu.Lock()
+		s.checkpointTsMap[regionID] = rangeRequestTask{
+			span: span,
+			ts:   atomic.LoadUint64(&checkpointTs),
+		}
+		s.mu.Unlock()
 		select {
 		case s.eventCh <- revent:
 			sendEventCounter.WithLabelValues("sorter resolved", captureID, changefeedID).Inc()
@@ -1066,6 +1169,13 @@ func (s *eventFeedSession) singleEventFeed(
 			}
 
 			updateCheckpointTS(&checkpointTs, x.ResolvedTs)
+
+			s.mu.Lock()
+			s.checkpointTsMap[regionID] = rangeRequestTask{
+				span: span,
+				ts:   atomic.LoadUint64(&checkpointTs),
+			}
+			s.mu.Unlock()
 			select {
 			case s.eventCh <- revent:
 				sendEventCounter.WithLabelValues("native resolved", captureID, changefeedID).Inc()

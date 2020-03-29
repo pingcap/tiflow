@@ -60,6 +60,20 @@ var (
 			Name:      "send_event_count",
 			Help:      "event count sent to event channel by this puller",
 		}, []string{"type", "capture", "changefeed"})
+	eventFeedMinCheckpointTs = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "min_checkpoint_ts",
+			Help:      "",
+		}, []string{"changefeed"})
+	eventFeedMinCheckpointTsRegion = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "min_checkpoint_ts_region",
+			Help:      "",
+		}, []string{"changefeed"})
 )
 
 // InitMetrics registers all metrics in the kv package
@@ -70,4 +84,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(eventFeedGauge)
 	registry.MustRegister(pullEventCounter)
 	registry.MustRegister(sendEventCounter)
+	registry.MustRegister(eventFeedMinCheckpointTs)
+	registry.MustRegister(eventFeedMinCheckpointTsRegion)
 }
