@@ -771,31 +771,6 @@ func (c *CDCClient) singleEventFeed(
 
 	matcher := newMatcher()
 
-	maxItemFn := func(item sortItem) {
-		if atomic.LoadUint32(&initialized) == 0 {
-			return
-		}
-
-		// emit a checkpointTs
-		revent := &model.RegionFeedEvent{
-			Resolved: &model.ResolvedSpan{
-				Span:       span,
-				ResolvedTs: item.commit,
-			},
-		}
-		updateCheckpointTS(&checkpointTs, item.commit)
-		select {
-		case eventCh <- revent:
-			sendEventCounter.WithLabelValues("sorter resolved", captureID, changefeedID).Inc()
-		case <-ctx.Done():
-		}
-	}
-
-	// TODO: drop this if we totally depends on the ResolvedTs event from
-	// tikv to emit the ResolvedSpan.
-	sorter := newSorter(maxItemFn)
-	defer sorter.close()
-
 	for {
 
 		var event *cdcpb.Event
@@ -851,10 +826,6 @@ func (c *CDCClient) singleEventFeed(
 					}
 				case cdcpb.Event_PREWRITE:
 					matcher.putPrewriteRow(entry)
-					sorter.pushTsItem(sortItem{
-						start: entry.GetStartTs(),
-						tp:    cdcpb.Event_PREWRITE,
-					})
 				case cdcpb.Event_COMMIT:
 					// emit a value
 					value, err := matcher.matchRow(entry)
@@ -888,18 +859,8 @@ func (c *CDCClient) singleEventFeed(
 					case <-ctx.Done():
 						return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
 					}
-					sorter.pushTsItem(sortItem{
-						start:  entry.GetStartTs(),
-						commit: entry.GetCommitTs(),
-						tp:     cdcpb.Event_COMMIT,
-					})
 				case cdcpb.Event_ROLLBACK:
 					matcher.rollbackRow(entry)
-					sorter.pushTsItem(sortItem{
-						start:  entry.GetStartTs(),
-						commit: entry.GetCommitTs(),
-						tp:     cdcpb.Event_ROLLBACK,
-					})
 				}
 			}
 		case *cdcpb.Event_Admin_:
