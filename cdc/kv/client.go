@@ -709,7 +709,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 
 		for _, tiRegion := range regions {
 			region := tiRegion.GetMeta()
-			partialSpan, err := util.Intersect(span, util.Span{Start: region.StartKey, End: region.EndKey})
+			partialSpan, err := util.Intersect(s.totalSpan, util.Span{Start: region.StartKey, End: region.EndKey})
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -750,7 +750,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 			return nil
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			eventFeedErrorCounter.WithLabelValues("DuplicateRequest").Inc()
-			log.Error("tikv reported duplicated request to the same region. region merge should happened which is not supported",
+			log.Error("tikv reported duplicated request to the same region, which is not expected",
 				zap.Uint64("regionID", duplicatedRequest.RegionId))
 			return nil
 		} else {

@@ -250,7 +250,7 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, c
 }
 
 const (
-	// LockRangeResultSuccess meaqns a LockRange operation succeeded.
+	// LockRangeResultSuccess means a LockRange operation succeeded.
 	LockRangeResultSuccess = 0
 	// LockRangeResultWait means a LockRange operation is blocked and should wait for it being finished.
 	LockRangeResultWait = 1
