@@ -37,6 +37,7 @@ type mqSink struct {
 	checkpointTs     uint64
 	filter           *util.Filter
 
+	captureID    string
 	changefeedID string
 
 	count int64
@@ -47,6 +48,7 @@ type mqSink struct {
 func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, opts map[string]string) *mqSink {
 	partitionNum := mqProducer.GetPartitionNum()
 	changefeedID := opts[OptChangefeedID]
+	captureID := opts[OptCaptureID]
 	return &mqSink{
 		mqProducer:   mqProducer,
 		partitionNum: partitionNum,
@@ -56,6 +58,7 @@ func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, opts map[str
 		}, 128),
 		filter:       filter,
 		changefeedID: changefeedID,
+		captureID:    captureID,
 		errCh:        make(chan error, 1),
 	}
 }
@@ -190,11 +193,25 @@ func (k *mqSink) Run(ctx context.Context) error {
 		wg.Go(func() error {
 			return k.run(cctx)
 		})
+		wg.Go(func() error {
+			return k.collectMetrics(ctx)
+		})
 	}
 	wg.Go(func() error {
 		return k.mqProducer.Run(cctx)
 	})
 	return wg.Wait()
+}
+
+func (k *mqSink) collectMetrics(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(time.Minute):
+			mqSinkCheckpointChanSizeGauge.WithLabelValues(k.captureID, k.changefeedID).Set(float64(len(k.sinkCheckpointTsCh)))
+		}
+	}
 }
 
 func (k *mqSink) run(ctx context.Context) error {

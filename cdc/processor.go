@@ -551,6 +551,20 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	}
 }
 
+func (p *processor) collectMetrics(ctx context.Context, tableID int64) {
+	go func() {
+		for {
+			tableIDStr := strconv.FormatInt(tableID, 10)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Minute):
+				tableOutputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureID, tableIDStr).Set(float64(len(p.output)))
+			}
+		}
+	}()
+}
+
 func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEntry) (*entry.StorageBuilder, error) {
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","))
@@ -641,6 +655,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	table.mounter = mounter
 	p.tables[tableID] = table
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Inc()
+	p.collectMetrics(ctx, tableID)
 }
 
 func (p *processor) stop(ctx context.Context) error {
