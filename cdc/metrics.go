@@ -27,7 +27,6 @@ func init() {
 	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	registry.MustRegister(prometheus.NewGoCollector())
 
-	entry.InitMetrics(registry)
 	kv.InitMetrics(registry)
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
