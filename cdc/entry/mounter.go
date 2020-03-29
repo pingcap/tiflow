@@ -130,9 +130,9 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			continue
 		}
 
-		//if err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts); err != nil {
-		//	return errors.Trace(err)
-		//}
+		if err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts); err != nil {
+			return errors.Trace(err)
+		}
 
 		if rawRow.OpType == model.OpTypeResolved {
 			tableMountedResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(tableID, 10)).Set(float64(oracle.ExtractPhysical(rawRow.Ts)))
@@ -141,14 +141,14 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			continue
 		}
 
-		//event, err := m.unmarshalAndMountRowChanged(rawRow)
-		//if err != nil {
-		//	return errors.Trace(err)
-		//}
-		//if event == nil {
-		//	continue
-		//}
-		//m.output <- event
+		event, err := m.unmarshalAndMountRowChanged(rawRow)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if event == nil {
+			continue
+		}
+		m.output <- event
 	}
 }
 
