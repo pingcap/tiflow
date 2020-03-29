@@ -152,7 +152,7 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		if event == nil {
 			continue
 		}
-		m.output <- event
+		//m.output <- event
 	}
 }
 
