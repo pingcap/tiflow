@@ -2099,6 +2099,7 @@
       }
     },
     {
+      "datasource": "cdc-server",
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -2191,6 +2192,7 @@
       }
     },
     {
+      "datasource": "cdc-server",
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,

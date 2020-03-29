@@ -30,6 +30,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	defaultOutputChanSize = 128000
+)
+
 type baseKVEntry struct {
 	Ts       uint64
 	TableID  int64
@@ -103,7 +107,7 @@ func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaStorage *Storage
 	return &mounterImpl{
 		schemaStorage:   schemaStorage,
 		rawRowChangedCh: rawRowChangedCh,
-		output:          make(chan *model.RowChangedEvent),
+		output:          make(chan *model.RowChangedEvent, defaultOutputChanSize),
 	}
 }
 

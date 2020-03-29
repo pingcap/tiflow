@@ -25,8 +25,8 @@ type EntrySorter struct {
 // NewEntrySorter creates a new EntrySorter
 func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
-		resolvedCh: make(chan uint64, 1024),
-		output:     make(chan *model.RawKVEntry, 128),
+		resolvedCh: make(chan uint64, 12800),
+		output:     make(chan *model.RawKVEntry, 128000),
 	}
 }
 

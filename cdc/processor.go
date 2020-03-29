@@ -52,7 +52,7 @@ const (
 	waitGlobalResolvedTsDelay   = time.Millisecond * 500
 	waitFallbackResolvedTsDelay = time.Millisecond * 500
 
-	defaultOutputChanSize = 128
+	defaultOutputChanSize = 128000
 
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
