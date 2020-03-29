@@ -28,8 +28,8 @@ type EntrySorter struct {
 // NewEntrySorter creates a new EntrySorter
 func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
-		resolvedNotify: make(chan struct{}, 10240),
-		outputCh:       make(chan *model.RawKVEntry, 10240),
+		resolvedNotify: make(chan struct{}, 128000),
+		outputCh:       make(chan *model.RawKVEntry, 128000),
 	}
 }
 

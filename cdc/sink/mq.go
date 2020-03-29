@@ -55,7 +55,7 @@ func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, opts map[str
 		sinkCheckpointTsCh: make(chan struct {
 			ts    uint64
 			index uint64
-		}, 128),
+		}, 128000),
 		filter:       filter,
 		changefeedID: changefeedID,
 		captureID:    captureID,
