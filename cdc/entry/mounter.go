@@ -200,7 +200,7 @@ func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
 	}
 
 	errg.Go(func() error {
-		var events []*model.RowChangedEvent
+		events := make([]*model.RowChangedEvent, workerNum)
 		var lastResolvedTs uint64
 		for {
 			minTs := uint64(math.MaxUint64)

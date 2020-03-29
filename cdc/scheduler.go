@@ -34,6 +34,7 @@ func runProcessor(
 	captureID string,
 	checkpointTs uint64,
 ) (*processor, error) {
+	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
 	opts := make(map[string]string, len(info.Opts)+2)
 	for k, v := range info.Opts {
 		opts[k] = v
@@ -63,7 +64,6 @@ func runProcessor(
 	}
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
 
-	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
 	processor.Run(ctx, errCh)
 
 	go func() {
