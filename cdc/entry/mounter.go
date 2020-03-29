@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -145,14 +144,14 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			continue
 		}
 
-		//event, err := m.unmarshalAndMountRowChanged(rawRow)
-		//if err != nil {
-		//	return errors.Trace(err)
-		//}
-		//if event == nil {
-		//	continue
-		//}
-		//m.output <- event
+		event, err := m.unmarshalAndMountRowChanged(rawRow)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if event == nil {
+			continue
+		}
+		m.output <- event
 	}
 }
 
@@ -411,8 +410,12 @@ func formatColVal(value interface{}, tp byte) (interface{}, error) {
 	}
 
 	switch tp {
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeJSON:
-		value = fmt.Sprintf("%v", value)
+	case mysql.TypeDate, mysql.TypeDatetime,
+		mysql.TypeNewDate, mysql.TypeTimestamp,
+		mysql.TypeDuration, mysql.TypeDecimal,
+		mysql.TypeNewDecimal, mysql.TypeJSON:
+		//value = fmt.Sprintf("%v", value)
+		value = nil
 	case mysql.TypeEnum:
 		value = value.(types.Enum).Value
 	case mysql.TypeSet:
