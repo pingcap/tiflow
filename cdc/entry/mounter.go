@@ -175,9 +175,9 @@ func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
 	}()
 	for i := 0; i < workerNum; i++ {
 		i := i
+		eventChs[i] = make(chan *model.RowChangedEvent, defaultOutputChanSize)
 		errg.Go(func() error {
 			var rawRow *model.RawKVEntry
-			eventChs[i] = make(chan *model.RowChangedEvent, defaultOutputChanSize)
 			for {
 				select {
 				case <-cctx.Done():
