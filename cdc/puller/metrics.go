@@ -87,6 +87,13 @@ var (
 			Name:      "max_event_ts",
 			Help:      "real local resolved ts of processor",
 		}, []string{"changefeed", "capture", "table"})
+	bufferSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "buffer_size",
+			Help:      "Puller entry buffer size",
+		}, []string{"capture", "changefeed", "table", "type"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -101,4 +108,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(tableMergedDDLResolvedTsGauge)
 	registry.MustRegister(tableMountedResolvedTsGauge)
 	registry.MustRegister(maxTsGauge)
+	registry.MustRegister(bufferSizeGauge)
 }

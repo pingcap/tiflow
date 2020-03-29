@@ -31,8 +31,8 @@ type EntrySorter struct {
 // NewEntrySorter creates a new EntrySorter
 func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
-		resolvedNotify: make(chan struct{}, 128),
-		outputCh:       make(chan *model.RawKVEntry, 1024),
+		resolvedNotify: make(chan struct{}, 512),
+		outputCh:       make(chan *model.RawKVEntry, 10240),
 	}
 }
 
@@ -82,7 +82,6 @@ func (es *EntrySorter) Run(ctx context.Context) {
 	}
 	go func() {
 		var sorted []*model.RawKVEntry
-		var lastResolvedTs uint64
 		for {
 			select {
 			case <-ctx.Done():
@@ -91,15 +90,15 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				return
 			case <-es.resolvedNotify:
 				es.lock.Lock()
-				toSort := es.unsorted
-				es.unsorted = nil
-				resolvedTsGroup := es.resolvedTsGroup
-				es.resolvedTsGroup = nil
-				resolvedTsGroupSize := len(resolvedTsGroup)
-				es.lock.Unlock()
-				if len(resolvedTsGroup) == 0 {
+				if len(es.resolvedTsGroup) == 0 {
+					es.lock.Unlock()
 					continue
 				}
+				resolvedTsGroup := es.resolvedTsGroup
+				es.resolvedTsGroup = nil
+				toSort := es.unsorted
+				es.unsorted = nil
+				es.lock.Unlock()
 
 				resEvents := make([]*model.RawKVEntry, len(resolvedTsGroup))
 				t1 := time.Now()
@@ -124,12 +123,21 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				mergeCost := time.Now().Sub(t1)
 				sorted = merged
 				log.Info("print buffer size",
-					zap.Int("resolvedCh", resolvedTsGroupSize),
+					zap.Int("resolvedTsGroup", len(resolvedTsGroup)),
 					zap.Int("toSort", len(toSort)),
 					zap.Int("sorted", len(sorted)),
 					zap.Int("output", len(es.outputCh)),
 					zap.Duration("sort cost", sortCost),
 					zap.Duration("merge cost", mergeCost))
+				bufferSizeGauge.WithLabelValues(captureID, changefeedID, strconv.FormatInt(tableID, 10),
+					"resolvedTsGroup").Set(float64(len(resolvedTsGroup)))
+				bufferSizeGauge.WithLabelValues(captureID, changefeedID, strconv.FormatInt(tableID, 10),
+					"toSort").Set(float64(len(toSort)))
+				bufferSizeGauge.WithLabelValues(captureID, changefeedID, strconv.FormatInt(tableID, 10),
+					"sorted").Set(float64(len(sorted)))
+				bufferSizeGauge.WithLabelValues(captureID, changefeedID, strconv.FormatInt(tableID, 10),
+					"outputCh").Set(float64(len(es.outputCh)))
+
 			}
 		}
 	}()
