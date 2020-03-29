@@ -18,8 +18,12 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
+	"math"
 	"strconv"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -78,6 +82,7 @@ func (idx *indexKVEntry) unflatten(tableInfo *TableInfo) error {
 	}
 	return nil
 }
+
 func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
 	if index.Primary {
 		return true
@@ -103,6 +108,7 @@ type mounterImpl struct {
 	schemaStorage   *Storage
 	rawRowChangedCh <-chan *model.RawKVEntry
 	output          chan *model.RowChangedEvent
+	unmarshalRow    chan *model.RawKVEntry
 }
 
 // NewMounter creates a mounter
@@ -111,48 +117,116 @@ func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaStorage *Storage
 		schemaStorage:   schemaStorage,
 		rawRowChangedCh: rawRowChangedCh,
 		output:          make(chan *model.RowChangedEvent, defaultOutputChanSize),
+		unmarshalRow:    make(chan *model.RawKVEntry, defaultOutputChanSize),
 	}
 }
 
 func (m *mounterImpl) Run(ctx context.Context) error {
-	go func() {
-		m.collectMetrics(ctx)
-	}()
-
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	tableID := util.TableIDFromCtx(ctx)
-	for {
-		var rawRow *model.RawKVEntry
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case rawRow = <-m.rawRowChangedCh:
-		}
-		if rawRow == nil {
-			continue
-		}
 
-		if err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts); err != nil {
-			return errors.Trace(err)
-		}
+	errg, cctx := errgroup.WithContext(ctx)
 
-		if rawRow.OpType == model.OpTypeResolved {
-			tableMountedResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(tableID, 10)).Set(float64(oracle.ExtractPhysical(rawRow.Ts)))
+	errg.Go(func() error {
+		m.collectMetrics(cctx)
+		return nil
+	})
 
-			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
-			continue
-		}
+	errg.Go(func() error {
+		for {
+			var rawRow *model.RawKVEntry
+			select {
+			case <-cctx.Done():
+				return errors.Trace(cctx.Err())
+			case rawRow = <-m.rawRowChangedCh:
+			}
+			if rawRow == nil {
+				continue
+			}
 
-		event, err := m.unmarshalAndMountRowChanged(rawRow)
-		if err != nil {
-			return errors.Trace(err)
+			if err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts); err != nil {
+				return errors.Trace(err)
+			}
+
+			if rawRow.OpType == model.OpTypeResolved {
+				tableMountedResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(tableID, 10)).Set(float64(oracle.ExtractPhysical(rawRow.Ts)))
+			}
+			m.unmarshalRow <- rawRow
+
 		}
-		if event == nil {
-			continue
+	})
+
+	errg.Go(func() error {
+		return m.unmarshalWorker(cctx)
+	})
+	return errg.Wait()
+}
+
+const workerNum = 4
+
+func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
+	errg, cctx := errgroup.WithContext(ctx)
+	eventChs := make([]chan *model.RowChangedEvent, workerNum)
+	defer func() {
+		for i := 0; i < workerNum; i++ {
+			close(eventChs[i])
 		}
-		m.output <- event
+	}()
+	for i := 0; i < workerNum; i++ {
+		i := i
+		errg.Go(func() error {
+			var rawRow *model.RawKVEntry
+			eventChs[i] = make(chan *model.RowChangedEvent, defaultOutputChanSize)
+			for {
+				select {
+				case <-cctx.Done():
+					return errors.Trace(cctx.Err())
+				case rawRow = <-m.unmarshalRow:
+				}
+				if rawRow.OpType == model.OpTypeResolved {
+					for j := 0; j < workerNum; j++ {
+						eventChs[j] <- &model.RowChangedEvent{Ts: rawRow.Ts, Resolved: true}
+					}
+					continue
+				}
+				event, err := m.unmarshalAndMountRowChanged(rawRow)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				eventChs[i] <- event
+			}
+		})
 	}
+
+	errg.Go(func() error {
+		var events []*model.RowChangedEvent
+		var lastResolvedTs uint64
+		for {
+			minTs := uint64(math.MaxUint64)
+			var minChIndex int
+			for i := 0; i < workerNum; i++ {
+				if events[i] == nil {
+					events[i] = <-eventChs[i]
+				}
+				if minTs > events[i].Ts {
+					minTs = events[i].Ts
+					minChIndex = i
+				}
+			}
+			if events[minChIndex].Resolved {
+				if events[minChIndex].Ts != lastResolvedTs {
+					m.output <- events[minChIndex]
+					lastResolvedTs = events[minChIndex].Ts
+				}
+			} else {
+				m.output <- events[minChIndex]
+			}
+			events[minChIndex] = nil
+			minTs = uint64(math.MaxUint64)
+		}
+	})
+	return errg.Wait()
 }
 
 func (m *mounterImpl) Output() <-chan *model.RowChangedEvent {
@@ -173,6 +247,7 @@ func (m *mounterImpl) collectMetrics(ctx context.Context) {
 		}
 	}()
 }
+
 func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
@@ -414,8 +489,7 @@ func formatColVal(value interface{}, tp byte) (interface{}, error) {
 		mysql.TypeNewDate, mysql.TypeTimestamp,
 		mysql.TypeDuration, mysql.TypeDecimal,
 		mysql.TypeNewDecimal, mysql.TypeJSON:
-		//value = fmt.Sprintf("%v", value)
-		value = nil
+		value = fmt.Sprintf("%v", value)
 	case mysql.TypeEnum:
 		value = value.(types.Enum).Value
 	case mysql.TypeSet:
