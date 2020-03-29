@@ -168,11 +168,7 @@ const workerNum = 4
 func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
 	errg, cctx := errgroup.WithContext(ctx)
 	eventChs := make([]chan *model.RowChangedEvent, workerNum)
-	defer func() {
-		for i := 0; i < workerNum; i++ {
-			close(eventChs[i])
-		}
-	}()
+
 	for i := 0; i < workerNum; i++ {
 		i := i
 		eventChs[i] = make(chan *model.RowChangedEvent, defaultOutputChanSize)
@@ -200,6 +196,11 @@ func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
 	}
 
 	errg.Go(func() error {
+		defer func() {
+			for i := 0; i < workerNum; i++ {
+				close(eventChs[i])
+			}
+		}()
 		events := make([]*model.RowChangedEvent, workerNum)
 		var lastResolvedTs uint64
 		for {
@@ -207,7 +208,11 @@ func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
 			var minChIndex int
 			for i := 0; i < workerNum; i++ {
 				if events[i] == nil {
-					events[i] = <-eventChs[i]
+					select {
+					case events[i] = <-eventChs[i]:
+					case <-cctx.Done():
+						return errors.Trace(cctx.Err())
+					}
 				}
 				if minTs > events[i].Ts {
 					minTs = events[i].Ts
