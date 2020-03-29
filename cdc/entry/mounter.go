@@ -145,13 +145,13 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			continue
 		}
 
-		event, err := m.unmarshalAndMountRowChanged(rawRow)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if event == nil {
-			continue
-		}
+		//event, err := m.unmarshalAndMountRowChanged(rawRow)
+		//if err != nil {
+		//	return errors.Trace(err)
+		//}
+		//if event == nil {
+		//	continue
+		//}
 		//m.output <- event
 	}
 }
