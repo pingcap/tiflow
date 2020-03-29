@@ -3,7 +3,6 @@ package puller
 import (
 	"context"
 	"sort"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,10 +10,8 @@ import (
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
-	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 // EntrySorter accepts out-of-order raw kv entries and output sorted entries
@@ -38,9 +35,6 @@ func NewEntrySorter() *EntrySorter {
 
 // Run runs EntrySorter
 func (es *EntrySorter) Run(ctx context.Context) {
-	captureID := util.CaptureIDFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableID := util.TableIDFromCtx(ctx)
 	lessFunc := func(i *model.RawKVEntry, j *model.RawKVEntry) bool {
 		if i.Ts == j.Ts {
 			if i.OpType == model.OpTypeDelete {
@@ -75,11 +69,23 @@ func (es *EntrySorter) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case es.outputCh <- entry:
-			if entry.OpType == model.OpTypeResolved {
-				tableSortedResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(tableID, 10)).Set(float64(oracle.ExtractPhysical(entry.Ts)))
-			}
 		}
 	}
+
+	go func() {
+		captureID := util.CaptureIDFromCtx(ctx)
+		changefeedID := util.ChangefeedIDFromCtx(ctx)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Minute):
+				entrySorterResolvedChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(es.resolvedNotify)))
+				entrySorterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(es.outputCh)))
+			}
+		}
+	}()
+
 	go func() {
 		var sorted []*model.RawKVEntry
 		for {
@@ -129,15 +135,6 @@ func (es *EntrySorter) Run(ctx context.Context) {
 					zap.Int("output", len(es.outputCh)),
 					zap.Duration("sort cost", sortCost),
 					zap.Duration("merge cost", mergeCost))
-				bufferSizeGauge.WithLabelValues(captureID, changefeedID, strconv.FormatInt(tableID, 10),
-					"resolvedTsGroup").Set(float64(len(resolvedTsGroup)))
-				bufferSizeGauge.WithLabelValues(captureID, changefeedID, strconv.FormatInt(tableID, 10),
-					"toSort").Set(float64(len(toSort)))
-				bufferSizeGauge.WithLabelValues(captureID, changefeedID, strconv.FormatInt(tableID, 10),
-					"sorted").Set(float64(len(sorted)))
-				bufferSizeGauge.WithLabelValues(captureID, changefeedID, strconv.FormatInt(tableID, 10),
-					"outputCh").Set(float64(len(es.outputCh)))
-
 			}
 		}
 	}()
