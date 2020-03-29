@@ -605,7 +605,7 @@ func (o *ownerImpl) newChangeFeed(
 	}
 	go func() {
 		ctx := util.SetOwnerInCtx(context.TODO())
-		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
+		if err := sink.Run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			log.Error("failed to close sink", zap.Error(err))
 		}
 	}()
@@ -1279,9 +1279,12 @@ func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
 				// When the watching routine returns, the error must not
 				// be nil, it may be caused by a temporary error or a context
 				// error(ownerCtx.Err())
-				if ownerCtx.Err() != nil {
+				err2 := ownerCtx.Err()
+				if err2 != nil {
 					// The context error indicates the termination of the owner
-					log.Error("watch processor failed", zap.Error(ownerCtx.Err()))
+					if errors.Cause(err2) != context.Canceled {
+						log.Error("watch processor failed", zap.Error(err2))
+					}
 					return
 				}
 				log.Warn("watch processor returned", zap.Error(err))

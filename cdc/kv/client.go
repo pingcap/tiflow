@@ -247,13 +247,19 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 }
 
 func (c *CDCClient) getStream(ctx context.Context, addr string) (stream cdcpb.ChangeData_EventFeedClient, err error) {
-	conn, err := c.getConn(ctx, addr)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	client := cdcpb.NewChangeDataClient(conn)
-	stream, err = client.EventFeed(ctx)
-	log.Debug("created stream to store", zap.String("addr", addr))
+	err = retry.Run(500*time.Millisecond, 10, func() error {
+		conn, err := c.getConn(ctx, addr)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		client := cdcpb.NewChangeDataClient(conn)
+		stream, err = client.EventFeed(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Debug("created stream to store", zap.String("addr", addr))
+		return nil
+	})
 	return
 }
 
@@ -390,7 +396,11 @@ MainLoop:
 			if !ok {
 				stream, err = c.getStream(ctx, rpcCtx.Addr)
 				if err != nil {
-					return errors.Trace(err)
+					// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
+					log.Warn("get grpc stream client failed", zap.Error(err))
+					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+					c.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
+					continue MainLoop
 				}
 				streams[rpcCtx.Addr] = stream
 

@@ -128,7 +128,7 @@ func waitTopicCreated(address []string, topic string, cfg *sarama.Config) error 
 		return errors.Trace(err)
 	}
 	defer admin.Close()
-	for i := 0; i <= 10; i++ {
+	for i := 0; i <= 30; i++ {
 		topics, err := admin.ListTopics()
 		if err != nil {
 			return errors.Trace(err)

@@ -87,7 +87,6 @@ func (es *EntrySorter) Run(ctx context.Context) {
 			case <-ctx.Done():
 				atomic.StoreInt32(&es.closed, 1)
 				close(es.outputCh)
-				close(es.resolvedNotify)
 				return
 			case <-es.resolvedNotify:
 				es.lock.Lock()

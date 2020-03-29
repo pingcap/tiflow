@@ -494,6 +494,9 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			var err error
 			changefeedStatus, err = p.tsRWriter.GetChangeFeedStatus(ctx)
 			if err != nil {
+				if errors.Cause(err) == context.Canceled {
+					return backoff.Permanent(err)
+				}
 				log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
 			}
 			return err

@@ -174,11 +174,11 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 			partitionNum = 4
 			log.Warn("topic not found and partition number is not specified, using default partition number", zap.String("topic", topic), zap.Int32("partition_num", partitionNum))
 		}
+		log.Info("create a topic", zap.String("topic", topic), zap.Int32("partition_num", partitionNum), zap.Int16("replication_factor", config.ReplicationFactor))
 		err := admin.CreateTopic(topic, &sarama.TopicDetail{
 			NumPartitions:     partitionNum,
 			ReplicationFactor: config.ReplicationFactor,
 		}, false)
-		log.Info("create a topic", zap.String("topic", topic), zap.Int32("partition_num", partitionNum), zap.Int16("replication_factor", config.ReplicationFactor))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -231,6 +231,11 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 
 	config.Producer.Retry.Max = 10000
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
+
+	config.Admin.Retry.Max = 10000
+	config.Admin.Retry.Backoff = 500 * time.Millisecond
+	config.Admin.Timeout = 20 * time.Second
+
 	return config, err
 }
 
