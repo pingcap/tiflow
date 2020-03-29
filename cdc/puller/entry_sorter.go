@@ -65,8 +65,8 @@ func (es *EntrySorter) Run(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Minute):
-				entrySorterResolvedChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(es.output)))
-				entrySorterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(es.resolvedCh)))
+				entrySorterResolvedChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(es.resolvedCh)))
+				entrySorterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(es.output)))
 			}
 		}
 	}()
