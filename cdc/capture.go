@@ -123,7 +123,7 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 		select {
 		case <-c.session.Done():
 			if ctx.Err() != context.Canceled {
-				panic(ErrSuicide)
+				c.Suicide()
 			}
 		default:
 		}
@@ -146,8 +146,8 @@ func (c *Capture) Resign(ctx context.Context) error {
 }
 
 // Suicide kills the capture itself
-func (c *Capture) Suicide() error {
-	panic(errors.New("Suicide"))
+func (c *Capture) Suicide() {
+	panic(ErrSuicide)
 }
 
 // Cleanup cleans all dynamic resources
