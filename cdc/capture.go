@@ -130,7 +130,6 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 		if err := c.handleTaskEvent(ctx, ev); err != nil {
 			return errors.Trace(err)
 		}
-		return nil
 	}
 
 	return nil
