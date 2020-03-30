@@ -639,10 +639,7 @@ func (p *processor) stop(ctx context.Context) error {
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureID); err != nil {
 		return err
 	}
-	if err := p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID); err != nil {
-		return err
-	}
-	return nil
+	return p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID)
 }
 
 // runProcessor creates a new processor then starts it.
