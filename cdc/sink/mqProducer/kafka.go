@@ -261,8 +261,5 @@ func (k *kafkaSaramaProducer) Close() error {
 	for i := 0; i < int(k.partitionNum); i++ {
 		err = k.asyncClient[i].Close()
 	}
-	if err != nil {
-		return errors.Trace(err)
-	}
-
+	return errors.Trace(err)
 }
