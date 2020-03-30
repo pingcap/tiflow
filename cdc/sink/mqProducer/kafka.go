@@ -35,7 +35,7 @@ var DefaultKafkaConfig = KafkaConfig{
 }
 
 type kafkaSaramaProducer struct {
-	asyncClient  sarama.AsyncProducer
+	asyncClient  []sarama.AsyncProducer
 	topic        string
 	partitionNum int32
 	currentIndex uint64
@@ -47,20 +47,27 @@ type kafkaSaramaProducer struct {
 }
 
 func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-k.closeCh:
-			return nil
-		case msg := <-k.asyncClient.Successes():
-			cb := msg.Metadata.(func(error))
-			cb(nil)
-		case err := <-k.asyncClient.Errors():
-			cb := err.Msg.Metadata.(func(error))
-			cb(err.Err)
-		}
+	errg, cctx := errgroup.WithContext(ctx)
+	for i := 0; i < int(k.partitionNum); i++ {
+		i := i
+		errg.Go(func() error {
+			for {
+				select {
+				case <-cctx.Done():
+					return errors.Trace(cctx.Err())
+				case <-k.closeCh:
+					return nil
+				case msg := <-k.asyncClient[i].Successes():
+					cb := msg.Metadata.(func(error))
+					cb(nil)
+				case err := <-k.asyncClient[i].Errors():
+					cb := err.Msg.Metadata.(func(error))
+					cb(err.Err)
+				}
+			}
+		})
 	}
+	return errg.Wait()
 }
 
 func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32, callback func(err error)) (uint64, error) {
@@ -77,7 +84,7 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 	select {
 	case <-ctx.Done():
 		return 0, errors.Trace(ctx.Err())
-	case k.asyncClient.Input() <- &sarama.ProducerMessage{
+	case k.asyncClient[partition].Input() <- &sarama.ProducerMessage{
 		Topic:     k.topic,
 		Key:       sarama.ByteEncoder(key),
 		Value:     sarama.ByteEncoder(value),
@@ -144,11 +151,6 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	if err != nil {
 		return nil, err
 	}
-	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
-	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 
 	// get partition number or create topic automatically
 	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
@@ -189,9 +191,18 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
+	asyncClients := make([]sarama.AsyncProducer, partitionNum)
+	for i := 0; i < int(partitionNum); i++ {
+		asyncClients[i], err = sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+	}
 
 	return &kafkaSaramaProducer{
-		asyncClient:              asyncClient,
+		asyncClient:              asyncClients,
 		topic:                    topic,
 		partitionNum:             partitionNum,
 		partitionMaxSucceedIndex: make([]uint64, partitionNum),
@@ -246,5 +257,12 @@ func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
 
 func (k *kafkaSaramaProducer) Close() error {
 	close(k.closeCh)
-	return k.asyncClient.Close()
+	var err error
+	for i := 0; i < int(k.partitionNum); i++ {
+		err = k.asyncClient[i].Close()
+	}
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 }
