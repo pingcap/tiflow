@@ -441,8 +441,6 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 			select {
 			case s.regionCh <- sri:
 			case <-ctx.Done():
-			case <-time.After(time.Second * 30):
-				log.Error("cannot send to regionCh in 30 sec", zap.Uint64("regionID", sri.verID.GetID()))
 			}
 
 		case util.LockRangeResultStale:
@@ -484,8 +482,6 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 	case s.errCh <- errorInfo:
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(time.Second * 30):
-		log.Error("cannot send to errCh in 30 sec", zap.Uint64("regionID", errorInfo.verID.GetID()))
 	}
 
 	return nil
@@ -900,11 +896,6 @@ func (s *eventFeedSession) receiveFromStream(
 				case state.eventCh <- nil:
 				case <-ctx.Done():
 					return ctx.Err()
-				case <-time.After(time.Second * 30):
-					log.Error("cannot send to region event ch in 30 sec while channel is failing",
-						zap.Uint64("regionID", state.sri.verID.GetID()),
-						zap.Uint64("requestID", state.requestID),
-						zap.String("addr", addr))
 				}
 			}
 
@@ -970,11 +961,6 @@ func (s *eventFeedSession) receiveFromStream(
 			case state.eventCh <- event:
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(time.Second * 30):
-				log.Error("cannot send to region event ch in 30 sec",
-					zap.Uint64("regionID", state.sri.verID.GetID()),
-					zap.Uint64("requestID", state.requestID),
-					zap.String("addr", addr))
 			}
 		}
 	}
