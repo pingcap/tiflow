@@ -177,6 +177,7 @@ func (s *mysqlSink) Run(ctx context.Context) error {
 
 			sinkResolvedTs := atomic.LoadUint64(&s.sinkResolvedTs)
 			for globalResolvedTs > sinkResolvedTs {
+				log.Debug("mysql sink wait sink resolved ts", zap.Uint64("globalResolvedTs", globalResolvedTs), zap.Uint64("sinkResolvedTs", sinkResolvedTs))
 				time.Sleep(10 * time.Millisecond)
 				sinkResolvedTs = atomic.LoadUint64(&s.sinkResolvedTs)
 			}

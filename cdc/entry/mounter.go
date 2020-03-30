@@ -142,6 +142,7 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		if rawRow.OpType == model.OpTypeResolved {
 			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
 			metricMounterResolvedTs.Set(float64(oracle.ExtractPhysical(rawRow.Ts)))
+			log.Debug("mounter send resolved ts", zap.Uint64("resolved ts", rawRow.Ts), zap.String("table", tableIDStr))
 			continue
 		}
 

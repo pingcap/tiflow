@@ -273,6 +273,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			return ctx.Err()
 		case <-resolveTsTick.C:
 			minResolvedTs := p.schemaBuilder.GetResolvedTs()
+			log.Debug("processor ddl resolved ts", zap.Uint64("minResolvedTs", minResolvedTs))
 			p.tablesMu.Lock()
 			for _, table := range p.tables {
 				ts := table.loadResolvedTS()
@@ -285,6 +286,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			p.tablesMu.Unlock()
 			// some puller still haven't received the row changed data
 			if minResolvedTs < p.position.ResolvedTs {
+				log.Debug("set resolved ts fallback", zap.Uint64("minResolvedTs", minResolvedTs))
 				atomic.StoreInt32(&p.resolvedTsFallback, 1)
 				continue
 			}
@@ -480,6 +482,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
 			time.Sleep(waitGlobalResolvedTsDelay)
+			log.Debug("processor ts not forward", zap.Uint64("resolved ts", lastResolvedTs), zap.Uint64("checkpoint ts", lastCheckPointTs))
 			continue
 		}
 
@@ -492,6 +495,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		}
 
 		if atomic.LoadInt32(&p.resolvedTsFallback) != 0 {
+			log.Debug("resolved ts fallback", zap.Uint64("last resolved ts", lastResolvedTs), zap.Uint64("checkpoint ts", lastCheckPointTs))
 			time.Sleep(waitFallbackResolvedTsDelay)
 			continue
 		}

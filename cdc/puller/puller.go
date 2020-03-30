@@ -125,6 +125,7 @@ func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 				if !forwarded {
 					continue
 				}
+				log.Debug("puller forward resolved ts", zap.Uint64("resolved", resolvedTs), zap.String("table", tableIDStr))
 				metricPullerResolvedTsGauge.Set(float64(oracle.ExtractPhysical(resolvedTs)))
 				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 				sorter.AddEntry(&model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved})
