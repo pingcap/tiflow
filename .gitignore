@@ -38,6 +38,7 @@ cmd/cdc/cdc
 
 # Files generated when testing
 vendor/
+tiflash-config-preprocessed.toml
 
 # Files generated when running docker-compose
 docker/data

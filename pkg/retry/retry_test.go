@@ -16,6 +16,7 @@ package retry
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -34,7 +35,7 @@ func (s *runSuite) TestShouldRetryAtMostSpecifiedTimes(c *check.C) {
 		return errors.New("test")
 	}
 
-	err := Run(f, 3)
+	err := Run(500*time.Millisecond, 3, f)
 	c.Assert(err, check.ErrorMatches, "test")
 	// It's weird that backoff may retry one more time than maxTries.
 	// Because the steps in backoff.Retry is:
@@ -54,7 +55,7 @@ func (s *runSuite) TestShouldStopOnSuccess(c *check.C) {
 		return errors.New("test")
 	}
 
-	err := Run(f, 3)
+	err := Run(500*time.Millisecond, 3, f)
 	c.Assert(err, check.IsNil)
 	c.Assert(callCount, check.Equals, 2)
 }
@@ -66,7 +67,7 @@ func (s *runSuite) TestShouldBeCtxAware(c *check.C) {
 		return context.Canceled
 	}
 
-	err := Run(f, 3)
+	err := Run(500*time.Millisecond, 3, f)
 	c.Assert(err, check.Equals, context.Canceled)
 	c.Assert(callCount, check.Equals, 1)
 
@@ -75,7 +76,7 @@ func (s *runSuite) TestShouldBeCtxAware(c *check.C) {
 		callCount++
 		return errors.Annotate(context.Canceled, "test")
 	}
-	err = Run(f, 3)
+	err = Run(500*time.Millisecond, 3, f)
 	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	c.Assert(callCount, check.Equals, 1)
 }

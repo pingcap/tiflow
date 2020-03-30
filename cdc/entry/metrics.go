@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,25 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cdc
+package entry
 
 import (
-	"github.com/pingcap/ticdc/cdc/entry"
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var registry = prometheus.NewRegistry()
+var (
+	mounterOutputChanSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "mounter",
+			Name:      "output_chan_size",
+			Help:      "mounter output chan size",
+		}, []string{"capture", "changefeed"})
+)
 
-func init() {
-	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	registry.MustRegister(prometheus.NewGoCollector())
-
-	kv.InitMetrics(registry)
-	puller.InitMetrics(registry)
-	sink.InitMetrics(registry)
-	entry.InitMetrics(registry)
-	initProcessorMetrics(registry)
+// InitMetrics registers all metrics in this file
+func InitMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(mounterOutputChanSizeGauge)
 }

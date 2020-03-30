@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -151,6 +152,7 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 }
 
 func (o *Owner) newChangeFeed(
+	ctx context.Context,
 	id model.ChangeFeedID,
 	processorsInfos model.ProcessorsInfos,
 	taskPositions map[string]*model.TaskPosition,
@@ -159,7 +161,12 @@ func (o *Owner) newChangeFeed(
 	log.Info("Find new changefeed", zap.Reflect("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
-	jobs, err := getHistoryDDLJobs(o.pdEndpoints)
+	// TODO here we create another pb client,we should reuse them
+	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","))
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -226,10 +233,16 @@ func (o *Owner) newChangeFeed(
 		}
 	}
 
-	sink, err := sink.NewSink(info.SinkURI, filter, info.Opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.Opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	go func() {
+		ctx := util.SetOwnerInCtx(context.TODO())
+		if err := sink.Run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+			log.Error("failed to close sink", zap.Error(err))
+		}
+	}()
 
 	cf := &changeFeed{
 		info:          info,
@@ -292,7 +305,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 		checkpointTs := cfInfo.GetCheckpointTs(status)
 
-		newCf, err := o.newChangeFeed(changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
+		newCf, err := o.newChangeFeed(ctx, changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
 		if err != nil {
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
@@ -370,6 +383,8 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	}
 	err = cf.ddlHandler.Close()
 	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
+	err = cf.sink.Close()
+	log.Info("stop changefeed sink", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
 	delete(o.changeFeeds, job.CfID)
 	return nil
 }
@@ -708,7 +723,7 @@ func (o *Owner) startProcessorInfoWatcher(ctx context.Context) {
 				// be nil, it may be caused by a temporary error or a context
 				// error(ctx.Err())
 				if ctx.Err() != nil {
-					if ctx.Err() != context.Canceled {
+					if errors.Cause(ctx.Err()) != context.Canceled {
 						// The context error indicates the termination of the owner
 						log.Error("watch processor failed", zap.Error(ctx.Err()))
 					} else {

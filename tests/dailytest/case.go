@@ -211,7 +211,7 @@ func (tr *testRunner) execSQLs(sqls []string) {
 // RunCase run some simple test case
 func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr := &testRunner{src: src, dst: dst, schema: schema}
-
+	ineligibleTable(tr, src, dst)
 	runPKorUKcases(tr)
 
 	tr.run(caseUpdateWhileAddingCol)
@@ -325,6 +325,63 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	// 	}
 	// })
 	// tr.execSQLs([]string{"DROP TABLE binlog_big;"})
+}
+
+func ineligibleTable(tr *testRunner, src *sql.DB, dst *sql.DB) {
+	sqls := []string{
+		"CREATE TABLE ineligible_table1 (uk int UNIQUE null, ncol int);",
+		"CREATE TABLE ineligible_table2 (ncol1 int, ncol2 int);",
+
+		"insert into ineligible_table1 (uk, ncol) values (1,1);",
+		"insert into ineligible_table2 (ncol1, ncol2) values (2,2);",
+		"ALTER TABLE ineligible_table1 ADD COLUMN c1 INT NOT NULL;",
+		"ALTER TABLE ineligible_table2 ADD COLUMN c1 INT NOT NULL;",
+		"insert into ineligible_table1 (uk, ncol, c1) values (null,2,3);",
+		"insert into ineligible_table2 (ncol1, ncol2, c1) values (1,1,3);",
+
+		"CREATE TABLE eligible_table (uk int UNIQUE not null, ncol int);",
+		"insert into eligible_table (uk, ncol) values (1,1);",
+		"insert into eligible_table (uk, ncol) values (2,2);",
+		"ALTER TABLE eligible_table ADD COLUMN c1 INT NOT NULL;",
+		"insert into eligible_table (uk, ncol, c1) values (3,4,5);",
+	}
+	// execute SQL but don't check
+	for _, sql := range sqls {
+		mustExec(src, sql)
+	}
+
+	synced := false
+TestLoop:
+	for {
+		rows, err := dst.Query("show tables")
+		if err != nil {
+			log.S().Fatalf("exec failed, sql: 'show tables', err: %+v", err)
+		}
+		for rows.Next() {
+			var tableName string
+			err := rows.Scan(&tableName)
+			if err != nil {
+				log.S().Fatalf("scan result set failed, err: %+v", err)
+			}
+			if tableName == "ineligible_table1" || tableName == "ineligible_table2" {
+				log.S().Fatalf("found unexpected table %s", tableName)
+			}
+			if synced {
+				break TestLoop
+			}
+			if tableName == "eligible_table" {
+				synced = true
+			}
+		}
+	}
+
+	// clean up
+	sqls = []string{
+		"DROP TABLE ineligible_table1;",
+		"DROP TABLE ineligible_table2;",
+		"DROP TABLE eligible_table;",
+	}
+	tr.execSQLs(sqls)
 }
 
 func caseUpdateWhileAddingCol(db *sql.DB) {

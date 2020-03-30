@@ -45,7 +45,7 @@ func runProcessor(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := sink.NewSink(info.SinkURI, filter, opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -63,6 +63,7 @@ func runProcessor(
 	}
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
 
+	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
 	processor.Run(ctx, errCh)
 
 	go func() {
