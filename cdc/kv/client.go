@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -315,9 +316,9 @@ type eventFeedSession struct {
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
 
-	rangeLock *util.RegionRangeLock
-	//checkpointTsMap *util.RangeTsMap
-	//mu              sync.Mutex
+	rangeLock       *util.RegionRangeLock
+	checkpointTsMap *util.RangeTsMap
+	mu              sync.Mutex
 }
 
 type rangeRequestTask struct {
@@ -332,15 +333,15 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	return &eventFeedSession{
-		client:         client,
-		regionCache:    regionCache,
-		totalSpan:      totalSpan,
-		eventCh:        eventCh,
-		regionCh:       make(chan singleRegionInfo, 16),
-		errCh:          make(chan regionErrorInfo, 16),
-		requestRangeCh: make(chan rangeRequestTask, 16),
-		rangeLock:      util.NewRegionRangeLock(),
-		//checkpointTsMap: util.NewRangeTsMap(),
+		client:          client,
+		regionCache:     regionCache,
+		totalSpan:       totalSpan,
+		eventCh:         eventCh,
+		regionCh:        make(chan singleRegionInfo, 16),
+		errCh:           make(chan regionErrorInfo, 16),
+		requestRangeCh:  make(chan rangeRequestTask, 16),
+		rangeLock:       util.NewRegionRangeLock(),
+		checkpointTsMap: util.NewRangeTsMap(),
 	}
 }
 
@@ -381,28 +382,20 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 		}
 	})
 
-	//go func() {
-	//	timer := time.NewTicker(time.Minute)
-	//	defer timer.Stop()
-	//	for {
-	//		select {
-	//		case <-ctx.Done():
-	//			return
-	//		case <-timer.C:
-	//			s.mu.Lock()
-	//			//str := "{"
-	//			//for id, data := range s.checkpointTsMap {
-	//			//	str += fmt.Sprintf(`"%v": { "start_key": "%v", "end_key": "%v", "ts": %v},`, id, hex.EncodeToString(data.span.Start), hex.EncodeToString(data.span.End), data.ts)
-	//			//}
-	//			//if str[len(str)-1] == ',' {
-	//			//	str = str[:len(str)-1]
-	//			//}
-	//			//str += "}"
-	//			log.Debug("checkpointTs list", zap.Stringer("data", s.checkpointTsMap))
-	//			s.mu.Unlock()
-	//		}
-	//	}
-	//}()
+	go func() {
+		timer := time.NewTicker(time.Minute)
+		defer timer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				s.mu.Lock()
+				log.Debug("checkpointTs list", zap.Stringer("data", s.checkpointTsMap))
+				s.mu.Unlock()
+			}
+		}
+	}()
 
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
 
@@ -458,7 +451,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 		}
 	}
 
-	res := s.rangeLock.LockRange(sri.span.Start, sri.span.End, sri.verID.GetVer())
+	res := s.rangeLock.LockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
 
 	if res.Status == util.LockRangeResultWait {
 		if blocking {
@@ -856,26 +849,26 @@ func (s *eventFeedSession) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
-		//if err == nil {
-		//	eventsStr := make([]string, 0, len(cevent.Events))
-		//	for _, e := range cevent.Events {
-		//		content := ""
-		//		switch x := e.Event.(type) {
-		//		case *cdcpb.Event_Entries_:
-		//			content = "entries"
-		//		case *cdcpb.Event_Admin_:
-		//			content = "admin:" + x.Admin.String()
-		//		case *cdcpb.Event_Error:
-		//			content = "error:" + x.Error.String()
-		//		case *cdcpb.Event_ResolvedTs:
-		//			content = "resolved_ts:" + strconv.FormatUint(x.ResolvedTs, 10)
-		//		}
-		//		eventsStr = append(eventsStr, fmt.Sprintf("regionID:%v, %v;", e.RegionId, content))
-		//	}
-		//	log.Debug("recv ChangeDataEvent", zap.Strings("event", eventsStr), zap.String("addr", addr))
-		//} else {
-		//	log.Debug("recv ChangeDataEvent err", zap.Error(err), zap.String("addr", addr))
-		//}
+		if err == nil {
+			eventsStr := make([]string, 0, len(cevent.Events))
+			for _, e := range cevent.Events {
+				content := ""
+				switch x := e.Event.(type) {
+				case *cdcpb.Event_Entries_:
+					content = "entries"
+				case *cdcpb.Event_Admin_:
+					content = "admin:" + x.Admin.String()
+				case *cdcpb.Event_Error:
+					content = "error:" + x.Error.String()
+				case *cdcpb.Event_ResolvedTs:
+					content = "resolved_ts:" + strconv.FormatUint(x.ResolvedTs, 10)
+				}
+				eventsStr = append(eventsStr, fmt.Sprintf("regionID:%v, %v;", e.RegionId, content))
+			}
+			log.Debug("recv ChangeDataEvent", zap.Strings("event", eventsStr), zap.String("addr", addr))
+		} else {
+			log.Debug("recv ChangeDataEvent err", zap.Error(err), zap.String("addr", addr))
+		}
 
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
@@ -981,9 +974,9 @@ func (s *eventFeedSession) singleEventFeed(
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
-	//s.mu.Lock()
-	//s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
-	//s.mu.Unlock()
+	s.mu.Lock()
+	s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
+	s.mu.Unlock()
 
 	var initialized uint32
 
@@ -1003,9 +996,9 @@ func (s *eventFeedSession) singleEventFeed(
 		}
 		updateCheckpointTS(&checkpointTs, item.commit)
 
-		//s.mu.Lock()
-		//s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
-		//s.mu.Unlock()
+		s.mu.Lock()
+		s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
+		s.mu.Unlock()
 		select {
 		case s.eventCh <- revent:
 			sendEventCounter.WithLabelValues("sorter resolved", captureID, changefeedID).Inc()
@@ -1142,9 +1135,9 @@ func (s *eventFeedSession) singleEventFeed(
 
 			updateCheckpointTS(&checkpointTs, x.ResolvedTs)
 
-			//s.mu.Lock()
-			//s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
-			//s.mu.Unlock()
+			s.mu.Lock()
+			s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
+			s.mu.Unlock()
 			select {
 			case s.eventCh <- revent:
 				sendEventCounter.WithLabelValues("native resolved", captureID, changefeedID).Inc()

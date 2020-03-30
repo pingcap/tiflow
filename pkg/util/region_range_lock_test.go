@@ -38,12 +38,12 @@ func mustWaitFn(c *check.C, res LockRangeResult) func() LockRangeResult {
 }
 
 func mustLockRangeSuccess(c *check.C, l *RegionRangeLock, startKey, endKey string, version uint64, expectedCheckpointTs uint64) {
-	res := l.LockRange([]byte(startKey), []byte(endKey), version)
+	res := l.LockRange([]byte(startKey), []byte(endKey), 1, version)
 	mustSuccess(c, res, expectedCheckpointTs)
 }
 
 func mustLockRangeStale(c *check.C, l *RegionRangeLock, startKey, endKey string, version uint64, expectRetrySpans ...string) {
-	res := l.LockRange([]byte(startKey), []byte(endKey), version)
+	res := l.LockRange([]byte(startKey), []byte(endKey), 1, version)
 	spans := make([]Span, 0)
 	for i := 0; i < len(expectRetrySpans); i += 2 {
 		spans = append(spans, Span{Start: []byte(expectRetrySpans[i]), End: []byte(expectRetrySpans[i+1])})
@@ -52,7 +52,7 @@ func mustLockRangeStale(c *check.C, l *RegionRangeLock, startKey, endKey string,
 }
 
 func mustLockRangeWait(c *check.C, l *RegionRangeLock, startKey, endKey string, version uint64) func() LockRangeResult {
-	res := l.LockRange([]byte(startKey), []byte(endKey), version)
+	res := l.LockRange([]byte(startKey), []byte(endKey), 1, version)
 	return mustWaitFn(c, res)
 }
 
@@ -84,7 +84,7 @@ func (s *regionRangeLockSuit) TestRegionRangeLockStale(c *check.C) {
 	mustLockRangeStale(c, l, "c", "i", 9, "g", "i")
 	mustLockRangeStale(c, l, "a", "z", 9, "a", "c", "g", "j", "n", "z")
 	mustLockRangeStale(c, l, "a", "e", 9, "a", "c")
-	mustLockRangeStale(c, l,  "e", "h", 9, "g", "h")
+	mustLockRangeStale(c, l, "e", "h", 9, "g", "h")
 	mustLockRangeStale(c, l, "e", "k", 9, "g", "j")
 	mustLockRangeSuccess(c, l, "g", "j", 1, math.MaxUint64)
 	unlockRange(l, "g", "j", 1, 2)
@@ -93,6 +93,3 @@ func (s *regionRangeLockSuit) TestRegionRangeLockStale(c *check.C) {
 	mustLockRangeSuccess(c, l, "a", "z", 11, 2)
 	unlockRange(l, "a", "z", 11, 2)
 }
-
-
-

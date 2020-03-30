@@ -17,14 +17,12 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"github.com/google/btree"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"math"
 	"sync"
-	"time"
-
-	"github.com/google/btree"
 )
 
 type rangeTsEntry struct {
@@ -125,6 +123,7 @@ func (m *RangeTsMap) String() string {
 type rangeLockEntry struct {
 	startKey []byte
 	endKey   []byte
+	regionID uint64
 	version  uint64
 	waiters  []chan<- interface{}
 }
@@ -175,7 +174,7 @@ func (l *RegionRangeLock) getOverlappedEntries(startKey, endKey []byte) []*range
 	return overlappingRanges
 }
 
-func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, version uint64) (LockRangeResult, []<-chan interface{}) {
+func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, version uint64) (LockRangeResult, []<-chan interface{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -195,6 +194,16 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, version uint64) 
 		}, nil
 	}
 
+	// <====DEBUG====
+	var overlapStr []string //DEBUG
+
+	for _, r := range overlappingRanges {
+		overlapStr = append(overlapStr, fmt.Sprintf("start: %v, end: %v, version: %v, regionID: %v",
+			hex.EncodeToString(r.startKey), hex.EncodeToString(r.endKey), r.version, r.regionID)) //DEBUG
+
+	}
+	// ====DEBUG====>
+
 	isStale := false
 	for _, r := range overlappingRanges {
 		if r.version >= version {
@@ -205,6 +214,8 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, version uint64) 
 	if isStale {
 		retryRanges := make([]Span, 0)
 		currentRangeStartKey := startKey
+
+		log.Debug("tryLockRange stale", zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("blockedBy", overlapStr)) //DEBUG
 
 		for _, r := range overlappingRanges {
 			if bytes.Compare(currentRangeStartKey, r.startKey) < 0 {
@@ -222,7 +233,6 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, version uint64) 
 		}, nil
 	}
 
-	var blockedBy []string //DEBUG
 	var signalChs []<-chan interface{}
 
 	for _, r := range overlappingRanges {
@@ -230,10 +240,9 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, version uint64) 
 		signalChs = append(signalChs, ch)
 		r.waiters = append(r.waiters, ch)
 
-		blockedBy = append(blockedBy, fmt.Sprintf("start: %v, end: %v", hex.EncodeToString(r.startKey), hex.EncodeToString(r.endKey))) //DEBUG
 	}
 
-	log.Debug("tryLockRange blocked", zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("blockedBy", blockedBy)) //DEBUG
+	log.Debug("tryLockRange blocked", zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("blockedBy", overlapStr)) //DEBUG
 
 	return LockRangeResult{
 		Status: LockRangeResultWait,
@@ -241,27 +250,27 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, version uint64) 
 }
 
 // LockRange locks a range with specified version.
-func (l *RegionRangeLock) LockRange(startKey, endKey []byte, version uint64) LockRangeResult {
-	res, signalChs := l.tryLockRange(startKey, endKey, version)
+func (l *RegionRangeLock) LockRange(startKey, endKey []byte, regionID, version uint64) LockRangeResult {
+	res, signalChs := l.tryLockRange(startKey, endKey, regionID, version)
 
 	if res.Status != LockRangeResultWait {
 		return res
 	}
 
 	res.WaitFn = func() LockRangeResult {
-		// <====DEBUG====
-		c := make(chan int, 1)
-		go func() {
-			select {
-			case <-c:
-			case <-time.After(time.Second * 30):
-				log.Error("cannot acquire range lock in 30 sec",
-					zap.Binary("startKey", startKey),
-					zap.Binary("endKey", endKey))
-			}
-		}()
-		defer func() { c <- 1 }()
-		// ====DEBUG====>
+		//// <====DEBUG====
+		//c := make(chan int, 1)
+		//go func() {
+		//	select {
+		//	case <-c:
+		//	case <-time.After(time.Second * 30):
+		//		log.Error("cannot acquire range lock in 30 sec",
+		//			zap.Binary("startKey", startKey),
+		//			zap.Binary("endKey", endKey))
+		//	}
+		//}()
+		//defer func() { c <- 1 }()
+		//// ====DEBUG====>
 
 		signalChs1 := signalChs
 		var res1 LockRangeResult
@@ -269,7 +278,7 @@ func (l *RegionRangeLock) LockRange(startKey, endKey []byte, version uint64) Loc
 			for _, ch := range signalChs1 {
 				<-ch
 			}
-			res1, signalChs1 = l.tryLockRange(startKey, endKey, version)
+			res1, signalChs1 = l.tryLockRange(startKey, endKey, regionID, version)
 			if res1.Status != LockRangeResultWait {
 				return res1
 			}
