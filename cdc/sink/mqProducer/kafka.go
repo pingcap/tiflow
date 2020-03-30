@@ -53,12 +53,12 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case <-k.closeCh:
 			return nil
-		case msg := <-k.asyncClient.Successes():
-			cb := msg.Metadata.(func(error))
-			cb(nil)
-		case err := <-k.asyncClient.Errors():
-			cb := err.Msg.Metadata.(func(error))
-			cb(err.Err)
+		case <-k.asyncClient.Successes():
+			//cb := msg.Metadata.(func(error))
+			//cb(nil)
+		case <-k.asyncClient.Errors():
+			//cb := err.Msg.Metadata.(func(error))
+			//cb(err.Err)
 		}
 	}
 }
@@ -73,7 +73,7 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 			callback(err)
 		}
 	}
-	//cb(nil)
+
 	select {
 	case <-ctx.Done():
 		return 0, errors.Trace(ctx.Err())
@@ -85,6 +85,7 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 		Metadata:  cb,
 	}:
 	}
+	cb(nil)
 	return index, nil
 }
 
@@ -221,7 +222,6 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 	config.Version = version
 	sarama.MaxRequestSize = int32(c.MaxMessageBytes)
 	config.Producer.Flush.MaxMessages = c.MaxMessageBytes
-	config.Metadata.Full = false
 	config.Metadata.Retry.Max = 10000
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 
