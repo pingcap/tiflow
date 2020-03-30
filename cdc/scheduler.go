@@ -42,7 +42,6 @@ func runProcessor(
 	}
 	opts[sink.OptChangefeedID] = changefeedID
 	opts[sink.OptCaptureID] = captureID
-	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
 	filter, err := util.NewFilter(info.GetConfig())
 	if err != nil {
 		return nil, errors.Trace(err)

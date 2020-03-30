@@ -41,14 +41,6 @@ var (
 			Name:      "mq_checkpoint_chan_size",
 			Help:      "checkpoint channel size for mq sink",
 		}, []string{"capture", "changefeed"})
-	mqMsgSizeBytes = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "mq_msg_size_bytes",
-			Help:      "Size of KV events.",
-			Buckets:   prometheus.ExponentialBuckets(16, 2, 25),
-		}, []string{"captureID"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -56,5 +48,4 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(execBatchHistogram)
 	registry.MustRegister(execTxnHistogram)
 	registry.MustRegister(mqSinkCheckpointChanSizeGauge)
-	registry.MustRegister(mqMsgSizeBytes)
 }

@@ -53,12 +53,12 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case <-k.closeCh:
 			return nil
-		case <-k.asyncClient.Successes():
-			//cb := msg.Metadata.(func(error))
-			//cb(nil)
-		case <-k.asyncClient.Errors():
-			//cb := err.Msg.Metadata.(func(error))
-			//cb(err.Err)
+		case msg := <-k.asyncClient.Successes():
+			cb := msg.Metadata.(func(error))
+			cb(nil)
+		case err := <-k.asyncClient.Errors():
+			cb := err.Msg.Metadata.(func(error))
+			cb(err.Err)
 		}
 	}
 }
@@ -73,7 +73,6 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 			callback(err)
 		}
 	}
-
 	select {
 	case <-ctx.Done():
 		return 0, errors.Trace(ctx.Err())
@@ -85,7 +84,6 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 		Metadata:  cb,
 	}:
 	}
-	cb(nil)
 	return index, nil
 }
 

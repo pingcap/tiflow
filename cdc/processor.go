@@ -131,7 +131,7 @@ func newProcessor(
 
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	ddlPuller := puller.NewPuller(pdCli, checkpointTs, 0, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
+	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
 	ddlEventCh := ddlPuller.SortedOutput(ctx)
 	schemaBuilder, err := createSchemaBuilder(endpoints, ddlEventCh)
 	if err != nil {
