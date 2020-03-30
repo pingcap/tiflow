@@ -106,6 +106,7 @@ func WrapTableInfo(info *timodel.TableInfo) *TableInfo {
 			if mysql.HasPriKeyFlag(col.Flag) {
 				// Prepend to make sure the primary key ends up at the front
 				ti.UniqueColumns[col.ID] = struct{}{}
+				ti.IndieMarkCol = col.Name.O
 				break
 			}
 		}
