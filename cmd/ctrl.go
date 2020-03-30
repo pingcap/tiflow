@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -72,7 +71,7 @@ func newListCaptureCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ownerID, err := roles.GetOwnerID(context.Background(), cdcEtcdCli, kv.CaptureOwnerKey)
+			ownerID, err := cdcEtcdCli.GetOwnerID(context.Background(), kv.CaptureOwnerKey)
 			if err != nil && errors.Cause(err) != concurrency.ErrElectionNoLeader {
 				return err
 			}

@@ -24,6 +24,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const ownerRunInterval = time.Millisecond * 500
+
 type options struct {
 	pdEndpoints string
 	statusHost  string
@@ -64,6 +66,7 @@ type ServerOption func(*options)
 type Server struct {
 	opts         options
 	capture      *Capture
+	owner        *Owner
 	statusServer *http.Server
 }
 
@@ -78,14 +81,8 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 		zap.String("status-host", opts.statusHost),
 		zap.Int("status-port", opts.statusPort))
 
-	capture, err := NewCapture(strings.Split(opts.pdEndpoints, ","))
-	if err != nil {
-		return nil, err
-	}
-
 	s := &Server{
-		opts:    opts,
-		capture: capture,
+		opts: opts,
 	}
 	return s, nil
 }
@@ -93,8 +90,63 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 // Run runs the server.
 func (s *Server) Run(ctx context.Context) error {
 	s.startStatusHTTP()
-	ctx = util.PutCaptureIDInCtx(ctx, s.capture.info.ID)
-	return s.capture.Start(ctx)
+
+	// When a capture suicided, restart it
+	for {
+		if err := s.run(ctx); err != ErrSuicide {
+			return err
+		}
+		log.Info("server recovered")
+	}
+}
+
+func (s *Server) run(ctx context.Context) (err error) {
+	capture, err := NewCapture(strings.Split(s.opts.pdEndpoints, ","))
+	if err != nil {
+		return err
+	}
+	s.capture = capture
+
+	ctx, cancel := context.WithCancel(util.PutCaptureIDInCtx(ctx, s.capture.info.ID))
+
+	// when a goroutine paniced, cancel would be called first, which
+	// cancels all the normal goroutines, and then the defered recover
+	// is called, which modifies the err value to ErrSuicide. The caller
+	// would restart this function when an error is ErrSuicide.
+	defer func() {
+		if r := recover(); r == ErrSuicide {
+			log.Error("server suicided")
+			// assign the error value, which should be handled by
+			// the parent caller
+			err = ErrSuicide
+		} else if r != nil {
+			panic(r)
+		}
+	}()
+	defer cancel()
+
+	go func() {
+		for {
+			// Campaign to be an owner, it blocks until it becomes
+			// the owner
+			if err := s.capture.Campaign(ctx); err != nil {
+				log.Error("campaign failed", zap.Error(err))
+				return
+			}
+			owner, err := NewOwner(s.capture.session)
+			if err != nil {
+				log.Error("new owner failed", zap.Error(err))
+				return
+			}
+			s.owner = owner
+			if err := owner.Run(ctx, ownerRunInterval); err != nil {
+				log.Error("run owner failed", zap.Error(err))
+				return
+			}
+		}
+
+	}()
+	return s.capture.Run(ctx)
 }
 
 // Close closes the server.
