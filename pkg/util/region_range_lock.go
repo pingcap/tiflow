@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"math"
 	"sync"
@@ -43,19 +44,19 @@ func (e *rangeTsEntry) Less(than btree.Item) bool {
 	return bytes.Compare(e.startKey, than.(*rangeTsEntry).startKey) < 0
 }
 
-type rangeTsMap struct {
+type RangeTsMap struct {
 	m *btree.BTree
 }
 
-func newRangeTsMap() *rangeTsMap {
-	return &rangeTsMap{
+func NewRangeTsMap() *RangeTsMap {
+	return &RangeTsMap{
 		m: btree.New(16),
 	}
 }
 
-func (m *rangeTsMap) set(startKey, endKey []byte, ts uint64) {
+func (m *RangeTsMap) Set(startKey, endKey []byte, ts uint64) {
 	if m.m.Get(rangeTsEntryWithKey(endKey)) == nil {
-		tailTs := uint64(0)
+		tailTs := uint64(math.MaxUint64)
 		m.m.DescendLessOrEqual(rangeTsEntryWithKey(endKey), func(i btree.Item) bool {
 			tailTs = i.(*rangeTsEntry).ts
 			return false
@@ -82,7 +83,14 @@ func (m *rangeTsMap) set(startKey, endKey []byte, ts uint64) {
 	})
 }
 
-func (m *rangeTsMap) getMin(startKey, endKey []byte) uint64 {
+func (m *RangeTsMap) GetMin(startKey, endKey []byte) uint64 {
+	//fmt.Printf("GetMin %+q %+q\n", startKey, endKey)
+	//m.m.Ascend(func(i btree.Item) bool {
+	//	e := i.(*rangeTsEntry)
+	//	fmt.Printf("RangeTsMap: %+q: %v\n", e.startKey, e.ts)
+	//	return true
+	//})
+
 	var ts uint64 = math.MaxUint64
 	m.m.DescendLessOrEqual(rangeTsEntryWithKey(startKey), func(i btree.Item) bool {
 		ts = i.(*rangeTsEntry).ts
@@ -95,13 +103,25 @@ func (m *rangeTsMap) getMin(startKey, endKey []byte) uint64 {
 		}
 		return true
 	})
+	//fmt.Printf("GetMin returns %v\n", ts)
 	return ts
+}
+
+func (m *RangeTsMap) String() string {
+	result := ""
+	m.m.Ascend(func(i btree.Item) bool {
+		e := i.(*rangeTsEntry)
+		result += fmt.Sprintf("%v %v %v\n", e.ts, oracle.GetTimeFromTS(e.ts), hex.EncodeToString(e.startKey))
+		return true
+	})
+	return result
 }
 
 type rangeLockEntry struct {
 	startKey []byte
 	endKey   []byte
 	version  uint64
+	waiters  []chan<- interface{}
 }
 
 func rangeLockEntryWithKey(key []byte) *rangeLockEntry {
@@ -119,18 +139,15 @@ func (e *rangeLockEntry) Less(than btree.Item) bool {
 // version number, which should comes from the Region's Epoch version. The version is used to compare which range is
 // new and which is old if two ranges are overlapping.
 type RegionRangeLock struct {
-	cond              *sync.Cond
-	rangeCheckpointTs *rangeTsMap
+	mu                sync.Mutex
+	rangeCheckpointTs *RangeTsMap
 	rangeLock         *btree.BTree
 }
 
 // NewRegionRangeLock creates a new RegionRangeLock.
 func NewRegionRangeLock() *RegionRangeLock {
-	cond := sync.NewCond(&sync.Mutex{})
-
 	return &RegionRangeLock{
-		cond:              cond,
-		rangeCheckpointTs: newRangeTsMap(),
+		rangeCheckpointTs: NewRangeTsMap(),
 		rangeLock:         btree.New(16),
 	}
 }
@@ -153,11 +170,14 @@ func (l *RegionRangeLock) getOverlappedEntries(startKey, endKey []byte) []*range
 	return overlappingRanges
 }
 
-func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, version uint64) LockRangeResult {
+func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, version uint64) (LockRangeResult, []<-chan interface{}) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	overlappingRanges := l.getOverlappedEntries(startKey, endKey)
 
 	if len(overlappingRanges) == 0 {
-		checkpointTs := l.rangeCheckpointTs.getMin(startKey, endKey)
+		checkpointTs := l.rangeCheckpointTs.GetMin(startKey, endKey)
 		l.rangeLock.ReplaceOrInsert(&rangeLockEntry{
 			startKey: startKey,
 			endKey:   endKey,
@@ -167,7 +187,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, version uint64) 
 		return LockRangeResult{
 			Status:       LockRangeResultSuccess,
 			CheckpointTs: checkpointTs,
-		}
+		}, nil
 	}
 
 	isStale := false
@@ -194,26 +214,37 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, version uint64) 
 		return LockRangeResult{
 			Status:      LockRangeResultStale,
 			RetryRanges: retryRanges,
-		}
+		}, nil
 	}
+
+	var blockedBy []string //DEBUG
+	var signalChs []<-chan interface{}
+
+	for _, r := range overlappingRanges {
+		ch := make(chan interface{}, 1)
+		signalChs = append(signalChs, ch)
+		r.waiters = append(r.waiters, ch)
+
+		blockedBy = append(blockedBy, fmt.Sprintf("start: %v, end: %v", hex.EncodeToString(r.startKey), hex.EncodeToString(r.endKey))) //DEBUG
+	}
+
+	log.Debug("tryLockRange blocked", zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("blockedBy", blockedBy)) //DEBUG
 
 	return LockRangeResult{
 		Status: LockRangeResultWait,
-	}
+	}, signalChs
 }
 
 // LockRange locks a range with specified version.
 func (l *RegionRangeLock) LockRange(startKey, endKey []byte, version uint64) LockRangeResult {
-	l.cond.L.Lock()
-
-	res := l.tryLockRange(startKey, endKey, version)
+	res, signalChs := l.tryLockRange(startKey, endKey, version)
 
 	if res.Status != LockRangeResultWait {
-		l.cond.L.Unlock()
 		return res
 	}
 
 	res.WaitFn = func() LockRangeResult {
+		// <====DEBUG====
 		c := make(chan int, 1)
 		go func() {
 			select {
@@ -225,12 +256,16 @@ func (l *RegionRangeLock) LockRange(startKey, endKey []byte, version uint64) Loc
 			}
 		}()
 		defer func() { c <- 1 }()
+		// ====DEBUG====>
 
+		signalChs1 := signalChs
+		var res1 LockRangeResult
 		for {
-			l.cond.Wait()
-			res1 := l.tryLockRange(startKey, endKey, version)
+			for _, ch := range signalChs1 {
+				<-ch
+			}
+			res1, signalChs1 = l.tryLockRange(startKey, endKey, version)
 			if res1.Status != LockRangeResultWait {
-				l.cond.L.Unlock()
 				return res1
 			}
 		}
@@ -241,8 +276,8 @@ func (l *RegionRangeLock) LockRange(startKey, endKey []byte, version uint64) Loc
 
 // UnlockRange unlocks a range and update checkpointTs of the range to specivied value.
 func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, checkpointTs uint64) {
-	l.cond.L.Lock()
-	defer l.cond.L.Unlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	item := l.rangeLock.Get(rangeLockEntryWithKey(startKey))
 
@@ -258,10 +293,12 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, c
 			entry.startKey, entry.endKey, entry.version, startKey, endKey, version))
 	}
 
-	l.rangeLock.Delete(entry)
-	l.rangeCheckpointTs.set(startKey, endKey, checkpointTs)
+	for _, ch := range entry.waiters {
+		ch <- nil
+	}
 
-	l.cond.Broadcast()
+	l.rangeLock.Delete(entry)
+	l.rangeCheckpointTs.Set(startKey, endKey, checkpointTs)
 }
 
 const (

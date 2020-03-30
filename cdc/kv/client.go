@@ -15,11 +15,9 @@ package kv
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"math/rand"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -318,7 +316,7 @@ type eventFeedSession struct {
 	requestRangeCh chan rangeRequestTask
 
 	rangeLock       *util.RegionRangeLock
-	checkpointTsMap map[uint64]rangeRequestTask
+	checkpointTsMap *util.RangeTsMap
 	mu              sync.Mutex
 }
 
@@ -342,15 +340,13 @@ func newEventFeedSession(
 		errCh:           make(chan regionErrorInfo, 16),
 		requestRangeCh:  make(chan rangeRequestTask, 16),
 		rangeLock:       util.NewRegionRangeLock(),
-		checkpointTsMap: make(map[uint64]rangeRequestTask),
+		checkpointTsMap: util.NewRangeTsMap(),
 	}
 }
 
 func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	eventFeedGauge.Inc()
 	defer eventFeedGauge.Dec()
-
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
 	log.Debug("event feed started", zap.Reflect("span", s.totalSpan), zap.Uint64("ts", ts))
 
@@ -380,10 +376,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case errInfo := <-s.errCh:
-				err := s.handleError(ctx, errInfo)
-				if err != nil {
-					return errors.Trace(err)
-				}
+				s.handleError(ctx, errInfo, true)
 			}
 		}
 	})
@@ -397,40 +390,16 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				return
 			case <-timer.C:
 				s.mu.Lock()
-				str := "{"
-				for id, data := range s.checkpointTsMap {
-					str += fmt.Sprintf(`"%v": { "start_key": "%v", "end_key": "%v", "ts": %v},`, id, hex.EncodeToString(data.span.Start), hex.EncodeToString(data.span.End), data.ts)
-					if str[len(str)-1] == ',' {
-						str = str[:len(str)-1]
-					}
-				}
-				str += "}"
+				//str := "{"
+				//for id, data := range s.checkpointTsMap {
+				//	str += fmt.Sprintf(`"%v": { "start_key": "%v", "end_key": "%v", "ts": %v},`, id, hex.EncodeToString(data.span.Start), hex.EncodeToString(data.span.End), data.ts)
+				//}
+				//if str[len(str)-1] == ',' {
+				//	str = str[:len(str)-1]
+				//}
+				//str += "}"
+				log.Debug("checkpointTs list", zap.Stringer("data", s.checkpointTsMap))
 				s.mu.Unlock()
-				log.Debug("checkpointTs list", zap.String("data", str))
-			}
-		}
-	}()
-
-	go func() {
-		timer := time.NewTicker(time.Second * 10)
-		defer timer.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-timer.C:
-				s.mu.Lock()
-				var regionID uint64
-				var ts uint64
-				for id, data := range s.checkpointTsMap {
-					if ts == 0 || ts > data.ts {
-						ts = data.ts
-						regionID = id
-					}
-				}
-				s.mu.Unlock()
-				eventFeedMinCheckpointTs.WithLabelValues(changefeedID).Set(float64(ts))
-				eventFeedMinCheckpointTsRegion.WithLabelValues(changefeedID).Set(float64(regionID))
 			}
 		}
 	}()
@@ -440,18 +409,25 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	return g.Wait()
 }
 
-func (s *eventFeedSession) nonBlockingDivideAndRequest(ctx context.Context, span util.Span, ts uint64) {
+func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, span util.Span, ts uint64, blocking bool) {
 	task := rangeRequestTask{span: span, ts: ts}
-	// Try to send without blocking. If channel is full, spawn a goroutine to do the blocking sending.
-	select {
-	case s.requestRangeCh <- task:
-	default:
-		go func() {
-			select {
-			case s.requestRangeCh <- task:
-			case <-ctx.Done():
-			}
-		}()
+	if blocking {
+		select {
+		case s.requestRangeCh <- task:
+		case <-ctx.Done():
+		}
+	} else {
+		// Try to send without blocking. If channel is full, spawn a goroutine to do the blocking sending.
+		select {
+		case s.requestRangeCh <- task:
+		default:
+			go func() {
+				select {
+				case s.requestRangeCh <- task:
+				case <-ctx.Done():
+				}
+			}()
+		}
 	}
 }
 
@@ -470,8 +446,14 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 			}
 
 		case util.LockRangeResultStale:
+			log.Info("request expired",
+				zap.Uint64("regionID", sri.verID.GetID()),
+				zap.Reflect("span", sri.span),
+				zap.Reflect("retrySpans", res.RetryRanges))
 			for _, r := range res.RetryRanges {
-				s.nonBlockingDivideAndRequest(ctx, r, sri.ts)
+				// This call can be always blocking because if `blocking` is set to false, this will in a new goroutine,
+				// so it won't block the caller of `schedulerRegionRequest`.
+				s.scheduleDivideRegionAndRequest(ctx, r, sri.ts, true)
 			}
 		default:
 			panic("unreachable")
@@ -549,7 +531,12 @@ MainLoop:
 				log.Info("cannot get rpcCtx, retry span",
 					zap.Uint64("regionID", sri.verID.GetID()),
 					zap.Reflect("span", sri.span))
-				s.nonBlockingDivideAndRequest(ctx, sri.span, sri.ts)
+				s.handleError(ctx, regionErrorInfo{
+					singleRegionInfo: sri,
+					err: &rpcCtxUnavailableErr{
+						verID: sri.verID,
+					},
+				}, false)
 				continue MainLoop
 			}
 			sri.rpcCtx = rpcCtx
@@ -776,6 +763,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 
 			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil)
 			s.scheduleRegionRequest(ctx, sri, true)
+			log.Debug("partialSpan scheduled", zap.Reflect("span", partialSpan), zap.Uint64("regionID", region.Id))
 
 			// return if no more regions
 			if util.EndCompare(nextSpan.Start, span.End) >= 0 {
@@ -787,7 +775,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 
 // handleError handles error returned by a region. If some new EventFeed connection should be established, the region
 // info will be sent to `regionCh`.
-func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorInfo) error {
+func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorInfo, blocking bool) {
 	err := errInfo.err
 	switch eerr := errors.Cause(err).(type) {
 	case *eventError:
@@ -799,21 +787,25 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		} else if innerErr.GetEpochNotMatch() != nil {
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
 			eventFeedErrorCounter.WithLabelValues("EpochNotMatch").Inc()
-			s.nonBlockingDivideAndRequest(ctx, errInfo.span, errInfo.ts)
-			return nil
+			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts, blocking)
+			return
 		} else if innerErr.GetRegionNotFound() != nil {
 			eventFeedErrorCounter.WithLabelValues("RegionNotFound").Inc()
-			s.nonBlockingDivideAndRequest(ctx, errInfo.span, errInfo.ts)
-			return nil
+			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts, blocking)
+			return
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			eventFeedErrorCounter.WithLabelValues("DuplicateRequest").Inc()
 			log.Error("tikv reported duplicated request to the same region, which is not expected",
 				zap.Uint64("regionID", duplicatedRequest.RegionId))
-			return nil
+			return
 		} else {
 			eventFeedErrorCounter.WithLabelValues("Unknown").Inc()
 			log.Warn("receive empty or unknown error msg", zap.Stringer("error", innerErr))
 		}
+	case *rpcCtxUnavailableErr:
+		eventFeedErrorCounter.WithLabelValues("RpcCtxUnavailable").Inc()
+		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts, blocking)
+		return
 	default:
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		if errInfo.rpcCtx.Meta != nil {
@@ -821,9 +813,9 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		}
 	}
 
-	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo, true)
+	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo, blocking)
 
-	return nil
+	return
 }
 
 func (s *eventFeedSession) getRPCContextForRegion(ctx context.Context, id tikv.RegionVerID) (*tikv.RPCContext, error) {
@@ -868,26 +860,26 @@ func (s *eventFeedSession) receiveFromStream(
 	for {
 		cevent, err := stream.Recv()
 
-		if err == nil {
-			eventsStr := make([]string, 0, len(cevent.Events))
-			for _, e := range cevent.Events {
-				content := ""
-				switch x := e.Event.(type) {
-				case *cdcpb.Event_Entries_:
-					content = "entries"
-				case *cdcpb.Event_Admin_:
-					content = "admin:" + x.Admin.String()
-				case *cdcpb.Event_Error:
-					content = "error:" + x.Error.String()
-				case *cdcpb.Event_ResolvedTs:
-					content = "resolved_ts:" + strconv.FormatUint(x.ResolvedTs, 10)
-				}
-				eventsStr = append(eventsStr, fmt.Sprintf("regionID:%v, %v;", e.RegionId, content))
-			}
-			log.Debug("recv ChangeDataEvent", zap.Strings("event", eventsStr), zap.String("addr", addr))
-		} else {
-			log.Debug("recv ChangeDataEvent err", zap.Error(err), zap.String("addr", addr))
-		}
+		//if err == nil {
+		//	eventsStr := make([]string, 0, len(cevent.Events))
+		//	for _, e := range cevent.Events {
+		//		content := ""
+		//		switch x := e.Event.(type) {
+		//		case *cdcpb.Event_Entries_:
+		//			content = "entries"
+		//		case *cdcpb.Event_Admin_:
+		//			content = "admin:" + x.Admin.String()
+		//		case *cdcpb.Event_Error:
+		//			content = "error:" + x.Error.String()
+		//		case *cdcpb.Event_ResolvedTs:
+		//			content = "resolved_ts:" + strconv.FormatUint(x.ResolvedTs, 10)
+		//		}
+		//		eventsStr = append(eventsStr, fmt.Sprintf("regionID:%v, %v;", e.RegionId, content))
+		//	}
+		//	log.Debug("recv ChangeDataEvent", zap.Strings("event", eventsStr), zap.String("addr", addr))
+		//} else {
+		//	log.Debug("recv ChangeDataEvent err", zap.Error(err), zap.String("addr", addr))
+		//}
 
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
@@ -1004,10 +996,7 @@ func (s *eventFeedSession) singleEventFeed(
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
 	s.mu.Lock()
-	s.checkpointTsMap[regionID] = rangeRequestTask{
-		span: span,
-		ts:   atomic.LoadUint64(&checkpointTs),
-	}
+	s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
 	s.mu.Unlock()
 
 	var initialized uint32
@@ -1029,10 +1018,7 @@ func (s *eventFeedSession) singleEventFeed(
 		updateCheckpointTS(&checkpointTs, item.commit)
 
 		s.mu.Lock()
-		s.checkpointTsMap[regionID] = rangeRequestTask{
-			span: span,
-			ts:   atomic.LoadUint64(&checkpointTs),
-		}
+		s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
 		s.mu.Unlock()
 		select {
 		case s.eventCh <- revent:
@@ -1171,10 +1157,7 @@ func (s *eventFeedSession) singleEventFeed(
 			updateCheckpointTS(&checkpointTs, x.ResolvedTs)
 
 			s.mu.Lock()
-			s.checkpointTsMap[regionID] = rangeRequestTask{
-				span: span,
-				ts:   atomic.LoadUint64(&checkpointTs),
-			}
+			s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
 			s.mu.Unlock()
 			select {
 			case s.eventCh <- revent:
@@ -1204,4 +1187,13 @@ type eventError struct {
 // Error implement error interface.
 func (e *eventError) Error() string {
 	return e.err.String()
+}
+
+type rpcCtxUnavailableErr struct {
+	verID tikv.RegionVerID
+}
+
+func (e *rpcCtxUnavailableErr) Error() string {
+	return fmt.Sprintf("cannot get rpcCtx for region %v. ver:%v, confver:%v",
+		e.verID.GetID(), e.verID.GetVer(), e.verID.GetConfVer())
 }
