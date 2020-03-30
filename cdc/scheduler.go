@@ -22,13 +22,14 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 )
 
 // runProcessor creates a new processor then starts it.
 func runProcessor(
 	ctx context.Context,
-	pdEndpoints []string,
+	session *concurrency.Session,
 	info model.ChangeFeedInfo,
 	changefeedID string,
 	captureID string,
@@ -55,13 +56,14 @@ func runProcessor(
 			errCh <- err
 		}
 	}()
-	processor, err := NewProcessor(ctx, pdEndpoints, info, sink, changefeedID, captureID, checkpointTs)
+	processor, err := newProcessor(ctx, session, info, sink, changefeedID, captureID, checkpointTs)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
 
+	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
 	processor.Run(ctx, errCh)
 
 	go func() {

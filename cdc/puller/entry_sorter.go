@@ -5,8 +5,10 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 // EntrySorter accepts out-of-order raw kv entries and output sorted entries
@@ -23,8 +25,8 @@ type EntrySorter struct {
 // NewEntrySorter creates a new EntrySorter
 func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
-		resolvedCh: make(chan uint64, 1024),
-		output:     make(chan *model.RawKVEntry, 128),
+		resolvedCh: make(chan uint64, 12800),
+		output:     make(chan *model.RawKVEntry, 128000),
 	}
 }
 
@@ -54,6 +56,20 @@ func (es *EntrySorter) Run(ctx context.Context) {
 			output(kvsB[j])
 		}
 	}
+
+	go func() {
+		captureID := util.CaptureIDFromCtx(ctx)
+		changefeedID := util.ChangefeedIDFromCtx(ctx)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Minute):
+				entrySorterResolvedChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(es.resolvedCh)))
+				entrySorterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(es.output)))
+			}
+		}
+	}()
 
 	go func() {
 		var sorted []*model.RawKVEntry

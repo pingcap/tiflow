@@ -19,15 +19,21 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
+)
+
+const (
+	defaultOutputChanSize = 128000
 )
 
 type baseKVEntry struct {
@@ -103,11 +109,15 @@ func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaStorage *Storage
 	return &mounterImpl{
 		schemaStorage:   schemaStorage,
 		rawRowChangedCh: rawRowChangedCh,
-		output:          make(chan *model.RowChangedEvent),
+		output:          make(chan *model.RowChangedEvent, defaultOutputChanSize),
 	}
 }
 
 func (m *mounterImpl) Run(ctx context.Context) error {
+	go func() {
+		m.collectMetrics(ctx)
+	}()
+
 	for {
 		var rawRow *model.RawKVEntry
 		select {
@@ -143,6 +153,20 @@ func (m *mounterImpl) Output() <-chan *model.RowChangedEvent {
 	return m.output
 }
 
+func (m *mounterImpl) collectMetrics(ctx context.Context) {
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second * 30):
+				mounterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(m.output)))
+			}
+		}
+	}()
+}
 func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil

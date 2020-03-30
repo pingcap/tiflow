@@ -273,13 +273,19 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 }
 
 func (c *CDCClient) newStream(ctx context.Context, addr string) (stream cdcpb.ChangeData_EventFeedClient, err error) {
-	conn, err := c.getConn(ctx, addr)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	client := cdcpb.NewChangeDataClient(conn)
-	stream, err = client.EventFeed(ctx)
-	log.Debug("created stream to store", zap.String("addr", addr))
+	err = retry.Run(500*time.Millisecond, 10, func() error {
+		conn, err := c.getConn(ctx, addr)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		client := cdcpb.NewChangeDataClient(conn)
+		stream, err = client.EventFeed(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Debug("created stream to store", zap.String("addr", addr))
+		return nil
+	})
 	return
 }
 
@@ -571,7 +577,11 @@ MainLoop:
 			if !ok {
 				stream, err = s.client.newStream(ctx, rpcCtx.Addr)
 				if err != nil {
-					return errors.Trace(err)
+					// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
+					log.Warn("get grpc stream client failed", zap.Error(err))
+					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+					s.client.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
+					continue MainLoop
 				}
 				streams[rpcCtx.Addr] = stream
 
@@ -982,35 +992,6 @@ func (s *eventFeedSession) singleEventFeed(
 
 	matcher := newMatcher()
 
-	maxItemFn := func(item sortItem) {
-		if atomic.LoadUint32(&initialized) == 0 {
-			return
-		}
-
-		// emit a checkpointTs
-		revent := &model.RegionFeedEvent{
-			Resolved: &model.ResolvedSpan{
-				Span:       span,
-				ResolvedTs: item.commit,
-			},
-		}
-		updateCheckpointTS(&checkpointTs, item.commit)
-
-		s.mu.Lock()
-		s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
-		s.mu.Unlock()
-		select {
-		case s.eventCh <- revent:
-			sendEventCounter.WithLabelValues("sorter resolved", captureID, changefeedID).Inc()
-		case <-ctx.Done():
-		}
-	}
-
-	// TODO: drop this if we totally depends on the ResolvedTs event from
-	// tikv to emit the ResolvedSpan.
-	sorter := newSorter(maxItemFn)
-	defer sorter.close()
-
 	for {
 
 		var event *cdcpb.Event
@@ -1066,10 +1047,6 @@ func (s *eventFeedSession) singleEventFeed(
 					}
 				case cdcpb.Event_PREWRITE:
 					matcher.putPrewriteRow(entry)
-					sorter.pushTsItem(sortItem{
-						start: entry.GetStartTs(),
-						tp:    cdcpb.Event_PREWRITE,
-					})
 				case cdcpb.Event_COMMIT:
 					// emit a value
 					value, err := matcher.matchRow(entry)
@@ -1103,18 +1080,8 @@ func (s *eventFeedSession) singleEventFeed(
 					case <-ctx.Done():
 						return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
 					}
-					sorter.pushTsItem(sortItem{
-						start:  entry.GetStartTs(),
-						commit: entry.GetCommitTs(),
-						tp:     cdcpb.Event_COMMIT,
-					})
 				case cdcpb.Event_ROLLBACK:
 					matcher.rollbackRow(entry)
-					sorter.pushTsItem(sortItem{
-						start:  entry.GetStartTs(),
-						commit: entry.GetCommitTs(),
-						tp:     cdcpb.Event_ROLLBACK,
-					})
 				}
 			}
 		case *cdcpb.Event_Admin_:
