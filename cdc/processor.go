@@ -38,12 +38,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	pbackoff "google.golang.org/grpc/backoff"
 )
 
 const (
@@ -56,8 +53,6 @@ const (
 
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
-
-	defaultProcessorSessionTTL = 3 // 3 seconds
 )
 
 var (
@@ -110,42 +105,21 @@ func (t *tableInfo) storeResolvedTS(ts uint64) {
 	atomic.StoreUint64(&t.resolvedTS, ts)
 }
 
-// NewProcessor creates and returns a processor for the specified change feed
-func NewProcessor(
+// newProcessor creates and returns a processor for the specified change feed
+func newProcessor(
 	ctx context.Context,
-	pdEndpoints []string,
+	session *concurrency.Session,
 	changefeed model.ChangeFeedInfo,
 	sink sink.Sink,
 	changefeedID, captureID string,
 	checkpointTs uint64) (*processor, error) {
-	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
+	etcdCli := session.Client()
+	endpoints := session.Client().Endpoints()
+	pdCli, err := fNewPDCli(endpoints, pd.SecurityOption{})
 	if err != nil {
-		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
+		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", endpoints)
 	}
 
-	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   pdEndpoints,
-		DialTimeout: 5 * time.Second,
-		DialOptions: []grpc.DialOption{
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: pbackoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		},
-	})
-	if err != nil {
-		return nil, errors.Annotate(err, "new etcd client")
-	}
-	sess, err := concurrency.NewSession(etcdCli,
-		concurrency.WithTTL(defaultProcessorSessionTTL))
-	if err != nil {
-		return nil, errors.Annotate(err, "new etcd session")
-	}
 	cdcEtcdCli := kv.NewCDCEtcdClient(etcdCli)
 
 	tsRWriter, err := fNewTsRWriter(cdcEtcdCli, changefeedID, captureID)
@@ -159,7 +133,7 @@ func NewProcessor(
 	// so we set `needEncode` to false.
 	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
 	ddlEventCh := ddlPuller.SortedOutput(ctx)
-	schemaBuilder, err := createSchemaBuilder(pdEndpoints, ddlEventCh)
+	schemaBuilder, err := createSchemaBuilder(endpoints, ddlEventCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -172,7 +146,7 @@ func NewProcessor(
 		changefeed:    changefeed,
 		pdCli:         pdCli,
 		etcdCli:       cdcEtcdCli,
-		session:       sess,
+		session:       session,
 		sink:          sink,
 		ddlPuller:     ddlPuller,
 		schemaBuilder: schemaBuilder,
