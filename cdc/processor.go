@@ -131,7 +131,7 @@ func newProcessor(
 
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
+	ddlPuller := puller.NewPuller(pdCli, checkpointTs, 0, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
 	ddlEventCh := ddlPuller.SortedOutput(ctx)
 	schemaBuilder, err := createSchemaBuilder(endpoints, ddlEventCh)
 	if err != nil {
@@ -565,6 +565,7 @@ func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (stor
 func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) {
 	p.tablesMu.Lock()
 	defer p.tablesMu.Unlock()
+	ctx = util.PutTableIDInCtx(ctx, tableID)
 
 	log.Debug("Add table", zap.Int64("tableID", tableID))
 	if _, ok := p.tables[tableID]; ok {
@@ -582,7 +583,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
 	span := util.GetTableSpan(tableID, true)
-	puller := puller.NewPuller(p.pdCli, startTs, []util.Span{span}, true, p.limitter)
+	puller := puller.NewPuller(p.pdCli, startTs, tableID, []util.Span{span}, true, p.limitter)
 	go func() {
 		err := puller.Run(ctx)
 		if errors.Cause(err) != context.Canceled {

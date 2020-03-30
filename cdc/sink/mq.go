@@ -101,6 +101,7 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 		if err != nil {
 			return errors.Trace(err)
 		}
+		mqMsgSizeBytes.WithLabelValues(k.captureID).Observe(float64(len(keyByte) + len(valueByte)))
 		k.lastSentMsgIndex, err = k.mqProducer.SendMessage(ctx, keyByte, valueByte, partition, func(err error) {
 			if err != nil {
 				log.Error("failed to send row changed event to kafka", zap.Int("size", len(keyByte)+len(valueByte)), zap.Error(err), zap.Reflect("row", row))
@@ -155,6 +156,7 @@ func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
 			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
 		}
 	}
+
 	return int32(hash.Sum32() % uint32(k.partitionNum))
 }
 

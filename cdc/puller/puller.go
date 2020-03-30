@@ -15,8 +15,11 @@ package puller
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/tidb/store/tikv/oracle"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -55,6 +58,7 @@ type pullerImpl struct {
 	chanBuffer   ChanBuffer
 	tsTracker    resolveTsTracker
 	resolvedTs   uint64
+	tableID      int64
 	// needEncode represents whether we need to encode a key when checking it is in span
 	needEncode bool
 }
@@ -71,6 +75,7 @@ type CancellablePuller struct {
 func NewPuller(
 	pdCli pd.Client,
 	checkpointTs uint64,
+	tableID int64,
 	spans []util.Span,
 	needEncode bool,
 	limitter *BlurResourceLimitter,
@@ -83,6 +88,7 @@ func NewPuller(
 		chanBuffer:   makeChanBuffer(),
 		tsTracker:    makeSpanFrontier(spans...),
 		needEncode:   needEncode,
+		tableID:      tableID,
 	}
 
 	return p
@@ -98,7 +104,7 @@ func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 	sorter := NewEntrySorter()
 	go func() {
 		sorter.Run(ctx)
-		defer close(sorter.resolvedCh)
+		defer close(sorter.resolvedNotify)
 		for {
 			be, err := p.chanBuffer.Get(ctx)
 			if err != nil {
@@ -122,6 +128,10 @@ func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 					continue
 				}
 				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
+				if p.tableID != 0 {
+					tableRealResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(p.tableID, 10)).Set(float64(oracle.ExtractPhysical(resolvedTs)))
+				}
+
 				sorter.AddEntry(&model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved})
 			}
 		}
@@ -167,10 +177,16 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	})
 
 	g.Go(func() error {
+		var maxTs uint64
 		for {
 			select {
 			case e := <-eventCh:
 				if e.Val != nil {
+					if p.tableID != 0 && maxTs < e.Val.Ts {
+						maxTs = e.Val.Ts
+						maxTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(p.tableID, 10)).Set(float64(oracle.ExtractPhysical(e.Val.Ts)))
+
+					}
 					kvEventCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
 					val := e.Val
 
@@ -187,6 +203,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						return errors.Trace(err)
 					}
 				} else if e.Resolved != nil {
+
+					if p.tableID != 0 && maxTs < e.Resolved.ResolvedTs {
+						maxTs = e.Resolved.ResolvedTs
+						maxTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(p.tableID, 10)).Set(float64(oracle.ExtractPhysical(e.Resolved.ResolvedTs)))
+					}
 					kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
 					if err := p.buffer.AddEntry(ctx, *e); err != nil {
 						return errors.Trace(err)
