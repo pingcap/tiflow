@@ -315,9 +315,9 @@ type eventFeedSession struct {
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
 
-	rangeLock       *util.RegionRangeLock
-	checkpointTsMap *util.RangeTsMap
-	mu              sync.Mutex
+	rangeLock *util.RegionRangeLock
+	//checkpointTsMap *util.RangeTsMap
+	//mu              sync.Mutex
 }
 
 type rangeRequestTask struct {
@@ -332,15 +332,15 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	return &eventFeedSession{
-		client:          client,
-		regionCache:     regionCache,
-		totalSpan:       totalSpan,
-		eventCh:         eventCh,
-		regionCh:        make(chan singleRegionInfo, 16),
-		errCh:           make(chan regionErrorInfo, 16),
-		requestRangeCh:  make(chan rangeRequestTask, 16),
-		rangeLock:       util.NewRegionRangeLock(),
-		checkpointTsMap: util.NewRangeTsMap(),
+		client:         client,
+		regionCache:    regionCache,
+		totalSpan:      totalSpan,
+		eventCh:        eventCh,
+		regionCh:       make(chan singleRegionInfo, 16),
+		errCh:          make(chan regionErrorInfo, 16),
+		requestRangeCh: make(chan rangeRequestTask, 16),
+		rangeLock:      util.NewRegionRangeLock(),
+		//checkpointTsMap: util.NewRangeTsMap(),
 	}
 }
 
@@ -381,28 +381,28 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 		}
 	})
 
-	go func() {
-		timer := time.NewTicker(time.Minute)
-		defer timer.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-timer.C:
-				s.mu.Lock()
-				//str := "{"
-				//for id, data := range s.checkpointTsMap {
-				//	str += fmt.Sprintf(`"%v": { "start_key": "%v", "end_key": "%v", "ts": %v},`, id, hex.EncodeToString(data.span.Start), hex.EncodeToString(data.span.End), data.ts)
-				//}
-				//if str[len(str)-1] == ',' {
-				//	str = str[:len(str)-1]
-				//}
-				//str += "}"
-				log.Debug("checkpointTs list", zap.Stringer("data", s.checkpointTsMap))
-				s.mu.Unlock()
-			}
-		}
-	}()
+	//go func() {
+	//	timer := time.NewTicker(time.Minute)
+	//	defer timer.Stop()
+	//	for {
+	//		select {
+	//		case <-ctx.Done():
+	//			return
+	//		case <-timer.C:
+	//			s.mu.Lock()
+	//			//str := "{"
+	//			//for id, data := range s.checkpointTsMap {
+	//			//	str += fmt.Sprintf(`"%v": { "start_key": "%v", "end_key": "%v", "ts": %v},`, id, hex.EncodeToString(data.span.Start), hex.EncodeToString(data.span.End), data.ts)
+	//			//}
+	//			//if str[len(str)-1] == ',' {
+	//			//	str = str[:len(str)-1]
+	//			//}
+	//			//str += "}"
+	//			log.Debug("checkpointTs list", zap.Stringer("data", s.checkpointTsMap))
+	//			s.mu.Unlock()
+	//		}
+	//	}
+	//}()
 
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
 
@@ -981,9 +981,9 @@ func (s *eventFeedSession) singleEventFeed(
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
-	s.mu.Lock()
-	s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
-	s.mu.Unlock()
+	//s.mu.Lock()
+	//s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
+	//s.mu.Unlock()
 
 	var initialized uint32
 
@@ -1003,9 +1003,9 @@ func (s *eventFeedSession) singleEventFeed(
 		}
 		updateCheckpointTS(&checkpointTs, item.commit)
 
-		s.mu.Lock()
-		s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
-		s.mu.Unlock()
+		//s.mu.Lock()
+		//s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
+		//s.mu.Unlock()
 		select {
 		case s.eventCh <- revent:
 			sendEventCounter.WithLabelValues("sorter resolved", captureID, changefeedID).Inc()
@@ -1142,9 +1142,9 @@ func (s *eventFeedSession) singleEventFeed(
 
 			updateCheckpointTS(&checkpointTs, x.ResolvedTs)
 
-			s.mu.Lock()
-			s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
-			s.mu.Unlock()
+			//s.mu.Lock()
+			//s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
+			//s.mu.Unlock()
 			select {
 			case s.eventCh <- revent:
 				sendEventCounter.WithLabelValues("native resolved", captureID, changefeedID).Inc()
