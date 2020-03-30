@@ -22,7 +22,7 @@ require (
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
 	github.com/pingcap/failpoint v0.0.0-20200210140405-f8f9fb234798
-	github.com/pingcap/kvproto v0.0.0-20200311033452-ee50d594859d
+	github.com/pingcap/kvproto v0.0.0-20200330093347-98f910b71904
 	github.com/pingcap/log v0.0.0-20200117041106-d28c14d3b1cd
 	github.com/pingcap/parser v0.0.0-20200317021010-cd90cc2a7d87
 	github.com/pingcap/pd/v4 v4.0.0-beta.1.0.20200305072537-61d9f9cc35d3
@@ -43,7 +43,5 @@ require (
 	google.golang.org/genproto v0.0.0-20200113173426-e1de0a7b01eb // indirect
 	google.golang.org/grpc v1.26.0
 )
-
-replace github.com/pingcap/kvproto => github.com/MyonKeminta/kvproto v0.0.0-20200323094912-0ad62f824695
 
 replace github.com/pingcap/tidb => github.com/MyonKeminta/tidb v1.1.0-alpha.1.0.20200325092028-b9f4e8c44d23

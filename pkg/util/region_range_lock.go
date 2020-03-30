@@ -44,16 +44,20 @@ func (e *rangeTsEntry) Less(than btree.Item) bool {
 	return bytes.Compare(e.startKey, than.(*rangeTsEntry).startKey) < 0
 }
 
+// RangeTsMap represents a map from key range to a timestamp. It supports range set and calculating min value among a
+// a specified range.
 type RangeTsMap struct {
 	m *btree.BTree
 }
 
+// NewRangeTsMap creates a RangeTsMap.
 func NewRangeTsMap() *RangeTsMap {
 	return &RangeTsMap{
 		m: btree.New(16),
 	}
 }
 
+// Set sets the corresponding ts of the given range to the specified value.
 func (m *RangeTsMap) Set(startKey, endKey []byte, ts uint64) {
 	if m.m.Get(rangeTsEntryWithKey(endKey)) == nil {
 		tailTs := uint64(math.MaxUint64)
@@ -83,6 +87,7 @@ func (m *RangeTsMap) Set(startKey, endKey []byte, ts uint64) {
 	})
 }
 
+// GetMin gets the min ts value among the given range.
 func (m *RangeTsMap) GetMin(startKey, endKey []byte) uint64 {
 	//fmt.Printf("GetMin %+q %+q\n", startKey, endKey)
 	//m.m.Ascend(func(i btree.Item) bool {
