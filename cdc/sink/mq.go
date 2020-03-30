@@ -91,28 +91,27 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
 			continue
 		}
-		k.calPartition(row)
+		partition := k.calPartition(row)
 		key, value := row.ToMqMessage()
-		_, err := key.Encode()
+		keyByte, err := key.Encode()
 		if err != nil {
 			return errors.Trace(err)
 		}
-		_, err = value.Encode()
+		valueByte, err := value.Encode()
 		if err != nil {
 			return errors.Trace(err)
 		}
-
-		//k.lastSentMsgIndex, err = k.mqProducer.SendMessage(ctx, keyByte, valueByte, partition, func(err error) {
-		//	if err != nil {
-		//		log.Error("failed to send row changed event to kafka", zap.Int("size", len(keyByte)+len(valueByte)), zap.Error(err), zap.Reflect("row", row))
-		//		select {
-		//		case k.errCh <- err:
-		//		default:
-		//		}
-		//		return
-		//	}
-		//})
-		atomic.AddInt64(&k.count, 1)
+		k.lastSentMsgIndex, err = k.mqProducer.SendMessage(ctx, keyByte, valueByte, partition, func(err error) {
+			if err != nil {
+				log.Error("failed to send row changed event to kafka", zap.Int("size", len(keyByte)+len(valueByte)), zap.Error(err), zap.Reflect("row", row))
+				select {
+				case k.errCh <- err:
+				default:
+				}
+				return
+			}
+			atomic.AddInt64(&k.count, 1)
+		})
 		if err != nil {
 			return errors.Trace(err)
 		}
