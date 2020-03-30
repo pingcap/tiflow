@@ -73,18 +73,18 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 			callback(err)
 		}
 	}
-	cb(nil)
-	//select {
-	//case <-ctx.Done():
-	//	return 0, errors.Trace(ctx.Err())
-	//case k.asyncClient.Input() <- &sarama.ProducerMessage{
-	//	Topic:     k.topic,
-	//	Key:       sarama.ByteEncoder(key),
-	//	Value:     sarama.ByteEncoder(value),
-	//	Partition: partition,
-	//	Metadata:  cb,
-	//}:
-	//}
+	//cb(nil)
+	select {
+	case <-ctx.Done():
+		return 0, errors.Trace(ctx.Err())
+	case k.asyncClient.Input() <- &sarama.ProducerMessage{
+		Topic:     k.topic,
+		Key:       sarama.ByteEncoder(key),
+		Value:     sarama.ByteEncoder(value),
+		Partition: partition,
+		Metadata:  cb,
+	}:
+	}
 	return index, nil
 }
 

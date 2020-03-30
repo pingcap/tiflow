@@ -143,18 +143,18 @@ func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
 		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
 	}
 
-	if len(row.IndieMarkCol) > 0 {
-		// distribute partition by rowid or unique column value
-		value := row.Columns[row.IndieMarkCol].Value
-		b, err := json.Marshal(value)
-		if err != nil {
-			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-		}
-		_, err = hash.Write(b)
-		if err != nil {
-			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-		}
+	//if len(row.IndieMarkCol) > 0 {
+	// distribute partition by rowid or unique column value
+	value := row.Columns[row.IndieMarkCol].Value
+	b, err := json.Marshal(value)
+	if err != nil {
+		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
 	}
+	_, err = hash.Write(b)
+	if err != nil {
+		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
+	}
+
 	return int32(hash.Sum32() % uint32(k.partitionNum))
 }
 
