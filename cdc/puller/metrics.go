@@ -52,6 +52,20 @@ var (
 			Name:      "event_chan_size",
 			Help:      "Puller event channel size",
 		}, []string{"capture", "changefeed"})
+	entrySorterResolvedChanSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "entry_sorter_resolved_chan_size",
+			Help:      "Puller entry sorter resolved channel size",
+		}, []string{"capture", "changefeed"})
+	entrySorterOutputChanSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "puller",
+			Name:      "entry_sorter_output_chan_size",
+			Help:      "Puller entry sorter output channel size",
+		}, []string{"capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -61,4 +75,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(resolvedTxnsBatchSize)
 	registry.MustRegister(entryBufferSizeGauge)
 	registry.MustRegister(eventChanSizeGauge)
+	registry.MustRegister(entrySorterResolvedChanSizeGauge)
+	registry.MustRegister(entrySorterOutputChanSizeGauge)
 }

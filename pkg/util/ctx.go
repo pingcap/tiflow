@@ -20,6 +20,7 @@ type ctxKey string
 const (
 	ctxKeyCaptureID    = ctxKey("captureID")
 	ctxKeyChangefeedID = ctxKey("changefeedID")
+	ctxKeyIsOwner      = ctxKey("isOwner")
 )
 
 // CaptureIDFromCtx returns a capture ID stored in the specified context.
@@ -35,6 +36,17 @@ func CaptureIDFromCtx(ctx context.Context) string {
 // PutCaptureIDInCtx returns a new child context with the specified capture ID stored.
 func PutCaptureIDInCtx(ctx context.Context, captureID string) context.Context {
 	return context.WithValue(ctx, ctxKeyCaptureID, captureID)
+}
+
+// SetOwnerInCtx returns a new child context with the owner flag set.
+func SetOwnerInCtx(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ctxKeyIsOwner, true)
+}
+
+// IsOwnerFromCtx returns true if this capture is owner
+func IsOwnerFromCtx(ctx context.Context) bool {
+	isOwner := ctx.Value(ctxKeyIsOwner)
+	return isOwner != nil && isOwner.(bool)
 }
 
 // ChangefeedIDFromCtx returns a changefeedID stored in the specified context.

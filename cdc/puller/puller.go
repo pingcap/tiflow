@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	defaultPullerEventChanSize = 128
+	defaultPullerEventChanSize = 128000
 )
 
 // Puller pull data from tikv and push changes into a buffer
@@ -98,6 +98,7 @@ func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 	sorter := NewEntrySorter()
 	go func() {
 		sorter.Run(ctx)
+		defer close(sorter.resolvedCh)
 		for {
 			be, err := p.chanBuffer.Get(ctx)
 			if err != nil {

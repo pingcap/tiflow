@@ -26,9 +26,14 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
+)
+
+const (
+	defaultOutputChanSize = 128000
 )
 
 type baseKVEntry struct {
@@ -104,42 +109,33 @@ func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaStorage *Storage
 	return &mounterImpl{
 		schemaStorage:   schemaStorage,
 		rawRowChangedCh: rawRowChangedCh,
-		output:          make(chan *model.RowChangedEvent),
+		output:          make(chan *model.RowChangedEvent, defaultOutputChanSize),
 	}
 }
 
 func (m *mounterImpl) Run(ctx context.Context) error {
-	var lastRowChangedEvent *model.RawKVEntry
+	go func() {
+		m.collectMetrics(ctx)
+	}()
+
 	for {
 		var rawRow *model.RawKVEntry
-		if lastRowChangedEvent != nil {
-			rawRow = lastRowChangedEvent
-			lastRowChangedEvent = nil
-		} else {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			case rawRow = <-m.rawRowChangedCh:
-			}
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case rawRow = <-m.rawRowChangedCh:
 		}
 		if rawRow == nil {
-			return errors.Trace(ctx.Err())
+			continue
+		}
+
+		if err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts); err != nil {
+			return errors.Trace(err)
 		}
 
 		if rawRow.OpType == model.OpTypeResolved {
 			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
 			continue
-		}
-
-		err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts)
-		switch errors.Cause(err) {
-		case nil:
-		case model.ErrUnresolved:
-			lastRowChangedEvent = rawRow
-			time.Sleep(50 * time.Millisecond)
-			continue
-		default:
-			return errors.Cause(err)
 		}
 
 		event, err := m.unmarshalAndMountRowChanged(rawRow)
@@ -157,6 +153,20 @@ func (m *mounterImpl) Output() <-chan *model.RowChangedEvent {
 	return m.output
 }
 
+func (m *mounterImpl) collectMetrics(ctx context.Context) {
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second * 30):
+				mounterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(m.output)))
+			}
+		}
+	}()
+}
 func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
@@ -246,6 +256,7 @@ func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, bas
 }
 
 const ddlJobListKey = "DDLJobList"
+const ddlAddIndexJobListKey = "DDLJobAddIdxList"
 
 // UnmarshalDDL unmarshals the ddl job from RawKVEntry
 func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
@@ -260,7 +271,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 		return nil, nil
 	}
 	k := meta.(metaListData)
-	if k.key != ddlJobListKey {
+	if k.key != ddlJobListKey && k.key != ddlAddIndexJobListKey {
 		return nil, nil
 	}
 	job := &timodel.Job{}

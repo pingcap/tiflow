@@ -247,13 +247,19 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 }
 
 func (c *CDCClient) getStream(ctx context.Context, addr string) (stream cdcpb.ChangeData_EventFeedClient, err error) {
-	conn, err := c.getConn(ctx, addr)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	client := cdcpb.NewChangeDataClient(conn)
-	stream, err = client.EventFeed(ctx)
-	log.Debug("created stream to store", zap.String("addr", addr))
+	err = retry.Run(500*time.Millisecond, 10, func() error {
+		conn, err := c.getConn(ctx, addr)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		client := cdcpb.NewChangeDataClient(conn)
+		stream, err = client.EventFeed(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Debug("created stream to store", zap.String("addr", addr))
+		return nil
+	})
 	return
 }
 
@@ -390,7 +396,11 @@ MainLoop:
 			if !ok {
 				stream, err = c.getStream(ctx, rpcCtx.Addr)
 				if err != nil {
-					return errors.Trace(err)
+					// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
+					log.Warn("get grpc stream client failed", zap.Error(err))
+					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+					c.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
+					continue MainLoop
 				}
 				streams[rpcCtx.Addr] = stream
 
@@ -532,31 +542,32 @@ func (c *CDCClient) divideAndSendEventFeedToRegions(
 			regions []*tikv.Region
 			err     error
 		)
-		retryErr := retry.Run(func() error {
-			scanT0 := time.Now()
-			bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-			regions, err = c.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
-			scanRegionsDuration.WithLabelValues(captureID).Observe(time.Since(scanT0).Seconds())
-			if err != nil {
-				return errors.Trace(err)
-			}
-			metas := make([]*metapb.Region, 0, len(regions))
-			for _, region := range regions {
-				if region.GetMeta() == nil {
-					err = errors.New("meta not exists in region")
-					log.Warn("batch load region", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
+		retryErr := retry.Run(500*time.Millisecond, maxRetry,
+			func() error {
+				scanT0 := time.Now()
+				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+				regions, err = c.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
+				scanRegionsDuration.WithLabelValues(captureID).Observe(time.Since(scanT0).Seconds())
+				if err != nil {
+					return errors.Trace(err)
+				}
+				metas := make([]*metapb.Region, 0, len(regions))
+				for _, region := range regions {
+					if region.GetMeta() == nil {
+						err = errors.New("meta not exists in region")
+						log.Warn("batch load region", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
+						return err
+					}
+					metas = append(metas, region.GetMeta())
+				}
+				if !util.CheckRegionsLeftCover(metas, nextSpan) {
+					err = errors.New("regions not completely left cover span")
+					log.Warn("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
 					return err
 				}
-				metas = append(metas, region.GetMeta())
-			}
-			if !util.CheckRegionsLeftCover(metas, nextSpan) {
-				err = errors.New("regions not completely left cover span")
-				log.Warn("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
-				return err
-			}
-			log.Debug("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions))
-			return nil
-		}, maxRetry)
+				log.Debug("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions))
+				return nil
+			})
 
 		if retryErr != nil {
 			return retryErr
@@ -760,31 +771,6 @@ func (c *CDCClient) singleEventFeed(
 
 	matcher := newMatcher()
 
-	maxItemFn := func(item sortItem) {
-		if atomic.LoadUint32(&initialized) == 0 {
-			return
-		}
-
-		// emit a checkpointTs
-		revent := &model.RegionFeedEvent{
-			Resolved: &model.ResolvedSpan{
-				Span:       span,
-				ResolvedTs: item.commit,
-			},
-		}
-		updateCheckpointTS(&checkpointTs, item.commit)
-		select {
-		case eventCh <- revent:
-			sendEventCounter.WithLabelValues("sorter resolved", captureID, changefeedID).Inc()
-		case <-ctx.Done():
-		}
-	}
-
-	// TODO: drop this if we totally depends on the ResolvedTs event from
-	// tikv to emit the ResolvedSpan.
-	sorter := newSorter(maxItemFn)
-	defer sorter.close()
-
 	for {
 
 		var event *cdcpb.Event
@@ -840,10 +826,6 @@ func (c *CDCClient) singleEventFeed(
 					}
 				case cdcpb.Event_PREWRITE:
 					matcher.putPrewriteRow(entry)
-					sorter.pushTsItem(sortItem{
-						start: entry.GetStartTs(),
-						tp:    cdcpb.Event_PREWRITE,
-					})
 				case cdcpb.Event_COMMIT:
 					// emit a value
 					value, err := matcher.matchRow(entry)
@@ -877,18 +859,8 @@ func (c *CDCClient) singleEventFeed(
 					case <-ctx.Done():
 						return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
 					}
-					sorter.pushTsItem(sortItem{
-						start:  entry.GetStartTs(),
-						commit: entry.GetCommitTs(),
-						tp:     cdcpb.Event_COMMIT,
-					})
 				case cdcpb.Event_ROLLBACK:
 					matcher.rollbackRow(entry)
-					sorter.pushTsItem(sortItem{
-						start:  entry.GetStartTs(),
-						commit: entry.GetCommitTs(),
-						tp:     cdcpb.Event_ROLLBACK,
-					})
 				}
 			}
 		case *cdcpb.Event_Admin_:

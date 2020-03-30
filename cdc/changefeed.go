@@ -296,15 +296,23 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 	}
 }
 
-func (c *changeFeed) applyJob(job *timodel.Job) error {
+func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 	log.Info("apply job", zap.String("sql", job.Query), zap.Stringer("job", job))
 
 	schamaName, tableName, _, err := c.schema.HandleDDL(job)
 	if err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
 	}
 
 	schemaID := uint64(job.SchemaID)
+	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
+		tableID := uint64(job.BinlogInfo.TableInfo.ID)
+		if _, exist := c.tables[tableID]; exist {
+			c.removeTable(schemaID, tableID)
+		}
+		return true, nil
+	}
+
 	// case table id set may change
 	switch job.Type {
 	case timodel.ActionCreateSchema:
@@ -328,16 +336,86 @@ func (c *changeFeed) applyJob(job *timodel.Job) error {
 		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, entry.TableName{Schema: schamaName, Table: tableName})
 	}
 
-	return nil
+	return false, nil
 }
 
-func (c *changeFeed) pullDDLJob() error {
-	ddlResolvedTs, ddlJobs, err := c.ddlHandler.PullDDL()
+// handleDDL check if we can change the status to be `ChangeFeedExecDDL` and execute the DDL asynchronously
+// if the status is in ChangeFeedWaitToExecDDL.
+// After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
+func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.CaptureInfo) error {
+	if c.ddlState != model.ChangeFeedWaitToExecDDL {
+		return nil
+	}
+	if len(c.ddlJobHistory) == 0 {
+		log.Fatal("ddl job history can not be empty in changefeed when should to execute DDL")
+	}
+	todoDDLJob := c.ddlJobHistory[0]
+
+	// Check if all the checkpointTs of capture are achieving global resolvedTs(which is equal to todoDDLJob.FinishedTS)
+	if len(c.taskStatus) > len(c.taskPositions) {
+		return nil
+	}
+	for cid, pInfo := range c.taskPositions {
+		if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
+			log.Debug("wait checkpoint ts", zap.String("cid", cid),
+				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
+				zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
+				zap.String("ddl query", todoDDLJob.Query))
+			return nil
+		}
+	}
+
+	err := c.schema.FillSchemaName(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.ddlResolvedTs = ddlResolvedTs
-	c.ddlJobHistory = append(c.ddlJobHistory, ddlJobs...)
+	ddlEvent := new(model.DDLEvent)
+	ddlEvent.FromJob(todoDDLJob)
+
+	// Execute DDL Job asynchronously
+	c.ddlState = model.ChangeFeedExecDDL
+	log.Debug("apply job", zap.Stringer("job", todoDDLJob),
+		zap.String("schema", todoDDLJob.SchemaName),
+		zap.String("query", todoDDLJob.Query),
+		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
+
+	// TODO consider some newly added DDL types such as `ActionCreateSequence`
+	skip, err := c.applyJob(todoDDLJob)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if skip {
+		c.ddlJobHistory = c.ddlJobHistory[1:]
+		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
+		c.ddlState = model.ChangeFeedSyncDML
+		return nil
+	}
+
+	c.banlanceOrphanTables(ctx, captures)
+
+	err = c.sink.EmitDDLEvent(ctx, ddlEvent)
+	// If DDL executing failed, pause the changefeed and print log, rather
+	// than return an error and break the running of this owner.
+	if err != nil {
+		c.ddlState = model.ChangeFeedDDLExecuteFailed
+		log.Error("Execute DDL failed",
+			zap.String("ChangeFeedID", c.id),
+			zap.Error(err),
+			zap.Reflect("ddlJob", todoDDLJob))
+		return errors.Trace(model.ErrExecDDLFailed)
+	}
+	log.Info("Execute DDL succeeded",
+		zap.String("ChangeFeedID", c.id),
+		zap.Reflect("ddlJob", todoDDLJob))
+
+	if c.ddlState != model.ChangeFeedExecDDL {
+		log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
+			zap.String("ChangeFeedID", c.id),
+			zap.String("ChangeFeedDDLState", c.ddlState.String()))
+	}
+	c.ddlJobHistory = c.ddlJobHistory[1:]
+	c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
+	c.ddlState = model.ChangeFeedSyncDML
 	return nil
 }
 
@@ -425,90 +503,12 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	return nil
 }
 
-// handleDDL check if we can change the status to be `ChangeFeedExecDDL` and execute the DDL asynchronously
-// if the status is in ChangeFeedWaitToExecDDL.
-// After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
-func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.CaptureInfo) error {
-	if c.ddlState != model.ChangeFeedWaitToExecDDL {
-		return nil
-	}
-	if len(c.ddlJobHistory) == 0 {
-		log.Fatal("ddl job history can not be empty in changefeed when should to execute DDL")
-	}
-	todoDDLJob := c.ddlJobHistory[0]
-
-	// Check if all the checkpointTs of capture are achieving global resolvedTs(which is equal to todoDDLJob.FinishedTS)
-	if len(c.taskStatus) > len(c.taskPositions) {
-		return nil
-	}
-	for cid, pInfo := range c.taskPositions {
-		if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
-			log.Debug("wait checkpoint ts", zap.String("cid", cid),
-				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
-				zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
-				zap.String("ddl query", todoDDLJob.Query))
-			return nil
-		}
-	}
-
-	// Execute DDL Job asynchronously
-	c.ddlState = model.ChangeFeedExecDDL
-	log.Debug("apply job", zap.Stringer("job", todoDDLJob),
-		zap.String("schema", todoDDLJob.SchemaName),
-		zap.String("query", todoDDLJob.Query),
-		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
-
-	var tableName, schemaName string
-	if todoDDLJob.BinlogInfo.TableInfo != nil {
-		tableName = todoDDLJob.BinlogInfo.TableInfo.Name.O
-	}
-	// TODO consider some newly added DDL types such as `ActionCreateSequence`
-	if todoDDLJob.Type != timodel.ActionCreateSchema {
-		dbInfo, exist := c.schema.SchemaByID(todoDDLJob.SchemaID)
-		if !exist {
-			return errors.NotFoundf("schema %d not found", todoDDLJob.SchemaID)
-		}
-		schemaName = dbInfo.Name.O
-	} else {
-		schemaName = todoDDLJob.BinlogInfo.DBInfo.Name.O
-	}
-	ddlEvent := &model.DDLEvent{
-		Ts:     todoDDLJob.BinlogInfo.FinishedTS,
-		Query:  todoDDLJob.Query,
-		Schema: schemaName,
-		Table:  tableName,
-		Type:   todoDDLJob.Type,
-	}
-
-	err := c.applyJob(todoDDLJob)
+func (c *changeFeed) pullDDLJob() error {
+	ddlResolvedTs, ddlJobs, err := c.ddlHandler.PullDDL()
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	c.banlanceOrphanTables(ctx, captures)
-
-	err = c.sink.EmitDDLEvent(ctx, ddlEvent)
-	// If DDL executing failed, pause the changefeed and print log, rather
-	// than return an error and break the running of this owner.
-	if err != nil {
-		c.ddlState = model.ChangeFeedDDLExecuteFailed
-		log.Error("Execute DDL failed",
-			zap.String("ChangeFeedID", c.id),
-			zap.Error(err),
-			zap.Reflect("ddlJob", todoDDLJob))
-		return errors.Trace(model.ErrExecDDLFailed)
-	}
-	log.Info("Execute DDL succeeded",
-		zap.String("ChangeFeedID", c.id),
-		zap.Reflect("ddlJob", todoDDLJob))
-
-	if c.ddlState != model.ChangeFeedExecDDL {
-		log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
-			zap.String("ChangeFeedID", c.id),
-			zap.String("ChangeFeedDDLState", c.ddlState.String()))
-	}
-	c.ddlJobHistory = c.ddlJobHistory[1:]
-	c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
-	c.ddlState = model.ChangeFeedSyncDML
+	c.ddlResolvedTs = ddlResolvedTs
+	c.ddlJobHistory = append(c.ddlJobHistory, ddlJobs...)
 	return nil
 }

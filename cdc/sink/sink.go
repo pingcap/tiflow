@@ -18,12 +18,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/ticdc/pkg/util"
-
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 // Sink options keys
@@ -48,13 +46,14 @@ type Sink interface {
 	Run(ctx context.Context) error
 	// PrintStatus prints necessary status periodically
 	PrintStatus(ctx context.Context) error
+	Close() error
 }
 
 // DSNScheme is the scheme name of DSN
 const DSNScheme = "dsn://"
 
 // NewSink creates a new sink with the sink-uri
-func NewSink(sinkURIStr string, filter *util.Filter, opts map[string]string) (Sink, error) {
+func NewSink(ctx context.Context, sinkURIStr string, filter *util.Filter, opts map[string]string) (Sink, error) {
 	// check if sinkURI is a DSN
 	if strings.HasPrefix(strings.ToLower(sinkURIStr), DSNScheme) {
 		dsnStr := sinkURIStr[len(DSNScheme):]
@@ -72,11 +71,11 @@ func NewSink(sinkURIStr string, filter *util.Filter, opts map[string]string) (Si
 	}
 	switch strings.ToLower(sinkURI.Scheme) {
 	case "blackhole":
-		return newBlackHoleSink(), nil
+		return newBlackHoleSink(opts), nil
 	case "mysql", "tidb":
 		return newMySQLSink(sinkURI, nil, filter, opts)
 	case "kafka":
-		return newKafkaSaramaSink(sinkURI, filter, opts)
+		return newKafkaSaramaSink(ctx, sinkURI, filter, opts)
 	default:
 		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}

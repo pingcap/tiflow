@@ -28,7 +28,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
@@ -38,10 +37,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/helper"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tidb/util/codec"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -53,7 +49,7 @@ const (
 	waitGlobalResolvedTsDelay   = time.Millisecond * 500
 	waitFallbackResolvedTsDelay = time.Millisecond * 500
 
-	defaultOutputChanSize = 128
+	defaultOutputChanSize = 128000
 
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
@@ -135,7 +131,7 @@ func newProcessor(
 
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan()}, false, limitter)
+	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
 	ddlEventCh := ddlPuller.SortedOutput(ctx)
 	schemaBuilder, err := createSchemaBuilder(endpoints, ddlEventCh)
 	if err != nil {
@@ -242,13 +238,13 @@ func (p *processor) positionWorker(ctx context.Context) error {
 
 	updateInfo := func() error {
 		t0Update := time.Now()
-		err := retry.Run(func() error {
+		err := retry.Run(500*time.Millisecond, 3, func() error {
 			inErr := p.updateInfo(ctx)
 			if errors.Cause(inErr) == model.ErrAdminStopProcessor {
 				return backoff.Permanent(inErr)
 			}
 			return inErr
-		}, 3)
+		})
 		updateInfoDuration.WithLabelValues(p.captureID).Observe(time.Since(t0Update).Seconds())
 		if err != nil {
 			return errors.Annotate(err, "failed to update info")
@@ -344,7 +340,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	p.handleTables(ctx, oldStatus, p.status, p.position.CheckPointTs)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
 
-	return retry.Run(func() error {
+	return retry.Run(500*time.Millisecond, 5, func() error {
 		err = p.tsRWriter.WriteInfoIntoStorage(ctx)
 		switch errors.Cause(err) {
 		case model.ErrWriteTsConflict:
@@ -355,7 +351,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		default:
 			return backoff.Permanent(errors.Trace(err))
 		}
-	}, 5)
+	})
 }
 
 func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed, added []*model.ProcessTableInfo) {
@@ -468,6 +464,9 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			var err error
 			changefeedStatus, err = p.tsRWriter.GetChangeFeedStatus(ctx)
 			if err != nil {
+				if errors.Cause(err) == context.Canceled {
+					return backoff.Permanent(err)
+				}
 				log.Error("Global resolved worker: read global resolved ts failed", zap.Error(err))
 			}
 			return err
@@ -522,70 +521,32 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	}
 }
 
+func (p *processor) collectMetrics(ctx context.Context, tableID int64) {
+	go func() {
+		for {
+			tableIDStr := strconv.FormatInt(tableID, 10)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Minute):
+				tableOutputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureID, tableIDStr).Set(float64(len(p.output)))
+			}
+		}
+	}()
+}
+
 func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEntry) (*entry.StorageBuilder, error) {
-	jobs, err := getHistoryDDLJobs(pdEndpoints)
+	// TODO here we create another pb client,we should reuse them
+	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	builder := entry.NewStorageBuilder(jobs, ddlEventCh)
 	return builder, nil
-}
-
-func getHistoryDDLJobs(pdEndpoints []string) ([]*timodel.Job, error) {
-	// TODO here we create another pb client,we should reuse them
-	kvStore, err := createTiStore(strings.Join(pdEndpoints, ","))
-	if err != nil {
-		return nil, err
-	}
-	originalJobs, err := kv.LoadHistoryDDLJobs(kvStore)
-	jobs := make([]*timodel.Job, 0, len(originalJobs))
-	if err != nil {
-		return nil, err
-	}
-	for _, job := range originalJobs {
-		if job.State != timodel.JobStateSynced && job.State != timodel.JobStateDone {
-			continue
-		}
-		err := resetFinishedTs(kvStore.(tikv.Storage), job)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		jobs = append(jobs, job)
-	}
-	return jobs, nil
-}
-
-func resetFinishedTs(kvStore tikv.Storage, job *timodel.Job) error {
-	helper := helper.NewHelper(kvStore)
-	diffKey := schemaDiffKey(job.BinlogInfo.SchemaVersion)
-	resp, err := helper.GetMvccByEncodedKey(diffKey)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	mvcc := resp.GetInfo()
-	if mvcc == nil || len(mvcc.Writes) == 0 {
-		return errors.NotFoundf("mvcc info, ddl job id: %d, schema version: %d", job.ID, job.BinlogInfo.SchemaVersion)
-	}
-	var finishedTS uint64
-	for _, w := range mvcc.Writes {
-		if finishedTS < w.CommitTs {
-			finishedTS = w.CommitTs
-		}
-	}
-	job.BinlogInfo.FinishedTS = finishedTS
-	return nil
-}
-
-func schemaDiffKey(schemaVersion int64) []byte {
-	metaPrefix := []byte("m")
-	mSchemaDiffPrefix := "Diff"
-	StringData := 's'
-	key := []byte(fmt.Sprintf("%s:%d", mSchemaDiffPrefix, schemaVersion))
-
-	ek := make([]byte, 0, len(metaPrefix)+len(key)+24)
-	ek = append(ek, metaPrefix...)
-	ek = codec.EncodeBytes(ek, key)
-	return codec.EncodeUint(ek, uint64(StringData))
 }
 
 func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
@@ -627,6 +588,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	storage, err := p.schemaBuilder.Build(startTs)
 	if err != nil {
 		p.errCh <- errors.Trace(err)
+		return
 	}
 	// start mounter
 	mounter := entry.NewMounter(puller.SortedOutput(ctx), storage)
@@ -663,6 +625,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	table.mounter = mounter
 	p.tables[tableID] = table
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Inc()
+	p.collectMetrics(ctx, tableID)
 }
 
 func (p *processor) stop(ctx context.Context) error {
@@ -701,7 +664,7 @@ func runProcessor(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := sink.NewSink(info.SinkURI, filter, opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -719,6 +682,7 @@ func runProcessor(
 	}
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
 
+	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
 	processor.Run(ctx, errCh)
 
 	go func() {
