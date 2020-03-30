@@ -220,7 +220,7 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 	config.Version = version
 	sarama.MaxRequestSize = int32(c.MaxMessageBytes)
 	config.Producer.Flush.MaxMessages = c.MaxMessageBytes
-	config.Metadata.Retry.Max = 10000
+	config.Metadata.Retry.Max = 20
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
@@ -229,7 +229,7 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
 
-	config.Producer.Retry.Max = 10000
+	config.Producer.Retry.Max = 20
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
 
 	config.Admin.Retry.Max = 10000
