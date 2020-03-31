@@ -121,12 +121,13 @@ func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaStorage *Storage
 }
 
 func (m *mounterImpl) Run(ctx context.Context) error {
+
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableID := util.TableIDFromCtx(ctx)
+	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+	metricMounterResolvedTs := mounterTableResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 
 	errg, cctx := errgroup.WithContext(ctx)
-
 	errg.Go(func() error {
 		m.collectMetrics(cctx)
 		return nil
@@ -149,7 +150,12 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			}
 
 			if rawRow.OpType == model.OpTypeResolved {
-				tableMountedResolvedTsGauge.WithLabelValues(changefeedID, captureID, strconv.FormatInt(tableID, 10)).Set(float64(oracle.ExtractPhysical(rawRow.Ts)))
+				m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
+				continue
+			}
+
+			if rawRow.OpType == model.OpTypeResolved {
+				metricMounterResolvedTs.Set(float64(oracle.ExtractPhysical(rawRow.Ts)))
 			}
 			m.unmarshalRow <- rawRow
 
@@ -235,7 +241,6 @@ func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
 	})
 	return errg.Wait()
 }
-
 func (m *mounterImpl) Output() <-chan *model.RowChangedEvent {
 	return m.output
 }
@@ -243,13 +248,15 @@ func (m *mounterImpl) Output() <-chan *model.RowChangedEvent {
 func (m *mounterImpl) collectMetrics(ctx context.Context) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+	metricMounterOutputChanSize := mounterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Second * 30):
-				mounterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(m.output)))
+				metricMounterOutputChanSize.Set(float64(len(m.output)))
 			}
 		}
 	}()

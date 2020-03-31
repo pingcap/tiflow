@@ -209,7 +209,7 @@ func (k *mqSink) collectMetrics(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-time.After(time.Minute):
+		case <-time.After(defaultMetricInterval):
 			mqSinkCheckpointChanSizeGauge.WithLabelValues(k.captureID, k.changefeedID).Set(float64(len(k.sinkCheckpointTsCh)))
 		}
 	}

@@ -3,6 +3,7 @@ package puller
 import (
 	"context"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -72,19 +73,31 @@ func (es *EntrySorter) Run(ctx context.Context) {
 	go func() {
 		captureID := util.CaptureIDFromCtx(ctx)
 		changefeedID := util.ChangefeedIDFromCtx(ctx)
+		tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+		metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+		metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+		metricEntryUnsortedSizeGauge := entrySorterUnsortedSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(time.Minute):
-				entrySorterResolvedChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(es.resolvedNotify)))
-				entrySorterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(es.outputCh)))
+			case <-time.After(defaultMetricInterval):
+				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedNotify)))
+				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
+				es.lock.Lock()
+				metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
+				es.lock.Unlock()
 			}
 		}
 	}()
 
 	go func() {
 		var sorted []*model.RawKVEntry
+		captureID := util.CaptureIDFromCtx(ctx)
+		changefeedID := util.ChangefeedIDFromCtx(ctx)
+		tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+		metricEntrySorterSortDuration := entrySorterSortDuration.WithLabelValues(captureID, changefeedID, tableIDStr)
+		metricEntrySorterMergeDuration := entrySorterMergeDuration.WithLabelValues(captureID, changefeedID, tableIDStr)
 		for {
 			select {
 			case <-ctx.Done():
@@ -108,10 +121,14 @@ func (es *EntrySorter) Run(ctx context.Context) {
 					resEvents[i] = &model.RawKVEntry{Ts: rts, OpType: model.OpTypeResolved}
 				}
 				toSort = append(toSort, resEvents...)
+				startTime := time.Now()
 				sort.Slice(toSort, func(i, j int) bool {
 					return lessFunc(toSort[i], toSort[j])
 				})
+				metricEntrySorterSortDuration.Observe(time.Since(startTime).Seconds())
 				maxResolvedTs := resolvedTsGroup[len(resolvedTsGroup)-1]
+
+				startTime = time.Now()
 				var merged []*model.RawKVEntry
 				mergeFunc(toSort, sorted, func(entry *model.RawKVEntry) {
 					if entry.Ts <= maxResolvedTs {
@@ -120,6 +137,7 @@ func (es *EntrySorter) Run(ctx context.Context) {
 						merged = append(merged, entry)
 					}
 				})
+				metricEntrySorterMergeDuration.Observe(time.Since(startTime).Seconds())
 				sorted = merged
 			}
 		}
