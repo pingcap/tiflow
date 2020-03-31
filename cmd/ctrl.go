@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/roles"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -72,7 +71,7 @@ func newListCaptureCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ownerID, err := roles.GetOwnerID(context.Background(), cdcEtcdCli, kv.CaptureOwnerKey)
+			ownerID, err := cdcEtcdCli.GetOwnerID(context.Background(), kv.CaptureOwnerKey)
 			if err != nil && errors.Cause(err) != concurrency.ErrElectionNoLeader {
 				return err
 			}
@@ -101,21 +100,6 @@ func newListChangefeedCommand() *cobra.Command {
 				cfs = append(cfs, &cf{ID: id})
 			}
 			return jsonPrint(cmd, cfs)
-		},
-	}
-	return command
-}
-
-func newListProcessorCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "list",
-		Short: "List all processors in TiCDC cluster",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			_, processors, err := cdcEtcdCli.GetAllProcessors(context.Background())
-			if err != nil {
-				return err
-			}
-			return jsonPrint(cmd, processors)
 		},
 	}
 	return command

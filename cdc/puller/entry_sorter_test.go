@@ -16,6 +16,7 @@ package puller
 import (
 	"context"
 	"math/rand"
+	"testing"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -54,6 +55,11 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 				{Ts: 2, OpType: model.OpTypePut},
 				{Ts: 3, OpType: model.OpTypePut},
 				{Ts: 3, OpType: model.OpTypeResolved}},
+		},
+		{
+			input:      []*model.RawKVEntry{},
+			resolvedTs: 3,
+			expect:     []*model.RawKVEntry{{Ts: 3, OpType: model.OpTypeResolved}},
 		},
 		{
 			input: []*model.RawKVEntry{
@@ -108,7 +114,7 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 	defer cancel()
 	es.Run(ctx)
 
-	maxTs := uint64(100000)
+	maxTs := uint64(1000000)
 	go func() {
 		for resolvedTs := uint64(1); resolvedTs <= maxTs; resolvedTs += 400 {
 			var opType model.OpType
@@ -139,6 +145,44 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 		}
 		lastTs = entry.Ts
 		lastOpType = entry.OpType
+		if entry.OpType == model.OpTypeResolved {
+			resolvedTs = entry.Ts
+		}
+		if resolvedTs == maxTs {
+			break
+		}
+	}
+}
+
+func BenchmarkSorter(b *testing.B) {
+	es := NewEntrySorter()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	es.Run(ctx)
+
+	maxTs := uint64(10000000)
+	b.ResetTimer()
+	go func() {
+		for resolvedTs := uint64(1); resolvedTs <= maxTs; resolvedTs += 400 {
+			var opType model.OpType
+			if rand.Intn(2) == 0 {
+				opType = model.OpTypePut
+			} else {
+				opType = model.OpTypeDelete
+			}
+			for i := 0; i < 100000; i++ {
+				entry := &model.RawKVEntry{
+					Ts:     uint64(int64(resolvedTs) + rand.Int63n(1000)),
+					OpType: opType,
+				}
+				es.AddEntry(entry)
+			}
+			es.AddEntry(&model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved})
+		}
+		es.AddEntry(&model.RawKVEntry{Ts: maxTs, OpType: model.OpTypeResolved})
+	}()
+	var resolvedTs uint64
+	for entry := range es.Output() {
 		if entry.OpType == model.OpTypeResolved {
 			resolvedTs = entry.Ts
 		}

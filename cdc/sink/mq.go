@@ -155,6 +155,7 @@ func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
 			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
 		}
 	}
+
 	return int32(hash.Sum32() % uint32(k.partitionNum))
 }
 
@@ -331,6 +332,11 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filt
 			return nil, errors.Trace(err)
 		}
 		config.MaxMessageBytes = c
+	}
+
+	s = sinkURI.Query().Get("compression")
+	if s != "" {
+		config.Compression = s
 	}
 
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {

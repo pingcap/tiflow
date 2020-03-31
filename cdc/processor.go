@@ -38,12 +38,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	pbackoff "google.golang.org/grpc/backoff"
 )
 
 const (
@@ -56,8 +53,6 @@ const (
 
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
-
-	defaultProcessorSessionTTL = 3 // 3 seconds
 )
 
 var (
@@ -110,42 +105,21 @@ func (t *tableInfo) storeResolvedTS(ts uint64) {
 	atomic.StoreUint64(&t.resolvedTS, ts)
 }
 
-// NewProcessor creates and returns a processor for the specified change feed
-func NewProcessor(
+// newProcessor creates and returns a processor for the specified change feed
+func newProcessor(
 	ctx context.Context,
-	pdEndpoints []string,
+	session *concurrency.Session,
 	changefeed model.ChangeFeedInfo,
 	sink sink.Sink,
 	changefeedID, captureID string,
 	checkpointTs uint64) (*processor, error) {
-	pdCli, err := fNewPDCli(pdEndpoints, pd.SecurityOption{})
+	etcdCli := session.Client()
+	endpoints := session.Client().Endpoints()
+	pdCli, err := fNewPDCli(endpoints, pd.SecurityOption{})
 	if err != nil {
-		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", pdEndpoints)
+		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", endpoints)
 	}
 
-	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   pdEndpoints,
-		DialTimeout: 5 * time.Second,
-		DialOptions: []grpc.DialOption{
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: pbackoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		},
-	})
-	if err != nil {
-		return nil, errors.Annotate(err, "new etcd client")
-	}
-	sess, err := concurrency.NewSession(etcdCli,
-		concurrency.WithTTL(defaultProcessorSessionTTL))
-	if err != nil {
-		return nil, errors.Annotate(err, "new etcd session")
-	}
 	cdcEtcdCli := kv.NewCDCEtcdClient(etcdCli)
 
 	tsRWriter, err := fNewTsRWriter(cdcEtcdCli, changefeedID, captureID)
@@ -159,7 +133,7 @@ func NewProcessor(
 	// so we set `needEncode` to false.
 	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
 	ddlEventCh := ddlPuller.SortedOutput(ctx)
-	schemaBuilder, err := createSchemaBuilder(pdEndpoints, ddlEventCh)
+	schemaBuilder, err := createSchemaBuilder(endpoints, ddlEventCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -172,7 +146,7 @@ func NewProcessor(
 		changefeed:    changefeed,
 		pdCli:         pdCli,
 		etcdCli:       cdcEtcdCli,
-		session:       sess,
+		session:       session,
 		sink:          sink,
 		ddlPuller:     ddlPuller,
 		schemaBuilder: schemaBuilder,
@@ -221,14 +195,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 		return p.sink.PrintStatus(cctx)
 	})
 
-	if err := p.register(ctx); err != nil {
-		errCh <- err
-	}
 	go func() {
 		if err := wg.Wait(); err != nil {
 			errCh <- err
 		}
-		_ = p.deregister(ctx)
 	}()
 }
 
@@ -257,7 +227,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 }
 
 // localResolvedWorker do the flowing works.
-// 1, update resolve ts by scaning all table's resolve ts.
+// 1, update resolve ts by scanning all table's resolve ts.
 // 2, update checkpoint ts by consuming entry from p.executedTxns.
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
@@ -591,6 +561,7 @@ func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (stor
 func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) {
 	p.tablesMu.Lock()
 	defer p.tablesMu.Unlock()
+	ctx = util.PutTableIDInCtx(ctx, tableID)
 
 	log.Debug("Add table", zap.Int64("tableID", tableID))
 	if _, ok := p.tables[tableID]; ok {
@@ -669,21 +640,65 @@ func (p *processor) stop(ctx context.Context) error {
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureID); err != nil {
 		return err
 	}
-	if err := p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID); err != nil {
-		return err
-	}
-
-	return errors.Trace(p.deregister(ctx))
+	return p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID)
 }
 
-func (p *processor) register(ctx context.Context) error {
-	info := &model.ProcessorInfo{
-		ID:           p.id,
-		CaptureID:    p.captureID,
-		ChangeFeedID: p.changefeedID,
+// runProcessor creates a new processor then starts it.
+func runProcessor(
+	ctx context.Context,
+	session *concurrency.Session,
+	info model.ChangeFeedInfo,
+	changefeedID string,
+	captureID string,
+	checkpointTs uint64,
+) (*processor, error) {
+	opts := make(map[string]string, len(info.Opts)+2)
+	for k, v := range info.Opts {
+		opts[k] = v
 	}
-	return p.etcdCli.PutProcessorInfo(ctx, p.captureID, info, p.session.Lease())
-}
-func (p *processor) deregister(ctx context.Context) error {
-	return p.etcdCli.DeleteProcessorInfo(ctx, p.captureID, p.id)
+	opts[sink.OptChangefeedID] = changefeedID
+	opts[sink.OptCaptureID] = captureID
+	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
+	filter, err := util.NewFilter(info.GetConfig())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, opts)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	errCh := make(chan error, 1)
+	go func() {
+		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
+			errCh <- err
+		}
+	}()
+	processor, err := newProcessor(ctx, session, info, sink, changefeedID, captureID, checkpointTs)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
+
+	processor.Run(ctx, errCh)
+
+	go func() {
+		err := <-errCh
+		if errors.Cause(err) != context.Canceled {
+			log.Error("error on running processor",
+				zap.String("captureid", captureID),
+				zap.String("changefeedid", changefeedID),
+				zap.String("processorid", processor.id),
+				zap.Error(err))
+		} else {
+			log.Info("processor exited",
+				zap.String("captureid", captureID),
+				zap.String("changefeedid", changefeedID),
+				zap.String("processorid", processor.id))
+		}
+		cancel()
+	}()
+
+	return processor, nil
 }

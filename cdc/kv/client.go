@@ -155,7 +155,7 @@ func (a *connArray) Init(ctx context.Context) error {
 				Timeout:             3 * time.Second,
 				PermitWithoutStream: true,
 			}),
-			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(32*1024*1024)),
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(128*1024*1024)),
 		)
 		cancel()
 
