@@ -104,7 +104,6 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				es.lock.Unlock()
 
 				resEvents := make([]*model.RawKVEntry, len(resolvedTsGroup))
-				t1 := time.Now()
 				for i, rts := range resolvedTsGroup {
 					resEvents[i] = &model.RawKVEntry{Ts: rts, OpType: model.OpTypeResolved}
 				}
@@ -112,8 +111,6 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				sort.Slice(toSort, func(i, j int) bool {
 					return lessFunc(toSort[i], toSort[j])
 				})
-				sortCost := time.Now().Sub(t1)
-				t1 = time.Now()
 				maxResolvedTs := resolvedTsGroup[len(resolvedTsGroup)-1]
 				var merged []*model.RawKVEntry
 				mergeFunc(toSort, sorted, func(entry *model.RawKVEntry) {
@@ -123,7 +120,6 @@ func (es *EntrySorter) Run(ctx context.Context) {
 						merged = append(merged, entry)
 					}
 				})
-				mergeCost := time.Now().Sub(t1)
 				sorted = merged
 			}
 		}
