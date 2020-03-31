@@ -45,7 +45,7 @@ func (m *MqMessageKey) Decode(data []byte) error {
 // MqMessageRow represents the row message value
 type MqMessageRow struct {
 	Update map[string]*Column `json:"u,omitempty"`
-	Delete map[string]*Column `json:"s,omitempty"`
+	Delete map[string]*Column `json:"d,omitempty"`
 }
 
 // Encode encodes the message to the json bytes
