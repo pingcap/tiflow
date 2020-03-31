@@ -507,7 +507,7 @@ func (s *mysqlSink) prepareDelete(schema, table string, cols map[string]*model.C
 func whereSlice(cols map[string]*model.Column) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for colName, col := range cols {
-		if !col.WhereHandle {
+		if col.WhereHandle == nil || !*col.WhereHandle {
 			continue
 		}
 		colNames = append(colNames, colName)

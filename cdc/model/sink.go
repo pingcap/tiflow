@@ -61,9 +61,9 @@ func (e *RowChangedEvent) FromMqMessage(key *MqMessageKey, value *MqMessageRow) 
 
 // Column represents a column value in row changed event
 type Column struct {
-	Type        byte        `json:"type"`
-	WhereHandle bool        `json:"where_handle"`
-	Value       interface{} `json:"value"`
+	Type        byte        `json:"t"`
+	WhereHandle *bool       `json:"h,omitempty"`
+	Value       interface{} `json:"v"`
 }
 
 func (c *Column) formatVal() {

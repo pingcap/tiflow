@@ -316,11 +316,15 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		values[colName] = &model.Column{
-			Type:        colInfo.Tp,
-			WhereHandle: tableInfo.IsColumnUnique(colInfo.ID),
-			Value:       value,
+		col := &model.Column{
+			Type:  colInfo.Tp,
+			Value: value,
 		}
+		if tableInfo.IsColumnUnique(colInfo.ID) {
+			whereHandle := true
+			col.WhereHandle = &whereHandle
+		}
+		values[colName] = col
 	}
 
 	event := &model.RowChangedEvent{
@@ -335,11 +339,15 @@ func (m *mounterImpl) mountRowKVEntry(row *rowKVEntry) (*model.RowChangedEvent, 
 		for _, col := range tableInfo.Columns {
 			_, ok := values[col.Name.O]
 			if !ok && tableInfo.IsColWritable(col) {
-				values[col.Name.O] = &model.Column{
-					Type:        col.Tp,
-					WhereHandle: tableInfo.IsColumnUnique(col.ID),
-					Value:       getDefaultOrZeroValue(col),
+				column := &model.Column{
+					Type:  col.Tp,
+					Value: getDefaultOrZeroValue(col),
 				}
+				if tableInfo.IsColumnUnique(col.ID) {
+					whereHandle := true
+					column.WhereHandle = &whereHandle
+				}
+				values[col.Name.O] = column
 			}
 		}
 	}
@@ -381,9 +389,10 @@ func (m *mounterImpl) mountIndexKVEntry(idx *indexKVEntry) (*model.RowChangedEve
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		whereHandle := true
 		values[idxCol.Name.O] = &model.Column{
 			Type:        tableInfo.Columns[idxCol.Offset].Tp,
-			WhereHandle: true,
+			WhereHandle: &whereHandle,
 			Value:       value,
 		}
 	}
