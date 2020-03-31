@@ -563,6 +563,7 @@ func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (stor
 func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) {
 	p.tablesMu.Lock()
 	defer p.tablesMu.Unlock()
+	ctx = util.PutTableIDInCtx(ctx, tableID)
 
 	log.Debug("Add table", zap.Int64("tableID", tableID))
 	if _, ok := p.tables[tableID]; ok {
@@ -660,6 +661,7 @@ func runProcessor(
 	}
 	opts[sink.OptChangefeedID] = changefeedID
 	opts[sink.OptCaptureID] = captureID
+	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
 	filter, err := util.NewFilter(info.GetConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -682,7 +684,6 @@ func runProcessor(
 	}
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
 
-	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
 	processor.Run(ctx, errCh)
 
 	go func() {

@@ -193,6 +193,10 @@ func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.
 }
 
 func (c *changeFeed) restoreTableInfos(infoSnapshot *model.TaskStatus, captureID string) {
+	// the capture information maybe deleted during table cleaning
+	if _, ok := c.taskStatus[captureID]; !ok {
+		log.Warn("ignore restore table info, task status for capture not found", zap.String("captureID", captureID))
+	}
 	c.taskStatus[captureID].TableInfos = infoSnapshot.TableInfos
 }
 

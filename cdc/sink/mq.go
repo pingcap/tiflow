@@ -155,6 +155,7 @@ func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
 			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
 		}
 	}
+
 	return int32(hash.Sum32() % uint32(k.partitionNum))
 }
 

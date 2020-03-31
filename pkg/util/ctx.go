@@ -39,6 +39,20 @@ func PutCaptureIDInCtx(ctx context.Context, captureID string) context.Context {
 	return context.WithValue(ctx, ctxKeyCaptureID, captureID)
 }
 
+// PutTableIDInCtx returns a new child context with the specified table ID stored.
+func PutTableIDInCtx(ctx context.Context, tableID int64) context.Context {
+	return context.WithValue(ctx, ctxKeyTableID, tableID)
+}
+
+// TableIDFromCtx returns a table ID
+func TableIDFromCtx(ctx context.Context) int64 {
+	tableID, ok := ctx.Value(ctxKeyTableID).(int64)
+	if !ok {
+		return 0
+	}
+	return tableID
+}
+
 // SetOwnerInCtx returns a new child context with the owner flag set.
 func SetOwnerInCtx(ctx context.Context) context.Context {
 	return context.WithValue(ctx, ctxKeyIsOwner, true)
