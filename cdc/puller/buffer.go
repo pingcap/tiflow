@@ -127,6 +127,16 @@ func (b *memBuffer) Get(ctx context.Context) (model.RegionFeedEvent, error) {
 	}
 }
 
+// Size returns the memory size of memBuffer
+func (b *memBuffer) Size() int64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.limitter == nil {
+		return 0
+	}
+	return b.limitter.used
+}
+
 var sizeOfVal = unsafe.Sizeof(model.RawKVEntry{})
 var sizeOfResolve = unsafe.Sizeof(model.ResolvedSpan{})
 

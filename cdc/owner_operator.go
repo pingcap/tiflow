@@ -55,6 +55,7 @@ func newDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
 		return puller.Run(ctx)
 	})
 
+	ctx = util.PutTableIDInCtx(ctx, -1)
 	rawDDLCh := puller.SortedOutput(ctx)
 
 	errg.Go(func() error {
