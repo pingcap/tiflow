@@ -119,6 +119,10 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		m.collectMetrics(ctx)
 	}()
 
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+	metricMounterResolvedTs := mounterTableResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 	for {
 		var rawRow *model.RawKVEntry
 		select {
@@ -136,6 +140,7 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 
 		if rawRow.OpType == model.OpTypeResolved {
 			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
+			metricMounterResolvedTs.Set(float64(rawRow.Ts))
 			continue
 		}
 
