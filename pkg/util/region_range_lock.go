@@ -85,7 +85,7 @@ func (m *RangeTsMap) Set(startKey, endKey []byte, ts uint64) {
 	})
 }
 
-// GetMin gets the min ts value among the given range.
+// GetMin gets the min ts value among the given range. endKey must be greater than startKey.
 func (m *RangeTsMap) GetMin(startKey, endKey []byte) uint64 {
 	//fmt.Printf("GetMin %+q %+q\n", startKey, endKey)
 	//m.m.Ascend(func(i btree.Item) bool {
