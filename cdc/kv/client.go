@@ -474,15 +474,27 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	handleResult(res)
 }
 
-func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) error {
+func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, blocking bool) error {
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetVer(), errorInfo.ts)
-	select {
-	case s.errCh <- errorInfo:
-	case <-ctx.Done():
-		return ctx.Err()
+	if blocking {
+		select {
+		case s.errCh <- errorInfo:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	} else {
+		select {
+		case s.errCh <- errorInfo:
+		default:
+			go func() {
+				select {
+				case s.errCh <- errorInfo:
+				case <-ctx.Done():
+				}
+			}()
+		}
 	}
-
 	return nil
 }
 
@@ -526,12 +538,15 @@ MainLoop:
 				log.Info("cannot get rpcCtx, retry span",
 					zap.Uint64("regionID", sri.verID.GetID()),
 					zap.Reflect("span", sri.span))
-				s.handleError(ctx, regionErrorInfo{
+				err = s.onRegionFail(ctx, regionErrorInfo{
 					singleRegionInfo: sri,
 					err: &rpcCtxUnavailableErr{
 						verID: sri.verID,
 					},
-				}, false)
+				}, true)
+				if err != nil {
+					return errors.Trace(err)
+				}
 				continue MainLoop
 			}
 			sri.rpcCtx = rpcCtx
@@ -581,7 +596,8 @@ MainLoop:
 					log.Warn("get grpc stream client failed", zap.Error(err))
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 					s.client.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
-					continue MainLoop
+					// Retry connecting and sending the request.
+					continue
 				}
 				streams[rpcCtx.Addr] = stream
 
@@ -700,7 +716,7 @@ func (s *eventFeedSession) partialRegionFeed(
 	return s.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
-	})
+	}, false)
 }
 
 // divideAndSendEventFeedToRegions split up the input span into spans aligned
@@ -845,7 +861,7 @@ func (s *eventFeedSession) receiveFromStream(
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
 				err:              errors.New("pending region cancelled due to stream disconnecting"),
-			})
+			}, false)
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
 				return

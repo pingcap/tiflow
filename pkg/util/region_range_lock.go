@@ -185,8 +185,11 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		l.rangeLock.ReplaceOrInsert(&rangeLockEntry{
 			startKey: startKey,
 			endKey:   endKey,
+			regionID: regionID,
 			version:  version,
 		})
+
+		log.Debug("Range Locked", zap.Uint64("regionID", regionID), zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)))
 
 		return LockRangeResult{
 			Status:       LockRangeResultSuccess,
@@ -215,7 +218,8 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		retryRanges := make([]Span, 0)
 		currentRangeStartKey := startKey
 
-		log.Debug("tryLockRange stale", zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("blockedBy", overlapStr)) //DEBUG
+		log.Debug("tryLockRange stale", zap.Uint64("regionID", regionID),
+			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("blockedBy", overlapStr)) //DEBUG
 
 		for _, r := range overlappingRanges {
 			if bytes.Compare(currentRangeStartKey, r.startKey) < 0 {
@@ -242,7 +246,8 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 
 	}
 
-	log.Debug("tryLockRange blocked", zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("blockedBy", overlapStr)) //DEBUG
+	log.Debug("tryLockRange blocked", zap.Uint64("regionID", regionID),
+		zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("blockedBy", overlapStr)) //DEBUG
 
 	return LockRangeResult{
 		Status: LockRangeResultWait,
@@ -311,8 +316,13 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, c
 		ch <- nil
 	}
 
-	l.rangeLock.Delete(entry)
+	i := l.rangeLock.Delete(entry)
+	if i == nil {
+		panic("impossible")
+	}
 	l.rangeCheckpointTs.Set(startKey, endKey, checkpointTs)
+	log.Debug("unlocked range", zap.Uint64("regionID", entry.regionID),
+		zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)))
 }
 
 const (
