@@ -82,8 +82,8 @@ func (es *EntrySorter) Run(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Minute):
-				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedCh)))
-				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.output)))
+				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedNotify)))
+				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
 				es.lock.Lock()
 				metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
 				es.lock.Unlock()
