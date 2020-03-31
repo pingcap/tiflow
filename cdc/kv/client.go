@@ -56,6 +56,14 @@ type singleRegionInfo struct {
 	rpcCtx       *tikv.RPCContext
 }
 
+var (
+	metricFeedNotLeaderCounter        = eventFeedErrorCounter.WithLabelValues("NotLeader")
+	metricFeedEpochNotMatchCounter    = eventFeedErrorCounter.WithLabelValues("EpochNotMatch")
+	metricFeedRegionNotFoundCounter   = eventFeedErrorCounter.WithLabelValues("RegionNotFound")
+	metricFeedDuplicateRequestCounter = eventFeedErrorCounter.WithLabelValues("DuplicateRequest")
+	metricFeedUnknownErrorCounter     = eventFeedErrorCounter.WithLabelValues("Unknown")
+)
+
 func newSingleRegionInfo(verID tikv.RegionVerID, span util.Span, ts uint64, rpcCtx *tikv.RPCContext) singleRegionInfo {
 	return singleRegionInfo{
 		verID:        verID,
@@ -605,23 +613,23 @@ func (c *CDCClient) handleError(ctx context.Context, errInfo regionErrorInfo, re
 	case *eventError:
 		innerErr := eerr.err
 		if notLeader := innerErr.GetNotLeader(); notLeader != nil {
-			eventFeedErrorCounter.WithLabelValues("NotLeader").Inc()
+			metricFeedNotLeaderCounter.Inc()
 			// TODO: Handle the case that notleader.GetLeader() is nil.
 			c.regionCache.UpdateLeader(errInfo.verID, notLeader.GetLeader().GetStoreId(), errInfo.rpcCtx.PeerIdx)
 		} else if innerErr.GetEpochNotMatch() != nil {
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
-			eventFeedErrorCounter.WithLabelValues("EpochNotMatch").Inc()
+			metricFeedEpochNotMatchCounter.Inc()
 			return c.divideAndSendEventFeedToRegions(ctx, errInfo.span, errInfo.ts, regionCh)
 		} else if innerErr.GetRegionNotFound() != nil {
-			eventFeedErrorCounter.WithLabelValues("RegionNotFound").Inc()
+			metricFeedRegionNotFoundCounter.Inc()
 			return c.divideAndSendEventFeedToRegions(ctx, errInfo.span, errInfo.ts, regionCh)
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
-			eventFeedErrorCounter.WithLabelValues("DuplicateRequest").Inc()
+			metricFeedDuplicateRequestCounter.Inc()
 			log.Error("tikv reported duplicated request to the same region. region merge should happened which is not supported",
 				zap.Uint64("regionID", duplicatedRequest.RegionId))
 			return nil
 		} else {
-			eventFeedErrorCounter.WithLabelValues("Unknown").Inc()
+			metricFeedUnknownErrorCounter.Inc()
 			log.Warn("receive empty or unknown error msg", zap.Stringer("error", innerErr))
 		}
 	default:
@@ -766,6 +774,15 @@ func (c *CDCClient) singleEventFeed(
 ) (uint64, error) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	metricEventSize := eventSize.WithLabelValues(captureID)
+	metricPullEventInitializedCounter := pullEventCounter.WithLabelValues(cdcpb.Event_INITIALIZED.String(), captureID, changefeedID)
+	metricPullEventCommittedCounter := pullEventCounter.WithLabelValues(cdcpb.Event_COMMITTED.String(), captureID, changefeedID)
+	metricPullEventCommitCounter := pullEventCounter.WithLabelValues(cdcpb.Event_COMMIT.String(), captureID, changefeedID)
+	metricPullEventPrewriteCounter := pullEventCounter.WithLabelValues(cdcpb.Event_PREWRITE.String(), captureID, changefeedID)
+	metricPullEventRollbackCounter := pullEventCounter.WithLabelValues(cdcpb.Event_ROLLBACK.String(), captureID, changefeedID)
+	metricSendEventResolvedCounter := sendEventCounter.WithLabelValues("native resolved", captureID, changefeedID)
+	metricSendEventCommitCounter := sendEventCounter.WithLabelValues("commit", captureID, changefeedID)
+	metricSendEventCommittedCounter := sendEventCounter.WithLabelValues("committed", captureID, changefeedID)
 
 	var initialized uint32
 
@@ -791,15 +808,16 @@ func (c *CDCClient) singleEventFeed(
 			return atomic.LoadUint64(&checkpointTs), errors.New("single event feed aborted")
 		}
 
-		eventSize.WithLabelValues(captureID).Observe(float64(event.Event.Size()))
+		metricEventSize.Observe(float64(event.Event.Size()))
 		switch x := event.Event.(type) {
 		case *cdcpb.Event_Entries_:
 			for _, entry := range x.Entries.GetEntries() {
-				pullEventCounter.WithLabelValues(entry.Type.String(), captureID, changefeedID).Inc()
 				switch entry.Type {
 				case cdcpb.Event_INITIALIZED:
+					metricPullEventInitializedCounter.Inc()
 					atomic.StoreUint32(&initialized, 1)
 				case cdcpb.Event_COMMITTED:
+					metricPullEventCommittedCounter.Inc()
 					var opType model.OpType
 					switch entry.GetOpType() {
 					case cdcpb.Event_Row_DELETE:
@@ -820,13 +838,15 @@ func (c *CDCClient) singleEventFeed(
 					}
 					select {
 					case eventCh <- revent:
-						sendEventCounter.WithLabelValues("committed", captureID, changefeedID).Inc()
+						metricSendEventCommittedCounter.Inc()
 					case <-ctx.Done():
 						return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
 					}
 				case cdcpb.Event_PREWRITE:
+					metricPullEventPrewriteCounter.Inc()
 					matcher.putPrewriteRow(entry)
 				case cdcpb.Event_COMMIT:
+					metricPullEventCommitCounter.Inc()
 					// emit a value
 					value, err := matcher.matchRow(entry)
 					if err != nil {
@@ -855,11 +875,12 @@ func (c *CDCClient) singleEventFeed(
 
 					select {
 					case eventCh <- revent:
-						sendEventCounter.WithLabelValues("commit", captureID, changefeedID).Inc()
+						metricSendEventCommitCounter.Inc()
 					case <-ctx.Done():
 						return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
 					}
 				case cdcpb.Event_ROLLBACK:
+					metricPullEventRollbackCounter.Inc()
 					matcher.rollbackRow(entry)
 				}
 			}
@@ -882,7 +903,7 @@ func (c *CDCClient) singleEventFeed(
 			updateCheckpointTS(&checkpointTs, x.ResolvedTs)
 			select {
 			case eventCh <- revent:
-				sendEventCounter.WithLabelValues("native resolved", captureID, changefeedID).Inc()
+				metricSendEventResolvedCounter.Inc()
 			case <-ctx.Done():
 				return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
 			}
