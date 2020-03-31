@@ -81,7 +81,7 @@ func (es *EntrySorter) Run(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(time.Minute):
+			case <-time.After(defaultMetricInterval):
 				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedNotify)))
 				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
 				es.lock.Lock()

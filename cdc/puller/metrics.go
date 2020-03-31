@@ -13,7 +13,15 @@
 
 package puller
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+const (
+	defaultMetricInterval = time.Second * 15
+)
 
 var (
 	kvEventCounter = prometheus.NewCounterVec(
