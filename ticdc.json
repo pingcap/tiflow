@@ -18,7 +18,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 18,
-  "iteration": 1585644981550,
+  "iteration": 1585647076364,
   "links": [],
   "panels": [
     {
@@ -2415,7 +2415,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "cdc-server",
-      "description": "The number of events received from kv client event channel",
+      "description": "resolved ts sent from table mounter",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -2454,10 +2454,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (rate(ticdc_processor_txn_count{changefeed=\"$changefeed\"}[1m])) by (instance, type)",
+          "expr": "sum (rate(ticdc_mounter_table_resolved_ts{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])) by (instance, table)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}} - {{type}}",
+          "legendFormat": "{{instance}} - {{table}}",
           "refId": "A"
         }
       ],
@@ -2465,7 +2465,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "processor txn count",
+      "title": "mounter_resolved_ts",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2481,7 +2481,7 @@
       },
       "yaxes": [
         {
-          "format": "none",
+          "format": "short",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -2814,7 +2814,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "cdc-server",
-      "description": "txn input channel size for a table in processor",
+      "description": "output chan size of table mounter",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -2855,7 +2855,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_processor_table_input_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "expr": "sum(ticdc_mounter_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} - {{table}}",
@@ -2866,7 +2866,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "ticdc_processor_table_input_chan_size",
+      "title": "ticdc_mounter_output_chan_size",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -3140,7 +3140,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_mounter_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "expr": "sum(ticdc_processor_txn_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} - {{table}}",
@@ -3151,7 +3151,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "mounter_output_chan_size",
+      "title": "table_output_chan_size",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -3199,8 +3199,9 @@
         "allValue": null,
         "current": {
           "selected": true,
-          "text": "a1e19d64-32b4-4cd9-ade7-b8e7ddd929fb",
-          "value": "a1e19d64-32b4-4cd9-ade7-b8e7ddd929fb"
+          "tags": [],
+          "text": "57d16fbf-5f03-4637-8ec8-47d2f73bf3af",
+          "value": "57d16fbf-5f03-4637-8ec8-47d2f73bf3af"
         },
         "datasource": "cdc-server",
         "definition": "label_values(ticdc_processor_resolved_ts, changefeed)",
@@ -3225,8 +3226,9 @@
         "allValue": null,
         "current": {
           "selected": true,
-          "text": "3292f135-27e1-41cf-8eac-cc4b92ca77df",
-          "value": "3292f135-27e1-41cf-8eac-cc4b92ca77df"
+          "tags": [],
+          "text": "fdcff3d9-ff92-413e-8051-b6e00617246f",
+          "value": "fdcff3d9-ff92-413e-8051-b6e00617246f"
         },
         "datasource": "cdc-server",
         "definition": "label_values(ticdc_processor_resolved_ts, capture)",
@@ -3281,5 +3283,5 @@
   "timezone": "",
   "title": "ticdc",
   "uid": "YiGL8hBZz",
-  "version": 48
+  "version": 50
 }
