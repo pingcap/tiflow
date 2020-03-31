@@ -547,7 +547,7 @@ MainLoop:
 					err: &rpcCtxUnavailableErr{
 						verID: sri.verID,
 					},
-				}, true)
+				}, false)
 				if err != nil {
 					return errors.Trace(err)
 				}
