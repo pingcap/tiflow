@@ -26,9 +26,9 @@ const (
 // MqMessageKey represents the message key
 type MqMessageKey struct {
 	Ts     uint64        `json:"ts"`
-	Schema string        `json:"schema,omitempty"`
-	Table  string        `json:"table,omitempty"`
-	Type   MqMessageType `json:"type"`
+	Schema string        `json:"scm,omitempty"`
+	Table  string        `json:"tbl,omitempty"`
+	Type   MqMessageType `json:"t"`
 }
 
 // Encode encodes the message to the json bytes
@@ -44,8 +44,8 @@ func (m *MqMessageKey) Decode(data []byte) error {
 
 // MqMessageRow represents the row message value
 type MqMessageRow struct {
-	Update map[string]*Column `json:"update,omitempty"`
-	Delete map[string]*Column `json:"delete,omitempty"`
+	Update map[string]*Column `json:"u,omitempty"`
+	Delete map[string]*Column `json:"d,omitempty"`
 }
 
 // Encode encodes the message to the json bytes
@@ -72,8 +72,8 @@ func (m *MqMessageRow) Decode(data []byte) error {
 
 // MqMessageDDL represents the DDL message value
 type MqMessageDDL struct {
-	Query string           `json:"query"`
-	Type  model.ActionType `json:"type"`
+	Query string           `json:"q"`
+	Type  model.ActionType `json:"t"`
 }
 
 // Encode encodes the message to the json bytes
