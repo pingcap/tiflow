@@ -41,11 +41,6 @@ type Owner struct {
 	session     *concurrency.Session
 	changeFeeds map[model.ChangeFeedID]*changeFeed
 
-	// processorLock protects markDownProcessor and activeProcessors
-	processorLock     sync.RWMutex
-	markDownProcessor []*model.ProcInfoSnap
-	activeProcessors  map[string]*model.ProcessorInfo
-
 	cfRWriter ChangeFeedRWriter
 
 	l sync.RWMutex
@@ -72,15 +67,14 @@ func NewOwner(sess *concurrency.Session) (*Owner, error) {
 	}
 
 	owner := &Owner{
-		done:             make(chan struct{}),
-		session:          sess,
-		pdClient:         pdClient,
-		changeFeeds:      make(map[model.ChangeFeedID]*changeFeed),
-		activeProcessors: make(map[string]*model.ProcessorInfo),
-		captures:         make(map[model.CaptureID]*model.CaptureInfo),
-		pdEndpoints:      endpoints,
-		cfRWriter:        cli,
-		etcdClient:       cli,
+		done:        make(chan struct{}),
+		session:     sess,
+		pdClient:    pdClient,
+		changeFeeds: make(map[model.ChangeFeedID]*changeFeed),
+		captures:    make(map[model.CaptureID]*model.CaptureInfo),
+		pdEndpoints: endpoints,
+		cfRWriter:   cli,
+		etcdClient:  cli,
 	}
 
 	return owner, nil
@@ -92,63 +86,38 @@ func (o *Owner) addCapture(info *model.CaptureInfo) {
 	o.l.Unlock()
 }
 
-func (o *Owner) handleMarkdownProcessor(ctx context.Context) {
-	o.processorLock.Lock()
-	defer o.processorLock.Unlock()
-	var deletedCapture = make(map[string]struct{})
-	remainProcs := make([]*model.ProcInfoSnap, 0)
-	for _, snap := range o.markDownProcessor {
-		changefeed, ok := o.changeFeeds[snap.CfID]
-		if !ok {
-			log.Error("changefeed not found in owner cache, can't rebalance",
-				zap.String("changefeedID", snap.CfID))
-			continue
-		}
-		for _, tbl := range snap.Tables {
-			log.Debug("readd table", zap.Uint64("tid", tbl.ID),
-				zap.Uint64("startts", tbl.StartTs))
-			changefeed.reAddTable(tbl.ID, tbl.StartTs)
-		}
-		log.Debug("delete task status for down processor",
-			zap.String("captureid", snap.CaptureID))
-		err := o.etcdClient.DeleteTaskStatus(ctx, snap.CfID, snap.CaptureID)
-		if err != nil {
-			log.Warn("failed to delete processor info",
-				zap.String("changefeedID", snap.CfID),
-				zap.String("captureID", snap.CaptureID),
-				zap.Error(err),
-			)
-			remainProcs = append(remainProcs, snap)
-			continue
-		}
-		err = o.etcdClient.DeleteTaskPosition(ctx, snap.CfID, snap.CaptureID)
-		if err != nil {
-			log.Warn("failed to delete task position",
-				zap.String("changefeedID", snap.CfID),
-				zap.String("captureID", snap.CaptureID),
-				zap.Error(err),
-			)
-			remainProcs = append(remainProcs, snap)
-			continue
-		}
-		deletedCapture[snap.CaptureID] = struct{}{}
-	}
-	o.markDownProcessor = remainProcs
-
-	for id := range deletedCapture {
-		err := o.etcdClient.DeleteCaptureInfo(ctx, id)
-		if err != nil {
-			log.Warn("failed to delete capture info", zap.Error(err))
-		}
-		log.Info("delete capture info", zap.String("id", id))
-	}
-}
-
 func (o *Owner) removeCapture(info *model.CaptureInfo) {
 	o.l.Lock()
 	defer o.l.Unlock()
 
 	delete(o.captures, info.ID)
+
+	for _, feed := range o.changeFeeds {
+		task, ok := feed.taskStatus[info.ID]
+		if !ok {
+			continue
+		}
+		pos, ok := feed.taskPositions[info.ID]
+		if !ok {
+			continue
+		}
+
+		for _, table := range task.TableInfos {
+			feed.orphanTables[table.ID] = model.ProcessTableInfo{
+				ID:      table.ID,
+				StartTs: pos.CheckPointTs,
+			}
+		}
+
+		ctx := context.TODO()
+		if err := o.etcdClient.DeleteTaskStatus(ctx, feed.id, info.ID); err != nil {
+			log.Warn("failed to delete task status", zap.Error(err))
+		}
+		if err := o.etcdClient.DeleteTaskPosition(ctx, feed.id, info.ID); err != nil {
+			log.Warn("failed to delete task position", zap.Error(err))
+		}
+
+	}
 }
 
 func (o *Owner) newChangeFeed(
@@ -467,9 +436,6 @@ func (o *Owner) throne(ctx context.Context) error {
 	// Start a routine to keep watching on the liveness of
 	// captures.
 	o.startCaptureWatcher(ctx)
-	// Start a routine to keep watching on the liveness of
-	// processors.
-	o.startProcessorInfoWatcher(ctx)
 	return nil
 }
 
@@ -538,15 +504,6 @@ func (o *Owner) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	// Handle the down processors.
-	//
-	// Since the processor watcher runs asynchronously,
-	// it may detected a processor down before
-	// loading the the change feeds, in which case the down processor
-	// will be ignored when doing rebalance. So we must call this
-	// function after calling loadChangeFeeds.
-	o.handleMarkdownProcessor(ctx)
-
 	err = o.calcResolvedTs(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -594,151 +551,6 @@ func (o *Owner) writeDebugInfo(w io.Writer) {
 	}
 }
 
-func (o *Owner) markProcessorDown(ctx context.Context,
-	p *model.ProcessorInfo) error {
-	statuses, err := o.cfRWriter.GetAllTaskStatus(ctx, p.ChangeFeedID)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	positions, err := o.cfRWriter.GetAllTaskPositions(ctx, p.ChangeFeedID)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// lookup the task position for the processor
-	pos, exist := positions[p.CaptureID]
-	if !exist {
-		return nil
-	}
-	// lookup the task position for the processor
-	status, exist := statuses[p.CaptureID]
-	if !exist {
-		return nil
-	}
-	snap := status.Snapshot(p.ChangeFeedID,
-		p.CaptureID,
-		pos.CheckPointTs)
-	log.Info("mark processor down",
-		zap.String("processorid", p.ID),
-		zap.String("captureid", p.CaptureID),
-		zap.String("changefeed", p.ChangeFeedID),
-		zap.Reflect("tables", snap.Tables))
-	o.processorLock.Lock()
-	o.markDownProcessor = append(o.markDownProcessor, snap)
-	delete(o.activeProcessors, p.ID)
-	o.processorLock.Unlock()
-	return nil
-}
-
-func (o *Owner) markProcessorActive(ctx context.Context,
-	p *model.ProcessorInfo) error {
-	o.processorLock.Lock()
-	o.activeProcessors[p.ID] = p
-	o.processorLock.Unlock()
-	return nil
-}
-
-func (o *Owner) rebuildProcessorEvents(ctx context.Context,
-	processors []*model.ProcessorInfo) error {
-	current := make(map[string]*model.ProcessorInfo)
-	for _, p := range processors {
-		current[p.ID] = p
-		if _, ok := o.activeProcessors[p.ID]; !ok {
-			if err := o.markProcessorActive(ctx, p); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
-	for _, p := range o.activeProcessors {
-		if _, ok := current[p.ID]; !ok {
-			if err := o.markProcessorDown(ctx, p); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
-	return nil
-}
-
-func (o *Owner) watchProcessorInfo(ctx context.Context) error {
-	ctx = clientv3.WithRequireLeader(ctx)
-
-	rev, processors, err := o.etcdClient.GetAllProcessors(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// before watching, rebuild events according to
-	// the existed processors. This is necessary because
-	// the etcd events may be compacted.
-	if err := o.rebuildProcessorEvents(ctx, processors); err != nil {
-		return errors.Trace(err)
-	}
-
-	log.Info("monitoring processors",
-		zap.String("key", kv.ProcessorInfoKeyPrefix),
-		zap.Int64("rev", rev))
-	ch := o.etcdClient.Client.Watch(ctx, kv.ProcessorInfoKeyPrefix,
-		clientv3.WithPrefix(),
-		clientv3.WithRev(rev+1),
-		clientv3.WithPrevKV())
-
-	for resp := range ch {
-		if resp.Err() != nil {
-			return errors.Trace(resp.Err())
-		}
-		for _, ev := range resp.Events {
-			p := &model.ProcessorInfo{}
-			switch ev.Type {
-			case clientv3.EventTypeDelete:
-				if err := p.Unmarshal(ev.PrevKv.Value); err != nil {
-					return errors.Trace(err)
-				}
-				log.Debug("processor deleted",
-					zap.String("processorid", p.ID),
-					zap.String("captureid", p.CaptureID),
-					zap.String("changefeedid", p.ChangeFeedID))
-				if err := o.markProcessorDown(ctx, p); err != nil {
-					return errors.Trace(err)
-				}
-			case clientv3.EventTypePut:
-				if err := p.Unmarshal(ev.Kv.Value); err != nil {
-					return errors.Trace(err)
-				}
-				log.Debug("processor created",
-					zap.String("processorid", p.ID),
-					zap.String("captureid", p.CaptureID),
-					zap.String("changefeedid", p.ChangeFeedID))
-				if err := o.markProcessorActive(ctx, p); err != nil {
-					return errors.Trace(err)
-				}
-			}
-		}
-	}
-	return nil
-}
-func (o *Owner) startProcessorInfoWatcher(ctx context.Context) {
-	log.Info("start to watch processors")
-	go func() {
-		for {
-			if err := o.watchProcessorInfo(ctx); err != nil {
-				// When the watching routine returns, the error must not
-				// be nil, it may be caused by a temporary error or a context
-				// error(ctx.Err())
-				if ctx.Err() != nil {
-					if errors.Cause(ctx.Err()) != context.Canceled {
-						// The context error indicates the termination of the owner
-						log.Error("watch processor failed", zap.Error(ctx.Err()))
-					} else {
-						log.Info("watch processor exited")
-					}
-					return
-				}
-				log.Warn("watch processor returned", zap.Error(err))
-				// Otherwise, a temporary error occured(ErrCompact),
-				// restart the watching routine.
-			}
-		}
-	}()
-}
-
 // cleanUpStaleTasks cleans up the task status which does not associated
 // with an active processor.
 //
@@ -750,21 +562,22 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	active := make(map[string]struct{})
+	_, captures, err := o.etcdClient.GetCaptures(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	for _, c := range captures {
+		active[c.ID] = struct{}{}
+	}
 	for changeFeedID := range changefeeds {
 		statuses, err := o.etcdClient.GetAllTaskStatus(ctx, changeFeedID)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		active := make(map[string]*model.ProcessorInfo)
 		for captureID := range statuses {
-			_, processors, err := o.etcdClient.GetProcessors(ctx, captureID)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			for _, p := range processors {
-				active[p.CaptureID] = p
-			}
 			if _, ok := active[captureID]; !ok {
 				if err := o.etcdClient.DeleteTaskStatus(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
@@ -854,11 +667,11 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 				// be nil, it may be caused by a temporary error or a context
 				// error(ctx.Err())
 				if ctx.Err() != nil {
-					if ctx.Err() != context.Canceled {
+					if errors.Cause(ctx.Err()) != context.Canceled {
 						// The context error indicates the termination of the owner
-						log.Error("watch capture failed", zap.Error(ctx.Err()))
+						log.Error("watch processor failed", zap.Error(ctx.Err()))
 					} else {
-						log.Info("watch capture exited")
+						log.Info("watch processor exited")
 					}
 					return
 				}

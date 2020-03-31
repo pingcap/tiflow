@@ -25,6 +25,7 @@ type KafkaConfig struct {
 
 	Version         string
 	MaxMessageBytes int
+	Compression     string
 }
 
 // DefaultKafkaConfig is the default Kafka configuration
@@ -32,6 +33,7 @@ var DefaultKafkaConfig = KafkaConfig{
 	Version:           "2.4.0",
 	MaxMessageBytes:   512 * 1024 * 1024, // 512M
 	ReplicationFactor: 1,
+	Compression:       "none",
 }
 
 type kafkaSaramaProducer struct {
@@ -228,6 +230,22 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
+
+	switch strings.ToLower(strings.TrimSpace(c.Compression)) {
+	case "none":
+		config.Producer.Compression = sarama.CompressionNone
+	case "gzip":
+		config.Producer.Compression = sarama.CompressionGZIP
+	case "snappy":
+		config.Producer.Compression = sarama.CompressionSnappy
+	case "lz4":
+		config.Producer.Compression = sarama.CompressionLZ4
+	case "zstd":
+		config.Producer.Compression = sarama.CompressionZSTD
+	default:
+		log.Warn("Unsupported compression algorithm", zap.String("compression", c.Compression))
+		config.Producer.Compression = sarama.CompressionNone
+	}
 
 	config.Producer.Retry.Max = 10000
 	config.Producer.Retry.Backoff = 500 * time.Millisecond

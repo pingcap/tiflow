@@ -333,6 +333,11 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filt
 		config.MaxMessageBytes = c
 	}
 
+	s = sinkURI.Query().Get("compression")
+	if s != "" {
+		config.Compression = s
+	}
+
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
