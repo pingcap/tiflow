@@ -12,7 +12,7 @@ type Producer interface {
 	BroadcastMessage(ctx context.Context, key *model.MqMessageKey, value *model.MqMessageDDL) error
 	SyncBroadcastMessage(ctx context.Context, key *model.MqMessageKey, value *model.MqMessageDDL) error
 	GetPartitionNum() int32
-	Successes()
+	Successes() chan uint64
 	Run(ctx context.Context) error
 	Close() error
 }

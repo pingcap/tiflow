@@ -171,6 +171,7 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
 	p.errCh = errCh
+	ddlPullerCtx := util.PutTableIDInCtx(cctx, 0)
 
 	wg.Go(func() error {
 		return p.positionWorker(cctx)
@@ -185,8 +186,7 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	wg.Go(func() error {
-		cctx = util.PutTableIDInCtx(cctx, 0)
-		return p.ddlPuller.Run(cctx)
+		return p.ddlPuller.Run(ddlPullerCtx)
 	})
 
 	wg.Go(func() error {
