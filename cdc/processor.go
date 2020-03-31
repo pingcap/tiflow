@@ -227,7 +227,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 }
 
 // localResolvedWorker do the flowing works.
-// 1, update resolve ts by scaning all table's resolve ts.
+// 1, update resolve ts by scanning all table's resolve ts.
 // 2, update checkpoint ts by consuming entry from p.executedTxns.
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
