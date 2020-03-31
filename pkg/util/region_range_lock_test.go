@@ -23,17 +23,17 @@ type regionRangeLockSuit struct{}
 var _ = check.Suite(&regionRangeLockSuit{})
 
 func mustSuccess(c *check.C, res LockRangeResult, expectedCheckpointTs uint64) {
-	c.Assert(res.Status, check.Equals, LockRangeResultSuccess)
+	c.Assert(res.Status, check.Equals, LockRangeStatusSuccess)
 	c.Assert(res.CheckpointTs, check.Equals, expectedCheckpointTs)
 }
 
 func mustStale(c *check.C, res LockRangeResult, expectedRetryRanges ...Span) {
-	c.Assert(res.Status, check.Equals, LockRangeResultStale)
+	c.Assert(res.Status, check.Equals, LockRangeStatusStale)
 	c.Assert(res.RetryRanges, check.DeepEquals, expectedRetryRanges)
 }
 
 func mustWaitFn(c *check.C, res LockRangeResult) func() LockRangeResult {
-	c.Assert(res.Status, check.Equals, LockRangeResultWait)
+	c.Assert(res.Status, check.Equals, LockRangeStatusWait)
 	return res.WaitFn
 }
 

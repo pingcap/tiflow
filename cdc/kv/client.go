@@ -433,7 +433,7 @@ func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, s
 func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri singleRegionInfo, blocking bool) {
 	handleResult := func(res util.LockRangeResult) {
 		switch res.Status {
-		case util.LockRangeResultSuccess:
+		case util.LockRangeStatusSuccess:
 			if sri.ts > res.CheckpointTs {
 				sri.ts = res.CheckpointTs
 			}
@@ -442,7 +442,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 			case <-ctx.Done():
 			}
 
-		case util.LockRangeResultStale:
+		case util.LockRangeStatusStale:
 			log.Info("request expired",
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Reflect("span", sri.span),
@@ -459,7 +459,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 
 	res := s.rangeLock.LockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
 
-	if res.Status == util.LockRangeResultWait {
+	if res.Status == util.LockRangeStatusWait {
 		if blocking {
 			res = res.WaitFn()
 		} else {

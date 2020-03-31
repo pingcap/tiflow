@@ -17,12 +17,14 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"math"
+	"sync"
+	"sync/atomic"
+
 	"github.com/google/btree"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
-	"math"
-	"sync"
 )
 
 type rangeTsEntry struct {
@@ -58,6 +60,7 @@ func NewRangeTsMap() *RangeTsMap {
 // Set sets the corresponding ts of the given range to the specified value.
 func (m *RangeTsMap) Set(startKey, endKey []byte, ts uint64) {
 	if m.m.Get(rangeTsEntryWithKey(endKey)) == nil {
+		// To calculate the minimal ts, the default value is math.MaxUint64
 		tailTs := uint64(math.MaxUint64)
 		m.m.DescendLessOrEqual(rangeTsEntryWithKey(endKey), func(i btree.Item) bool {
 			tailTs = i.(*rangeTsEntry).ts
@@ -87,13 +90,6 @@ func (m *RangeTsMap) Set(startKey, endKey []byte, ts uint64) {
 
 // GetMin gets the min ts value among the given range. endKey must be greater than startKey.
 func (m *RangeTsMap) GetMin(startKey, endKey []byte) uint64 {
-	//fmt.Printf("GetMin %+q %+q\n", startKey, endKey)
-	//m.m.Ascend(func(i btree.Item) bool {
-	//	e := i.(*rangeTsEntry)
-	//	fmt.Printf("RangeTsMap: %+q: %v\n", e.startKey, e.ts)
-	//	return true
-	//})
-
 	var ts uint64 = math.MaxUint64
 	m.m.DescendLessOrEqual(rangeTsEntryWithKey(startKey), func(i btree.Item) bool {
 		ts = i.(*rangeTsEntry).ts
@@ -106,7 +102,6 @@ func (m *RangeTsMap) GetMin(startKey, endKey []byte) uint64 {
 		}
 		return true
 	})
-	//fmt.Printf("GetMin returns %v\n", ts)
 	return ts
 }
 
@@ -138,6 +133,12 @@ func (e *rangeLockEntry) Less(than btree.Item) bool {
 	return bytes.Compare(e.startKey, than.(*rangeLockEntry).startKey) < 0
 }
 
+var currentID uint64 = 0
+
+func allocID() uint64 {
+	return atomic.AddUint64(&currentID, 1)
+}
+
 // RegionRangeLock is specifically used for kv client to manage exclusive region ranges. Acquiring lock will be blocked
 // if part of its range is already locked. It also manages checkpoint ts of all ranges. The ranges are marked by a
 // version number, which should comes from the Region's Epoch version. The version is used to compare which range is
@@ -146,6 +147,8 @@ type RegionRangeLock struct {
 	mu                sync.Mutex
 	rangeCheckpointTs *RangeTsMap
 	rangeLock         *btree.BTree
+	// ID to identify different RegionRangeLock instances, so logs of different instances can be distinguished.
+	id uint64
 }
 
 // NewRegionRangeLock creates a new RegionRangeLock.
@@ -153,6 +156,7 @@ func NewRegionRangeLock() *RegionRangeLock {
 	return &RegionRangeLock{
 		rangeCheckpointTs: NewRangeTsMap(),
 		rangeLock:         btree.New(16),
+		id:                allocID(),
 	}
 }
 
@@ -189,23 +193,21 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			version:  version,
 		})
 
-		log.Debug("Range Locked", zap.Uint64("regionID", regionID), zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)))
+		log.Info("range locked", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
+			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)))
 
 		return LockRangeResult{
-			Status:       LockRangeResultSuccess,
+			Status:       LockRangeStatusSuccess,
 			CheckpointTs: checkpointTs,
 		}, nil
 	}
 
-	// <====DEBUG====
-	var overlapStr []string //DEBUG
-
+	// Format overlapping ranges for printing log
+	var overlapStr []string
 	for _, r := range overlappingRanges {
-		overlapStr = append(overlapStr, fmt.Sprintf("start: %v, end: %v, version: %v, regionID: %v",
-			hex.EncodeToString(r.startKey), hex.EncodeToString(r.endKey), r.version, r.regionID)) //DEBUG
-
+		overlapStr = append(overlapStr, fmt.Sprintf("regionID: %v, ver: %v, start: %v, end: %v",
+			r.regionID, r.version, hex.EncodeToString(r.startKey), hex.EncodeToString(r.endKey))) //DEBUG
 	}
-	// ====DEBUG====>
 
 	isStale := false
 	for _, r := range overlappingRanges {
@@ -218,8 +220,8 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		retryRanges := make([]Span, 0)
 		currentRangeStartKey := startKey
 
-		log.Debug("tryLockRange stale", zap.Uint64("regionID", regionID),
-			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("blockedBy", overlapStr)) //DEBUG
+		log.Info("tryLockRange stale", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
+			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("allOverlapping", overlapStr)) //DEBUG
 
 		for _, r := range overlappingRanges {
 			if bytes.Compare(currentRangeStartKey, r.startKey) < 0 {
@@ -232,7 +234,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		}
 
 		return LockRangeResult{
-			Status:      LockRangeResultStale,
+			Status:      LockRangeStatusStale,
 			RetryRanges: retryRanges,
 		}, nil
 	}
@@ -246,11 +248,11 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 
 	}
 
-	log.Debug("tryLockRange blocked", zap.Uint64("regionID", regionID),
+	log.Info("lock range blocked", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 		zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("blockedBy", overlapStr)) //DEBUG
 
 	return LockRangeResult{
-		Status: LockRangeResultWait,
+		Status: LockRangeStatusWait,
 	}, signalChs
 }
 
@@ -258,25 +260,11 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 func (l *RegionRangeLock) LockRange(startKey, endKey []byte, regionID, version uint64) LockRangeResult {
 	res, signalChs := l.tryLockRange(startKey, endKey, regionID, version)
 
-	if res.Status != LockRangeResultWait {
+	if res.Status != LockRangeStatusWait {
 		return res
 	}
 
 	res.WaitFn = func() LockRangeResult {
-		//// <====DEBUG====
-		//c := make(chan int, 1)
-		//go func() {
-		//	select {
-		//	case <-c:
-		//	case <-time.After(time.Second * 30):
-		//		log.Error("cannot acquire range lock in 30 sec",
-		//			zap.Binary("startKey", startKey),
-		//			zap.Binary("endKey", endKey))
-		//	}
-		//}()
-		//defer func() { c <- 1 }()
-		//// ====DEBUG====>
-
 		signalChs1 := signalChs
 		var res1 LockRangeResult
 		for {
@@ -284,7 +272,7 @@ func (l *RegionRangeLock) LockRange(startKey, endKey []byte, regionID, version u
 				<-ch
 			}
 			res1, signalChs1 = l.tryLockRange(startKey, endKey, regionID, version)
-			if res1.Status != LockRangeResultWait {
+			if res1.Status != LockRangeStatusWait {
 				return res1
 			}
 		}
@@ -321,20 +309,26 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, c
 		panic("impossible")
 	}
 	l.rangeCheckpointTs.Set(startKey, endKey, checkpointTs)
-	log.Debug("unlocked range", zap.Uint64("regionID", entry.regionID),
+	log.Info("unlocked range", zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
 		zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)))
 }
 
 const (
-	// LockRangeResultSuccess means a LockRange operation succeeded.
-	LockRangeResultSuccess = 0
-	// LockRangeResultWait means a LockRange operation is blocked and should wait for it being finished.
-	LockRangeResultWait = 1
-	// LockRangeResultStale means a LockRange operation is rejected because of the range's version is stale.
-	LockRangeResultStale = 2
+	// LockRangeStatusSuccess means a LockRange operation succeeded.
+	LockRangeStatusSuccess = 0
+	// LockRangeStatusWait means a LockRange operation is blocked and should wait for it being finished.
+	LockRangeStatusWait = 1
+	// LockRangeStatusStale means a LockRange operation is rejected because of the range's version is stale.
+	LockRangeStatusStale = 2
 )
 
 // LockRangeResult represents the result of LockRange method of RegionRangeLock.
+// If Status is LockRangeStatusSuccess, the CheckpointTs field will be the minimal checkpoint ts among the locked
+// range.
+// If Status is LockRangeStatusWait, it means the lock cannot be acquired immediately. WaitFn must be invoked to
+// continue waiting and acquiring the lock.
+// If Status is LockRangeStatusStale, it means the LockRange request is stale because there's already a overlapping
+// locked range, whose version is greater or equals to the requested one.
 type LockRangeResult struct {
 	Status       int
 	CheckpointTs uint64
