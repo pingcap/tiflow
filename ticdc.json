@@ -3140,7 +3140,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_processor_txn_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "expr": "sum(ticdc_mounter_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} - {{table}}",
@@ -3151,7 +3151,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "table_output_chan_size",
+      "title": "mounter_output_chan_size",
       "tooltip": {
         "shared": true,
         "sort": 2,

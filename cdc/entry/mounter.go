@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -156,13 +157,15 @@ func (m *mounterImpl) Output() <-chan *model.RowChangedEvent {
 func (m *mounterImpl) collectMetrics(ctx context.Context) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+	metricMounterOutputChanSize := mounterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Second * 30):
-				mounterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(m.output)))
+				metricMounterOutputChanSize.Set(float64(len(m.output)))
 			}
 		}
 	}()
