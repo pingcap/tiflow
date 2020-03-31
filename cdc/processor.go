@@ -195,14 +195,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 		return p.sink.PrintStatus(cctx)
 	})
 
-	if err := p.register(ctx); err != nil {
-		errCh <- err
-	}
 	go func() {
 		if err := wg.Wait(); err != nil {
 			errCh <- err
 		}
-		_ = p.deregister(ctx)
 	}()
 }
 
@@ -643,21 +639,65 @@ func (p *processor) stop(ctx context.Context) error {
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureID); err != nil {
 		return err
 	}
-	if err := p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID); err != nil {
-		return err
-	}
-
-	return errors.Trace(p.deregister(ctx))
+	return p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID)
 }
 
-func (p *processor) register(ctx context.Context) error {
-	info := &model.ProcessorInfo{
-		ID:           p.id,
-		CaptureID:    p.captureID,
-		ChangeFeedID: p.changefeedID,
+// runProcessor creates a new processor then starts it.
+func runProcessor(
+	ctx context.Context,
+	session *concurrency.Session,
+	info model.ChangeFeedInfo,
+	changefeedID string,
+	captureID string,
+	checkpointTs uint64,
+) (*processor, error) {
+	opts := make(map[string]string, len(info.Opts)+2)
+	for k, v := range info.Opts {
+		opts[k] = v
 	}
-	return p.etcdCli.PutProcessorInfo(ctx, p.captureID, info, p.session.Lease())
-}
-func (p *processor) deregister(ctx context.Context) error {
-	return p.etcdCli.DeleteProcessorInfo(ctx, p.captureID, p.id)
+	opts[sink.OptChangefeedID] = changefeedID
+	opts[sink.OptCaptureID] = captureID
+	filter, err := util.NewFilter(info.GetConfig())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, opts)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	errCh := make(chan error, 1)
+	go func() {
+		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
+			errCh <- err
+		}
+	}()
+	processor, err := newProcessor(ctx, session, info, sink, changefeedID, captureID, checkpointTs)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
+
+	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
+	processor.Run(ctx, errCh)
+
+	go func() {
+		err := <-errCh
+		if errors.Cause(err) != context.Canceled {
+			log.Error("error on running processor",
+				zap.String("captureid", captureID),
+				zap.String("changefeedid", changefeedID),
+				zap.String("processorid", processor.id),
+				zap.Error(err))
+		} else {
+			log.Info("processor exited",
+				zap.String("captureid", captureID),
+				zap.String("changefeedid", changefeedID),
+				zap.String("processorid", processor.id))
+		}
+		cancel()
+	}()
+
+	return processor, nil
 }
