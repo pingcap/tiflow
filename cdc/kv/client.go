@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -312,6 +311,7 @@ type eventFeedSession struct {
 
 	// The whole range that is being subscribed.
 	totalSpan util.Span
+
 	// The channel to send the processed events.
 	eventCh chan<- *model.RegionFeedEvent
 	// The channel to put the region that will be sent requests.
@@ -322,9 +322,7 @@ type eventFeedSession struct {
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
 
-	rangeLock       *util.RegionRangeLock
-	checkpointTsMap *util.RangeTsMap
-	mu              sync.Mutex
+	rangeLock *util.RegionRangeLock
 }
 
 type rangeRequestTask struct {
@@ -339,15 +337,14 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	return &eventFeedSession{
-		client:          client,
-		regionCache:     regionCache,
-		totalSpan:       totalSpan,
-		eventCh:         eventCh,
-		regionCh:        make(chan singleRegionInfo, 16),
-		errCh:           make(chan regionErrorInfo, 16),
-		requestRangeCh:  make(chan rangeRequestTask, 16),
-		rangeLock:       util.NewRegionRangeLock(),
-		checkpointTsMap: util.NewRangeTsMap(),
+		client:         client,
+		regionCache:    regionCache,
+		totalSpan:      totalSpan,
+		eventCh:        eventCh,
+		regionCh:       make(chan singleRegionInfo, 16),
+		errCh:          make(chan regionErrorInfo, 16),
+		requestRangeCh: make(chan rangeRequestTask, 16),
+		rangeLock:      util.NewRegionRangeLock(),
 	}
 }
 
@@ -388,26 +385,13 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 		}
 	})
 
-	go func() {
-		timer := time.NewTicker(time.Minute)
-		defer timer.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-timer.C:
-				s.mu.Lock()
-				log.Debug("checkpointTs list", zap.Stringer("data", s.checkpointTsMap))
-				s.mu.Unlock()
-			}
-		}
-	}()
-
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
 
 	return g.Wait()
 }
 
+// scheduleDivideRegionAndRequest schedules a range to be divided by regions, and these regions will be then scheduled
+// to send ChangeData requests.
 func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, span util.Span, ts uint64, blocking bool) {
 	task := rangeRequestTask{span: span, ts: ts}
 	if blocking {
@@ -430,6 +414,7 @@ func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, s
 	}
 }
 
+// scheduleRegionRequest locks the region's range and schedules sending ChangeData request to the region.
 func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri singleRegionInfo, blocking bool) {
 	handleResult := func(res util.LockRangeResult) {
 		switch res.Status {
@@ -474,6 +459,9 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	handleResult(res)
 }
 
+// onRegionFail handles a region's failure, which means, unlock the region's range and send the error to the errCh for
+// error handling.
+// CAUTION: Note that this should only be called in a context that the region has locked it's range.
 func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, blocking bool) error {
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
 	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetVer(), errorInfo.ts)
@@ -517,6 +505,7 @@ func (s *eventFeedSession) dispatchRequest(
 
 MainLoop:
 	for {
+		// Note that when a region is received from the channel, it's range has been already locked.
 		var sri singleRegionInfo
 		select {
 		case <-ctx.Done():
@@ -790,6 +779,8 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 
 // handleError handles error returned by a region. If some new EventFeed connection should be established, the region
 // info will be sent to `regionCh`.
+// CAUTION: Note that this should only be invoked in a context that the region is not locked, otherwise use onRegionFail
+// instead.
 func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorInfo, blocking bool) {
 	err := errInfo.err
 	switch eerr := errors.Cause(err).(type) {
@@ -874,27 +865,6 @@ func (s *eventFeedSession) receiveFromStream(
 
 	for {
 		cevent, err := stream.Recv()
-
-		if err == nil {
-			eventsStr := make([]string, 0, len(cevent.Events))
-			for _, e := range cevent.Events {
-				content := ""
-				switch x := e.Event.(type) {
-				case *cdcpb.Event_Entries_:
-					content = "entries"
-				case *cdcpb.Event_Admin_:
-					content = "admin:" + x.Admin.String()
-				case *cdcpb.Event_Error:
-					content = "error:" + x.Error.String()
-				case *cdcpb.Event_ResolvedTs:
-					content = "resolved_ts:" + strconv.FormatUint(x.ResolvedTs, 10)
-				}
-				eventsStr = append(eventsStr, fmt.Sprintf("regionID:%v, %v;", e.RegionId, content))
-			}
-			log.Debug("recv ChangeDataEvent", zap.Strings("event", eventsStr), zap.String("addr", addr))
-		} else {
-			log.Debug("recv ChangeDataEvent err", zap.Error(err), zap.String("addr", addr))
-		}
 
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
@@ -999,10 +969,6 @@ func (s *eventFeedSession) singleEventFeed(
 ) (uint64, error) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-
-	s.mu.Lock()
-	s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
-	s.mu.Unlock()
 
 	var initialized uint32
 
@@ -1118,9 +1084,6 @@ func (s *eventFeedSession) singleEventFeed(
 
 			updateCheckpointTS(&checkpointTs, x.ResolvedTs)
 
-			s.mu.Lock()
-			s.checkpointTsMap.Set(span.Start, span.End, atomic.LoadUint64(&checkpointTs))
-			s.mu.Unlock()
 			select {
 			case s.eventCh <- revent:
 				sendEventCounter.WithLabelValues("native resolved", captureID, changefeedID).Inc()
