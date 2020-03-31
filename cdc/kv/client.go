@@ -835,8 +835,6 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 	}
 
 	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo, blocking)
-
-	return
 }
 
 func (s *eventFeedSession) getRPCContextForRegion(ctx context.Context, id tikv.RegionVerID) (*tikv.RPCContext, error) {
