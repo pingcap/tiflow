@@ -23,7 +23,6 @@ import (
 
 	"github.com/google/btree"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 )
 
@@ -103,16 +102,6 @@ func (m *RangeTsMap) GetMin(startKey, endKey []byte) uint64 {
 		return true
 	})
 	return ts
-}
-
-func (m *RangeTsMap) String() string {
-	result := ""
-	m.m.Ascend(func(i btree.Item) bool {
-		e := i.(*rangeTsEntry)
-		result += fmt.Sprintf("%v %v %v\n", e.ts, oracle.GetTimeFromTS(e.ts), hex.EncodeToString(e.startKey))
-		return true
-	})
-	return result
 }
 
 type rangeLockEntry struct {
@@ -306,7 +295,7 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, c
 
 	i := l.rangeLock.Delete(entry)
 	if i == nil {
-		panic("impossible")
+		panic("impossible (entry just get from BTree disappeared)")
 	}
 	l.rangeCheckpointTs.Set(startKey, endKey, checkpointTs)
 	log.Info("unlocked range", zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
