@@ -46,10 +46,6 @@ func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, opts map[str
 	return &mqSink{
 		mqProducer:   mqProducer,
 		partitionNum: partitionNum,
-		sinkCheckpointTsCh: make(chan struct {
-			ts    uint64
-			index uint64
-		}, 128000),
 		filter:       filter,
 		changefeedID: changefeedID,
 		captureID:    captureID,
@@ -164,7 +160,7 @@ func (k *mqSink) collectMetrics(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(defaultMetricInterval):
-			mqSinkCheckpointChanSizeGauge.WithLabelValues(k.captureID, k.changefeedID).Set(float64(len(k.sinkCheckpointTsCh)))
+			//mqSinkCheckpointChanSizeGauge.WithLabelValues(k.captureID, k.changefeedID).Set(float64(len(k.sinkCheckpointTsCh)))
 		}
 	}
 }
