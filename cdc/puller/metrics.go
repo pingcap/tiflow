@@ -43,21 +43,21 @@ var (
 			Subsystem: "puller",
 			Name:      "entry_buffer_size",
 			Help:      "Puller entry buffer size",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "table"})
 	memBufferSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "mem_buffer_size",
 			Help:      "Puller in memory buffer size",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "table"})
 	eventChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
 			Name:      "event_chan_size",
 			Help:      "Puller event channel size",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "table"})
 	entrySorterResolvedChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",

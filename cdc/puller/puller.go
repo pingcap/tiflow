@@ -158,6 +158,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
 
 	g.Go(func() error {
 		for {
@@ -165,9 +166,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return nil
 			case <-time.After(time.Minute):
-				entryBufferSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(p.chanBuffer)))
-				eventChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(eventCh)))
-				memBufferSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(p.buffer.Size()))
+				entryBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(len(p.chanBuffer)))
+				eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(len(eventCh)))
+				memBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(p.buffer.Size()))
 			}
 		}
 	})

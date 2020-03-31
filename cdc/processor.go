@@ -132,8 +132,8 @@ func newProcessor(
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
 	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
-	ctx = util.PutTableIDInCtx(ctx, 0)
-	ddlEventCh := ddlPuller.SortedOutput(ctx)
+	ctx2 := util.PutTableIDInCtx(ctx, 0)
+	ddlEventCh := ddlPuller.SortedOutput(ctx2)
 	schemaBuilder, err := createSchemaBuilder(endpoints, ddlEventCh)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -185,7 +185,8 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	wg.Go(func() error {
-		return p.ddlPuller.Run(cctx)
+		ctx2 := util.PutTableIDInCtx(cctx, 0)
+		return p.ddlPuller.Run(ctx2)
 	})
 
 	wg.Go(func() error {
@@ -575,6 +576,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 		cancel:     cancel,
 	}
 
+	ctx = util.PutTableIDInCtx(ctx, tableID)
 	// start table puller
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
@@ -591,7 +593,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 		p.errCh <- errors.Trace(err)
 		return
 	}
-	ctx = util.PutTableIDInCtx(ctx, tableID)
 	// start mounter
 	mounter := entry.NewMounter(puller.SortedOutput(ctx), storage)
 	go func() {
