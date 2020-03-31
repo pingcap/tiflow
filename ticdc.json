@@ -18,101 +18,16 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 18,
-  "iteration": 1585464922802,
+  "iteration": 1585647076364,
   "links": [],
   "panels": [
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "fill": 1,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 0
-      },
-      "id": 47,
-      "legend": {
-        "avg": true,
-        "current": false,
-        "max": true,
-        "min": true,
-        "rightSide": true,
-        "show": true,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "links": [],
-      "nullPointMode": "null",
-      "percentage": false,
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "time()*1000-sum (ticdc_processor_checkpoint_ts{changefeed = \"$changefeed\"}) by (instance)",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "l",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Panel Title",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "ms",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
     {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 0
       },
       "id": 21,
       "panels": [],
@@ -131,7 +46,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 9
+        "y": 1
       },
       "hiddenSeries": false,
       "id": 19,
@@ -222,7 +137,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 9
+        "y": 1
       },
       "hiddenSeries": false,
       "id": 23,
@@ -321,7 +236,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 17
+        "y": 9
       },
       "hiddenSeries": false,
       "id": 26,
@@ -410,7 +325,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 17
+        "y": 9
       },
       "hiddenSeries": false,
       "id": 27,
@@ -499,7 +414,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 25
+        "y": 17
       },
       "hiddenSeries": false,
       "id": 24,
@@ -585,7 +500,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 25
       },
       "id": 13,
       "panels": [],
@@ -604,7 +519,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 34
+        "y": 26
       },
       "hiddenSeries": false,
       "id": 15,
@@ -696,7 +611,7 @@
         "h": 7,
         "w": 13,
         "x": 11,
-        "y": 34
+        "y": 26
       },
       "hiddenSeries": false,
       "id": 28,
@@ -729,7 +644,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "ticdc_kvclient_event_feed_error_count",
+          "expr": "sum(rate(ticdc_kvclient_event_feed_error_count[30s])) by (instance, type)",
+          "format": "time_series",
+          "intervalFactor": 1,
           "legendFormat": "{{instance}} - {{type}}",
           "refId": "A"
         }
@@ -788,7 +705,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 41
+        "y": 33
       },
       "hiddenSeries": false,
       "id": 17,
@@ -879,7 +796,7 @@
         "h": 7,
         "w": 13,
         "x": 11,
-        "y": 41
+        "y": 33
       },
       "hiddenSeries": false,
       "id": 29,
@@ -973,7 +890,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 48
+        "y": 40
       },
       "hiddenSeries": false,
       "id": 31,
@@ -1068,7 +985,7 @@
         "h": 7,
         "w": 13,
         "x": 11,
-        "y": 48
+        "y": 40
       },
       "hiddenSeries": false,
       "id": 40,
@@ -1101,7 +1018,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_puller_event_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance)",
+          "expr": "sum(ticdc_puller_event_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -1162,7 +1079,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 55
+        "y": 47
       },
       "hiddenSeries": false,
       "id": 43,
@@ -1195,10 +1112,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_puller_entry_buffer_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance)",
+          "expr": "sum(ticdc_puller_entry_buffer_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}}",
+          "legendFormat": "{{instance}} - {{table}}",
           "refId": "A"
         }
       ],
@@ -1249,6 +1166,382 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "cdc-server",
+      "description": "Puller in memory buffer size",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 13,
+        "x": 11,
+        "y": 47
+      },
+      "hiddenSeries": false,
+      "id": 50,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": false,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ticdc_puller_mem_buffer_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}} - {{table}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "puller_mem_buffer_size",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "cdc-server",
+      "description": "forwarded resolved ts in a single puller",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 11,
+        "x": 0,
+        "y": 54
+      },
+      "hiddenSeries": false,
+      "id": 52,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": false,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ticdc_puller_resolved_ts{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}-{{table}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "puller_resolved_ts",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "dateTimeAsIso",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "cdc-server",
+      "description": "Puller entry sorter unsoreted items size",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 13,
+        "x": 11,
+        "y": 54
+      },
+      "hiddenSeries": false,
+      "id": 51,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": false,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ticdc_puller_entry_sorter_unsorted_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}-{{table}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "entry_sorter_unsorted_size",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "cdc-server",
+      "description": "Puller entry sorter resolved channel size",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 11,
+        "x": 0,
+        "y": 61
+      },
+      "hiddenSeries": false,
+      "id": 42,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": false,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ticdc_puller_entry_sorter_resolved_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}-{{table}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "entry_sorter_resolved_chan_size",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "cdc-server",
       "description": "Puller entry sorter output channel size",
       "fill": 1,
       "fillGradient": 0,
@@ -1256,7 +1549,7 @@
         "h": 7,
         "w": 13,
         "x": 11,
-        "y": 55
+        "y": 61
       },
       "hiddenSeries": false,
       "id": 41,
@@ -1289,10 +1582,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_puller_entry_sorter_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance)",
+          "expr": "sum(ticdc_puller_entry_sorter_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}}",
+          "legendFormat": "{{instance}}-{{table}}",
           "refId": "A"
         }
       ],
@@ -1343,17 +1636,17 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "cdc-server",
-      "description": "Puller entry sorter resolved channel size",
+      "description": "Bucketed histogram of processing time (s) of merge in entry sorter",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 62
+        "y": 68
       },
       "hiddenSeries": false,
-      "id": 42,
+      "id": 53,
       "legend": {
         "alignAsTable": true,
         "avg": false,
@@ -1383,18 +1676,26 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_puller_entry_sorter_resolved_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance)",
+          "expr": "histogram_quantile(0.99, sum(rate(ticdc_puller_entry_sorter_sort_bucket{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])) by (le,table))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}}",
+          "legendFormat": "{{table}}-p99",
           "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum(rate(ticdc_puller_entry_sorter_sort_bucket{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])) by (le,table))",
+          "format": "time_series",
+          "hide": true,
+          "intervalFactor": 1,
+          "legendFormat": "{{table}}-p90",
+          "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "entry_sorter_resolved_chan_size",
+      "title": "entry_sorter_sort_duration",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1412,7 +1713,110 @@
         {
           "format": "short",
           "label": null,
+          "logBase": 2,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
           "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "cdc-server",
+      "description": "Bucketed histogram of processing time (s) of merge in entry sorter.",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 13,
+        "x": 11,
+        "y": 68
+      },
+      "hiddenSeries": false,
+      "id": 54,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": false,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ticdc_puller_entry_sorter_merge_bucket{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])) by (le,table))",
+          "format": "time_series",
+          "hide": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{table}}-p99",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum(rate(ticdc_puller_entry_sorter_merge_bucket{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])) by (le,table))",
+          "format": "time_series",
+          "hide": true,
+          "intervalFactor": 1,
+          "legendFormat": "{{table}}-p90",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "entry_sorter_merge_duration",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 2,
           "max": null,
           "min": null,
           "show": true
@@ -1437,7 +1841,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 75
       },
       "id": 11,
       "panels": [],
@@ -1456,7 +1860,7 @@
         "h": 8,
         "w": 11,
         "x": 0,
-        "y": 70
+        "y": 76
       },
       "hiddenSeries": false,
       "id": 2,
@@ -1549,7 +1953,7 @@
         "h": 8,
         "w": 12,
         "x": 11,
-        "y": 70
+        "y": 76
       },
       "hiddenSeries": false,
       "id": 30,
@@ -1642,7 +2046,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 78
+        "y": 84
       },
       "hiddenSeries": false,
       "id": 4,
@@ -1733,7 +2137,7 @@
         "h": 7,
         "w": 12,
         "x": 11,
-        "y": 78
+        "y": 84
       },
       "hiddenSeries": false,
       "id": 3,
@@ -1832,7 +2236,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 85
+        "y": 91
       },
       "hiddenSeries": false,
       "id": 32,
@@ -1925,7 +2329,7 @@
         "h": 7,
         "w": 12,
         "x": 11,
-        "y": 85
+        "y": 91
       },
       "hiddenSeries": false,
       "id": 5,
@@ -2011,14 +2415,14 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "cdc-server",
-      "description": "The number of events received from kv client event channel",
+      "description": "resolved ts sent from table mounter",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 92
+        "y": 98
       },
       "hiddenSeries": false,
       "id": 33,
@@ -2050,10 +2454,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (rate(ticdc_processor_txn_count{changefeed=\"$changefeed\"}[1m])) by (instance, type)",
+          "expr": "sum (ticdc_mounter_table_resolved_ts{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}} - {{type}}",
+          "legendFormat": "{{instance}} - {{table}}",
           "refId": "A"
         }
       ],
@@ -2061,7 +2465,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "processor txn count",
+      "title": "mounter_resolved_ts",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2077,7 +2481,7 @@
       },
       "yaxes": [
         {
-          "format": "none",
+          "format": "short",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -2099,11 +2503,11 @@
       }
     },
     {
-      "datasource": "cdc-server",
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": "cdc-server",
       "description": "The number of events received from kv client event channel",
       "fill": 1,
       "fillGradient": 0,
@@ -2111,7 +2515,7 @@
         "h": 7,
         "w": 12,
         "x": 11,
-        "y": 92
+        "y": 98
       },
       "hiddenSeries": false,
       "id": 34,
@@ -2192,7 +2596,6 @@
       }
     },
     {
-      "datasource": "cdc-server",
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
@@ -2204,7 +2607,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 99
+        "y": 105
       },
       "hiddenSeries": false,
       "id": 35,
@@ -2311,7 +2714,7 @@
         "h": 7,
         "w": 12,
         "x": 11,
-        "y": 99
+        "y": 105
       },
       "hiddenSeries": false,
       "id": 36,
@@ -2411,14 +2814,14 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "cdc-server",
-      "description": "txn input channel size for a table in processor",
+      "description": "output chan size of table mounter",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 106
+        "y": 112
       },
       "hiddenSeries": false,
       "id": 37,
@@ -2452,10 +2855,105 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_processor_table_input_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "expr": "sum(ticdc_mounter_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} - {{table}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "ticdc_mounter_output_chan_size",
+      "tooltip": {
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "none",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "cdc-server",
+      "description": "txn input channel size for a table in processor",
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 11,
+        "y": 112
+      },
+      "hiddenSeries": false,
+      "id": 49,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "sort": "current",
+        "sortDesc": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ticdc_mounter_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}} ",
           "refId": "A"
         }
       ],
@@ -2506,101 +3004,6 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "cdc-server",
-      "description": "txn output channel size for a table in processor",
-      "fill": 0,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 11,
-        "y": 106
-      },
-      "hiddenSeries": false,
-      "id": 38,
-      "legend": {
-        "alignAsTable": true,
-        "avg": false,
-        "current": true,
-        "max": true,
-        "min": false,
-        "rightSide": true,
-        "show": true,
-        "sort": "current",
-        "sortDesc": true,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "links": [],
-      "nullPointMode": "null",
-      "options": {
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(ticdc_processor_txn_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "{{instance}} - {{table}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "table_output_chan_size",
-      "tooltip": {
-        "shared": true,
-        "sort": 2,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "none",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "cdc-server",
       "description": "checkpoint channel size for mq sink",
       "fill": 0,
       "fillGradient": 0,
@@ -2608,7 +3011,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 113
+        "y": 119
       },
       "hiddenSeries": false,
       "id": 48,
@@ -2689,6 +3092,101 @@
         "align": false,
         "alignLevel": null
       }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "cdc-server",
+      "description": "txn output channel size for a table in processor",
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 11,
+        "y": 119
+      },
+      "hiddenSeries": false,
+      "id": 38,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "sort": "current",
+        "sortDesc": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "sum(ticdc_processor_txn_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}} - {{table}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "table_output_chan_size",
+      "tooltip": {
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "none",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
   "refresh": false,
@@ -2700,8 +3198,10 @@
       {
         "allValue": null,
         "current": {
-          "text": "3ed63a5e-5f2f-476f-82cb-1bc3924ee5f2",
-          "value": "3ed63a5e-5f2f-476f-82cb-1bc3924ee5f2"
+          "selected": true,
+          "tags": [],
+          "text": "57d16fbf-5f03-4637-8ec8-47d2f73bf3af",
+          "value": "57d16fbf-5f03-4637-8ec8-47d2f73bf3af"
         },
         "datasource": "cdc-server",
         "definition": "label_values(ticdc_processor_resolved_ts, changefeed)",
@@ -2725,8 +3225,10 @@
       {
         "allValue": null,
         "current": {
-          "text": "ff82a167-ffac-483d-acf2-d63245c0deaa",
-          "value": "ff82a167-ffac-483d-acf2-d63245c0deaa"
+          "selected": true,
+          "tags": [],
+          "text": "fdcff3d9-ff92-413e-8051-b6e00617246f",
+          "value": "fdcff3d9-ff92-413e-8051-b6e00617246f"
         },
         "datasource": "cdc-server",
         "definition": "label_values(ticdc_processor_resolved_ts, capture)",
@@ -2781,5 +3283,5 @@
   "timezone": "",
   "title": "ticdc",
   "uid": "YiGL8hBZz",
-  "version": 39
+  "version": 50
 }

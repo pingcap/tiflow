@@ -132,6 +132,7 @@ func newProcessor(
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
 	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
+	ctx = util.PutTableIDInCtx(ctx, 0)
 	ddlEventCh := ddlPuller.SortedOutput(ctx)
 	schemaBuilder, err := createSchemaBuilder(endpoints, ddlEventCh)
 	if err != nil {
@@ -184,6 +185,7 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	wg.Go(func() error {
+		cctx = util.PutTableIDInCtx(cctx, 0)
 		return p.ddlPuller.Run(cctx)
 	})
 
@@ -528,7 +530,7 @@ func (p *processor) collectMetrics(ctx context.Context, tableID int64) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(time.Minute):
+			case <-time.After(defaultMetricInterval):
 				tableOutputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureID, tableIDStr).Set(float64(len(p.output)))
 			}
 		}
@@ -575,6 +577,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 		cancel:     cancel,
 	}
 
+	ctx = util.PutTableIDInCtx(ctx, tableID)
 	// start table puller
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
