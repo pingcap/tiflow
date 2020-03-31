@@ -23,14 +23,13 @@ function test_kill_owner() {
     run_cdc_server $WORK_DIR $CDC_BINARY
     # ensure the server become the owner
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
-    owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
+    owner_pid=$(pidof $CDC_BINARY)
     owner_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}')
     echo "owner pid:" $owner_pid
     echo "owner id" $owner_id
 
     # run another server
     run_cdc_server $WORK_DIR $CDC_BINARY
-    ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
     echo "capture_id:" $capture_id
 
@@ -54,14 +53,13 @@ function test_hang_up_owner() {
     # ensure the server become the owner
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
 
-    owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
+    owner_pid=$(pidof $CDC_BINARY)
     owner_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}')
     echo "owner pid:" $owner_pid
     echo "owner id" $owner_id
 
     # run another server
     run_cdc_server $WORK_DIR $CDC_BINARY
-    ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
     echo "capture_id:" $capture_id
 
@@ -75,6 +73,7 @@ function test_hang_up_owner() {
 
     echo "test_hang_up_owner: pass"
 
+    kill -9 $owner_pid
     cleanup_process $CDC_BINARY
 }
 
@@ -90,21 +89,19 @@ function test_expire_owner() {
     # ensure the server become the owner
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
 
-    owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
+    owner_pid=$(pidof $CDC_BINARY)
     owner_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}')
     echo "owner pid:" $owner_pid
     echo "owner id" $owner_id
 
     # stop the owner
     kill -SIGSTOP $owner_pid
-    echo "process status:" $(ps -h -p $owner_pid -o "s")
 
     # ensure the session has expired
-    ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\[\]'"
+    ensure $MAX_RETRIES test -z "$($CDC_BINARY cli capture list 2>&1 | grep -o id)"
 
     # resume the owner
     kill -SIGCONT $owner_pid
-    echo "process status:" $(ps -h -p $owner_pid -o "s")
     # ensure the owner has recovered
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
     echo "test_expire_owner pass"
