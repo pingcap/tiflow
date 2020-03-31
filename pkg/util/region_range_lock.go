@@ -294,7 +294,7 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, c
 	}
 
 	entry := item.(*rangeLockEntry)
-	if entry.version != version || bytes.Compare(entry.endKey, endKey) != 0 {
+	if entry.version != version || !bytes.Equal(entry.endKey, endKey) {
 		panic(fmt.Sprintf("unlocking region not match the locked region. "+
 			"Locked: [%v, %v), version %v; Unlocking: [%v, %v), %v",
 			entry.startKey, entry.endKey, entry.version, startKey, endKey, version))
