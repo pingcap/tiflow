@@ -98,7 +98,7 @@ func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 	sorter := NewEntrySorter()
 	go func() {
 		sorter.Run(ctx)
-		defer close(sorter.resolvedCh)
+		defer close(sorter.resolvedNotify)
 		for {
 			be, err := p.chanBuffer.Get(ctx)
 			if err != nil {
