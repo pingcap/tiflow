@@ -2,8 +2,9 @@
 
 set -e
 
-CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
+source $CUR/owner.sh
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 
@@ -31,12 +32,12 @@ function sql_check() {
 
     # check table availability.
     echo "run sql_check", ${DOWN_TIDB_HOST}
-    run_sql "SELECT id, val FROM test.availability;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} && \
-    check_contains "id: 1" && \
-    check_contains "val: 1" && \
-    check_contains "id: 2" && \
-    check_contains "val: 22" && \
-    check_not_contains "id: 3" 
+    run_sql "SELECT id, val FROM test.availability;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+        check_contains "id: 1" &&
+        check_contains "val: 1" &&
+        check_contains "id: 2" &&
+        check_contains "val: 22" &&
+        check_not_contains "id: 3"
 }
 export -f sql_check
 
@@ -44,10 +45,10 @@ function check_result() {
     ensure 50 sql_check
 }
 
-function nonempty(){
+function nonempty() {
     sql=$*
-    run_sql "$sql" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} && \
-    check_contains "id:"
+    run_sql "$sql" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+        check_contains "id:"
 }
 export -f nonempty
 
@@ -86,5 +87,6 @@ function availability_test() {
 
 trap stop_tidb_cluster EXIT
 prepare $*
-availability_test $*
+#availability_test $*
+test_owner_ha $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
