@@ -78,17 +78,3 @@ func ChangefeedIDFromCtx(ctx context.Context) string {
 func PutChangefeedIDInCtx(ctx context.Context, changefeedID string) context.Context {
 	return context.WithValue(ctx, ctxKeyChangefeedID, changefeedID)
 }
-
-// PutTableIDInCtx returns a new child context with the specified table ID stored.
-func PutTableIDInCtx(ctx context.Context, tableID int64) context.Context {
-	return context.WithValue(ctx, ctxKeyTableID, tableID)
-}
-
-// TableIDFromCtx returns a table ID
-func TableIDFromCtx(ctx context.Context) int64 {
-	tableID, ok := ctx.Value(ctxKeyTableID).(int64)
-	if !ok {
-		return 0
-	}
-	return tableID
-}
