@@ -195,16 +195,21 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config KafkaConfig) (*kafkaSaramaProducer, error) {
+	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}
-	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
-	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
+	cfg.Producer.Return.Errors = true
+	syncClient, err := sarama.NewSyncProducer(strings.Split(address, ","), cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	syncClient, err := sarama.NewSyncProducer(strings.Split(address, ","), cfg)
+	cfg, err = newSaramaConfig(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
