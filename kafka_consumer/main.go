@@ -304,13 +304,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	if sink == nil {
 		panic("sink should initialized")
 	}
-	batchMsg := model.NewBatchMsg()
+	batchDecoder := model.NewBatchDecoder()
 	for message := range claim.Messages() {
 		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
-		batchMsg.SetRaw(message.Key, message.Value)
+		batchDecoder.Set(message.Key, message.Value)
 		fmt.Printf("msg key %x value %x\n", message.Key, message.Value)
-		for batchMsg.HasNext() {
-			keyBytes, valueBytes, err := batchMsg.Next()
+		for batchDecoder.HasNext() {
+			keyBytes, valueBytes, err := batchDecoder.Next()
 			if err != nil {
 				log.Fatal("get message from batch failed", zap.Error(err))
 			}

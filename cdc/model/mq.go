@@ -3,7 +3,6 @@ package model
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
@@ -95,12 +94,12 @@ func NewResolvedMessage(ts uint64) *MqMessageKey {
 	}
 }
 
-type BatchMsg struct {
+type BatchEncoder struct {
 	keyBuf   *bytes.Buffer
 	valueBuf *bytes.Buffer
 }
 
-func (batch *BatchMsg) Append(key []byte, value []byte) {
+func (batch *BatchEncoder) Append(key []byte, value []byte) {
 	batch.keyBuf.Write(codec.EncodeInt([]byte{}, int64(len(key))))
 	batch.keyBuf.Write(key)
 
@@ -108,48 +107,52 @@ func (batch *BatchMsg) Append(key []byte, value []byte) {
 	batch.valueBuf.Write(value)
 }
 
-func (batch *BatchMsg) GetRaw() ([]byte, []byte) {
+func (batch *BatchEncoder) Marshal() ([]byte, []byte) {
 	return batch.keyBuf.Bytes(), batch.valueBuf.Bytes()
 }
 
-func (batch *BatchMsg) SetRaw(key []byte, value []byte) {
-	batch.keyBuf.Reset()
-	batch.keyBuf.Write(key)
-
-	batch.valueBuf.Reset()
-	batch.valueBuf.Write(value)
-}
-
-func (batch *BatchMsg) Len() int {
+func (batch *BatchEncoder) Len() int {
 	return batch.keyBuf.Len() + batch.valueBuf.Len()
 }
 
-func (batch *BatchMsg) HasNext() bool {
-	return batch.keyBuf.Len() > 0 && batch.valueBuf.Len() > 0
-}
-
-func (batch *BatchMsg) Next() ([]byte, []byte, error) {
-	fmt.Printf("before get key len: %d\n", batch.keyBuf.Len())
-	_, keyLen, err := codec.DecodeInt(batch.keyBuf.Next(8))
-	if err != nil {
-		return nil, nil, err
-	}
-	fmt.Printf("before get key: %d\n", keyLen)
-	key := batch.keyBuf.Next(int(keyLen))
-
-	fmt.Printf("before get value len: %d\n", batch.valueBuf.Len())
-	_, valueLen, err := codec.DecodeInt(batch.valueBuf.Next(8))
-	if err != nil {
-		return nil, nil, err
-	}
-	fmt.Printf("before get value: %d\n", valueLen)
-	value := batch.valueBuf.Next(int(valueLen))
-	return key, value, nil
-}
-
-func NewBatchMsg() *BatchMsg {
-	return &BatchMsg{
+func NewBatchEncoder() *BatchEncoder {
+	return &BatchEncoder{
 		keyBuf:   &bytes.Buffer{},
 		valueBuf: &bytes.Buffer{},
 	}
+}
+
+type BatchDecoder struct {
+	keyBytes   []byte
+	valueBytes []byte
+}
+
+func (batch *BatchDecoder) Set(key []byte, value []byte) {
+	batch.keyBytes = key
+	batch.valueBytes = value
+}
+
+func (batch *BatchDecoder) HasNext() bool {
+	return len(batch.keyBytes) > 0 && len(batch.valueBytes) > 0
+}
+
+func (batch *BatchDecoder) Next() ([]byte, []byte, error) {
+	keyLeft, keyLen, err := codec.DecodeInt(batch.keyBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	key := keyLeft[0:keyLen]
+	batch.keyBytes = keyLeft[keyLen:]
+
+	valueLeft, valueLen, err := codec.DecodeInt(batch.valueBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	value := valueLeft[0:valueLen]
+	batch.valueBytes = valueLeft[valueLen:]
+	return key, value, nil
+}
+
+func NewBatchDecoder() *BatchDecoder {
+	return &BatchDecoder{}
 }

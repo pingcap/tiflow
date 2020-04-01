@@ -109,7 +109,7 @@ func (k *kafkaSaramaProducer) PrintStatus(ctx context.Context) error {
 }
 
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key *model.MqMessageKey, value *model.MqMessageDDL) error {
-
+	batchMsg := model.NewBatchEncoder()
 	keyByte, err := key.Encode()
 	if err != nil {
 		return errors.Trace(err)
@@ -121,6 +121,8 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key *mod
 			return errors.Trace(err)
 		}
 	}
+	batchMsg.Append(keyByte, valueByte)
+	keyByte, valueByte = batchMsg.Marshal()
 	for partition := int32(0); partition < k.partitionNum; partition++ {
 		_, _, err := k.syncClient.SendMessage(&sarama.ProducerMessage{
 			Topic:     k.topic,
@@ -175,18 +177,16 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 		partition := i
 		rowPartitionCh := k.rowPartitionCh[partition]
 		errg.Go(func() error {
-			batchMsg := model.NewBatchMsg()
+			batchEncoder := model.NewBatchEncoder()
 			// TODO 监控
 			flush := func(resolved bool, resolvedTs uint64) {
-				key, value := batchMsg.GetRaw()
+				key, value := batchEncoder.Marshal()
 				msg := &sarama.ProducerMessage{
 					Topic:     k.topic,
 					Key:       sarama.ByteEncoder(key),
 					Value:     sarama.ByteEncoder(value),
 					Partition: int32(partition),
 				}
-				fmt.Printf("flush to downstream key %x value %x (before enocde)\n", key, value)
-				fmt.Printf("flush to downstream key %x value %x (after enocde)\n", msg.Key, msg.Value)
 				if resolved {
 					msg.Metadata = resolvedTs
 				}
@@ -207,7 +207,9 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 				case <-ctx.Done():
 					return errors.Trace(ctx.Err())
 				case <-tick.C:
-					flush(false, 0)
+					if batchEncoder.Len() > 0 {
+						flush(false, 0)
+					}
 					continue
 				case msg = <-rowPartitionCh:
 				}
@@ -224,8 +226,8 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
-				batchMsg.Append(keyByte, valueByte)
-				if batchMsg.Len() >= batchSize {
+				batchEncoder.Append(keyByte, valueByte)
+				if batchEncoder.Len() >= batchSize {
 					flush(false, 0)
 				}
 			}
