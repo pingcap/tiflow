@@ -306,8 +306,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	}
 	batchMsg := model.NewBatchMsg()
 	for message := range claim.Messages() {
-		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
+		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 		batchMsg.SetRaw(message.Key, message.Value)
+		fmt.Printf("msg key %x value %x\n", message.Key, message.Value)
 		for batchMsg.HasNext() {
 			keyBytes, valueBytes, err := batchMsg.Next()
 			if err != nil {
@@ -330,6 +331,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				ddl := new(model.DDLEvent)
 				ddl.FromMqMessage(key, value)
 				c.appendDDL(ddl)
+				fmt.Printf("get ddl event %v\n", ddl)
 			case model.MqMessageTypeRow:
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
@@ -349,6 +351,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
+				fmt.Printf("get row event %v\n", row)
 			case model.MqMessageTypeResolved:
 				err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{Ts: key.Ts, Resolved: true})
 				if err != nil {
@@ -358,6 +361,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if resolvedTs < key.Ts {
 					atomic.StoreUint64(&sink.resolvedTs, key.Ts)
 				}
+				fmt.Printf("get resolved event %v\n", resolvedTs)
 			}
 			session.MarkMessage(message, "")
 		}

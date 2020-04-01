@@ -3,6 +3,7 @@ package model
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
@@ -128,15 +129,20 @@ func (batch *BatchMsg) HasNext() bool {
 }
 
 func (batch *BatchMsg) Next() ([]byte, []byte, error) {
+	fmt.Printf("before get key len: %d\n", batch.keyBuf.Len())
 	_, keyLen, err := codec.DecodeInt(batch.keyBuf.Next(8))
 	if err != nil {
 		return nil, nil, err
 	}
+	fmt.Printf("before get key: %d\n", keyLen)
 	key := batch.keyBuf.Next(int(keyLen))
+
+	fmt.Printf("before get value len: %d\n", batch.valueBuf.Len())
 	_, valueLen, err := codec.DecodeInt(batch.valueBuf.Next(8))
 	if err != nil {
 		return nil, nil, err
 	}
+	fmt.Printf("before get value: %d\n", valueLen)
 	value := batch.valueBuf.Next(int(valueLen))
 	return key, value, nil
 }

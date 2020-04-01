@@ -185,6 +185,8 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 					Value:     sarama.ByteEncoder(value),
 					Partition: int32(partition),
 				}
+				fmt.Printf("flush to downstream key %x value %x (before enocde)\n", key, value)
+				fmt.Printf("flush to downstream key %x value %x (after enocde)\n", msg.Key, msg.Value)
 				if resolved {
 					msg.Metadata = resolvedTs
 				}
