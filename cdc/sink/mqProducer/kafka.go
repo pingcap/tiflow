@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/ticdc/cdc/model"
@@ -45,6 +46,9 @@ type kafkaSaramaProducer struct {
 	rowPartitionCh []chan kafkaRowMsg
 	successes      chan uint64
 
+	count     uint64
+	totalSize uint64
+
 	closeCh chan struct{}
 }
 
@@ -66,6 +70,42 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key *model.MqMess
 
 func (k *kafkaSaramaProducer) BroadcastMessage(ctx context.Context, key *model.MqMessageKey, value *model.MqMessageDDL) error {
 	panic("implement me")
+}
+
+func (k *kafkaSaramaProducer) PrintStatus(ctx context.Context) error {
+	lastTime := time.Now()
+	var lastCount uint64
+	var lastSize uint64
+	timer := time.NewTicker(5 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
+			now := time.Now()
+			seconds := uint64(now.Unix() - lastTime.Unix())
+			total := atomic.LoadUint64(&k.count)
+			totalSize := atomic.LoadUint64(&k.totalSize)
+			count := total - lastCount
+			countSize := totalSize - lastSize
+			qps := uint64(0)
+			speed := uint64(0)
+			var speedMB float64
+			if seconds > 0 {
+				qps = count / seconds
+				speed = countSize / seconds
+				speedMB = float64(speed) / float64(1024*1024)
+			}
+
+			lastCount = total
+			lastSize = totalSize
+			lastTime = now
+			log.Info("MQ sink replication status",
+				zap.Uint64("count", count),
+				zap.Uint64("qps", qps), zap.Float64("speed(MB/S)", speedMB))
+		}
+	}
 }
 
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key *model.MqMessageKey, value *model.MqMessageDDL) error {
@@ -128,6 +168,8 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 const batchSize = 64 * 1024 //64kb
 
 func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	errg, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < int(k.partitionNum); i++ {
 		partition := i
@@ -148,13 +190,17 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 				if resolved {
 					msg.Metadata = resolvedTs
 				}
-				batchKey = []byte{'['}
-				batchValue = []byte{'['}
 				select {
 				case <-ctx.Done():
 					return
 				case k.asyncClient.Input() <- msg:
 				}
+				atomic.AddUint64(&k.count, 1)
+				atomic.AddUint64(&k.totalSize, uint64(len(batchValue)+len(batchKey)))
+				mqBatchHistogram.WithLabelValues(captureID, changefeedID).
+					Observe(float64(len(batchValue) + len(batchKey)))
+				batchKey = []byte{'['}
+				batchValue = []byte{'['}
 			}
 			tick := time.NewTicker(500 * time.Millisecond)
 			for {

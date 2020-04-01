@@ -34,8 +34,6 @@ type mqSink struct {
 	captureID    string
 	changefeedID string
 
-	count int64
-
 	errCh chan error
 }
 
@@ -204,31 +202,7 @@ func (k *mqSink) Close() error {
 }
 
 func (k *mqSink) PrintStatus(ctx context.Context) error {
-	lastTime := time.Now()
-	var lastCount int64
-	timer := time.NewTicker(printStatusInterval)
-	defer timer.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-timer.C:
-			now := time.Now()
-			seconds := now.Unix() - lastTime.Unix()
-			total := atomic.LoadInt64(&k.count)
-			count := total - lastCount
-			qps := int64(0)
-			if seconds > 0 {
-				qps = count / seconds
-			}
-			lastCount = total
-			lastTime = now
-			log.Info("MQ sink replication status",
-				zap.String("changefeed", k.changefeedID),
-				zap.Int64("count", count),
-				zap.Int64("qps", qps))
-		}
-	}
+	return k.mqProducer.PrintStatus(ctx)
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filter, opts map[string]string) (*mqSink, error) {
