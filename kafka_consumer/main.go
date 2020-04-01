@@ -304,55 +304,63 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	if sink == nil {
 		panic("sink should initialized")
 	}
+	batchMsg := model.NewBatchMsg()
 	for message := range claim.Messages() {
 		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
-		key := new(model.MqMessageKey)
-		err := key.Decode(message.Key)
-		if err != nil {
-			log.Fatal("decode message key failed", zap.Error(err))
-		}
-
-		switch key.Type {
-		case model.MqMessageTypeDDL:
-			value := new(model.MqMessageDDL)
-			err := value.Decode(message.Value)
+		batchMsg.SetRaw(message.Key, message.Value)
+		for batchMsg.HasNext() {
+			keyBytes, valueBytes, err := batchMsg.Next()
 			if err != nil {
-				log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+				log.Fatal("get message from batch failed", zap.Error(err))
+			}
+			key := new(model.MqMessageKey)
+			err = key.Decode(keyBytes)
+			if err != nil {
+				log.Fatal("decode message key failed", zap.Error(err))
 			}
 
-			ddl := new(model.DDLEvent)
-			ddl.FromMqMessage(key, value)
-			c.appendDDL(ddl)
-		case model.MqMessageTypeRow:
-			globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-			if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
-				log.Info("filter fallback row", zap.ByteString("row", message.Key),
-					zap.Uint64("globalResolvedTs", globalResolvedTs),
-					zap.Uint64("sinkResolvedTs", sink.resolvedTs))
-				break
+			switch key.Type {
+			case model.MqMessageTypeDDL:
+				value := new(model.MqMessageDDL)
+				err := value.Decode(valueBytes)
+				if err != nil {
+					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+				}
+
+				ddl := new(model.DDLEvent)
+				ddl.FromMqMessage(key, value)
+				c.appendDDL(ddl)
+			case model.MqMessageTypeRow:
+				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
+				if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
+					log.Info("filter fallback row", zap.ByteString("row", message.Key),
+						zap.Uint64("globalResolvedTs", globalResolvedTs),
+						zap.Uint64("sinkResolvedTs", sink.resolvedTs))
+					break
+				}
+				value := new(model.MqMessageRow)
+				err := value.Decode(valueBytes)
+				if err != nil {
+					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+				}
+				row := new(model.RowChangedEvent)
+				row.FromMqMessage(key, value)
+				err = sink.EmitRowChangedEvent(ctx, row)
+				if err != nil {
+					log.Fatal("emit row changed event failed", zap.Error(err))
+				}
+			case model.MqMessageTypeResolved:
+				err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{Ts: key.Ts, Resolved: true})
+				if err != nil {
+					log.Fatal("meit row changed event failed", zap.Error(err))
+				}
+				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
+				if resolvedTs < key.Ts {
+					atomic.StoreUint64(&sink.resolvedTs, key.Ts)
+				}
 			}
-			value := new(model.MqMessageRow)
-			err := value.Decode(message.Value)
-			if err != nil {
-				log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
-			}
-			row := new(model.RowChangedEvent)
-			row.FromMqMessage(key, value)
-			err = sink.EmitRowChangedEvent(ctx, row)
-			if err != nil {
-				log.Fatal("emit row changed event failed", zap.Error(err))
-			}
-		case model.MqMessageTypeResolved:
-			err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{Ts: key.Ts, Resolved: true})
-			if err != nil {
-				log.Fatal("meit row changed event failed", zap.Error(err))
-			}
-			resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-			if resolvedTs < key.Ts {
-				atomic.StoreUint64(&sink.resolvedTs, key.Ts)
-			}
+			session.MarkMessage(message, "")
 		}
-		session.MarkMessage(message, "")
 	}
 
 	return nil

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb/util/codec"
 )
 
 // MqMessageType is the type of message
@@ -91,5 +91,59 @@ func NewResolvedMessage(ts uint64) *MqMessageKey {
 	return &MqMessageKey{
 		Ts:   ts,
 		Type: MqMessageTypeResolved,
+	}
+}
+
+type BatchMsg struct {
+	keyBuf   *bytes.Buffer
+	valueBuf *bytes.Buffer
+}
+
+func (batch *BatchMsg) Append(key []byte, value []byte) {
+	batch.keyBuf.Write(codec.EncodeInt([]byte{}, int64(len(key))))
+	batch.keyBuf.Write(key)
+
+	batch.valueBuf.Write(codec.EncodeInt([]byte{}, int64(len(value))))
+	batch.valueBuf.Write(value)
+}
+
+func (batch *BatchMsg) GetRaw() ([]byte, []byte) {
+	return batch.keyBuf.Bytes(), batch.valueBuf.Bytes()
+}
+
+func (batch *BatchMsg) SetRaw(key []byte, value []byte) {
+	batch.keyBuf.Reset()
+	batch.keyBuf.Write(key)
+
+	batch.valueBuf.Reset()
+	batch.valueBuf.Write(value)
+}
+
+func (batch *BatchMsg) Len() int {
+	return batch.keyBuf.Len() + batch.valueBuf.Len()
+}
+
+func (batch *BatchMsg) HasNext() bool {
+	return batch.keyBuf.Len() > 0 && batch.valueBuf.Len() > 0
+}
+
+func (batch *BatchMsg) Next() ([]byte, []byte, error) {
+	_, keyLen, err := codec.DecodeInt(batch.keyBuf.Next(8))
+	if err != nil {
+		return nil, nil, err
+	}
+	key := batch.keyBuf.Next(int(keyLen))
+	_, valueLen, err := codec.DecodeInt(batch.valueBuf.Next(8))
+	if err != nil {
+		return nil, nil, err
+	}
+	value := batch.valueBuf.Next(int(valueLen))
+	return key, value, nil
+}
+
+func NewBatchMsg() *BatchMsg {
+	return &BatchMsg{
+		keyBuf:   &bytes.Buffer{},
+		valueBuf: &bytes.Buffer{},
 	}
 }

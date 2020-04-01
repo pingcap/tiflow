@@ -175,16 +175,14 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 		partition := i
 		rowPartitionCh := k.rowPartitionCh[partition]
 		errg.Go(func() error {
-			batchKey := []byte{'['}
-			batchValue := []byte{'['}
+			batchMsg := model.NewBatchMsg()
 			// TODO 监控
 			flush := func(resolved bool, resolvedTs uint64) {
-				batchKey = append(batchKey, ']')
-				batchValue = append(batchValue, ']')
+				key, value := batchMsg.GetRaw()
 				msg := &sarama.ProducerMessage{
 					Topic:     k.topic,
-					Key:       sarama.ByteEncoder(batchKey),
-					Value:     sarama.ByteEncoder(batchValue),
+					Key:       sarama.ByteEncoder(key),
+					Value:     sarama.ByteEncoder(value),
 					Partition: int32(partition),
 				}
 				if resolved {
@@ -196,11 +194,9 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 				case k.asyncClient.Input() <- msg:
 				}
 				atomic.AddUint64(&k.count, 1)
-				atomic.AddUint64(&k.totalSize, uint64(len(batchValue)+len(batchKey)))
+				atomic.AddUint64(&k.totalSize, uint64(len(key)+len(value)))
 				mqBatchHistogram.WithLabelValues(captureID, changefeedID).
-					Observe(float64(len(batchValue) + len(batchKey)))
-				batchKey = []byte{'['}
-				batchValue = []byte{'['}
+					Observe(float64(len(key) + len(value)))
 			}
 			tick := time.NewTicker(500 * time.Millisecond)
 			for {
@@ -226,11 +222,8 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
-				batchKey = append(batchKey, ',')
-				batchKey = append(batchKey, keyByte...)
-				batchValue = append(batchValue, ',')
-				batchValue = append(batchValue, valueByte...)
-				if len(batchValue) >= batchSize || len(batchKey) >= batchSize {
+				batchMsg.Append(keyByte, valueByte)
+				if batchMsg.Len() >= batchSize {
 					flush(false, 0)
 				}
 			}
