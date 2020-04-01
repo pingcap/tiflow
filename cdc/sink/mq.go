@@ -155,6 +155,7 @@ func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
 			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
 		}
 	}
+
 	return int32(hash.Sum32() % uint32(k.partitionNum))
 }
 
@@ -208,7 +209,7 @@ func (k *mqSink) collectMetrics(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-time.After(time.Minute):
+		case <-time.After(defaultMetricInterval):
 			mqSinkCheckpointChanSizeGauge.WithLabelValues(k.captureID, k.changefeedID).Set(float64(len(k.sinkCheckpointTsCh)))
 		}
 	}

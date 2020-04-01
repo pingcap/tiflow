@@ -132,6 +132,7 @@ func newProcessor(
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
 	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
+	ctx = util.PutTableIDInCtx(ctx, 0)
 	ddlEventCh := ddlPuller.SortedOutput(ctx)
 	schemaBuilder, err := createSchemaBuilder(endpoints, ddlEventCh)
 	if err != nil {
@@ -184,6 +185,7 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	wg.Go(func() error {
+		cctx = util.PutTableIDInCtx(cctx, 0)
 		return p.ddlPuller.Run(cctx)
 	})
 
@@ -528,7 +530,7 @@ func (p *processor) collectMetrics(ctx context.Context, tableID int64) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(time.Minute):
+			case <-time.After(defaultMetricInterval):
 				tableOutputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureID, tableIDStr).Set(float64(len(p.output)))
 			}
 		}
@@ -561,6 +563,7 @@ func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (stor
 func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) {
 	p.tablesMu.Lock()
 	defer p.tablesMu.Unlock()
+	ctx = util.PutTableIDInCtx(ctx, tableID)
 
 	log.Debug("Add table", zap.Int64("tableID", tableID))
 	if _, ok := p.tables[tableID]; ok {
@@ -574,6 +577,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 		cancel:     cancel,
 	}
 
+	ctx = util.PutTableIDInCtx(ctx, tableID)
 	// start table puller
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
@@ -657,6 +661,7 @@ func runProcessor(
 	}
 	opts[sink.OptChangefeedID] = changefeedID
 	opts[sink.OptCaptureID] = captureID
+	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
 	filter, err := util.NewFilter(info.GetConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -679,7 +684,6 @@ func runProcessor(
 	}
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
 
-	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
 	processor.Run(ctx, errCh)
 
 	go func() {

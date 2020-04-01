@@ -3,6 +3,7 @@ package puller
 import (
 	"context"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,20 +14,20 @@ import (
 
 // EntrySorter accepts out-of-order raw kv entries and output sorted entries
 type EntrySorter struct {
-	unsorted   []*model.RawKVEntry
-	resolvedCh chan uint64
-	lock       sync.Mutex
-	resolvedTs uint64
-	closed     int32
+	unsorted        []*model.RawKVEntry
+	lock            sync.Mutex
+	resolvedTsGroup []uint64
+	closed          int32
 
-	output chan *model.RawKVEntry
+	outputCh       chan *model.RawKVEntry
+	resolvedNotify chan struct{}
 }
 
 // NewEntrySorter creates a new EntrySorter
 func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
-		resolvedCh: make(chan uint64, 12800),
-		output:     make(chan *model.RawKVEntry, 128000),
+		resolvedNotify: make(chan struct{}, 128000),
+		outputCh:       make(chan *model.RawKVEntry, 128000),
 	}
 }
 
@@ -34,7 +35,12 @@ func NewEntrySorter() *EntrySorter {
 func (es *EntrySorter) Run(ctx context.Context) {
 	lessFunc := func(i *model.RawKVEntry, j *model.RawKVEntry) bool {
 		if i.Ts == j.Ts {
-			return i.OpType == model.OpTypeDelete
+			if i.OpType == model.OpTypeDelete {
+				return true
+			}
+			if j.OpType == model.OpTypeResolved {
+				return true
+			}
 		}
 		return i.Ts < j.Ts
 	}
@@ -56,48 +62,82 @@ func (es *EntrySorter) Run(ctx context.Context) {
 			output(kvsB[j])
 		}
 	}
+	output := func(ctx context.Context, entry *model.RawKVEntry) {
+		select {
+		case <-ctx.Done():
+			return
+		case es.outputCh <- entry:
+		}
+	}
 
 	go func() {
 		captureID := util.CaptureIDFromCtx(ctx)
 		changefeedID := util.ChangefeedIDFromCtx(ctx)
+		tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+		metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+		metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+		metricEntryUnsortedSizeGauge := entrySorterUnsortedSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(time.Minute):
-				entrySorterResolvedChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(es.resolvedCh)))
-				entrySorterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(es.output)))
+			case <-time.After(defaultMetricInterval):
+				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedNotify)))
+				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
+				es.lock.Lock()
+				metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
+				es.lock.Unlock()
 			}
 		}
 	}()
 
 	go func() {
 		var sorted []*model.RawKVEntry
+		captureID := util.CaptureIDFromCtx(ctx)
+		changefeedID := util.ChangefeedIDFromCtx(ctx)
+		tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+		metricEntrySorterSortDuration := entrySorterSortDuration.WithLabelValues(captureID, changefeedID, tableIDStr)
+		metricEntrySorterMergeDuration := entrySorterMergeDuration.WithLabelValues(captureID, changefeedID, tableIDStr)
 		for {
 			select {
 			case <-ctx.Done():
 				atomic.StoreInt32(&es.closed, 1)
-				close(es.output)
+				close(es.outputCh)
 				return
-			case resolvedTs := <-es.resolvedCh:
+			case <-es.resolvedNotify:
 				es.lock.Lock()
+				if len(es.resolvedTsGroup) == 0 {
+					es.lock.Unlock()
+					continue
+				}
+				resolvedTsGroup := es.resolvedTsGroup
+				es.resolvedTsGroup = nil
 				toSort := es.unsorted
 				es.unsorted = nil
 				es.lock.Unlock()
 
+				resEvents := make([]*model.RawKVEntry, len(resolvedTsGroup))
+				for i, rts := range resolvedTsGroup {
+					resEvents[i] = &model.RawKVEntry{Ts: rts, OpType: model.OpTypeResolved}
+				}
+				toSort = append(toSort, resEvents...)
+				startTime := time.Now()
 				sort.Slice(toSort, func(i, j int) bool {
 					return lessFunc(toSort[i], toSort[j])
 				})
+				metricEntrySorterSortDuration.Observe(time.Since(startTime).Seconds())
+				maxResolvedTs := resolvedTsGroup[len(resolvedTsGroup)-1]
 
+				startTime = time.Now()
 				var merged []*model.RawKVEntry
 				mergeFunc(toSort, sorted, func(entry *model.RawKVEntry) {
-					if entry.Ts <= resolvedTs {
-						es.output <- entry
+					if entry.Ts <= maxResolvedTs {
+						output(ctx, entry)
 					} else {
 						merged = append(merged, entry)
 					}
 				})
-				es.output <- &model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved}
+				metricEntrySorterMergeDuration.Observe(time.Since(startTime).Seconds())
 				sorted = merged
 			}
 		}
@@ -109,18 +149,19 @@ func (es *EntrySorter) AddEntry(entry *model.RawKVEntry) {
 	if atomic.LoadInt32(&es.closed) != 0 {
 		return
 	}
-	if entry.OpType == model.OpTypeResolved {
-		atomic.StoreUint64(&es.resolvedTs, entry.Ts)
-		es.resolvedCh <- entry.Ts
-		return
-	}
 	es.lock.Lock()
-	defer es.lock.Unlock()
-	es.unsorted = append(es.unsorted, entry)
-
+	if entry.OpType == model.OpTypeResolved {
+		es.resolvedTsGroup = append(es.resolvedTsGroup, entry.Ts)
+	} else {
+		es.unsorted = append(es.unsorted, entry)
+	}
+	es.lock.Unlock()
+	if entry.OpType == model.OpTypeResolved {
+		es.resolvedNotify <- struct{}{}
+	}
 }
 
 // Output returns the sorted raw kv output channel
 func (es *EntrySorter) Output() <-chan *model.RawKVEntry {
-	return es.output
+	return es.outputCh
 }

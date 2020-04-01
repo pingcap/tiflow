@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -27,6 +28,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
@@ -118,6 +120,10 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		m.collectMetrics(ctx)
 	}()
 
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+	metricMounterResolvedTs := mounterTableResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 	for {
 		var rawRow *model.RawKVEntry
 		select {
@@ -135,6 +141,7 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 
 		if rawRow.OpType == model.OpTypeResolved {
 			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
+			metricMounterResolvedTs.Set(float64(oracle.ExtractPhysical(rawRow.Ts)))
 			continue
 		}
 
@@ -156,13 +163,15 @@ func (m *mounterImpl) Output() <-chan *model.RowChangedEvent {
 func (m *mounterImpl) collectMetrics(ctx context.Context) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+	metricMounterOutputChanSize := mounterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Second * 30):
-				mounterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(m.output)))
+				metricMounterOutputChanSize.Set(float64(len(m.output)))
 			}
 		}
 	}()

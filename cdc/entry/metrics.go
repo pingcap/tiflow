@@ -24,10 +24,18 @@ var (
 			Subsystem: "mounter",
 			Name:      "output_chan_size",
 			Help:      "mounter output chan size",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "table"})
+	mounterTableResolvedTsGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "mounter",
+			Name:      "table_resolved_ts",
+			Help:      "resolved ts send from mounter",
+		}, []string{"capture", "changefeed", "table"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(mounterOutputChanSizeGauge)
+	registry.MustRegister(mounterTableResolvedTsGauge)
 }
