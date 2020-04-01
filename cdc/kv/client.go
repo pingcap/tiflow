@@ -16,6 +16,7 @@ package kv
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
 	"io"
 	"math/rand"
 	"strconv"
@@ -309,10 +310,10 @@ func (c *CDCClient) EventFeed(
 	return s.eventFeed(ctx, ts)
 }
 
-var currentRequestID uint64 = 0
+var currentID uint64 = 0
 
-func allocRequestID() uint64 {
-	return atomic.AddUint64(&currentRequestID, 1)
+func allocID() uint64 {
+	return atomic.AddUint64(&currentID, 1)
 }
 
 type eventFeedSession struct {
@@ -334,7 +335,11 @@ type eventFeedSession struct {
 
 	rangeLock *util.RegionRangeLock
 
-	id string
+	// To identify metrics of different eventFeedSession
+	id                string
+	regionChSizeGauge prometheus.Gauge
+	errChSizeGauge    prometheus.Gauge
+	rangeChSizeGauge  prometheus.Gauge
 }
 
 type rangeRequestTask struct {
@@ -348,16 +353,20 @@ func newEventFeedSession(
 	totalSpan util.Span,
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
+	id := strconv.FormatUint(allocID(), 10)
 	return &eventFeedSession{
-		client:         client,
-		regionCache:    regionCache,
-		totalSpan:      totalSpan,
-		eventCh:        eventCh,
-		regionCh:       make(chan singleRegionInfo, 16),
-		errCh:          make(chan regionErrorInfo, 16),
-		requestRangeCh: make(chan rangeRequestTask, 16),
-		rangeLock:      util.NewRegionRangeLock(),
-		id:             strconv.FormatUint(allocRequestID(), 10),
+		client:            client,
+		regionCache:       regionCache,
+		totalSpan:         totalSpan,
+		eventCh:           eventCh,
+		regionCh:          make(chan singleRegionInfo, 16),
+		errCh:             make(chan regionErrorInfo, 16),
+		requestRangeCh:    make(chan rangeRequestTask, 16),
+		rangeLock:         util.NewRegionRangeLock(),
+		id:                strconv.FormatUint(allocID(), 10),
+		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
+		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
+		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
 	}
 }
 
@@ -564,7 +573,7 @@ MainLoop:
 			}
 			sri.rpcCtx = rpcCtx
 
-			requestID := allocRequestID()
+			requestID := allocID()
 
 			req := &cdcpb.ChangeDataRequest{
 				Header: &cdcpb.Header{
