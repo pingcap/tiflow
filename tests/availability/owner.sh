@@ -73,7 +73,6 @@ function test_hang_up_owner() {
 
     echo "test_hang_up_owner: pass"
 
-    kill -9 $owner_pid
     cleanup_process $CDC_BINARY
 }
 
