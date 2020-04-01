@@ -308,7 +308,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	for message := range claim.Messages() {
 		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 		batchDecoder.Set(message.Key, message.Value)
-		fmt.Printf("msg key %x value %x\n", message.Key, message.Value)
 		for batchDecoder.HasNext() {
 			keyBytes, valueBytes, err := batchDecoder.Next()
 			if err != nil {
