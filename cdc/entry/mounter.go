@@ -230,7 +230,6 @@ func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
 				m.output <- events[minChIndex]
 			}
 			events[minChIndex] = nil
-			minTs = uint64(math.MaxUint64)
 		}
 	})
 	return errg.Wait()
