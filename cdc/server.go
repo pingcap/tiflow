@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
@@ -140,7 +141,11 @@ func (s *Server) run(ctx context.Context) (err error) {
 			}
 			s.owner = owner
 			if err := owner.Run(ctx, ownerRunInterval); err != nil {
-				log.Error("run owner failed", zap.Error(err))
+				if errors.Cause(err) != context.Canceled {
+					log.Error("run owner failed", zap.Error(err))
+				} else {
+					log.Info("owner exited")
+				}
 				return
 			}
 		}
