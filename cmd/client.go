@@ -19,7 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"

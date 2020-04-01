@@ -19,7 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
