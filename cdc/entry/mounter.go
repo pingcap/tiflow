@@ -157,8 +157,8 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			if rawRow.OpType == model.OpTypeResolved {
 				metricMounterResolvedTs.Set(float64(oracle.ExtractPhysical(rawRow.Ts)))
 			}
+			log.Info("received row", zap.Uint64("ts", rawRow.Ts))
 			m.unmarshalRow <- rawRow
-
 		}
 	})
 
@@ -189,6 +189,7 @@ func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
 					for j := 0; j < workerNum; j++ {
 						eventChs[j] <- &model.RowChangedEvent{Ts: rawRow.Ts, Resolved: true}
 					}
+					log.Info("received resolved ts in worker", zap.Uint64("ts", rawRow.Ts))
 					continue
 				}
 				event, err := m.unmarshalAndMountRowChanged(rawRow)
@@ -199,6 +200,7 @@ func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
 					continue
 				}
 				eventChs[i] <- event
+				log.Info("sent event to event ch", zap.Int("eventid", i), zap.Reflect("event", event))
 			}
 		})
 	}
@@ -232,7 +234,9 @@ func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
 					m.output <- events[minChIndex]
 					lastResolvedTs = events[minChIndex].Ts
 				}
+				log.Info("resolved ts form events", zap.Int("evid", minChIndex), zap.Uint64("ts", events[minChIndex].Ts))
 			} else {
+				log.Info("row form events", zap.Int("evid", minChIndex), zap.Reflect("row", events[minChIndex]))
 				m.output <- events[minChIndex]
 			}
 			events[minChIndex] = nil
