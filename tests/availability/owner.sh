@@ -96,12 +96,14 @@ function test_expire_owner() {
 
     # stop the owner
     kill -SIGSTOP $owner_pid
+    echo "process status:" $(ps -h -p $owner_pid -o "s")
 
     # ensure the session has expired
-    ensure $MAX_RETRIES test -z "$($CDC_BINARY cli capture list 2>&1 | grep -o id)"
+    ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\[\]'"
 
     # resume the owner
     kill -SIGCONT $owner_pid
+    echo "process status:" $(ps -h -p $owner_pid -o "s")
     # ensure the owner has recovered
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
     echo "test_expire_owner pass"
