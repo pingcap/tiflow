@@ -350,7 +350,16 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
-				fmt.Printf("get row event %v\n", row)
+				priCol, ok := row.Columns["YCSB_KEY"]
+				if ok {
+					b := make([]byte, len(priCol.Value.([]uint8)))
+					for i, v := range priCol.Value.([]uint8) {
+						b[i] = byte(v)
+					}
+					fmt.Printf("get row event %v pk %s\n", row, string(b))
+				} else {
+					fmt.Printf("get row event %v\n", row)
+				}
 			case model.MqMessageTypeResolved:
 				err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{Ts: key.Ts, Resolved: true})
 				if err != nil {

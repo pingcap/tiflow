@@ -155,6 +155,7 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 				if msg.Metadata != nil {
 					checkpointTs := msg.Metadata.(uint64)
 					k.successes <- checkpointTs
+					fmt.Printf("receive checkpointTs %d\n", checkpointTs)
 				}
 			case err := <-k.asyncClient.Errors():
 				log.Fatal("write kafka error", zap.Error(err))
@@ -215,7 +216,9 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 				}
 				if msg.key.Type == model.MqMessageTypeResolved {
 					// TODO correctness problem
+					fmt.Printf("sink resolved ts %d\n", msg.key.Ts)
 					flush(true, msg.key.Ts)
+					continue
 				}
 
 				keyByte, err := msg.key.Encode()
@@ -225,6 +228,16 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 				valueByte, err := msg.value.Encode()
 				if err != nil {
 					return errors.Trace(err)
+				}
+				priCol, ok := msg.value.Update["YCSB_KEY"]
+				if ok {
+					b := make([]byte, len(priCol.Value.([]uint8)))
+					for i, v := range priCol.Value.([]uint8) {
+						b[i] = byte(v)
+					}
+					fmt.Printf("get row event %v pk %s\n", msg.value, string(b))
+				} else {
+					fmt.Printf("get row event %v\n", msg.value)
 				}
 				batchEncoder.Append(keyByte, valueByte)
 				if batchEncoder.Len() >= batchSize {
