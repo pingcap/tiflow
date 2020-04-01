@@ -388,7 +388,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case task := <-s.requestRangeCh:
-				clientChannelSize.WithLabelValues(s.id, "range").Dec()
+				s.rangeChSizeGauge.Dec()
 				err := s.divideAndSendEventFeedToRegions(ctx, task.span, task.ts)
 				if err != nil {
 					return errors.Trace(err)
@@ -403,14 +403,14 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case errInfo := <-s.errCh:
-				clientChannelSize.WithLabelValues(s.id, "err").Dec()
+				s.errChSizeGauge.Dec()
 				s.handleError(ctx, errInfo, true)
 			}
 		}
 	})
 
 	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
-	clientChannelSize.WithLabelValues(s.id, "range").Inc()
+	s.rangeChSizeGauge.Inc()
 
 	return g.Wait()
 }
@@ -422,19 +422,19 @@ func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, s
 	if blocking {
 		select {
 		case s.requestRangeCh <- task:
-			clientChannelSize.WithLabelValues(s.id, "range").Inc()
+			s.rangeChSizeGauge.Inc()
 		case <-ctx.Done():
 		}
 	} else {
 		// Try to send without blocking. If channel is full, spawn a goroutine to do the blocking sending.
 		select {
 		case s.requestRangeCh <- task:
-			clientChannelSize.WithLabelValues(s.id, "range").Inc()
+			s.rangeChSizeGauge.Inc()
 		default:
 			go func() {
 				select {
 				case s.requestRangeCh <- task:
-					clientChannelSize.WithLabelValues(s.id, "range").Inc()
+					s.rangeChSizeGauge.Inc()
 				case <-ctx.Done():
 				}
 			}()
@@ -452,7 +452,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 			}
 			select {
 			case s.regionCh <- sri:
-				clientChannelSize.WithLabelValues(s.id, "region").Inc()
+				s.regionChSizeGauge.Inc()
 			case <-ctx.Done():
 			}
 
@@ -497,19 +497,19 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 	if blocking {
 		select {
 		case s.errCh <- errorInfo:
-			clientChannelSize.WithLabelValues(s.id, "err").Inc()
+			s.errChSizeGauge.Inc()
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	} else {
 		select {
 		case s.errCh <- errorInfo:
-			clientChannelSize.WithLabelValues(s.id, "err").Inc()
+			s.errChSizeGauge.Inc()
 		default:
 			go func() {
 				select {
 				case s.errCh <- errorInfo:
-					clientChannelSize.WithLabelValues(s.id, "err").Inc()
+					s.errChSizeGauge.Inc()
 				case <-ctx.Done():
 				}
 			}()
@@ -543,7 +543,7 @@ MainLoop:
 		case <-ctx.Done():
 			return ctx.Err()
 		case sri = <-s.regionCh:
-			clientChannelSize.WithLabelValues(s.id, "region").Dec()
+			s.regionChSizeGauge.Dec()
 		}
 
 		log.Debug("dispatching region", zap.Uint64("regionID", sri.verID.GetID()))
