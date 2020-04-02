@@ -77,7 +77,7 @@ func LoadHistoryDDLJobs(kvStore tidbkv.Storage, ts uint64) ([]*model.Job, error)
 				return nil, errors.Trace(err)
 			}
 		}
-		if job.BinlogInfo.FinishedTS >= ts {
+		if job.BinlogInfo.FinishedTS > ts {
 			break
 		}
 		jobs = append(jobs, job)
