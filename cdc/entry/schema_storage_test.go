@@ -458,5 +458,137 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
 }
 
 func (t *schemaSuite) TestMultiVersionStorage(c *C) {
+	dbName := timodel.NewCIStr("Test")
+	tbName := timodel.NewCIStr("T1")
+	// db and ignoreDB info
+	dbInfo := &timodel.DBInfo{
+		ID:    1,
+		Name:  dbName,
+		State: timodel.StatePublic,
+	}
+	// `createSchema` job1
+	job := &timodel.Job{
+		ID:         3,
+		State:      timodel.JobStateSynced,
+		SchemaID:   1,
+		Type:       timodel.ActionCreateSchema,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 100},
+		Query:      "create database test",
+	}
 
+	storage, err := NewSchemaStorage([]*timodel.Job{job})
+	c.Assert(err, IsNil)
+
+	// table info
+	tblInfo := &timodel.TableInfo{
+		ID:    2,
+		Name:  tbName,
+		State: timodel.StatePublic,
+	}
+
+	// `createTable` job
+	job = &timodel.Job{
+		ID:         6,
+		State:      timodel.JobStateSynced,
+		SchemaID:   1,
+		TableID:    2,
+		Type:       timodel.ActionCreateTable,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 110},
+		Query:      "create table " + tbName.O,
+	}
+
+	err = storage.HandleDDLJob(job)
+	c.Assert(err, IsNil)
+
+	tbName = timodel.NewCIStr("T2")
+	// table info
+	tblInfo = &timodel.TableInfo{
+		ID:    3,
+		Name:  tbName,
+		State: timodel.StatePublic,
+	}
+	// `createTable` job
+	job = &timodel.Job{
+		ID:         6,
+		State:      timodel.JobStateSynced,
+		SchemaID:   1,
+		TableID:    3,
+		Type:       timodel.ActionCreateTable,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 120},
+		Query:      "create table " + tbName.O,
+	}
+
+	err = storage.HandleDDLJob(job)
+	c.Assert(err, IsNil)
+
+	// `dropTable` job
+	job = &timodel.Job{
+		ID:         6,
+		State:      timodel.JobStateSynced,
+		SchemaID:   1,
+		TableID:    2,
+		Type:       timodel.ActionDropTable,
+		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 130},
+	}
+
+	err = storage.HandleDDLJob(job)
+	c.Assert(err, IsNil)
+
+	// `dropSchema` job
+	job = &timodel.Job{
+		ID:         6,
+		State:      timodel.JobStateSynced,
+		SchemaID:   1,
+		Type:       timodel.ActionDropSchema,
+		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 140},
+	}
+
+	err = storage.HandleDDLJob(job)
+	c.Assert(err, IsNil)
+
+	c.Assert(storage.resolvedTs, Equals, uint64(140))
+	snap, err := storage.GetSnapshot(100)
+	c.Assert(err, IsNil)
+	_, exist := snap.SchemaByID(1)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsFalse)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsFalse)
+
+	snap, err = storage.GetSnapshot(115)
+	c.Assert(err, IsNil)
+	_, exist = snap.SchemaByID(1)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsFalse)
+
+	snap, err = storage.GetSnapshot(125)
+	c.Assert(err, IsNil)
+	_, exist = snap.SchemaByID(1)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsTrue)
+
+	snap, err = storage.GetSnapshot(135)
+	c.Assert(err, IsNil)
+	_, exist = snap.SchemaByID(1)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsFalse)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsTrue)
+
+	snap, err = storage.GetSnapshot(140)
+	c.Assert(err, IsNil)
+	_, exist = snap.SchemaByID(1)
+	c.Assert(exist, IsFalse)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsFalse)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsFalse)
 }
