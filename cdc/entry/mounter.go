@@ -220,6 +220,7 @@ func (m *mounterImpl) unmarshalWorker(ctx context.Context, input chan *model.Raw
 				if event == nil {
 					continue
 				}
+				log.Info("unmarshal output", zap.Reflect("event", event))
 				output[i] <- event
 			}
 		})
@@ -257,6 +258,7 @@ func (m *mounterImpl) mergeWorker(ctx context.Context, input []chan *model.RowCh
 				lastResolvedTs = events[minChIndex].Ts
 			}
 		} else {
+			log.Info("merge output", zap.Reflect("event", events[minChIndex]))
 			m.output <- events[minChIndex]
 		}
 		events[minChIndex] = nil
