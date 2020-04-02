@@ -112,6 +112,8 @@ func (t TableName) String() string {
 // TableInfo provides meta data describing a DB table.
 type TableInfo struct {
 	*timodel.TableInfo
+	SchemaID      int64
+	SchemaName    timodel.CIStr
 	columnsOffset map[int64]int
 	indicesOffset map[int64]int
 	uniqueColumns map[int64]struct{}
@@ -124,9 +126,11 @@ type TableInfo struct {
 }
 
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
-func WrapTableInfo(info *timodel.TableInfo) *TableInfo {
+func WrapTableInfo(schemaID int64, schemaName timodel.CIStr, info *timodel.TableInfo) *TableInfo {
 	ti := &TableInfo{
 		TableInfo:     info,
+		SchemaID:      schemaID,
+		SchemaName:    schemaName,
 		columnsOffset: make(map[int64]int, len(info.Columns)),
 		indicesOffset: make(map[int64]int, len(info.Indices)),
 		uniqueColumns: make(map[int64]struct{}),
@@ -263,7 +267,7 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 
 // Clone clones the TableInfo
 func (ti *TableInfo) Clone() *TableInfo {
-	return WrapTableInfo(ti.TableInfo.Clone())
+	return WrapTableInfo(ti.SchemaID, ti.SchemaName, ti.TableInfo.Clone())
 }
 
 // GetTableNameByID looks up a TableName with the given table id
@@ -403,11 +407,12 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 	return nil
 }
 
-func (s *schemaSnapshot) createTable(schemaID int64, table *TableInfo) error {
+func (s *schemaSnapshot) createTable(schemaID int64, tbl *timodel.TableInfo) error {
 	schema, ok := s.schemas[schemaID]
 	if !ok {
 		return errors.NotFoundf("table's schema(%d)", schemaID)
 	}
+	table := WrapTableInfo(schema.ID, schema.Name, tbl)
 	_, ok = s.tables[table.ID]
 	if ok {
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
@@ -428,11 +433,12 @@ func (s *schemaSnapshot) createTable(schemaID int64, table *TableInfo) error {
 }
 
 // ReplaceTable replace the table by new tableInfo
-func (s *schemaSnapshot) replaceTable(table *TableInfo) error {
-	_, ok := s.tables[table.ID]
+func (s *schemaSnapshot) replaceTable(tbl *timodel.TableInfo) error {
+	oldTable, ok := s.tables[tbl.ID]
 	if !ok {
-		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
+		return errors.NotFoundf("table %s(%d)", tbl.Name, tbl.ID)
 	}
+	table := WrapTableInfo(oldTable.SchemaID, oldTable.SchemaName, tbl)
 	s.tables[table.ID] = table
 	if !table.ExistTableUniqueColumn() {
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
@@ -448,11 +454,6 @@ func (s *schemaSnapshot) replaceTable(table *TableInfo) error {
 // the fourth value[error]: the handleDDL execution's err
 func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
-
-	if SkipJob(job) {
-		return nil
-	}
-
 	switch job.Type {
 	case timodel.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
@@ -473,25 +474,18 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 			return errors.Trace(err)
 		}
 	case timodel.ActionRenameTable:
-		// ignore schema doesn't support rename ddl
-		_, ok := s.SchemaByTableID(job.TableID)
-		if !ok {
-			return errors.NotFoundf("table(%d) or it's schema", job.TableID)
-		}
 		// first drop the table
 		err := s.dropTable(job.TableID)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		// create table
-		table := WrapTableInfo(job.BinlogInfo.TableInfo)
-		err = s.createTable(job.SchemaID, table)
+		err = s.createTable(job.SchemaID, job.BinlogInfo.TableInfo)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
-		table := WrapTableInfo(job.BinlogInfo.TableInfo)
-		err := s.createTable(job.SchemaID, table)
+		err := s.createTable(job.SchemaID, job.BinlogInfo.TableInfo)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -508,8 +502,7 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 			return errors.Trace(err)
 		}
 
-		table := WrapTableInfo(job.BinlogInfo.TableInfo)
-		err = s.createTable(job.SchemaID, table)
+		err = s.createTable(job.SchemaID, job.BinlogInfo.TableInfo)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -526,9 +519,7 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
 			return nil
 		}
-		table := WrapTableInfo(tbInfo)
-
-		err := s.replaceTable(table)
+		err := s.replaceTable(tbInfo)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -566,17 +557,26 @@ func NewSchemaStorage(jobs []*timodel.Job) (*SchemaStorage, error) {
 }
 
 func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
-	// TODO check gcts and resolvedTs
-	// TODO find a snap
+	gcTs := atomic.LoadUint64(&s.gcTs)
+	if ts < gcTs {
+		return nil, errors.Errorf("can not found schema snapshot, the specified ts(%d) is less than gcTS(%d)", ts, gcTs)
+	}
+	resolvedTs := atomic.LoadUint64(&s.resolvedTs)
+	if ts > resolvedTs {
+		return nil, errors.Annotatef(model.ErrUnresolved, "can not found schema snapshot, the specified ts(%d) is more than resolvedTs(%d)", ts, resolvedTs)
+	}
 	s.snapsMu.RLock()
 	defer s.snapsMu.RUnlock()
 	i := sort.Search(len(s.snaps), func(i int) bool {
-
+		return s.snaps[i].currentTs > ts
 	})
-	return s.snaps[i], nil
+	if i <= 0 {
+		return nil, errors.Errorf("can not found schema snapshot, ts: %d", ts)
+	}
+	return s.snaps[i-1], nil
 }
 
-func (s *SchemaStorage) getSnapshotWithRetry(ts uint64) (*schemaSnapshot, error) {
+func (s *SchemaStorage) GetSnapshot(ts uint64) (*schemaSnapshot, error) {
 	var snap *schemaSnapshot
 	err := retry.Run(10*time.Millisecond, 25,
 		func() error {
@@ -595,12 +595,22 @@ func (s *SchemaStorage) getSnapshotWithRetry(ts uint64) (*schemaSnapshot, error)
 	}
 }
 
+func (s *SchemaStorage) GetLastSnapshot() *schemaSnapshot {
+	s.snapsMu.RLock()
+	defer s.snapsMu.RUnlock()
+	return s.snaps[len(s.snaps)-1]
+}
+
 func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 	s.snapsMu.Lock()
 	defer s.snapsMu.Unlock()
 	lastSnap := s.snaps[len(s.snaps)-1]
 	if job.BinlogInfo.FinishedTS <= lastSnap.currentTs {
 		log.Debug("ignore foregone DDL job", zap.Reflect("job", job))
+		return nil
+	}
+	if SkipJob(job) {
+		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 		return nil
 	}
 	snap := lastSnap.Clone()
@@ -616,8 +626,9 @@ func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 	atomic.StoreUint64(&s.resolvedTs, ts)
 }
 
-func (s *SchemaStorage) DoGC(ts uint64) {
-	panic("unimplemented")
+func (s *SchemaStorage) DoGC(ts uint64) error {
+	//panic("unimplemented")
+	return nil
 }
 
 // SkipJob skip the job should not be executed
