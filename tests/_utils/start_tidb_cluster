@@ -3,7 +3,7 @@
 
 set -e
 
-CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 
 OUT_DIR=$1
@@ -16,7 +16,7 @@ stop_tidb_cluster
 
 cd $OUT_DIR && echo "start tidb cluster in $OUT_DIR"
 
-cat - > "$OUT_DIR/pd-config.toml" <<EOF
+cat - >"$OUT_DIR/pd-config.toml" <<EOF
 [replication]
 # Set it to 1 to make sure we have enough replicas to run placement-rules.
 max-replicas = 1
@@ -25,16 +25,16 @@ EOF
 
 echo "Starting Upstream PD..."
 pd-server \
-    --client-urls http://${UP_PD_HOST}:${UP_PD_PORT}\
-    --peer-urls http://${UP_PD_HOST}:${UP_PD_PEER_PORT}\
+    --client-urls http://${UP_PD_HOST}:${UP_PD_PORT} \
+    --peer-urls http://${UP_PD_HOST}:${UP_PD_PEER_PORT} \
     --config "$OUT_DIR/pd-config.toml" \
     --log-file "$OUT_DIR/pd.log" \
     --data-dir "$OUT_DIR/pd" &
 
 echo "Starting Downstream PD..."
 pd-server \
-    --client-urls http://${DOWN_PD_HOST}:${DOWN_PD_PORT}\
-    --peer-urls http://${DOWN_PD_HOST}:${DOWN_PD_PEER_PORT}\
+    --client-urls http://${DOWN_PD_HOST}:${DOWN_PD_PORT} \
+    --peer-urls http://${DOWN_PD_HOST}:${DOWN_PD_PEER_PORT} \
     --config "$OUT_DIR/pd-config.toml" \
     --log-file "$OUT_DIR/down_pd.log" \
     --data-dir "$OUT_DIR/down_pd" &
@@ -49,7 +49,7 @@ while ! curl -o /dev/null -sf http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/v
 done
 
 # Tries to limit the max number of open files under the system limit
-cat - > "$OUT_DIR/tikv-config.toml" <<EOF
+cat - >"$OUT_DIR/tikv-config.toml" <<EOF
 [rocksdb]
 max-open-files = 4096
 [raftdb]
@@ -65,7 +65,7 @@ sync-log = false
 EOF
 
 # tidb server config file
-cat - > "$OUT_DIR/tidb-config.toml" <<EOF
+cat - >"$OUT_DIR/tidb-config.toml" <<EOF
 split-table = true
 EOF
 
@@ -130,7 +130,7 @@ tidb-server \
 echo "Verifying Upstream TiDB is started..."
 i=0
 while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-    i=$((i+1))
+    i=$((i + 1))
     if [ "$i" -gt 40 ]; then
         echo 'Failed to start upstream TiDB'
         exit 2
@@ -140,7 +140,7 @@ done
 
 i=0
 while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_OTHER_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-    i=$((i+1))
+    i=$((i + 1))
     if [ "$i" -gt 40 ]; then
         echo 'Failed to start upstream TiDB'
         exit 2
@@ -151,7 +151,7 @@ done
 echo "Verifying Downstream TiDB is started..."
 i=0
 while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-    i=$((i+1))
+    i=$((i + 1))
     if [ "$i" -gt 10 ]; then
         echo 'Failed to start downstream TiDB'
         exit 1
@@ -162,7 +162,7 @@ done
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-cat - > "$OUT_DIR/tiflash-config.toml" <<EOF
+cat - >"$OUT_DIR/tiflash-config.toml" <<EOF
 tmp_path = "${OUT_DIR}/tiflash/tmp"
 display_name = "TiFlash"
 default_profile = "default"
@@ -209,8 +209,7 @@ ignore_databases = "system,default"
 storage_engine = "tmt"
 EOF
 
-
-cat - > "$OUT_DIR/tiflash-proxy.toml" <<EOF
+cat - >"$OUT_DIR/tiflash-proxy.toml" <<EOF
 log-level = "info"
 
 [server]
@@ -242,21 +241,20 @@ max-open-files = 1000
 block-cache-size = "1GB"
 EOF
 
-#echo "Starting Upstream TiFlash..."
-#mkdir -p ${OUT_DIR}/tiflash/ && cp $CUR/tiflash-users.toml ${OUT_DIR}/tiflash/users.toml
-#tiflash server --config-file "$OUT_DIR/tiflash-config.toml" &
-#
-#echo "Verifying Upsteam TiFlash is started..."
-## Make sure TiFlash is started.
-#while ! curl -o /dev/null -sf http://127.0.0.1:17000/metrics 1>/dev/null 2>&1 ; do
-#    i=$((i+1))
-#    if [ "$i" -gt 10 ]; then
-#        cat ${OUT_DIR}/tiflash/log/proxy.log
-#        cat ${OUT_DIR}/tiflash/log/server.log
-#        cat ${OUT_DIR}/tiflash/log/error.log
-#        echo 'Failed to start TiFlash'
-#        exit 1
-#    fi
-#    sleep 2
-#done
-#
+echo "Starting Upstream TiFlash..."
+mkdir -p ${OUT_DIR}/tiflash/ && cp $CUR/tiflash-users.toml ${OUT_DIR}/tiflash/users.toml
+tiflash server --config-file "$OUT_DIR/tiflash-config.toml" &
+
+echo "Verifying Upsteam TiFlash is started..."
+# Make sure TiFlash is started.
+while ! curl -o /dev/null -sf http://127.0.0.1:17000/metrics 1>/dev/null 2>&1; do
+    i=$((i + 1))
+    if [ "$i" -gt 10 ]; then
+        cat ${OUT_DIR}/tiflash/log/proxy.log
+        cat ${OUT_DIR}/tiflash/log/server.log
+        cat ${OUT_DIR}/tiflash/log/error.log
+        echo 'Failed to start TiFlash'
+        exit 1
+    fi
+    sleep 2
+done
