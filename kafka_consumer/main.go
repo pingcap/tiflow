@@ -305,6 +305,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		panic("sink should initialized")
 	}
 	batchDecoder := model.NewBatchDecoder()
+ClaimMessages:
 	for message := range claim.Messages() {
 		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 		batchDecoder.Set(message.Key, message.Value)
@@ -330,14 +331,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				ddl := new(model.DDLEvent)
 				ddl.FromMqMessage(key, value)
 				c.appendDDL(ddl)
-				fmt.Printf("get ddl event %v\n", ddl)
 			case model.MqMessageTypeRow:
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
 					log.Info("filter fallback row", zap.ByteString("row", message.Key),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs))
-					break
+					break ClaimMessages
 				}
 				value := new(model.MqMessageRow)
 				err := value.Decode(valueBytes)
@@ -350,16 +350,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
-				priCol, ok := row.Columns["YCSB_KEY"]
-				if ok {
-					b := make([]byte, len(priCol.Value.([]uint8)))
-					for i, v := range priCol.Value.([]uint8) {
-						b[i] = byte(v)
-					}
-					fmt.Printf("get row event %v pk %s\n", row, string(b))
-				} else {
-					fmt.Printf("get row event %v\n", row)
-				}
 			case model.MqMessageTypeResolved:
 				err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{Ts: key.Ts, Resolved: true})
 				if err != nil {
@@ -369,7 +359,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if resolvedTs < key.Ts {
 					atomic.StoreUint64(&sink.resolvedTs, key.Ts)
 				}
-				fmt.Printf("get resolved event %v\n", resolvedTs)
 			}
 			session.MarkMessage(message, "")
 		}

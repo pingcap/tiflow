@@ -229,16 +229,6 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
-				priCol, ok := msg.value.Update["YCSB_KEY"]
-				if ok {
-					b := make([]byte, len(priCol.Value.([]uint8)))
-					for i, v := range priCol.Value.([]uint8) {
-						b[i] = byte(v)
-					}
-					fmt.Printf("get row event %v pk %s\n", msg.value, string(b))
-				} else {
-					fmt.Printf("get row event %v\n", msg.value)
-				}
 				batchEncoder.Append(keyByte, valueByte)
 				if batchEncoder.Len() >= batchSize {
 					flush(false, 0)
