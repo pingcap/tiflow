@@ -636,7 +636,16 @@ func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 
 // DoGC removes snaps which of ts less than this specified ts
 func (s *SchemaStorage) DoGC(ts uint64) error {
-	//panic("unimplemented")
+	s.snapsMu.Lock()
+	defer s.snapsMu.Unlock()
+	var startIdx int
+	for i, snap := range s.snaps {
+		startIdx = i
+		if snap.currentTs >= ts {
+			break
+		}
+	}
+	s.snaps = s.snaps[startIdx:]
 	return nil
 }
 
