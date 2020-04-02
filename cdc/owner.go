@@ -139,6 +139,9 @@ func (o *Owner) newChangeFeed(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	for _, j := range jobs {
+		log.Info("load history ddl jobs", zap.Reflect("job", j))
+	}
 
 	schemaStorage, err := entry.NewSchemaStorage(jobs)
 	if err != nil {

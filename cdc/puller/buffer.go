@@ -134,7 +134,7 @@ func (b *memBuffer) Size() int64 {
 	if b.limitter == nil {
 		return 0
 	}
-	return b.limitter.used
+	return atomic.LoadInt64(&b.limitter.used)
 }
 
 var sizeOfVal = unsafe.Sizeof(model.RawKVEntry{})
