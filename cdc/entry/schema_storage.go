@@ -539,6 +539,7 @@ func (s *schemaSnapshot) CloneTables() map[uint64]TableName {
 	return mp
 }
 
+// SchemaStorage stores the schema information with multi-version
 type SchemaStorage struct {
 	snaps      []*schemaSnapshot
 	snapsMu    sync.RWMutex
@@ -546,6 +547,7 @@ type SchemaStorage struct {
 	resolvedTs uint64
 }
 
+// NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(jobs []*timodel.Job) (*SchemaStorage, error) {
 	snap := newEmptySchemaSnapshot()
 	for _, job := range jobs {
@@ -576,6 +578,7 @@ func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 	return s.snaps[i-1], nil
 }
 
+// GetSnapshot returns the snapshot which of ts is specified
 func (s *SchemaStorage) GetSnapshot(ts uint64) (*schemaSnapshot, error) {
 	var snap *schemaSnapshot
 	err := retry.Run(10*time.Millisecond, 25,
@@ -595,12 +598,14 @@ func (s *SchemaStorage) GetSnapshot(ts uint64) (*schemaSnapshot, error) {
 	}
 }
 
+// GetLastSnapshot returns the last snapshot
 func (s *SchemaStorage) GetLastSnapshot() *schemaSnapshot {
 	s.snapsMu.RLock()
 	defer s.snapsMu.RUnlock()
 	return s.snaps[len(s.snaps)-1]
 }
 
+// HandleDDLJob creates a new snapshot in storage and handles the ddl job
 func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 	s.snapsMu.Lock()
 	defer s.snapsMu.Unlock()
@@ -622,10 +627,12 @@ func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 	return nil
 }
 
+// AdvanceResolvedTs advances the resolved
 func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 	atomic.StoreUint64(&s.resolvedTs, ts)
 }
 
+// DoGC removes snaps which of ts less than this specified ts
 func (s *SchemaStorage) DoGC(ts uint64) error {
 	//panic("unimplemented")
 	return nil

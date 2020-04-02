@@ -141,6 +141,9 @@ func (o *Owner) newChangeFeed(
 	}
 
 	schemaStorage, err := entry.NewSchemaStorage(jobs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
 
