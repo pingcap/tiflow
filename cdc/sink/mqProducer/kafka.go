@@ -145,6 +145,7 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
+		parttionResolved := make(map[int32]uint64)
 		for {
 			select {
 			case <-ctx.Done():
@@ -154,8 +155,17 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 			case msg := <-k.asyncClient.Successes():
 				if msg.Metadata != nil {
 					checkpointTs := msg.Metadata.(uint64)
-					k.successes <- checkpointTs
-					fmt.Printf("receive checkpointTs %d\n", checkpointTs)
+					if checkpointTs > parttionResolved[msg.Partition] {
+						parttionResolved[msg.Partition] = checkpointTs
+						minResolved := checkpointTs
+						for _, ts := range parttionResolved {
+							if ts < minResolved {
+								minResolved = ts
+							}
+						}
+						k.successes <- minResolved
+						log.Info("update checkpoint ts", zap.Uint64("ts", minResolved))
+					}
 				}
 			case err := <-k.asyncClient.Errors():
 				log.Fatal("write kafka error", zap.Error(err))
@@ -216,7 +226,9 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 				}
 				if msg.key.Type == model.MqMessageTypeResolved {
 					// TODO correctness problem
-					fmt.Printf("sink resolved ts %d\n", msg.key.Ts)
+					// Here we assume that all messages which ts < this Resolved would be received by consumer
+					// before this msg
+					log.Info("sink resolved ts", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
 					flush(true, msg.key.Ts)
 					continue
 				}
