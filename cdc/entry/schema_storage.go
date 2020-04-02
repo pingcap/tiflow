@@ -131,6 +131,26 @@ func WrapTableInfo(info *timodel.TableInfo) *TableInfo {
 		}
 	}
 
+	handleColID := int64(-1)
+	reqCols := make([]rowcodec.ColInfo, len(ti.Columns))
+	for i, col := range ti.Columns {
+		isPK := (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == timodel.ExtraHandleID
+		if isPK {
+			handleColID = col.ID
+		}
+		reqCols[i] = rowcodec.ColInfo{
+			ID:         col.ID,
+			Tp:         int32(col.Tp),
+			Flag:       int32(col.Flag),
+			Flen:       col.Flen,
+			Decimal:    col.Decimal,
+			Elems:      col.Elems,
+			IsPKHandle: isPK,
+		}
+	}
+	ti.rowColInfos = reqCols
+	ti.handleColID = handleColID
+
 	return ti
 }
 
@@ -154,28 +174,6 @@ func (ti *TableInfo) GetIndexInfo(indexID int64) (info *timodel.IndexInfo, exist
 
 // GetRowColInfos returns all column infos for rowcodec
 func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
-	if len(ti.rowColInfos) != 0 {
-		return ti.handleColID, ti.rowColInfos
-	}
-	handleColID := int64(-1)
-	reqCols := make([]rowcodec.ColInfo, len(ti.Columns))
-	for i, col := range ti.Columns {
-		isPK := (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == timodel.ExtraHandleID
-		if isPK {
-			handleColID = col.ID
-		}
-		reqCols[i] = rowcodec.ColInfo{
-			ID:         col.ID,
-			Tp:         int32(col.Tp),
-			Flag:       int32(col.Flag),
-			Flen:       col.Flen,
-			Decimal:    col.Decimal,
-			Elems:      col.Elems,
-			IsPKHandle: isPK,
-		}
-	}
-	ti.rowColInfos = reqCols
-	ti.handleColID = handleColID
 	return ti.handleColID, ti.rowColInfos
 }
 
