@@ -164,6 +164,10 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 				for _, job := range jobs {
+					if job.BinlogInfo.FinishedTS <= m.schemaStorage.lastHandledTs {
+						log.Debug("skip DDL job because the job is already handled", zap.Stringer("job", job))
+						continue
+					}
 					log.Info("handle job", zap.String("job", job.Query))
 					_, _, _, err := m.schemaStorage.HandleDDL(job)
 					if err != nil {
