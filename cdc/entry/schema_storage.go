@@ -504,6 +504,7 @@ func (s *Storage) ddlShouldBeHandle(commitTs uint64) (ddls []*timodel.Job, err e
 	return
 }
 
+// DDLShouldBeHandle returns jobs that should be handled
 func (s *Storage) DDLShouldBeHandle(commitTs uint64) ([]*timodel.Job, error) {
 	var jobs []*timodel.Job
 	err := retry.Run(10*time.Millisecond, 25,
