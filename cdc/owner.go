@@ -669,9 +669,9 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 				if ctx.Err() != nil {
 					if errors.Cause(ctx.Err()) != context.Canceled {
 						// The context error indicates the termination of the owner
-						log.Error("watch processor failed", zap.Error(ctx.Err()))
+						log.Error("watch capture failed", zap.Error(ctx.Err()))
 					} else {
-						log.Info("watch processor exited")
+						log.Info("watch capture exited")
 					}
 					return
 				}
