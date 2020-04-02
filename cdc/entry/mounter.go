@@ -164,6 +164,7 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 				for _, job := range jobs {
+					log.Info("handle job", zap.String("job", job.Query))
 					_, _, _, err := m.schemaStorage.HandleDDL(job)
 					if err != nil {
 						return errors.Trace(err)
