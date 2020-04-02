@@ -530,6 +530,10 @@ func (s *Storage) DDLShouldBeHandle(commitTs uint64) ([]*timodel.Job, error) {
 func (s *Storage) HandleDDL(job *timodel.Job) (schemaName string, tableName string, sql string, err error) {
 	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
 
+	if job.BinlogInfo.FinishedTS <= s.lastHandledTs {
+		log.Debug("skip DDL job because the job is already handled", zap.Stringer("job", job))
+		return "", "", "", nil
+	}
 	if SkipJob(job) {
 		return "", "", "", nil
 	}
