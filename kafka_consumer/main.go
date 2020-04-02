@@ -307,7 +307,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	batchDecoder := model.NewBatchDecoder()
 ClaimMessages:
 	for message := range claim.Messages() {
-		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
+		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 		batchDecoder.Set(message.Key, message.Value)
 		for batchDecoder.HasNext() {
 			keyBytes, valueBytes, err := batchDecoder.Next()
@@ -357,6 +357,7 @@ ClaimMessages:
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if resolvedTs < key.Ts {
+					log.Info("update sink resolved ts", zap.Uint64("old", resolvedTs), zap.Uint64("new", key.Ts))
 					atomic.StoreUint64(&sink.resolvedTs, key.Ts)
 				}
 			}
@@ -495,7 +496,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 		lastGlobalResolvedTs = globalResolvedTs
 		atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
-		log.Debug("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
+		log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
 
 		err = c.forEachSink(func(sink *struct {
 			sink.Sink
