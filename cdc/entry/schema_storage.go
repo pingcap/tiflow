@@ -470,9 +470,23 @@ func (s *Storage) HandlePreviousDDLJobIfNeed(commitTs uint64) error {
 }
 
 func (s *Storage) handlePreviousDDLJobIfNeed(commitTs uint64) error {
+	jobs, err := s.ddlShouldBeHandle(commitTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for _, job := range jobs {
+		_, _, _, err := s.HandleDDL(job)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+func (s *Storage) ddlShouldBeHandle(commitTs uint64) (ddls []*timodel.Job, err error) {
 	resolvedTs := atomic.LoadUint64(s.resolvedTs)
 	if commitTs > resolvedTs {
-		return errors.Annotatef(model.ErrUnresolved, "waiting resolved ts of ddl puller, resolvedTs(%d), commitTs(%d)", resolvedTs, commitTs)
+		return nil, errors.Annotatef(model.ErrUnresolved, "waiting resolved ts of ddl puller, resolvedTs(%d), commitTs(%d)", resolvedTs, commitTs)
 	}
 	currentJob, jobs := s.jobList.FetchNextJobs(s.currentJob, commitTs)
 	for _, job := range jobs {
@@ -484,13 +498,29 @@ func (s *Storage) handlePreviousDDLJobIfNeed(commitTs uint64) error {
 			log.Debug("skip DDL job because the job is already handled", zap.Stringer("job", job))
 			continue
 		}
-		_, _, _, err := s.HandleDDL(job)
-		if err != nil {
-			return errors.Annotatef(err, "handle ddl job %v failed, the schema info: %s", job, s)
-		}
+		ddls = append(ddls, job)
 	}
 	s.currentJob = currentJob
-	return nil
+	return
+}
+
+func (s *Storage) DDLShouldBeHandle(commitTs uint64) ([]*timodel.Job, error) {
+	var jobs []*timodel.Job
+	err := retry.Run(10*time.Millisecond, 25,
+		func() error {
+			var err error
+			jobs, err = s.ddlShouldBeHandle(commitTs)
+			if errors.Cause(err) != model.ErrUnresolved {
+				return backoff.Permanent(err)
+			}
+			return err
+		})
+	switch err.(type) {
+	case *backoff.PermanentError:
+		return nil, errors.Annotate(err, "timeout")
+	default:
+		return jobs, err
+	}
 }
 
 // HandleDDL has four return values,

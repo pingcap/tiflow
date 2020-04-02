@@ -107,18 +107,24 @@ type mounterImpl struct {
 	schemaStorage   *Storage
 	rawRowChangedCh <-chan *model.RawKVEntry
 	output          chan *model.RowChangedEvent
-	unmarshalRow    chan *model.RawKVEntry
+	mergeRowChs     []chan *model.RowChangedEvent
 }
 
 // NewMounter creates a mounter
 func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaStorage *Storage) Mounter {
-	return &mounterImpl{
+	mounter := &mounterImpl{
 		schemaStorage:   schemaStorage,
 		rawRowChangedCh: rawRowChangedCh,
 		output:          make(chan *model.RowChangedEvent, defaultOutputChanSize),
-		unmarshalRow:    make(chan *model.RawKVEntry, defaultOutputChanSize),
+		mergeRowChs:     make([]chan *model.RowChangedEvent, workerNum),
 	}
+	for i := 0; i < workerNum; i++ {
+		mounter.mergeRowChs[i] = make(chan *model.RowChangedEvent, defaultOutputChanSize)
+	}
+	return mounter
 }
+
+const workerNum = 4
 
 func (m *mounterImpl) Run(ctx context.Context) error {
 
@@ -133,6 +139,9 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		return nil
 	})
 
+	unmarshalRowCh := make(chan *model.RawKVEntry, 128000)
+	unmarshalWorkerGroup := m.unmarshalWorker(ctx, unmarshalRowCh, m.mergeRowChs)
+
 	errg.Go(func() error {
 		for {
 			var rawRow *model.RawKVEntry
@@ -144,44 +153,58 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 			if rawRow == nil {
 				continue
 			}
-
-			if err := m.schemaStorage.HandlePreviousDDLJobIfNeed(rawRow.Ts); err != nil {
+			jobs, err := m.schemaStorage.DDLShouldBeHandle(rawRow.Ts)
+			if err != nil {
 				return errors.Trace(err)
 			}
-
+			if len(jobs) > 0 {
+				close(unmarshalRowCh)
+				err := unmarshalWorkerGroup.Wait()
+				if err != nil {
+					return errors.Trace(err)
+				}
+				for _, job := range jobs {
+					_, _, _, err := m.schemaStorage.HandleDDL(job)
+					if err != nil {
+						return errors.Trace(err)
+					}
+				}
+				unmarshalRowCh = make(chan *model.RawKVEntry, 128000)
+				unmarshalWorkerGroup = m.unmarshalWorker(ctx, unmarshalRowCh, m.mergeRowChs)
+			}
 			if rawRow.OpType == model.OpTypeResolved {
 				metricMounterResolvedTs.Set(float64(oracle.ExtractPhysical(rawRow.Ts)))
 			}
-			m.unmarshalRow <- rawRow
+			unmarshalRowCh <- rawRow
 		}
 	})
 
 	errg.Go(func() error {
-		return m.unmarshalWorker(cctx)
+		return m.mergeWorker(cctx, m.mergeRowChs)
 	})
 	return errg.Wait()
 }
 
-const workerNum = 4
-
-func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
+func (m *mounterImpl) unmarshalWorker(ctx context.Context, input chan *model.RawKVEntry, output []chan *model.RowChangedEvent) *errgroup.Group {
 	errg, cctx := errgroup.WithContext(ctx)
-	eventChs := make([]chan *model.RowChangedEvent, workerNum)
 
 	for i := 0; i < workerNum; i++ {
 		i := i
-		eventChs[i] = make(chan *model.RowChangedEvent, defaultOutputChanSize)
 		errg.Go(func() error {
 			var rawRow *model.RawKVEntry
+			var ok bool
 			for {
 				select {
 				case <-cctx.Done():
-					return errors.Trace(cctx.Err())
-				case rawRow = <-m.unmarshalRow:
+					return cctx.Err()
+				case rawRow, ok = <-input:
+				}
+				if !ok {
+					return nil
 				}
 				if rawRow.OpType == model.OpTypeResolved {
 					for j := 0; j < workerNum; j++ {
-						eventChs[j] <- &model.RowChangedEvent{Ts: rawRow.Ts, Resolved: true}
+						output[j] <- &model.RowChangedEvent{Ts: rawRow.Ts, Resolved: true}
 					}
 					continue
 				}
@@ -192,48 +215,49 @@ func (m *mounterImpl) unmarshalWorker(ctx context.Context) error {
 				if event == nil {
 					continue
 				}
-				eventChs[i] <- event
+				output[i] <- event
 			}
 		})
 	}
-
-	errg.Go(func() error {
-		defer func() {
-			for i := 0; i < workerNum; i++ {
-				close(eventChs[i])
-			}
-		}()
-		events := make([]*model.RowChangedEvent, workerNum)
-		var lastResolvedTs uint64
-		for {
-			minTs := uint64(math.MaxUint64)
-			var minChIndex int
-			for i := 0; i < workerNum; i++ {
-				if events[i] == nil {
-					select {
-					case events[i] = <-eventChs[i]:
-					case <-cctx.Done():
-						return errors.Trace(cctx.Err())
-					}
-				}
-				if minTs > events[i].Ts {
-					minTs = events[i].Ts
-					minChIndex = i
-				}
-			}
-			if events[minChIndex].Resolved {
-				if events[minChIndex].Ts != lastResolvedTs {
-					m.output <- events[minChIndex]
-					lastResolvedTs = events[minChIndex].Ts
-				}
-			} else {
-				m.output <- events[minChIndex]
-			}
-			events[minChIndex] = nil
-		}
-	})
-	return errg.Wait()
+	return errg
 }
+
+func (m *mounterImpl) mergeWorker(ctx context.Context, input []chan *model.RowChangedEvent) error {
+	defer func() {
+		for i := 0; i < workerNum; i++ {
+			close(input[i])
+		}
+	}()
+	events := make([]*model.RowChangedEvent, workerNum)
+	var lastResolvedTs uint64
+	for {
+		minTs := uint64(math.MaxUint64)
+		var minChIndex int
+		for i := 0; i < workerNum; i++ {
+			if events[i] == nil {
+				select {
+				case events[i] = <-input[i]:
+				case <-ctx.Done():
+					return errors.Trace(ctx.Err())
+				}
+			}
+			if minTs > events[i].Ts {
+				minTs = events[i].Ts
+				minChIndex = i
+			}
+		}
+		if events[minChIndex].Resolved {
+			if events[minChIndex].Ts != lastResolvedTs {
+				m.output <- events[minChIndex]
+				lastResolvedTs = events[minChIndex].Ts
+			}
+		} else {
+			m.output <- events[minChIndex]
+		}
+		events[minChIndex] = nil
+	}
+}
+
 func (m *mounterImpl) Output() <-chan *model.RowChangedEvent {
 	return m.output
 }
