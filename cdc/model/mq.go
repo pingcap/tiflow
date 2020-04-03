@@ -107,12 +107,17 @@ func (batch *BatchEncoder) Append(key []byte, value []byte) {
 	batch.valueBuf.Write(value)
 }
 
-func (batch *BatchEncoder) Marshal() ([]byte, []byte) {
+func (batch *BatchEncoder) Bytes() ([]byte, []byte) {
 	return batch.keyBuf.Bytes(), batch.valueBuf.Bytes()
 }
 
 func (batch *BatchEncoder) Len() int {
 	return batch.keyBuf.Len() + batch.valueBuf.Len()
+}
+
+func (batch *BatchEncoder) Reset() {
+	batch.keyBuf.Reset()
+	batch.valueBuf.Reset()
 }
 
 func NewBatchEncoder() *BatchEncoder {
