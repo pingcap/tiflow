@@ -243,8 +243,6 @@ func collectRawTxns(
 	outputFn func(context.Context, model.RawTxn) error,
 	tracker resolveTsTracker,
 ) error {
-	captureID := util.CaptureIDFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	entryGroup := NewEntryGroup()
 	for {
 		be, err := inputFn(ctx)
