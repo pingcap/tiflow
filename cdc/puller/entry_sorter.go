@@ -200,6 +200,7 @@ func SortOutput(ctx context.Context, input <-chan *model.RawKVEntry) <-chan *mod
 				log.Info("sortoutput1", zap.Uint64("ts", rawKV.Ts), zap.ByteString("key", rawKV.Key), zap.ByteString("value", rawKV.Value))
 				sorter.AddEntry(model.NewPolymorphicEvent(rawKV))
 			case sorted := <-sorter.Output():
+				log.Info("which is nil", zap.Reflect("sorted", sorted))
 				log.Info("sortoutput2", zap.Uint64("ts", sorted.Ts), zap.ByteString("key", sorted.RawKV.Key), zap.ByteString("value", sorted.RawKV.Value))
 				output(sorted.RawKV)
 			}
