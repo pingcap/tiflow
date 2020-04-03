@@ -126,6 +126,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	}
 	key, value := ddl.ToMqMessage()
+	log.Info("emit ddl event", zap.Reflect("key", key), zap.Reflect("value", value))
 	err := k.mqProducer.SyncBroadcastMessage(ctx, key, value)
 	if err != nil {
 		return errors.Trace(err)

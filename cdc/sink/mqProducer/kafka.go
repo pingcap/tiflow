@@ -233,17 +233,20 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 					continue
 				case msg = <-rowPartitionCh:
 				}
-				if msg.cb != nil {
-					defer msg.cb(err)
-				}
 				if msg.key.Type == model.MqMessageTypeResolved {
 					// Sink checkpoint ts
 					if msg.checkpoint {
 						keyByte, err = msg.key.Encode()
 						if err != nil {
+							if msg.cb != nil {
+								msg.cb(err)
+							}
 							return errors.Trace(err)
 						}
 						batchEncoder.Append(keyByte, msg.valueByte)
+					}
+					if msg.cb != nil {
+						msg.cb(nil)
 					}
 					// TODO correctness problem
 					// Here we assume that all messages which ts < this Resolved would be received by consumer
@@ -257,9 +260,15 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 
 				keyByte, err = msg.key.Encode()
 				if err != nil {
+					if msg.cb != nil {
+						msg.cb(err)
+					}
 					return errors.Trace(err)
 				}
 				batchEncoder.Append(keyByte, msg.valueByte)
+				if msg.cb != nil {
+					msg.cb(nil)
+				}
 				if batchEncoder.Len() >= batchSize {
 					flush(false, 0)
 				}

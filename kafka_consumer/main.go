@@ -331,6 +331,11 @@ ClaimMessages:
 				ddl := new(model.DDLEvent)
 				ddl.FromMqMessage(key, value)
 				c.appendDDL(ddl)
+				log.Info("receive ddl event",
+					zap.Uint64("ts", key.Ts),
+					zap.Int32("partition", partition),
+					zap.Reflect("key", key),
+					zap.Reflect("value", value))
 			case model.MqMessageTypeRow:
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
