@@ -598,7 +598,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	defer p.tablesMu.Unlock()
 	ctx = util.PutTableIDInCtx(ctx, tableID)
 
-	log.Debug("Add table", zap.Int64("tableID", tableID))
+	log.Info("Add table", zap.Int64("tableID", tableID))
 	if _, ok := p.tables[tableID]; ok {
 		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
 	}

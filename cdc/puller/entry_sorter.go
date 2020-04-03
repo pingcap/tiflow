@@ -122,7 +122,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 
 				resEvents := make([]*model.PolymorphicEvent, len(resolvedTsGroup))
 				for i, rts := range resolvedTsGroup {
-					resEvents[i] = model.NewPolymorphicEvent(&model.RawKVEntry{Ts: rts, OpType: model.OpTypeResolved})
+					resEvents[i] = model.NewResolvedPolymorphicEvent(rts)
 				}
 				toSort = append(toSort, resEvents...)
 				startTime := time.Now()
@@ -197,11 +197,8 @@ func SortOutput(ctx context.Context, input <-chan *model.RawKVEntry) <-chan *mod
 				if rawKV == nil {
 					continue
 				}
-				log.Info("sortoutput1", zap.Uint64("ts", rawKV.Ts), zap.ByteString("key", rawKV.Key), zap.ByteString("value", rawKV.Value))
 				sorter.AddEntry(model.NewPolymorphicEvent(rawKV))
 			case sorted := <-sorter.Output():
-				log.Info("which is nil", zap.Reflect("sorted", sorted))
-				log.Info("sortoutput2", zap.Uint64("ts", sorted.Ts), zap.ByteString("key", sorted.RawKV.Key), zap.ByteString("value", sorted.RawKV.Value))
 				output(sorted.RawKV)
 			}
 		}
