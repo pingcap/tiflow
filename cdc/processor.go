@@ -652,7 +652,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 				case p.mounter.Input() <- pEvent:
 				}
 			case pEvent := <-sorter.Output():
-				log.Info("output in sorter", zap.Reflect("rawKV", pEvent))
+				if pEvent == nil {
+					continue
+				}
 				if pEvent.RawKV.OpType == model.OpTypeResolved {
 					table.storeResolvedTS(pEvent.Ts)
 					continue
