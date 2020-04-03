@@ -114,12 +114,18 @@ type MockPullerManager struct {
 	c *check.C
 }
 
+var _ Puller = &mockPuller{}
+
 type mockPuller struct {
 	pm          *MockPullerManager
 	spans       []util.Span
 	resolvedTs  uint64
 	startTs     uint64
 	rawKVOffset int
+}
+
+func (p *mockPuller) Output() <-chan *model.RawKVEntry {
+	panic("implement me")
 }
 
 func (p *mockPuller) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry {
@@ -164,10 +170,6 @@ func (p *mockPuller) GetResolvedTs() uint64 {
 }
 
 func (p *mockPuller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
-	panic("unreachable")
-}
-
-func (p *mockPuller) Output() ChanBuffer {
 	panic("unreachable")
 }
 

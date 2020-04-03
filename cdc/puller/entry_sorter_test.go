@@ -95,15 +95,18 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	es.Run(ctx)
+	go func() {
+		err := es.Run(ctx)
+		c.Assert(err, check.IsNil)
+	}()
 	for _, tc := range testCases {
 		for _, entry := range tc.input {
-			es.AddEntry(entry)
+			es.AddEntry(model.NewPolymorphicEvent(entry))
 		}
-		es.AddEntry(&model.RawKVEntry{Ts: tc.resolvedTs, OpType: model.OpTypeResolved})
+		es.AddEntry(model.NewResolvedPolymorphicEvent(tc.resolvedTs))
 		for i := 0; i < len(tc.expect); i++ {
 			e := <-es.Output()
-			c.Check(e, check.DeepEquals, tc.expect[i])
+			c.Check(e.RawKV, check.DeepEquals, tc.expect[i])
 		}
 	}
 }
@@ -112,7 +115,10 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	es.Run(ctx)
+	go func() {
+		err := es.Run(ctx)
+		c.Assert(err, check.IsNil)
+	}()
 
 	maxTs := uint64(1000000)
 	go func() {
@@ -128,11 +134,11 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 					Ts:     uint64(int64(resolvedTs) + rand.Int63n(int64(maxTs-resolvedTs))),
 					OpType: opType,
 				}
-				es.AddEntry(entry)
+				es.AddEntry(model.NewPolymorphicEvent(entry))
 			}
-			es.AddEntry(&model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved})
+			es.AddEntry(model.NewResolvedPolymorphicEvent(resolvedTs))
 		}
-		es.AddEntry(&model.RawKVEntry{Ts: maxTs, OpType: model.OpTypeResolved})
+		es.AddEntry(model.NewResolvedPolymorphicEvent(maxTs))
 	}()
 	var lastTs uint64
 	var resolvedTs uint64
@@ -140,12 +146,12 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 	for entry := range es.Output() {
 		c.Assert(entry.Ts, check.GreaterEqual, lastTs)
 		c.Assert(entry.Ts, check.Greater, resolvedTs)
-		if lastOpType == model.OpTypePut && entry.OpType == model.OpTypeDelete {
+		if lastOpType == model.OpTypePut && entry.RawKV.OpType == model.OpTypeDelete {
 			c.Assert(entry.Ts, check.Greater, lastTs)
 		}
 		lastTs = entry.Ts
-		lastOpType = entry.OpType
-		if entry.OpType == model.OpTypeResolved {
+		lastOpType = entry.RawKV.OpType
+		if entry.RawKV.OpType == model.OpTypeResolved {
 			resolvedTs = entry.Ts
 		}
 		if resolvedTs == maxTs {
@@ -158,7 +164,12 @@ func BenchmarkSorter(b *testing.B) {
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	es.Run(ctx)
+	go func() {
+		err := es.Run(ctx)
+		if err != nil {
+			panic(err)
+		}
+	}()
 
 	maxTs := uint64(10000000)
 	b.ResetTimer()
@@ -175,15 +186,15 @@ func BenchmarkSorter(b *testing.B) {
 					Ts:     uint64(int64(resolvedTs) + rand.Int63n(1000)),
 					OpType: opType,
 				}
-				es.AddEntry(entry)
+				es.AddEntry(model.NewPolymorphicEvent(entry))
 			}
-			es.AddEntry(&model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved})
+			es.AddEntry(model.NewResolvedPolymorphicEvent(resolvedTs))
 		}
-		es.AddEntry(&model.RawKVEntry{Ts: maxTs, OpType: model.OpTypeResolved})
+		es.AddEntry(model.NewResolvedPolymorphicEvent(maxTs))
 	}()
 	var resolvedTs uint64
 	for entry := range es.Output() {
-		if entry.OpType == model.OpTypeResolved {
+		if entry.RawKV.OpType == model.OpTypeResolved {
 			resolvedTs = entry.Ts
 		}
 		if resolvedTs == maxTs {

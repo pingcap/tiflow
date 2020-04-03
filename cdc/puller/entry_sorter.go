@@ -171,6 +171,7 @@ func (es *EntrySorter) Output() <-chan *model.PolymorphicEvent {
 	return es.outputCh
 }
 
+// SortOutput receives a channel from a puller, then sort event and output to the channel returned.
 func SortOutput(ctx context.Context, input <-chan *model.RawKVEntry) <-chan *model.RawKVEntry {
 	ctx, cancel := context.WithCancel(ctx)
 	sorter := NewEntrySorter()
