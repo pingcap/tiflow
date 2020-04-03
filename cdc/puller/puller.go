@@ -252,10 +252,8 @@ func collectRawTxns(
 			return errors.Trace(err)
 		}
 		if be.Val != nil {
-			txnCollectCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
 			entryGroup.AddEntry(be.Val.Ts, be.Val)
 		} else if be.Resolved != nil {
-			txnCollectCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
 			resolvedTs := be.Resolved.ResolvedTs
 			// 1. Forward is called in a single thread
 			// 2. The only way the global minimum resolved Ts can be forwarded is that
