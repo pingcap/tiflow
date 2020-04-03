@@ -547,7 +547,6 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if row.Row == nil {
 				continue
 			}
-			log.Info("exec row", zap.Reflect("row", row))
 			err := p.sink.EmitRowChangedEvent(ctx, row.Row)
 			if err != nil {
 				return errors.Trace(err)
@@ -594,7 +593,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	defer p.tablesMu.Unlock()
 	ctx = util.PutTableIDInCtx(ctx, tableID)
 
-	log.Info("Add table", zap.Int64("tableID", tableID))
+	log.Debug("Add table", zap.Int64("tableID", tableID))
 	if _, ok := p.tables[tableID]; ok {
 		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
 	}
@@ -637,7 +636,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 				}
 				return
 			case rawKV := <-puller.Output():
-				log.Info("output in puller", zap.Reflect("rawKV", rawKV))
 				if rawKV == nil {
 					continue
 				}
