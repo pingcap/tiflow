@@ -551,7 +551,6 @@ type SchemaStorage struct {
 func NewSchemaStorage(jobs []*timodel.Job) (*SchemaStorage, error) {
 	snap := newEmptySchemaSnapshot()
 	for _, job := range jobs {
-		log.Info("init handle ddl job", zap.Reflect("job", job))
 		if err := snap.handleDDL(job); err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -623,7 +622,6 @@ func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 		return nil
 	}
-	log.Info("handle ddl job", zap.Reflect("job", job))
 	snap := lastSnap.Clone()
 	if err := snap.handleDDL(job); err != nil {
 		return errors.Trace(err)
