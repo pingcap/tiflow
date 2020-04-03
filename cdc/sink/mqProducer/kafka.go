@@ -235,25 +235,14 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 				}
 				if msg.key.Type == model.MqMessageTypeResolved {
 					// Sink checkpoint ts
-					if msg.checkpoint {
-						keyByte, err = msg.key.Encode()
-						if err != nil {
-							if msg.cb != nil {
-								msg.cb(err)
-							}
-							return errors.Trace(err)
-						}
-						batchEncoder.Append(keyByte, msg.valueByte)
+					if !msg.checkpoint {
+						// TODO correctness problem
+						// Here we assume that all messages which ts < this Resolved would be received by consumer
+						// before this msg
+						log.Info("sink resolved ts", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
+						flush(true, msg.key.Ts)
+						continue
 					}
-					if msg.cb != nil {
-						msg.cb(nil)
-					}
-					// TODO correctness problem
-					// Here we assume that all messages which ts < this Resolved would be received by consumer
-					// before this msg
-					log.Info("sink resolved ts", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
-					flush(true, msg.key.Ts)
-					continue
 				}
 
 				log.Info("sink event", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
