@@ -243,9 +243,10 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 						flush(true, msg.key.Ts)
 						continue
 					}
+					log.Info("sink checkpoint ts", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
+				} else {
+					log.Info("sink row event", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
 				}
-
-				log.Info("sink event", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
 
 				keyByte, err = msg.key.Encode()
 				if err != nil {

@@ -339,7 +339,7 @@ ClaimMessages:
 			case model.MqMessageTypeRow:
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
-					log.Info("filter fallback row", zap.ByteString("row", message.Key),
+					log.Debug("filter fallback row", zap.ByteString("row", message.Key),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
 						zap.Int32("partition", partition))
