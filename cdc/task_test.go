@@ -167,7 +167,7 @@ func (s *taskSuite) TestWatch(c *check.C) {
 	ch := s.w.Watch(context.Background())
 
 	// Trigger the ErrCompacted error
-	failpoint.Enable("github.com/pingcap/ticdc/cdc.restart_task_watch", "50%off")
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc.restart_task_watch", "50%off"), check.IsNil)
 
 	// Put task changefeed-1
 	c.Assert(client.PutTaskStatus(s.c.Ctx(), "changefeed-1",
