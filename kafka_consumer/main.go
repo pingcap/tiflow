@@ -336,7 +336,8 @@ ClaimMessages:
 				if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
 					log.Info("filter fallback row", zap.ByteString("row", message.Key),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
-						zap.Uint64("sinkResolvedTs", sink.resolvedTs))
+						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
+						zap.Int32("partition", partition))
 					break ClaimMessages
 				}
 				value := new(model.MqMessageRow)
@@ -353,11 +354,16 @@ ClaimMessages:
 			case model.MqMessageTypeResolved:
 				err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{Ts: key.Ts, Resolved: true})
 				if err != nil {
-					log.Fatal("meit row changed event failed", zap.Error(err))
+					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
+				log.Info("receive resolved ts event",
+					zap.Uint64("ts", key.Ts),
+					zap.Int32("partition", partition))
 				if resolvedTs < key.Ts {
-					log.Info("update sink resolved ts", zap.Uint64("old", resolvedTs), zap.Uint64("new", key.Ts))
+					log.Info("update sink resolved ts",
+						zap.Uint64("ts", key.Ts),
+						zap.Int32("partition", partition))
 					atomic.StoreUint64(&sink.resolvedTs, key.Ts)
 				}
 			}

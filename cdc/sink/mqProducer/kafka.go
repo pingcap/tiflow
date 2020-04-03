@@ -233,6 +233,8 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 					continue
 				}
 
+				log.Info("sink event", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
+
 				keyByte, err := msg.key.Encode()
 				if err != nil {
 					return errors.Trace(err)
