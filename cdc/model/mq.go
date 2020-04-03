@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/util/codec"
+	"go.uber.org/zap"
 )
 
 // MqMessageType is the type of message
@@ -105,6 +107,8 @@ func (batch *BatchEncoder) Append(key []byte, value []byte) {
 
 	batch.valueBuf.Write(codec.EncodeInt([]byte{}, int64(len(value))))
 	batch.valueBuf.Write(value)
+
+	log.Info("append msg to batch", zap.Int("batchSize", batch.Len()), zap.Int("keySize", len(key)), zap.Int("valueSize", len(value)))
 }
 
 func (batch *BatchEncoder) Bytes() ([]byte, []byte) {
@@ -146,13 +150,16 @@ func (batch *BatchDecoder) Next() ([]byte, []byte, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	key := keyLeft[0:keyLen]
-	batch.keyBytes = keyLeft[keyLen:]
-
 	valueLeft, valueLen, err := codec.DecodeInt(batch.valueBytes)
 	if err != nil {
 		return nil, nil, err
 	}
+
+	log.Info("decode msg", zap.Int64("keySize", keyLen), zap.Int64("valueSize", valueLen), zap.Int("keyLeft", len(keyLeft)), zap.Int("valueLeft", len(valueLeft)))
+
+	key := keyLeft[0:keyLen]
+	batch.keyBytes = keyLeft[keyLen:]
+
 	value := valueLeft[0:valueLen]
 	batch.valueBytes = valueLeft[valueLen:]
 	return key, value, nil

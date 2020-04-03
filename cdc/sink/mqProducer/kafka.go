@@ -199,7 +199,8 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 			// TODO 监控
 			flush := func(resolved bool, resolvedTs uint64) {
 				key, value := batchEncoder.Bytes()
-				batchEncoder.Reset()
+				log.Info("sink msg", zap.String("key", string(key)), zap.String("value", string(value)))
+				batchEncoder = model.NewBatchEncoder()
 				msg := &sarama.ProducerMessage{
 					Topic:     k.topic,
 					Key:       sarama.ByteEncoder(key),
@@ -240,13 +241,13 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 						// TODO correctness problem
 						// Here we assume that all messages which ts < this Resolved would be received by consumer
 						// before this msg
-						log.Info("sink resolved ts", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition), zap.Int("batchSize", batchEncoder.Len()))
+						log.Info("sink resolved ts", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
 						flush(true, msg.key.Ts)
 						continue
 					}
-					log.Info("sink checkpoint ts", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition), zap.Int("batchSize", batchEncoder.Len()))
+					log.Info("sink checkpoint ts", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
 				} else {
-					log.Info("sink row event", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition), zap.Int("batchSize", batchEncoder.Len()))
+					log.Info("sink row event", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
 				}
 
 				keyByte, err = msg.key.Encode()
