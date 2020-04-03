@@ -556,7 +556,11 @@ func NewSchemaStorage(jobs []*timodel.Job) (*SchemaStorage, error) {
 			return nil, errors.Trace(err)
 		}
 	}
-	return &SchemaStorage{snaps: []*schemaSnapshot{snap}}, nil
+	return &SchemaStorage{
+		snaps:      []*schemaSnapshot{snap},
+		gcTs:       snap.currentTs,
+		resolvedTs: snap.currentTs,
+	}, nil
 }
 
 func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
@@ -635,18 +639,18 @@ func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 }
 
 // DoGC removes snaps which of ts less than this specified ts
-func (s *SchemaStorage) DoGC(ts uint64) error {
+func (s *SchemaStorage) DoGC(ts uint64) {
 	s.snapsMu.Lock()
 	defer s.snapsMu.Unlock()
 	var startIdx int
 	for i, snap := range s.snaps {
-		startIdx = i
-		if snap.currentTs >= ts {
+		if snap.currentTs > ts {
 			break
 		}
+		startIdx = i
 	}
 	s.snaps = s.snaps[startIdx:]
-	return nil
+	atomic.StoreUint64(&s.gcTs, s.snaps[0].currentTs)
 }
 
 // SkipJob skip the job should not be executed

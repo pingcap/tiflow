@@ -307,6 +307,7 @@ func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 	if err != nil {
 		return false, errors.Trace(err)
 	}
+	c.schema.DoGC(job.BinlogInfo.FinishedTS)
 	snap := c.schema.GetLastSnapshot()
 
 	schemaID := uint64(job.SchemaID)

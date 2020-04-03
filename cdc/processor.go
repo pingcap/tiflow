@@ -512,10 +512,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		}
 
 		if lastCheckPointTs < changefeedStatus.CheckpointTs {
-			err = p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
 			lastCheckPointTs = changefeedStatus.CheckpointTs
 		}
 
