@@ -69,7 +69,34 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key *model.MqMess
 }
 
 func (k *kafkaSaramaProducer) BroadcastMessage(ctx context.Context, key *model.MqMessageKey, value *model.MqMessageDDL) error {
-	panic("implement me")
+	batchMsg := model.NewBatchEncoder()
+	keyByte, err := key.Encode()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	var valueByte []byte
+	if value != nil {
+		valueByte, err = value.Encode()
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	batchMsg.Append(keyByte, valueByte)
+	keyByte, valueByte = batchMsg.Marshal()
+	msg := &sarama.ProducerMessage{
+		Topic: k.topic,
+		Key:   sarama.ByteEncoder(keyByte),
+		Value: sarama.ByteEncoder(valueByte),
+	}
+	for partition := int32(0); partition < k.partitionNum; partition++ {
+		msg.Partition = partition
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case k.asyncClient.Input() <- msg:
+		}
+	}
+	return nil
 }
 
 func (k *kafkaSaramaProducer) PrintStatus(ctx context.Context) error {
