@@ -52,7 +52,7 @@ function test_kill_capture() {
 
     # ensure the server become the owner
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
-    owner_pid=$(pidof $CDC_BINARY)
+    owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
     owner_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}')
     echo "owner pid:" $owner_pid
     echo "owner id" $owner_id
@@ -65,6 +65,7 @@ function test_kill_capture() {
 
     # start the second capture
     run_cdc_server $WORK_DIR $CDC_BINARY
+    ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
 
     # kill the owner
@@ -87,13 +88,14 @@ function test_hang_up_capture() {
 
     # ensure the server become the owner
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
-    owner_pid=$(pidof $CDC_BINARY)
+    owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
     owner_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}')
     echo "owner pid:" $owner_pid
     echo "owner id" $owner_id
 
     # start the second capture
     run_cdc_server $WORK_DIR $CDC_BINARY
+    ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
 
     kill -STOP $owner_pid
@@ -114,7 +116,7 @@ function test_expire_capture() {
 
     # ensure the server become the owner
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
-    owner_pid=$(pidof $CDC_BINARY)
+    owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
     owner_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}')
     echo "owner pid:" $owner_pid
     echo "owner id" $owner_id
