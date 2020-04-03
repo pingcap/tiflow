@@ -77,7 +77,8 @@ type processor struct {
 	schemaStorage *entry.SchemaStorage
 
 	tsRWriter storage.ProcessorTsRWriter
-	output    chan *model.RowChangedEvent
+	output    chan *model.PolymorphicEvent
+	mounter   entry.Mounter
 
 	status             *model.TaskStatus
 	position           *model.TaskPosition
@@ -92,7 +93,6 @@ type processor struct {
 
 type tableInfo struct {
 	id         int64
-	mounter    entry.Mounter
 	resolvedTS uint64
 	cancel     context.CancelFunc
 }
@@ -150,12 +150,13 @@ func newProcessor(
 		session:       session,
 		sink:          sink,
 		ddlPuller:     ddlPuller,
+		mounter:       entry.NewMounter(schemaStorage),
 		schemaStorage: schemaStorage,
 
 		tsRWriter: tsRWriter,
 		status:    tsRWriter.GetTaskStatus(),
 		position:  &model.TaskPosition{CheckPointTs: checkpointTs},
-		output:    make(chan *model.RowChangedEvent, defaultOutputChanSize),
+		output:    make(chan *model.PolymorphicEvent, defaultOutputChanSize),
 
 		tables: make(map[int64]*tableInfo),
 	}
@@ -195,6 +196,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 
 	wg.Go(func() error {
 		return p.sink.PrintStatus(cctx)
+	})
+
+	wg.Go(func() error {
+		return p.mounter.Run(cctx)
 	})
 
 	go func() {
@@ -298,7 +303,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case p.output <- &model.RowChangedEvent{Resolved: true, Ts: minResolvedTs}:
+			case p.output <- model.NewResolvedPolymorphicEvent(minResolvedTs):
 			}
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case <-checkpointTsTick.C:
@@ -318,7 +323,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 }
 
 func (p *processor) ddlPullWorker(ctx context.Context) error {
-	ddlRawKVCh := p.ddlPuller.SortedOutput(ctx)
+	ddlRawKVCh := puller.SortOutput(ctx, p.ddlPuller.Output())
 	var ddlRawKV *model.RawKVEntry
 	for {
 		select {
@@ -538,7 +543,11 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	for {
 		select {
 		case row := <-p.output:
-			err := p.sink.EmitRowChangedEvent(ctx, row)
+			row.WaitPrepare()
+			if row.Row == nil {
+				continue
+			}
+			err := p.sink.EmitRowChangedEvent(ctx, row.Row)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -606,21 +615,23 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
 	span := util.GetTableSpan(tableID, true)
+	sorter := puller.NewEntrySorter()
 	puller := puller.NewPuller(p.pdCli, startTs, []util.Span{span}, true, p.limitter)
+
 	go func() {
 		err := puller.Run(ctx)
 		if errors.Cause(err) != context.Canceled {
 			p.errCh <- err
 		}
 	}()
-	// start mounter
-	mounter := entry.NewMounter(puller.SortedOutput(ctx), p.schemaStorage)
+
 	go func() {
-		err := mounter.Run(ctx)
+		err := sorter.Run(ctx)
 		if errors.Cause(err) != context.Canceled {
 			p.errCh <- err
 		}
 	}()
+
 	go func() {
 		for {
 			select {
@@ -629,23 +640,48 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 					p.errCh <- ctx.Err()
 				}
 				return
-			case row := <-mounter.Output():
-				if row.Resolved {
-					table.storeResolvedTS(row.Ts)
+			case rawKV := <-puller.Output():
+				if rawKV == nil {
 					continue
 				}
+				pEvent := model.NewPolymorphicEvent(rawKV)
+				sorter.AddEntry(pEvent)
 				select {
 				case <-ctx.Done():
 					if errors.Cause(ctx.Err()) != context.Canceled {
 						p.errCh <- ctx.Err()
 					}
 					return
-				case p.output <- row:
+				case p.mounter.Input() <- pEvent:
 				}
 			}
 		}
 	}()
-	table.mounter = mounter
+
+	go func() {
+		var pEvent *model.PolymorphicEvent
+		for {
+			select {
+			case <-ctx.Done():
+				if errors.Cause(ctx.Err()) != context.Canceled {
+					p.errCh <- ctx.Err()
+				}
+				return
+			case pEvent = <-sorter.Output():
+			}
+			if pEvent.RawKV.OpType == model.OpTypeResolved {
+				table.storeResolvedTS(pEvent.Ts)
+			}
+			select {
+			case <-ctx.Done():
+				if errors.Cause(ctx.Err()) != context.Canceled {
+					p.errCh <- ctx.Err()
+				}
+				return
+			case p.output <- pEvent:
+			}
+		}
+	}()
 	p.tables[tableID] = table
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Inc()
 	p.collectMetrics(ctx, tableID)
