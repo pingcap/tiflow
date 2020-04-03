@@ -30,6 +30,7 @@ function test_kill_owner() {
 
     # run another server
     run_cdc_server $WORK_DIR $CDC_BINARY
+    ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
     echo "capture_id:" $capture_id
 
@@ -60,6 +61,7 @@ function test_hang_up_owner() {
 
     # run another server
     run_cdc_server $WORK_DIR $CDC_BINARY
+    ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
     echo "capture_id:" $capture_id
 
