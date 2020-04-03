@@ -547,6 +547,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if row.Row == nil {
 				continue
 			}
+			log.Info("exec row", zap.Reflect("row", row))
 			err := p.sink.EmitRowChangedEvent(ctx, row.Row)
 			if err != nil {
 				return errors.Trace(err)
@@ -587,11 +588,6 @@ func createSchemaStorage(pdEndpoints []string, checkpointTs uint64) (*entry.Sche
 func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
 	return storage.NewProcessorTsEtcdRWriter(cli, changefeedID, captureID)
 }
-
-// getTsRwriter is used in unit test only
-//func (p *processor) getTsRwriter() storage.ProcessorTsRWriter {
-//	return p.tsRWriter
-//}
 
 func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) {
 	p.tablesMu.Lock()
@@ -641,6 +637,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 				}
 				return
 			case rawKV := <-puller.Output():
+				log.Info("output in puller", zap.Reflect("rawKV", rawKV))
 				if rawKV == nil {
 					continue
 				}
@@ -654,31 +651,20 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 					return
 				case p.mounter.Input() <- pEvent:
 				}
-			}
-		}
-	}()
-
-	go func() {
-		var pEvent *model.PolymorphicEvent
-		for {
-			select {
-			case <-ctx.Done():
-				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
+			case pEvent := <-sorter.Output():
+				log.Info("output in sorter", zap.Reflect("rawKV", pEvent))
+				if pEvent.RawKV.OpType == model.OpTypeResolved {
+					table.storeResolvedTS(pEvent.Ts)
+					continue
 				}
-				return
-			case pEvent = <-sorter.Output():
-			}
-			if pEvent.RawKV.OpType == model.OpTypeResolved {
-				table.storeResolvedTS(pEvent.Ts)
-			}
-			select {
-			case <-ctx.Done():
-				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
+				select {
+				case <-ctx.Done():
+					if errors.Cause(ctx.Err()) != context.Canceled {
+						p.errCh <- ctx.Err()
+					}
+					return
+				case p.output <- pEvent:
 				}
-				return
-			case p.output <- pEvent:
 			}
 		}
 	}()

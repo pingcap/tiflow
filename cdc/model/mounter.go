@@ -34,7 +34,7 @@ func (e *PolymorphicEvent) PrepareFinished() {
 }
 
 func (e *PolymorphicEvent) WaitPrepare() {
-	if e.finished == nil {
+	if e.finished != nil {
 		<-e.finished
 	}
 }

@@ -137,6 +137,8 @@ func (m *mounterImpl) codecWorker(ctx context.Context) error {
 		case pEvent = <-m.rawRowChangedCh:
 		}
 		if pEvent.RawKV.OpType == model.OpTypeResolved {
+			pEvent.Row = &model.RowChangedEvent{Ts: pEvent.Ts, Resolved: true}
+			pEvent.PrepareFinished()
 			continue
 		}
 		rowEvent, err := m.unmarshalAndMountRowChanged(pEvent.RawKV)
