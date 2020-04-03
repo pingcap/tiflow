@@ -111,8 +111,13 @@ func (batch *BatchEncoder) Append(key []byte, value []byte) {
 	log.Info("append msg to batch", zap.Int("batchSize", batch.Len()), zap.Int("keySize", len(key)), zap.Int("valueSize", len(value)))
 }
 
-func (batch *BatchEncoder) Bytes() ([]byte, []byte) {
-	return batch.keyBuf.Bytes(), batch.valueBuf.Bytes()
+func (batch *BatchEncoder) Read() (keyByte []byte, valueByte []byte) {
+	keyByte = make([]byte, batch.keyBuf.Len())
+	batch.keyBuf.Read(keyByte)
+
+	valueByte = make([]byte, batch.valueBuf.Len())
+	batch.valueBuf.Read(valueByte)
+	return
 }
 
 func (batch *BatchEncoder) Len() int {

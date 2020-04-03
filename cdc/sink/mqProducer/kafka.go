@@ -198,9 +198,9 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 			batchEncoder := model.NewBatchEncoder()
 			// TODO 监控
 			flush := func(resolved bool, resolvedTs uint64) {
-				key, value := batchEncoder.Bytes()
+				key, value := batchEncoder.Read()
 				log.Info("sink msg", zap.String("key", string(key)), zap.String("value", string(value)))
-				batchEncoder = model.NewBatchEncoder()
+				batchEncoder.Reset()
 				msg := &sarama.ProducerMessage{
 					Topic:     k.topic,
 					Key:       sarama.ByteEncoder(key),
