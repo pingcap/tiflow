@@ -8,6 +8,9 @@ type PolymorphicEvent struct {
 }
 
 func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
+	if rawKV.OpType == OpTypeResolved {
+		return NewResolvedPolymorphicEvent(rawKV.Ts)
+	}
 	return &PolymorphicEvent{
 		Ts:       rawKV.Ts,
 		RawKV:    rawKV,

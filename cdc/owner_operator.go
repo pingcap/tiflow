@@ -17,6 +17,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/v4/client"
@@ -53,6 +56,7 @@ func newDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
 
 	// FIXME: user of ddlHandler can't know error happen.
 	errg.Go(func() error {
+		log.Info("run ddl puller in owner")
 		return plr.Run(ctx)
 	})
 
@@ -93,6 +97,7 @@ func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.ddlJobs = append(h.ddlJobs, job)
+	log.Info("owner pull ddl job", zap.Reflect("job", job))
 	return nil
 }
 
