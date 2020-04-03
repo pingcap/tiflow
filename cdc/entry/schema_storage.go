@@ -447,11 +447,6 @@ func (s *schemaSnapshot) replaceTable(tbl *timodel.TableInfo) error {
 	return nil
 }
 
-// HandleDDL has four return values,
-// the first value[string]: the schema name
-// the second value[string]: the table name
-// the third value[string]: the sql that is corresponding to the job
-// the fourth value[error]: the handleDDL execution's err
 func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
 	switch job.Type {
@@ -635,7 +630,14 @@ func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 
 // AdvanceResolvedTs advances the resolved
 func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
-	atomic.StoreUint64(&s.resolvedTs, ts)
+	var swapped bool
+	for !swapped {
+		oldResolvedTs := atomic.LoadUint64(&s.resolvedTs)
+		if ts < oldResolvedTs {
+			return
+		}
+		swapped = atomic.CompareAndSwapUint64(&s.resolvedTs, oldResolvedTs, ts)
+	}
 }
 
 // DoGC removes snaps which of ts less than this specified ts
