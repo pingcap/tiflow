@@ -8,6 +8,7 @@ import (
 type matcher struct {
 	// TODO : clear the single prewrite
 	unmatchedValue map[matchKey][]byte
+	cachedCommit   []*cdcpb.Event_Row
 }
 
 type matchKey struct {
@@ -35,7 +36,14 @@ func (m *matcher) matchRow(row *cdcpb.Event_Row) ([]byte, error) {
 		return value, nil
 	}
 	return nil, errors.NotFoundf("prewrite row, startTs:%d", row.GetStartTs())
+}
 
+func (m *matcher) cacheCommitRow(row *cdcpb.Event_Row) {
+	m.cachedCommit = append(m.cachedCommit, row)
+}
+
+func (m *matcher) clearCacheCommit() {
+	m.cachedCommit = nil
 }
 
 func (m *matcher) rollbackRow(row *cdcpb.Event_Row) {
