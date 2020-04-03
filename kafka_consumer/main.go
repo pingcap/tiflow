@@ -352,6 +352,10 @@ ClaimMessages:
 				}
 				row := new(model.RowChangedEvent)
 				row.FromMqMessage(key, value)
+				log.Info("emit row change event", zap.ByteString("row", message.Key),
+					zap.Uint64("globalResolvedTs", globalResolvedTs),
+					zap.Uint64("sinkResolvedTs", sink.resolvedTs),
+					zap.Int32("partition", partition))
 				err = sink.EmitRowChangedEvent(ctx, row)
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
@@ -390,6 +394,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 		log.Error("unexpected ddl job", zap.Uint64("ddlts", ddl.Ts), zap.Uint64("globalResolvedTs", globalResolvedTs))
 		return
 	}
+	log.Info("append ddl", zap.Reflect("ddl", ddl))
 	c.ddlList = append(c.ddlList, ddl)
 	c.maxDDLReceivedTs = ddl.Ts
 }
