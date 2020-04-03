@@ -977,11 +977,23 @@ func (s *eventFeedSession) receiveFromStream(
 				continue
 			}
 
-			select {
-			case state.eventCh <- event:
-			case <-ctx.Done():
-				return ctx.Err()
+			hangTime := time.Duration(0)
+			ticker := time.NewTicker(time.Minute)
+		HangTimeCheckLoop:
+			for {
+				select {
+				case state.eventCh <- event:
+					break HangTimeCheckLoop
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-ticker.C:
+					hangTime += time.Minute
+					log.Warn("event received from tikv cannot be sent to region worker for too long time",
+						zap.String("addr", addr), zap.Uint64("regionID", event.GetRegionId()),
+						zap.Uint64("requestID", event.GetRequestId()), zap.Duration("duration", hangTime))
+				}
 			}
+			ticker.Stop()
 		}
 	}
 }
@@ -1014,15 +1026,25 @@ func (s *eventFeedSession) singleEventFeed(
 
 	matcher := newMatcher()
 
-	for {
+	var ticker *time.Ticker
+	hangTime := time.Duration(0)
 
+	for {
+		ticker = time.NewTicker(time.Minute)
 		var event *cdcpb.Event
 		var ok bool
 		select {
 		case <-ctx.Done():
 			return atomic.LoadUint64(&checkpointTs), ctx.Err()
+		case <-ticker.C:
+			hangTime += time.Minute
+			log.Warn("region not receiving event from tikv for too long time",
+				zap.Uint64("regionID", regionID), zap.Reflect("span", span), zap.Duration("duration", hangTime))
+			continue
 		case event, ok = <-receiverCh:
 		}
+		hangTime = 0
+		ticker.Stop()
 
 		if !ok {
 			log.Debug("singleEventFeed receiver closed")
