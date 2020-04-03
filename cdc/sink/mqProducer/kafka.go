@@ -38,12 +38,11 @@ var DefaultKafkaConfig = KafkaConfig{
 }
 
 type kafkaSaramaProducer struct {
-	syncClient   sarama.SyncProducer
 	asyncClient  sarama.AsyncProducer
 	topic        string
 	partitionNum int32
 
-	rowPartitionCh []chan kafkaRowMsg
+	rowPartitionCh []chan kafkaMsg
 	successes      chan uint64
 
 	count     uint64
@@ -52,51 +51,30 @@ type kafkaSaramaProducer struct {
 	closeCh chan struct{}
 }
 
-type kafkaRowMsg struct {
-	key   *model.MqMessageKey
-	value *model.MqMessageRow
+type kafkaMsg struct {
+	key        *model.MqMessageKey
+	valueByte  []byte
+	checkpoint bool
+	cb         func(error)
 }
 
 func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key *model.MqMessageKey, value *model.MqMessageRow, partition int32) error {
+	valueByte, err := value.Encode()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case k.rowPartitionCh[int(partition)] <- kafkaRowMsg{
-		key: key, value: value,
+	case k.rowPartitionCh[int(partition)] <- kafkaMsg{
+		key: key, valueByte: valueByte,
 	}:
 	}
 	return nil
 }
 
 func (k *kafkaSaramaProducer) BroadcastMessage(ctx context.Context, key *model.MqMessageKey, value *model.MqMessageDDL) error {
-	batchMsg := model.NewBatchEncoder()
-	keyByte, err := key.Encode()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	var valueByte []byte
-	if value != nil {
-		valueByte, err = value.Encode()
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-	batchMsg.Append(keyByte, valueByte)
-	keyByte, valueByte = batchMsg.Marshal()
-	msg := &sarama.ProducerMessage{
-		Topic: k.topic,
-		Key:   sarama.ByteEncoder(keyByte),
-		Value: sarama.ByteEncoder(valueByte),
-	}
-	for partition := int32(0); partition < k.partitionNum; partition++ {
-		msg.Partition = partition
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case k.asyncClient.Input() <- msg:
-		}
-	}
-	return nil
+	panic("implement me")
 }
 
 func (k *kafkaSaramaProducer) PrintStatus(ctx context.Context) error {
@@ -136,32 +114,34 @@ func (k *kafkaSaramaProducer) PrintStatus(ctx context.Context) error {
 }
 
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key *model.MqMessageKey, value *model.MqMessageDDL) error {
-	batchMsg := model.NewBatchEncoder()
-	keyByte, err := key.Encode()
-	if err != nil {
-		return errors.Trace(err)
-	}
+	wg, _ := errgroup.WithContext(ctx)
 	var valueByte []byte
+	var err error
 	if value != nil {
 		valueByte, err = value.Encode()
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
-	batchMsg.Append(keyByte, valueByte)
-	keyByte, valueByte = batchMsg.Marshal()
-	for partition := int32(0); partition < k.partitionNum; partition++ {
-		_, _, err := k.syncClient.SendMessage(&sarama.ProducerMessage{
-			Topic:     k.topic,
-			Key:       sarama.ByteEncoder(keyByte),
-			Value:     sarama.ByteEncoder(valueByte),
-			Partition: partition,
+	for partition := 0; partition < int(k.partitionNum); partition++ {
+		partition := partition
+		wg.Go(func() error {
+			done := make(chan struct{})
+			var err1 error
+			k.rowPartitionCh[partition] <- kafkaMsg{
+				key:        key,
+				valueByte:  valueByte,
+				checkpoint: true,
+				cb: func(err error) {
+					err1 = err
+					close(done)
+				},
+			}
+			<-done
+			return err1
 		})
-		if err != nil {
-			return errors.Trace(err)
-		}
 	}
-	return nil
+	return wg.Wait()
 }
 
 func (k *kafkaSaramaProducer) Successes() chan uint64 {
@@ -240,7 +220,9 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 			}
 			tick := time.NewTicker(500 * time.Millisecond)
 			for {
-				var msg kafkaRowMsg
+				var msg kafkaMsg
+				var err error
+				var keyByte []byte
 				select {
 				case <-ctx.Done():
 					return errors.Trace(ctx.Err())
@@ -251,7 +233,18 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 					continue
 				case msg = <-rowPartitionCh:
 				}
+				if msg.cb != nil {
+					defer msg.cb(err)
+				}
 				if msg.key.Type == model.MqMessageTypeResolved {
+					// Sink checkpoint ts
+					if msg.checkpoint {
+						keyByte, err = msg.key.Encode()
+						if err != nil {
+							return errors.Trace(err)
+						}
+						batchEncoder.Append(keyByte, msg.valueByte)
+					}
 					// TODO correctness problem
 					// Here we assume that all messages which ts < this Resolved would be received by consumer
 					// before this msg
@@ -262,15 +255,11 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 
 				log.Info("sink event", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
 
-				keyByte, err := msg.key.Encode()
+				keyByte, err = msg.key.Encode()
 				if err != nil {
 					return errors.Trace(err)
 				}
-				valueByte, err := msg.value.Encode()
-				if err != nil {
-					return errors.Trace(err)
-				}
-				batchEncoder.Append(keyByte, valueByte)
+				batchEncoder.Append(keyByte, msg.valueByte)
 				if batchEncoder.Len() >= batchSize {
 					flush(false, 0)
 				}
@@ -288,10 +277,6 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 		return nil, err
 	}
 	cfg.Producer.Return.Errors = true
-	syncClient, err := sarama.NewSyncProducer(strings.Split(address, ","), cfg)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	cfg, err = newSaramaConfig(ctx, config)
 	if err != nil {
 		return nil, err
@@ -340,14 +325,13 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	rowPartitionCh := make([]chan kafkaRowMsg, partitionNum)
+	rowPartitionCh := make([]chan kafkaMsg, partitionNum)
 	for i := 0; i < int(partitionNum); i++ {
-		rowPartitionCh[i] = make(chan kafkaRowMsg, 128000)
+		rowPartitionCh[i] = make(chan kafkaMsg, 128000)
 	}
 
 	return &kafkaSaramaProducer{
 		asyncClient:    asyncClient,
-		syncClient:     syncClient,
 		topic:          topic,
 		partitionNum:   partitionNum,
 		closeCh:        make(chan struct{}),
