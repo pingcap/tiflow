@@ -60,7 +60,7 @@ func getSnapshotMeta(tiStore tidbkv.Storage) (*meta.Meta, error) {
 }
 
 // LoadHistoryDDLJobs loads all history DDL jobs from TiDB.
-func LoadHistoryDDLJobs(kvStore tidbkv.Storage) ([]*model.Job, error) {
+func LoadHistoryDDLJobs(kvStore tidbkv.Storage, ts uint64) ([]*model.Job, error) {
 	originalJobs, err := loadHistoryDDLJobs(kvStore)
 	jobs := make([]*model.Job, 0, len(originalJobs))
 	if err != nil {
@@ -76,6 +76,9 @@ func LoadHistoryDDLJobs(kvStore tidbkv.Storage) ([]*model.Job, error) {
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
+		}
+		if job.BinlogInfo.FinishedTS > ts {
+			break
 		}
 		jobs = append(jobs, job)
 	}

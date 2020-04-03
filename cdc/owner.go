@@ -135,21 +135,17 @@ func (o *Owner) newChangeFeed(
 	if err != nil {
 		return nil, err
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	for _, j := range jobs {
+		log.Info("load history ddl jobs", zap.Reflect("job", j))
+	}
 
-	schemaStorage := entry.NewSingleStorage()
-
-	for _, job := range jobs {
-		if job.BinlogInfo.FinishedTS > checkpointTs {
-			break
-		}
-		_, _, _, err := schemaStorage.HandleDDL(job)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	schemaStorage, err := entry.NewSchemaStorage(jobs)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
@@ -176,7 +172,7 @@ func (o *Owner) newChangeFeed(
 	schemas := make(map[uint64]tableIDMap)
 	tables := make(map[uint64]entry.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
-	for tid, table := range schemaStorage.CloneTables() {
+	for tid, table := range schemaStorage.GetLastSnapshot().CloneTables() {
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
 		}
@@ -186,7 +182,7 @@ func (o *Owner) newChangeFeed(
 			log.Debug("ignore known table", zap.Uint64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
 			continue
 		}
-		schema, ok := schemaStorage.SchemaByTableID(int64(tid))
+		schema, ok := schemaStorage.GetLastSnapshot().SchemaByTableID(int64(tid))
 		if !ok {
 			log.Warn("schema not found for table", zap.Uint64("tid", tid))
 		} else {

@@ -223,7 +223,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 }
 
 func (p *pullerImpl) GetResolvedTs() uint64 {
-	return p.tsTracker.Frontier()
+	return atomic.LoadUint64(&p.resolvedTs)
 }
 
 // TODO remove this function

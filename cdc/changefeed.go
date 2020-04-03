@@ -67,7 +67,7 @@ type changeFeed struct {
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
 
-	schema        *entry.Storage
+	schema        *entry.SchemaStorage
 	ddlState      model.ChangeFeedDDLState
 	targetTs      uint64
 	taskStatus    model.ProcessorsInfos
@@ -303,13 +303,15 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 	log.Info("apply job", zap.String("sql", job.Query), zap.Stringer("job", job))
 
-	schamaName, tableName, _, err := c.schema.HandleDDL(job)
+	err = c.schema.HandleDDLJob(job)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
+	c.schema.DoGC(job.BinlogInfo.FinishedTS)
+	snap := c.schema.GetLastSnapshot()
 
 	schemaID := uint64(job.SchemaID)
-	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
+	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && snap.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
 		tableID := uint64(job.BinlogInfo.TableInfo.ID)
 		if _, exist := c.tables[tableID]; exist {
 			c.removeTable(schemaID, tableID)
@@ -325,19 +327,31 @@ func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 		c.dropSchema(schemaID)
 	case timodel.ActionCreateTable, timodel.ActionRecoverTable:
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, entry.TableName{Schema: schamaName, Table: tableName})
+		tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+		if !exist {
+			return false, errors.NotFoundf("table(%d)", addID)
+		}
+		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
 	case timodel.ActionDropTable:
 		dropID := uint64(job.TableID)
 		c.removeTable(schemaID, dropID)
 	case timodel.ActionRenameTable:
+		tableName, exist := snap.GetTableNameByID(job.TableID)
+		if !exist {
+			return false, errors.NotFoundf("table(%d)", job.TableID)
+		}
 		// no id change just update name
-		c.tables[uint64(job.TableID)] = entry.TableName{Schema: schamaName, Table: tableName}
+		c.tables[uint64(job.TableID)] = tableName
 	case timodel.ActionTruncateTable:
 		dropID := uint64(job.TableID)
 		c.removeTable(schemaID, dropID)
 
+		tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+		if !exist {
+			return false, errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
+		}
 		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, entry.TableName{Schema: schamaName, Table: tableName})
+		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
 	}
 
 	return false, nil
@@ -369,7 +383,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		}
 	}
 
-	err := c.schema.FillSchemaName(todoDDLJob)
+	err := c.schema.GetLastSnapshot().FillSchemaName(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}

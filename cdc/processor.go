@@ -74,7 +74,7 @@ type processor struct {
 	sink sink.Sink
 
 	ddlPuller     puller.Puller
-	schemaBuilder *entry.StorageBuilder
+	schemaStorage *entry.SchemaStorage
 
 	tsRWriter storage.ProcessorTsRWriter
 	output    chan *model.RowChangedEvent
@@ -131,10 +131,10 @@ func newProcessor(
 
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
+	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
 	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
 	ctx = util.PutTableIDInCtx(ctx, 0)
-	ddlEventCh := ddlPuller.SortedOutput(ctx)
-	schemaBuilder, err := createSchemaBuilder(endpoints, ddlEventCh)
+	schemaStorage, err := createSchemaStorage(endpoints, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -150,7 +150,7 @@ func newProcessor(
 		session:       session,
 		sink:          sink,
 		ddlPuller:     ddlPuller,
-		schemaBuilder: schemaBuilder,
+		schemaStorage: schemaStorage,
 
 		tsRWriter: tsRWriter,
 		status:    tsRWriter.GetTaskStatus(),
@@ -171,6 +171,7 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
 	p.errCh = errCh
+	ddlPullerCtx := util.PutTableIDInCtx(cctx, 0)
 
 	wg.Go(func() error {
 		return p.positionWorker(cctx)
@@ -185,12 +186,11 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	wg.Go(func() error {
-		cctx = util.PutTableIDInCtx(cctx, 0)
-		return p.ddlPuller.Run(cctx)
+		return p.ddlPuller.Run(ddlPullerCtx)
 	})
 
 	wg.Go(func() error {
-		return p.schemaBuilder.Run(cctx)
+		return p.ddlPullWorker(cctx)
 	})
 
 	wg.Go(func() error {
@@ -272,7 +272,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-resolveTsTick.C:
-			minResolvedTs := p.schemaBuilder.GetResolvedTs()
+			minResolvedTs := p.ddlPuller.GetResolvedTs()
 			p.tablesMu.Lock()
 			for _, table := range p.tables {
 				ts := table.loadResolvedTS()
@@ -313,6 +313,34 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+		}
+	}
+}
+
+func (p *processor) ddlPullWorker(ctx context.Context) error {
+	ddlRawKVCh := p.ddlPuller.SortedOutput(ctx)
+	var ddlRawKV *model.RawKVEntry
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case ddlRawKV = <-ddlRawKVCh:
+		}
+		if ddlRawKV == nil {
+			continue
+		}
+		if ddlRawKV.OpType == model.OpTypeResolved {
+			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.Ts)
+		}
+		job, err := entry.UnmarshalDDL(ddlRawKV)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if job == nil {
+			continue
+		}
+		if err := p.schemaStorage.HandleDDLJob(job); err != nil {
+			return errors.Trace(err)
 		}
 	}
 }
@@ -484,10 +512,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		}
 
 		if lastCheckPointTs < changefeedStatus.CheckpointTs {
-			err = p.schemaBuilder.DoGc(changefeedStatus.CheckpointTs)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
 			lastCheckPointTs = changefeedStatus.CheckpointTs
 		}
 
@@ -537,18 +562,17 @@ func (p *processor) collectMetrics(ctx context.Context, tableID int64) {
 	}()
 }
 
-func createSchemaBuilder(pdEndpoints []string, ddlEventCh <-chan *model.RawKVEntry) (*entry.StorageBuilder, error) {
+func createSchemaStorage(pdEndpoints []string, checkpointTs uint64) (*entry.SchemaStorage, error) {
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	builder := entry.NewStorageBuilder(jobs, ddlEventCh)
-	return builder, nil
+	return entry.NewSchemaStorage(jobs)
 }
 
 func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
@@ -589,13 +613,8 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 			p.errCh <- err
 		}
 	}()
-	storage, err := p.schemaBuilder.Build(startTs)
-	if err != nil {
-		p.errCh <- errors.Trace(err)
-		return
-	}
 	// start mounter
-	mounter := entry.NewMounter(puller.SortedOutput(ctx), storage)
+	mounter := entry.NewMounter(puller.SortedOutput(ctx), p.schemaStorage)
 	go func() {
 		err := mounter.Run(ctx)
 		if errors.Cause(err) != context.Canceled {

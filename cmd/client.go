@@ -272,29 +272,24 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig) (ineligibleTable
 	if err != nil {
 		return nil, err
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore, startTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	schemaStorage := entry.NewSingleStorage()
-
-	for _, job := range jobs {
-		if job.BinlogInfo.FinishedTS > startTs {
-			break
-		}
-		_, _, _, err := schemaStorage.HandleDDL(job)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	schemaStorage, err := entry.NewSchemaStorage(jobs)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
+
 	filter, err := util.NewFilter(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	for tID, tableName := range schemaStorage.CloneTables() {
-		tableInfo, exist := schemaStorage.TableByID(int64(tID))
+	snap := schemaStorage.GetLastSnapshot()
+	for tID, tableName := range snap.CloneTables() {
+		tableInfo, exist := snap.TableByID(int64(tID))
 		if !exist {
 			return nil, errors.NotFoundf("table %d", int64(tID))
 		}
