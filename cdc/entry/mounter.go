@@ -161,17 +161,17 @@ func (m *mounterImpl) collectMetrics(ctx context.Context) {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
 	metricMounterOutputChanSize := mounterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(time.Second * 30):
-				metricMounterOutputChanSize.Set(float64(len(m.output)))
-			}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second * 30):
+			metricMounterOutputChanSize.Set(float64(len(m.output)))
 		}
-	}()
+	}
 }
+
 func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
