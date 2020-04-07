@@ -61,7 +61,7 @@ type mysqlSink struct {
 	unresolvedRowsMu sync.Mutex
 	unresolvedRows   map[string][]*model.RowChangedEvent
 
-	count int64
+	count uint64
 }
 
 func (s *mysqlSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
@@ -151,13 +151,17 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		return errors.Trace(err)
 	}
 
-	atomic.AddInt64(&s.count, 1)
+	atomic.AddUint64(&s.count, 1)
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
 	return nil
 }
 
 func (s *mysqlSink) CheckpointTs() uint64 {
 	return atomic.LoadUint64(&s.checkpointTs)
+}
+
+func (s *mysqlSink) Count() uint64 {
+	return atomic.LoadUint64(&s.count)
 }
 
 func (s *mysqlSink) Run(ctx context.Context) error {
@@ -397,7 +401,7 @@ func (s *mysqlSink) Close() error {
 
 func (s *mysqlSink) PrintStatus(ctx context.Context) error {
 	lastTime := time.Now()
-	var lastCount int64
+	var lastCount uint64
 	timer := time.NewTicker(printStatusInterval)
 	defer timer.Stop()
 	for {
@@ -407,18 +411,18 @@ func (s *mysqlSink) PrintStatus(ctx context.Context) error {
 		case <-timer.C:
 			now := time.Now()
 			seconds := now.Unix() - lastTime.Unix()
-			total := atomic.LoadInt64(&s.count)
+			total := atomic.LoadUint64(&s.count)
 			count := total - lastCount
-			qps := int64(0)
+			qps := uint64(0)
 			if seconds > 0 {
-				qps = count / seconds
+				qps = count / uint64(seconds)
 			}
 			lastCount = total
 			lastTime = now
 			log.Info("mysql sink replication status",
 				zap.String("changefeed", s.params.changefeedID),
-				zap.Int64("count", count),
-				zap.Int64("qps", qps))
+				zap.Uint64("count", count),
+				zap.Uint64("qps", qps))
 		}
 	}
 }
@@ -460,7 +464,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent)
 	}
 	execTxnHistogram.WithLabelValues(s.params.captureID, s.params.changefeedID).Observe(time.Since(startTime).Seconds())
 	execBatchHistogram.WithLabelValues(s.params.captureID, s.params.changefeedID).Observe(float64(len(rows)))
-	atomic.AddInt64(&s.count, int64(len(rows)))
+	atomic.AddUint64(&s.count, uint64(len(rows)))
 	log.Debug("Exec Rows succeeded", zap.Int("num of Rows", len(rows)))
 	return nil
 }

@@ -113,6 +113,10 @@ func (k *kafkaSaramaProducer) PrintStatus(ctx context.Context) error {
 	}
 }
 
+func (k *kafkaSaramaProducer) Count() uint64 {
+	return atomic.LoadUint64(&k.count)
+}
+
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key *model.MqMessageKey, value *model.MqMessageDDL) error {
 	wg, _ := errgroup.WithContext(ctx)
 	var valueByte []byte

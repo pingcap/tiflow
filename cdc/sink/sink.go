@@ -42,6 +42,8 @@ type Sink interface {
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	// CheckpointTs returns the sink checkpoint
 	CheckpointTs() uint64
+	// Count returns the count of sunk events
+	Count() uint64
 	// Run runs the sink
 	Run(ctx context.Context) error
 	// PrintStatus prints necessary status periodically

@@ -8,18 +8,24 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
+	"github.com/pingcap/errors"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 )
 
 // EntrySorter accepts out-of-order raw kv entries and output sorted entries
 type EntrySorter struct {
-	unsorted        []*model.RawKVEntry
+	unsorted        []*model.PolymorphicEvent
 	lock            sync.Mutex
 	resolvedTsGroup []uint64
 	closed          int32
 
-	outputCh       chan *model.RawKVEntry
+	outputCh       chan *model.PolymorphicEvent
 	resolvedNotify chan struct{}
 }
 
@@ -27,24 +33,33 @@ type EntrySorter struct {
 func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
 		resolvedNotify: make(chan struct{}, 128000),
-		outputCh:       make(chan *model.RawKVEntry, 128000),
+		outputCh:       make(chan *model.PolymorphicEvent, 128000),
 	}
 }
 
 // Run runs EntrySorter
-func (es *EntrySorter) Run(ctx context.Context) {
-	lessFunc := func(i *model.RawKVEntry, j *model.RawKVEntry) bool {
+func (es *EntrySorter) Run(ctx context.Context) error {
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+	metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricEntryUnsortedSizeGauge := entrySorterUnsortedSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricEntrySorterSortDuration := entrySorterSortDuration.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricEntrySorterMergeDuration := entrySorterMergeDuration.WithLabelValues(captureID, changefeedID, tableIDStr)
+
+	lessFunc := func(i *model.PolymorphicEvent, j *model.PolymorphicEvent) bool {
 		if i.Ts == j.Ts {
-			if i.OpType == model.OpTypeDelete {
+			if i.RawKV.OpType == model.OpTypeDelete {
 				return true
 			}
-			if j.OpType == model.OpTypeResolved {
+			if j.RawKV.OpType == model.OpTypeResolved {
 				return true
 			}
 		}
 		return i.Ts < j.Ts
 	}
-	mergeFunc := func(kvsA []*model.RawKVEntry, kvsB []*model.RawKVEntry, output func(*model.RawKVEntry)) {
+	mergeFunc := func(kvsA []*model.PolymorphicEvent, kvsB []*model.PolymorphicEvent, output func(*model.PolymorphicEvent)) {
 		var i, j int
 		for i < len(kvsA) && j < len(kvsB) {
 			if lessFunc(kvsA[i], kvsB[j]) {
@@ -62,7 +77,7 @@ func (es *EntrySorter) Run(ctx context.Context) {
 			output(kvsB[j])
 		}
 	}
-	output := func(ctx context.Context, entry *model.RawKVEntry) {
+	output := func(ctx context.Context, entry *model.PolymorphicEvent) {
 		select {
 		case <-ctx.Done():
 			return
@@ -70,17 +85,12 @@ func (es *EntrySorter) Run(ctx context.Context) {
 		}
 	}
 
-	go func() {
-		captureID := util.CaptureIDFromCtx(ctx)
-		changefeedID := util.ChangefeedIDFromCtx(ctx)
-		tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
-		metricEntrySorterResolvedChanSizeGuage := entrySorterResolvedChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-		metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-		metricEntryUnsortedSizeGauge := entrySorterUnsortedSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	errg, ctx := errgroup.WithContext(ctx)
+	errg.Go(func() error {
 		for {
 			select {
 			case <-ctx.Done():
-				return
+				return errors.Trace(ctx.Err())
 			case <-time.After(defaultMetricInterval):
 				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedNotify)))
 				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
@@ -89,21 +99,15 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				es.lock.Unlock()
 			}
 		}
-	}()
-
-	go func() {
-		var sorted []*model.RawKVEntry
-		captureID := util.CaptureIDFromCtx(ctx)
-		changefeedID := util.ChangefeedIDFromCtx(ctx)
-		tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
-		metricEntrySorterSortDuration := entrySorterSortDuration.WithLabelValues(captureID, changefeedID, tableIDStr)
-		metricEntrySorterMergeDuration := entrySorterMergeDuration.WithLabelValues(captureID, changefeedID, tableIDStr)
+	})
+	errg.Go(func() error {
+		var sorted []*model.PolymorphicEvent
 		for {
 			select {
 			case <-ctx.Done():
 				atomic.StoreInt32(&es.closed, 1)
 				close(es.outputCh)
-				return
+				return errors.Trace(ctx.Err())
 			case <-es.resolvedNotify:
 				es.lock.Lock()
 				if len(es.resolvedTsGroup) == 0 {
@@ -116,9 +120,9 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				es.unsorted = nil
 				es.lock.Unlock()
 
-				resEvents := make([]*model.RawKVEntry, len(resolvedTsGroup))
+				resEvents := make([]*model.PolymorphicEvent, len(resolvedTsGroup))
 				for i, rts := range resolvedTsGroup {
-					resEvents[i] = &model.RawKVEntry{Ts: rts, OpType: model.OpTypeResolved}
+					resEvents[i] = model.NewResolvedPolymorphicEvent(rts)
 				}
 				toSort = append(toSort, resEvents...)
 				startTime := time.Now()
@@ -129,8 +133,8 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				maxResolvedTs := resolvedTsGroup[len(resolvedTsGroup)-1]
 
 				startTime = time.Now()
-				var merged []*model.RawKVEntry
-				mergeFunc(toSort, sorted, func(entry *model.RawKVEntry) {
+				var merged []*model.PolymorphicEvent
+				mergeFunc(toSort, sorted, func(entry *model.PolymorphicEvent) {
 					if entry.Ts <= maxResolvedTs {
 						output(ctx, entry)
 					} else {
@@ -141,27 +145,74 @@ func (es *EntrySorter) Run(ctx context.Context) {
 				sorted = merged
 			}
 		}
-	}()
+	})
+	return errg.Wait()
 }
 
 // AddEntry adds an RawKVEntry to the EntryGroup
-func (es *EntrySorter) AddEntry(entry *model.RawKVEntry) {
+func (es *EntrySorter) AddEntry(entry *model.PolymorphicEvent) {
 	if atomic.LoadInt32(&es.closed) != 0 {
 		return
 	}
 	es.lock.Lock()
-	if entry.OpType == model.OpTypeResolved {
+	if entry.RawKV.OpType == model.OpTypeResolved {
 		es.resolvedTsGroup = append(es.resolvedTsGroup, entry.Ts)
 	} else {
 		es.unsorted = append(es.unsorted, entry)
 	}
 	es.lock.Unlock()
-	if entry.OpType == model.OpTypeResolved {
+	if entry.RawKV.OpType == model.OpTypeResolved {
 		es.resolvedNotify <- struct{}{}
 	}
 }
 
 // Output returns the sorted raw kv output channel
-func (es *EntrySorter) Output() <-chan *model.RawKVEntry {
+func (es *EntrySorter) Output() <-chan *model.PolymorphicEvent {
 	return es.outputCh
+}
+
+// SortOutput receives a channel from a puller, then sort event and output to the channel returned.
+func SortOutput(ctx context.Context, input <-chan *model.RawKVEntry) <-chan *model.RawKVEntry {
+	ctx, cancel := context.WithCancel(ctx)
+	sorter := NewEntrySorter()
+	outputCh := make(chan *model.RawKVEntry, 128)
+	output := func(rawKV *model.RawKVEntry) {
+		select {
+		case <-ctx.Done():
+			if errors.Cause(ctx.Err()) != context.Canceled {
+				log.Error("sorter exited with error", zap.Error(ctx.Err()))
+			}
+			return
+		case outputCh <- rawKV:
+		}
+	}
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				if errors.Cause(ctx.Err()) != context.Canceled {
+					log.Error("sorter exited with error", zap.Error(ctx.Err()))
+				}
+				return
+			case rawKV := <-input:
+				if rawKV == nil {
+					continue
+				}
+				sorter.AddEntry(model.NewPolymorphicEvent(rawKV))
+			case sorted := <-sorter.Output():
+				if sorted != nil {
+					output(sorted.RawKV)
+				}
+			}
+		}
+	}()
+	go func() {
+		if err := sorter.Run(ctx); err != nil {
+			if errors.Cause(ctx.Err()) != context.Canceled {
+				log.Error("sorter exited with error", zap.Error(ctx.Err()))
+			}
+		}
+		cancel()
+	}()
+	return outputCh
 }

@@ -14,6 +14,7 @@ type Producer interface {
 	GetPartitionNum() int32
 	Successes() chan uint64
 	PrintStatus(ctx context.Context) error
+	Count() uint64
 	Run(ctx context.Context) error
 	Close() error
 }

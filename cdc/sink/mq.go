@@ -137,6 +137,10 @@ func (k *mqSink) CheckpointTs() uint64 {
 	return atomic.LoadUint64(&k.checkpointTs)
 }
 
+func (k *mqSink) Count() uint64 {
+	return k.mqProducer.Count()
+}
+
 func (k *mqSink) Run(ctx context.Context) error {
 	wg, cctx := errgroup.WithContext(ctx)
 	if !util.IsOwnerFromCtx(ctx) {
