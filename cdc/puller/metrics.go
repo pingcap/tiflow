@@ -37,7 +37,7 @@ var (
 			Subsystem: "puller",
 			Name:      "txn_collect_event_count",
 			Help:      "The number of events received from txn collector",
-		}, []string{"capture", "changefeed", "type"})
+		}, []string{"capture", "changefeed", "table", "type"})
 	pullerResolvedTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",

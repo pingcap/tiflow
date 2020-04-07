@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -56,13 +57,6 @@ type pullerImpl struct {
 	resolvedTs   uint64
 	// needEncode represents whether we need to encode a key when checking it is in span
 	needEncode bool
-}
-
-// CancellablePuller is a puller that can be stopped with the Cancel function
-type CancellablePuller struct {
-	Puller
-
-	Cancel context.CancelFunc
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTs
@@ -116,16 +110,23 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
 
+	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricEventCounterKv := kvEventCounter.WithLabelValues(captureID, changefeedID, "kv")
+	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved")
+
 	g.Go(func() error {
 		for {
 			select {
 			case <-ctx.Done():
 				return nil
 			case <-time.After(15 * time.Second):
-				outputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(len(p.outputCh)))
-				eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(len(eventCh)))
-				memBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(p.buffer.Size()))
-				pullerResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(atomic.LoadUint64(&p.resolvedTs)))
+				metricEventChanSize.Set(float64(len(eventCh)))
+				metricMemBufferSize.Set(float64(p.buffer.Size()))
+				metricOutputChanSize.Set(float64(len(p.outputCh)))
+				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
 			}
 		}
 	})
@@ -135,7 +136,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			select {
 			case e := <-eventCh:
 				if e.Val != nil {
-					kvEventCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
+					metricEventCounterKv.Inc()
 					val := e.Val
 
 					// if a region with kv range [a, z)
@@ -151,7 +152,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						return errors.Trace(err)
 					}
 				} else if e.Resolved != nil {
-					kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
+					metricEventCounterResolved.Inc()
 					if err := p.buffer.AddEntry(ctx, *e); err != nil {
 						return errors.Trace(err)
 					}
