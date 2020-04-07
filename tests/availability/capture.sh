@@ -7,7 +7,7 @@ source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 
-MAX_RETRIES=20
+MAX_RETRIES=50
 
 function sql_check() {
     # run check in sequence and short circuit principle, if error hanppens,
