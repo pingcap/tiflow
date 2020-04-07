@@ -735,6 +735,8 @@ func (s *eventFeedSession) partialRegionFeed(
 
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
 	state.markStopped()
+	// Avoid too many kv clients retry at the same time.
+	time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
 	return s.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
