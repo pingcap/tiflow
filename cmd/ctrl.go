@@ -60,9 +60,10 @@ type captureTaskStatus struct {
 }
 
 type profileStatus struct {
-	OPS   uint64 `json:"ops"`
-	Gap   int64  `json:"gap"`
-	Count uint64 `json:"count"`
+	OPS            uint64 `json:"ops"`
+	Count          uint64 `json:"count"`
+	SinkGap        int64  `json:"sink_gap"`
+	ReplicationGap int64  `json:"replication_gap"`
 }
 
 type processorMeta struct {
@@ -144,7 +145,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 				count += pinfo.Count
 			}
 			processorInfos, err := cdcEtcdCli.GetAllTaskStatus(context.Background(), changefeedID)
-			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+			if err != nil {
 				return err
 			}
 			taskStatus := make([]captureTaskStatus, 0, len(processorInfos))
@@ -185,6 +186,7 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 						os.Exit(1)
 					}
 				case <-tick.C:
+					now := time.Now()
 					status, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
 					if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 						return err
@@ -197,11 +199,15 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 					for _, pinfo := range taskPositions {
 						count += pinfo.Count
 					}
-					now := time.Now()
+					ts, _, err := pdCli.GetTS(context.Background())
+					if err != nil {
+						return err
+					}
 					statistics := profileStatus{
-						OPS:   (count - lastCount) / uint64(now.Unix()-lastTime.Unix()),
-						Gap:   oracle.ExtractPhysical(status.ResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs),
-						Count: count,
+						OPS:            (count - lastCount) / uint64(now.Unix()-lastTime.Unix()),
+						SinkGap:        oracle.ExtractPhysical(status.ResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs),
+						ReplicationGap: ts - oracle.ExtractPhysical(status.CheckpointTs),
+						Count:          count,
 					}
 					jsonPrint(cmd, &statistics)
 					lastCount = count
