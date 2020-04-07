@@ -152,7 +152,7 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
-		parttionResolved := make(map[int32]uint64)
+		partitionResolved := make(map[int32]uint64)
 		for {
 			select {
 			case <-ctx.Done():
@@ -162,16 +162,19 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 			case msg := <-k.asyncClient.Successes():
 				if msg.Metadata != nil {
 					checkpointTs := msg.Metadata.(uint64)
-					if checkpointTs > parttionResolved[msg.Partition] {
-						parttionResolved[msg.Partition] = checkpointTs
-						minResolved := checkpointTs
-						for _, ts := range parttionResolved {
-							if ts < minResolved {
-								minResolved = ts
+					if checkpointTs > partitionResolved[msg.Partition] {
+						partitionResolved[msg.Partition] = checkpointTs
+						// When all the partitions have received at least one resolved ts
+						if len(partitionResolved) == int(k.partitionNum) {
+							minResolved := checkpointTs
+							for _, ts := range partitionResolved {
+								if ts < minResolved {
+									minResolved = ts
+								}
 							}
+							k.successes <- minResolved
+							log.Debug("update checkpoint ts", zap.Uint64("ts", minResolved))
 						}
-						k.successes <- minResolved
-						log.Info("update checkpoint ts", zap.Uint64("ts", minResolved))
 					}
 				}
 			case err := <-k.asyncClient.Errors():
@@ -198,7 +201,6 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 			batchEncoder := model.NewBatchEncoder()
 			flush := func(resolved bool, resolvedTs uint64) {
 				key, value := batchEncoder.Read()
-				log.Info("sink msg", zap.String("key", string(key)), zap.String("value", string(value)))
 				batchEncoder.Reset()
 				msg := &sarama.ProducerMessage{
 					Topic:     k.topic,
@@ -240,13 +242,9 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 						// TODO correctness problem
 						// Here we assume that all messages which ts < this Resolved would be received by consumer
 						// before this msg
-						log.Info("sink resolved ts", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
 						flush(true, msg.key.Ts)
 						continue
 					}
-					log.Info("sink checkpoint ts", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
-				} else {
-					log.Info("sink row event", zap.Uint64("ts", msg.key.Ts), zap.Int("partition", partition))
 				}
 
 				keyByte, err = msg.key.Encode()

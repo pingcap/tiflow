@@ -307,7 +307,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	batchDecoder := model.NewBatchDecoder()
 ClaimMessages:
 	for message := range claim.Messages() {
-		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
+		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 		batchDecoder.Set(message.Key, message.Value)
 		for batchDecoder.HasNext() {
 			keyBytes, valueBytes, err := batchDecoder.Next()
@@ -331,11 +331,6 @@ ClaimMessages:
 				ddl := new(model.DDLEvent)
 				ddl.FromMqMessage(key, value)
 				c.appendDDL(ddl)
-				log.Info("receive ddl event",
-					zap.Uint64("ts", key.Ts),
-					zap.Int32("partition", partition),
-					zap.Reflect("key", key),
-					zap.Reflect("value", value))
 			case model.MqMessageTypeRow:
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
@@ -352,10 +347,6 @@ ClaimMessages:
 				}
 				row := new(model.RowChangedEvent)
 				row.FromMqMessage(key, value)
-				log.Info("emit row change event", zap.ByteString("row", message.Key),
-					zap.Uint64("globalResolvedTs", globalResolvedTs),
-					zap.Uint64("sinkResolvedTs", sink.resolvedTs),
-					zap.Int32("partition", partition))
 				err = sink.EmitRowChangedEvent(ctx, row)
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
@@ -366,11 +357,8 @@ ClaimMessages:
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				log.Info("receive resolved ts event",
-					zap.Uint64("ts", key.Ts),
-					zap.Int32("partition", partition))
 				if resolvedTs < key.Ts {
-					log.Info("update sink resolved ts",
+					log.Debug("update sink resolved ts",
 						zap.Uint64("ts", key.Ts),
 						zap.Int32("partition", partition))
 					atomic.StoreUint64(&sink.resolvedTs, key.Ts)
@@ -394,7 +382,6 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 		log.Error("unexpected ddl job", zap.Uint64("ddlts", ddl.Ts), zap.Uint64("globalResolvedTs", globalResolvedTs))
 		return
 	}
-	log.Info("append ddl", zap.Reflect("ddl", ddl))
 	c.ddlList = append(c.ddlList, ddl)
 	c.maxDDLReceivedTs = ddl.Ts
 }
