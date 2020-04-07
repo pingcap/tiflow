@@ -16,6 +16,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -62,8 +63,8 @@ type captureTaskStatus struct {
 type profileStatus struct {
 	OPS            uint64 `json:"ops"`
 	Count          uint64 `json:"count"`
-	SinkGap        int64  `json:"sink_gap"`
-	ReplicationGap int64  `json:"replication_gap"`
+	SinkGap        string `json:"sink_gap"`
+	ReplicationGap string `json:"replication_gap"`
 }
 
 type processorMeta struct {
@@ -203,10 +204,12 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 					if err != nil {
 						return err
 					}
+					sinkGap := oracle.ExtractPhysical(status.ResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)
+					replicationGap := ts - oracle.ExtractPhysical(status.CheckpointTs)
 					statistics := profileStatus{
 						OPS:            (count - lastCount) / uint64(now.Unix()-lastTime.Unix()),
-						SinkGap:        oracle.ExtractPhysical(status.ResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs),
-						ReplicationGap: ts - oracle.ExtractPhysical(status.CheckpointTs),
+						SinkGap:        fmt.Sprintf("%dms", sinkGap),
+						ReplicationGap: fmt.Sprintf("%dms", replicationGap),
 						Count:          count,
 					}
 					jsonPrint(cmd, &statistics)
