@@ -15,21 +15,23 @@ package puller
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
-	defaultPullerEventChanSize = 128
+	defaultPullerEventChanSize = 128000
 )
 
 // Puller pull data from tikv and push changes into a buffer
@@ -95,9 +97,12 @@ func (p *pullerImpl) Output() ChanBuffer {
 func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+	metricPullerResolvedTsGauge := pullerResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 	sorter := NewEntrySorter()
 	go func() {
 		sorter.Run(ctx)
+		defer close(sorter.resolvedNotify)
 		for {
 			be, err := p.chanBuffer.Get(ctx)
 			if err != nil {
@@ -120,6 +125,7 @@ func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 				if !forwarded {
 					continue
 				}
+				metricPullerResolvedTsGauge.Set(float64(oracle.ExtractPhysical(resolvedTs)))
 				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 				sorter.AddEntry(&model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved})
 			}
@@ -152,6 +158,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
 
 	g.Go(func() error {
 		for {
@@ -159,8 +166,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return nil
 			case <-time.After(time.Minute):
-				entryBufferSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(p.chanBuffer)))
-				eventChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(eventCh)))
+				entryBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(len(p.chanBuffer)))
+				eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(len(eventCh)))
+				memBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(p.buffer.Size()))
 			}
 		}
 	})
@@ -215,7 +223,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 }
 
 func (p *pullerImpl) GetResolvedTs() uint64 {
-	return p.tsTracker.Frontier()
+	return atomic.LoadUint64(&p.resolvedTs)
 }
 
 // TODO remove this function
@@ -256,7 +264,6 @@ func collectRawTxns(
 					return errors.Trace(err)
 				}
 			}
-			resolvedTxnsBatchSize.Observe(float64(len(readyTxns)))
 			if len(readyTxns) == 0 {
 				log.Debug("Forwarding fake txn", zap.Uint64("ts", resolvedTs))
 				fakeTxn := model.RawTxn{

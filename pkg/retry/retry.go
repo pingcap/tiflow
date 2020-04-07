@@ -15,6 +15,7 @@ package retry
 
 import (
 	"context"
+	"time"
 
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
@@ -22,11 +23,10 @@ import (
 
 // Run retries the specified function on error for at most maxRetries times.
 // It stops retry if the returned error is context.Canceled or context.DeadlineExceeded.
-func Run(f func() error, maxRetries uint64) error {
-	retryCfg := backoff.WithMaxRetries(
-		backoff.NewExponentialBackOff(),
-		maxRetries,
-	)
+func Run(initialInterval time.Duration, maxRetries uint64, f func() error) error {
+	cfg := backoff.NewExponentialBackOff()
+	cfg.InitialInterval = initialInterval
+	retryCfg := backoff.WithMaxRetries(cfg, maxRetries)
 	return backoff.Retry(func() error {
 		err := f()
 		switch errors.Cause(err) {

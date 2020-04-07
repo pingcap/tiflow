@@ -61,9 +61,9 @@ func (e *RowChangedEvent) FromMqMessage(key *MqMessageKey, value *MqMessageRow) 
 
 // Column represents a column value in row changed event
 type Column struct {
-	Type        byte        `json:"type"`
-	WhereHandle bool        `json:"where_handle"`
-	Value       interface{} `json:"value"`
+	Type        byte        `json:"t"`
+	WhereHandle *bool       `json:"h,omitempty"`
+	Value       interface{} `json:"v"`
 }
 
 func (c *Column) formatVal() {
@@ -121,4 +121,17 @@ func (e *DDLEvent) FromMqMessage(key *MqMessageKey, value *MqMessageDDL) {
 	e.Schema = key.Schema
 	e.Type = value.Type
 	e.Query = value.Query
+}
+
+// FromJob fills the values of DDLEvent from DDL job
+func (e *DDLEvent) FromJob(job *model.Job) {
+	var tableName string
+	if job.BinlogInfo.TableInfo != nil {
+		tableName = job.BinlogInfo.TableInfo.Name.O
+	}
+	e.Ts = job.BinlogInfo.FinishedTS
+	e.Query = job.Query
+	e.Schema = job.SchemaName
+	e.Table = tableName
+	e.Type = job.Type
 }

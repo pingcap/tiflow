@@ -2,8 +2,11 @@ package puller
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
+
+	"github.com/pingcap/ticdc/cdc/kv"
 
 	"github.com/pingcap/ticdc/cdc/entry"
 
@@ -11,7 +14,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/domain"
@@ -238,12 +240,14 @@ func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *entry.Ta
 	is := m.domain.InfoSchema()
 	tbl, err := is.TableByName(timodel.NewCIStr(schemaName), timodel.NewCIStr(tableName))
 	m.c.Assert(err, check.IsNil)
-	return entry.WrapTableInfo(tbl.Meta())
+	dbInfo, exist := is.SchemaByTable(tbl.Meta())
+	m.c.Assert(exist, check.IsTrue)
+	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name, tbl.Meta())
 }
 
 // GetDDLJobs returns the ddl jobs
 func (m *MockPullerManager) GetDDLJobs() []*timodel.Job {
-	jobs, err := kv.LoadHistoryDDLJobs(m.store)
+	jobs, err := kv.LoadHistoryDDLJobs(m.store, math.MaxUint64)
 	m.c.Assert(err, check.IsNil)
 	return jobs
 }

@@ -111,14 +111,15 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 }
 
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent, maxRetries uint64) error {
-	return retry.Run(func() error {
-		err := s.execDDL(ctx, ddl)
-		if isIgnorableDDLError(err) {
-			log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
-			return nil
-		}
-		return err
-	}, maxRetries)
+	return retry.Run(500*time.Millisecond, maxRetries,
+		func() error {
+			err := s.execDDL(ctx, ddl)
+			if isIgnorableDDLError(err) {
+				log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
+				return nil
+			}
+			return err
+		})
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
@@ -164,6 +165,10 @@ func (s *mysqlSink) Count() uint64 {
 }
 
 func (s *mysqlSink) Run(ctx context.Context) error {
+	if util.IsOwnerFromCtx(ctx) {
+		<-ctx.Done()
+		return ctx.Err()
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -506,7 +511,7 @@ func (s *mysqlSink) prepareDelete(schema, table string, cols map[string]*model.C
 func whereSlice(cols map[string]*model.Column) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for colName, col := range cols {
-		if !col.WhereHandle {
+		if col.WhereHandle == nil || !*col.WhereHandle {
 			continue
 		}
 		colNames = append(colNames, colName)

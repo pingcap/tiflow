@@ -16,7 +16,7 @@ import (
 var ErrReachLimit = errors.New("reach limit")
 
 const (
-	defaultBufferSize = 128
+	defaultBufferSize = 128000
 )
 
 // EventBuffer in a interface for communicating kv entries.
@@ -125,6 +125,16 @@ func (b *memBuffer) Get(ctx context.Context) (model.RegionFeedEvent, error) {
 		case <-b.signalCh:
 		}
 	}
+}
+
+// Size returns the memory size of memBuffer
+func (b *memBuffer) Size() int64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.limitter == nil {
+		return 0
+	}
+	return atomic.LoadInt64(&b.limitter.used)
 }
 
 var sizeOfVal = unsafe.Sizeof(model.RawKVEntry{})
