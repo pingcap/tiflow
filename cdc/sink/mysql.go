@@ -82,6 +82,7 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 	s.unresolvedRowsMu.Lock()
 	defer s.unresolvedRowsMu.Unlock()
 	for _, row := range rows {
+		log.Info("received rows in sink", zap.Reflect("row", rows))
 		if row.Resolved {
 			resolvedTs = row.Ts
 			continue
@@ -93,7 +94,9 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 		key := util.QuoteSchema(row.Schema, row.Table)
 		s.unresolvedRows[key] = append(s.unresolvedRows[key], row)
 	}
-	atomic.StoreUint64(&s.sinkResolvedTs, resolvedTs)
+	if resolvedTs != 0 {
+		atomic.StoreUint64(&s.sinkResolvedTs, resolvedTs)
+	}
 	return nil
 }
 
