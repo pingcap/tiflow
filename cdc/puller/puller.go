@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	defaultPullerEventChanSize = 128000
+	defaultPullerEventChanSize  = 128000
+	defaultPullerOutputChanSize = 128
 )
 
 // Puller pull data from tikv and push changes into a buffer
@@ -78,7 +79,7 @@ func NewPuller(
 		checkpointTs: checkpointTs,
 		spans:        spans,
 		buffer:       makeMemBuffer(limitter),
-		outputCh:     make(chan *model.RawKVEntry, 128),
+		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
 		tsTracker:    makeSpanFrontier(spans...),
 		needEncode:   needEncode,
 	}

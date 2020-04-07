@@ -24,7 +24,7 @@ var (
 			Subsystem: "mounter",
 			Name:      "input_chan_size",
 			Help:      "mounter input chan size",
-		}, []string{"capture", "changefeed"})
+		}, []string{"capture", "changefeed", "table"})
 )
 
 // InitMetrics registers all metrics in this file

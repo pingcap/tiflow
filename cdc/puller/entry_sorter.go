@@ -200,7 +200,9 @@ func SortOutput(ctx context.Context, input <-chan *model.RawKVEntry) <-chan *mod
 				}
 				sorter.AddEntry(model.NewPolymorphicEvent(rawKV))
 			case sorted := <-sorter.Output():
-				output(sorted.RawKV)
+				if sorted != nil {
+					output(sorted.RawKV)
+				}
 			}
 		}
 	}()

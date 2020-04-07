@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -159,13 +160,15 @@ func (m *mounterImpl) Input() chan<- *model.PolymorphicEvent {
 func (m *mounterImpl) collectMetrics(ctx context.Context) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMounterOutputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureID, changefeedID)
+	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+
+	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Second * 15):
-			metricMounterOutputChanSize.Set(float64(len(m.rawRowChangedCh)))
+			metricMounterInputChanSize.Set(float64(len(m.rawRowChangedCh)))
 		}
 	}
 }
