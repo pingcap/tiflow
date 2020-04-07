@@ -88,6 +88,8 @@ type TaskPosition struct {
 	CheckPointTs uint64 `json:"checkpoint-ts"`
 	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
 	ResolvedTs uint64 `json:"resolved-ts"`
+	// The count of events were synchronized. This is updated by corresponding processor.
+	Count uint64 `json:"count"`
 }
 
 // Marshal returns the json marshal format of a TaskStatus

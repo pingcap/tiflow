@@ -346,6 +346,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 }
 
 func (p *processor) updateInfo(ctx context.Context) error {
+	p.position.Count = p.sink.Count()
 	err := p.tsRWriter.WritePosition(ctx, p.position)
 	if err != nil {
 		return errors.Trace(err)
