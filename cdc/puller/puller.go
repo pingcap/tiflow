@@ -99,6 +99,8 @@ func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
 	metricPullerResolvedTsGauge := pullerResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv")
+	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "resolved")
 	sorter := NewEntrySorter()
 	go func() {
 		sorter.Run(ctx)
@@ -112,10 +114,10 @@ func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 				break
 			}
 			if be.Val != nil {
-				txnCollectCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
+				metricTxnCollectCounterKv.Inc()
 				sorter.AddEntry(be.Val)
 			} else if be.Resolved != nil {
-				txnCollectCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
+				metricTxnCollectCounterResolved.Inc()
 				resolvedTs := be.Resolved.ResolvedTs
 				// 1. Forward is called in a single thread
 				// 2. The only way the global minimum resolved Ts can be forwarded is that
@@ -160,15 +162,21 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
 
+	metricEntryBufferSize := entryBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricEventCounterKv := kvEventCounter.WithLabelValues(captureID, changefeedID, "kv")
+	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved")
+
 	g.Go(func() error {
 		for {
 			select {
 			case <-ctx.Done():
 				return nil
 			case <-time.After(time.Minute):
-				entryBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(len(p.chanBuffer)))
-				eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(len(eventCh)))
-				memBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr).Set(float64(p.buffer.Size()))
+				metricEntryBufferSize.Set(float64(len(p.chanBuffer)))
+				metricEventChanSize.Set(float64(len(eventCh)))
+				metricMemBufferSize.Set(float64(p.buffer.Size()))
 			}
 		}
 	})
@@ -178,7 +186,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			select {
 			case e := <-eventCh:
 				if e.Val != nil {
-					kvEventCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
+					metricEventCounterKv.Inc()
 					val := e.Val
 
 					// if a region with kv range [a, z)
@@ -194,7 +202,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						return errors.Trace(err)
 					}
 				} else if e.Resolved != nil {
-					kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
+					metricEventCounterResolved.Inc()
 					if err := p.buffer.AddEntry(ctx, *e); err != nil {
 						return errors.Trace(err)
 					}
@@ -235,8 +243,6 @@ func collectRawTxns(
 	outputFn func(context.Context, model.RawTxn) error,
 	tracker resolveTsTracker,
 ) error {
-	captureID := util.CaptureIDFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	entryGroup := NewEntryGroup()
 	for {
 		be, err := inputFn(ctx)
@@ -244,10 +250,8 @@ func collectRawTxns(
 			return errors.Trace(err)
 		}
 		if be.Val != nil {
-			txnCollectCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
 			entryGroup.AddEntry(be.Val.Ts, be.Val)
 		} else if be.Resolved != nil {
-			txnCollectCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
 			resolvedTs := be.Resolved.ResolvedTs
 			// 1. Forward is called in a single thread
 			// 2. The only way the global minimum resolved Ts can be forwarded is that
