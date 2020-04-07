@@ -96,11 +96,13 @@ func NewResolvedMessage(ts uint64) *MqMessageKey {
 	}
 }
 
+// BatchEncoder encodes messages into a batch
 type BatchEncoder struct {
 	keyBuf   *bytes.Buffer
 	valueBuf *bytes.Buffer
 }
 
+// Append adds a message to the batch
 func (batch *BatchEncoder) Append(key []byte, value []byte) {
 	batch.keyBuf.Write(codec.EncodeInt([]byte{}, int64(len(key))))
 	batch.keyBuf.Write(key)
@@ -111,24 +113,28 @@ func (batch *BatchEncoder) Append(key []byte, value []byte) {
 	log.Info("append msg to batch", zap.Int("batchSize", batch.Len()), zap.Int("keySize", len(key)), zap.Int("valueSize", len(value)))
 }
 
+// Read reads the current batch from the buffer.
 func (batch *BatchEncoder) Read() (keyByte []byte, valueByte []byte) {
 	keyByte = make([]byte, batch.keyBuf.Len())
-	batch.keyBuf.Read(keyByte)
+	_, _ = batch.keyBuf.Read(keyByte)
 
 	valueByte = make([]byte, batch.valueBuf.Len())
-	batch.valueBuf.Read(valueByte)
+	_, _ = batch.valueBuf.Read(valueByte)
 	return
 }
 
+// Len returns the size of the current batch.
 func (batch *BatchEncoder) Len() int {
 	return batch.keyBuf.Len() + batch.valueBuf.Len()
 }
 
+// Reset resets the buffer to be empty.
 func (batch *BatchEncoder) Reset() {
 	batch.keyBuf.Reset()
 	batch.valueBuf.Reset()
 }
 
+// NewBatchEncoder creates a new BatchEncoder.
 func NewBatchEncoder() *BatchEncoder {
 	return &BatchEncoder{
 		keyBuf:   &bytes.Buffer{},
@@ -136,20 +142,24 @@ func NewBatchEncoder() *BatchEncoder {
 	}
 }
 
+// BatchDecoder decodes the byte of a batch into the original messages.
 type BatchDecoder struct {
 	keyBytes   []byte
 	valueBytes []byte
 }
 
+// Set sets the byte of the decoded batch.
 func (batch *BatchDecoder) Set(key []byte, value []byte) {
 	batch.keyBytes = key
 	batch.valueBytes = value
 }
 
+// HasNext returns whether there is a next message in the batch.
 func (batch *BatchDecoder) HasNext() bool {
 	return len(batch.keyBytes) > 0 && len(batch.valueBytes) > 0
 }
 
+// Next returns the next message. It must be used when HasNext is true.
 func (batch *BatchDecoder) Next() ([]byte, []byte, error) {
 	keyLeft, keyLen, err := codec.DecodeInt(batch.keyBytes)
 	if err != nil {
@@ -170,6 +180,7 @@ func (batch *BatchDecoder) Next() ([]byte, []byte, error) {
 	return key, value, nil
 }
 
+// NewBatchDecoder creates a new BatchDecoder.
 func NewBatchDecoder() *BatchDecoder {
 	return &BatchDecoder{}
 }

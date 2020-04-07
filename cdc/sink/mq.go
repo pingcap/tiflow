@@ -23,9 +23,8 @@ import (
 )
 
 type mqSink struct {
-	mqProducer       mqProducer.Producer
-	partitionNum     int32
-	lastSentMsgIndex uint64
+	mqProducer   mqProducer.Producer
+	partitionNum int32
 
 	globalResolvedTs uint64
 	checkpointTs     uint64
@@ -160,7 +159,7 @@ func (k *mqSink) collectMetrics(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(defaultMetricInterval):
-			//mqSinkCheckpointChanSizeGauge.WithLabelValues(k.captureID, k.changefeedID).Set(float64(len(k.sinkCheckpointTsCh)))
+			mqSinkCheckpointChanSizeGauge.WithLabelValues(k.captureID, k.changefeedID).Set(float64(len(k.mqProducer.Successes())))
 		}
 	}
 }

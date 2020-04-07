@@ -196,7 +196,6 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 		rowPartitionCh := k.rowPartitionCh[partition]
 		errg.Go(func() error {
 			batchEncoder := model.NewBatchEncoder()
-			// TODO 监控
 			flush := func(resolved bool, resolvedTs uint64) {
 				key, value := batchEncoder.Read()
 				log.Info("sink msg", zap.String("key", string(key)), zap.String("value", string(value)))
