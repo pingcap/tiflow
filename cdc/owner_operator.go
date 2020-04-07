@@ -41,10 +41,10 @@ type ddlHandler struct {
 func newDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	puller := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, nil)
+	plr := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &ddlHandler{
-		puller: puller,
+		puller: plr,
 		cancel: cancel,
 	}
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
@@ -53,10 +53,10 @@ func newDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
 
 	// FIXME: user of ddlHandler can't know error happen.
 	errg.Go(func() error {
-		return puller.Run(ctx)
+		return plr.Run(ctx)
 	})
 
-	rawDDLCh := puller.SortedOutput(ctx)
+	rawDDLCh := puller.SortOutput(ctx, plr.Output())
 
 	errg.Go(func() error {
 		for {

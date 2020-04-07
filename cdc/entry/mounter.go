@@ -28,10 +28,10 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -97,81 +97,82 @@ func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
 // Mounter is used to parse SQL events from KV events
 type Mounter interface {
 	Run(ctx context.Context) error
-	Output() <-chan *model.RowChangedEvent
+	Input() chan<- *model.PolymorphicEvent
 }
 
 type mounterImpl struct {
 	schemaStorage   *SchemaStorage
-	rawRowChangedCh <-chan *model.RawKVEntry
-	output          chan *model.RowChangedEvent
+	rawRowChangedCh chan *model.PolymorphicEvent
 }
 
 // NewMounter creates a mounter
-func NewMounter(rawRowChangedCh <-chan *model.RawKVEntry, schemaStorage *SchemaStorage) Mounter {
+func NewMounter(schemaStorage *SchemaStorage) Mounter {
 	return &mounterImpl{
 		schemaStorage:   schemaStorage,
-		rawRowChangedCh: rawRowChangedCh,
-		output:          make(chan *model.RowChangedEvent, defaultOutputChanSize),
+		rawRowChangedCh: make(chan *model.PolymorphicEvent, defaultOutputChanSize),
 	}
 }
 
-func (m *mounterImpl) Run(ctx context.Context) error {
-	go func() {
-		m.collectMetrics(ctx)
-	}()
+const codecWorkerNum = 16
 
-	captureID := util.CaptureIDFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
-	metricMounterResolvedTs := mounterTableResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+func (m *mounterImpl) Run(ctx context.Context) error {
+	errg, ctx := errgroup.WithContext(ctx)
+	errg.Go(func() error {
+		m.collectMetrics(ctx)
+		return nil
+	})
+	for i := 0; i < codecWorkerNum; i++ {
+		errg.Go(func() error {
+			return m.codecWorker(ctx)
+		})
+	}
+	return errg.Wait()
+}
+
+func (m *mounterImpl) codecWorker(ctx context.Context) error {
 	for {
-		var rawRow *model.RawKVEntry
+		var pEvent *model.PolymorphicEvent
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case rawRow = <-m.rawRowChangedCh:
+		case pEvent = <-m.rawRowChangedCh:
 		}
-		if rawRow == nil {
+		if pEvent.RawKV.OpType == model.OpTypeResolved {
+			pEvent.Row = &model.RowChangedEvent{Ts: pEvent.Ts, Resolved: true}
+			pEvent.PrepareFinished()
 			continue
 		}
-
-		if rawRow.OpType == model.OpTypeResolved {
-			m.output <- &model.RowChangedEvent{Resolved: true, Ts: rawRow.Ts}
-			metricMounterResolvedTs.Set(float64(oracle.ExtractPhysical(rawRow.Ts)))
-			continue
-		}
-
-		event, err := m.unmarshalAndMountRowChanged(rawRow)
+		rowEvent, err := m.unmarshalAndMountRowChanged(pEvent.RawKV)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if event == nil {
-			continue
-		}
-		m.output <- event
+		pEvent.Row = rowEvent
+		pEvent.RawKV.Key = nil
+		pEvent.RawKV.Value = nil
+		pEvent.PrepareFinished()
 	}
 }
 
-func (m *mounterImpl) Output() <-chan *model.RowChangedEvent {
-	return m.output
+func (m *mounterImpl) Input() chan<- *model.PolymorphicEvent {
+	return m.rawRowChangedCh
 }
 
 func (m *mounterImpl) collectMetrics(ctx context.Context) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
-	metricMounterOutputChanSize := mounterOutputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(time.Second * 30):
-				metricMounterOutputChanSize.Set(float64(len(m.output)))
-			}
+
+	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second * 15):
+			metricMounterInputChanSize.Set(float64(len(m.rawRowChangedCh)))
 		}
-	}()
+	}
 }
+
 func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil

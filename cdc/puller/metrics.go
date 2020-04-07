@@ -45,11 +45,11 @@ var (
 			Name:      "resolved_ts",
 			Help:      "puller forward resolved ts",
 		}, []string{"capture", "changefeed", "table"})
-	entryBufferSizeGauge = prometheus.NewGaugeVec(
+	outputChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "puller",
-			Name:      "entry_buffer_size",
+			Name:      "output_chan_size",
 			Help:      "Puller entry buffer size",
 		}, []string{"capture", "changefeed", "table"})
 	memBufferSizeGauge = prometheus.NewGaugeVec(
@@ -111,7 +111,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(txnCollectCounter)
 	registry.MustRegister(pullerResolvedTsGauge)
 	registry.MustRegister(memBufferSizeGauge)
-	registry.MustRegister(entryBufferSizeGauge)
+	registry.MustRegister(outputChanSizeGauge)
 	registry.MustRegister(eventChanSizeGauge)
 	registry.MustRegister(entrySorterResolvedChanSizeGauge)
 	registry.MustRegister(entrySorterOutputChanSizeGauge)
