@@ -1,7 +1,6 @@
 package kv
 
 import (
-	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 )
 
@@ -30,12 +29,12 @@ func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
 	m.unmatchedValue[newMatchKey(row)] = row.GetValue()
 }
 
-func (m *matcher) matchRow(row *cdcpb.Event_Row) ([]byte, error) {
+func (m *matcher) matchRow(row *cdcpb.Event_Row) ([]byte, bool) {
 	if value, exist := m.unmatchedValue[newMatchKey(row)]; exist {
 		delete(m.unmatchedValue, newMatchKey(row))
-		return value, nil
+		return value, true
 	}
-	return nil, errors.NotFoundf("prewrite row, startTs:%d", row.GetStartTs())
+	return nil, false
 }
 
 func (m *matcher) cacheCommitRow(row *cdcpb.Event_Row) {

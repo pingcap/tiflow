@@ -1043,9 +1043,11 @@ func (s *eventFeedSession) singleEventFeed(
 					metricPullEventInitializedCounter.Inc()
 					atomic.StoreUint32(&initialized, 1)
 					for _, cacheEntry := range matcher.cachedCommit {
-						value, err := matcher.matchRow(cacheEntry)
-						if err != nil {
-							return atomic.LoadUint64(&checkpointTs), errors.Errorf("match entry error key: %b", cacheEntry.GetKey())
+						value, ok := matcher.matchRow(cacheEntry)
+						if !ok {
+							return atomic.LoadUint64(&checkpointTs),
+								errors.Errorf("prewrite not match, key: %b, start-ts: %d",
+									cacheEntry.GetKey(), cacheEntry.GetStartTs())
 						}
 						revent, err := assembleCommitEvent(cacheEntry, value)
 						if err != nil {
@@ -1091,13 +1093,15 @@ func (s *eventFeedSession) singleEventFeed(
 				case cdcpb.Event_COMMIT:
 					metricPullEventCommitCounter.Inc()
 					// emit a value
-					value, err := matcher.matchRow(entry)
-					if err != nil {
+					value, ok := matcher.matchRow(entry)
+					if !ok {
 						if atomic.LoadUint32(&initialized) == 0 {
 							matcher.cacheCommitRow(entry)
 							continue
 						}
-						return atomic.LoadUint64(&checkpointTs), errors.Errorf("match entry error key: %b", entry.GetKey())
+						return atomic.LoadUint64(&checkpointTs),
+							errors.Errorf("prewrite not match, key: %b, start-ts: %d",
+								entry.GetKey(), entry.GetStartTs())
 					}
 
 					revent, err := assembleCommitEvent(entry, value)
