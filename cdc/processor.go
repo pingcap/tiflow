@@ -605,7 +605,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 		cancel:     cancel,
 	}
 
-	ctx = util.PutTableIDInCtx(ctx, tableID)
 	// start table puller
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.

@@ -178,12 +178,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			if e.Val != nil {
-				txnCollectCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
+				txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv").Inc()
 				if err := output(e.Val); err != nil {
 					return errors.Trace(err)
 				}
 			} else if e.Resolved != nil {
-				txnCollectCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
+				txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "resolved").Inc()
 				resolvedTs := e.Resolved.ResolvedTs
 				// 1. Forward is called in a single thread
 				// 2. The only way the global minimum resolved Ts can be forwarded is that
