@@ -109,11 +109,9 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 		ChannelSize: 128,
 	})
 	log.Info("waiting for tasks", zap.String("captureid", c.info.ID))
-	for ev := range taskWatcher.Watch(ctx) {
-		if ev.Err != nil {
-			return errors.Trace(ev.Err)
-		}
-
+	var ev *TaskEvent
+	wch := taskWatcher.Watch(ctx)
+	for {
 		// Panic when the session is done unexpectedly, it means the
 		// server does not send heatbeats in time, or network interrupted
 		// In this case, the state of the capture is underminded,
@@ -125,14 +123,18 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 			if ctx.Err() != context.Canceled {
 				c.Suicide()
 			}
-		default:
-		}
-		if err := c.handleTaskEvent(ctx, ev); err != nil {
-			return errors.Trace(err)
+		case ev = <-wch:
+			if ev == nil {
+				return nil
+			}
+			if ev.Err != nil {
+				return errors.Trace(ev.Err)
+			}
+			if err := c.handleTaskEvent(ctx, ev); err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
-
-	return nil
 }
 
 // Campaign to be an owner

@@ -14,6 +14,8 @@
 package kv
 
 import (
+	"math"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
@@ -42,7 +44,7 @@ func (s *storeSuite) TestLoadHistoryDDLJobs(c *check.C) {
 	domain.SetStatsUpdating(true)
 
 	oldJobIDs := make(map[int64]struct{})
-	oldJobs, err := LoadHistoryDDLJobs(store)
+	oldJobs, err := LoadHistoryDDLJobs(store, math.MaxUint64)
 	c.Assert(err, check.IsNil)
 	for _, job := range oldJobs {
 		oldJobIDs[job.ID] = struct{}{}
@@ -51,7 +53,7 @@ func (s *storeSuite) TestLoadHistoryDDLJobs(c *check.C) {
 	tk := testkit.NewTestKit(c, store)
 	tk.MustExec("create table test.simple_test (id bigint primary key)")
 
-	latestJobs, err := LoadHistoryDDLJobs(store)
+	latestJobs, err := LoadHistoryDDLJobs(store, math.MaxUint64)
 	c.Assert(err, check.IsNil)
 	c.Assert(len(latestJobs)-len(oldJobs), check.Equals, 1)
 	_, ok := oldJobIDs[latestJobs[len(latestJobs)-1].ID]

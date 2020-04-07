@@ -47,10 +47,10 @@ func (t *schemaSuite) TestSchema(c *C) {
 		Query:      "create database test",
 	}
 	// reconstruct the local schema
-	schema := NewSingleStorage()
-	_, _, _, err := schema.HandleDDL(job)
+	snap := newEmptySchemaSnapshot()
+	err := snap.handleDDL(job)
 	c.Assert(err, IsNil)
-	_, exist := schema.SchemaByID(job.SchemaID)
+	_, exist := snap.SchemaByID(job.SchemaID)
 	c.Assert(exist, IsTrue)
 
 	// test drop schema
@@ -62,9 +62,9 @@ func (t *schemaSuite) TestSchema(c *C) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 3, FinishedTS: 124},
 		Query:      "drop database test",
 	}
-	_, _, _, err = schema.HandleDDL(job)
+	err = snap.handleDDL(job)
 	c.Assert(err, IsNil)
-	_, exist = schema.SchemaByID(job.SchemaID)
+	_, exist = snap.SchemaByID(job.SchemaID)
 	c.Assert(exist, IsFalse)
 
 	job = &timodel.Job{
@@ -76,9 +76,9 @@ func (t *schemaSuite) TestSchema(c *C) {
 		Query:      "create database test",
 	}
 
-	_, _, _, err = schema.HandleDDL(job)
+	err = snap.handleDDL(job)
 	c.Assert(err, IsNil)
-	_, _, _, err = schema.HandleDDL(job)
+	err = snap.handleDDL(job)
 	c.Log(err)
 	c.Assert(errors.IsAlreadyExists(err), IsTrue)
 
@@ -91,9 +91,9 @@ func (t *schemaSuite) TestSchema(c *C) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, FinishedTS: 123},
 		Query:      "drop database test",
 	}
-	_, _, _, err = schema.HandleDDL(job)
+	err = snap.handleDDL(job)
 	c.Assert(err, IsNil)
-	_, _, _, err = schema.HandleDDL(job)
+	err = snap.handleDDL(job)
 	c.Assert(errors.IsNotFound(err), IsTrue)
 }
 
@@ -190,23 +190,23 @@ func (*schemaSuite) TestTable(c *C) {
 	jobs = append(jobs, job)
 
 	// reconstruct the local schema
-	schema := NewSingleStorage()
+	snap := newEmptySchemaSnapshot()
 	for _, job := range jobs {
-		_, _, _, err := schema.HandleDDL(job)
+		err := snap.handleDDL(job)
 		c.Assert(err, IsNil)
 	}
 
 	// check the historical db that constructed above whether in the schema list of local schema
-	_, ok := schema.SchemaByID(dbInfo.ID)
+	_, ok := snap.SchemaByID(dbInfo.ID)
 	c.Assert(ok, IsTrue)
 	// check the historical table that constructed above whether in the table list of local schema
-	table, ok := schema.TableByID(tblInfo.ID)
+	table, ok := snap.TableByID(tblInfo.ID)
 	c.Assert(ok, IsTrue)
 	c.Assert(table.Columns, HasLen, 1)
 	c.Assert(table.Indices, HasLen, 1)
 
 	// test ineligible tables
-	c.Assert(schema.IsIneligibleTableID(2), IsTrue)
+	c.Assert(snap.IsIneligibleTableID(2), IsTrue)
 
 	// check truncate table
 	tblInfo1 := &timodel.TableInfo{
@@ -224,18 +224,18 @@ func (*schemaSuite) TestTable(c *C) {
 		Query:      "truncate table " + tbName.O,
 	}
 
-	_, _, _, err := schema.HandleDDL(job)
+	err := snap.handleDDL(job)
 	c.Assert(err, IsNil)
 
-	_, ok = schema.TableByID(tblInfo1.ID)
+	_, ok = snap.TableByID(tblInfo1.ID)
 	c.Assert(ok, IsTrue)
 
-	_, ok = schema.TableByID(2)
+	_, ok = snap.TableByID(2)
 	c.Assert(ok, IsFalse)
 
 	// test ineligible tables
-	c.Assert(schema.IsIneligibleTableID(9), IsTrue)
-	c.Assert(schema.IsIneligibleTableID(2), IsFalse)
+	c.Assert(snap.IsIneligibleTableID(9), IsTrue)
+	c.Assert(snap.IsIneligibleTableID(2), IsFalse)
 	// check drop table
 	job = &timodel.Job{
 		ID:         9,
@@ -246,26 +246,24 @@ func (*schemaSuite) TestTable(c *C) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 6, FinishedTS: 128},
 		Query:      "drop table " + tbName.O,
 	}
-	_, _, _, err = schema.HandleDDL(job)
+	err = snap.handleDDL(job)
 	c.Assert(err, IsNil)
 
-	_, ok = schema.TableByID(tblInfo.ID)
+	_, ok = snap.TableByID(tblInfo.ID)
 	c.Assert(ok, IsFalse)
 
 	// test ineligible tables
-	c.Assert(schema.IsIneligibleTableID(9), IsFalse)
+	c.Assert(snap.IsIneligibleTableID(9), IsFalse)
 
 	// drop schema
-	_, err = schema.DropSchema(3)
+	err = snap.dropSchema(3)
 	c.Assert(err, IsNil)
-	// test schema version
-	c.Assert(schema.SchemaMetaVersion(), Equals, int64(0))
 
 }
 
 func (t *schemaSuite) TestHandleDDL(c *C) {
 
-	schema := NewSingleStorage()
+	snap := newEmptySchemaSnapshot()
 	dbName := timodel.NewCIStr("Test")
 	colName := timodel.NewCIStr("A")
 	tbName := timodel.NewCIStr("T")
@@ -273,15 +271,8 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 
 	// check rollback done job
 	job := &timodel.Job{ID: 1, State: timodel.JobStateRollbackDone}
-	_, _, sql, err := schema.HandleDDL(job)
+	err := snap.handleDDL(job)
 	c.Assert(err, IsNil)
-	c.Assert(sql, Equals, "")
-
-	// check job.Query is empty
-	job = &timodel.Job{ID: 1, State: timodel.JobStateDone}
-	_, _, sql, err = schema.HandleDDL(job)
-	c.Assert(sql, Equals, "")
-	c.Assert(err, NotNil, Commentf("should return not found job.Query"))
 
 	// db info
 	dbInfo := &timodel.DBInfo{
@@ -348,42 +339,37 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 			BinlogInfo: testCase.binlogInfo,
 			Query:      testCase.query,
 		}
-		testDoDDLAndCheck(c, schema, job, false, testCase.resultQuery, testCase.schemaName, testCase.tableName)
+		testDoDDLAndCheck(c, snap, job, false)
 
 		// custom check after ddl
 		switch testCase.name {
 		case "createSchema":
-			_, ok := schema.SchemaByID(dbInfo.ID)
+			_, ok := snap.SchemaByID(dbInfo.ID)
 			c.Assert(ok, IsTrue)
 		case "createTable":
-			_, ok := schema.TableByID(tblInfo.ID)
+			_, ok := snap.TableByID(tblInfo.ID)
 			c.Assert(ok, IsTrue)
 		case "renameTable":
-			tb, ok := schema.TableByID(tblInfo.ID)
+			tb, ok := snap.TableByID(tblInfo.ID)
 			c.Assert(ok, IsTrue)
 			c.Assert(tblInfo.Name, Equals, tb.Name)
 		case "addColumn", "truncateTable":
-			tb, ok := schema.TableByID(tblInfo.ID)
+			tb, ok := snap.TableByID(tblInfo.ID)
 			c.Assert(ok, IsTrue)
 			c.Assert(tb.Columns, HasLen, 1)
 		case "dropTable":
-			_, ok := schema.TableByID(tblInfo.ID)
+			_, ok := snap.TableByID(tblInfo.ID)
 			c.Assert(ok, IsFalse)
 		case "dropSchema":
-			_, ok := schema.SchemaByID(job.SchemaID)
+			_, ok := snap.SchemaByID(job.SchemaID)
 			c.Assert(ok, IsFalse)
 		}
 	}
 }
 
-func testDoDDLAndCheck(c *C, schema *Storage, job *timodel.Job, isErr bool, sql string, expectedSchema string, expectedTable string) {
-	schemaName, tableName, resSQL, err := schema.HandleDDL(job)
-	c.Logf("handle: %s", job.Query)
-	c.Logf("result: %s, %s, %s, %v", schemaName, tableName, resSQL, err)
+func testDoDDLAndCheck(c *C, snap *schemaSnapshot, job *timodel.Job, isErr bool) {
+	err := snap.handleDDL(job)
 	c.Assert(err != nil, Equals, isErr)
-	c.Assert(sql, Equals, resSQL)
-	c.Assert(schemaName, Equals, expectedSchema)
-	c.Assert(tableName, Equals, expectedTable)
 }
 
 type getUniqueKeysSuite struct{}
@@ -424,7 +410,7 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *C
 		},
 		PKIsHandle: false,
 	}
-	info := WrapTableInfo(&t)
+	info := WrapTableInfo(1, timodel.CIStr{}, &t)
 	cols := info.GetUniqueKeys()
 	c.Assert(cols, DeepEquals, [][]string{
 		{"id"}, {"name"},
@@ -464,9 +450,145 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
 		},
 		PKIsHandle: true,
 	}
-	info := WrapTableInfo(&t)
+	info := WrapTableInfo(1, timodel.CIStr{}, &t)
 	cols := info.GetUniqueKeys()
 	c.Assert(cols, DeepEquals, [][]string{
 		{"uid"}, {"job"},
 	})
+}
+
+func (t *schemaSuite) TestMultiVersionStorage(c *C) {
+	dbName := timodel.NewCIStr("Test")
+	tbName := timodel.NewCIStr("T1")
+	// db and ignoreDB info
+	dbInfo := &timodel.DBInfo{
+		ID:    1,
+		Name:  dbName,
+		State: timodel.StatePublic,
+	}
+	// `createSchema` job1
+	job := &timodel.Job{
+		ID:         3,
+		State:      timodel.JobStateSynced,
+		SchemaID:   1,
+		Type:       timodel.ActionCreateSchema,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 100},
+		Query:      "create database test",
+	}
+
+	storage, err := NewSchemaStorage([]*timodel.Job{job})
+	c.Assert(err, IsNil)
+
+	// table info
+	tblInfo := &timodel.TableInfo{
+		ID:    2,
+		Name:  tbName,
+		State: timodel.StatePublic,
+	}
+
+	// `createTable` job
+	job = &timodel.Job{
+		ID:         6,
+		State:      timodel.JobStateSynced,
+		SchemaID:   1,
+		TableID:    2,
+		Type:       timodel.ActionCreateTable,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 110},
+		Query:      "create table " + tbName.O,
+	}
+
+	err = storage.HandleDDLJob(job)
+	c.Assert(err, IsNil)
+
+	tbName = timodel.NewCIStr("T2")
+	// table info
+	tblInfo = &timodel.TableInfo{
+		ID:    3,
+		Name:  tbName,
+		State: timodel.StatePublic,
+	}
+	// `createTable` job
+	job = &timodel.Job{
+		ID:         6,
+		State:      timodel.JobStateSynced,
+		SchemaID:   1,
+		TableID:    3,
+		Type:       timodel.ActionCreateTable,
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, TableInfo: tblInfo, FinishedTS: 120},
+		Query:      "create table " + tbName.O,
+	}
+
+	err = storage.HandleDDLJob(job)
+	c.Assert(err, IsNil)
+
+	// `dropTable` job
+	job = &timodel.Job{
+		ID:         6,
+		State:      timodel.JobStateSynced,
+		SchemaID:   1,
+		TableID:    2,
+		Type:       timodel.ActionDropTable,
+		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 130},
+	}
+
+	err = storage.HandleDDLJob(job)
+	c.Assert(err, IsNil)
+
+	// `dropSchema` job
+	job = &timodel.Job{
+		ID:         6,
+		State:      timodel.JobStateSynced,
+		SchemaID:   1,
+		Type:       timodel.ActionDropSchema,
+		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 140},
+	}
+
+	err = storage.HandleDDLJob(job)
+	c.Assert(err, IsNil)
+
+	c.Assert(storage.resolvedTs, Equals, uint64(140))
+	snap, err := storage.GetSnapshot(100)
+	c.Assert(err, IsNil)
+	_, exist := snap.SchemaByID(1)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsFalse)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsFalse)
+
+	snap, err = storage.GetSnapshot(115)
+	c.Assert(err, IsNil)
+	_, exist = snap.SchemaByID(1)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsFalse)
+
+	snap, err = storage.GetSnapshot(125)
+	c.Assert(err, IsNil)
+	_, exist = snap.SchemaByID(1)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsTrue)
+
+	snap, err = storage.GetSnapshot(135)
+	c.Assert(err, IsNil)
+	_, exist = snap.SchemaByID(1)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsFalse)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsTrue)
+
+	snap, err = storage.GetSnapshot(140)
+	c.Assert(err, IsNil)
+	_, exist = snap.SchemaByID(1)
+	c.Assert(exist, IsFalse)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsFalse)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsFalse)
 }

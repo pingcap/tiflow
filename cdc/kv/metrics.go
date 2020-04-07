@@ -60,6 +60,13 @@ var (
 			Name:      "send_event_count",
 			Help:      "event count sent to event channel by this puller",
 		}, []string{"type", "capture", "changefeed"})
+	clientChannelSize = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "channel_size",
+			Help:      "size of each channel in kv client",
+		}, []string{"id", "channel"})
 )
 
 // InitMetrics registers all metrics in the kv package
@@ -70,4 +77,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(eventFeedGauge)
 	registry.MustRegister(pullEventCounter)
 	registry.MustRegister(sendEventCounter)
+	registry.MustRegister(clientChannelSize)
 }
