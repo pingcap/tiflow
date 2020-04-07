@@ -40,7 +40,7 @@ type mqSink struct {
 	captureID    string
 	changefeedID string
 
-	count int64
+	count uint64
 
 	errCh chan error
 }
@@ -110,7 +110,7 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 				}
 				return
 			}
-			atomic.AddInt64(&k.count, 1)
+			atomic.AddUint64(&k.count, 1)
 		})
 		if err != nil {
 			return errors.Trace(err)
@@ -186,6 +186,10 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 func (k *mqSink) CheckpointTs() uint64 {
 	return atomic.LoadUint64(&k.checkpointTs)
+}
+
+func (k *mqSink) Count() uint64 {
+	return atomic.LoadUint64(&k.count)
 }
 
 func (k *mqSink) Run(ctx context.Context) error {
@@ -269,7 +273,7 @@ func (k *mqSink) Close() error {
 
 func (k *mqSink) PrintStatus(ctx context.Context) error {
 	lastTime := time.Now()
-	var lastCount int64
+	var lastCount uint64
 	timer := time.NewTicker(printStatusInterval)
 	defer timer.Stop()
 	for {
@@ -279,18 +283,18 @@ func (k *mqSink) PrintStatus(ctx context.Context) error {
 		case <-timer.C:
 			now := time.Now()
 			seconds := now.Unix() - lastTime.Unix()
-			total := atomic.LoadInt64(&k.count)
+			total := atomic.LoadUint64(&k.count)
 			count := total - lastCount
-			qps := int64(0)
+			qps := uint64(0)
 			if seconds > 0 {
-				qps = count / seconds
+				qps = count / uint64(seconds)
 			}
 			lastCount = total
 			lastTime = now
 			log.Info("MQ sink replication status",
 				zap.String("changefeed", k.changefeedID),
-				zap.Int64("count", count),
-				zap.Int64("qps", qps))
+				zap.Uint64("count", count),
+				zap.Uint64("qps", qps))
 		}
 	}
 }

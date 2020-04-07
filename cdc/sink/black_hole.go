@@ -90,6 +90,10 @@ func (b *blackHoleSink) CheckpointTs() uint64 {
 	return atomic.LoadUint64(&b.checkpointTs)
 }
 
+func (b *blackHoleSink) Count() uint64 {
+	return 0
+}
+
 func (b *blackHoleSink) PrintStatus(ctx context.Context) error {
 	<-ctx.Done()
 	return nil
