@@ -135,7 +135,7 @@ func (o *Owner) newChangeFeed(
 	if err != nil {
 		return nil, err
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore, checkpointTs)
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
