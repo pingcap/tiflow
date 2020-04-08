@@ -168,17 +168,14 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 					checkpointTs := msg.Metadata.(uint64)
 					if checkpointTs > partitionResolved[msg.Partition] {
 						partitionResolved[msg.Partition] = checkpointTs
-						// When all the partitions have received at least one resolved ts
-						if len(partitionResolved) == int(k.partitionNum) {
-							minResolved := checkpointTs
-							for _, ts := range partitionResolved {
-								if ts < minResolved {
-									minResolved = ts
-								}
+						minResolved := checkpointTs
+						for _, ts := range partitionResolved {
+							if ts < minResolved {
+								minResolved = ts
 							}
-							k.successes <- minResolved
-							log.Debug("update checkpoint ts", zap.Uint64("ts", minResolved))
 						}
+						k.successes <- minResolved
+						log.Debug("update checkpoint ts", zap.Uint64("ts", minResolved))
 					}
 				}
 			case err := <-k.asyncClient.Errors():

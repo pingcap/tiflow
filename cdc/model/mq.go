@@ -110,7 +110,7 @@ func (batch *BatchEncoder) Append(key []byte, value []byte) {
 	batch.valueBuf.Write(codec.EncodeInt([]byte{}, int64(len(value))))
 	batch.valueBuf.Write(value)
 
-	log.Info("append msg to batch", zap.Int("batchSize", batch.Len()), zap.Int("keySize", len(key)), zap.Int("valueSize", len(value)))
+	log.Debug("append msg to batch", zap.Int("batchSize", batch.Len()), zap.Int("keySize", len(key)), zap.Int("valueSize", len(value)))
 }
 
 // Read reads the current batch from the buffer.
@@ -170,7 +170,7 @@ func (batch *BatchDecoder) Next() ([]byte, []byte, error) {
 		return nil, nil, err
 	}
 
-	log.Info("decode msg", zap.Int64("keySize", keyLen), zap.Int64("valueSize", valueLen), zap.Int("keyLeft", len(keyLeft)), zap.Int("valueLeft", len(valueLeft)))
+	log.Debug("decode msg", zap.Int64("keySize", keyLen), zap.Int64("valueSize", valueLen), zap.Int("keyLeft", len(keyLeft)), zap.Int("valueLeft", len(valueLeft)))
 
 	key := keyLeft[0:keyLen]
 	batch.keyBytes = keyLeft[keyLen:]
