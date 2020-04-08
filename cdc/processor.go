@@ -350,18 +350,21 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 }
 
 func (p *processor) updateInfo(ctx context.Context) error {
-	p.position.Count = p.sink.Count()
-	err := p.tsRWriter.WritePosition(ctx, p.position)
-	if err != nil {
-		return errors.Trace(err)
+	updatePosition := func() error {
+		p.position.Count = p.sink.Count()
+		err := p.tsRWriter.WritePosition(ctx, p.position)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Debug("update task position", zap.Stringer("status", p.position))
+		return nil
 	}
-	log.Debug("update task position", zap.Stringer("status", p.position))
 	statusChanged, locked, err := p.tsRWriter.UpdateInfo(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	if !statusChanged && !locked {
-		return nil
+		return updatePosition()
 	}
 	oldStatus := p.status
 	p.status = p.tsRWriter.GetTaskStatus()
@@ -375,7 +378,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	p.handleTables(ctx, oldStatus, p.status, p.position.CheckPointTs)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
 
-	return retry.Run(500*time.Millisecond, 5, func() error {
+	err = retry.Run(500*time.Millisecond, 5, func() error {
 		err = p.tsRWriter.WriteInfoIntoStorage(ctx)
 		switch errors.Cause(err) {
 		case model.ErrWriteTsConflict:
@@ -387,6 +390,10 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			return backoff.Permanent(errors.Trace(err))
 		}
 	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return updatePosition()
 }
 
 func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed, added []*model.ProcessTableInfo) {
