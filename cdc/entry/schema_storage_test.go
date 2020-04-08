@@ -466,6 +466,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 		Name:  dbName,
 		State: timodel.StatePublic,
 	}
+	var jobs []*timodel.Job
 	// `createSchema` job1
 	job := &timodel.Job{
 		ID:         3,
@@ -475,9 +476,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 100},
 		Query:      "create database test",
 	}
-
-	storage, err := NewSchemaStorage([]*timodel.Job{job})
-	c.Assert(err, IsNil)
+	jobs = append(jobs, job)
 
 	// table info
 	tblInfo := &timodel.TableInfo{
@@ -497,8 +496,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 		Query:      "create table " + tbName.O,
 	}
 
-	err = storage.HandleDDLJob(job)
-	c.Assert(err, IsNil)
+	jobs = append(jobs, job)
 
 	tbName = timodel.NewCIStr("T2")
 	// table info
@@ -518,7 +516,8 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 		Query:      "create table " + tbName.O,
 	}
 
-	err = storage.HandleDDLJob(job)
+	jobs = append(jobs, job)
+	storage, err := NewSchemaStorage(jobs)
 	c.Assert(err, IsNil)
 
 	// `dropTable` job
@@ -591,4 +590,39 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	c.Assert(exist, IsFalse)
 	_, exist = snap.TableByID(3)
 	c.Assert(exist, IsFalse)
+
+	storage.DoGC(0)
+	snap, err = storage.GetSnapshot(100)
+	c.Assert(err, IsNil)
+	_, exist = snap.SchemaByID(1)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsFalse)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsFalse)
+	storage.DoGC(115)
+	_, err = storage.GetSnapshot(100)
+	c.Assert(err, NotNil)
+	snap, err = storage.GetSnapshot(115)
+	c.Assert(err, IsNil)
+	_, exist = snap.SchemaByID(1)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsTrue)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsFalse)
+
+	storage.DoGC(155)
+	storage.AdvanceResolvedTs(185)
+
+	snap, err = storage.GetSnapshot(180)
+	c.Assert(err, IsNil)
+	_, exist = snap.SchemaByID(1)
+	c.Assert(exist, IsFalse)
+	_, exist = snap.TableByID(2)
+	c.Assert(exist, IsFalse)
+	_, exist = snap.TableByID(3)
+	c.Assert(exist, IsFalse)
+	_, err = storage.GetSnapshot(130)
+	c.Assert(err, NotNil)
 }

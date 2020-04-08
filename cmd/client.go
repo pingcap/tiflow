@@ -273,7 +273,7 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig) (ineligibleTable
 	if err != nil {
 		return nil, err
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore, startTs)
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

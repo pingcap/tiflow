@@ -2,7 +2,6 @@ package puller
 
 import (
 	"context"
-	"math"
 	"sync"
 	"time"
 
@@ -250,7 +249,7 @@ func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *entry.Ta
 
 // GetDDLJobs returns the ddl jobs
 func (m *MockPullerManager) GetDDLJobs() []*timodel.Job {
-	jobs, err := kv.LoadHistoryDDLJobs(m.store, math.MaxUint64)
+	jobs, err := kv.LoadHistoryDDLJobs(m.store)
 	m.c.Assert(err, check.IsNil)
 	return jobs
 }

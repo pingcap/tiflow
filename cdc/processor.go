@@ -584,7 +584,7 @@ func createSchemaStorage(pdEndpoints []string, checkpointTs uint64) (*entry.Sche
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore, checkpointTs)
+	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
