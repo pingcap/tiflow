@@ -977,23 +977,11 @@ func (s *eventFeedSession) receiveFromStream(
 				continue
 			}
 
-			hangTime := time.Duration(0)
-			ticker := time.NewTicker(time.Minute)
-		HangTimeCheckLoop:
-			for {
-				select {
-				case state.eventCh <- event:
-					break HangTimeCheckLoop
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-ticker.C:
-					hangTime += time.Minute
-					log.Warn("event received from tikv cannot be sent to region worker for too long time",
-						zap.String("addr", addr), zap.Uint64("regionID", event.GetRegionId()),
-						zap.Uint64("requestID", event.GetRequestId()), zap.Duration("duration", hangTime))
-				}
+			select {
+			case state.eventCh <- event:
+			case <-ctx.Done():
+				return ctx.Err()
 			}
-			ticker.Stop()
 		}
 	}
 }
