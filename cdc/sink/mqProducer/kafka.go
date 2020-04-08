@@ -200,6 +200,7 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 		rowPartitionCh := k.rowPartitionCh[partition]
 		errg.Go(func() error {
 			batchEncoder := model.NewBatchEncoder()
+			cbs := make([]func(error), 0)
 			flush := func(resolved bool, resolvedTs uint64) {
 				key, value := batchEncoder.Read()
 				batchEncoder.Reset()
@@ -217,6 +218,10 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 					return
 				case k.asyncClient.Input() <- msg:
 				}
+				for _, cb := range cbs {
+					cb(nil)
+				}
+				cbs = make([]func(error), 0)
 				atomic.AddUint64(&k.count, 1)
 				atomic.AddUint64(&k.totalSize, uint64(len(key)+len(value)))
 				mqBatchHistogram.WithLabelValues(captureID, changefeedID).
@@ -247,18 +252,18 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 						continue
 					}
 				}
+				if msg.cb != nil {
+					cbs = append(cbs, msg.cb)
+				}
 
 				keyByte, err = msg.key.Encode()
 				if err != nil {
-					if msg.cb != nil {
-						msg.cb(err)
+					for _, cb := range cbs {
+						cb(err)
 					}
 					return errors.Trace(err)
 				}
 				batchEncoder.Append(keyByte, msg.valueByte)
-				if msg.cb != nil {
-					msg.cb(nil)
-				}
 				if batchEncoder.Len() >= batchSize {
 					flush(false, 0)
 				}
@@ -272,11 +277,6 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config KafkaConfig) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfig(ctx, config)
-	if err != nil {
-		return nil, err
-	}
-	cfg.Producer.Return.Errors = true
-	cfg, err = newSaramaConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}

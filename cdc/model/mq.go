@@ -25,6 +25,11 @@ const (
 	MqMessageTypeResolved
 )
 
+const (
+	// BatchVersion1 represents the version of batch format
+	BatchVersion1 int64 = 0
+)
+
 // MqMessageKey represents the message key
 type MqMessageKey struct {
 	Ts     uint64        `json:"ts"`
@@ -117,15 +122,17 @@ func (batch *BatchEncoder) Append(key []byte, value []byte) {
 func (batch *BatchEncoder) Read() (keyByte []byte, valueByte []byte) {
 	keyByte = make([]byte, batch.keyBuf.Len())
 	_, _ = batch.keyBuf.Read(keyByte)
+	keyByte = append(codec.EncodeInt([]byte{}, BatchVersion1), keyByte...)
 
 	valueByte = make([]byte, batch.valueBuf.Len())
 	_, _ = batch.valueBuf.Read(valueByte)
+	valueByte = append(codec.EncodeInt([]byte{}, BatchVersion1), valueByte...)
 	return
 }
 
 // Len returns the size of the current batch.
 func (batch *BatchEncoder) Len() int {
-	return batch.keyBuf.Len() + batch.valueBuf.Len()
+	return batch.keyBuf.Len() + batch.valueBuf.Len() - 8
 }
 
 // Reset resets the buffer to be empty.
@@ -149,9 +156,26 @@ type BatchDecoder struct {
 }
 
 // Set sets the byte of the decoded batch.
-func (batch *BatchDecoder) Set(key []byte, value []byte) {
-	batch.keyBytes = key
-	batch.valueBytes = value
+func (batch *BatchDecoder) Set(key []byte, value []byte) error {
+	keyLeft, keyVersion, err := codec.DecodeInt(key)
+	if err != nil {
+		return err
+	}
+	if keyVersion != BatchVersion1 {
+		return errors.New("unexpected key format version")
+	}
+	batch.keyBytes = keyLeft
+
+	valueLeft, valueVersion, err := codec.DecodeInt(value)
+	if err != nil {
+		return err
+	}
+	if valueVersion != BatchVersion1 {
+		return errors.New("unexpected value format version")
+	}
+	batch.valueBytes = valueLeft
+
+	return nil
 }
 
 // HasNext returns whether there is a next message in the batch.
