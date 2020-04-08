@@ -601,7 +601,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	_, exist = snap.TableByID(3)
 	c.Assert(exist, IsFalse)
 	storage.DoGC(115)
-	snap, err = storage.GetSnapshot(100)
+	_, err = storage.GetSnapshot(100)
 	c.Assert(err, NotNil)
 	snap, err = storage.GetSnapshot(115)
 	c.Assert(err, IsNil)
