@@ -29,13 +29,13 @@ func (s *MatcherSuite) TestMatcher(c *check.C) {
 		StartTs: 1,
 		Key:     []byte("k1"),
 	}
-	_, err := matcher.matchRow(commitRow1)
-	c.Assert(err, check.ErrorMatches, "*not found*")
+	_, ok := matcher.matchRow(commitRow1)
+	c.Assert(ok, check.IsFalse)
 	commitRow2 := &cdcpb.Event_Row{
 		StartTs: 2,
 		Key:     []byte("k1"),
 	}
-	value2, err := matcher.matchRow(commitRow2)
-	c.Assert(err, check.IsNil)
+	value2, ok := matcher.matchRow(commitRow2)
+	c.Assert(ok, check.IsTrue)
 	c.Assert(value2, check.BytesEquals, []byte("v2"))
 }

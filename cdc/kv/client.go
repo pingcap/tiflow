@@ -1042,6 +1042,25 @@ func (s *eventFeedSession) singleEventFeed(
 				case cdcpb.Event_INITIALIZED:
 					metricPullEventInitializedCounter.Inc()
 					atomic.StoreUint32(&initialized, 1)
+					for _, cacheEntry := range matcher.cachedCommit {
+						value, ok := matcher.matchRow(cacheEntry)
+						if !ok {
+							return atomic.LoadUint64(&checkpointTs),
+								errors.Errorf("prewrite not match, key: %b, start-ts: %d",
+									cacheEntry.GetKey(), cacheEntry.GetStartTs())
+						}
+						revent, err := assembleCommitEvent(cacheEntry, value)
+						if err != nil {
+							return atomic.LoadUint64(&checkpointTs), errors.Trace(err)
+						}
+						select {
+						case s.eventCh <- revent:
+							metricSendEventCommitCounter.Inc()
+						case <-ctx.Done():
+							return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
+						}
+					}
+					matcher.clearCacheCommit()
 				case cdcpb.Event_COMMITTED:
 					metricPullEventCommittedCounter.Inc()
 					var opType model.OpType
@@ -1074,29 +1093,20 @@ func (s *eventFeedSession) singleEventFeed(
 				case cdcpb.Event_COMMIT:
 					metricPullEventCommitCounter.Inc()
 					// emit a value
-					value, err := matcher.matchRow(entry)
+					value, ok := matcher.matchRow(entry)
+					if !ok {
+						if atomic.LoadUint32(&initialized) == 0 {
+							matcher.cacheCommitRow(entry)
+							continue
+						}
+						return atomic.LoadUint64(&checkpointTs),
+							errors.Errorf("prewrite not match, key: %b, start-ts: %d",
+								entry.GetKey(), entry.GetStartTs())
+					}
+
+					revent, err := assembleCommitEvent(entry, value)
 					if err != nil {
-						// FIXME: need a better event match mechanism
-						log.Warn("match entry error", zap.Error(err), zap.Stringer("entry", entry))
-					}
-
-					var opType model.OpType
-					switch entry.GetOpType() {
-					case cdcpb.Event_Row_DELETE:
-						opType = model.OpTypeDelete
-					case cdcpb.Event_Row_PUT:
-						opType = model.OpTypePut
-					default:
-						return atomic.LoadUint64(&checkpointTs), errors.Errorf("unknow tp: %v", entry.GetOpType())
-					}
-
-					revent := &model.RegionFeedEvent{
-						Val: &model.RawKVEntry{
-							OpType: opType,
-							Key:    entry.Key,
-							Value:  value,
-							Ts:     entry.CommitTs,
-						},
+						return atomic.LoadUint64(&checkpointTs), errors.Trace(err)
 					}
 
 					select {
@@ -1137,6 +1147,28 @@ func (s *eventFeedSession) singleEventFeed(
 		}
 
 	}
+}
+
+func assembleCommitEvent(entry *cdcpb.Event_Row, value []byte) (*model.RegionFeedEvent, error) {
+	var opType model.OpType
+	switch entry.GetOpType() {
+	case cdcpb.Event_Row_DELETE:
+		opType = model.OpTypeDelete
+	case cdcpb.Event_Row_PUT:
+		opType = model.OpTypePut
+	default:
+		return nil, errors.Errorf("unknow tp: %v", entry.GetOpType())
+	}
+
+	revent := &model.RegionFeedEvent{
+		Val: &model.RawKVEntry{
+			OpType: opType,
+			Key:    entry.Key,
+			Value:  value,
+			Ts:     entry.CommitTs,
+		},
+	}
+	return revent, nil
 }
 
 func updateCheckpointTS(checkpointTs *uint64, newValue uint64) {
