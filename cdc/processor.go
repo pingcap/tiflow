@@ -464,7 +464,6 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
 	}
 
-	log.Info("before resolve lock", zap.Reflect("status", p.status))
 	// write clock if need
 	if newInfo.TablePLock != nil && newInfo.TableCLock == nil {
 		newInfo.TableCLock = &model.TableLock{
@@ -472,7 +471,6 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 			CheckpointTs: checkpointTs,
 		}
 	}
-	log.Info("after resolve lock", zap.Reflect("status", p.status))
 }
 
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
