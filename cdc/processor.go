@@ -162,7 +162,14 @@ func newProcessor(
 	}
 
 	for _, table := range p.status.TableInfos {
-		go p.addTable(ctx, int64(table.ID), table.StartTs)
+		p.addTable(ctx, int64(table.ID), table.StartTs)
+	}
+	// write clock if need
+	if p.status.TablePLock != nil && p.status.TableCLock == nil {
+		p.status.TableCLock = &model.TableLock{
+			Ts:           p.status.TablePLock.Ts,
+			CheckpointTs: checkpointTs,
+		}
 	}
 
 	return p, nil
@@ -460,17 +467,17 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 		p.removeTable(int64(pinfo.ID))
 	}
 
-	// add tables
-	for _, pinfo := range addedTables {
-		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
-	}
-
 	// write clock if need
 	if newInfo.TablePLock != nil && newInfo.TableCLock == nil {
 		newInfo.TableCLock = &model.TableLock{
 			Ts:           newInfo.TablePLock.Ts,
 			CheckpointTs: checkpointTs,
 		}
+	}
+
+	// add tables
+	for _, pinfo := range addedTables {
+		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
 	}
 }
 
