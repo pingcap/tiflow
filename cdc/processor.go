@@ -164,14 +164,6 @@ func newProcessor(
 	for _, table := range p.status.TableInfos {
 		p.addTable(ctx, int64(table.ID), table.StartTs)
 	}
-	// write clock if need
-	if p.status.TablePLock != nil && p.status.TableCLock == nil {
-		p.status.TableCLock = &model.TableLock{
-			Ts:           p.status.TablePLock.Ts,
-			CheckpointTs: checkpointTs,
-		}
-	}
-
 	return p, nil
 }
 
@@ -364,11 +356,11 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	log.Debug("update task position", zap.Stringer("status", p.position))
-	statusChanged, err := p.tsRWriter.UpdateInfo(ctx)
+	statusChanged, locked, err := p.tsRWriter.UpdateInfo(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if !statusChanged {
+	if !statusChanged && !locked {
 		return nil
 	}
 	oldStatus := p.status
@@ -467,6 +459,12 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 		p.removeTable(int64(pinfo.ID))
 	}
 
+	// add tables
+	for _, pinfo := range addedTables {
+		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
+	}
+
+	log.Info("before resolve lock", zap.Reflect("status", p.status))
 	// write clock if need
 	if newInfo.TablePLock != nil && newInfo.TableCLock == nil {
 		newInfo.TableCLock = &model.TableLock{
@@ -474,11 +472,7 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 			CheckpointTs: checkpointTs,
 		}
 	}
-
-	// add tables
-	for _, pinfo := range addedTables {
-		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
-	}
+	log.Info("after resolve lock", zap.Reflect("status", p.status))
 }
 
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.

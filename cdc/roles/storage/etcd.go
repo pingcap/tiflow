@@ -42,7 +42,7 @@ type ProcessorTsRWriter interface {
 	GetTaskStatus() *model.TaskStatus
 	// UpdateInfo update the in memory cache as taskStatus in storage.
 	// oldInfo and newInfo is the old and new in memory cache taskStatus.
-	UpdateInfo(ctx context.Context) (bool, error)
+	UpdateInfo(ctx context.Context) (bool, bool, error)
 	// WriteInfoIntoStorage update taskStatus into storage, return model.ErrWriteTsConflict if in last learn taskStatus is out dated and must call UpdateInfo.
 	WriteInfoIntoStorage(ctx context.Context) error
 }
@@ -89,16 +89,17 @@ func (rw *ProcessorTsEtcdRWriter) WritePosition(ctx context.Context, taskPositio
 // UpdateInfo implements ProcessorTsRWriter interface.
 func (rw *ProcessorTsEtcdRWriter) UpdateInfo(
 	ctx context.Context,
-) (changed bool, err error) {
+) (changed bool, locked bool, err error) {
 	modRevision, info, err := rw.etcdClient.GetTaskStatus(ctx, rw.changefeedID, rw.captureID)
 	if err != nil {
-		return false, errors.Trace(err)
+		return false, false, errors.Trace(err)
 	}
 	changed = rw.modRevision != modRevision
 	if changed {
 		rw.taskStatus = info
 		rw.modRevision = modRevision
 	}
+	locked = rw.taskStatus.TablePLock != nil && rw.taskStatus.TableCLock == nil
 	return
 }
 
