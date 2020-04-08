@@ -460,17 +460,17 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 		p.removeTable(int64(pinfo.ID))
 	}
 
+	// add tables
+	for _, pinfo := range addedTables {
+		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
+	}
+
 	// write clock if need
 	if newInfo.TablePLock != nil && newInfo.TableCLock == nil {
 		newInfo.TableCLock = &model.TableLock{
 			Ts:           newInfo.TablePLock.Ts,
 			CheckpointTs: checkpointTs,
 		}
-	}
-
-	// add tables
-	for _, pinfo := range addedTables {
-		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
 	}
 }
 
@@ -669,6 +669,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 		}
 	}()
 	p.tables[tableID] = table
+	if p.position.CheckPointTs > startTs {
+		p.position.CheckPointTs = startTs
+	}
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Inc()
 	p.collectMetrics(ctx, tableID)
 }

@@ -186,8 +186,8 @@ func (ow *OwnerTaskStatusEtcdWriter) updateInfo(
 	return
 }
 
-// checkLock checks whether there exists p-lock or whether p-lock is committed if it exists
-func (ow *OwnerTaskStatusEtcdWriter) checkLock(
+// CheckLock checks whether there exists p-lock or whether p-lock is committed if it exists
+func (ow *OwnerTaskStatusEtcdWriter) CheckLock(
 	ctx context.Context, changefeedID, captureID string,
 ) (status model.TableLockStatus, err error) {
 	_, info, err := ow.etcdClient.GetTaskStatus(ctx, changefeedID, captureID)
@@ -224,7 +224,7 @@ func (ow *OwnerTaskStatusEtcdWriter) Write(
 ) (newInfo *model.TaskStatus, err error) {
 
 	// check p-lock not exists or is already resolved
-	lockStatus, err := ow.checkLock(ctx, changefeedID, captureID)
+	lockStatus, err := ow.CheckLock(ctx, changefeedID, captureID)
 	if err != nil {
 		return
 	}

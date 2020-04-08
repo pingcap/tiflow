@@ -275,7 +275,10 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 	}
 
 	for _, changefeed := range o.changeFeeds {
-		changefeed.tryBalance(ctx, o.captures)
+		err := changefeed.tryBalance(ctx, o.captures)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	return nil
