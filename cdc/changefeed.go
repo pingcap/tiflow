@@ -80,11 +80,12 @@ type changeFeed struct {
 	ddlJobHistory []*timodel.Job
 	ddlExecutedTs uint64
 
-	schemas       map[uint64]tableIDMap
-	tables        map[uint64]entry.TableName
-	orphanTables  map[uint64]model.ProcessTableInfo
-	toCleanTables map[uint64]struct{}
-	infoWriter    *storage.OwnerTaskStatusEtcdWriter
+	schemas              map[uint64]tableIDMap
+	tables               map[uint64]entry.TableName
+	orphanTables         map[uint64]model.ProcessTableInfo
+	waitingConfirmTables map[uint64]string
+	toCleanTables        map[uint64]struct{}
+	infoWriter           *storage.OwnerTaskStatusEtcdWriter
 }
 
 // String implements fmt.Stringer interface.
@@ -187,9 +188,9 @@ func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo
 	return minID
 }
 
-func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo) {
+func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo) error {
 	c.cleanTables(ctx)
-	c.banlanceOrphanTables(ctx, captures)
+	return c.banlanceOrphanTables(ctx, captures)
 }
 
 func (c *changeFeed) restoreTableInfos(infoSnapshot *model.TaskStatus, captureID string) {
@@ -255,15 +256,30 @@ func findTaskStatusWithTable(infos model.ProcessorsInfos, tableID uint64) (captu
 	return "", nil, false
 }
 
-func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo) {
+func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo) error {
 	if len(captures) == 0 {
-		return
+		return nil
+	}
+
+	for tableID, captureID := range c.waitingConfirmTables {
+		lockStatus, err := c.infoWriter.CheckLock(ctx, c.id, captureID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		switch lockStatus {
+		case model.TableNoLock:
+			delete(c.waitingConfirmTables, tableID)
+		case model.TablePLock:
+			log.Debug("waiting the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
+		case model.TablePLockCommited:
+			delete(c.waitingConfirmTables, tableID)
+		}
 	}
 
 	for tableID, orphan := range c.orphanTables {
 		captureID := c.selectCapture(captures)
 		if len(captureID) == 0 {
-			return
+			return nil
 		}
 
 		info := c.taskStatus[captureID]
@@ -276,7 +292,7 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 			StartTs: orphan.StartTs,
 		})
 
-		newInfo, err := c.infoWriter.Write(ctx, c.id, captureID, info, false)
+		newInfo, err := c.infoWriter.Write(ctx, c.id, captureID, info, true)
 		if err == nil {
 			c.taskStatus[captureID] = newInfo
 		}
@@ -292,12 +308,14 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 				zap.Uint64("start ts", orphan.StartTs),
 				zap.String("capture", captureID))
 			delete(c.orphanTables, tableID)
+			c.waitingConfirmTables[tableID] = captureID
 		default:
 			c.restoreTableInfos(infoClone, captureID)
 			log.Error("fail to put sub changefeed info", zap.Error(err))
-			return
+			return errors.Trace(err)
 		}
 	}
+	return nil
 }
 
 func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
@@ -409,7 +427,10 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 
-	c.banlanceOrphanTables(ctx, captures)
+	err = c.banlanceOrphanTables(ctx, captures)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	err = c.sink.EmitDDLEvent(ctx, ddlEvent)
 	// If DDL executing failed, pause the changefeed and print log, rather
@@ -445,6 +466,9 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	// ProcessorInfos don't contains the whole set table id now.
 	if len(c.orphanTables) > 0 {
+		return nil
+	}
+	if len(c.waitingConfirmTables) > 0 {
 		return nil
 	}
 

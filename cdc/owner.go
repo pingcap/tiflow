@@ -207,14 +207,15 @@ func (o *Owner) newChangeFeed(
 	}()
 
 	cf := &changeFeed{
-		info:          info,
-		id:            id,
-		ddlHandler:    ddlHandler,
-		schema:        schemaStorage,
-		schemas:       schemas,
-		tables:        tables,
-		orphanTables:  orphanTables,
-		toCleanTables: make(map[uint64]struct{}),
+		info:                 info,
+		id:                   id,
+		ddlHandler:           ddlHandler,
+		schema:               schemaStorage,
+		schemas:              schemas,
+		tables:               tables,
+		orphanTables:         orphanTables,
+		waitingConfirmTables: make(map[uint64]string),
+		toCleanTables:        make(map[uint64]struct{}),
 		status: &model.ChangeFeedStatus{
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
@@ -275,7 +276,10 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 	}
 
 	for _, changefeed := range o.changeFeeds {
-		changefeed.tryBalance(ctx, o.captures)
+		err := changefeed.tryBalance(ctx, o.captures)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	return nil
