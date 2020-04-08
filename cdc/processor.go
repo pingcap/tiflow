@@ -653,7 +653,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 				if pEvent == nil {
 					continue
 				}
-				log.Info("sorter output", zap.Reflect("pevent", pEvent))
 				if pEvent.RawKV.OpType == model.OpTypeResolved {
 					table.storeResolvedTS(pEvent.Ts)
 					continue
