@@ -162,9 +162,8 @@ func newProcessor(
 	}
 
 	for _, table := range p.status.TableInfos {
-		go p.addTable(ctx, int64(table.ID), table.StartTs)
+		p.addTable(ctx, int64(table.ID), table.StartTs)
 	}
-
 	return p, nil
 }
 
@@ -351,18 +350,21 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 }
 
 func (p *processor) updateInfo(ctx context.Context) error {
-	p.position.Count = p.sink.Count()
-	err := p.tsRWriter.WritePosition(ctx, p.position)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	log.Debug("update task position", zap.Stringer("status", p.position))
-	statusChanged, err := p.tsRWriter.UpdateInfo(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if !statusChanged {
+	updatePosition := func() error {
+		p.position.Count = p.sink.Count()
+		err := p.tsRWriter.WritePosition(ctx, p.position)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Debug("update task position", zap.Stringer("status", p.position))
 		return nil
+	}
+	statusChanged, locked, err := p.tsRWriter.UpdateInfo(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !statusChanged && !locked {
+		return updatePosition()
 	}
 	oldStatus := p.status
 	p.status = p.tsRWriter.GetTaskStatus()
@@ -376,7 +378,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	p.handleTables(ctx, oldStatus, p.status, p.position.CheckPointTs)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
 
-	return retry.Run(500*time.Millisecond, 5, func() error {
+	err = retry.Run(500*time.Millisecond, 5, func() error {
 		err = p.tsRWriter.WriteInfoIntoStorage(ctx)
 		switch errors.Cause(err) {
 		case model.ErrWriteTsConflict:
@@ -388,6 +390,10 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			return backoff.Permanent(errors.Trace(err))
 		}
 	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return updatePosition()
 }
 
 func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed, added []*model.ProcessTableInfo) {
@@ -460,17 +466,17 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 		p.removeTable(int64(pinfo.ID))
 	}
 
+	// add tables
+	for _, pinfo := range addedTables {
+		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
+	}
+
 	// write clock if need
 	if newInfo.TablePLock != nil && newInfo.TableCLock == nil {
 		newInfo.TableCLock = &model.TableLock{
 			Ts:           newInfo.TablePLock.Ts,
 			CheckpointTs: checkpointTs,
 		}
-	}
-
-	// add tables
-	for _, pinfo := range addedTables {
-		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
 	}
 }
 
@@ -669,6 +675,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 		}
 	}()
 	p.tables[tableID] = table
+	if p.position.CheckPointTs > startTs {
+		p.position.CheckPointTs = startTs
+	}
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Inc()
 	p.collectMetrics(ctx, tableID)
 }
