@@ -650,8 +650,12 @@ func (s *SchemaStorage) DoGC(ts uint64) {
 		}
 		startIdx = i
 	}
+	if startIdx == 0 {
+		return
+	}
 	s.snaps = s.snaps[startIdx:]
 	atomic.StoreUint64(&s.gcTs, s.snaps[0].currentTs)
+	log.Info("finished gc in schema storage", zap.Uint64("gcTs", s.snaps[0].currentTs))
 }
 
 // SkipJob skip the job should not be executed
