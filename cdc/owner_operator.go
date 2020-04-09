@@ -64,6 +64,9 @@ func newDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
 			case <-ctx.Done():
 				return ctx.Err()
 			case e := <-rawDDLCh:
+				if e == nil {
+					continue
+				}
 				err := h.receiveDDL(e)
 				if err != nil {
 					return errors.Trace(err)
