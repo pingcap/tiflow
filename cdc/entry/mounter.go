@@ -161,8 +161,8 @@ func (m *mounterImpl) collectMetrics(ctx context.Context) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
-
 	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+
 	for {
 		select {
 		case <-ctx.Done():

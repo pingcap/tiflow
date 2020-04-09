@@ -544,17 +544,13 @@ type SchemaStorage struct {
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(jobs []*timodel.Job) (*SchemaStorage, error) {
-	snap := newEmptySchemaSnapshot()
+	schema := &SchemaStorage{}
 	for _, job := range jobs {
-		if err := snap.handleDDL(job); err != nil {
+		if err := schema.HandleDDLJob(job); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
-	return &SchemaStorage{
-		snaps:      []*schemaSnapshot{snap},
-		gcTs:       snap.currentTs,
-		resolvedTs: snap.currentTs,
-	}, nil
+	return schema, nil
 }
 
 func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
@@ -606,18 +602,23 @@ func (s *SchemaStorage) GetLastSnapshot() *schemaSnapshot {
 
 // HandleDDLJob creates a new snapshot in storage and handles the ddl job
 func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
-	s.snapsMu.Lock()
-	defer s.snapsMu.Unlock()
-	lastSnap := s.snaps[len(s.snaps)-1]
-	if job.BinlogInfo.FinishedTS <= lastSnap.currentTs {
-		log.Debug("ignore foregone DDL job", zap.Reflect("job", job))
-		return nil
-	}
 	if SkipJob(job) {
 		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 		return nil
 	}
-	snap := lastSnap.Clone()
+	s.snapsMu.Lock()
+	defer s.snapsMu.Unlock()
+	var snap *schemaSnapshot
+	if len(s.snaps) > 0 {
+		lastSnap := s.snaps[len(s.snaps)-1]
+		if job.BinlogInfo.FinishedTS <= lastSnap.currentTs {
+			log.Debug("ignore foregone DDL job", zap.Reflect("job", job))
+			return nil
+		}
+		snap = lastSnap.Clone()
+	} else {
+		snap = newEmptySchemaSnapshot()
+	}
 	if err := snap.handleDDL(job); err != nil {
 		return errors.Trace(err)
 	}
@@ -649,8 +650,12 @@ func (s *SchemaStorage) DoGC(ts uint64) {
 		}
 		startIdx = i
 	}
+	if startIdx == 0 {
+		return
+	}
 	s.snaps = s.snaps[startIdx:]
 	atomic.StoreUint64(&s.gcTs, s.snaps[0].currentTs)
+	log.Info("finished gc in schema storage", zap.Uint64("gcTs", s.snaps[0].currentTs))
 }
 
 // SkipJob skip the job should not be executed
