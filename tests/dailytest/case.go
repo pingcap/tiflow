@@ -212,9 +212,9 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr := &testRunner{src: src, dst: dst, schema: schema}
 	//ineligibleTable(tr, src, dst)
 	//runPKorUKcases(tr)
-	//
-	tr.run(caseUpdateWhileAddingCol)
-	tr.execSQLs([]string{"DROP TABLE growing_cols;"})
+	////
+	//tr.run(caseUpdateWhileAddingCol)
+	//tr.execSQLs([]string{"DROP TABLE growing_cols;"})
 
 	//tr.execSQLs(caseMultiDataType)
 	//tr.execSQLs(caseMultiDataTypeClean)
@@ -235,6 +235,18 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	//})
 	//tr.execSQLs(casePKAddDuplicateUKClean)
 
+	tr.run(caseUpdateWhileDroppingCol)
+	tr.execSQLs([]string{"DROP TABLE many_cols;"})
+	tr.run(caseUpdateWhileDroppingCol)
+	tr.execSQLs([]string{"DROP TABLE many_cols;"})
+	tr.run(caseUpdateWhileDroppingCol)
+	tr.execSQLs([]string{"DROP TABLE many_cols;"})
+	tr.run(caseUpdateWhileDroppingCol)
+	tr.execSQLs([]string{"DROP TABLE many_cols;"})
+	tr.run(caseUpdateWhileDroppingCol)
+	tr.execSQLs([]string{"DROP TABLE many_cols;"})
+	tr.run(caseUpdateWhileDroppingCol)
+	tr.execSQLs([]string{"DROP TABLE many_cols;"})
 	tr.run(caseUpdateWhileDroppingCol)
 	tr.execSQLs([]string{"DROP TABLE many_cols;"})
 
@@ -418,7 +430,7 @@ CREATE TABLE growing_cols (
 }
 
 func caseUpdateWhileDroppingCol(db *sql.DB) {
-	const nCols = 10
+	const nCols = 2
 	var builder strings.Builder
 	for i := 0; i < nCols; i++ {
 		if i != 0 {

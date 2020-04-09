@@ -52,6 +52,7 @@ func Run(sourceDB *sql.DB, targetDB *sql.DB, schema string, workerCount int, job
 	//	`}
 
 	// run the simple test case
+	log.S().Info("start test!!!")
 	RunCase(sourceDB, targetDB, schema)
 
 	//RunTest(sourceDB, targetDB, schema, func(src *sql.DB) {
