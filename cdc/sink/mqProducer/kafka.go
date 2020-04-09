@@ -53,20 +53,16 @@ type kafkaSaramaProducer struct {
 }
 
 type kafkaMsg struct {
-	key       *model.MqMessageKey
-	valueByte []byte
+	key   *model.MqMessageKey
+	value *model.MqMessageRow
 }
 
 func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key *model.MqMessageKey, value *model.MqMessageRow, partition int32) error {
-	valueByte, err := value.Encode()
-	if err != nil {
-		return errors.Trace(err)
-	}
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
 	case k.rowPartitionCh[int(partition)] <- kafkaMsg{
-		key: key, valueByte: valueByte,
+		key: key, value: value,
 	}:
 	}
 	return nil
@@ -241,7 +237,11 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
-				batchEncoder.Append(keyByte, msg.valueByte)
+				valueByte, err := msg.value.Encode()
+				if err != nil {
+					return errors.Trace(err)
+				}
+				batchEncoder.Append(keyByte, valueByte)
 				if batchEncoder.Len() >= batchSize {
 					flush(false, 0)
 				}
@@ -384,7 +384,13 @@ func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
 
 func (k *kafkaSaramaProducer) Close() error {
 	close(k.closeCh)
-	err := k.syncClient.Close()
-	err = k.asyncClient.Close()
-	return err
+	err1 := k.syncClient.Close()
+	err2 := k.asyncClient.Close()
+	if err1 != nil {
+		return err1
+	}
+	if err2 != nil {
+		return err2
+	}
+	return nil
 }
