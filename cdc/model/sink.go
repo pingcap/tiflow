@@ -3,8 +3,8 @@ package model
 import (
 	"encoding/base64"
 	"encoding/json"
-	"log"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"go.uber.org/zap"
