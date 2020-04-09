@@ -68,10 +68,9 @@ type Column struct {
 
 func (c *Column) formatVal() {
 	switch c.Type {
-	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString,
-		mysql.TypeTinyBlob, mysql.TypeMediumBlob,
+	case mysql.TypeTinyBlob, mysql.TypeMediumBlob,
 		mysql.TypeLongBlob, mysql.TypeBlob:
-		if s, ok := c.Value.(string); ok && len(s) > 0 {
+		if s, ok := c.Value.(string); ok {
 			var err error
 			c.Value, err = base64.StdEncoding.DecodeString(s)
 			if err != nil {
