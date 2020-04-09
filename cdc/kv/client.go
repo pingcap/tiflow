@@ -1014,15 +1014,25 @@ func (s *eventFeedSession) singleEventFeed(
 
 	matcher := newMatcher()
 
-	for {
+	var ticker *time.Ticker
+	hangTime := time.Duration(0)
 
+	for {
+		ticker = time.NewTicker(time.Minute)
 		var event *cdcpb.Event
 		var ok bool
 		select {
 		case <-ctx.Done():
 			return atomic.LoadUint64(&checkpointTs), ctx.Err()
+		case <-ticker.C:
+			hangTime += time.Minute
+			log.Warn("region not receiving event from tikv for too long time",
+				zap.Uint64("regionID", regionID), zap.Reflect("span", span), zap.Duration("duration", hangTime))
+			continue
 		case event, ok = <-receiverCh:
 		}
+		hangTime = 0
+		ticker.Stop()
 
 		if !ok {
 			log.Debug("singleEventFeed receiver closed")
