@@ -26,7 +26,12 @@ func newMatcher() *matcher {
 }
 
 func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
-	m.unmatchedValue[newMatchKey(row)] = row.GetValue()
+	key := newMatchKey(row)
+	value := row.GetValue()
+	if _, exist := m.unmatchedValue[key]; exist && len(value) == 0 {
+		return
+	}
+	m.unmatchedValue[key] = value
 }
 
 func (m *matcher) matchRow(row *cdcpb.Event_Row) ([]byte, bool) {
