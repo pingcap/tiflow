@@ -68,10 +68,6 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key *model.MqMess
 	return nil
 }
 
-func (k *kafkaSaramaProducer) BroadcastMessage(ctx context.Context, key *model.MqMessageKey, value *model.MqMessageDDL) error {
-	panic("implement me")
-}
-
 func (k *kafkaSaramaProducer) PrintStatus(ctx context.Context) error {
 	lastTime := time.Now()
 	var lastCount uint64
