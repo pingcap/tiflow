@@ -66,6 +66,6 @@ func main() {
 		}
 	}()
 
-	dailytest.RunMultiSource(sourceDBs, targetDB, cfg.SourceDBCfg.Name)
+	//dailytest.RunMultiSource(sourceDBs, targetDB, cfg.SourceDBCfg.Name)
 	dailytest.Run(sourceDB, targetDB, cfg.SourceDBCfg.Name, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 }
