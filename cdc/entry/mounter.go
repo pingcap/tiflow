@@ -146,7 +146,6 @@ func (m *mounterImpl) codecWorker(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Debug("show raw kv and row changed", zap.Reflect("raw", pEvent.RawKV), zap.Reflect("row", rowEvent))
 		pEvent.Row = rowEvent
 		pEvent.RawKV.Key = nil
 		pEvent.RawKV.Value = nil
