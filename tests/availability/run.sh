@@ -6,6 +6,7 @@ CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 source $CUR/owner.sh
 source $CUR/capture.sh
+source $CUR/processor.sh
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 
@@ -31,4 +32,5 @@ trap stop_tidb_cluster EXIT
 prepare $*
 test_owner_ha $*
 test_capture_ha $*
+test_processor_ha $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

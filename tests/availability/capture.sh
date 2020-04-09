@@ -100,7 +100,7 @@ function test_hang_up_capture() {
 
     kill -STOP $owner_pid
     run_sql "INSERT INTO test.availability(id, val) VALUES (3, 3);"
-    ensure 20 nonempty 'select id, val from test.availability where id=3 and val=3'
+    ensure $MAX_RETRIES nonempty 'select id, val from test.availability where id=3 and val=3'
     kill -CONT $owner_pid
     cleanup_process $CDC_BINARY
 }
@@ -134,6 +134,6 @@ function test_expire_capture() {
 
     run_sql "UPDATE test.availability set val = 22 where id = 2;"
     run_sql "DELETE from test.availability where id = 3;"
-    ensure 20 nonempty 'select id, val from test.availability where id=2 and val=22'
+    ensure $MAX_RETRIES nonempty 'select id, val from test.availability where id=2 and val=22'
     cleanup_process $CDC_BINARY
 }
