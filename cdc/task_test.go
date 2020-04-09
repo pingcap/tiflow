@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -164,6 +165,9 @@ func (s *taskSuite) TestWatch(c *check.C) {
 
 	// Watch with a normal context
 	ch := s.w.Watch(context.Background())
+
+	// Trigger the ErrCompacted error
+	c.Assert(failpoint.Enable("github.com/pingcap/ticdc/cdc.restart_task_watch", "50%off"), check.IsNil)
 
 	// Put task changefeed-1
 	c.Assert(client.PutTaskStatus(s.c.Ctx(), "changefeed-1",

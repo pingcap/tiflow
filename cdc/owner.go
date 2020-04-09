@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/entry"
@@ -32,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 )
 
@@ -612,7 +614,11 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 		clientv3.WithPrevKV())
 
 	for resp := range ch {
-		if resp.Err() != nil {
+		err := resp.Err()
+		failpoint.Inject("restart-capture-watch", func() {
+			err = mvcc.ErrCompacted
+		})
+		if err != nil {
 			return errors.Trace(resp.Err())
 		}
 		for _, ev := range resp.Events {

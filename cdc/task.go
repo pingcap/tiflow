@@ -17,9 +17,11 @@ import (
 	"context"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 )
 
@@ -123,7 +125,11 @@ restart:
 		clientv3.WithPrevKV(),
 		clientv3.WithRev(resp.Header.Revision+1))
 	for wresp := range wch {
-		if wresp.Err() != nil {
+		err := wresp.Err()
+		failpoint.Inject("restart-task-watch", func() {
+			err = mvcc.ErrCompacted
+		})
+		if err != nil {
 			goto restart
 		}
 		for _, ev := range wresp.Events {
