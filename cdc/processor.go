@@ -480,7 +480,6 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 			Ts:           newInfo.TablePLock.Ts,
 			CheckpointTs: checkpointTs,
 		}
-		log.Info("add c lock", zap.Reflect("c lock", newInfo.TableCLock))
 	}
 }
 
@@ -604,7 +603,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	defer p.tablesMu.Unlock()
 	ctx = util.PutTableIDInCtx(ctx, tableID)
 
-	log.Info("Add table", zap.Int64("tableID", tableID), zap.Uint64("startTs", startTs))
+	log.Debug("Add table", zap.Int64("tableID", tableID), zap.Uint64("startTs", startTs))
 	if _, ok := p.tables[tableID]; ok {
 		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
 	}

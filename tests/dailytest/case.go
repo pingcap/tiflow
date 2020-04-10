@@ -20,6 +20,7 @@ import (
 	"math/rand"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -210,107 +211,95 @@ func (tr *testRunner) execSQLs(sqls []string) {
 // RunCase run some simple test case
 func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr := &testRunner{src: src, dst: dst, schema: schema}
-	//ineligibleTable(tr, src, dst)
-	//runPKorUKcases(tr)
-	////
-	//tr.run(caseUpdateWhileAddingCol)
-	//tr.execSQLs([]string{"DROP TABLE growing_cols;"})
+	ineligibleTable(tr, src, dst)
+	runPKorUKcases(tr)
 
-	//tr.execSQLs(caseMultiDataType)
-	//tr.execSQLs(caseMultiDataTypeClean)
-	//
-	//tr.execSQLs(caseUKWithNoPK)
-	//tr.execSQLs(caseUKWithNoPKClean)
-	//
-	//tr.execSQLs(caseAlterDatabase)
-	//tr.execSQLs(caseAlterDatabaseClean)
+	tr.run(caseUpdateWhileAddingCol)
+	tr.execSQLs([]string{"DROP TABLE growing_cols;"})
+
+	tr.execSQLs(caseMultiDataType)
+	tr.execSQLs(caseMultiDataTypeClean)
+
+	tr.execSQLs(caseUKWithNoPK)
+	tr.execSQLs(caseUKWithNoPKClean)
+
+	tr.execSQLs(caseAlterDatabase)
+	tr.execSQLs(caseAlterDatabaseClean)
 
 	// run casePKAddDuplicateUK
-	//tr.run(func(src *sql.DB) {
-	//	err := execSQLs(src, casePKAddDuplicateUK)
-	//	// the add unique index will failed by duplicate entry
-	//	if err != nil && !strings.Contains(err.Error(), "Duplicate") {
-	//		log.S().Fatal(err)
-	//	}
-	//})
-	//tr.execSQLs(casePKAddDuplicateUKClean)
+	tr.run(func(src *sql.DB) {
+		err := execSQLs(src, casePKAddDuplicateUK)
+		// the add unique index will failed by duplicate entry
+		if err != nil && !strings.Contains(err.Error(), "Duplicate") {
+			log.S().Fatal(err)
+		}
+	})
+	tr.execSQLs(casePKAddDuplicateUKClean)
 
 	tr.run(caseUpdateWhileDroppingCol)
 	tr.execSQLs([]string{"DROP TABLE many_cols;"})
-	tr.run(caseUpdateWhileDroppingCol)
-	tr.execSQLs([]string{"DROP TABLE many_cols;"})
-	tr.run(caseUpdateWhileDroppingCol)
-	tr.execSQLs([]string{"DROP TABLE many_cols;"})
-	tr.run(caseUpdateWhileDroppingCol)
-	tr.execSQLs([]string{"DROP TABLE many_cols;"})
-	tr.run(caseUpdateWhileDroppingCol)
-	tr.execSQLs([]string{"DROP TABLE many_cols;"})
-	tr.run(caseUpdateWhileDroppingCol)
-	tr.execSQLs([]string{"DROP TABLE many_cols;"})
-	tr.run(caseUpdateWhileDroppingCol)
-	tr.execSQLs([]string{"DROP TABLE many_cols;"})
 
-	//tr.execSQLs(caseInsertBit)
-	//tr.execSQLs(caseInsertBitClean)
-	//
-	//// run caseRecoverAndInsert
-	//tr.execSQLs(caseRecoverAndInsert)
-	//tr.execSQLs(caseRecoverAndInsertClean)
-	//
-	//tr.run(caseTblWithGeneratedCol)
-	//tr.execSQLs([]string{"DROP TABLE gen_contacts;"})
-	//tr.run(caseCreateView)
-	//tr.execSQLs([]string{"DROP TABLE base_for_view;"})
-	//tr.execSQLs([]string{"DROP VIEW view_user_sum;"})
+	tr.execSQLs(caseInsertBit)
+	tr.execSQLs(caseInsertBitClean)
+
+	// run caseRecoverAndInsert
+	tr.execSQLs(caseRecoverAndInsert)
+	tr.execSQLs(caseRecoverAndInsertClean)
+
+	tr.run(caseTblWithGeneratedCol)
+	tr.execSQLs([]string{"DROP TABLE gen_contacts;"})
+	tr.run(caseCreateView)
+	tr.execSQLs([]string{"DROP TABLE base_for_view;"})
+	tr.execSQLs([]string{"DROP VIEW view_user_sum;"})
 
 	// random op on have both pk and uk table
-	//var start time.Time
-	//tr.run(func(src *sql.DB) {
-	//	start = time.Now()
-	//
-	//	err := updatePKUK(src, 1000)
-	//	if err != nil {
-	//		log.S().Fatal(errors.ErrorStack(err))
-	//	}
-	//})
-	//
-	//tr.execSQLs([]string{"DROP TABLE pkuk"})
-	//log.S().Info("sync updatePKUK take: ", time.Since(start))
+	var start time.Time
+	tr.run(func(src *sql.DB) {
+		start = time.Now()
+
+		err := updatePKUK(src, 1000)
+		if err != nil {
+			log.S().Fatal(errors.ErrorStack(err))
+		}
+	})
+
+	tr.execSQLs([]string{"DROP TABLE pkuk"})
+	log.S().Info("sync updatePKUK take: ", time.Since(start))
 
 	// swap unique index value
-	//tr.run(func(src *sql.DB) {
-	//	mustExec(src, "create table uindex(id int primary key, a1 int unique)")
-	//
-	//	mustExec(src, "insert into uindex(id, a1) values(1, 10), (2, 20)")
-	//
-	//	tx, err := src.Begin()
-	//	if err != nil {
-	//		log.S().Fatal(err)
-	//	}
-	//
-	//	_, err = tx.Exec("update uindex set a1 = 30 where id = 1")
-	//	if err != nil {
-	//		log.S().Fatal(err)
-	//	}
-	//
-	//	_, err = tx.Exec("update uindex set a1 = 10 where id = 2")
-	//	if err != nil {
-	//		log.S().Fatal(err)
-	//	}
-	//
-	//	_, err = tx.Exec("update uindex set a1 = 20 where id = 1")
-	//	if err != nil {
-	//		log.S().Fatal(err)
-	//	}
-	//
-	//	err = tx.Commit()
-	//	if err != nil {
-	//		log.S().Fatal(err)
-	//	}
-	//})
-	//tr.run(func(src *sql.DB) {
-	//	mustExec(src, "drop table uindex")
-	//})
+	tr.run(func(src *sql.DB) {
+		mustExec(src, "create table uindex(id int primary key, a1 int unique)")
+
+		mustExec(src, "insert into uindex(id, a1) values(1, 10), (2, 20)")
+
+		tx, err := src.Begin()
+		if err != nil {
+			log.S().Fatal(err)
+		}
+
+		_, err = tx.Exec("update uindex set a1 = 30 where id = 1")
+		if err != nil {
+			log.S().Fatal(err)
+		}
+
+		_, err = tx.Exec("update uindex set a1 = 10 where id = 2")
+		if err != nil {
+			log.S().Fatal(err)
+		}
+
+		_, err = tx.Exec("update uindex set a1 = 20 where id = 1")
+		if err != nil {
+			log.S().Fatal(err)
+		}
+
+		err = tx.Commit()
+		if err != nil {
+			log.S().Fatal(err)
+		}
+	})
+	tr.run(func(src *sql.DB) {
+		mustExec(src, "drop table uindex")
+	})
 
 	// test big cdc msg
 	// TODO: fix me
@@ -430,7 +419,7 @@ CREATE TABLE growing_cols (
 }
 
 func caseUpdateWhileDroppingCol(db *sql.DB) {
-	const nCols = 2
+	const nCols = 10
 	var builder strings.Builder
 	for i := 0; i < nCols; i++ {
 		if i != 0 {
