@@ -1055,9 +1055,13 @@ func (s *eventFeedSession) singleEventFeed(
 					for _, cacheEntry := range matcher.cachedCommit {
 						value, ok := matcher.matchRow(cacheEntry)
 						if !ok {
-							return atomic.LoadUint64(&checkpointTs),
-								errors.Errorf("prewrite not match, key: %b, start-ts: %d",
-									cacheEntry.GetKey(), cacheEntry.GetStartTs())
+							// when cdc receives a commit log without a corresponding
+							// prewrite log before initialized, a committed log  with
+							// the same key and start-ts must have been received.
+							log.Info("ignore commit event without prewrite",
+								zap.Binary("key", cacheEntry.GetKey()),
+								zap.Uint64("ts", cacheEntry.GetStartTs()))
+							continue
 						}
 						revent, err := assembleCommitEvent(cacheEntry, value)
 						if err != nil {
