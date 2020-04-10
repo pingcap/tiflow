@@ -550,11 +550,14 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	for {
 		select {
 		case row := <-p.output:
-			row.WaitPrepare()
+			err := row.WaitPrepare(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
 			if row.Row == nil {
 				continue
 			}
-			err := p.sink.EmitRowChangedEvent(ctx, row.Row)
+			err = p.sink.EmitRowChangedEvent(ctx, row.Row)
 			if err != nil {
 				return errors.Trace(err)
 			}
