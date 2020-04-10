@@ -477,6 +477,7 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 			Ts:           newInfo.TablePLock.Ts,
 			CheckpointTs: checkpointTs,
 		}
+		log.Info("add c lock", zap.Reflect("c lock", newInfo.TableCLock))
 	}
 }
 
@@ -600,7 +601,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	defer p.tablesMu.Unlock()
 	ctx = util.PutTableIDInCtx(ctx, tableID)
 
-	log.Debug("Add table", zap.Int64("tableID", tableID))
+	log.Info("Add table", zap.Int64("tableID", tableID), zap.Uint64("startTs", startTs))
 	if _, ok := p.tables[tableID]; ok {
 		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
 	}
@@ -677,6 +678,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	p.tables[tableID] = table
 	if p.position.CheckPointTs > startTs {
 		p.position.CheckPointTs = startTs
+	}
+	if p.position.ResolvedTs > startTs {
+		p.position.ResolvedTs = startTs
 	}
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Inc()
 	p.collectMetrics(ctx, tableID)
