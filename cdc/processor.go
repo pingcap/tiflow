@@ -377,7 +377,10 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	}
 	p.handleTables(ctx, oldStatus, p.status, p.position.CheckPointTs)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
-
+	err = updatePosition()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	err = retry.Run(500*time.Millisecond, 5, func() error {
 		err = p.tsRWriter.WriteInfoIntoStorage(ctx)
 		switch errors.Cause(err) {
@@ -393,7 +396,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return updatePosition()
+	return nil
 }
 
 func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed, added []*model.ProcessTableInfo) {
@@ -603,7 +606,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	defer p.tablesMu.Unlock()
 	ctx = util.PutTableIDInCtx(ctx, tableID)
 
-	log.Debug("Add table", zap.Int64("tableID", tableID))
+	log.Debug("Add table", zap.Int64("tableID", tableID), zap.Uint64("startTs", startTs))
 	if _, ok := p.tables[tableID]; ok {
 		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
 	}
@@ -680,6 +683,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	p.tables[tableID] = table
 	if p.position.CheckPointTs > startTs {
 		p.position.CheckPointTs = startTs
+	}
+	if p.position.ResolvedTs > startTs {
+		p.position.ResolvedTs = startTs
 	}
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Inc()
 	p.collectMetrics(ctx, tableID)

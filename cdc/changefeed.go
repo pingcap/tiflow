@@ -465,10 +465,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	}
 
 	// ProcessorInfos don't contains the whole set table id now.
-	if len(c.orphanTables) > 0 {
-		return nil
-	}
-	if len(c.waitingConfirmTables) > 0 {
+	if len(c.orphanTables) > 0 || len(c.waitingConfirmTables) > 0 {
 		return nil
 	}
 
