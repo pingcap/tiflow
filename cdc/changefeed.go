@@ -83,9 +83,12 @@ type changeFeed struct {
 	schemas              map[uint64]tableIDMap
 	tables               map[uint64]entry.TableName
 	orphanTables         map[uint64]model.ProcessTableInfo
-	waitingConfirmTables map[uint64]string
-	toCleanTables        map[uint64]struct{}
-	infoWriter           *storage.OwnerTaskStatusEtcdWriter
+	waitingConfirmTables map[uint64]struct {
+		captureID string
+		startTs   uint64
+	}
+	toCleanTables map[uint64]struct{}
+	infoWriter    *storage.OwnerTaskStatusEtcdWriter
 }
 
 // String implements fmt.Stringer interface.
@@ -261,8 +264,8 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 		return nil
 	}
 
-	for tableID, captureID := range c.waitingConfirmTables {
-		lockStatus, err := c.infoWriter.CheckLock(ctx, c.id, captureID)
+	for tableID, waitingConfirm := range c.waitingConfirmTables {
+		lockStatus, err := c.infoWriter.CheckLock(ctx, c.id, waitingConfirm.captureID)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -270,7 +273,7 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 		case model.TableNoLock:
 			delete(c.waitingConfirmTables, tableID)
 		case model.TablePLock:
-			log.Debug("waiting the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
+			log.Debug("waiting the c-lock", zap.Uint64("tableID", tableID), zap.Reflect("waitingConfirm", waitingConfirm))
 		case model.TablePLockCommited:
 			delete(c.waitingConfirmTables, tableID)
 		}
@@ -308,7 +311,10 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 				zap.Uint64("start ts", orphan.StartTs),
 				zap.String("capture", captureID))
 			delete(c.orphanTables, tableID)
-			c.waitingConfirmTables[tableID] = captureID
+			c.waitingConfirmTables[tableID] = struct {
+				captureID string
+				startTs   uint64
+			}{captureID: captureID, startTs: orphan.StartTs}
 		default:
 			c.restoreTableInfos(infoClone, captureID)
 			log.Error("fail to put sub changefeed info", zap.Error(err))
@@ -468,9 +474,6 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if len(c.orphanTables) > 0 {
 		return nil
 	}
-	if len(c.waitingConfirmTables) > 0 {
-		return nil
-	}
 
 	minResolvedTs := c.targetTs
 	minCheckpointTs := c.targetTs
@@ -488,6 +491,15 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 			if minCheckpointTs > position.CheckPointTs {
 				minCheckpointTs = position.CheckPointTs
+			}
+		}
+		for _, waitingConfirm := range c.waitingConfirmTables {
+			if minResolvedTs > waitingConfirm.startTs {
+				minResolvedTs = waitingConfirm.startTs
+			}
+
+			if minCheckpointTs > waitingConfirm.startTs {
+				minCheckpointTs = waitingConfirm.startTs
 			}
 		}
 	}

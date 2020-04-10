@@ -209,15 +209,18 @@ func (o *Owner) newChangeFeed(
 	}()
 
 	cf := &changeFeed{
-		info:                 info,
-		id:                   id,
-		ddlHandler:           ddlHandler,
-		schema:               schemaStorage,
-		schemas:              schemas,
-		tables:               tables,
-		orphanTables:         orphanTables,
-		waitingConfirmTables: make(map[uint64]string),
-		toCleanTables:        make(map[uint64]struct{}),
+		info:         info,
+		id:           id,
+		ddlHandler:   ddlHandler,
+		schema:       schemaStorage,
+		schemas:      schemas,
+		tables:       tables,
+		orphanTables: orphanTables,
+		waitingConfirmTables: make(map[uint64]struct {
+			captureID string
+			startTs   uint64
+		}),
+		toCleanTables: make(map[uint64]struct{}),
 		status: &model.ChangeFeedStatus{
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
