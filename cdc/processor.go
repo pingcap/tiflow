@@ -377,7 +377,10 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	}
 	p.handleTables(ctx, oldStatus, p.status, p.position.CheckPointTs)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
-
+	err = updatePosition()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	err = retry.Run(500*time.Millisecond, 5, func() error {
 		err = p.tsRWriter.WriteInfoIntoStorage(ctx)
 		switch errors.Cause(err) {
@@ -393,7 +396,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return updatePosition()
+	return nil
 }
 
 func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed, added []*model.ProcessTableInfo) {
