@@ -537,16 +537,15 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			zap.Uint64("minCheckpointTs", minCheckpointTs), zap.Uint64("c.status.CheckpointTs", c.status.CheckpointTs))
 	}
 
-	c.status.ResolvedTs = minResolvedTs
-	c.status.CheckpointTs = minCheckpointTs
-
 	var tsUpdated bool
 
 	if minResolvedTs > c.status.ResolvedTs {
+		c.status.ResolvedTs = minResolvedTs
 		tsUpdated = true
 	}
 
 	if minCheckpointTs > c.status.CheckpointTs {
+		c.status.CheckpointTs = minCheckpointTs
 		err := c.sink.EmitCheckpointEvent(ctx, minCheckpointTs)
 		if err != nil {
 			return errors.Trace(err)
