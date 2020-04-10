@@ -533,15 +533,16 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		minCheckpointTs = minResolvedTs
 	}
 
+	c.status.ResolvedTs = minResolvedTs
+	c.status.CheckpointTs = minCheckpointTs
+
 	var tsUpdated bool
 
-	if minResolvedTs != c.status.ResolvedTs {
-		c.status.ResolvedTs = minResolvedTs
+	if minResolvedTs > c.status.ResolvedTs {
 		tsUpdated = true
 	}
 
-	if minCheckpointTs != c.status.CheckpointTs {
-		c.status.CheckpointTs = minCheckpointTs
+	if minCheckpointTs > c.status.CheckpointTs {
 		err := c.sink.EmitCheckpointEvent(ctx, minCheckpointTs)
 		if err != nil {
 			return errors.Trace(err)
