@@ -304,55 +304,71 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	if sink == nil {
 		panic("sink should initialized")
 	}
+	batchDecoder := model.NewBatchDecoder()
+ClaimMessages:
 	for message := range claim.Messages() {
-		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
-		key := new(model.MqMessageKey)
-		err := key.Decode(message.Key)
+		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
+		err := batchDecoder.Set(message.Key, message.Value)
 		if err != nil {
-			log.Fatal("decode message key failed", zap.Error(err))
+			return errors.Trace(err)
 		}
+		for batchDecoder.HasNext() {
+			keyBytes, valueBytes, err := batchDecoder.Next()
+			if err != nil {
+				log.Fatal("get message from batch failed", zap.Error(err))
+			}
+			key := new(model.MqMessageKey)
+			err = key.Decode(keyBytes)
+			if err != nil {
+				log.Fatal("decode message key failed", zap.Error(err))
+			}
 
-		switch key.Type {
-		case model.MqMessageTypeDDL:
-			value := new(model.MqMessageDDL)
-			err := value.Decode(message.Value)
-			if err != nil {
-				log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
-			}
+			switch key.Type {
+			case model.MqMessageTypeDDL:
+				value := new(model.MqMessageDDL)
+				err := value.Decode(valueBytes)
+				if err != nil {
+					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+				}
 
-			ddl := new(model.DDLEvent)
-			ddl.FromMqMessage(key, value)
-			c.appendDDL(ddl)
-		case model.MqMessageTypeRow:
-			globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-			if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
-				log.Info("filter fallback row", zap.ByteString("row", message.Key),
-					zap.Uint64("globalResolvedTs", globalResolvedTs),
-					zap.Uint64("sinkResolvedTs", sink.resolvedTs))
-				break
+				ddl := new(model.DDLEvent)
+				ddl.FromMqMessage(key, value)
+				c.appendDDL(ddl)
+			case model.MqMessageTypeRow:
+				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
+				if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
+					log.Debug("filter fallback row", zap.ByteString("row", message.Key),
+						zap.Uint64("globalResolvedTs", globalResolvedTs),
+						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
+						zap.Int32("partition", partition))
+					break ClaimMessages
+				}
+				value := new(model.MqMessageRow)
+				err := value.Decode(valueBytes)
+				if err != nil {
+					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+				}
+				row := new(model.RowChangedEvent)
+				row.FromMqMessage(key, value)
+				err = sink.EmitRowChangedEvent(ctx, row)
+				if err != nil {
+					log.Fatal("emit row changed event failed", zap.Error(err))
+				}
+			case model.MqMessageTypeResolved:
+				err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{Ts: key.Ts, Resolved: true})
+				if err != nil {
+					log.Fatal("emit row changed event failed", zap.Error(err))
+				}
+				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
+				if resolvedTs < key.Ts {
+					log.Debug("update sink resolved ts",
+						zap.Uint64("ts", key.Ts),
+						zap.Int32("partition", partition))
+					atomic.StoreUint64(&sink.resolvedTs, key.Ts)
+				}
 			}
-			value := new(model.MqMessageRow)
-			err := value.Decode(message.Value)
-			if err != nil {
-				log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
-			}
-			row := new(model.RowChangedEvent)
-			row.FromMqMessage(key, value)
-			err = sink.EmitRowChangedEvent(ctx, row)
-			if err != nil {
-				log.Fatal("emit row changed event failed", zap.Error(err))
-			}
-		case model.MqMessageTypeResolved:
-			err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{Ts: key.Ts, Resolved: true})
-			if err != nil {
-				log.Fatal("meit row changed event failed", zap.Error(err))
-			}
-			resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-			if resolvedTs < key.Ts {
-				atomic.StoreUint64(&sink.resolvedTs, key.Ts)
-			}
+			session.MarkMessage(message, "")
 		}
-		session.MarkMessage(message, "")
 	}
 
 	return nil
@@ -486,7 +502,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 		lastGlobalResolvedTs = globalResolvedTs
 		atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
-		log.Debug("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
+		log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
 
 		err = c.forEachSink(func(sink *struct {
 			sink.Sink
