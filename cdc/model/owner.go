@@ -269,7 +269,7 @@ func (status *ChangeFeedStatus) Unmarshal(data []byte) error {
 
 // ProcInfoSnap holds most important replication information of a processor
 type ProcInfoSnap struct {
-	CfID      string
-	CaptureID string
-	Tables    []ProcessTableInfo
+	CfID      string             `json:"changefeed-id"`
+	CaptureID string             `json:"capture-id"`
+	Tables    []ProcessTableInfo `json:"-"`
 }

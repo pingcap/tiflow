@@ -35,9 +35,6 @@ const (
 	// CaptureInfoKeyPrefix is the capture info path that is saved to etcd
 	CaptureInfoKeyPrefix = EtcdKeyBase + "/capture"
 
-	// ProcessorInfoKeyPrefix is the processor info path that is saved to etcd
-	ProcessorInfoKeyPrefix = EtcdKeyBase + "/processor"
-
 	// TaskKeyPrefix is the prefix of task keys
 	TaskKeyPrefix = EtcdKeyBase + "/task"
 
@@ -84,11 +81,6 @@ func GetEtcdKeyTaskPosition(changefeedID, captureID string) string {
 // GetEtcdKeyCaptureInfo returns the key of a capture info
 func GetEtcdKeyCaptureInfo(id string) string {
 	return CaptureInfoKeyPrefix + "/" + id
-}
-
-// GetEtcdKeyProcessorInfo returns the key of a processor
-func GetEtcdKeyProcessorInfo(captureID, processorID string) string {
-	return ProcessorInfoKeyPrefix + "/" + captureID + "/" + processorID
 }
 
 // GetEtcdKeyTaskStatus returns the key for the task status
@@ -236,6 +228,33 @@ func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID str
 		positions[captureID] = info
 	}
 	return positions, nil
+}
+
+// GetProcessors queries all processors of the cdc cluster,
+// and returns a slice of ProcInfoSnap(without table info)
+func (c CDCEtcdClient) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
+	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	infos := make([]*model.ProcInfoSnap, 0, resp.Count)
+	for _, rawKv := range resp.Kvs {
+		changefeedID, err := util.ExtractKeySuffix(string(rawKv.Key))
+		if err != nil {
+			return nil, err
+		}
+		endIndex := len(rawKv.Key) - len(changefeedID) - 1
+		captureID, err := util.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		if err != nil {
+			return nil, err
+		}
+		info := &model.ProcInfoSnap{
+			CfID:      changefeedID,
+			CaptureID: captureID,
+		}
+		infos = append(infos, info)
+	}
+	return infos, nil
 }
 
 // GetAllTaskStatus queries all task status of a changefeed, and returns a map

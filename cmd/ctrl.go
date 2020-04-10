@@ -225,6 +225,21 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 	return command
 }
 
+func newListProcessorCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "list",
+		Short: "List all processors in TiCDC cluster",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			info, err := cdcEtcdCli.GetProcessors(context.Background())
+			if err != nil {
+				return err
+			}
+			return jsonPrint(cmd, info)
+		},
+	}
+	return command
+}
+
 func newQueryProcessorCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "query",

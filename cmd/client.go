@@ -134,6 +134,7 @@ func newProcessorCommand() *cobra.Command {
 		Short: "Manage processor (processor is a sub replication task running on a specified capture)",
 	}
 	command.AddCommand(
+		newListProcessorCommand(),
 		newQueryProcessorCommand(),
 	)
 	return command
