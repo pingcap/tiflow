@@ -46,3 +46,5 @@ CREATE TABLE many_cols1 (
 ALTER TABLE many_cols1 DROP COLUMN col0;
 INSERT INTO many_cols1 (val) VALUES (1);
 DROP TABLE many_cols1;
+
+CREATE TABLE finish_mark(a int primary key)

@@ -32,7 +32,7 @@ function run() {
     fi
     run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # sync_diff can't check non-exist table, so we check expected tables are created in downstream first
-    check_table_exists row_format.multi_data_type ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists ddl_sequence.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     cleanup_process $CDC_BINARY
