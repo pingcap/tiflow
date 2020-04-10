@@ -3,8 +3,8 @@ package model
 import (
 	"encoding/base64"
 	"encoding/json"
-	"log"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"go.uber.org/zap"
@@ -68,8 +68,7 @@ type Column struct {
 
 func (c *Column) formatVal() {
 	switch c.Type {
-	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString,
-		mysql.TypeTinyBlob, mysql.TypeMediumBlob,
+	case mysql.TypeTinyBlob, mysql.TypeMediumBlob,
 		mysql.TypeLongBlob, mysql.TypeBlob:
 		if s, ok := c.Value.(string); ok {
 			var err error

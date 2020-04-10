@@ -13,6 +13,8 @@
 
 package model
 
+import "context"
+
 // PolymorphicEvent describes a event can be in multiple states
 type PolymorphicEvent struct {
 	Ts       uint64
@@ -52,8 +54,13 @@ func (e *PolymorphicEvent) PrepareFinished() {
 }
 
 // WaitPrepare waits for prepare process finished
-func (e *PolymorphicEvent) WaitPrepare() {
+func (e *PolymorphicEvent) WaitPrepare(ctx context.Context) error {
 	if e.finished != nil {
-		<-e.finished
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-e.finished:
+		}
 	}
+	return nil
 }
