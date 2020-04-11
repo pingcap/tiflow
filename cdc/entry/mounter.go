@@ -19,7 +19,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -113,7 +112,7 @@ func NewMounter(schemaStorage *SchemaStorage) Mounter {
 	}
 }
 
-const codecWorkerNum = 16
+const codecWorkerNum = 32
 
 func (m *mounterImpl) Run(ctx context.Context) error {
 	errg, ctx := errgroup.WithContext(ctx)
@@ -130,6 +129,10 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 }
 
 func (m *mounterImpl) codecWorker(ctx context.Context) error {
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	metricMountDuration := mountDuration.WithLabelValues(captureID, changefeedID)
+
 	for {
 		var pEvent *model.PolymorphicEvent
 		select {
@@ -142,6 +145,7 @@ func (m *mounterImpl) codecWorker(ctx context.Context) error {
 			pEvent.PrepareFinished()
 			continue
 		}
+		startTime := time.Now()
 		rowEvent, err := m.unmarshalAndMountRowChanged(pEvent.RawKV)
 		if err != nil {
 			return errors.Trace(err)
@@ -150,6 +154,7 @@ func (m *mounterImpl) codecWorker(ctx context.Context) error {
 		pEvent.RawKV.Key = nil
 		pEvent.RawKV.Value = nil
 		pEvent.PrepareFinished()
+		metricMountDuration.Observe(time.Since(startTime).Seconds())
 	}
 }
 
@@ -160,8 +165,7 @@ func (m *mounterImpl) Input() chan<- *model.PolymorphicEvent {
 func (m *mounterImpl) collectMetrics(ctx context.Context) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
-	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
+	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureID, changefeedID)
 
 	for {
 		select {
