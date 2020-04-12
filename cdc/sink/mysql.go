@@ -444,27 +444,27 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, sqls []string, va
 			return backoff.Permanent(err)
 		}
 		log.Warn("exec dmls with error, retry later", zap.Error(err))
-		return errors.Trace(err)
+		return err
 	}
 	return retry.Run(500*time.Millisecond, maxRetries,
 		func() error {
 			failpoint.Inject("MySQLSinkTxnRandomError", func() {
-				failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
+				failpoint.Return(checkTxnErr(errors.Trace(dmysql.ErrInvalidConn)))
 			})
 			startTime := time.Now()
 			tx, err := s.db.BeginTx(ctx, nil)
 			if err != nil {
-				return errors.Trace(err)
+				return checkTxnErr(errors.Trace(err))
 			}
 			for i, query := range sqls {
 				args := values[i]
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-					return checkTxnErr(err)
+					return checkTxnErr(errors.Trace(err))
 				}
 				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 			}
 			if err = tx.Commit(); err != nil {
-				return checkTxnErr(err)
+				return checkTxnErr(errors.Trace(err))
 			}
 			s.metricExecTxnHis.Observe(time.Since(startTime).Seconds())
 			s.metricExecBatchHis.Observe(float64(len(sqls)))
