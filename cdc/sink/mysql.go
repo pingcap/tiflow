@@ -28,6 +28,7 @@ import (
 	"github.com/cenkalti/backoff"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -439,9 +440,13 @@ func (s *mysqlSink) PrintStatus(ctx context.Context) error {
 
 func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, sqls []string, values [][]interface{}, maxRetries uint64) error {
 	checkTxnErr := func(err error) error {
+		failpoint.Inject("MySQLSinkTxnRandomError", func() {
+			err = errors.Trace(dmysql.ErrInvalidConn)
+		})
 		if errors.Cause(err) == context.Canceled {
 			return backoff.Permanent(err)
 		}
+		log.Warn("exec dmls with error, retry later", zap.Error(err))
 		return errors.Trace(err)
 	}
 	return retry.Run(500*time.Millisecond, maxRetries,
