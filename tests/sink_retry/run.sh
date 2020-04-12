@@ -18,10 +18,10 @@ function run() {
 
     cd $WORK_DIR
 
-    # record tso before we create tables to skip the system table DDLs
     start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    run_sql "CREATE DATABASE sink_retry;"
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=sink_retry
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/sink/MySQLSinkTxnRandomError=2%return(true)'
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/MySQLSinkTxnRandomError=5%return(true)'
     run_cdc_server $WORK_DIR $CDC_BINARY
 
     TOPIC_NAME="ticdc-sink-retry-test-$RANDOM"

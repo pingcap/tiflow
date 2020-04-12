@@ -440,9 +440,6 @@ func (s *mysqlSink) PrintStatus(ctx context.Context) error {
 
 func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, sqls []string, values [][]interface{}, maxRetries uint64) error {
 	checkTxnErr := func(err error) error {
-		failpoint.Inject("MySQLSinkTxnRandomError", func() {
-			err = errors.Trace(dmysql.ErrInvalidConn)
-		})
 		if errors.Cause(err) == context.Canceled {
 			return backoff.Permanent(err)
 		}
@@ -451,6 +448,9 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, sqls []string, va
 	}
 	return retry.Run(500*time.Millisecond, maxRetries,
 		func() error {
+			failpoint.Inject("MySQLSinkTxnRandomError", func() {
+				failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
+			})
 			startTime := time.Now()
 			tx, err := s.db.BeginTx(ctx, nil)
 			if err != nil {
