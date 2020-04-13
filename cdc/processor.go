@@ -550,13 +550,16 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
 	defer log.Info("syncResolved stopped")
+	metricWaitPrepare := waitEventPrepareDuration.WithLabelValues(p.changefeedID, p.captureID)
 	for {
 		select {
 		case row := <-p.output:
+			startTime := time.Now()
 			err := row.WaitPrepare(ctx)
 			if err != nil {
 				return errors.Trace(err)
 			}
+			metricWaitPrepare.Observe(time.Since(startTime).Seconds())
 			if row.Row == nil {
 				continue
 			}

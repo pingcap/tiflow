@@ -24,10 +24,19 @@ var (
 			Subsystem: "mounter",
 			Name:      "input_chan_size",
 			Help:      "mounter input chan size",
-		}, []string{"capture", "changefeed", "table"})
+		}, []string{"capture", "changefeed"})
+	mountDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "mounter",
+			Name:      "unmarshal_and_mount",
+			Help:      "Bucketed histogram of processing time (s) of unmarshal and mount in mounter.",
+			Buckets:   prometheus.ExponentialBuckets(0.000001, 10, 10),
+		}, []string{"capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(mounterInputChanSizeGauge)
+	registry.MustRegister(mountDuration)
 }

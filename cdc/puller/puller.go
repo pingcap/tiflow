@@ -30,7 +30,7 @@ import (
 
 const (
 	defaultPullerEventChanSize  = 128000
-	defaultPullerOutputChanSize = 128
+	defaultPullerOutputChanSize = 128000
 )
 
 // Puller pull data from tikv and push changes into a buffer

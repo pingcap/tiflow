@@ -61,6 +61,14 @@ var (
 			Help:      "The time it took to update sub change feed info.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"captureID"})
+	waitEventPrepareDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "wait_event_prepare",
+			Help:      "Bucketed histogram of processing time (s) of waiting event prepare in processor.",
+			Buckets:   prometheus.ExponentialBuckets(0.000001, 10, 10),
+		}, []string{"capture", "changefeed"})
 	tableInputChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -87,4 +95,5 @@ func initProcessorMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(updateInfoDuration)
 	registry.MustRegister(tableInputChanSizeGauge)
 	registry.MustRegister(tableOutputChanSizeGauge)
+	registry.MustRegister(waitEventPrepareDuration)
 }
