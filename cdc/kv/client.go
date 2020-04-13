@@ -44,7 +44,7 @@ import (
 
 const (
 	dialTimeout               = 10 * time.Second
-	maxRetry                  = 10
+	maxRetry                  = 100
 	tikvRequestMaxBackoff     = 20000 // Maximum total sleep time(in ms)
 	grpcInitialWindowSize     = 1 << 30
 	grpcInitialConnWindowSize = 1 << 30
@@ -283,7 +283,7 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 }
 
 func (c *CDCClient) newStream(ctx context.Context, addr string) (stream cdcpb.ChangeData_EventFeedClient, err error) {
-	err = retry.Run(500*time.Millisecond, 10, func() error {
+	err = retry.Run(50*time.Millisecond, 20, func() error {
 		conn, err := c.getConn(ctx, addr)
 		if err != nil {
 			return errors.Trace(err)
@@ -757,7 +757,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			regions []*tikv.Region
 			err     error
 		)
-		retryErr := retry.Run(500*time.Millisecond, maxRetry,
+		retryErr := retry.Run(50*time.Millisecond, maxRetry,
 			func() error {
 				scanT0 := time.Now()
 				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
