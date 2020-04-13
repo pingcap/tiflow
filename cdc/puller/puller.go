@@ -76,6 +76,7 @@ func NewPuller(
 		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
 		tsTracker:    makeSpanFrontier(spans...),
 		needEncode:   needEncode,
+		resolvedTs:   checkpointTs,
 	}
 	return p
 }
