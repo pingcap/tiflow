@@ -68,7 +68,7 @@ var (
 			Name:      "wait_event_prepare",
 			Help:      "Bucketed histogram of processing time (s) of waiting event prepare in processor.",
 			Buckets:   prometheus.ExponentialBuckets(0.000001, 10, 10),
-		}, []string{"capture", "changefeed"})
+		}, []string{"changefeed", "capture"})
 	tableInputChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",

@@ -7,6 +7,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -19,8 +20,9 @@ func newBlackHoleSink(opts map[string]string) *blackHoleSink {
 	if cid, ok := opts[OptCaptureID]; ok {
 		sink.captureID = cid
 	}
+	sink.metricExecTxnHis = execTxnHistogram.WithLabelValues(sink.captureID, sink.changefeedID)
+	sink.metricExecBatchHis = execBatchHistogram.WithLabelValues(sink.captureID, sink.changefeedID)
 	return sink
-
 }
 
 type blackHoleSink struct {
@@ -31,6 +33,9 @@ type blackHoleSink struct {
 	captureID        string
 	changefeedID     string
 	accumulated      uint64
+
+	metricExecTxnHis   prometheus.Observer
+	metricExecBatchHis prometheus.Observer
 }
 
 func (b *blackHoleSink) Run(ctx context.Context) error {
@@ -45,7 +50,10 @@ func (b *blackHoleSink) Run(ctx context.Context) error {
 				time.Sleep(5 * time.Millisecond)
 				resolvedTs = atomic.LoadUint64(&b.resolvedTs)
 			}
-			execBatchHistogram.WithLabelValues(b.captureID, b.changefeedID).Observe(float64(atomic.LoadUint64(&b.accumulated)))
+			startTime := time.Now()
+			// TODO: add some random replication latency
+			b.metricExecTxnHis.Observe(time.Since(startTime).Seconds())
+			b.metricExecBatchHis.Observe(float64(atomic.LoadUint64(&b.accumulated)))
 			atomic.StoreUint64(&b.accumulated, 0)
 			atomic.StoreUint64(&b.checkpointTs, globalResolvedTs)
 		}
