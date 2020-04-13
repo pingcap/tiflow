@@ -770,17 +770,17 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 				for _, region := range regions {
 					if region.GetMeta() == nil {
 						err = errors.New("meta not exists in region")
-						log.Warn("batch load region", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
+						log.Warn("batch load region", zap.Reflect("span", nextSpan), zap.Error(err))
 						return err
 					}
 					metas = append(metas, region.GetMeta())
 				}
 				if !util.CheckRegionsLeftCover(metas, nextSpan) {
-					err = errors.New("regions not completely left cover span")
-					log.Warn("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions), zap.Error(err))
+					err = errors.Errorf("regions not completely left cover span, span %v regions: %v", nextSpan, metas)
+					log.Warn("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", metas), zap.Error(err))
 					return err
 				}
-				log.Debug("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", regions))
+				log.Debug("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", metas))
 				return nil
 			})
 
