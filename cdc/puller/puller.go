@@ -126,7 +126,10 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				metricEventChanSize.Set(float64(len(eventCh)))
 				metricMemBufferSize.Set(float64(p.buffer.Size()))
 				metricOutputChanSize.Set(float64(len(p.outputCh)))
-				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
+				resolvedTs := atomic.LoadUint64(&p.resolvedTs)
+				if resolvedTs > 0 {
+					metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(resolvedTs)))
+				}
 			}
 		}
 	})

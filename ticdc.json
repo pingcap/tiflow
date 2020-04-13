@@ -18,7 +18,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 18,
-  "iteration": 1585647076364,
+  "iteration": 1586758044341,
   "links": [],
   "panels": [
     {
@@ -1112,7 +1112,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_puller_entry_buffer_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "expr": "sum(ticdc_puller_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} - {{table}}",
@@ -1123,7 +1123,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "puller_entry_buffer_size",
+      "title": "ticdc_puller_output_chan_size",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2415,7 +2415,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "cdc-server",
-      "description": "resolved ts sent from table mounter",
+      "description": "local resolved ts of processor",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -2454,7 +2454,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (ticdc_mounter_table_resolved_ts{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "expr": "sum (ticdc_processor_table_resolved_ts{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}} - {{table}}",
@@ -2465,7 +2465,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "mounter_resolved_ts",
+      "title": "ticdc_processor_table_resolved_ts",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -2481,7 +2481,7 @@
       },
       "yaxes": [
         {
-          "format": "short",
+          "format": "dateTimeAsIso",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -2547,7 +2547,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{changefeed=\"$changefeed\"}[1m])) by (instance)",
+          "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -2600,6 +2600,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
+      "datasource": "cdc-server",
       "description": "The number of events received from kv client event channel",
       "fill": 1,
       "fillGradient": 0,
@@ -2639,24 +2640,24 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_txn_exec_duration_bucket{changefeed=\"$changefeed\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(ticdc_sink_txn_exec_duration_bucket{changefeed=\"$changefeed\"}[1m])) by (le,instance))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "90",
+          "legendFormat": "{{instance}}-p95",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_exec_duration_bucket{changefeed=\"$changefeed\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_exec_duration_bucket{changefeed=\"$changefeed\"}[1m])) by (le,instance))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "99",
+          "legendFormat": "{{instance}}-p99",
           "refId": "B"
         },
         {
-          "expr": "rate(ticdc_sink_txn_exec_duration_sum{changefeed=\"$changefeed\"}[1m]) / rate(ticdc_sink_txn_exec_duration_count{changefeed=\"$changefeed\"}[1m])",
+          "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_exec_duration_bucket{changefeed=\"$changefeed\"}[1m])) by (le,instance))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "avg",
+          "legendFormat": "{{instance}}-p999",
           "refId": "C"
         }
       ],
@@ -2746,24 +2747,25 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(ticdc_sink_txn_batch_size_bucket{changefeed=\"$changefeed\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_txn_batch_size_bucket{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])) by (le,instance))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "50",
+          "legendFormat": "{{instance}}-p90",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.90, sum(rate(ticdc_sink_txn_batch_size_bucket{changefeed=\"$changefeed\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(ticdc_sink_txn_batch_size_bucket{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])) by (le,instance))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "90",
+          "legendFormat": "{{instance}}-p99",
           "refId": "B"
         },
         {
-          "expr": "rate(ticdc_sink_txn_batch_size_sum{changefeed=\"$changefeed\"}[1m]) / rate(ticdc_sink_txn_batch_size_count{changefeed=\"$changefeed\"}[1m])",
+          "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_batch_size_bucket{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])) by (le,instance))",
           "format": "time_series",
+          "hide": true,
           "intervalFactor": 1,
-          "legendFormat": "avg",
+          "legendFormat": "{{instance}}-p999",
           "refId": "C"
         }
       ],
@@ -2814,7 +2816,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "cdc-server",
-      "description": "output chan size of table mounter",
+      "description": "input chan size of table mounter",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -2855,10 +2857,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_mounter_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "expr": "sum(ticdc_mounter_input_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}} - {{table}}",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -2866,7 +2868,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "ticdc_mounter_output_chan_size",
+      "title": "ticdc_mounter_input_chan_size",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -2909,7 +2911,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "cdc-server",
-      "description": "txn input channel size for a table in processor",
+      "description": "txn output channel size for a table in processor",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -2919,7 +2921,7 @@
         "y": 112
       },
       "hiddenSeries": false,
-      "id": 49,
+      "id": 38,
       "legend": {
         "alignAsTable": true,
         "avg": false,
@@ -2950,10 +2952,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_mounter_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance)",
+          "expr": "sum(ticdc_processor_txn_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}} ",
+          "legendFormat": "{{instance}} - {{table}}",
           "refId": "A"
         }
       ],
@@ -2961,7 +2963,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "ticdc_processor_table_input_chan_size",
+      "title": "ticdc_processor_table_output_chan_size",
       "tooltip": {
         "shared": true,
         "sort": 2,
@@ -2978,6 +2980,219 @@
       "yaxes": [
         {
           "format": "none",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "cdc-server",
+      "description": "Bucketed histogram of processing time (s) of unmarshal and mount in mounter.",
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 11,
+        "x": 0,
+        "y": 119
+      },
+      "hiddenSeries": false,
+      "id": 55,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "sort": "current",
+        "sortDesc": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ticdc_mounter_unmarshal_and_mount_bucket{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])) by (le, instance))",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}-p99",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.999, sum(rate(ticdc_mounter_unmarshal_and_mount_bucket{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])) by (le, instance))",
+          "format": "time_series",
+          "hide": true,
+          "instant": false,
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}-p999",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(ticdc_mounter_unmarshal_and_mount_sum{changefeed=\"$changefeed\",capture=\"$capture\"}[1m]) / rate(ticdc_mounter_unmarshal_and_mount_count{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}-avg",
+          "refId": "C"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "ticdc_mounter_unmarshal_and_mount",
+      "tooltip": {
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "s",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "none",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "cdc-server",
+      "description": "Bucketed histogram of processing time (s) of waiting event prepare in processor.",
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 11,
+        "y": 119
+      },
+      "hiddenSeries": false,
+      "id": 56,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "max": true,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "sort": "current",
+        "sortDesc": true,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 1,
+      "links": [],
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.999, sum(rate(ticdc_processor_wait_event_prepare_bucket{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])) by (le, instance))",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}-p999",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(ticdc_processor_wait_event_prepare_sum{changefeed=\"$changefeed\",capture=\"$capture\"}[1m]) / rate(ticdc_processor_wait_event_prepare_count{changefeed=\"$changefeed\",capture=\"$capture\"}[1m])",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}-avg",
+          "refId": "B"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "ticdc_processor_wait_event_prepare",
+      "tooltip": {
+        "shared": true,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "s",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -3011,7 +3226,7 @@
         "h": 7,
         "w": 11,
         "x": 0,
-        "y": 119
+        "y": 126
       },
       "hiddenSeries": false,
       "id": 48,
@@ -3092,101 +3307,6 @@
         "align": false,
         "alignLevel": null
       }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "cdc-server",
-      "description": "txn output channel size for a table in processor",
-      "fill": 0,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 11,
-        "y": 119
-      },
-      "hiddenSeries": false,
-      "id": 38,
-      "legend": {
-        "alignAsTable": true,
-        "avg": false,
-        "current": true,
-        "max": true,
-        "min": false,
-        "rightSide": true,
-        "show": true,
-        "sort": "current",
-        "sortDesc": true,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 1,
-      "links": [],
-      "nullPointMode": "null",
-      "options": {
-        "dataLinks": []
-      },
-      "percentage": false,
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(ticdc_processor_txn_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "{{instance}} - {{table}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "table_output_chan_size",
-      "tooltip": {
-        "shared": true,
-        "sort": 2,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "none",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
     }
   ],
   "refresh": false,
@@ -3198,10 +3318,8 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
-          "tags": [],
-          "text": "57d16fbf-5f03-4637-8ec8-47d2f73bf3af",
-          "value": "57d16fbf-5f03-4637-8ec8-47d2f73bf3af"
+          "text": "88452ec0-43da-4fef-976e-a7c86623987e",
+          "value": "88452ec0-43da-4fef-976e-a7c86623987e"
         },
         "datasource": "cdc-server",
         "definition": "label_values(ticdc_processor_resolved_ts, changefeed)",
@@ -3225,10 +3343,8 @@
       {
         "allValue": null,
         "current": {
-          "selected": true,
-          "tags": [],
-          "text": "fdcff3d9-ff92-413e-8051-b6e00617246f",
-          "value": "fdcff3d9-ff92-413e-8051-b6e00617246f"
+          "text": "585d6c3d-cccb-4711-944b-37fafa3050be",
+          "value": "585d6c3d-cccb-4711-944b-37fafa3050be"
         },
         "datasource": "cdc-server",
         "definition": "label_values(ticdc_processor_resolved_ts, capture)",
@@ -3283,5 +3399,5 @@
   "timezone": "",
   "title": "ticdc",
   "uid": "YiGL8hBZz",
-  "version": 50
+  "version": 63
 }
