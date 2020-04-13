@@ -146,7 +146,7 @@ func (m *mounterImpl) codecWorker(ctx context.Context) error {
 			continue
 		}
 		startTime := time.Now()
-		rowEvent, err := m.unmarshalAndMountRowChanged(pEvent.RawKV)
+		rowEvent, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -177,7 +177,7 @@ func (m *mounterImpl) collectMetrics(ctx context.Context) {
 	}
 }
 
-func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
 	}
@@ -190,7 +190,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(raw *model.RawKVEntry) (*model
 		TableID: tableID,
 		Delete:  raw.OpType == model.OpTypeDelete,
 	}
-	snap, err := m.schemaStorage.GetSnapshot(raw.Ts)
+	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.Ts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
