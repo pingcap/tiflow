@@ -14,6 +14,7 @@
 package entry
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -574,10 +575,15 @@ func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 }
 
 // GetSnapshot returns the snapshot which of ts is specified
-func (s *SchemaStorage) GetSnapshot(ts uint64) (*schemaSnapshot, error) {
+func (s *SchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnapshot, error) {
 	var snap *schemaSnapshot
 	err := retry.Run(10*time.Millisecond, 25,
 		func() error {
+			select {
+			case <-ctx.Done():
+				return backoff.Permanent(errors.Trace(ctx.Err()))
+			default:
+			}
 			var err error
 			snap, err = s.getSnapshot(ts)
 			if errors.Cause(err) != model.ErrUnresolved {

@@ -14,14 +14,14 @@
 package entry
 
 import (
+	"context"
 	"fmt"
-
-	parser_types "github.com/pingcap/parser/types"
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	parser_types "github.com/pingcap/parser/types"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -458,6 +458,7 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
 }
 
 func (t *schemaSuite) TestMultiVersionStorage(c *C) {
+	ctx, cancel := context.WithCancel(context.Background())
 	dbName := timodel.NewCIStr("Test")
 	tbName := timodel.NewCIStr("T1")
 	// db and ignoreDB info
@@ -546,7 +547,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	c.Assert(err, IsNil)
 
 	c.Assert(storage.resolvedTs, Equals, uint64(140))
-	snap, err := storage.GetSnapshot(100)
+	snap, err := storage.GetSnapshot(ctx, 100)
 	c.Assert(err, IsNil)
 	_, exist := snap.SchemaByID(1)
 	c.Assert(exist, IsTrue)
@@ -555,7 +556,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	_, exist = snap.TableByID(3)
 	c.Assert(exist, IsFalse)
 
-	snap, err = storage.GetSnapshot(115)
+	snap, err = storage.GetSnapshot(ctx, 115)
 	c.Assert(err, IsNil)
 	_, exist = snap.SchemaByID(1)
 	c.Assert(exist, IsTrue)
@@ -564,7 +565,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	_, exist = snap.TableByID(3)
 	c.Assert(exist, IsFalse)
 
-	snap, err = storage.GetSnapshot(125)
+	snap, err = storage.GetSnapshot(ctx, 125)
 	c.Assert(err, IsNil)
 	_, exist = snap.SchemaByID(1)
 	c.Assert(exist, IsTrue)
@@ -573,7 +574,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	_, exist = snap.TableByID(3)
 	c.Assert(exist, IsTrue)
 
-	snap, err = storage.GetSnapshot(135)
+	snap, err = storage.GetSnapshot(ctx, 135)
 	c.Assert(err, IsNil)
 	_, exist = snap.SchemaByID(1)
 	c.Assert(exist, IsTrue)
@@ -582,7 +583,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	_, exist = snap.TableByID(3)
 	c.Assert(exist, IsTrue)
 
-	snap, err = storage.GetSnapshot(140)
+	snap, err = storage.GetSnapshot(ctx, 140)
 	c.Assert(err, IsNil)
 	_, exist = snap.SchemaByID(1)
 	c.Assert(exist, IsFalse)
@@ -592,7 +593,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	c.Assert(exist, IsFalse)
 
 	storage.DoGC(0)
-	snap, err = storage.GetSnapshot(100)
+	snap, err = storage.GetSnapshot(ctx, 100)
 	c.Assert(err, IsNil)
 	_, exist = snap.SchemaByID(1)
 	c.Assert(exist, IsTrue)
@@ -601,9 +602,9 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	_, exist = snap.TableByID(3)
 	c.Assert(exist, IsFalse)
 	storage.DoGC(115)
-	_, err = storage.GetSnapshot(100)
+	_, err = storage.GetSnapshot(ctx, 100)
 	c.Assert(err, NotNil)
-	snap, err = storage.GetSnapshot(115)
+	snap, err = storage.GetSnapshot(ctx, 115)
 	c.Assert(err, IsNil)
 	_, exist = snap.SchemaByID(1)
 	c.Assert(exist, IsTrue)
@@ -615,7 +616,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	storage.DoGC(155)
 	storage.AdvanceResolvedTs(185)
 
-	snap, err = storage.GetSnapshot(180)
+	snap, err = storage.GetSnapshot(ctx, 180)
 	c.Assert(err, IsNil)
 	_, exist = snap.SchemaByID(1)
 	c.Assert(exist, IsFalse)
@@ -623,6 +624,10 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	c.Assert(exist, IsFalse)
 	_, exist = snap.TableByID(3)
 	c.Assert(exist, IsFalse)
-	_, err = storage.GetSnapshot(130)
+	_, err = storage.GetSnapshot(ctx, 130)
 	c.Assert(err, NotNil)
+
+	cancel()
+	_, err = storage.GetSnapshot(ctx, 200)
+	c.Assert(errors.Cause(err), Equals, context.Canceled)
 }
