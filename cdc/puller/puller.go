@@ -76,6 +76,7 @@ func NewPuller(
 		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
 		tsTracker:    makeSpanFrontier(spans...),
 		needEncode:   needEncode,
+		resolvedTs:   checkpointTs,
 	}
 	return p
 }
@@ -126,10 +127,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				metricEventChanSize.Set(float64(len(eventCh)))
 				metricMemBufferSize.Set(float64(p.buffer.Size()))
 				metricOutputChanSize.Set(float64(len(p.outputCh)))
-				resolvedTs := atomic.LoadUint64(&p.resolvedTs)
-				if resolvedTs > 0 {
-					metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(resolvedTs)))
-				}
+				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
 			}
 		}
 	})
