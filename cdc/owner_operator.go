@@ -17,6 +17,8 @@ import (
 	"context"
 	"sync"
 
+	tidbkv "github.com/pingcap/tidb/kv"
+
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/v4/client"
@@ -38,10 +40,10 @@ type ddlHandler struct {
 	cancel func()
 }
 
-func newDDLHandler(pdCli pd.Client, checkpointTS uint64) *ddlHandler {
+func newDDLHandler(pdCli pd.Client, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	plr := puller.NewPuller(pdCli, checkpointTS, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, nil)
+	plr := puller.NewPuller(pdCli, kvStorage, checkpointTS, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &ddlHandler{
 		puller: plr,

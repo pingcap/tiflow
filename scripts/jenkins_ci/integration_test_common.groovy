@@ -1,4 +1,5 @@
-test_case_names = ["simple", "cdc", "multi_capture", "split_region", "row_format", "tiflash", "availability", "ddl_sequence", "sink_retry"]
+test_case_names = ["simple", "cdc", "multi_capture", "split_region", "row_format",
+"tiflash", "availability", "ddl_sequence", "sink_retry", "resolve_lock"]
 
 def prepare_binaries() {
     stage('Prepare Binaries') {
