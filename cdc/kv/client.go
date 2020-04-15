@@ -1263,7 +1263,7 @@ func (s *eventFeedSession) resolveLock(ctx context.Context, regionID uint64, max
 			key = locks[len(locks)-1].Key
 		}
 
-		if len(key) == 0 || bytes.Compare(key, loc.EndKey) >= 0 {
+		if len(key) == 0 || (len(loc.EndKey) != 0 && bytes.Compare(key, loc.EndKey) >= 0) {
 			break
 		}
 		bo = tikv.NewBackoffer(ctx, tikv.GcResolveLockMaxBackoff)
