@@ -1040,7 +1040,8 @@ func (s *eventFeedSession) singleEventFeed(
 			}
 			version, err := s.kvStorage.CurrentVersion()
 			if err != nil {
-				return atomic.LoadUint64(&checkpointTs), errors.Trace(err)
+				log.Warn("failed to get current version from PD", zap.Error(err))
+				continue
 			}
 			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
 			sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(lastResolvedTs))
@@ -1050,7 +1051,8 @@ func (s *eventFeedSession) singleEventFeed(
 				maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
 				err = s.resolveLock(ctx, regionID, maxVersion)
 				if err != nil {
-					return atomic.LoadUint64(&checkpointTs), errors.Trace(err)
+					log.Warn("failed to resolve lock", zap.Uint64("regionID", regionID), zap.Error(err))
+					continue
 				}
 			}
 			continue
