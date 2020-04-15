@@ -1046,7 +1046,7 @@ func (s *eventFeedSession) singleEventFeed(
 			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
 			sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(lastResolvedTs))
 			if sinceLastResolvedTs > time.Second*20 {
-				log.Warn("region not receiving resolved event from tikv for too long time, try to resolve lock",
+				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 					zap.Uint64("regionID", regionID), zap.Reflect("span", span), zap.Duration("duration", sinceLastResolvedTs), zap.Uint64("lastResolvedTs", lastResolvedTs))
 				maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
 				err = s.resolveLock(ctx, regionID, maxVersion)
@@ -1192,9 +1192,6 @@ func (s *eventFeedSession) singleEventFeed(
 const scanLockLimit = 1024
 
 func (s *eventFeedSession) resolveLock(ctx context.Context, regionID uint64, maxVersion uint64) error {
-	// for scan lock request, we must return all locks even if they are generated
-	// by the same transaction. because gc worker need to make sure all locks have been
-	// cleaned.
 	req := tikvrpc.NewRequest(tikvrpc.CmdScanLock, &kvrpcpb.ScanLockRequest{
 		MaxVersion: maxVersion,
 		Limit:      scanLockLimit,
