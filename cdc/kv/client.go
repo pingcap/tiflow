@@ -1192,6 +1192,7 @@ func (s *eventFeedSession) singleEventFeed(
 const scanLockLimit = 1024
 
 func (s *eventFeedSession) resolveLock(ctx context.Context, regionID uint64, maxVersion uint64) error {
+	// TODO test whether this function will kill active transaction
 	req := tikvrpc.NewRequest(tikvrpc.CmdScanLock, &kvrpcpb.ScanLockRequest{
 		MaxVersion: maxVersion,
 		Limit:      scanLockLimit,
