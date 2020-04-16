@@ -36,6 +36,7 @@ func (s *decodeFileSuite) TestCanDecodeTOML(c *check.C) {
 	// TODO add comment to config file
 	content := `
 filter-case-sensitive = false
+ignore-txn-commit-ts = []
 ddl-white-list = [100, 101]
 
 [filter-rules]
@@ -57,6 +58,7 @@ tbl-name = "following"
 	c.Assert(err, check.IsNil)
 
 	c.Assert(cfg.FilterCaseSensitive, check.IsFalse)
+	c.Assert(cfg.IgnoreTxnCommitTs, check.DeepEquals, []uint64{})
 	c.Assert(cfg.DDLWhitelist, check.DeepEquals, []model.ActionType{100, 101})
 	c.Assert(cfg.FilterRules.IgnoreDBs, check.DeepEquals, []string{"test", "sys"})
 	c.Assert(cfg.FilterRules.DoTables, check.DeepEquals, []*filter.Table{

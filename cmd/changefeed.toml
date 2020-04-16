@@ -1,5 +1,6 @@
 
 filter-case-sensitive = false
+ignore-txn-commit-ts = []
 ddl-white-list = [100, 101]
 
 [filter-rules]
