@@ -43,8 +43,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const defaultWorkerCount = 16
-const defaultMaxTxnRow = 256
+const (
+	defaultWorkerCount     = 16
+	defaultMaxTxnRow       = 256
+	defaultDMLMaxRetryTime = 20
+	defaultDDLMaxRetryTime = 20
+)
 
 var (
 	printStatusInterval = 30 * time.Second
@@ -114,7 +118,7 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 		)
 		return nil
 	}
-	err := s.execDDLWithMaxRetries(ctx, ddl, 5)
+	err := s.execDDLWithMaxRetries(ctx, ddl, defaultDDLMaxRetryTime)
 	return errors.Trace(err)
 }
 
@@ -502,7 +506,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return errors.Trace(s.execDMLWithMaxRetries(ctx, sqls, values, 10))
+	return errors.Trace(s.execDMLWithMaxRetries(ctx, sqls, values, defaultDMLMaxRetryTime))
 }
 
 func (s *mysqlSink) prepareReplace(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
