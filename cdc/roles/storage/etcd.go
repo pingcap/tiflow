@@ -268,7 +268,7 @@ func (ow *OwnerTaskStatusEtcdWriter) Write(
 			log.Info("outdated table infos, update table and retry")
 			newInfo, err = ow.updateInfo(ctx, changefeedID, captureID, info)
 			switch errors.Cause(err) {
-			case model.ErrFindPLockNotCommit:
+			case model.ErrFindPLockNotCommit, model.ErrTaskStatusNotExists:
 				return backoff.Permanent(err)
 			case nil:
 				return errors.Trace(model.ErrWriteTaskStatusConlict)
