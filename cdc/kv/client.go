@@ -14,9 +14,9 @@
 package kv
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
 	"io"
 	"math/rand"
 	"strconv"
@@ -26,6 +26,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
+	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
@@ -34,6 +35,9 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tidb/store/tikv/tikvrpc"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -233,16 +237,18 @@ type CDCClient struct {
 	}
 
 	regionCache *tikv.RegionCache
+	kvStorage   tikv.Storage
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(pd pd.Client) (c *CDCClient, err error) {
+func NewCDCClient(pd pd.Client, kvStorage tikv.Storage) (c *CDCClient, err error) {
 	clusterID := pd.GetClusterID(context.Background())
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
 	c = &CDCClient{
 		clusterID:   clusterID,
 		pd:          pd,
+		kvStorage:   kvStorage,
 		regionCache: tikv.NewRegionCache(pd),
 		mu: struct {
 			sync.Mutex
@@ -306,7 +312,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string) (stream cdcpb.Ch
 func (c *CDCClient) EventFeed(
 	ctx context.Context, span util.Span, ts uint64, eventCh chan<- *model.RegionFeedEvent,
 ) error {
-	s := newEventFeedSession(c, c.regionCache, span, eventCh)
+	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span, eventCh)
 	return s.eventFeed(ctx, ts)
 }
 
@@ -319,6 +325,7 @@ func allocID() uint64 {
 type eventFeedSession struct {
 	client      *CDCClient
 	regionCache *tikv.RegionCache
+	kvStorage   tikv.Storage
 
 	// The whole range that is being subscribed.
 	totalSpan util.Span
@@ -350,6 +357,7 @@ type rangeRequestTask struct {
 func newEventFeedSession(
 	client *CDCClient,
 	regionCache *tikv.RegionCache,
+	kvStorage tikv.Storage,
 	totalSpan util.Span,
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
@@ -357,6 +365,7 @@ func newEventFeedSession(
 	return &eventFeedSession{
 		client:            client,
 		regionCache:       regionCache,
+		kvStorage:         kvStorage,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
 		regionCh:          make(chan singleRegionInfo, 16),
@@ -1013,27 +1022,42 @@ func (s *eventFeedSession) singleEventFeed(
 	var initialized uint32
 
 	matcher := newMatcher()
-
-	var ticker *time.Ticker
-	hangTime := time.Duration(0)
+	advanceCheckTicker := time.NewTicker(time.Second * 5)
+	lastReceivedEventTime := time.Now()
+	var lastResolvedTs uint64
 
 	for {
-		ticker = time.NewTicker(time.Minute)
 		var event *cdcpb.Event
 		var ok bool
 		select {
 		case <-ctx.Done():
 			return atomic.LoadUint64(&checkpointTs), ctx.Err()
-		case <-ticker.C:
-			hangTime += time.Minute
-			log.Warn("region not receiving event from tikv for too long time",
-				zap.Uint64("regionID", regionID), zap.Reflect("span", span), zap.Duration("duration", hangTime))
+		case <-advanceCheckTicker.C:
+			sinceLastEvent := time.Since(lastReceivedEventTime)
+			if sinceLastEvent > time.Second*20 {
+				log.Warn("region not receiving event from tikv for too long time",
+					zap.Uint64("regionID", regionID), zap.Reflect("span", span), zap.Duration("duration", sinceLastEvent))
+			}
+			version, err := s.kvStorage.CurrentVersion()
+			if err != nil {
+				log.Warn("failed to get current version from PD", zap.Error(err))
+				continue
+			}
+			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
+			sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(lastResolvedTs))
+			if sinceLastResolvedTs > time.Second*20 {
+				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
+					zap.Uint64("regionID", regionID), zap.Reflect("span", span), zap.Duration("duration", sinceLastResolvedTs), zap.Uint64("lastResolvedTs", lastResolvedTs))
+				maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
+				err = s.resolveLock(ctx, regionID, maxVersion)
+				if err != nil {
+					log.Warn("failed to resolve lock", zap.Uint64("regionID", regionID), zap.Error(err))
+					continue
+				}
+			}
 			continue
 		case event, ok = <-receiverCh:
 		}
-		hangTime = 0
-		ticker.Stop()
-
 		if !ok {
 			log.Debug("singleEventFeed receiver closed")
 			return atomic.LoadUint64(&checkpointTs), nil
@@ -1043,6 +1067,7 @@ func (s *eventFeedSession) singleEventFeed(
 			log.Debug("singleEventFeed closed by error")
 			return atomic.LoadUint64(&checkpointTs), errors.New("single event feed aborted")
 		}
+		lastReceivedEventTime = time.Now()
 
 		metricEventSize.Observe(float64(event.Event.Size()))
 		switch x := event.Event.(type) {
@@ -1139,6 +1164,7 @@ func (s *eventFeedSession) singleEventFeed(
 		case *cdcpb.Event_Error:
 			return atomic.LoadUint64(&checkpointTs), errors.Trace(&eventError{err: x.Error})
 		case *cdcpb.Event_ResolvedTs:
+			lastResolvedTs = x.ResolvedTs
 			if atomic.LoadUint32(&initialized) == 0 {
 				continue
 			}
@@ -1161,6 +1187,87 @@ func (s *eventFeedSession) singleEventFeed(
 		}
 
 	}
+}
+
+const scanLockLimit = 1024
+
+func (s *eventFeedSession) resolveLock(ctx context.Context, regionID uint64, maxVersion uint64) error {
+	// TODO test whether this function will kill active transaction
+	req := tikvrpc.NewRequest(tikvrpc.CmdScanLock, &kvrpcpb.ScanLockRequest{
+		MaxVersion: maxVersion,
+		Limit:      scanLockLimit,
+	})
+
+	bo := tikv.NewBackoffer(ctx, tikv.GcResolveLockMaxBackoff)
+	var loc *tikv.KeyLocation
+	var key []byte
+	flushRegion := func() error {
+		var err error
+		loc, err = s.kvStorage.GetRegionCache().LocateRegionByID(bo, regionID)
+		if err != nil {
+			return err
+		}
+		key = loc.StartKey
+		return nil
+	}
+	if err := flushRegion(); err != nil {
+		return errors.Trace(err)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		req.ScanLock().StartKey = key
+		resp, err := s.kvStorage.SendReq(bo, req, loc.Region, tikv.ReadTimeoutMedium)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		regionErr, err := resp.GetRegionError()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if regionErr != nil {
+			err = bo.Backoff(tikv.BoRegionMiss, errors.New(regionErr.String()))
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if err := flushRegion(); err != nil {
+				return errors.Trace(err)
+			}
+			continue
+		}
+		if resp.Resp == nil {
+			return errors.Trace(tikv.ErrBodyMissing)
+		}
+		locksResp := resp.Resp.(*kvrpcpb.ScanLockResponse)
+		if locksResp.GetError() != nil {
+			return errors.Errorf("unexpected scanlock error: %s", locksResp)
+		}
+		locksInfo := locksResp.GetLocks()
+		locks := make([]*tikv.Lock, len(locksInfo))
+		for i := range locksInfo {
+			locks[i] = tikv.NewLock(locksInfo[i])
+		}
+
+		_, _, err1 := s.kvStorage.GetLockResolver().ResolveLocks(bo, 0, locks)
+		if err1 != nil {
+			return errors.Trace(err1)
+		}
+		if len(locks) < scanLockLimit {
+			key = loc.EndKey
+		} else {
+			key = locks[len(locks)-1].Key
+		}
+
+		if len(key) == 0 || (len(loc.EndKey) != 0 && bytes.Compare(key, loc.EndKey) >= 0) {
+			break
+		}
+		bo = tikv.NewBackoffer(ctx, tikv.GcResolveLockMaxBackoff)
+	}
+	log.Info("resolve lock successfully", zap.Uint64("regionID", regionID), zap.Uint64("maxVersion", maxVersion))
+	return nil
 }
 
 func assembleCommitEvent(entry *cdcpb.Event_Row, value []byte) (*model.RegionFeedEvent, error) {

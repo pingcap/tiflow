@@ -24,6 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	tidbkv "github.com/pingcap/tidb/kv"
+
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -67,9 +69,10 @@ type processor struct {
 	changefeed   model.ChangeFeedInfo
 	limitter     *puller.BlurResourceLimitter
 
-	pdCli   pd.Client
-	etcdCli kv.CDCEtcdClient
-	session *concurrency.Session
+	pdCli     pd.Client
+	kvStorage tidbkv.Storage
+	etcdCli   kv.CDCEtcdClient
+	session   *concurrency.Session
 
 	sink sink.Sink
 
@@ -119,7 +122,10 @@ func newProcessor(
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", endpoints)
 	}
-
+	kvStorage, err := kv.CreateTiStore(strings.Join(endpoints, ","))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	cdcEtcdCli := kv.NewCDCEtcdClient(etcdCli)
 
 	tsRWriter, err := fNewTsRWriter(cdcEtcdCli, changefeedID, captureID)
@@ -132,7 +138,7 @@ func newProcessor(
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
-	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
+	ddlPuller := puller.NewPuller(pdCli, kvStorage, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
 	ctx = util.PutTableIDInCtx(ctx, 0)
 	filter, err := util.NewFilter(changefeed.GetConfig())
 	if err != nil {
@@ -150,6 +156,7 @@ func newProcessor(
 		changefeedID:  changefeedID,
 		changefeed:    changefeed,
 		pdCli:         pdCli,
+		kvStorage:     kvStorage,
 		etcdCli:       cdcEtcdCli,
 		session:       session,
 		sink:          sink,
@@ -630,7 +637,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	// so we set `needEncode` to true.
 	span := util.GetTableSpan(tableID, true)
 	sorter := puller.NewEntrySorter()
-	puller := puller.NewPuller(p.pdCli, startTs, []util.Span{span}, true, p.limitter)
+	puller := puller.NewPuller(p.pdCli, p.kvStorage, startTs, []util.Span{span}, true, p.limitter)
 
 	go func() {
 		err := puller.Run(ctx)

@@ -1,4 +1,5 @@
-test_case_names = ["simple", "cdc", "multi_capture", "split_region", "row_format", "tiflash", "availability", "ddl_sequence", "sink_retry"]
+test_case_names = ["simple", "cdc", "multi_capture", "split_region", "row_format",
+"tiflash", "availability", "ddl_sequence", "sink_retry", "resolve_lock"]
 
 def prepare_binaries() {
     stage('Prepare Binaries') {
@@ -99,6 +100,8 @@ def tests(sink_type, node_label) {
                 container("golang") {
                     def ws = pwd()
                     deleteDir()
+                    println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
+                    println "work space path:\n${ws}"
                     unstash 'ticdc'
                     unstash 'ticdc_binaries'
 
@@ -126,6 +129,8 @@ def tests(sink_type, node_label) {
                 container("golang") {
                     def ws = pwd()
                     deleteDir()
+                    println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
+                    println "work space path:\n${ws}"
                     unstash 'ticdc'
                     unstash 'third_binaries'
                     unstash 'ticdc_binaries'

@@ -152,7 +152,7 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
-	ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
+	ddlHandler := newDDLHandler(o.pdClient, kvStore, checkpointTs)
 
 	existingTables := make(map[uint64]uint64)
 	for captureID, taskStatus := range processorsInfos {

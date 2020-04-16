@@ -24,7 +24,7 @@ import (
 // NewConfig creates a new config.
 func NewConfig() *Config {
 	cfg := &Config{}
-	cfg.FlagSet = flag.NewFlagSet("binlogTest", flag.ContinueOnError)
+	cfg.FlagSet = flag.NewFlagSet("ticdcTest", flag.ContinueOnError)
 	fs := cfg.FlagSet
 
 	fs.StringVar(&cfg.configFile, "config", "", "Config file")
@@ -47,6 +47,8 @@ type Config struct {
 	JobCount int `toml:"job-count" json:"job-count"`
 
 	Batch int `toml:"batch" json:"batch"`
+
+	PDAddr string `toml:"pd" json:"pd"`
 
 	SourceDBCfg DBConfig `toml:"source-db" json:"source-db"`
 
