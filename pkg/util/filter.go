@@ -23,6 +23,7 @@ type ReplicaConfig struct {
 	SinkPartitionRules  []*PartitionRule   `toml:"sink-partition-rules" json:"sink-partition-rules"`
 }
 
+// PartitionRule represents partition rule for a table
 type PartitionRule struct {
 	filter.Table
 	Rule string `toml:"rule" json:"rule"`
