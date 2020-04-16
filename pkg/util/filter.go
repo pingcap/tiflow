@@ -3,9 +3,6 @@ package util
 import (
 	"strings"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/parser/model"
 
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -16,7 +13,6 @@ type Filter struct {
 	filter            *filter.Filter
 	ignoreTxnCommitTs []uint64
 	ddlWhitelist      []model.ActionType
-	config            *ReplicaConfig
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
@@ -83,7 +79,6 @@ func NewFilter(config *ReplicaConfig) (*Filter, error) {
 		filter:            filter,
 		ignoreTxnCommitTs: config.IgnoreTxnCommitTs,
 		ddlWhitelist:      config.DDLWhitelist,
-		config:            config,
 	}, nil
 }
 
@@ -170,15 +165,6 @@ func (f *Filter) shouldDiscardByBuiltInDDLWhitelist(ddlType model.ActionType) bo
 		return false
 	}
 	return true
-}
-
-// Clone clones the Filter
-func (f *Filter) Clone() *Filter {
-	filter, err := NewFilter(f.config.Clone())
-	if err != nil {
-		log.Fatal("err must be nil", zap.Error(err))
-	}
-	return filter
 }
 
 // IsSysSchema returns true if the given schema is a system schema
