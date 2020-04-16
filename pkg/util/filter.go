@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/parser/model"
-
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -21,52 +20,6 @@ type ReplicaConfig struct {
 	FilterCaseSensitive bool               `toml:"filter-case-sensitive" json:"filter-case-sensitive"`
 	FilterRules         *filter.Rules      `toml:"filter-rules" json:"filter-rules"`
 	IgnoreTxnCommitTs   []uint64           `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
-}
-
-// Clone clones a ReplicaConfig
-func (c *ReplicaConfig) Clone() *ReplicaConfig {
-	r := new(ReplicaConfig)
-	if c.DDLWhitelist != nil {
-		r.DDLWhitelist = make([]model.ActionType, len(c.DDLWhitelist))
-		copy(r.DDLWhitelist, c.DDLWhitelist)
-	}
-	r.FilterCaseSensitive = c.FilterCaseSensitive
-	r.FilterRules = cloneFilterRules(c.FilterRules)
-	if c.IgnoreTxnCommitTs != nil {
-		r.IgnoreTxnCommitTs = make([]uint64, len(c.IgnoreTxnCommitTs))
-		copy(r.IgnoreTxnCommitTs, c.IgnoreTxnCommitTs)
-	}
-	return r
-}
-
-func cloneFilterRules(c *filter.Rules) *filter.Rules {
-	if c == nil {
-		return nil
-	}
-	r := new(filter.Rules)
-	if c.DoTables != nil {
-		r.DoTables = make([]*filter.Table, len(c.DoTables))
-		for i, v := range c.DoTables {
-			r.DoTables[i] = &filter.Table{Schema: v.Schema, Name: v.Name}
-		}
-	}
-	if c.DoDBs != nil {
-		r.DoDBs = make([]string, len(c.DoDBs))
-		copy(r.DoDBs, c.DoDBs)
-	}
-
-	if c.IgnoreTables != nil {
-		r.IgnoreTables = make([]*filter.Table, len(c.IgnoreTables))
-		for i, v := range c.IgnoreTables {
-			r.IgnoreTables[i] = &filter.Table{Schema: v.Schema, Name: v.Name}
-		}
-	}
-
-	if c.IgnoreDBs != nil {
-		r.IgnoreDBs = make([]string, len(c.IgnoreDBs))
-		copy(r.IgnoreDBs, c.IgnoreDBs)
-	}
-	return r
 }
 
 // NewFilter creates a filter
