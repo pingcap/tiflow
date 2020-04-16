@@ -14,7 +14,13 @@
 package sink
 
 import (
+	"time"
+
 	"github.com/prometheus/client_golang/prometheus"
+)
+
+const (
+	defaultMetricInterval = time.Second * 15
 )
 
 var (
@@ -34,10 +40,18 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 18),
 		}, []string{"capture", "changefeed"})
+	mqSinkCheckpointChanSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "mq_checkpoint_chan_size",
+			Help:      "checkpoint channel size for mq sink",
+		}, []string{"capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(execBatchHistogram)
 	registry.MustRegister(execTxnHistogram)
+	registry.MustRegister(mqSinkCheckpointChanSizeGauge)
 }

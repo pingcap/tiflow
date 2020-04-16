@@ -25,8 +25,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -36,6 +38,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -61,7 +64,10 @@ type mysqlSink struct {
 	unresolvedRowsMu sync.Mutex
 	unresolvedRows   map[string][]*model.RowChangedEvent
 
-	count int64
+	count uint64
+
+	metricExecTxnHis   prometheus.Observer
+	metricExecBatchHis prometheus.Observer
 }
 
 func (s *mysqlSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
@@ -93,7 +99,9 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 		key := util.QuoteSchema(row.Schema, row.Table)
 		s.unresolvedRows[key] = append(s.unresolvedRows[key], row)
 	}
-	atomic.StoreUint64(&s.sinkResolvedTs, resolvedTs)
+	if resolvedTs != 0 {
+		atomic.StoreUint64(&s.sinkResolvedTs, resolvedTs)
+	}
 	return nil
 }
 
@@ -111,14 +119,15 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 }
 
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent, maxRetries uint64) error {
-	return retry.Run(func() error {
-		err := s.execDDL(ctx, ddl)
-		if isIgnorableDDLError(err) {
-			log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
-			return nil
-		}
-		return err
-	}, maxRetries)
+	return retry.Run(500*time.Millisecond, maxRetries,
+		func() error {
+			err := s.execDDL(ctx, ddl)
+			if isIgnorableDDLError(err) {
+				log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
+				return nil
+			}
+			return err
+		})
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
@@ -150,7 +159,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		return errors.Trace(err)
 	}
 
-	atomic.AddInt64(&s.count, 1)
+	atomic.AddUint64(&s.count, 1)
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
 	return nil
 }
@@ -159,7 +168,15 @@ func (s *mysqlSink) CheckpointTs() uint64 {
 	return atomic.LoadUint64(&s.checkpointTs)
 }
 
+func (s *mysqlSink) Count() uint64 {
+	return atomic.LoadUint64(&s.count)
+}
+
 func (s *mysqlSink) Run(ctx context.Context) error {
+	if util.IsOwnerFromCtx(ctx) {
+		<-ctx.Done()
+		return ctx.Err()
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -325,6 +342,9 @@ func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, filter *util.Filter, opt
 	sink.db.SetMaxIdleConns(params.workerCount)
 	sink.db.SetMaxOpenConns(params.workerCount)
 
+	sink.metricExecTxnHis = execTxnHistogram.WithLabelValues(params.captureID, params.changefeedID)
+	sink.metricExecBatchHis = execBatchHistogram.WithLabelValues(params.captureID, params.changefeedID)
+
 	return sink, nil
 }
 
@@ -392,7 +412,7 @@ func (s *mysqlSink) Close() error {
 
 func (s *mysqlSink) PrintStatus(ctx context.Context) error {
 	lastTime := time.Now()
-	var lastCount int64
+	var lastCount uint64
 	timer := time.NewTicker(printStatusInterval)
 	defer timer.Stop()
 	for {
@@ -402,29 +422,63 @@ func (s *mysqlSink) PrintStatus(ctx context.Context) error {
 		case <-timer.C:
 			now := time.Now()
 			seconds := now.Unix() - lastTime.Unix()
-			total := atomic.LoadInt64(&s.count)
+			total := atomic.LoadUint64(&s.count)
 			count := total - lastCount
-			qps := int64(0)
+			qps := uint64(0)
 			if seconds > 0 {
-				qps = count / seconds
+				qps = count / uint64(seconds)
 			}
 			lastCount = total
 			lastTime = now
 			log.Info("mysql sink replication status",
 				zap.String("changefeed", s.params.changefeedID),
-				zap.Int64("count", count),
-				zap.Int64("qps", qps))
+				zap.Uint64("count", count),
+				zap.Uint64("qps", qps))
 		}
 	}
 }
 
-func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent) error {
-	startTime := time.Now()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return errors.Trace(err)
+func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, sqls []string, values [][]interface{}, maxRetries uint64) error {
+	checkTxnErr := func(err error) error {
+		if errors.Cause(err) == context.Canceled {
+			return backoff.Permanent(err)
+		}
+		log.Warn("exec dmls with error, retry later", zap.Error(err))
+		return err
 	}
+	return retry.Run(500*time.Millisecond, maxRetries,
+		func() error {
+			failpoint.Inject("MySQLSinkTxnRandomError", func() {
+				failpoint.Return(checkTxnErr(errors.Trace(dmysql.ErrInvalidConn)))
+			})
+			startTime := time.Now()
+			tx, err := s.db.BeginTx(ctx, nil)
+			if err != nil {
+				return checkTxnErr(errors.Trace(err))
+			}
+			for i, query := range sqls {
+				args := values[i]
+				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+					return checkTxnErr(errors.Trace(err))
+				}
+				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+			}
+			if err = tx.Commit(); err != nil {
+				return checkTxnErr(errors.Trace(err))
+			}
+			s.metricExecTxnHis.Observe(time.Since(startTime).Seconds())
+			s.metricExecBatchHis.Observe(float64(len(sqls)))
+			atomic.AddUint64(&s.count, uint64(len(sqls)))
+			log.Debug("Exec Rows succeeded", zap.String("changefeed", s.params.changefeedID), zap.Int("num of Rows", len(sqls)))
+			return nil
+		},
+	)
+}
 
+// prepareDMLs converts model.RowChangedEvent list to query string list and args list
+func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) ([]string, [][]interface{}, error) {
+	sqls := make([]string, 0, len(rows))
+	values := make([][]interface{}, 0, len(rows))
 	for _, row := range rows {
 		var query string
 		var args []interface{}
@@ -435,29 +489,20 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent)
 			query, args, err = s.prepareReplace(row.Schema, row.Table, row.Columns)
 		}
 		if err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Failed to rollback", zap.Error(err))
-			}
-			return errors.Trace(err)
+			return nil, nil, errors.Trace(err)
 		}
-		log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
-		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Failed to rollback", zap.String("sql", query), zap.Error(err))
-			}
-			log.Info("exec row failed", zap.String("sql", query), zap.Any("args", args))
-			return errors.Annotatef(err, "row commitTs: %d", row.Ts)
-		}
+		sqls = append(sqls, query)
+		values = append(values, args)
 	}
+	return sqls, values, nil
+}
 
-	if err = tx.Commit(); err != nil {
+func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent) error {
+	sqls, values, err := s.prepareDMLs(rows)
+	if err != nil {
 		return errors.Trace(err)
 	}
-	execTxnHistogram.WithLabelValues(s.params.captureID, s.params.changefeedID).Observe(time.Since(startTime).Seconds())
-	execBatchHistogram.WithLabelValues(s.params.captureID, s.params.changefeedID).Observe(float64(len(rows)))
-	atomic.AddInt64(&s.count, int64(len(rows)))
-	log.Debug("Exec Rows succeeded", zap.Int("num of Rows", len(rows)))
-	return nil
+	return errors.Trace(s.execDMLWithMaxRetries(ctx, sqls, values, 10))
 }
 
 func (s *mysqlSink) prepareReplace(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
@@ -502,7 +547,7 @@ func (s *mysqlSink) prepareDelete(schema, table string, cols map[string]*model.C
 func whereSlice(cols map[string]*model.Column) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for colName, col := range cols {
-		if !col.WhereHandle {
+		if col.WhereHandle == nil || !*col.WhereHandle {
 			continue
 		}
 		colNames = append(colNames, colName)

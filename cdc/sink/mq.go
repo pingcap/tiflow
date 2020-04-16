@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/pingcap/ticdc/pkg/util"
 
 	"github.com/pingcap/log"
@@ -24,25 +26,27 @@ type mqSink struct {
 	mqProducer   mqProducer.Producer
 	partitionNum int32
 
-	sinkCheckpointTsCh chan uint64
-	globalResolvedTs   uint64
-	checkpointTs       uint64
-	filter             *util.Filter
+	globalResolvedTs uint64
+	checkpointTs     uint64
+	filter           *util.Filter
 
+	captureID    string
 	changefeedID string
 
-	count int64
+	errCh chan error
 }
 
 func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, opts map[string]string) *mqSink {
 	partitionNum := mqProducer.GetPartitionNum()
 	changefeedID := opts[OptChangefeedID]
+	captureID := opts[OptCaptureID]
 	return &mqSink{
-		mqProducer:         mqProducer,
-		partitionNum:       partitionNum,
-		sinkCheckpointTsCh: make(chan uint64, 128),
-		filter:             filter,
-		changefeedID:       changefeedID,
+		mqProducer:   mqProducer,
+		partitionNum: partitionNum,
+		filter:       filter,
+		changefeedID: changefeedID,
+		captureID:    captureID,
+		errCh:        make(chan error, 1),
 	}
 }
 
@@ -52,11 +56,8 @@ func (k *mqSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
 }
 
 func (k *mqSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
-	keyByte, err := model.NewResolvedMessage(ts).Encode()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = k.mqProducer.BroadcastMessage(ctx, keyByte, nil)
+	log.Info("emit checkpoint event", zap.Uint64("ts", ts))
+	err := k.mqProducer.SyncBroadcastMessage(ctx, model.NewResolvedMessage(ts), nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -64,10 +65,12 @@ func (k *mqSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
 }
 
 func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	var sinkCheckpointTs uint64
 	for _, row := range rows {
 		if row.Resolved {
-			sinkCheckpointTs = row.Ts
+			err := k.mqProducer.SendMessage(ctx, model.NewResolvedMessage(row.Ts), nil, 0)
+			if err != nil {
+				return errors.Trace(err)
+			}
 			continue
 		}
 		if k.filter.ShouldIgnoreEvent(row.Ts, row.Schema, row.Table) {
@@ -76,28 +79,10 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 		}
 		partition := k.calPartition(row)
 		key, value := row.ToMqMessage()
-		keyByte, err := key.Encode()
+		err := k.mqProducer.SendMessage(ctx, key, value, partition)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		valueByte, err := value.Encode()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		err = k.mqProducer.SendMessage(ctx, keyByte, valueByte, partition)
-		if err != nil {
-			log.Error("send message failed", zap.ByteStrings("row", [][]byte{keyByte, valueByte}), zap.Int32("partition", partition))
-			return errors.Trace(err)
-		}
-		atomic.AddInt64(&k.count, 1)
-	}
-	if sinkCheckpointTs == 0 {
-		return nil
-	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case k.sinkCheckpointTsCh <- sinkCheckpointTs:
 	}
 	return nil
 }
@@ -126,6 +111,7 @@ func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
 			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
 		}
 	}
+
 	return int32(hash.Sum32() % uint32(k.partitionNum))
 }
 
@@ -139,19 +125,11 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	}
 	key, value := ddl.ToMqMessage()
-	keyByte, err := key.Encode()
+	log.Info("emit ddl event", zap.Reflect("key", key), zap.Reflect("value", value))
+	err := k.mqProducer.SyncBroadcastMessage(ctx, key, value)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	valueByte, err := value.Encode()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = k.mqProducer.BroadcastMessage(ctx, keyByte, valueByte)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	atomic.AddInt64(&k.count, 1)
 	return nil
 }
 
@@ -159,57 +137,80 @@ func (k *mqSink) CheckpointTs() uint64 {
 	return atomic.LoadUint64(&k.checkpointTs)
 }
 
-func (k *mqSink) Run(ctx context.Context) error {
-	for {
-		var sinkCheckpointTs uint64
-		select {
-		case <-ctx.Done():
-			err := k.mqProducer.Close()
-			if err != nil {
-				log.Error("close MQ Producer failed", zap.Error(err))
-			}
-			return ctx.Err()
-		case sinkCheckpointTs = <-k.sinkCheckpointTsCh:
-		}
-		globalResolvedTs := atomic.LoadUint64(&k.globalResolvedTs)
-		// when local resolvedTS is fallback, we will postpone to pushing global resolvedTS
-		// check if the global resolvedTS is postponed
-		if globalResolvedTs < sinkCheckpointTs {
-			sinkCheckpointTs = globalResolvedTs
-		}
-		atomic.StoreUint64(&k.checkpointTs, sinkCheckpointTs)
-	}
+func (k *mqSink) Count() uint64 {
+	return k.mqProducer.Count()
 }
 
-func (k *mqSink) PrintStatus(ctx context.Context) error {
-	lastTime := time.Now()
-	var lastCount int64
-	timer := time.NewTicker(printStatusInterval)
-	defer timer.Stop()
+func (k *mqSink) Run(ctx context.Context) error {
+	wg, cctx := errgroup.WithContext(ctx)
+	if !util.IsOwnerFromCtx(ctx) {
+		wg.Go(func() error {
+			return k.run(cctx)
+		})
+		wg.Go(func() error {
+			return k.collectMetrics(ctx)
+		})
+	}
+	wg.Go(func() error {
+		return k.mqProducer.Run(cctx)
+	})
+	return wg.Wait()
+}
+
+func (k *mqSink) collectMetrics(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-timer.C:
-			now := time.Now()
-			seconds := now.Unix() - lastTime.Unix()
-			total := atomic.LoadInt64(&k.count)
-			count := total - lastCount
-			qps := int64(0)
-			if seconds > 0 {
-				qps = count / seconds
-			}
-			lastCount = total
-			lastTime = now
-			log.Info("MQ sink replication status",
-				zap.String("changefeed", k.changefeedID),
-				zap.Int64("count", count),
-				zap.Int64("qps", qps))
+		case <-time.After(defaultMetricInterval):
+			mqSinkCheckpointChanSizeGauge.WithLabelValues(k.captureID, k.changefeedID).Set(float64(len(k.mqProducer.Successes())))
 		}
 	}
 }
 
-func newKafkaSaramaSink(sinkURI *url.URL, filter *util.Filter, opts map[string]string) (*mqSink, error) {
+func (k *mqSink) run(ctx context.Context) error {
+	for {
+		var sinkCheckpoint uint64
+		select {
+		case <-ctx.Done():
+			if err := k.Close(); err != nil {
+				log.Error("close mq sink failed", zap.Error(err))
+			}
+			return ctx.Err()
+		case err := <-k.errCh:
+			log.Error("found err in MQ Sink, exiting", zap.Error(err))
+			if err := k.Close(); err != nil {
+				log.Error("close mq sink failed", zap.Error(err))
+			}
+			return err
+		case sinkCheckpoint = <-k.mqProducer.Successes():
+		}
+
+		globalResolvedTs := atomic.LoadUint64(&k.globalResolvedTs)
+		// when local resolvedTS is fallback, we will postpone to pushing global resolvedTS
+		// check if the global resolvedTS is postponed
+
+		if globalResolvedTs < sinkCheckpoint {
+			sinkCheckpoint = globalResolvedTs
+		}
+		atomic.StoreUint64(&k.checkpointTs, sinkCheckpoint)
+	}
+}
+
+func (k *mqSink) Close() error {
+	err := k.mqProducer.Close()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	close(k.errCh)
+	return nil
+}
+
+func (k *mqSink) PrintStatus(ctx context.Context) error {
+	return k.mqProducer.PrintStatus(ctx)
+}
+
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filter, opts map[string]string) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
 	scheme := strings.ToLower(sinkURI.Scheme)
@@ -248,10 +249,15 @@ func newKafkaSaramaSink(sinkURI *url.URL, filter *util.Filter, opts map[string]s
 		config.MaxMessageBytes = c
 	}
 
+	s = sinkURI.Query().Get("compression")
+	if s != "" {
+		config.Compression = s
+	}
+
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-	producer, err := mqProducer.NewKafkaSaramaProducer(sinkURI.Host, topic, config)
+	producer, err := mqProducer.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

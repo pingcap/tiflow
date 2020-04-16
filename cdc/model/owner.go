@@ -88,6 +88,8 @@ type TaskPosition struct {
 	CheckPointTs uint64 `json:"checkpoint-ts"`
 	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
 	ResolvedTs uint64 `json:"resolved-ts"`
+	// The count of events were synchronized. This is updated by corresponding processor.
+	Count uint64 `json:"count"`
 }
 
 // Marshal returns the json marshal format of a TaskStatus
@@ -267,7 +269,7 @@ func (status *ChangeFeedStatus) Unmarshal(data []byte) error {
 
 // ProcInfoSnap holds most important replication information of a processor
 type ProcInfoSnap struct {
-	CfID      string
-	CaptureID string
-	Tables    []ProcessTableInfo
+	CfID      string             `json:"changefeed-id"`
+	CaptureID string             `json:"capture-id"`
+	Tables    []ProcessTableInfo `json:"-"`
 }

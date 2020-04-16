@@ -141,9 +141,10 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 	err = rw.WriteInfoIntoStorage(context.Background())
 	c.Assert(errors.Cause(err), check.Equals, model.ErrWriteTsConflict)
 
-	changed, err := rw.UpdateInfo(context.Background())
+	changed, locked, err := rw.UpdateInfo(context.Background())
 	c.Assert(err, check.IsNil)
 	c.Assert(changed, check.IsTrue)
+	c.Assert(locked, check.IsFalse)
 	c.Assert(rw.GetTaskStatus(), check.DeepEquals, getInfo)
 	info = rw.GetTaskStatus()
 

@@ -19,7 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -122,6 +122,7 @@ func newChangefeedCommand() *cobra.Command {
 		newListChangefeedCommand(),
 		newQueryChangefeedCommand(),
 		newCreateChangefeedCommand(),
+		newStatisticsChangefeedCommand(),
 		// TODO: add stop, resume, delete changefeed
 	)
 	return command
@@ -283,20 +284,14 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig) (ineligibleTable
 		return nil, errors.Trace(err)
 	}
 
-	schemaStorage := entry.NewSingleStorage(filter)
-
-	for _, job := range jobs {
-		if job.BinlogInfo.FinishedTS > startTs {
-			break
-		}
-		_, _, _, err := schemaStorage.HandleDDL(job)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	schemaStorage, err := entry.NewSchemaStorage(jobs, filter)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
-	for tID, tableName := range schemaStorage.CloneTables() {
-		tableInfo, exist := schemaStorage.TableByID(int64(tID))
+	snap := schemaStorage.GetLastSnapshot()
+	for tID, tableName := range snap.CloneTables() {
+		tableInfo, exist := snap.TableByID(int64(tID))
 		if !exist {
 			return nil, errors.NotFoundf("table %d", int64(tID))
 		}
@@ -368,7 +363,7 @@ func loop() {
 		command := newCliCommand()
 		command.SetArgs(args)
 		_ = command.ParseFlags(args)
-		command.SetOutput((os.Stdout))
+		command.SetOutput(os.Stdout)
 		if err = command.Execute(); err != nil {
 			command.Println(err)
 		}

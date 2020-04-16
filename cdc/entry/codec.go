@@ -273,9 +273,10 @@ func unflatten(datum types.Datum, ft *types.FieldType) (types.Datum, error) {
 		return datum, nil
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeYear, mysql.TypeInt24,
 		mysql.TypeLong, mysql.TypeLonglong, mysql.TypeDouble, mysql.TypeTinyBlob,
-		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob, mysql.TypeVarchar,
-		mysql.TypeString:
+		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob:
 		return datum, nil
+	case mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeString:
+		datum.SetString(string(datum.GetBytes()), "")
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
 		t := types.NewTime(types.ZeroCoreTime, ft.Tp, int8(ft.Decimal))
 		var err error
@@ -288,7 +289,7 @@ func unflatten(datum types.Datum, ft *types.FieldType) (types.Datum, error) {
 		return datum, nil
 	case mysql.TypeDuration: //duration should read fsp from column meta data
 		dur := types.Duration{Duration: time.Duration(datum.GetInt64()), Fsp: int8(ft.Decimal)}
-		datum.SetValue(dur)
+		datum.SetValueWithDefaultCollation(dur)
 		return datum, nil
 	case mysql.TypeEnum:
 		// ignore error deliberately, to read empty enum value.
@@ -296,14 +297,14 @@ func unflatten(datum types.Datum, ft *types.FieldType) (types.Datum, error) {
 		if err != nil {
 			enum = types.Enum{}
 		}
-		datum.SetValue(enum)
+		datum.SetValueWithDefaultCollation(enum)
 		return datum, nil
 	case mysql.TypeSet:
 		set, err := types.ParseSetValue(ft.Elems, datum.GetUint64())
 		if err != nil {
 			return datum, errors.Trace(err)
 		}
-		datum.SetValue(set)
+		datum.SetValueWithDefaultCollation(set)
 		return datum, nil
 	case mysql.TypeBit:
 		val := datum.GetUint64()

@@ -14,6 +14,7 @@
 package cdc
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -49,8 +50,26 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
 		return
 	}
-	err := s.capture.ownerManager.ResignOwner(req.Context())
-	handleOwnerResp(w, err)
+	if s.owner == nil {
+		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		return
+	}
+	// Resign is a complex process that needs to be synchronized because
+	// it happens in two separate goroutines
+	//
+	// Imagine that we have goroutines A and B
+	// A1. Notify the owner to exit
+	// B1. The owner exits gracefully
+	// A2. Delete the leader key until the owner has exited
+	// B2. Restart to campaign
+	//
+	// A2 must occur between B1 and B2, so we register the Resign process
+	// as the stepDown function which is called when the owner exited.
+	s.owner.Close(req.Context(), func(ctx context.Context) error {
+		return s.capture.Resign(ctx)
+	})
+	s.owner = nil
+	handleOwnerResp(w, nil)
 }
 
 func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request) {
@@ -58,6 +77,11 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
 		return
 	}
+
+	if s.owner == nil {
+		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+	}
+
 	err := req.ParseForm()
 	if err != nil {
 		writeInternalServerError(w, err)
@@ -73,6 +97,6 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		CfID: req.Form.Get(opVarChangefeedID),
 		Type: model.AdminJobType(typ),
 	}
-	err = s.capture.ownerWorker.EnqueueJob(job)
+	err = s.owner.EnqueueJob(job)
 	handleOwnerResp(w, err)
 }

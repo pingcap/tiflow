@@ -82,7 +82,7 @@ func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.W
 
 func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
-	s.capture.ownerWorker.writeDebugInfo(w)
+	s.owner.writeDebugInfo(w)
 
 	fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
 	for _, p := range s.capture.processors {

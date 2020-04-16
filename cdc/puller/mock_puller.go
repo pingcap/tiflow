@@ -113,12 +113,18 @@ type MockPullerManager struct {
 	c *check.C
 }
 
+var _ Puller = &mockPuller{}
+
 type mockPuller struct {
 	pm          *MockPullerManager
 	spans       []util.Span
 	resolvedTs  uint64
 	startTs     uint64
 	rawKVOffset int
+}
+
+func (p *mockPuller) Output() <-chan *model.RawKVEntry {
+	panic("implement me")
 }
 
 func (p *mockPuller) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry {
@@ -163,10 +169,6 @@ func (p *mockPuller) GetResolvedTs() uint64 {
 }
 
 func (p *mockPuller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
-	panic("unreachable")
-}
-
-func (p *mockPuller) Output() ChanBuffer {
 	panic("unreachable")
 }
 
@@ -222,11 +224,12 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 
 // CreatePuller returns a mock puller with the specified start ts and spans
 func (m *MockPullerManager) CreatePuller(startTs uint64, spans []util.Span) Puller {
-	return &mockPuller{
-		spans:   spans,
-		pm:      m,
-		startTs: startTs,
-	}
+	//return &mockPuller{
+	//	spans:   spans,
+	//	pm:      m,
+	//	startTs: startTs,
+	//}
+	return nil
 }
 
 // MustExec delegates to TestKit.MustExec
@@ -239,7 +242,9 @@ func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *entry.Ta
 	is := m.domain.InfoSchema()
 	tbl, err := is.TableByName(timodel.NewCIStr(schemaName), timodel.NewCIStr(tableName))
 	m.c.Assert(err, check.IsNil)
-	return entry.WrapTableInfo(tbl.Meta())
+	dbInfo, exist := is.SchemaByTable(tbl.Meta())
+	m.c.Assert(exist, check.IsTrue)
+	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name, tbl.Meta())
 }
 
 // GetDDLJobs returns the ddl jobs
