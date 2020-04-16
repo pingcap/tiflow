@@ -264,7 +264,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		resolvedTs uint64
 	}, kafkaPartitionNum)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.NewSink(ctx, downstreamURIStr, filter, nil)
+		s, err := sink.NewSink(ctx, downstreamURIStr, filter, &util.ReplicaConfig{}, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -273,7 +273,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			resolvedTs uint64
 		}{Sink: s}
 	}
-	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, nil)
+	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, &util.ReplicaConfig{}, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

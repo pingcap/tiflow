@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/entry"
+
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/ticdc/pkg/util"
@@ -29,6 +31,7 @@ type mqSink struct {
 	globalResolvedTs uint64
 	checkpointTs     uint64
 	filter           *util.Filter
+	partitioner      *partitioner
 
 	captureID    string
 	changefeedID string
@@ -36,16 +39,14 @@ type mqSink struct {
 	errCh chan error
 }
 
-func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, opts map[string]string) *mqSink {
-	partitionNum := mqProducer.GetPartitionNum()
-	changefeedID := opts[OptChangefeedID]
-	captureID := opts[OptCaptureID]
+func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, config *util.ReplicaConfig, opts map[string]string) *mqSink {
 	return &mqSink{
 		mqProducer:   mqProducer,
-		partitionNum: partitionNum,
+		partitionNum: mqProducer.GetPartitionNum(),
+		partitioner:  newPartitioner(config, mqProducer.GetPartitionNum()),
 		filter:       filter,
-		changefeedID: changefeedID,
-		captureID:    captureID,
+		changefeedID: opts[OptChangefeedID],
+		captureID:    opts[OptCaptureID],
 		errCh:        make(chan error, 1),
 	}
 }
@@ -77,7 +78,7 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
 			continue
 		}
-		partition := k.calPartition(row)
+		partition := k.partitioner.calPartition(row)
 		key, value := row.ToMqMessage()
 		err := k.mqProducer.SendMessage(ctx, key, value, partition)
 		if err != nil {
@@ -85,34 +86,6 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 		}
 	}
 	return nil
-}
-
-func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
-	hash := crc32.NewIEEE()
-	// distribute partition by table
-	_, err := hash.Write([]byte(row.Schema))
-	if err != nil {
-		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-	}
-	_, err = hash.Write([]byte(row.Table))
-	if err != nil {
-		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-	}
-
-	if len(row.IndieMarkCol) > 0 {
-		// distribute partition by rowid or unique column value
-		value := row.Columns[row.IndieMarkCol].Value
-		b, err := json.Marshal(value)
-		if err != nil {
-			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-		}
-		_, err = hash.Write(b)
-		if err != nil {
-			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-		}
-	}
-
-	return int32(hash.Sum32() % uint32(k.partitionNum))
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -210,7 +183,7 @@ func (k *mqSink) PrintStatus(ctx context.Context) error {
 	return k.mqProducer.PrintStatus(ctx)
 }
 
-func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filter, opts map[string]string) (*mqSink, error) {
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filter, replicaConfig *util.ReplicaConfig, opts map[string]string) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
 	scheme := strings.ToLower(sinkURI.Scheme)
@@ -261,5 +234,125 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filt
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return newMqSink(producer, filter, opts), nil
+	return newMqSink(producer, filter, replicaConfig, opts), nil
+}
+
+type partitionRule int
+
+const (
+	partitionRuleDefault partitionRule = iota
+	partitionRuleRowID
+	partitionRuleTS
+	partitionRuleTable
+)
+
+func (r *partitionRule) fromString(rule string) {
+	switch strings.ToLower(rule) {
+	case "default":
+		*r = partitionRuleDefault
+	case "rowid":
+		*r = partitionRuleRowID
+	case "ts":
+		*r = partitionRuleTS
+	case "table":
+		*r = partitionRuleTable
+	default:
+		*r = partitionRuleDefault
+		log.Warn("can't support partition rule, using default rule", zap.String("rule", rule))
+	}
+}
+
+type partitioner struct {
+	rules         map[entry.TableName]partitionRule
+	caseSensitive bool
+	partitionNum  int32
+}
+
+func newPartitioner(config *util.ReplicaConfig, partitionNum int32) *partitioner {
+	p := &partitioner{
+		caseSensitive: config.FilterCaseSensitive,
+		partitionNum:  partitionNum,
+		rules:         make(map[entry.TableName]partitionRule, len(config.SinkPartitionRules)),
+	}
+	for _, ruleConfig := range config.SinkPartitionRules {
+		tableName := entry.TableName{Schema: ruleConfig.Schema, Table: ruleConfig.Name}
+		if !p.caseSensitive {
+			tableName.Schema = strings.ToLower(tableName.Schema)
+			tableName.Table = strings.ToLower(tableName.Table)
+		}
+		var rule partitionRule
+		rule.fromString(ruleConfig.Rule)
+		p.rules[tableName] = rule
+	}
+	return p
+}
+
+func (p *partitioner) calPartition(row *model.RowChangedEvent) int32 {
+	rule, exist := p.rules[entry.TableName{Schema: row.Schema, Table: row.Table}]
+	if !exist {
+		rule = partitionRuleDefault
+	}
+	switch rule {
+	case partitionRuleDefault:
+		return p.defaultPartition(row)
+	case partitionRuleRowID:
+		return p.rowIDPartition(row)
+	case partitionRuleTS:
+		return p.tsPartition(row)
+	case partitionRuleTable:
+		return p.tablePartition(row)
+	default:
+		panic("unreachable")
+	}
+}
+
+func (p *partitioner) defaultPartition(row *model.RowChangedEvent) int32 {
+	hash := crc32.NewIEEE()
+	// distribute partition by table
+	_, err := hash.Write([]byte(row.Schema))
+	if err != nil {
+		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
+	}
+	_, err = hash.Write([]byte(row.Table))
+	if err != nil {
+		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
+	}
+
+	if len(row.IndieMarkCol) > 0 {
+		// distribute partition by rowid or unique column value
+		value := row.Columns[row.IndieMarkCol].Value
+		b, err := json.Marshal(value)
+		if err != nil {
+			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
+		}
+		_, err = hash.Write(b)
+		if err != nil {
+			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
+		}
+	}
+
+	return int32(hash.Sum32() % uint32(p.partitionNum))
+}
+
+func (p *partitioner) tsPartition(row *model.RowChangedEvent) int32 {
+	return int32(row.Ts % uint64(p.partitionNum))
+}
+
+func (p *partitioner) rowIDPartition(row *model.RowChangedEvent) int32 {
+	return int32(uint64(row.RowID) % uint64(p.partitionNum))
+}
+
+func (p *partitioner) tablePartition(row *model.RowChangedEvent) int32 {
+	hash := crc32.NewIEEE()
+	// distribute partition by table
+	_, err := hash.Write([]byte(row.Schema))
+	if err != nil {
+		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
+	}
+	_, err = hash.Write([]byte(row.Table))
+	if err != nil {
+		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
+	}
+
+	return int32(hash.Sum32() % uint32(p.partitionNum))
 }

@@ -20,6 +20,12 @@ type ReplicaConfig struct {
 	FilterCaseSensitive bool               `toml:"filter-case-sensitive" json:"filter-case-sensitive"`
 	FilterRules         *filter.Rules      `toml:"filter-rules" json:"filter-rules"`
 	IgnoreTxnCommitTs   []uint64           `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
+	SinkPartitionRules  []*PartitionRule   `toml:"sink-partition-rules" json:"sink-partition-rules"`
+}
+
+type PartitionRule struct {
+	filter.Table
+	Rule string `toml:"rule" json:"rule"`
 }
 
 // NewFilter creates a filter
