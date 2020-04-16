@@ -18,9 +18,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/util"
-
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -33,8 +33,10 @@ var _ = check.Suite(&decodeFileSuite{})
 func (s *decodeFileSuite) TestCanDecodeTOML(c *check.C) {
 	dir := c.MkDir()
 	path := filepath.Join(dir, "config.toml")
+	// TODO add comment to config file
 	content := `
 filter-case-sensitive = false
+ddl-white-list = [100, 101]
 
 [filter-rules]
 ignore-dbs = ["test", "sys"]
@@ -55,11 +57,16 @@ tbl-name = "following"
 	c.Assert(err, check.IsNil)
 
 	c.Assert(cfg.FilterCaseSensitive, check.IsFalse)
+	c.Assert(cfg.DDLWhitelist, check.DeepEquals, []model.ActionType{100, 101})
 	c.Assert(cfg.FilterRules.IgnoreDBs, check.DeepEquals, []string{"test", "sys"})
 	c.Assert(cfg.FilterRules.DoTables, check.DeepEquals, []*filter.Table{
 		{Schema: "sns", Name: "user"},
 		{Schema: "sns", Name: "following"},
 	})
+
+	// write to example config file
+	err = ioutil.WriteFile("changefeed.toml", []byte(content), 0644)
+	c.Assert(err, check.IsNil)
 }
 
 func (s *decodeFileSuite) TestShouldReturnErrForUnknownCfgs(c *check.C) {
