@@ -24,6 +24,15 @@ import (
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
+// SortEngine is the sorter engine
+type SortEngine string
+
+// sort engines
+const (
+	SortInMemory SortEngine = "memory"
+	SortInFile   SortEngine = "file"
+)
+
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
 	SinkURI    string            `json:"sink-uri"`
@@ -35,6 +44,8 @@ type ChangeFeedInfo struct {
 	TargetTs uint64 `json:"target-ts"`
 	// used for admin job notification, trigger watch event in capture
 	AdminJobType AdminJobType `json:"admin-job-type"`
+	Engine       SortEngine   `json:"sort-engine"`
+	SortDir      string       `json:"sort-dir"`
 
 	Config *util.ReplicaConfig `json:"config"`
 }
