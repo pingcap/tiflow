@@ -18,9 +18,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/util"
-
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -35,6 +35,8 @@ func (s *decodeFileSuite) TestCanDecodeTOML(c *check.C) {
 	path := filepath.Join(dir, "config.toml")
 	content := `
 filter-case-sensitive = false
+ignore-txn-commit-ts = [1, 2]
+ddl-white-list = [1, 2]
 
 [filter-rules]
 ignore-dbs = ["test", "sys"]
@@ -55,6 +57,42 @@ tbl-name = "following"
 	c.Assert(err, check.IsNil)
 
 	c.Assert(cfg.FilterCaseSensitive, check.IsFalse)
+	c.Assert(cfg.IgnoreTxnCommitTs, check.DeepEquals, []uint64{1, 2})
+	c.Assert(cfg.DDLWhitelist, check.DeepEquals, []model.ActionType{1, 2})
+	c.Assert(cfg.FilterRules.IgnoreDBs, check.DeepEquals, []string{"test", "sys"})
+	c.Assert(cfg.FilterRules.DoTables, check.DeepEquals, []*filter.Table{
+		{Schema: "sns", Name: "user"},
+		{Schema: "sns", Name: "following"},
+	})
+}
+
+func (s *decodeFileSuite) TestAndWriteExampleTOML(c *check.C) {
+	// TODO add comment to config file
+	content := `
+filter-case-sensitive = false
+ignore-txn-commit-ts = []
+
+[filter-rules]
+ignore-dbs = ["test", "sys"]
+
+[[filter-rules.do-tables]]
+db-name = "sns"
+tbl-name = "user"
+
+[[filter-rules.do-tables]]
+db-name = "sns"
+tbl-name = "following"
+`
+	err := ioutil.WriteFile("changefeed.toml", []byte(content), 0644)
+	c.Assert(err, check.IsNil)
+
+	cfg := new(util.ReplicaConfig)
+	err = strictDecodeFile("changefeed.toml", "cdc", &cfg)
+	c.Assert(err, check.IsNil)
+
+	c.Assert(cfg.FilterCaseSensitive, check.IsFalse)
+	c.Assert(cfg.IgnoreTxnCommitTs, check.DeepEquals, []uint64{})
+	c.Assert(cfg.DDLWhitelist, check.IsNil)
 	c.Assert(cfg.FilterRules.IgnoreDBs, check.DeepEquals, []string{"test", "sys"})
 	c.Assert(cfg.FilterRules.DoTables, check.DeepEquals, []*filter.Table{
 		{Schema: "sns", Name: "user"},

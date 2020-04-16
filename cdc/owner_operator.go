@@ -89,7 +89,7 @@ func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if job == nil || entry.SkipJob(job) {
+	if job == nil {
 		return nil
 	}
 

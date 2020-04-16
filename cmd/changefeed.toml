@@ -1,6 +1,6 @@
-ignore-txn-commit-ts = []
 
 filter-case-sensitive = false
+ignore-txn-commit-ts = []
 
 [filter-rules]
 ignore-dbs = ["test", "sys"]

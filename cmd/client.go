@@ -279,12 +279,12 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig) (ineligibleTable
 		return nil, errors.Trace(err)
 	}
 
-	schemaStorage, err := entry.NewSchemaStorage(jobs)
+	filter, err := util.NewFilter(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	filter, err := util.NewFilter(cfg)
+	schemaStorage, err := entry.NewSchemaStorage(jobs, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

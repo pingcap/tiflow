@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"go.uber.org/zap"
 )
@@ -541,11 +542,13 @@ type SchemaStorage struct {
 	snapsMu    sync.RWMutex
 	gcTs       uint64
 	resolvedTs uint64
+
+	filter *util.Filter
 }
 
 // NewSchemaStorage creates a new schema storage
-func NewSchemaStorage(jobs []*timodel.Job) (*SchemaStorage, error) {
-	schema := &SchemaStorage{}
+func NewSchemaStorage(jobs []*timodel.Job, filter *util.Filter) (*SchemaStorage, error) {
+	schema := &SchemaStorage{filter: filter}
 	for _, job := range jobs {
 		if err := schema.HandleDDLJob(job); err != nil {
 			return nil, errors.Trace(err)
@@ -608,7 +611,7 @@ func (s *SchemaStorage) GetLastSnapshot() *schemaSnapshot {
 
 // HandleDDLJob creates a new snapshot in storage and handles the ddl job
 func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
-	if SkipJob(job) {
+	if s.skipJob(job) {
 		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 		return nil
 	}
@@ -669,9 +672,9 @@ func (s *SchemaStorage) DoGC(ts uint64) {
 // For older version TiDB, it write DDL Binlog in the txn that the state of job is changed to *synced*
 // Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
-func SkipJob(job *timodel.Job) bool {
-	switch job.Type {
-	case timodel.ActionSetTiFlashReplica, timodel.ActionUpdateTiFlashReplicaStatus:
+func (s *SchemaStorage) skipJob(job *timodel.Job) bool {
+	if s.filter != nil && s.filter.ShouldDiscardDDL(job.Type) {
+		log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
 		return true
 	}
 	return !job.IsSynced() && !job.IsDone()

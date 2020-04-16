@@ -142,7 +142,12 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
-	schemaStorage, err := entry.NewSchemaStorage(jobs)
+	filter, err := util.NewFilter(info.GetConfig())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	schemaStorage, err := entry.NewSchemaStorage(jobs, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -161,11 +166,6 @@ func (o *Owner) newChangeFeed(
 			}
 			existingTables[tbl.ID] = checkpointTs
 		}
-	}
-
-	filter, err := util.NewFilter(info.GetConfig())
-	if err != nil {
-		return nil, errors.Trace(err)
 	}
 
 	schemas := make(map[uint64]tableIDMap)

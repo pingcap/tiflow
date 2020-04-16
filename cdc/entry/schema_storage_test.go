@@ -518,7 +518,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	}
 
 	jobs = append(jobs, job)
-	storage, err := NewSchemaStorage(jobs)
+	storage, err := NewSchemaStorage(jobs, nil)
 	c.Assert(err, IsNil)
 
 	// `dropTable` job
