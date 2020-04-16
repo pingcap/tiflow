@@ -15,6 +15,7 @@ package util
 
 import (
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -84,4 +85,16 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 	for _, tc := range testCases {
 		c.Assert(filter.ShouldIgnoreEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
 	}
+}
+
+func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
+	config := &ReplicaConfig{
+		DDLWhitelist: []model.ActionType{model.ActionAddForeignKey},
+	}
+	filter, err := NewFilter(config)
+	c.Assert(err, check.IsNil)
+	c.Assert(filter.ShouldDiscardDDL(model.ActionDropSchema), check.IsFalse)
+	c.Assert(filter.ShouldDiscardDDL(model.ActionAddForeignKey), check.IsFalse)
+	c.Assert(filter.ShouldDiscardDDL(model.ActionCreateSequence), check.IsTrue)
+
 }

@@ -134,7 +134,11 @@ func newProcessor(
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
 	ddlPuller := puller.NewPuller(pdCli, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
 	ctx = util.PutTableIDInCtx(ctx, 0)
-	schemaStorage, err := createSchemaStorage(endpoints, checkpointTs)
+	filter, err := util.NewFilter(changefeed.GetConfig())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schemaStorage, err := createSchemaStorage(endpoints, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -587,7 +591,7 @@ func (p *processor) collectMetrics(ctx context.Context, tableID int64) {
 	}()
 }
 
-func createSchemaStorage(pdEndpoints []string, checkpointTs uint64) (*entry.SchemaStorage, error) {
+func createSchemaStorage(pdEndpoints []string, filter *util.Filter) (*entry.SchemaStorage, error) {
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","))
 	if err != nil {
@@ -597,7 +601,7 @@ func createSchemaStorage(pdEndpoints []string, checkpointTs uint64) (*entry.Sche
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return entry.NewSchemaStorage(jobs)
+	return entry.NewSchemaStorage(jobs, filter)
 }
 
 func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
