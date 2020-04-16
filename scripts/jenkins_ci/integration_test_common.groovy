@@ -98,6 +98,9 @@ def tests(sink_type, node_label) {
         test_cases["unit test"] = {
             node (node_label) {
                 container("golang") {
+                    println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
+                    println "work space path:\n${ws}"
+
                     def ws = pwd()
                     deleteDir()
                     unstash 'ticdc'
@@ -125,6 +128,9 @@ def tests(sink_type, node_label) {
         def run_integration_test = { case_name ->
             node (node_label) {
                 container("golang") {
+                    println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
+                    println "work space path:\n${ws}"
+
                     def ws = pwd()
                     deleteDir()
                     unstash 'ticdc'
