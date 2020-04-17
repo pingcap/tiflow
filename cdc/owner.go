@@ -151,6 +151,7 @@ func (o *Owner) newChangeFeed(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	schemaStorage.FlushIneligibleTables()
 
 	ddlHandler := newDDLHandler(o.pdClient, kvStore, checkpointTs)
 
