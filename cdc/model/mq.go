@@ -2,13 +2,11 @@ package model
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb/util/codec"
-	"go.uber.org/zap"
 )
 
 // MqMessageType is the type of message
@@ -27,7 +25,7 @@ const (
 
 const (
 	// BatchVersion1 represents the version of batch format
-	BatchVersion1 int64 = 1
+	BatchVersion1 uint64 = 1
 )
 
 // MqMessageKey represents the message key
@@ -109,13 +107,16 @@ type BatchEncoder struct {
 
 // Append adds a message to the batch
 func (batch *BatchEncoder) Append(key []byte, value []byte) {
-	batch.keyBuf.Write(codec.EncodeInt([]byte{}, int64(len(key))))
+	var keyLenByte [8]byte
+	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+	var valueLenByte [8]byte
+	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
+
+	batch.keyBuf.Write(keyLenByte[:])
 	batch.keyBuf.Write(key)
 
-	batch.valueBuf.Write(codec.EncodeInt([]byte{}, int64(len(value))))
+	batch.valueBuf.Write(valueLenByte[:])
 	batch.valueBuf.Write(value)
-
-	log.Debug("append msg to batch", zap.Int("batchSize", batch.Len()), zap.Int("keySize", len(key)), zap.Int("valueSize", len(value)))
 }
 
 // Read reads the current batch from the buffer.
@@ -136,8 +137,11 @@ func (batch *BatchEncoder) Len() int {
 // Reset resets the buffer to be empty.
 func (batch *BatchEncoder) Reset() {
 	batch.keyBuf.Reset()
-	batch.keyBuf.Write(codec.EncodeInt([]byte{}, BatchVersion1))
 	batch.valueBuf.Reset()
+
+	var versionByte [8]byte
+	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+	batch.keyBuf.Write(versionByte[:])
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
@@ -158,14 +162,12 @@ type BatchDecoder struct {
 
 // Set sets the byte of the decoded batch.
 func (batch *BatchDecoder) Set(key []byte, value []byte) error {
-	keyLeft, keyVersion, err := codec.DecodeInt(key)
-	if err != nil {
-		return err
-	}
-	if keyVersion != BatchVersion1 {
+	version := binary.BigEndian.Uint64(key[:8])
+	key = key[8:]
+	if version != BatchVersion1 {
 		return errors.New("unexpected key format version")
 	}
-	batch.keyBytes = keyLeft
+	batch.keyBytes = key
 	batch.valueBytes = value
 	return nil
 }
@@ -176,24 +178,17 @@ func (batch *BatchDecoder) HasNext() bool {
 }
 
 // Next returns the next message. It must be used when HasNext is true.
-func (batch *BatchDecoder) Next() ([]byte, []byte, error) {
-	keyLeft, keyLen, err := codec.DecodeInt(batch.keyBytes)
-	if err != nil {
-		return nil, nil, err
+func (batch *BatchDecoder) Next() ([]byte, []byte, bool) {
+	if !batch.HasNext() {
+		return nil, nil, false
 	}
-	valueLeft, valueLen, err := codec.DecodeInt(batch.valueBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	log.Debug("decode msg", zap.Int64("keySize", keyLen), zap.Int64("valueSize", valueLen), zap.Int("keyLeft", len(keyLeft)), zap.Int("valueLeft", len(valueLeft)))
-
-	key := keyLeft[0:keyLen]
-	batch.keyBytes = keyLeft[keyLen:]
-
-	value := valueLeft[0:valueLen]
-	batch.valueBytes = valueLeft[valueLen:]
-	return key, value, nil
+	keyLen := binary.BigEndian.Uint64(batch.keyBytes[:8])
+	valueLen := binary.BigEndian.Uint64(batch.valueBytes[:8])
+	key := batch.keyBytes[8 : keyLen+8]
+	value := batch.valueBytes[8 : valueLen+8]
+	batch.keyBytes = batch.keyBytes[keyLen+8:]
+	batch.valueBytes = batch.valueBytes[valueLen+8:]
+	return key, value, true
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
