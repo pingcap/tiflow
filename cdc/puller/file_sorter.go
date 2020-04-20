@@ -28,10 +28,14 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -61,6 +65,9 @@ func newFileCache() *fileCache {
 }
 
 func (cache *fileCache) resetUnsortedFiles() {
+	for _, f := range cache.unsortedFiles {
+		cache.toRemoveFiles = append(cache.toRemoveFiles, f)
+	}
 	cache.unsortedFiles = make([]string, 0, defaultInitFileCount)
 	cache.availableFileIdx = make([]int, 0, defaultInitFileCount)
 	cache.availableFileSize = make(map[int]uint64, defaultInitFileCount)
@@ -301,6 +308,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 
 	// prepare buffer reader of all sorted files
 	readers := make([]*bufio.Reader, 0, len(files)+1)
+	toRemoveFiles := make([]string, 0, len(files)+1)
 	for _, f := range files {
 		sortedFile, err := sortSingleFile(ctx, f)
 		if err != nil {
@@ -309,6 +317,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		if sortedFile == "" {
 			continue
 		}
+		toRemoveFiles = append(toRemoveFiles, sortedFile)
 		fd, err := os.Open(filepath.Join(fs.dir, sortedFile))
 		if err != nil {
 			return errors.Trace(err)
@@ -317,6 +326,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		readers = append(readers, rd)
 	}
 	if fs.cache.lastSortedFile != "" {
+		toRemoveFiles = append(toRemoveFiles, fs.cache.lastSortedFile)
 		fd, err := os.Open(filepath.Join(fs.dir, fs.cache.lastSortedFile))
 		if err != nil {
 			return errors.Trace(err)
@@ -379,14 +389,48 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 	} else {
 		fs.cache.lastSortedFile = ""
 	}
+
+	fs.cache.fileLock.Lock()
 	atomic.StoreInt32(&fs.cache.sorting, 0)
+	for _, f := range toRemoveFiles {
+		fs.cache.toRemoveFiles = append(fs.cache.toRemoveFiles, f)
+	}
+	fs.cache.fileLock.Unlock()
 	fs.output(ctx, model.NewResolvedPolymorphicEvent(resolvedTs))
 
 	return nil
 }
 
+// AddEntry adds an RawKVEntry to file sorter cache
+func (fs *FileSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
+	select {
+	case <-ctx.Done():
+		return
+	case fs.inputCh <- entry:
+	}
+}
+
+// Output returns the sorted PolymorphicEvent in output channel
+func (fs *FileSorter) Output() <-chan *model.PolymorphicEvent {
+	return fs.outputCh
+}
+
 // Run implements EventSorter.Run, runs in background, sorts and sends sorted events to output channel
 func (fs *FileSorter) Run(ctx context.Context) error {
+	wg, ctx := errgroup.WithContext(ctx)
+
+	wg.Go(func() error {
+		return fs.sortAndOutput(ctx)
+	})
+
+	wg.Go(func() error {
+		return fs.gcRemovedFiles(ctx)
+	})
+
+	return wg.Wait()
+}
+
+func (fs *FileSorter) sortAndOutput(ctx context.Context) error {
 	bufferLen := 10
 	buffer := make([]*model.PolymorphicEvent, 0, bufferLen)
 
@@ -402,7 +446,7 @@ func (fs *FileSorter) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return errors.Trace(ctx.Err())
 		case ev := <-fs.inputCh:
 			if ev.RawKV.OpType == model.OpTypeResolved {
 				err := flush()
@@ -426,18 +470,27 @@ func (fs *FileSorter) Run(ctx context.Context) error {
 	}
 }
 
-// AddEntry adds an RawKVEntry to file sorter cache
-func (fs *FileSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
-	select {
-	case <-ctx.Done():
-		return
-	case fs.inputCh <- entry:
+func (fs *FileSorter) gcRemovedFiles(ctx context.Context) error {
+	ticker := time.NewTicker(time.Minute)
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			// TODO: control gc running time, in case of the delete operation of
+			// some large files blocks sorting
+			fs.cache.fileLock.Lock()
+			for _, f := range fs.cache.toRemoveFiles {
+				fpath := filepath.Join(fs.dir, f)
+				err := os.Remove(fpath)
+				if err != nil {
+					log.Warn("remove file failed", zap.Error(err))
+				}
+			}
+			fs.cache.toRemoveFiles = make([]string, 0)
+			fs.cache.fileLock.Unlock()
+		}
 	}
-}
-
-// Output returns the sorted PolymorphicEvent in output channel
-func (fs *FileSorter) Output() <-chan *model.PolymorphicEvent {
-	return fs.outputCh
 }
 
 func randomFileName(prefix string) string {
