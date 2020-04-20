@@ -636,6 +636,22 @@ func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 	return nil
 }
 
+// FlushIneligibleTables recounts the ineligible table set in last schema snap
+func (s *SchemaStorage) FlushIneligibleTables() {
+	s.snapsMu.Lock()
+	defer s.snapsMu.Unlock()
+	if len(s.snaps) == 0 {
+		return
+	}
+	lastSnap := s.snaps[len(s.snaps)-1]
+	for tableID := range lastSnap.ineligibleTableID {
+		tableInfo, exist := lastSnap.tables[tableID]
+		if !exist || tableInfo.ExistTableUniqueColumn() {
+			delete(lastSnap.ineligibleTableID, tableID)
+		}
+	}
+}
+
 // AdvanceResolvedTs advances the resolved
 func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 	var swapped bool

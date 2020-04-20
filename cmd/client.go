@@ -288,6 +288,7 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig) (ineligibleTable
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	schemaStorage.FlushIneligibleTables()
 
 	snap := schemaStorage.GetLastSnapshot()
 	for tID, tableName := range snap.CloneTables() {
