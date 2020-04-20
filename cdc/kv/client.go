@@ -1024,6 +1024,7 @@ func (s *eventFeedSession) singleEventFeed(
 	matcher := newMatcher()
 	advanceCheckTicker := time.NewTicker(time.Second * 5)
 	lastReceivedEventTime := time.Now()
+	startFeedTime := time.Now()
 	var lastResolvedTs uint64
 
 	for {
@@ -1033,6 +1034,9 @@ func (s *eventFeedSession) singleEventFeed(
 		case <-ctx.Done():
 			return atomic.LoadUint64(&checkpointTs), ctx.Err()
 		case <-advanceCheckTicker.C:
+			if time.Since(startFeedTime) < 20*time.Second {
+				continue
+			}
 			sinceLastEvent := time.Since(lastReceivedEventTime)
 			if sinceLastEvent > time.Second*20 {
 				log.Warn("region not receiving event from tikv for too long time",
