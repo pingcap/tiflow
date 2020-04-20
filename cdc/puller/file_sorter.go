@@ -65,9 +65,7 @@ func newFileCache() *fileCache {
 }
 
 func (cache *fileCache) resetUnsortedFiles() {
-	for _, f := range cache.unsortedFiles {
-		cache.toRemoveFiles = append(cache.toRemoveFiles, f)
-	}
+	cache.toRemoveFiles = append(cache.toRemoveFiles, cache.unsortedFiles...)
 	cache.unsortedFiles = make([]string, 0, defaultInitFileCount)
 	cache.availableFileIdx = make([]int, 0, defaultInitFileCount)
 	cache.availableFileSize = make(map[int]uint64, defaultInitFileCount)
@@ -392,9 +390,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 
 	fs.cache.fileLock.Lock()
 	atomic.StoreInt32(&fs.cache.sorting, 0)
-	for _, f := range toRemoveFiles {
-		fs.cache.toRemoveFiles = append(fs.cache.toRemoveFiles, f)
-	}
+	fs.cache.toRemoveFiles = append(fs.cache.toRemoveFiles, toRemoveFiles...)
 	fs.cache.fileLock.Unlock()
 	fs.output(ctx, model.NewResolvedPolymorphicEvent(resolvedTs))
 
