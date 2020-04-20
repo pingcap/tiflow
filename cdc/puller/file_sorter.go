@@ -234,11 +234,12 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 	// sortSingleFile reads an unsorted file into memory, sort in memory and rewritten
 	// sorted events ta a new file.
 	sortSingleFile := func(ctx context.Context, filename string) (string, error) {
-		_, err := os.Stat(filename)
+		fpath := filepath.Join(fs.dir, filename)
+		_, err := os.Stat(fpath)
 		if os.IsNotExist(err) {
 			return "", nil
 		}
-		data, err := ioutil.ReadFile(filepath.Join(fs.dir, filename))
+		data, err := ioutil.ReadFile(fpath)
 		if err != nil {
 			return "", errors.Trace(err)
 		}
