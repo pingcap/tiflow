@@ -19,10 +19,10 @@ import (
 
 // PolymorphicEvent describes a event can be in multiple states
 type PolymorphicEvent struct {
-	Ts       uint64           `json:"t"`
-	RawKV    *RawKVEntry      `json:"-"`
-	Row      *RowChangedEvent `json:"r"`
-	Finished chan struct{}    `json:"-"`
+	Ts       uint64
+	RawKV    *RawKVEntry
+	Row      *RowChangedEvent
+	finished chan struct{}
 }
 
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
@@ -33,7 +33,7 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 	return &PolymorphicEvent{
 		Ts:       rawKV.Ts,
 		RawKV:    rawKV,
-		Finished: make(chan struct{}),
+		finished: make(chan struct{}),
 	}
 }
 
@@ -43,25 +43,25 @@ func NewResolvedPolymorphicEvent(ts uint64) *PolymorphicEvent {
 		Ts:       ts,
 		RawKV:    &RawKVEntry{Ts: ts, OpType: OpTypeResolved},
 		Row:      &RowChangedEvent{Ts: ts, Resolved: true},
-		Finished: nil,
+		finished: nil,
 	}
 }
 
 // PrepareFinished marks the prepare process is finished
 // In prepare process, Mounter will translate raw KV to row data
 func (e *PolymorphicEvent) PrepareFinished() {
-	if e.Finished != nil {
-		close(e.Finished)
+	if e.finished != nil {
+		close(e.finished)
 	}
 }
 
 // WaitPrepare waits for prepare process finished
 func (e *PolymorphicEvent) WaitPrepare(ctx context.Context) error {
-	if e.Finished != nil {
+	if e.finished != nil {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-e.Finished:
+		case <-e.finished:
 		}
 	}
 	return nil

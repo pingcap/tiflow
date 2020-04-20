@@ -12,18 +12,18 @@ import (
 
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
-	Ts       uint64 `json:"t"`
-	Resolved bool   `json:"r"`
+	Ts       uint64
+	Resolved bool
 
-	Schema string `json:"s"`
-	Table  string `json:"a"`
+	Schema string
+	Table  string
 
-	Delete bool `json:"d"`
+	Delete bool
 
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
-	IndieMarkCol string             `json:"i"`
-	Columns      map[string]*Column `json:"c"`
+	IndieMarkCol string
+	Columns      map[string]*Column
 }
 
 // ToMqMessage transforms to message key and value

@@ -19,7 +19,7 @@ import (
 	"container/heap"
 	"context"
 	"encoding/binary"
-	"encoding/json"
+	"encoding/gob"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -110,20 +110,22 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 	if len(entries) == 0 {
 		return 0, nil
 	}
-	buf := bytes.NewBuffer([]byte{})
+	buf := new(bytes.Buffer)
+	dataBuf := new(bytes.Buffer)
 	var dataLen [8]byte
 	for _, entry := range entries {
 		err := entry.WaitPrepare(ctx)
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
-		data, err := json.Marshal(entry)
+		dataBuf.Reset()
+		err = gob.NewEncoder(dataBuf).Encode(entry)
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
-		binary.BigEndian.PutUint64(dataLen[:], uint64(len(data)))
+		binary.BigEndian.PutUint64(dataLen[:], uint64(dataBuf.Len()))
 		buf.Write(dataLen[:])
-		buf.Write(data)
+		buf.Write(dataBuf.Bytes())
 	}
 	f, err := os.OpenFile(fullpath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -215,7 +217,7 @@ func readPolymorphicEvent(rd *bufio.Reader) (*model.PolymorphicEvent, error) {
 	}
 
 	ev := &model.PolymorphicEvent{}
-	err = json.Unmarshal(data, &ev)
+	err = gob.NewDecoder(bytes.NewReader(data)).Decode(ev)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -251,7 +253,8 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 				return "", errors.New("unsorted file unexpected truncated")
 			}
 			ev := &model.PolymorphicEvent{}
-			err := json.Unmarshal(data[idx+8:idx+8+dataLen], &ev)
+			err = gob.NewDecoder(bytes.NewReader(data[idx+8 : idx+8+dataLen])).Decode(ev)
+
 			if err != nil {
 				return "", errors.Trace(err)
 			}
@@ -336,7 +339,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		}
 		heap.Push(h, &sortItem{entry: ev, fileIndex: i})
 	}
-	lastSortedFileIsUsed := false
+	lastSortedFileHasData := false
 	newLastSortedFile := randomFileName("last-sorted")
 	bufferLen := 10
 	buffer := make([]*model.PolymorphicEvent, 0, bufferLen)
@@ -345,7 +348,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		if item.entry.Ts <= resolvedTs {
 			fs.output(ctx, item.entry)
 		} else {
-			lastSortedFileIsUsed = true
+			lastSortedFileHasData = true
 			buffer = append(buffer, item.entry)
 			if len(buffer) > bufferLen {
 				_, err := flushEventsToFile(ctx, filepath.Join(fs.dir, newLastSortedFile), buffer)
@@ -371,8 +374,10 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			return errors.Trace(err)
 		}
 	}
-	if lastSortedFileIsUsed {
+	if lastSortedFileHasData {
 		fs.cache.lastSortedFile = newLastSortedFile
+	} else {
+		fs.cache.lastSortedFile = ""
 	}
 	atomic.StoreInt32(&fs.cache.sorting, 0)
 	fs.output(ctx, model.NewResolvedPolymorphicEvent(resolvedTs))
