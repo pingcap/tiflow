@@ -21,8 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.uber.org/zap/zapcore"
-
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -715,12 +713,12 @@ func (s *SchemaStorage) DoGC(ts uint64) {
 	if startIdx == 0 {
 		return
 	}
-	if log.GetLevel() == zapcore.DebugLevel {
-		log.Debug("Do GC in schema storage")
-		for i := 0; i < startIdx; i++ {
-			s.snaps[i].PrintStatus(log.Debug)
-		}
+	//if log.GetLevel() == zapcore.DebugLevel {
+	log.Info("Do GC in schema storage")
+	for i := 0; i < startIdx; i++ {
+		s.snaps[i].PrintStatus(log.Info)
 	}
+	//}
 	s.snaps = s.snaps[startIdx:]
 	atomic.StoreUint64(&s.gcTs, s.snaps[0].currentTs)
 	log.Info("finished gc in schema storage", zap.Uint64("gcTs", s.snaps[0].currentTs))
