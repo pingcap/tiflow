@@ -411,10 +411,19 @@ func (s *schemaSnapshot) createSchema(db *timodel.DBInfo) error {
 		return errors.AlreadyExistsf("schema %s(%d)", db.Name, db.ID)
 	}
 
-	s.schemas[db.ID] = db
+	s.schemas[db.ID] = db.Clone()
 	s.schemaNameToID[db.Name.O] = db.ID
 
 	log.Debug("create schema success, schema id", zap.String("name", db.Name.O), zap.Int64("id", db.ID))
+	return nil
+}
+
+func (s *schemaSnapshot) replaceSchema(db *timodel.DBInfo) error {
+	if _, ok := s.schemas[db.ID]; !ok {
+		return errors.NotFoundf("schema %s(%d)", db.Name, db.ID)
+	}
+	s.schemas[db.ID] = db.Clone()
+	s.schemaNameToID[db.Name.O] = db.ID
 	return nil
 }
 
@@ -450,7 +459,7 @@ func (s *schemaSnapshot) createTable(schemaID int64, tbl *timodel.TableInfo) err
 	if !ok {
 		return errors.NotFoundf("table's schema(%d)", schemaID)
 	}
-	table := WrapTableInfo(schema.ID, schema.Name.O, tbl)
+	table := WrapTableInfo(schema.ID, schema.Name.O, tbl.Clone())
 	_, ok = s.tables[table.ID]
 	if ok {
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
@@ -475,7 +484,7 @@ func (s *schemaSnapshot) replaceTable(tbl *timodel.TableInfo) error {
 	if !ok {
 		return errors.NotFoundf("table %s(%d)", tbl.Name, tbl.ID)
 	}
-	table := WrapTableInfo(oldTable.SchemaID, oldTable.TableName.Schema, tbl)
+	table := WrapTableInfo(oldTable.SchemaID, oldTable.TableName.Schema, tbl.Clone())
 	s.tables[table.ID] = table
 	if !table.ExistTableUniqueColumn() {
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
@@ -494,12 +503,10 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 			return errors.Trace(err)
 		}
 	case timodel.ActionModifySchemaCharsetAndCollate:
-		db := job.BinlogInfo.DBInfo
-		if _, ok := s.schemas[db.ID]; !ok {
-			return errors.NotFoundf("schema %s(%d)", db.Name, db.ID)
+		err := s.replaceSchema(job.BinlogInfo.DBInfo)
+		if err != nil {
+			return errors.Trace(err)
 		}
-		s.schemas[db.ID] = db
-		s.schemaNameToID[db.Name.O] = db.ID
 	case timodel.ActionDropSchema:
 		err := s.dropSchema(job.SchemaID)
 		if err != nil {
