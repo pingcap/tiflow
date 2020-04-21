@@ -407,17 +407,23 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		zap.String("query", todoDDLJob.Query),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
-	err := c.schema.HandleDDLJob(todoDDLJob)
+	// get the snap before this ddl to avoid losing the schema name when the ddl is dropping a schema.
+	snap, err := c.schema.GetSnapshot(ctx, todoDDLJob.BinlogInfo.FinishedTS-1)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = snap.FillSchemaName(todoDDLJob)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = c.schema.HandleDDLJob(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	c.schema.DoGC(todoDDLJob.BinlogInfo.FinishedTS)
 
-	snap, err := c.schema.GetSnapshot(ctx, todoDDLJob.BinlogInfo.FinishedTS)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = snap.FillSchemaName(todoDDLJob)
+	snap, err = c.schema.GetSnapshot(ctx, todoDDLJob.BinlogInfo.FinishedTS)
 	if err != nil {
 		return errors.Trace(err)
 	}
