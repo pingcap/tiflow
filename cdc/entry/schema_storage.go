@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/zap/zapcore"
+
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -36,7 +38,6 @@ import (
 // schemaSnapshot stores the source TiDB all schema information
 // schemaSnapshot is a READ ONLY struct
 type schemaSnapshot struct {
-	tableIDToName  map[int64]TableName
 	tableNameToID  map[TableName]int64
 	schemaNameToID map[string]int64
 
@@ -51,7 +52,6 @@ type schemaSnapshot struct {
 
 func newEmptySchemaSnapshot() *schemaSnapshot {
 	return &schemaSnapshot{
-		tableIDToName:  make(map[int64]TableName),
 		tableNameToID:  make(map[TableName]int64),
 		schemaNameToID: make(map[string]int64),
 
@@ -63,10 +63,50 @@ func newEmptySchemaSnapshot() *schemaSnapshot {
 	}
 }
 
+func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field)) {
+	logger("[SchemaSnap] Start to print status", zap.Uint64("currentTs", s.currentTs))
+	for id, dbInfo := range s.schemas {
+		logger("[SchemaSnap] --> Schemas", zap.Int64("schemaID", id), zap.Reflect("dbInfo", dbInfo))
+		// check schemaNameToID
+		if schemaID, exist := s.schemaNameToID[dbInfo.Name.O]; !exist || schemaID != id {
+			logger("[SchemaSnap] ----> schemaNameToID item lost", zap.String("name", dbInfo.Name.O), zap.Int64("schemaNameToID", s.schemaNameToID[dbInfo.Name.O]))
+		}
+	}
+	if len(s.schemaNameToID) != len(s.schemas) {
+		logger("[SchemaSnap] schemaNameToID length mismatch schemas")
+		for schemaName, schemaID := range s.schemaNameToID {
+			logger("[SchemaSnap] --> schemaNameToID", zap.String("schemaName", schemaName), zap.Int64("schemaID", schemaID))
+		}
+	}
+	for id, tableInfo := range s.tables {
+		logger("[SchemaSnap] --> Tables", zap.Int64("tableID", id), zap.Stringer("tableInfo", tableInfo))
+		// check tableNameToID
+		if tableID, exist := s.tableNameToID[tableInfo.TableName]; !exist || tableID != id {
+			logger("[SchemaSnap] ----> tableNameToID item lost", zap.Stringer("name", tableInfo.TableName), zap.Int64("tableNameToID", s.tableNameToID[tableInfo.TableName]))
+		}
+	}
+	if len(s.tableNameToID) != len(s.tables) {
+		logger("[SchemaSnap] tableNameToID length mismatch tables")
+		for tableName, tableID := range s.tableNameToID {
+			logger("[SchemaSnap] --> tableNameToID", zap.Stringer("tableName", tableName), zap.Int64("tableID", tableID))
+		}
+	}
+	truncateTableID := make([]int64, 0, len(s.truncateTableID))
+	for id := range s.truncateTableID {
+		truncateTableID = append(truncateTableID, id)
+	}
+	logger("[SchemaSnap] TruncateTableIDs", zap.Int64s("ids", truncateTableID))
+
+	ineligibleTableID := make([]int64, 0, len(s.ineligibleTableID))
+	for id := range s.ineligibleTableID {
+		ineligibleTableID = append(ineligibleTableID, id)
+	}
+	logger("[SchemaSnap] IneligibleTableIDs", zap.Int64s("ids", ineligibleTableID))
+}
+
 // Clone clones Storage
 func (s *schemaSnapshot) Clone() *schemaSnapshot {
 	n := &schemaSnapshot{
-		tableIDToName:  make(map[int64]TableName, len(s.tableIDToName)),
 		tableNameToID:  make(map[TableName]int64, len(s.tableNameToID)),
 		schemaNameToID: make(map[string]int64, len(s.schemaNameToID)),
 
@@ -75,9 +115,6 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 
 		truncateTableID:   make(map[int64]struct{}, len(s.truncateTableID)),
 		ineligibleTableID: make(map[int64]struct{}, len(s.ineligibleTableID)),
-	}
-	for k, v := range s.tableIDToName {
-		n.tableIDToName[k] = v
 	}
 	for k, v := range s.tableNameToID {
 		n.tableNameToID[k] = v
@@ -115,7 +152,7 @@ func (t TableName) String() string {
 type TableInfo struct {
 	*timodel.TableInfo
 	SchemaID      int64
-	SchemaName    timodel.CIStr
+	TableName     TableName
 	columnsOffset map[int64]int
 	indicesOffset map[int64]int
 	uniqueColumns map[int64]struct{}
@@ -128,11 +165,11 @@ type TableInfo struct {
 }
 
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
-func WrapTableInfo(schemaID int64, schemaName timodel.CIStr, info *timodel.TableInfo) *TableInfo {
+func WrapTableInfo(schemaID int64, schemaName string, info *timodel.TableInfo) *TableInfo {
 	ti := &TableInfo{
 		TableInfo:     info,
 		SchemaID:      schemaID,
-		SchemaName:    schemaName,
+		TableName:     TableName{Schema: schemaName, Table: info.Name.O},
 		columnsOffset: make(map[int64]int, len(info.Columns)),
 		indicesOffset: make(map[int64]int, len(info.Indices)),
 		uniqueColumns: make(map[int64]struct{}),
@@ -191,6 +228,10 @@ func (ti *TableInfo) GetColumnInfo(colID int64) (info *timodel.ColumnInfo, exist
 		return nil, false
 	}
 	return ti.Columns[colOffset], true
+}
+
+func (ti *TableInfo) String() string {
+	return fmt.Sprintf("TableInfo, ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t", ti.ID, ti.TableName, len(ti.Columns), len(ti.Indices), ti.PKIsHandle)
 }
 
 // GetIndexInfo returns the index info by ID
@@ -269,13 +310,16 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 
 // Clone clones the TableInfo
 func (ti *TableInfo) Clone() *TableInfo {
-	return WrapTableInfo(ti.SchemaID, ti.SchemaName, ti.TableInfo.Clone())
+	return WrapTableInfo(ti.SchemaID, ti.TableName.Schema, ti.TableInfo.Clone())
 }
 
 // GetTableNameByID looks up a TableName with the given table id
 func (s *schemaSnapshot) GetTableNameByID(id int64) (TableName, bool) {
-	name, ok := s.tableIDToName[id]
-	return name, ok
+	tableInfo, ok := s.tables[id]
+	if !ok {
+		return TableName{}, false
+	}
+	return tableInfo.TableName, true
 }
 
 // GetTableIDByName returns the tableID by table schemaName and tableName
@@ -305,11 +349,11 @@ func (s *schemaSnapshot) SchemaByID(id int64) (val *timodel.DBInfo, ok bool) {
 
 // SchemaByTableID returns the schema ID by table ID
 func (s *schemaSnapshot) SchemaByTableID(tableID int64) (*timodel.DBInfo, bool) {
-	tn, ok := s.tableIDToName[tableID]
+	tableInfo, ok := s.tables[tableID]
 	if !ok {
 		return nil, false
 	}
-	schemaID, ok := s.schemaNameToID[tn.Schema]
+	schemaID, ok := s.schemaNameToID[tableInfo.TableName.Schema]
 	if !ok {
 		return nil, false
 	}
@@ -334,22 +378,6 @@ func (s *schemaSnapshot) IsIneligibleTableID(id int64) bool {
 	return ok
 }
 
-// FillSchemaName fills the schema name in ddl job
-func (s *schemaSnapshot) FillSchemaName(job *timodel.Job) error {
-	var schemaName string
-	if job.Type != timodel.ActionCreateSchema {
-		dbInfo, exist := s.SchemaByID(job.SchemaID)
-		if !exist {
-			return errors.NotFoundf("schema %d not found", job.SchemaID)
-		}
-		schemaName = dbInfo.Name.O
-	} else {
-		schemaName = job.BinlogInfo.DBInfo.Name.O
-	}
-	job.SchemaName = schemaName
-	return nil
-}
-
 func (s *schemaSnapshot) dropSchema(id int64) error {
 	schema, ok := s.schemas[id]
 	if !ok {
@@ -357,9 +385,8 @@ func (s *schemaSnapshot) dropSchema(id int64) error {
 	}
 
 	for _, table := range schema.Tables {
+		tableName := s.tables[table.ID].TableName
 		delete(s.tables, table.ID)
-		tableName := s.tableIDToName[table.ID]
-		delete(s.tableIDToName, table.ID)
 		delete(s.tableNameToID, tableName)
 	}
 
@@ -374,10 +401,19 @@ func (s *schemaSnapshot) createSchema(db *timodel.DBInfo) error {
 		return errors.AlreadyExistsf("schema %s(%d)", db.Name, db.ID)
 	}
 
-	s.schemas[db.ID] = db
+	s.schemas[db.ID] = db.Clone()
 	s.schemaNameToID[db.Name.O] = db.ID
 
 	log.Debug("create schema success, schema id", zap.String("name", db.Name.O), zap.Int64("id", db.ID))
+	return nil
+}
+
+func (s *schemaSnapshot) replaceSchema(db *timodel.DBInfo) error {
+	if _, ok := s.schemas[db.ID]; !ok {
+		return errors.NotFoundf("schema %s(%d)", db.Name, db.ID)
+	}
+	s.schemas[db.ID] = db.Clone()
+	s.schemaNameToID[db.Name.O] = db.ID
 	return nil
 }
 
@@ -399,9 +435,8 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 		}
 	}
 
+	tableName := s.tables[id].TableName
 	delete(s.tables, id)
-	tableName := s.tableIDToName[id]
-	delete(s.tableIDToName, id)
 	delete(s.tableNameToID, tableName)
 	delete(s.ineligibleTableID, id)
 
@@ -414,7 +449,7 @@ func (s *schemaSnapshot) createTable(schemaID int64, tbl *timodel.TableInfo) err
 	if !ok {
 		return errors.NotFoundf("table's schema(%d)", schemaID)
 	}
-	table := WrapTableInfo(schema.ID, schema.Name, tbl)
+	table := WrapTableInfo(schema.ID, schema.Name.O, tbl.Clone())
 	_, ok = s.tables[table.ID]
 	if ok {
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
@@ -427,8 +462,7 @@ func (s *schemaSnapshot) createTable(schemaID int64, tbl *timodel.TableInfo) err
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
 		s.ineligibleTableID[table.ID] = struct{}{}
 	}
-	s.tableIDToName[table.ID] = TableName{Schema: schema.Name.O, Table: table.Name.O}
-	s.tableNameToID[s.tableIDToName[table.ID]] = table.ID
+	s.tableNameToID[table.TableName] = table.ID
 
 	log.Debug("create table success", zap.String("name", schema.Name.O+"."+table.Name.O), zap.Int64("id", table.ID))
 	return nil
@@ -440,13 +474,22 @@ func (s *schemaSnapshot) replaceTable(tbl *timodel.TableInfo) error {
 	if !ok {
 		return errors.NotFoundf("table %s(%d)", tbl.Name, tbl.ID)
 	}
-	table := WrapTableInfo(oldTable.SchemaID, oldTable.SchemaName, tbl)
+	table := WrapTableInfo(oldTable.SchemaID, oldTable.TableName.Schema, tbl.Clone())
 	s.tables[table.ID] = table
 	if !table.ExistTableUniqueColumn() {
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
 		s.ineligibleTableID[table.ID] = struct{}{}
 	}
 	return nil
+}
+
+func (s *schemaSnapshot) flushIneligibleTables() {
+	for tableID := range s.ineligibleTableID {
+		tableInfo, exist := s.tables[tableID]
+		if !exist || tableInfo.ExistTableUniqueColumn() {
+			delete(s.ineligibleTableID, tableID)
+		}
+	}
 }
 
 func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
@@ -459,12 +502,10 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 			return errors.Trace(err)
 		}
 	case timodel.ActionModifySchemaCharsetAndCollate:
-		db := job.BinlogInfo.DBInfo
-		if _, ok := s.schemas[db.ID]; !ok {
-			return errors.NotFoundf("schema %s(%d)", db.Name, db.ID)
+		err := s.replaceSchema(job.BinlogInfo.DBInfo)
+		if err != nil {
+			return errors.Trace(err)
 		}
-		s.schemas[db.ID] = db
-		s.schemaNameToID[db.Name.O] = db.ID
 	case timodel.ActionDropSchema:
 		err := s.dropSchema(job.SchemaID)
 		if err != nil {
@@ -527,10 +568,10 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 
 // CloneTables return a clone of the existing tables.
 func (s *schemaSnapshot) CloneTables() map[uint64]TableName {
-	mp := make(map[uint64]TableName, len(s.tableIDToName))
+	mp := make(map[uint64]TableName, len(s.tables))
 
-	for id, table := range s.tableIDToName {
-		mp[uint64(id)] = table
+	for id, table := range s.tables {
+		mp[uint64(id)] = table.TableName
 	}
 
 	return mp
@@ -636,19 +677,18 @@ func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 	return nil
 }
 
-// FlushIneligibleTables recounts the ineligible table set in last schema snap
-func (s *SchemaStorage) FlushIneligibleTables() {
+// FlushIneligibleTables recounts the ineligible table set in schema snaps which of currentTs greater or equal to specified ts
+func (s *SchemaStorage) FlushIneligibleTables(ts uint64) {
 	s.snapsMu.Lock()
 	defer s.snapsMu.Unlock()
 	if len(s.snaps) == 0 {
 		return
 	}
-	lastSnap := s.snaps[len(s.snaps)-1]
-	for tableID := range lastSnap.ineligibleTableID {
-		tableInfo, exist := lastSnap.tables[tableID]
-		if !exist || tableInfo.ExistTableUniqueColumn() {
-			delete(lastSnap.ineligibleTableID, tableID)
+	for _, snap := range s.snaps {
+		if snap.currentTs < ts {
+			continue
 		}
+		snap.flushIneligibleTables()
 	}
 }
 
@@ -664,6 +704,26 @@ func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 	}
 }
 
+// FillSchemaName fills the schema name in ddl job
+func (s *SchemaStorage) FillSchemaName(job *timodel.Job) error {
+	if job.Type == timodel.ActionCreateSchema ||
+		job.Type == timodel.ActionDropSchema {
+		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
+		return nil
+	}
+
+	snap, err := s.getSnapshot(job.BinlogInfo.FinishedTS)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	dbInfo, exist := snap.SchemaByID(job.SchemaID)
+	if !exist {
+		return errors.NotFoundf("schema %d not found", job.SchemaID)
+	}
+	job.SchemaName = dbInfo.Name.O
+	return nil
+}
+
 // DoGC removes snaps which of ts less than this specified ts
 func (s *SchemaStorage) DoGC(ts uint64) {
 	s.snapsMu.Lock()
@@ -677,6 +737,12 @@ func (s *SchemaStorage) DoGC(ts uint64) {
 	}
 	if startIdx == 0 {
 		return
+	}
+	if log.GetLevel() == zapcore.DebugLevel {
+		log.Debug("Do GC in schema storage")
+		for i := 0; i < startIdx; i++ {
+			s.snaps[i].PrintStatus(log.Debug)
+		}
 	}
 	s.snaps = s.snaps[startIdx:]
 	atomic.StoreUint64(&s.gcTs, s.snaps[0].currentTs)

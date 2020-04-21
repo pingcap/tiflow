@@ -244,7 +244,7 @@ func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *entry.Ta
 	m.c.Assert(err, check.IsNil)
 	dbInfo, exist := is.SchemaByTable(tbl.Meta())
 	m.c.Assert(exist, check.IsTrue)
-	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name, tbl.Meta())
+	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, tbl.Meta())
 }
 
 // GetDDLJobs returns the ddl jobs

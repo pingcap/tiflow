@@ -318,15 +318,11 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 	return nil
 }
 
-func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
-	log.Info("apply job", zap.String("sql", job.Query), zap.Stringer("job", job))
-
-	err = c.schema.HandleDDLJob(job)
+func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool, err error) {
+	snap, err := c.schema.GetSnapshot(ctx, job.BinlogInfo.FinishedTS)
 	if err != nil {
 		return false, errors.Trace(err)
 	}
-	c.schema.DoGC(job.BinlogInfo.FinishedTS)
-	snap := c.schema.GetLastSnapshot()
 
 	schemaID := uint64(job.SchemaID)
 	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && snap.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
@@ -337,42 +333,48 @@ func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 		return true, nil
 	}
 
-	// case table id set may change
-	switch job.Type {
-	case timodel.ActionCreateSchema:
-		c.addSchema(schemaID)
-	case timodel.ActionDropSchema:
-		c.dropSchema(schemaID)
-	case timodel.ActionCreateTable, timodel.ActionRecoverTable:
-		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
-		if !exist {
-			return false, errors.NotFoundf("table(%d)", addID)
-		}
-		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
-	case timodel.ActionDropTable:
-		dropID := uint64(job.TableID)
-		c.removeTable(schemaID, dropID)
-	case timodel.ActionRenameTable:
-		tableName, exist := snap.GetTableNameByID(job.TableID)
-		if !exist {
-			return false, errors.NotFoundf("table(%d)", job.TableID)
-		}
-		// no id change just update name
-		c.tables[uint64(job.TableID)] = tableName
-	case timodel.ActionTruncateTable:
-		dropID := uint64(job.TableID)
-		c.removeTable(schemaID, dropID)
+	err = func() error {
+		// case table id set may change
+		switch job.Type {
+		case timodel.ActionCreateSchema:
+			c.addSchema(schemaID)
+		case timodel.ActionDropSchema:
+			c.dropSchema(schemaID)
+		case timodel.ActionCreateTable, timodel.ActionRecoverTable:
+			addID := uint64(job.BinlogInfo.TableInfo.ID)
+			tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+			if !exist {
+				return errors.NotFoundf("table(%d)", addID)
+			}
+			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
+		case timodel.ActionDropTable:
+			dropID := uint64(job.TableID)
+			c.removeTable(schemaID, dropID)
+		case timodel.ActionRenameTable:
+			tableName, exist := snap.GetTableNameByID(job.TableID)
+			if !exist {
+				return errors.NotFoundf("table(%d)", job.TableID)
+			}
+			// no id change just update name
+			c.tables[uint64(job.TableID)] = tableName
+		case timodel.ActionTruncateTable:
+			dropID := uint64(job.TableID)
+			c.removeTable(schemaID, dropID)
 
-		tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
-		if !exist {
-			return false, errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
+			tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+			if !exist {
+				return errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
+			}
+			addID := uint64(job.BinlogInfo.TableInfo.ID)
+			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
 		}
-		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
+		return nil
+	}()
+	if err != nil {
+		log.Error("failed to applyJob, start to print debug info", zap.Error(err))
+		snap.PrintStatus(log.Error)
 	}
-
-	return false, nil
+	return false, err
 }
 
 // handleDDL check if we can change the status to be `ChangeFeedExecDDL` and execute the DDL asynchronously
@@ -400,23 +402,29 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 			return nil
 		}
 	}
+	log.Info("apply job", zap.Stringer("job", todoDDLJob),
+		zap.String("schema", todoDDLJob.SchemaName),
+		zap.String("query", todoDDLJob.Query),
+		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
-	err := c.schema.GetLastSnapshot().FillSchemaName(todoDDLJob)
+	err := c.schema.HandleDDLJob(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	err = c.schema.FillSchemaName(todoDDLJob)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.schema.DoGC(todoDDLJob.BinlogInfo.FinishedTS)
+
 	ddlEvent := new(model.DDLEvent)
 	ddlEvent.FromJob(todoDDLJob)
 
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
-	log.Debug("apply job", zap.Stringer("job", todoDDLJob),
-		zap.String("schema", todoDDLJob.SchemaName),
-		zap.String("query", todoDDLJob.Query),
-		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
 	// TODO consider some newly added DDL types such as `ActionCreateSequence`
-	skip, err := c.applyJob(todoDDLJob)
+	skip, err := c.applyJob(ctx, todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
