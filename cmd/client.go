@@ -197,7 +197,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 				Config:     cfg,
 			}
 
-			ineligibleTables, err := verifyTables(ctx, cfg)
+			ineligibleTables, err := verifyTables(ctx, cfg, startTs)
 			if err != nil {
 				return err
 			}
@@ -269,7 +269,7 @@ func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) er
 	return nil
 }
 
-func verifyTables(ctx context.Context, cfg *util.ReplicaConfig) (ineligibleTables []entry.TableName, err error) {
+func verifyTables(ctx context.Context, cfg *util.ReplicaConfig, startTs uint64) (ineligibleTables []entry.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr)
 	if err != nil {
 		return nil, err
@@ -288,9 +288,13 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig) (ineligibleTable
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage.FlushIneligibleTables()
+	schemaStorage.FlushIneligibleTables(startTs)
+	schemaStorage.AdvanceResolvedTs(startTs)
 
-	snap := schemaStorage.GetLastSnapshot()
+	snap, err := schemaStorage.GetSnapshot(ctx, startTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	for tID, tableName := range snap.CloneTables() {
 		tableInfo, exist := snap.TableByID(int64(tID))
 		if !exist {
