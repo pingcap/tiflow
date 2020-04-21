@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/zap/zapcore"
+
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -76,17 +78,17 @@ func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field
 			logger("[SchemaSnap] --> schemaNameToID", zap.String("schemaName", schemaName), zap.Int64("schemaID", schemaID))
 		}
 	}
+	for id, tableInfo := range s.tables {
+		logger("[SchemaSnap] --> Tables", zap.Int64("tableID", id), zap.Stringer("tableInfo", tableInfo))
+		// check tableNameToID
+		if tableID, exist := s.tableNameToID[tableInfo.TableName]; !exist || tableID != id {
+			logger("[SchemaSnap] ----> tableNameToID item lost", zap.Stringer("name", tableInfo.TableName), zap.Int64("tableNameToID", s.tableNameToID[tableInfo.TableName]))
+		}
+	}
 	if len(s.tableNameToID) != len(s.tables) {
 		logger("[SchemaSnap] tableNameToID length mismatch tables")
 		for tableName, tableID := range s.tableNameToID {
 			logger("[SchemaSnap] --> tableNameToID", zap.Stringer("tableName", tableName), zap.Int64("tableID", tableID))
-		}
-	}
-	for id, tableInfo := range s.tables {
-		logger("[SchemaSnap] --> Tables", zap.Int64("tableID", id), zap.Reflect("tableInfo", tableInfo))
-		// check tableNameToID
-		if tableID, exist := s.tableNameToID[tableInfo.TableName]; !exist || tableID != id {
-			logger("[SchemaSnap] ----> tableNameToID item lost", zap.Stringer("name", tableInfo.TableName), zap.Int64("tableNameToID", s.tableNameToID[tableInfo.TableName]))
 		}
 	}
 	truncateTableID := make([]int64, 0, len(s.truncateTableID))
@@ -226,6 +228,10 @@ func (ti *TableInfo) GetColumnInfo(colID int64) (info *timodel.ColumnInfo, exist
 		return nil, false
 	}
 	return ti.Columns[colOffset], true
+}
+
+func (ti *TableInfo) String() string {
+	return fmt.Sprintf("TableInfo, ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t", ti.ID, ti.TableName, len(ti.Columns), len(ti.Indices), ti.PKIsHandle)
 }
 
 // GetIndexInfo returns the index info by ID
@@ -720,12 +726,12 @@ func (s *SchemaStorage) DoGC(ts uint64) {
 	if startIdx == 0 {
 		return
 	}
-	//if log.GetLevel() == zapcore.DebugLevel {
-	log.Info("Do GC in schema storage")
-	for i := 0; i < startIdx; i++ {
-		s.snaps[i].PrintStatus(log.Info)
+	if log.GetLevel() == zapcore.DebugLevel {
+		log.Debug("Do GC in schema storage")
+		for i := 0; i < startIdx; i++ {
+			s.snaps[i].PrintStatus(log.Debug)
+		}
 	}
-	//}
 	s.snaps = s.snaps[startIdx:]
 	atomic.StoreUint64(&s.gcTs, s.snaps[0].currentTs)
 	log.Info("finished gc in schema storage", zap.Uint64("gcTs", s.snaps[0].currentTs))
