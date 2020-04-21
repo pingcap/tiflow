@@ -319,7 +319,6 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 }
 
 func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool, err error) {
-	log.Info("apply job", zap.String("sql", job.Query), zap.Stringer("job", job))
 	snap, err := c.schema.GetSnapshot(ctx, job.BinlogInfo.FinishedTS)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -403,6 +402,11 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 			return nil
 		}
 	}
+	log.Info("apply job", zap.Stringer("job", todoDDLJob),
+		zap.String("schema", todoDDLJob.SchemaName),
+		zap.String("query", todoDDLJob.Query),
+		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
+
 	err := c.schema.HandleDDLJob(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
@@ -422,10 +426,6 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
-	log.Debug("apply job", zap.Stringer("job", todoDDLJob),
-		zap.String("schema", todoDDLJob.SchemaName),
-		zap.String("query", todoDDLJob.Query),
-		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
 	// TODO consider some newly added DDL types such as `ActionCreateSequence`
 	skip, err := c.applyJob(ctx, todoDDLJob)
