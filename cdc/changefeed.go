@@ -409,8 +409,11 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 			return nil
 		}
 	}
-
-	err := c.schema.GetLastSnapshot().FillSchemaName(todoDDLJob)
+	snap, err := c.schema.GetSnapshot(ctx, todoDDLJob.BinlogInfo.FinishedTS)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = snap.FillSchemaName(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
