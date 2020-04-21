@@ -378,22 +378,6 @@ func (s *schemaSnapshot) IsIneligibleTableID(id int64) bool {
 	return ok
 }
 
-// FillSchemaName fills the schema name in ddl job
-func (s *schemaSnapshot) FillSchemaName(job *timodel.Job) error {
-	var schemaName string
-	if job.Type != timodel.ActionCreateSchema {
-		dbInfo, exist := s.SchemaByID(job.SchemaID)
-		if !exist {
-			return errors.NotFoundf("schema %d not found", job.SchemaID)
-		}
-		schemaName = dbInfo.Name.O
-	} else {
-		schemaName = job.BinlogInfo.DBInfo.Name.O
-	}
-	job.SchemaName = schemaName
-	return nil
-}
-
 func (s *schemaSnapshot) dropSchema(id int64) error {
 	schema, ok := s.schemas[id]
 	if !ok {
@@ -718,6 +702,26 @@ func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 		}
 		swapped = atomic.CompareAndSwapUint64(&s.resolvedTs, oldResolvedTs, ts)
 	}
+}
+
+// FillSchemaName fills the schema name in ddl job
+func (s *SchemaStorage) FillSchemaName(job *timodel.Job) error {
+	if job.Type == timodel.ActionCreateSchema {
+		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
+		return nil
+	}
+
+	// get the snap before this ddl to avoid losing the schema name when the ddl is dropping a schema.
+	snap, err := s.getSnapshot(job.BinlogInfo.FinishedTS - 1)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	dbInfo, exist := snap.SchemaByID(job.SchemaID)
+	if !exist {
+		return errors.NotFoundf("schema %d not found", job.SchemaID)
+	}
+	job.SchemaName = dbInfo.Name.O
+	return nil
 }
 
 // DoGC removes snaps which of ts less than this specified ts
