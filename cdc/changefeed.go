@@ -318,7 +318,7 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 	return nil
 }
 
-func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
+func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool, err error) {
 	log.Info("apply job", zap.String("sql", job.Query), zap.Stringer("job", job))
 
 	err = c.schema.HandleDDLJob(job)
@@ -326,7 +326,10 @@ func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 		return false, errors.Trace(err)
 	}
 	c.schema.DoGC(job.BinlogInfo.FinishedTS)
-	snap := c.schema.GetLastSnapshot()
+	snap, err := c.schema.GetSnapshot(ctx, job.BinlogInfo.FinishedTS)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
 
 	schemaID := uint64(job.SchemaID)
 	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && snap.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
@@ -422,7 +425,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
 	// TODO consider some newly added DDL types such as `ActionCreateSequence`
-	skip, err := c.applyJob(todoDDLJob)
+	skip, err := c.applyJob(ctx, todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
