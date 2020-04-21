@@ -194,35 +194,42 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	tableInfo, exist := snap.TableByID(tableID)
-	if !exist {
-		if snap.IsTruncateTableID(tableID) {
-			log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.Ts), zap.Int64("tableID", tableID))
-			return nil, nil
+	row, err := func() (*model.RowChangedEvent, error) {
+		tableInfo, exist := snap.TableByID(tableID)
+		if !exist {
+			if snap.IsTruncateTableID(tableID) {
+				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.Ts), zap.Int64("tableID", tableID))
+				return nil, nil
+			}
+			return nil, errors.NotFoundf("table in schema storage, id: %d", tableID)
 		}
-		return nil, errors.NotFoundf("table in schema storage, id: %d", tableID)
+		switch {
+		case bytes.HasPrefix(key, recordPrefix):
+			rowKV, err := m.unmarshalRowKVEntry(tableInfo, key, raw.Value, baseInfo)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			if rowKV == nil {
+				return nil, nil
+			}
+			return m.mountRowKVEntry(tableInfo, rowKV)
+		case bytes.HasPrefix(key, indexPrefix):
+			indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, baseInfo)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			if indexKV == nil {
+				return nil, nil
+			}
+			return m.mountIndexKVEntry(tableInfo, indexKV)
+		}
+		return nil, nil
+	}()
+	if err != nil {
+		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
+		snap.PrintStatus(log.Error)
 	}
-	switch {
-	case bytes.HasPrefix(key, recordPrefix):
-		rowKV, err := m.unmarshalRowKVEntry(tableInfo, key, raw.Value, baseInfo)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if rowKV == nil {
-			return nil, nil
-		}
-		return m.mountRowKVEntry(tableInfo, rowKV)
-	case bytes.HasPrefix(key, indexPrefix):
-		indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, baseInfo)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if indexKV == nil {
-			return nil, nil
-		}
-		return m.mountIndexKVEntry(tableInfo, indexKV)
-	}
-	return nil, nil
+	return row, err
 }
 
 func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, rawValue []byte, base baseKVEntry) (*rowKVEntry, error) {
@@ -338,8 +345,8 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	event := &model.RowChangedEvent{
 		Ts:           row.Ts,
 		Resolved:     false,
-		Schema:       tableInfo.SchemaName.O,
-		Table:        tableInfo.Name.O,
+		Schema:       tableInfo.TableName.Schema,
+		Table:        tableInfo.TableName.Table,
 		IndieMarkCol: tableInfo.IndieMarkCol,
 	}
 
@@ -400,8 +407,8 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 	return &model.RowChangedEvent{
 		Ts:           idx.Ts,
 		Resolved:     false,
-		Schema:       tableInfo.SchemaName.O,
-		Table:        tableInfo.Name.O,
+		Schema:       tableInfo.TableName.Schema,
+		Table:        tableInfo.TableName.Table,
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,
 		Columns:      values,

@@ -410,7 +410,7 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *C
 		},
 		PKIsHandle: false,
 	}
-	info := WrapTableInfo(1, timodel.CIStr{}, &t)
+	info := WrapTableInfo(1, "", &t)
 	cols := info.GetUniqueKeys()
 	c.Assert(cols, DeepEquals, [][]string{
 		{"id"}, {"name"},
@@ -450,7 +450,7 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
 		},
 		PKIsHandle: true,
 	}
-	info := WrapTableInfo(1, timodel.CIStr{}, &t)
+	info := WrapTableInfo(1, "", &t)
 	cols := info.GetUniqueKeys()
 	c.Assert(cols, DeepEquals, [][]string{
 		{"uid"}, {"job"},

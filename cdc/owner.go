@@ -151,7 +151,8 @@ func (o *Owner) newChangeFeed(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage.FlushIneligibleTables()
+	schemaStorage.FlushIneligibleTables(checkpointTs)
+	schemaStorage.AdvanceResolvedTs(checkpointTs)
 
 	ddlHandler := newDDLHandler(o.pdClient, kvStore, checkpointTs)
 
@@ -172,7 +173,11 @@ func (o *Owner) newChangeFeed(
 	schemas := make(map[uint64]tableIDMap)
 	tables := make(map[uint64]entry.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
-	for tid, table := range schemaStorage.GetLastSnapshot().CloneTables() {
+	snap, err := schemaStorage.GetSnapshot(ctx, checkpointTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	for tid, table := range snap.CloneTables() {
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
 		}
@@ -182,7 +187,7 @@ func (o *Owner) newChangeFeed(
 			log.Debug("ignore known table", zap.Uint64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
 			continue
 		}
-		schema, ok := schemaStorage.GetLastSnapshot().SchemaByTableID(int64(tid))
+		schema, ok := snap.SchemaByTableID(int64(tid))
 		if !ok {
 			log.Warn("schema not found for table", zap.Uint64("tid", tid))
 		} else {
