@@ -485,9 +485,11 @@ loop:
 			return ctx.Err()
 		case <-time.After(tickTime):
 			err := o.run(ctx)
-			// owner may be evicted during running, ignore the context canceled error directly
-			if err != nil && errors.Cause(err) != context.Canceled {
-				return err
+			if err != nil {
+				if errors.Cause(err) != context.Canceled {
+					log.Error("owner exited with error", zap.Error(err))
+				}
+				break loop
 			}
 		}
 	}

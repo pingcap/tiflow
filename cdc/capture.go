@@ -113,9 +113,9 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 	wch := taskWatcher.Watch(ctx)
 	for {
 		// Panic when the session is done unexpectedly, it means the
-		// server does not send heatbeats in time, or network interrupted
-		// In this case, the state of the capture is underminded,
-		// the task may have or have not been reblanced, the owner
+		// server does not send heartbeats in time, or network interrupted
+		// In this case, the state of the capture is undermined,
+		// the task may have or have not been rebalanced, the owner
 		// may be or not be held. It is unsafe to let goroutines
 		// continue, especially the goroutine to replicate data.
 		select {

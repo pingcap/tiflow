@@ -623,6 +623,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	log.Debug("Add table", zap.Int64("tableID", tableID), zap.Uint64("startTs", startTs))
 	if _, ok := p.tables[tableID]; ok {
 		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
+		return
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
