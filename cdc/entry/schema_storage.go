@@ -706,13 +706,13 @@ func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 
 // FillSchemaName fills the schema name in ddl job
 func (s *SchemaStorage) FillSchemaName(job *timodel.Job) error {
-	if job.Type == timodel.ActionCreateSchema {
+	if job.Type == timodel.ActionCreateSchema ||
+		job.Type == timodel.ActionDropSchema {
 		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
 		return nil
 	}
 
-	// get the snap before this ddl to avoid losing the schema name when the ddl is dropping a schema.
-	snap, err := s.getSnapshot(job.BinlogInfo.FinishedTS - 1)
+	snap, err := s.getSnapshot(job.BinlogInfo.FinishedTS)
 	if err != nil {
 		return errors.Trace(err)
 	}
