@@ -320,12 +320,6 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 
 func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool, err error) {
 	log.Info("apply job", zap.String("sql", job.Query), zap.Stringer("job", job))
-
-	err = c.schema.HandleDDLJob(job)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	c.schema.DoGC(job.BinlogInfo.FinishedTS)
 	snap, err := c.schema.GetSnapshot(ctx, job.BinlogInfo.FinishedTS)
 	if err != nil {
 		return false, errors.Trace(err)
@@ -409,6 +403,12 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 			return nil
 		}
 	}
+	err := c.schema.HandleDDLJob(todoDDLJob)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.schema.DoGC(todoDDLJob.BinlogInfo.FinishedTS)
+
 	snap, err := c.schema.GetSnapshot(ctx, todoDDLJob.BinlogInfo.FinishedTS)
 	if err != nil {
 		return errors.Trace(err)
