@@ -337,46 +337,48 @@ func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 		return true, nil
 	}
 
-	// case table id set may change
-	switch job.Type {
-	case timodel.ActionCreateSchema:
-		c.addSchema(schemaID)
-	case timodel.ActionDropSchema:
-		c.dropSchema(schemaID)
-	case timodel.ActionCreateTable, timodel.ActionRecoverTable:
-		dbInfo, exist := snap.SchemaByID(job.SchemaID)
-		if !exist {
-			return false, errors.NotFoundf("schema (%d)", job.SchemaID)
-		}
-		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		tableName := entry.TableName{
-			Schema: dbInfo.Name.O,
-			Table:  job.BinlogInfo.TableInfo.Name.O,
-		}
-		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
-	case timodel.ActionDropTable:
-		dropID := uint64(job.TableID)
-		c.removeTable(schemaID, dropID)
-	case timodel.ActionRenameTable:
-		tableName, exist := snap.GetTableNameByID(job.TableID)
-		if !exist {
-			return false, errors.NotFoundf("table(%d)", job.TableID)
-		}
-		// no id change just update name
-		c.tables[uint64(job.TableID)] = tableName
-	case timodel.ActionTruncateTable:
-		dropID := uint64(job.TableID)
-		c.removeTable(schemaID, dropID)
+	err = func() error {
+		// case table id set may change
+		switch job.Type {
+		case timodel.ActionCreateSchema:
+			c.addSchema(schemaID)
+		case timodel.ActionDropSchema:
+			c.dropSchema(schemaID)
+		case timodel.ActionCreateTable, timodel.ActionRecoverTable:
+			addID := uint64(job.BinlogInfo.TableInfo.ID)
+			tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+			if !exist {
+				return errors.NotFoundf("table(%d)", addID)
+			}
+			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
+		case timodel.ActionDropTable:
+			dropID := uint64(job.TableID)
+			c.removeTable(schemaID, dropID)
+		case timodel.ActionRenameTable:
+			tableName, exist := snap.GetTableNameByID(job.TableID)
+			if !exist {
+				return errors.NotFoundf("table(%d)", job.TableID)
+			}
+			// no id change just update name
+			c.tables[uint64(job.TableID)] = tableName
+		case timodel.ActionTruncateTable:
+			dropID := uint64(job.TableID)
+			c.removeTable(schemaID, dropID)
 
-		tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
-		if !exist {
-			return false, errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
+			tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+			if !exist {
+				return errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
+			}
+			addID := uint64(job.BinlogInfo.TableInfo.ID)
+			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
 		}
-		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
+		return nil
+	}()
+	if err != nil {
+		log.Error("failed to applyJob, start to print debug info", zap.Error(err))
+		snap.PrintStatus(log.Error)
 	}
-
-	return false, nil
+	return false, err
 }
 
 // handleDDL check if we can change the status to be `ChangeFeedExecDDL` and execute the DDL asynchronously
