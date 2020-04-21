@@ -344,10 +344,14 @@ func (c *changeFeed) applyJob(job *timodel.Job) (skip bool, err error) {
 	case timodel.ActionDropSchema:
 		c.dropSchema(schemaID)
 	case timodel.ActionCreateTable, timodel.ActionRecoverTable:
-		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+		dbInfo, exist := snap.SchemaByID(job.SchemaID)
 		if !exist {
-			return false, errors.NotFoundf("table(%d)", addID)
+			return false, errors.NotFoundf("schema (%d)", job.SchemaID)
+		}
+		addID := uint64(job.BinlogInfo.TableInfo.ID)
+		tableName := entry.TableName{
+			Schema: dbInfo.Name.O,
+			Table:  job.BinlogInfo.TableInfo.Name.O,
 		}
 		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
 	case timodel.ActionDropTable:
