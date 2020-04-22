@@ -38,7 +38,7 @@ func (s PartitionerSuite) TestPartitionerDefaultRule(c *check.C) {
 					Value: 1,
 				},
 			},
-		}, exceptPartition: 15},
+		}, exceptPartition: 7},
 		{row: &model.RowChangedEvent{
 			Schema:       "test",
 			Table:        "t1",
@@ -48,7 +48,7 @@ func (s PartitionerSuite) TestPartitionerDefaultRule(c *check.C) {
 					Value: 2,
 				},
 			},
-		}, exceptPartition: 5},
+		}, exceptPartition: 13},
 		{row: &model.RowChangedEvent{
 			Schema:       "test",
 			Table:        "t1",
@@ -58,7 +58,7 @@ func (s PartitionerSuite) TestPartitionerDefaultRule(c *check.C) {
 					Value: 3,
 				},
 			},
-		}, exceptPartition: 3},
+		}, exceptPartition: 11},
 		{row: &model.RowChangedEvent{
 			Schema:       "test",
 			Table:        "t2",
@@ -68,7 +68,7 @@ func (s PartitionerSuite) TestPartitionerDefaultRule(c *check.C) {
 					Value: 1,
 				},
 			},
-		}, exceptPartition: 12},
+		}, exceptPartition: 7},
 		{row: &model.RowChangedEvent{
 			Schema:       "test",
 			Table:        "t2",
@@ -78,7 +78,7 @@ func (s PartitionerSuite) TestPartitionerDefaultRule(c *check.C) {
 					Value: 2,
 				},
 			},
-		}, exceptPartition: 6},
+		}, exceptPartition: 13},
 		{row: &model.RowChangedEvent{
 			Schema:       "test",
 			Table:        "t2",
@@ -88,7 +88,7 @@ func (s PartitionerSuite) TestPartitionerDefaultRule(c *check.C) {
 					Value: 3,
 				},
 			},
-		}, exceptPartition: 0},
+		}, exceptPartition: 11},
 		{row: &model.RowChangedEvent{
 			Schema: "test",
 			Table:  "t3",

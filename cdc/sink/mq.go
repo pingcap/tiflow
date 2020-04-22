@@ -308,29 +308,19 @@ func (p *partitioner) calPartition(row *model.RowChangedEvent) int32 {
 
 func (p *partitioner) defaultPartition(row *model.RowChangedEvent) int32 {
 	hash := crc32.NewIEEE()
-	// distribute partition by table
-	_, err := hash.Write([]byte(row.Schema))
+	if len(row.IndieMarkCol) == 0 {
+		return p.tablePartition(row)
+	}
+	// distribute partition by rowid or unique column value
+	value := row.Columns[row.IndieMarkCol].Value
+	b, err := json.Marshal(value)
 	if err != nil {
 		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
 	}
-	_, err = hash.Write([]byte(row.Table))
+	_, err = hash.Write(b)
 	if err != nil {
 		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
 	}
-
-	if len(row.IndieMarkCol) > 0 {
-		// distribute partition by rowid or unique column value
-		value := row.Columns[row.IndieMarkCol].Value
-		b, err := json.Marshal(value)
-		if err != nil {
-			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-		}
-		_, err = hash.Write(b)
-		if err != nil {
-			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-		}
-	}
-
 	return int32(hash.Sum32() % uint32(p.partitionNum))
 }
 
