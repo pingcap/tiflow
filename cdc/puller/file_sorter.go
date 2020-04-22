@@ -110,12 +110,14 @@ func (cache *fileCache) gc() {
 	defer cache.fileLock.Unlock()
 	for _, f := range cache.toRemoveFiles {
 		fpath := filepath.Join(cache.dir, f)
-		err := os.Remove(fpath)
-		if err != nil {
-			log.Warn("remove file failed", zap.Error(err))
+		if _, err := os.Stat(fpath); err != nil {
+			err2 := os.Remove(fpath)
+			if err2 != nil {
+				log.Warn("remove file failed", zap.Error(err))
+			}
 		}
 	}
-	cache.toRemoveFiles = make([]string, 0)
+	cache.toRemoveFiles = cache.toRemoveFiles[:0]
 }
 
 // prepareSorting checks whether the file cache can start a new sorting round
@@ -176,6 +178,9 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 		err := entry.WaitPrepare(ctx)
 		if err != nil {
 			return 0, errors.Trace(err)
+		}
+		if entry.Row == nil {
+			continue
 		}
 		dataBuf.Reset()
 		err = gob.NewEncoder(dataBuf).Encode(entry)
@@ -240,7 +245,7 @@ func (h *sortHeap) Pop() interface{} {
 // TODO: batch read
 func readPolymorphicEvent(rd *bufio.Reader, readBuf *bytes.Reader) (*model.PolymorphicEvent, error) {
 	var byteLen [8]byte
-	n, err := rd.Read(byteLen[:])
+	n, err := io.ReadFull(rd, byteLen[:])
 	if err != nil {
 		if err == io.EOF {
 			return nil, nil
@@ -248,7 +253,7 @@ func readPolymorphicEvent(rd *bufio.Reader, readBuf *bytes.Reader) (*model.Polym
 		return nil, errors.Trace(err)
 	}
 	if n < 8 {
-		return nil, errors.Errorf("invalid lenth data %s", byteLen)
+		return nil, errors.Errorf("invalid length data %s, read %d bytes", byteLen, n)
 	}
 	dataLen := int(binary.BigEndian.Uint64(byteLen[:]))
 
