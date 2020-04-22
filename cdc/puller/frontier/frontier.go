@@ -41,6 +41,7 @@ type spanFrontier struct {
 	minHeap minTsHeap
 }
 
+// NewFrontier creates Froniter from the given spans.
 func NewFrontier(spans ...util.Span) Frontier {
 	// spanFrontier don't support use Nil as the maximum key of End range
 	// So we use set it as util.UpperBoundKey, the means the real use case *should not* have a
