@@ -15,6 +15,7 @@ package puller
 
 import (
 	"context"
+	"log"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -24,6 +25,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
+	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"golang.org/x/sync/errgroup"
 )
@@ -49,6 +52,7 @@ type resolveTsTracker interface {
 
 type pullerImpl struct {
 	pdCli        pd.Client
+	kvStorage    tikv.Storage
 	checkpointTs uint64
 	spans        []util.Span
 	buffer       *memBuffer
@@ -63,13 +67,19 @@ type pullerImpl struct {
 // and put into buf.
 func NewPuller(
 	pdCli pd.Client,
+	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []util.Span,
 	needEncode bool,
 	limitter *BlurResourceLimitter,
 ) *pullerImpl {
+	tikvStorage, ok := kvStorage.(tikv.Storage)
+	if !ok {
+		log.Fatal("can't create puller for non-tikv storage")
+	}
 	p := &pullerImpl{
 		pdCli:        pdCli,
+		kvStorage:    tikvStorage,
 		checkpointTs: checkpointTs,
 		spans:        spans,
 		buffer:       makeMemBuffer(limitter),
@@ -87,7 +97,7 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	cli, err := kv.NewCDCClient(p.pdCli)
+	cli, err := kv.NewCDCClient(p.pdCli, p.kvStorage)
 	if err != nil {
 		return errors.Annotate(err, "create cdc client failed")
 	}

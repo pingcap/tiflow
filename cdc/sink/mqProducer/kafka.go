@@ -151,7 +151,7 @@ func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 			case <-k.closeCh:
 				return nil
 			case msg := <-k.asyncClient.Successes():
-				if msg.Metadata != nil {
+				if msg != nil && msg.Metadata != nil {
 					checkpointTs := msg.Metadata.(uint64)
 					if checkpointTs > partitionResolved[msg.Partition] {
 						partitionResolved[msg.Partition] = checkpointTs

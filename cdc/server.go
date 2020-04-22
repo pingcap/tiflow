@@ -121,7 +121,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 			// the parent caller
 			err = ErrSuicide
 		} else if r != nil {
-			panic(r)
+			log.Error("server exited with panic", zap.Reflect("panic info", r))
 		}
 	}()
 	defer cancel()

@@ -21,7 +21,7 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 	cluster := mocktikv.NewCluster()
 	pdCli := mocktikv.NewPDClient(cluster)
 
-	cli, err := NewCDCClient(pdCli)
+	cli, err := NewCDCClient(pdCli, nil)
 	c.Assert(err, check.IsNil)
 
 	err = cli.Close()

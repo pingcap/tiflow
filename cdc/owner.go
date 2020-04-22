@@ -151,8 +151,10 @@ func (o *Owner) newChangeFeed(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	schemaStorage.FlushIneligibleTables(checkpointTs)
+	schemaStorage.AdvanceResolvedTs(checkpointTs)
 
-	ddlHandler := newDDLHandler(o.pdClient, checkpointTs)
+	ddlHandler := newDDLHandler(o.pdClient, kvStore, checkpointTs)
 
 	existingTables := make(map[uint64]uint64)
 	for captureID, taskStatus := range processorsInfos {
@@ -171,7 +173,11 @@ func (o *Owner) newChangeFeed(
 	schemas := make(map[uint64]tableIDMap)
 	tables := make(map[uint64]entry.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
-	for tid, table := range schemaStorage.GetLastSnapshot().CloneTables() {
+	snap, err := schemaStorage.GetSnapshot(ctx, checkpointTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	for tid, table := range snap.CloneTables() {
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
 		}
@@ -181,7 +187,7 @@ func (o *Owner) newChangeFeed(
 			log.Debug("ignore known table", zap.Uint64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
 			continue
 		}
-		schema, ok := schemaStorage.GetLastSnapshot().SchemaByTableID(int64(tid))
+		schema, ok := snap.SchemaByTableID(int64(tid))
 		if !ok {
 			log.Warn("schema not found for table", zap.Uint64("tid", tid))
 		} else {
@@ -479,9 +485,11 @@ loop:
 			return ctx.Err()
 		case <-time.After(tickTime):
 			err := o.run(ctx)
-			// owner may be evicted during running, ignore the context canceled error directly
-			if err != nil && errors.Cause(err) != context.Canceled {
-				return err
+			if err != nil {
+				if errors.Cause(err) != context.Canceled {
+					log.Error("owner exited with error", zap.Error(err))
+				}
+				break loop
 			}
 		}
 	}

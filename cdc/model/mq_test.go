@@ -27,8 +27,8 @@ func (s *taskStatusSuite) TestBatchEncoderAndDecoder(c *check.C) {
 	err := decoder.Set(encoder.Read())
 	c.Assert(err, check.IsNil)
 	for _, tc := range testCases {
-		key, value, err := decoder.Next()
-		c.Assert(err, check.IsNil)
+		key, value, exist := decoder.Next()
+		c.Assert(exist, check.IsTrue)
 		c.Assert(key, check.BytesEquals, tc.key)
 		c.Assert(value, check.BytesEquals, tc.value)
 	}

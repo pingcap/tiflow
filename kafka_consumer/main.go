@@ -313,8 +313,8 @@ ClaimMessages:
 			return errors.Trace(err)
 		}
 		for batchDecoder.HasNext() {
-			keyBytes, valueBytes, err := batchDecoder.Next()
-			if err != nil {
+			keyBytes, valueBytes, exist := batchDecoder.Next()
+			if !exist {
 				log.Fatal("get message from batch failed", zap.Error(err))
 			}
 			key := new(model.MqMessageKey)
