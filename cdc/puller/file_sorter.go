@@ -46,6 +46,7 @@ var (
 type fileCache struct {
 	fileLock          sync.Mutex
 	sorting           int32
+	dir               string
 	toRemoveFiles     []string
 	unsortedFiles     []string
 	lastSortedFile    string
@@ -53,8 +54,9 @@ type fileCache struct {
 	availableFileSize map[int]uint64
 }
 
-func newFileCache() *fileCache {
+func newFileCache(dir string) *fileCache {
 	cache := &fileCache{
+		dir:               dir,
 		toRemoveFiles:     make([]string, 0, defaultInitFileCount),
 		unsortedFiles:     make([]string, 0, defaultInitFileCount),
 		availableFileIdx:  make([]int, 0, defaultInitFileCount),
@@ -99,6 +101,58 @@ func (cache *fileCache) increase(idx, size int) {
 		cache.availableFileIdx = append(cache.availableFileIdx[:idx], cache.availableFileIdx[idx+1:]...)
 		delete(cache.availableFileSize, fileIdx)
 	}
+}
+
+func (cache *fileCache) gc() {
+	// TODO: control gc running time, in case of the delete operation of
+	// some large files blocks sorting
+	cache.fileLock.Lock()
+	defer cache.fileLock.Unlock()
+	for _, f := range cache.toRemoveFiles {
+		fpath := filepath.Join(cache.dir, f)
+		err := os.Remove(fpath)
+		if err != nil {
+			log.Warn("remove file failed", zap.Error(err))
+		}
+	}
+	cache.toRemoveFiles = make([]string, 0)
+}
+
+// prepareSorting checks whether the file cache can start a new sorting round
+// returns unsorted files list and whether the sorting can start
+func (cache *fileCache) prepareSorting() ([]string, bool) {
+	// clear and reset unsorted files, set cache sorting flag to prevent repeated sort
+	cache.fileLock.Lock()
+	defer cache.fileLock.Unlock()
+	if atomic.LoadInt32(&cache.sorting) == 1 {
+		return nil, false
+	}
+	atomic.StoreInt32(&cache.sorting, 1)
+	files := make([]string, len(cache.unsortedFiles))
+	copy(files, cache.unsortedFiles)
+	cache.resetUnsortedFiles()
+	return files, true
+}
+
+func (cache *fileCache) finishSorting(lastSortedFile string, toRemoveFiles []string) {
+	cache.fileLock.Lock()
+	defer cache.fileLock.Unlock()
+	atomic.StoreInt32(&cache.sorting, 0)
+	cache.toRemoveFiles = append(cache.toRemoveFiles, toRemoveFiles...)
+	cache.lastSortedFile = lastSortedFile
+}
+
+func (cache *fileCache) flush(ctx context.Context, entries []*model.PolymorphicEvent) error {
+	cache.fileLock.Lock()
+	defer cache.fileLock.Unlock()
+	idx, filename := cache.next()
+	fpath := filepath.Join(cache.dir, filename)
+	dataLen, err := flushEventsToFile(ctx, fpath, entries)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	cache.increase(idx, dataLen)
+	return nil
 }
 
 // FileSorter accepts out-of-order raw kv entries, sort in local file system
@@ -154,23 +208,9 @@ func NewFileSorter(dir string) *FileSorter {
 		dir:      dir,
 		outputCh: make(chan *model.PolymorphicEvent, 128000),
 		inputCh:  make(chan *model.PolymorphicEvent, 128000),
-		cache:    newFileCache(),
+		cache:    newFileCache(dir),
 	}
 	return fs
-}
-
-// flush writes a slice of model.PolymorphicEvent to a random unsorted file in sequence
-func (fs *FileSorter) flush(ctx context.Context, entries []*model.PolymorphicEvent) error {
-	fs.cache.fileLock.Lock()
-	defer fs.cache.fileLock.Unlock()
-	idx, filename := fs.cache.next()
-	fpath := filepath.Join(fs.dir, filename)
-	dataLen, err := flushEventsToFile(ctx, fpath, entries)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	fs.cache.increase(idx, dataLen)
-	return nil
 }
 
 // sortItem is used in PolymorphicEvent merge procedure from sorted files
@@ -198,7 +238,7 @@ func (h *sortHeap) Pop() interface{} {
 
 // readPolymorphicEvent reads a PolymorphicEvent from file reader and also advance reader
 // TODO: batch read
-func readPolymorphicEvent(rd *bufio.Reader) (*model.PolymorphicEvent, error) {
+func readPolymorphicEvent(rd *bufio.Reader, readBuf *bytes.Reader) (*model.PolymorphicEvent, error) {
 	var byteLen [8]byte
 	n, err := rd.Read(byteLen[:])
 	if err != nil {
@@ -221,8 +261,9 @@ func readPolymorphicEvent(rd *bufio.Reader) (*model.PolymorphicEvent, error) {
 		return nil, errors.Errorf("truncated data %s n: %d dataLen: %d", data, n, dataLen)
 	}
 
+	readBuf.Reset(data)
 	ev := &model.PolymorphicEvent{}
-	err = gob.NewDecoder(bytes.NewReader(data)).Decode(ev)
+	err = gob.NewDecoder(readBuf).Decode(ev)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -252,13 +293,15 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		}
 		evs := make([]*model.PolymorphicEvent, 0)
 		idx := 0
+		reader := new(bytes.Reader)
 		for idx < len(data) {
 			dataLen := int(binary.BigEndian.Uint64(data[idx : idx+8]))
 			if idx+8+dataLen > len(data) {
 				return "", errors.New("unsorted file unexpected truncated")
 			}
 			ev := &model.PolymorphicEvent{}
-			err = gob.NewDecoder(bytes.NewReader(data[idx+8 : idx+8+dataLen])).Decode(ev)
+			reader.Reset(data[idx+8 : idx+8+dataLen])
+			err = gob.NewDecoder(reader).Decode(ev)
 
 			if err != nil {
 				return "", errors.Trace(err)
@@ -280,7 +323,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 				if err != nil {
 					return "", errors.Trace(err)
 				}
-				buffer = make([]*model.PolymorphicEvent, 0, batchFlushSize)
+				buffer = buffer[:0]
 			}
 		}
 		if len(buffer) > 0 {
@@ -292,17 +335,10 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		return newfile, nil
 	}
 
-	// clear and reset unsorted files, set cache sorting flag to prevent repeated sort
-	fs.cache.fileLock.Lock()
-	if atomic.LoadInt32(&fs.cache.sorting) == 1 {
-		fs.cache.fileLock.Unlock()
+	files, start := fs.cache.prepareSorting()
+	if !start {
 		return nil
 	}
-	atomic.StoreInt32(&fs.cache.sorting, 1)
-	files := make([]string, len(fs.cache.unsortedFiles))
-	copy(files, fs.cache.unsortedFiles)
-	fs.cache.resetUnsortedFiles()
-	fs.cache.fileLock.Unlock()
 
 	// prepare buffer reader of all sorted files
 	readers := make([]*bufio.Reader, 0, len(files)+1)
@@ -337,8 +373,9 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 	// the rest events will be rewritten into the new lastSortedFile
 	h := &sortHeap{}
 	heap.Init(h)
+	readBuf := new(bytes.Reader)
 	for i, fd := range readers {
-		ev, err := readPolymorphicEvent(fd)
+		ev, err := readPolymorphicEvent(fd, readBuf)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -347,7 +384,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		}
 		heap.Push(h, &sortItem{entry: ev, fileIndex: i})
 	}
-	lastSortedFileHasData := false
+	lastSortedFileUpdated := false
 	newLastSortedFile := randomFileName("last-sorted")
 	bufferLen := 10
 	buffer := make([]*model.PolymorphicEvent, 0, bufferLen)
@@ -356,17 +393,17 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		if item.entry.Ts <= resolvedTs {
 			fs.output(ctx, item.entry)
 		} else {
-			lastSortedFileHasData = true
+			lastSortedFileUpdated = true
 			buffer = append(buffer, item.entry)
 			if len(buffer) > bufferLen {
 				_, err := flushEventsToFile(ctx, filepath.Join(fs.dir, newLastSortedFile), buffer)
 				if err != nil {
 					return errors.Trace(err)
 				}
-				buffer = make([]*model.PolymorphicEvent, 0, bufferLen)
+				buffer = buffer[:0]
 			}
 		}
-		ev, err := readPolymorphicEvent(readers[item.fileIndex])
+		ev, err := readPolymorphicEvent(readers[item.fileIndex], readBuf)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -382,16 +419,12 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			return errors.Trace(err)
 		}
 	}
-	if lastSortedFileHasData {
+	lastSortedFile := ""
+	if lastSortedFileUpdated {
 		fs.cache.lastSortedFile = newLastSortedFile
-	} else {
-		fs.cache.lastSortedFile = ""
 	}
 
-	fs.cache.fileLock.Lock()
-	atomic.StoreInt32(&fs.cache.sorting, 0)
-	fs.cache.toRemoveFiles = append(fs.cache.toRemoveFiles, toRemoveFiles...)
-	fs.cache.fileLock.Unlock()
+	fs.cache.finishSorting(lastSortedFile, toRemoveFiles)
 	fs.output(ctx, model.NewResolvedPolymorphicEvent(resolvedTs))
 
 	return nil
@@ -431,11 +464,11 @@ func (fs *FileSorter) sortAndOutput(ctx context.Context) error {
 	buffer := make([]*model.PolymorphicEvent, 0, bufferLen)
 
 	flush := func() error {
-		err := fs.flush(ctx, buffer)
+		err := fs.cache.flush(ctx, buffer)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		buffer = make([]*model.PolymorphicEvent, 0, bufferLen)
+		buffer = buffer[:0]
 		return nil
 	}
 
@@ -473,18 +506,7 @@ func (fs *FileSorter) gcRemovedFiles(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			// TODO: control gc running time, in case of the delete operation of
-			// some large files blocks sorting
-			fs.cache.fileLock.Lock()
-			for _, f := range fs.cache.toRemoveFiles {
-				fpath := filepath.Join(fs.dir, f)
-				err := os.Remove(fpath)
-				if err != nil {
-					log.Warn("remove file failed", zap.Error(err))
-				}
-			}
-			fs.cache.toRemoveFiles = make([]string, 0)
-			fs.cache.fileLock.Unlock()
+			fs.cache.gc()
 		}
 	}
 }
