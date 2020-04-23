@@ -1023,6 +1023,7 @@ func (s *eventFeedSession) singleEventFeed(
 
 	matcher := newMatcher()
 	advanceCheckTicker := time.NewTicker(time.Second * 5)
+	defer advanceCheckTicker.Stop()
 	lastReceivedEventTime := time.Now()
 	startFeedTime := time.Now()
 	var lastResolvedTs uint64
