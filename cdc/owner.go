@@ -263,7 +263,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 
 		// we find a new changefeed, init changefeed info here.
-		status, err := o.cfRWriter.GetChangeFeedStatus(ctx, changeFeedID)
+		status, _, err := o.cfRWriter.GetChangeFeedStatus(ctx, changeFeedID)
 		if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 			return err
 		}
@@ -405,7 +405,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 		case model.AdminResume:
-			cfStatus, err := o.etcdClient.GetChangeFeedStatus(ctx, job.CfID)
+			cfStatus, _, err := o.etcdClient.GetChangeFeedStatus(ctx, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
 			}

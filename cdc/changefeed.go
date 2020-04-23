@@ -57,7 +57,7 @@ type ChangeFeedRWriter interface {
 	GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error)
 
 	// GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
-	GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error)
+	GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, int64, error)
 	// PutAllChangeFeedStatus the changefeed info to storage such as etcd.
 	PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error
 }

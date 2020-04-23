@@ -133,7 +133,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 				return err
 			}
-			status, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
+			status, _, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
 			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 				return err
 			}
@@ -188,7 +188,7 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 					}
 				case <-tick.C:
 					now := time.Now()
-					status, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
+					status, _, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
 					if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 						return err
 					}
