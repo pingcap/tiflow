@@ -12,5 +12,6 @@ insert into `t` (`a`) value ('b');
 insert into `t` (`a`) value ('C');
 insert into `t` (`a`) value ('d');
 
+delete from `t` where `a` = 'a';
 
 CREATE TABLE `finished_mark` (id int primary key);
