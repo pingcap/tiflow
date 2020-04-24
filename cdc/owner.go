@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -295,8 +296,16 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 
 func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
+	minCheckpointTs := uint64(math.MaxUint64)
 	for id, changefeed := range o.changeFeeds {
 		snapshot[id] = changefeed.status
+		if changefeed.status.CheckpointTs < minCheckpointTs {
+			minCheckpointTs = changefeed.status.CheckpointTs
+		}
+	}
+	_,err := o.pdClient.UpdateGCSafePoint(ctx, minCheckpointTs)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	return errors.Trace(o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot))
 }
