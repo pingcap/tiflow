@@ -58,44 +58,6 @@ type indexKVEntry struct {
 	IndexValue []types.Datum
 }
 
-func (idx *indexKVEntry) unflatten(tableInfo *TableInfo) error {
-	if tableInfo.ID != idx.TableID {
-		return errors.New("wrong table info in unflatten")
-	}
-	index, exist := tableInfo.GetIndexInfo(idx.IndexID)
-	if !exist {
-		return errors.NotFoundf("index info, indexID: %d", idx.IndexID)
-	}
-	if !isDistinct(index, idx.IndexValue) {
-		idx.RecordID = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
-		idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-1]
-	}
-	for i, v := range idx.IndexValue {
-		colOffset := index.Columns[i].Offset
-		fieldType := &tableInfo.Columns[colOffset].FieldType
-		datum, err := unflatten(v, fieldType)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		idx.IndexValue[i] = datum
-	}
-	return nil
-}
-func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
-	if index.Primary {
-		return true
-	}
-	if index.Unique {
-		for _, value := range indexValue {
-			if value.IsNull() {
-				return false
-			}
-		}
-		return true
-	}
-	return false
-}
-
 // Mounter is used to parse SQL events from KV events
 type Mounter interface {
 	Run(ctx context.Context) error
@@ -265,10 +227,8 @@ func (m *mounterImpl) unmarshalIndexKVEntry(tableInfo *TableInfo, rawKey []byte,
 	}
 
 	colInfos := make([]rowcodec.ColInfo, 0, len(idxInfo.Columns))
-	colTypes := make([]types.FieldType, 0, len(idxInfo.Columns))
 	for _, idxCol := range idxInfo.Columns {
 		col := tableInfo.Columns[idxCol.Offset]
-		colTypes = append(colTypes, col.FieldType)
 		colInfos = append(colInfos, rowcodec.ColInfo{
 			ID:         col.ID,
 			Tp:         int32(col.Tp),
