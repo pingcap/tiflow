@@ -67,7 +67,7 @@ EOF
 # tidb server config file
 cat - >"$OUT_DIR/tidb-config.toml" <<EOF
 split-table = true
-new_collation_enabled_on_first_boostrap = true
+new_collations_enabled_on_first_boostrap = true
 EOF
 
 echo "Starting Upstream TiKV..."
@@ -76,8 +76,7 @@ tikv-server \
     -A ${UP_TIKV_HOST_1}:${UP_TIKV_PORT_1} \
     --log-file "$OUT_DIR/tikv1.log" \
     --data-dir "$OUT_DIR/tikv1_data" \
-    -C "$OUT_DIR/tikv-config.toml" \
-    -s "$OUT_DIR/tikv" &
+    -C "$OUT_DIR/tikv-config.toml" &
 
 tikv-server \
     --pd ${UP_PD_HOST}:${UP_PD_PORT} \
