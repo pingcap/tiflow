@@ -117,18 +117,18 @@ func decodeRecordID(key []byte) (rest []byte, recordID int64, err error) {
 	return
 }
 
-func decodeIndexKey(key []byte) (indexID int64, indexValue []types.Datum, err error) {
-	if len(key) < prefixIndexLen || !bytes.HasPrefix(key, indexPrefix) {
-		return 0, nil, errors.Errorf("invalid record key - %q", key)
+func decodeIndexID(key []byte) (indexID int64, err error) {
+	if len(key) < prefixTableIDLen+prefixIndexLen {
+		return 0, errors.Errorf("invalid record key - %q", key)
+	}
+	key = key[prefixTableIDLen:]
+	if !bytes.HasPrefix(key, indexPrefix) {
+		return 0, errors.Errorf("invalid record key - %q", key)
 	}
 	key = key[indexPrefixLen:]
-	key, indexID, err = codec.DecodeInt(key)
+	_, indexID, err = codec.DecodeInt(key)
 	if err != nil {
-		return 0, nil, errors.Trace(err)
-	}
-	indexValue, err = codec.Decode(key, 2)
-	if err != nil {
-		return 0, nil, errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
 	return
 }

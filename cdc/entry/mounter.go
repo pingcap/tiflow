@@ -21,6 +21,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pingcap/tidb/tablecodec"
+	"github.com/pingcap/tidb/util/rowcodec"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -214,7 +217,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			}
 			return m.mountRowKVEntry(tableInfo, rowKV)
 		case bytes.HasPrefix(key, indexPrefix):
-			indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, baseInfo)
+			indexKV, err := m.unmarshalIndexKVEntry(tableInfo, raw.Key, raw.Value, baseInfo)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -251,26 +254,58 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, 
 	}, nil
 }
 
-func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*indexKVEntry, error) {
-	indexID, indexValue, err := decodeIndexKey(restKey)
+func (m *mounterImpl) unmarshalIndexKVEntry(tableInfo *TableInfo, rawKey []byte, rawValue []byte, base baseKVEntry) (*indexKVEntry, error) {
+	indexID, err := decodeIndexID(rawKey)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	idxInfo, exist := tableInfo.GetIndexInfo(indexID)
+	if !exist {
+		return nil, errors.NotFoundf("index info %d", indexID)
+	}
+
+	colInfos := make([]rowcodec.ColInfo, 0, len(idxInfo.Columns))
+	colTypes := make([]types.FieldType, 0, len(idxInfo.Columns))
+	for _, idxCol := range idxInfo.Columns {
+		col := tableInfo.Columns[idxCol.Offset]
+		colTypes = append(colTypes, col.FieldType)
+		colInfos = append(colInfos, rowcodec.ColInfo{
+			ID:         col.ID,
+			Tp:         int32(col.Tp),
+			Flag:       int32(col.Flag),
+			IsPKHandle: tableInfo.PKIsHandle && mysql.HasPriKeyFlag(col.Flag),
+		})
+	}
+
+	values, err := tablecodec.DecodeIndexKV(rawKey, rawValue, len(idxInfo.Columns), tablecodec.HandleIsSigned, colInfos)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	ds := make([]types.Datum, 0, len(idxInfo.Columns))
+	for i, idxCol := range idxInfo.Columns {
+		col := tableInfo.Columns[idxCol.Offset]
+		d, err := tablecodec.DecodeColumnValue(values[i], &col.FieldType, time.UTC)
+		if err != nil {
+			return nil, err
+		}
+		ds = append(ds, d)
+	}
+
 	var recordID int64
 
-	if len(rawValue) == 8 {
-		// primary key or unique index
-		buf := bytes.NewBuffer(rawValue)
-		err = binary.Read(buf, binary.BigEndian, &recordID)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	// primary key or unique index
+	buf := bytes.NewBuffer(values[len(values)-1])
+	err = binary.Read(buf, binary.BigEndian, &recordID)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
+
 	base.RecordID = recordID
 	return &indexKVEntry{
 		baseKVEntry: base,
 		IndexID:     indexID,
-		IndexValue:  indexValue,
+		IndexValue:  ds,
 	}, nil
 }
 
@@ -384,11 +419,6 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 
 	if !tableInfo.IsIndexUnique(indexInfo) {
 		return nil, nil
-	}
-
-	err := idx.unflatten(tableInfo)
-	if err != nil {
-		return nil, errors.Trace(err)
 	}
 
 	values := make(map[string]*model.Column, len(idx.IndexValue))
