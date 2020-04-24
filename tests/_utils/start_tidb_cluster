@@ -67,7 +67,7 @@ EOF
 # tidb server config file
 cat - >"$OUT_DIR/tidb-config.toml" <<EOF
 split-table = true
-new_collations_enabled_on_first_boostrap = true
+new_collations_enabled_on_first_bootstrap = true
 EOF
 
 echo "Starting Upstream TiKV..."
