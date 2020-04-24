@@ -1,5 +1,6 @@
 test_case_names = ["simple", "cdc", "multi_capture", "split_region", "row_format",
-"tiflash", "availability", "ddl_sequence", "sink_retry", "resolve_lock", "drop_many_tables"]
+"tiflash", "availability", "ddl_sequence", "sink_retry", "resolve_lock", "drop_many_tables",
+"file_sort"]
 
 def prepare_binaries() {
     stage('Prepare Binaries') {
