@@ -314,6 +314,10 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			evs = append(evs, ev)
 			idx = idx + 8 + dataLen
 		}
+		// event count in unsorted file may be zero
+		if len(evs) == 0 {
+			return "", nil
+		}
 		sort.Slice(evs, func(i, j int) bool {
 			return evs[i].Ts < evs[j].Ts
 		})
