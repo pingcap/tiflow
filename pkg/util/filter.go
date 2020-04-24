@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -19,12 +20,12 @@ type Filter struct {
 
 // ReplicaConfig represents some addition replication config for a changefeed
 type ReplicaConfig struct {
-	DDLWhitelist        []model.ActionType `toml:"ddl-white-list" json:"ddl-white-list"`
-	FilterCaseSensitive bool               `toml:"filter-case-sensitive" json:"filter-case-sensitive"`
-	FilterRules         *filter.Rules      `toml:"filter-rules" json:"filter-rules"`
-	IgnoreTxnCommitTs   []uint64           `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
-	SinkDispatchRules   []*DispatchRule    `toml:"sink-dispatch-rules" json:"sink-dispatch-rules"`
-	Cyclic              *CyclicConfig      `toml:"cyclic-replication" json:"cyclic-replication"`
+	DDLWhitelist        []model.ActionType        `toml:"ddl-white-list" json:"ddl-white-list"`
+	FilterCaseSensitive bool                      `toml:"filter-case-sensitive" json:"filter-case-sensitive"`
+	FilterRules         *filter.Rules             `toml:"filter-rules" json:"filter-rules"`
+	IgnoreTxnCommitTs   []uint64                  `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
+	SinkDispatchRules   []*DispatchRule           `toml:"sink-dispatch-rules" json:"sink-dispatch-rules"`
+	Cyclic              *cyclic.ReplicationConfig `toml:"cyclic-replication" json:"cyclic-replication"`
 }
 
 // DispatchRule represents partition rule for a table
@@ -41,7 +42,7 @@ func NewFilter(config *ReplicaConfig) (*Filter, error) {
 		return nil, err
 	}
 	if config.Cyclic != nil {
-		cyclicDDLFilter, err = newCyclicFitler(config.Cyclic)
+		cyclicDDLFilter, err = cyclic.NewCyclicFitler(config.Cyclic)
 		if err != nil {
 			return nil, err
 		}

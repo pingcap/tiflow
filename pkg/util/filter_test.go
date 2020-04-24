@@ -16,6 +16,7 @@ package util
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -104,22 +105,22 @@ func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
 func (s *filterSuite) TestShouldDiscardCyclicDDL(c *check.C) {
 	// Discard CyclicSchema DDLs only.
 	config := &ReplicaConfig{
-		Cyclic: &CyclicConfig{ReplicaID: 1, SyncDDL: true},
+		Cyclic: &cyclic.ReplicationConfig{ReplicaID: 1, SyncDDL: true},
 	}
 	filter, err := NewFilter(config)
 	c.Assert(err, check.IsNil)
-	job := &model.Job{Type: model.ActionCreateTable, SchemaName: CyclicSchemaName}
+	job := &model.Job{Type: model.ActionCreateTable, SchemaName: cyclic.SchemaName}
 	c.Assert(filter.ShouldDiscardDDL(job), check.IsTrue)
 	job = &model.Job{Type: model.ActionCreateTable, SchemaName: "test"}
 	c.Assert(filter.ShouldDiscardDDL(job), check.IsFalse)
 
 	// Discard all DDLs.
 	config = &ReplicaConfig{
-		Cyclic: &CyclicConfig{ReplicaID: 1, SyncDDL: false},
+		Cyclic: &cyclic.ReplicationConfig{ReplicaID: 1, SyncDDL: false},
 	}
 	filter, err = NewFilter(config)
 	c.Assert(err, check.IsNil)
-	job = &model.Job{Type: model.ActionCreateTable, SchemaName: CyclicSchemaName}
+	job = &model.Job{Type: model.ActionCreateTable, SchemaName: cyclic.SchemaName}
 	c.Assert(filter.ShouldDiscardDDL(job), check.IsTrue)
 	job = &model.Job{Type: model.ActionCreateTable, SchemaName: "test"}
 	c.Assert(filter.ShouldDiscardDDL(job), check.IsTrue)
