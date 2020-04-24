@@ -11,3 +11,6 @@ insert into `t` (`a`) value ('A');
 insert into `t` (`a`) value ('b');
 insert into `t` (`a`) value ('C');
 insert into `t` (`a`) value ('d');
+
+
+CREATE TABLE `finished_mark` (id int primary key);
