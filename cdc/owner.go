@@ -303,11 +303,12 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			minCheckpointTs = changefeed.status.CheckpointTs
 		}
 	}
-	_,err := o.pdClient.UpdateGCSafePoint(ctx, minCheckpointTs)
+	err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return errors.Trace(o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot))
+	_,err = o.pdClient.UpdateGCSafePoint(ctx, minCheckpointTs)
+	return errors.Trace(err)
 }
 
 // calcResolvedTs call calcResolvedTs of every changefeeds
