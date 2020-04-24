@@ -75,7 +75,7 @@ tikv-server \
     --pd ${UP_PD_HOST}:${UP_PD_PORT} \
     -A ${UP_TIKV_HOST_1}:${UP_TIKV_PORT_1} \
     --log-file "$OUT_DIR/tikv1.log" \
-    --data-dir "$OUT_DIR/tikv1-data" \
+    --data-dir "$OUT_DIR/tikv1_data" \
     -C "$OUT_DIR/tikv-config.toml" \
     -s "$OUT_DIR/tikv" &
 
@@ -83,25 +83,23 @@ tikv-server \
     --pd ${UP_PD_HOST}:${UP_PD_PORT} \
     -A ${UP_TIKV_HOST_2}:${UP_TIKV_PORT_2} \
     --log-file "$OUT_DIR/tikv2.log" \
-    --data-dir "$OUT_DIR/tikv2-data" \
-    -C "$OUT_DIR/tikv-config.toml" \
-    -s "$OUT_DIR/tikv" &
+    --data-dir "$OUT_DIR/tikv2_data" \
+    -C "$OUT_DIR/tikv-config.toml" &
 
 tikv-server \
     --pd ${UP_PD_HOST}:${UP_PD_PORT} \
     -A ${UP_TIKV_HOST_3}:${UP_TIKV_PORT_3} \
     --log-file "$OUT_DIR/tikv3.log" \
-    --data-dir "$OUT_DIR/tikv3-data" \
-    -C "$OUT_DIR/tikv-config.toml" \
-    -s "$OUT_DIR/tikv" &
+    --data-dir "$OUT_DIR/tikv3_data" \
+    -C "$OUT_DIR/tikv-config.toml" &
 
 echo "Starting Downstream TiKV..."
 tikv-server \
     --pd ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
     -A ${DOWN_TIKV_HOST}:${DOWN_TIKV_PORT} \
     --log-file "$OUT_DIR/tikv_down.log" \
-    -C "$OUT_DIR/tikv-config.toml" \
-    -s "$OUT_DIR/tikv_down" &
+    --data-dir "$OUT_DIR/tikv_down_data" \
+    -C "$OUT_DIR/tikv-config.toml" &
 
 sleep 2
 
