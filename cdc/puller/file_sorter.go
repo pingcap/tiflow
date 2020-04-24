@@ -110,10 +110,10 @@ func (cache *fileCache) gc() {
 	defer cache.fileLock.Unlock()
 	for _, f := range cache.toRemoveFiles {
 		fpath := filepath.Join(cache.dir, f)
-		if _, err := os.Stat(fpath); err != nil {
+		if _, err := os.Stat(fpath); err == nil {
 			err2 := os.Remove(fpath)
 			if err2 != nil {
-				log.Warn("remove file failed", zap.Error(err))
+				log.Warn("remove file failed", zap.Error(err2))
 			}
 		}
 	}
