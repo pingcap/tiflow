@@ -26,7 +26,7 @@ require (
 	github.com/pingcap/log v0.0.0-20200117041106-d28c14d3b1cd
 	github.com/pingcap/parser v0.0.0-20200326020624-68d423641be5
 	github.com/pingcap/pd/v4 v4.0.0-beta.1.0.20200305072537-61d9f9cc35d3
-	github.com/pingcap/tidb v1.1.0-beta.0.20200402055642-79db9e30ab8f
+	github.com/pingcap/tidb v1.1.0-beta.0.20200331094141-a1d627a24eb8
 	github.com/pingcap/tidb-tools v4.0.0-beta.2.0.20200323030733-8d3314c33a54+incompatible
 	github.com/prometheus/client_golang v1.3.0
 	github.com/prometheus/common v0.8.0 // indirect
