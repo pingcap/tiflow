@@ -163,7 +163,7 @@ func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string) (*mod
 	}
 	info := &model.ChangeFeedStatus{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
-	return info, resp.Header.Revision, errors.Trace(err)
+	return info, resp.Kvs[0].ModRevision, errors.Trace(err)
 }
 
 // GetCaptures returns kv revision and CaptureInfo list

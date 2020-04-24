@@ -48,10 +48,7 @@ import (
 )
 
 const (
-	updateInfoInterval          = time.Millisecond * 500
-	resolveTsInterval           = time.Millisecond * 500
-	waitGlobalResolvedTsDelay   = time.Millisecond * 500
-	waitFallbackResolvedTsDelay = time.Millisecond * 500
+	resolveTsInterval = time.Millisecond * 500
 
 	defaultOutputChanSize = 128000
 
@@ -327,10 +324,6 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				return ctx.Err()
 			case p.output <- model.NewResolvedPolymorphicEvent(minResolvedTs):
 			}
-			err := updateInfo()
-			if err != nil {
-				return errors.Trace(err)
-			}
 			resolvedTsGauge.Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 			if err := updateInfo(); err != nil {
 				return errors.Trace(err)
@@ -594,7 +587,9 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			}
 			for _, ev := range resp.Events {
 				var status model.ChangeFeedStatus
-				status.Unmarshal(ev.Kv.Value)
+				if err := status.Unmarshal(ev.Kv.Value); err != nil {
+					return err
+				}
 				if err := updateStatus(&status); err != nil {
 					return err
 				}

@@ -243,12 +243,17 @@ func (o *Owner) newChangeFeed(
 	return cf, nil
 }
 
-func (o *Owner) loadChangeFeeds(ctx context.Context) error {
+func (o *Owner) loadChangeFeeds(ctx context.Context, changed map[string]struct{}) error {
 	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
 	if err != nil {
 		return err
 	}
 	for changeFeedID, cfInfoRawValue := range details {
+		if changed != nil {
+			if _, ok := changed[changeFeedID]; !ok {
+				continue
+			}
+		}
 		taskStatus, err := o.cfRWriter.GetAllTaskStatus(ctx, changeFeedID)
 		if err != nil {
 			return err
@@ -306,8 +311,14 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 }
 
 // calcResolvedTs call calcResolvedTs of every changefeeds
-func (o *Owner) calcResolvedTs(ctx context.Context) error {
+func (o *Owner) calcResolvedTs(ctx context.Context, changed map[string]struct{}) error {
 	for _, cf := range o.changeFeeds {
+		if changed != nil {
+			if _, ok := changed[cf.id]; !ok {
+				continue
+			}
+		}
+
 		if err := cf.calcResolvedTs(ctx); err != nil {
 			return errors.Trace(err)
 		}
@@ -316,8 +327,14 @@ func (o *Owner) calcResolvedTs(ctx context.Context) error {
 }
 
 // handleDDL call handleDDL of every changefeeds
-func (o *Owner) handleDDL(ctx context.Context) error {
+func (o *Owner) handleDDL(ctx context.Context, changed map[string]struct{}) error {
 	for _, cf := range o.changeFeeds {
+		if changed != nil {
+			if _, ok := changed[cf.id]; !ok {
+				continue
+			}
+		}
+
 		err := cf.handleDDL(ctx, o.captures)
 		switch errors.Cause(err) {
 		case nil:
@@ -479,22 +496,34 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	if err := o.throne(ctx); err != nil {
 		return err
 	}
+
+	ctx1, cancel := context.WithCancel(ctx)
+	defer cancel()
+	changedFeeds := o.watchFeedChange(ctx1)
+
+	ticker := time.NewTicker(tickTime)
+	defer ticker.Stop()
+
 loop:
 	for {
+		var changed map[string]struct{}
 		select {
 		case <-o.done:
 			close(o.done)
 			break loop
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(tickTime):
-			err := o.run(ctx)
-			if err != nil {
-				if errors.Cause(err) != context.Canceled {
-					log.Error("owner exited with error", zap.Error(err))
-				}
-				break loop
+		case changed = <-changedFeeds:
+		case <-ticker.C:
+			changed = nil
+		}
+
+		err := o.run(ctx, changed)
+		if err != nil {
+			if errors.Cause(err) != context.Canceled {
+				log.Error("owner exited with error", zap.Error(err))
 			}
+			break loop
 		}
 	}
 	if o.stepDown != nil {
@@ -506,11 +535,44 @@ loop:
 	return nil
 }
 
-func (o *Owner) run(ctx context.Context) error {
+func (o *Owner) watchFeedChange(ctx context.Context) chan map[string]struct{} {
+	output := make(chan map[string]struct{}, 1)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			wch := o.etcdClient.Client.Watch(ctx, kv.TaskPositionKeyPrefix, clientv3.WithFilterDelete(), clientv3.WithPrefix())
+
+			for resp := range wch {
+				if resp.Err() != nil {
+					log.Error("position watcher restarted with error", zap.Error(resp.Err()))
+					break
+				}
+
+				changed := make(map[string]struct{})
+				for _, ev := range resp.Events {
+					changeFeedID, err := util.ExtractKeySuffix(string(ev.Kv.Key))
+					if err != nil {
+						log.Error("position watcher restarted with error", zap.Error(err))
+						break
+					}
+					changed[changeFeedID] = struct{}{}
+				}
+				output <- changed
+			}
+		}
+	}()
+	return output
+}
+
+func (o *Owner) run(ctx context.Context, changed map[string]struct{}) error {
 	o.l.Lock()
 	defer o.l.Unlock()
 
-	err := o.loadChangeFeeds(ctx)
+	err := o.loadChangeFeeds(ctx, changed)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -520,12 +582,12 @@ func (o *Owner) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	err = o.calcResolvedTs(ctx)
+	err = o.calcResolvedTs(ctx, changed)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = o.handleDDL(ctx)
+	err = o.handleDDL(ctx, changed)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -615,7 +677,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 	// Supposing a crased capture should be removed now, the owner will miss deleting
 	// task status and task position if changefeed information is not loaded.
 	o.l.Lock()
-	if err := o.loadChangeFeeds(ctx); err != nil {
+	if err := o.loadChangeFeeds(ctx, nil); err != nil {
 		o.l.Unlock()
 		return errors.Trace(err)
 	}
