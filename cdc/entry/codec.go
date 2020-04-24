@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -258,8 +259,8 @@ func decodeRowV1(b []byte, recordID int64, tableInfo *TableInfo) (map[int64]type
 //      https://github.com/pingcap/tidb/blob/master/docs/design/2018-07-19-row-format.md
 func decodeRowV2(data []byte, recordID int64, tableInfo *TableInfo) (map[int64]types.Datum, error) {
 	handleColID, reqCols := tableInfo.GetRowColInfos()
-	decoder := rowcodec.NewDatumMapDecoder(reqCols, handleColID, time.UTC)
-	return decoder.DecodeToDatumMap(data, recordID, nil)
+	decoder := rowcodec.NewDatumMapDecoder(reqCols, []int64{handleColID}, time.UTC)
+	return decoder.DecodeToDatumMap(data, kv.IntHandle(recordID), nil)
 }
 
 // unflatten converts a raw datum to a column datum.
