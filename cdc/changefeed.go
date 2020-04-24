@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
@@ -74,6 +75,7 @@ type changeFeed struct {
 	taskPositions map[string]*model.TaskPosition
 	filter        *util.Filter
 	sink          sink.Sink
+	cyclic        *cyclic.Cyclic
 
 	ddlHandler    OwnerDDLHandler
 	ddlResolvedTs uint64
@@ -128,6 +130,22 @@ func (c *changeFeed) dropSchema(schemaID uint64) {
 func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
+	}
+
+	// If cyclic replication is turned on, we neeed to create a mark table to
+	// the downstream cluster.
+	// Do not create mark table if itself is the mark table.
+	if c.cyclic != nil && c.cyclic.IsMarkTable(table.Schema, table.Table) {
+		// For simplicty, we awlays create cyclic mark table.
+		// DDL filter should always filter these DDL from upstream.
+		ddls := c.cyclic.CreateTableCyclicMark(tid)
+		// TODO(neil) do not use todo context!
+		ctx := context.TODO()
+		for _, ddl := range ddls {
+			// TODO(neil) what about ts in the event?
+			ddl.Ts = 0
+			c.sink.EmitDDLEvent(ctx, ddl)
+		}
 	}
 
 	if _, ok := c.tables[tid]; ok {
@@ -566,7 +584,7 @@ func (c *changeFeed) pullDDLJob() error {
 	}
 	c.ddlResolvedTs = ddlResolvedTs
 	for _, ddl := range ddlJobs {
-		if c.filter.ShouldDiscardDDL(ddl.Type) {
+		if c.filter.ShouldDiscardDDL(ddl) {
 			log.Info("discard the ddl job", zap.Int64("jobID", ddl.ID), zap.String("query", ddl.Query))
 			continue
 		}
