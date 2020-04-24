@@ -46,10 +46,10 @@ import (
 )
 
 const (
-	updateInfoInterval          = time.Millisecond * 500
-	resolveTsInterval           = time.Millisecond * 500
-	waitGlobalResolvedTsDelay   = time.Millisecond * 500
-	waitFallbackResolvedTsDelay = time.Millisecond * 500
+	updateInfoInterval             = time.Millisecond * 500
+	resolveTsInterval              = time.Millisecond * 500
+	waitGlobalResolvedTsDelay      = time.Millisecond * 500
+	waitSinkEmittedResolvedTsDelay = time.Millisecond * 500
 
 	defaultOutputChanSize = 128000
 
@@ -74,7 +74,8 @@ type processor struct {
 	etcdCli   kv.CDCEtcdClient
 	session   *concurrency.Session
 
-	sink sink.Sink
+	sink                  sink.Sink
+	sinkEmittedResolvedTs uint64
 
 	ddlPuller     puller.Puller
 	schemaStorage *entry.SchemaStorage
@@ -83,9 +84,8 @@ type processor struct {
 	output    chan *model.PolymorphicEvent
 	mounter   entry.Mounter
 
-	status             *model.TaskStatus
-	position           *model.TaskPosition
-	resolvedTsFallback int32
+	status   *model.TaskStatus
+	position *model.TaskPosition
 
 	tablesMu sync.Mutex
 	tables   map[int64]*tableInfo
@@ -298,12 +298,6 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				}
 			}
 			p.tablesMu.Unlock()
-			// some puller still haven't received the row changed data
-			if minResolvedTs < p.position.ResolvedTs {
-				atomic.StoreInt32(&p.resolvedTsFallback, 1)
-				continue
-			}
-			atomic.StoreInt32(&p.resolvedTsFallback, 0)
 
 			if minResolvedTs == p.position.ResolvedTs {
 				continue
@@ -541,9 +535,9 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
 			lastCheckPointTs = changefeedStatus.CheckpointTs
 		}
-
-		if atomic.LoadInt32(&p.resolvedTsFallback) != 0 {
-			time.Sleep(waitFallbackResolvedTsDelay)
+		sinkEmittedResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
+		if sinkEmittedResolvedTs < changefeedStatus.ResolvedTs {
+			time.Sleep(waitSinkEmittedResolvedTsDelay)
 			continue
 		}
 
@@ -574,9 +568,13 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if row.Row == nil {
 				continue
 			}
-			err = p.sink.EmitRowChangedEvent(ctx, row.Row)
-			if err != nil {
-				return errors.Trace(err)
+			if row.RawKV.OpType == model.OpTypeResolved {
+				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.Ts)
+			} else {
+				err = p.sink.EmitRowChangedEvent(ctx, row.Row)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 		case <-ctx.Done():
 			return ctx.Err()

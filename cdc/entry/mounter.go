@@ -141,7 +141,6 @@ func (m *mounterImpl) codecWorker(ctx context.Context) error {
 		case pEvent = <-m.rawRowChangedCh:
 		}
 		if pEvent.RawKV.OpType == model.OpTypeResolved {
-			pEvent.Row = &model.RowChangedEvent{Ts: pEvent.Ts, Resolved: true}
 			pEvent.PrepareFinished()
 			continue
 		}
@@ -344,7 +343,6 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 
 	event := &model.RowChangedEvent{
 		Ts:           row.Ts,
-		Resolved:     false,
 		Schema:       tableInfo.TableName.Schema,
 		Table:        tableInfo.TableName.Table,
 		IndieMarkCol: tableInfo.IndieMarkCol,
@@ -406,7 +404,6 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 	}
 	return &model.RowChangedEvent{
 		Ts:           idx.Ts,
-		Resolved:     false,
 		Schema:       tableInfo.TableName.Schema,
 		Table:        tableInfo.TableName.Table,
 		IndieMarkCol: tableInfo.IndieMarkCol,

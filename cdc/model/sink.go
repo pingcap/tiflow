@@ -12,8 +12,7 @@ import (
 
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
-	Ts       uint64
-	Resolved bool
+	Ts uint64
 
 	Schema string
 	Table  string
@@ -46,7 +45,6 @@ func (e *RowChangedEvent) ToMqMessage() (*MqMessageKey, *MqMessageRow) {
 // FromMqMessage fills the values of RowChangedEvent from message key and value
 func (e *RowChangedEvent) FromMqMessage(key *MqMessageKey, value *MqMessageRow) {
 	e.Ts = key.Ts
-	e.Resolved = false
 	e.Table = key.Table
 	e.Schema = key.Schema
 

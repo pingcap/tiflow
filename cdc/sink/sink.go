@@ -32,22 +32,25 @@ const (
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
-	// EmitResolvedEvent saves the global resolved to the sink backend
-	EmitResolvedEvent(ctx context.Context, ts uint64) error
-	// EmitCheckpointEvent saves the global checkpoint to the sink backend
-	EmitCheckpointEvent(ctx context.Context, ts uint64) error
-	// EmitDMLs saves the specified DMLs to the sink backend
-	EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error
-	// EmitDDL saves the specified DDL to the sink backend
+
+	// EmitRowChangedEvents sends Row Changed Event to Sink
+	// EmitRowChangedEvents may write rows to downstream directly;
+	//
+	EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error
+
+	// EmitDDLEvent sends DDL Event to Sink
+	// EmitDDLEvent should execute DDL to downstream synchronously
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
-	// CheckpointTs returns the sink checkpoint
-	CheckpointTs() uint64
-	// Count returns the count of sunk events
-	Count() uint64
-	// Run runs the sink
-	Run(ctx context.Context) error
-	// PrintStatus prints necessary status periodically
-	PrintStatus(ctx context.Context) error
+
+	// FlushRowChangedEvents flushes each row which of commitTs greater or equal to `resolvedTs` into downstream.
+	// TiCDC guarantees that all of Event which of commitTs greater or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
+	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error
+
+	// EmitCheckpointTs sneds CheckpointTs to Sink
+	// TiCDC guarantees that all Events **in the cluster** which of commitTs greater or equal to `checkpointTs` are sent to downstream successfully.
+	EmitCheckpointTs(ctx context.Context, ts uint64) error
+
+	// Close closes the Sink
 	Close() error
 }
 
