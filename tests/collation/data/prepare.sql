@@ -8,4 +8,6 @@ CREATE TABLE `t` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 insert into `t` (`a`) value ('A');
-insert into `t` (`a`) value ('a');
+insert into `t` (`a`) value ('b');
+insert into `t` (`a`) value ('C');
+insert into `t` (`a`) value ('d');
