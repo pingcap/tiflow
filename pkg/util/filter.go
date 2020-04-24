@@ -12,6 +12,9 @@ type Filter struct {
 	filter            *filter.Filter
 	ignoreTxnCommitTs []uint64
 	ddlWhitelist      []model.ActionType
+
+	// TODO(neil) should just be *cyclic.Cyclic
+	cyclicDDLFilter *filter.Filter
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
@@ -21,6 +24,7 @@ type ReplicaConfig struct {
 	FilterRules         *filter.Rules      `toml:"filter-rules" json:"filter-rules"`
 	IgnoreTxnCommitTs   []uint64           `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
 	SinkDispatchRules   []*DispatchRule    `toml:"sink-dispatch-rules" json:"sink-dispatch-rules"`
+	Cyclic              *CyclicConfig      `toml:"cyclic-replication" json:"cyclic-replication"`
 }
 
 // DispatchRule represents partition rule for a table
@@ -31,14 +35,22 @@ type DispatchRule struct {
 
 // NewFilter creates a filter
 func NewFilter(config *ReplicaConfig) (*Filter, error) {
+	var cyclicDDLFilter *filter.Filter
 	filter, err := filter.New(config.FilterCaseSensitive, config.FilterRules)
 	if err != nil {
 		return nil, err
+	}
+	if config.Cyclic != nil {
+		cyclicDDLFilter, err = newCyclicFitler(config.Cyclic)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &Filter{
 		filter:            filter,
 		ignoreTxnCommitTs: config.IgnoreTxnCommitTs,
 		ddlWhitelist:      config.DDLWhitelist,
+		cyclicDDLFilter:   cyclicDDLFilter,
 	}, nil
 }
 
@@ -69,8 +81,15 @@ func (f *Filter) ShouldIgnoreEvent(ts uint64, schema, table string) bool {
 	return f.shouldIgnoreCommitTs(ts) || f.ShouldIgnoreTable(schema, table)
 }
 
-// ShouldDiscardDDL returns true if this kind of DDL should be discarded
-func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
+// ShouldDiscardDDL returns true if this DDL should be discarded
+func (f *Filter) ShouldDiscardDDL(job *model.Job) bool {
+	if f.cyclicDDLFilter != nil {
+		// Cyclic only cares about schema name.
+		left := f.cyclicDDLFilter.ApplyOn([]*filter.Table{{Schema: job.SchemaName}})
+		return len(left) == 0
+	}
+
+	ddlType := job.Type
 	if !f.shouldDiscardByBuiltInDDLWhitelist(ddlType) {
 		return false
 	}
