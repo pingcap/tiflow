@@ -60,6 +60,8 @@ type Owner struct {
 	stepDown func(ctx context.Context) error
 }
 
+const cdcServiceSafePointID = "ticdc"
+
 // NewOwner creates a new Owner instance
 func NewOwner(sess *concurrency.Session) (*Owner, error) {
 	cli := kv.NewCDCEtcdClient(sess.Client())
@@ -307,8 +309,12 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_,err = o.pdClient.UpdateGCSafePoint(ctx, minCheckpointTs)
-	return errors.Trace(err)
+	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, math.MaxInt64, minCheckpointTs)
+	if err != nil {
+		log.Info("failed to update service safe point", zap.Error(err))
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 // calcResolvedTs call calcResolvedTs of every changefeeds
