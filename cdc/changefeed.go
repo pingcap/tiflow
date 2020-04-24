@@ -138,7 +138,7 @@ func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 	if c.cyclic != nil && c.cyclic.IsMarkTable(table.Schema, table.Table) {
 		// For simplicty, we awlays create cyclic mark table.
 		// DDL filter should always filter these DDL from upstream.
-		ddls := c.cyclic.CreateTableCyclicMark(tid)
+		ddls := model.CyclicCreateMarkTable(tid)
 		// TODO(neil) do not use todo context!
 		ctx := context.TODO()
 		for _, ddl := range ddls {
@@ -295,8 +295,31 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[strin
 	}
 
 	appendTableInfos := make(map[string][]*model.ProcessTableInfo, len(captures))
-
+	schemaSnapshot := c.schema.GetLastSnapshot()
 	for tableID, orphan := range c.orphanTables {
+		var orphanMarkTable *model.ProcessTableInfo
+		if c.cyclic != nil {
+			tableName, found := schemaSnapshot.GetTableNameByID(int64(tableID))
+			if found && c.cyclic.IsMarkTable(tableName.Schema, tableName.Table) {
+				// Skip, mark tables should not be balanced alone.
+				continue
+			}
+			markTableSchameName, markTableTableName := cyclic.MarkTableName(tableID)
+			id, found := schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
+			if !found {
+				// Mark table is not created yet, skip and wait.
+				log.Info("balance table info delay, wait mark table",
+					zap.String("changefeed", c.id),
+					zap.Uint64("tableID", tableID),
+					zap.String("markTableName", markTableTableName))
+				continue
+			}
+			orphanMarkTable = &model.ProcessTableInfo{
+				ID:      uint64(id),
+				StartTs: orphan.StartTs,
+			}
+		}
+
 		captureID := c.selectCapture(captures)
 		if len(captureID) == 0 {
 			return nil
@@ -306,6 +329,10 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[strin
 			ID:      tableID,
 			StartTs: orphan.StartTs,
 		})
+		// Table and mark table must be balanced to the same capture.
+		if orphanMarkTable != nil {
+			info = append(info, orphanMarkTable)
+		}
 		appendTableInfos[captureID] = info
 	}
 
