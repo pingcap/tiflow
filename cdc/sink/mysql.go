@@ -318,8 +318,8 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		}
 
 		// Assume all the timestamp type is in the UTC zone when passing into mysql sink.
-		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/?interpolateParams=true&multiStatements=true&time_zone=UTC", username,
-			password, sinkURI.Hostname(), port)
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/?interpolateParams=true&multiStatements=true&time_zone=%s", username,
+			password, sinkURI.Hostname(), port, tz.String())
 		var err error
 		db, err = sql.Open("mysql", dsn)
 		if err != nil {
