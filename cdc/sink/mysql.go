@@ -262,13 +262,11 @@ var defaultParams = params{
 
 func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
 	dsnCfg.Loc = tz
-	if dsnCfg.Params == nil {
-		dsnCfg.Params = make(map[string]string, 1)
-	}
+	dsnCfg.Params = nil
 	dsnCfg.DBName = ""
 	dsnCfg.InterpolateParams = true
 	dsnCfg.MultiStatements = true
-	dsnCfg.Params["time_zone"] = tz.String()
+	dsnCfg.ParseTime = true
 	return dsnCfg.FormatDSN(), nil
 }
 
@@ -328,21 +326,21 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		log.Info("Start mysql sink", zap.String("dsn", dsnStr))
 		db, err = sql.Open("mysql", dsnStr)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, errors.Annotatef(err, "Open database connection failed, dsn: %s", dsnStr)
 		}
+		log.Info("Start mysql sink", zap.String("dsn", dsnStr))
 	case dsn != nil:
 		dsnStr, err := configureSinkURI(dsn, tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		log.Info("Start mysql sink", zap.String("dsn", dsnStr))
 		db, err = sql.Open("mysql", dsnStr)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, errors.Annotatef(err, "Open database connection failed, dsn: %s", dsnStr)
 		}
+		log.Info("Start mysql sink", zap.String("dsn", dsnStr))
 	}
 
 	sink := &mysqlSink{
