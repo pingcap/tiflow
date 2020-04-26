@@ -24,6 +24,7 @@ import (
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/puller/frontier"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -44,12 +45,6 @@ type Puller interface {
 	Output() <-chan *model.RawKVEntry
 }
 
-// resolveTsTracker checks resolved event of spans and moves the global resolved ts ahead
-type resolveTsTracker interface {
-	Forward(span util.Span, ts uint64) bool
-	Frontier() uint64
-}
-
 type pullerImpl struct {
 	pdCli        pd.Client
 	kvStorage    tikv.Storage
@@ -57,7 +52,7 @@ type pullerImpl struct {
 	spans        []util.Span
 	buffer       *memBuffer
 	outputCh     chan *model.RawKVEntry
-	tsTracker    resolveTsTracker
+	tsTracker    frontier.Frontier
 	resolvedTs   uint64
 	// needEncode represents whether we need to encode a key when checking it is in span
 	needEncode bool
@@ -84,7 +79,7 @@ func NewPuller(
 		spans:        spans,
 		buffer:       makeMemBuffer(limitter),
 		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:    makeSpanFrontier(spans...),
+		tsTracker:    frontier.NewFrontier(spans...),
 		needEncode:   needEncode,
 		resolvedTs:   checkpointTs,
 	}

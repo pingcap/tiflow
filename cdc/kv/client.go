@@ -633,7 +633,7 @@ MainLoop:
 				streams[rpcCtx.Addr] = stream
 
 				g.Go(func() error {
-					return s.receiveFromStream(ctx, g, rpcCtx.Addr, rpcCtx.GetStoreID(), stream, pendingRegions)
+					return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions)
 				})
 			}
 
@@ -646,7 +646,7 @@ MainLoop:
 
 				log.Error("send request to stream failed",
 					zap.String("addr", rpcCtx.Addr),
-					zap.Uint64("storeID", rpcCtx.GetStoreID()),
+					zap.Uint64("storeID", getStoreID(rpcCtx)),
 					zap.Uint64("requestID", requestID),
 					zap.Error(err))
 				err1 := stream.CloseSend()
@@ -682,7 +682,7 @@ MainLoop:
 }
 
 func needReloadRegion(failStoreIDs map[uint64]struct{}, rpcCtx *tikv.RPCContext) (need bool) {
-	failStoreIDs[rpcCtx.GetStoreID()] = struct{}{}
+	failStoreIDs[getStoreID(rpcCtx)] = struct{}{}
 	need = len(failStoreIDs) == len(rpcCtx.Meta.GetPeers())
 	if need {
 		for k := range failStoreIDs {
@@ -1323,4 +1323,11 @@ type rpcCtxUnavailableErr struct {
 func (e *rpcCtxUnavailableErr) Error() string {
 	return fmt.Sprintf("cannot get rpcCtx for region %v. ver:%v, confver:%v",
 		e.verID.GetID(), e.verID.GetVer(), e.verID.GetConfVer())
+}
+
+func getStoreID(rpcCtx *tikv.RPCContext) uint64 {
+	if rpcCtx != nil && rpcCtx.Peer != nil {
+		return rpcCtx.Peer.GetStoreId()
+	}
+	return 0
 }
