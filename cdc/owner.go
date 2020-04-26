@@ -58,12 +58,15 @@ type Owner struct {
 	adminJobsLock sync.Mutex
 
 	stepDown func(ctx context.Context) error
+
+	// gcTTL is the ttl of cdc gc safepoint ttl.
+	gcTTL int64
 }
 
 const cdcServiceSafePointID = "ticdc"
 
 // NewOwner creates a new Owner instance
-func NewOwner(sess *concurrency.Session) (*Owner, error) {
+func NewOwner(sess *concurrency.Session, gcTTL int64) (*Owner, error) {
 	cli := kv.NewCDCEtcdClient(sess.Client())
 	endpoints := sess.Client().Endpoints()
 	pdClient, err := pd.NewClient(endpoints, pd.SecurityOption{})
@@ -80,6 +83,7 @@ func NewOwner(sess *concurrency.Session) (*Owner, error) {
 		pdEndpoints: endpoints,
 		cfRWriter:   cli,
 		etcdClient:  cli,
+		gcTTL:       gcTTL,
 	}
 
 	return owner, nil
@@ -313,7 +317,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, math.MaxInt64, minCheckpointTs)
+	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, o.gcTTL, minCheckpointTs)
 	if err != nil {
 		log.Info("failed to update service safe point", zap.Error(err))
 		return errors.Trace(err)
