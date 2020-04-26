@@ -13,7 +13,10 @@
 
 package util
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type ctxKey string
 
@@ -22,6 +25,7 @@ const (
 	ctxKeyCaptureID    = ctxKey("captureID")
 	ctxKeyChangefeedID = ctxKey("changefeedID")
 	ctxKeyIsOwner      = ctxKey("isOwner")
+	ctxKeyTimezone     = ctxKey("timezone")
 )
 
 // CaptureIDFromCtx returns a capture ID stored in the specified context.
@@ -39,6 +43,11 @@ func PutCaptureIDInCtx(ctx context.Context, captureID string) context.Context {
 	return context.WithValue(ctx, ctxKeyCaptureID, captureID)
 }
 
+// PutTimezoneInCtx returns a new child context with the given timezone
+func PutTimezoneInCtx(ctx context.Context, timezone *time.Location) context.Context {
+	return context.WithValue(ctx, ctxKeyTimezone, timezone)
+}
+
 // PutTableIDInCtx returns a new child context with the specified table ID stored.
 func PutTableIDInCtx(ctx context.Context, tableID int64) context.Context {
 	return context.WithValue(ctx, ctxKeyTableID, tableID)
@@ -51,6 +60,15 @@ func TableIDFromCtx(ctx context.Context) int64 {
 		return 0
 	}
 	return tableID
+}
+
+// TimezoneFromCtx returns a timezone
+func TimezoneFromCtx(ctx context.Context) *time.Location {
+	tz, ok := ctx.Value(ctxKeyTimezone).(*time.Location)
+	if !ok {
+		return nil
+	}
+	return tz
 }
 
 // SetOwnerInCtx returns a new child context with the owner flag set.

@@ -260,18 +260,18 @@ var defaultParams = params{
 	maxTxnRow:   defaultMaxTxnRow,
 }
 
-func configureSinkURI(dsnCfg *dmysql.Config) (string, error) {
-	dsnCfg.Loc = time.UTC
+func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
+	dsnCfg.Loc = tz
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
 	dsnCfg.DBName = ""
-	dsnCfg.Params["time_zone"] = "UTC"
+	dsnCfg.Params["time_zone"] = tz.String()
 	return dsnCfg.FormatDSN(), nil
 }
 
 // newMySQLSink creates a new MySQL sink using schema storage
-func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, filter *util.Filter, opts map[string]string) (Sink, error) {
+func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, filter *util.Filter, opts map[string]string) (Sink, error) {
 	var db *sql.DB
 	params := defaultParams
 
@@ -281,6 +281,7 @@ func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, filter *util.Filter, opt
 	if cid, ok := opts[OptCaptureID]; ok {
 		params.captureID = cid
 	}
+	tz := util.TimezoneFromCtx(ctx)
 
 	switch {
 	case sinkURI != nil:
@@ -325,7 +326,7 @@ func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, filter *util.Filter, opt
 			return nil, errors.Trace(err)
 		}
 	case dsn != nil:
-		dsnStr, err := configureSinkURI(dsn)
+		dsnStr, err := configureSinkURI(dsn, tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

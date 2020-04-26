@@ -55,7 +55,7 @@ type indexKVEntry struct {
 	IndexValue []types.Datum
 }
 
-func (idx *indexKVEntry) unflatten(tableInfo *TableInfo) error {
+func (idx *indexKVEntry) unflatten(tableInfo *TableInfo, tz *time.Location) error {
 	if tableInfo.ID != idx.TableID {
 		return errors.New("wrong table info in unflatten")
 	}
@@ -70,7 +70,7 @@ func (idx *indexKVEntry) unflatten(tableInfo *TableInfo) error {
 	for i, v := range idx.IndexValue {
 		colOffset := index.Columns[i].Offset
 		fieldType := &tableInfo.Columns[colOffset].FieldType
-		datum, err := unflatten(v, fieldType)
+		datum, err := unflatten(v, fieldType, tz)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -102,6 +102,7 @@ type Mounter interface {
 type mounterImpl struct {
 	schemaStorage   *SchemaStorage
 	rawRowChangedCh chan *model.PolymorphicEvent
+	tz              *time.Location
 }
 
 // NewMounter creates a mounter
@@ -115,6 +116,7 @@ func NewMounter(schemaStorage *SchemaStorage) Mounter {
 const codecWorkerNum = 32
 
 func (m *mounterImpl) Run(ctx context.Context) error {
+	m.tz = util.TimezoneFromCtx(ctx)
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
 		m.collectMetrics(ctx)
@@ -240,7 +242,7 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, 
 	if len(key) != 0 {
 		return nil, errors.New("invalid record key")
 	}
-	row, err := decodeRow(rawValue, recordID, tableInfo)
+	row, err := decodeRow(rawValue, recordID, tableInfo, m.tz)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -386,7 +388,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		return nil, nil
 	}
 
-	err := idx.unflatten(tableInfo)
+	err := idx.unflatten(tableInfo, m.tz)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
