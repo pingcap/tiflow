@@ -110,10 +110,10 @@ func (cache *fileCache) gc() {
 	defer cache.fileLock.Unlock()
 	for _, f := range cache.toRemoveFiles {
 		fpath := filepath.Join(cache.dir, f)
-		if _, err := os.Stat(fpath); err != nil {
+		if _, err := os.Stat(fpath); err == nil {
 			err2 := os.Remove(fpath)
 			if err2 != nil {
-				log.Warn("remove file failed", zap.Error(err))
+				log.Warn("remove file failed", zap.Error(err2))
 			}
 		}
 	}
@@ -313,6 +313,10 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			}
 			evs = append(evs, ev)
 			idx = idx + 8 + dataLen
+		}
+		// event count in unsorted file may be zero
+		if len(evs) == 0 {
+			return "", nil
 		}
 		sort.Slice(evs, func(i, j int) bool {
 			return evs[i].Ts < evs[j].Ts
