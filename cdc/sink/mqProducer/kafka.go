@@ -210,6 +210,7 @@ func (k *kafkaSaramaProducer) runWorker(ctx context.Context) error {
 					Observe(float64(len(key) + len(value)))
 			}
 			tick := time.NewTicker(500 * time.Millisecond)
+			defer tick.Stop()
 			for {
 				var msg kafkaMsg
 				var err error
