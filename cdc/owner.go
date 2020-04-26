@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -246,6 +247,7 @@ func (o *Owner) newChangeFeed(
 		infoWriter:    storage.NewOwnerTaskStatusEtcdWriter(o.etcdClient),
 		filter:        filter,
 		sink:          sink,
+		cyclic:        cyclic.NewCyclic(info.Config.Cyclic),
 	}
 	return cf, nil
 }

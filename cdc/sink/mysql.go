@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
@@ -69,6 +70,8 @@ type mysqlSink struct {
 	unresolvedRows   map[string][]*model.RowChangedEvent
 
 	count uint64
+
+	cyclic *cyclic.Cyclic
 
 	metricExecTxnHis   prometheus.Observer
 	metricExecBatchHis prometheus.Observer
@@ -187,6 +190,9 @@ func (s *mysqlSink) Run(ctx context.Context) error {
 		<-ctx.Done()
 		return ctx.Err()
 	}
+
+	s.adjustSQLMode(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -250,6 +256,29 @@ func splitRowsGroup(resolvedTs uint64, unresolvedRows map[string][]*model.RowCha
 		}
 	}
 	return
+}
+
+// adjustSQLMode adjust sql mode according to sink config.
+func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
+	// Must relax sql mode to support cyclic replication, as downstream may have
+	// extra columns (not null and no default value).
+	if s.cyclic != nil {
+		return nil
+	}
+	var oldMode, newMode string
+	row := s.db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
+	err := row.Scan(&oldMode)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	newMode = cyclic.RelaxSQLMode(oldMode)
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf("SET sql_mode = '%s';", newMode))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = rows.Close()
+	return errors.Trace(err)
 }
 
 var _ Sink = &mysqlSink{}
@@ -361,6 +390,15 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 
 	sink.db.SetMaxIdleConns(params.workerCount)
 	sink.db.SetMaxOpenConns(params.workerCount)
+
+	if val, ok := opts[cyclic.OptCyclicConfig]; ok {
+		cfg := new(cyclic.ReplicationConfig)
+		err := cfg.Unmarshal([]byte(val))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		sink.cyclic = cyclic.NewCyclic(cfg)
+	}
 
 	sink.metricExecTxnHis = execTxnHistogram.WithLabelValues(params.captureID, params.changefeedID)
 	sink.metricExecBatchHis = execBatchHistogram.WithLabelValues(params.captureID, params.changefeedID)

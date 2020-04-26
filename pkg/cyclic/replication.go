@@ -18,8 +18,7 @@
 package cyclic
 
 import (
-	"context"
-	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -32,9 +31,9 @@ const (
 	SchemaName string = "tidb_cdc"
 	tableName  string = "repl_mark"
 
-	// OptRelaxSQLMode is the key that adds to changefeed options
+	// OptCyclicConfig is the key that adds to changefeed options
 	// automatically is cyclic replication is on.
-	OptRelaxSQLMode string = "_cyclic_relax_sql_mode"
+	OptCyclicConfig string = "_cyclic_relax_sql_mode"
 )
 
 // ReplicationConfig represents config used for cyclic replication
@@ -48,6 +47,20 @@ type ReplicationConfig struct {
 // IsEnabled returns whether cyclic replication is enabled or not.
 func (c *ReplicationConfig) IsEnabled() bool {
 	return c != nil && c.ReplicaID != 0
+}
+
+// Marshal returns the json marshal format of a ReplicationConfig
+func (c *ReplicationConfig) Marshal() (string, error) {
+	cfg, err := json.Marshal(c)
+	if err != nil {
+		return "", errors.Annotatef(err, "Unmarshal data: %v", c)
+	}
+	return string(cfg), nil
+}
+
+// Unmarshal unmarshals into *ReplicationConfig from json marshal byte slice
+func (c *ReplicationConfig) Unmarshal(data []byte) error {
+	return json.Unmarshal(data, c)
 }
 
 // NewCyclicFitler creates a DDL filter for cyclic replication.
@@ -81,25 +94,18 @@ func NewCyclicFitler(config *ReplicationConfig) (*filter.Filter, error) {
 }
 
 // RelaxSQLMode returns relaxed SQL mode, "STRICT_TRANS_TABLES" is removed.
-func RelaxSQLMode(ctx context.Context, db *sql.DB) (string, error) {
-	var oldMode, newMode string
-	row := db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
-	err := row.Scan(&oldMode)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-
+func RelaxSQLMode(oldMode string) string {
 	toRemove := "STRICT_TRANS_TABLES"
 
 	if !strings.Contains(oldMode, toRemove) {
-		return oldMode, nil
+		return oldMode
 	}
 
 	// concatenated by "," like: mode1,mode2
-	newMode = strings.Replace(newMode, toRemove+",", "", -1)
+	newMode := strings.Replace(oldMode, toRemove+",", "", -1)
 	newMode = strings.Replace(newMode, ","+toRemove, "", -1)
 	newMode = strings.Replace(newMode, toRemove, "", -1)
-	return newMode, nil
+	return newMode
 }
 
 // Cyclic ...
