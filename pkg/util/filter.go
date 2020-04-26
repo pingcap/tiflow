@@ -23,7 +23,7 @@ type ReplicaConfig struct {
 	SinkDispatchRules   []*DispatchRule    `toml:"sink-dispatch-rules" json:"sink-dispatch-rules"`
 }
 
-// PartitionRule represents partition rule for a table
+// DispatchRule represents partition rule for a table
 type DispatchRule struct {
 	filter.Table
 	Rule string `toml:"rule" json:"rule"`

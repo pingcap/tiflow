@@ -61,6 +61,7 @@ func (s *dispatcherSwitcher) Dispatch(row *model.RowChangedEvent) int32 {
 	return dispatcher.Dispatch(row)
 }
 
+// NewDispatcher creates a new dispatcher
 func NewDispatcher(config *util.ReplicaConfig, partitionNum int32) Dispatcher {
 	p := &dispatcherSwitcher{
 		caseSensitive:     config.FilterCaseSensitive,
