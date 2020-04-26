@@ -266,6 +266,8 @@ func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) 
 		dsnCfg.Params = make(map[string]string, 1)
 	}
 	dsnCfg.DBName = ""
+	dsnCfg.InterpolateParams = true
+	dsnCfg.MultiStatements = true
 	dsnCfg.Params["time_zone"] = tz.String()
 	return dsnCfg.FormatDSN(), nil
 }
@@ -317,11 +319,17 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 			port = "4000"
 		}
 
-		// Assume all the timestamp type is in the UTC zone when passing into mysql sink.
-		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/?interpolateParams=true&multiStatements=true&time_zone=%s", username,
-			password, sinkURI.Hostname(), port, tz.String())
-		var err error
-		db, err = sql.Open("mysql", dsn)
+		dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/", username, password, sinkURI.Hostname(), port)
+		dsn, err := dmysql.ParseDSN(dsnStr)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		dsnStr, err = configureSinkURI(dsn, tz)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		log.Info("Start mysql sink", zap.String("dsn", dsnStr))
+		db, err = sql.Open("mysql", dsnStr)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -330,6 +338,7 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		log.Info("Start mysql sink", zap.String("dsn", dsnStr))
 		db, err = sql.Open("mysql", dsnStr)
 		if err != nil {
 			return nil, errors.Trace(err)
