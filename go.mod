@@ -22,11 +22,11 @@ require (
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
 	github.com/pingcap/failpoint v0.0.0-20200210140405-f8f9fb234798
-	github.com/pingcap/kvproto v0.0.0-20200330093347-98f910b71904
+	github.com/pingcap/kvproto v0.0.0-20200420075417-e0c6e8842f22
 	github.com/pingcap/log v0.0.0-20200117041106-d28c14d3b1cd
-	github.com/pingcap/parser v0.0.0-20200326020624-68d423641be5
-	github.com/pingcap/pd/v4 v4.0.0-beta.1.0.20200305072537-61d9f9cc35d3
-	github.com/pingcap/tidb v1.1.0-beta.0.20200331094141-a1d627a24eb8
+	github.com/pingcap/parser v0.0.0-20200422082501-7329d80eaf2c
+	github.com/pingcap/pd/v4 v4.0.0-rc.1.0.20200422143320-428acd53eba2
+	github.com/pingcap/tidb v1.1.0-beta.0.20200424111313-5e4a6948977f
 	github.com/pingcap/tidb-tools v4.0.0-beta.2.0.20200323030733-8d3314c33a54+incompatible
 	github.com/prometheus/client_golang v1.3.0
 	github.com/prometheus/common v0.8.0 // indirect
