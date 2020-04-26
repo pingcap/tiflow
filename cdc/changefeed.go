@@ -480,10 +480,11 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	minResolvedTs := c.targetTs
 	minCheckpointTs := c.targetTs
 
+	if len(c.taskPositions) < len(c.taskStatus) {
+		return nil
+	}
 	if len(c.taskPositions) == 0 {
 		minCheckpointTs = c.status.ResolvedTs
-	} else if len(c.taskPositions) < len(c.taskStatus) {
-		return nil
 	} else {
 		// calc the min of all resolvedTs in captures
 		for _, position := range c.taskPositions {
