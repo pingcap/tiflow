@@ -136,12 +136,12 @@ func (cache *fileCache) prepareSorting() ([]string, bool) {
 	return files, true
 }
 
-func (cache *fileCache) finishSorting(lastSortedFile string, toRemoveFiles []string) {
+func (cache *fileCache) finishSorting(newLastSortedFile string, toRemoveFiles []string) {
 	cache.fileLock.Lock()
 	defer cache.fileLock.Unlock()
 	atomic.StoreInt32(&cache.sorting, 0)
 	cache.toRemoveFiles = append(cache.toRemoveFiles, toRemoveFiles...)
-	cache.lastSortedFile = lastSortedFile
+	cache.lastSortedFile = newLastSortedFile
 }
 
 func (cache *fileCache) flush(ctx context.Context, entries []*model.PolymorphicEvent) error {
@@ -428,12 +428,11 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			return errors.Trace(err)
 		}
 	}
-	lastSortedFile := ""
-	if lastSortedFileUpdated {
-		fs.cache.lastSortedFile = newLastSortedFile
+	if !lastSortedFileUpdated {
+		newLastSortedFile = ""
 	}
 
-	fs.cache.finishSorting(lastSortedFile, toRemoveFiles)
+	fs.cache.finishSorting(newLastSortedFile, toRemoveFiles)
 	fs.output(ctx, model.NewResolvedPolymorphicEvent(resolvedTs))
 
 	return nil
