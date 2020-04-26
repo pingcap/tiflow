@@ -647,6 +647,7 @@ MainLoop:
 				log.Error("send request to stream failed",
 					zap.String("addr", rpcCtx.Addr),
 					zap.Uint64("storeID", getStoreID(rpcCtx)),
+					zap.Uint64("regionID", sri.verID.GetID()),
 					zap.Uint64("requestID", requestID),
 					zap.Error(err))
 				err1 := stream.CloseSend()
@@ -656,6 +657,11 @@ MainLoop:
 				// Delete the stream from the map so that the next time the store is accessed, the stream will be
 				// re-established.
 				delete(streams, rpcCtx.Addr)
+				// Delete `pendingRegions` from `storePendingRegions` so that the next time a region of this store is
+				// requested, it will create a new one. So if the `receiveFromStream` goroutine tries to stop all
+				// pending regions, the new pending regions that are requested after reconnecting won't be stopped
+				// incorrectly.
+				delete(storePendingRegions, rpcCtx.Addr)
 
 				// Remove the region from pendingRegions. If it's already removed, it should be already retried by
 				// `receiveFromStream`, so no need to retry here.
@@ -968,7 +974,7 @@ func (s *eventFeedSession) receiveFromStream(
 						zap.Uint64("regionID", event.RegionId),
 						zap.Uint64("requestID", event.RequestId),
 						zap.String("addr", addr))
-					return errors.Errorf("received event regionID %v, requestID %v from %v but neither pending"+
+					return errors.Errorf("received event regionID %v, requestID %v from %v but neither pending "+
 						"region nor running region was found", event.RegionId, event.RequestId, addr)
 				}
 
