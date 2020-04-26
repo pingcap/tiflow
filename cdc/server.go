@@ -62,7 +62,7 @@ func StatusPort(p int) ServerOption {
 	}
 }
 
-// StatusPort returns a ServerOption that sets the status server port
+// Timezone returns a ServerOption that sets the timezone
 func Timezone(tz *time.Location) ServerOption {
 	return func(o *options) {
 		o.timezone = tz
