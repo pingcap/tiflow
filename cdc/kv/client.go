@@ -611,12 +611,7 @@ MainLoop:
 			}
 
 			state := newRegionFeedState(sri, requestID)
-			hasOld := pendingRegions.insert(requestID, state)
-			if hasOld {
-				log.Error("region is already pending for the first response while trying to send another request."+
-					"region merge may have happened which is not supported yet",
-					zap.Uint64("regionID", sri.verID.GetID()), zap.Uint64("requestID", requestID))
-			}
+			pendingRegions.insert(requestID, state)
 
 			stream, ok := streams[rpcCtx.Addr]
 			// Establish the stream if it has not been connected yet.
@@ -624,10 +619,12 @@ MainLoop:
 				stream, err = s.client.newStream(ctx, rpcCtx.Addr)
 				if err != nil {
 					// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
-					log.Warn("get grpc stream client failed", zap.Error(err))
+					log.Warn("get grpc stream client failed",
+						zap.Uint64("regionID", sri.verID.GetID()), zap.Uint64("requestID", requestID), zap.Error(err))
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 					s.client.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
-					// Retry connecting and sending the request.
+					// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
+					pendingRegions.take(requestID)
 					continue
 				}
 				streams[rpcCtx.Addr] = stream
