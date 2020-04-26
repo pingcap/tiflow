@@ -41,14 +41,14 @@ func (r *dispatchRule) fromString(rule string) {
 	}
 }
 
-type SinkDispatcher struct {
+type dispatcherSwitcher struct {
 	rules             map[entry.TableName]Dispatcher
 	caseSensitive     bool
 	partitionNum      int32
 	defaultDispatcher Dispatcher
 }
 
-func (s *SinkDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
+func (s *dispatcherSwitcher) Dispatch(row *model.RowChangedEvent) int32 {
 	tableName := entry.TableName{Schema: row.Schema, Table: row.Table}
 	if !s.caseSensitive {
 		tableName.Schema = strings.ToLower(tableName.Schema)
@@ -61,14 +61,14 @@ func (s *SinkDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	return dispatcher.Dispatch(row)
 }
 
-func NewSinkDispatcher(config *util.ReplicaConfig, partitionNum int32) Dispatcher {
-	p := &SinkDispatcher{
+func NewDispatcher(config *util.ReplicaConfig, partitionNum int32) Dispatcher {
+	p := &dispatcherSwitcher{
 		caseSensitive:     config.FilterCaseSensitive,
 		partitionNum:      partitionNum,
-		rules:             make(map[entry.TableName]Dispatcher, len(config.SinkPartitionRules)),
+		rules:             make(map[entry.TableName]Dispatcher, len(config.SinkDispatchRules)),
 		defaultDispatcher: &defaultDispatcher{partitionNum: partitionNum},
 	}
-	for _, ruleConfig := range config.SinkPartitionRules {
+	for _, ruleConfig := range config.SinkDispatchRules {
 		tableName := entry.TableName{Schema: ruleConfig.Schema, Table: ruleConfig.Name}
 		if !p.caseSensitive {
 			tableName.Schema = strings.ToLower(tableName.Schema)

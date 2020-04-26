@@ -49,12 +49,12 @@ tbl-name = "user"
 db-name = "sns"
 tbl-name = "following"
 
-[[sink-partition-rules]]
+[[sink-dispatch-rules]]
 db-name = "sns"
 tbl-name = "user"
 rule = "ts"
 
-[[sink-partition-rules]]
+[[sink-dispatch-rules]]
 db-name = "sns"
 tbl-name = "following"
 rule = "rowid"
@@ -74,7 +74,7 @@ rule = "rowid"
 		{Schema: "sns", Name: "user"},
 		{Schema: "sns", Name: "following"},
 	})
-	c.Assert(cfg.SinkPartitionRules, check.DeepEquals, []*util.PartitionRule{
+	c.Assert(cfg.SinkDispatchRules, check.DeepEquals, []*util.DispatchRule{
 		{Table: filter.Table{Schema: "sns", Name: "user"}, Rule: "ts"},
 		{Table: filter.Table{Schema: "sns", Name: "following"}, Rule: "rowid"},
 	})
@@ -97,12 +97,12 @@ tbl-name = "user"
 db-name = "sns"
 tbl-name = "following"
 
-[[sink-partition-rules]]
+[[sink-dispatch-rules]]
 db-name = "sns"
 tbl-name = "user"
 rule = "ts"
 
-[[sink-partition-rules]]
+[[sink-dispatch-rules]]
 db-name = "sns"
 tbl-name = "following"
 rule = "rowid"
@@ -122,7 +122,7 @@ rule = "rowid"
 		{Schema: "sns", Name: "user"},
 		{Schema: "sns", Name: "following"},
 	})
-	c.Assert(cfg.SinkPartitionRules, check.DeepEquals, []*util.PartitionRule{
+	c.Assert(cfg.SinkDispatchRules, check.DeepEquals, []*util.DispatchRule{
 		{Table: filter.Table{Schema: "sns", Name: "user"}, Rule: "ts"},
 		{Table: filter.Table{Schema: "sns", Name: "following"}, Rule: "rowid"},
 	})

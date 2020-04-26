@@ -13,12 +13,12 @@ tbl-name = "user"
 db-name = "sns"
 tbl-name = "following"
 
-[[sink-partition-rules]]
+[[sink-dispatch-rules]]
 db-name = "sns"
 tbl-name = "user"
 rule = "ts"
 
-[[sink-partition-rules]]
+[[sink-dispatch-rules]]
 db-name = "sns"
 tbl-name = "following"
 rule = "rowid"

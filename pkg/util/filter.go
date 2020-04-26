@@ -20,11 +20,11 @@ type ReplicaConfig struct {
 	FilterCaseSensitive bool               `toml:"filter-case-sensitive" json:"filter-case-sensitive"`
 	FilterRules         *filter.Rules      `toml:"filter-rules" json:"filter-rules"`
 	IgnoreTxnCommitTs   []uint64           `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
-	SinkPartitionRules  []*PartitionRule   `toml:"sink-partition-rules" json:"sink-partition-rules"`
+	SinkDispatchRules   []*DispatchRule    `toml:"sink-dispatch-rules" json:"sink-dispatch-rules"`
 }
 
 // PartitionRule represents partition rule for a table
-type PartitionRule struct {
+type DispatchRule struct {
 	filter.Table
 	Rule string `toml:"rule" json:"rule"`
 }

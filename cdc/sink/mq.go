@@ -41,7 +41,7 @@ func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, config *util
 	return &mqSink{
 		mqProducer:   mqProducer,
 		partitionNum: mqProducer.GetPartitionNum(),
-		dispatcher:   dispatcher.NewSinkDispatcher(config, mqProducer.GetPartitionNum()),
+		dispatcher:   dispatcher.NewDispatcher(config, mqProducer.GetPartitionNum()),
 		filter:       filter,
 		changefeedID: opts[OptChangefeedID],
 		captureID:    opts[OptCaptureID],
