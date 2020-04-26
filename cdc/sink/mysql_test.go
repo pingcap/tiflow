@@ -37,54 +37,54 @@ func (s EmitSuite) TestSplitRowsGroup(c *check.C) {
 		expectedMinTs           uint64
 	}{{
 		inputGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
+			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		resolvedTs:            5,
 		expectedResolvedGroup: map[string][]*model.RowChangedEvent{},
 		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
+			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		expectedMinTs: 5,
 	}, {
 		inputGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
+			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		resolvedTs: 23,
 		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}},
-			"t2": {{Ts: 23}},
+			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}},
+			"t2": {{CRTs: 23}},
 		},
 		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+			"t1": {{CRTs: 33}, {CRTs: 34}},
+			"t2": {{CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		expectedMinTs: 11,
 	}, {
 		inputGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
+			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		resolvedTs: 30,
 		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}},
+			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 33}, {Ts: 34}},
+			"t1": {{CRTs: 33}, {CRTs: 34}},
 		},
 		expectedMinTs: 11,
 	}, {
 		inputGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
+			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		resolvedTs: 40,
 		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
+			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{},
 		expectedMinTs:           11,
@@ -105,19 +105,19 @@ func (s EmitSuite) TestTxnRowLimiter(c *check.C) {
 		inputGroup: nil,
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{Ts: 1}},
+		inputGroup: []*model.RowChangedEvent{{CRTs: 1}},
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{Ts: 1}, {Ts: 2}, {Ts: 3}, {Ts: 4}, {Ts: 5}, {Ts: 6}},
+		inputGroup: []*model.RowChangedEvent{{CRTs: 1}, {CRTs: 2}, {CRTs: 3}, {CRTs: 4}, {CRTs: 5}, {CRTs: 6}},
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{Ts: 1}, {Ts: 2}, {Ts: 3}, {Ts: 4}, {Ts: 5}, {Ts: 6}, {Ts: 7}, {Ts: 8}},
+		inputGroup: []*model.RowChangedEvent{{CRTs: 1}, {CRTs: 2}, {CRTs: 3}, {CRTs: 4}, {CRTs: 5}, {CRTs: 6}, {CRTs: 7}, {CRTs: 8}},
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{Ts: 1}, {Ts: 2}, {Ts: 3}, {Ts: 4}, {Ts: 4}, {Ts: 4}, {Ts: 6}},
+		inputGroup: []*model.RowChangedEvent{{CRTs: 1}, {CRTs: 2}, {CRTs: 3}, {CRTs: 4}, {CRTs: 4}, {CRTs: 4}, {CRTs: 6}},
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{Ts: 1}, {Ts: 1}, {Ts: 1}, {Ts: 2}, {Ts: 2}, {Ts: 2}, {Ts: 2}, {Ts: 3}, {Ts: 3}},
+		inputGroup: []*model.RowChangedEvent{{CRTs: 1}, {CRTs: 1}, {CRTs: 1}, {CRTs: 2}, {CRTs: 2}, {CRTs: 2}, {CRTs: 2}, {CRTs: 3}, {CRTs: 3}},
 		maxTxnRow:  2,
 	}}
 

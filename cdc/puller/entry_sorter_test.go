@@ -34,62 +34,62 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 	}{
 		{
 			input: []*model.RawKVEntry{
-				{Ts: 1, OpType: model.OpTypePut},
-				{Ts: 2, OpType: model.OpTypePut},
-				{Ts: 4, OpType: model.OpTypeDelete},
-				{Ts: 2, OpType: model.OpTypeDelete}},
+				{CRTs: 1, OpType: model.OpTypePut},
+				{CRTs: 2, OpType: model.OpTypePut},
+				{CRTs: 4, OpType: model.OpTypeDelete},
+				{CRTs: 2, OpType: model.OpTypeDelete}},
 			resolvedTs: 0,
 			expect: []*model.RawKVEntry{
-				{Ts: 0, OpType: model.OpTypeResolved}},
+				{CRTs: 0, OpType: model.OpTypeResolved}},
 		},
 		{
 			input: []*model.RawKVEntry{
-				{Ts: 3, OpType: model.OpTypePut},
-				{Ts: 2, OpType: model.OpTypePut},
-				{Ts: 5, OpType: model.OpTypePut}},
+				{CRTs: 3, OpType: model.OpTypePut},
+				{CRTs: 2, OpType: model.OpTypePut},
+				{CRTs: 5, OpType: model.OpTypePut}},
 			resolvedTs: 3,
 			expect: []*model.RawKVEntry{
-				{Ts: 1, OpType: model.OpTypePut},
-				{Ts: 2, OpType: model.OpTypeDelete},
-				{Ts: 2, OpType: model.OpTypePut},
-				{Ts: 2, OpType: model.OpTypePut},
-				{Ts: 3, OpType: model.OpTypePut},
-				{Ts: 3, OpType: model.OpTypeResolved}},
+				{CRTs: 1, OpType: model.OpTypePut},
+				{CRTs: 2, OpType: model.OpTypeDelete},
+				{CRTs: 2, OpType: model.OpTypePut},
+				{CRTs: 2, OpType: model.OpTypePut},
+				{CRTs: 3, OpType: model.OpTypePut},
+				{CRTs: 3, OpType: model.OpTypeResolved}},
 		},
 		{
 			input:      []*model.RawKVEntry{},
 			resolvedTs: 3,
-			expect:     []*model.RawKVEntry{{Ts: 3, OpType: model.OpTypeResolved}},
+			expect:     []*model.RawKVEntry{{CRTs: 3, OpType: model.OpTypeResolved}},
 		},
 		{
 			input: []*model.RawKVEntry{
-				{Ts: 7, OpType: model.OpTypePut}},
+				{CRTs: 7, OpType: model.OpTypePut}},
 			resolvedTs: 6,
 			expect: []*model.RawKVEntry{
-				{Ts: 4, OpType: model.OpTypeDelete},
-				{Ts: 5, OpType: model.OpTypePut},
-				{Ts: 6, OpType: model.OpTypeResolved}},
+				{CRTs: 4, OpType: model.OpTypeDelete},
+				{CRTs: 5, OpType: model.OpTypePut},
+				{CRTs: 6, OpType: model.OpTypeResolved}},
 		},
 		{
-			input:      []*model.RawKVEntry{{Ts: 7, OpType: model.OpTypeDelete}},
+			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
 			resolvedTs: 6,
 			expect: []*model.RawKVEntry{
-				{Ts: 6, OpType: model.OpTypeResolved}},
+				{CRTs: 6, OpType: model.OpTypeResolved}},
 		},
 		{
-			input:      []*model.RawKVEntry{{Ts: 7, OpType: model.OpTypeDelete}},
+			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
 			resolvedTs: 8,
 			expect: []*model.RawKVEntry{
-				{Ts: 7, OpType: model.OpTypeDelete},
-				{Ts: 7, OpType: model.OpTypeDelete},
-				{Ts: 7, OpType: model.OpTypePut},
-				{Ts: 8, OpType: model.OpTypeResolved}},
+				{CRTs: 7, OpType: model.OpTypeDelete},
+				{CRTs: 7, OpType: model.OpTypeDelete},
+				{CRTs: 7, OpType: model.OpTypePut},
+				{CRTs: 8, OpType: model.OpTypeResolved}},
 		},
 		{
 			input:      []*model.RawKVEntry{},
 			resolvedTs: 15,
 			expect: []*model.RawKVEntry{
-				{Ts: 15, OpType: model.OpTypeResolved}},
+				{CRTs: 15, OpType: model.OpTypeResolved}},
 		},
 	}
 	es := NewEntrySorter()
@@ -131,7 +131,7 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 			}
 			for i := 0; i < 1000; i++ {
 				entry := &model.RawKVEntry{
-					Ts:     uint64(int64(resolvedTs) + rand.Int63n(int64(maxTs-resolvedTs))),
+					CRTs:   uint64(int64(resolvedTs) + rand.Int63n(int64(maxTs-resolvedTs))),
 					OpType: opType,
 				}
 				es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
@@ -144,15 +144,15 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 	var resolvedTs uint64
 	lastOpType := model.OpTypePut
 	for entry := range es.Output() {
-		c.Assert(entry.Ts, check.GreaterEqual, lastTs)
-		c.Assert(entry.Ts, check.Greater, resolvedTs)
+		c.Assert(entry.CRTs, check.GreaterEqual, lastTs)
+		c.Assert(entry.CRTs, check.Greater, resolvedTs)
 		if lastOpType == model.OpTypePut && entry.RawKV.OpType == model.OpTypeDelete {
-			c.Assert(entry.Ts, check.Greater, lastTs)
+			c.Assert(entry.CRTs, check.Greater, lastTs)
 		}
-		lastTs = entry.Ts
+		lastTs = entry.CRTs
 		lastOpType = entry.RawKV.OpType
 		if entry.RawKV.OpType == model.OpTypeResolved {
-			resolvedTs = entry.Ts
+			resolvedTs = entry.CRTs
 		}
 		if resolvedTs == maxTs {
 			break
@@ -183,7 +183,7 @@ func BenchmarkSorter(b *testing.B) {
 			}
 			for i := 0; i < 100000; i++ {
 				entry := &model.RawKVEntry{
-					Ts:     uint64(int64(resolvedTs) + rand.Int63n(1000)),
+					CRTs:   uint64(int64(resolvedTs) + rand.Int63n(1000)),
 					OpType: opType,
 				}
 				es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
@@ -195,7 +195,7 @@ func BenchmarkSorter(b *testing.B) {
 	var resolvedTs uint64
 	for entry := range es.Output() {
 		if entry.RawKV.OpType == model.OpTypeResolved {
-			resolvedTs = entry.Ts
+			resolvedTs = entry.CRTs
 		}
 		if resolvedTs == maxTs {
 			break

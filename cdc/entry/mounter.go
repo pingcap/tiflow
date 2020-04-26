@@ -40,7 +40,10 @@ const (
 )
 
 type baseKVEntry struct {
-	Ts       uint64
+	StartTs uint64
+	// Commit or resolved TS
+	CRTs uint64
+
 	TableID  int64
 	RecordID int64
 	Delete   bool
@@ -146,7 +149,7 @@ func (m *mounterImpl) codecWorker(ctx context.Context) error {
 		case pEvent = <-m.rawRowChangedCh:
 		}
 		if pEvent.RawKV.OpType == model.OpTypeResolved {
-			pEvent.Row = &model.RowChangedEvent{Ts: pEvent.Ts, Resolved: true}
+			pEvent.Row = &model.RowChangedEvent{CRTs: pEvent.CRTs, Resolved: true}
 			pEvent.PrepareFinished()
 			continue
 		}
@@ -191,11 +194,12 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		return nil, errors.Trace(err)
 	}
 	baseInfo := baseKVEntry{
-		Ts:      raw.Ts,
+		StartTs: raw.StartTs,
+		CRTs:    raw.CRTs,
 		TableID: tableID,
 		Delete:  raw.OpType == model.OpTypeDelete,
 	}
-	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.Ts)
+	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CRTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -203,7 +207,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		tableInfo, exist := snap.TableByID(tableID)
 		if !exist {
 			if snap.IsTruncateTableID(tableID) {
-				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.Ts), zap.Int64("tableID", tableID))
+				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", tableID))
 				return nil, nil
 			}
 			return nil, errors.NotFoundf("table in schema storage, id: %d", tableID)
@@ -313,7 +317,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	}
 	// FinishedTS is only set when the job is synced,
 	// but we can use the entry's ts here
-	job.BinlogInfo.FinishedTS = raw.Ts
+	job.BinlogInfo.FinishedTS = raw.CRTs
 	return job, nil
 }
 
@@ -353,7 +357,8 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 
 	event := &model.RowChangedEvent{
-		Ts:           row.Ts,
+		StartTs:      row.StartTs,
+		CRTs:         row.CRTs,
 		RowID:        row.RecordID,
 		Resolved:     false,
 		Schema:       tableInfo.TableName.Schema,
@@ -417,7 +422,8 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		}
 	}
 	return &model.RowChangedEvent{
-		Ts:           idx.Ts,
+		StartTs:      idx.StartTs,
+		CRTs:         idx.CRTs,
 		RowID:        idx.RecordID,
 		Resolved:     false,
 		Schema:       tableInfo.TableName.Schema,

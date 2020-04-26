@@ -96,11 +96,11 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 	defer s.unresolvedRowsMu.Unlock()
 	for _, row := range rows {
 		if row.Resolved {
-			resolvedTs = row.Ts
+			resolvedTs = row.CRTs
 			continue
 		}
-		if s.filter.ShouldIgnoreEvent(row.Ts, row.Schema, row.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
+		if s.filter.ShouldIgnoreEvent(row.CRTs, row.Schema, row.Table) {
+			log.Info("Row changed event ignored", zap.Uint64("ts", row.CRTs))
 			continue
 		}
 		key := util.QuoteSchema(row.Schema, row.Table)
@@ -235,7 +235,7 @@ func splitRowsGroup(resolvedTs uint64, unresolvedRows map[string][]*model.RowCha
 	minTs = resolvedTs
 	for key, rows := range unresolvedRows {
 		i := sort.Search(len(rows), func(i int) bool {
-			return rows[i].Ts > resolvedTs
+			return rows[i].CRTs > resolvedTs
 		})
 		if i == 0 {
 			continue
@@ -251,8 +251,8 @@ func splitRowsGroup(resolvedTs uint64, unresolvedRows map[string][]*model.RowCha
 		}
 		resolvedRowsMap[key] = resolvedRows
 
-		if len(resolvedRows) > 0 && resolvedRows[0].Ts < minTs {
-			minTs = resolvedRows[0].Ts
+		if len(resolvedRows) > 0 && resolvedRows[0].CRTs < minTs {
+			minTs = resolvedRows[0].CRTs
 		}
 	}
 	return

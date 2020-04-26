@@ -134,10 +134,10 @@ func (p *mockPuller) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 			p.pm.rawKVEntriesMu.RLock()
 			for ; p.rawKVOffset < len(p.pm.rawKVEntries); p.rawKVOffset++ {
 				rawKV := p.pm.rawKVEntries[p.rawKVOffset]
-				if rawKV.Ts < p.startTs {
+				if rawKV.StartTs < p.startTs {
 					continue
 				}
-				p.resolvedTs = rawKV.Ts
+				p.resolvedTs = rawKV.StartTs
 				if !util.KeyInSpans(rawKV.Key, p.spans, false) {
 					continue
 				}
@@ -297,18 +297,20 @@ func prewrite2RawKV(req *kvrpcpb.PrewriteRequest, commitTs uint64) []*model.RawK
 		switch mut.Op {
 		case kvrpcpb.Op_Put, kvrpcpb.Op_Insert:
 			rawKV := &model.RawKVEntry{
-				Ts:     commitTs,
-				Key:    mut.Key,
-				Value:  mut.Value,
-				OpType: model.OpTypePut,
+				StartTs: req.GetStartVersion(),
+				CRTs:    commitTs,
+				Key:     mut.Key,
+				Value:   mut.Value,
+				OpType:  model.OpTypePut,
 			}
 			putEntries = append(putEntries, rawKV)
 		case kvrpcpb.Op_Del:
 			rawKV := &model.RawKVEntry{
-				Ts:     commitTs,
-				Key:    mut.Key,
-				Value:  mut.Value,
-				OpType: model.OpTypeResolved,
+				StartTs: req.GetStartVersion(),
+				CRTs:    commitTs,
+				Key:     mut.Key,
+				Value:   mut.Value,
+				OpType:  model.OpTypeResolved,
 			}
 			deleteEntries = append(deleteEntries, rawKV)
 		default:
@@ -316,7 +318,7 @@ func prewrite2RawKV(req *kvrpcpb.PrewriteRequest, commitTs uint64) []*model.RawK
 		}
 	}
 	entries := append(deleteEntries, putEntries...)
-	return append(entries, &model.RawKVEntry{Ts: commitTs, OpType: model.OpTypeResolved})
+	return append(entries, &model.RawKVEntry{CRTs: commitTs, OpType: model.OpTypeResolved})
 }
 
 func anyError(errs []error) bool {

@@ -82,7 +82,7 @@ func (b *blackHoleSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.
 	var count uint64 = 0
 	for _, row := range rows {
 		if row.Resolved {
-			atomic.StoreUint64(&b.resolvedTs, row.Ts)
+			atomic.StoreUint64(&b.resolvedTs, row.CRTs)
 		} else {
 			count += 1
 		}

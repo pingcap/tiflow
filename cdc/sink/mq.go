@@ -65,14 +65,14 @@ func (k *mqSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
 func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		if row.Resolved {
-			err := k.mqProducer.SendMessage(ctx, model.NewResolvedMessage(row.Ts), nil, 0)
+			err := k.mqProducer.SendMessage(ctx, model.NewResolvedMessage(row.CRTs), nil, 0)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			continue
 		}
-		if k.filter.ShouldIgnoreEvent(row.Ts, row.Schema, row.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
+		if k.filter.ShouldIgnoreEvent(row.CRTs, row.Schema, row.Table) {
+			log.Info("Row changed event ignored", zap.Uint64("ts", row.CRTs))
 			continue
 		}
 		partition := k.dispatcher.Dispatch(row)

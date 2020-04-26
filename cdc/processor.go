@@ -345,7 +345,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 			continue
 		}
 		if ddlRawKV.OpType == model.OpTypeResolved {
-			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.Ts)
+			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
 		}
 		job, err := entry.UnmarshalDDL(ddlRawKV)
 		if err != nil {
@@ -690,7 +690,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 					continue
 				}
 				if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
-					table.storeResolvedTS(pEvent.Ts)
+					table.storeResolvedTS(pEvent.CRTs)
 					continue
 				}
 				select {

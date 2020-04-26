@@ -12,9 +12,13 @@ import (
 
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
-	Ts       uint64
-	RowID    int64
+	StartTs uint64
+
+	// Commit or resolved TS
+	CRTs     uint64
 	Resolved bool
+
+	RowID int64
 
 	Schema string
 	Table  string
@@ -31,7 +35,7 @@ type RowChangedEvent struct {
 // ToMqMessage transforms to message key and value
 func (e *RowChangedEvent) ToMqMessage() (*MqMessageKey, *MqMessageRow) {
 	key := &MqMessageKey{
-		Ts:     e.Ts,
+		Ts:     e.CRTs,
 		Schema: e.Schema,
 		Table:  e.Table,
 		Type:   MqMessageTypeRow,
@@ -47,7 +51,7 @@ func (e *RowChangedEvent) ToMqMessage() (*MqMessageKey, *MqMessageRow) {
 
 // FromMqMessage fills the values of RowChangedEvent from message key and value
 func (e *RowChangedEvent) FromMqMessage(key *MqMessageKey, value *MqMessageRow) {
-	e.Ts = key.Ts
+	e.CRTs = key.Ts
 	e.Resolved = false
 	e.Table = key.Table
 	e.Schema = key.Schema

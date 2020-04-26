@@ -366,7 +366,7 @@ ClaimMessages:
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
 			case model.MqMessageTypeResolved:
-				err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{Ts: key.Ts, Resolved: true})
+				err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{CRTs: key.Ts, Resolved: true})
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}

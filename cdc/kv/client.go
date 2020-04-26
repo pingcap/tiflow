@@ -1122,10 +1122,11 @@ func (s *eventFeedSession) singleEventFeed(
 
 					revent := &model.RegionFeedEvent{
 						Val: &model.RawKVEntry{
-							OpType: opType,
-							Key:    entry.Key,
-							Value:  entry.GetValue(),
-							Ts:     entry.CommitTs,
+							OpType:  opType,
+							Key:     entry.Key,
+							Value:   entry.GetValue(),
+							StartTs: entry.StartTs,
+							CRTs:    entry.CommitTs,
 						},
 					}
 					select {
@@ -1291,10 +1292,11 @@ func assembleCommitEvent(entry *cdcpb.Event_Row, value []byte) (*model.RegionFee
 
 	revent := &model.RegionFeedEvent{
 		Val: &model.RawKVEntry{
-			OpType: opType,
-			Key:    entry.Key,
-			Value:  value,
-			Ts:     entry.CommitTs,
+			OpType:  opType,
+			Key:     entry.Key,
+			Value:   value,
+			StartTs: entry.StartTs,
+			CRTs:    entry.CommitTs,
 		},
 	}
 	return revent, nil
