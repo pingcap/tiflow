@@ -305,6 +305,9 @@ func (o *Owner) balanceTables(ctx context.Context) error {
 }
 
 func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
+	if len(o.changeFeeds) == 0 {
+		return nil
+	}
 	snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
 	minCheckpointTs := uint64(math.MaxUint64)
 	for id, changefeed := range o.changeFeeds {
