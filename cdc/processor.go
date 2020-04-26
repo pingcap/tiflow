@@ -637,15 +637,24 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
 	span := util.GetTableSpan(tableID, true)
-	sorter := puller.NewEntrySorter()
-	puller := puller.NewPuller(p.pdCli, p.kvStorage, startTs, []util.Span{span}, true, p.limitter)
-
+	plr := puller.NewPuller(p.pdCli, p.kvStorage, startTs, []util.Span{span}, true, p.limitter)
 	go func() {
-		err := puller.Run(ctx)
+		err := plr.Run(ctx)
 		if errors.Cause(err) != context.Canceled {
 			p.errCh <- err
 		}
 	}()
+
+	var sorter puller.EventSorter
+	switch p.changefeed.Engine {
+	case model.SortInMemory:
+		sorter = puller.NewEntrySorter()
+	case model.SortInFile:
+		sorter = puller.NewFileSorter(p.changefeed.SortDir)
+	default:
+		p.errCh <- errors.Errorf("unknown sort engine %s", p.changefeed.Engine)
+		return
+	}
 
 	go func() {
 		err := sorter.Run(ctx)
@@ -662,12 +671,12 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 					p.errCh <- ctx.Err()
 				}
 				return
-			case rawKV := <-puller.Output():
+			case rawKV := <-plr.Output():
 				if rawKV == nil {
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
-				sorter.AddEntry(pEvent)
+				sorter.AddEntry(ctx, pEvent)
 				select {
 				case <-ctx.Done():
 					if errors.Cause(ctx.Err()) != context.Canceled {
@@ -680,7 +689,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 				if pEvent == nil {
 					continue
 				}
-				if pEvent.RawKV.OpType == model.OpTypeResolved {
+				if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
 					table.storeResolvedTS(pEvent.Ts)
 					continue
 				}

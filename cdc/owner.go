@@ -97,10 +97,12 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 	for _, feed := range o.changeFeeds {
 		task, ok := feed.taskStatus[info.ID]
 		if !ok {
+			log.Warn("task status not found", zap.String("capture", info.ID))
 			continue
 		}
 		pos, ok := feed.taskPositions[info.ID]
 		if !ok {
+			log.Warn("task position not found", zap.String("capture", info.ID))
 			continue
 		}
 
@@ -282,14 +284,16 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 		o.changeFeeds[changeFeedID] = newCf
 	}
+	return nil
+}
 
+func (o *Owner) balanceTables(ctx context.Context) error {
 	for _, changefeed := range o.changeFeeds {
 		err := changefeed.tryBalance(ctx, o.captures)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
-
 	return nil
 }
 
@@ -511,6 +515,11 @@ func (o *Owner) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	err = o.balanceTables(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	err = o.calcResolvedTs(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -601,6 +610,16 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 
 func (o *Owner) watchCapture(ctx context.Context) error {
 	ctx = clientv3.WithRequireLeader(ctx)
+
+	// When an owner just starts, changefeed information is not updated at once.
+	// Supposing a crased capture should be removed now, the owner will miss deleting
+	// task status and task position if changefeed information is not loaded.
+	o.l.Lock()
+	if err := o.loadChangeFeeds(ctx); err != nil {
+		o.l.Unlock()
+		return errors.Trace(err)
+	}
+	o.l.Unlock()
 
 	rev, captures, err := o.etcdClient.GetCaptures(ctx)
 	if err != nil {

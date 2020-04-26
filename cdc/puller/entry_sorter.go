@@ -150,7 +150,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 }
 
 // AddEntry adds an RawKVEntry to the EntryGroup
-func (es *EntrySorter) AddEntry(entry *model.PolymorphicEvent) {
+func (es *EntrySorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 	if atomic.LoadInt32(&es.closed) != 0 {
 		return
 	}
@@ -198,7 +198,7 @@ func SortOutput(ctx context.Context, input <-chan *model.RawKVEntry) <-chan *mod
 				if rawKV == nil {
 					continue
 				}
-				sorter.AddEntry(model.NewPolymorphicEvent(rawKV))
+				sorter.AddEntry(ctx, model.NewPolymorphicEvent(rawKV))
 			case sorted := <-sorter.Output():
 				if sorted != nil {
 					output(sorted.RawKV)
