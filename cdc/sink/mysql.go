@@ -262,11 +262,13 @@ var defaultParams = params{
 
 func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
 	dsnCfg.Loc = tz
-	dsnCfg.Params = nil
+	if dsnCfg.Params == nil {
+		dsnCfg.Params = make(map[string]string, 1)
+	}
 	dsnCfg.DBName = ""
 	dsnCfg.InterpolateParams = true
 	dsnCfg.MultiStatements = true
-	dsnCfg.ParseTime = true
+	dsnCfg.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
 	return dsnCfg.FormatDSN(), nil
 }
 
