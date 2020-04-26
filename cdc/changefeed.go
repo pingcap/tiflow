@@ -135,7 +135,7 @@ func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 	// If cyclic replication is turned on, we neeed to create a mark table to
 	// the downstream cluster.
 	// Do not create mark table if itself is the mark table.
-	if c.cyclic != nil && c.cyclic.IsMarkTable(table.Schema, table.Table) {
+	if c.cyclic != nil && cyclic.IsMarkTable(table.Schema, table.Table) {
 		// For simplicty, we awlays create cyclic mark table.
 		// DDL filter should always filter these DDL from upstream.
 		ddls := model.CyclicCreateMarkTable(tid)
@@ -300,7 +300,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[strin
 		var orphanMarkTable *model.ProcessTableInfo
 		if c.cyclic != nil {
 			tableName, found := schemaSnapshot.GetTableNameByID(int64(tableID))
-			if found && c.cyclic.IsMarkTable(tableName.Schema, tableName.Table) {
+			if found && cyclic.IsMarkTable(tableName.Schema, tableName.Table) {
 				// Skip, mark tables should not be balanced alone.
 				continue
 			}

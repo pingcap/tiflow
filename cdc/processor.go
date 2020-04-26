@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -386,7 +387,10 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		}
 		return errors.Trace(model.ErrAdminStopProcessor)
 	}
-	p.handleTables(ctx, oldStatus, p.status, p.position.CheckPointTs)
+	err = p.handleTables(ctx, oldStatus, p.status, p.position.CheckPointTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
 	err = updatePosition()
 	if err != nil {
@@ -472,8 +476,31 @@ func (p *processor) removeTable(tableID int64) {
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
-func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.TaskStatus, checkpointTs uint64) {
+func (p *processor) handleTables(
+	ctx context.Context, oldInfo, newInfo *model.TaskStatus, checkpointTs uint64,
+) error {
 	removedTables, addedTables := diffProcessTableInfos(oldInfo.TableInfos, newInfo.TableInfos)
+	if p.changefeed.Config != nil && p.changefeed.Config.Cyclic.IsEnabled() {
+		// Make sure all normal tables and mark tables are paired.
+		schemaSnapshot := p.schemaStorage.GetLastSnapshot()
+		for _, tables := range [][]*model.ProcessTableInfo{addedTables, removedTables} {
+			tableNames := make([]cyclic.TableName, 0, len(tables))
+			for _, table := range tables {
+				name, ok := schemaSnapshot.GetTableNameByID(int64(table.ID))
+				if !ok {
+					return errors.NotFoundf("table(%d)", table.ID)
+				}
+				tableNames = append(tableNames, cyclic.TableName{
+					Schema: name.Schema,
+					Table:  name.Table,
+				})
+			}
+			if !cyclic.IsTablesPaired(tableNames) {
+				return errors.NotValidf(
+					"normal table and mark table not match %v", tableNames)
+			}
+		}
+	}
 
 	// remove tables
 	for _, pinfo := range removedTables {
@@ -492,6 +519,7 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 			CheckpointTs: checkpointTs,
 		}
 	}
+	return nil
 }
 
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.

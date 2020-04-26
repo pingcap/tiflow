@@ -23,7 +23,7 @@ import (
 // Some cyclic replication implemention are here, this is required to break
 // cyclic imports.
 //
-// TODO(neil) move it package cyclic
+// TODO(neil) move it package cyclic and let util depends on model.
 //
 // package model imports util
 //         util imports cyclic

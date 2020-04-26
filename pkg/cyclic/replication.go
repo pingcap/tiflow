@@ -130,6 +130,36 @@ func MarkTableName(tableID uint64) (schema, table string) {
 	return
 }
 
+// TableName represents name of a table, includes table name and schema name.
+// TODO(neil) it's better in package model.
+type TableName struct {
+	Schema, Table string
+	// Table ID
+	ID uint64
+}
+
+// IsTablesPaired checks if normal tables are paired with mark tables.
+func IsTablesPaired(tables []TableName) bool {
+	normalTables := make([]TableName, 0, len(tables)/2)
+	markMap := make(map[TableName]struct{}, len(tables)/2)
+	for _, table := range tables {
+		if IsMarkTable(table.Schema, table.Table) {
+			markMap[table] = struct{}{}
+		} else {
+			normalTables = append(normalTables, table)
+		}
+	}
+	for _, table := range normalTables {
+		markTable := TableName{}
+		markTable.Schema, markTable.Table = MarkTableName(table.ID)
+		_, ok := markMap[markTable]
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // UdpateTableCyclicMark return a DML to update mark table regrad to the tableID
 // bucket and clusterID.
 func (*Cyclic) UdpateTableCyclicMark(tableID, bucket, clusterID uint64) string {
@@ -139,7 +169,7 @@ func (*Cyclic) UdpateTableCyclicMark(tableID, bucket, clusterID uint64) string {
 }
 
 // IsMarkTable tells whether the table is a mark table or not.
-func (c *Cyclic) IsMarkTable(schema, table string) bool {
+func IsMarkTable(schema, table string) bool {
 	if schema == SchemaName {
 		return true
 	}
