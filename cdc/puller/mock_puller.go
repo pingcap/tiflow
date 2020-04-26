@@ -3,11 +3,10 @@ package puller
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/ticdc/cdc/kv"
-
-	"github.com/pingcap/ticdc/cdc/entry"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
@@ -121,55 +120,48 @@ type mockPuller struct {
 	resolvedTs  uint64
 	startTs     uint64
 	rawKVOffset int
+	outputCh    chan *model.RawKVEntry
 }
 
 func (p *mockPuller) Output() <-chan *model.RawKVEntry {
-	panic("implement me")
-}
-
-func (p *mockPuller) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry {
-	output := make(chan *model.RawKVEntry, 16)
-	go func() {
-		for {
-			p.pm.rawKVEntriesMu.RLock()
-			for ; p.rawKVOffset < len(p.pm.rawKVEntries); p.rawKVOffset++ {
-				rawKV := p.pm.rawKVEntries[p.rawKVOffset]
-				if rawKV.Ts < p.startTs {
-					continue
-				}
-				p.resolvedTs = rawKV.Ts
-				if !util.KeyInSpans(rawKV.Key, p.spans, false) {
-					continue
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case output <- rawKV:
-				}
-			}
-			p.pm.rawKVEntriesMu.RUnlock()
-			time.Sleep(time.Millisecond * 100)
-		}
-	}()
-	return output
+	return p.outputCh
 }
 
 func (p *mockPuller) Run(ctx context.Context) error {
-	// Do nothing
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-p.pm.closeCh:
-		return nil
+	defer close(p.outputCh)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-p.pm.closeCh:
+			return nil
+		default:
+		}
+		p.pm.rawKVEntriesMu.RLock()
+		for ; p.rawKVOffset < len(p.pm.rawKVEntries); p.rawKVOffset++ {
+			rawKV := p.pm.rawKVEntries[p.rawKVOffset]
+			if rawKV.Ts < p.startTs {
+				continue
+			}
+			atomic.StoreUint64(&p.resolvedTs, rawKV.Ts)
+			if !util.KeyInSpans(rawKV.Key, p.spans, false) {
+				continue
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-p.pm.closeCh:
+				return nil
+			case p.outputCh <- rawKV:
+			}
+		}
+		p.pm.rawKVEntriesMu.RUnlock()
+		time.Sleep(time.Millisecond * 100)
 	}
 }
 
 func (p *mockPuller) GetResolvedTs() uint64 {
-	return p.resolvedTs
-}
-
-func (p *mockPuller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
-	panic("unreachable")
+	return atomic.LoadUint64(&p.resolvedTs)
 }
 
 // NewMockPullerManager creates and sets up a mock puller manager
@@ -224,12 +216,12 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 
 // CreatePuller returns a mock puller with the specified start ts and spans
 func (m *MockPullerManager) CreatePuller(startTs uint64, spans []util.Span) Puller {
-	//return &mockPuller{
-	//	spans:   spans,
-	//	pm:      m,
-	//	startTs: startTs,
-	//}
-	return nil
+	return &mockPuller{
+		spans:    spans,
+		pm:       m,
+		startTs:  startTs,
+		outputCh: make(chan *model.RawKVEntry, 128),
+	}
 }
 
 // MustExec delegates to TestKit.MustExec
@@ -238,18 +230,18 @@ func (m *MockPullerManager) MustExec(sql string, args ...interface{}) {
 }
 
 // GetTableInfo queries the info schema with the table name and returns the TableInfo
-func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *entry.TableInfo {
+func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) (*timodel.DBInfo, *timodel.TableInfo) {
 	is := m.domain.InfoSchema()
 	tbl, err := is.TableByName(timodel.NewCIStr(schemaName), timodel.NewCIStr(tableName))
 	m.c.Assert(err, check.IsNil)
 	dbInfo, exist := is.SchemaByTable(tbl.Meta())
 	m.c.Assert(exist, check.IsTrue)
-	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, tbl.Meta())
+	return dbInfo, tbl.Meta()
 }
 
 // GetDDLJobs returns the ddl jobs
 func (m *MockPullerManager) GetDDLJobs() []*timodel.Job {
-	jobs, err := kv.LoadHistoryDDLJobs(m.store)
+	jobs, err := kv.LoadHistoryDDLJobs(m.store, false)
 	m.c.Assert(err, check.IsNil)
 	return jobs
 }
@@ -308,7 +300,7 @@ func prewrite2RawKV(req *kvrpcpb.PrewriteRequest, commitTs uint64) []*model.RawK
 				Ts:     commitTs,
 				Key:    mut.Key,
 				Value:  mut.Value,
-				OpType: model.OpTypeResolved,
+				OpType: model.OpTypeDelete,
 			}
 			deleteEntries = append(deleteEntries, rawKV)
 		default:

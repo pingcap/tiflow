@@ -26,6 +26,14 @@ type RowChangedEvent struct {
 	Columns      map[string]*Column
 }
 
+func (e *RowChangedEvent) String() string {
+	b, err := json.Marshal(e)
+	if err != nil {
+		log.Error("failed to transforms row changed event to string", zap.Error(err))
+	}
+	return string(b)
+}
+
 // ToMqMessage transforms to message key and value
 func (e *RowChangedEvent) ToMqMessage() (*MqMessageKey, *MqMessageRow) {
 	key := &MqMessageKey{

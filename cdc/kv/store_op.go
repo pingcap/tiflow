@@ -60,18 +60,18 @@ func getSnapshotMeta(tiStore tidbkv.Storage) (*meta.Meta, error) {
 }
 
 // LoadHistoryDDLJobs loads all history DDL jobs from TiDB.
-func LoadHistoryDDLJobs(kvStore tidbkv.Storage) ([]*model.Job, error) {
+func LoadHistoryDDLJobs(kvStore tidbkv.Storage, needResetTs bool) ([]*model.Job, error) {
 	originalJobs, err := loadHistoryDDLJobs(kvStore)
-	jobs := make([]*model.Job, 0, len(originalJobs))
 	if err != nil {
 		return nil, err
 	}
+	jobs := make([]*model.Job, 0, len(originalJobs))
 	tikvStorage, ok := kvStore.(tikv.Storage)
 	for _, job := range originalJobs {
 		if job.State != model.JobStateSynced && job.State != model.JobStateDone {
 			continue
 		}
-		if ok {
+		if ok && needResetTs {
 			err := resetFinishedTs(tikvStorage, job)
 			if err != nil {
 				return nil, errors.Trace(err)

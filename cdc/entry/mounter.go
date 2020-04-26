@@ -16,7 +16,6 @@ package entry
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -181,6 +180,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		case bytes.HasPrefix(key, indexPrefix):
 			indexKV, err := m.unmarshalIndexKVEntry(tableInfo, raw.Key, raw.Value, baseInfo)
 			if err != nil {
+				panic(err)
 				return nil, errors.Trace(err)
 			}
 			if indexKV == nil {
@@ -219,6 +219,7 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, 
 func (m *mounterImpl) unmarshalIndexKVEntry(tableInfo *TableInfo, rawKey []byte, rawValue []byte, base baseKVEntry) (*indexKVEntry, error) {
 	indexID, err := decodeIndexID(rawKey)
 	if err != nil {
+		panic(err)
 		return nil, errors.Trace(err)
 	}
 	idxInfo, exist := tableInfo.GetIndexInfo(indexID)
@@ -236,9 +237,10 @@ func (m *mounterImpl) unmarshalIndexKVEntry(tableInfo *TableInfo, rawKey []byte,
 			IsPKHandle: tableInfo.PKIsHandle && mysql.HasPriKeyFlag(col.Flag),
 		})
 	}
-
+	log.Info("DecodeIndexKV", zap.ByteString("key", rawKey), zap.ByteString("rawValue", rawValue), zap.Int("len", len(idxInfo.Columns)), zap.Reflect("colinfo", colInfos))
 	values, err := tablecodec.DecodeIndexKV(rawKey, rawValue, len(idxInfo.Columns), tablecodec.HandleIsSigned, colInfos)
 	if err != nil {
+		panic(err)
 		return nil, errors.Trace(err)
 	}
 
@@ -247,21 +249,23 @@ func (m *mounterImpl) unmarshalIndexKVEntry(tableInfo *TableInfo, rawKey []byte,
 		col := tableInfo.Columns[idxCol.Offset]
 		d, err := tablecodec.DecodeColumnValue(values[i], &col.FieldType, time.UTC)
 		if err != nil {
+			panic(err)
 			return nil, err
 		}
 		ds = append(ds, d)
 	}
 
-	var recordID int64
+	log.Info("values", zap.ByteStrings("values", values), zap.Reflect("ds", ds[0].GetValue()))
 
-	// primary key or unique index
-	buf := bytes.NewBuffer(values[len(values)-1])
-	err = binary.Read(buf, binary.BigEndian, &recordID)
+	// decode row id
+	rowIDType := types.NewFieldType(mysql.TypeLong)
+	d, err := tablecodec.DecodeColumnValue(values[len(values)-1], rowIDType, time.UTC)
 	if err != nil {
-		return nil, errors.Trace(err)
+		panic(err)
+		return nil, err
 	}
 
-	base.RecordID = recordID
+	base.RecordID = d.GetInt64()
 	return &indexKVEntry{
 		baseKVEntry: base,
 		IndexID:     indexID,

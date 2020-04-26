@@ -1,140 +1,161 @@
 package entry
 
-/*
 import (
 	"context"
 	"math"
 	"reflect"
-	"sync"
+
+	"github.com/pingcap/parser/mysql"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/types"
 )
 
 type mountTxnsSuite struct{}
 
 var _ = check.Suite(&mountTxnsSuite{})
 
-func setUpPullerAndSchema(ctx context.Context, c *check.C, newRowFormat bool, sqls ...string) (*puller.MockPullerManager, *Storage) {
+func setUpPullerAndSchema(c *check.C, newRowFormat bool, sqls ...string) (*puller.MockPullerManager, *mounterImpl) {
 	pm := puller.NewMockPullerManager(c, newRowFormat)
 	for _, sql := range sqls {
 		pm.MustExec(sql)
 	}
-	ddlPlr := pm.CreatePuller(0, []util.Span{util.GetDDLSpan()})
-	go func() {
-		err := ddlPlr.Run(ctx)
-		if err != nil && errors.Cause(err) != context.Canceled {
-			c.Fail()
-		}
-	}()
-
 	jobs := pm.GetDDLJobs()
-	schemaBuilder,err := NewStorageBuilder(jobs, ddlPlr.SortedOutput(ctx))
+	schemaStorage, err := NewSchemaStorage(jobs, nil)
 	c.Assert(err, check.IsNil)
-	schemaStorage := schemaBuilder.Build(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
-	err = schemaStorage.HandlePreviousDDLJobIfNeed(jobs[len(jobs)-1].BinlogInfo.FinishedTS)
-	c.Assert(err, check.IsNil)
-	return pm, schemaStorage
+	schemaStorage.AdvanceResolvedTs(math.MaxUint64)
+	return pm, NewMounter(schemaStorage).(*mounterImpl)
 }
 
-func getFirstRealTxn(ctx context.Context, c *check.C, plr puller.Puller) (result model.RawTxn) {
-	ctx, cancel := context.WithCancel(ctx)
-	var once sync.Once
-	err := plr.CollectRawTxns(ctx, func(ctx context.Context, rawTxn model.RawTxn) error {
-		if rawTxn.IsFake() {
-			return nil
+func nextRawKVEntry(input <-chan *model.RawKVEntry) *model.RawKVEntry {
+	for raw := range input {
+		if raw.OpType == model.OpTypeDelete || raw.OpType == model.OpTypePut {
+			return raw
 		}
-		once.Do(func() {
-			result = rawTxn
-		})
-		cancel()
-		return nil
-	})
-	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
-	return
+	}
+	return nil
 }
 
 func (cs *mountTxnsSuite) testInsertPkNotHandle(c *check.C, newRowFormat bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	pm, schema := setUpPullerAndSchema(ctx, c, newRowFormat,
+	pm, mounter := setUpPullerAndSchema(c, newRowFormat,
 		"create database testDB",
 		"create table testDB.test1(id varchar(255) primary key, a int, index ci (a))",
 	)
-	tableInfo := pm.GetTableInfo("testDB", "test1")
+	_, tableInfo := pm.GetTableInfo("testDB", "test1")
 	tableID := tableInfo.ID
-	mounter := NewTxnMounter(schema)
 	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+	go func() {
+		err := plr.Run(ctx)
+		if err != nil {
+			c.Fatal(err)
+		}
+	}()
 
+	trueBool := true
 	pm.MustExec("insert into testDB.test1 values('ttt',6)")
-	rawTxn := getFirstRealTxn(ctx, c, plr)
-	t, err := mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("ttt")),
-					"a":  types.NewIntDatum(6),
+
+	expecteds := []*model.RowChangedEvent{
+		{
+			Schema:       "testDB",
+			Table:        "test1",
+			IndieMarkCol: "id",
+			Columns: map[string]*model.Column{
+				"id": {
+					Type:        mysql.TypeVarchar,
+					WhereHandle: &trueBool,
+					Value:       "ttt",
+				},
+				"a": {
+					Type:  mysql.TypeLong,
+					Value: int64(6),
 				},
 			},
-		},
-	})
+		}, nil, nil,
+	}
+	cs.assertRowEquals(c, func() *model.RowChangedEvent {
+		rawRow := nextRawKVEntry(plr.Output())
+		row, err := mounter.unmarshalAndMountRowChanged(ctx, rawRow)
+		c.Assert(err, check.IsNil)
+		return row
+	}, expecteds)
 
 	pm.MustExec("update testDB.test1 set id = 'vvv' where a = 6")
-	rawTxn = getFirstRealTxn(ctx, c, plr)
-	t, err = mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("ttt")),
-				},
-			},
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.InsertDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("vvv")),
-					"a":  types.NewIntDatum(6),
-				},
-			},
-		},
-	})
 
-	pm.MustExec("delete from testDB.test1 where a = 6")
-	rawTxn = getFirstRealTxn(ctx, c, plr)
-	t, err = mounter.Mount(rawTxn)
-	c.Assert(err, check.IsNil)
-	cs.assertTableTxnEquals(c, t, model.Txn{
-		Ts: rawTxn.Entries[0].Ts,
-		DMLs: []*model.DML{
-			{
-				Database: "testDB",
-				Table:    "test1",
-				Tp:       model.DeleteDMLType,
-				Values: map[string]types.Datum{
-					"id": types.NewBytesDatum([]byte("vvv")),
+	expecteds = []*model.RowChangedEvent{
+		{
+			Schema:       "testDB",
+			Table:        "test1",
+			IndieMarkCol: "id",
+			Columns: map[string]*model.Column{
+				"id": {
+					Type:        mysql.TypeVarchar,
+					WhereHandle: &trueBool,
+					Value:       "vvv",
+				},
+				"a": {
+					Type:  mysql.TypeLong,
+					Value: int64(6),
 				},
 			},
-		},
-	})
+		}, nil, nil, nil, nil, nil,
+	}
+	cs.assertRowEquals(c, func() *model.RowChangedEvent {
+		rawRow := nextRawKVEntry(plr.Output())
+		row, err := mounter.unmarshalAndMountRowChanged(ctx, rawRow)
+		c.Assert(err, check.IsNil)
+		return row
+	}, expecteds)
+
+	//rawTxn = getFirstRealTxn(ctx, c, plr)
+	//t, err = mounter.Mount(rawTxn)
+	//c.Assert(err, check.IsNil)
+	//cs.assertTableTxnEquals(c, t, model.Txn{
+	//	Ts: rawTxn.Entries[0].Ts,
+	//	DMLs: []*model.DML{
+	//		{
+	//			Database: "testDB",
+	//			Table:    "test1",
+	//			Tp:       model.DeleteDMLType,
+	//			Values: map[string]types.Datum{
+	//				"id": types.NewBytesDatum([]byte("ttt")),
+	//			},
+	//		},
+	//		{
+	//			Database: "testDB",
+	//			Table:    "test1",
+	//			Tp:       model.InsertDMLType,
+	//			Values: map[string]types.Datum{
+	//				"id": types.NewBytesDatum([]byte("vvv")),
+	//				"a":  types.NewIntDatum(6),
+	//			},
+	//		},
+	//	},
+	//})
+	//
+	//pm.MustExec("delete from testDB.test1 where a = 6")
+	//rawTxn = getFirstRealTxn(ctx, c, plr)
+	//t, err = mounter.Mount(rawTxn)
+	//c.Assert(err, check.IsNil)
+	//cs.assertTableTxnEquals(c, t, model.Txn{
+	//	Ts: rawTxn.Entries[0].Ts,
+	//	DMLs: []*model.DML{
+	//		{
+	//			Database: "testDB",
+	//			Table:    "test1",
+	//			Tp:       model.DeleteDMLType,
+	//			Values: map[string]types.Datum{
+	//				"id": types.NewBytesDatum([]byte("vvv")),
+	//			},
+	//		},
+	//	},
+	//})
 }
 
+/*
 func (cs *mountTxnsSuite) testIncompleteRow(c *check.C, newRowFormat bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -455,10 +476,6 @@ func (cs *mountTxnsSuite) testLargeInteger(c *check.C, newRowFormat bool) {
 
 }
 
-func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
-	cs.testInsertPkNotHandle(c, true)
-	cs.testInsertPkNotHandle(c, false)
-}
 func (cs *mountTxnsSuite) TestIncompleteRow(c *check.C) {
 	cs.testIncompleteRow(c, true)
 	cs.testIncompleteRow(c, false)
@@ -476,28 +493,29 @@ func (cs *mountTxnsSuite) TestLargeInteger(c *check.C) {
 	cs.testLargeInteger(c, false)
 }
 
-func (cs *mountTxnsSuite) assertTableTxnEquals(c *check.C,
-	obtained, expected model.Txn) {
-	obtainedDMLs := obtained.DMLs
-	expectedDMLs := expected.DMLs
-	obtained.DMLs = nil
-	expected.DMLs = nil
-	c.Assert(obtained, check.DeepEquals, expected)
-	assertContain := func(obtained []*model.DML, expected []*model.DML) {
-		c.Assert(len(obtained), check.Equals, len(expected))
-		for _, oDML := range obtained {
-			match := false
-			for _, eDML := range expected {
-				if reflect.DeepEqual(oDML, eDML) {
-					match = true
-					break
-				}
-			}
-			if !match {
-				c.Errorf("obtained DML %#v isn't contained by expected DML", oDML)
+
+*/
+
+func (cs *mountTxnsSuite) TestInsertPkNotHandle(c *check.C) {
+	//cs.testInsertPkNotHandle(c, true)
+	cs.testInsertPkNotHandle(c, false)
+}
+
+func (cs *mountTxnsSuite) assertRowEquals(c *check.C, obtainedFunc func() *model.RowChangedEvent, expectedRows []*model.RowChangedEvent) {
+	for range expectedRows {
+		obtained := obtainedFunc()
+		if obtained != nil {
+			obtained.Ts = 0
+		}
+		match := false
+		for _, row := range expectedRows {
+			if reflect.DeepEqual(obtained, row) {
+				match = true
+				break
 			}
 		}
+		if !match {
+			c.Fatalf("obtained Row %s isn't contained by expected Row", obtained)
+		}
 	}
-	assertContain(obtainedDMLs, expectedDMLs)
 }
-*/
