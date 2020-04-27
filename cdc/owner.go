@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -57,10 +58,15 @@ type Owner struct {
 	adminJobsLock sync.Mutex
 
 	stepDown func(ctx context.Context) error
+
+	// gcTTL is the ttl of cdc gc safepoint ttl.
+	gcTTL int64
 }
 
+const cdcServiceSafePointID = "ticdc"
+
 // NewOwner creates a new Owner instance
-func NewOwner(sess *concurrency.Session) (*Owner, error) {
+func NewOwner(sess *concurrency.Session, gcTTL int64) (*Owner, error) {
 	cli := kv.NewCDCEtcdClient(sess.Client())
 	endpoints := sess.Client().Endpoints()
 	pdClient, err := pd.NewClient(endpoints, pd.SecurityOption{})
@@ -77,6 +83,7 @@ func NewOwner(sess *concurrency.Session) (*Owner, error) {
 		pdEndpoints: endpoints,
 		cfRWriter:   cli,
 		etcdClient:  cli,
+		gcTTL:       gcTTL,
 	}
 
 	return owner, nil
@@ -298,11 +305,27 @@ func (o *Owner) balanceTables(ctx context.Context) error {
 }
 
 func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
+	if len(o.changeFeeds) == 0 {
+		return nil
+	}
 	snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
+	minCheckpointTs := uint64(math.MaxUint64)
 	for id, changefeed := range o.changeFeeds {
 		snapshot[id] = changefeed.status
+		if changefeed.status.CheckpointTs < minCheckpointTs {
+			minCheckpointTs = changefeed.status.CheckpointTs
+		}
 	}
-	return errors.Trace(o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot))
+	err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, o.gcTTL, minCheckpointTs)
+	if err != nil {
+		log.Info("failed to update service safe point", zap.Error(err))
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 // calcResolvedTs call calcResolvedTs of every changefeeds
