@@ -133,7 +133,9 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 			if errors.Cause(err) == context.Canceled {
 				return backoff.Permanent(err)
 			}
-			log.Warn("execute DDL with error, retry later", zap.String("query", ddl.Query), zap.Error(err))
+			if err != nil {
+				log.Warn("execute DDL with error, retry later", zap.String("query", ddl.Query), zap.Error(err))
+			}
 			return err
 		})
 }
