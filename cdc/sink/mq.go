@@ -55,7 +55,6 @@ func (k *mqSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
 }
 
 func (k *mqSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
-	log.Info("emit checkpoint event", zap.Uint64("ts", ts))
 	err := k.mqProducer.SyncBroadcastMessage(ctx, model.NewResolvedMessage(ts), nil)
 	if err != nil {
 		return errors.Trace(err)
