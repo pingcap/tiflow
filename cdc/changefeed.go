@@ -276,41 +276,49 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 		}
 	}
 
+	appendTableInfos := make(map[string][]*model.ProcessTableInfo, len(captures))
+
 	for tableID, orphan := range c.orphanTables {
 		captureID := c.selectCapture(captures)
 		if len(captureID) == 0 {
 			return nil
 		}
-
-		info := c.taskStatus[captureID]
-		if info == nil {
-			info = new(model.TaskStatus)
-		}
-		infoClone := info.Clone()
-		info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{
+		info := appendTableInfos[captureID]
+		info = append(info, &model.ProcessTableInfo{
 			ID:      tableID,
 			StartTs: orphan.StartTs,
 		})
+		appendTableInfos[captureID] = info
+	}
 
-		newInfo, err := c.infoWriter.Write(ctx, c.id, captureID, info, true)
+	for captureID, tableInfos := range appendTableInfos {
+		status := c.taskStatus[captureID]
+		if status == nil {
+			status = new(model.TaskStatus)
+		}
+		statusClone := status.Clone()
+		status.TableInfos = append(status.TableInfos, tableInfos...)
+
+		newInfo, err := c.infoWriter.Write(ctx, c.id, captureID, status, true)
 		if err == nil {
 			c.taskStatus[captureID] = newInfo
 		}
 		switch errors.Cause(err) {
 		case model.ErrFindPLockNotCommit:
-			c.restoreTableInfos(infoClone, captureID)
+			c.restoreTableInfos(statusClone, captureID)
 			log.Info("write table info delay, wait plock resolve",
 				zap.String("changefeed", c.id),
 				zap.String("capture", captureID))
 		case nil:
 			log.Info("dispatch table success",
-				zap.Uint64("table id", tableID),
-				zap.Uint64("start ts", orphan.StartTs),
+				zap.Reflect("tableInfos", tableInfos),
 				zap.String("capture", captureID))
-			delete(c.orphanTables, tableID)
-			c.waitingConfirmTables[tableID] = captureID
+			for _, tableInfo := range tableInfos {
+				delete(c.orphanTables, tableInfo.ID)
+				c.waitingConfirmTables[tableInfo.ID] = captureID
+			}
 		default:
-			c.restoreTableInfos(infoClone, captureID)
+			c.restoreTableInfos(statusClone, captureID)
 			log.Error("fail to put sub changefeed info", zap.Error(err))
 			return errors.Trace(err)
 		}
