@@ -437,9 +437,10 @@ func (w *mysqlSinkWorker) run(ctx context.Context) {
 	for row := range w.rowCh {
 		rows = append(rows, row)
 		rows = w.fetchAllPendingEvent(rows)
-		// TODO: Add retry
 		err := w.execDMLs(ctx, rows)
-		w.trySendErr(err)
+		if err != nil {
+			w.trySendErr(err)
+		}
 
 		// clean cache to avoid memory leak.
 		for i := range rows {
