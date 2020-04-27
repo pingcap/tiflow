@@ -1,45 +1,9 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_TEST-CLUSTER",
-      "label": "test-cluster",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
-  "__requires": [
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "6.1.6"
-    },
-    {
-      "type": "panel",
-      "id": "graph",
-      "name": "Graph",
-      "version": ""
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "1.0.0"
-    },
-    {
-      "type": "panel",
-      "id": "singlestat",
-      "name": "Singlestat",
-      "version": ""
-    }
-  ],
   "annotations": {
     "list": [
       {
         "builtIn": 1,
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "test-cluster",
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -53,8 +17,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 18,
-  "iteration": 1586758044341,
+  "id": 19,
+  "iteration": 1587962619871,
   "links": [],
   "panels": [
     {
@@ -75,7 +39,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -166,7 +130,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -265,7 +229,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -354,7 +318,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -443,7 +407,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -548,7 +512,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -640,7 +604,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -733,7 +697,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "decimals": null,
       "fill": 1,
       "fillGradient": 0,
@@ -825,7 +789,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -919,7 +883,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1013,7 +977,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "Puller event channel size",
       "fill": 1,
       "fillGradient": 0,
@@ -1107,7 +1071,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "Puller entry channel buffer size",
       "fill": 1,
       "fillGradient": 0,
@@ -1201,7 +1165,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "Puller in memory buffer size",
       "fill": 1,
       "fillGradient": 0,
@@ -1295,7 +1259,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "forwarded resolved ts in a single puller",
       "fill": 1,
       "fillGradient": 0,
@@ -1389,7 +1353,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "Puller entry sorter unsoreted items size",
       "fill": 1,
       "fillGradient": 0,
@@ -1483,7 +1447,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "Puller entry sorter resolved channel size",
       "fill": 1,
       "fillGradient": 0,
@@ -1577,7 +1541,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "Puller entry sorter output channel size",
       "fill": 1,
       "fillGradient": 0,
@@ -1671,7 +1635,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "Bucketed histogram of processing time (s) of merge in entry sorter",
       "fill": 1,
       "fillGradient": 0,
@@ -1773,7 +1737,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "Bucketed histogram of processing time (s) of merge in entry sorter.",
       "fill": 1,
       "fillGradient": 0,
@@ -1889,7 +1853,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -1982,7 +1946,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -2022,7 +1986,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (ticdc_processor_table_resolved_ts{changefeed = \"$changefeed\"}) by (table)",
+          "expr": "sum (ticdc_processor_table_resolved_ts{changefeed = \"$changefeed\",capture=\"$capture\"}) by (table)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{table}}",
@@ -2075,7 +2039,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -2113,7 +2077,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_processor_num_of_tables{changefeed = \"$changefeed\",capture=\"$capture\"}) by (instance)",
+          "expr": "sum(ticdc_processor_num_of_tables{changefeed = \"$changefeed\", capture=\"$capture\"}) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -2166,7 +2130,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "fill": 1,
       "fillGradient": 0,
       "gridPos": {
@@ -2264,7 +2228,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "The number of events received from kv client event channel",
       "fill": 1,
       "fillGradient": 0,
@@ -2357,7 +2321,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "The number of events received from txn collector",
       "fill": 1,
       "fillGradient": 0,
@@ -2450,7 +2414,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "local resolved ts of processor",
       "fill": 1,
       "fillGradient": 0,
@@ -2543,7 +2507,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "The number of events received from kv client event channel",
       "fill": 1,
       "fillGradient": 0,
@@ -2636,7 +2600,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "The number of events received from kv client event channel",
       "fill": 1,
       "fillGradient": 0,
@@ -2743,7 +2707,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "The number of events received from kv client event channel",
       "fill": 1,
       "fillGradient": 0,
@@ -2851,7 +2815,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "input chan size of table mounter",
       "fill": 0,
       "fillGradient": 0,
@@ -2946,7 +2910,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "txn output channel size for a table in processor",
       "fill": 0,
       "fillGradient": 0,
@@ -3041,7 +3005,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "Bucketed histogram of processing time (s) of unmarshal and mount in mounter.",
       "fill": 0,
       "fillGradient": 0,
@@ -3152,7 +3116,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "Bucketed histogram of processing time (s) of waiting event prepare in processor.",
       "fill": 0,
       "fillGradient": 0,
@@ -3254,7 +3218,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_TEST-CLUSTER}",
+      "datasource": "test-cluster",
       "description": "checkpoint channel size for mq sink",
       "fill": 0,
       "fillGradient": 0,
@@ -3354,10 +3318,10 @@
       {
         "allValue": null,
         "current": {
-          "text": "88452ec0-43da-4fef-976e-a7c86623987e",
-          "value": "88452ec0-43da-4fef-976e-a7c86623987e"
+          "text": "7260b9b2-7682-4f81-af01-0c1cf20db1e9",
+          "value": "7260b9b2-7682-4f81-af01-0c1cf20db1e9"
         },
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "test-cluster",
         "definition": "label_values(ticdc_processor_resolved_ts, changefeed)",
         "hide": 0,
         "includeAll": false,
@@ -3379,10 +3343,10 @@
       {
         "allValue": null,
         "current": {
-          "text": "585d6c3d-cccb-4711-944b-37fafa3050be",
-          "value": "585d6c3d-cccb-4711-944b-37fafa3050be"
+          "text": "15952fb3-5ab6-4a94-b87c-bd691a540003",
+          "value": "15952fb3-5ab6-4a94-b87c-bd691a540003"
         },
-        "datasource": "${DS_TEST-CLUSTER}",
+        "datasource": "test-cluster",
         "definition": "label_values(ticdc_processor_resolved_ts, capture)",
         "hide": 0,
         "includeAll": false,
@@ -3435,5 +3399,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-CDC",
   "uid": "YiGL8hBZz",
-  "version": 63
+  "version": 1
 }
