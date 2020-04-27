@@ -19,6 +19,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -377,6 +379,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 	event.Delete = row.Delete
 	event.Columns = values
+	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, util.QuoteSchema(event.Schema, event.Table))
 	return event, nil
 }
 
@@ -422,6 +425,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,
 		Columns:      values,
+		Keys:         genMultipleKeys(tableInfo.TableInfo, values, util.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
 	}, nil
 }
 
@@ -493,4 +497,112 @@ func fetchHandleValue(tableInfo *TableInfo, recordID int64) (pkCoID int64, pkVal
 		pkValue.SetInt64(recordID)
 	}
 	return
+}
+
+func genMultipleKeys(ti *timodel.TableInfo, values map[string]*model.Column, table string) []string {
+	multipleKeys := make([]string, 0, len(ti.Indices)+1)
+	if ti.PKIsHandle {
+		if pk := ti.GetPkColInfo(); pk != nil {
+			cols := []*timodel.ColumnInfo{pk}
+			key := genKeyList(table, cols, values)
+			if len(key) > 0 { // ignore `null` value.
+				multipleKeys = append(multipleKeys, key)
+			} else {
+				log.L().Debug("ignore empty primary key", zap.String("table", table))
+			}
+		}
+	}
+
+	for _, indexCols := range ti.Indices {
+		if !indexCols.Unique {
+			continue
+		}
+		cols := getIndexColumns(ti.Columns, indexCols)
+		key := genKeyList(table, cols, values)
+		if len(key) > 0 { // ignore `null` value.
+			multipleKeys = append(multipleKeys, key)
+		} else {
+			log.L().Debug("ignore empty index key", zap.String("table", table))
+		}
+	}
+
+	if len(multipleKeys) == 0 {
+		// use table name as key if no key generated (no PK/UK),
+		// no concurrence for rows in the same table.
+		log.L().Debug("use table name as the key", zap.String("table", table))
+		multipleKeys = append(multipleKeys, table)
+	}
+
+	return multipleKeys
+}
+
+func columnValue(value interface{}) string {
+	var data string
+	switch v := value.(type) {
+	case nil:
+		data = "null"
+	case bool:
+		if v {
+			data = "1"
+		} else {
+			data = "0"
+		}
+	case int:
+		data = strconv.FormatInt(int64(v), 10)
+	case int8:
+		data = strconv.FormatInt(int64(v), 10)
+	case int16:
+		data = strconv.FormatInt(int64(v), 10)
+	case int32:
+		data = strconv.FormatInt(int64(v), 10)
+	case int64:
+		data = strconv.FormatInt(int64(v), 10)
+	case uint8:
+		data = strconv.FormatUint(uint64(v), 10)
+	case uint16:
+		data = strconv.FormatUint(uint64(v), 10)
+	case uint32:
+		data = strconv.FormatUint(uint64(v), 10)
+	case uint64:
+		data = strconv.FormatUint(uint64(v), 10)
+	case float32:
+		data = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		data = strconv.FormatFloat(float64(v), 'f', -1, 64)
+	case string:
+		data = v
+	case []byte:
+		data = string(v)
+	default:
+		data = fmt.Sprintf("%v", v)
+	}
+
+	return data
+}
+
+func genKeyList(table string, columns []*timodel.ColumnInfo, values map[string]*model.Column) string {
+	var buf strings.Builder
+	for _, col := range columns {
+		val, ok := values[col.Name.O]
+		if !ok || val.Value == nil {
+			log.L().Debug("ignore null value", zap.String("column", col.Name.O), zap.String("table", table))
+			continue // ignore `null` value.
+		}
+		buf.WriteString(columnValue(val.Value))
+	}
+	if buf.Len() == 0 {
+		log.L().Debug("all value are nil, no key generated", zap.String("table", table))
+		return "" // all values are `null`.
+	}
+
+	buf.WriteString(table)
+	return buf.String()
+}
+
+func getIndexColumns(columns []*timodel.ColumnInfo, indexColumns *timodel.IndexInfo) []*timodel.ColumnInfo {
+	cols := make([]*timodel.ColumnInfo, 0, len(indexColumns.Columns))
+	for _, column := range indexColumns.Columns {
+		cols = append(cols, columns[column.Offset])
+	}
+	return cols
 }

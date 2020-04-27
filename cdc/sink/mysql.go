@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,7 +41,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -367,60 +367,128 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 }
 
 func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChangedEvent) error {
-	jobs := make(chan []*model.RowChangedEvent, len(rowGroups))
-	for _, dmls := range rowGroups {
-		jobs <- dmls
-	}
-	close(jobs)
+	return concurrentExec(ctx, rowGroups, s.params.workerCount, s.params.maxTxnRow, s.execDMLs)
+}
 
-	nWorkers := s.params.workerCount
+func concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChangedEvent, nWorkers, maxTxnRow int, execDMLs func(context.Context, []*model.RowChangedEvent) error) error {
 	if nWorkers == 0 {
 		nWorkers = defaultParams.workerCount
 	}
 
-	if len(rowGroups) < nWorkers {
-		nWorkers = len(rowGroups)
-	}
-	eg, _ := errgroup.WithContext(ctx)
+	var workerWg, jobWg sync.WaitGroup
+	errCh := make(chan error, 1)
+	rowChs := make([]chan *model.RowChangedEvent, 0, nWorkers)
 	for i := 0; i < nWorkers; i++ {
-		eg.Go(func() error {
-			for rows := range jobs {
-				err := rowLimitIterator(rows, s.params.maxTxnRow,
-					func(rows []*model.RowChangedEvent) error {
-						return errors.Trace(s.execDMLs(ctx, rows))
-					})
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-			return nil
-		})
+		rowCh := make(chan *model.RowChangedEvent, 1024)
+		worker := mysqlSinkWorker{
+			rowCh:     rowCh,
+			errCh:     errCh,
+			workerWg:  &workerWg,
+			jobWg:     &jobWg,
+			maxTxnRow: maxTxnRow,
+			execDMLs:  execDMLs,
+		}
+		workerWg.Add(1)
+		go worker.run(ctx)
+		rowChs = append(rowChs, rowCh)
 	}
-	return eg.Wait()
+	causality := newCausality()
+	rowChIdx := 0
+	sendFn := func(row *model.RowChangedEvent, keys []string, idx int) {
+		causality.add(keys, idx)
+		jobWg.Add(1)
+		rowChs[idx] <- row
+	}
+	for groupKey, rows := range rowGroups {
+		for _, row := range rows {
+			keys := row.Keys
+			if len(keys) == 0 {
+				keys = []string{groupKey}
+			}
+			if conflict, idx := causality.detectConflict(keys); conflict {
+				if idx >= 0 {
+					sendFn(row, keys, idx)
+					continue
+				}
+				jobWg.Wait()
+				causality.reset()
+			}
+			idx := rowChIdx % len(rowChs)
+			sendFn(row, keys, idx)
+			rowChIdx++
+		}
+	}
+	for i := range rowChs {
+		close(rowChs[i])
+	}
+	workerWg.Wait()
+	select {
+	case err := <-errCh:
+		return err
+	default:
+		return nil
+	}
 }
 
-func rowLimitIterator(rows []*model.RowChangedEvent, maxTxnRow int, fn func([]*model.RowChangedEvent) error) error {
-	start := 0
-	end := maxTxnRow
-	for end < len(rows) {
-		lastTs := rows[end-1].Ts
-		for ; end < len(rows); end++ {
-			if lastTs < rows[end].Ts {
-				break
+type mysqlSinkWorker struct {
+	rowCh     chan *model.RowChangedEvent
+	errCh     chan error
+	workerWg  *sync.WaitGroup
+	jobWg     *sync.WaitGroup
+	maxTxnRow int
+	execDMLs  func(context.Context, []*model.RowChangedEvent) error
+}
+
+func (w *mysqlSinkWorker) run(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			buf := make([]byte, 4096)
+			stackSize := runtime.Stack(buf, false)
+			buf = buf[:stackSize]
+			w.trySendErr(errors.Errorf("mysql sink concurrent execute panic, stack: %v", string(buf)))
+			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stack trace"))
+		}
+		w.workerWg.Done()
+	}()
+	var rows []*model.RowChangedEvent
+	for row := range w.rowCh {
+		rows = append(rows, row)
+		rows = w.fetchAllPendingEvent(rows)
+		err := w.execDMLs(ctx, rows)
+		if err != nil {
+			w.trySendErr(err)
+		}
+
+		// clean cache to avoid memory leak.
+		for i := range rows {
+			w.jobWg.Done()
+			rows[i] = nil
+		}
+		rows = rows[:0]
+	}
+}
+
+func (w *mysqlSinkWorker) trySendErr(err error) {
+	select {
+	case w.errCh <- err:
+	default:
+		return
+	}
+}
+
+func (w *mysqlSinkWorker) fetchAllPendingEvent(rows []*model.RowChangedEvent) []*model.RowChangedEvent {
+	for len(rows) < w.maxTxnRow {
+		select {
+		case row, ok := <-w.rowCh:
+			if !ok {
+				return rows
 			}
-		}
-		if err := fn(rows[start:end]); err != nil {
-			return errors.Trace(err)
-		}
-		start = end
-		end += maxTxnRow
-	}
-	if start < len(rows) {
-		if err := fn(rows[start:]); err != nil {
-			return errors.Trace(err)
+			rows = append(rows, row)
+		default:
+			return rows
 		}
 	}
-	return nil
+	return rows
 }
 
 func (s *mysqlSink) Close() error {
