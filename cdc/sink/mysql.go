@@ -129,6 +129,10 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 				log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
 				return nil
 			}
+			if errors.Cause(err) == context.Canceled {
+				return backoff.Permanent(err)
+			}
+			log.Warn("execute DDL with error, retry later", zap.String("query", ddl.Query), zap.Error(err))
 			return err
 		})
 }
@@ -512,7 +516,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, sqls []string, va
 		if errors.Cause(err) == context.Canceled {
 			return backoff.Permanent(err)
 		}
-		log.Warn("exec dmls with error, retry later", zap.Error(err))
+		log.Warn("execute DMLs with error, retry later", zap.Error(err))
 		return err
 	}
 	return retry.Run(500*time.Millisecond, maxRetries,

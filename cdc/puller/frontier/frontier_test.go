@@ -1,4 +1,4 @@
-package puller
+package frontier
 
 import (
 	"fmt"
@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/interval"
 	"github.com/pingcap/ticdc/pkg/util"
 )
 
@@ -18,11 +17,11 @@ var _ = check.Suite(&spanFrontierSuite{})
 
 func (s *spanFrontier) testStr() string {
 	var buf strings.Builder
-	s.Entries(func(sp interval.Range, ts uint64) {
+	s.Entries(func(start, end []byte, ts uint64) {
 		if buf.Len() != 0 {
 			buf.WriteString(` `)
 		}
-		fmt.Fprintf(&buf, `%s@%d`, sp, ts)
+		fmt.Fprintf(&buf, `{%s %s}@%d`, start, end, ts)
 	})
 
 	return buf.String()
@@ -41,7 +40,7 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 	spBD := util.Span{Start: keyB, End: keyD}
 	spCD := util.Span{Start: keyC, End: keyD}
 
-	f := makeSpanFrontier(spAD)
+	f := NewFrontier(spAD).(*spanFrontier)
 
 	c.Assert(f.Frontier(), check.Equals, uint64(0))
 	c.Assert(f.testStr(), check.Equals, `{a d}@0`)
@@ -147,7 +146,7 @@ func (s *spanFrontierSuite) TestMinMax(c *check.C) {
 	spMidMax := util.Span{Start: keyMid, End: keyMax}
 	spMinMax := util.Span{Start: keyMin, End: keyMax}
 
-	f := makeSpanFrontier(spMinMax)
+	f := NewFrontier(spMinMax).(*spanFrontier)
 	c.Assert(f.Frontier(), check.Equals, uint64(0))
 	c.Assert(f.testStr(), check.Equals, "{ \xff\xff\xff\xff\xff}@0")
 
@@ -168,19 +167,24 @@ func (s *spanFrontierSuite) TestMinMax(c *check.C) {
 }
 
 func (s *spanFrontierSuite) TestSpanFrontierDisjoinSpans(c *check.C) {
+	key1 := []byte("1")
+	key2 := []byte("2")
 	keyA := []byte("a")
 	keyB := []byte("b")
 	keyC := []byte("c")
 	keyD := []byte("d")
 	keyE := []byte("e")
+	keyF := []byte("f")
 
 	spAB := util.Span{Start: keyA, End: keyB}
 	spAD := util.Span{Start: keyA, End: keyD}
 	spAE := util.Span{Start: keyA, End: keyE}
 	spDE := util.Span{Start: keyD, End: keyE}
 	spCE := util.Span{Start: keyC, End: keyE}
+	sp12 := util.Span{Start: key1, End: key2}
+	sp1F := util.Span{Start: key1, End: keyF}
 
-	f := makeSpanFrontier(spAB, spCE)
+	f := NewFrontier(spAB, spCE).(*spanFrontier)
 	c.Assert(f.Frontier(), check.Equals, uint64(0))
 	c.Assert(f.testStr(), check.Equals, `{a b}@0 {c e}@0`)
 
@@ -211,4 +215,16 @@ func (s *spanFrontierSuite) TestSpanFrontierDisjoinSpans(c *check.C) {
 	c.Assert(adv, check.IsTrue)
 	c.Assert(f.Frontier(), check.Equals, uint64(4))
 	c.Assert(f.testStr(), check.Equals, `{a b}@4 {c d}@4 {d e}@4`)
+
+	// Advance all with a larger span
+	adv = f.Forward(sp1F, 5)
+	c.Assert(adv, check.IsTrue)
+	c.Assert(f.Frontier(), check.Equals, uint64(5))
+	c.Assert(f.testStr(), check.Equals, `{a b}@5 {c d}@5 {d e}@5`)
+
+	// Advance span smaller than all tracked spans
+	adv = f.Forward(sp12, 6)
+	c.Assert(adv, check.IsFalse)
+	c.Assert(f.Frontier(), check.Equals, uint64(5))
+	c.Assert(f.testStr(), check.Equals, `{a b}@5 {c d}@5 {d e}@5`)
 }

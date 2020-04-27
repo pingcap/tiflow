@@ -110,10 +110,10 @@ func (cache *fileCache) gc() {
 	defer cache.fileLock.Unlock()
 	for _, f := range cache.toRemoveFiles {
 		fpath := filepath.Join(cache.dir, f)
-		if _, err := os.Stat(fpath); err != nil {
+		if _, err := os.Stat(fpath); err == nil {
 			err2 := os.Remove(fpath)
 			if err2 != nil {
-				log.Warn("remove file failed", zap.Error(err))
+				log.Warn("remove file failed", zap.Error(err2))
 			}
 		}
 	}
@@ -136,12 +136,12 @@ func (cache *fileCache) prepareSorting() ([]string, bool) {
 	return files, true
 }
 
-func (cache *fileCache) finishSorting(lastSortedFile string, toRemoveFiles []string) {
+func (cache *fileCache) finishSorting(newLastSortedFile string, toRemoveFiles []string) {
 	cache.fileLock.Lock()
 	defer cache.fileLock.Unlock()
 	atomic.StoreInt32(&cache.sorting, 0)
 	cache.toRemoveFiles = append(cache.toRemoveFiles, toRemoveFiles...)
-	cache.lastSortedFile = lastSortedFile
+	cache.lastSortedFile = newLastSortedFile
 }
 
 func (cache *fileCache) flush(ctx context.Context, entries []*model.PolymorphicEvent) error {
@@ -314,6 +314,10 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			evs = append(evs, ev)
 			idx = idx + 8 + dataLen
 		}
+		// event count in unsorted file may be zero
+		if len(evs) == 0 {
+			return "", nil
+		}
 		sort.Slice(evs, func(i, j int) bool {
 			return evs[i].Ts < evs[j].Ts
 		})
@@ -424,12 +428,11 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			return errors.Trace(err)
 		}
 	}
-	lastSortedFile := ""
-	if lastSortedFileUpdated {
-		fs.cache.lastSortedFile = newLastSortedFile
+	if !lastSortedFileUpdated {
+		newLastSortedFile = ""
 	}
 
-	fs.cache.finishSorting(lastSortedFile, toRemoveFiles)
+	fs.cache.finishSorting(newLastSortedFile, toRemoveFiles)
 	fs.output(ctx, model.NewResolvedPolymorphicEvent(resolvedTs))
 
 	return nil

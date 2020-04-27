@@ -52,10 +52,9 @@ def prepare_binaries() {
                         curl \${tidb_url} | tar xz -C ./tmp bin/tidb-server
                         curl \${pd_url} | tar xz -C ./tmp bin/*
                         curl \${tikv_url} | tar xz -C ./tmp bin/tikv-server
-                        curl http://139.219.11.38:8000/5mpBK/tiflash.tar.gz | tar xz -C ./tmp/bin tiflash
-                        curl http://139.219.11.38:8000/OHIIL/libtiflash_proxy.tar.gz | tar xz -C ./tmp/bin libtiflash_proxy.so
-                        curl http://139.219.11.38:8000/buUKY/flash_cluster_manager.tgz | tar xz && mv flash_cluster_manager ./tmp/bin
                         mv tmp/bin/* third_bin
+                        curl http://download.pingcap.org/tiflash-nightly-linux-amd64.tar.gz | tar xz -C third_bin
+                        mv third_bin/tiflash-nightly-linux-amd64/* third_bin
                         curl ${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb -o third_bin/go-ycsb
                         curl https://download.pingcap.org/tidb-tools-v2.1.6-linux-amd64.tar.gz | tar xz -C ./tmp tidb-tools-v2.1.6-linux-amd64/bin/sync_diff_inspector
                         mv tmp/tidb-tools-v2.1.6-linux-amd64/bin/* third_bin
