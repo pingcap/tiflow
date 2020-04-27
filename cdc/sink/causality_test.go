@@ -10,9 +10,9 @@ var _ = check.Suite(&testCausalitySuite{})
 
 func (s *testCausalitySuite) TestCausality(c *check.C) {
 	rows := [][]string{
-		[]string{"a"},
-		[]string{"b"},
-		[]string{"c"},
+		{"a"},
+		{"b"},
+		{"c"},
 	}
 	ca := newCausality()
 	for i, row := range rows {
