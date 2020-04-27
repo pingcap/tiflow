@@ -578,7 +578,7 @@ func genKeyList(table string, columns []*timodel.ColumnInfo, values map[string]*
 			log.L().Debug("ignore null value", zap.String("column", col.Name.O), zap.String("table", table))
 			continue // ignore `null` value.
 		}
-		buf.WriteString(columnValue(val))
+		buf.WriteString(columnValue(val.Value))
 	}
 	if buf.Len() == 0 {
 		log.L().Debug("all value are nil, no key generated", zap.String("table", table))
