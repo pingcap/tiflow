@@ -352,7 +352,10 @@ func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, filter *util.Filter, opt
 }
 
 func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChangedEvent) error {
-	nWorkers := s.params.workerCount
+	return concurrentExec(ctx, rowGroups, s.params.workerCount, s.params.maxTxnRow, s.execDMLs)
+}
+
+func concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChangedEvent, nWorkers, maxTxnRow int, execDMLs func(context.Context, []*model.RowChangedEvent) error) error {
 	if nWorkers == 0 {
 		nWorkers = defaultParams.workerCount
 	}
@@ -364,37 +367,38 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*
 	for i := 0; i < nWorkers; i++ {
 		rowCh := make(chan *model.RowChangedEvent, 1024)
 		worker := mysqlSinkWorker{
-			rowCh:            rowCh,
-			errCh:            errCh,
-			jobWg:            &jobWg,
-			maxTxnRow:        s.params.maxTxnRow,
-			execDMLs:         s.execDMLs,
+			rowCh:     rowCh,
+			errCh:     errCh,
+			jobWg:     &jobWg,
+			maxTxnRow: maxTxnRow,
+			execDMLs:  execDMLs,
 		}
 		go worker.run(ctx)
 		rowChs = append(rowChs, rowCh)
 	}
 	causality := newCausality()
 	rowChIdx := 0
-	sendFn := func(row *model.RowChangedEvent,idx int) {
-		causality.add(row.Keys,idx)
+	sendFn := func(row *model.RowChangedEvent, keys []string, idx int) {
+		causality.add(keys, idx)
 		jobWg.Add(1)
 		rowChs[idx] <- row
 	}
 	for groupKey, rows := range rowGroups {
 		for _, row := range rows {
-			if len(row.Keys) == 0 {
-				row.Keys = []string{groupKey}
+			keys := row.Keys
+			if len(keys) == 0 {
+				keys = []string{groupKey}
 			}
-			if conflict,idx := causality.detectConflict(row.Keys); conflict{
-				if idx >=0 {
-					sendFn(row,idx)
+			if conflict, idx := causality.detectConflict(keys); conflict {
+				if idx >= 0 {
+					sendFn(row, keys, idx)
 					continue
 				}
 				jobWg.Wait()
 				causality.reset()
 			}
 			idx := rowChIdx % len(rowChs)
-			sendFn(row,idx)
+			sendFn(row, keys, idx)
 			rowChIdx++
 		}
 	}
@@ -411,11 +415,11 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*
 }
 
 type mysqlSinkWorker struct {
-	rowCh            chan *model.RowChangedEvent
-	errCh            chan error
-	jobWg            *sync.WaitGroup
-	maxTxnRow        int
-	execDMLs         func(context.Context, []*model.RowChangedEvent) error
+	rowCh     chan *model.RowChangedEvent
+	errCh     chan error
+	jobWg     *sync.WaitGroup
+	maxTxnRow int
+	execDMLs  func(context.Context, []*model.RowChangedEvent) error
 }
 
 func (w *mysqlSinkWorker) run(ctx context.Context) {
@@ -469,30 +473,6 @@ func (w *mysqlSinkWorker) fetchAllPendingEvent(rows []*model.RowChangedEvent) []
 		}
 	}
 	return rows
-}
-
-func rowLimitIterator(rows []*model.RowChangedEvent, maxTxnRow int, fn func([]*model.RowChangedEvent) error) error {
-	start := 0
-	end := maxTxnRow
-	for end < len(rows) {
-		lastTs := rows[end-1].Ts
-		for ; end < len(rows); end++ {
-			if lastTs < rows[end].Ts {
-				break
-			}
-		}
-		if err := fn(rows[start:end]); err != nil {
-			return errors.Trace(err)
-		}
-		start = end
-		end += maxTxnRow
-	}
-	if start < len(rows) {
-		if err := fn(rows[start:]); err != nil {
-			return errors.Trace(err)
-		}
-	}
-	return nil
 }
 
 func (s *mysqlSink) Close() error {
