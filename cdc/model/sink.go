@@ -10,6 +10,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// TableName represents name of a table, includes table name and schema name.
+type TableName struct {
+	Schema, Table string
+	// Table ID
+	ID int64
+}
+
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
 	StartTs uint64
@@ -20,8 +27,7 @@ type RowChangedEvent struct {
 
 	RowID int64
 
-	Schema string
-	Table  string
+	Table *TableName
 
 	Delete bool
 
@@ -36,8 +42,8 @@ type RowChangedEvent struct {
 func (e *RowChangedEvent) ToMqMessage() (*MqMessageKey, *MqMessageRow) {
 	key := &MqMessageKey{
 		Ts:     e.CRTs,
-		Schema: e.Schema,
-		Table:  e.Table,
+		Schema: e.Table.Schema,
+		Table:  e.Table.Table,
 		Type:   MqMessageTypeRow,
 	}
 	value := &MqMessageRow{}
@@ -53,8 +59,9 @@ func (e *RowChangedEvent) ToMqMessage() (*MqMessageKey, *MqMessageRow) {
 func (e *RowChangedEvent) FromMqMessage(key *MqMessageKey, value *MqMessageRow) {
 	e.CRTs = key.Ts
 	e.Resolved = false
-	e.Table = key.Table
-	e.Schema = key.Schema
+	e.Table.Table = key.Table
+	e.Table.Schema = key.Schema
+	// TODO(neil) maybe we need add table ID to MqMessage?
 
 	if len(value.Delete) != 0 {
 		e.Delete = true

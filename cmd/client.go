@@ -22,6 +22,7 @@ import (
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -48,6 +49,10 @@ var (
 	noConfirm  bool
 	sortEngine string
 	sortDir    string
+
+	cyclicReplicaID        uint64
+	cyclicFilterReplicaIDs []uint
+	cyclicSyncDDL          bool
 
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client
@@ -189,6 +194,18 @@ func newCreateChangefeedCommand() *cobra.Command {
 					return err
 				}
 			}
+			if cyclicReplicaID != 0 && len(cyclicFilterReplicaIDs) != 0 {
+				filter := make([]uint64, 0, len(cyclicFilterReplicaIDs))
+				for _, id := range cyclicFilterReplicaIDs {
+					filter = append(filter, uint64(id))
+				}
+				cfg.Cyclic = &cyclic.ReplicationConfig{
+					ReplicaID:       cyclicReplicaID,
+					FilterReplicaID: filter,
+					SyncDDL:         cyclicSyncDDL,
+					// TODO(neil) enable ID bucket.
+				}
+			}
 
 			info := &model.ChangeFeedInfo{
 				SinkURI:    sinkURI,
@@ -253,6 +270,9 @@ func newCreateChangefeedCommand() *cobra.Command {
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", "memory", "sort engine used for data sort")
 	command.PersistentFlags().StringVar(&sortDir, "sort-dir", ".", "directory used for file sort")
+	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
+	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
+	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", false, "(Expremental) Cyclic replication sync DDL of changefeed")
 
 	return command
 }

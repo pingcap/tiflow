@@ -55,3 +55,26 @@ func (s *cyclicSuit) TestIsTablePaired(c *check.C) {
 			check.Commentf("%v", test))
 	}
 }
+
+func (s *cyclicSuit) TestIsMarkTable(c *check.C) {
+	tests := []struct {
+		schema, table string
+		isMarkTable   bool
+	}{
+		{"", "", false},
+		{"a", "a", false},
+		{"a", "", false},
+		{"", "a", false},
+		{SchemaName, "", true},
+		{"", tableName, true},
+		{"`" + SchemaName + "`", "", true},
+		{"`" + SchemaName + "`", "repl_mark_1", true},
+		{SchemaName, tableName, true},
+		{SchemaName, "`repl_mark_1`", true},
+	}
+
+	for _, test := range tests {
+		c.Assert(IsMarkTable(test.schema, test.table), check.Equals, test.isMarkTable,
+			check.Commentf("%v", test))
+	}
+}

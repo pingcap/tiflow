@@ -67,7 +67,7 @@ type mysqlSink struct {
 	globalForwardCh chan struct{}
 
 	unresolvedRowsMu sync.Mutex
-	unresolvedRows   map[string][]*model.RowChangedEvent
+	unresolvedRows   map[model.TableName][]*model.RowChangedEvent
 
 	count uint64
 
@@ -99,11 +99,11 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 			resolvedTs = row.CRTs
 			continue
 		}
-		if s.filter.ShouldIgnoreEvent(row.CRTs, row.Schema, row.Table) {
+		if s.filter.ShouldIgnoreEvent(row.CRTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("ts", row.CRTs))
 			continue
 		}
-		key := util.QuoteSchema(row.Schema, row.Table)
+		key := *row.Table
 		s.unresolvedRows[key] = append(s.unresolvedRows[key], row)
 	}
 	if resolvedTs != 0 {
@@ -222,6 +222,14 @@ func (s *mysqlSink) Run(ctx context.Context) error {
 				continue
 			}
 
+			if s.cyclic != nil {
+				// Filter rows if it is origined from downstream.
+				// TODO(neil) we must preserve mark rows if there is any.
+				txnMap, markMap := model.MapMarkRowsGroup(resolvedRowsMap)
+				resolvedRowsMap = model.ReduceCyclicRowsGroup(
+					txnMap, markMap, s.cyclic.FilterReplicaID())
+			}
+
 			if err := s.concurrentExec(ctx, resolvedRowsMap); err != nil {
 				return errors.Trace(err)
 			}
@@ -230,8 +238,10 @@ func (s *mysqlSink) Run(ctx context.Context) error {
 	}
 }
 
-func splitRowsGroup(resolvedTs uint64, unresolvedRows map[string][]*model.RowChangedEvent) (minTs uint64, resolvedRowsMap map[string][]*model.RowChangedEvent) {
-	resolvedRowsMap = make(map[string][]*model.RowChangedEvent, len(unresolvedRows))
+func splitRowsGroup(
+	resolvedTs uint64, unresolvedRows map[model.TableName][]*model.RowChangedEvent,
+) (minTs uint64, resolvedRowsMap map[model.TableName][][]*model.RowChangedEvent) {
+	resolvedRowsMap = make(map[model.TableName][][]*model.RowChangedEvent, len(unresolvedRows))
 	minTs = resolvedTs
 	for key, rows := range unresolvedRows {
 		i := sort.Search(len(rows), func(i int) bool {
@@ -249,7 +259,7 @@ func splitRowsGroup(resolvedTs uint64, unresolvedRows map[string][]*model.RowCha
 			copy(resolvedRows, rows[:i])
 			unresolvedRows[key] = rows[i:]
 		}
-		resolvedRowsMap[key] = resolvedRows
+		resolvedRowsMap[key] = [][]*model.RowChangedEvent{resolvedRows}
 
 		if len(resolvedRows) > 0 && resolvedRows[0].CRTs < minTs {
 			minTs = resolvedRows[0].CRTs
@@ -382,7 +392,7 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 
 	sink := &mysqlSink{
 		db:              db,
-		unresolvedRows:  make(map[string][]*model.RowChangedEvent),
+		unresolvedRows:  make(map[model.TableName][]*model.RowChangedEvent),
 		params:          params,
 		filter:          filter,
 		globalForwardCh: make(chan struct{}, 1),
@@ -406,11 +416,14 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 	return sink, nil
 }
 
-func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChangedEvent) error {
+func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[model.TableName][][]*model.RowChangedEvent) error {
 	return concurrentExec(ctx, rowGroups, s.params.workerCount, s.params.maxTxnRow, s.execDMLs)
 }
 
-func concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChangedEvent, nWorkers, maxTxnRow int, execDMLs func(context.Context, []*model.RowChangedEvent) error) error {
+func concurrentExec(
+	ctx context.Context, rowGroups map[model.TableName][][]*model.RowChangedEvent, nWorkers, maxTxnRow int,
+	execDMLs func(context.Context, []*model.RowChangedEvent, int) error,
+) error {
 	if nWorkers == 0 {
 		nWorkers = defaultParams.workerCount
 	}
@@ -426,6 +439,7 @@ func concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChange
 			workerWg:  &workerWg,
 			jobWg:     &jobWg,
 			maxTxnRow: maxTxnRow,
+			id:        i,
 			execDMLs:  execDMLs,
 		}
 		workerWg.Add(1)
@@ -439,23 +453,25 @@ func concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChange
 		jobWg.Add(1)
 		rowChs[idx] <- row
 	}
-	for groupKey, rows := range rowGroups {
-		for _, row := range rows {
-			keys := row.Keys
-			if len(keys) == 0 {
-				keys = []string{groupKey}
-			}
-			if conflict, idx := causality.detectConflict(keys); conflict {
-				if idx >= 0 {
-					sendFn(row, keys, idx)
-					continue
+	for groupKey, multiRows := range rowGroups {
+		for _, rows := range multiRows {
+			for _, row := range rows {
+				keys := row.Keys
+				if len(keys) == 0 {
+					keys = []string{util.QuoteSchema(groupKey.Schema, groupKey.Table)}
 				}
-				jobWg.Wait()
-				causality.reset()
+				if conflict, idx := causality.detectConflict(keys); conflict {
+					if idx >= 0 {
+						sendFn(row, keys, idx)
+						continue
+					}
+					jobWg.Wait()
+					causality.reset()
+				}
+				idx := rowChIdx % len(rowChs)
+				sendFn(row, keys, idx)
+				rowChIdx++
 			}
-			idx := rowChIdx % len(rowChs)
-			sendFn(row, keys, idx)
-			rowChIdx++
 		}
 	}
 	for i := range rowChs {
@@ -476,7 +492,8 @@ type mysqlSinkWorker struct {
 	workerWg  *sync.WaitGroup
 	jobWg     *sync.WaitGroup
 	maxTxnRow int
-	execDMLs  func(context.Context, []*model.RowChangedEvent) error
+	id        int
+	execDMLs  func(context.Context, []*model.RowChangedEvent, int) error
 }
 
 func (w *mysqlSinkWorker) run(ctx context.Context) {
@@ -494,7 +511,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) {
 	for row := range w.rowCh {
 		rows = append(rows, row)
 		rows = w.fetchAllPendingEvent(rows)
-		err := w.execDMLs(ctx, rows)
+		err := w.execDMLs(ctx, rows, w.id)
 		if err != nil {
 			w.trySendErr(err)
 		}
@@ -601,20 +618,32 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, sqls []string, va
 }
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
-func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) ([]string, [][]interface{}, error) {
+func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, bucket int) ([]string, [][]interface{}, error) {
 	sqls := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 	for _, row := range rows {
 		var query string
 		var args []interface{}
 		var err error
-		if row.Delete {
-			query, args, err = s.prepareDelete(row.Schema, row.Table, row.Columns)
+		markRowFound := false
+		if s.cyclic != nil && cyclic.IsMarkTable(row.Table.Schema, row.Table.Table) {
+			// Write mark table based on bucket ID and table ID.
+			replicaID := model.ExtractReplicaID(row)
+			// Mark row's table ID is set to corresponding table ID.
+			query = s.cyclic.UdpateTableCyclicMark(row.Table.ID, uint64(bucket), replicaID)
+			markRowFound = true
+		} else if row.Delete {
+			query, args, err = s.prepareDelete(row.Table.Schema, row.Table.Table, row.Columns)
 		} else {
-			query, args, err = s.prepareReplace(row.Schema, row.Table, row.Columns)
+			query, args, err = s.prepareReplace(row.Table.Schema, row.Table.Table, row.Columns)
 		}
 		if err != nil {
 			return nil, nil, errors.Trace(err)
+		}
+		if s.cyclic != nil && !markRowFound {
+			// Write mark table with the current replica ID.
+			query = s.cyclic.UdpateTableCyclicMark(row.Table.ID, uint64(bucket), s.cyclic.ReplicaID())
+			args = nil
 		}
 		sqls = append(sqls, query)
 		values = append(values, args)
@@ -622,8 +651,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) ([]string, [][]in
 	return sqls, values, nil
 }
 
-func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent) error {
-	sqls, values, err := s.prepareDMLs(rows)
+func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, bucket int) error {
+	sqls, values, err := s.prepareDMLs(rows, bucket)
 	if err != nil {
 		return errors.Trace(err)
 	}

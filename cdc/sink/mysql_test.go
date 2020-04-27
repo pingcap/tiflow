@@ -30,63 +30,63 @@ var _ = check.Suite(&EmitSuite{})
 
 func (s EmitSuite) TestSplitRowsGroup(c *check.C) {
 	testCases := []struct {
-		inputGroup              map[string][]*model.RowChangedEvent
+		inputGroup              map[model.TableName][]*model.RowChangedEvent
 		resolvedTs              uint64
-		expectedResolvedGroup   map[string][]*model.RowChangedEvent
-		expectedUnresolvedGroup map[string][]*model.RowChangedEvent
+		expectedResolvedGroup   map[model.TableName][][]*model.RowChangedEvent
+		expectedUnresolvedGroup map[model.TableName][]*model.RowChangedEvent
 		expectedMinTs           uint64
 	}{{
-		inputGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
-			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+		inputGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
+			{Table: "t2"}: {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		resolvedTs:            5,
-		expectedResolvedGroup: map[string][]*model.RowChangedEvent{},
-		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
-			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+		expectedResolvedGroup: map[model.TableName][][]*model.RowChangedEvent{},
+		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
+			{Table: "t2"}: {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		expectedMinTs: 5,
 	}, {
-		inputGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
-			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+		inputGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
+			{Table: "t2"}: {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		resolvedTs: 23,
-		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}},
-			"t2": {{CRTs: 23}},
+		expectedResolvedGroup: map[model.TableName][][]*model.RowChangedEvent{
+			{Table: "t1"}: {{{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}}},
+			{Table: "t2"}: {{{CRTs: 23}}},
 		},
-		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{CRTs: 33}, {CRTs: 34}},
-			"t2": {{CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CRTs: 33}, {CRTs: 34}},
+			{Table: "t2"}: {{CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		expectedMinTs: 11,
 	}, {
-		inputGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
-			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+		inputGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
+			{Table: "t2"}: {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		resolvedTs: 30,
-		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}},
-			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+		expectedResolvedGroup: map[model.TableName][][]*model.RowChangedEvent{
+			{Table: "t1"}: {{{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}}},
+			{Table: "t2"}: {{{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}}},
 		},
-		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{CRTs: 33}, {CRTs: 34}},
+		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CRTs: 33}, {CRTs: 34}},
 		},
 		expectedMinTs: 11,
 	}, {
-		inputGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
-			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+		inputGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
+			{Table: "t2"}: {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
 		},
 		resolvedTs: 40,
-		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
-			"t2": {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+		expectedResolvedGroup: map[model.TableName][][]*model.RowChangedEvent{
+			{Table: "t1"}: {{{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}}},
+			{Table: "t2"}: {{{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}}},
 		},
-		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{},
+		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{},
 		expectedMinTs:           11,
 	}}
 	for _, tc := range testCases {
@@ -124,9 +124,9 @@ func (s EmitSuite) TestTxnRowLimiter(c *check.C) {
 	for i, tc := range testCases {
 		var output []*model.RowChangedEvent
 		var err error
-		rowGroups := make(map[string][]*model.RowChangedEvent)
-		rowGroups["test"] = tc.inputGroup
-		err = concurrentExec(context.Background(), rowGroups, rand.Intn(16), tc.maxTxnRow, func(_ context.Context, rows []*model.RowChangedEvent) error {
+		rowGroups := make(map[model.TableName][][]*model.RowChangedEvent)
+		rowGroups[model.TableName{Table: "test"}] = [][]*model.RowChangedEvent{tc.inputGroup}
+		err = concurrentExec(context.Background(), rowGroups, rand.Intn(16), tc.maxTxnRow, func(_ context.Context, rows []*model.RowChangedEvent, _ int) error {
 			output = append(output, rows...)
 			return nil
 		})

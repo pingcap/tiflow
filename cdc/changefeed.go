@@ -138,7 +138,7 @@ func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 	if c.cyclic != nil && cyclic.IsMarkTable(table.Schema, table.Table) {
 		// For simplicty, we awlays create cyclic mark table.
 		// DDL filter should always filter these DDL from upstream.
-		ddls := model.CyclicCreateMarkTable(tid)
+		ddls := model.CyclicCreateMarkTable(int64(tid))
 		// TODO(neil) do not use todo context!
 		ctx := context.TODO()
 		for _, ddl := range ddls {
@@ -304,7 +304,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[strin
 				// Skip, mark tables should not be balanced alone.
 				continue
 			}
-			markTableSchameName, markTableTableName := cyclic.MarkTableName(tableID)
+			markTableSchameName, markTableTableName := cyclic.MarkTableName(int64(tableID))
 			id, found := schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
 			if !found {
 				// Mark table is not created yet, skip and wait.

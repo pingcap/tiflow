@@ -357,12 +357,15 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 
 	event := &model.RowChangedEvent{
-		StartTs:      row.StartTs,
-		CRTs:         row.CRTs,
-		RowID:        row.RecordID,
-		Resolved:     false,
-		Schema:       tableInfo.TableName.Schema,
-		Table:        tableInfo.TableName.Table,
+		StartTs:  row.StartTs,
+		CRTs:     row.CRTs,
+		RowID:    row.RecordID,
+		Resolved: false,
+		Table: &model.TableName{
+			Schema: tableInfo.TableName.Schema,
+			Table:  tableInfo.TableName.Table,
+			ID:     tableInfo.ID,
+		},
 		IndieMarkCol: tableInfo.IndieMarkCol,
 	}
 
@@ -384,7 +387,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 	event.Delete = row.Delete
 	event.Columns = values
-	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, util.QuoteSchema(event.Schema, event.Table))
+	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, util.QuoteSchema(event.Table.Schema, event.Table.Table))
 	return event, nil
 }
 
@@ -422,12 +425,15 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		}
 	}
 	return &model.RowChangedEvent{
-		StartTs:      idx.StartTs,
-		CRTs:         idx.CRTs,
-		RowID:        idx.RecordID,
-		Resolved:     false,
-		Schema:       tableInfo.TableName.Schema,
-		Table:        tableInfo.TableName.Table,
+		StartTs:  idx.StartTs,
+		CRTs:     idx.CRTs,
+		RowID:    idx.RecordID,
+		Resolved: false,
+		Table: &model.TableName{
+			Schema: tableInfo.TableName.Schema,
+			Table:  tableInfo.TableName.Table,
+			ID:     tableInfo.ID,
+		},
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,
 		Columns:      values,

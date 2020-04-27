@@ -71,7 +71,7 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 			}
 			continue
 		}
-		if k.filter.ShouldIgnoreEvent(row.CRTs, row.Schema, row.Table) {
+		if k.filter.ShouldIgnoreEvent(row.CRTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("ts", row.CRTs))
 			continue
 		}

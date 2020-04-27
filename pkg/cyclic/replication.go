@@ -31,6 +31,9 @@ const (
 	SchemaName string = "tidb_cdc"
 	tableName  string = "repl_mark"
 
+	// CyclicReplicaIDCol is the name of replica ID in mark tables
+	CyclicReplicaIDCol string = "replica_id"
+
 	// OptCyclicConfig is the key that adds to changefeed options
 	// automatically is cyclic replication is on.
 	OptCyclicConfig string = "_cyclic_relax_sql_mode"
@@ -124,7 +127,7 @@ func NewCyclic(config *ReplicationConfig) *Cyclic {
 }
 
 // MarkTableName returns mark table name regards to the tableID
-func MarkTableName(tableID uint64) (schema, table string) {
+func MarkTableName(tableID int64) (schema, table string) {
 	table = fmt.Sprintf("%s_%d", tableName, tableID)
 	schema = SchemaName
 	return
@@ -135,7 +138,7 @@ func MarkTableName(tableID uint64) (schema, table string) {
 type TableName struct {
 	Schema, Table string
 	// Table ID
-	ID uint64
+	ID int64
 }
 
 // IsTablesPaired checks if normal tables are paired with mark tables.
@@ -161,16 +164,35 @@ func IsTablesPaired(tables []TableName) bool {
 }
 
 // UdpateTableCyclicMark return a DML to update mark table regrad to the tableID
-// bucket and clusterID.
-func (*Cyclic) UdpateTableCyclicMark(tableID, bucket, clusterID uint64) string {
+// bucket and replicaID.
+func (*Cyclic) UdpateTableCyclicMark(tableID int64, bucket, replicaID uint64) string {
 	return fmt.Sprintf(
 		`INSERT INTO %s.%s_%d VALUES (%d, %d, 0) ON DUPLICATE KEY UPDATE val = val + 1;`,
-		SchemaName, tableName, tableID, bucket, clusterID)
+		SchemaName, tableName, tableID, bucket, replicaID)
+}
+
+// FilterReplicaID return a slice of replica IDs needs to be filtered.
+func (c *Cyclic) FilterReplicaID() []uint64 {
+	return c.config.FilterReplicaID
+}
+
+// ReplicaID return a replica ID of this cluster.
+func (c *Cyclic) ReplicaID() uint64 {
+	return c.config.ReplicaID
 }
 
 // IsMarkTable tells whether the table is a mark table or not.
 func IsMarkTable(schema, table string) bool {
-	if schema == SchemaName {
+	const quoteSchemaName string = "`" + SchemaName + "`"
+	const quotetableName string = "`" + tableName
+
+	if strings.HasPrefix(schema, SchemaName) {
+		return true
+	}
+	if strings.HasPrefix(schema, quoteSchemaName) {
+		return true
+	}
+	if strings.HasPrefix(table, quotetableName) {
 		return true
 	}
 	return strings.HasPrefix(table, tableName)
