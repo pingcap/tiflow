@@ -255,6 +255,11 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, 
 }
 
 func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*indexKVEntry, error) {
+	// skip set index KV
+	if !base.Delete {
+		return nil, nil
+	}
+
 	indexID, indexValue, err := decodeIndexKey(restKey)
 	if err != nil {
 		return nil, errors.Trace(err)
