@@ -63,7 +63,7 @@ func NewSink(ctx context.Context, sinkURIStr string, filter *util.Filter, config
 		if err != nil {
 			return nil, errors.Annotatef(err, "parse sinkURI failed")
 		}
-		return newMySQLSink(nil, dsnCfg, filter, opts)
+		return newMySQLSink(ctx, nil, dsnCfg, filter, opts)
 	}
 
 	// parse sinkURI as a URI
@@ -75,7 +75,7 @@ func NewSink(ctx context.Context, sinkURIStr string, filter *util.Filter, config
 	case "blackhole":
 		return newBlackHoleSink(opts), nil
 	case "mysql", "tidb":
-		return newMySQLSink(sinkURI, nil, filter, opts)
+		return newMySQLSink(ctx, sinkURI, nil, filter, opts)
 	case "kafka":
 		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts)
 	default:

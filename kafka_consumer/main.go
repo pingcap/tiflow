@@ -39,6 +39,7 @@ var (
 
 	logPath  string
 	logLevel string
+	timezone string
 )
 
 func init() {
@@ -48,6 +49,7 @@ func init() {
 	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
+	flag.StringVar(&timezone, "tz", "System", "Specify time zone of Kafka consumer")
 	flag.Parse()
 
 	err := util.InitLogger(&util.Config{
@@ -254,6 +256,15 @@ type Consumer struct {
 // NewConsumer creates a new cdc kafka consumer
 func NewConsumer(ctx context.Context) (*Consumer, error) {
 	// TODO support filter in downstream sink
+	tz := time.Local
+	if strings.ToLower(timezone) != "system" {
+		var err error
+		tz, err = time.LoadLocation(timezone)
+		if err != nil {
+			return nil, errors.Annotate(err, "can not load timezone")
+		}
+	}
+	ctx = util.PutTimezoneInCtx(ctx, tz)
 	filter, err := util.NewFilter(&util.ReplicaConfig{})
 	if err != nil {
 		return nil, errors.Trace(err)

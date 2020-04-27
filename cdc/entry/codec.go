@@ -182,7 +182,7 @@ func decodeMetaKey(ek []byte) (meta, error) {
 }
 
 // decodeRow decodes a byte slice into datums with a existing row map.
-func decodeRow(b []byte, recordID int64, tableInfo *TableInfo) (map[int64]types.Datum, error) {
+func decodeRow(b []byte, recordID int64, tableInfo *TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	if len(b) == 0 {
 		if tableInfo.PKIsHandle {
 			id, pkValue, err := fetchHandleValue(tableInfo, recordID)
@@ -194,14 +194,14 @@ func decodeRow(b []byte, recordID int64, tableInfo *TableInfo) (map[int64]types.
 		return map[int64]types.Datum{}, nil
 	}
 	if rowcodec.IsNewFormat(b) {
-		return decodeRowV2(b, recordID, tableInfo)
+		return decodeRowV2(b, recordID, tableInfo, tz)
 	}
-	return decodeRowV1(b, recordID, tableInfo)
+	return decodeRowV1(b, recordID, tableInfo, tz)
 }
 
 // decodeRowV1 decodes value data using old encoding format.
 // Row layout: colID1, value1, colID2, value2, .....
-func decodeRowV1(b []byte, recordID int64, tableInfo *TableInfo) (map[int64]types.Datum, error) {
+func decodeRowV1(b []byte, recordID int64, tableInfo *TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	row := make(map[int64]types.Datum)
 	if len(b) == 1 && b[0] == codec.NilFlag {
 		b = b[1:]
@@ -237,7 +237,7 @@ func decodeRowV1(b []byte, recordID int64, tableInfo *TableInfo) (map[int64]type
 			continue
 		}
 		fieldType := &colInfo.FieldType
-		datum, err := unflatten(v, fieldType)
+		datum, err := unflatten(v, fieldType, tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -257,14 +257,14 @@ func decodeRowV1(b []byte, recordID int64, tableInfo *TableInfo) (map[int64]type
 // decodeRowV2 decodes value data using new encoding format.
 // Ref: https://github.com/pingcap/tidb/pull/12634
 //      https://github.com/pingcap/tidb/blob/master/docs/design/2018-07-19-row-format.md
-func decodeRowV2(data []byte, recordID int64, tableInfo *TableInfo) (map[int64]types.Datum, error) {
+func decodeRowV2(data []byte, recordID int64, tableInfo *TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	handleColID, reqCols := tableInfo.GetRowColInfos()
-	decoder := rowcodec.NewDatumMapDecoder(reqCols, []int64{handleColID}, time.UTC)
+	decoder := rowcodec.NewDatumMapDecoder(reqCols, []int64{handleColID}, tz)
 	return decoder.DecodeToDatumMap(data, kv.IntHandle(recordID), nil)
 }
 
 // unflatten converts a raw datum to a column datum.
-func unflatten(datum types.Datum, ft *types.FieldType) (types.Datum, error) {
+func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (types.Datum, error) {
 	if datum.IsNull() {
 		return datum, nil
 	}
@@ -272,12 +272,12 @@ func unflatten(datum types.Datum, ft *types.FieldType) (types.Datum, error) {
 	case mysql.TypeFloat:
 		datum.SetFloat32(float32(datum.GetFloat64()))
 		return datum, nil
+	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
+		datum.SetString(datum.GetString(), ft.Collate)
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeYear, mysql.TypeInt24,
 		mysql.TypeLong, mysql.TypeLonglong, mysql.TypeDouble, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob:
 		return datum, nil
-	case mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeString:
-		datum.SetString(string(datum.GetBytes()), "")
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
 		t := types.NewTime(types.ZeroCoreTime, ft.Tp, int8(ft.Decimal))
 		var err error
@@ -285,12 +285,18 @@ func unflatten(datum types.Datum, ft *types.FieldType) (types.Datum, error) {
 		if err != nil {
 			return datum, errors.Trace(err)
 		}
+		if ft.Tp == mysql.TypeTimestamp && !t.IsZero() {
+			err = t.ConvertTimeZone(time.UTC, loc)
+			if err != nil {
+				return datum, errors.Trace(err)
+			}
+		}
 		datum.SetUint64(0)
 		datum.SetMysqlTime(t)
 		return datum, nil
 	case mysql.TypeDuration: //duration should read fsp from column meta data
 		dur := types.Duration{Duration: time.Duration(datum.GetInt64()), Fsp: int8(ft.Decimal)}
-		datum.SetValueWithDefaultCollation(dur)
+		datum.SetMysqlDuration(dur)
 		return datum, nil
 	case mysql.TypeEnum:
 		// ignore error deliberately, to read empty enum value.
@@ -298,14 +304,14 @@ func unflatten(datum types.Datum, ft *types.FieldType) (types.Datum, error) {
 		if err != nil {
 			enum = types.Enum{}
 		}
-		datum.SetValueWithDefaultCollation(enum)
+		datum.SetMysqlEnum(enum, ft.Collate)
 		return datum, nil
 	case mysql.TypeSet:
 		set, err := types.ParseSetValue(ft.Elems, datum.GetUint64())
 		if err != nil {
 			return datum, errors.Trace(err)
 		}
-		datum.SetValueWithDefaultCollation(set)
+		datum.SetMysqlSet(set, ft.Collate)
 		return datum, nil
 	case mysql.TypeBit:
 		val := datum.GetUint64()
