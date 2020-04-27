@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -353,40 +352,6 @@ func newMySQLSink(sinkURI *url.URL, dsn *dmysql.Config, filter *util.Filter, opt
 }
 
 func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChangedEvent) error {
-	jobs := make(chan []*model.RowChangedEvent, len(rowGroups))
-	for _, dmls := range rowGroups {
-		jobs <- dmls
-	}
-	close(jobs)
-
-	nWorkers := s.params.workerCount
-	if nWorkers == 0 {
-		nWorkers = defaultParams.workerCount
-	}
-
-	if len(rowGroups) < nWorkers {
-		nWorkers = len(rowGroups)
-	}
-	eg, _ := errgroup.WithContext(ctx)
-	for i := 0; i < nWorkers; i++ {
-		eg.Go(func() error {
-			for rows := range jobs {
-				err := rowLimitIterator(rows, s.params.maxTxnRow,
-					func(rows []*model.RowChangedEvent) error {
-						// TODO: Add retry
-						return errors.Trace(s.execDMLs(ctx, rows))
-					})
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-			return nil
-		})
-	}
-	return eg.Wait()
-}
-
-func (s *mysqlSink) concurrentExec2(ctx context.Context, rowGroups map[string][]*model.RowChangedEvent) error {
 	nWorkers := s.params.workerCount
 	if nWorkers == 0 {
 		nWorkers = defaultParams.workerCount
@@ -403,7 +368,6 @@ func (s *mysqlSink) concurrentExec2(ctx context.Context, rowGroups map[string][]
 			errCh:            errCh,
 			jobWg:            &jobWg,
 			maxTxnRow:        s.params.maxTxnRow,
-			maxBatchWaitTime: time.Nanosecond * 50,
 			execDMLs:         s.execDMLs,
 		}
 		go worker.run(ctx)
@@ -411,16 +375,26 @@ func (s *mysqlSink) concurrentExec2(ctx context.Context, rowGroups map[string][]
 	}
 	causality := newCausality()
 	rowChIdx := 0
-	for _, rows := range rowGroups {
+	sendFn := func(row *model.RowChangedEvent,idx int) {
+		causality.add(row.Keys,idx)
+		jobWg.Add(1)
+		rowChs[idx] <- row
+	}
+	for groupKey, rows := range rowGroups {
 		for _, row := range rows {
-			if causality.detectConflict(row.Keys) {
+			if len(row.Keys) == 0 {
+				row.Keys = []string{groupKey}
+			}
+			if conflict,idx := causality.detectConflict(row.Keys); conflict{
+				if idx >=0 {
+					sendFn(row,idx)
+					continue
+				}
 				jobWg.Wait()
 				causality.reset()
 			}
-			causality.add(row.Keys)
-			jobWg.Add(1)
 			idx := rowChIdx % len(rowChs)
-			rowChs[idx] <- row
+			sendFn(row,idx)
 			rowChIdx++
 		}
 	}
@@ -441,7 +415,6 @@ type mysqlSinkWorker struct {
 	errCh            chan error
 	jobWg            *sync.WaitGroup
 	maxTxnRow        int
-	maxBatchWaitTime time.Duration
 	execDMLs         func(context.Context, []*model.RowChangedEvent) error
 }
 
@@ -461,7 +434,6 @@ func (w *mysqlSinkWorker) run(ctx context.Context) {
 			}
 			rows = append(rows, row)
 			rows = w.fetchAllPendingEvent(rows)
-			rows = w.fetchMorePendingEvent(rows)
 			// TODO: Add retry
 			err := w.execDMLs(ctx, rows)
 			w.trySendErr(err)
@@ -496,27 +468,6 @@ func (w *mysqlSinkWorker) fetchAllPendingEvent(rows []*model.RowChangedEvent) []
 			return rows
 		}
 	}
-	return rows
-}
-
-func (w *mysqlSinkWorker) fetchMorePendingEvent(rows []*model.RowChangedEvent) []*model.RowChangedEvent {
-	if len(rows) >= w.maxTxnRow {
-		return rows
-	}
-	after := time.NewTimer(w.maxBatchWaitTime)
-loop1:
-	for len(rows) < w.maxTxnRow {
-		select {
-		case row, ok := <-w.rowCh:
-			if !ok {
-				return rows
-			}
-			rows = append(rows, row)
-		case <-after.C:
-			break loop1
-		}
-	}
-	after.Stop()
 	return rows
 }
 
