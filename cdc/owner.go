@@ -615,8 +615,20 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-
+		positions, err := o.etcdClient.GetAllTaskPositions(ctx, changeFeedID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// in most cases statuses and positions have the same keys
+		captureIDs := make(map[string]struct{}, len(statuses))
 		for captureID := range statuses {
+			captureIDs[captureID] = struct{}{}
+		}
+		for captureID := range positions {
+			captureIDs[captureID] = struct{}{}
+		}
+
+		for captureID := range captureIDs {
 			if _, ok := active[captureID]; !ok {
 				if err := o.etcdClient.DeleteTaskStatus(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
