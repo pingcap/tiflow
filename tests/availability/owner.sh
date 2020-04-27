@@ -128,11 +128,12 @@ function test_owner_cleanup_stale_tasks() {
     # run another server
     run_cdc_server $WORK_DIR $CDC_BINARY
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
+    capture_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}' | grep -v "$owner_pid")
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
     echo "capture_id:" $capture_id
 
-    kill -SIGKILL $owner_id
-    kill -SIGKILL $capture_id
+    kill -SIGKILL $owner_pid
+    kill -SIGKILL $capture_pid
     # wait capture info expires
     sleep 3
 
