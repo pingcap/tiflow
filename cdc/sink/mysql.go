@@ -434,25 +434,19 @@ func (w *mysqlSinkWorker) run(ctx context.Context) {
 		}
 	}()
 	var rows []*model.RowChangedEvent
-	for {
-		select {
-		case row, ok := <-w.rowCh:
-			if !ok {
-				return
-			}
-			rows = append(rows, row)
-			rows = w.fetchAllPendingEvent(rows)
-			// TODO: Add retry
-			err := w.execDMLs(ctx, rows)
-			w.trySendErr(err)
+	for row := range w.rowCh {
+		rows = append(rows, row)
+		rows = w.fetchAllPendingEvent(rows)
+		// TODO: Add retry
+		err := w.execDMLs(ctx, rows)
+		w.trySendErr(err)
 
-			// clean cache to avoid memory leak.
-			for i := range rows {
-				w.jobWg.Done()
-				rows[i] = nil
-			}
-			rows = rows[:0]
+		// clean cache to avoid memory leak.
+		for i := range rows {
+			w.jobWg.Done()
+			rows[i] = nil
 		}
+		rows = rows[:0]
 	}
 }
 
