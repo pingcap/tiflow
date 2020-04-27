@@ -13,6 +13,7 @@ import (
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
 	Ts       uint64
+	RowID    int64
 	Resolved bool
 
 	Schema string

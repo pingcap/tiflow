@@ -78,6 +78,7 @@ func (idx *indexKVEntry) unflatten(tableInfo *TableInfo) error {
 	}
 	return nil
 }
+
 func isDistinct(index *timodel.IndexInfo, indexValue []types.Datum) bool {
 	if index.Primary {
 		return true
@@ -344,6 +345,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 
 	event := &model.RowChangedEvent{
 		Ts:           row.Ts,
+		RowID:        row.RecordID,
 		Resolved:     false,
 		Schema:       tableInfo.TableName.Schema,
 		Table:        tableInfo.TableName.Table,
@@ -406,6 +408,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 	}
 	return &model.RowChangedEvent{
 		Ts:           idx.Ts,
+		RowID:        idx.RecordID,
 		Resolved:     false,
 		Schema:       tableInfo.TableName.Schema,
 		Table:        tableInfo.TableName.Table,
