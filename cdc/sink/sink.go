@@ -55,7 +55,7 @@ type Sink interface {
 const DSNScheme = "dsn://"
 
 // NewSink creates a new sink with the sink-uri
-func NewSink(ctx context.Context, sinkURIStr string, filter *util.Filter, opts map[string]string) (Sink, error) {
+func NewSink(ctx context.Context, sinkURIStr string, filter *util.Filter, config *util.ReplicaConfig, opts map[string]string) (Sink, error) {
 	// check if sinkURI is a DSN
 	if strings.HasPrefix(strings.ToLower(sinkURIStr), DSNScheme) {
 		dsnStr := sinkURIStr[len(DSNScheme):]
@@ -63,7 +63,7 @@ func NewSink(ctx context.Context, sinkURIStr string, filter *util.Filter, opts m
 		if err != nil {
 			return nil, errors.Annotatef(err, "parse sinkURI failed")
 		}
-		return newMySQLSink(nil, dsnCfg, filter, opts)
+		return newMySQLSink(ctx, nil, dsnCfg, filter, opts)
 	}
 
 	// parse sinkURI as a URI
@@ -75,9 +75,9 @@ func NewSink(ctx context.Context, sinkURIStr string, filter *util.Filter, opts m
 	case "blackhole":
 		return newBlackHoleSink(opts), nil
 	case "mysql", "tidb":
-		return newMySQLSink(sinkURI, nil, filter, opts)
+		return newMySQLSink(ctx, sinkURI, nil, filter, opts)
 	case "kafka":
-		return newKafkaSaramaSink(ctx, sinkURI, filter, opts)
+		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts)
 	default:
 		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}

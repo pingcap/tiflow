@@ -791,7 +791,7 @@ func runProcessor(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

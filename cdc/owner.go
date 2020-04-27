@@ -212,7 +212,7 @@ func (o *Owner) newChangeFeed(
 		}
 	}
 
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.Opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), info.Opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

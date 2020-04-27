@@ -741,7 +741,7 @@ func (s *eventFeedSession) partialRegionFeed(
 		zap.Reflect("regionID", state.sri.verID.GetID()),
 		zap.Reflect("span", state.sri.span),
 		zap.Uint64("checkpoint", ts),
-		zap.Error(err))
+		zap.String("error", err.Error()))
 
 	state.sri.ts = ts
 

@@ -37,12 +37,14 @@ type options struct {
 	statusHost  string
 	statusPort  int
 	gcTTL       int64
+	timezone    *time.Location
 }
 
 var defaultServerOptions = options{
 	pdEndpoints: "http://127.0.0.1:2379",
 	statusHost:  "127.0.0.1",
 	statusPort:  defaultStatusPort,
+	timezone:    time.Local,
 	gcTTL:       DefaultCDCGCSafePointTTL,
 }
 
@@ -74,6 +76,13 @@ func GCTTL(t int64) ServerOption {
 	}
 }
 
+// Timezone returns a ServerOption that sets the timezone
+func Timezone(tz *time.Location) ServerOption {
+	return func(o *options) {
+		o.timezone = tz
+	}
+}
+
 // A ServerOption sets options such as the addr of PD.
 type ServerOption func(*options)
 
@@ -95,7 +104,8 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 		zap.String("pd-addr", opts.pdEndpoints),
 		zap.String("status-host", opts.statusHost),
 		zap.Int("status-port", opts.statusPort),
-		zap.Int64("gc-ttl", opts.gcTTL))
+		zap.Int64("gc-ttl", opts.gcTTL),
+		zap.Any("timezone", opts.timezone))
 
 	s := &Server{
 		opts: opts,
@@ -122,8 +132,9 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return err
 	}
 	s.capture = capture
-
-	ctx, cancel := context.WithCancel(util.PutCaptureIDInCtx(ctx, s.capture.info.ID))
+	ctx = util.PutCaptureIDInCtx(ctx, s.capture.info.ID)
+	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
+	ctx, cancel := context.WithCancel(ctx)
 
 	// when a goroutine paniced, cancel would be called first, which
 	// cancels all the normal goroutines, and then the defered recover

@@ -1929,7 +1929,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_processor_resolved_ts{changefeed = \"$changefeed\"}) by (instance)",
+          "expr": "sum(ticdc_processor_resolved_ts{changefeed = \"$changefeed\",capture=\"$capture\"}) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -2113,7 +2113,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_processor_num_of_tables{changefeed = \"$changefeed\"}) by (instance)",
+          "expr": "sum(ticdc_processor_num_of_tables{changefeed = \"$changefeed\",capture=\"$capture\"}) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -2205,7 +2205,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum (ticdc_processor_checkpoint_ts{changefeed = \"$changefeed\"}) by (instance)",
+          "expr": "sum (ticdc_processor_checkpoint_ts{changefeed = \"$changefeed\",capture=\"$capture\"}) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",

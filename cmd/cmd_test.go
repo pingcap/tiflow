@@ -48,6 +48,16 @@ tbl-name = "user"
 [[filter-rules.do-tables]]
 db-name = "sns"
 tbl-name = "following"
+
+[[sink-dispatch-rules]]
+db-name = "sns"
+tbl-name = "user"
+rule = "ts"
+
+[[sink-dispatch-rules]]
+db-name = "sns"
+tbl-name = "following"
+rule = "rowid"
 `
 	err := ioutil.WriteFile(path, []byte(content), 0644)
 	c.Assert(err, check.IsNil)
@@ -63,6 +73,10 @@ tbl-name = "following"
 	c.Assert(cfg.FilterRules.DoTables, check.DeepEquals, []*filter.Table{
 		{Schema: "sns", Name: "user"},
 		{Schema: "sns", Name: "following"},
+	})
+	c.Assert(cfg.SinkDispatchRules, check.DeepEquals, []*util.DispatchRule{
+		{Table: filter.Table{Schema: "sns", Name: "user"}, Rule: "ts"},
+		{Table: filter.Table{Schema: "sns", Name: "following"}, Rule: "rowid"},
 	})
 }
 
@@ -82,6 +96,16 @@ tbl-name = "user"
 [[filter-rules.do-tables]]
 db-name = "sns"
 tbl-name = "following"
+
+[[sink-dispatch-rules]]
+db-name = "sns"
+tbl-name = "user"
+rule = "ts"
+
+[[sink-dispatch-rules]]
+db-name = "sns"
+tbl-name = "following"
+rule = "rowid"
 `
 	err := ioutil.WriteFile("changefeed.toml", []byte(content), 0644)
 	c.Assert(err, check.IsNil)
@@ -97,6 +121,10 @@ tbl-name = "following"
 	c.Assert(cfg.FilterRules.DoTables, check.DeepEquals, []*filter.Table{
 		{Schema: "sns", Name: "user"},
 		{Schema: "sns", Name: "following"},
+	})
+	c.Assert(cfg.SinkDispatchRules, check.DeepEquals, []*util.DispatchRule{
+		{Table: filter.Table{Schema: "sns", Name: "user"}, Rule: "ts"},
+		{Table: filter.Table{Schema: "sns", Name: "following"}, Rule: "rowid"},
 	})
 }
 
