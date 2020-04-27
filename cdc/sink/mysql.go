@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -364,19 +365,20 @@ func concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChange
 		nWorkers = defaultParams.workerCount
 	}
 
+	var workerWg, jobWg sync.WaitGroup
 	errCh := make(chan error, 1)
 	rowChs := make([]chan *model.RowChangedEvent, 0, nWorkers)
-	var jobWg sync.WaitGroup
-
 	for i := 0; i < nWorkers; i++ {
 		rowCh := make(chan *model.RowChangedEvent, 1024)
 		worker := mysqlSinkWorker{
 			rowCh:     rowCh,
 			errCh:     errCh,
+			workerWg:  &workerWg,
 			jobWg:     &jobWg,
 			maxTxnRow: maxTxnRow,
 			execDMLs:  execDMLs,
 		}
+		workerWg.Add(1)
 		go worker.run(ctx)
 		rowChs = append(rowChs, rowCh)
 	}
@@ -409,7 +411,7 @@ func concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChange
 	for i := range rowChs {
 		close(rowChs[i])
 	}
-	jobWg.Wait()
+	workerWg.Wait()
 	select {
 	case err := <-errCh:
 		return err
@@ -421,6 +423,7 @@ func concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChange
 type mysqlSinkWorker struct {
 	rowCh     chan *model.RowChangedEvent
 	errCh     chan error
+	workerWg  *sync.WaitGroup
 	jobWg     *sync.WaitGroup
 	maxTxnRow int
 	execDMLs  func(context.Context, []*model.RowChangedEvent) error
@@ -429,9 +432,13 @@ type mysqlSinkWorker struct {
 func (w *mysqlSinkWorker) run(ctx context.Context) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error("mysql sink worker panic",
-				zap.Reflect("r", r), zap.Stack("stack trace"))
+			buf := make([]byte, 4096)
+			stackSize := runtime.Stack(buf, false)
+			buf = buf[:stackSize]
+			w.trySendErr(errors.Errorf("mysql sink concurrent execute panic, stack: %v", string(buf)))
+			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stack trace"))
 		}
+		w.workerWg.Done()
 	}()
 	var rows []*model.RowChangedEvent
 	for row := range w.rowCh {
