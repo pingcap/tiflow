@@ -2,13 +2,13 @@ package sink
 
 import (
 	"context"
-	"encoding/json"
-	"hash/crc32"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
 
 	"golang.org/x/sync/errgroup"
 
@@ -29,6 +29,7 @@ type mqSink struct {
 	globalResolvedTs uint64
 	checkpointTs     uint64
 	filter           *util.Filter
+	dispatcher       dispatcher.Dispatcher
 
 	captureID    string
 	changefeedID string
@@ -36,16 +37,14 @@ type mqSink struct {
 	errCh chan error
 }
 
-func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, opts map[string]string) *mqSink {
-	partitionNum := mqProducer.GetPartitionNum()
-	changefeedID := opts[OptChangefeedID]
-	captureID := opts[OptCaptureID]
+func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, config *util.ReplicaConfig, opts map[string]string) *mqSink {
 	return &mqSink{
 		mqProducer:   mqProducer,
-		partitionNum: partitionNum,
+		partitionNum: mqProducer.GetPartitionNum(),
+		dispatcher:   dispatcher.NewDispatcher(config, mqProducer.GetPartitionNum()),
 		filter:       filter,
-		changefeedID: changefeedID,
-		captureID:    captureID,
+		changefeedID: opts[OptChangefeedID],
+		captureID:    opts[OptCaptureID],
 		errCh:        make(chan error, 1),
 	}
 }
@@ -77,7 +76,7 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
 			continue
 		}
-		partition := k.calPartition(row)
+		partition := k.dispatcher.Dispatch(row)
 		key, value := row.ToMqMessage()
 		err := k.mqProducer.SendMessage(ctx, key, value, partition)
 		if err != nil {
@@ -85,34 +84,6 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 		}
 	}
 	return nil
-}
-
-func (k *mqSink) calPartition(row *model.RowChangedEvent) int32 {
-	hash := crc32.NewIEEE()
-	// distribute partition by table
-	_, err := hash.Write([]byte(row.Schema))
-	if err != nil {
-		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-	}
-	_, err = hash.Write([]byte(row.Table))
-	if err != nil {
-		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-	}
-
-	if len(row.IndieMarkCol) > 0 {
-		// distribute partition by rowid or unique column value
-		value := row.Columns[row.IndieMarkCol].Value
-		b, err := json.Marshal(value)
-		if err != nil {
-			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-		}
-		_, err = hash.Write(b)
-		if err != nil {
-			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-		}
-	}
-
-	return int32(hash.Sum32() % uint32(k.partitionNum))
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -210,7 +181,7 @@ func (k *mqSink) PrintStatus(ctx context.Context) error {
 	return k.mqProducer.PrintStatus(ctx)
 }
 
-func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filter, opts map[string]string) (*mqSink, error) {
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filter, replicaConfig *util.ReplicaConfig, opts map[string]string) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
 	scheme := strings.ToLower(sinkURI.Scheme)
@@ -261,5 +232,5 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filt
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return newMqSink(producer, filter, opts), nil
+	return newMqSink(producer, filter, replicaConfig, opts), nil
 }
