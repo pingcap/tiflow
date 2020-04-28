@@ -161,7 +161,7 @@ func newProcessor(
 		session:       session,
 		sink:          sink,
 		ddlPuller:     ddlPuller,
-		mounter:       entry.NewMounter(schemaStorage),
+		mounter:       entry.NewMounter(schemaStorage, changefeed.GetConfig().MounterWorkerNum),
 		schemaStorage: schemaStorage,
 
 		tsRWriter: tsRWriter,

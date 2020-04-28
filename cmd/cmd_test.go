@@ -37,6 +37,7 @@ func (s *decodeFileSuite) TestCanDecodeTOML(c *check.C) {
 filter-case-sensitive = false
 ignore-txn-commit-ts = [1, 2]
 ddl-white-list = [1, 2]
+mounter-worker-num = 64
 
 [filter-rules]
 ignore-dbs = ["test", "sys"]
@@ -67,6 +68,7 @@ rule = "rowid"
 	c.Assert(err, check.IsNil)
 
 	c.Assert(cfg.FilterCaseSensitive, check.IsFalse)
+	c.Assert(cfg.MounterWorkerNum, check.Equals, 64)
 	c.Assert(cfg.IgnoreTxnCommitTs, check.DeepEquals, []uint64{1, 2})
 	c.Assert(cfg.DDLWhitelist, check.DeepEquals, []model.ActionType{1, 2})
 	c.Assert(cfg.FilterRules.IgnoreDBs, check.DeepEquals, []string{"test", "sys"})

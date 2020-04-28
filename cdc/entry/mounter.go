@@ -106,17 +106,22 @@ type mounterImpl struct {
 	schemaStorage   *SchemaStorage
 	rawRowChangedCh chan *model.PolymorphicEvent
 	tz              *time.Location
+	workerNum       int
 }
 
 // NewMounter creates a mounter
-func NewMounter(schemaStorage *SchemaStorage) Mounter {
+func NewMounter(schemaStorage *SchemaStorage, workerNum int) Mounter {
+	if workerNum <= 0 {
+		workerNum = defaultMounterWorkerNum
+	}
 	return &mounterImpl{
 		schemaStorage:   schemaStorage,
 		rawRowChangedCh: make(chan *model.PolymorphicEvent, defaultOutputChanSize),
+		workerNum:       workerNum,
 	}
 }
 
-const codecWorkerNum = 32
+const defaultMounterWorkerNum = 32
 
 func (m *mounterImpl) Run(ctx context.Context) error {
 	m.tz = util.TimezoneFromCtx(ctx)
@@ -125,7 +130,7 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		m.collectMetrics(ctx)
 		return nil
 	})
-	for i := 0; i < codecWorkerNum; i++ {
+	for i := 0; i < m.workerNum; i++ {
 		errg.Go(func() error {
 			return m.codecWorker(ctx)
 		})
@@ -337,7 +342,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 			continue
 		}
 		colName := colInfo.Name.O
-		value, err := formatColVal(colValue.GetValue(), colInfo.Tp)
+		value, err := formatColVal(colValue, colInfo.Tp)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -405,7 +410,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 
 	values := make(map[string]*model.Column, len(idx.IndexValue))
 	for i, idxCol := range indexInfo.Columns {
-		value, err := formatColVal(idx.IndexValue[i].GetValue(), tableInfo.Columns[idxCol.Offset].Tp)
+		value, err := formatColVal(idx.IndexValue[i], tableInfo.Columns[idxCol.Offset].Tp)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -429,27 +434,31 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 	}, nil
 }
 
-func formatColVal(value interface{}, tp byte) (interface{}, error) {
-	if value == nil {
-		return nil, nil
-	}
+func formatColVal(datum types.Datum, tp byte) (interface{}, error) {
 
 	switch tp {
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp, mysql.TypeDuration, mysql.TypeDecimal, mysql.TypeNewDecimal, mysql.TypeJSON:
-		value = fmt.Sprintf("%v", value)
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
+		return datum.GetMysqlTime().String(), nil
+	case mysql.TypeDuration:
+		return datum.GetMysqlDuration().String(), nil
+	case mysql.TypeJSON:
+		return datum.GetMysqlJSON().String(), nil
+	case mysql.TypeNewDecimal, mysql.TypeDecimal:
+		v := datum.GetMysqlDecimal()
+		if v == nil {
+			return nil, nil
+		}
+		return v.String(), nil
 	case mysql.TypeEnum:
-		value = value.(types.Enum).Value
+		return datum.GetMysqlEnum().Value, nil
 	case mysql.TypeSet:
-		value = value.(types.Set).Value
+		return datum.GetMysqlSet().Value, nil
 	case mysql.TypeBit:
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
-		var err error
-		value, err = value.(types.BinaryLiteral).ToInt(nil)
-		if err != nil {
-			return nil, err
-		}
+		return datum.GetBinaryLiteral().ToInt(nil)
+	default:
+		return datum.GetValue(), nil
 	}
-	return value, nil
 }
 
 func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
