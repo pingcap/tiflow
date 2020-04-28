@@ -39,19 +39,21 @@ import (
 )
 
 var (
+	defaultBufferSize           = 1000
 	defaultInitFileCount        = 10
 	defaultFileSizeLimit uint64 = 1 << 31 // 2GB per file at most
 )
 
 type fileCache struct {
-	fileLock          sync.Mutex
-	sorting           int32
-	dir               string
-	toRemoveFiles     []string
-	unsortedFiles     []string
-	lastSortedFile    string
-	availableFileIdx  []int
-	availableFileSize map[int]uint64
+	fileLock              sync.Mutex
+	sorting               int32
+	dir                   string
+	toRemoveFiles         []string
+	toRemoveUnsortedFiles []string
+	unsortedFiles         []string
+	lastSortedFile        string
+	availableFileIdx      []int
+	availableFileSize     map[int]uint64
 }
 
 func newFileCache(dir string) *fileCache {
@@ -67,9 +69,10 @@ func newFileCache(dir string) *fileCache {
 }
 
 func (cache *fileCache) resetUnsortedFiles() {
-	cache.toRemoveFiles = append(cache.toRemoveFiles, cache.unsortedFiles...)
-	cache.unsortedFiles = make([]string, 0, defaultInitFileCount)
-	cache.availableFileIdx = make([]int, 0, defaultInitFileCount)
+	cache.toRemoveUnsortedFiles = make([]string, len(cache.unsortedFiles))
+	copy(cache.toRemoveUnsortedFiles, cache.unsortedFiles)
+	cache.unsortedFiles = cache.unsortedFiles[:0]
+	cache.availableFileIdx = cache.availableFileIdx[:0]
 	cache.availableFileSize = make(map[int]uint64, defaultInitFileCount)
 }
 
@@ -141,6 +144,8 @@ func (cache *fileCache) finishSorting(newLastSortedFile string, toRemoveFiles []
 	defer cache.fileLock.Unlock()
 	atomic.StoreInt32(&cache.sorting, 0)
 	cache.toRemoveFiles = append(cache.toRemoveFiles, toRemoveFiles...)
+	cache.toRemoveFiles = append(cache.toRemoveFiles, cache.toRemoveUnsortedFiles...)
+	cache.toRemoveUnsortedFiles = cache.toRemoveUnsortedFiles[:0]
 	cache.lastSortedFile = newLastSortedFile
 }
 
@@ -190,6 +195,9 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 		binary.BigEndian.PutUint64(dataLen[:], uint64(dataBuf.Len()))
 		buf.Write(dataLen[:])
 		buf.Write(dataBuf.Bytes())
+	}
+	if buf.Len() == 0 {
+		return 0, nil
 	}
 	f, err := os.OpenFile(fullpath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -321,13 +329,12 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		sort.Slice(evs, func(i, j int) bool {
 			return evs[i].Ts < evs[j].Ts
 		})
-		batchFlushSize := 10
 		newfile := randomFileName("sorted")
 		newfpath := filepath.Join(fs.dir, newfile)
-		buffer := make([]*model.PolymorphicEvent, 0, batchFlushSize)
+		buffer := make([]*model.PolymorphicEvent, 0, defaultBufferSize)
 		for _, entry := range evs {
 			buffer = append(buffer, entry)
-			if len(buffer) >= batchFlushSize {
+			if len(buffer) >= defaultBufferSize {
 				_, err := flushEventsToFile(ctx, newfpath, buffer)
 				if err != nil {
 					return "", errors.Trace(err)
@@ -395,8 +402,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 	}
 	lastSortedFileUpdated := false
 	newLastSortedFile := randomFileName("last-sorted")
-	bufferLen := 10
-	buffer := make([]*model.PolymorphicEvent, 0, bufferLen)
+	buffer := make([]*model.PolymorphicEvent, 0, defaultBufferSize)
 	for h.Len() > 0 {
 		item := heap.Pop(h).(*sortItem)
 		if item.entry.Ts <= resolvedTs {
@@ -404,7 +410,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		} else {
 			lastSortedFileUpdated = true
 			buffer = append(buffer, item.entry)
-			if len(buffer) > bufferLen {
+			if len(buffer) > defaultBufferSize {
 				_, err := flushEventsToFile(ctx, filepath.Join(fs.dir, newLastSortedFile), buffer)
 				if err != nil {
 					return errors.Trace(err)
@@ -468,8 +474,7 @@ func (fs *FileSorter) Run(ctx context.Context) error {
 }
 
 func (fs *FileSorter) sortAndOutput(ctx context.Context) error {
-	bufferLen := 10
-	buffer := make([]*model.PolymorphicEvent, 0, bufferLen)
+	buffer := make([]*model.PolymorphicEvent, 0, defaultBufferSize)
 
 	flush := func() error {
 		err := fs.cache.flush(ctx, buffer)
@@ -497,7 +502,7 @@ func (fs *FileSorter) sortAndOutput(ctx context.Context) error {
 				continue
 			}
 			buffer = append(buffer, ev)
-			if len(buffer) >= bufferLen {
+			if len(buffer) >= defaultBufferSize {
 				err := flush()
 				if err != nil {
 					return errors.Trace(err)
