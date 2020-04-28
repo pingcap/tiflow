@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// GetTimezone returns the timezone specified by the name
 func GetTimezone(name string) (*time.Location, error) {
 	switch strings.ToLower(name) {
 	case "", "system", "local":
@@ -16,6 +17,7 @@ func GetTimezone(name string) (*time.Location, error) {
 	}
 }
 
+// GetTimezone returns the timezone in local system
 func GetLocalTimezone() (*time.Location, error) {
 	if time.Local.String() != "Local" {
 		return time.Local, nil
