@@ -44,7 +44,7 @@ var defaultServerOptions = options{
 	pdEndpoints: "http://127.0.0.1:2379",
 	statusHost:  "127.0.0.1",
 	statusPort:  defaultStatusPort,
-	timezone:    time.Local,
+	timezone:    nil,
 	gcTTL:       DefaultCDCGCSafePointTTL,
 }
 

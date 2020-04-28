@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -54,15 +53,18 @@ func runEServer(cmd *cobra.Command, args []string) error {
 		return errors.Annotatef(err, "invalid status address: %s", statusAddr)
 	}
 
-	var opts []cdc.ServerOption
-	opts = append(opts, cdc.PDEndpoints(serverPdAddr), cdc.StatusHost(addrs[0]), cdc.StatusPort(int(statusPort)), cdc.GCTTL(gcTTL))
-	if strings.ToLower(timezone) != "system" {
-		tz, err := time.LoadLocation(timezone)
-		if err != nil {
-			return errors.Annotate(err, "can not load timezone")
-		}
-		opts = append(opts, cdc.Timezone(tz))
+	tz, err := util.GetTimezone(timezone)
+	if err != nil {
+		return errors.Annotate(err, "can not load timezone")
 	}
+
+	opts := []cdc.ServerOption{
+		cdc.PDEndpoints(serverPdAddr),
+		cdc.StatusHost(addrs[0]),
+		cdc.StatusPort(int(statusPort)),
+		cdc.GCTTL(gcTTL),
+		cdc.Timezone(tz)}
+
 	server, err := cdc.NewServer(opts...)
 	if err != nil {
 		return errors.Annotate(err, "new server")
