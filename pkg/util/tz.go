@@ -17,7 +17,7 @@ func GetTimezone(name string) (*time.Location, error) {
 	}
 }
 
-// GetTimezone returns the timezone in local system
+// GetLocalTimezone returns the timezone in local system
 func GetLocalTimezone() (*time.Location, error) {
 	if time.Local.String() != "Local" {
 		return time.Local, nil
