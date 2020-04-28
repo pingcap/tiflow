@@ -75,7 +75,9 @@ type changeFeed struct {
 	taskPositions map[string]*model.TaskPosition
 	filter        *util.Filter
 	sink          sink.Sink
-	cyclic        *cyclic.Cyclic
+
+	// TODO(neil) should it be a bool?
+	cyclic *cyclic.Cyclic
 
 	ddlHandler    OwnerDDLHandler
 	ddlResolvedTs uint64
@@ -127,9 +129,9 @@ func (c *changeFeed) dropSchema(schemaID uint64) {
 	delete(c.schemas, schemaID)
 }
 
-func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
+func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) error {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
-		return
+		return nil
 	}
 
 	// If cyclic replication is turned on, we neeed to create a mark table to
@@ -144,13 +146,16 @@ func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 		for _, ddl := range ddls {
 			// TODO(neil) what about ts in the event?
 			ddl.Ts = 0
-			c.sink.EmitDDLEvent(ctx, ddl)
+			err := c.sink.EmitDDLEvent(ctx, ddl)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 
 	if _, ok := c.tables[tid]; ok {
 		log.Warn("add table already exists", zap.Uint64("tableID", tid), zap.Stringer("table", table))
-		return
+		return nil
 	}
 
 	if _, ok := c.schemas[sid]; !ok {
@@ -162,6 +167,7 @@ func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 		ID:      tid,
 		StartTs: startTs,
 	}
+	return nil
 }
 
 func (c *changeFeed) removeTable(sid, tid uint64) {
@@ -399,7 +405,10 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			if !exist {
 				return errors.NotFoundf("table(%d)", addID)
 			}
-			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
+			errAdd := c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
+			if errAdd != nil {
+				return errAdd
+			}
 		case timodel.ActionDropTable:
 			dropID := uint64(job.TableID)
 			c.removeTable(schemaID, dropID)
@@ -419,7 +428,10 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 				return errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
 			}
 			addID := uint64(job.BinlogInfo.TableInfo.ID)
-			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
+			errAdd := c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
+			if errAdd != nil {
+				return errAdd
+			}
 		}
 		return nil
 	}()

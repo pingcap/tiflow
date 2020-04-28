@@ -34,7 +34,6 @@ import (
 //
 // Note table ID is only for avoid write hotspot there is *NO* guarantee
 // normal tables and mark tables are one:one map.
-// Also, table A's mark could be in table B's mark table.
 func CyclicCreateMarkTable(tableID int64) []*DDLEvent {
 	schema, table := cyclic.MarkTableName(tableID)
 	events := []*DDLEvent{
@@ -158,8 +157,7 @@ func ReduceCyclicRowsGroup(
 			multiRows := make([][]*RowChangedEvent, 0, 1)
 			rows := make([]*RowChangedEvent, 0, len(events)+1)
 			if markRow != nil {
-				var mark RowChangedEvent
-				mark = *markRow
+				var mark RowChangedEvent = *markRow
 				// Rewrite mark table name based on event's table ID.
 				schema, table := cyclic.MarkTableName(name.ID)
 				mark.Table = &TableName{

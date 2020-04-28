@@ -191,7 +191,10 @@ func (s *mysqlSink) Run(ctx context.Context) error {
 		return ctx.Err()
 	}
 
-	s.adjustSQLMode(ctx)
+	err := s.adjustSQLMode(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	for {
 		select {
