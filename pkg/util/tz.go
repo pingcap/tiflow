@@ -26,6 +26,9 @@ func GetLocalTimezone() (*time.Location, error) {
 	if err != nil {
 		return nil, err
 	}
+	// the linked path of `/etc/localtime`
+	// MacOS: /var/db/timezone/zoneinfo/Asia/Shanghai
+	// Linux: /etc/usr/share/zoneinfo/Asia/Shanghai
 	tzName := path.Join(path.Base(path.Dir(str)), path.Base(str))
 	return time.LoadLocation(tzName)
 }
