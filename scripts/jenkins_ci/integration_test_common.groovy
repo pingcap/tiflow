@@ -1,6 +1,6 @@
 test_case_names = ["simple", "cdc", "multi_capture", "split_region", "row_format",
 "tiflash", "availability", "ddl_sequence", "sink_retry", "resolve_lock", "drop_many_tables",
-"file_sort"]
+"file_sort", "batch_add_table"]
 
 def prepare_binaries() {
     stage('Prepare Binaries') {
@@ -56,6 +56,8 @@ def prepare_binaries() {
                         curl http://download.pingcap.org/tiflash-nightly-linux-amd64.tar.gz | tar xz -C third_bin
                         mv third_bin/tiflash-nightly-linux-amd64/* third_bin
                         curl ${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb -o third_bin/go-ycsb
+                        curl -L https://github.com/etcd-io/etcd/releases/download/v3.4.7/etcd-v3.4.7-linux-amd64.tar.gz | tar xz -C ./tmp
+                        mv tmp/etcd-v3.4.7-linux-amd64/etcdctl third_bin
                         curl https://download.pingcap.org/tidb-tools-v2.1.6-linux-amd64.tar.gz | tar xz -C ./tmp tidb-tools-v2.1.6-linux-amd64/bin/sync_diff_inspector
                         mv tmp/tidb-tools-v2.1.6-linux-amd64/bin/* third_bin
                         chmod a+x third_bin/*

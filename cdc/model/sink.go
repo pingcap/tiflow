@@ -25,6 +25,7 @@ type RowChangedEvent struct {
 	// IndieMarkCol will be set to the name of the unique index
 	IndieMarkCol string
 	Columns      map[string]*Column
+	Keys         []string
 }
 
 // ToMqMessage transforms to message key and value
