@@ -106,17 +106,22 @@ type mounterImpl struct {
 	schemaStorage   *SchemaStorage
 	rawRowChangedCh chan *model.PolymorphicEvent
 	tz              *time.Location
+	workerNum       int
 }
 
 // NewMounter creates a mounter
-func NewMounter(schemaStorage *SchemaStorage) Mounter {
+func NewMounter(schemaStorage *SchemaStorage, workerNum int) Mounter {
+	if workerNum <= 0 {
+		workerNum = defaultMounterWorkerNum
+	}
 	return &mounterImpl{
 		schemaStorage:   schemaStorage,
 		rawRowChangedCh: make(chan *model.PolymorphicEvent, defaultOutputChanSize),
+		workerNum:       workerNum,
 	}
 }
 
-const codecWorkerNum = 32
+const defaultMounterWorkerNum = 32
 
 func (m *mounterImpl) Run(ctx context.Context) error {
 	m.tz = util.TimezoneFromCtx(ctx)
@@ -125,7 +130,7 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		m.collectMetrics(ctx)
 		return nil
 	})
-	for i := 0; i < codecWorkerNum; i++ {
+	for i := 0; i < m.workerNum; i++ {
 		errg.Go(func() error {
 			return m.codecWorker(ctx)
 		})
