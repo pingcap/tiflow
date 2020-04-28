@@ -125,8 +125,8 @@ groups:
     for: 1m
     labels:
       env: ENV_LABELS_ENV
-        level: warning
-        expr: histogram_quantile(0.9, rate(tikv_cdc_scan_duration_seconds_bucket{}[1m])) > 30
+      level: warning
+      expr: histogram_quantile(0.9, rate(tikv_cdc_scan_duration_seconds_bucket{}[1m])) > 30
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
