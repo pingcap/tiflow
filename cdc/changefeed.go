@@ -313,8 +313,21 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[strin
 			markTableSchameName, markTableTableName := cyclic.MarkTableName(int64(tableID))
 			id, found := schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
 			if !found {
+				msg := "balance table info delay, wait mark table"
+				if c.cyclic.IsInitialDDLCluster() {
+					ddls := make([]string, 0, 2)
+					ddlevents := model.CyclicCreateMarkTable(int64(tableID))
+					for _, event := range ddlevents {
+						ddls = append(ddls, event.Query)
+					}
+					errCreate := c.cyclic.CreateInitialUpsteamMarkTable(ctx, ddls)
+					if errCreate != nil {
+						return errors.Trace(errCreate)
+					}
+					msg = "balance table info delay, wait initial mark table"
+				}
 				// Mark table is not created yet, skip and wait.
-				log.Info("balance table info delay, wait mark table",
+				log.Info(msg,
 					zap.String("changefeed", c.id),
 					zap.Uint64("tableID", tableID),
 					zap.String("markTableName", markTableTableName))

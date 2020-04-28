@@ -18,6 +18,8 @@
 package cyclic
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -42,9 +44,10 @@ const (
 // ReplicationConfig represents config used for cyclic replication
 type ReplicationConfig struct {
 	ReplicaID       uint64   `toml:"enable" json:"enable"`
-	SyncDDL         bool     `toml:"sync-ddl" json:"sync-ddl"`
-	IDBuckets       int      `toml:"id-buckets" json:"id-buckets"`
 	FilterReplicaID []uint64 `toml:"filter-replica-ids" json:"filter-replica-ids"`
+	IDBuckets       int      `toml:"id-buckets" json:"id-buckets"`
+	SyncDDL         bool     `toml:"sync-ddl" json:"sync-ddl"`
+	UpstreamDSN     string   `toml:"upstream-dsn" json:"upstream-dsn"`
 }
 
 // IsEnabled returns whether cyclic replication is enabled or not.
@@ -179,6 +182,35 @@ func (c *Cyclic) FilterReplicaID() []uint64 {
 // ReplicaID return a replica ID of this cluster.
 func (c *Cyclic) ReplicaID() uint64 {
 	return c.config.ReplicaID
+}
+
+// IsInitialDDLCluster returns true if the upstream cluster accepts DDLs.
+func (c *Cyclic) IsInitialDDLCluster() bool {
+	return c.config.UpstreamDSN != ""
+}
+
+// CreateInitialUpsteamMarkTable creates initial mark tables to the upstream.
+// It should only be called in TiDB which accepts DDLs.
+func (c *Cyclic) CreateInitialUpsteamMarkTable(
+	ctx context.Context, ddls []string,
+) error {
+	db, err := sql.Open("mysql", c.config.UpstreamDSN)
+	if err != nil {
+		return errors.Annotatef(err, "Fail to create intial mark table, open db failed")
+	}
+	for _, ddl := range ddls {
+		r, err := db.QueryContext(ctx, ddl)
+		if err != nil {
+			return errors.Annotatef(err, "Fail to create intial mark table, ddl %s failed", ddl)
+		}
+		if err = r.Close(); err != nil {
+			return errors.Annotatef(err, "Fail to create intial mark table, close row failed")
+		}
+	}
+	if err = db.Close(); err != nil {
+		return errors.Annotatef(err, "Fail to create intial mark table, close db failed")
+	}
+	return nil
 }
 
 // IsMarkTable tells whether the table is a mark table or not.

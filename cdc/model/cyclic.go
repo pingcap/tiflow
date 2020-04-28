@@ -41,7 +41,7 @@ func CyclicCreateMarkTable(tableID int64) []*DDLEvent {
 			Ts:     0,
 			Schema: schema,
 			Table:  table,
-			Query:  fmt.Sprintf("CREATE SCHEMA IF NOT EXIST %s", schema),
+			Query:  fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", schema),
 			Type:   model.ActionCreateSchema,
 		},
 		{
@@ -49,13 +49,13 @@ func CyclicCreateMarkTable(tableID int64) []*DDLEvent {
 			Schema: schema,
 			Table:  table,
 			Query: fmt.Sprintf(
-				`CREATE TABLE %s.%s IF NOT EXIST
+				`CREATE TABLE IF NOT EXISTS %s.%s
 					(
 					bucket INT NOT NULL,
 					%s BIGINT UNSIGNED NOT NULL,
-					val DEFAULT 0,
-					PRIMARY KEY (bucket, replica_id)
-				);`, schema, table, cyclic.CyclicReplicaIDCol),
+					val BIGINT DEFAULT 0,
+					PRIMARY KEY (bucket, %s)
+				);`, schema, table, cyclic.CyclicReplicaIDCol, cyclic.CyclicReplicaIDCol),
 			Type: model.ActionCreateTable,
 		}}
 	return events
