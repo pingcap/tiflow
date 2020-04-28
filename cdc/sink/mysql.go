@@ -267,7 +267,6 @@ var defaultParams = params{
 }
 
 func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
-	dsnCfg.Loc = tz
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
