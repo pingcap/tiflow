@@ -250,17 +250,12 @@ func (o *Owner) newChangeFeed(
 	return cf, nil
 }
 
-func (o *Owner) loadChangeFeeds(ctx context.Context, changed map[string]struct{}) error {
+func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
 	if err != nil {
 		return err
 	}
 	for changeFeedID, cfInfoRawValue := range details {
-		if changed != nil {
-			if _, ok := changed[changeFeedID]; !ok {
-				continue
-			}
-		}
 		taskStatus, err := o.cfRWriter.GetAllTaskStatus(ctx, changeFeedID)
 		if err != nil {
 			return err
@@ -334,14 +329,8 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 }
 
 // calcResolvedTs call calcResolvedTs of every changefeeds
-func (o *Owner) calcResolvedTs(ctx context.Context, changed map[string]struct{}) error {
+func (o *Owner) calcResolvedTs(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
-		if changed != nil {
-			if _, ok := changed[cf.id]; !ok {
-				continue
-			}
-		}
-
 		if err := cf.calcResolvedTs(ctx); err != nil {
 			return errors.Trace(err)
 		}
@@ -350,14 +339,8 @@ func (o *Owner) calcResolvedTs(ctx context.Context, changed map[string]struct{})
 }
 
 // handleDDL call handleDDL of every changefeeds
-func (o *Owner) handleDDL(ctx context.Context, changed map[string]struct{}) error {
+func (o *Owner) handleDDL(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
-		if changed != nil {
-			if _, ok := changed[cf.id]; !ok {
-				continue
-			}
-		}
-
 		err := cf.handleDDL(ctx, o.captures)
 		switch errors.Cause(err) {
 		case nil:
@@ -529,19 +512,17 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 
 loop:
 	for {
-		var changed map[string]struct{}
 		select {
 		case <-o.done:
 			close(o.done)
 			break loop
 		case <-ctx.Done():
 			return ctx.Err()
-		case changed = <-changedFeeds:
+		case <-changedFeeds:
 		case <-ticker.C:
-			changed = nil
 		}
 
-		err := o.run(ctx, changed)
+		err := o.run(ctx)
 		if err != nil {
 			if errors.Cause(err) != context.Canceled {
 				log.Error("owner exited with error", zap.Error(err))
@@ -558,8 +539,8 @@ loop:
 	return nil
 }
 
-func (o *Owner) watchFeedChange(ctx context.Context) chan map[string]struct{} {
-	output := make(chan map[string]struct{}, 1)
+func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
+	output := make(chan struct{}, 1)
 	go func() {
 		for {
 			select {
@@ -575,27 +556,21 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan map[string]struct{} {
 					break
 				}
 
-				changed := make(map[string]struct{})
-				for _, ev := range resp.Events {
-					changeFeedID, err := util.ExtractKeySuffix(string(ev.Kv.Key))
-					if err != nil {
-						log.Error("position watcher restarted with error", zap.Error(err))
-						break
-					}
-					changed[changeFeedID] = struct{}{}
-				}
-				output <- changed
+				// TODO: because the main loop has many serial steps, it is hard to do a partial update without change
+				// majority logical. For now just to wakeup the main loop ASAP to reduce latency, the efficiency of etcd
+				// operations should be resolved in future release.
+				output <- struct{}{}
 			}
 		}
 	}()
 	return output
 }
 
-func (o *Owner) run(ctx context.Context, changed map[string]struct{}) error {
+func (o *Owner) run(ctx context.Context) error {
 	o.l.Lock()
 	defer o.l.Unlock()
 
-	err := o.loadChangeFeeds(ctx, changed)
+	err := o.loadChangeFeeds(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -605,12 +580,12 @@ func (o *Owner) run(ctx context.Context, changed map[string]struct{}) error {
 		return errors.Trace(err)
 	}
 
-	err = o.calcResolvedTs(ctx, changed)
+	err = o.calcResolvedTs(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = o.handleDDL(ctx, changed)
+	err = o.handleDDL(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -712,7 +687,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 	// Supposing a crased capture should be removed now, the owner will miss deleting
 	// task status and task position if changefeed information is not loaded.
 	o.l.Lock()
-	if err := o.loadChangeFeeds(ctx, nil); err != nil {
+	if err := o.loadChangeFeeds(ctx); err != nil {
 		o.l.Unlock()
 		return errors.Trace(err)
 	}
