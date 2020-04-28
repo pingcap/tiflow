@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	ownerRunInterval = time.Millisecond * 500
+	ownerRunInterval = time.Millisecond * 20
 
 	// DefaultCDCGCSafePointTTL is the default value of cdc gc safe-point ttl, specified in seconds.
 	DefaultCDCGCSafePointTTL = 24 * 60 * 60

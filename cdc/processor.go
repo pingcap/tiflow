@@ -46,8 +46,8 @@ import (
 )
 
 const (
-	updateInfoInterval          = time.Millisecond * 500
-	resolveTsInterval           = time.Millisecond * 500
+	updateInfoInterval          = time.Millisecond * 20
+	resolveTsInterval           = time.Millisecond * 20
 	waitGlobalResolvedTsDelay   = time.Millisecond * 500
 	waitFallbackResolvedTsDelay = time.Millisecond * 500
 
