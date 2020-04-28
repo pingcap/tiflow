@@ -39,9 +39,9 @@ import (
 )
 
 var (
-	defaultBufferSize           = 1000
-	defaultInitFileCount        = 10
-	defaultFileSizeLimit uint64 = 1 << 31 // 2GB per file at most
+	defaultSorterBufferSize        = 1000
+	defaultInitFileCount           = 10
+	defaultFileSizeLimit    uint64 = 1 << 31 // 2GB per file at most
 )
 
 type fileCache struct {
@@ -331,10 +331,10 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		})
 		newfile := randomFileName("sorted")
 		newfpath := filepath.Join(fs.dir, newfile)
-		buffer := make([]*model.PolymorphicEvent, 0, defaultBufferSize)
+		buffer := make([]*model.PolymorphicEvent, 0, defaultSorterBufferSize)
 		for _, entry := range evs {
 			buffer = append(buffer, entry)
-			if len(buffer) >= defaultBufferSize {
+			if len(buffer) >= defaultSorterBufferSize {
 				_, err := flushEventsToFile(ctx, newfpath, buffer)
 				if err != nil {
 					return "", errors.Trace(err)
@@ -402,7 +402,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 	}
 	lastSortedFileUpdated := false
 	newLastSortedFile := randomFileName("last-sorted")
-	buffer := make([]*model.PolymorphicEvent, 0, defaultBufferSize)
+	buffer := make([]*model.PolymorphicEvent, 0, defaultSorterBufferSize)
 	for h.Len() > 0 {
 		item := heap.Pop(h).(*sortItem)
 		if item.entry.Ts <= resolvedTs {
@@ -410,7 +410,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		} else {
 			lastSortedFileUpdated = true
 			buffer = append(buffer, item.entry)
-			if len(buffer) > defaultBufferSize {
+			if len(buffer) > defaultSorterBufferSize {
 				_, err := flushEventsToFile(ctx, filepath.Join(fs.dir, newLastSortedFile), buffer)
 				if err != nil {
 					return errors.Trace(err)
@@ -474,7 +474,7 @@ func (fs *FileSorter) Run(ctx context.Context) error {
 }
 
 func (fs *FileSorter) sortAndOutput(ctx context.Context) error {
-	buffer := make([]*model.PolymorphicEvent, 0, defaultBufferSize)
+	buffer := make([]*model.PolymorphicEvent, 0, defaultSorterBufferSize)
 
 	flush := func() error {
 		err := fs.cache.flush(ctx, buffer)
@@ -502,7 +502,7 @@ func (fs *FileSorter) sortAndOutput(ctx context.Context) error {
 				continue
 			}
 			buffer = append(buffer, ev)
-			if len(buffer) >= defaultBufferSize {
+			if len(buffer) >= defaultSorterBufferSize {
 				err := flush()
 				if err != nil {
 					return errors.Trace(err)
