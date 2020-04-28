@@ -87,8 +87,8 @@ var (
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
-			Name:      "mysql_execution_error",
-			Help:      "total count of processor errors",
+			Name:      "exit_with_error_count",
+			Help:      "counter for processor exits with error",
 		}, []string{"changefeed", "capture"})
 )
 

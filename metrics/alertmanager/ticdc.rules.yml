@@ -119,3 +119,39 @@ groups:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
       summary: tikv cdc min resolved ts no change for 1m
+
+  - alert: ticdc_sink_mysql_execution_error
+    expr: changes(ticdc_sink_mysql_execution_error[1m]) > 0
+    for: 1m
+    labels:
+      env: ENV_LABELS_ENV
+      level: warning
+      expr: changes(ticdc_sink_mysql_execution_error[1m]) > 0
+    annotations:
+      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
+      value: '{{ $value }}'
+      summary: cdc sink mysql execution meets errors
+
+  - alert: ticdc_processor_exit_with_error_count
+    expr: changes(ticdc_processor_exit_with_error_count[1m]) > 0
+    for: 1m
+    labels:
+      env: ENV_LABELS_ENV
+      level: critical
+      expr: changes(ticdc_processor_exit_with_error_count[1m]) > 0
+    annotations:
+      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
+      value: '{{ $value }}'
+      summary: cdc processor exits with error
+
+  - alert: ticdc_memory_abnormal
+    expr: go_memstats_heap_alloc_bytes{job="ticdc"} > 1e+10
+    for: 1m
+      labels:
+        env: ENV_LABELS_ENV
+        level: warning
+        expr: go_memstats_heap_alloc_bytes{job="ticdc"} > 1e+10
+      annotations:
+        description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values:{{ $value }}'
+        value: '{{ $value }}'
+        summary: TiCDC heap memory usage is over 10 GB
