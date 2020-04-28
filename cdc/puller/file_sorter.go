@@ -40,6 +40,7 @@ import (
 
 var (
 	defaultSorterBufferSize        = 1000
+	defaultAutoResolvedRows        = 1000
 	defaultInitFileCount           = 10
 	defaultFileSizeLimit    uint64 = 1 << 31 // 2GB per file at most
 )
@@ -390,6 +391,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 	h := &sortHeap{}
 	heap.Init(h)
 	readBuf := new(bytes.Reader)
+	rowCount := 0
 	for i, fd := range readers {
 		ev, err := readPolymorphicEvent(fd, readBuf)
 		if err != nil {
@@ -407,6 +409,14 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		item := heap.Pop(h).(*sortItem)
 		if item.entry.Ts <= resolvedTs {
 			fs.output(ctx, item.entry)
+			// As events are sorted, we can output a resolved ts at any time.
+			// If we don't output a resovled ts event, the processor will still
+			// cache all events in memory until it receives the resolved ts when
+			// file sorter outputs all events in this rotate round.
+			rowCount += 1
+			if rowCount%defaultAutoResolvedRows == 0 {
+				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.Ts))
+			}
 		} else {
 			lastSortedFileUpdated = true
 			buffer = append(buffer, item.entry)
