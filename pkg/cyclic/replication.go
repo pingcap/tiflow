@@ -15,17 +15,16 @@
 // among mutliple TiDB clusters/MySQL. It uses a mark table to identify and
 // filter duplicate DMLs.
 // CDC needs to watch DMLs to mark tables and ignore all DDLs to mark tables.
+//
+// Note for now, mark tables must be create manually.
 package cyclic
 
 import (
-	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
 const (
@@ -47,7 +46,6 @@ type ReplicationConfig struct {
 	FilterReplicaID []uint64 `toml:"filter-replica-ids" json:"filter-replica-ids"`
 	IDBuckets       int      `toml:"id-buckets" json:"id-buckets"`
 	SyncDDL         bool     `toml:"sync-ddl" json:"sync-ddl"`
-	UpstreamDSN     string   `toml:"upstream-dsn" json:"upstream-dsn"`
 }
 
 // IsEnabled returns whether cyclic replication is enabled or not.
@@ -67,36 +65,6 @@ func (c *ReplicationConfig) Marshal() (string, error) {
 // Unmarshal unmarshals into *ReplicationConfig from json marshal byte slice
 func (c *ReplicationConfig) Unmarshal(data []byte) error {
 	return json.Unmarshal(data, c)
-}
-
-// NewCyclicFitler creates a DDL filter for cyclic replication.
-// Mark table DDLs are always filtered. Turning off SyncDDL filters all DDLs.
-func NewCyclicFitler(config *ReplicationConfig) (*filter.Filter, error) {
-	if config.ReplicaID == 0 {
-		return nil, nil
-	}
-	caseSensitive := true
-	if config.SyncDDL {
-		// Filter DDLs targets to cyclic.SchemaName
-		rules := &filter.Rules{
-			IgnoreDBs: []string{SchemaName},
-		}
-		cyclicFilter, err := filter.New(caseSensitive, rules)
-		if err != nil {
-			return nil, err
-		}
-		return cyclicFilter, nil
-	}
-
-	// Filter all DDLs
-	rules := &filter.Rules{
-		IgnoreDBs: []string{"~.*"},
-	}
-	cyclicFilter, err := filter.New(!caseSensitive, rules)
-	if err != nil {
-		return nil, err
-	}
-	return cyclicFilter, nil
 }
 
 // RelaxSQLMode returns relaxed SQL mode, "STRICT_TRANS_TABLES" is removed.
@@ -130,8 +98,15 @@ func NewCyclic(config *ReplicationConfig) *Cyclic {
 }
 
 // MarkTableName returns mark table name regards to the tableID
-func MarkTableName(tableID int64) (schema, table string) {
-	table = fmt.Sprintf("%s_%d", tableName, tableID)
+func MarkTableName(sourceSchema, sourceTable string) (schema, table string) {
+	// TODO(neil) better unquote or just crc32 the name.
+	sourceSchema = strings.Replace(sourceSchema, "`", "_", -1)
+	sourceSchema = strings.Replace(sourceSchema, ".", "_", -1)
+	sourceTable = strings.Replace(sourceTable, "`", "_", -1)
+	sourceTable = strings.Replace(sourceTable, ".", "_", -1)
+
+	source := strings.Join([]string{sourceSchema, sourceTable}, "_")
+	table = fmt.Sprintf("%s_%s", tableName, source)
 	schema = SchemaName
 	return
 }
@@ -157,7 +132,7 @@ func IsTablesPaired(tables []TableName) bool {
 	}
 	for _, table := range normalTables {
 		markTable := TableName{}
-		markTable.Schema, markTable.Table = MarkTableName(table.ID)
+		markTable.Schema, markTable.Table = MarkTableName(table.Schema, table.Table)
 		_, ok := markMap[markTable]
 		if !ok {
 			return false
@@ -168,10 +143,11 @@ func IsTablesPaired(tables []TableName) bool {
 
 // UdpateTableCyclicMark return a DML to update mark table regrad to the tableID
 // bucket and replicaID.
-func (*Cyclic) UdpateTableCyclicMark(tableID int64, bucket, replicaID uint64) string {
+func (*Cyclic) UdpateTableCyclicMark(sourceSchema, sourceTable string, bucket, replicaID uint64) string {
+	schema, table := MarkTableName(sourceSchema, sourceTable)
 	return fmt.Sprintf(
-		`INSERT INTO %s.%s_%d VALUES (%d, %d, 0) ON DUPLICATE KEY UPDATE val = val + 1;`,
-		SchemaName, tableName, tableID, bucket, replicaID)
+		`INSERT INTO %s.%s VALUES (%d, %d, 0) ON DUPLICATE KEY UPDATE val = val + 1;`,
+		schema, table, bucket, replicaID)
 }
 
 // FilterReplicaID return a slice of replica IDs needs to be filtered.
@@ -182,35 +158,6 @@ func (c *Cyclic) FilterReplicaID() []uint64 {
 // ReplicaID return a replica ID of this cluster.
 func (c *Cyclic) ReplicaID() uint64 {
 	return c.config.ReplicaID
-}
-
-// IsInitialDDLCluster returns true if the upstream cluster accepts DDLs.
-func (c *Cyclic) IsInitialDDLCluster() bool {
-	return c.config.UpstreamDSN != ""
-}
-
-// CreateInitialUpsteamMarkTable creates initial mark tables to the upstream.
-// It should only be called in TiDB which accepts DDLs.
-func (c *Cyclic) CreateInitialUpsteamMarkTable(
-	ctx context.Context, ddls []string,
-) error {
-	db, err := sql.Open("mysql", c.config.UpstreamDSN)
-	if err != nil {
-		return errors.Annotatef(err, "Fail to create intial mark table, open db failed")
-	}
-	for _, ddl := range ddls {
-		r, err := db.QueryContext(ctx, ddl)
-		if err != nil {
-			return errors.Annotatef(err, "Fail to create intial mark table, ddl %s failed", ddl)
-		}
-		if err = r.Close(); err != nil {
-			return errors.Annotatef(err, "Fail to create intial mark table, close row failed")
-		}
-	}
-	if err = db.Close(); err != nil {
-		return errors.Annotatef(err, "Fail to create intial mark table, close db failed")
-	}
-	return nil
 }
 
 // IsMarkTable tells whether the table is a mark table or not.

@@ -12,30 +12,29 @@ import (
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema, Table string
-	// Table ID
-	ID int64
+	Schema string `json:"shema"`
+	Table  string `json:"table"`
 }
 
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
-	StartTs uint64
+	StartTs uint64 `json:"start-ts"`
 
 	// Commit or resolved TS
-	CRTs     uint64
-	Resolved bool
+	CRTs     uint64 `json:"cr-ts"`
+	Resolved bool   `json:"resolved"`
 
-	RowID int64
+	RowID int64 `json:"row-id"`
 
-	Table *TableName
+	Table *TableName `json:"table"`
 
-	Delete bool
+	Delete bool `json:"delete"`
 
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
-	IndieMarkCol string
-	Columns      map[string]*Column
-	Keys         []string
+	IndieMarkCol string             `json:"indie-mark-col"`
+	Columns      map[string]*Column `json:"columns"`
+	Keys         []string           `json:"keys"`
 }
 
 // ToMqMessage transforms to message key and value

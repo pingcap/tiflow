@@ -53,7 +53,6 @@ var (
 	cyclicReplicaID        uint64
 	cyclicFilterReplicaIDs []uint
 	cyclicSyncDDL          bool
-	cyclicUpstreamDSN      string
 
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client
@@ -204,7 +203,6 @@ func newCreateChangefeedCommand() *cobra.Command {
 					ReplicaID:       cyclicReplicaID,
 					FilterReplicaID: filter,
 					SyncDDL:         cyclicSyncDDL,
-					UpstreamDSN:     cyclicUpstreamDSN,
 					// TODO(neil) enable ID bucket.
 				}
 			}
@@ -275,7 +273,6 @@ func newCreateChangefeedCommand() *cobra.Command {
 	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
 	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
 	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", false, "(Expremental) Cyclic replication sync DDL of changefeed")
-	command.PersistentFlags().StringVar(&cyclicUpstreamDSN, "cyclic-upstream-dsn", "", "(Expremental) Cyclic replication upstream TiDB address")
 
 	return command
 }

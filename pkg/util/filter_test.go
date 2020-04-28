@@ -84,7 +84,19 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 	}
 
 	for _, tc := range testCases {
-		c.Assert(filter.ShouldIgnoreEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
+		c.Assert(filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
+		c.Assert(filter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
+	}
+
+	disableDDLFilter, err := NewFilter(&ReplicaConfig{
+		Cyclic: &cyclic.ReplicationConfig{
+			ReplicaID: 1,
+			SyncDDL:   false,
+		}})
+	c.Assert(err, check.IsNil)
+	for _, tc := range testCases {
+		c.Assert(disableDDLFilter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table),
+			check.Equals, true)
 	}
 }
 
@@ -94,34 +106,7 @@ func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
 	}
 	filter, err := NewFilter(config)
 	c.Assert(err, check.IsNil)
-	job := &model.Job{Type: model.ActionDropSchema}
-	c.Assert(filter.ShouldDiscardDDL(job), check.IsFalse)
-	job = &model.Job{Type: model.ActionAddForeignKey}
-	c.Assert(filter.ShouldDiscardDDL(job), check.IsFalse)
-	job = &model.Job{Type: model.ActionCreateSequence}
-	c.Assert(filter.ShouldDiscardDDL(job), check.IsTrue)
-}
-
-func (s *filterSuite) TestShouldDiscardCyclicDDL(c *check.C) {
-	// Discard CyclicSchema DDLs only.
-	config := &ReplicaConfig{
-		Cyclic: &cyclic.ReplicationConfig{ReplicaID: 1, SyncDDL: true},
-	}
-	filter, err := NewFilter(config)
-	c.Assert(err, check.IsNil)
-	job := &model.Job{Type: model.ActionCreateTable, SchemaName: cyclic.SchemaName}
-	c.Assert(filter.ShouldDiscardDDL(job), check.IsTrue)
-	job = &model.Job{Type: model.ActionCreateTable, SchemaName: "test"}
-	c.Assert(filter.ShouldDiscardDDL(job), check.IsFalse)
-
-	// Discard all DDLs.
-	config = &ReplicaConfig{
-		Cyclic: &cyclic.ReplicationConfig{ReplicaID: 1, SyncDDL: false},
-	}
-	filter, err = NewFilter(config)
-	c.Assert(err, check.IsNil)
-	job = &model.Job{Type: model.ActionCreateTable, SchemaName: cyclic.SchemaName}
-	c.Assert(filter.ShouldDiscardDDL(job), check.IsTrue)
-	job = &model.Job{Type: model.ActionCreateTable, SchemaName: "test"}
-	c.Assert(filter.ShouldDiscardDDL(job), check.IsTrue)
+	c.Assert(filter.ShouldDiscardDDL(model.ActionDropSchema), check.IsFalse)
+	c.Assert(filter.ShouldDiscardDDL(model.ActionAddForeignKey), check.IsFalse)
+	c.Assert(filter.ShouldDiscardDDL(model.ActionCreateSequence), check.IsTrue)
 }

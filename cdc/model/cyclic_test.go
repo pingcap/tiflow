@@ -97,11 +97,11 @@ func (s *cyclicSuit) TestMapMarkRowsGroupReduceCyclicRowsGroup(c *check.C) {
 		},
 		{
 			input: map[TableName][][]*RowChangedEvent{
-				{Table: "a"}:           {{{StartTs: 1}}},
-				{Table: "b2"}:          {{{StartTs: 2}}},
-				{Table: "b2.1"}:        {{{StartTs: 2}}},
-				{Table: "b3", ID: 3}:   {{{StartTs: 3, Table: &TableName{ID: 3}}}},
-				{Table: "b3.1", ID: 4}: {{{StartTs: 3, Table: &TableName{ID: 4}}}},
+				{Table: "a"}:    {{{StartTs: 1}}},
+				{Table: "b2"}:   {{{StartTs: 2}}},
+				{Table: "b2.1"}: {{{StartTs: 2}}},
+				{Table: "b3"}:   {{{StartTs: 3, Table: &TableName{}}}},
+				{Table: "b3.1"}: {{{StartTs: 3, Table: &TableName{}}}},
 				{Schema: "tidb_cdc", Table: "1"}: {{
 					{StartTs: 2, Columns: map[string]*Column{rID: {Value: uint64(10)}}},
 					{StartTs: 3, Columns: map[string]*Column{rID: {Value: uint64(11)}}},
@@ -110,8 +110,8 @@ func (s *cyclicSuit) TestMapMarkRowsGroupReduceCyclicRowsGroup(c *check.C) {
 			output: map[uint64]map[TableName][]*RowChangedEvent{
 				1: {{Table: "a"}: {{StartTs: 1}}},
 				2: {{Table: "b2"}: {{StartTs: 2}}, {Table: "b2.1"}: {{StartTs: 2}}},
-				3: {{Table: "b3", ID: 3}: {{StartTs: 3, Table: &TableName{ID: 3}}},
-					{Table: "b3.1", ID: 4}: {{StartTs: 3, Table: &TableName{ID: 4}}}},
+				3: {{Table: "b3"}: {{StartTs: 3, Table: &TableName{}}},
+					{Table: "b3.1"}: {{StartTs: 3, Table: &TableName{}}}},
 			},
 			markMap: map[uint64]*RowChangedEvent{
 				2: {StartTs: 2, Columns: map[string]*Column{rID: {Value: uint64(10)}}},
@@ -119,13 +119,13 @@ func (s *cyclicSuit) TestMapMarkRowsGroupReduceCyclicRowsGroup(c *check.C) {
 			},
 			reduced: map[TableName][][]*RowChangedEvent{
 				{Table: "a"}: {{{StartTs: 1}}},
-				{Table: "b3", ID: 3}: {{
-					{StartTs: 3, Columns: map[string]*Column{rID: {Value: uint64(11)}}, Table: &TableName{Schema: "tidb_cdc", Table: "repl_mark_3", ID: 3}},
-					{StartTs: 3, Table: &TableName{ID: 3}},
+				{Table: "b3"}: {{
+					{StartTs: 3, Columns: map[string]*Column{rID: {Value: uint64(11)}}, Table: &TableName{Schema: "tidb_cdc", Table: "repl_mark__b3"}},
+					{StartTs: 3, Table: &TableName{}},
 				}},
-				{Table: "b3.1", ID: 4}: {{
-					{StartTs: 3, Columns: map[string]*Column{rID: {Value: uint64(11)}}, Table: &TableName{Schema: "tidb_cdc", Table: "repl_mark_4", ID: 4}},
-					{StartTs: 3, Table: &TableName{ID: 4}},
+				{Table: "b3.1"}: {{
+					{StartTs: 3, Columns: map[string]*Column{rID: {Value: uint64(11)}}, Table: &TableName{Schema: "tidb_cdc", Table: "repl_mark__b3_1"}},
+					{StartTs: 3, Table: &TableName{}},
 				}},
 			},
 			filterID: []uint64{10}, // 10 -> 2, filter start ts 2
@@ -133,11 +133,11 @@ func (s *cyclicSuit) TestMapMarkRowsGroupReduceCyclicRowsGroup(c *check.C) {
 		{
 			input: map[TableName][][]*RowChangedEvent{
 				{Table: "b2"}: {{{StartTs: 2, CRTs: 2}}},
-				{Table: "b3", ID: 3}: {{
-					{StartTs: 2, CRTs: 2, Table: &TableName{ID: 3}},
-					{StartTs: 3, CRTs: 3, Table: &TableName{ID: 3}},
-					{StartTs: 3, CRTs: 3, Table: &TableName{ID: 3}},
-					{StartTs: 4, CRTs: 4, Table: &TableName{ID: 3}},
+				{Table: "b3"}: {{
+					{StartTs: 2, CRTs: 2, Table: &TableName{}},
+					{StartTs: 3, CRTs: 3, Table: &TableName{}},
+					{StartTs: 3, CRTs: 3, Table: &TableName{}},
+					{StartTs: 4, CRTs: 4, Table: &TableName{}},
 				}},
 				{Schema: "tidb_cdc", Table: "1"}: {{
 					{StartTs: 2, CRTs: 2, Columns: map[string]*Column{rID: {Value: uint64(10)}}},
@@ -146,21 +146,21 @@ func (s *cyclicSuit) TestMapMarkRowsGroupReduceCyclicRowsGroup(c *check.C) {
 			},
 			output: map[uint64]map[TableName][]*RowChangedEvent{
 				2: {{Table: "b2"}: {{StartTs: 2, CRTs: 2}},
-					{Table: "b3", ID: 3}: {{StartTs: 2, CRTs: 2, Table: &TableName{ID: 3}}}},
-				3: {{Table: "b3", ID: 3}: {{StartTs: 3, CRTs: 3, Table: &TableName{ID: 3}},
-					{StartTs: 3, CRTs: 3, Table: &TableName{ID: 3}}}},
-				4: {{Table: "b3", ID: 3}: {{StartTs: 4, CRTs: 4, Table: &TableName{ID: 3}}}},
+					{Table: "b3"}: {{StartTs: 2, CRTs: 2, Table: &TableName{}}}},
+				3: {{Table: "b3"}: {{StartTs: 3, CRTs: 3, Table: &TableName{}},
+					{StartTs: 3, CRTs: 3, Table: &TableName{}}}},
+				4: {{Table: "b3"}: {{StartTs: 4, CRTs: 4, Table: &TableName{}}}},
 			},
 			markMap: map[uint64]*RowChangedEvent{
 				2: {StartTs: 2, CRTs: 2, Columns: map[string]*Column{rID: {Value: uint64(10)}}},
 				3: {StartTs: 3, CRTs: 3, Columns: map[string]*Column{rID: {Value: uint64(11)}}},
 			},
 			reduced: map[TableName][][]*RowChangedEvent{
-				{Table: "b3", ID: 3}: {
-					{{StartTs: 3, CRTs: 3, Columns: map[string]*Column{rID: {Value: uint64(11)}}, Table: &TableName{Schema: "tidb_cdc", Table: "repl_mark_3", ID: 3}},
-						{StartTs: 3, CRTs: 3, Table: &TableName{ID: 3}},
-						{StartTs: 3, CRTs: 3, Table: &TableName{ID: 3}}},
-					{{StartTs: 4, CRTs: 4, Table: &TableName{ID: 3}}},
+				{Table: "b3"}: {
+					{{StartTs: 3, CRTs: 3, Columns: map[string]*Column{rID: {Value: uint64(11)}}, Table: &TableName{Schema: "tidb_cdc", Table: "repl_mark__b3"}},
+						{StartTs: 3, CRTs: 3, Table: &TableName{}},
+						{StartTs: 3, CRTs: 3, Table: &TableName{}}},
+					{{StartTs: 4, CRTs: 4, Table: &TableName{}}},
 				},
 			},
 			filterID: []uint64{10}, // 10 -> 2, filter start ts 2

@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"os/signal"
 	"syscall"
@@ -34,6 +35,7 @@ var (
 	changefeedID string
 	captureID    string
 	interval     uint
+	statCount    uint64
 )
 
 // cf holds changefeed id, which is used for output only
@@ -177,7 +179,7 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 			tick := time.NewTicker(time.Duration(interval) * time.Second)
 			lastTime := time.Now()
 			var lastCount uint64
-			for {
+			for ; statCount != 0; statCount-- {
 				select {
 				case sig := <-sc:
 					switch sig {
@@ -217,10 +219,12 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 					lastTime = now
 				}
 			}
+			return nil
 		},
 	}
 	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
 	command.PersistentFlags().UintVar(&interval, "interval", 10, "Interval for outputing the latest statistics")
+	command.PersistentFlags().Uint64Var(&statCount, "count", math.MaxUint64, "Number of outputing the latest statistics")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 	return command
 }

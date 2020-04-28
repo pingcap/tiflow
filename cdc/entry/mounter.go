@@ -364,7 +364,6 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		Table: &model.TableName{
 			Schema: tableInfo.TableName.Schema,
 			Table:  tableInfo.TableName.Table,
-			ID:     tableInfo.ID,
 		},
 		IndieMarkCol: tableInfo.IndieMarkCol,
 	}
@@ -432,7 +431,6 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		Table: &model.TableName{
 			Schema: tableInfo.TableName.Schema,
 			Table:  tableInfo.TableName.Table,
-			ID:     tableInfo.ID,
 		},
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,

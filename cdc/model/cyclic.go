@@ -34,8 +34,10 @@ import (
 //
 // Note table ID is only for avoid write hotspot there is *NO* guarantee
 // normal tables and mark tables are one:one map.
-func CyclicCreateMarkTable(tableID int64) []*DDLEvent {
-	schema, table := cyclic.MarkTableName(tableID)
+//
+// For now, it's dead code. We need create table on changefeed creation.
+func CyclicCreateMarkTable(sourceSchema, sourceTable string) []*DDLEvent {
+	schema, table := cyclic.MarkTableName(sourceSchema, sourceTable)
 	events := []*DDLEvent{
 		{
 			Ts:     0,
@@ -159,12 +161,10 @@ func ReduceCyclicRowsGroup(
 			if markRow != nil {
 				var mark RowChangedEvent = *markRow
 				// Rewrite mark table name based on event's table ID.
-				schema, table := cyclic.MarkTableName(name.ID)
+				schema, table := cyclic.MarkTableName(name.Schema, name.Table)
 				mark.Table = &TableName{
 					Schema: schema,
 					Table:  table,
-					// Set mark row table ID to corresponding table ID.
-					ID: name.ID,
 				}
 				rows = append(rows, &mark)
 			}

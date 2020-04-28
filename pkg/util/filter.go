@@ -13,9 +13,7 @@ type Filter struct {
 	filter            *filter.Filter
 	ignoreTxnCommitTs []uint64
 	ddlWhitelist      []model.ActionType
-
-	// TODO(neil) should just be *cyclic.Cyclic
-	cyclicDDLFilter *filter.Filter
+	disableDDL        bool
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
@@ -36,22 +34,16 @@ type DispatchRule struct {
 
 // NewFilter creates a filter
 func NewFilter(config *ReplicaConfig) (*Filter, error) {
-	var cyclicDDLFilter *filter.Filter
 	filter, err := filter.New(config.FilterCaseSensitive, config.FilterRules)
 	if err != nil {
 		return nil, err
 	}
-	if config.Cyclic != nil {
-		cyclicDDLFilter, err = cyclic.NewCyclicFitler(config.Cyclic)
-		if err != nil {
-			return nil, err
-		}
-	}
+	enableDDL := config.Cyclic == nil || config.Cyclic.SyncDDL
 	return &Filter{
 		filter:            filter,
 		ignoreTxnCommitTs: config.IgnoreTxnCommitTs,
 		ddlWhitelist:      config.DDLWhitelist,
-		cyclicDDLFilter:   cyclicDDLFilter,
+		disableDDL:        !enableDDL,
 	}, nil
 }
 
@@ -76,21 +68,20 @@ func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 	return len(left) == 0
 }
 
-// ShouldIgnoreEvent removes DDL/DMLs that's not wanted by this change feed.
+// ShouldIgnoreDMLEvent removes DMLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
-func (f *Filter) ShouldIgnoreEvent(ts uint64, schema, table string) bool {
+func (f *Filter) ShouldIgnoreDMLEvent(ts uint64, schema, table string) bool {
 	return f.shouldIgnoreCommitTs(ts) || f.ShouldIgnoreTable(schema, table)
 }
 
-// ShouldDiscardDDL returns true if this DDL should be discarded
-func (f *Filter) ShouldDiscardDDL(job *model.Job) bool {
-	if f.cyclicDDLFilter != nil {
-		// Cyclic only cares about schema name.
-		left := f.cyclicDDLFilter.ApplyOn([]*filter.Table{{Schema: job.SchemaName}})
-		return len(left) == 0
-	}
+// ShouldIgnoreDDLEvent removes DDLs that's not wanted by this change feed.
+// CDC only supports filtering by database/table now.
+func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, schema, table string) bool {
+	return f.disableDDL || f.shouldIgnoreCommitTs(ts) || f.ShouldIgnoreTable(schema, table)
+}
 
-	ddlType := job.Type
+// ShouldDiscardDDL returns true if this DDL should be discarded
+func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
 	if !f.shouldDiscardByBuiltInDDLWhitelist(ddlType) {
 		return false
 	}

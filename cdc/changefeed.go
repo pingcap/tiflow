@@ -134,25 +134,6 @@ func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) e
 		return nil
 	}
 
-	// If cyclic replication is turned on, we neeed to create a mark table to
-	// the downstream cluster.
-	// Do not create mark table if itself is the mark table.
-	if c.cyclic != nil && cyclic.IsMarkTable(table.Schema, table.Table) {
-		// For simplicty, we awlays create cyclic mark table.
-		// DDL filter should always filter these DDL from upstream.
-		ddls := model.CyclicCreateMarkTable(int64(tid))
-		// TODO(neil) do not use todo context!
-		ctx := context.TODO()
-		for _, ddl := range ddls {
-			// TODO(neil) what about ts in the event?
-			ddl.Ts = 0
-			err := c.sink.EmitDDLEvent(ctx, ddl)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
-
 	if _, ok := c.tables[tid]; ok {
 		log.Warn("add table already exists", zap.Uint64("tableID", tid), zap.Stringer("table", table))
 		return nil
@@ -306,28 +287,16 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[strin
 		var orphanMarkTable *model.ProcessTableInfo
 		if c.cyclic != nil {
 			tableName, found := schemaSnapshot.GetTableNameByID(int64(tableID))
-			if found && cyclic.IsMarkTable(tableName.Schema, tableName.Table) {
+			if !found || cyclic.IsMarkTable(tableName.Schema, tableName.Table) {
 				// Skip, mark tables should not be balanced alone.
 				continue
 			}
-			markTableSchameName, markTableTableName := cyclic.MarkTableName(int64(tableID))
+			// TODO(neil) we could just use c.tables.
+			markTableSchameName, markTableTableName := cyclic.MarkTableName(tableName.Schema, tableName.Table)
 			id, found := schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
 			if !found {
-				msg := "balance table info delay, wait mark table"
-				if c.cyclic.IsInitialDDLCluster() {
-					ddls := make([]string, 0, 2)
-					ddlevents := model.CyclicCreateMarkTable(int64(tableID))
-					for _, event := range ddlevents {
-						ddls = append(ddls, event.Query)
-					}
-					errCreate := c.cyclic.CreateInitialUpsteamMarkTable(ctx, ddls)
-					if errCreate != nil {
-						return errors.Trace(errCreate)
-					}
-					msg = "balance table info delay, wait initial mark table"
-				}
 				// Mark table is not created yet, skip and wait.
-				log.Info(msg,
+				log.Info("balance table info delay, wait mark table",
 					zap.String("changefeed", c.id),
 					zap.Uint64("tableID", tableID),
 					zap.String("markTableName", markTableTableName))
@@ -552,6 +521,11 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	// ProcessorInfos don't contains the whole set table id now.
 	if len(c.orphanTables) > 0 || len(c.waitingConfirmTables) > 0 {
+		// TODO(neil) ignore mark tables in orphanTables or just split tables
+		// into orphanTables and markTables.
+		log.Debug("skip calcResolvedTs",
+			zap.Reflect("orphanTables", c.orphanTables),
+			zap.Reflect("waitingConfirmTables", c.orphanTables))
 		return nil
 	}
 
@@ -636,7 +610,7 @@ func (c *changeFeed) pullDDLJob() error {
 	}
 	c.ddlResolvedTs = ddlResolvedTs
 	for _, ddl := range ddlJobs {
-		if c.filter.ShouldDiscardDDL(ddl) {
+		if c.filter.ShouldDiscardDDL(ddl.Type) {
 			log.Info("discard the ddl job", zap.Int64("jobID", ddl.ID), zap.String("query", ddl.Query))
 			continue
 		}
