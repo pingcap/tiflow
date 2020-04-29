@@ -36,10 +36,16 @@ function run() {
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
 
+    # Add a check table to reduce check time, or if we check data with sync diff
+    # directly, there maybe a lot of diff data at first because of the incremental scan
+    run_sql "CREATE table file_sort.check1(id int primary key);"
     check_table_exists "file_sort.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists "file_sort.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=file_sort
+    run_sql "CREATE table file_sort.check2(id int primary key);"
+    check_table_exists "file_sort.check2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     cleanup_process $CDC_BINARY
