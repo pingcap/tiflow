@@ -65,9 +65,11 @@ func (k *mqSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
 func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		if row.Resolved {
-			err := k.mqProducer.SendMessage(ctx, model.NewResolvedMessage(row.Ts), nil, 0)
-			if err != nil {
-				return errors.Trace(err)
+			for i := int32(0); i < k.partitionNum; i++ {
+				err := k.mqProducer.SendMessage(ctx, model.NewResolvedMessage(row.Ts), nil, i)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 			continue
 		}
