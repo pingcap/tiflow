@@ -9,10 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/log"
-
-	"github.com/pingcap/ticdc/cdc/entry"
-
 	"github.com/BurntSushi/toml"
 	"github.com/chzyer/readline"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
@@ -20,6 +16,7 @@ import (
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/v4/client"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -46,6 +43,8 @@ var (
 	configFile string
 	cliPdAddr  string
 	noConfirm  bool
+	sortEngine string
+	sortDir    string
 
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client
@@ -195,6 +194,8 @@ func newCreateChangefeedCommand() *cobra.Command {
 				StartTs:    startTs,
 				TargetTs:   targetTs,
 				Config:     cfg,
+				Engine:     model.SortEngine(sortEngine),
+				SortDir:    sortDir,
 			}
 
 			ineligibleTables, err := verifyTables(ctx, cfg, startTs)
@@ -210,8 +211,9 @@ func newCreateChangefeedCommand() *cobra.Command {
 					if err != nil {
 						return err
 					}
-					if strings.TrimSpace(yOrN) != "Y" {
-						log.S().Fatal("Failed to create changefeed\n")
+					if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+						cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
+						return nil
 					}
 				}
 			}
@@ -237,7 +239,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cmd.Printf("create changefeed ID: %s info %s\n", id, d)
+			cmd.Printf("Create changefeed successfully!\nID: %s\nInfo: %s\n", id, d)
 			return cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
 		},
 	}
@@ -247,6 +249,8 @@ func newCreateChangefeedCommand() *cobra.Command {
 	command.PersistentFlags().StringVar(&configFile, "config", "", "Path of the configuration file")
 	command.PersistentFlags().StringSliceVar(&opts, "opts", nil, "Extra options, in the `key=value` format")
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
+	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", "memory", "sort engine used for data sort")
+	command.PersistentFlags().StringVar(&sortDir, "sort-dir", ".", "directory used for file sort")
 
 	return command
 }

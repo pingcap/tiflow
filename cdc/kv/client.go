@@ -611,12 +611,7 @@ MainLoop:
 			}
 
 			state := newRegionFeedState(sri, requestID)
-			hasOld := pendingRegions.insert(requestID, state)
-			if hasOld {
-				log.Error("region is already pending for the first response while trying to send another request."+
-					"region merge may have happened which is not supported yet",
-					zap.Uint64("regionID", sri.verID.GetID()), zap.Uint64("requestID", requestID))
-			}
+			pendingRegions.insert(requestID, state)
 
 			stream, ok := streams[rpcCtx.Addr]
 			// Establish the stream if it has not been connected yet.
@@ -624,16 +619,18 @@ MainLoop:
 				stream, err = s.client.newStream(ctx, rpcCtx.Addr)
 				if err != nil {
 					// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
-					log.Warn("get grpc stream client failed", zap.Error(err))
+					log.Warn("get grpc stream client failed",
+						zap.Uint64("regionID", sri.verID.GetID()), zap.Uint64("requestID", requestID), zap.Error(err))
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 					s.client.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
-					// Retry connecting and sending the request.
+					// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
+					pendingRegions.take(requestID)
 					continue
 				}
 				streams[rpcCtx.Addr] = stream
 
 				g.Go(func() error {
-					return s.receiveFromStream(ctx, g, rpcCtx.Addr, rpcCtx.GetStoreID(), stream, pendingRegions)
+					return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions)
 				})
 			}
 
@@ -646,7 +643,8 @@ MainLoop:
 
 				log.Error("send request to stream failed",
 					zap.String("addr", rpcCtx.Addr),
-					zap.Uint64("storeID", rpcCtx.GetStoreID()),
+					zap.Uint64("storeID", getStoreID(rpcCtx)),
+					zap.Uint64("regionID", sri.verID.GetID()),
 					zap.Uint64("requestID", requestID),
 					zap.Error(err))
 				err1 := stream.CloseSend()
@@ -656,6 +654,11 @@ MainLoop:
 				// Delete the stream from the map so that the next time the store is accessed, the stream will be
 				// re-established.
 				delete(streams, rpcCtx.Addr)
+				// Delete `pendingRegions` from `storePendingRegions` so that the next time a region of this store is
+				// requested, it will create a new one. So if the `receiveFromStream` goroutine tries to stop all
+				// pending regions, the new pending regions that are requested after reconnecting won't be stopped
+				// incorrectly.
+				delete(storePendingRegions, rpcCtx.Addr)
 
 				// Remove the region from pendingRegions. If it's already removed, it should be already retried by
 				// `receiveFromStream`, so no need to retry here.
@@ -682,7 +685,7 @@ MainLoop:
 }
 
 func needReloadRegion(failStoreIDs map[uint64]struct{}, rpcCtx *tikv.RPCContext) (need bool) {
-	failStoreIDs[rpcCtx.GetStoreID()] = struct{}{}
+	failStoreIDs[getStoreID(rpcCtx)] = struct{}{}
 	need = len(failStoreIDs) == len(rpcCtx.Meta.GetPeers())
 	if need {
 		for k := range failStoreIDs {
@@ -738,7 +741,7 @@ func (s *eventFeedSession) partialRegionFeed(
 		zap.Reflect("regionID", state.sri.verID.GetID()),
 		zap.Reflect("span", state.sri.span),
 		zap.Uint64("checkpoint", ts),
-		zap.Error(err))
+		zap.String("error", err.Error()))
 
 	state.sri.ts = ts
 
@@ -968,7 +971,7 @@ func (s *eventFeedSession) receiveFromStream(
 						zap.Uint64("regionID", event.RegionId),
 						zap.Uint64("requestID", event.RequestId),
 						zap.String("addr", addr))
-					return errors.Errorf("received event regionID %v, requestID %v from %v but neither pending"+
+					return errors.Errorf("received event regionID %v, requestID %v from %v but neither pending "+
 						"region nor running region was found", event.RegionId, event.RequestId, addr)
 				}
 
@@ -1023,6 +1026,7 @@ func (s *eventFeedSession) singleEventFeed(
 
 	matcher := newMatcher()
 	advanceCheckTicker := time.NewTicker(time.Second * 5)
+	defer advanceCheckTicker.Stop()
 	lastReceivedEventTime := time.Now()
 	startFeedTime := time.Now()
 	var lastResolvedTs uint64
@@ -1322,4 +1326,11 @@ type rpcCtxUnavailableErr struct {
 func (e *rpcCtxUnavailableErr) Error() string {
 	return fmt.Sprintf("cannot get rpcCtx for region %v. ver:%v, confver:%v",
 		e.verID.GetID(), e.verID.GetVer(), e.verID.GetConfVer())
+}
+
+func getStoreID(rpcCtx *tikv.RPCContext) uint64 {
+	if rpcCtx != nil && rpcCtx.Peer != nil {
+		return rpcCtx.Peer.GetStoreId()
+	}
+	return 0
 }

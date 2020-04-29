@@ -14,6 +14,8 @@
 package sink
 
 import (
+	"context"
+	"math/rand"
 	"testing"
 
 	"github.com/pingcap/check"
@@ -97,56 +99,39 @@ func (s EmitSuite) TestSplitRowsGroup(c *check.C) {
 
 func (s EmitSuite) TestTxnRowLimiter(c *check.C) {
 	testCases := []struct {
-		inputGroup    []*model.RowChangedEvent
-		expectedGroup [][]*model.RowChangedEvent
-		maxTxnRow     int
+		inputGroup []*model.RowChangedEvent
+		maxTxnRow  int
 	}{{
-		inputGroup:    []*model.RowChangedEvent{},
-		expectedGroup: nil,
-		maxTxnRow:     4,
+		inputGroup: nil,
+		maxTxnRow:  4,
 	}, {
-		inputGroup:    []*model.RowChangedEvent{{Ts: 1}},
-		expectedGroup: [][]*model.RowChangedEvent{{{Ts: 1}}},
-		maxTxnRow:     4,
+		inputGroup: []*model.RowChangedEvent{{Ts: 1}},
+		maxTxnRow:  4,
 	}, {
 		inputGroup: []*model.RowChangedEvent{{Ts: 1}, {Ts: 2}, {Ts: 3}, {Ts: 4}, {Ts: 5}, {Ts: 6}},
-		expectedGroup: [][]*model.RowChangedEvent{
-			{{Ts: 1}, {Ts: 2}, {Ts: 3}, {Ts: 4}},
-			{{Ts: 5}, {Ts: 6}},
-		},
-		maxTxnRow: 4,
+		maxTxnRow:  4,
 	}, {
 		inputGroup: []*model.RowChangedEvent{{Ts: 1}, {Ts: 2}, {Ts: 3}, {Ts: 4}, {Ts: 5}, {Ts: 6}, {Ts: 7}, {Ts: 8}},
-		expectedGroup: [][]*model.RowChangedEvent{
-			{{Ts: 1}, {Ts: 2}, {Ts: 3}, {Ts: 4}},
-			{{Ts: 5}, {Ts: 6}, {Ts: 7}, {Ts: 8}},
-		},
-		maxTxnRow: 4,
+		maxTxnRow:  4,
 	}, {
 		inputGroup: []*model.RowChangedEvent{{Ts: 1}, {Ts: 2}, {Ts: 3}, {Ts: 4}, {Ts: 4}, {Ts: 4}, {Ts: 6}},
-		expectedGroup: [][]*model.RowChangedEvent{
-			{{Ts: 1}, {Ts: 2}, {Ts: 3}, {Ts: 4}, {Ts: 4}, {Ts: 4}},
-			{{Ts: 6}},
-		},
-		maxTxnRow: 4,
+		maxTxnRow:  4,
 	}, {
 		inputGroup: []*model.RowChangedEvent{{Ts: 1}, {Ts: 1}, {Ts: 1}, {Ts: 2}, {Ts: 2}, {Ts: 2}, {Ts: 2}, {Ts: 3}, {Ts: 3}},
-		expectedGroup: [][]*model.RowChangedEvent{
-			{{Ts: 1}, {Ts: 1}, {Ts: 1}},
-			{{Ts: 2}, {Ts: 2}, {Ts: 2}, {Ts: 2}},
-			{{Ts: 3}, {Ts: 3}},
-		},
-		maxTxnRow: 2,
+		maxTxnRow:  2,
 	}}
 
-	for _, tc := range testCases {
-		var output [][]*model.RowChangedEvent
-		err := rowLimitIterator(tc.inputGroup, tc.maxTxnRow, func(rows []*model.RowChangedEvent) error {
-			output = append(output, rows)
+	for i, tc := range testCases {
+		var output []*model.RowChangedEvent
+		var err error
+		rowGroups := make(map[string][]*model.RowChangedEvent)
+		rowGroups["test"] = tc.inputGroup
+		err = concurrentExec(context.Background(), rowGroups, rand.Intn(16), tc.maxTxnRow, func(_ context.Context, rows []*model.RowChangedEvent) error {
+			output = append(output, rows...)
 			return nil
 		})
 		c.Assert(err, check.IsNil)
-		c.Assert(output, check.DeepEquals, tc.expectedGroup)
+		c.Assert(output, check.DeepEquals, tc.inputGroup, check.Commentf("case %v, %#v, %#v", i, output, tc.inputGroup))
 	}
 }
 

@@ -19,6 +19,8 @@ import (
 var (
 	serverPdAddr string
 	statusAddr   string
+	timezone     string
+	gcTTL        int64
 
 	serverCmd = &cobra.Command{
 		Use:              "server",
@@ -32,7 +34,9 @@ func init() {
 	rootCmd.AddCommand(serverCmd)
 
 	serverCmd.Flags().StringVar(&serverPdAddr, "pd", "http://127.0.0.1:2379", "PD address, separated by comma")
-	serverCmd.Flags().StringVar(&statusAddr, "status-addr", "127.0.0.1:8300", "Bind address for http status server")
+	serverCmd.Flags().StringVar(&statusAddr, "status-addr", "0.0.0.0:8300", "Bind address for http status server")
+	serverCmd.Flags().StringVar(&timezone, "tz", "System", "Specify time zone of TiCDC cluster")
+	serverCmd.Flags().Int64Var(&gcTTL, "gc-ttl", cdc.DefaultCDCGCSafePointTTL, "CDC GC safepoint TTL duration, specified in seconds")
 }
 
 func preRunLogInfo(cmd *cobra.Command, args []string) {
@@ -49,8 +53,17 @@ func runEServer(cmd *cobra.Command, args []string) error {
 		return errors.Annotatef(err, "invalid status address: %s", statusAddr)
 	}
 
-	var opts []cdc.ServerOption
-	opts = append(opts, cdc.PDEndpoints(serverPdAddr), cdc.StatusHost(addrs[0]), cdc.StatusPort(int(statusPort)))
+	tz, err := util.GetTimezone(timezone)
+	if err != nil {
+		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
+	}
+
+	opts := []cdc.ServerOption{
+		cdc.PDEndpoints(serverPdAddr),
+		cdc.StatusHost(addrs[0]),
+		cdc.StatusPort(int(statusPort)),
+		cdc.GCTTL(gcTTL),
+		cdc.Timezone(tz)}
 
 	server, err := cdc.NewServer(opts...)
 	if err != nil {

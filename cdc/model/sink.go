@@ -12,7 +12,8 @@ import (
 
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
-	Ts uint64
+	Ts    uint64
+	RowID int64
 
 	Schema string
 	Table  string
@@ -23,6 +24,7 @@ type RowChangedEvent struct {
 	// IndieMarkCol will be set to the name of the unique index
 	IndieMarkCol string
 	Columns      map[string]*Column
+	Keys         []string
 }
 
 // ToMqMessage transforms to message key and value

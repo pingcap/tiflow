@@ -12,3 +12,13 @@ tbl-name = "user"
 [[filter-rules.do-tables]]
 db-name = "sns"
 tbl-name = "following"
+
+[[sink-dispatch-rules]]
+db-name = "sns"
+tbl-name = "user"
+rule = "ts"
+
+[[sink-dispatch-rules]]
+db-name = "sns"
+tbl-name = "following"
+rule = "rowid"

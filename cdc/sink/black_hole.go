@@ -39,6 +39,7 @@ type blackHoleSink struct {
 }
 
 func (b *blackHoleSink) Run(ctx context.Context) error {
+	var lastCount uint64 = 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -53,8 +54,9 @@ func (b *blackHoleSink) Run(ctx context.Context) error {
 			startTime := time.Now()
 			// TODO: add some random replication latency
 			b.metricExecTxnHis.Observe(time.Since(startTime).Seconds())
-			b.metricExecBatchHis.Observe(float64(atomic.LoadUint64(&b.accumulated)))
-			atomic.StoreUint64(&b.accumulated, 0)
+			accumulated := atomic.LoadUint64(&b.accumulated)
+			b.metricExecBatchHis.Observe(float64(accumulated - lastCount))
+			lastCount = accumulated
 			atomic.StoreUint64(&b.checkpointTs, globalResolvedTs)
 		}
 	}
@@ -99,7 +101,7 @@ func (b *blackHoleSink) CheckpointTs() uint64 {
 }
 
 func (b *blackHoleSink) Count() uint64 {
-	return 0
+	return atomic.LoadUint64(&b.accumulated)
 }
 
 func (b *blackHoleSink) PrintStatus(ctx context.Context) error {

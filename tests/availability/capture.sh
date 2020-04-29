@@ -28,11 +28,19 @@ function check_result() {
     ensure $MAX_RETRIES sql_check
 }
 
+function empty() {
+    sql=$*
+    run_sql "$sql" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+        check_not_contains "id:"
+}
+
 function nonempty() {
     sql=$*
     run_sql "$sql" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
         check_contains "id:"
 }
+
+export -f empty
 export -f nonempty
 
 function test_capture_ha() {

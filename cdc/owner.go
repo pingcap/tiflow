@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -57,10 +58,15 @@ type Owner struct {
 	adminJobsLock sync.Mutex
 
 	stepDown func(ctx context.Context) error
+
+	// gcTTL is the ttl of cdc gc safepoint ttl.
+	gcTTL int64
 }
 
+const cdcServiceSafePointID = "ticdc"
+
 // NewOwner creates a new Owner instance
-func NewOwner(sess *concurrency.Session) (*Owner, error) {
+func NewOwner(sess *concurrency.Session, gcTTL int64) (*Owner, error) {
 	cli := kv.NewCDCEtcdClient(sess.Client())
 	endpoints := sess.Client().Endpoints()
 	pdClient, err := pd.NewClient(endpoints, pd.SecurityOption{})
@@ -77,6 +83,7 @@ func NewOwner(sess *concurrency.Session) (*Owner, error) {
 		pdEndpoints: endpoints,
 		cfRWriter:   cli,
 		etcdClient:  cli,
+		gcTTL:       gcTTL,
 	}
 
 	return owner, nil
@@ -97,10 +104,12 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 	for _, feed := range o.changeFeeds {
 		task, ok := feed.taskStatus[info.ID]
 		if !ok {
+			log.Warn("task status not found", zap.String("capture", info.ID))
 			continue
 		}
 		pos, ok := feed.taskPositions[info.ID]
 		if !ok {
+			log.Warn("task position not found", zap.String("capture", info.ID))
 			continue
 		}
 
@@ -203,7 +212,7 @@ func (o *Owner) newChangeFeed(
 		}
 	}
 
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.Opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), info.Opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -282,23 +291,41 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 		o.changeFeeds[changeFeedID] = newCf
 	}
+	return nil
+}
 
+func (o *Owner) balanceTables(ctx context.Context) error {
 	for _, changefeed := range o.changeFeeds {
 		err := changefeed.tryBalance(ctx, o.captures)
 		if err != nil {
 			return errors.Trace(err)
 		}
 	}
-
 	return nil
 }
 
 func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
+	if len(o.changeFeeds) == 0 {
+		return nil
+	}
 	snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
+	minCheckpointTs := uint64(math.MaxUint64)
 	for id, changefeed := range o.changeFeeds {
 		snapshot[id] = changefeed.status
+		if changefeed.status.CheckpointTs < minCheckpointTs {
+			minCheckpointTs = changefeed.status.CheckpointTs
+		}
 	}
-	return errors.Trace(o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot))
+	err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, o.gcTTL, minCheckpointTs)
+	if err != nil {
+		log.Info("failed to update service safe point", zap.Error(err))
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 // calcResolvedTs call calcResolvedTs of every changefeeds
@@ -511,6 +538,11 @@ func (o *Owner) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	err = o.balanceTables(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	err = o.calcResolvedTs(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -583,8 +615,20 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-
+		positions, err := o.etcdClient.GetAllTaskPositions(ctx, changeFeedID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// in most cases statuses and positions have the same keys
+		captureIDs := make(map[string]struct{}, len(statuses))
 		for captureID := range statuses {
+			captureIDs[captureID] = struct{}{}
+		}
+		for captureID := range positions {
+			captureIDs[captureID] = struct{}{}
+		}
+
+		for captureID := range captureIDs {
 			if _, ok := active[captureID]; !ok {
 				if err := o.etcdClient.DeleteTaskStatus(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
@@ -601,6 +645,16 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 
 func (o *Owner) watchCapture(ctx context.Context) error {
 	ctx = clientv3.WithRequireLeader(ctx)
+
+	// When an owner just starts, changefeed information is not updated at once.
+	// Supposing a crased capture should be removed now, the owner will miss deleting
+	// task status and task position if changefeed information is not loaded.
+	o.l.Lock()
+	if err := o.loadChangeFeeds(ctx); err != nil {
+		o.l.Unlock()
+		return errors.Trace(err)
+	}
+	o.l.Unlock()
 
 	rev, captures, err := o.etcdClient.GetCaptures(ctx)
 	if err != nil {

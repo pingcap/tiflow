@@ -25,18 +25,27 @@ import (
 	"go.uber.org/zap"
 )
 
-const ownerRunInterval = time.Millisecond * 500
+const (
+	ownerRunInterval = time.Millisecond * 500
+
+	// DefaultCDCGCSafePointTTL is the default value of cdc gc safe-point ttl, specified in seconds.
+	DefaultCDCGCSafePointTTL = 24 * 60 * 60
+)
 
 type options struct {
 	pdEndpoints string
 	statusHost  string
 	statusPort  int
+	gcTTL       int64
+	timezone    *time.Location
 }
 
 var defaultServerOptions = options{
 	pdEndpoints: "http://127.0.0.1:2379",
 	statusHost:  "127.0.0.1",
 	statusPort:  defaultStatusPort,
+	timezone:    nil,
+	gcTTL:       DefaultCDCGCSafePointTTL,
 }
 
 // PDEndpoints returns a ServerOption that sets the endpoints of PD for the server.
@@ -60,6 +69,20 @@ func StatusPort(p int) ServerOption {
 	}
 }
 
+// GCTTL returns a ServerOption that sets the gc ttl.
+func GCTTL(t int64) ServerOption {
+	return func(o *options) {
+		o.gcTTL = t
+	}
+}
+
+// Timezone returns a ServerOption that sets the timezone
+func Timezone(tz *time.Location) ServerOption {
+	return func(o *options) {
+		o.timezone = tz
+	}
+}
+
 // A ServerOption sets options such as the addr of PD.
 type ServerOption func(*options)
 
@@ -80,7 +103,9 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 	log.Info("creating CDC server",
 		zap.String("pd-addr", opts.pdEndpoints),
 		zap.String("status-host", opts.statusHost),
-		zap.Int("status-port", opts.statusPort))
+		zap.Int("status-port", opts.statusPort),
+		zap.Int64("gc-ttl", opts.gcTTL),
+		zap.Any("timezone", opts.timezone))
 
 	s := &Server{
 		opts: opts,
@@ -107,8 +132,9 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return err
 	}
 	s.capture = capture
-
-	ctx, cancel := context.WithCancel(util.PutCaptureIDInCtx(ctx, s.capture.info.ID))
+	ctx = util.PutCaptureIDInCtx(ctx, s.capture.info.ID)
+	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
+	ctx, cancel := context.WithCancel(ctx)
 
 	// when a goroutine paniced, cancel would be called first, which
 	// cancels all the normal goroutines, and then the defered recover
@@ -134,7 +160,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 				log.Error("campaign failed", zap.Error(err))
 				return
 			}
-			owner, err := NewOwner(s.capture.session)
+			owner, err := NewOwner(s.capture.session, s.opts.gcTTL)
 			if err != nil {
 				log.Error("new owner failed", zap.Error(err))
 				return

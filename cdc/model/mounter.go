@@ -13,7 +13,9 @@
 
 package model
 
-import "context"
+import (
+	"context"
+)
 
 // PolymorphicEvent describes a event can be in multiple states
 type PolymorphicEvent struct {

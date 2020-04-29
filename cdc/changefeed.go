@@ -159,29 +159,28 @@ func (c *changeFeed) removeTable(sid, tid uint64) {
 	}
 }
 
-func (c *changeFeed) selectCapture(captures map[string]*model.CaptureInfo) string {
-	return c.minimumTablesCapture(captures)
+func (c *changeFeed) selectCapture(captures map[string]*model.CaptureInfo, toAppend map[string][]*model.ProcessTableInfo) string {
+	return c.minimumTablesCapture(captures, toAppend)
 }
 
-func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo) string {
+func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo, toAppend map[string][]*model.ProcessTableInfo) string {
 	if len(captures) == 0 {
 		return ""
 	}
 
-	for id := range captures {
-		// We have not dispatch any table to this capture yet.
-		if _, ok := c.taskStatus[id]; !ok {
-			return id
-		}
-	}
-
-	var minCount int = math.MaxInt64
 	var minID string
-
-	for id, pinfo := range c.taskStatus {
-		if len(pinfo.TableInfos) < minCount {
+	minCount := math.MaxInt64
+	for id := range captures {
+		var tableCount int
+		if pinfo, ok := c.taskStatus[id]; ok {
+			tableCount += len(pinfo.TableInfos)
+		}
+		if append, ok := toAppend[id]; ok {
+			tableCount += len(append)
+		}
+		if tableCount < minCount {
 			minID = id
-			minCount = len(pinfo.TableInfos)
+			minCount = tableCount
 		}
 	}
 
@@ -276,41 +275,49 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 		}
 	}
 
+	appendTableInfos := make(map[string][]*model.ProcessTableInfo, len(captures))
+
 	for tableID, orphan := range c.orphanTables {
-		captureID := c.selectCapture(captures)
+		captureID := c.selectCapture(captures, appendTableInfos)
 		if len(captureID) == 0 {
 			return nil
 		}
-
-		info := c.taskStatus[captureID]
-		if info == nil {
-			info = new(model.TaskStatus)
-		}
-		infoClone := info.Clone()
-		info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{
+		info := appendTableInfos[captureID]
+		info = append(info, &model.ProcessTableInfo{
 			ID:      tableID,
 			StartTs: orphan.StartTs,
 		})
+		appendTableInfos[captureID] = info
+	}
 
-		newInfo, err := c.infoWriter.Write(ctx, c.id, captureID, info, true)
+	for captureID, tableInfos := range appendTableInfos {
+		status := c.taskStatus[captureID]
+		if status == nil {
+			status = new(model.TaskStatus)
+		}
+		statusClone := status.Clone()
+		status.TableInfos = append(status.TableInfos, tableInfos...)
+
+		newInfo, err := c.infoWriter.Write(ctx, c.id, captureID, status, true)
 		if err == nil {
 			c.taskStatus[captureID] = newInfo
 		}
 		switch errors.Cause(err) {
 		case model.ErrFindPLockNotCommit:
-			c.restoreTableInfos(infoClone, captureID)
+			c.restoreTableInfos(statusClone, captureID)
 			log.Info("write table info delay, wait plock resolve",
 				zap.String("changefeed", c.id),
 				zap.String("capture", captureID))
 		case nil:
 			log.Info("dispatch table success",
-				zap.Uint64("table id", tableID),
-				zap.Uint64("start ts", orphan.StartTs),
+				zap.Reflect("tableInfos", tableInfos),
 				zap.String("capture", captureID))
-			delete(c.orphanTables, tableID)
-			c.waitingConfirmTables[tableID] = captureID
+			for _, tableInfo := range tableInfos {
+				delete(c.orphanTables, tableInfo.ID)
+				c.waitingConfirmTables[tableInfo.ID] = captureID
+			}
 		default:
-			c.restoreTableInfos(infoClone, captureID)
+			c.restoreTableInfos(statusClone, captureID)
 			log.Error("fail to put sub changefeed info", zap.Error(err))
 			return errors.Trace(err)
 		}
@@ -480,10 +487,11 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	minResolvedTs := c.targetTs
 	minCheckpointTs := c.targetTs
 
-	if len(c.taskPositions) == 0 {
-		minCheckpointTs = c.status.CheckpointTs
-	} else if len(c.taskPositions) < len(c.taskStatus) {
+	if len(c.taskPositions) < len(c.taskStatus) {
 		return nil
+	}
+	if len(c.taskPositions) == 0 {
+		minCheckpointTs = c.status.ResolvedTs
 	} else {
 		// calc the min of all resolvedTs in captures
 		for _, position := range c.taskPositions {

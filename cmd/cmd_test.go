@@ -37,6 +37,7 @@ func (s *decodeFileSuite) TestCanDecodeTOML(c *check.C) {
 filter-case-sensitive = false
 ignore-txn-commit-ts = [1, 2]
 ddl-white-list = [1, 2]
+mounter-worker-num = 64
 
 [filter-rules]
 ignore-dbs = ["test", "sys"]
@@ -48,6 +49,16 @@ tbl-name = "user"
 [[filter-rules.do-tables]]
 db-name = "sns"
 tbl-name = "following"
+
+[[sink-dispatch-rules]]
+db-name = "sns"
+tbl-name = "user"
+rule = "ts"
+
+[[sink-dispatch-rules]]
+db-name = "sns"
+tbl-name = "following"
+rule = "rowid"
 `
 	err := ioutil.WriteFile(path, []byte(content), 0644)
 	c.Assert(err, check.IsNil)
@@ -57,12 +68,17 @@ tbl-name = "following"
 	c.Assert(err, check.IsNil)
 
 	c.Assert(cfg.FilterCaseSensitive, check.IsFalse)
+	c.Assert(cfg.MounterWorkerNum, check.Equals, 64)
 	c.Assert(cfg.IgnoreTxnCommitTs, check.DeepEquals, []uint64{1, 2})
 	c.Assert(cfg.DDLWhitelist, check.DeepEquals, []model.ActionType{1, 2})
 	c.Assert(cfg.FilterRules.IgnoreDBs, check.DeepEquals, []string{"test", "sys"})
 	c.Assert(cfg.FilterRules.DoTables, check.DeepEquals, []*filter.Table{
 		{Schema: "sns", Name: "user"},
 		{Schema: "sns", Name: "following"},
+	})
+	c.Assert(cfg.SinkDispatchRules, check.DeepEquals, []*util.DispatchRule{
+		{Table: filter.Table{Schema: "sns", Name: "user"}, Rule: "ts"},
+		{Table: filter.Table{Schema: "sns", Name: "following"}, Rule: "rowid"},
 	})
 }
 
@@ -82,6 +98,16 @@ tbl-name = "user"
 [[filter-rules.do-tables]]
 db-name = "sns"
 tbl-name = "following"
+
+[[sink-dispatch-rules]]
+db-name = "sns"
+tbl-name = "user"
+rule = "ts"
+
+[[sink-dispatch-rules]]
+db-name = "sns"
+tbl-name = "following"
+rule = "rowid"
 `
 	err := ioutil.WriteFile("changefeed.toml", []byte(content), 0644)
 	c.Assert(err, check.IsNil)
@@ -97,6 +123,10 @@ tbl-name = "following"
 	c.Assert(cfg.FilterRules.DoTables, check.DeepEquals, []*filter.Table{
 		{Schema: "sns", Name: "user"},
 		{Schema: "sns", Name: "following"},
+	})
+	c.Assert(cfg.SinkDispatchRules, check.DeepEquals, []*util.DispatchRule{
+		{Table: filter.Table{Schema: "sns", Name: "user"}, Rule: "ts"},
+		{Table: filter.Table{Schema: "sns", Name: "following"}, Rule: "rowid"},
 	})
 }
 
