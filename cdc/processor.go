@@ -162,7 +162,7 @@ func newProcessor(
 		session:       session,
 		sink:          sink,
 		ddlPuller:     ddlPuller,
-		mounter:       entry.NewMounter(schemaStorage),
+		mounter:       entry.NewMounter(schemaStorage, changefeed.GetConfig().MounterWorkerNum),
 		schemaStorage: schemaStorage,
 
 		tsRWriter: tsRWriter,
@@ -794,6 +794,7 @@ func runProcessor(
 	}
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
 
+	processorErrorCounter.WithLabelValues(changefeedID, captureID).Add(0)
 	processor.Run(ctx, errCh)
 
 	go func() {
@@ -805,6 +806,9 @@ func runProcessor(
 				zap.String("processorid", processor.id),
 				zap.Error(err))
 		} else {
+			if err != nil {
+				processorErrorCounter.WithLabelValues(changefeedID, captureID).Inc()
+			}
 			log.Info("processor exited",
 				zap.String("captureid", captureID),
 				zap.String("changefeedid", changefeedID),

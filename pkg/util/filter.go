@@ -23,6 +23,7 @@ type ReplicaConfig struct {
 	FilterRules         *filter.Rules             `toml:"filter-rules" json:"filter-rules"`
 	IgnoreTxnCommitTs   []uint64                  `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
 	SinkDispatchRules   []*DispatchRule           `toml:"sink-dispatch-rules" json:"sink-dispatch-rules"`
+	MounterWorkerNum    int                       `toml:"mounter-worker-num" json:"mounter-worker-num"`
 	Cyclic              *cyclic.ReplicationConfig `toml:"cyclic-replication" json:"cyclic-replication"`
 }
 

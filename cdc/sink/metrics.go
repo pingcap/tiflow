@@ -47,6 +47,13 @@ var (
 			Name:      "mq_checkpoint_chan_size",
 			Help:      "checkpoint channel size for mq sink",
 		}, []string{"capture", "changefeed"})
+	mysqlExecutionErrorCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "mysql_execution_error",
+			Help:      "total count of mysql execution errors",
+		}, []string{"capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -54,4 +61,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(execBatchHistogram)
 	registry.MustRegister(execTxnHistogram)
 	registry.MustRegister(mqSinkCheckpointChanSizeGauge)
+	registry.MustRegister(mysqlExecutionErrorCounter)
 }

@@ -143,7 +143,7 @@ func (k *kafkaSaramaProducer) Successes() chan uint64 {
 func (k *kafkaSaramaProducer) Run(ctx context.Context) error {
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
-		partitionResolved := make(map[int32]uint64)
+		partitionResolved := make([]uint64, int(k.partitionNum))
 		for {
 			select {
 			case <-ctx.Done():
