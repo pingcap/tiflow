@@ -9,10 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/log"
-
-	"github.com/pingcap/ticdc/cdc/entry"
-
 	"github.com/BurntSushi/toml"
 	"github.com/chzyer/readline"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
@@ -20,6 +16,7 @@ import (
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/v4/client"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -214,8 +211,9 @@ func newCreateChangefeedCommand() *cobra.Command {
 					if err != nil {
 						return err
 					}
-					if strings.TrimSpace(yOrN) != "Y" {
-						log.S().Fatal("Failed to create changefeed\n")
+					if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+						cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
+						return nil
 					}
 				}
 			}
@@ -241,7 +239,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cmd.Printf("create changefeed ID: %s info %s\n", id, d)
+			cmd.Printf("Create changefeed successfully!\nID: %s\nInfo: %s\n", id, d)
 			return cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
 		},
 	}
