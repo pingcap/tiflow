@@ -76,8 +76,7 @@ type changeFeed struct {
 	filter        *util.Filter
 	sink          sink.Sink
 
-	// TODO(neil) should it be a bool?
-	cyclic *cyclic.Cyclic
+	cyclicEnabled bool
 
 	ddlHandler    OwnerDDLHandler
 	ddlResolvedTs uint64
@@ -129,14 +128,14 @@ func (c *changeFeed) dropSchema(schemaID uint64) {
 	delete(c.schemas, schemaID)
 }
 
-func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) error {
+func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
-		return nil
+		return
 	}
 
 	if _, ok := c.tables[tid]; ok {
 		log.Warn("add table already exists", zap.Uint64("tableID", tid), zap.Stringer("table", table))
-		return nil
+		return
 	}
 
 	if _, ok := c.schemas[sid]; !ok {
@@ -148,7 +147,6 @@ func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) e
 		ID:      tid,
 		StartTs: startTs,
 	}
-	return nil
 }
 
 func (c *changeFeed) removeTable(sid, tid uint64) {
@@ -284,7 +282,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[strin
 	schemaSnapshot := c.schema.GetLastSnapshot()
 	for tableID, orphan := range c.orphanTables {
 		var orphanMarkTable *model.ProcessTableInfo
-		if c.cyclic != nil {
+		if c.cyclicEnabled {
 			tableName, found := schemaSnapshot.GetTableNameByID(int64(tableID))
 			if !found || cyclic.IsMarkTable(tableName.Schema, tableName.Table) {
 				// Skip, mark tables should not be balanced alone.
@@ -386,10 +384,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			if !exist {
 				return errors.NotFoundf("table(%d)", addID)
 			}
-			errAdd := c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
-			if errAdd != nil {
-				return errAdd
-			}
+			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
 		case timodel.ActionDropTable:
 			dropID := uint64(job.TableID)
 			c.removeTable(schemaID, dropID)
@@ -409,10 +404,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 				return errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
 			}
 			addID := uint64(job.BinlogInfo.TableInfo.ID)
-			errAdd := c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
-			if errAdd != nil {
-				return errAdd
-			}
+			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
 		}
 		return nil
 	}()

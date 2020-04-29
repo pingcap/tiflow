@@ -115,8 +115,6 @@ func MarkTableName(sourceSchema, sourceTable string) (schema, table string) {
 // TODO(neil) it's better in package model.
 type TableName struct {
 	Schema, Table string
-	// Table ID
-	ID int64
 }
 
 // IsTablesPaired checks if normal tables are paired with mark tables.

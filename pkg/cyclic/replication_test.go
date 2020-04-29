@@ -40,13 +40,13 @@ func (s *cyclicSuit) TestIsTablePaired(c *check.C) {
 		{[]TableName{{Schema: "a", Table: "a"}},
 			false},
 		{[]TableName{{Schema: SchemaName, Table: "repl_mark_a_a"},
-			{Schema: "a", Table: "a", ID: 1}},
+			{Schema: "a", Table: "a"}},
 			true},
 		{[]TableName{
 			{Schema: SchemaName, Table: "repl_mark_a_a"},
 			{Schema: SchemaName, Table: "repl_mark_a_b"},
-			{Schema: "a", Table: "a", ID: 1},
-			{Schema: "a", Table: "b", ID: 2}},
+			{Schema: "a", Table: "a"},
+			{Schema: "a", Table: "b"}},
 			true},
 	}
 

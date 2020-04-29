@@ -60,7 +60,6 @@ func (e *RowChangedEvent) FromMqMessage(key *MqMessageKey, value *MqMessageRow) 
 	e.Resolved = false
 	e.Table.Table = key.Table
 	e.Table.Schema = key.Schema
-	// TODO(neil) maybe we need add table ID to MqMessage?
 
 	if len(value.Delete) != 0 {
 		e.Delete = true

@@ -229,7 +229,6 @@ func (s *mysqlSink) Run(ctx context.Context) error {
 
 			if s.cyclic != nil {
 				// Filter rows if it is origined from downstream.
-				// TODO(neil) we must preserve mark rows if there is any.
 				txnMap, markMap := model.MapMarkRowsGroup(resolvedRowsMap)
 				resolvedRowsMap = model.ReduceCyclicRowsGroup(
 					txnMap, markMap, s.cyclic.FilterReplicaID())
