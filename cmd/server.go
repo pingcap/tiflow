@@ -55,7 +55,7 @@ func runEServer(cmd *cobra.Command, args []string) error {
 
 	tz, err := util.GetTimezone(timezone)
 	if err != nil {
-		return errors.Annotate(err, "can not load timezone")
+		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
 
 	opts := []cdc.ServerOption{
