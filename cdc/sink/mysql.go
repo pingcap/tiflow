@@ -72,6 +72,7 @@ type mysqlSink struct {
 
 	metricExecTxnHis   prometheus.Observer
 	metricExecBatchHis prometheus.Observer
+	metricExecErrCnt   prometheus.Counter
 }
 
 func (s *mysqlSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
@@ -134,6 +135,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 				return backoff.Permanent(err)
 			}
 			if err != nil {
+				s.metricExecErrCnt.Inc()
 				log.Warn("execute DDL with error, retry later", zap.String("query", ddl.Query), zap.Error(err))
 			}
 			return err
@@ -363,6 +365,7 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 
 	sink.metricExecTxnHis = execTxnHistogram.WithLabelValues(params.captureID, params.changefeedID)
 	sink.metricExecBatchHis = execBatchHistogram.WithLabelValues(params.captureID, params.changefeedID)
+	sink.metricExecErrCnt = mysqlExecutionErrorCounter.WithLabelValues(params.captureID, params.changefeedID)
 
 	return sink, nil
 }
@@ -529,6 +532,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, sqls []string, va
 		if errors.Cause(err) == context.Canceled {
 			return backoff.Permanent(err)
 		}
+		s.metricExecErrCnt.Inc()
 		log.Warn("execute DMLs with error, retry later", zap.Error(err))
 		return err
 	}
