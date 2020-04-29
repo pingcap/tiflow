@@ -31,7 +31,7 @@ func init() {
 		}
 	})
 	rootCmd.PersistentFlags().StringVar(&logFile, "log-file", "cdc.log", "log file path")
-	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "debug", "log level (etc: debug|info|warn|error)")
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level (etc: debug|info|warn|error)")
 }
 
 func initLog() error {
