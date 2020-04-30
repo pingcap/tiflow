@@ -74,8 +74,11 @@ type processor struct {
 	etcdCli   kv.CDCEtcdClient
 	session   *concurrency.Session
 
-	sink                  sink.Sink
+	sink sink.Sink
+
 	sinkEmittedResolvedTs uint64
+	globalResolvedTs      uint64
+	checkpointTs          uint64
 
 	ddlPuller     puller.Puller
 	schemaStorage *entry.SchemaStorage
@@ -193,6 +196,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	wg.Go(func() error {
+		return p.sinkDriver(cctx)
+	})
+
+	wg.Go(func() error {
 		return p.syncResolved(cctx)
 	})
 
@@ -202,10 +209,6 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 
 	wg.Go(func() error {
 		return p.ddlPullWorker(cctx)
-	})
-
-	wg.Go(func() error {
-		return p.sink.PrintStatus(cctx)
 	})
 
 	wg.Go(func() error {
@@ -311,7 +314,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case <-checkpointTsTick.C:
-			checkpointTs := p.sink.CheckpointTs()
+			checkpointTs := atomic.LoadUint64(&p.checkpointTs)
 			if p.position.CheckPointTs >= checkpointTs {
 				continue
 			}
@@ -356,7 +359,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 
 func (p *processor) updateInfo(ctx context.Context) error {
 	updatePosition := func() error {
-		p.position.Count = p.sink.Count()
+		//p.position.Count = p.sink.Count()
 		err := p.tsRWriter.WritePosition(ctx, p.position)
 		if err != nil {
 			return errors.Trace(err)
@@ -488,6 +491,8 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 	}
 }
 
+const globalStatusNotifierName = "globalStatusNotifier"
+
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
 func (p *processor) globalStatusWorker(ctx context.Context) error {
 	log.Info("Global status worker started")
@@ -503,6 +508,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			backoff.NewExponentialBackOff(), ctx),
 		3,
 	)
+	globalStatusNotifier := util.GlobalNotifyHub.GetNotifier(globalStatusNotifierName)
 	for {
 		select {
 		case <-ctx.Done():
@@ -530,25 +536,45 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			time.Sleep(waitGlobalResolvedTsDelay)
 			continue
 		}
-
+		changed := false
 		if lastCheckPointTs < changefeedStatus.CheckpointTs {
 			p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
 			lastCheckPointTs = changefeedStatus.CheckpointTs
+			changed = true
 		}
-		sinkEmittedResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
-		if sinkEmittedResolvedTs < changefeedStatus.ResolvedTs {
-			time.Sleep(waitSinkEmittedResolvedTsDelay)
-			continue
-		}
-
 		if lastResolvedTs < changefeedStatus.ResolvedTs {
-			err = p.sink.EmitResolvedEvent(ctx, changefeedStatus.ResolvedTs)
+			lastResolvedTs = changefeedStatus.ResolvedTs
+			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
+			changed = true
+		}
+		if changed {
+			globalStatusNotifier.Notify(ctx)
+		}
+	}
+}
+
+func (p *processor) sinkDriver(ctx context.Context) error {
+	notifyCh, closeNotify := util.GlobalNotifyHub.GetNotifier(globalStatusNotifierName).Receiver()
+	defer closeNotify()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-notifyCh:
+			sinkEmittedResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
+			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+			var minTs uint64
+			if sinkEmittedResolvedTs < globalResolvedTs {
+				minTs = sinkEmittedResolvedTs
+			} else {
+				minTs = globalResolvedTs
+			}
+			err := p.sink.FlushRowChangedEvents(ctx, minTs)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			lastResolvedTs = changefeedStatus.ResolvedTs
+			atomic.StoreUint64(&p.checkpointTs, minTs)
 		}
-
 	}
 }
 
@@ -559,6 +585,13 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	for {
 		select {
 		case row := <-p.output:
+			if row == nil {
+				continue
+			}
+			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
+				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.Ts)
+				continue
+			}
 			startTime := time.Now()
 			err := row.WaitPrepare(ctx)
 			if err != nil {
@@ -568,13 +601,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if row.Row == nil {
 				continue
 			}
-			if row.RawKV.OpType == model.OpTypeResolved {
-				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.Ts)
-			} else {
-				err = p.sink.EmitRowChangedEvent(ctx, row.Row)
-				if err != nil {
-					return errors.Trace(err)
-				}
+			err = p.sink.EmitRowChangedEvents(ctx, row.Row)
+			if err != nil {
+				return errors.Trace(err)
 			}
 		case <-ctx.Done():
 			return ctx.Err()
@@ -752,11 +781,6 @@ func runProcessor(
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
-	go func() {
-		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
-			errCh <- err
-		}
-	}()
 	processor, err := newProcessor(ctx, session, info, sink, changefeedID, captureID, checkpointTs)
 	if err != nil {
 		cancel()

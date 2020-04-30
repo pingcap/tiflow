@@ -216,12 +216,6 @@ func (o *Owner) newChangeFeed(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	go func() {
-		ctx := util.SetOwnerInCtx(context.TODO())
-		if err := sink.Run(ctx); err != nil && errors.Cause(err) != context.Canceled {
-			log.Error("failed to close sink", zap.Error(err))
-		}
-	}()
 
 	cf := &changeFeed{
 		info:                 info,

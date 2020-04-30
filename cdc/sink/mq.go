@@ -8,18 +8,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
-
-	"golang.org/x/sync/errgroup"
-
-	"github.com/pingcap/ticdc/pkg/util"
-
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
 	"github.com/pingcap/ticdc/cdc/sink/mqProducer"
+	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 )
 
 type mqSink struct {
@@ -49,28 +44,8 @@ func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, config *util
 	}
 }
 
-func (k *mqSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
-	atomic.StoreUint64(&k.globalResolvedTs, ts)
-	return nil
-}
-
-func (k *mqSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
-	err := k.mqProducer.SyncBroadcastMessage(ctx, model.NewResolvedMessage(ts), nil)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
-}
-
-func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
+func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
-		if row.Resolved {
-			err := k.mqProducer.SendMessage(ctx, model.NewResolvedMessage(row.Ts), nil, 0)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			continue
-		}
 		if k.filter.ShouldIgnoreEvent(row.Ts, row.Schema, row.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
 			continue
@@ -83,6 +58,20 @@ func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChan
 		}
 	}
 	return nil
+}
+
+func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
+	err := k.mqProducer.SendMessage(ctx, model.NewResolvedMessage(resolvedTs), nil, 0)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// TODO make sure event is sent something
+	return nil
+}
+
+func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+	err := k.mqProducer.SyncBroadcastMessage(ctx, model.NewResolvedMessage(ts), nil)
+	return errors.Trace(err)
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -101,30 +90,6 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return errors.Trace(err)
 	}
 	return nil
-}
-
-func (k *mqSink) CheckpointTs() uint64 {
-	return atomic.LoadUint64(&k.checkpointTs)
-}
-
-func (k *mqSink) Count() uint64 {
-	return k.mqProducer.Count()
-}
-
-func (k *mqSink) Run(ctx context.Context) error {
-	wg, cctx := errgroup.WithContext(ctx)
-	if !util.IsOwnerFromCtx(ctx) {
-		wg.Go(func() error {
-			return k.run(cctx)
-		})
-		wg.Go(func() error {
-			return k.collectMetrics(ctx)
-		})
-	}
-	wg.Go(func() error {
-		return k.mqProducer.Run(cctx)
-	})
-	return wg.Wait()
 }
 
 func (k *mqSink) collectMetrics(ctx context.Context) error {

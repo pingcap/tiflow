@@ -74,28 +74,10 @@ type mysqlSink struct {
 	metricExecBatchHis prometheus.Observer
 }
 
-func (s *mysqlSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
-	atomic.StoreUint64(&s.globalResolvedTs, ts)
-	select {
-	case s.globalForwardCh <- struct{}{}:
-	default:
-	}
-	return nil
-}
-
-func (s *mysqlSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
-	return nil
-}
-
-func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	var resolvedTs uint64
+func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	s.unresolvedRowsMu.Lock()
 	defer s.unresolvedRowsMu.Unlock()
 	for _, row := range rows {
-		if row.Resolved {
-			resolvedTs = row.Ts
-			continue
-		}
 		if s.filter.ShouldIgnoreEvent(row.Ts, row.Schema, row.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
 			continue
@@ -103,9 +85,37 @@ func (s *mysqlSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowC
 		key := util.QuoteSchema(row.Schema, row.Table)
 		s.unresolvedRows[key] = append(s.unresolvedRows[key], row)
 	}
-	if resolvedTs != 0 {
-		atomic.StoreUint64(&s.sinkResolvedTs, resolvedTs)
+	return nil
+}
+
+func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
+	if resolvedTs <= atomic.LoadUint64(&s.checkpointTs) {
+		return nil
 	}
+
+	s.unresolvedRowsMu.Lock()
+	if len(s.unresolvedRows) == 0 {
+		atomic.StoreUint64(&s.checkpointTs, resolvedTs)
+		s.unresolvedRowsMu.Unlock()
+		return nil
+	}
+
+	_, resolvedRowsMap := splitRowsGroup(resolvedTs, s.unresolvedRows)
+	s.unresolvedRowsMu.Unlock()
+	if len(resolvedRowsMap) == 0 {
+		atomic.StoreUint64(&s.checkpointTs, resolvedTs)
+		return nil
+	}
+
+	if err := s.concurrentExec(ctx, resolvedRowsMap); err != nil {
+		return errors.Trace(err)
+	}
+	atomic.StoreUint64(&s.checkpointTs, resolvedTs)
+	return nil
+}
+
+func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+	// do nothing
 	return nil
 }
 
@@ -172,56 +182,6 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	atomic.AddUint64(&s.count, 1)
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
 	return nil
-}
-
-func (s *mysqlSink) CheckpointTs() uint64 {
-	return atomic.LoadUint64(&s.checkpointTs)
-}
-
-func (s *mysqlSink) Count() uint64 {
-	return atomic.LoadUint64(&s.count)
-}
-
-func (s *mysqlSink) Run(ctx context.Context) error {
-	if util.IsOwnerFromCtx(ctx) {
-		<-ctx.Done()
-		return ctx.Err()
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-s.globalForwardCh:
-			globalResolvedTs := atomic.LoadUint64(&s.globalResolvedTs)
-			if globalResolvedTs == atomic.LoadUint64(&s.checkpointTs) {
-				continue
-			}
-
-			sinkResolvedTs := atomic.LoadUint64(&s.sinkResolvedTs)
-			for globalResolvedTs > sinkResolvedTs {
-				time.Sleep(10 * time.Millisecond)
-				sinkResolvedTs = atomic.LoadUint64(&s.sinkResolvedTs)
-			}
-
-			s.unresolvedRowsMu.Lock()
-			if len(s.unresolvedRows) == 0 {
-				atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
-				s.unresolvedRowsMu.Unlock()
-				continue
-			}
-			_, resolvedRowsMap := splitRowsGroup(globalResolvedTs, s.unresolvedRows)
-			s.unresolvedRowsMu.Unlock()
-			if len(resolvedRowsMap) == 0 {
-				atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
-				continue
-			}
-
-			if err := s.concurrentExec(ctx, resolvedRowsMap); err != nil {
-				return errors.Trace(err)
-			}
-			atomic.StoreUint64(&s.checkpointTs, globalResolvedTs)
-		}
-	}
 }
 
 func splitRowsGroup(resolvedTs uint64, unresolvedRows map[string][]*model.RowChangedEvent) (minTs uint64, resolvedRowsMap map[string][]*model.RowChangedEvent) {
