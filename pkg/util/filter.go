@@ -39,12 +39,12 @@ func NewFilter(config *ReplicaConfig) (*Filter, error) {
 	if err != nil {
 		return nil, err
 	}
-	enableDDL := config.Cyclic == nil || config.Cyclic.SyncDDL
+	disableDDL := config.Cyclic.IsEnabled() && !config.Cyclic.SyncDDL
 	return &Filter{
 		filter:            filter,
 		ignoreTxnCommitTs: config.IgnoreTxnCommitTs,
 		ddlWhitelist:      config.DDLWhitelist,
-		disableDDL:        !enableDDL,
+		disableDDL:        disableDDL,
 	}, nil
 }
 

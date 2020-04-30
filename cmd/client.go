@@ -270,7 +270,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 	command.PersistentFlags().StringVar(&sortDir, "sort-dir", ".", "directory used for file sort")
 	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
 	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
-	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", false, "(Expremental) Cyclic replication sync DDL of changefeed")
+	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
 
 	return command
 }
