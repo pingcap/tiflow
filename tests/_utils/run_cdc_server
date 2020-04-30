@@ -5,7 +5,7 @@
 # parameter 3: log suffix
 # parameter 4: PD address
 
-set -ex
+set -e
 
 workdir=$1
 binary=$2
@@ -21,4 +21,3 @@ echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
 $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME$log_suffix.out" server --log-file $workdir/cdc$log_suffix.log $pd_addr --log-level debug >> $workdir/stdout$log_suffix.log 2>&1 &
 cd $pwd
-set +x

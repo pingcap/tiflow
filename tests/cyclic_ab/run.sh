@@ -87,10 +87,13 @@ function run() {
 
     # Sleep a while to make sure no more events will be created in cyclic.
     sleep 5
+
+    # Why 30? 20 insert + 10 mark table insert.
+    expect=30
     uuid=$(cdc cli changefeed list --pd=http://$UP_PD_HOST:$UP_PD_PORT 2>&1 | grep -oE "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}")
-    count=$(cdc cli changefeed statistics --changefeed-id ${uuid} s--pd=http://$UP_PD_HOST:$UP_PD_PORT --count 1 --interval 1 2>&1 | grep -o '"count": 40')
-    if [[ $count != '"count": 40' ]]; then
-        echo "[$(date)] <<<<< found extra mysql events! expect to 40 got ${count} >>>>>"
+    count=$(cdc cli changefeed statistics --changefeed-id ${uuid} s--pd=http://$UP_PD_HOST:$UP_PD_PORT --count 1 --interval 1 2>&1 | grep '"count"' | grep -oE '[0-9]+')
+    if [[ $count != $expect ]]; then
+        echo "[$(date)] <<<<< found extra mysql events! expect to ${expect} got ${count} >>>>>"
         exit 1
     fi
 

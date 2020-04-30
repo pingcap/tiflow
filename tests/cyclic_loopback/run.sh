@@ -63,15 +63,14 @@ function run() {
     # Why 50? 40 insert + 10 mark table insert.
     expect=50
     for i in $(seq 1 10); do {
-        countline=$(cdc cli changefeed statistics --changefeed-id ${uuid} s--pd=http://$UP_PD_HOST:$UP_PD_PORT --count 1 --interval 1 2>&1 | grep '"count"')
-        count=$(echo ${countline} | grep -oE "[0-9]+")
+        count=$(cdc cli changefeed statistics --changefeed-id ${uuid} --pd=http://$UP_PD_HOST:$UP_PD_PORT --count 1 --interval 1 2>&1 | grep '"count"' | grep -oE "[0-9]+")
         if [[ $count == ${expect} ]]; then
             break
         fi
         sleep 2
     } done;
 
-    if [[ $count != ${expect} ]]; then
+    if [[ $count != $expect ]]; then
         echo "[$(date)] <<<<< found extra mysql events! expect to ${expect} got ${count} >>>>>"
         exit 1
     fi
