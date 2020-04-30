@@ -1,31 +1,29 @@
 package sink
 
 import (
-	"context"
 	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
 // newBlackHoleSink creates a block hole sink
-func NewBaseSink(name string, opts map[string]string) *BaseSink {
-	sink := &BaseSink{name: name, lastPrintStatusTime: time.Now()}
+func NewStatistics(name string, opts map[string]string) *Statistics {
+	statistics := &Statistics{name: name, lastPrintStatusTime: time.Now()}
 	if cid, ok := opts[OptChangefeedID]; ok {
-		sink.changefeedID = cid
+		statistics.changefeedID = cid
 	}
 	if cid, ok := opts[OptCaptureID]; ok {
-		sink.captureID = cid
+		statistics.captureID = cid
 	}
-	sink.metricExecTxnHis = execTxnHistogram.WithLabelValues(sink.captureID, sink.changefeedID)
-	sink.metricExecBatchHis = execBatchHistogram.WithLabelValues(sink.captureID, sink.changefeedID)
-	return sink
+	statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.captureID, statistics.changefeedID)
+	statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.captureID, statistics.changefeedID)
+	return statistics
 }
 
-type BaseSink struct {
+type Statistics struct {
 	name         string
 	captureID    string
 	changefeedID string
@@ -39,28 +37,20 @@ type BaseSink struct {
 	metricExecBatchHis prometheus.Observer
 }
 
-func (b *BaseSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	atomic.AddUint64(&b.accumulated, uint64(len(rows)))
+func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
+	startTime := time.Now()
+	batchSize, err := executer()
+	if err != nil {
+		return err
+	}
+	castTime := time.Since(startTime).Seconds()
+	b.metricExecTxnHis.Observe(castTime)
+	b.metricExecBatchHis.Observe(float64(batchSize))
+	atomic.AddUint64(&b.accumulated, uint64(batchSize))
 	return nil
 }
 
-func (b *BaseSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
-	accumulated := atomic.LoadUint64(&b.accumulated)
-	b.metricExecBatchHis.Observe(float64(accumulated - b.lastFlushAccumulated))
-	b.lastFlushAccumulated = accumulated
-	b.printStatus()
-	return nil
-}
-
-func (b *BaseSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	return nil
-}
-
-func (b *BaseSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	return nil
-}
-
-func (b *BaseSink) printStatus() {
+func (b *Statistics) PrintStatus() {
 	since := time.Since(b.lastPrintStatusTime)
 	if since < 10*time.Second {
 		return
@@ -80,8 +70,4 @@ func (b *BaseSink) printStatus() {
 		zap.String("captureID", b.captureID),
 		zap.Uint64("count", count),
 		zap.Uint64("qps", qps))
-}
-
-func (b *BaseSink) Close() error {
-	return nil
 }

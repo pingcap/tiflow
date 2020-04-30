@@ -39,7 +39,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -68,10 +67,7 @@ type mysqlSink struct {
 	unresolvedRowsMu sync.Mutex
 	unresolvedRows   map[string][]*model.RowChangedEvent
 
-	count uint64
-
-	metricExecTxnHis   prometheus.Observer
-	metricExecBatchHis prometheus.Observer
+	statistics *Statistics
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -111,6 +107,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		return errors.Trace(err)
 	}
 	atomic.StoreUint64(&s.checkpointTs, resolvedTs)
+	s.statistics.PrintStatus()
 	return nil
 }
 
@@ -179,7 +176,6 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		return errors.Trace(err)
 	}
 
-	atomic.AddUint64(&s.count, 1)
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
 	return nil
 }
@@ -316,13 +312,11 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		params:          params,
 		filter:          filter,
 		globalForwardCh: make(chan struct{}, 1),
+		statistics:      NewStatistics("mysql", opts),
 	}
 
 	sink.db.SetMaxIdleConns(params.workerCount)
 	sink.db.SetMaxOpenConns(params.workerCount)
-
-	sink.metricExecTxnHis = execTxnHistogram.WithLabelValues(params.captureID, params.changefeedID)
-	sink.metricExecBatchHis = execBatchHistogram.WithLabelValues(params.captureID, params.changefeedID)
 
 	return sink, nil
 }
@@ -456,34 +450,6 @@ func (s *mysqlSink) Close() error {
 	return nil
 }
 
-func (s *mysqlSink) PrintStatus(ctx context.Context) error {
-	lastTime := time.Now()
-	var lastCount uint64
-	timer := time.NewTicker(printStatusInterval)
-	defer timer.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-timer.C:
-			now := time.Now()
-			seconds := now.Unix() - lastTime.Unix()
-			total := atomic.LoadUint64(&s.count)
-			count := total - lastCount
-			qps := uint64(0)
-			if seconds > 0 {
-				qps = count / uint64(seconds)
-			}
-			lastCount = total
-			lastTime = now
-			log.Info("mysql sink replication status",
-				zap.String("changefeed", s.params.changefeedID),
-				zap.Uint64("count", count),
-				zap.Uint64("qps", qps))
-		}
-	}
-}
-
 func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, sqls []string, values [][]interface{}, maxRetries uint64) error {
 	checkTxnErr := func(err error) error {
 		if errors.Cause(err) == context.Canceled {
@@ -497,24 +463,26 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, sqls []string, va
 			failpoint.Inject("MySQLSinkTxnRandomError", func() {
 				failpoint.Return(checkTxnErr(errors.Trace(dmysql.ErrInvalidConn)))
 			})
-			startTime := time.Now()
-			tx, err := s.db.BeginTx(ctx, nil)
-			if err != nil {
-				return checkTxnErr(errors.Trace(err))
-			}
-			for i, query := range sqls {
-				args := values[i]
-				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-					return checkTxnErr(errors.Trace(err))
+			err := s.statistics.RecordBatchExecution(func() (int, error) {
+				tx, err := s.db.BeginTx(ctx, nil)
+				if err != nil {
+					return 0, checkTxnErr(errors.Trace(err))
 				}
-				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+				for i, query := range sqls {
+					args := values[i]
+					if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+						return 0, checkTxnErr(errors.Trace(err))
+					}
+					log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+				}
+				if err = tx.Commit(); err != nil {
+					return 0, checkTxnErr(errors.Trace(err))
+				}
+				return len(sqls), nil
+			})
+			if err != nil {
+				return errors.Trace(err)
 			}
-			if err = tx.Commit(); err != nil {
-				return checkTxnErr(errors.Trace(err))
-			}
-			s.metricExecTxnHis.Observe(time.Since(startTime).Seconds())
-			s.metricExecBatchHis.Observe(float64(len(sqls)))
-			atomic.AddUint64(&s.count, uint64(len(sqls)))
 			log.Debug("Exec Rows succeeded", zap.String("changefeed", s.params.changefeedID), zap.Int("num of Rows", len(sqls)))
 			return nil
 		},
