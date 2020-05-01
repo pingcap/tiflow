@@ -115,19 +115,16 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 	var ev *TaskEvent
 	wch := taskWatcher.Watch(ctx)
 	for {
-		// Panic when the session is done unexpectedly, it means the
+		// Return error when the session is done unexpectedly, it means the
 		// server does not send heartbeats in time, or network interrupted
-		// In this case, the state of the capture is undermined,
-		// the task may have or have not been rebalanced, the owner
-		// may be or not be held.
-		// When a panic happens, the routine will immediately starts to unwind
-		// the call stack until the whole program crashes or the built-in recover
-		// function is called, we use recover in server stack and starts a new
-		// server main loop, and we cancel context here to let all sub routines exit
+		// In this case, the state of the capture is undermined, the task may
+		// have or have not been rebalanced, the owner may be or not be held,
+		// so we must cancel context to let all sub routines exit.
 		select {
 		case <-c.session.Done():
 			if ctx.Err() != context.Canceled {
-				c.Suicide()
+				log.Info("capture session done, capture suicide itself", zap.String("capture", c.info.ID))
+				return errors.Trace(ErrSuicide)
 			}
 		case ev = <-wch:
 			if ev == nil {

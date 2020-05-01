@@ -121,7 +121,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// When a capture suicided, restart it
 	for {
-		if err := s.run(ctx); err != ErrSuicide {
+		if err := s.run(ctx); errors.Cause(err) != ErrSuicide {
 			return err
 		}
 		log.Info("server recovered")
@@ -143,7 +143,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			log.Warn("campaign owner failed", zap.Error(err))
 			continue
 		}
-		log.Info("compaign owner successfully", zap.String("capture", s.capture.info.ID))
+		log.Info("campaign owner successfully", zap.String("capture", s.capture.info.ID))
 		owner, err := NewOwner(s.capture.session, s.opts.gcTTL)
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
@@ -177,21 +177,6 @@ func (s *Server) run(ctx context.Context) (err error) {
 	ctx = util.PutCaptureIDInCtx(ctx, s.capture.info.ID)
 	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
 	ctx, cancel := context.WithCancel(ctx)
-
-	// when a goroutine paniced, cancel would be called first, which
-	// cancels all the normal goroutines, and then the defered recover
-	// is called, which modifies the err value to ErrSuicide. The caller
-	// would restart this function when an error is ErrSuicide.
-	defer func() {
-		if r := recover(); r == ErrSuicide {
-			log.Error("server suicided")
-			// assign the error value, which should be handled by
-			// the parent caller
-			err = ErrSuicide
-		} else if r != nil {
-			log.Error("server exited with panic", zap.Reflect("panic info", r))
-		}
-	}()
 	defer cancel()
 
 	wg, cctx := errgroup.WithContext(ctx)
