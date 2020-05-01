@@ -187,5 +187,6 @@ function test_owner_retryable_error() {
     ensure $MAX_RETRIES "ps -C $CDC_BINARY -o pid= | awk '{print \$1}' | wc -l | grep 1"
 
     echo "test_owner_retryable_error pass"
+    export GO_FAILPOINTS=''
     cleanup_process $CDC_BINARY
 }
