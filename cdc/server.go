@@ -124,7 +124,7 @@ func (s *Server) Run(ctx context.Context) error {
 		if err := s.run(ctx); errors.Cause(err) != ErrSuicide {
 			return err
 		}
-		log.Info("server recovered")
+		log.Info("server recovered", zap.String("capture", s.capture.info.ID))
 	}
 }
 
@@ -159,7 +159,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			err2 := s.capture.Resign(ctx)
 			if err2 != nil {
 				// if regisn owner failed, return error to let capture exits
-				return errors.Annotatef(err, "regign owner failed, capture: %s", s.capture.info.ID)
+				return errors.Annotatef(err, "resign owner failed, capture: %s", s.capture.info.ID)
 			}
 			log.Warn("run owner failed", zap.Error(err))
 		}

@@ -20,11 +20,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -142,17 +144,18 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 
 // Campaign to be an owner
 func (c *Capture) Campaign(ctx context.Context) error {
+	failpoint.Inject("capture-campaign-compacted-error", func() {
+		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
+	})
 	return c.election.Campaign(ctx, c.info.ID)
 }
 
 // Resign lets a owner start a new election.
 func (c *Capture) Resign(ctx context.Context) error {
+	failpoint.Inject("capture-resign-failed", func() {
+		failpoint.Return(errors.New("capture resign failed"))
+	})
 	return c.election.Resign(ctx)
-}
-
-// Suicide kills the capture itself
-func (c *Capture) Suicide() {
-	panic(ErrSuicide)
 }
 
 // Cleanup cleans all dynamic resources
