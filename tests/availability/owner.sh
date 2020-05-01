@@ -169,7 +169,7 @@ function test_owner_retryable_error() {
     echo "owner pid:" $owner_pid
     echo "owner id" $owner_id
 
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner-run-with-error=1*return(true);github.com/pingcap/ticdc/cdc/capture-resign-failed=1*return(true);'
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner-run-with-error=1*return(true);github.com/pingcap/ticdc/cdc/capture-resign-failed=1*return(true)'
 
     # run another server
     run_cdc_server $WORK_DIR $CDC_BINARY server2
@@ -179,11 +179,12 @@ function test_owner_retryable_error() {
     echo "capture_id:" $capture_id
 
     # resign the first capture, the second capture campaigns to be owner.
-    # but we inject two errors, the second capture owner runs with error and then
-    # resign owner also failed, so the second capture will exit
+    # However we have injected two failpoints, the second capture owner runs
+    # with error and before it exits resign owner also failed, so the second
+    # capture will exit and the first capture campaigns to be owner again.
     curl -X POST http://127.0.0.1:8300/capture/owner/resign
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep $owner_id -A1 | grep '\"is-owner\": true'"
-    ps -C $CDC_BINARY -o pid= | awk '{print $1}' | wc -l | check_contains "1"
+    ensure $MAX_RETRIES "ps -C $CDC_BINARY -o pid= | awk '{print \$1}' | wc -l | grep 1"
 
     echo "test_owner_retryable_error pass"
     cleanup_process $CDC_BINARY
