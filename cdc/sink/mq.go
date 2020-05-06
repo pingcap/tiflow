@@ -114,21 +114,17 @@ flushLoop:
 			return ctx.Err()
 		case <-notifyCh:
 			for i := 0; i < int(k.partitionNum); i++ {
-				log.Info("find hang3")
 				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
-					log.Info("find hang4")
 					continue flushLoop
 				}
 			}
 			break flushLoop
 		}
 	}
-	log.Info("find hang5")
 	err := k.mqProducer.Flush(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("find hang00")
 	k.checkpointTs = resolvedTs
 	return nil
 }

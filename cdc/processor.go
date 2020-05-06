@@ -571,12 +571,10 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 			if minTs == 0 {
 				continue
 			}
-			log.Info("start flushing", zap.Uint64("checkpointTs", minTs))
 			err := p.sink.FlushRowChangedEvents(ctx, minTs)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			log.Info("updated checkpointTs after flushing", zap.Uint64("checkpointTs", minTs))
 			atomic.StoreUint64(&p.checkpointTs, minTs)
 		}
 	}
