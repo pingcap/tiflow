@@ -78,10 +78,14 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []by
 }
 
 func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
+	notifyCh, closeNotify := util.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName).Receiver()
+	defer closeNotify()
+
 	targetOffsets := make([]uint64, k.partitionNum)
 	for i := 0; i < len(k.partitionOffset); i++ {
 		targetOffsets[i] = atomic.LoadUint64(&k.partitionOffset[i].sent)
 	}
+
 	noEventsToFLush := true
 	for i, target := range targetOffsets {
 		if target > atomic.LoadUint64(&k.partitionOffset[i].flushed) {
@@ -93,9 +97,6 @@ func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 		log.Info("no events to flush")
 		return nil
 	}
-
-	notifyCh, closeNotify := util.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName).Receiver()
-	defer closeNotify()
 
 	log.Info("find hang55")
 flushLoop:

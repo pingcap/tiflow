@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"os/signal"
@@ -377,10 +378,6 @@ ClaimMessages:
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
 			case model.MqMessageTypeResolved:
-				err := sink.FlushRowChangedEvents(ctx, key.Ts)
-				if err != nil {
-					log.Fatal("emit row changed event failed", zap.Error(err))
-				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if resolvedTs < key.Ts {
 					log.Debug("update sink resolved ts",
@@ -447,78 +444,69 @@ func (c *Consumer) forEachSink(fn func(sink *struct {
 
 // Run runs the Consumer
 func (c *Consumer) Run(ctx context.Context) error {
-	/*
-		wg := &sync.WaitGroup{}
-		var lastGlobalResolvedTs uint64
-		for {
-			select {
-			case <-ctx.Done():
-				wg.Wait()
-				return ctx.Err()
-			default:
+	var lastGlobalResolvedTs uint64
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		time.Sleep(100 * time.Millisecond)
+		// handle ddl
+		globalResolvedTs := uint64(math.MaxUint64)
+		err := c.forEachSink(func(sink *struct {
+			sink.Sink
+			resolvedTs uint64
+		}) error {
+			resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
+			if resolvedTs < globalResolvedTs {
+				globalResolvedTs = resolvedTs
 			}
-			time.Sleep(100 * time.Millisecond)
-			// handle ddl
-			globalCheckpointTs := uint64(math.MaxUint64)
-			err = c.forEachSink(func(sink *struct {
+			return nil
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+		todoDDL := c.getFrontDDL()
+		if todoDDL != nil && globalResolvedTs >= todoDDL.Ts {
+			//flush DMLs
+			err := c.forEachSink(func(sink *struct {
 				sink.Sink
 				resolvedTs uint64
 			}) error {
-				checkpointTs := sink.CheckpointTs()
-				if checkpointTs < globalCheckpointTs {
-					globalCheckpointTs = checkpointTs
-				}
-				return nil
-			})
-			if err != nil {
-				return errors.Trace(err)
-			}
-			todoDDL := c.getFrontDDL()
-			if todoDDL != nil && globalCheckpointTs == todoDDL.Ts {
-				// execute ddl
-				err := c.ddlSink.EmitDDLEvent(ctx, todoDDL)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				c.popDDL()
-			}
-
-			//handle global resolvedTs
-			globalResolvedTs := uint64(math.MaxUint64)
-			err = c.forEachSink(func(sink *struct {
-				sink.Sink
-				resolvedTs uint64
-			}) error {
-				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if resolvedTs < globalResolvedTs {
-					globalResolvedTs = resolvedTs
-				}
-				return nil
+				return sink.FlushRowChangedEvents(ctx, todoDDL.Ts)
 			})
 			if err != nil {
 				return errors.Trace(err)
 			}
 
-			todoDDL = c.getFrontDDL()
-			if todoDDL != nil && todoDDL.Ts < globalResolvedTs {
-				globalResolvedTs = todoDDL.Ts
-			}
-			if lastGlobalResolvedTs == globalResolvedTs {
-				continue
-			}
-			lastGlobalResolvedTs = globalResolvedTs
-			atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
-			log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
-
-			err = c.forEachSink(func(sink *struct {
-				sink.Sink
-				resolvedTs uint64
-			}) error {
-				return sink.EmitResolvedEvent(ctx, globalResolvedTs)
-			})
+			// execute ddl
+			err = c.ddlSink.EmitDDLEvent(ctx, todoDDL)
 			if err != nil {
 				return errors.Trace(err)
 			}
-	*/
-	return nil
+			c.popDDL()
+			continue
+		}
+
+		if todoDDL != nil && todoDDL.Ts < globalResolvedTs {
+			globalResolvedTs = todoDDL.Ts
+		}
+		if lastGlobalResolvedTs == globalResolvedTs {
+			continue
+		}
+		lastGlobalResolvedTs = globalResolvedTs
+		atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
+		log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
+
+		err = c.forEachSink(func(sink *struct {
+			sink.Sink
+			resolvedTs uint64
+		}) error {
+			return sink.FlushRowChangedEvents(ctx, globalResolvedTs)
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
 }

@@ -91,6 +91,10 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) e
 	if resolvedTs <= k.checkpointTs {
 		return nil
 	}
+
+	notifyCh, closeNotify := util.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName).Receiver()
+	defer closeNotify()
+
 	for i := 0; i < int(k.partitionNum); i++ {
 		select {
 		case <-ctx.Done():
@@ -101,10 +105,6 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) e
 		}{resolvedTs: resolvedTs}:
 		}
 	}
-	log.Info("find hang1")
-	notifyCh, closeNotify := util.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName).Receiver()
-	defer closeNotify()
-	log.Info("find hang2")
 
 	// waiting for all row events are sent to mq producer
 flushLoop:
