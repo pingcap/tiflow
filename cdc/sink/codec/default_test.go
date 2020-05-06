@@ -1,12 +1,24 @@
-package batchEncoder
+package codec
 
-import "github.com/pingcap/check"
+import (
+	"testing"
 
-type batchSuite struct{}
+	"github.com/pingcap/ticdc/cdc/model"
+
+	"github.com/pingcap/check"
+)
+
+func Test(t *testing.T) { check.TestingT(t) }
+
+type batchSuite struct {
+	rowCases        []*model.RowChangedEvent
+	ddlCases        []*model.DDLEvent
+	resolvedTsCases []uint64
+}
 
 var _ = check.Suite(&batchSuite{})
 
-func (s *taskStatusSuite) TestBatchEncoderAndDecoder(c *check.C) {
+func (s *batchSuite) test(c *check.C) {
 	testCases := []struct {
 		key   []byte
 		value []byte
@@ -16,6 +28,7 @@ func (s *taskStatusSuite) TestBatchEncoderAndDecoder(c *check.C) {
 		{key: []byte("dfg"), value: []byte("a,mnv")},
 		{key: []byte("qwer"), value: []byte("ijweior")},
 		{key: []byte("aslkdjf"), value: []byte("asndf")}}
+
 	encoder := NewBatchEncoder()
 	var length int
 	for _, tc := range testCases {
@@ -33,5 +46,4 @@ func (s *taskStatusSuite) TestBatchEncoderAndDecoder(c *check.C) {
 		c.Assert(value, check.BytesEquals, tc.value)
 	}
 	c.Assert(decoder.HasNext(), check.Equals, false)
-
 }

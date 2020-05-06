@@ -82,6 +82,17 @@ func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 	for i := 0; i < len(k.partitionOffset); i++ {
 		targetOffsets[i] = atomic.LoadUint64(&k.partitionOffset[i].sent)
 	}
+	noEventsToFLush := true
+	for i, target := range targetOffsets {
+		if target > atomic.LoadUint64(&k.partitionOffset[i].flushed) {
+			noEventsToFLush = false
+			break
+		}
+	}
+	if noEventsToFLush {
+		log.Info("no events to flush")
+		return nil
+	}
 
 	notifyCh, closeNotify := util.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName).Receiver()
 	defer closeNotify()

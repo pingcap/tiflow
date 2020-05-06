@@ -1,4 +1,4 @@
-package batchEncoder
+package codec
 
 import "github.com/pingcap/ticdc/cdc/model"
 

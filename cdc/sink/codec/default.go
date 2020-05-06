@@ -1,4 +1,4 @@
-package batchEncoder
+package codec
 
 import (
 	"bytes"

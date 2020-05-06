@@ -8,22 +8,21 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/batchEncoder"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
 	"github.com/pingcap/ticdc/cdc/sink/mqProducer"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 type mqSink struct {
 	mqProducer mqProducer.Producer
 	dispatcher dispatcher.Dispatcher
-	newEncoder func() batchEncoder.EventBatchEncoder
+	newEncoder func() codec.EventBatchEncoder
 	filter     *util.Filter
 
 	partitionNum   int32
@@ -32,6 +31,7 @@ type mqSink struct {
 		resolvedTs uint64
 	}
 	partitionResolvedTs []uint64
+	checkpointTs        uint64
 }
 
 func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *util.Filter, config *util.ReplicaConfig, opts map[string]string, errCh chan error) *mqSink {
@@ -49,7 +49,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *util
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: dispatcher.NewDispatcher(config, mqProducer.GetPartitionNum()),
-		newEncoder: batchEncoder.NewDefaultEventBatchEncoder,
+		newEncoder: codec.NewDefaultEventBatchEncoder,
 		filter:     filter,
 
 		partitionNum:        partitionNum,
@@ -88,6 +88,9 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 }
 
 func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
+	if resolvedTs <= k.checkpointTs {
+		return nil
+	}
 	for i := 0; i < int(k.partitionNum); i++ {
 		select {
 		case <-ctx.Done():
@@ -121,7 +124,13 @@ flushLoop:
 		}
 	}
 	log.Info("find hang5")
-	return k.mqProducer.Flush(ctx)
+	err := k.mqProducer.Flush(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Info("find hang00")
+	k.checkpointTs = resolvedTs
+	return nil
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
