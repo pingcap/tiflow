@@ -267,7 +267,6 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		}
 	}
 	ctx = util.PutTimezoneInCtx(ctx, tz)
-	ctx, cancel := context.WithCancel(ctx)
 	filter, err := util.NewFilter(&util.ReplicaConfig{})
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -277,10 +276,12 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		sink.Sink
 		resolvedTs uint64
 	}, kafkaPartitionNum)
+	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
 		s, err := sink.NewSink(ctx, downstreamURIStr, filter, &util.ReplicaConfig{}, nil, errCh)
 		if err != nil {
+			cancel()
 			return nil, errors.Trace(err)
 		}
 		c.sinks[i] = &struct {
@@ -290,6 +291,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	}
 	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, &util.ReplicaConfig{}, nil, errCh)
 	if err != nil {
+		cancel()
 		return nil, errors.Trace(err)
 	}
 	go func() {
@@ -331,7 +333,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 ClaimMessages:
 	for message := range claim.Messages() {
 		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
-		batchDecoder, err := codec.NewDefaultEventBatchDecoder(message.Key, message.Value)
+		batchDecoder, err := codec.NewJSONEventBatchDecoder(message.Key, message.Value)
 		if err != nil {
 			return errors.Trace(err)
 		}

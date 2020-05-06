@@ -150,5 +150,5 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 }
 
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
-	s.testBatchCodec(c, NewDefaultEventBatchEncoder, NewDefaultEventBatchDecoder)
+	s.testBatchCodec(c, NewJSONEventBatchEncoder, NewJSONEventBatchDecoder)
 }

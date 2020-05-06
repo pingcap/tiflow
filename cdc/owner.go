@@ -142,7 +142,6 @@ func (o *Owner) newChangeFeed(
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
 	// TODO here we create another pb client,we should reuse them
-	ctx, cancel := context.WithCancel(ctx)
 	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","))
 	if err != nil {
 		return nil, err
@@ -180,11 +179,13 @@ func (o *Owner) newChangeFeed(
 		}
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	schemas := make(map[uint64]tableIDMap)
 	tables := make(map[uint64]entry.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
 	snap, err := schemaStorage.GetSnapshot(ctx, checkpointTs)
 	if err != nil {
+		cancel()
 		return nil, errors.Trace(err)
 	}
 	for tid, table := range snap.CloneTables() {
@@ -216,6 +217,7 @@ func (o *Owner) newChangeFeed(
 
 	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), info.Opts, errCh)
 	if err != nil {
+		cancel()
 		return nil, errors.Trace(err)
 	}
 	go func() {

@@ -49,7 +49,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *util
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: dispatcher.NewDispatcher(config, mqProducer.GetPartitionNum()),
-		newEncoder: codec.NewDefaultEventBatchEncoder,
+		newEncoder: codec.NewJSONEventBatchEncoder,
 		filter:     filter,
 
 		partitionNum:        partitionNum,

@@ -14,13 +14,7 @@
 package sink
 
 import (
-	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
-)
-
-const (
-	defaultMetricInterval = time.Second * 15
 )
 
 var (

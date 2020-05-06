@@ -24,23 +24,16 @@ func (s *logSuite) TestNotifyHub(c *check.C) {
 			notifier.Notify(context.Background())
 		}
 	}()
-	select {
-	case <-rCh1:
-	}
+	<-rCh1
 	close1()
-	select {
-	case <-rCh2:
-	}
-	select {
-	case <-rCh3:
-	}
+	<-rCh2
+	<-rCh3
+
 	close2()
 	close3()
 	c.Assert(len(notifier.notifyChs), check.Equals, 0)
 	time.Sleep(time.Second)
 	rCh4, close4 := notifier.Receiver()
-	select {
-	case <-rCh4:
-	}
+	<-rCh4
 	close4()
 }

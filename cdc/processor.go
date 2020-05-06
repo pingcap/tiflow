@@ -46,10 +46,9 @@ import (
 )
 
 const (
-	updateInfoInterval             = time.Millisecond * 500
-	resolveTsInterval              = time.Millisecond * 500
-	waitGlobalResolvedTsDelay      = time.Millisecond * 500
-	waitSinkEmittedResolvedTsDelay = time.Millisecond * 500
+	updateInfoInterval        = time.Millisecond * 500
+	resolveTsInterval         = time.Millisecond * 500
+	waitGlobalResolvedTsDelay = time.Millisecond * 500
 
 	defaultOutputChanSize = 128000
 
@@ -784,6 +783,7 @@ func runProcessor(
 	errCh := make(chan error, 1)
 	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), opts, errCh)
 	if err != nil {
+		cancel()
 		return nil, errors.Trace(err)
 	}
 	processor, err := newProcessor(ctx, session, info, sink, changefeedID, captureID, checkpointTs)

@@ -11,7 +11,7 @@ import (
 
 const printStatusInterval = 30 * time.Second
 
-// newBlackHoleSink creates a block hole sink
+// NewStatistics creates a statistics
 func NewStatistics(name string, opts map[string]string) *Statistics {
 	statistics := &Statistics{name: name, lastPrintStatusTime: time.Now()}
 	if cid, ok := opts[OptChangefeedID]; ok {
@@ -25,13 +25,13 @@ func NewStatistics(name string, opts map[string]string) *Statistics {
 	return statistics
 }
 
+// Statistics maintains some status and metrics of the Sink
 type Statistics struct {
 	name         string
 	captureID    string
 	changefeedID string
 	accumulated  uint64
 
-	lastFlushAccumulated       uint64
 	lastPrintStatusAccumulated uint64
 	lastPrintStatusTime        time.Time
 
@@ -39,6 +39,7 @@ type Statistics struct {
 	metricExecBatchHis prometheus.Observer
 }
 
+// RecordBatchExecution records the cost time of batch execution and batch size
 func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
 	startTime := time.Now()
 	batchSize, err := executer()
@@ -52,6 +53,7 @@ func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
 	return nil
 }
 
+// PrintStatus prints the status of the Sink
 func (b *Statistics) PrintStatus() {
 	since := time.Since(b.lastPrintStatusTime)
 	if since < printStatusInterval {

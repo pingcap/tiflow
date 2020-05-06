@@ -8,12 +8,14 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-type DefaultEventBatchEncoder struct {
+// JSONEventBatchEncoder encodes the events into the byte of a batch into.
+type JSONEventBatchEncoder struct {
 	keyBuf   *bytes.Buffer
 	valueBuf *bytes.Buffer
 }
 
-func (d *DefaultEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
+// AppendResolvedEvent implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 	keyMsg := model.NewResolvedMessage(ts)
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -32,7 +34,8 @@ func (d *DefaultEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 	return nil
 }
 
-func (d *DefaultEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+// AppendRowChangedEvent implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
 	keyMsg, valueMsg := e.ToMqMessage()
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -56,7 +59,8 @@ func (d *DefaultEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 	return nil
 }
 
-func (d *DefaultEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+// AppendDDLEvent implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 	keyMsg, valueMsg := e.ToMqMessage()
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -80,11 +84,13 @@ func (d *DefaultEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 	return nil
 }
 
-func (d *DefaultEventBatchEncoder) Build() (key []byte, value []byte) {
+// Build implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) Build() (key []byte, value []byte) {
 	return d.keyBuf.Bytes(), d.valueBuf.Bytes()
 }
 
-func (d *DefaultEventBatchEncoder) Size() int {
+// Size implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) Size() int {
 	return d.keyBuf.Len() + d.valueBuf.Len()
 }
 
@@ -93,9 +99,9 @@ const (
 	BatchVersion1 uint64 = 1
 )
 
-// NewBatchEncoder creates a new BatchEncoder.
-func NewDefaultEventBatchEncoder() EventBatchEncoder {
-	batch := &DefaultEventBatchEncoder{
+// NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.
+func NewJSONEventBatchEncoder() EventBatchEncoder {
+	batch := &JSONEventBatchEncoder{
 		keyBuf:   &bytes.Buffer{},
 		valueBuf: &bytes.Buffer{},
 	}
@@ -105,15 +111,16 @@ func NewDefaultEventBatchEncoder() EventBatchEncoder {
 	return batch
 }
 
-// DefaultEventBatchDecoder decodes the byte of a batch into the original messages.
-type DefaultEventBatchDecoder struct {
+// JSONEventBatchDecoder decodes the byte of a batch into the original messages.
+type JSONEventBatchDecoder struct {
 	keyBytes   []byte
 	valueBytes []byte
 	nextKey    *model.MqMessageKey
 	nextKeyLen uint64
 }
 
-func (b *DefaultEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
+// HasNext implements the EventBatchDecoder interface
+func (b *JSONEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
 	if !b.hasNext() {
 		return 0, false, nil
 	}
@@ -123,7 +130,8 @@ func (b *DefaultEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) 
 	return b.nextKey.Type, true, nil
 }
 
-func (b *DefaultEventBatchDecoder) NextResolvedEvent() (uint64, error) {
+// NextResolvedEvent implements the EventBatchDecoder interface
+func (b *JSONEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return 0, err
@@ -140,7 +148,8 @@ func (b *DefaultEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	return resolvedTs, nil
 }
 
-func (b *DefaultEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+// NextRowChangedEvent implements the EventBatchDecoder interface
+func (b *JSONEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return nil, err
@@ -163,7 +172,8 @@ func (b *DefaultEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent
 	return rowEvent, nil
 }
 
-func (b *DefaultEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+// NextDDLEvent implements the EventBatchDecoder interface
+func (b *JSONEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return nil, err
@@ -186,11 +196,11 @@ func (b *DefaultEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return ddlEvent, nil
 }
 
-func (b *DefaultEventBatchDecoder) hasNext() bool {
+func (b *JSONEventBatchDecoder) hasNext() bool {
 	return len(b.keyBytes) > 0 && len(b.valueBytes) > 0
 }
 
-func (b *DefaultEventBatchDecoder) decodeNextKey() error {
+func (b *JSONEventBatchDecoder) decodeNextKey() error {
 	keyLen := binary.BigEndian.Uint64(b.keyBytes[:8])
 	key := b.keyBytes[8 : keyLen+8]
 	msgKey := new(model.MqMessageKey)
@@ -203,14 +213,14 @@ func (b *DefaultEventBatchDecoder) decodeNextKey() error {
 	return nil
 }
 
-// NewBatchDecoder creates a new BatchDecoder.
-func NewDefaultEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, error) {
+// NewJSONEventBatchDecoder creates a new JSONEventBatchDecoder.
+func NewJSONEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, error) {
 	version := binary.BigEndian.Uint64(key[:8])
 	key = key[8:]
 	if version != BatchVersion1 {
 		return nil, errors.New("unexpected key format version")
 	}
-	return &DefaultEventBatchDecoder{
+	return &JSONEventBatchDecoder{
 		keyBytes:   key,
 		valueBytes: value,
 	}, nil

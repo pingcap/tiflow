@@ -5,33 +5,38 @@ import (
 	"sync"
 )
 
+// GlobalNotifyHub is a notify hub which is global level
 var GlobalNotifyHub = NewNotifyHub()
 
+// NotifyHub is a notify manager, used to create and maintain Notifier objects
 type NotifyHub struct {
 	notifiers map[string]*Notifier
 	mu        sync.Mutex
 }
 
+// NewNotifyHub creates the NotifyHub
 func NewNotifyHub() *NotifyHub {
 	return &NotifyHub{
 		notifiers: make(map[string]*Notifier),
 	}
 }
 
+// GetNotifier gets the Notifier corresponding to the name
+// if the Notifier is not exists, this method will create a new one.
 func (n *NotifyHub) GetNotifier(name string) *Notifier {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if notifier, ok := n.notifiers[name]; ok {
 		return notifier
-	} else {
-		notifier := &Notifier{
-			name: name,
-		}
-		n.notifiers[name] = notifier
-		return notifier
 	}
+	notifier := &Notifier{
+		name: name,
+	}
+	n.notifiers[name] = notifier
+	return notifier
 }
 
+// CloseNotifier closes the Notifier corresponding to the name
 func (n *NotifyHub) CloseNotifier(name string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -41,6 +46,7 @@ func (n *NotifyHub) CloseNotifier(name string) {
 	}
 }
 
+// CloseAll closes all notifiers
 func (n *NotifyHub) CloseAll() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -50,6 +56,7 @@ func (n *NotifyHub) CloseAll() {
 	}
 }
 
+// Notifier provides a one-to-many notification mechanism
 type Notifier struct {
 	name      string
 	notifyChs []struct {
@@ -60,6 +67,7 @@ type Notifier struct {
 	mu       sync.RWMutex
 }
 
+// Notify sends a signal to the Receivers
 func (n *Notifier) Notify(ctx context.Context) {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
@@ -72,6 +80,8 @@ func (n *Notifier) Notify(ctx context.Context) {
 	}
 }
 
+// Receiver creates a receiver
+// returns a channel to receive notifications and a function to close this receiver
 func (n *Notifier) Receiver() (<-chan struct{}, func()) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
