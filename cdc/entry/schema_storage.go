@@ -50,6 +50,20 @@ type schemaSnapshot struct {
 	currentTs uint64
 }
 
+type SingleSchemaSnapshot = schemaSnapshot
+
+func (s *SingleSchemaSnapshot) HandleDDL(job *timodel.Job) error {
+	return s.handleDDL(job)
+}
+
+func (s *SingleSchemaSnapshot) FlushIneligibleTables() {
+	s.flushIneligibleTables()
+}
+
+func NewSingleSchemaSnapshot() *SingleSchemaSnapshot {
+	return newEmptySchemaSnapshot()
+}
+
 func newEmptySchemaSnapshot() *schemaSnapshot {
 	return &schemaSnapshot{
 		tableNameToID:  make(map[TableName]int64),

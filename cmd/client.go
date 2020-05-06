@@ -9,6 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/BurntSushi/toml"
 	"github.com/chzyer/readline"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
@@ -288,27 +291,25 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig, startTs uint64) 
 		return nil, errors.Trace(err)
 	}
 
-	schemaStorage, err := entry.NewSchemaStorage(nil, filter)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	snap := entry.NewSingleSchemaSnapshot()
 	for _, job := range jobs {
 		if job.BinlogInfo.FinishedTS > startTs {
 			break
 		}
-		err := schemaStorage.HandleDDLJob(job)
+		if filter.ShouldDiscardDDL(job.Type) {
+			log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
+			continue
+		}
+		if !job.IsSynced() && !job.IsDone() {
+			continue
+		}
+		err := snap.HandleDDL(job)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		schemaStorage.DoGC(job.BinlogInfo.FinishedTS)
 	}
-	schemaStorage.FlushIneligibleTables(startTs)
-	schemaStorage.AdvanceResolvedTs(startTs)
+	snap.FlushIneligibleTables()
 
-	snap, err := schemaStorage.GetSnapshot(ctx, startTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	for tID, tableName := range snap.CloneTables() {
 		tableInfo, exist := snap.TableByID(int64(tID))
 		if !exist {
