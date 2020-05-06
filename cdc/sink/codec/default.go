@@ -109,29 +109,102 @@ func NewDefaultEventBatchEncoder() EventBatchEncoder {
 type DefaultEventBatchDecoder struct {
 	keyBytes   []byte
 	valueBytes []byte
+	nextKey    *model.MqMessageKey
+	nextKeyLen uint64
 }
 
-// HasNext returns whether there is a next message in the batch.
-func (b *DefaultEventBatchDecoder) HasNext() bool {
+func (b *DefaultEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) {
+	if !b.hasNext() {
+		return 0, false, nil
+	}
+	if err := b.decodeNextKey(); err != nil {
+		return 0, false, err
+	}
+	return b.nextKey.Type, true, nil
+}
+
+func (b *DefaultEventBatchDecoder) NextResolvedEvent() (uint64, error) {
+	if b.nextKey == nil {
+		if err := b.decodeNextKey(); err != nil {
+			return 0, err
+		}
+	}
+	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
+	if b.nextKey.Type != model.MqMessageTypeResolved {
+		return 0, errors.NotFoundf("not found resolved event message")
+	}
+	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
+	b.valueBytes = b.valueBytes[valueLen+8:]
+	resolvedTs := b.nextKey.Ts
+	b.nextKey = nil
+	return resolvedTs, nil
+}
+
+func (b *DefaultEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+	if b.nextKey == nil {
+		if err := b.decodeNextKey(); err != nil {
+			return nil, err
+		}
+	}
+	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
+	if b.nextKey.Type != model.MqMessageTypeRow {
+		return nil, errors.NotFoundf("not found row event message")
+	}
+	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
+	value := b.valueBytes[8 : valueLen+8]
+	b.valueBytes = b.valueBytes[valueLen+8:]
+	rowMsg := new(model.MqMessageRow)
+	if err := rowMsg.Decode(value); err != nil {
+		return nil, errors.Trace(err)
+	}
+	rowEvent := new(model.RowChangedEvent)
+	rowEvent.FromMqMessage(b.nextKey, rowMsg)
+	b.nextKey = nil
+	return rowEvent, nil
+}
+
+func (b *DefaultEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+	if b.nextKey == nil {
+		if err := b.decodeNextKey(); err != nil {
+			return nil, err
+		}
+	}
+	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
+	if b.nextKey.Type != model.MqMessageTypeDDL {
+		return nil, errors.NotFoundf("not found ddl event message")
+	}
+	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
+	value := b.valueBytes[8 : valueLen+8]
+	b.valueBytes = b.valueBytes[valueLen+8:]
+	ddlMsg := new(model.MqMessageDDL)
+	if err := ddlMsg.Decode(value); err != nil {
+		return nil, errors.Trace(err)
+	}
+	ddlEvent := new(model.DDLEvent)
+	ddlEvent.FromMqMessage(b.nextKey, ddlMsg)
+	b.nextKey = nil
+	return ddlEvent, nil
+}
+
+func (b *DefaultEventBatchDecoder) hasNext() bool {
 	return len(b.keyBytes) > 0 && len(b.valueBytes) > 0
 }
 
-// Next returns the next message. It must be used when HasNext is true.
-func (b *DefaultEventBatchDecoder) Next() ([]byte, []byte, bool) {
-	if !b.HasNext() {
-		return nil, nil, false
-	}
+func (b *DefaultEventBatchDecoder) decodeNextKey() error {
 	keyLen := binary.BigEndian.Uint64(b.keyBytes[:8])
-	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	key := b.keyBytes[8 : keyLen+8]
-	value := b.valueBytes[8 : valueLen+8]
-	b.keyBytes = b.keyBytes[keyLen+8:]
-	b.valueBytes = b.valueBytes[valueLen+8:]
-	return key, value, true
+	msgKey := new(model.MqMessageKey)
+	err := msgKey.Decode(key)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	b.nextKey = msgKey
+	b.nextKeyLen = keyLen
+	return nil
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
-func NewDefaultEventBatchDecoder(key []byte, value []byte) (*DefaultEventBatchDecoder, error) {
+func NewDefaultEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, error) {
 	version := binary.BigEndian.Uint64(key[:8])
 	key = key[8:]
 	if version != BatchVersion1 {

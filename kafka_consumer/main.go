@@ -335,55 +335,49 @@ ClaimMessages:
 		if err != nil {
 			return errors.Trace(err)
 		}
-		for batchDecoder.HasNext() {
-			keyBytes, valueBytes, exist := batchDecoder.Next()
-			if !exist {
-				log.Fatal("get message from batch failed", zap.Error(err))
-			}
-			key := new(model.MqMessageKey)
-			err = key.Decode(keyBytes)
+		for {
+			tp, hasNext, err := batchDecoder.HasNext()
 			if err != nil {
 				log.Fatal("decode message key failed", zap.Error(err))
 			}
-
-			switch key.Type {
+			if !hasNext {
+				break
+			}
+			switch tp {
 			case model.MqMessageTypeDDL:
-				value := new(model.MqMessageDDL)
-				err := value.Decode(valueBytes)
+				ddl, err := batchDecoder.NextDDLEvent()
 				if err != nil {
 					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
 				}
-
-				ddl := new(model.DDLEvent)
-				ddl.FromMqMessage(key, value)
 				c.appendDDL(ddl)
 			case model.MqMessageTypeRow:
+				row, err := batchDecoder.NextRowChangedEvent()
+				if err != nil {
+					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+				}
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-				if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
+				if row.Ts <= globalResolvedTs || row.Ts <= sink.resolvedTs {
 					log.Debug("filter fallback row", zap.ByteString("row", message.Key),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
 						zap.Int32("partition", partition))
 					break ClaimMessages
 				}
-				value := new(model.MqMessageRow)
-				err := value.Decode(valueBytes)
-				if err != nil {
-					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
-				}
-				row := new(model.RowChangedEvent)
-				row.FromMqMessage(key, value)
 				err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
 			case model.MqMessageTypeResolved:
+				ts, err := batchDecoder.NextResolvedEvent()
+				if err != nil {
+					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if resolvedTs < key.Ts {
+				if resolvedTs < ts {
 					log.Debug("update sink resolved ts",
-						zap.Uint64("ts", key.Ts),
+						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition))
-					atomic.StoreUint64(&sink.resolvedTs, key.Ts)
+					atomic.StoreUint64(&sink.resolvedTs, ts)
 				}
 			}
 			session.MarkMessage(message, "")

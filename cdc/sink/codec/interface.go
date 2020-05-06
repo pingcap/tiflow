@@ -9,3 +9,10 @@ type EventBatchEncoder interface {
 	Build() (key []byte, value []byte)
 	Size() int
 }
+
+type EventBatchDecoder interface {
+	HasNext() (model.MqMessageType, bool, error)
+	NextResolvedEvent() (uint64, error)
+	NextRowChangedEvent() (*model.RowChangedEvent, error)
+	NextDDLEvent() (*model.DDLEvent, error)
+}
