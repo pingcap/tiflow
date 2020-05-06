@@ -99,8 +99,10 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) e
 		}{resolvedTs: resolvedTs}:
 		}
 	}
+	log.Info("find hang1")
 	notifyCh, closeNotify := util.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName).Receiver()
 	defer closeNotify()
+	log.Info("find hang2")
 
 	// waiting for all row events are sent to mq producer
 flushLoop:
@@ -110,13 +112,16 @@ flushLoop:
 			return ctx.Err()
 		case <-notifyCh:
 			for i := 0; i < int(k.partitionNum); i++ {
+				log.Info("find hang3")
 				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
+					log.Info("find hang4")
 					continue flushLoop
 				}
 			}
 			break flushLoop
 		}
 	}
+	log.Info("find hang5")
 	return k.mqProducer.Flush(ctx)
 }
 

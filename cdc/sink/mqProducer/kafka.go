@@ -85,6 +85,8 @@ func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 
 	notifyCh, closeNotify := util.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName).Receiver()
 	defer closeNotify()
+
+	log.Info("find hang55")
 flushLoop:
 	for {
 		select {
@@ -94,10 +96,13 @@ flushLoop:
 			return nil
 		case <-notifyCh:
 			for i, target := range targetOffsets {
+				log.Info("find hang6")
 				if target > atomic.LoadUint64(&k.partitionOffset[i].flushed) {
+					log.Info("find hang7")
 					continue flushLoop
 				}
 			}
+			log.Info("find hang8")
 			return nil
 		}
 	}

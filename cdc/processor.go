@@ -569,6 +569,7 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 			} else {
 				minTs = globalResolvedTs
 			}
+			log.Info("start flushing", zap.Uint64("checkpointTs", minTs))
 			err := p.sink.FlushRowChangedEvents(ctx, minTs)
 			if err != nil {
 				return errors.Trace(err)
