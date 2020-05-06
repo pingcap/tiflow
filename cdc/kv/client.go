@@ -289,17 +289,22 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 }
 
 func (c *CDCClient) newStream(ctx context.Context, addr string) (stream cdcpb.ChangeData_EventFeedClient, err error) {
+	id := allocID()
 	err = retry.Run(50*time.Millisecond, 20, func() error {
+		log.Debug("try create stream to store once", zap.String("addr", addr), zap.Uint64("operationID", id))
 		conn, err := c.getConn(ctx, addr)
 		if err != nil {
+			log.Debug("try create stream to store: getConn failed", zap.String("addr", addr), zap.Uint64("operationID", id), zap.Error(err))
 			return errors.Trace(err)
 		}
+		log.Debug("try create stream to store: getConn finished", zap.String("addr", addr), zap.Uint64("operationID", id))
 		client := cdcpb.NewChangeDataClient(conn)
 		stream, err = client.EventFeed(ctx)
 		if err != nil {
+			log.Debug("try create stream to store: create stream failed", zap.String("addr", addr), zap.Uint64("operationID", id), zap.Error(err))
 			return errors.Trace(err)
 		}
-		log.Debug("created stream to store", zap.String("addr", addr))
+		log.Debug("created stream to store", zap.String("addr", addr), zap.Uint64("operationID", id))
 		return nil
 	})
 	return
@@ -616,17 +621,21 @@ MainLoop:
 			stream, ok := streams[rpcCtx.Addr]
 			// Establish the stream if it has not been connected yet.
 			if !ok {
+				log.Debug("dispatchRequest: trying to create new stream",
+					zap.Uint64("regionID", sri.verID.GetID()), zap.Uint64("requestID", requestID), zap.String("addr", rpcCtx.Addr), zap.String("sid", s.id))
 				stream, err = s.client.newStream(ctx, rpcCtx.Addr)
 				if err != nil {
 					// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
 					log.Warn("get grpc stream client failed",
-						zap.Uint64("regionID", sri.verID.GetID()), zap.Uint64("requestID", requestID), zap.Error(err))
+						zap.Uint64("regionID", sri.verID.GetID()), zap.Uint64("requestID", requestID), zap.Error(err), zap.String("sid", s.id))
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 					s.client.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
 					// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
 					pendingRegions.take(requestID)
 					continue
 				}
+				log.Debug("dispatchRequest: created new stream",
+					zap.Uint64("regionID", sri.verID.GetID()), zap.Uint64("requestID", requestID), zap.String("addr", rpcCtx.Addr), zap.String("sid", s.id))
 				streams[rpcCtx.Addr] = stream
 
 				g.Go(func() error {
@@ -634,7 +643,7 @@ MainLoop:
 				})
 			}
 
-			log.Info("start new request", zap.Reflect("request", req), zap.String("addr", rpcCtx.Addr))
+			log.Info("start new request", zap.Reflect("request", req), zap.String("addr", rpcCtx.Addr), zap.String("sid", s.id))
 			err = stream.Send(req)
 
 			// If Send error, the receiver should have received error too or will receive error soon. So we doesn't need
@@ -646,10 +655,10 @@ MainLoop:
 					zap.Uint64("storeID", getStoreID(rpcCtx)),
 					zap.Uint64("regionID", sri.verID.GetID()),
 					zap.Uint64("requestID", requestID),
-					zap.Error(err))
+					zap.Error(err), zap.String("sid", s.id))
 				err1 := stream.CloseSend()
 				if err1 != nil {
-					log.Error("failed to close stream", zap.Error(err1))
+					log.Error("failed to close stream", zap.Error(err1), zap.String("sid", s.id))
 				}
 				// Delete the stream from the map so that the next time the store is accessed, the stream will be
 				// re-established.
