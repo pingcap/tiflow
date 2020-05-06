@@ -10,11 +10,10 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/pingcap/ticdc/cdc/sink/batchEncoder"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/batchEncoder"
 	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
 	"github.com/pingcap/ticdc/cdc/sink/mqProducer"
 	"github.com/pingcap/ticdc/pkg/util"

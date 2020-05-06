@@ -1,4 +1,4 @@
-package batchEncoderpackage
+package batchEncoder
 
 import "github.com/pingcap/check"
 
