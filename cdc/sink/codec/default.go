@@ -104,3 +104,41 @@ func NewDefaultEventBatchEncoder() EventBatchEncoder {
 	batch.keyBuf.Write(versionByte[:])
 	return batch
 }
+
+// DefaultEventBatchDecoder decodes the byte of a batch into the original messages.
+type DefaultEventBatchDecoder struct {
+	keyBytes   []byte
+	valueBytes []byte
+}
+
+// HasNext returns whether there is a next message in the batch.
+func (b *DefaultEventBatchDecoder) HasNext() bool {
+	return len(b.keyBytes) > 0 && len(b.valueBytes) > 0
+}
+
+// Next returns the next message. It must be used when HasNext is true.
+func (b *DefaultEventBatchDecoder) Next() ([]byte, []byte, bool) {
+	if !b.HasNext() {
+		return nil, nil, false
+	}
+	keyLen := binary.BigEndian.Uint64(b.keyBytes[:8])
+	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
+	key := b.keyBytes[8 : keyLen+8]
+	value := b.valueBytes[8 : valueLen+8]
+	b.keyBytes = b.keyBytes[keyLen+8:]
+	b.valueBytes = b.valueBytes[valueLen+8:]
+	return key, value, true
+}
+
+// NewBatchDecoder creates a new BatchDecoder.
+func NewDefaultEventBatchDecoder(key []byte, value []byte) (*DefaultEventBatchDecoder, error) {
+	version := binary.BigEndian.Uint64(key[:8])
+	key = key[8:]
+	if version != BatchVersion1 {
+		return nil, errors.New("unexpected key format version")
+	}
+	return &DefaultEventBatchDecoder{
+		keyBytes:   key,
+		valueBytes: value,
+	}, nil
+}

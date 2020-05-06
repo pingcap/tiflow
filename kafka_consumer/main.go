@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/sink/codec"
+
 	"github.com/google/uuid"
 
 	"github.com/pingcap/ticdc/pkg/util"
@@ -325,11 +327,10 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	if sink == nil {
 		panic("sink should initialized")
 	}
-	batchDecoder := model.NewBatchDecoder()
 ClaimMessages:
 	for message := range claim.Messages() {
 		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
-		err := batchDecoder.Set(message.Key, message.Value)
+		batchDecoder, err := codec.NewDefaultEventBatchDecoder(message.Key, message.Value)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -376,11 +377,10 @@ ClaimMessages:
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
 			case model.MqMessageTypeResolved:
-				// TODO
-				//err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{Ts: key.Ts, Resolved: true})
-				//if err != nil {
-				//	log.Fatal("emit row changed event failed", zap.Error(err))
-				//}
+				err := sink.FlushRowChangedEvents(ctx, key.Ts)
+				if err != nil {
+					log.Fatal("emit row changed event failed", zap.Error(err))
+				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if resolvedTs < key.Ts {
 					log.Debug("update sink resolved ts",

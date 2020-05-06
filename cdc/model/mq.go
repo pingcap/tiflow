@@ -2,7 +2,6 @@ package model
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/json"
 
 	"github.com/pingcap/errors"
@@ -97,46 +96,4 @@ func NewResolvedMessage(ts uint64) *MqMessageKey {
 		Ts:   ts,
 		Type: MqMessageTypeResolved,
 	}
-}
-
-// BatchDecoder decodes the byte of a batch into the original messages.
-type BatchDecoder struct {
-	keyBytes   []byte
-	valueBytes []byte
-}
-
-// Set sets the byte of the decoded batch.
-func (batch *BatchDecoder) Set(key []byte, value []byte) error {
-	version := binary.BigEndian.Uint64(key[:8])
-	key = key[8:]
-	if version != BatchVersion1 {
-		return errors.New("unexpected key format version")
-	}
-	batch.keyBytes = key
-	batch.valueBytes = value
-	return nil
-}
-
-// HasNext returns whether there is a next message in the batch.
-func (batch *BatchDecoder) HasNext() bool {
-	return len(batch.keyBytes) > 0 && len(batch.valueBytes) > 0
-}
-
-// Next returns the next message. It must be used when HasNext is true.
-func (batch *BatchDecoder) Next() ([]byte, []byte, bool) {
-	if !batch.HasNext() {
-		return nil, nil, false
-	}
-	keyLen := binary.BigEndian.Uint64(batch.keyBytes[:8])
-	valueLen := binary.BigEndian.Uint64(batch.valueBytes[:8])
-	key := batch.keyBytes[8 : keyLen+8]
-	value := batch.valueBytes[8 : valueLen+8]
-	batch.keyBytes = batch.keyBytes[keyLen+8:]
-	batch.valueBytes = batch.valueBytes[valueLen+8:]
-	return key, value, true
-}
-
-// NewBatchDecoder creates a new BatchDecoder.
-func NewBatchDecoder() *BatchDecoder {
-	return &BatchDecoder{}
 }
