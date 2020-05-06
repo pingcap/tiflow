@@ -288,9 +288,19 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig, startTs uint64) 
 		return nil, errors.Trace(err)
 	}
 
-	schemaStorage, err := entry.NewSchemaStorage(jobs, filter)
+	schemaStorage, err := entry.NewSchemaStorage(nil, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+	for _, job := range jobs {
+		if job.BinlogInfo.FinishedTS > startTs {
+			break
+		}
+		err := schemaStorage.HandleDDLJob(job)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		schemaStorage.DoGC(job.BinlogInfo.FinishedTS)
 	}
 	schemaStorage.FlushIneligibleTables(startTs)
 	schemaStorage.AdvanceResolvedTs(startTs)
