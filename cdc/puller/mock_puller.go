@@ -14,7 +14,7 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
@@ -117,7 +117,7 @@ var _ Puller = &mockPuller{}
 
 type mockPuller struct {
 	pm          *MockPullerManager
-	spans       []util.Span
+	spans       []regionspan.Span
 	resolvedTs  uint64
 	startTs     uint64
 	rawKVOffset int
@@ -138,7 +138,7 @@ func (p *mockPuller) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 					continue
 				}
 				p.resolvedTs = rawKV.Ts
-				if !util.KeyInSpans(rawKV.Key, p.spans, false) {
+				if !regionspan.KeyInSpans(rawKV.Key, p.spans, false) {
 					continue
 				}
 				select {
@@ -223,7 +223,7 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 }
 
 // CreatePuller returns a mock puller with the specified start ts and spans
-func (m *MockPullerManager) CreatePuller(startTs uint64, spans []util.Span) Puller {
+func (m *MockPullerManager) CreatePuller(startTs uint64, spans []regionspan.Span) Puller {
 	//return &mockPuller{
 	//	spans:   spans,
 	//	pm:      m,

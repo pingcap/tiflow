@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -151,7 +152,7 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
-	filter, err := util.NewFilter(info.GetConfig())
+	filter, err := filter.NewFilter(info.GetConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
