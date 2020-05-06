@@ -81,11 +81,11 @@ func (d *DefaultEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 }
 
 func (d *DefaultEventBatchEncoder) Build() (key []byte, value []byte) {
-	panic("implement me")
+	return d.keyBuf.Bytes(), d.valueBuf.Bytes()
 }
 
 func (d *DefaultEventBatchEncoder) Size() int {
-	panic("implement me")
+	return d.keyBuf.Len() + d.valueBuf.Len()
 }
 
 const (
