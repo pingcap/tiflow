@@ -32,6 +32,8 @@ type mqSink struct {
 	}
 	partitionResolvedTs []uint64
 	checkpointTs        uint64
+
+	statistics *Statistics
 }
 
 func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *util.Filter, config *util.ReplicaConfig, opts map[string]string, errCh chan error) *mqSink {
