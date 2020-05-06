@@ -573,6 +573,7 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			log.Info("updated checkpointTs after flushing", zap.Uint64("checkpointTs", minTs))
 			atomic.StoreUint64(&p.checkpointTs, minTs)
 		}
 	}
