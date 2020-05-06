@@ -775,12 +775,12 @@ func runProcessor(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), opts)
+	ctx, cancel := context.WithCancel(ctx)
+	errCh := make(chan error, 1)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	ctx, cancel := context.WithCancel(ctx)
-	errCh := make(chan error, 1)
 	processor, err := newProcessor(ctx, session, info, sink, changefeedID, captureID, checkpointTs)
 	if err != nil {
 		cancel()

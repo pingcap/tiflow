@@ -99,61 +99,6 @@ func NewResolvedMessage(ts uint64) *MqMessageKey {
 	}
 }
 
-// BatchEncoder encodes messages into a batch
-type BatchEncoder struct {
-	keyBuf   *bytes.Buffer
-	valueBuf *bytes.Buffer
-}
-
-// Append adds a message to the batch
-func (batch *BatchEncoder) Append(key []byte, value []byte) {
-	var keyLenByte [8]byte
-	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
-	var valueLenByte [8]byte
-	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
-
-	batch.keyBuf.Write(keyLenByte[:])
-	batch.keyBuf.Write(key)
-
-	batch.valueBuf.Write(valueLenByte[:])
-	batch.valueBuf.Write(value)
-}
-
-// Read reads the current batch from the buffer.
-func (batch *BatchEncoder) Read() (keyByte []byte, valueByte []byte) {
-	keyByte = make([]byte, batch.keyBuf.Len())
-	_, _ = batch.keyBuf.Read(keyByte)
-
-	valueByte = make([]byte, batch.valueBuf.Len())
-	_, _ = batch.valueBuf.Read(valueByte)
-	return
-}
-
-// Len returns the size of the current batch.
-func (batch *BatchEncoder) Len() int {
-	return batch.keyBuf.Len() + batch.valueBuf.Len() - 8
-}
-
-// Reset resets the buffer to be empty.
-func (batch *BatchEncoder) Reset() {
-	batch.keyBuf.Reset()
-	batch.valueBuf.Reset()
-
-	var versionByte [8]byte
-	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
-	batch.keyBuf.Write(versionByte[:])
-}
-
-// NewBatchEncoder creates a new BatchEncoder.
-func NewBatchEncoder() *BatchEncoder {
-	batch := &BatchEncoder{
-		keyBuf:   &bytes.Buffer{},
-		valueBuf: &bytes.Buffer{},
-	}
-	batch.Reset()
-	return batch
-}
-
 // BatchDecoder decodes the byte of a batch into the original messages.
 type BatchDecoder struct {
 	keyBytes   []byte

@@ -142,6 +142,7 @@ func (o *Owner) newChangeFeed(
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
 	// TODO here we create another pb client,we should reuse them
+	ctx, cancel := context.WithCancel(ctx)
 	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","))
 	if err != nil {
 		return nil, err
@@ -211,12 +212,21 @@ func (o *Owner) newChangeFeed(
 			StartTs: checkpointTs,
 		}
 	}
+	errCh := make(chan error, 1)
 
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), info.Opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), info.Opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
+	go func() {
+		err := <-errCh
+		if errors.Cause(err) != context.Canceled {
+			log.Error("error on running owner", zap.Error(err))
+		} else {
+			log.Info("owner exited")
+		}
+		cancel()
+	}()
 	cf := &changeFeed{
 		info:                 info,
 		id:                   id,

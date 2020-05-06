@@ -49,20 +49,12 @@ const (
 	defaultDDLMaxRetryTime = 20
 )
 
-var (
-	printStatusInterval = 30 * time.Second
-)
-
 type mysqlSink struct {
-	db               *sql.DB
-	globalResolvedTs uint64
-	sinkResolvedTs   uint64
-	checkpointTs     uint64
-	params           params
+	db           *sql.DB
+	checkpointTs uint64
+	params       params
 
 	filter *util.Filter
-
-	globalForwardCh chan struct{}
 
 	unresolvedRowsMu sync.Mutex
 	unresolvedRows   map[string][]*model.RowChangedEvent
@@ -246,6 +238,7 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 	}
 	tz := util.TimezoneFromCtx(ctx)
 
+	var dsnStr string
 	switch {
 	case sinkURI != nil:
 		scheme := strings.ToLower(sinkURI.Scheme)
@@ -280,7 +273,7 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 			port = "4000"
 		}
 
-		dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/", username, password, sinkURI.Hostname(), port)
+		dsnStr = fmt.Sprintf("%s:%s@tcp(%s:%s)/", username, password, sinkURI.Hostname(), port)
 		dsn, err := dmysql.ParseDSN(dsnStr)
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -289,36 +282,29 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		db, err = sql.Open("mysql", dsnStr)
-		if err != nil {
-			return nil, errors.Annotatef(err, "Open database connection failed, dsn: %s", dsnStr)
-		}
-		log.Info("Start mysql sink", zap.String("dsn", dsnStr))
 	case dsn != nil:
-		dsnStr, err := configureSinkURI(dsn, tz)
+		var err error
+		dsnStr, err = configureSinkURI(dsn, tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		db, err = sql.Open("mysql", dsnStr)
-		if err != nil {
-			return nil, errors.Annotatef(err, "Open database connection failed, dsn: %s", dsnStr)
-		}
-		log.Info("Start mysql sink", zap.String("dsn", dsnStr))
 	}
-
-	sink := &mysqlSink{
-		db:              db,
-		unresolvedRows:  make(map[string][]*model.RowChangedEvent),
-		params:          params,
-		filter:          filter,
-		globalForwardCh: make(chan struct{}, 1),
-		statistics:      NewStatistics("mysql", opts),
+	db, err := sql.Open("mysql", dsnStr)
+	if err != nil {
+		return nil, errors.Annotatef(err, "Open database connection failed, dsn: %s", dsnStr)
 	}
+	log.Info("Start mysql sink", zap.String("dsn", dsnStr))
 
-	sink.db.SetMaxIdleConns(params.workerCount)
-	sink.db.SetMaxOpenConns(params.workerCount)
+	db.SetMaxIdleConns(params.workerCount)
+	db.SetMaxOpenConns(params.workerCount)
 
-	return sink, nil
+	return &mysqlSink{
+		db:             db,
+		unresolvedRows: make(map[string][]*model.RowChangedEvent),
+		params:         params,
+		filter:         filter,
+		statistics:     NewStatistics("mysql", opts),
+	}, nil
 }
 
 func (s *mysqlSink) concurrentExec(ctx context.Context, rowGroups map[string][]*model.RowChangedEvent) error {

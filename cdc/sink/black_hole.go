@@ -30,13 +30,15 @@ func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model
 
 func (b *blackHoleSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
 	log.Info("BlockHoleSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolvedTs))
-	return b.statistics.RecordBatchExecution(func() (int, error) {
+	err := b.statistics.RecordBatchExecution(func() (int, error) {
 		// TODO: add some random replication latency
 		accumulated := atomic.LoadUint64(&b.accumulated)
 		batchSize := accumulated - b.lastAccumulated
 		b.lastAccumulated = accumulated
 		return int(batchSize), nil
 	})
+	b.statistics.PrintStatus()
+	return err
 }
 
 func (b *blackHoleSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {

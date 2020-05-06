@@ -9,6 +9,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const printStatusInterval = 30 * time.Second
+
 // newBlackHoleSink creates a block hole sink
 func NewStatistics(name string, opts map[string]string) *Statistics {
 	statistics := &Statistics{name: name, lastPrintStatusTime: time.Now()}
@@ -52,7 +54,7 @@ func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
 
 func (b *Statistics) PrintStatus() {
 	since := time.Since(b.lastPrintStatusTime)
-	if since < 10*time.Second {
+	if since < printStatusInterval {
 		return
 	}
 	accumulated := atomic.LoadUint64(&b.accumulated)
