@@ -3,6 +3,8 @@ package codec
 import (
 	"testing"
 
+	"github.com/pingcap/parser/mysql"
+
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
@@ -151,4 +153,32 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	s.testBatchCodec(c, NewJSONEventBatchEncoder, NewJSONEventBatchDecoder)
+}
+
+var _ = check.Suite(columnSuite{})
+
+type columnSuite struct{}
+
+func (s *columnSuite) TestFormatCol(c *check.C) {
+	row := &mqMessageRow{Update: map[string]*column{"test": {
+		Type:  mysql.TypeString,
+		Value: "测",
+	}}}
+	rowEncode, err := row.Encode()
+	c.Assert(err, check.IsNil)
+	row2 := new(mqMessageRow)
+	err = row2.Decode(rowEncode)
+	c.Assert(err, check.IsNil)
+	c.Assert(row2, check.DeepEquals, row)
+
+	row = &mqMessageRow{Update: map[string]*column{"test": {
+		Type:  mysql.TypeBlob,
+		Value: []byte("测"),
+	}}}
+	rowEncode, err = row.Encode()
+	c.Assert(err, check.IsNil)
+	row2 = new(mqMessageRow)
+	err = row2.Decode(rowEncode)
+	c.Assert(err, check.IsNil)
+	c.Assert(row2, check.DeepEquals, row)
 }
