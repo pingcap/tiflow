@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/filter"
+	tifilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
@@ -230,8 +231,8 @@ func (s *mysqlSink) Run(ctx context.Context) error {
 
 			if s.cyclic != nil {
 				// Filter rows if it is origined from downstream.
-				txnMap, markMap := model.MapMarkRowsGroup(resolvedRowsMap)
-				resolvedRowsMap = model.ReduceCyclicRowsGroup(
+				txnMap, markMap := cyclic.MapMarkRowsGroup(resolvedRowsMap)
+				resolvedRowsMap = cyclic.ReduceCyclicRowsGroup(
 					txnMap, markMap, s.cyclic.FilterReplicaID())
 			}
 
@@ -322,7 +323,7 @@ func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) 
 }
 
 // newMySQLSink creates a new MySQL sink using schema storage
-func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, filter *filter.Filter, opts map[string]string) (Sink, error) {
+func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, filter *tifilter.Filter, opts map[string]string) (Sink, error) {
 	var db *sql.DB
 	params := defaultParams
 
@@ -406,7 +407,7 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 	sink.db.SetMaxOpenConns(params.workerCount)
 
 	if val, ok := opts[cyclic.OptCyclicConfig]; ok {
-		cfg := new(cyclic.ReplicationConfig)
+		cfg := new(tifilter.ReplicationConfig)
 		err := cfg.Unmarshal([]byte(val))
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -649,7 +650,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, bucket int) ([]st
 		var err error
 		if s.cyclic != nil && cyclic.IsMarkTable(row.Table.Schema, row.Table.Table) {
 			// Write mark table based on bucket ID and table ID.
-			replicaID := model.ExtractReplicaID(row)
+			replicaID := cyclic.ExtractReplicaID(row)
 			// Mark row's table ID is set to corresponding table ID.
 			query = s.cyclic.UdpateTableCyclicMark(
 				row.Table.Schema, row.Table.Table, uint64(bucket), replicaID)

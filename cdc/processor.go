@@ -486,13 +486,13 @@ func (p *processor) handleTables(
 		// Make sure all normal tables and mark tables are paired.
 		schemaSnapshot := p.schemaStorage.GetLastSnapshot()
 		for _, tables := range [][]*model.ProcessTableInfo{addedTables, removedTables} {
-			tableNames := make([]cyclic.TableName, 0, len(tables))
+			tableNames := make([]model.TableName, 0, len(tables))
 			for _, table := range tables {
 				name, ok := schemaSnapshot.GetTableNameByID(int64(table.ID))
 				if !ok {
 					return errors.NotFoundf("table(%d)", table.ID)
 				}
-				tableNames = append(tableNames, cyclic.TableName{
+				tableNames = append(tableNames, model.TableName{
 					Schema: name.Schema,
 					Table:  name.Table,
 				})

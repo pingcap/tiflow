@@ -19,8 +19,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/filter"
+	cdcfilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
@@ -185,7 +185,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 				return err
 			}
 
-			cfg := new(filter.ReplicaConfig)
+			cfg := new(cdcfilter.ReplicaConfig)
 			if len(configFile) > 0 {
 				if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
 					return err
@@ -196,7 +196,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 				for _, id := range cyclicFilterReplicaIDs {
 					filter = append(filter, uint64(id))
 				}
-				cfg.Cyclic = &cyclic.ReplicationConfig{
+				cfg.Cyclic = &cdcfilter.ReplicationConfig{
 					ReplicaID:       cyclicReplicaID,
 					FilterReplicaID: filter,
 					SyncDDL:         cyclicSyncDDL,

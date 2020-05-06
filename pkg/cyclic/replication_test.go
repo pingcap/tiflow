@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 type cyclicSuit struct{}
@@ -31,18 +32,18 @@ func (s *cyclicSuit) TestRelaxSQLMode(c *check.C) {
 
 func (s *cyclicSuit) TestIsTablePaired(c *check.C) {
 	tests := []struct {
-		tables   []TableName
+		tables   []model.TableName
 		isParied bool
 	}{
-		{[]TableName{}, true},
-		{[]TableName{{Schema: SchemaName, Table: "repl_mark_1"}},
+		{[]model.TableName{}, true},
+		{[]model.TableName{{Schema: SchemaName, Table: "repl_mark_1"}},
 			true},
-		{[]TableName{{Schema: "a", Table: "a"}},
+		{[]model.TableName{{Schema: "a", Table: "a"}},
 			false},
-		{[]TableName{{Schema: SchemaName, Table: "repl_mark_a_a"},
+		{[]model.TableName{{Schema: SchemaName, Table: "repl_mark_a_a"},
 			{Schema: "a", Table: "a"}},
 			true},
-		{[]TableName{
+		{[]model.TableName{
 			{Schema: SchemaName, Table: "repl_mark_a_a"},
 			{Schema: SchemaName, Table: "repl_mark_a_b"},
 			{Schema: "a", Table: "a"},

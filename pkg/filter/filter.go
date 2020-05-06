@@ -1,12 +1,17 @@
 package filter
 
 import (
+	"encoding/json"
 	"strings"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
+
+// OptCyclicConfig is the key that adds to changefeed options
+// automatically is cyclic replication is on.
+const OptCyclicConfig string = "_cyclic_relax_sql_mode"
 
 // Filter is a event filter implementation
 type Filter struct {
@@ -18,19 +23,46 @@ type Filter struct {
 
 // ReplicaConfig represents some addition replication config for a changefeed
 type ReplicaConfig struct {
-	DDLWhitelist        []model.ActionType        `toml:"ddl-white-list" json:"ddl-white-list"`
-	FilterCaseSensitive bool                      `toml:"filter-case-sensitive" json:"filter-case-sensitive"`
-	FilterRules         *filter.Rules             `toml:"filter-rules" json:"filter-rules"`
-	IgnoreTxnCommitTs   []uint64                  `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
-	SinkDispatchRules   []*DispatchRule           `toml:"sink-dispatch-rules" json:"sink-dispatch-rules"`
-	MounterWorkerNum    int                       `toml:"mounter-worker-num" json:"mounter-worker-num"`
-	Cyclic              *cyclic.ReplicationConfig `toml:"cyclic-replication" json:"cyclic-replication"`
+	DDLWhitelist        []model.ActionType `toml:"ddl-white-list" json:"ddl-white-list"`
+	FilterCaseSensitive bool               `toml:"filter-case-sensitive" json:"filter-case-sensitive"`
+	FilterRules         *filter.Rules      `toml:"filter-rules" json:"filter-rules"`
+	IgnoreTxnCommitTs   []uint64           `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
+	SinkDispatchRules   []*DispatchRule    `toml:"sink-dispatch-rules" json:"sink-dispatch-rules"`
+	MounterWorkerNum    int                `toml:"mounter-worker-num" json:"mounter-worker-num"`
+	Cyclic              *ReplicationConfig `toml:"cyclic-replication" json:"cyclic-replication"`
 }
 
 // DispatchRule represents partition rule for a table
 type DispatchRule struct {
 	filter.Table
 	Rule string `toml:"rule" json:"rule"`
+}
+
+// ReplicationConfig represents config used for cyclic replication
+type ReplicationConfig struct {
+	ReplicaID       uint64   `toml:"enable" json:"enable"`
+	FilterReplicaID []uint64 `toml:"filter-replica-ids" json:"filter-replica-ids"`
+	IDBuckets       int      `toml:"id-buckets" json:"id-buckets"`
+	SyncDDL         bool     `toml:"sync-ddl" json:"sync-ddl"`
+}
+
+// IsEnabled returns whether cyclic replication is enabled or not.
+func (c *ReplicationConfig) IsEnabled() bool {
+	return c != nil && c.ReplicaID != 0
+}
+
+// Marshal returns the json marshal format of a ReplicationConfig
+func (c *ReplicationConfig) Marshal() (string, error) {
+	cfg, err := json.Marshal(c)
+	if err != nil {
+		return "", errors.Annotatef(err, "Unmarshal data: %v", c)
+	}
+	return string(cfg), nil
+}
+
+// Unmarshal unmarshals into *ReplicationConfig from json marshal byte slice
+func (c *ReplicationConfig) Unmarshal(data []byte) error {
+	return json.Unmarshal(data, c)
 }
 
 // NewFilter creates a filter

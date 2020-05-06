@@ -11,40 +11,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package cyclic
 
 import (
 	"fmt"
 	"sort"
 
-	"github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/pkg/cyclic"
+	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
-// Some cyclic replication implemention are here, this is required to break
-// cyclic imports.
-//
-// TODO(neil) move it package cyclic and let util depends on model.
-//
-// package model imports util
-//         util imports cyclic
-// so cyclic can not imports model
-
-// CyclicCreateMarkTable returns DDLs to create mark table regard to the tableID
+// CreateMarkTable returns DDLs to create mark table regard to the tableID
 //
 // Note table ID is only for avoid write hotspot there is *NO* guarantee
 // normal tables and mark tables are one:one map.
 //
 // For now, it's dead code. We need create table on changefeed creation.
-func CyclicCreateMarkTable(sourceSchema, sourceTable string) []*DDLEvent {
-	schema, table := cyclic.MarkTableName(sourceSchema, sourceTable)
-	events := []*DDLEvent{
+func CreateMarkTable(sourceSchema, sourceTable string) []*model.DDLEvent {
+	schema, table := MarkTableName(sourceSchema, sourceTable)
+	events := []*model.DDLEvent{
 		{
 			Ts:     0,
 			Schema: schema,
 			Table:  table,
 			Query:  fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", schema),
-			Type:   model.ActionCreateSchema,
+			Type:   timodel.ActionCreateSchema,
 		},
 		{
 			Ts:     0,
@@ -57,29 +48,29 @@ func CyclicCreateMarkTable(sourceSchema, sourceTable string) []*DDLEvent {
 					%s BIGINT UNSIGNED NOT NULL,
 					val BIGINT DEFAULT 0,
 					PRIMARY KEY (bucket, %s)
-				);`, schema, table, cyclic.CyclicReplicaIDCol, cyclic.CyclicReplicaIDCol),
-			Type: model.ActionCreateTable,
+				);`, schema, table, CyclicReplicaIDCol, CyclicReplicaIDCol),
+			Type: timodel.ActionCreateTable,
 		}}
 	return events
 }
 
 // ExtractReplicaID extracts replica ID from the given mark row.
-func ExtractReplicaID(markRow *RowChangedEvent) uint64 {
-	val, ok := markRow.Columns[cyclic.CyclicReplicaIDCol]
+func ExtractReplicaID(markRow *model.RowChangedEvent) uint64 {
+	val, ok := markRow.Columns[CyclicReplicaIDCol]
 	if !ok {
-		panic("bad mark table, " + cyclic.CyclicReplicaIDCol + " not found")
+		panic("bad mark table, " + CyclicReplicaIDCol + " not found")
 	}
 	return val.Value.(uint64)
 }
 
 // TxnMap maps start ts to txn may cross multiple tables.
-type TxnMap map[uint64]map[TableName][]*RowChangedEvent
+type TxnMap map[uint64]map[model.TableName][]*model.RowChangedEvent
 
 // MarkMap maps start ts to mark table rows.
 // There is at most one mark table row that is modified for each transaction.
-type MarkMap map[uint64]*RowChangedEvent
+type MarkMap map[uint64]*model.RowChangedEvent
 
-func (m MarkMap) shouldFilterTxn(startTs uint64, filterReplicaIDs []uint64) (*RowChangedEvent, bool) {
+func (m MarkMap) shouldFilterTxn(startTs uint64, filterReplicaIDs []uint64) (*model.RowChangedEvent, bool) {
 	markRow, markFound := m[startTs]
 	if !markFound {
 		return nil, false
@@ -96,14 +87,14 @@ func (m MarkMap) shouldFilterTxn(startTs uint64, filterReplicaIDs []uint64) (*Ro
 // MapMarkRowsGroup maps row change events into two group, normal table group
 // and mark table group.
 func MapMarkRowsGroup(
-	inputs map[TableName][][]*RowChangedEvent,
+	inputs map[model.TableName][][]*model.RowChangedEvent,
 ) (output TxnMap, markMap MarkMap) {
-	output = make(map[uint64]map[TableName][]*RowChangedEvent)
-	markMap = make(map[uint64]*RowChangedEvent)
+	output = make(map[uint64]map[model.TableName][]*model.RowChangedEvent)
+	markMap = make(map[uint64]*model.RowChangedEvent)
 	for name, input := range inputs {
 		for _, events := range input {
 			// Group mark table rows by start ts
-			if cyclic.IsMarkTable(name.Schema, name.Table) {
+			if IsMarkTable(name.Schema, name.Table) {
 				for _, event := range events {
 					_, ok := markMap[event.StartTs]
 					if ok {
@@ -119,11 +110,11 @@ func MapMarkRowsGroup(
 			for _, event := range events {
 				sameTxn, txnFound := output[event.StartTs]
 				if !txnFound {
-					sameTxn = make(map[TableName][]*RowChangedEvent)
+					sameTxn = make(map[model.TableName][]*model.RowChangedEvent)
 				}
 				table, tableFound := sameTxn[name]
 				if !tableFound {
-					table = make([]*RowChangedEvent, 0, 1)
+					table = make([]*model.RowChangedEvent, 0, 1)
 				}
 				table = append(table, event)
 				sameTxn[name] = table
@@ -139,8 +130,8 @@ func MapMarkRowsGroup(
 // the same.
 func ReduceCyclicRowsGroup(
 	input TxnMap, markMap MarkMap, filterReplicaIDs []uint64,
-) map[TableName][][]*RowChangedEvent {
-	output := make(map[TableName][][]*RowChangedEvent, len(input))
+) map[model.TableName][][]*model.RowChangedEvent {
+	output := make(map[model.TableName][][]*model.RowChangedEvent, len(input))
 
 	for startTs, txn := range input {
 		// Check if we should skip this event
@@ -156,13 +147,13 @@ func ReduceCyclicRowsGroup(
 				panic(fmt.Sprintf(
 					"start ts mismatch %d != %d", startTs, events[0].StartTs))
 			}
-			multiRows := make([][]*RowChangedEvent, 0, 1)
-			rows := make([]*RowChangedEvent, 0, len(events)+1)
+			multiRows := make([][]*model.RowChangedEvent, 0, 1)
+			rows := make([]*model.RowChangedEvent, 0, len(events)+1)
 			if markRow != nil {
-				var mark RowChangedEvent = *markRow
+				var mark model.RowChangedEvent = *markRow
 				// Rewrite mark table name based on event's table ID.
-				schema, table := cyclic.MarkTableName(name.Schema, name.Table)
-				mark.Table = &TableName{
+				schema, table := MarkTableName(name.Schema, name.Table)
+				mark.Table = &model.TableName{
 					Schema: schema,
 					Table:  table,
 				}

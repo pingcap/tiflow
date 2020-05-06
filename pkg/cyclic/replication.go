@@ -20,11 +20,11 @@
 package cyclic
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/filter"
 )
 
 const (
@@ -39,33 +39,6 @@ const (
 	// automatically is cyclic replication is on.
 	OptCyclicConfig string = "_cyclic_relax_sql_mode"
 )
-
-// ReplicationConfig represents config used for cyclic replication
-type ReplicationConfig struct {
-	ReplicaID       uint64   `toml:"enable" json:"enable"`
-	FilterReplicaID []uint64 `toml:"filter-replica-ids" json:"filter-replica-ids"`
-	IDBuckets       int      `toml:"id-buckets" json:"id-buckets"`
-	SyncDDL         bool     `toml:"sync-ddl" json:"sync-ddl"`
-}
-
-// IsEnabled returns whether cyclic replication is enabled or not.
-func (c *ReplicationConfig) IsEnabled() bool {
-	return c != nil && c.ReplicaID != 0
-}
-
-// Marshal returns the json marshal format of a ReplicationConfig
-func (c *ReplicationConfig) Marshal() (string, error) {
-	cfg, err := json.Marshal(c)
-	if err != nil {
-		return "", errors.Annotatef(err, "Unmarshal data: %v", c)
-	}
-	return string(cfg), nil
-}
-
-// Unmarshal unmarshals into *ReplicationConfig from json marshal byte slice
-func (c *ReplicationConfig) Unmarshal(data []byte) error {
-	return json.Unmarshal(data, c)
-}
 
 // RelaxSQLMode returns relaxed SQL mode, "STRICT_TRANS_TABLES" is removed.
 func RelaxSQLMode(oldMode string) string {
@@ -84,11 +57,11 @@ func RelaxSQLMode(oldMode string) string {
 
 // Cyclic ...
 type Cyclic struct {
-	config ReplicationConfig
+	config filter.ReplicationConfig
 }
 
 // NewCyclic creates a cyclic
-func NewCyclic(config *ReplicationConfig) *Cyclic {
+func NewCyclic(config *filter.ReplicationConfig) *Cyclic {
 	if config == nil || config.ReplicaID == 0 {
 		return nil
 	}
@@ -111,16 +84,10 @@ func MarkTableName(sourceSchema, sourceTable string) (schema, table string) {
 	return
 }
 
-// TableName represents name of a table, includes table name and schema name.
-// TODO(neil) it's better in package model.
-type TableName struct {
-	Schema, Table string
-}
-
 // IsTablesPaired checks if normal tables are paired with mark tables.
-func IsTablesPaired(tables []TableName) bool {
-	normalTables := make([]TableName, 0, len(tables)/2)
-	markMap := make(map[TableName]struct{}, len(tables)/2)
+func IsTablesPaired(tables []model.TableName) bool {
+	normalTables := make([]model.TableName, 0, len(tables)/2)
+	markMap := make(map[model.TableName]struct{}, len(tables)/2)
 	for _, table := range tables {
 		if IsMarkTable(table.Schema, table.Table) {
 			markMap[table] = struct{}{}
@@ -129,7 +96,7 @@ func IsTablesPaired(tables []TableName) bool {
 		}
 	}
 	for _, table := range normalTables {
-		markTable := TableName{}
+		markTable := model.TableName{}
 		markTable.Schema, markTable.Table = MarkTableName(table.Schema, table.Table)
 		_, ok := markMap[markTable]
 		if !ok {

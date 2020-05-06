@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -93,7 +92,7 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 	}
 
 	disableDDLFilter, err := NewFilter(&ReplicaConfig{
-		Cyclic: &cyclic.ReplicationConfig{
+		Cyclic: &ReplicationConfig{
 			ReplicaID: 1,
 			SyncDDL:   false,
 		}})

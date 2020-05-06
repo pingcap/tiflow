@@ -18,7 +18,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/filter"
 
 	"github.com/pingcap/errors"
@@ -102,7 +101,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 		if err != nil {
 			return errors.Annotatef(err, "Unmarshal data: %v", data)
 		}
-		info.Opts[cyclic.OptCyclicConfig] = string(cyclicCfg)
+		info.Opts[filter.OptCyclicConfig] = string(cyclicCfg)
 	}
 	return nil
 }
