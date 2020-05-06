@@ -264,6 +264,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		}
 	}
 	ctx = util.PutTimezoneInCtx(ctx, tz)
+	ctx, cancel := context.WithCancel(ctx)
 	filter, err := util.NewFilter(&util.ReplicaConfig{})
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -273,8 +274,9 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		sink.Sink
 		resolvedTs uint64
 	}, kafkaPartitionNum)
+	errCh := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.NewSink(ctx, downstreamURIStr, filter, &util.ReplicaConfig{}, nil)
+		s, err := sink.NewSink(ctx, downstreamURIStr, filter, &util.ReplicaConfig{}, nil, errCh)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -283,10 +285,19 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			resolvedTs uint64
 		}{Sink: s}
 	}
-	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, &util.ReplicaConfig{}, nil)
+	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, &util.ReplicaConfig{}, nil, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	go func() {
+		err := <-errCh
+		if errors.Cause(err) != context.Canceled {
+			log.Error("error on running consumer", zap.Error(err))
+		} else {
+			log.Info("consumer exited")
+		}
+		cancel()
+	}()
 	c.ddlSink = sink
 	c.ready = make(chan bool)
 	return c, nil
