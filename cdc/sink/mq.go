@@ -184,12 +184,17 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	notifier := util.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName)
 	input := k.partitionInput[partition]
 	encoder := k.newEncoder()
+	batchSize := 0
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
 
 	flushToProducer := func() error {
+		if batchSize == 0 {
+			return nil
+		}
 		key, value := encoder.Build()
 		encoder = k.newEncoder()
+		batchSize = 0
 		return k.mqProducer.SendMessage(ctx, key, value, partition)
 	}
 	for {
@@ -221,6 +226,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		batchSize++
 		if encoder.Size() >= batchSizeLimit {
 			if err := flushToProducer(); err != nil {
 				return errors.Trace(err)
