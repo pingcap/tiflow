@@ -163,10 +163,7 @@ func IsMarkTable(schema, table string) bool {
 	const quoteSchemaName string = "`" + SchemaName + "`"
 	const quotetableName string = "`" + tableName
 
-	if strings.HasPrefix(schema, SchemaName) {
-		return true
-	}
-	if strings.HasPrefix(schema, quoteSchemaName) {
+	if schema == SchemaName || schema == quoteSchemaName {
 		return true
 	}
 	if strings.HasPrefix(table, quotetableName) {
