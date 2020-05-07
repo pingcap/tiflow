@@ -120,7 +120,8 @@ func newMockService(c *check.C, port int, ch chan *cdcpb.ChangeDataEvent) *grpc.
 	return grpcServer
 }
 
-func (s *clientSuite) TestConnectOfflineTiKV(c *check.C) {
+// Use etcdSuite to workaround the race. See comments of `TestConnArray`.
+func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
 	defer func() {
 		if ch2 != nil {
