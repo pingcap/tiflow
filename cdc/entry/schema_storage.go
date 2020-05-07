@@ -541,15 +541,6 @@ func (s *schemaSnapshot) replaceTable(tbl *timodel.TableInfo) error {
 	return nil
 }
 
-func (s *schemaSnapshot) flushIneligibleTables() {
-	for tableID := range s.ineligibleTableID {
-		tableInfo, exist := s.tables[tableID]
-		if !exist || tableInfo.ExistTableUniqueColumn() {
-			delete(s.ineligibleTableID, tableID)
-		}
-	}
-}
-
 func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
 	switch job.Type {
@@ -742,21 +733,6 @@ func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 	s.snaps = append(s.snaps, snap)
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 	return nil
-}
-
-// FlushIneligibleTables recounts the ineligible table set in schema snaps which of currentTs greater or equal to specified ts
-func (s *SchemaStorage) FlushIneligibleTables(ts uint64) {
-	s.snapsMu.Lock()
-	defer s.snapsMu.Unlock()
-	if len(s.snaps) == 0 {
-		return
-	}
-	for _, snap := range s.snaps {
-		if snap.currentTs < ts {
-			continue
-		}
-		snap.flushIneligibleTables()
-	}
 }
 
 // AdvanceResolvedTs advances the resolved
