@@ -109,7 +109,9 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 		}
 		var startTs uint64
 		pos, ok := feed.taskPositions[info.ID]
-		if !ok {
+		if ok {
+			startTs = pos.CheckPointTs
+		} else {
 			log.Warn("task position not found, fallback to use changefeed checkpointts",
 				zap.String("capture", info.ID), zap.String("changefeed", feed.id))
 			// maybe the processor hasn't added table yet, fallback to use global
