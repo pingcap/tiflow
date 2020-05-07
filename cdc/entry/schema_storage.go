@@ -56,8 +56,9 @@ func newEmptySchemaSnapshot() *schemaSnapshot {
 		tableNameToID:  make(map[TableName]int64),
 		schemaNameToID: make(map[string]int64),
 
-		schemas: make(map[int64]*timodel.DBInfo),
-		tables:  make(map[int64]*TableInfo),
+		schemas:        make(map[int64]*timodel.DBInfo),
+		tables:         make(map[int64]*TableInfo),
+		partitionTable: make(map[int64]*TableInfo),
 
 		truncateTableID:   make(map[int64]struct{}),
 		ineligibleTableID: make(map[int64]struct{}),
@@ -114,8 +115,9 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 		tableNameToID:  make(map[TableName]int64, len(s.tableNameToID)),
 		schemaNameToID: make(map[string]int64, len(s.schemaNameToID)),
 
-		schemas: make(map[int64]*timodel.DBInfo, len(s.schemas)),
-		tables:  make(map[int64]*TableInfo, len(s.tables)),
+		schemas:        make(map[int64]*timodel.DBInfo, len(s.schemas)),
+		tables:         make(map[int64]*TableInfo, len(s.tables)),
+		partitionTable: make(map[int64]*TableInfo, len(s.partitionTable)),
 
 		truncateTableID:   make(map[int64]struct{}, len(s.truncateTableID)),
 		ineligibleTableID: make(map[int64]struct{}, len(s.ineligibleTableID)),
@@ -131,6 +133,9 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 	}
 	for k, v := range s.tables {
 		n.tables[k] = v.Clone()
+	}
+	for k, v := range s.partitionTable {
+		n.partitionTable[k] = v.Clone()
 	}
 	for k, v := range s.truncateTableID {
 		n.truncateTableID[k] = v
