@@ -181,6 +181,7 @@ func (o *Owner) newChangeFeed(
 
 	schemas := make(map[uint64]tableIDMap)
 	tables := make(map[uint64]entry.TableName)
+	partitions := make(map[uint64][]int64)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
 	snap, err := schemaStorage.GetSnapshot(ctx, checkpointTs)
 	if err != nil {
@@ -211,8 +212,10 @@ func (o *Owner) newChangeFeed(
 			log.Warn("table not found for table ID", zap.Uint64("tid", tid))
 		}
 		if pi := tblInfo.GetPartitionInfo(); pi != nil {
+			delete(partitions, tid)
 			for _, partition := range pi.Definitions {
 				id := uint64(partition.ID)
+				partitions[tid] = append(partitions[id], partition.ID)
 				orphanTables[id] = model.ProcessTableInfo{
 					ID:      id,
 					StartTs: checkpointTs,
@@ -245,6 +248,7 @@ func (o *Owner) newChangeFeed(
 		schema:               schemaStorage,
 		schemas:              schemas,
 		tables:               tables,
+		partitions:           partitions,
 		orphanTables:         orphanTables,
 		waitingConfirmTables: make(map[uint64]string),
 		toCleanTables:        make(map[uint64]struct{}),

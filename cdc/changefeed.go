@@ -82,6 +82,7 @@ type changeFeed struct {
 
 	schemas              map[uint64]tableIDMap
 	tables               map[uint64]entry.TableName
+	partitions           map[uint64][]int64 // key is table ID, value is the slice of partitions ID.
 	orphanTables         map[uint64]model.ProcessTableInfo
 	waitingConfirmTables map[uint64]string
 	toCleanTables        map[uint64]struct{}
@@ -141,7 +142,9 @@ func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName, t
 	c.schemas[sid][tid] = struct{}{}
 	c.tables[tid] = table
 	if pi := tblInfo.GetPartitionInfo(); pi != nil {
+		delete(c.partitions, tid)
 		for _, partition := range pi.Definitions {
+			c.partitions[tid] = append(c.partitions[tid], partition.ID)
 			id := uint64(partition.ID)
 			c.orphanTables[id] = model.ProcessTableInfo{
 				ID:      id,
@@ -162,10 +165,20 @@ func (c *changeFeed) removeTable(sid, tid uint64) {
 	}
 	delete(c.tables, tid)
 
-	if _, ok := c.orphanTables[tid]; ok {
-		delete(c.orphanTables, tid)
+	removeFunc := func(id uint64) {
+		if _, ok := c.orphanTables[id]; ok {
+			delete(c.orphanTables, id)
+		} else {
+			c.toCleanTables[id] = struct{}{}
+		}
+	}
+
+	if pids, ok := c.partitions[tid]; ok {
+		for _, id := range pids {
+			removeFunc(uint64(id))
+		}
 	} else {
-		c.toCleanTables[tid] = struct{}{}
+		removeFunc(tid)
 	}
 }
 
