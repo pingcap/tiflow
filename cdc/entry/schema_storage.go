@@ -91,12 +91,15 @@ func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*schemaSnap
 		dbinfo.Tables = make([]*timodel.TableInfo, 0, len(tableInfos))
 		for _, tableInfo := range tableInfos {
 			dbinfo.Tables = append(dbinfo.Tables, tableInfo)
-			snap.tables[tableInfo.ID] = WrapTableInfo(dbinfo.ID, dbinfo.Name.O, tableInfo)
+			tableInfo := WrapTableInfo(dbinfo.ID, dbinfo.Name.O, tableInfo)
+			snap.tables[tableInfo.ID] = tableInfo
 			snap.tableNameToID[TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
+			if !tableInfo.ExistTableUniqueColumn() {
+				snap.ineligibleTableID[tableInfo.ID] = struct{}{}
+			}
 		}
 	}
 	snap.currentTs = currentTs
-	snap.flushIneligibleTables()
 	return snap, nil
 }
 
@@ -641,7 +644,13 @@ type SchemaStorage struct {
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *util.Filter) (*SchemaStorage, error) {
-	snap, err := newSchemaSnapshotFromMeta(meta, startTs)
+	var snap *schemaSnapshot
+	var err error
+	if meta == nil {
+		snap = newEmptySchemaSnapshot()
+	} else {
+		snap, err = newSchemaSnapshotFromMeta(meta, startTs)
+	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

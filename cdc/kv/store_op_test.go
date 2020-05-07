@@ -15,10 +15,6 @@ package kv
 
 import (
 	"github.com/pingcap/check"
-	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/mockstore/mocktikv"
-	"github.com/pingcap/tidb/util/testkit"
 )
 
 type storeSuite struct{}
@@ -26,34 +22,5 @@ type storeSuite struct{}
 var _ = check.Suite(&storeSuite{})
 
 func (s *storeSuite) TestLoadHistoryDDLJobs(c *check.C) {
-	mockCluster := mocktikv.NewCluster()
-	mocktikv.BootstrapWithSingleStore(mockCluster)
-	mockMvccStore := mocktikv.MustNewMVCCStore()
-	store, err := mockstore.NewMockTikvStore(
-		mockstore.WithCluster(mockCluster),
-		mockstore.WithMVCCStore(mockMvccStore),
-	)
-	c.Assert(err, check.IsNil)
 
-	session.SetSchemaLease(0)
-	session.DisableStats4Test()
-	domain, err := session.BootstrapSession(store)
-	c.Assert(err, check.IsNil)
-	domain.SetStatsUpdating(true)
-
-	oldJobIDs := make(map[int64]struct{})
-	oldJobs, err := LoadHistoryDDLJobs(store)
-	c.Assert(err, check.IsNil)
-	for _, job := range oldJobs {
-		oldJobIDs[job.ID] = struct{}{}
-	}
-
-	tk := testkit.NewTestKit(c, store)
-	tk.MustExec("create table test.simple_test (id bigint primary key)")
-
-	latestJobs, err := LoadHistoryDDLJobs(store)
-	c.Assert(err, check.IsNil)
-	c.Assert(len(latestJobs)-len(oldJobs), check.Equals, 1)
-	_, ok := oldJobIDs[latestJobs[len(latestJobs)-1].ID]
-	c.Assert(ok, check.IsFalse)
 }
