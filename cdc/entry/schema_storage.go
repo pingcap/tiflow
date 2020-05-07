@@ -50,12 +50,15 @@ type schemaSnapshot struct {
 	currentTs uint64
 }
 
+// SingleSchemaSnapshot is a single schema snapshot independent of schema storage
 type SingleSchemaSnapshot = schemaSnapshot
 
+// HandleDDL handles the ddl job
 func (s *SingleSchemaSnapshot) HandleDDL(job *timodel.Job) error {
 	return s.handleDDL(job)
 }
 
+// NewSingleSchemaSnapshotFromMeta creates a new single schema snapshot from a tidb meta
 func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*SingleSchemaSnapshot, error) {
 	return newSchemaSnapshotFromMeta(meta, currentTs)
 }

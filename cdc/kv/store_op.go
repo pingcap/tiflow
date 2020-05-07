@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 )
 
+// GetSnapshotMeta returns tidb meta information
 func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
 	snapshot, err := tiStore.GetSnapshot(tidbkv.NewVersion(ts))
 	if err != nil {
