@@ -146,12 +146,12 @@ function test_owner_cleanup_stale_tasks() {
     run_cdc_server $WORK_DIR $CDC_BINARY
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
 
-    run_sql "INSERT INTO test.availability(id, val) VALUES (1, 1);"
-    ensure $MAX_RETRIES nonempty 'select id, val from test.availability where id=1 and val=1'
-    run_sql "UPDATE test.availability set val = 22 where id = 1;"
-    ensure $MAX_RETRIES nonempty 'select id, val from test.availability where id=1 and val=22'
-    run_sql "DELETE from test.availability where id=1;"
-    ensure $MAX_RETRIES empty 'select id, val from test.availability where id=1'
+    run_sql "INSERT INTO test.availability1(id, val) VALUES (1, 1);"
+    ensure $MAX_RETRIES nonempty 'select id, val from test.availability1 where id=1 and val=1'
+    run_sql "UPDATE test.availability1 set val = 22 where id = 1;"
+    ensure $MAX_RETRIES nonempty 'select id, val from test.availability1 where id=1 and val=22'
+    run_sql "DELETE from test.availability1 where id=1;"
+    ensure $MAX_RETRIES empty 'select id, val from test.availability1 where id=1'
 
     echo "test_owner_cleanup_stale_tasks pass"
     cleanup_process $CDC_BINARY
