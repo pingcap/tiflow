@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cyclic"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
@@ -62,7 +63,7 @@ type mysqlSink struct {
 	checkpointTs     uint64
 	params           params
 
-	filter *util.Filter
+	filter *filter.Filter
 
 	globalForwardCh chan struct{}
 
@@ -154,7 +155,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	if shouldSwitchDB {
-		_, err = tx.ExecContext(ctx, "USE "+util.QuoteName(ddl.Schema)+";")
+		_, err = tx.ExecContext(ctx, "USE "+model.QuoteName(ddl.Schema)+";")
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.Error(err))
@@ -321,7 +322,7 @@ func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) 
 }
 
 // newMySQLSink creates a new MySQL sink using schema storage
-func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, filter *util.Filter, opts map[string]string) (Sink, error) {
+func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, filter *filter.Filter, opts map[string]string) (Sink, error) {
 	var db *sql.DB
 	params := defaultParams
 
@@ -464,7 +465,7 @@ func concurrentExec(
 			keys := make([]string, 0, len(rows))
 			for _, row := range rows {
 				if len(row.Keys) == 0 {
-					keys = []string{util.QuoteSchema(groupKey.Schema, groupKey.Table)}
+					keys = []string{model.QuoteSchema(groupKey.Schema, groupKey.Table)}
 				} else {
 					keys = append(keys, row.Keys...)
 				}
@@ -692,16 +693,16 @@ func (s *mysqlSink) prepareReplace(schema, table string, cols map[string]*model.
 	}
 
 	colList := "(" + buildColumnList(columnNames) + ")"
-	tblName := util.QuoteSchema(schema, table)
+	tblName := model.QuoteSchema(schema, table)
 	builder.WriteString("REPLACE INTO " + tblName + colList + " VALUES ")
-	builder.WriteString("(" + util.HolderString(len(columnNames)) + ");")
+	builder.WriteString("(" + model.HolderString(len(columnNames)) + ");")
 
 	return builder.String(), args, nil
 }
 
 func (s *mysqlSink) prepareDelete(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("DELETE FROM %s WHERE ", util.QuoteSchema(schema, table)))
+	builder.WriteString(fmt.Sprintf("DELETE FROM %s WHERE ", model.QuoteSchema(schema, table)))
 
 	colNames, wargs := whereSlice(cols)
 	args := make([]interface{}, 0, len(wargs))
@@ -710,9 +711,9 @@ func (s *mysqlSink) prepareDelete(schema, table string, cols map[string]*model.C
 			builder.WriteString(" AND ")
 		}
 		if wargs[i] == nil {
-			builder.WriteString(util.QuoteName(colNames[i]) + " IS NULL")
+			builder.WriteString(model.QuoteName(colNames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(util.QuoteName(colNames[i]) + " = ?")
+			builder.WriteString(model.QuoteName(colNames[i]) + " = ?")
 			args = append(args, wargs[i])
 		}
 	}
@@ -768,7 +769,7 @@ func buildColumnList(names []string) string {
 		if i > 0 {
 			b.WriteString(",")
 		}
-		b.WriteString(util.QuoteName(name))
+		b.WriteString(model.QuoteName(name))
 
 	}
 

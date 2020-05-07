@@ -11,11 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package regionspan
 
 import (
-	"github.com/pingcap/check"
 	"math"
+
+	"github.com/pingcap/check"
 )
 
 type regionRangeLockSuit struct{}

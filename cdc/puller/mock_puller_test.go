@@ -21,7 +21,7 @@ var _ = check.Suite(&mockPullerSuite{})
 
 func (s *mockPullerSuite) TestTxnSort(c *check.C) {
 	pm := NewMockPullerManager(c, true)
-	plr := pm.CreatePuller(0, []util.Span{util.Span{}.Hack()})
+	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.Span{}.Hack()})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ts := uint64(0)
@@ -45,7 +45,7 @@ func (s *mockPullerSuite) TestTxnSort(c *check.C) {
 
 func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 	pm := NewMockPullerManager(c, true)
-	plr := pm.CreatePuller(0, []util.Span{util.GetDDLSpan()})
+	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetDDLSpan()})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ts := uint64(0)
@@ -58,7 +58,7 @@ func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 				return nil
 			}
 			for _, e := range rawTxn.Entries {
-				c.Assert(util.KeyInSpan(e.Key, util.GetDDLSpan()), check.IsTrue)
+				c.Assert(util.KeyInSpan(e.Key, regionspan.GetDDLSpan()), check.IsTrue)
 			}
 			t, err := txnMounter.Mount(rawTxn)
 			c.Assert(err, check.IsNil)
@@ -83,7 +83,7 @@ func (s *mockPullerSuite) TestDDLPuller(c *check.C) {
 
 func (s *mockPullerSuite) TestStartTs(c *check.C) {
 	pm := NewMockPullerManager(c, true)
-	plrA := pm.CreatePuller(0, []util.Span{util.Span{}.Hack()})
+	plrA := pm.CreatePuller(0, []regionspan.Span{regionspan.Span{}.Hack()})
 	ctx, cancel := context.WithCancel(context.Background())
 	ts := uint64(0)
 	var rawTxns []model.RawTxn
@@ -110,7 +110,7 @@ func (s *mockPullerSuite) TestStartTs(c *check.C) {
 	cancel()
 	mu.Lock()
 	index := len(rawTxns) / 2
-	plrB := pm.CreatePuller(rawTxns[index].Ts, []util.Span{util.Span{}.Hack()})
+	plrB := pm.CreatePuller(rawTxns[index].Ts, []regionspan.Span{regionspan.Span{}.Hack()})
 	mu.Unlock()
 	ctx, cancel = context.WithCancel(context.Background())
 	err := plrB.CollectRawTxns(ctx, func(ctx context.Context, txn model.RawTxn) error {

@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cyclic"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
@@ -185,7 +185,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 				return err
 			}
 
-			cfg := new(util.ReplicaConfig)
+			cfg := new(filter.ReplicaConfig)
 			if len(configFile) > 0 {
 				if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
 					return err
@@ -293,7 +293,7 @@ func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) er
 	return nil
 }
 
-func verifyTables(ctx context.Context, cfg *util.ReplicaConfig, startTs uint64) (ineligibleTables []entry.TableName, err error) {
+func verifyTables(ctx context.Context, cfg *filter.ReplicaConfig, startTs uint64) (ineligibleTables []entry.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr)
 	if err != nil {
 		return nil, err
@@ -303,7 +303,7 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig, startTs uint64) 
 		return nil, errors.Trace(err)
 	}
 
-	filter, err := util.NewFilter(cfg)
+	filter, err := filter.NewFilter(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

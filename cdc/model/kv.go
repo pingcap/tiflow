@@ -3,7 +3,7 @@ package model
 import (
 	"fmt"
 
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 )
 
 // OpType for the kv, delete or put
@@ -38,7 +38,7 @@ func (e *RegionFeedEvent) GetValue() interface{} {
 // ResolvedSpan guarantees all the KV value event
 // with commit ts less than ResolvedTs has been emitted.
 type ResolvedSpan struct {
-	Span       util.Span
+	Span       regionspan.Span
 	ResolvedTs uint64
 }
 

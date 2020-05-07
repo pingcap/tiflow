@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/util"
 
 	"github.com/pingcap/log"
@@ -28,7 +29,7 @@ type mqSink struct {
 
 	globalResolvedTs uint64
 	checkpointTs     uint64
-	filter           *util.Filter
+	filter           *filter.Filter
 	dispatcher       dispatcher.Dispatcher
 
 	captureID    string
@@ -37,7 +38,7 @@ type mqSink struct {
 	errCh chan error
 }
 
-func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, config *util.ReplicaConfig, opts map[string]string) *mqSink {
+func newMqSink(mqProducer mqProducer.Producer, filter *filter.Filter, config *filter.ReplicaConfig, opts map[string]string) *mqSink {
 	return &mqSink{
 		mqProducer:   mqProducer,
 		partitionNum: mqProducer.GetPartitionNum(),
@@ -182,7 +183,7 @@ func (k *mqSink) PrintStatus(ctx context.Context) error {
 	return k.mqProducer.PrintStatus(ctx)
 }
 
-func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filter, replicaConfig *util.ReplicaConfig, opts map[string]string) (*mqSink, error) {
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *filter.ReplicaConfig, opts map[string]string) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
 	scheme := strings.ToLower(sinkURI.Scheme)

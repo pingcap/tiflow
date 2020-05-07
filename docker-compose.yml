@@ -1,12 +1,12 @@
 ---
     version: '2.1'
-    
+
     services:
       controller:
         image: ticdc:latest
         build:
           context: .
-          dockerfile: ./docker/Dockerfile
+          dockerfile: ./Dockerfile
         volumes:
           - ./docker/data:/data
           - ./docker/logs:/logs
@@ -21,12 +21,12 @@
         image: ticdc:latest
         build:
           context: .
-          dockerfile: ./docker/Dockerfile
+          dockerfile: ./Dockerfile
         volumes:
           - ./docker/data:/data
           - ./docker/logs:/logs
         entrypoint: "/cdc server"
-        command: 
+        command:
           - --pd=http://upstream-pd:2379
           - --log-file=/logs/capturer0.log
         depends_on:
@@ -38,12 +38,12 @@
         image: ticdc:latest
         build:
           context: .
-          dockerfile: ./docker/Dockerfile
+          dockerfile: ./Dockerfile
         volumes:
           - ./docker/data:/data
           - ./docker/logs:/logs
         entrypoint: "/cdc server"
-        command: 
+        command:
           - --pd=http://upstream-pd:2379
           - --log-file=/logs/capturer1.log
         depends_on:
@@ -55,19 +55,19 @@
         image: ticdc:latest
         build:
           context: .
-          dockerfile: ./docker/Dockerfile
+          dockerfile: ./Dockerfile
         volumes:
           - ./docker/data:/data
           - ./docker/logs:/logs
         entrypoint: "/cdc server"
-        command: 
+        command:
           - --pd=http://upstream-pd:2379
           - --log-file=/logs/capturer2.log
         depends_on:
           - "upstream-tidb"
           - "downstream-tidb"
         restart: on-failure
-    
+
       upstream-pd:
         image: pingcap/pd:nightly
         ports:
@@ -87,7 +87,7 @@
           - --config=/pd.toml
           - --log-file=/logs/upstream-pd.log
         restart: on-failure
-    
+
       upstream-tikv0:
         image: pingcap/tikv:nightly
         volumes:
@@ -104,7 +104,7 @@
         depends_on:
           - "upstream-pd"
         restart: on-failure
-    
+
       upstream-tikv1:
         image: pingcap/tikv:nightly
         volumes:
@@ -121,7 +121,7 @@
         depends_on:
           - "upstream-pd"
         restart: on-failure
-    
+
       upstream-tikv2:
         image: pingcap/tikv:nightly
         volumes:
@@ -138,7 +138,7 @@
         depends_on:
           - "upstream-pd"
         restart: on-failure
-    
+
       upstream-tidb:
         image: pingcap/tidb:nightly
         ports:
@@ -178,7 +178,7 @@
           - --config=/pd.toml
           - --log-file=/logs/downstream-pd.log
         restart: on-failure
-    
+
       downstream-tikv0:
         image: pingcap/tikv:nightly
         volumes:
@@ -195,7 +195,7 @@
         depends_on:
           - "downstream-pd"
         restart: on-failure
-    
+
       downstream-tikv1:
         image: pingcap/tikv:nightly
         volumes:
@@ -212,7 +212,7 @@
         depends_on:
           - "downstream-pd"
         restart: on-failure
-    
+
       downstream-tikv2:
         image: pingcap/tikv:nightly
         volumes:
@@ -229,7 +229,7 @@
         depends_on:
           - "downstream-pd"
         restart: on-failure
-    
+
       downstream-tidb:
         image: pingcap/tidb:nightly
         ports:

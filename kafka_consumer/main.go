@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	cdcfilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 
@@ -265,7 +266,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		}
 	}
 	ctx = util.PutTimezoneInCtx(ctx, tz)
-	filter, err := util.NewFilter(&util.ReplicaConfig{})
+	filter, err := cdcfilter.NewFilter(&cdcfilter.ReplicaConfig{})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -275,7 +276,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		resolvedTs uint64
 	}, kafkaPartitionNum)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.NewSink(ctx, downstreamURIStr, filter, &util.ReplicaConfig{}, nil)
+		s, err := sink.NewSink(ctx, downstreamURIStr, filter, &cdcfilter.ReplicaConfig{}, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -284,7 +285,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			resolvedTs uint64
 		}{Sink: s}
 	}
-	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, &util.ReplicaConfig{}, nil)
+	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, &cdcfilter.ReplicaConfig{}, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

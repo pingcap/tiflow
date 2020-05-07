@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/cyclic"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 )
@@ -73,7 +73,7 @@ type changeFeed struct {
 	targetTs      uint64
 	taskStatus    model.ProcessorsInfos
 	taskPositions map[string]*model.TaskPosition
-	filter        *util.Filter
+	filter        *filter.Filter
 	sink          sink.Sink
 
 	cyclicEnabled bool

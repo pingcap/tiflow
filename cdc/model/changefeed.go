@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/ticdc/pkg/cyclic"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/filter"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -48,13 +48,13 @@ type ChangeFeedInfo struct {
 	Engine       SortEngine   `json:"sort-engine"`
 	SortDir      string       `json:"sort-dir"`
 
-	Config *util.ReplicaConfig `json:"config"`
+	Config *filter.ReplicaConfig `json:"config"`
 }
 
 // GetConfig returns ReplicaConfig.
-func (info *ChangeFeedInfo) GetConfig() *util.ReplicaConfig {
+func (info *ChangeFeedInfo) GetConfig() *filter.ReplicaConfig {
 	if info.Config == nil {
-		info.Config = &util.ReplicaConfig{}
+		info.Config = &filter.ReplicaConfig{}
 	}
 	return info.Config
 }

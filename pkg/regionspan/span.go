@@ -1,4 +1,4 @@
-package util
+package regionspan
 
 import (
 	"bytes"

@@ -391,7 +391,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 	event.Delete = row.Delete
 	event.Columns = values
-	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, util.QuoteSchema(event.Table.Schema, event.Table.Table))
+	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(event.Table.Schema, event.Table.Table))
 	return event, nil
 }
 
@@ -440,7 +440,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,
 		Columns:      values,
-		Keys:         genMultipleKeys(tableInfo.TableInfo, values, util.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
+		Keys:         genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
 	}, nil
 }
 

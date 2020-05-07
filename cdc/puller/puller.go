@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller/frontier"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -49,7 +50,7 @@ type pullerImpl struct {
 	pdCli        pd.Client
 	kvStorage    tikv.Storage
 	checkpointTs uint64
-	spans        []util.Span
+	spans        []regionspan.Span
 	buffer       *memBuffer
 	outputCh     chan *model.RawKVEntry
 	tsTracker    frontier.Frontier
@@ -64,7 +65,7 @@ func NewPuller(
 	pdCli pd.Client,
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
-	spans []util.Span,
+	spans []regionspan.Span,
 	needEncode bool,
 	limitter *BlurResourceLimitter,
 ) *pullerImpl {
@@ -149,7 +150,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// and we only want the get [b, c) from this region,
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
-					if !util.KeyInSpans(val.Key, p.spans, p.needEncode) {
+					if !regionspan.KeyInSpans(val.Key, p.spans, p.needEncode) {
 						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
 						continue
 					}

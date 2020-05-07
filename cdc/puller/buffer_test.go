@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 )
 
 type bufferSuite struct{}
@@ -49,7 +49,7 @@ func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
 	c.Assert(err, check.IsNil)
 	err = b.AddEntry(ctx, model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpan{
-			Span:       util.Span{},
+			Span:       regionspan.Span{},
 			ResolvedTs: 111,
 		},
 	})
@@ -69,7 +69,7 @@ func (bs *bufferSuite) TestWaitsCanBeCanceled(c *check.C) {
 		for {
 			err := b.AddEntry(timeout, model.RegionFeedEvent{
 				Resolved: &model.ResolvedSpan{
-					Span:       util.Span{},
+					Span:       regionspan.Span{},
 					ResolvedTs: 111,
 				},
 			})
