@@ -15,7 +15,6 @@ package kv
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/pingcap/ticdc/pkg/flags"
 	"github.com/pingcap/tidb/store"
@@ -30,29 +29,26 @@ import (
 )
 
 func loadHistoryDDLJobs(tiStore tidbkv.Storage) ([]*model.Job, error) {
-	snapMeta, err := getSnapshotMeta(tiStore)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	jobs, err := snapMeta.GetAllHistoryDDLJobs()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 
-	// jobs from GetAllHistoryDDLJobs are sorted by job id, need sorted by schema version
-	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].BinlogInfo.FinishedTS < jobs[j].BinlogInfo.FinishedTS
-	})
+	//snapMeta, err := GetSnapshotMeta(tiStore)
+	//if err != nil {
+	//	return nil, errors.Trace(err)
+	//}
+	//jobs, err := snapMeta.GetAllHistoryDDLJobs()
+	//if err != nil {
+	//	return nil, errors.Trace(err)
+	//}
+	//
+	//// jobs from GetAllHistoryDDLJobs are sorted by job id, need sorted by schema version
+	//sort.Slice(jobs, func(i, j int) bool {
+	//	return jobs[i].BinlogInfo.FinishedTS < jobs[j].BinlogInfo.FinishedTS
+	//})
 
-	return jobs, nil
+	return nil, nil
 }
 
-func getSnapshotMeta(tiStore tidbkv.Storage) (*meta.Meta, error) {
-	version, err := tiStore.CurrentVersion()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapshot, err := tiStore.GetSnapshot(version)
+func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
+	snapshot, err := tiStore.GetSnapshot(tidbkv.NewVersion(ts))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

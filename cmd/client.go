@@ -9,9 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/BurntSushi/toml"
 	"github.com/chzyer/readline"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
@@ -281,7 +278,7 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig, startTs uint64) 
 	if err != nil {
 		return nil, err
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -291,24 +288,10 @@ func verifyTables(ctx context.Context, cfg *util.ReplicaConfig, startTs uint64) 
 		return nil, errors.Trace(err)
 	}
 
-	snap := entry.NewSingleSchemaSnapshot()
-	for _, job := range jobs {
-		if job.BinlogInfo.FinishedTS > startTs {
-			break
-		}
-		if filter.ShouldDiscardDDL(job.Type) {
-			log.Info("discard the ddl job", zap.Int64("jobID", job.ID), zap.String("query", job.Query))
-			continue
-		}
-		if !job.IsSynced() && !job.IsDone() {
-			continue
-		}
-		err := snap.HandleDDL(job)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
-	snap.FlushIneligibleTables()
 
 	for tID, tableName := range snap.CloneTables() {
 		tableInfo, exist := snap.TableByID(int64(tID))

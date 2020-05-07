@@ -21,8 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.uber.org/zap/zapcore"
-
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -31,8 +29,10 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
+	timeta "github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // schemaSnapshot stores the source TiDB all schema information
@@ -56,12 +56,8 @@ func (s *SingleSchemaSnapshot) HandleDDL(job *timodel.Job) error {
 	return s.handleDDL(job)
 }
 
-func (s *SingleSchemaSnapshot) FlushIneligibleTables() {
-	s.flushIneligibleTables()
-}
-
-func NewSingleSchemaSnapshot() *SingleSchemaSnapshot {
-	return newEmptySchemaSnapshot()
+func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*SingleSchemaSnapshot, error) {
+	return newSchemaSnapshotFromMeta(meta, currentTs)
 }
 
 func newEmptySchemaSnapshot() *schemaSnapshot {
@@ -75,6 +71,33 @@ func newEmptySchemaSnapshot() *schemaSnapshot {
 		truncateTableID:   make(map[int64]struct{}),
 		ineligibleTableID: make(map[int64]struct{}),
 	}
+}
+
+func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*schemaSnapshot, error) {
+	snap := newEmptySchemaSnapshot()
+	dbinfos, err := meta.ListDatabases()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	for _, dbinfo := range dbinfos {
+		snap.schemas[dbinfo.ID] = dbinfo
+		snap.schemaNameToID[dbinfo.Name.O] = dbinfo.ID
+	}
+	for schemaID, dbinfo := range snap.schemas {
+		tableInfos, err := meta.ListTables(schemaID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		dbinfo.Tables = make([]*timodel.TableInfo, 0, len(tableInfos))
+		for _, tableInfo := range tableInfos {
+			dbinfo.Tables = append(dbinfo.Tables, tableInfo)
+			snap.tables[tableInfo.ID] = WrapTableInfo(dbinfo.ID, dbinfo.Name.O, tableInfo)
+			snap.tableNameToID[TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
+		}
+	}
+	snap.currentTs = currentTs
+	snap.flushIneligibleTables()
+	return snap, nil
 }
 
 func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field)) {
@@ -392,6 +415,21 @@ func (s *schemaSnapshot) IsIneligibleTableID(id int64) bool {
 	return ok
 }
 
+// FillSchemaName fills the schema name in ddl job
+func (s *schemaSnapshot) FillSchemaName(job *timodel.Job) error {
+	if job.Type == timodel.ActionCreateSchema ||
+		job.Type == timodel.ActionDropSchema {
+		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
+		return nil
+	}
+	dbInfo, exist := s.SchemaByID(job.SchemaID)
+	if !exist {
+		return errors.NotFoundf("schema %d not found", job.SchemaID)
+	}
+	job.SchemaName = dbInfo.Name.O
+	return nil
+}
+
 func (s *schemaSnapshot) dropSchema(id int64) error {
 	schema, ok := s.schemas[id]
 	if !ok {
@@ -602,12 +640,15 @@ type SchemaStorage struct {
 }
 
 // NewSchemaStorage creates a new schema storage
-func NewSchemaStorage(jobs []*timodel.Job, filter *util.Filter) (*SchemaStorage, error) {
-	schema := &SchemaStorage{filter: filter}
-	for _, job := range jobs {
-		if err := schema.HandleDDLJob(job); err != nil {
-			return nil, errors.Trace(err)
-		}
+func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *util.Filter) (*SchemaStorage, error) {
+	snap, err := newSchemaSnapshotFromMeta(meta, startTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schema := &SchemaStorage{
+		snaps:      []*schemaSnapshot{snap},
+		resolvedTs: startTs,
+		filter:     filter,
 	}
 	return schema, nil
 }
@@ -716,26 +757,6 @@ func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 		}
 		swapped = atomic.CompareAndSwapUint64(&s.resolvedTs, oldResolvedTs, ts)
 	}
-}
-
-// FillSchemaName fills the schema name in ddl job
-func (s *SchemaStorage) FillSchemaName(job *timodel.Job) error {
-	if job.Type == timodel.ActionCreateSchema ||
-		job.Type == timodel.ActionDropSchema {
-		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
-		return nil
-	}
-
-	snap, err := s.getSnapshot(job.BinlogInfo.FinishedTS)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	dbInfo, exist := snap.SchemaByID(job.SchemaID)
-	if !exist {
-		return errors.NotFoundf("schema %d not found", job.SchemaID)
-	}
-	job.SchemaName = dbInfo.Name.O
-	return nil
 }
 
 // DoGC removes snaps which of ts less than this specified ts
