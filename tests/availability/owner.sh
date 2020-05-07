@@ -13,7 +13,9 @@ function test_owner_ha() {
     test_kill_owner
     test_hang_up_owner
     test_expire_owner
-    test_owner_cleanup_stale_tasks
+    # FIXME: this test case should be owner crashed during task cleanup
+    # test_owner_cleanup_stale_tasks
+    test_gap_between_watch_capture
 }
 # test_kill_owner starts two captures and kill the owner
 # we expect the live capture will be elected as the new
@@ -142,11 +144,50 @@ function test_owner_cleanup_stale_tasks() {
     run_cdc_server $WORK_DIR $CDC_BINARY
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
 
-    run_sql "INSERT INTO test.availability(id, val) VALUES (1, 1);"
-    ensure $MAX_RETRIES nonempty 'select id, val from test.availability where id=1 and val=1'
-    run_sql "UPDATE test.availability set val = 22 where id = 1;"
-    ensure $MAX_RETRIES nonempty 'select id, val from test.availability where id=1 and val=22'
-    run_sql "DELETE from test.availability where id=1;"
-    ensure $MAX_RETRIES empty 'select id, val from test.availability where id=1'
+    run_sql "INSERT INTO test.availability1(id, val) VALUES (1, 1);"
+    ensure $MAX_RETRIES nonempty 'select id, val from test.availability1 where id=1 and val=1'
+    run_sql "UPDATE test.availability1 set val = 22 where id = 1;"
+    ensure $MAX_RETRIES nonempty 'select id, val from test.availability1 where id=1 and val=22'
+    run_sql "DELETE from test.availability1 where id=1;"
+    ensure $MAX_RETRIES empty 'select id, val from test.availability1 where id=1'
+    cleanup_process $CDC_BINARY
+}
+
+function test_gap_between_watch_capture() {
+    echo "run test case test_gap_between_watch_capture"
+
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sleep-before-watch-capture=1*sleep(6000)'
+
+    # start a capture server
+    run_cdc_server $WORK_DIR $CDC_BINARY
+    # ensure the server become the owner
+    ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
+    owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
+    owner_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}')
+    echo "owner pid:" $owner_pid
+    echo "owner id" $owner_id
+
+    # run another server
+    run_cdc_server $WORK_DIR $CDC_BINARY
+    ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
+    capture_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}' | grep -v "$owner_pid")
+    capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
+    echo "capture_id:" $capture_id
+
+    kill -SIGKILL $capture_pid
+    # wait capture info expires
+    sleep 3
+
+    for i in $(seq 1 3); do
+        run_sql "INSERT INTO test.availability$i(id, val) VALUES (1, 1);"
+        ensure $MAX_RETRIES nonempty "select id, val from test.availability$i where id=1 and val=1"
+        run_sql "UPDATE test.availability$i set val = 22 where id = 1;"
+        ensure $MAX_RETRIES nonempty "select id, val from test.availability$i where id=1 and val=22"
+        run_sql "DELETE from test.availability$i where id=1;"
+        ensure $MAX_RETRIES empty "select id, val from test.availability$i where id=1"
+    done
+
+    export GO_FAILPOINTS=''
+    echo "test_gap_between_watch_capture pass"
     cleanup_process $CDC_BINARY
 }

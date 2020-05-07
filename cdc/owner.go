@@ -105,30 +105,47 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 	for _, feed := range o.changeFeeds {
 		task, ok := feed.taskStatus[info.ID]
 		if !ok {
-			log.Warn("task status not found", zap.String("capture", info.ID))
+			log.Warn("task status not found", zap.String("capture", info.ID), zap.String("changefeed", feed.id))
 			continue
 		}
+		var startTs uint64
 		pos, ok := feed.taskPositions[info.ID]
-		if !ok {
-			log.Warn("task position not found", zap.String("capture", info.ID))
-			continue
+		if ok {
+			startTs = pos.CheckPointTs
+		} else {
+			log.Warn("task position not found, fallback to use changefeed checkpointts",
+				zap.String("capture", info.ID), zap.String("changefeed", feed.id))
+			// maybe the processor hasn't added table yet, fallback to use the
+			// global checkpoint ts as the start ts of the table.
+			startTs = feed.status.CheckpointTs
 		}
 
 		for _, table := range task.TableInfos {
 			feed.orphanTables[table.ID] = model.ProcessTableInfo{
 				ID:      table.ID,
-				StartTs: pos.CheckPointTs,
+				StartTs: startTs,
 			}
 		}
 
 		ctx := context.TODO()
 		if err := o.etcdClient.DeleteTaskStatus(ctx, feed.id, info.ID); err != nil {
-			log.Warn("failed to delete task status", zap.Error(err))
+			log.Warn("failed to delete task status",
+				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
 		if err := o.etcdClient.DeleteTaskPosition(ctx, feed.id, info.ID); err != nil {
-			log.Warn("failed to delete task position", zap.Error(err))
+			log.Warn("failed to delete task position",
+				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
+	}
+}
 
+func (o *Owner) addOrphanTable(cid string, table model.ProcessTableInfo) {
+	o.l.Lock()
+	defer o.l.Unlock()
+	if cf, ok := o.changeFeeds[cid]; ok {
+		cf.orphanTables[table.ID] = table
+	} else {
+		log.Warn("changefeed not found", zap.String("changefeed", cid))
 	}
 }
 
@@ -458,14 +475,6 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 }
 
 func (o *Owner) throne(ctx context.Context) error {
-	// When an owner crashed, its processors crashed too,
-	// clean up the tasks for these processors.
-	if err := o.cleanUpStaleTasks(ctx); err != nil {
-		log.Error("clean up stale tasks failed",
-			zap.Error(err))
-		return err
-	}
-
 	// Start a routine to keep watching on the liveness of
 	// captures.
 	o.startCaptureWatcher(ctx)
@@ -597,17 +606,12 @@ func (o *Owner) writeDebugInfo(w io.Writer) {
 // When a new owner is elected, it does not know the events occurs before, like
 // processor deletion. In this case, the new owner should check if the task
 // status is stale because of the processor deletion.
-func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
+func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.CaptureInfo) error {
 	_, changefeeds, err := o.etcdClient.GetChangeFeeds(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	active := make(map[string]struct{})
-	_, captures, err := o.etcdClient.GetCaptures(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	for _, c := range captures {
 		active[c.ID] = struct{}{}
 	}
@@ -620,10 +624,31 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		// in most cases statuses and positions have the same keys
+		// in most cases statuses and positions have the same keys, or positions
+		// are more than statuses, as we always delete task status first.
 		captureIDs := make(map[string]struct{}, len(statuses))
-		for captureID := range statuses {
+		for captureID, status := range statuses {
 			captureIDs[captureID] = struct{}{}
+			pos, taskPosFound := positions[captureID]
+			if !taskPosFound {
+				log.Warn("task position not found, fallback to use original start ts",
+					zap.String("capture", captureID),
+					zap.String("changefeed", changeFeedID),
+					zap.Reflect("task status", status),
+				)
+			}
+			for _, table := range status.TableInfos {
+				var startTs uint64
+				if taskPosFound {
+					startTs = pos.CheckPointTs
+				} else {
+					startTs = table.StartTs
+				}
+				o.addOrphanTable(changeFeedID, model.ProcessTableInfo{
+					ID:      table.ID,
+					StartTs: startTs,
+				})
+			}
 		}
 		for captureID := range positions {
 			captureIDs[captureID] = struct{}{}
@@ -646,6 +671,8 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context) error {
 
 func (o *Owner) watchCapture(ctx context.Context) error {
 	ctx = clientv3.WithRequireLeader(ctx)
+
+	failpoint.Inject("sleep-before-watch-capture", nil)
 
 	// When an owner just starts, changefeed information is not updated at once.
 	// Supposing a crased capture should be removed now, the owner will miss deleting
@@ -721,7 +748,18 @@ func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures []*model.Capt
 			o.removeCapture(c)
 		}
 	}
-	return nil
+	// clean up stale tasks each time before watch capture event starts,
+	// for two reasons:
+	// 1. when a new owner is elected, it must clean up stale task status and positions.
+	// 2. when error happens in owner's capture event watch, the owner just resets
+	//    the watch loop, with the following two steps:
+	//    1) load all captures from PD, having a revision for data
+	//	  2) start a new watch from revision in step1
+	//    the step-2 may meet an error such as ErrCompacted, and we will continue
+	//    from step-1, however other capture may crash just after step-2 returns
+	//    and before step-1 starts, the longer time gap between step-2 to step-1,
+	//    missing a crashed capture is more likey to happen.
+	return errors.Trace(o.cleanUpStaleTasks(ctx, captures))
 }
 
 func (o *Owner) startCaptureWatcher(ctx context.Context) {
