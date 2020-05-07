@@ -40,10 +40,10 @@ const (
 )
 
 type baseKVEntry struct {
-	Ts       uint64
-	TableID  int64
-	RecordID int64
-	Delete   bool
+	Ts              uint64
+	PhysicalTableID int64
+	RecordID        int64
+	Delete          bool
 }
 
 type rowKVEntry struct {
@@ -58,8 +58,19 @@ type indexKVEntry struct {
 }
 
 func (idx *indexKVEntry) unflatten(tableInfo *TableInfo, tz *time.Location) error {
-	if tableInfo.ID != idx.TableID {
-		return errors.New("wrong table info in unflatten")
+	if tableInfo.ID != idx.PhysicalTableID {
+		isPartition := false
+		if pi := tableInfo.GetPartitionInfo(); pi != nil {
+			for _, p := range pi.Definitions {
+				if p.ID == idx.PhysicalTableID {
+					isPartition = true
+					break
+				}
+			}
+		}
+		if !isPartition {
+			return errors.New("wrong table info in unflatten")
+		}
 	}
 	index, exist := tableInfo.GetIndexInfo(idx.IndexID)
 	if !exist {
@@ -191,29 +202,30 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
 	}
-	key, tableID, err := decodeTableID(raw.Key)
-	fmt.Printf("table id %v -----\n", tableID)
+	key, physicalTableID, err := decodeTableID(raw.Key)
+	fmt.Printf("table id %v -----\n", physicalTableID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	baseInfo := baseKVEntry{
-		Ts:      raw.Ts,
-		TableID: tableID,
-		Delete:  raw.OpType == model.OpTypeDelete,
+		Ts:              raw.Ts,
+		PhysicalTableID: physicalTableID,
+		Delete:          raw.OpType == model.OpTypeDelete,
 	}
 	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.Ts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	row, err := func() (*model.RowChangedEvent, error) {
-		tableInfo, exist := snap.TableByID(tableID)
-		fmt.Printf("%v, %v, %v -----\n", exist, tableID, tableInfo)
+		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
+		fmt.Printf("%v, %v, %v -----\n", exist, physicalTableID, tableInfo)
 		if !exist {
-			if snap.IsTruncateTableID(tableID) {
-				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.Ts), zap.Int64("tableID", tableID))
+			// TODO: truncate partition?
+			if snap.IsTruncateTableID(tableInfo.ID) {
+				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.Ts), zap.Int64("tableID", tableInfo.ID))
 				return nil, nil
 			}
-			return nil, errors.NotFoundf("table in schema storage, id: %d", tableID)
+			return nil, errors.NotFoundf("table in schema storage, id: %d", physicalTableID)
 		}
 		switch {
 		case bytes.HasPrefix(key, recordPrefix):

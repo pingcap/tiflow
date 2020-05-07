@@ -86,12 +86,14 @@ func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field
 			logger("[SchemaSnap] ----> tableNameToID item lost", zap.Stringer("name", tableInfo.TableName), zap.Int64("tableNameToID", s.tableNameToID[tableInfo.TableName]))
 		}
 	}
-	// If has partition tables, len(s.tableNameToID) will less than the len(s.tables).
 	if len(s.tableNameToID) != len(s.tables) {
 		logger("[SchemaSnap] tableNameToID length mismatch tables")
 		for tableName, tableID := range s.tableNameToID {
 			logger("[SchemaSnap] --> tableNameToID", zap.Stringer("tableName", tableName), zap.Int64("tableID", tableID))
 		}
+	}
+	for pid, table := range s.partitionTable {
+		logger("[SchemaSnap] --> Partitions", zap.Int64("partitionID", pid), zap.Int64("tableID", table.ID))
 	}
 	truncateTableID := make([]int64, 0, len(s.truncateTableID))
 	for id := range s.truncateTableID {
@@ -368,6 +370,15 @@ func (s *schemaSnapshot) TableByID(id int64) (val *TableInfo, ok bool) {
 	return
 }
 
+// PhysicalTableByID returns the TableInfo by table id or partition ID.
+func (s *schemaSnapshot) PhysicalTableByID(id int64) (val *TableInfo, ok bool) {
+	val, ok = s.tables[id]
+	if !ok {
+		val, ok = s.partitionTable[id]
+	}
+	return
+}
+
 // IsTruncateTableID returns true if the table id have been truncated by truncate table DDL
 func (s *schemaSnapshot) IsTruncateTableID(id int64) bool {
 	_, ok := s.truncateTableID[id]
@@ -390,7 +401,7 @@ func (s *schemaSnapshot) dropSchema(id int64) error {
 		tableName := s.tables[table.ID].TableName
 		if pi := table.GetPartitionInfo(); pi != nil {
 			for _, partition := range pi.Definitions {
-				delete(s.tables, partition.ID)
+				delete(s.partitionTable, partition.ID)
 			}
 		}
 		delete(s.tables, table.ID)
@@ -446,7 +457,7 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 	delete(s.tables, id)
 	if pi := table.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
-			delete(s.tables, partition.ID)
+			delete(s.partitionTable, partition.ID)
 			delete(s.ineligibleTableID, partition.ID)
 		}
 	}
@@ -477,7 +488,7 @@ func (s *schemaSnapshot) createTable(schemaID int64, tbl *timodel.TableInfo) err
 	}
 	if pi := table.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
-			s.tables[partition.ID] = table
+			s.partitionTable[partition.ID] = table
 			if !table.ExistTableUniqueColumn() {
 				s.ineligibleTableID[partition.ID] = struct{}{}
 			}
@@ -503,7 +514,7 @@ func (s *schemaSnapshot) replaceTable(tbl *timodel.TableInfo) error {
 	}
 	if pi := table.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
-			s.tables[partition.ID] = table
+			s.partitionTable[partition.ID] = table
 			if !table.ExistTableUniqueColumn() {
 				s.ineligibleTableID[partition.ID] = struct{}{}
 			}
