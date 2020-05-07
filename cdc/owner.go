@@ -114,8 +114,8 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 		} else {
 			log.Warn("task position not found, fallback to use changefeed checkpointts",
 				zap.String("capture", info.ID), zap.String("changefeed", feed.id))
-			// maybe the processor hasn't added table yet, fallback to use global
-			// checkpoint ts as the start ts of the table.
+			// maybe the processor hasn't added table yet, fallback to use the
+			// global checkpoint ts as the start ts of the table.
 			startTs = feed.status.CheckpointTs
 		}
 
@@ -628,19 +628,24 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 		captureIDs := make(map[string]struct{}, len(statuses))
 		for captureID, status := range statuses {
 			captureIDs[captureID] = struct{}{}
-			pos, ok := positions[captureID]
-			if !ok {
-				log.Warn("find task status, but task position not found",
+			pos, taskPosFound := positions[captureID]
+			if !taskPosFound {
+				log.Warn("task position not found, fallback to use original start ts",
 					zap.String("capture", captureID),
 					zap.String("changefeed", changeFeedID),
 					zap.Reflect("task status", status),
 				)
-				continue
 			}
 			for _, table := range status.TableInfos {
+				var startTs uint64
+				if taskPosFound {
+					startTs = pos.CheckPointTs
+				} else {
+					startTs = table.StartTs
+				}
 				o.addOrphanTable(changeFeedID, model.ProcessTableInfo{
 					ID:      table.ID,
-					StartTs: pos.CheckPointTs,
+					StartTs: startTs,
 				})
 			}
 		}
