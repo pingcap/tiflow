@@ -34,10 +34,18 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 18),
 		}, []string{"capture", "changefeed"})
+	executionErrorCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "execution_error",
+			Help:      "total count of execution errors",
+		}, []string{"capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(execBatchHistogram)
 	registry.MustRegister(execTxnHistogram)
+	registry.MustRegister(executionErrorCounter)
 }

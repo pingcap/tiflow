@@ -32,6 +32,8 @@ type mqSink struct {
 	}
 	partitionResolvedTs []uint64
 	checkpointTs        uint64
+
+	statistics *Statistics
 }
 
 func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *util.Filter, config *util.ReplicaConfig, opts map[string]string, errCh chan error) *mqSink {
@@ -55,6 +57,8 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *util
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
+
+		statistics: NewStatistics("MQ", opts),
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
@@ -198,13 +202,16 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	defer tick.Stop()
 
 	flushToProducer := func() error {
-		if batchSize == 0 {
-			return nil
-		}
-		key, value := encoder.Build()
-		encoder = k.newEncoder()
-		batchSize = 0
-		return k.mqProducer.SendMessage(ctx, key, value, partition)
+		return k.statistics.RecordBatchExecution(func() (int, error) {
+			if batchSize == 0 {
+				return 0, nil
+			}
+			key, value := encoder.Build()
+			encoder = k.newEncoder()
+			thisBatchSize := batchSize
+			batchSize = 0
+			return thisBatchSize, k.mqProducer.SendMessage(ctx, key, value, partition)
+		})
 	}
 	for {
 		var e struct {

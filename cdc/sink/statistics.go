@@ -22,6 +22,7 @@ func NewStatistics(name string, opts map[string]string) *Statistics {
 	}
 	statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.captureID, statistics.changefeedID)
 	statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.captureID, statistics.changefeedID)
+	statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.captureID, statistics.changefeedID)
 	return statistics
 }
 
@@ -37,6 +38,7 @@ type Statistics struct {
 
 	metricExecTxnHis   prometheus.Observer
 	metricExecBatchHis prometheus.Observer
+	metricExecErrCnt   prometheus.Counter
 }
 
 // RecordBatchExecution records the cost time of batch execution and batch size
@@ -44,6 +46,7 @@ func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
 	startTime := time.Now()
 	batchSize, err := executer()
 	if err != nil {
+		b.metricExecErrCnt.Inc()
 		return err
 	}
 	castTime := time.Since(startTime).Seconds()
