@@ -88,18 +88,18 @@ type regionErrorInfo struct {
 }
 
 type regionFeedState struct {
-	sri       singleRegionInfo
-	requestID uint64
-	eventCh   chan *cdcpb.Event
-	stopped   int32
+	sri           singleRegionInfo
+	requestID     uint64
+	regionEventCh chan *cdcpb.Event
+	stopped       int32
 }
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
 	return &regionFeedState{
-		sri:       sri,
-		requestID: requestID,
-		eventCh:   make(chan *cdcpb.Event, 16),
-		stopped:   0,
+		sri:           sri,
+		requestID:     requestID,
+		regionEventCh: make(chan *cdcpb.Event, 16),
+		stopped:       0,
 	}
 }
 
@@ -290,7 +290,7 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 
 func (c *CDCClient) newStream(ctx context.Context, addr string) (stream cdcpb.ChangeData_EventFeedClient, err error) {
 	id := allocID()
-	err = retry.Run(50*time.Millisecond, 20, func() error {
+	err = retry.Run(50*time.Millisecond, 3, func() error {
 		log.Debug("try create stream to store once", zap.String("addr", addr), zap.Uint64("operationID", id))
 		conn, err := c.getConn(ctx, addr)
 		if err != nil {
@@ -713,7 +713,7 @@ func (s *eventFeedSession) partialRegionFeed(
 	ctx context.Context,
 	state *regionFeedState,
 ) error {
-	receiver := state.eventCh
+	receiver := state.regionEventCh
 	defer func() {
 		state.markStopped()
 		// Workaround to avoid remaining messages in the channel blocks the receiver thread.
@@ -921,7 +921,7 @@ func (s *eventFeedSession) receiveFromStream(
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
 			for _, state := range regionStates {
-				close(state.eventCh)
+				close(state.regionEventCh)
 			}
 			return nil
 		}
@@ -934,7 +934,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 			for _, state := range regionStates {
 				select {
-				case state.eventCh <- nil:
+				case state.regionEventCh <- nil:
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -999,7 +999,7 @@ func (s *eventFeedSession) receiveFromStream(
 			}
 
 			select {
-			case state.eventCh <- event:
+			case state.regionEventCh <- event:
 			case <-ctx.Done():
 				return ctx.Err()
 			}
