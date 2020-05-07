@@ -99,6 +99,9 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 
 // Run runs the Capture mainloop
 func (c *Capture) Run(ctx context.Context) (err error) {
+	ctx, cancel := context.WithCancel(ctx)
+	// TODO: we'd better to add some wait mechanism to ensure no routine is blocked
+	defer cancel()
 	err = c.register(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -116,8 +119,11 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 		// server does not send heartbeats in time, or network interrupted
 		// In this case, the state of the capture is undermined,
 		// the task may have or have not been rebalanced, the owner
-		// may be or not be held. It is unsafe to let goroutines
-		// continue, especially the goroutine to replicate data.
+		// may be or not be held.
+		// When a panic happens, the routine will immediately starts to unwind
+		// the call stack until the whole program crashes or the built-in recover
+		// function is called, we use recover in server stack and starts a new
+		// server main loop, and we cancel context here to let all sub routines exit
 		select {
 		case <-c.session.Done():
 			if ctx.Err() != context.Canceled {

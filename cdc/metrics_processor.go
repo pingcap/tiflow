@@ -83,6 +83,13 @@ var (
 			Name:      "txn_output_chan_size",
 			Help:      "txn output channel size for a table",
 		}, []string{"changefeed", "capture", "table"})
+	processorErrorCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "exit_with_error_count",
+			Help:      "counter for processor exits with error",
+		}, []string{"changefeed", "capture"})
 )
 
 // initProcessorMetrics registers all metrics used in processor
@@ -96,4 +103,5 @@ func initProcessorMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(tableInputChanSizeGauge)
 	registry.MustRegister(tableOutputChanSizeGauge)
 	registry.MustRegister(waitEventPrepareDuration)
+	registry.MustRegister(processorErrorCounter)
 }

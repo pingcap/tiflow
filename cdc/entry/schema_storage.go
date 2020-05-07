@@ -29,8 +29,8 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"go.uber.org/zap"
 )
@@ -584,11 +584,11 @@ type SchemaStorage struct {
 	gcTs       uint64
 	resolvedTs uint64
 
-	filter *util.Filter
+	filter *filter.Filter
 }
 
 // NewSchemaStorage creates a new schema storage
-func NewSchemaStorage(jobs []*timodel.Job, filter *util.Filter) (*SchemaStorage, error) {
+func NewSchemaStorage(jobs []*timodel.Job, filter *filter.Filter) (*SchemaStorage, error) {
 	schema := &SchemaStorage{filter: filter}
 	for _, job := range jobs {
 		if err := schema.HandleDDLJob(job); err != nil {

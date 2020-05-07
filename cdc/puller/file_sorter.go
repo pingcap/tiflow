@@ -39,19 +39,22 @@ import (
 )
 
 var (
-	defaultInitFileCount        = 10
-	defaultFileSizeLimit uint64 = 1 << 31 // 2GB per file at most
+	defaultSorterBufferSize        = 1000
+	defaultAutoResolvedRows        = 1000
+	defaultInitFileCount           = 10
+	defaultFileSizeLimit    uint64 = 1 << 31 // 2GB per file at most
 )
 
 type fileCache struct {
-	fileLock          sync.Mutex
-	sorting           int32
-	dir               string
-	toRemoveFiles     []string
-	unsortedFiles     []string
-	lastSortedFile    string
-	availableFileIdx  []int
-	availableFileSize map[int]uint64
+	fileLock              sync.Mutex
+	sorting               int32
+	dir                   string
+	toRemoveFiles         []string
+	toRemoveUnsortedFiles []string
+	unsortedFiles         []string
+	lastSortedFile        string
+	availableFileIdx      []int
+	availableFileSize     map[int]uint64
 }
 
 func newFileCache(dir string) *fileCache {
@@ -67,9 +70,10 @@ func newFileCache(dir string) *fileCache {
 }
 
 func (cache *fileCache) resetUnsortedFiles() {
-	cache.toRemoveFiles = append(cache.toRemoveFiles, cache.unsortedFiles...)
-	cache.unsortedFiles = make([]string, 0, defaultInitFileCount)
-	cache.availableFileIdx = make([]int, 0, defaultInitFileCount)
+	cache.toRemoveUnsortedFiles = make([]string, len(cache.unsortedFiles))
+	copy(cache.toRemoveUnsortedFiles, cache.unsortedFiles)
+	cache.unsortedFiles = cache.unsortedFiles[:0]
+	cache.availableFileIdx = cache.availableFileIdx[:0]
 	cache.availableFileSize = make(map[int]uint64, defaultInitFileCount)
 }
 
@@ -141,6 +145,8 @@ func (cache *fileCache) finishSorting(newLastSortedFile string, toRemoveFiles []
 	defer cache.fileLock.Unlock()
 	atomic.StoreInt32(&cache.sorting, 0)
 	cache.toRemoveFiles = append(cache.toRemoveFiles, toRemoveFiles...)
+	cache.toRemoveFiles = append(cache.toRemoveFiles, cache.toRemoveUnsortedFiles...)
+	cache.toRemoveUnsortedFiles = cache.toRemoveUnsortedFiles[:0]
 	cache.lastSortedFile = newLastSortedFile
 }
 
@@ -190,6 +196,9 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 		binary.BigEndian.PutUint64(dataLen[:], uint64(dataBuf.Len()))
 		buf.Write(dataLen[:])
 		buf.Write(dataBuf.Bytes())
+	}
+	if buf.Len() == 0 {
+		return 0, nil
 	}
 	f, err := os.OpenFile(fullpath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -321,13 +330,12 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		sort.Slice(evs, func(i, j int) bool {
 			return evs[i].Ts < evs[j].Ts
 		})
-		batchFlushSize := 10
 		newfile := randomFileName("sorted")
 		newfpath := filepath.Join(fs.dir, newfile)
-		buffer := make([]*model.PolymorphicEvent, 0, batchFlushSize)
+		buffer := make([]*model.PolymorphicEvent, 0, defaultSorterBufferSize)
 		for _, entry := range evs {
 			buffer = append(buffer, entry)
-			if len(buffer) >= batchFlushSize {
+			if len(buffer) >= defaultSorterBufferSize {
 				_, err := flushEventsToFile(ctx, newfpath, buffer)
 				if err != nil {
 					return "", errors.Trace(err)
@@ -383,6 +391,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 	h := &sortHeap{}
 	heap.Init(h)
 	readBuf := new(bytes.Reader)
+	rowCount := 0
 	for i, fd := range readers {
 		ev, err := readPolymorphicEvent(fd, readBuf)
 		if err != nil {
@@ -395,16 +404,23 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 	}
 	lastSortedFileUpdated := false
 	newLastSortedFile := randomFileName("last-sorted")
-	bufferLen := 10
-	buffer := make([]*model.PolymorphicEvent, 0, bufferLen)
+	buffer := make([]*model.PolymorphicEvent, 0, defaultSorterBufferSize)
 	for h.Len() > 0 {
 		item := heap.Pop(h).(*sortItem)
 		if item.entry.Ts <= resolvedTs {
 			fs.output(ctx, item.entry)
+			// As events are sorted, we can output a resolved ts at any time.
+			// If we don't output a resovled ts event, the processor will still
+			// cache all events in memory until it receives the resolved ts when
+			// file sorter outputs all events in this rotate round.
+			rowCount += 1
+			if rowCount%defaultAutoResolvedRows == 0 {
+				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.Ts))
+			}
 		} else {
 			lastSortedFileUpdated = true
 			buffer = append(buffer, item.entry)
-			if len(buffer) > bufferLen {
+			if len(buffer) > defaultSorterBufferSize {
 				_, err := flushEventsToFile(ctx, filepath.Join(fs.dir, newLastSortedFile), buffer)
 				if err != nil {
 					return errors.Trace(err)
@@ -468,8 +484,7 @@ func (fs *FileSorter) Run(ctx context.Context) error {
 }
 
 func (fs *FileSorter) sortAndOutput(ctx context.Context) error {
-	bufferLen := 10
-	buffer := make([]*model.PolymorphicEvent, 0, bufferLen)
+	buffer := make([]*model.PolymorphicEvent, 0, defaultSorterBufferSize)
 
 	flush := func() error {
 		err := fs.cache.flush(ctx, buffer)
@@ -497,7 +512,7 @@ func (fs *FileSorter) sortAndOutput(ctx context.Context) error {
 				continue
 			}
 			buffer = append(buffer, ev)
-			if len(buffer) >= bufferLen {
+			if len(buffer) >= defaultSorterBufferSize {
 				err := flush()
 				if err != nil {
 					return errors.Trace(err)

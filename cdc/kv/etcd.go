@@ -22,7 +22,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 )
@@ -120,7 +119,7 @@ func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (int64, map[string]*m
 	revision := resp.Header.Revision
 	details := make(map[string]*mvccpb.KeyValue, resp.Count)
 	for _, kv := range resp.Kvs {
-		id, err := util.ExtractKeySuffix(string(kv.Key))
+		id, err := model.ExtractKeySuffix(string(kv.Key))
 		if err != nil {
 			return 0, nil, err
 		}
@@ -208,12 +207,12 @@ func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID str
 	}
 	positions := make(map[string]*model.TaskPosition, resp.Count)
 	for _, rawKv := range resp.Kvs {
-		changeFeed, err := util.ExtractKeySuffix(string(rawKv.Key))
+		changeFeed, err := model.ExtractKeySuffix(string(rawKv.Key))
 		if err != nil {
 			return nil, err
 		}
 		endIndex := len(rawKv.Key) - len(changeFeed) - 1
-		captureID, err := util.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		captureID, err := model.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
 		if err != nil {
 			return nil, err
 		}
@@ -239,12 +238,12 @@ func (c CDCEtcdClient) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap
 	}
 	infos := make([]*model.ProcInfoSnap, 0, resp.Count)
 	for _, rawKv := range resp.Kvs {
-		changefeedID, err := util.ExtractKeySuffix(string(rawKv.Key))
+		changefeedID, err := model.ExtractKeySuffix(string(rawKv.Key))
 		if err != nil {
 			return nil, err
 		}
 		endIndex := len(rawKv.Key) - len(changefeedID) - 1
-		captureID, err := util.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		captureID, err := model.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
 		if err != nil {
 			return nil, err
 		}
@@ -266,12 +265,12 @@ func (c CDCEtcdClient) GetAllTaskStatus(ctx context.Context, changefeedID string
 	}
 	pinfo := make(map[string]*model.TaskStatus, resp.Count)
 	for _, rawKv := range resp.Kvs {
-		changeFeed, err := util.ExtractKeySuffix(string(rawKv.Key))
+		changeFeed, err := model.ExtractKeySuffix(string(rawKv.Key))
 		if err != nil {
 			return nil, err
 		}
 		endIndex := len(rawKv.Key) - len(changeFeed) - 1
-		captureID, err := util.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		captureID, err := model.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
 		if err != nil {
 			return nil, err
 		}

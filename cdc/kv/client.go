@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -57,7 +58,7 @@ const (
 
 type singleRegionInfo struct {
 	verID        tikv.RegionVerID
-	span         util.Span
+	span         regionspan.Span
 	ts           uint64
 	failStoreIDs map[uint64]struct{}
 	rpcCtx       *tikv.RPCContext
@@ -72,7 +73,7 @@ var (
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
 )
 
-func newSingleRegionInfo(verID tikv.RegionVerID, span util.Span, ts uint64, rpcCtx *tikv.RPCContext) singleRegionInfo {
+func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.Span, ts uint64, rpcCtx *tikv.RPCContext) singleRegionInfo {
 	return singleRegionInfo{
 		verID:        verID,
 		span:         span,
@@ -310,7 +311,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string) (stream cdcpb.Ch
 // provided channel.
 // The `Start` and `End` field in input span must be memcomparable encoded.
 func (c *CDCClient) EventFeed(
-	ctx context.Context, span util.Span, ts uint64, eventCh chan<- *model.RegionFeedEvent,
+	ctx context.Context, span regionspan.Span, ts uint64, eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span, eventCh)
 	return s.eventFeed(ctx, ts)
@@ -328,7 +329,7 @@ type eventFeedSession struct {
 	kvStorage   tikv.Storage
 
 	// The whole range that is being subscribed.
-	totalSpan util.Span
+	totalSpan regionspan.Span
 
 	// The channel to send the processed events.
 	eventCh chan<- *model.RegionFeedEvent
@@ -340,7 +341,7 @@ type eventFeedSession struct {
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
 
-	rangeLock *util.RegionRangeLock
+	rangeLock *regionspan.RegionRangeLock
 
 	// To identify metrics of different eventFeedSession
 	id                string
@@ -350,7 +351,7 @@ type eventFeedSession struct {
 }
 
 type rangeRequestTask struct {
-	span util.Span
+	span regionspan.Span
 	ts   uint64
 }
 
@@ -358,7 +359,7 @@ func newEventFeedSession(
 	client *CDCClient,
 	regionCache *tikv.RegionCache,
 	kvStorage tikv.Storage,
-	totalSpan util.Span,
+	totalSpan regionspan.Span,
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
@@ -371,7 +372,7 @@ func newEventFeedSession(
 		regionCh:          make(chan singleRegionInfo, 16),
 		errCh:             make(chan regionErrorInfo, 16),
 		requestRangeCh:    make(chan rangeRequestTask, 16),
-		rangeLock:         util.NewRegionRangeLock(),
+		rangeLock:         regionspan.NewRegionRangeLock(),
 		id:                strconv.FormatUint(allocID(), 10),
 		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
@@ -426,7 +427,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 
 // scheduleDivideRegionAndRequest schedules a range to be divided by regions, and these regions will be then scheduled
 // to send ChangeData requests.
-func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, span util.Span, ts uint64, blocking bool) {
+func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, span regionspan.Span, ts uint64, blocking bool) {
 	task := rangeRequestTask{span: span, ts: ts}
 	if blocking {
 		select {
@@ -453,9 +454,9 @@ func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, s
 
 // scheduleRegionRequest locks the region's range and schedules sending ChangeData request to the region.
 func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri singleRegionInfo, blocking bool) {
-	handleResult := func(res util.LockRangeResult) {
+	handleResult := func(res regionspan.LockRangeResult) {
 		switch res.Status {
-		case util.LockRangeStatusSuccess:
+		case regionspan.LockRangeStatusSuccess:
 			if sri.ts > res.CheckpointTs {
 				sri.ts = res.CheckpointTs
 			}
@@ -465,7 +466,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 			case <-ctx.Done():
 			}
 
-		case util.LockRangeStatusStale:
+		case regionspan.LockRangeStatusStale:
 			log.Info("request expired",
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Reflect("span", sri.span),
@@ -482,7 +483,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 
 	res := s.rangeLock.LockRange(sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
 
-	if res.Status == util.LockRangeStatusWait {
+	if res.Status == regionspan.LockRangeStatusWait {
 		if blocking {
 			res = res.WaitFn()
 		} else {
@@ -757,7 +758,7 @@ func (s *eventFeedSession) partialRegionFeed(
 // to region boundaries. When region merging happens, it's possible that it
 // will produce some overlapping spans.
 func (s *eventFeedSession) divideAndSendEventFeedToRegions(
-	ctx context.Context, span util.Span, ts uint64,
+	ctx context.Context, span regionspan.Span, ts uint64,
 ) error {
 	limit := 20
 
@@ -787,7 +788,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 					}
 					metas = append(metas, region.GetMeta())
 				}
-				if !util.CheckRegionsLeftCover(metas, nextSpan) {
+				if !regionspan.CheckRegionsLeftCover(metas, nextSpan) {
 					err = errors.Errorf("regions not completely left cover span, span %v regions: %v", nextSpan, metas)
 					log.Warn("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", metas), zap.Error(err))
 					return err
@@ -802,7 +803,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 
 		for _, tiRegion := range regions {
 			region := tiRegion.GetMeta()
-			partialSpan, err := util.Intersect(s.totalSpan, util.Span{Start: region.StartKey, End: region.EndKey})
+			partialSpan, err := regionspan.Intersect(s.totalSpan, regionspan.Span{Start: region.StartKey, End: region.EndKey})
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -815,7 +816,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			log.Debug("partialSpan scheduled", zap.Reflect("span", partialSpan), zap.Uint64("regionID", region.Id))
 
 			// return if no more regions
-			if util.EndCompare(nextSpan.Start, span.End) >= 0 {
+			if regionspan.EndCompare(nextSpan.Start, span.End) >= 0 {
 				return nil
 			}
 		}
@@ -1006,7 +1007,7 @@ func (s *eventFeedSession) receiveFromStream(
 func (s *eventFeedSession) singleEventFeed(
 	ctx context.Context,
 	regionID uint64,
-	span util.Span,
+	span regionspan.Span,
 	checkpointTs uint64,
 	receiverCh <-chan *cdcpb.Event,
 ) (uint64, error) {

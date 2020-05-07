@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	cdcfilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
@@ -37,6 +37,7 @@ func (s *decodeFileSuite) TestCanDecodeTOML(c *check.C) {
 filter-case-sensitive = false
 ignore-txn-commit-ts = [1, 2]
 ddl-white-list = [1, 2]
+mounter-worker-num = 64
 
 [filter-rules]
 ignore-dbs = ["test", "sys"]
@@ -62,11 +63,12 @@ rule = "rowid"
 	err := ioutil.WriteFile(path, []byte(content), 0644)
 	c.Assert(err, check.IsNil)
 
-	cfg := new(util.ReplicaConfig)
+	cfg := new(cdcfilter.ReplicaConfig)
 	err = strictDecodeFile(path, "cdc", &cfg)
 	c.Assert(err, check.IsNil)
 
 	c.Assert(cfg.FilterCaseSensitive, check.IsFalse)
+	c.Assert(cfg.MounterWorkerNum, check.Equals, 64)
 	c.Assert(cfg.IgnoreTxnCommitTs, check.DeepEquals, []uint64{1, 2})
 	c.Assert(cfg.DDLWhitelist, check.DeepEquals, []model.ActionType{1, 2})
 	c.Assert(cfg.FilterRules.IgnoreDBs, check.DeepEquals, []string{"test", "sys"})
@@ -74,7 +76,7 @@ rule = "rowid"
 		{Schema: "sns", Name: "user"},
 		{Schema: "sns", Name: "following"},
 	})
-	c.Assert(cfg.SinkDispatchRules, check.DeepEquals, []*util.DispatchRule{
+	c.Assert(cfg.SinkDispatchRules, check.DeepEquals, []*cdcfilter.DispatchRule{
 		{Table: filter.Table{Schema: "sns", Name: "user"}, Rule: "ts"},
 		{Table: filter.Table{Schema: "sns", Name: "following"}, Rule: "rowid"},
 	})
@@ -110,7 +112,7 @@ rule = "rowid"
 	err := ioutil.WriteFile("changefeed.toml", []byte(content), 0644)
 	c.Assert(err, check.IsNil)
 
-	cfg := new(util.ReplicaConfig)
+	cfg := new(cdcfilter.ReplicaConfig)
 	err = strictDecodeFile("changefeed.toml", "cdc", &cfg)
 	c.Assert(err, check.IsNil)
 
@@ -122,7 +124,7 @@ rule = "rowid"
 		{Schema: "sns", Name: "user"},
 		{Schema: "sns", Name: "following"},
 	})
-	c.Assert(cfg.SinkDispatchRules, check.DeepEquals, []*util.DispatchRule{
+	c.Assert(cfg.SinkDispatchRules, check.DeepEquals, []*cdcfilter.DispatchRule{
 		{Table: filter.Table{Schema: "sns", Name: "user"}, Rule: "ts"},
 		{Table: filter.Table{Schema: "sns", Name: "following"}, Rule: "rowid"},
 	})
@@ -135,7 +137,7 @@ func (s *decodeFileSuite) TestShouldReturnErrForUnknownCfgs(c *check.C) {
 	err := ioutil.WriteFile(path, []byte(content), 0644)
 	c.Assert(err, check.IsNil)
 
-	cfg := new(util.ReplicaConfig)
+	cfg := new(cdcfilter.ReplicaConfig)
 	err = strictDecodeFile(path, "cdc", &cfg)
 	c.Assert(err, check.NotNil)
 	c.Assert(err, check.ErrorMatches, ".*unknown config.*")

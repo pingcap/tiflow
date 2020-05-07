@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 )
 
 // Frontier checks resolved event of spans and moves the global resolved ts ahead
 type Frontier interface {
-	Forward(span util.Span, ts uint64) bool
+	Forward(span regionspan.Span, ts uint64) bool
 	Frontier() uint64
 }
 
@@ -42,7 +42,7 @@ type spanFrontier struct {
 }
 
 // NewFrontier creates Froniter from the given spans.
-func NewFrontier(spans ...util.Span) Frontier {
+func NewFrontier(spans ...regionspan.Span) Frontier {
 	// spanFrontier don't support use Nil as the maximum key of End range
 	// So we use set it as util.UpperBoundKey, the means the real use case *should not* have a
 	// End key bigger than util.UpperBoundKey
@@ -78,7 +78,7 @@ func (s *spanFrontier) Frontier() uint64 {
 
 // Forward advances the timestamp for a span.
 // True is returned if the frontier advanced.
-func (s *spanFrontier) Forward(span util.Span, ts uint64) bool {
+func (s *spanFrontier) Forward(span regionspan.Span, ts uint64) bool {
 	span = span.Hack()
 
 	pre := s.Frontier()
@@ -86,7 +86,7 @@ func (s *spanFrontier) Forward(span util.Span, ts uint64) bool {
 	return pre < s.Frontier()
 }
 
-func (s *spanFrontier) insert(span util.Span, ts uint64) {
+func (s *spanFrontier) insert(span regionspan.Span, ts uint64) {
 	n := s.list.seek(span.Start)
 
 	if n == nil || bytes.Compare(span.End, n.start) <= 0 {

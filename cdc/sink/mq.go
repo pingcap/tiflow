@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/util"
 
 	"github.com/pingcap/log"
@@ -28,7 +29,7 @@ type mqSink struct {
 
 	globalResolvedTs uint64
 	checkpointTs     uint64
-	filter           *util.Filter
+	filter           *filter.Filter
 	dispatcher       dispatcher.Dispatcher
 
 	captureID    string
@@ -37,7 +38,7 @@ type mqSink struct {
 	errCh chan error
 }
 
-func newMqSink(mqProducer mqProducer.Producer, filter *util.Filter, config *util.ReplicaConfig, opts map[string]string) *mqSink {
+func newMqSink(mqProducer mqProducer.Producer, filter *filter.Filter, config *filter.ReplicaConfig, opts map[string]string) *mqSink {
 	return &mqSink{
 		mqProducer:   mqProducer,
 		partitionNum: mqProducer.GetPartitionNum(),
@@ -65,9 +66,11 @@ func (k *mqSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
 func (k *mqSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		if row.Resolved {
-			err := k.mqProducer.SendMessage(ctx, model.NewResolvedMessage(row.Ts), nil, 0)
-			if err != nil {
-				return errors.Trace(err)
+			for i := int32(0); i < k.partitionNum; i++ {
+				err := k.mqProducer.SendMessage(ctx, model.NewResolvedMessage(row.Ts), nil, i)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 			continue
 		}
@@ -180,7 +183,7 @@ func (k *mqSink) PrintStatus(ctx context.Context) error {
 	return k.mqProducer.PrintStatus(ctx)
 }
 
-func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filter, replicaConfig *util.ReplicaConfig, opts map[string]string) (*mqSink, error) {
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *filter.ReplicaConfig, opts map[string]string) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
 	scheme := strings.ToLower(sinkURI.Scheme)
