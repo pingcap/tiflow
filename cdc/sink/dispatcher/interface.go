@@ -6,7 +6,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"go.uber.org/zap"
 )
 
@@ -62,7 +62,7 @@ func (s *dispatcherSwitcher) Dispatch(row *model.RowChangedEvent) int32 {
 }
 
 // NewDispatcher creates a new dispatcher
-func NewDispatcher(config *util.ReplicaConfig, partitionNum int32) Dispatcher {
+func NewDispatcher(config *filter.ReplicaConfig, partitionNum int32) Dispatcher {
 	p := &dispatcherSwitcher{
 		caseSensitive:     config.FilterCaseSensitive,
 		partitionNum:      partitionNum,

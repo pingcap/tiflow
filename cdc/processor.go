@@ -37,6 +37,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -138,9 +140,9 @@ func newProcessor(
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
-	ddlPuller := puller.NewPuller(pdCli, kvStorage, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
+	ddlPuller := puller.NewPuller(pdCli, kvStorage, checkpointTs, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false, limitter)
 	ctx = util.PutTableIDInCtx(ctx, 0)
-	filter, err := util.NewFilter(changefeed.GetConfig())
+	filter, err := filter.NewFilter(changefeed.GetConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -598,7 +600,7 @@ func (p *processor) collectMetrics(ctx context.Context, tableID int64) {
 	}()
 }
 
-func createSchemaStorage(pdEndpoints []string, filter *util.Filter) (*entry.SchemaStorage, error) {
+func createSchemaStorage(pdEndpoints []string, filter *filter.Filter) (*entry.SchemaStorage, error) {
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","))
 	if err != nil {
@@ -636,8 +638,8 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	// start table puller
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
-	span := util.GetTableSpan(tableID, true)
-	plr := puller.NewPuller(p.pdCli, p.kvStorage, startTs, []util.Span{span}, true, p.limitter)
+	span := regionspan.GetTableSpan(tableID, true)
+	plr := puller.NewPuller(p.pdCli, p.kvStorage, startTs, []regionspan.Span{span}, true, p.limitter)
 	go func() {
 		err := plr.Run(ctx)
 		if errors.Cause(err) != context.Canceled {
@@ -744,7 +746,7 @@ func runProcessor(
 	opts[sink.OptChangefeedID] = changefeedID
 	opts[sink.OptCaptureID] = captureID
 	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
-	filter, err := util.NewFilter(info.GetConfig())
+	filter, err := filter.NewFilter(info.GetConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

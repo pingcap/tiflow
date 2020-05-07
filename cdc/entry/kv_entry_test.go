@@ -27,7 +27,7 @@ func (s *kvEntrySuite) testCreateTable(c *check.C, newRowFormat bool) {
 
 	pm.MustExec("create table test.test1(id varchar(255) primary key, a int, index i1 (a))")
 
-	plr := pm.CreatePuller(0, []util.Span{util.GetDDLSpan()})
+	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetDDLSpan()})
 	existDDLJobHistoryKVEntry := false
 
 	// create another context with canceled, we can close this puller but not affect puller manager
@@ -81,7 +81,7 @@ func (s *kvEntrySuite) testCreateTable(c *check.C, newRowFormat bool) {
 
 	pm.MustExec("create table test.test2(id int primary key, b varchar(255) unique key)")
 
-	plr = pm.CreatePuller(0, []util.Span{util.GetDDLSpan()})
+	plr = pm.CreatePuller(0, []regionspan.Span{regionspan.GetDDLSpan()})
 	existDDLJobHistoryKVEntry = false
 	plrCtx, plrCancel = context.WithCancel(ctx)
 	err = plr.CollectRawTxns(plrCtx, func(ctx context.Context, rawTxn model.RawTxn) error {
@@ -130,7 +130,7 @@ func (s *kvEntrySuite) testPkIsNotHandleDML(c *check.C, newRowFormat bool) {
 	tableInfo := pm.GetTableInfo("test", "test1")
 	tableID := tableInfo.ID
 
-	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into test.test1 values('ttt',666)")
 	expect := []kvEntry{
@@ -210,7 +210,7 @@ func (s *kvEntrySuite) testPkIsHandleDML(c *check.C, newRowFormat bool) {
 	tableInfo := pm.GetTableInfo("test", "test2")
 	tableID := tableInfo.ID
 
-	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into test.test2 values(666,'aaa')")
 	expect := []kvEntry{
@@ -283,7 +283,7 @@ func (s *kvEntrySuite) testUkWithNull(c *check.C, newRowFormat bool) {
 	tableInfo := pm.GetTableInfo("test", "test2")
 	tableID := tableInfo.ID
 
-	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into test.test2 values(null, 'aa', '1996-11-20')")
 	time, err := types.ParseDate(nil, "1996-11-20")
@@ -391,7 +391,7 @@ func (s *kvEntrySuite) testUkWithNoPk(c *check.C, newRowFormat bool) {
 	tableInfo := pm.GetTableInfo("test", "cdc_uk_with_no_pk")
 	tableID := tableInfo.ID
 
-	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
 
 	pm.MustExec("INSERT INTO test.cdc_uk_with_no_pk(id, a1, a3) VALUES(5, 6, NULL);")
 	expect := []kvEntry{
