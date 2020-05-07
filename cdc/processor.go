@@ -616,6 +616,7 @@ func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (stor
 }
 
 func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) {
+	fmt.Printf("handle physical tables %v ------\n", tableID)
 	p.tablesMu.Lock()
 	defer p.tablesMu.Unlock()
 	ctx = util.PutTableIDInCtx(ctx, tableID)

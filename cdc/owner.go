@@ -206,10 +206,25 @@ func (o *Owner) newChangeFeed(
 			}
 			schemas[sid][tid] = struct{}{}
 		}
-		orphanTables[tid] = model.ProcessTableInfo{
-			ID:      tid,
-			StartTs: checkpointTs,
+		tblInfo, ok := snap.TableByID(int64(tid))
+		if !ok {
+			log.Warn("table not found for table ID", zap.Uint64("tid", tid))
 		}
+		if pi := tblInfo.GetPartitionInfo(); pi != nil {
+			for _, partition := range pi.Definitions {
+				id := uint64(partition.ID)
+				orphanTables[id] = model.ProcessTableInfo{
+					ID:      id,
+					StartTs: checkpointTs,
+				}
+			}
+		} else {
+			orphanTables[tid] = model.ProcessTableInfo{
+				ID:      tid,
+				StartTs: checkpointTs,
+			}
+		}
+
 	}
 
 	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), info.Opts)

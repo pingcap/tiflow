@@ -192,6 +192,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		return nil, nil
 	}
 	key, tableID, err := decodeTableID(raw.Key)
+	fmt.Printf("table id %v -----\n", tableID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -206,6 +207,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	}
 	row, err := func() (*model.RowChangedEvent, error) {
 		tableInfo, exist := snap.TableByID(tableID)
+		fmt.Printf("%v, %v, %v -----\n", exist, tableID, tableInfo)
 		if !exist {
 			if snap.IsTruncateTableID(tableID) {
 				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.Ts), zap.Int64("tableID", tableID))

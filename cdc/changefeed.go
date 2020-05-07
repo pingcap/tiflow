@@ -125,7 +125,7 @@ func (c *changeFeed) dropSchema(schemaID uint64) {
 	delete(c.schemas, schemaID)
 }
 
-func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
+func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName, tblInfo *timodel.TableInfo) {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
 	}
@@ -140,9 +140,19 @@ func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 	}
 	c.schemas[sid][tid] = struct{}{}
 	c.tables[tid] = table
-	c.orphanTables[tid] = model.ProcessTableInfo{
-		ID:      tid,
-		StartTs: startTs,
+	if pi := tblInfo.GetPartitionInfo(); pi != nil {
+		for _, partition := range pi.Definitions {
+			id := uint64(partition.ID)
+			c.orphanTables[id] = model.ProcessTableInfo{
+				ID:      id,
+				StartTs: startTs,
+			}
+		}
+	} else {
+		c.orphanTables[tid] = model.ProcessTableInfo{
+			ID:      tid,
+			StartTs: startTs,
+		}
 	}
 }
 
@@ -353,7 +363,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			if !exist {
 				return errors.NotFoundf("table(%d)", addID)
 			}
-			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
+			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName, job.BinlogInfo.TableInfo)
 		case timodel.ActionDropTable:
 			dropID := uint64(job.TableID)
 			c.removeTable(schemaID, dropID)
@@ -373,7 +383,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 				return errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
 			}
 			addID := uint64(job.BinlogInfo.TableInfo.ID)
-			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
+			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName, job.BinlogInfo.TableInfo)
 		}
 		return nil
 	}()

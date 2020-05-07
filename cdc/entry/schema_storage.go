@@ -41,8 +41,9 @@ type schemaSnapshot struct {
 	tableNameToID  map[TableName]int64
 	schemaNameToID map[string]int64
 
-	schemas map[int64]*timodel.DBInfo
-	tables  map[int64]*TableInfo
+	schemas        map[int64]*timodel.DBInfo
+	tables         map[int64]*TableInfo
+	partitionTable map[int64]*TableInfo
 
 	truncateTableID   map[int64]struct{}
 	ineligibleTableID map[int64]struct{}
@@ -85,6 +86,7 @@ func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field
 			logger("[SchemaSnap] ----> tableNameToID item lost", zap.Stringer("name", tableInfo.TableName), zap.Int64("tableNameToID", s.tableNameToID[tableInfo.TableName]))
 		}
 	}
+	// If has partition tables, len(s.tableNameToID) will less than the len(s.tables).
 	if len(s.tableNameToID) != len(s.tables) {
 		logger("[SchemaSnap] tableNameToID length mismatch tables")
 		for tableName, tableID := range s.tableNameToID {
@@ -386,6 +388,11 @@ func (s *schemaSnapshot) dropSchema(id int64) error {
 
 	for _, table := range schema.Tables {
 		tableName := s.tables[table.ID].TableName
+		if pi := table.GetPartitionInfo(); pi != nil {
+			for _, partition := range pi.Definitions {
+				delete(s.tables, partition.ID)
+			}
+		}
 		delete(s.tables, table.ID)
 		delete(s.tableNameToID, tableName)
 	}
@@ -437,6 +444,12 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 
 	tableName := s.tables[id].TableName
 	delete(s.tables, id)
+	if pi := table.GetPartitionInfo(); pi != nil {
+		for _, partition := range pi.Definitions {
+			delete(s.tables, partition.ID)
+			delete(s.ineligibleTableID, partition.ID)
+		}
+	}
 	delete(s.tableNameToID, tableName)
 	delete(s.ineligibleTableID, id)
 
@@ -462,6 +475,14 @@ func (s *schemaSnapshot) createTable(schemaID int64, tbl *timodel.TableInfo) err
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
 		s.ineligibleTableID[table.ID] = struct{}{}
 	}
+	if pi := table.GetPartitionInfo(); pi != nil {
+		for _, partition := range pi.Definitions {
+			s.tables[partition.ID] = table
+			if !table.ExistTableUniqueColumn() {
+				s.ineligibleTableID[partition.ID] = struct{}{}
+			}
+		}
+	}
 	s.tableNameToID[table.TableName] = table.ID
 
 	log.Debug("create table success", zap.String("name", schema.Name.O+"."+table.Name.O), zap.Int64("id", table.ID))
@@ -480,6 +501,15 @@ func (s *schemaSnapshot) replaceTable(tbl *timodel.TableInfo) error {
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
 		s.ineligibleTableID[table.ID] = struct{}{}
 	}
+	if pi := table.GetPartitionInfo(); pi != nil {
+		for _, partition := range pi.Definitions {
+			s.tables[partition.ID] = table
+			if !table.ExistTableUniqueColumn() {
+				s.ineligibleTableID[partition.ID] = struct{}{}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -488,6 +518,13 @@ func (s *schemaSnapshot) flushIneligibleTables() {
 		tableInfo, exist := s.tables[tableID]
 		if !exist || tableInfo.ExistTableUniqueColumn() {
 			delete(s.ineligibleTableID, tableID)
+			if tableInfo != nil {
+				if pi := tableInfo.GetPartitionInfo(); pi != nil {
+					for _, partition := range pi.Definitions {
+						delete(s.ineligibleTableID, partition.ID)
+					}
+				}
+			}
 		}
 	}
 }
