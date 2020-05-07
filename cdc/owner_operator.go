@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
 )
@@ -43,7 +44,7 @@ type ddlHandler struct {
 func newDDLHandler(pdCli pd.Client, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	plr := puller.NewPuller(pdCli, kvStorage, checkpointTS, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, nil)
+	plr := puller.NewPuller(pdCli, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &ddlHandler{
 		puller: plr,
