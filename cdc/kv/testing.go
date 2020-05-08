@@ -12,7 +12,7 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
@@ -60,7 +60,7 @@ func newEventChecker(t require.TestingT) *eventChecker {
 				if e.Val != nil {
 					// check if the value event break the checkpoint guarantee
 					for _, cp := range ec.checkpoints {
-						if !util.KeyInSpan(e.Val.Key, cp.Span) ||
+						if !regionspan.KeyInSpan(e.Val.Key, cp.Span) ||
 							e.Val.Ts > cp.ResolvedTs {
 							continue
 						}
@@ -135,7 +135,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	startTS := mustGetTimestamp(t, storage)
 
 	go func() {
-		err := cli.EventFeed(ctx, util.Span{Start: nil, End: nil}, startTS, eventCh)
+		err := cli.EventFeed(ctx, regionspan.Span{Start: nil, End: nil}, startTS, eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -222,7 +222,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	startTS := mustGetTimestamp(t, storage)
 
 	go func() {
-		err := cli.EventFeed(ctx, util.Span{Start: nil, End: nil}, startTS, checker.eventCh)
+		err := cli.EventFeed(ctx, regionspan.Span{Start: nil, End: nil}, startTS, checker.eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -244,7 +244,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		if i == 1 {
 			checker = newEventChecker(t)
 			go func() {
-				err := cli.EventFeed(ctx, util.Span{Start: nil, End: nil}, startTS, checker.eventCh)
+				err := cli.EventFeed(ctx, regionspan.Span{Start: nil, End: nil}, startTS, checker.eventCh)
 				require.Equal(t, err, context.Canceled)
 			}()
 		}
