@@ -22,7 +22,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -119,10 +121,50 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// When a capture suicided, restart it
 	for {
-		if err := s.run(ctx); err != ErrSuicide {
+		if err := s.run(ctx); errors.Cause(err) != ErrSuicide {
 			return err
 		}
-		log.Info("server recovered")
+		log.Info("server recovered", zap.String("capture", s.capture.info.ID))
+	}
+}
+
+func (s *Server) campaignOwnerLoop(ctx context.Context) error {
+	// In most failure cases, we don't return error directly, just run another
+	// campaign loop. We treat campaign loop as a special background routine.
+	for {
+		// Campaign to be an owner, it blocks until it becomes the owner
+		if err := s.capture.Campaign(ctx); err != nil {
+			switch errors.Cause(err) {
+			case context.Canceled:
+				return nil
+			case mvcc.ErrCompacted:
+				continue
+			}
+			log.Warn("campaign owner failed", zap.Error(err))
+			continue
+		}
+		log.Info("campaign owner successfully", zap.String("capture", s.capture.info.ID))
+		owner, err := NewOwner(s.capture.session, s.opts.gcTTL)
+		if err != nil {
+			log.Warn("create new owner failed", zap.Error(err))
+			continue
+		}
+
+		s.owner = owner
+		if err := owner.Run(ctx, ownerRunInterval); err != nil {
+			if errors.Cause(err) == context.Canceled {
+				log.Info("owner exited", zap.String("capture", s.capture.info.ID))
+				return nil
+			}
+			err2 := s.capture.Resign(ctx)
+			if err2 != nil {
+				// if regisn owner failed, return error to let capture exits
+				return errors.Annotatef(err2, "resign owner failed, capture: %s", s.capture.info.ID)
+			}
+			log.Warn("run owner failed", zap.Error(err))
+		}
+		// owner is resigned by API, reset owner and continue the campaign loop
+		s.owner = nil
 	}
 }
 
@@ -135,49 +177,19 @@ func (s *Server) run(ctx context.Context) (err error) {
 	ctx = util.PutCaptureIDInCtx(ctx, s.capture.info.ID)
 	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
 	ctx, cancel := context.WithCancel(ctx)
-
-	// when a goroutine paniced, cancel would be called first, which
-	// cancels all the normal goroutines, and then the defered recover
-	// is called, which modifies the err value to ErrSuicide. The caller
-	// would restart this function when an error is ErrSuicide.
-	defer func() {
-		if r := recover(); r == ErrSuicide {
-			log.Error("server suicided")
-			// assign the error value, which should be handled by
-			// the parent caller
-			err = ErrSuicide
-		} else if r != nil {
-			log.Error("server exited with panic", zap.Reflect("panic info", r))
-		}
-	}()
 	defer cancel()
 
-	go func() {
-		for {
-			// Campaign to be an owner, it blocks until it becomes
-			// the owner
-			if err := s.capture.Campaign(ctx); err != nil {
-				log.Error("campaign failed", zap.Error(err))
-				return
-			}
-			owner, err := NewOwner(s.capture.session, s.opts.gcTTL)
-			if err != nil {
-				log.Error("new owner failed", zap.Error(err))
-				return
-			}
-			s.owner = owner
-			if err := owner.Run(ctx, ownerRunInterval); err != nil {
-				if errors.Cause(err) != context.Canceled {
-					log.Error("run owner failed", zap.Error(err))
-				} else {
-					log.Info("owner exited")
-				}
-				return
-			}
-		}
+	wg, cctx := errgroup.WithContext(ctx)
 
-	}()
-	return s.capture.Run(ctx)
+	wg.Go(func() error {
+		return s.campaignOwnerLoop(cctx)
+	})
+
+	wg.Go(func() error {
+		return s.capture.Run(cctx)
+	})
+
+	return wg.Wait()
 }
 
 // Close closes the server.

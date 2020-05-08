@@ -17,6 +17,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tidb/store/mockstore/mocktikv"
+	"github.com/pingcap/tidb/util/testkit"
+
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
@@ -518,8 +524,12 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	}
 
 	jobs = append(jobs, job)
-	storage, err := NewSchemaStorage(jobs, nil)
+	storage, err := NewSchemaStorage(nil, 0, nil)
 	c.Assert(err, IsNil)
+	for _, job := range jobs {
+		err := storage.HandleDDLJob(job)
+		c.Assert(err, IsNil)
+	}
 
 	// `dropTable` job
 	job = &timodel.Job{
@@ -630,4 +640,43 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	cancel()
 	_, err = storage.GetSnapshot(ctx, 200)
 	c.Assert(errors.Cause(err), Equals, context.Canceled)
+}
+
+func (t *schemaSuite) TestCreateSnapFromMeta(c *C) {
+	mockCluster := mocktikv.NewCluster()
+	mocktikv.BootstrapWithSingleStore(mockCluster)
+	mockMvccStore := mocktikv.MustNewMVCCStore()
+	store, err := mockstore.NewMockTikvStore(
+		mockstore.WithCluster(mockCluster),
+		mockstore.WithMVCCStore(mockMvccStore),
+	)
+	c.Assert(err, IsNil)
+
+	session.SetSchemaLease(0)
+	session.DisableStats4Test()
+	domain, err := session.BootstrapSession(store)
+	c.Assert(err, IsNil)
+	domain.SetStatsUpdating(true)
+	tk := testkit.NewTestKit(c, store)
+	tk.MustExec("create database test2")
+	tk.MustExec("create table test.simple_test1 (id bigint primary key)")
+	tk.MustExec("create table test.simple_test2 (id bigint primary key)")
+	tk.MustExec("create table test2.simple_test3 (id bigint primary key)")
+	tk.MustExec("create table test2.simple_test4 (id bigint primary key)")
+	tk.MustExec("create table test2.simple_test5 (a bigint)")
+	ver, err := store.CurrentVersion()
+	c.Assert(err, IsNil)
+	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
+	c.Assert(err, IsNil)
+	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver)
+	c.Assert(err, IsNil)
+	_, ok := snap.GetTableByName("test", "simple_test1")
+	c.Assert(ok, IsTrue)
+	tableID, ok := snap.GetTableIDByName("test2", "simple_test5")
+	c.Assert(ok, IsTrue)
+	c.Assert(snap.IsIneligibleTableID(tableID), IsTrue)
+	dbInfo, ok := snap.SchemaByTableID(tableID)
+	c.Assert(ok, IsTrue)
+	c.Assert(dbInfo.Name.O, Equals, "test2")
+	c.Assert(len(dbInfo.Tables), Equals, 3)
 }

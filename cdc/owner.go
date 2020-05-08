@@ -164,7 +164,11 @@ func (o *Owner) newChangeFeed(
 	if err != nil {
 		return nil, err
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	meta, err := kv.GetSnapshotMeta(kvStore, checkpointTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -173,13 +177,6 @@ func (o *Owner) newChangeFeed(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
-	schemaStorage, err := entry.NewSchemaStorage(jobs, filter)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	schemaStorage.FlushIneligibleTables(checkpointTs)
-	schemaStorage.AdvanceResolvedTs(checkpointTs)
 
 	ddlHandler := newDDLHandler(o.pdClient, kvStore, checkpointTs)
 
@@ -201,12 +198,7 @@ func (o *Owner) newChangeFeed(
 	schemas := make(map[uint64]tableIDMap)
 	tables := make(map[uint64]entry.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
-	snap, err := schemaStorage.GetSnapshot(ctx, checkpointTs)
-	if err != nil {
-		cancel()
-		return nil, errors.Trace(err)
-	}
-	for tid, table := range snap.CloneTables() {
+	for tid, table := range schemaSnap.CloneTables() {
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
 		}
@@ -216,7 +208,7 @@ func (o *Owner) newChangeFeed(
 			log.Debug("ignore known table", zap.Uint64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
 			continue
 		}
-		schema, ok := snap.SchemaByTableID(int64(tid))
+		schema, ok := schemaSnap.SchemaByTableID(int64(tid))
 		if !ok {
 			log.Warn("schema not found for table", zap.Uint64("tid", tid))
 		} else {
@@ -251,7 +243,7 @@ func (o *Owner) newChangeFeed(
 		info:                 info,
 		id:                   id,
 		ddlHandler:           ddlHandler,
-		schema:               schemaStorage,
+		schema:               schemaSnap,
 		schemas:              schemas,
 		tables:               tables,
 		orphanTables:         orphanTables,
@@ -262,7 +254,6 @@ func (o *Owner) newChangeFeed(
 			CheckpointTs: checkpointTs,
 		},
 		ddlState:      model.ChangeFeedSyncDML,
-		ddlJobHistory: jobs,
 		ddlExecutedTs: checkpointTs,
 		targetTs:      info.GetTargetTs(),
 		taskStatus:    processorsInfos,
@@ -512,6 +503,10 @@ func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) er
 // Run the owner
 // TODO avoid this tick style, this means we get `tickTime` latency here.
 func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
+	failpoint.Inject("owner-run-with-error", func() {
+		failpoint.Return(errors.New("owner run with injected error"))
+	})
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
