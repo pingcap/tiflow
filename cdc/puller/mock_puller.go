@@ -5,8 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/kv"
-
 	"github.com/pingcap/ticdc/cdc/entry"
 
 	"github.com/pingcap/check"
@@ -245,13 +243,6 @@ func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *entry.Ta
 	dbInfo, exist := is.SchemaByTable(tbl.Meta())
 	m.c.Assert(exist, check.IsTrue)
 	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, tbl.Meta())
-}
-
-// GetDDLJobs returns the ddl jobs
-func (m *MockPullerManager) GetDDLJobs() []*timodel.Job {
-	jobs, err := kv.LoadHistoryDDLJobs(m.store)
-	m.c.Assert(err, check.IsNil)
-	return jobs
 }
 
 func (m *MockPullerManager) postPrewrite(req *kvrpcpb.PrewriteRequest, result []error) {
