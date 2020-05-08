@@ -403,8 +403,9 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 	for cid, pInfo := range c.taskPositions {
+		log.Info("processor position", zap.Any("pInfo", pInfo))
 		if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
-			log.Debug("wait checkpoint ts", zap.String("cid", cid),
+			log.Info("wait checkpoint ts", zap.String("cid", cid),
 				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
 				zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
 				zap.String("ddl query", todoDDLJob.Query))
@@ -504,6 +505,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			if minCheckpointTs > position.CheckPointTs {
 				minCheckpointTs = position.CheckPointTs
 			}
+			log.Info("pinfo in rtscaler", zap.Any("pInfo", position))
 		}
 	}
 
