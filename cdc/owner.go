@@ -498,6 +498,10 @@ func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) er
 // Run the owner
 // TODO avoid this tick style, this means we get `tickTime` latency here.
 func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
+	failpoint.Inject("owner-run-with-error", func() {
+		failpoint.Return(errors.New("owner run with injected error"))
+	})
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

@@ -20,11 +20,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -115,19 +117,16 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 	var ev *TaskEvent
 	wch := taskWatcher.Watch(ctx)
 	for {
-		// Panic when the session is done unexpectedly, it means the
+		// Return error when the session is done unexpectedly, it means the
 		// server does not send heartbeats in time, or network interrupted
-		// In this case, the state of the capture is undermined,
-		// the task may have or have not been rebalanced, the owner
-		// may be or not be held.
-		// When a panic happens, the routine will immediately starts to unwind
-		// the call stack until the whole program crashes or the built-in recover
-		// function is called, we use recover in server stack and starts a new
-		// server main loop, and we cancel context here to let all sub routines exit
+		// In this case, the state of the capture is undermined, the task may
+		// have or have not been rebalanced, the owner may be or not be held,
+		// so we must cancel context to let all sub routines exit.
 		select {
 		case <-c.session.Done():
 			if ctx.Err() != context.Canceled {
-				c.Suicide()
+				log.Info("capture session done, capture suicide itself", zap.String("capture", c.info.ID))
+				return errors.Trace(ErrSuicide)
 			}
 		case ev = <-wch:
 			if ev == nil {
@@ -145,17 +144,18 @@ func (c *Capture) Run(ctx context.Context) (err error) {
 
 // Campaign to be an owner
 func (c *Capture) Campaign(ctx context.Context) error {
+	failpoint.Inject("capture-campaign-compacted-error", func() {
+		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
+	})
 	return c.election.Campaign(ctx, c.info.ID)
 }
 
 // Resign lets a owner start a new election.
 func (c *Capture) Resign(ctx context.Context) error {
+	failpoint.Inject("capture-resign-failed", func() {
+		failpoint.Return(errors.New("capture resign failed"))
+	})
 	return c.election.Resign(ctx)
-}
-
-// Suicide kills the capture itself
-func (c *Capture) Suicide() {
-	panic(ErrSuicide)
 }
 
 // Cleanup cleans all dynamic resources
