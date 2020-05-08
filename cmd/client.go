@@ -122,8 +122,11 @@ func newChangefeedCommand() *cobra.Command {
 		newQueryChangefeedCommand(),
 		newCreateChangefeedCommand(),
 		newStatisticsChangefeedCommand(),
-		// TODO: add stop, resume, delete changefeed
 	)
+	// Add pause, resume, remove changefeed
+	for _, cmd := range newAdminChangefeedCommand() {
+		command.AddCommand(cmd)
+	}
 	return command
 }
 
