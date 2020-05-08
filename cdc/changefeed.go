@@ -557,9 +557,11 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	if minCheckpointTs > c.status.CheckpointTs {
 		c.status.CheckpointTs = minCheckpointTs
-		err := c.sink.EmitCheckpointEvent(ctx, minCheckpointTs)
-		if err != nil {
-			return errors.Trace(err)
+		if c.ddlState != model.ChangeFeedWaitToExecDDL {
+			err := c.sink.EmitCheckpointEvent(ctx, minCheckpointTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		tsUpdated = true
 	}
