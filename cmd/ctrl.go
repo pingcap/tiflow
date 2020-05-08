@@ -43,8 +43,9 @@ type cf struct {
 
 // capture holds capture information
 type capture struct {
-	ID      string `json:"id"`
-	IsOwner bool   `json:"is-owner"`
+	ID         string `json:"id"`
+	IsOwner    bool   `json:"is-owner"`
+	StatusAddr string `json:"status-address"`
 }
 
 // cfMeta holds changefeed info and changefeed status
@@ -73,7 +74,7 @@ type processorMeta struct {
 }
 
 func jsonPrint(cmd *cobra.Command, v interface{}) error {
-	data, err := json.MarshalIndent(v, "", "\t")
+	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -97,7 +98,8 @@ func newListCaptureCommand() *cobra.Command {
 			captures := make([]*capture, 0, len(raw))
 			for _, c := range raw {
 				isOwner := c.ID == ownerID
-				captures = append(captures, &capture{ID: c.ID, IsOwner: isOwner})
+				captures = append(captures,
+					&capture{ID: c.ID, IsOwner: isOwner, StatusAddr: c.StatusAddr})
 			}
 			return jsonPrint(cmd, captures)
 		},

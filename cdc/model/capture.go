@@ -21,7 +21,8 @@ import (
 
 // CaptureInfo store in etcd.
 type CaptureInfo struct {
-	ID string `json:"id"`
+	ID         string `json:"id"`
+	StatusAddr string `json:"status-address"`
 }
 
 // Marshal using json.Marshal.

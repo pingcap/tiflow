@@ -45,7 +45,8 @@ func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
 
 func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 	server := &Server{opts: defaultServerOptions}
-	server.startStatusHTTP()
+	err := server.startStatusHTTP()
+	c.Assert(err, check.IsNil)
 	defer func() {
 		c.Assert(server.statusServer.Close(), check.IsNil)
 	}()

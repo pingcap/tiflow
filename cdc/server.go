@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -117,8 +118,10 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 
 // Run runs the server.
 func (s *Server) Run(ctx context.Context) error {
-	s.startStatusHTTP()
-
+	err := s.startStatusHTTP()
+	if err != nil {
+		return err
+	}
 	// When a capture suicided, restart it
 	for {
 		if err := s.run(ctx); errors.Cause(err) != ErrSuicide {
@@ -169,7 +172,8 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	capture, err := NewCapture(strings.Split(s.opts.pdEndpoints, ","))
+	statusAddr := fmt.Sprintf("%s:%d", s.opts.statusHost, s.opts.statusPort)
+	capture, err := NewCapture(strings.Split(s.opts.pdEndpoints, ","), statusAddr)
 	if err != nil {
 		return err
 	}

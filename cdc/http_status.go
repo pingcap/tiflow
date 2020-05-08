@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -32,7 +33,7 @@ import (
 
 const defaultStatusPort = 8300
 
-func (s *Server) startStatusHTTP() {
+func (s *Server) startStatusHTTP() error {
 	serverMux := http.NewServeMux()
 
 	serverMux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -51,13 +52,20 @@ func (s *Server) startStatusHTTP() {
 
 	addr := fmt.Sprintf("%s:%d", s.opts.statusHost, s.opts.statusPort)
 	s.statusServer = &http.Server{Addr: addr, Handler: serverMux}
-	log.Info("status http server is running", zap.String("addr", addr))
+	errCh := make(chan error)
 	go func() {
-		err := s.statusServer.ListenAndServe()
+		ln, err := net.Listen("tcp", addr)
+		errCh <- err
+		if err != nil {
+			return
+		}
+		log.Info("status http server is running", zap.String("addr", addr))
+		err = s.statusServer.Serve(ln)
 		if err != nil && err != http.ErrServerClosed {
 			log.Error("status server error", zap.Error(err))
 		}
 	}()
+	return <-errCh
 }
 
 // status of cdc server

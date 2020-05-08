@@ -55,7 +55,7 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdEndpoints []string) (c *Capture, err error) {
+func NewCapture(pdEndpoints []string, statusAddr string) (c *Capture, err error) {
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   pdEndpoints,
 		DialTimeout: 5 * time.Second,
@@ -83,9 +83,11 @@ func NewCapture(pdEndpoints []string) (c *Capture, err error) {
 	cli := kv.NewCDCEtcdClient(etcdCli)
 	id := uuid.New().String()
 	info := &model.CaptureInfo{
-		ID: id,
+		ID:         id,
+		StatusAddr: statusAddr,
 	}
-	log.Info("creating capture", zap.String("capture-id", id))
+	log.Info("creating capture",
+		zap.String("capture-id", id), zap.String("status-addr", statusAddr))
 
 	c = &Capture{
 		processors:  make(map[string]*processor),
