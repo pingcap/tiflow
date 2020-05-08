@@ -491,6 +491,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	minCheckpointTs := c.targetTs
 
 	if len(c.taskPositions) < len(c.taskStatus) {
+		log.Info("exit cal cause1")
 		return nil
 	}
 	if len(c.taskPositions) == 0 {
