@@ -24,8 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	tidbkv "github.com/pingcap/tidb/kv"
-
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -38,9 +36,11 @@ import (
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -77,6 +77,10 @@ type processor struct {
 
 	sink sink.Sink
 
+	sinkEmittedResolvedTs uint64
+	globalResolvedTs      uint64
+	checkpointTs          uint64
+
 	ddlPuller     puller.Puller
 	schemaStorage *entry.SchemaStorage
 
@@ -84,13 +88,11 @@ type processor struct {
 	output    chan *model.PolymorphicEvent
 	mounter   entry.Mounter
 
-	stateMu            sync.Mutex
-	stateCond          sync.Cond
-	status             *model.TaskStatus
-	position           *model.TaskPosition
-	resolvedTsFallback bool
-	resolvedCh         chan struct{}
-	tables             map[int64]*tableInfo
+	stateMu    sync.Mutex
+	status     *model.TaskStatus
+	position   *model.TaskPosition
+	resolvedCh chan struct{}
+	tables     map[int64]*tableInfo
 
 	wg    *errgroup.Group
 	errCh chan<- error
@@ -146,7 +148,7 @@ func newProcessor(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := createSchemaStorage(endpoints, filter)
+	schemaStorage, err := createSchemaStorage(endpoints, checkpointTs, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -174,7 +176,6 @@ func newProcessor(
 
 		tables: make(map[int64]*tableInfo),
 	}
-	p.stateCond.L = &p.stateMu
 
 	for _, table := range p.status.TableInfos {
 		p.addTable(ctx, int64(table.ID), table.StartTs)
@@ -197,6 +198,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	wg.Go(func() error {
+		return p.sinkDriver(cctx)
+	})
+
+	wg.Go(func() error {
 		return p.syncResolved(cctx)
 	})
 
@@ -206,10 +211,6 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 
 	wg.Go(func() error {
 		return p.ddlPullWorker(cctx)
-	})
-
-	wg.Go(func() error {
-		return p.sink.PrintStatus(cctx)
 	})
 
 	wg.Go(func() error {
@@ -306,15 +307,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 					minResolvedTs = ts
 				}
 			}
-			// some puller still haven't received the row changed data
-			if minResolvedTs < p.position.ResolvedTs {
-				p.resolvedTsFallback = true
-				p.stateMu.Unlock()
-				continue
-			}
-			p.resolvedTsFallback = false
 			p.stateMu.Unlock()
-			p.stateCond.Signal()
 
 			if minResolvedTs == p.position.ResolvedTs {
 				continue
@@ -332,7 +325,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 
 		case <-checkpointTsTick.C:
-			checkpointTs := p.sink.CheckpointTs()
+			checkpointTs := atomic.LoadUint64(&p.checkpointTs)
 			if p.position.CheckPointTs >= checkpointTs {
 				continue
 			}
@@ -376,7 +369,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 
 func (p *processor) updateInfo(ctx context.Context) error {
 	updatePosition := func() error {
-		p.position.Count = p.sink.Count()
+		//p.position.Count = p.sink.Count()
 		err := p.tsRWriter.WritePosition(ctx, p.position)
 		if err != nil {
 			return errors.Trace(err)
@@ -510,6 +503,8 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 	}
 }
 
+const globalStatusNotifierName = "globalStatusNotifier"
+
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
 func (p *processor) globalStatusWorker(ctx context.Context) error {
 	log.Info("Global status worker started")
@@ -521,30 +516,25 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		lastResolvedTs   uint64
 		watchKey         = kv.GetEtcdKeyJob(p.changefeedID)
 	)
-
+	globalStatusNotifier := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName)
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) error {
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
 			return nil
 		}
-
+		changed := false
 		if lastCheckPointTs < changefeedStatus.CheckpointTs {
 			p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
 			lastCheckPointTs = changefeedStatus.CheckpointTs
+			changed = true
 		}
-
-		p.stateMu.Lock()
-		for p.resolvedTsFallback {
-			p.stateCond.Wait()
-		}
-		p.stateMu.Unlock()
-
 		if lastResolvedTs < changefeedStatus.ResolvedTs {
-			err := p.sink.EmitResolvedEvent(ctx, changefeedStatus.ResolvedTs)
-			if err != nil {
-				return errors.Trace(err)
-			}
 			lastResolvedTs = changefeedStatus.ResolvedTs
+			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
+			changed = true
+		}
+		if changed {
+			globalStatusNotifier.Notify(ctx)
 		}
 		return nil
 	}
@@ -602,6 +592,34 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 	}
 }
 
+func (p *processor) sinkDriver(ctx context.Context) error {
+	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName).Receiver()
+	defer closeNotify()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-notifyCh:
+			sinkEmittedResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
+			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+			var minTs uint64
+			if sinkEmittedResolvedTs < globalResolvedTs {
+				minTs = sinkEmittedResolvedTs
+			} else {
+				minTs = globalResolvedTs
+			}
+			if minTs == 0 {
+				continue
+			}
+			err := p.sink.FlushRowChangedEvents(ctx, minTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			atomic.StoreUint64(&p.checkpointTs, minTs)
+		}
+	}
+}
+
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
 	defer log.Info("syncResolved stopped")
@@ -609,6 +627,13 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	for {
 		select {
 		case row := <-p.output:
+			if row == nil {
+				continue
+			}
+			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
+				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.Ts)
+				continue
+			}
 			startTime := time.Now()
 			err := row.WaitPrepare(ctx)
 			if err != nil {
@@ -618,7 +643,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if row.Row == nil {
 				continue
 			}
-			err = p.sink.EmitRowChangedEvent(ctx, row.Row)
+			err = p.sink.EmitRowChangedEvents(ctx, row.Row)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -642,17 +667,17 @@ func (p *processor) collectMetrics(ctx context.Context, tableID int64) {
 	}()
 }
 
-func createSchemaStorage(pdEndpoints []string, filter *filter.Filter) (*entry.SchemaStorage, error) {
+func createSchemaStorage(pdEndpoints []string, checkpointTs uint64, filter *filter.Filter) (*entry.SchemaStorage, error) {
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	meta, err := kv.GetSnapshotMeta(kvStore, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return entry.NewSchemaStorage(jobs, filter)
+	return entry.NewSchemaStorage(meta, checkpointTs, filter)
 }
 
 func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
@@ -795,17 +820,13 @@ func runProcessor(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), opts)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
-	go func() {
-		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
-			errCh <- err
-		}
-	}()
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), opts, errCh)
+	if err != nil {
+		cancel()
+		return nil, errors.Trace(err)
+	}
 	processor, err := newProcessor(ctx, session, info, sink, changefeedID, captureID, checkpointTs)
 	if err != nil {
 		cancel()
