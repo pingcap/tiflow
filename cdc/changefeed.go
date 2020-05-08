@@ -402,16 +402,15 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if len(c.taskStatus) > len(c.taskPositions) {
 		return nil
 	}
-	for cid, pInfo := range c.taskPositions {
-		log.Info("processor position", zap.Any("pInfo", pInfo))
-		if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
-			log.Info("wait checkpoint ts", zap.String("cid", cid),
-				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
-				zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
-				zap.String("ddl query", todoDDLJob.Query))
-			return nil
-		}
+
+	if c.status.CheckpointTs != todoDDLJob.BinlogInfo.FinishedTS {
+		log.Info("wait checkpoint ts",
+			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
+			zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
+			zap.String("ddl query", todoDDLJob.Query))
+		return nil
 	}
+
 	log.Info("apply job", zap.Stringer("job", todoDDLJob),
 		zap.String("schema", todoDDLJob.SchemaName),
 		zap.String("query", todoDDLJob.Query),
