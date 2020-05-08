@@ -477,7 +477,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
 func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
-	if c.ddlState != model.ChangeFeedSyncDML {
+	if c.ddlState != model.ChangeFeedSyncDML && c.ddlState != model.ChangeFeedWaitToExecDDL {
 		return nil
 	}
 
