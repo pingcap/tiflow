@@ -267,10 +267,12 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 		}
 		switch lockStatus {
 		case model.TableNoLock:
+			log.Info("no c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
 			delete(c.waitingConfirmTables, tableID)
 		case model.TablePLock:
-			log.Debug("waiting the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
+			log.Info("waiting the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
 		case model.TablePLockCommited:
+			log.Info("delete the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
 			delete(c.waitingConfirmTables, tableID)
 		}
 	}
@@ -551,7 +553,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	}
 
 	if tsUpdated {
-		log.Debug("update changefeed", zap.String("id", c.id),
+		log.Info("update changefeed", zap.String("id", c.id),
 			zap.Uint64("checkpoint ts", minCheckpointTs),
 			zap.Uint64("resolved ts", minResolvedTs))
 	}

@@ -496,11 +496,13 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 
 	// add tables
 	for _, pinfo := range addedTables {
+		log.Info("add table", zap.Uint64("tableId", pinfo.ID), zap.Uint64("sts", pinfo.StartTs))
 		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
 	}
 
 	// write clock if need
 	if newInfo.TablePLock != nil && newInfo.TableCLock == nil {
+		log.Info("resolve lock", zap.Any("lock", newInfo.TablePLock))
 		newInfo.TableCLock = &model.TableLock{
 			Ts:           newInfo.TablePLock.Ts,
 			CheckpointTs: checkpointTs,
