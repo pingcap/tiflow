@@ -482,7 +482,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	}
 
 	// ProcessorInfos don't contains the whole set table id now.
-	if len(c.orphanTables) > 0 || len(c.waitingConfirmTables) > 0 {
+	if len(c.waitingConfirmTables) > 0 {
 		return nil
 	}
 
@@ -505,6 +505,15 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 				minCheckpointTs = position.CheckPointTs
 			}
 			log.Info("pinfo in rtscaler", zap.Any("pInfo", position))
+		}
+	}
+
+	for _, orphanTable := range c.orphanTables {
+		if minCheckpointTs > orphanTable.StartTs {
+			minCheckpointTs = orphanTable.StartTs
+		}
+		if minResolvedTs > orphanTable.StartTs {
+			minResolvedTs = orphanTable.StartTs
 		}
 	}
 
@@ -555,8 +564,8 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	if tsUpdated {
 		log.Info("update changefeed", zap.String("id", c.id),
-			zap.Uint64("checkpoint ts", minCheckpointTs),
-			zap.Uint64("resolved ts", minResolvedTs))
+			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
+			zap.Uint64("resolved ts", c.status.ResolvedTs))
 	}
 	return nil
 }
