@@ -15,17 +15,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
-
-	cdcfilter "github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/util"
-	"go.uber.org/zap"
-
 	"github.com/Shopify/sarama"
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
+	cdcfilter "github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 )
 
 // Sarama configuration options
@@ -275,9 +274,12 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		sink.Sink
 		resolvedTs uint64
 	}, kafkaPartitionNum)
+	ctx, cancel := context.WithCancel(ctx)
+	errCh := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.NewSink(ctx, downstreamURIStr, filter, &cdcfilter.ReplicaConfig{}, nil)
+		s, err := sink.NewSink(ctx, downstreamURIStr, filter, &cdcfilter.ReplicaConfig{}, nil, errCh)
 		if err != nil {
+			cancel()
 			return nil, errors.Trace(err)
 		}
 		c.sinks[i] = &struct {
@@ -285,10 +287,20 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			resolvedTs uint64
 		}{Sink: s}
 	}
-	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, &cdcfilter.ReplicaConfig{}, nil)
+	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, &cdcfilter.ReplicaConfig{}, nil, errCh)
 	if err != nil {
+		cancel()
 		return nil, errors.Trace(err)
 	}
+	go func() {
+		err := <-errCh
+		if errors.Cause(err) != context.Canceled {
+			log.Error("error on running consumer", zap.Error(err))
+		} else {
+			log.Info("consumer exited")
+		}
+		cancel()
+	}()
 	c.ddlSink = sink
 	c.ready = make(chan bool)
 	return c, nil
@@ -316,67 +328,56 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	if sink == nil {
 		panic("sink should initialized")
 	}
-	batchDecoder := model.NewBatchDecoder()
 ClaimMessages:
 	for message := range claim.Messages() {
 		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
-		err := batchDecoder.Set(message.Key, message.Value)
+		batchDecoder, err := codec.NewJSONEventBatchDecoder(message.Key, message.Value)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		for batchDecoder.HasNext() {
-			keyBytes, valueBytes, exist := batchDecoder.Next()
-			if !exist {
-				log.Fatal("get message from batch failed", zap.Error(err))
-			}
-			key := new(model.MqMessageKey)
-			err = key.Decode(keyBytes)
+		for {
+			tp, hasNext, err := batchDecoder.HasNext()
 			if err != nil {
 				log.Fatal("decode message key failed", zap.Error(err))
 			}
-
-			switch key.Type {
+			if !hasNext {
+				break
+			}
+			switch tp {
 			case model.MqMessageTypeDDL:
-				value := new(model.MqMessageDDL)
-				err := value.Decode(valueBytes)
+				ddl, err := batchDecoder.NextDDLEvent()
 				if err != nil {
 					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
 				}
-
-				ddl := new(model.DDLEvent)
-				ddl.FromMqMessage(key, value)
 				c.appendDDL(ddl)
 			case model.MqMessageTypeRow:
+				row, err := batchDecoder.NextRowChangedEvent()
+				if err != nil {
+					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+				}
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-				if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
+				if row.Ts <= globalResolvedTs || row.Ts <= sink.resolvedTs {
 					log.Debug("filter fallback row", zap.ByteString("row", message.Key),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
 						zap.Int32("partition", partition))
 					break ClaimMessages
 				}
-				value := new(model.MqMessageRow)
-				err := value.Decode(valueBytes)
-				if err != nil {
-					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
-				}
-				row := new(model.RowChangedEvent)
-				row.FromMqMessage(key, value)
-				err = sink.EmitRowChangedEvent(ctx, row)
+				err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
 				}
 			case model.MqMessageTypeResolved:
-				err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{Ts: key.Ts, Resolved: true})
+				ts, err := batchDecoder.NextResolvedEvent()
 				if err != nil {
-					log.Fatal("emit row changed event failed", zap.Error(err))
+					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if resolvedTs < key.Ts {
+				if resolvedTs < ts {
 					log.Debug("update sink resolved ts",
-						zap.Uint64("ts", key.Ts),
+						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition))
-					atomic.StoreUint64(&sink.resolvedTs, key.Ts)
+					atomic.StoreUint64(&sink.resolvedTs, ts)
 				}
 			}
 			session.MarkMessage(message, "")
@@ -437,61 +438,17 @@ func (c *Consumer) forEachSink(fn func(sink *struct {
 
 // Run runs the Consumer
 func (c *Consumer) Run(ctx context.Context) error {
-	wg := &sync.WaitGroup{}
-	err := c.forEachSink(func(sink *struct {
-		sink.Sink
-		resolvedTs uint64
-	}) error {
-		wg.Add(1)
-		go func() {
-			if err := sink.Run(ctx); err != nil {
-				log.Fatal("sink running error", zap.Error(err))
-			}
-			wg.Done()
-		}()
-		return nil
-	})
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	var lastGlobalResolvedTs uint64
 	for {
 		select {
 		case <-ctx.Done():
-			wg.Wait()
 			return ctx.Err()
 		default:
 		}
 		time.Sleep(100 * time.Millisecond)
 		// handle ddl
-		globalCheckpointTs := uint64(math.MaxUint64)
-		err = c.forEachSink(func(sink *struct {
-			sink.Sink
-			resolvedTs uint64
-		}) error {
-			checkpointTs := sink.CheckpointTs()
-			if checkpointTs < globalCheckpointTs {
-				globalCheckpointTs = checkpointTs
-			}
-			return nil
-		})
-		if err != nil {
-			return errors.Trace(err)
-		}
-		todoDDL := c.getFrontDDL()
-		if todoDDL != nil && globalCheckpointTs == todoDDL.Ts {
-			// execute ddl
-			err := c.ddlSink.EmitDDLEvent(ctx, todoDDL)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			c.popDDL()
-		}
-
-		//handle global resolvedTs
 		globalResolvedTs := uint64(math.MaxUint64)
-		err = c.forEachSink(func(sink *struct {
+		err := c.forEachSink(func(sink *struct {
 			sink.Sink
 			resolvedTs uint64
 		}) error {
@@ -504,8 +461,28 @@ func (c *Consumer) Run(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		todoDDL := c.getFrontDDL()
+		if todoDDL != nil && globalResolvedTs >= todoDDL.Ts {
+			//flush DMLs
+			err := c.forEachSink(func(sink *struct {
+				sink.Sink
+				resolvedTs uint64
+			}) error {
+				return sink.FlushRowChangedEvents(ctx, todoDDL.Ts)
+			})
+			if err != nil {
+				return errors.Trace(err)
+			}
 
-		todoDDL = c.getFrontDDL()
+			// execute ddl
+			err = c.ddlSink.EmitDDLEvent(ctx, todoDDL)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			c.popDDL()
+			continue
+		}
+
 		if todoDDL != nil && todoDDL.Ts < globalResolvedTs {
 			globalResolvedTs = todoDDL.Ts
 		}
@@ -520,7 +497,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			sink.Sink
 			resolvedTs uint64
 		}) error {
-			return sink.EmitResolvedEvent(ctx, globalResolvedTs)
+			return sink.FlushRowChangedEvents(ctx, globalResolvedTs)
 		})
 		if err != nil {
 			return errors.Trace(err)

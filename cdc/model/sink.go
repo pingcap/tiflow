@@ -1,20 +1,27 @@
 package model
 
 import (
-	"encoding/base64"
-	"encoding/json"
-
-	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
-	"go.uber.org/zap"
+)
+
+// MqMessageType is the type of message
+type MqMessageType int
+
+const (
+	// MqMessageTypeUnknow is unknown type of message key
+	MqMessageTypeUnknow MqMessageType = iota
+	// MqMessageTypeRow is row type of message key
+	MqMessageTypeRow
+	// MqMessageTypeDDL is ddl type of message key
+	MqMessageTypeDDL
+	// MqMessageTypeResolved is resolved type of message key
+	MqMessageTypeResolved
 )
 
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
-	Ts       uint64
-	RowID    int64
-	Resolved bool
+	Ts    uint64
+	RowID int64
 
 	Schema string
 	Table  string
@@ -28,67 +35,11 @@ type RowChangedEvent struct {
 	Keys         []string
 }
 
-// ToMqMessage transforms to message key and value
-func (e *RowChangedEvent) ToMqMessage() (*MqMessageKey, *MqMessageRow) {
-	key := &MqMessageKey{
-		Ts:     e.Ts,
-		Schema: e.Schema,
-		Table:  e.Table,
-		Type:   MqMessageTypeRow,
-	}
-	value := &MqMessageRow{}
-	if e.Delete {
-		value.Delete = e.Columns
-	} else {
-		value.Update = e.Columns
-	}
-	return key, value
-}
-
-// FromMqMessage fills the values of RowChangedEvent from message key and value
-func (e *RowChangedEvent) FromMqMessage(key *MqMessageKey, value *MqMessageRow) {
-	e.Ts = key.Ts
-	e.Resolved = false
-	e.Table = key.Table
-	e.Schema = key.Schema
-
-	if len(value.Delete) != 0 {
-		e.Delete = true
-		e.Columns = value.Delete
-	} else {
-		e.Delete = false
-		e.Columns = value.Update
-	}
-}
-
 // Column represents a column value in row changed event
 type Column struct {
 	Type        byte        `json:"t"`
 	WhereHandle *bool       `json:"h,omitempty"`
 	Value       interface{} `json:"v"`
-}
-
-func (c *Column) formatVal() {
-	switch c.Type {
-	case mysql.TypeTinyBlob, mysql.TypeMediumBlob,
-		mysql.TypeLongBlob, mysql.TypeBlob:
-		if s, ok := c.Value.(string); ok {
-			var err error
-			c.Value, err = base64.StdEncoding.DecodeString(s)
-			if err != nil {
-				log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
-			}
-		}
-	case mysql.TypeBit:
-		if s, ok := c.Value.(json.Number); ok {
-			intNum, err := s.Int64()
-			if err != nil {
-				log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
-			}
-			c.Value = uint64(intNum)
-		}
-
-	}
 }
 
 // DDLEvent represents a DDL event
@@ -98,30 +49,6 @@ type DDLEvent struct {
 	Table  string
 	Query  string
 	Type   model.ActionType
-}
-
-// ToMqMessage transforms to message key and value
-func (e *DDLEvent) ToMqMessage() (*MqMessageKey, *MqMessageDDL) {
-	key := &MqMessageKey{
-		Ts:     e.Ts,
-		Schema: e.Schema,
-		Table:  e.Table,
-		Type:   MqMessageTypeDDL,
-	}
-	value := &MqMessageDDL{
-		Query: e.Query,
-		Type:  e.Type,
-	}
-	return key, value
-}
-
-// FromMqMessage fills the values of DDLEvent from message key and value
-func (e *DDLEvent) FromMqMessage(key *MqMessageKey, value *MqMessageDDL) {
-	e.Ts = key.Ts
-	e.Table = key.Table
-	e.Schema = key.Schema
-	e.Type = value.Type
-	e.Query = value.Query
 }
 
 // FromJob fills the values of DDLEvent from DDL job

@@ -194,6 +194,7 @@ func (o *Owner) newChangeFeed(
 		}
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	schemas := make(map[uint64]tableIDMap)
 	tables := make(map[uint64]entry.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
@@ -222,18 +223,22 @@ func (o *Owner) newChangeFeed(
 			StartTs: checkpointTs,
 		}
 	}
+	errCh := make(chan error, 1)
 
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), info.Opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), info.Opts, errCh)
 	if err != nil {
+		cancel()
 		return nil, errors.Trace(err)
 	}
 	go func() {
-		ctx := util.SetOwnerInCtx(context.TODO())
-		if err := sink.Run(ctx); err != nil && errors.Cause(err) != context.Canceled {
-			log.Error("failed to close sink", zap.Error(err))
+		err := <-errCh
+		if errors.Cause(err) != context.Canceled {
+			log.Error("error on running owner", zap.Error(err))
+		} else {
+			log.Info("owner exited")
 		}
+		cancel()
 	}()
-
 	cf := &changeFeed{
 		info:                 info,
 		id:                   id,
@@ -623,28 +628,8 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 		// in most cases statuses and positions have the same keys, or positions
 		// are more than statuses, as we always delete task status first.
 		captureIDs := make(map[string]struct{}, len(statuses))
-		for captureID, status := range statuses {
+		for captureID := range statuses {
 			captureIDs[captureID] = struct{}{}
-			pos, taskPosFound := positions[captureID]
-			if !taskPosFound {
-				log.Warn("task position not found, fallback to use original start ts",
-					zap.String("capture", captureID),
-					zap.String("changefeed", changeFeedID),
-					zap.Reflect("task status", status),
-				)
-			}
-			for _, table := range status.TableInfos {
-				var startTs uint64
-				if taskPosFound {
-					startTs = pos.CheckPointTs
-				} else {
-					startTs = table.StartTs
-				}
-				o.addOrphanTable(changeFeedID, model.ProcessTableInfo{
-					ID:      table.ID,
-					StartTs: startTs,
-				})
-			}
 		}
 		for captureID := range positions {
 			captureIDs[captureID] = struct{}{}
@@ -652,6 +637,30 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 
 		for captureID := range captureIDs {
 			if _, ok := active[captureID]; !ok {
+				status, ok1 := statuses[captureID]
+				if ok1 {
+					pos, taskPosFound := positions[captureID]
+					if !taskPosFound {
+						log.Warn("task position not found, fallback to use original start ts",
+							zap.String("capture", captureID),
+							zap.String("changefeed", changeFeedID),
+							zap.Reflect("task status", status),
+						)
+					}
+					for _, table := range status.TableInfos {
+						var startTs uint64
+						if taskPosFound {
+							startTs = pos.CheckPointTs
+						} else {
+							startTs = table.StartTs
+						}
+						o.addOrphanTable(changeFeedID, model.ProcessTableInfo{
+							ID:      table.ID,
+							StartTs: startTs,
+						})
+					}
+				}
+
 				if err := o.etcdClient.DeleteTaskStatus(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
