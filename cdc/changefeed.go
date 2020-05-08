@@ -483,6 +483,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	// ProcessorInfos don't contains the whole set table id now.
 	if len(c.waitingConfirmTables) > 0 {
+		log.Info("show waitingConfirmTables", zap.Any("confirmTables", c.waitingConfirmTables))
 		return nil
 	}
 
