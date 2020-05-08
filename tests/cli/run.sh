@@ -20,7 +20,6 @@ function run() {
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-
     TOPIC_NAME="ticdc-cli-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
@@ -46,25 +45,25 @@ function run() {
     uuid=$(cdc cli changefeed list 2>&1 | grep -oE "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}")
 
     # Pause changefeed
-    cdc cli changefeed --changefeed-id $uuid pause
-    jobtype=$(cdc cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]')
-    if [[ $jobtype != "1" ]] then
+    cdc cli changefeed --changefeed-id $uuid pause && sleep 3
+    jobtype=$(cdc cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
+    if [[ $jobtype != 1 ]]; then
         echo "[$(date)] <<<<< unexpect admin job type! expect 1 got ${jobtype} >>>>>"
         exit 1
     fi
 
     # Resume changefeed
-    cdc cli changefeed --changefeed-id $uuid resume
-    jobtype=$(cdc cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]')
-    if [[ $jobtype != "2" ]] then
+    cdc cli changefeed --changefeed-id $uuid resume && sleep 3
+    jobtype=$(cdc cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
+    if [[ $jobtype != 2 ]]; then
         echo "[$(date)] <<<<< unexpect admin job type! expect 2 got ${jobtype} >>>>>"
         exit 1
     fi
 
     # Remove changefeed
-    cdc cli changefeed --changefeed-id $uuid remove
-    jobtype=$(cdc cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]')
-    if [[ $jobtype != "3" ]] then
+    cdc cli changefeed --changefeed-id $uuid remove && sleep 3
+    jobtype=$(cdc cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
+    if [[ $jobtype != 3 ]]; then
         echo "[$(date)] <<<<< unexpect admin job type! expect 3 got ${jobtype} >>>>>"
         exit 1
     fi

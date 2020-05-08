@@ -20,7 +20,6 @@ function run() {
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-
     TOPIC_NAME="ticdc-row-format-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;

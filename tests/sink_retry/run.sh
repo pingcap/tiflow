@@ -24,7 +24,6 @@ function run() {
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/MySQLSinkTxnRandomError=25%return(true)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-
     TOPIC_NAME="ticdc-sink-retry-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
