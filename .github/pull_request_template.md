@@ -42,7 +42,7 @@ Related changes
 
 - owner: add table in batch when start a changefeed to speed up scheduling
 
-or if no need to be included in the release note, just add the folloing line
+or if no need to be included in the release note, just add the following line
 
 - No release note
 -->
