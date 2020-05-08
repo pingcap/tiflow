@@ -107,35 +107,30 @@ func (s *mockChangeDataService) EventFeed(server cdcpb.ChangeData_EventFeedServe
 	return nil
 }
 
-func newMockService(c *check.C, port int, ch chan *cdcpb.ChangeDataEvent) *grpc.Server {
+func newMockService(c *check.C, port int, ch chan *cdcpb.ChangeDataEvent, wg *sync.WaitGroup) *grpc.Server {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	c.Assert(err, check.IsNil)
 	grpcServer := grpc.NewServer()
 	mockService := &mockChangeDataService{c: c, ch: ch}
 	cdcpb.RegisterChangeDataServer(grpcServer, mockService)
+	wg.Add(1)
 	go func() {
 		err := grpcServer.Serve(lis)
 		c.Assert(err, check.IsNil)
+		wg.Done()
 	}()
 	return grpcServer
 }
 
 // Use etcdSuite to workaround the race. See comments of `TestConnArray`.
 func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
+	wg := &sync.WaitGroup{}
 	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
+	server2 := newMockService(c, 23376, ch2, wg)
 	defer func() {
-		if ch2 != nil {
-			close(ch2)
-		}
-	}()
-	server2 := newMockService(c, 23376, ch2)
-	defer func() {
-		// if server1 != nil {
-		// 	server1.Stop()
-		// }
-		if server2 != nil {
-			server2.Stop()
-		}
+		close(ch2)
+		server2.Stop()
+		wg.Wait()
 	}()
 
 	cluster := mocktikv.NewCluster()
@@ -153,9 +148,11 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, util.Span{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		wg.Done()
 	}()
 
 	makeEvent := func(ts uint64) *cdcpb.ChangeDataEvent {
