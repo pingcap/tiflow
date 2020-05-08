@@ -194,6 +194,7 @@ func (o *Owner) newChangeFeed(
 		}
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	schemas := make(map[uint64]tableIDMap)
 	tables := make(map[uint64]entry.TableName)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
@@ -222,18 +223,22 @@ func (o *Owner) newChangeFeed(
 			StartTs: checkpointTs,
 		}
 	}
+	errCh := make(chan error, 1)
 
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), info.Opts)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), info.Opts, errCh)
 	if err != nil {
+		cancel()
 		return nil, errors.Trace(err)
 	}
 	go func() {
-		ctx := util.SetOwnerInCtx(context.TODO())
-		if err := sink.Run(ctx); err != nil && errors.Cause(err) != context.Canceled {
-			log.Error("failed to close sink", zap.Error(err))
+		err := <-errCh
+		if errors.Cause(err) != context.Canceled {
+			log.Error("error on running owner", zap.Error(err))
+		} else {
+			log.Info("owner exited")
 		}
+		cancel()
 	}()
-
 	cf := &changeFeed{
 		info:                 info,
 		id:                   id,

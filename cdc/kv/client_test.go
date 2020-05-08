@@ -13,7 +13,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
 	"google.golang.org/grpc"
@@ -150,7 +150,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
-		err := cdcClient.EventFeed(ctx, util.Span{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
+		err := cdcClient.EventFeed(ctx, regionspan.Span{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		wg.Done()
 	}()

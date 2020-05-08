@@ -14,13 +14,7 @@
 package sink
 
 import (
-	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
-)
-
-const (
-	defaultMetricInterval = time.Second * 15
 )
 
 var (
@@ -40,19 +34,12 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 18),
 		}, []string{"capture", "changefeed"})
-	mqSinkCheckpointChanSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "mq_checkpoint_chan_size",
-			Help:      "checkpoint channel size for mq sink",
-		}, []string{"capture", "changefeed"})
-	mysqlExecutionErrorCounter = prometheus.NewCounterVec(
+	executionErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
-			Name:      "mysql_execution_error",
-			Help:      "total count of mysql execution errors",
+			Name:      "execution_error",
+			Help:      "total count of execution errors",
 		}, []string{"capture", "changefeed"})
 )
 
@@ -60,6 +47,5 @@ var (
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(execBatchHistogram)
 	registry.MustRegister(execTxnHistogram)
-	registry.MustRegister(mqSinkCheckpointChanSizeGauge)
-	registry.MustRegister(mysqlExecutionErrorCounter)
+	registry.MustRegister(executionErrorCounter)
 }
