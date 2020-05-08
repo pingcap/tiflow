@@ -35,4 +35,14 @@ Related changes
  - Need to cherry-pick to the release branch
  - Need to update the documentation
  - Need to update the `tidb-cdc/cdc-ansible`
- - Need to be included in the release note
+
+### Release note
+
+<!-- bugfixes or new feature need a release note, must in the form of a list, such as
+
+- owner: add table in batch when start a changefeed to speed up scheduling
+
+or if no need to be included in the release note, just add the following line
+
+- No release note
+-->
