@@ -13,5 +13,6 @@ pwd=$pwd
 
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
-$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME$log_suffix.out" server --log-file $workdir/cdc$log_suffix.log --log-level info >> $workdir/stdout$log_suffix.log 2>&1 &
+pid=$(ps -C run_cdc_server -o pid=)
+$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME_$pid.out" server --log-file $workdir/cdc$log_suffix.log --log-level info >> $workdir/stdout$log_suffix.log 2>&1 &
 cd $pwd

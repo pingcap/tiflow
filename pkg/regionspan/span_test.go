@@ -1,6 +1,8 @@
-package util
+package regionspan
 
 import (
+	"testing"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
@@ -9,6 +11,8 @@ import (
 type spanSuite struct{}
 
 var _ = check.Suite(&spanSuite{})
+
+func Test(t *testing.T) { check.TestingT(t) }
 
 func (s *spanSuite) TestStartCompare(c *check.C) {
 	tests := []struct {

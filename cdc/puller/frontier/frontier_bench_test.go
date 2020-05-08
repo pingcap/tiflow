@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 )
 
 func toCMPBytes(i int) []byte {
@@ -27,9 +27,9 @@ func BenchmarkSpanFrontier(b *testing.B) {
 		n := test.n
 
 		b.Run(test.name, func(b *testing.B) {
-			spans := make([]util.Span, 0, n)
+			spans := make([]regionspan.Span, 0, n)
 			for i := 0; i < n; i++ {
-				span := util.Span{
+				span := regionspan.Span{
 					Start: toCMPBytes(i),
 					End:   toCMPBytes(i + 1),
 				}
@@ -65,14 +65,14 @@ func BenchmarkSpanFrontierOverlap(b *testing.B) {
 
 		for _, step := range steps {
 			b.Run(fmt.Sprintf("%s_%d", test.name, step), func(b *testing.B) {
-				spans := make([]util.Span, 0, n)
-				forward := make([]util.Span, 0, n)
+				spans := make([]regionspan.Span, 0, n)
+				forward := make([]regionspan.Span, 0, n)
 				for i := 0; i < n; i++ {
-					spans = append(spans, util.Span{
+					spans = append(spans, regionspan.Span{
 						Start: toCMPBytes(i),
 						End:   toCMPBytes(i + 1),
 					})
-					forward = append(forward, util.Span{
+					forward = append(forward, regionspan.Span{
 						Start: toCMPBytes(i),
 						End:   toCMPBytes(i + step),
 					})

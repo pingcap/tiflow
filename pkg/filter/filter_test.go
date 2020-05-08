@@ -11,9 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package filter
 
 import (
+	"testing"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -22,6 +24,8 @@ import (
 type filterSuite struct{}
 
 var _ = check.Suite(&filterSuite{})
+
+func Test(t *testing.T) { check.TestingT(t) }
 
 func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
 	filter, err := NewFilter(&ReplicaConfig{})

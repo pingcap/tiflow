@@ -2,7 +2,6 @@ package model
 
 import (
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/types"
 )
 
@@ -41,7 +40,7 @@ type DML struct {
 
 // TableName returns the fully qualified name of the DML's table
 func (dml *DML) TableName() string {
-	return util.QuoteSchema(dml.Database, dml.Table)
+	return QuoteSchema(dml.Database, dml.Table)
 }
 
 // DDL holds the ddl info

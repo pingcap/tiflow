@@ -14,8 +14,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
 	"github.com/pingcap/ticdc/cdc/sink/mqProducer"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
-	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -24,7 +24,7 @@ type mqSink struct {
 	mqProducer mqProducer.Producer
 	dispatcher dispatcher.Dispatcher
 	newEncoder func() codec.EventBatchEncoder
-	filter     *util.Filter
+	filter     *filter.Filter
 
 	partitionNum   int32
 	partitionInput []chan struct {
@@ -37,7 +37,7 @@ type mqSink struct {
 	statistics *Statistics
 }
 
-func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *util.Filter, config *util.ReplicaConfig, opts map[string]string, errCh chan error) *mqSink {
+func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filter.Filter, config *filter.ReplicaConfig, opts map[string]string, errCh chan error) *mqSink {
 	partitionNum := mqProducer.GetPartitionNum()
 	partitionInput := make([]chan struct {
 		row        *model.RowChangedEvent
@@ -252,7 +252,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	}
 }
 
-func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *util.Filter, replicaConfig *util.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *filter.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
 	scheme := strings.ToLower(sinkURI.Scheme)
