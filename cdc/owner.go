@@ -628,28 +628,8 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 		// in most cases statuses and positions have the same keys, or positions
 		// are more than statuses, as we always delete task status first.
 		captureIDs := make(map[string]struct{}, len(statuses))
-		for captureID, status := range statuses {
+		for captureID := range statuses {
 			captureIDs[captureID] = struct{}{}
-			pos, taskPosFound := positions[captureID]
-			if !taskPosFound {
-				log.Warn("task position not found, fallback to use original start ts",
-					zap.String("capture", captureID),
-					zap.String("changefeed", changeFeedID),
-					zap.Reflect("task status", status),
-				)
-			}
-			for _, table := range status.TableInfos {
-				var startTs uint64
-				if taskPosFound {
-					startTs = pos.CheckPointTs
-				} else {
-					startTs = table.StartTs
-				}
-				o.addOrphanTable(changeFeedID, model.ProcessTableInfo{
-					ID:      table.ID,
-					StartTs: startTs,
-				})
-			}
 		}
 		for captureID := range positions {
 			captureIDs[captureID] = struct{}{}
@@ -657,6 +637,30 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 
 		for captureID := range captureIDs {
 			if _, ok := active[captureID]; !ok {
+				status, ok1 := statuses[captureID]
+				if ok1 {
+					pos, taskPosFound := positions[captureID]
+					if !taskPosFound {
+						log.Warn("task position not found, fallback to use original start ts",
+							zap.String("capture", captureID),
+							zap.String("changefeed", changeFeedID),
+							zap.Reflect("task status", status),
+						)
+					}
+					for _, table := range status.TableInfos {
+						var startTs uint64
+						if taskPosFound {
+							startTs = pos.CheckPointTs
+						} else {
+							startTs = table.StartTs
+						}
+						o.addOrphanTable(changeFeedID, model.ProcessTableInfo{
+							ID:      table.ID,
+							StartTs: startTs,
+						})
+					}
+				}
+
 				if err := o.etcdClient.DeleteTaskStatus(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
