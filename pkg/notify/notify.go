@@ -1,4 +1,4 @@
-package util
+package notify
 
 import (
 	"context"
@@ -8,22 +8,22 @@ import (
 // GlobalNotifyHub is a notify hub which is global level
 var GlobalNotifyHub = NewNotifyHub()
 
-// NotifyHub is a notify manager, used to create and maintain Notifier objects
-type NotifyHub struct {
+// Hub is a notify manager, used to create and maintain Notifier objects
+type Hub struct {
 	notifiers map[string]*Notifier
 	mu        sync.Mutex
 }
 
 // NewNotifyHub creates the NotifyHub
-func NewNotifyHub() *NotifyHub {
-	return &NotifyHub{
+func NewNotifyHub() *Hub {
+	return &Hub{
 		notifiers: make(map[string]*Notifier),
 	}
 }
 
 // GetNotifier gets the Notifier corresponding to the name
 // if the Notifier is not exists, this method will create a new one.
-func (n *NotifyHub) GetNotifier(name string) *Notifier {
+func (n *Hub) GetNotifier(name string) *Notifier {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if notifier, ok := n.notifiers[name]; ok {
@@ -37,7 +37,7 @@ func (n *NotifyHub) GetNotifier(name string) *Notifier {
 }
 
 // CloseNotifier closes the Notifier corresponding to the name
-func (n *NotifyHub) CloseNotifier(name string) {
+func (n *Hub) CloseNotifier(name string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if notifier, ok := n.notifiers[name]; ok {
@@ -47,7 +47,7 @@ func (n *NotifyHub) CloseNotifier(name string) {
 }
 
 // CloseAll closes all notifiers
-func (n *NotifyHub) CloseAll() {
+func (n *Hub) CloseAll() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	for name, notifier := range n.notifiers {

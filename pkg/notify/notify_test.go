@@ -1,4 +1,4 @@
-package util
+package notify
 
 import (
 	"context"
@@ -11,7 +11,7 @@ type notifySuite struct{}
 
 var _ = check.Suite(&notifySuite{})
 
-func (s *logSuite) TestNotifyHub(c *check.C) {
+func (s *notifySuite) TestNotifyHub(c *check.C) {
 	hub := NewNotifyHub()
 	testName1 := "test1"
 	notifier := hub.GetNotifier(testName1)

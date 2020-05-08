@@ -14,6 +14,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
 	"github.com/pingcap/ticdc/cdc/sink/mqProducer"
+	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -96,7 +97,7 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) e
 		return nil
 	}
 
-	notifyCh, closeNotify := util.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName).Receiver()
+	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName).Receiver()
 	defer closeNotify()
 
 	for i := 0; i < int(k.partitionNum); i++ {
@@ -194,7 +195,7 @@ const batchSizeLimit = 4 * 1024 * 1024 // 4MB
 const mqResolvedNotifierName = "mqResolvedNotifier"
 
 func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
-	notifier := util.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName)
+	notifier := notify.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName)
 	input := k.partitionInput[partition]
 	encoder := k.newEncoder()
 	batchSize := 0

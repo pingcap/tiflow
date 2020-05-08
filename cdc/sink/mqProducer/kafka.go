@@ -10,6 +10,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
@@ -78,7 +79,7 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []by
 }
 
 func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
-	notifyCh, closeNotify := util.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName).Receiver()
+	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName).Receiver()
 	defer closeNotify()
 
 	targetOffsets := make([]uint64, k.partitionNum)
@@ -136,7 +137,7 @@ func (k *kafkaSaramaProducer) Close() error {
 const kafkaSaramaFlushedNotifierName = "kafkaSaramaFlushedNotifier"
 
 func (k *kafkaSaramaProducer) run(ctx context.Context) error {
-	notifier := util.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName)
+	notifier := notify.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName)
 	for {
 		select {
 		case <-ctx.Done():

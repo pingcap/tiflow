@@ -24,8 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	tidbkv "github.com/pingcap/tidb/kv"
-
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -37,8 +35,10 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
@@ -507,7 +507,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			backoff.NewExponentialBackOff(), ctx),
 		3,
 	)
-	globalStatusNotifier := util.GlobalNotifyHub.GetNotifier(globalStatusNotifierName)
+	globalStatusNotifier := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName)
 	for {
 		select {
 		case <-ctx.Done():
@@ -553,7 +553,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 }
 
 func (p *processor) sinkDriver(ctx context.Context) error {
-	notifyCh, closeNotify := util.GlobalNotifyHub.GetNotifier(globalStatusNotifierName).Receiver()
+	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName).Receiver()
 	defer closeNotify()
 	for {
 		select {
