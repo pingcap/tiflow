@@ -1,8 +1,8 @@
 #!/bin/bash
 
-killall -s 9 tikv-server || true
-killall -s 9 pd-server || true
-killall -s 9 tidb-server || true
-killall -s 9 cdc || true
-killall -s 9 cdc.test || true
-killall -s 9 tiflash || true
+killall -w -s 9 tikv-server || true
+killall -w -s 9 pd-server || true
+killall -w -s 9 tidb-server || true
+killall -w -s 9 cdc || true
+killall -w -s 9 cdc.test || true
+killall -w -s 9 tiflash || true
