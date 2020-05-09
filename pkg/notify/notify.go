@@ -1,15 +1,14 @@
 package notify
 
 import (
-	"context"
 	"sync"
 	"time"
 )
 
 // Notifier provides a one-to-many notification mechanism
 type Notifier struct {
-	notifyChs []struct {
-		ch    chan struct{}
+	receivers []struct {
+		rec   *Receiver
 		index int
 	}
 	maxIndex int
@@ -17,74 +16,81 @@ type Notifier struct {
 }
 
 // Notify sends a signal to the Receivers
-func (n *Notifier) Notify(ctx context.Context) {
+func (n *Notifier) Notify() {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
-	for _, notifyCh := range n.notifyChs {
-		signalNonBlocking(ctx, notifyCh.ch)
+	for _, receiver := range n.receivers {
+		signalNonBlocking(receiver.rec.c)
 	}
 }
 
-func signalNonBlocking(ctx context.Context, ch chan struct{}) {
+func signalNonBlocking(ch chan struct{}) {
 	select {
-	case <-ctx.Done():
 	case ch <- struct{}{}:
 	default:
 	}
 }
 
+// Receiver is a receiver of notifier, including the receiver channel and stop receiver function.
 type Receiver struct {
-	C    <-chan struct{}
-	Stop func()
+	C      <-chan struct{}
+	Stop   func()
+	ticker *time.Ticker
+	c      chan struct{}
 }
 
 // NewReceiver creates a receiver
 // returns a channel to receive notifications and a function to close this receiver
-func (n *Notifier) NewReceiver(ctx context.Context, tickTime time.Duration) *Receiver {
+func (n *Notifier) NewReceiver(tickTime time.Duration) *Receiver {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	receiverCh := make(chan struct{}, 1)
 	currentIndex := n.maxIndex
 	n.maxIndex++
-	n.notifyChs = append(n.notifyChs, struct {
-		ch    chan struct{}
-		index int
-	}{ch: receiverCh, index: currentIndex})
-	stopTicker := func() {}
+	receiverCh := make(chan struct{}, 1)
+	var ticker *time.Ticker
 	if tickTime > 0 {
-		ticker := time.NewTicker(tickTime)
-		stopTicker = ticker.Stop
+		ticker = time.NewTicker(tickTime)
 		go func() {
 			for range ticker.C {
-				signalNonBlocking(ctx, receiverCh)
+				signalNonBlocking(receiverCh)
 			}
 		}()
 	}
-	return &Receiver{
+	rec := &Receiver{
 		C: receiverCh,
 		Stop: func() {
-			stopTicker()
 			n.remove(currentIndex)
 		},
+		ticker: ticker,
+		c:      receiverCh,
 	}
+	n.receivers = append(n.receivers, struct {
+		rec   *Receiver
+		index int
+	}{rec: rec, index: currentIndex})
+	return rec
 }
 
 func (n *Notifier) remove(index int) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	for i, notifyCh := range n.notifyChs {
-		if notifyCh.index == index {
-			close(notifyCh.ch)
-			n.notifyChs = append(n.notifyChs[:i], n.notifyChs[i+1:]...)
+	for i, receiver := range n.receivers {
+		if receiver.index == index {
+			n.receivers = append(n.receivers[:i], n.receivers[i+1:]...)
+			receiver.rec.ticker.Stop()
+			close(receiver.rec.c)
 			break
 		}
 	}
 }
 
-func (n *Notifier) close() {
+// Close closes the notify and stops all receiver in this notifier
+func (n *Notifier) Close() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	for _, notifyCh := range n.notifyChs {
-		close(notifyCh.ch)
+	for _, receiver := range n.receivers {
+		receiver.rec.ticker.Stop()
+		close(receiver.rec.c)
 	}
+	n.receivers = nil
 }

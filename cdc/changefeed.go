@@ -267,12 +267,12 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 		}
 		switch lockStatus {
 		case model.TableNoLock:
-			log.Info("no c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
+			log.Debug("no c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
 			delete(c.waitingConfirmTables, tableID)
 		case model.TablePLock:
-			log.Info("waiting the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
+			log.Debug("waiting the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
 		case model.TablePLockCommited:
-			log.Info("delete the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
+			log.Debug("delete the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
 			delete(c.waitingConfirmTables, tableID)
 		}
 	}
@@ -399,7 +399,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	}
 
 	if c.status.CheckpointTs != todoDDLJob.BinlogInfo.FinishedTS {
-		log.Info("wait checkpoint ts",
+		log.Debug("wait checkpoint ts",
 			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
 			zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
 			zap.String("ddl query", todoDDLJob.Query))
@@ -477,7 +477,6 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	// ProcessorInfos don't contains the whole set table id now.
 	if len(c.waitingConfirmTables) > 0 {
-		log.Info("show waitingConfirmTables", zap.Any("confirmTables", c.waitingConfirmTables))
 		return nil
 	}
 
@@ -485,7 +484,6 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	minCheckpointTs := c.targetTs
 
 	if len(c.taskPositions) < len(c.taskStatus) {
-		log.Info("exit cal cause1")
 		return nil
 	}
 	if len(c.taskPositions) == 0 {
@@ -500,7 +498,6 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			if minCheckpointTs > position.CheckPointTs {
 				minCheckpointTs = position.CheckPointTs
 			}
-			log.Info("pinfo in rtscaler", zap.Any("pInfo", position))
 		}
 	}
 
@@ -561,7 +558,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	}
 
 	if tsUpdated {
-		log.Info("update changefeed", zap.String("id", c.id),
+		log.Debug("update changefeed", zap.String("id", c.id),
 			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
 			zap.Uint64("resolved ts", c.status.ResolvedTs))
 	}

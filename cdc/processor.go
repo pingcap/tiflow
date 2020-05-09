@@ -180,10 +180,10 @@ func newProcessor(
 		output:    make(chan *model.PolymorphicEvent, defaultOutputChanSize),
 
 		sinkEmittedResolvedNotifier: sinkEmittedResolvedNotifier,
-		sinkEmittedResolvedReceiver: sinkEmittedResolvedNotifier.NewReceiver(ctx, 50*time.Millisecond),
+		sinkEmittedResolvedReceiver: sinkEmittedResolvedNotifier.NewReceiver(50 * time.Millisecond),
 
 		localResolvedNotifier: localResolvedNotifier,
-		localResolvedReceiver: localResolvedNotifier.NewReceiver(ctx, 50*time.Millisecond),
+		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
 
 		tables: make(map[int64]*tableInfo),
 	}
@@ -352,7 +352,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 		}
 		if ddlRawKV.OpType == model.OpTypeResolved {
 			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.Ts)
-			p.localResolvedNotifier.Notify(ctx)
+			p.localResolvedNotifier.Notify()
 		}
 		job, err := entry.UnmarshalDDL(ddlRawKV)
 		if err != nil {
@@ -489,21 +489,17 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 
 	// add tables
 	for _, pinfo := range addedTables {
-		log.Info("add table", zap.Uint64("tableId", pinfo.ID), zap.Uint64("sts", pinfo.StartTs))
 		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
 	}
 
 	// write clock if need
 	if newInfo.TablePLock != nil && newInfo.TableCLock == nil {
-		log.Info("resolve lock", zap.Any("lock", newInfo.TablePLock))
 		newInfo.TableCLock = &model.TableLock{
 			Ts:           newInfo.TablePLock.Ts,
 			CheckpointTs: checkpointTs,
 		}
 	}
 }
-
-const globalStatusNotifierName = "globalStatusNotifier"
 
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
 func (p *processor) globalStatusWorker(ctx context.Context) error {
@@ -629,7 +625,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
 				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.Ts)
-				p.sinkEmittedResolvedNotifier.Notify(ctx)
+				p.sinkEmittedResolvedNotifier.Notify()
 				continue
 			}
 			startTime := time.Now()
@@ -759,7 +755,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 				}
 				if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
 					table.storeResolvedTS(pEvent.Ts)
-					p.localResolvedNotifier.Notify(ctx)
+					p.localResolvedNotifier.Notify()
 					resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.Ts)))
 					continue
 				}

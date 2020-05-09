@@ -62,7 +62,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
-		resolvedReceiver:    notifier.NewReceiver(ctx, 50*time.Millisecond),
+		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
 
 		statistics: NewStatistics("MQ", opts),
 	}
@@ -235,7 +235,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 					return errors.Trace(err)
 				}
 				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
-				k.resolvedNotifier.Notify(ctx)
+				k.resolvedNotifier.Notify()
 			}
 			continue
 		}

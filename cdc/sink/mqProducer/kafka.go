@@ -133,8 +133,6 @@ func (k *kafkaSaramaProducer) Close() error {
 	return nil
 }
 
-const kafkaSaramaFlushedNotifierName = "kafkaSaramaFlushedNotifier"
-
 func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	defer k.flushedReceiver.Stop()
 	for {
@@ -149,7 +147,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			}
 			flushedOffset := msg.Metadata.(uint64)
 			atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
-			k.flushedNotifier.Notify(ctx)
+			k.flushedNotifier.Notify()
 		case err := <-k.asyncClient.Errors():
 			close(k.closeCh)
 			return errors.Annotate(err, "write kafka error")
@@ -223,7 +221,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 			sent    uint64
 		}, partitionNum),
 		flushedNotifier: notifier,
-		flushedReceiver: notifier.NewReceiver(ctx, 50*time.Millisecond),
+		flushedReceiver: notifier.NewReceiver(50 * time.Millisecond),
 		closeCh:         make(chan struct{}),
 	}
 	go func() {
