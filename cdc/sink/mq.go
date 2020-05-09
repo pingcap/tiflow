@@ -33,6 +33,8 @@ type mqSink struct {
 	}
 	partitionResolvedTs []uint64
 	checkpointTs        uint64
+	resolvedNotifier    *notify.Notifier
+	resolvedReceiver    *notify.Receiver
 
 	statistics *Statistics
 }
@@ -49,6 +51,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 			resolvedTs uint64
 		}, 12800)
 	}
+	notifier := new(notify.Notifier)
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: dispatcher.NewDispatcher(config, mqProducer.GetPartitionNum()),
@@ -58,6 +61,8 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
+		resolvedNotifier:    notifier,
+		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
 
 		statistics: NewStatistics("MQ", opts),
 	}
@@ -97,9 +102,6 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) e
 		return nil
 	}
 
-	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName).Receiver()
-	defer closeNotify()
-
 	for i := 0; i < int(k.partitionNum); i++ {
 		select {
 		case <-ctx.Done():
@@ -117,7 +119,7 @@ flushLoop:
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-notifyCh:
+		case <-k.resolvedReceiver.C:
 			for i := 0; i < int(k.partitionNum); i++ {
 				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
 					continue flushLoop
@@ -180,6 +182,7 @@ func (k *mqSink) Close() error {
 }
 
 func (k *mqSink) run(ctx context.Context) error {
+	defer k.resolvedReceiver.Stop()
 	wg, ctx := errgroup.WithContext(ctx)
 	for i := int32(0); i < k.partitionNum; i++ {
 		partition := i
@@ -192,10 +195,7 @@ func (k *mqSink) run(ctx context.Context) error {
 
 const batchSizeLimit = 4 * 1024 * 1024 // 4MB
 
-const mqResolvedNotifierName = "mqResolvedNotifier"
-
 func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
-	notifier := notify.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName)
 	input := k.partitionInput[partition]
 	encoder := k.newEncoder()
 	batchSize := 0
@@ -235,7 +235,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 					return errors.Trace(err)
 				}
 				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
-				notifier.Notify(ctx)
+				k.resolvedNotifier.Notify()
 			}
 			continue
 		}

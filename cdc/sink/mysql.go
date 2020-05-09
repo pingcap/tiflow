@@ -46,7 +46,7 @@ import (
 const (
 	defaultWorkerCount     = 16
 	defaultMaxTxnRow       = 256
-	defaultDMLMaxRetryTime = 20
+	defaultDMLMaxRetryTime = 8
 	defaultDDLMaxRetryTime = 20
 )
 
@@ -503,7 +503,17 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return errors.Trace(s.execDMLWithMaxRetries(ctx, sqls, values, defaultDMLMaxRetryTime))
+	if err := s.execDMLWithMaxRetries(ctx, sqls, values, defaultDMLMaxRetryTime); err != nil {
+		ts := make([]uint64, 0, len(rows))
+		for _, row := range rows {
+			if len(ts) == 0 || ts[len(ts)-1] != row.Ts {
+				ts = append(ts, row.Ts)
+			}
+		}
+		log.Error("execute DMLs failed", zap.String("err", err.Error()), zap.Uint64s("ts", ts))
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 func (s *mysqlSink) prepareReplace(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {

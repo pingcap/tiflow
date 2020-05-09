@@ -57,7 +57,7 @@ type ChangeFeedRWriter interface {
 	GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error)
 
 	// GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
-	GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error)
+	GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, int64, error)
 	// PutAllChangeFeedStatus the changefeed info to storage such as etcd.
 	PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error
 }
@@ -267,10 +267,12 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 		}
 		switch lockStatus {
 		case model.TableNoLock:
+			log.Debug("no c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
 			delete(c.waitingConfirmTables, tableID)
 		case model.TablePLock:
 			log.Debug("waiting the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
 		case model.TablePLockCommited:
+			log.Debug("delete the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
 			delete(c.waitingConfirmTables, tableID)
 		}
 	}
@@ -395,15 +397,15 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if len(c.taskStatus) > len(c.taskPositions) {
 		return nil
 	}
-	for cid, pInfo := range c.taskPositions {
-		if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
-			log.Debug("wait checkpoint ts", zap.String("cid", cid),
-				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
-				zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
-				zap.String("ddl query", todoDDLJob.Query))
-			return nil
-		}
+
+	if c.status.CheckpointTs != todoDDLJob.BinlogInfo.FinishedTS {
+		log.Debug("wait checkpoint ts",
+			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
+			zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
+			zap.String("ddl query", todoDDLJob.Query))
+		return nil
 	}
+
 	log.Info("apply job", zap.Stringer("job", todoDDLJob),
 		zap.String("schema", todoDDLJob.SchemaName),
 		zap.String("query", todoDDLJob.Query),
@@ -469,12 +471,12 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
 func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
-	if c.ddlState != model.ChangeFeedSyncDML {
+	if c.ddlState != model.ChangeFeedSyncDML && c.ddlState != model.ChangeFeedWaitToExecDDL {
 		return nil
 	}
 
 	// ProcessorInfos don't contains the whole set table id now.
-	if len(c.orphanTables) > 0 || len(c.waitingConfirmTables) > 0 {
+	if len(c.waitingConfirmTables) > 0 {
 		return nil
 	}
 
@@ -496,6 +498,15 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			if minCheckpointTs > position.CheckPointTs {
 				minCheckpointTs = position.CheckPointTs
 			}
+		}
+	}
+
+	for _, orphanTable := range c.orphanTables {
+		if minCheckpointTs > orphanTable.StartTs {
+			minCheckpointTs = orphanTable.StartTs
+		}
+		if minResolvedTs > orphanTable.StartTs {
+			minResolvedTs = orphanTable.StartTs
 		}
 	}
 
@@ -537,17 +548,22 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	if minCheckpointTs > c.status.CheckpointTs {
 		c.status.CheckpointTs = minCheckpointTs
-		err := c.sink.EmitCheckpointTs(ctx, minCheckpointTs)
-		if err != nil {
-			return errors.Trace(err)
+		// when the `c.ddlState` is `model.ChangeFeedWaitToExecDDL`,
+		// some DDL is waiting to executed, we can't ensure whether the DDL has been executed.
+		// so we can't emit checkpoint to sink
+		if c.ddlState != model.ChangeFeedWaitToExecDDL {
+			err := c.sink.EmitCheckpointTs(ctx, minCheckpointTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		tsUpdated = true
 	}
 
 	if tsUpdated {
 		log.Debug("update changefeed", zap.String("id", c.id),
-			zap.Uint64("checkpoint ts", minCheckpointTs),
-			zap.Uint64("resolved ts", minResolvedTs))
+			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
+			zap.Uint64("resolved ts", c.status.ResolvedTs))
 	}
 	return nil
 }

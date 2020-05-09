@@ -43,6 +43,8 @@ type kafkaSaramaProducer struct {
 		flushed uint64
 		sent    uint64
 	}
+	flushedNotifier *notify.Notifier
+	flushedReceiver *notify.Receiver
 
 	closeCh chan struct{}
 }
@@ -79,9 +81,6 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []by
 }
 
 func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
-	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName).Receiver()
-	defer closeNotify()
-
 	targetOffsets := make([]uint64, k.partitionNum)
 	for i := 0; i < len(k.partitionOffset); i++ {
 		targetOffsets[i] = atomic.LoadUint64(&k.partitionOffset[i].sent)
@@ -106,7 +105,7 @@ flushLoop:
 			return ctx.Err()
 		case <-k.closeCh:
 			return nil
-		case <-notifyCh:
+		case <-k.flushedReceiver.C:
 			for i, target := range targetOffsets {
 				if target > atomic.LoadUint64(&k.partitionOffset[i].flushed) {
 					continue flushLoop
@@ -134,10 +133,8 @@ func (k *kafkaSaramaProducer) Close() error {
 	return nil
 }
 
-const kafkaSaramaFlushedNotifierName = "kafkaSaramaFlushedNotifier"
-
 func (k *kafkaSaramaProducer) run(ctx context.Context) error {
-	notifier := notify.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName)
+	defer k.flushedReceiver.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -150,7 +147,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			}
 			flushedOffset := msg.Metadata.(uint64)
 			atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
-			notifier.Notify(ctx)
+			k.flushedNotifier.Notify()
 		case err := <-k.asyncClient.Errors():
 			close(k.closeCh)
 			return errors.Annotate(err, "write kafka error")
@@ -213,7 +210,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
+	notifier := new(notify.Notifier)
 	k := &kafkaSaramaProducer{
 		asyncClient:  asyncClient,
 		syncClient:   syncClient,
@@ -223,7 +220,9 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 			flushed uint64
 			sent    uint64
 		}, partitionNum),
-		closeCh: make(chan struct{}),
+		flushedNotifier: notifier,
+		flushedReceiver: notifier.NewReceiver(50 * time.Millisecond),
+		closeCh:         make(chan struct{}),
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {

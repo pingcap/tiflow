@@ -1,39 +1,44 @@
 package notify
 
 import (
-	"context"
+	"testing"
 	"time"
 
 	"github.com/pingcap/check"
 )
+
+func Test(t *testing.T) { check.TestingT(t) }
 
 type notifySuite struct{}
 
 var _ = check.Suite(&notifySuite{})
 
 func (s *notifySuite) TestNotifyHub(c *check.C) {
-	hub := NewNotifyHub()
-	testName1 := "test1"
-	notifier := hub.GetNotifier(testName1)
-	rCh1, close1 := notifier.Receiver()
-	rCh2, close2 := notifier.Receiver()
-	rCh3, close3 := notifier.Receiver()
+	notifier := new(Notifier)
+	r1 := notifier.NewReceiver(-1)
+	r2 := notifier.NewReceiver(-1)
+	r3 := notifier.NewReceiver(-1)
 	go func() {
 		for i := 0; i < 5; i++ {
 			time.Sleep(time.Second)
-			notifier.Notify(context.Background())
+			notifier.Notify()
 		}
 	}()
-	<-rCh1
-	close1()
-	<-rCh2
-	<-rCh3
+	<-r1.C
+	r1.Stop()
+	<-r2.C
+	<-r3.C
 
-	close2()
-	close3()
-	c.Assert(len(notifier.notifyChs), check.Equals, 0)
+	r2.Stop()
+	r3.Stop()
+	c.Assert(len(notifier.receivers), check.Equals, 0)
 	time.Sleep(time.Second)
-	rCh4, close4 := notifier.Receiver()
-	<-rCh4
-	close4()
+	r4 := notifier.NewReceiver(-1)
+	<-r4.C
+	r4.Stop()
+
+	notifier2 := new(Notifier)
+	r5 := notifier2.NewReceiver(10 * time.Millisecond)
+	<-r5.C
+	r5.Stop()
 }

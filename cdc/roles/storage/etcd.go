@@ -32,7 +32,7 @@ import (
 // ProcessorTsRWriter reads or writes the resolvedTs and checkpointTs from the storage
 type ProcessorTsRWriter interface {
 	// GetChangeFeedStatus read the changefeed status.
-	GetChangeFeedStatus(ctx context.Context) (*model.ChangeFeedStatus, error)
+	GetChangeFeedStatus(ctx context.Context) (*model.ChangeFeedStatus, int64, error)
 
 	// WritePosition update taskPosition into storage, return model.ErrWriteTsConflict if in last learn taskPosition is out dated and must call UpdateInfo.
 	WritePosition(ctx context.Context, taskPosition *model.TaskPosition) error
@@ -138,7 +138,7 @@ func (rw *ProcessorTsEtcdRWriter) WriteInfoIntoStorage(
 }
 
 // GetChangeFeedStatus reads the changefeed status from etcd
-func (rw *ProcessorTsEtcdRWriter) GetChangeFeedStatus(ctx context.Context) (*model.ChangeFeedStatus, error) {
+func (rw *ProcessorTsEtcdRWriter) GetChangeFeedStatus(ctx context.Context) (*model.ChangeFeedStatus, int64, error) {
 	return rw.etcdClient.GetChangeFeedStatus(ctx, rw.changefeedID)
 }
 
