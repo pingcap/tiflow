@@ -33,6 +33,7 @@ type mqSink struct {
 	}
 	partitionResolvedTs []uint64
 	checkpointTs        uint64
+	resolvedReceiver    *notify.Receiver
 
 	statistics *Statistics
 }
@@ -58,6 +59,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
+		resolvedReceiver:    notify.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName).NewReceiver(ctx, 50*time.Millisecond),
 
 		statistics: NewStatistics("MQ", opts),
 	}
@@ -97,9 +99,6 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) e
 		return nil
 	}
 
-	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName).Receiver(ctx, -1)
-	defer closeNotify()
-
 	for i := 0; i < int(k.partitionNum); i++ {
 		select {
 		case <-ctx.Done():
@@ -117,7 +116,7 @@ flushLoop:
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-notifyCh:
+		case <-k.resolvedReceiver.C:
 			for i := 0; i < int(k.partitionNum); i++ {
 				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
 					continue flushLoop
@@ -196,6 +195,7 @@ const mqResolvedNotifierName = "mqResolvedNotifier"
 
 func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	notifier := notify.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName)
+	defer notify.GlobalNotifyHub.CloseNotifier(mqResolvedNotifierName)
 	input := k.partitionInput[partition]
 	encoder := k.newEncoder()
 	batchSize := 0

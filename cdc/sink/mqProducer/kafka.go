@@ -43,6 +43,7 @@ type kafkaSaramaProducer struct {
 		flushed uint64
 		sent    uint64
 	}
+	flushedReceiver *notify.Receiver
 
 	closeCh chan struct{}
 }
@@ -79,9 +80,6 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []by
 }
 
 func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
-	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName).Receiver(ctx, -1)
-	defer closeNotify()
-
 	targetOffsets := make([]uint64, k.partitionNum)
 	for i := 0; i < len(k.partitionOffset); i++ {
 		targetOffsets[i] = atomic.LoadUint64(&k.partitionOffset[i].sent)
@@ -106,7 +104,7 @@ flushLoop:
 			return ctx.Err()
 		case <-k.closeCh:
 			return nil
-		case <-notifyCh:
+		case <-k.flushedReceiver.C:
 			for i, target := range targetOffsets {
 				if target > atomic.LoadUint64(&k.partitionOffset[i].flushed) {
 					continue flushLoop
@@ -138,6 +136,7 @@ const kafkaSaramaFlushedNotifierName = "kafkaSaramaFlushedNotifier"
 
 func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	notifier := notify.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName)
+	defer notify.GlobalNotifyHub.CloseNotifier(kafkaSaramaFlushedNotifierName)
 	for {
 		select {
 		case <-ctx.Done():
@@ -223,7 +222,8 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 			flushed uint64
 			sent    uint64
 		}, partitionNum),
-		closeCh: make(chan struct{}),
+		flushedReceiver: notify.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName).NewReceiver(ctx, 50*time.Millisecond),
+		closeCh:         make(chan struct{}),
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {

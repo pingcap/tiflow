@@ -85,9 +85,14 @@ func signalNonBlocking(ctx context.Context, ch chan struct{}) {
 	}
 }
 
-// Receiver creates a receiver
+type Receiver struct {
+	C    <-chan struct{}
+	Stop func()
+}
+
+// NewReceiver creates a receiver
 // returns a channel to receive notifications and a function to close this receiver
-func (n *Notifier) Receiver(ctx context.Context, tickTime time.Duration) (<-chan struct{}, func()) {
+func (n *Notifier) NewReceiver(ctx context.Context, tickTime time.Duration) *Receiver {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	receiverCh := make(chan struct{}, 1)
@@ -107,9 +112,12 @@ func (n *Notifier) Receiver(ctx context.Context, tickTime time.Duration) (<-chan
 			}
 		}()
 	}
-	return receiverCh, func() {
-		stopTicker()
-		n.remove(currentIndex)
+	return &Receiver{
+		C: receiverCh,
+		Stop: func() {
+			stopTicker()
+			n.remove(currentIndex)
+		},
 	}
 }
 

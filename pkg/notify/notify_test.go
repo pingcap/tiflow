@@ -12,28 +12,35 @@ type notifySuite struct{}
 var _ = check.Suite(&notifySuite{})
 
 func (s *notifySuite) TestNotifyHub(c *check.C) {
+	ctx := context.Background()
 	hub := NewNotifyHub()
 	testName1 := "test1"
+	testName2 := "test2"
 	notifier := hub.GetNotifier(testName1)
-	rCh1, close1 := notifier.Receiver()
-	rCh2, close2 := notifier.Receiver()
-	rCh3, close3 := notifier.Receiver()
+	r1 := notifier.NewReceiver(ctx, -1)
+	r2 := notifier.NewReceiver(ctx, -1)
+	r3 := notifier.NewReceiver(ctx, -1)
 	go func() {
 		for i := 0; i < 5; i++ {
 			time.Sleep(time.Second)
 			notifier.Notify(context.Background())
 		}
 	}()
-	<-rCh1
-	close1()
-	<-rCh2
-	<-rCh3
+	<-r1.C
+	r1.Stop()
+	<-r2.C
+	<-r3.C
 
-	close2()
-	close3()
+	r2.Stop()
+	r3.Stop()
 	c.Assert(len(notifier.notifyChs), check.Equals, 0)
 	time.Sleep(time.Second)
-	rCh4, close4 := notifier.Receiver()
-	<-rCh4
-	close4()
+	r4 := notifier.NewReceiver(ctx, -1)
+	<-r4.C
+	r4.Stop()
+
+	notifier2 := hub.GetNotifier(testName2)
+	r5 := notifier2.NewReceiver(ctx, 10*time.Millisecond)
+	<-r5.C
+	r5.Stop()
 }

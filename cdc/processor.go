@@ -512,6 +512,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		watchKey         = kv.GetEtcdKeyJob(p.changefeedID)
 	)
 	globalStatusNotifier := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName)
+	defer notify.GlobalNotifyHub.CloseNotifier(globalStatusNotifierName)
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) error {
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
@@ -593,13 +594,12 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 }
 
 func (p *processor) sinkDriver(ctx context.Context) error {
-	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName).Receiver(ctx, -1)
-	defer closeNotify()
+	receiver := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName).NewReceiver(ctx, 50*time.Millisecond)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-notifyCh:
+		case <-receiver.C:
 			sinkEmittedResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
 			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
 			var minTs uint64
@@ -625,6 +625,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	defer log.Info("syncResolved stopped")
 	metricWaitPrepare := waitEventPrepareDuration.WithLabelValues(p.changefeedID, p.captureID)
 	globalStatusNotifier := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName)
+	defer notify.GlobalNotifyHub.CloseNotifier(globalStatusNotifierName)
 	for {
 		select {
 		case row := <-p.output:
