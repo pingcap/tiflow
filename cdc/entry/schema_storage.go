@@ -587,22 +587,6 @@ func (s *schemaSnapshot) replaceTable(tbl *timodel.TableInfo) error {
 	return nil
 }
 
-func (s *schemaSnapshot) flushIneligibleTables() {
-	for tableID := range s.ineligibleTableID {
-		tableInfo, exist := s.tables[tableID]
-		if !exist || tableInfo.ExistTableUniqueColumn() {
-			delete(s.ineligibleTableID, tableID)
-			if tableInfo != nil {
-				if pi := tableInfo.GetPartitionInfo(); pi != nil {
-					for _, partition := range pi.Definitions {
-						delete(s.ineligibleTableID, partition.ID)
-					}
-				}
-			}
-		}
-	}
-}
-
 func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
 	switch job.Type {
