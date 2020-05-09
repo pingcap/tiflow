@@ -69,6 +69,7 @@ type processor struct {
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
 	limitter     *puller.BlurResourceLimitter
+	stopped      int32
 
 	pdCli     pd.Client
 	kvStorage tidbkv.Storage
@@ -271,8 +272,10 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		t0Update := time.Now()
 		err := retry.Run(500*time.Millisecond, 3, func() error {
 			inErr := p.updateInfo(ctx)
-			if errors.Cause(inErr) == model.ErrAdminStopProcessor {
-				return backoff.Permanent(inErr)
+			if inErr != nil {
+				if p.isStopped() || errors.Cause(inErr) == model.ErrAdminStopProcessor {
+					return backoff.Permanent(errors.Trace(model.ErrAdminStopProcessor))
+				}
 			}
 			return inErr
 		})
@@ -287,9 +290,11 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		checkpointTsTick.Stop()
 		p.localResolvedReceiver.Stop()
 
-		err := updateInfo()
-		if err != nil && errors.Cause(err) != context.Canceled {
-			log.Error("failed to update info", zap.Error(err))
+		if !p.isStopped() {
+			err := updateInfo()
+			if err != nil && errors.Cause(err) != context.Canceled {
+				log.Warn("failed to update info before exit", zap.Error(err))
+			}
 		}
 
 		log.Info("Local resolved worker exited")
@@ -782,16 +787,22 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 }
 
 func (p *processor) stop(ctx context.Context) error {
+	log.Info("stop processor", zap.String("id", p.id), zap.String("capture", p.captureID), zap.String("changefeed", p.changefeedID))
 	p.stateMu.Lock()
 	for _, tbl := range p.tables {
 		tbl.cancel()
 	}
 	p.stateMu.Unlock()
+	atomic.StoreInt32(&p.stopped, 1)
 
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureID); err != nil {
 		return err
 	}
 	return p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID)
+}
+
+func (p *processor) isStopped() bool {
+	return atomic.LoadInt32(&p.stopped) == 1
 }
 
 // runProcessor creates a new processor then starts it.
@@ -833,16 +844,15 @@ func runProcessor(
 
 	go func() {
 		err := <-errCh
-		if errors.Cause(err) != context.Canceled {
+		cause := errors.Cause(err)
+		if cause != nil && cause != context.Canceled && cause != model.ErrAdminStopProcessor {
+			processorErrorCounter.WithLabelValues(changefeedID, captureID).Inc()
 			log.Error("error on running processor",
 				zap.String("captureid", captureID),
 				zap.String("changefeedid", changefeedID),
 				zap.String("processorid", processor.id),
 				zap.Error(err))
 		} else {
-			if err != nil {
-				processorErrorCounter.WithLabelValues(changefeedID, captureID).Inc()
-			}
 			log.Info("processor exited",
 				zap.String("captureid", captureID),
 				zap.String("changefeedid", changefeedID),
