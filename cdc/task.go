@@ -173,7 +173,7 @@ func (w *TaskWatcher) parseTask(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	status, err := w.capture.etcdClient.GetChangeFeedStatus(ctx, changeFeedID)
+	status, _, err := w.capture.etcdClient.GetChangeFeedStatus(ctx, changeFeedID)
 	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 		return nil, err
 	}

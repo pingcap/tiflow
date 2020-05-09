@@ -188,7 +188,7 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 
 	rw, err := NewProcessorTsEtcdRWriter(s.client, changefeedID, captureID)
 	c.Assert(err, check.IsNil)
-	changedFeed, err := rw.GetChangeFeedStatus(context.Background())
+	changedFeed, _, err := rw.GetChangeFeedStatus(context.Background())
 	c.Assert(err, check.IsNil)
 	c.Assert(changedFeed, check.DeepEquals, info)
 }
