@@ -2,15 +2,23 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/tidb/store/tikv"
+	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
@@ -66,4 +74,89 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob) error {
 		return errors.BadRequestf("%s", string(body))
 	}
 	return nil
+}
+
+func jsonPrint(cmd *cobra.Command, v interface{}) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	cmd.Printf("%s\n", data)
+	return nil
+}
+
+func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) error {
+	resp, err := cli.Client.Get(ctx, tikv.GcSavedSafePoint)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if resp.Count == 0 {
+		return nil
+	}
+	safePoint, err := strconv.ParseUint(string(resp.Kvs[0].Value), 10, 64)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if startTs < safePoint {
+		return errors.Errorf("startTs %d less than gcSafePoint %d", startTs, safePoint)
+	}
+	return nil
+}
+
+func verifyTables(ctx context.Context, cfg *filter.ReplicaConfig, startTs uint64) (ineligibleTables []entry.TableName, err error) {
+	kvStore, err := kv.CreateTiStore(cliPdAddr)
+	if err != nil {
+		return nil, err
+	}
+	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	filter, err := filter.NewFilter(cfg)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	for tID, tableName := range snap.CloneTables() {
+		tableInfo, exist := snap.TableByID(int64(tID))
+		if !exist {
+			return nil, errors.NotFoundf("table %d", int64(tID))
+		}
+		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
+			continue
+		}
+		if !tableInfo.ExistTableUniqueColumn() {
+			ineligibleTables = append(ineligibleTables, tableName)
+		}
+	}
+	return
+}
+
+// strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
+// into the Config struct, issue an error and stop the server from starting.
+func strictDecodeFile(path, component string, cfg interface{}) error {
+	metaData, err := toml.DecodeFile(path, cfg)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
+		var b strings.Builder
+		for i, item := range undecoded {
+			if i != 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(item.String())
+		}
+		err = errors.Errorf("component %s's config file %s contained unknown configuration options: %s",
+			component, path, b.String())
+	}
+
+	return errors.Trace(err)
 }

@@ -1,27 +1,17 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/chzyer/readline"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
-	"github.com/google/uuid"
 	"github.com/mattn/go-shellwords"
-	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/v4/client"
-	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3"
 	"google.golang.org/grpc"
@@ -50,7 +40,48 @@ var (
 	pdCli      pd.Client
 
 	interact bool
+
+	changefeedID string
+	captureID    string
+	interval     uint
 )
+
+// cf holds changefeed id, which is used for output only
+type cf struct {
+	ID string `json:"id"`
+}
+
+// capture holds capture information
+type capture struct {
+	ID            string `json:"id"`
+	IsOwner       bool   `json:"is-owner"`
+	AdvertiseAddr string `json:"address"`
+}
+
+// cfMeta holds changefeed info and changefeed status
+type cfMeta struct {
+	Info       *model.ChangeFeedInfo   `json:"info"`
+	Status     *model.ChangeFeedStatus `json:"status"`
+	Count      uint64                  `json:"count"`
+	TaskStatus []captureTaskStatus     `json:"task-status"`
+}
+
+type captureTaskStatus struct {
+	CaptureID  string            `json:"capture-id"`
+	TaskStatus *model.TaskStatus `json:"status"`
+}
+
+type profileStatus struct {
+	OPS            uint64 `json:"ops"`
+	Count          uint64 `json:"count"`
+	SinkGap        string `json:"sink_gap"`
+	ReplicationGap string `json:"replication_gap"`
+}
+
+type processorMeta struct {
+	Status   *model.TaskStatus   `json:"status"`
+	Position *model.TaskPosition `json:"position"`
+}
 
 func newCliCommand() *cobra.Command {
 	command := &cobra.Command{
@@ -98,240 +129,6 @@ func newCliCommand() *cobra.Command {
 	)
 
 	return command
-}
-
-func newCaptureCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "capture",
-		Short: "Manage capture (capture is a CDC server instance)",
-	}
-	command.AddCommand(
-		newListCaptureCommand(),
-		// TODO: add resign owner command
-	)
-	return command
-}
-
-func newChangefeedCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "changefeed",
-		Short: "Manage changefeed (changefeed is a replication task)",
-	}
-	command.AddCommand(
-		newListChangefeedCommand(),
-		newQueryChangefeedCommand(),
-		newCreateChangefeedCommand(),
-		newStatisticsChangefeedCommand(),
-	)
-	// Add pause, resume, remove changefeed
-	for _, cmd := range newAdminChangefeedCommand() {
-		command.AddCommand(cmd)
-	}
-	return command
-}
-
-func newProcessorCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "processor",
-		Short: "Manage processor (processor is a sub replication task running on a specified capture)",
-	}
-	command.AddCommand(
-		newListProcessorCommand(),
-		newQueryProcessorCommand(),
-	)
-	return command
-}
-
-func newMetadataCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "meta",
-		Short: "Manage metadata stored in PD",
-	}
-	command.AddCommand(
-		newDeleteMetaCommand(),
-	)
-	return command
-}
-
-func newTsoCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "tso",
-		Short: "Manage tso",
-	}
-	command.AddCommand(
-		newQueryTsoCommand(),
-	)
-	return command
-}
-
-func newCreateChangefeedCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "create",
-		Short: "Create a new replication task (changefeed)",
-		Long:  ``,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
-			id := uuid.New().String()
-			if startTs == 0 {
-				ts, logical, err := pdCli.GetTS(ctx)
-				if err != nil {
-					return err
-				}
-				startTs = oracle.ComposeTS(ts, logical)
-			}
-			if err := verifyStartTs(ctx, startTs, cdcEtcdCli); err != nil {
-				return err
-			}
-
-			cfg := new(filter.ReplicaConfig)
-			if len(configFile) > 0 {
-				if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
-					return err
-				}
-			}
-
-			info := &model.ChangeFeedInfo{
-				SinkURI:    sinkURI,
-				Opts:       make(map[string]string),
-				CreateTime: time.Now(),
-				StartTs:    startTs,
-				TargetTs:   targetTs,
-				Config:     cfg,
-				Engine:     model.SortEngine(sortEngine),
-				SortDir:    sortDir,
-			}
-
-			ineligibleTables, err := verifyTables(ctx, cfg, startTs)
-			if err != nil {
-				return err
-			}
-			if len(ineligibleTables) != 0 {
-				cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", ineligibleTables)
-				if !noConfirm {
-					cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
-					var yOrN string
-					_, err := fmt.Scan(&yOrN)
-					if err != nil {
-						return err
-					}
-					if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
-						cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
-						return nil
-					}
-				}
-			}
-
-			for _, opt := range opts {
-				s := strings.SplitN(opt, "=", 2)
-				if len(s) <= 0 {
-					cmd.Printf("omit opt: %s", opt)
-					continue
-				}
-
-				var key string
-				var value string
-
-				key = s[0]
-				if len(s) > 1 {
-					value = s[1]
-				}
-				info.Opts[key] = value
-			}
-
-			d, err := info.Marshal()
-			if err != nil {
-				return err
-			}
-			cmd.Printf("Create changefeed successfully!\nID: %s\nInfo: %s\n", id, d)
-			return cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
-		},
-	}
-	command.PersistentFlags().Uint64Var(&startTs, "start-ts", 0, "Start ts of changefeed")
-	command.PersistentFlags().Uint64Var(&targetTs, "target-ts", 0, "Target ts of changefeed")
-	command.PersistentFlags().StringVar(&sinkURI, "sink-uri", "mysql://root:123456@127.0.0.1:3306/", "sink uri")
-	command.PersistentFlags().StringVar(&configFile, "config", "", "Path of the configuration file")
-	command.PersistentFlags().StringSliceVar(&opts, "opts", nil, "Extra options, in the `key=value` format")
-	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
-	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", "memory", "sort engine used for data sort")
-	command.PersistentFlags().StringVar(&sortDir, "sort-dir", ".", "directory used for file sort")
-
-	return command
-}
-
-func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) error {
-	resp, err := cli.Client.Get(ctx, tikv.GcSavedSafePoint)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if resp.Count == 0 {
-		return nil
-	}
-	safePoint, err := strconv.ParseUint(string(resp.Kvs[0].Value), 10, 64)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if startTs < safePoint {
-		return errors.Errorf("startTs %d less than gcSafePoint %d", startTs, safePoint)
-	}
-	return nil
-}
-
-func verifyTables(ctx context.Context, cfg *filter.ReplicaConfig, startTs uint64) (ineligibleTables []entry.TableName, err error) {
-	kvStore, err := kv.CreateTiStore(cliPdAddr)
-	if err != nil {
-		return nil, err
-	}
-	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	filter, err := filter.NewFilter(cfg)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	for tID, tableName := range snap.CloneTables() {
-		tableInfo, exist := snap.TableByID(int64(tID))
-		if !exist {
-			return nil, errors.NotFoundf("table %d", int64(tID))
-		}
-		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
-			continue
-		}
-		if !tableInfo.ExistTableUniqueColumn() {
-			ineligibleTables = append(ineligibleTables, tableName)
-		}
-	}
-	return
-}
-
-// strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
-// into the Config struct, issue an error and stop the server from starting.
-func strictDecodeFile(path, component string, cfg interface{}) error {
-	metaData, err := toml.DecodeFile(path, cfg)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
-		var b strings.Builder
-		for i, item := range undecoded {
-			if i != 0 {
-				b.WriteString(", ")
-			}
-			b.WriteString(item.String())
-		}
-		err = errors.Errorf("component %s's config file %s contained unknown configuration options: %s",
-			component, path, b.String())
-	}
-
-	return errors.Trace(err)
 }
 
 func loop() {
