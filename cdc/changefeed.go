@@ -80,13 +80,16 @@ type changeFeed struct {
 	ddlJobHistory []*timodel.Job
 	ddlExecutedTs uint64
 
-	schemas              map[uint64]tableIDMap
-	tables               map[uint64]entry.TableName
-	partitions           map[uint64][]int64 // key is table ID, value is the slice of partitions ID.
-	orphanTables         map[uint64]model.ProcessTableInfo
+	schemas    map[uint64]tableIDMap
+	tables     map[uint64]entry.TableName
+	partitions map[uint64][]int64 // key is table ID, value is the slice of partitions ID.
+	// The key is table ID or the partition ID.
+	orphanTables map[uint64]model.ProcessTableInfo
+	// The key is table ID or the partition ID.
 	waitingConfirmTables map[uint64]string
-	toCleanTables        map[uint64]struct{}
-	infoWriter           *storage.OwnerTaskStatusEtcdWriter
+	// The key is table ID or the partition ID.
+	toCleanTables map[uint64]struct{}
+	infoWriter    *storage.OwnerTaskStatusEtcdWriter
 }
 
 // String implements fmt.Stringer interface.
