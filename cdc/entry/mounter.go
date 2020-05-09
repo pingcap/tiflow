@@ -202,7 +202,6 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		return nil, nil
 	}
 	key, physicalTableID, err := decodeTableID(raw.Key)
-	fmt.Printf("table id %v -----\n", physicalTableID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -217,7 +216,6 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	}
 	row, err := func() (*model.RowChangedEvent, error) {
 		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
-		fmt.Printf("%v, %v, %v -----\n", exist, physicalTableID, tableInfo)
 		if !exist {
 			// TODO: truncate partition?
 			if snap.IsTruncateTableID(physicalTableID) {
