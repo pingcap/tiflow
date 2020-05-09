@@ -285,7 +285,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 
 		// we find a new changefeed, init changefeed info here.
-		status, err := o.cfRWriter.GetChangeFeedStatus(ctx, changeFeedID)
+		status, _, err := o.cfRWriter.GetChangeFeedStatus(ctx, changeFeedID)
 		if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 			return err
 		}
@@ -443,7 +443,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 		case model.AdminResume:
-			cfStatus, err := o.etcdClient.GetChangeFeedStatus(ctx, job.CfID)
+			cfStatus, _, err := o.etcdClient.GetChangeFeedStatus(ctx, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -513,6 +513,14 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	if err := o.throne(ctx); err != nil {
 		return err
 	}
+
+	ctx1, cancel := context.WithCancel(ctx)
+	defer cancel()
+	changedFeeds := o.watchFeedChange(ctx1)
+
+	ticker := time.NewTicker(tickTime)
+	defer ticker.Stop()
+
 loop:
 	for {
 		select {
@@ -521,14 +529,16 @@ loop:
 			break loop
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(tickTime):
-			err := o.run(ctx)
-			if err != nil {
-				if errors.Cause(err) != context.Canceled {
-					log.Error("owner exited with error", zap.Error(err))
-				}
-				break loop
+		case <-changedFeeds:
+		case <-ticker.C:
+		}
+
+		err := o.run(ctx)
+		if err != nil {
+			if errors.Cause(err) != context.Canceled {
+				log.Error("owner exited with error", zap.Error(err))
 			}
+			break loop
 		}
 	}
 	if o.stepDown != nil {
@@ -538,6 +548,33 @@ loop:
 	}
 
 	return nil
+}
+
+func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
+	output := make(chan struct{}, 1)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			wch := o.etcdClient.Client.Watch(ctx, kv.TaskPositionKeyPrefix, clientv3.WithFilterDelete(), clientv3.WithPrefix())
+
+			for resp := range wch {
+				if resp.Err() != nil {
+					log.Error("position watcher restarted with error", zap.Error(resp.Err()))
+					break
+				}
+
+				// TODO: because the main loop has many serial steps, it is hard to do a partial update without change
+				// majority logical. For now just to wakeup the main loop ASAP to reduce latency, the efficiency of etcd
+				// operations should be resolved in future release.
+				output <- struct{}{}
+			}
+		}
+	}()
+	return output
 }
 
 func (o *Owner) run(ctx context.Context) error {

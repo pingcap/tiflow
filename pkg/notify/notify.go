@@ -1,66 +1,14 @@
 package notify
 
 import (
-	"context"
 	"sync"
+	"time"
 )
-
-// GlobalNotifyHub is a notify hub which is global level
-var GlobalNotifyHub = NewNotifyHub()
-
-// Hub is a notify manager, used to create and maintain Notifier objects
-type Hub struct {
-	notifiers map[string]*Notifier
-	mu        sync.Mutex
-}
-
-// NewNotifyHub creates the NotifyHub
-func NewNotifyHub() *Hub {
-	return &Hub{
-		notifiers: make(map[string]*Notifier),
-	}
-}
-
-// GetNotifier gets the Notifier corresponding to the name
-// if the Notifier is not exists, this method will create a new one.
-func (n *Hub) GetNotifier(name string) *Notifier {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if notifier, ok := n.notifiers[name]; ok {
-		return notifier
-	}
-	notifier := &Notifier{
-		name: name,
-	}
-	n.notifiers[name] = notifier
-	return notifier
-}
-
-// CloseNotifier closes the Notifier corresponding to the name
-func (n *Hub) CloseNotifier(name string) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if notifier, ok := n.notifiers[name]; ok {
-		notifier.close()
-		delete(n.notifiers, name)
-	}
-}
-
-// CloseAll closes all notifiers
-func (n *Hub) CloseAll() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	for name, notifier := range n.notifiers {
-		notifier.close()
-		delete(n.notifiers, name)
-	}
-}
 
 // Notifier provides a one-to-many notification mechanism
 type Notifier struct {
-	name      string
-	notifyChs []struct {
-		ch    chan struct{}
+	receivers []struct {
+		rec   *Receiver
 		index int
 	}
 	maxIndex int
@@ -68,51 +16,85 @@ type Notifier struct {
 }
 
 // Notify sends a signal to the Receivers
-func (n *Notifier) Notify(ctx context.Context) {
+func (n *Notifier) Notify() {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
-	for _, notifyCh := range n.notifyChs {
-		select {
-		case <-ctx.Done():
-		case notifyCh.ch <- struct{}{}:
-		default:
-		}
+	for _, receiver := range n.receivers {
+		signalNonBlocking(receiver.rec.c)
 	}
 }
 
-// Receiver creates a receiver
+func signalNonBlocking(ch chan struct{}) {
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
+}
+
+// Receiver is a receiver of notifier, including the receiver channel and stop receiver function.
+type Receiver struct {
+	C      <-chan struct{}
+	Stop   func()
+	ticker *time.Ticker
+	c      chan struct{}
+}
+
+// NewReceiver creates a receiver
 // returns a channel to receive notifications and a function to close this receiver
-func (n *Notifier) Receiver() (<-chan struct{}, func()) {
+func (n *Notifier) NewReceiver(tickTime time.Duration) *Receiver {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	receiverCh := make(chan struct{}, 1)
 	currentIndex := n.maxIndex
 	n.maxIndex++
-	n.notifyChs = append(n.notifyChs, struct {
-		ch    chan struct{}
-		index int
-	}{ch: receiverCh, index: currentIndex})
-	return receiverCh, func() {
-		n.remove(currentIndex)
+	receiverCh := make(chan struct{}, 1)
+	var ticker *time.Ticker
+	if tickTime > 0 {
+		ticker = time.NewTicker(tickTime)
+		go func() {
+			for range ticker.C {
+				signalNonBlocking(receiverCh)
+			}
+		}()
 	}
+	rec := &Receiver{
+		C: receiverCh,
+		Stop: func() {
+			n.remove(currentIndex)
+		},
+		ticker: ticker,
+		c:      receiverCh,
+	}
+	n.receivers = append(n.receivers, struct {
+		rec   *Receiver
+		index int
+	}{rec: rec, index: currentIndex})
+	return rec
 }
 
 func (n *Notifier) remove(index int) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	for i, notifyCh := range n.notifyChs {
-		if notifyCh.index == index {
-			close(notifyCh.ch)
-			n.notifyChs = append(n.notifyChs[:i], n.notifyChs[i+1:]...)
+	for i, receiver := range n.receivers {
+		if receiver.index == index {
+			n.receivers = append(n.receivers[:i], n.receivers[i+1:]...)
+			if receiver.rec.ticker != nil {
+				receiver.rec.ticker.Stop()
+			}
+			close(receiver.rec.c)
 			break
 		}
 	}
 }
 
-func (n *Notifier) close() {
+// Close closes the notify and stops all receiver in this notifier
+func (n *Notifier) Close() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	for _, notifyCh := range n.notifyChs {
-		close(notifyCh.ch)
+	for _, receiver := range n.receivers {
+		if receiver.rec.ticker != nil {
+			receiver.rec.ticker.Stop()
+		}
+		close(receiver.rec.c)
 	}
+	n.receivers = nil
 }

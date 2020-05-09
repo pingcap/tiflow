@@ -151,18 +151,18 @@ func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context, id string) erro
 }
 
 // GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
-func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error) {
+func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, int64, error) {
 	key := GetEtcdKeyJob(id)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, 0, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return nil, errors.Annotatef(model.ErrChangeFeedNotExists, "query status id %s", id)
+		return nil, 0, errors.Annotatef(model.ErrChangeFeedNotExists, "query status id %s", id)
 	}
 	info := &model.ChangeFeedStatus{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
-	return info, errors.Trace(err)
+	return info, resp.Kvs[0].ModRevision, errors.Trace(err)
 }
 
 // GetCaptures returns kv revision and CaptureInfo list

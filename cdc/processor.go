@@ -42,15 +42,15 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
-	updateInfoInterval        = time.Millisecond * 500
-	resolveTsInterval         = time.Millisecond * 500
-	waitGlobalResolvedTsDelay = time.Millisecond * 500
+	resolveTsInterval = time.Millisecond * 500
 
 	defaultOutputChanSize = 128000
 
@@ -88,11 +88,15 @@ type processor struct {
 	output    chan *model.PolymorphicEvent
 	mounter   entry.Mounter
 
+	stateMu  sync.Mutex
 	status   *model.TaskStatus
 	position *model.TaskPosition
-
-	tablesMu sync.Mutex
 	tables   map[int64]*tableInfo
+
+	sinkEmittedResolvedNotifier *notify.Notifier
+	sinkEmittedResolvedReceiver *notify.Receiver
+	localResolvedNotifier       *notify.Notifier
+	localResolvedReceiver       *notify.Receiver
 
 	wg    *errgroup.Group
 	errCh chan<- error
@@ -153,6 +157,8 @@ func newProcessor(
 		return nil, errors.Trace(err)
 	}
 
+	sinkEmittedResolvedNotifier := new(notify.Notifier)
+	localResolvedNotifier := new(notify.Notifier)
 	p := &processor{
 		id:            uuid.New().String(),
 		limitter:      limitter,
@@ -172,6 +178,12 @@ func newProcessor(
 		status:    tsRWriter.GetTaskStatus(),
 		position:  &model.TaskPosition{CheckPointTs: checkpointTs},
 		output:    make(chan *model.PolymorphicEvent, defaultOutputChanSize),
+
+		sinkEmittedResolvedNotifier: sinkEmittedResolvedNotifier,
+		sinkEmittedResolvedReceiver: sinkEmittedResolvedNotifier.NewReceiver(50 * time.Millisecond),
+
+		localResolvedNotifier: localResolvedNotifier,
+		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
 
 		tables: make(map[int64]*tableInfo),
 	}
@@ -238,11 +250,11 @@ func (p *processor) wait() {
 func (p *processor) writeDebugInfo(w io.Writer) {
 	fmt.Fprintf(w, "changefeedID: %s, info: %+v, status: %+v\n", p.changefeedID, p.changefeed, p.status)
 
-	p.tablesMu.Lock()
+	p.stateMu.Lock()
 	for _, table := range p.tables {
 		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", table.id, table.loadResolvedTS())
 	}
-	p.tablesMu.Unlock()
+	p.stateMu.Unlock()
 
 	fmt.Fprintf(w, "\n")
 }
@@ -253,8 +265,6 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
 func (p *processor) positionWorker(ctx context.Context) error {
-	updateInfoTick := time.NewTicker(updateInfoInterval)
-	resolveTsTick := time.NewTicker(resolveTsInterval)
 	checkpointTsTick := time.NewTicker(resolveTsInterval)
 
 	updateInfo := func() error {
@@ -274,9 +284,8 @@ func (p *processor) positionWorker(ctx context.Context) error {
 	}
 
 	defer func() {
-		updateInfoTick.Stop()
-		resolveTsTick.Stop()
 		checkpointTsTick.Stop()
+		p.localResolvedReceiver.Stop()
 
 		err := updateInfo()
 		if err != nil && errors.Cause(err) != context.Canceled {
@@ -286,44 +295,43 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		log.Info("Local resolved worker exited")
 	}()
 
+	resolvedTsGauge := resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID)
+	checkpointTsGauge := checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-resolveTsTick.C:
+		case <-p.localResolvedReceiver.C:
 			minResolvedTs := p.ddlPuller.GetResolvedTs()
-			p.tablesMu.Lock()
+			p.stateMu.Lock()
 			for _, table := range p.tables {
 				ts := table.loadResolvedTS()
-				tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID, strconv.FormatInt(table.id, 10)).Set(float64(oracle.ExtractPhysical(ts)))
 
 				if ts < minResolvedTs {
 					minResolvedTs = ts
 				}
 			}
-			p.tablesMu.Unlock()
+			p.stateMu.Unlock()
 
 			if minResolvedTs == p.position.ResolvedTs {
 				continue
 			}
 
 			p.position.ResolvedTs = minResolvedTs
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case p.output <- model.NewResolvedPolymorphicEvent(minResolvedTs):
+			resolvedTsGauge.Set(float64(oracle.ExtractPhysical(minResolvedTs)))
+			if err := updateInfo(); err != nil {
+				return errors.Trace(err)
 			}
-			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
+
 		case <-checkpointTsTick.C:
 			checkpointTs := atomic.LoadUint64(&p.checkpointTs)
 			if p.position.CheckPointTs >= checkpointTs {
 				continue
 			}
 			p.position.CheckPointTs = checkpointTs
-			checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(checkpointTs)))
-		case <-updateInfoTick.C:
-			err := updateInfo()
-			if err != nil {
+			checkpointTsGauge.Set(float64(oracle.ExtractPhysical(checkpointTs)))
+			if err := updateInfo(); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -344,6 +352,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 		}
 		if ddlRawKV.OpType == model.OpTypeResolved {
 			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.Ts)
+			p.localResolvedNotifier.Notify()
 		}
 		job, err := entry.UnmarshalDDL(ddlRawKV)
 		if err != nil {
@@ -449,8 +458,8 @@ func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed,
 }
 
 func (p *processor) removeTable(tableID int64) {
-	p.tablesMu.Lock()
-	defer p.tablesMu.Unlock()
+	p.stateMu.Lock()
+	defer p.stateMu.Unlock()
 
 	log.Debug("remove table", zap.Int64("id", tableID))
 
@@ -492,24 +501,43 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 	}
 }
 
-const globalStatusNotifierName = "globalStatusNotifier"
-
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
 func (p *processor) globalStatusWorker(ctx context.Context) error {
 	log.Info("Global status worker started")
 
 	var (
 		changefeedStatus *model.ChangeFeedStatus
+		statusRev        int64
 		lastCheckPointTs uint64
 		lastResolvedTs   uint64
+		watchKey         = kv.GetEtcdKeyJob(p.changefeedID)
 	)
+	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) error {
+		if lastResolvedTs == changefeedStatus.ResolvedTs &&
+			lastCheckPointTs == changefeedStatus.CheckpointTs {
+			return nil
+		}
+		if lastCheckPointTs < changefeedStatus.CheckpointTs {
+			p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
+			lastCheckPointTs = changefeedStatus.CheckpointTs
+		}
+		if lastResolvedTs < changefeedStatus.ResolvedTs {
+			lastResolvedTs = changefeedStatus.ResolvedTs
+			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case p.output <- model.NewResolvedPolymorphicEvent(lastResolvedTs):
+			}
+		}
+		return nil
+	}
 
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
 			backoff.NewExponentialBackOff(), ctx),
 		3,
 	)
-	globalStatusNotifier := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName)
 	for {
 		select {
 		case <-ctx.Done():
@@ -517,9 +545,10 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			return ctx.Err()
 		default:
 		}
+
 		err := backoff.Retry(func() error {
 			var err error
-			changefeedStatus, err = p.tsRWriter.GetChangeFeedStatus(ctx)
+			changefeedStatus, statusRev, err = p.tsRWriter.GetChangeFeedStatus(ctx)
 			if err != nil {
 				if errors.Cause(err) == context.Canceled {
 					return backoff.Permanent(err)
@@ -532,36 +561,37 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 
-		if lastResolvedTs == changefeedStatus.ResolvedTs &&
-			lastCheckPointTs == changefeedStatus.CheckpointTs {
-			time.Sleep(waitGlobalResolvedTsDelay)
-			continue
+		if err := updateStatus(changefeedStatus); err != nil {
+			return err
 		}
-		changed := false
-		if lastCheckPointTs < changefeedStatus.CheckpointTs {
-			p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
-			lastCheckPointTs = changefeedStatus.CheckpointTs
-			changed = true
-		}
-		if lastResolvedTs < changefeedStatus.ResolvedTs {
-			lastResolvedTs = changefeedStatus.ResolvedTs
-			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
-			changed = true
-		}
-		if changed {
-			globalStatusNotifier.Notify(ctx)
+
+		ch := p.etcdCli.Client.Watch(ctx, watchKey, clientv3.WithRev(statusRev+1), clientv3.WithFilterDelete())
+		for resp := range ch {
+			if resp.Err() == mvcc.ErrCompacted {
+				break
+			}
+			if resp.Err() != nil {
+				return err
+			}
+			for _, ev := range resp.Events {
+				var status model.ChangeFeedStatus
+				if err := status.Unmarshal(ev.Kv.Value); err != nil {
+					return err
+				}
+				if err := updateStatus(&status); err != nil {
+					return err
+				}
+			}
 		}
 	}
 }
 
 func (p *processor) sinkDriver(ctx context.Context) error {
-	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName).Receiver()
-	defer closeNotify()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-notifyCh:
+		case <-p.sinkEmittedResolvedReceiver.C:
 			sinkEmittedResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
 			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
 			var minTs uint64
@@ -585,6 +615,7 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
 	defer log.Info("syncResolved stopped")
+	defer p.sinkEmittedResolvedReceiver.Stop()
 	metricWaitPrepare := waitEventPrepareDuration.WithLabelValues(p.changefeedID, p.captureID)
 	for {
 		select {
@@ -594,6 +625,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
 				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.Ts)
+				p.sinkEmittedResolvedNotifier.Notify()
 				continue
 			}
 			startTime := time.Now()
@@ -647,8 +679,8 @@ func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (stor
 }
 
 func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) {
-	p.tablesMu.Lock()
-	defer p.tablesMu.Unlock()
+	p.stateMu.Lock()
+	defer p.stateMu.Unlock()
 	ctx = util.PutTableIDInCtx(ctx, tableID)
 
 	log.Debug("Add table", zap.Int64("tableID", tableID), zap.Uint64("startTs", startTs))
@@ -695,6 +727,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	}()
 
 	go func() {
+		resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID, strconv.FormatInt(table.id, 10))
 		for {
 			select {
 			case <-ctx.Done():
@@ -722,6 +755,8 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 				}
 				if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
 					table.storeResolvedTS(pEvent.Ts)
+					p.localResolvedNotifier.Notify()
+					resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.Ts)))
 					continue
 				}
 				select {
@@ -747,11 +782,11 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 }
 
 func (p *processor) stop(ctx context.Context) error {
-	p.tablesMu.Lock()
+	p.stateMu.Lock()
 	for _, tbl := range p.tables {
 		tbl.cancel()
 	}
-	p.tablesMu.Unlock()
+	p.stateMu.Unlock()
 
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureID); err != nil {
 		return err
