@@ -31,8 +31,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultStatusPort = 8300
-
 func (s *Server) startStatusHTTP() error {
 	serverMux := http.NewServeMux()
 
@@ -50,7 +48,7 @@ func (s *Server) startStatusHTTP() error {
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
 
-	addr := fmt.Sprintf("%s:%d", s.opts.statusHost, s.opts.statusPort)
+	addr := s.opts.addr
 	s.statusServer = &http.Server{Addr: addr, Handler: serverMux}
 
 	ln, err := net.Listen("tcp", addr)

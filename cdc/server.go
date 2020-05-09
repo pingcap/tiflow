@@ -15,7 +15,6 @@ package cdc
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -36,19 +35,27 @@ const (
 )
 
 type options struct {
-	pdEndpoints string
-	statusHost  string
-	statusPort  int
-	gcTTL       int64
-	timezone    *time.Location
+	pdEndpoints   string
+	addr          string
+	advertiseAddr string
+	gcTTL         int64
+	timezone      *time.Location
 }
 
-var defaultServerOptions = options{
-	pdEndpoints: "http://127.0.0.1:2379",
-	statusHost:  "127.0.0.1",
-	statusPort:  defaultStatusPort,
-	timezone:    nil,
-	gcTTL:       DefaultCDCGCSafePointTTL,
+func (o *options) validateAndAdjust() error {
+	if o.pdEndpoints == "" {
+		return errors.New("empty PD address")
+	}
+	if o.addr == "" {
+		return errors.New("empty address")
+	}
+	if o.advertiseAddr == "" {
+		o.advertiseAddr = o.addr
+	}
+	if o.gcTTL == 0 {
+		return errors.New("empty GC TTL is not allowed")
+	}
+	return nil
 }
 
 // PDEndpoints returns a ServerOption that sets the endpoints of PD for the server.
@@ -58,17 +65,17 @@ func PDEndpoints(s string) ServerOption {
 	}
 }
 
-// StatusHost returns a ServerOption that sets the status server host
-func StatusHost(s string) ServerOption {
+// Address returns a ServerOption that sets the server listen address
+func Address(s string) ServerOption {
 	return func(o *options) {
-		o.statusHost = s
+		o.addr = s
 	}
 }
 
-// StatusPort returns a ServerOption that sets the status server port
-func StatusPort(p int) ServerOption {
+// AdvertiseAddress returns a ServerOption that sets the server advertise address
+func AdvertiseAddress(s string) ServerOption {
 	return func(o *options) {
-		o.statusPort = p
+		o.advertiseAddr = s
 	}
 }
 
@@ -99,14 +106,17 @@ type Server struct {
 
 // NewServer creates a Server instance.
 func NewServer(opt ...ServerOption) (*Server, error) {
-	opts := defaultServerOptions
+	opts := options{}
 	for _, o := range opt {
 		o(&opts)
 	}
+	if err := opts.validateAndAdjust(); err != nil {
+		return nil, err
+	}
 	log.Info("creating CDC server",
 		zap.String("pd-addr", opts.pdEndpoints),
-		zap.String("status-host", opts.statusHost),
-		zap.Int("status-port", opts.statusPort),
+		zap.String("address", opts.addr),
+		zap.String("advertise-address", opts.advertiseAddr),
 		zap.Int64("gc-ttl", opts.gcTTL),
 		zap.Any("timezone", opts.timezone))
 
@@ -172,8 +182,8 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	statusAddr := fmt.Sprintf("%s:%d", s.opts.statusHost, s.opts.statusPort)
-	capture, err := NewCapture(strings.Split(s.opts.pdEndpoints, ","), statusAddr)
+	capture, err := NewCapture(
+		strings.Split(s.opts.pdEndpoints, ","), s.opts.advertiseAddr)
 	if err != nil {
 		return err
 	}

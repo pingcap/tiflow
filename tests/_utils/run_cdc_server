@@ -3,14 +3,14 @@
 # --workdir: work directory
 # --binary: path to cdc test binary
 # --logsuffix: log suffix
-# --statusaddr: status address
+# --addr: address
 
 set -e
 
 workdir=
 binary=
 logsuffix=
-statusaddr=
+addr=
 pwd=$pwd
 
 while [[ ${1} ]]; do
@@ -27,8 +27,8 @@ while [[ ${1} ]]; do
             logsuffix=${2}
             shift
             ;;
-        --statusaddr)
-            statusaddr="--status-addr ${2}"
+        --addr)
+            addr="--addr ${2}"
             shift
             ;;
         *)
@@ -45,5 +45,5 @@ done
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
 pid=$(ps -C run_cdc_server -o pid=|tr -d '[:space:]')
-$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server --log-file $workdir/cdc$logsuffix.log --log-level info $statusaddr >> $workdir/stdout$log_suffix.log 2>&1 &
+$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server --log-file $workdir/cdc$logsuffix.log --log-level info $addr >> $workdir/stdout$log_suffix.log 2>&1 &
 cd $pwd

@@ -27,7 +27,7 @@ func getAllCaptures(ctx context.Context) ([]*capture, error) {
 	for _, c := range raw {
 		isOwner := c.ID == ownerID
 		captures = append(captures,
-			&capture{ID: c.ID, IsOwner: isOwner, StatusAddr: c.StatusAddr})
+			&capture{ID: c.ID, IsOwner: isOwner, AdvertiseAddr: c.AdvertiseAddr})
 	}
 	return captures, nil
 }
@@ -50,7 +50,7 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob) error {
 	if err != nil {
 		return err
 	}
-	addr := fmt.Sprintf("http://%s/capture/owner/admin", owner.StatusAddr)
+	addr := fmt.Sprintf("http://%s/capture/owner/admin", owner.AdvertiseAddr)
 	resp, err := http.PostForm(addr, url.Values(map[string][]string{
 		cdc.APIOpVarAdminJob:     {fmt.Sprint(int(job.Type))},
 		cdc.APIOpVarChangefeedID: {job.CfID},

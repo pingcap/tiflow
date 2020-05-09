@@ -41,9 +41,9 @@ type cf struct {
 
 // capture holds capture information
 type capture struct {
-	ID         string `json:"id"`
-	IsOwner    bool   `json:"is-owner"`
-	StatusAddr string `json:"status-address"`
+	ID            string `json:"id"`
+	IsOwner       bool   `json:"is-owner"`
+	AdvertiseAddr string `json:"advertise-address"`
 }
 
 // cfMeta holds changefeed info and changefeed status
