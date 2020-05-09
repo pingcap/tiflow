@@ -6,60 +6,8 @@ import (
 	"time"
 )
 
-// GlobalNotifyHub is a notify hub which is global level
-var GlobalNotifyHub = NewNotifyHub()
-
-// Hub is a notify manager, used to create and maintain Notifier objects
-type Hub struct {
-	notifiers map[string]*Notifier
-	mu        sync.Mutex
-}
-
-// NewNotifyHub creates the NotifyHub
-func NewNotifyHub() *Hub {
-	return &Hub{
-		notifiers: make(map[string]*Notifier),
-	}
-}
-
-// GetNotifier gets the Notifier corresponding to the name
-// if the Notifier is not exists, this method will create a new one.
-func (n *Hub) GetNotifier(name string) *Notifier {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if notifier, ok := n.notifiers[name]; ok {
-		return notifier
-	}
-	notifier := &Notifier{
-		name: name,
-	}
-	n.notifiers[name] = notifier
-	return notifier
-}
-
-// CloseNotifier closes the Notifier corresponding to the name
-func (n *Hub) CloseNotifier(name string) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if notifier, ok := n.notifiers[name]; ok {
-		notifier.close()
-		delete(n.notifiers, name)
-	}
-}
-
-// CloseAll closes all notifiers
-func (n *Hub) CloseAll() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	for name, notifier := range n.notifiers {
-		notifier.close()
-		delete(n.notifiers, name)
-	}
-}
-
 // Notifier provides a one-to-many notification mechanism
 type Notifier struct {
-	name      string
 	notifyChs []struct {
 		ch    chan struct{}
 		index int

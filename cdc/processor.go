@@ -88,11 +88,15 @@ type processor struct {
 	output    chan *model.PolymorphicEvent
 	mounter   entry.Mounter
 
-	stateMu    sync.Mutex
-	status     *model.TaskStatus
-	position   *model.TaskPosition
-	resolvedCh chan struct{}
-	tables     map[int64]*tableInfo
+	stateMu  sync.Mutex
+	status   *model.TaskStatus
+	position *model.TaskPosition
+	tables   map[int64]*tableInfo
+
+	sinkEmittedResolvedNotifier *notify.Notifier
+	sinkEmittedResolvedReceiver *notify.Receiver
+	localResolvedNotifier       *notify.Notifier
+	localResolvedReceiver       *notify.Receiver
 
 	wg    *errgroup.Group
 	errCh chan<- error
@@ -153,6 +157,8 @@ func newProcessor(
 		return nil, errors.Trace(err)
 	}
 
+	sinkEmittedResolvedNotifier := new(notify.Notifier)
+	localResolvedNotifier := new(notify.Notifier)
 	p := &processor{
 		id:            uuid.New().String(),
 		limitter:      limitter,
@@ -168,11 +174,16 @@ func newProcessor(
 		mounter:       entry.NewMounter(schemaStorage, changefeed.GetConfig().MounterWorkerNum),
 		schemaStorage: schemaStorage,
 
-		tsRWriter:  tsRWriter,
-		status:     tsRWriter.GetTaskStatus(),
-		position:   &model.TaskPosition{CheckPointTs: checkpointTs},
-		resolvedCh: make(chan struct{}, 1),
-		output:     make(chan *model.PolymorphicEvent, defaultOutputChanSize),
+		tsRWriter: tsRWriter,
+		status:    tsRWriter.GetTaskStatus(),
+		position:  &model.TaskPosition{CheckPointTs: checkpointTs},
+		output:    make(chan *model.PolymorphicEvent, defaultOutputChanSize),
+
+		sinkEmittedResolvedNotifier: sinkEmittedResolvedNotifier,
+		sinkEmittedResolvedReceiver: sinkEmittedResolvedNotifier.NewReceiver(ctx, 50*time.Millisecond),
+
+		localResolvedNotifier: localResolvedNotifier,
+		localResolvedReceiver: localResolvedNotifier.NewReceiver(ctx, 50*time.Millisecond),
 
 		tables: make(map[int64]*tableInfo),
 	}
@@ -236,13 +247,6 @@ func (p *processor) wait() {
 	}
 }
 
-func (p *processor) notifyResolved() {
-	select {
-	case p.resolvedCh <- struct{}{}:
-	default:
-	}
-}
-
 func (p *processor) writeDebugInfo(w io.Writer) {
 	fmt.Fprintf(w, "changefeedID: %s, info: %+v, status: %+v\n", p.changefeedID, p.changefeed, p.status)
 
@@ -281,6 +285,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 
 	defer func() {
 		checkpointTsTick.Stop()
+		p.localResolvedReceiver.Stop()
 
 		err := updateInfo()
 		if err != nil && errors.Cause(err) != context.Canceled {
@@ -297,7 +302,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-p.resolvedCh:
+		case <-p.localResolvedReceiver.C:
 			minResolvedTs := p.ddlPuller.GetResolvedTs()
 			p.stateMu.Lock()
 			for _, table := range p.tables {
@@ -347,7 +352,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 		}
 		if ddlRawKV.OpType == model.OpTypeResolved {
 			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.Ts)
-			p.notifyResolved()
+			p.localResolvedNotifier.Notify(ctx)
 		}
 		job, err := entry.UnmarshalDDL(ddlRawKV)
 		if err != nil {
@@ -511,18 +516,14 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		lastResolvedTs   uint64
 		watchKey         = kv.GetEtcdKeyJob(p.changefeedID)
 	)
-	globalStatusNotifier := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName)
-	defer notify.GlobalNotifyHub.CloseNotifier(globalStatusNotifierName)
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) error {
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
 			return nil
 		}
-		changed := false
 		if lastCheckPointTs < changefeedStatus.CheckpointTs {
 			p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
 			lastCheckPointTs = changefeedStatus.CheckpointTs
-			changed = true
 		}
 		if lastResolvedTs < changefeedStatus.ResolvedTs {
 			lastResolvedTs = changefeedStatus.ResolvedTs
@@ -532,10 +533,6 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 				return ctx.Err()
 			case p.output <- model.NewResolvedPolymorphicEvent(lastResolvedTs):
 			}
-			changed = true
-		}
-		if changed {
-			globalStatusNotifier.Notify(ctx)
 		}
 		return nil
 	}
@@ -594,12 +591,11 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 }
 
 func (p *processor) sinkDriver(ctx context.Context) error {
-	receiver := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName).NewReceiver(ctx, 50*time.Millisecond)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-receiver.C:
+		case <-p.sinkEmittedResolvedReceiver.C:
 			sinkEmittedResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
 			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
 			var minTs uint64
@@ -623,9 +619,8 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
 	defer log.Info("syncResolved stopped")
+	defer p.sinkEmittedResolvedReceiver.Stop()
 	metricWaitPrepare := waitEventPrepareDuration.WithLabelValues(p.changefeedID, p.captureID)
-	globalStatusNotifier := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName)
-	defer notify.GlobalNotifyHub.CloseNotifier(globalStatusNotifierName)
 	for {
 		select {
 		case row := <-p.output:
@@ -634,7 +629,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
 				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.Ts)
-				globalStatusNotifier.Notify(ctx)
+				p.sinkEmittedResolvedNotifier.Notify(ctx)
 				continue
 			}
 			startTime := time.Now()
@@ -764,7 +759,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 				}
 				if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
 					table.storeResolvedTS(pEvent.Ts)
-					p.notifyResolved()
+					p.localResolvedNotifier.Notify(ctx)
 					resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.Ts)))
 					continue
 				}

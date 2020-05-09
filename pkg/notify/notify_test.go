@@ -13,10 +13,7 @@ var _ = check.Suite(&notifySuite{})
 
 func (s *notifySuite) TestNotifyHub(c *check.C) {
 	ctx := context.Background()
-	hub := NewNotifyHub()
-	testName1 := "test1"
-	testName2 := "test2"
-	notifier := hub.GetNotifier(testName1)
+	notifier := new(Notifier)
 	r1 := notifier.NewReceiver(ctx, -1)
 	r2 := notifier.NewReceiver(ctx, -1)
 	r3 := notifier.NewReceiver(ctx, -1)
@@ -39,7 +36,7 @@ func (s *notifySuite) TestNotifyHub(c *check.C) {
 	<-r4.C
 	r4.Stop()
 
-	notifier2 := hub.GetNotifier(testName2)
+	notifier2 := new(Notifier)
 	r5 := notifier2.NewReceiver(ctx, 10*time.Millisecond)
 	<-r5.C
 	r5.Stop()
