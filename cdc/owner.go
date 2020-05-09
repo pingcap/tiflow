@@ -215,7 +215,11 @@ func (o *Owner) newChangeFeed(
 			delete(partitions, tid)
 			for _, partition := range pi.Definitions {
 				id := uint64(partition.ID)
-				partitions[tid] = append(partitions[id], partition.ID)
+				if ts, ok := existingTables[id]; ok {
+					log.Debug("ignore known table partition", zap.Uint64("tid", tid), zap.Uint64("partitionID", id), zap.Stringer("table", table), zap.Uint64("ts", ts))
+					continue
+				}
+				partitions[tid] = append(partitions[tid], partition.ID)
 				orphanTables[id] = model.ProcessTableInfo{
 					ID:      id,
 					StartTs: checkpointTs,
