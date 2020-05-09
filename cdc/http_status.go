@@ -52,20 +52,19 @@ func (s *Server) startStatusHTTP() error {
 
 	addr := fmt.Sprintf("%s:%d", s.opts.statusHost, s.opts.statusPort)
 	s.statusServer = &http.Server{Addr: addr, Handler: serverMux}
-	errCh := make(chan error)
+
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
 	go func() {
-		ln, err := net.Listen("tcp", addr)
-		errCh <- err
-		if err != nil {
-			return
-		}
 		log.Info("status http server is running", zap.String("addr", addr))
 		err = s.statusServer.Serve(ln)
 		if err != nil && err != http.ErrServerClosed {
 			log.Error("status server error", zap.Error(err))
 		}
 	}()
-	return <-errCh
+	return nil
 }
 
 // status of cdc server
