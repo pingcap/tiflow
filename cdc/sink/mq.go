@@ -97,7 +97,7 @@ func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) e
 		return nil
 	}
 
-	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName).Receiver()
+	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(mqResolvedNotifierName).Receiver(ctx, -1)
 	defer closeNotify()
 
 	for i := 0; i < int(k.partitionNum); i++ {

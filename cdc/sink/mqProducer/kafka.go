@@ -79,7 +79,7 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []by
 }
 
 func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
-	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName).Receiver()
+	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(kafkaSaramaFlushedNotifierName).Receiver(ctx, -1)
 	defer closeNotify()
 
 	targetOffsets := make([]uint64, k.partitionNum)

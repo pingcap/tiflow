@@ -593,7 +593,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 }
 
 func (p *processor) sinkDriver(ctx context.Context) error {
-	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName).Receiver()
+	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName).Receiver(ctx, -1)
 	defer closeNotify()
 	for {
 		select {
@@ -624,6 +624,7 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 func (p *processor) syncResolved(ctx context.Context) error {
 	defer log.Info("syncResolved stopped")
 	metricWaitPrepare := waitEventPrepareDuration.WithLabelValues(p.changefeedID, p.captureID)
+	globalStatusNotifier := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName)
 	for {
 		select {
 		case row := <-p.output:
@@ -632,6 +633,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
 				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.Ts)
+				globalStatusNotifier.Notify(ctx)
 				continue
 			}
 			startTime := time.Now()

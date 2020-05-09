@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // GlobalNotifyHub is a notify hub which is global level
@@ -72,17 +73,21 @@ func (n *Notifier) Notify(ctx context.Context) {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 	for _, notifyCh := range n.notifyChs {
-		select {
-		case <-ctx.Done():
-		case notifyCh.ch <- struct{}{}:
-		default:
-		}
+		signalNonBlocking(ctx, notifyCh.ch)
+	}
+}
+
+func signalNonBlocking(ctx context.Context, ch chan struct{}) {
+	select {
+	case <-ctx.Done():
+	case ch <- struct{}{}:
+	default:
 	}
 }
 
 // Receiver creates a receiver
 // returns a channel to receive notifications and a function to close this receiver
-func (n *Notifier) Receiver() (<-chan struct{}, func()) {
+func (n *Notifier) Receiver(ctx context.Context, tickTime time.Duration) (<-chan struct{}, func()) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	receiverCh := make(chan struct{}, 1)
@@ -92,7 +97,18 @@ func (n *Notifier) Receiver() (<-chan struct{}, func()) {
 		ch    chan struct{}
 		index int
 	}{ch: receiverCh, index: currentIndex})
+	stopTicker := func() {}
+	if tickTime > 0 {
+		ticker := time.NewTicker(tickTime)
+		stopTicker = ticker.Stop
+		go func() {
+			for range ticker.C {
+				signalNonBlocking(ctx, receiverCh)
+			}
+		}()
+	}
 	return receiverCh, func() {
+		stopTicker()
 		n.remove(currentIndex)
 	}
 }
