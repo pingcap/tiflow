@@ -43,7 +43,7 @@ type cf struct {
 type capture struct {
 	ID            string `json:"id"`
 	IsOwner       bool   `json:"is-owner"`
-	AdvertiseAddr string `json:"advertise-address"`
+	AdvertiseAddr string `json:"address"`
 }
 
 // cfMeta holds changefeed info and changefeed status
