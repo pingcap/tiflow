@@ -16,8 +16,6 @@ package cdc
 import (
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/sink/mqProducer"
-
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/puller"
@@ -39,6 +37,5 @@ func init() {
 	puller.InitMetrics(registry)
 	sink.InitMetrics(registry)
 	entry.InitMetrics(registry)
-	mqProducer.InitMetrics(registry)
 	initProcessorMetrics(registry)
 }

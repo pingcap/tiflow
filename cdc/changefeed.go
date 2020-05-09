@@ -537,7 +537,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	if minCheckpointTs > c.status.CheckpointTs {
 		c.status.CheckpointTs = minCheckpointTs
-		err := c.sink.EmitCheckpointEvent(ctx, minCheckpointTs)
+		err := c.sink.EmitCheckpointTs(ctx, minCheckpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
