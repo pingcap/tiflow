@@ -314,11 +314,6 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 
 			p.position.ResolvedTs = minResolvedTs
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case p.output <- model.NewResolvedPolymorphicEvent(minResolvedTs):
-			}
 			resolvedTsGauge.Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 			if err := updateInfo(); err != nil {
 				return errors.Trace(err)
@@ -531,6 +526,11 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		if lastResolvedTs < changefeedStatus.ResolvedTs {
 			lastResolvedTs = changefeedStatus.ResolvedTs
 			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case p.output <- model.NewResolvedPolymorphicEvent(lastResolvedTs):
+			}
 			changed = true
 		}
 		if changed {
