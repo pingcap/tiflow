@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 )
@@ -67,12 +67,12 @@ type changeFeed struct {
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
 
-	schema        *entry.SchemaStorage
+	schema        *entry.SingleSchemaSnapshot
 	ddlState      model.ChangeFeedDDLState
 	targetTs      uint64
 	taskStatus    model.ProcessorsInfos
 	taskPositions map[string]*model.TaskPosition
-	filter        *util.Filter
+	filter        *filter.Filter
 	sink          sink.Sink
 
 	ddlHandler    OwnerDDLHandler
@@ -349,13 +349,8 @@ func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[stri
 }
 
 func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool, err error) {
-	snap, err := c.schema.GetSnapshot(ctx, job.BinlogInfo.FinishedTS)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-
 	schemaID := uint64(job.SchemaID)
-	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && snap.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
+	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
 		tableID := uint64(job.BinlogInfo.TableInfo.ID)
 		if _, exist := c.tables[tableID]; exist {
 			c.removeTable(schemaID, tableID)
@@ -372,7 +367,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			c.dropSchema(schemaID)
 		case timodel.ActionCreateTable, timodel.ActionRecoverTable:
 			addID := uint64(job.BinlogInfo.TableInfo.ID)
-			tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+			tableName, exist := c.schema.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
 			if !exist {
 				return errors.NotFoundf("table(%d)", addID)
 			}
@@ -381,7 +376,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			dropID := uint64(job.TableID)
 			c.removeTable(schemaID, dropID)
 		case timodel.ActionRenameTable:
-			tableName, exist := snap.GetTableNameByID(job.TableID)
+			tableName, exist := c.schema.GetTableNameByID(job.TableID)
 			if !exist {
 				return errors.NotFoundf("table(%d)", job.TableID)
 			}
@@ -391,7 +386,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			dropID := uint64(job.TableID)
 			c.removeTable(schemaID, dropID)
 
-			tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+			tableName, exist := c.schema.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
 			if !exist {
 				return errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
 			}
@@ -402,7 +397,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 	}()
 	if err != nil {
 		log.Error("failed to applyJob, start to print debug info", zap.Error(err))
-		snap.PrintStatus(log.Error)
+		c.schema.PrintStatus(log.Error)
 	}
 	return false, err
 }
@@ -437,7 +432,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		zap.String("query", todoDDLJob.Query),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
-	err := c.schema.HandleDDLJob(todoDDLJob)
+	err := c.schema.HandleDDL(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -445,7 +440,6 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.schema.DoGC(todoDDLJob.BinlogInfo.FinishedTS)
 
 	ddlEvent := new(model.DDLEvent)
 	ddlEvent.FromJob(todoDDLJob)
@@ -566,7 +560,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	if minCheckpointTs > c.status.CheckpointTs {
 		c.status.CheckpointTs = minCheckpointTs
-		err := c.sink.EmitCheckpointEvent(ctx, minCheckpointTs)
+		err := c.sink.EmitCheckpointTs(ctx, minCheckpointTs)
 		if err != nil {
 			return errors.Trace(err)
 		}

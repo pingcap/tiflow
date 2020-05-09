@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 )
 
 type spanFrontierSuite struct{}
@@ -33,12 +33,12 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 	keyC := []byte("c")
 	keyD := []byte("d")
 
-	spAB := util.Span{Start: keyA, End: keyB}
-	spAC := util.Span{Start: keyA, End: keyC}
-	spAD := util.Span{Start: keyA, End: keyD}
-	spBC := util.Span{Start: keyB, End: keyC}
-	spBD := util.Span{Start: keyB, End: keyD}
-	spCD := util.Span{Start: keyC, End: keyD}
+	spAB := regionspan.Span{Start: keyA, End: keyB}
+	spAC := regionspan.Span{Start: keyA, End: keyC}
+	spAD := regionspan.Span{Start: keyA, End: keyD}
+	spBC := regionspan.Span{Start: keyB, End: keyC}
+	spBD := regionspan.Span{Start: keyB, End: keyD}
+	spCD := regionspan.Span{Start: keyC, End: keyD}
 
 	f := NewFrontier(spAD).(*spanFrontier)
 
@@ -47,7 +47,7 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 
 	// Untracked spans are ignored
 	adv := f.Forward(
-		util.Span{Start: []byte("d"), End: []byte("e")},
+		regionspan.Span{Start: []byte("d"), End: []byte("e")},
 		100,
 	)
 	c.Assert(adv, check.IsFalse)
@@ -56,7 +56,7 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 
 	// Forward the tracked span space.
 	adv = f.Forward(
-		util.Span{Start: []byte("a"), End: []byte("d")},
+		regionspan.Span{Start: []byte("a"), End: []byte("d")},
 		1,
 	)
 	c.Assert(adv, check.IsTrue)
@@ -65,7 +65,7 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 
 	// Forward it again
 	adv = f.Forward(
-		util.Span{Start: []byte("a"), End: []byte("d")},
+		regionspan.Span{Start: []byte("a"), End: []byte("d")},
 		2,
 	)
 	c.Assert(adv, check.IsTrue)
@@ -74,7 +74,7 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 
 	// Forward to old ts is ignored.
 	adv = f.Forward(
-		util.Span{Start: []byte("a"), End: []byte("d")},
+		regionspan.Span{Start: []byte("a"), End: []byte("d")},
 		1,
 	)
 	c.Assert(adv, check.IsFalse)
@@ -142,9 +142,9 @@ func (s *spanFrontierSuite) TestMinMax(c *check.C) {
 	var keyMax []byte = nil
 	var keyMid []byte = []byte("m")
 
-	spMinMid := util.Span{Start: keyMin, End: keyMid}
-	spMidMax := util.Span{Start: keyMid, End: keyMax}
-	spMinMax := util.Span{Start: keyMin, End: keyMax}
+	spMinMid := regionspan.Span{Start: keyMin, End: keyMid}
+	spMidMax := regionspan.Span{Start: keyMid, End: keyMax}
+	spMinMax := regionspan.Span{Start: keyMin, End: keyMax}
 
 	f := NewFrontier(spMinMax).(*spanFrontier)
 	c.Assert(f.Frontier(), check.Equals, uint64(0))
@@ -176,13 +176,13 @@ func (s *spanFrontierSuite) TestSpanFrontierDisjoinSpans(c *check.C) {
 	keyE := []byte("e")
 	keyF := []byte("f")
 
-	spAB := util.Span{Start: keyA, End: keyB}
-	spAD := util.Span{Start: keyA, End: keyD}
-	spAE := util.Span{Start: keyA, End: keyE}
-	spDE := util.Span{Start: keyD, End: keyE}
-	spCE := util.Span{Start: keyC, End: keyE}
-	sp12 := util.Span{Start: key1, End: key2}
-	sp1F := util.Span{Start: key1, End: keyF}
+	spAB := regionspan.Span{Start: keyA, End: keyB}
+	spAD := regionspan.Span{Start: keyA, End: keyD}
+	spAE := regionspan.Span{Start: keyA, End: keyE}
+	spDE := regionspan.Span{Start: keyD, End: keyE}
+	spCE := regionspan.Span{Start: keyC, End: keyE}
+	sp12 := regionspan.Span{Start: key1, End: key2}
+	sp1F := regionspan.Span{Start: key1, End: keyF}
 
 	f := NewFrontier(spAB, spCE).(*spanFrontier)
 	c.Assert(f.Frontier(), check.Equals, uint64(0))

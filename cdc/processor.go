@@ -24,8 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	tidbkv "github.com/pingcap/tidb/kv"
-
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -37,8 +35,12 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
@@ -46,10 +48,9 @@ import (
 )
 
 const (
-	updateInfoInterval          = time.Millisecond * 500
-	resolveTsInterval           = time.Millisecond * 500
-	waitGlobalResolvedTsDelay   = time.Millisecond * 500
-	waitFallbackResolvedTsDelay = time.Millisecond * 500
+	updateInfoInterval        = time.Millisecond * 500
+	resolveTsInterval         = time.Millisecond * 500
+	waitGlobalResolvedTsDelay = time.Millisecond * 500
 
 	defaultOutputChanSize = 128000
 
@@ -76,6 +77,10 @@ type processor struct {
 
 	sink sink.Sink
 
+	sinkEmittedResolvedTs uint64
+	globalResolvedTs      uint64
+	checkpointTs          uint64
+
 	ddlPuller     puller.Puller
 	schemaStorage *entry.SchemaStorage
 
@@ -83,9 +88,8 @@ type processor struct {
 	output    chan *model.PolymorphicEvent
 	mounter   entry.Mounter
 
-	status             *model.TaskStatus
-	position           *model.TaskPosition
-	resolvedTsFallback int32
+	status   *model.TaskStatus
+	position *model.TaskPosition
 
 	tablesMu sync.Mutex
 	tables   map[int64]*tableInfo
@@ -138,13 +142,13 @@ func newProcessor(
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
-	ddlPuller := puller.NewPuller(pdCli, kvStorage, checkpointTs, []util.Span{util.GetDDLSpan(), util.GetAddIndexDDLSpan()}, false, limitter)
+	ddlPuller := puller.NewPuller(pdCli, kvStorage, checkpointTs, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false, limitter)
 	ctx = util.PutTableIDInCtx(ctx, 0)
-	filter, err := util.NewFilter(changefeed.GetConfig())
+	filter, err := filter.NewFilter(changefeed.GetConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := createSchemaStorage(endpoints, filter)
+	schemaStorage, err := createSchemaStorage(endpoints, checkpointTs, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -193,6 +197,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	wg.Go(func() error {
+		return p.sinkDriver(cctx)
+	})
+
+	wg.Go(func() error {
 		return p.syncResolved(cctx)
 	})
 
@@ -202,10 +210,6 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 
 	wg.Go(func() error {
 		return p.ddlPullWorker(cctx)
-	})
-
-	wg.Go(func() error {
-		return p.sink.PrintStatus(cctx)
 	})
 
 	wg.Go(func() error {
@@ -298,12 +302,6 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				}
 			}
 			p.tablesMu.Unlock()
-			// some puller still haven't received the row changed data
-			if minResolvedTs < p.position.ResolvedTs {
-				atomic.StoreInt32(&p.resolvedTsFallback, 1)
-				continue
-			}
-			atomic.StoreInt32(&p.resolvedTsFallback, 0)
 
 			if minResolvedTs == p.position.ResolvedTs {
 				continue
@@ -317,7 +315,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 			resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(oracle.ExtractPhysical(minResolvedTs)))
 		case <-checkpointTsTick.C:
-			checkpointTs := p.sink.CheckpointTs()
+			checkpointTs := atomic.LoadUint64(&p.checkpointTs)
 			if p.position.CheckPointTs >= checkpointTs {
 				continue
 			}
@@ -362,7 +360,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 
 func (p *processor) updateInfo(ctx context.Context) error {
 	updatePosition := func() error {
-		p.position.Count = p.sink.Count()
+		//p.position.Count = p.sink.Count()
 		err := p.tsRWriter.WritePosition(ctx, p.position)
 		if err != nil {
 			return errors.Trace(err)
@@ -494,6 +492,8 @@ func (p *processor) handleTables(ctx context.Context, oldInfo, newInfo *model.Ta
 	}
 }
 
+const globalStatusNotifierName = "globalStatusNotifier"
+
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
 func (p *processor) globalStatusWorker(ctx context.Context) error {
 	log.Info("Global status worker started")
@@ -509,6 +509,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			backoff.NewExponentialBackOff(), ctx),
 		3,
 	)
+	globalStatusNotifier := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName)
 	for {
 		select {
 		case <-ctx.Done():
@@ -536,25 +537,48 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			time.Sleep(waitGlobalResolvedTsDelay)
 			continue
 		}
-
+		changed := false
 		if lastCheckPointTs < changefeedStatus.CheckpointTs {
 			p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
 			lastCheckPointTs = changefeedStatus.CheckpointTs
+			changed = true
 		}
-
-		if atomic.LoadInt32(&p.resolvedTsFallback) != 0 {
-			time.Sleep(waitFallbackResolvedTsDelay)
-			continue
-		}
-
 		if lastResolvedTs < changefeedStatus.ResolvedTs {
-			err = p.sink.EmitResolvedEvent(ctx, changefeedStatus.ResolvedTs)
+			lastResolvedTs = changefeedStatus.ResolvedTs
+			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
+			changed = true
+		}
+		if changed {
+			globalStatusNotifier.Notify(ctx)
+		}
+	}
+}
+
+func (p *processor) sinkDriver(ctx context.Context) error {
+	notifyCh, closeNotify := notify.GlobalNotifyHub.GetNotifier(globalStatusNotifierName).Receiver()
+	defer closeNotify()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-notifyCh:
+			sinkEmittedResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
+			globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+			var minTs uint64
+			if sinkEmittedResolvedTs < globalResolvedTs {
+				minTs = sinkEmittedResolvedTs
+			} else {
+				minTs = globalResolvedTs
+			}
+			if minTs == 0 {
+				continue
+			}
+			err := p.sink.FlushRowChangedEvents(ctx, minTs)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			lastResolvedTs = changefeedStatus.ResolvedTs
+			atomic.StoreUint64(&p.checkpointTs, minTs)
 		}
-
 	}
 }
 
@@ -565,6 +589,13 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	for {
 		select {
 		case row := <-p.output:
+			if row == nil {
+				continue
+			}
+			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
+				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.Ts)
+				continue
+			}
 			startTime := time.Now()
 			err := row.WaitPrepare(ctx)
 			if err != nil {
@@ -574,7 +605,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if row.Row == nil {
 				continue
 			}
-			err = p.sink.EmitRowChangedEvent(ctx, row.Row)
+			err = p.sink.EmitRowChangedEvents(ctx, row.Row)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -598,17 +629,17 @@ func (p *processor) collectMetrics(ctx context.Context, tableID int64) {
 	}()
 }
 
-func createSchemaStorage(pdEndpoints []string, filter *util.Filter) (*entry.SchemaStorage, error) {
+func createSchemaStorage(pdEndpoints []string, checkpointTs uint64, filter *filter.Filter) (*entry.SchemaStorage, error) {
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	meta, err := kv.GetSnapshotMeta(kvStore, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return entry.NewSchemaStorage(jobs, filter)
+	return entry.NewSchemaStorage(meta, checkpointTs, filter)
 }
 
 func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
@@ -637,8 +668,8 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	// start table puller
 	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 	// so we set `needEncode` to true.
-	span := util.GetTableSpan(tableID, true)
-	plr := puller.NewPuller(p.pdCli, p.kvStorage, startTs, []util.Span{span}, true, p.limitter)
+	span := regionspan.GetTableSpan(tableID, true)
+	plr := puller.NewPuller(p.pdCli, p.kvStorage, startTs, []regionspan.Span{span}, true, p.limitter)
 	go func() {
 		err := plr.Run(ctx)
 		if errors.Cause(err) != context.Canceled {
@@ -745,21 +776,17 @@ func runProcessor(
 	opts[sink.OptChangefeedID] = changefeedID
 	opts[sink.OptCaptureID] = captureID
 	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
-	filter, err := util.NewFilter(info.GetConfig())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), opts)
+	filter, err := filter.NewFilter(info.GetConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
-	go func() {
-		if err := sink.Run(ctx); errors.Cause(err) != context.Canceled {
-			errCh <- err
-		}
-	}()
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), opts, errCh)
+	if err != nil {
+		cancel()
+		return nil, errors.Trace(err)
+	}
 	processor, err := newProcessor(ctx, session, info, sink, changefeedID, captureID, checkpointTs)
 	if err != nil {
 		cancel()

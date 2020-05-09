@@ -21,18 +21,18 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.uber.org/zap/zapcore"
-
 	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/retry"
-	"github.com/pingcap/ticdc/pkg/util"
+	timeta "github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // schemaSnapshot stores the source TiDB all schema information
@@ -51,6 +51,19 @@ type schemaSnapshot struct {
 	currentTs uint64
 }
 
+// SingleSchemaSnapshot is a single schema snapshot independent of schema storage
+type SingleSchemaSnapshot = schemaSnapshot
+
+// HandleDDL handles the ddl job
+func (s *SingleSchemaSnapshot) HandleDDL(job *timodel.Job) error {
+	return s.handleDDL(job)
+}
+
+// NewSingleSchemaSnapshotFromMeta creates a new single schema snapshot from a tidb meta
+func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*SingleSchemaSnapshot, error) {
+	return newSchemaSnapshotFromMeta(meta, currentTs)
+}
+
 func newEmptySchemaSnapshot() *schemaSnapshot {
 	return &schemaSnapshot{
 		tableNameToID:  make(map[TableName]int64),
@@ -63,6 +76,36 @@ func newEmptySchemaSnapshot() *schemaSnapshot {
 		truncateTableID:   make(map[int64]struct{}),
 		ineligibleTableID: make(map[int64]struct{}),
 	}
+}
+
+func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*schemaSnapshot, error) {
+	snap := newEmptySchemaSnapshot()
+	dbinfos, err := meta.ListDatabases()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	for _, dbinfo := range dbinfos {
+		snap.schemas[dbinfo.ID] = dbinfo
+		snap.schemaNameToID[dbinfo.Name.O] = dbinfo.ID
+	}
+	for schemaID, dbinfo := range snap.schemas {
+		tableInfos, err := meta.ListTables(schemaID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		dbinfo.Tables = make([]*timodel.TableInfo, 0, len(tableInfos))
+		for _, tableInfo := range tableInfos {
+			dbinfo.Tables = append(dbinfo.Tables, tableInfo)
+			tableInfo := WrapTableInfo(dbinfo.ID, dbinfo.Name.O, tableInfo)
+			snap.tables[tableInfo.ID] = tableInfo
+			snap.tableNameToID[TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
+			if !tableInfo.ExistTableUniqueColumn() {
+				snap.ineligibleTableID[tableInfo.ID] = struct{}{}
+			}
+		}
+	}
+	snap.currentTs = currentTs
+	return snap, nil
 }
 
 func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field)) {
@@ -396,6 +439,21 @@ func (s *schemaSnapshot) IsIneligibleTableID(id int64) bool {
 	return ok
 }
 
+// FillSchemaName fills the schema name in ddl job
+func (s *schemaSnapshot) FillSchemaName(job *timodel.Job) error {
+	if job.Type == timodel.ActionCreateSchema ||
+		job.Type == timodel.ActionDropSchema {
+		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
+		return nil
+	}
+	dbInfo, exist := s.SchemaByID(job.SchemaID)
+	if !exist {
+		return errors.NotFoundf("schema %d not found", job.SchemaID)
+	}
+	job.SchemaName = dbInfo.Name.O
+	return nil
+}
+
 func (s *schemaSnapshot) dropSchema(id int64) error {
 	schema, ok := s.schemas[id]
 	if !ok {
@@ -637,16 +695,25 @@ type SchemaStorage struct {
 	gcTs       uint64
 	resolvedTs uint64
 
-	filter *util.Filter
+	filter *filter.Filter
 }
 
 // NewSchemaStorage creates a new schema storage
-func NewSchemaStorage(jobs []*timodel.Job, filter *util.Filter) (*SchemaStorage, error) {
-	schema := &SchemaStorage{filter: filter}
-	for _, job := range jobs {
-		if err := schema.HandleDDLJob(job); err != nil {
-			return nil, errors.Trace(err)
-		}
+func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter) (*SchemaStorage, error) {
+	var snap *schemaSnapshot
+	var err error
+	if meta == nil {
+		snap = newEmptySchemaSnapshot()
+	} else {
+		snap, err = newSchemaSnapshotFromMeta(meta, startTs)
+	}
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schema := &SchemaStorage{
+		snaps:      []*schemaSnapshot{snap},
+		resolvedTs: startTs,
+		filter:     filter,
 	}
 	return schema, nil
 }
@@ -730,21 +797,6 @@ func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 	return nil
 }
 
-// FlushIneligibleTables recounts the ineligible table set in schema snaps which of currentTs greater or equal to specified ts
-func (s *SchemaStorage) FlushIneligibleTables(ts uint64) {
-	s.snapsMu.Lock()
-	defer s.snapsMu.Unlock()
-	if len(s.snaps) == 0 {
-		return
-	}
-	for _, snap := range s.snaps {
-		if snap.currentTs < ts {
-			continue
-		}
-		snap.flushIneligibleTables()
-	}
-}
-
 // AdvanceResolvedTs advances the resolved
 func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 	var swapped bool
@@ -755,26 +807,6 @@ func (s *SchemaStorage) AdvanceResolvedTs(ts uint64) {
 		}
 		swapped = atomic.CompareAndSwapUint64(&s.resolvedTs, oldResolvedTs, ts)
 	}
-}
-
-// FillSchemaName fills the schema name in ddl job
-func (s *SchemaStorage) FillSchemaName(job *timodel.Job) error {
-	if job.Type == timodel.ActionCreateSchema ||
-		job.Type == timodel.ActionDropSchema {
-		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
-		return nil
-	}
-
-	snap, err := s.getSnapshot(job.BinlogInfo.FinishedTS)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	dbInfo, exist := snap.SchemaByID(job.SchemaID)
-	if !exist {
-		return errors.NotFoundf("schema %d not found", job.SchemaID)
-	}
-	job.SchemaName = dbInfo.Name.O
-	return nil
 }
 
 // DoGC removes snaps which of ts less than this specified ts

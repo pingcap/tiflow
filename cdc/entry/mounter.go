@@ -162,7 +162,6 @@ func (m *mounterImpl) codecWorker(ctx context.Context) error {
 		case pEvent = <-m.rawRowChangedCh:
 		}
 		if pEvent.RawKV.OpType == model.OpTypeResolved {
-			pEvent.Row = &model.RowChangedEvent{Ts: pEvent.Ts, Resolved: true}
 			pEvent.PrepareFinished()
 			continue
 		}
@@ -221,7 +220,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		fmt.Printf("%v, %v, %v -----\n", exist, physicalTableID, tableInfo)
 		if !exist {
 			// TODO: truncate partition?
-			if snap.IsTruncateTableID(tableInfo.ID) {
+			if snap.IsTruncateTableID(physicalTableID) {
 				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.Ts), zap.Int64("tableID", tableInfo.ID))
 				return nil, nil
 			}
@@ -374,7 +373,6 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	event := &model.RowChangedEvent{
 		Ts:           row.Ts,
 		RowID:        row.RecordID,
-		Resolved:     false,
 		Schema:       tableInfo.TableName.Schema,
 		Table:        tableInfo.TableName.Table,
 		IndieMarkCol: tableInfo.IndieMarkCol,
@@ -398,7 +396,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 	event.Delete = row.Delete
 	event.Columns = values
-	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, util.QuoteSchema(event.Schema, event.Table))
+	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(event.Schema, event.Table))
 	return event, nil
 }
 
@@ -438,13 +436,12 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 	return &model.RowChangedEvent{
 		Ts:           idx.Ts,
 		RowID:        idx.RecordID,
-		Resolved:     false,
 		Schema:       tableInfo.TableName.Schema,
 		Table:        tableInfo.TableName.Table,
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,
 		Columns:      values,
-		Keys:         genMultipleKeys(tableInfo.TableInfo, values, util.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
+		Keys:         genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
 	}, nil
 }
 
