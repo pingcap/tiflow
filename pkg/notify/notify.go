@@ -77,7 +77,9 @@ func (n *Notifier) remove(index int) {
 	for i, receiver := range n.receivers {
 		if receiver.index == index {
 			n.receivers = append(n.receivers[:i], n.receivers[i+1:]...)
-			receiver.rec.ticker.Stop()
+			if receiver.rec.ticker != nil {
+				receiver.rec.ticker.Stop()
+			}
 			close(receiver.rec.c)
 			break
 		}
@@ -89,7 +91,9 @@ func (n *Notifier) Close() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	for _, receiver := range n.receivers {
-		receiver.rec.ticker.Stop()
+		if receiver.rec.ticker != nil {
+			receiver.rec.ticker.Stop()
+		}
 		close(receiver.rec.c)
 	}
 	n.receivers = nil
