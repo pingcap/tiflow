@@ -492,7 +492,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) ([]string, [][]in
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}
-		fmt.Printf("query: %v, args: %v -----\n", query, args)
 		sqls = append(sqls, query)
 		values = append(values, args)
 	}

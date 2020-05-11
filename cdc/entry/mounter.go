@@ -380,7 +380,6 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 			}
 		}
 	}
-	fmt.Printf("mount row: %#v, ts: %v, delete: %v, key: %v ------\n", values, event.Ts, row.Delete, genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)))
 	event.Delete = row.Delete
 	event.Columns = values
 	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(event.Schema, event.Table))
@@ -420,7 +419,6 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 			Value:       value,
 		}
 	}
-	fmt.Printf("mount index: %#v, ts: %v, delete: %v, key: %v ------\n", values, idx.Ts, true, genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)))
 	return &model.RowChangedEvent{
 		Ts:           idx.Ts,
 		RowID:        idx.RecordID,
