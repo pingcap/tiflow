@@ -30,7 +30,7 @@ function run() {
 
     # start $CDC_COUNT cdc servers, and create a changefeed
     for i in $(seq $CDC_COUNT); do
-        run_cdc_server $WORK_DIR $CDC_BINARY "$i"
+        run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "$i" --addr "0.0.0.0:830${i}"
     done
 
     TOPIC_NAME="ticdc-multi-capture-test-$RANDOM"

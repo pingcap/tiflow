@@ -20,7 +20,7 @@ function run() {
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
 
-    run_cdc_server $WORK_DIR $CDC_BINARY
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     TOPIC_NAME="ticdc-batch-add-table-test-$RANDOM"
     case $SINK_TYPE in

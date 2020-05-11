@@ -24,8 +24,10 @@ import (
 )
 
 const (
-	opVarAdminJob     = "admin-job"
-	opVarChangefeedID = "cf-id"
+	// APIOpVarAdminJob is the key of admin job in HTTP API
+	APIOpVarAdminJob = "admin-job"
+	// APIOpVarChangefeedID is the key of changefeed ID in HTTP API
+	APIOpVarChangefeedID = "cf-id"
 )
 
 type commonResp struct {
@@ -87,14 +89,14 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		writeInternalServerError(w, err)
 		return
 	}
-	typeStr := req.Form.Get(opVarAdminJob)
+	typeStr := req.Form.Get(APIOpVarAdminJob)
 	typ, err := strconv.ParseInt(typeStr, 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, errors.Errorf("invalid admin job type: %s", typeStr))
 		return
 	}
 	job := model.AdminJob{
-		CfID: req.Form.Get(opVarChangefeedID),
+		CfID: req.Form.Get(APIOpVarChangefeedID),
 		Type: model.AdminJobType(typ),
 	}
 	err = s.owner.EnqueueJob(job)
