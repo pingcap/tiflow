@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -103,10 +104,10 @@ type Mounter interface {
 }
 
 type mounterImpl struct {
-	schemaStorage   *SchemaStorage
-	rawRowChangedCh chan *model.PolymorphicEvent
-	tz              *time.Location
-	workerNum       int
+	schemaStorage    *SchemaStorage
+	rawRowChangedChs []chan *model.PolymorphicEvent
+	tz               *time.Location
+	workerNum        int
 }
 
 // NewMounter creates a mounter
@@ -114,10 +115,14 @@ func NewMounter(schemaStorage *SchemaStorage, workerNum int) Mounter {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
 	}
+	chs := make([]chan *model.PolymorphicEvent, workerNum)
+	for i := 0; i < workerNum; i++ {
+		chs[i] = make(chan *model.PolymorphicEvent, defaultOutputChanSize)
+	}
 	return &mounterImpl{
-		schemaStorage:   schemaStorage,
-		rawRowChangedCh: make(chan *model.PolymorphicEvent, defaultOutputChanSize),
-		workerNum:       workerNum,
+		schemaStorage:    schemaStorage,
+		rawRowChangedChs: chs,
+		workerNum:        workerNum,
 	}
 }
 
@@ -131,14 +136,15 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 		return nil
 	})
 	for i := 0; i < m.workerNum; i++ {
+		index := i
 		errg.Go(func() error {
-			return m.codecWorker(ctx)
+			return m.codecWorker(ctx, index)
 		})
 	}
 	return errg.Wait()
 }
 
-func (m *mounterImpl) codecWorker(ctx context.Context) error {
+func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	metricMountDuration := mountDuration.WithLabelValues(captureID, changefeedID)
@@ -148,7 +154,7 @@ func (m *mounterImpl) codecWorker(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case pEvent = <-m.rawRowChangedCh:
+		case pEvent = <-m.rawRowChangedChs[index]:
 		}
 		if pEvent.RawKV.OpType == model.OpTypeResolved {
 			pEvent.PrepareFinished()
@@ -168,7 +174,7 @@ func (m *mounterImpl) codecWorker(ctx context.Context) error {
 }
 
 func (m *mounterImpl) Input() chan<- *model.PolymorphicEvent {
-	return m.rawRowChangedCh
+	return m.rawRowChangedChs[rand.Intn(m.workerNum)]
 }
 
 func (m *mounterImpl) collectMetrics(ctx context.Context) {
@@ -181,7 +187,11 @@ func (m *mounterImpl) collectMetrics(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Second * 15):
-			metricMounterInputChanSize.Set(float64(len(m.rawRowChangedCh)))
+			chSize := 0
+			for _, ch := range m.rawRowChangedChs {
+				chSize += len(ch)
+			}
+			metricMounterInputChanSize.Set(float64(chSize))
 		}
 	}
 }
