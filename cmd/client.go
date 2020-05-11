@@ -127,8 +127,11 @@ func newChangefeedCommand() *cobra.Command {
 		newQueryChangefeedCommand(),
 		newCreateChangefeedCommand(),
 		newStatisticsChangefeedCommand(),
-		// TODO: add stop, resume, delete changefeed
 	)
+	// Add pause, resume, remove changefeed
+	for _, cmd := range newAdminChangefeedCommand() {
+		command.AddCommand(cmd)
+	}
 	return command
 }
 
@@ -298,7 +301,7 @@ func verifyTables(ctx context.Context, cfg *filter.ReplicaConfig, startTs uint64
 	if err != nil {
 		return nil, err
 	}
-	jobs, err := kv.LoadHistoryDDLJobs(kvStore)
+	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -308,17 +311,11 @@ func verifyTables(ctx context.Context, cfg *filter.ReplicaConfig, startTs uint64
 		return nil, errors.Trace(err)
 	}
 
-	schemaStorage, err := entry.NewSchemaStorage(jobs, filter)
+	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage.FlushIneligibleTables(startTs)
-	schemaStorage.AdvanceResolvedTs(startTs)
 
-	snap, err := schemaStorage.GetSnapshot(ctx, startTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	for tID, tableName := range snap.CloneTables() {
 		tableInfo, exist := snap.TableByID(int64(tID))
 		if !exist {

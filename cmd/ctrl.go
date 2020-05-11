@@ -24,11 +24,9 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
-	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
 var (
@@ -45,8 +43,9 @@ type cf struct {
 
 // capture holds capture information
 type capture struct {
-	ID      string `json:"id"`
-	IsOwner bool   `json:"is-owner"`
+	ID            string `json:"id"`
+	IsOwner       bool   `json:"is-owner"`
+	AdvertiseAddr string `json:"address"`
 }
 
 // cfMeta holds changefeed info and changefeed status
@@ -75,7 +74,7 @@ type processorMeta struct {
 }
 
 func jsonPrint(cmd *cobra.Command, v interface{}) error {
-	data, err := json.MarshalIndent(v, "", "\t")
+	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -88,18 +87,9 @@ func newListCaptureCommand() *cobra.Command {
 		Use:   "list",
 		Short: "List all captures in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, raw, err := cdcEtcdCli.GetCaptures(context.Background())
+			captures, err := getAllCaptures(context.Background())
 			if err != nil {
 				return err
-			}
-			ownerID, err := cdcEtcdCli.GetOwnerID(context.Background(), kv.CaptureOwnerKey)
-			if err != nil && errors.Cause(err) != concurrency.ErrElectionNoLeader {
-				return err
-			}
-			captures := make([]*capture, 0, len(raw))
-			for _, c := range raw {
-				isOwner := c.ID == ownerID
-				captures = append(captures, &capture{ID: c.ID, IsOwner: isOwner})
 			}
 			return jsonPrint(cmd, captures)
 		},
@@ -135,7 +125,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 				return err
 			}
-			status, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
+			status, _, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
 			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 				return err
 			}
@@ -190,7 +180,7 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 					}
 				case <-tick.C:
 					now := time.Now()
-					status, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
+					status, _, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
 					if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 						return err
 					}

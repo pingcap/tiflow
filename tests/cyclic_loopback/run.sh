@@ -35,7 +35,7 @@ function run() {
     # and make sure mark table is created.
     start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
 
-    run_cdc_server $WORK_DIR $CDC_BINARY "_${TEST_NAME}_upsteam" "http://${UP_PD_HOST}:${UP_PD_PORT}"
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "_${TEST_NAME}_upsteam" --pd "http://${UP_PD_HOST}:${UP_PD_PORT}"
 
     # Loop back to self.
     cdc cli changefeed create --start-ts=$start_ts \
@@ -63,7 +63,7 @@ function run() {
     # Why 50? 40 insert + 10 mark table insert.
     expect=50
     for i in $(seq 1 10); do {
-        count=$(cdc cli changefeed statistics --changefeed-id ${uuid} --pd=http://$UP_PD_HOST:$UP_PD_PORT --count 1 --interval 1 2>&1 | grep '"count"' | grep -oE "[0-9]+")
+        count=$(curl -sSf 127.0.0.1:8300/metrics | grep txn_batch_size_sum | grep ${uuid} | awk -F ' ' '{print $2}')
         if [[ $count == ${expect} ]]; then
             break
         fi

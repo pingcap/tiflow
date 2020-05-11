@@ -46,7 +46,7 @@ func NewResolvedPolymorphicEvent(resolvedTs uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
 		CRTs:     resolvedTs,
 		RawKV:    &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved},
-		Row:      &RowChangedEvent{CRTs: resolvedTs, Resolved: true},
+		Row:      nil,
 		finished: nil,
 	}
 }

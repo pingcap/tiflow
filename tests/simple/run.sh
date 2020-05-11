@@ -21,7 +21,7 @@ function prepare() {
     run_sql "CREATE table test.simple1(id int primary key, val int);"
     run_sql "CREATE table test.simple2(id int primary key, val int);"
 
-    run_cdc_server $WORK_DIR $CDC_BINARY
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     TOPIC_NAME="ticdc-simple-test-$RANDOM"
     case $SINK_TYPE in

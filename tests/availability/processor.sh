@@ -19,7 +19,7 @@ function test_processor_ha() {
 function test_stop_processor() {
     echo "run test case test_stop_processor"
     # start a capture server
-    run_cdc_server $WORK_DIR $CDC_BINARY
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     # ensure the server become the owner
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
     owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
@@ -35,11 +35,11 @@ function test_stop_processor() {
     # use ensure to wait for the change feed loading into memory from etcd
     ensure $MAX_RETRIES "curl -s -d \"cf-id=$changefeed&admin-job=1\" http://127.0.0.1:8300/capture/owner/admin | grep true"
 
-    run_sql "INSERT INTO test.availability(id, val) VALUES (4, 4);"
+    run_sql "INSERT INTO test.availability1(id, val) VALUES (4, 4);"
 
     # resume the change feed job
     curl -d "cf-id=$changefeed&admin-job=2" http://127.0.0.1:8300/capture/owner/admin
-    ensure $MAX_RETRIES nonempty 'select id, val from test.availability where id=4 and val=4'
+    ensure $MAX_RETRIES nonempty 'select id, val from test.availability1 where id=4 and val=4'
 
     echo "test_stop_processor pass"
     cleanup_process $CDC_BINARY

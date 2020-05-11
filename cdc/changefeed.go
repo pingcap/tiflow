@@ -58,7 +58,7 @@ type ChangeFeedRWriter interface {
 	GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error)
 
 	// GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
-	GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error)
+	GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, int64, error)
 	// PutAllChangeFeedStatus the changefeed info to storage such as etcd.
 	PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error
 }
@@ -68,7 +68,7 @@ type changeFeed struct {
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
 
-	schema        *entry.SchemaStorage
+	schema        *entry.SingleSchemaSnapshot
 	ddlState      model.ChangeFeedDDLState
 	targetTs      uint64
 	taskStatus    model.ProcessorsInfos
@@ -270,16 +270,18 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[strin
 		}
 		switch lockStatus {
 		case model.TableNoLock:
+			log.Debug("no c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
 			delete(c.waitingConfirmTables, tableID)
 		case model.TablePLock:
 			log.Debug("waiting the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
 		case model.TablePLockCommited:
+			log.Debug("delete the c-lock", zap.Uint64("tableID", tableID), zap.String("captureID", captureID))
 			delete(c.waitingConfirmTables, tableID)
 		}
 	}
 
 	appendTableInfos := make(map[string][]*model.ProcessTableInfo, len(captures))
-	schemaSnapshot := c.schema.GetLastSnapshot()
+	schemaSnapshot := c.schema
 	for tableID, orphan := range c.orphanTables {
 		var orphanMarkTable *model.ProcessTableInfo
 		if c.cyclicEnabled {
@@ -357,13 +359,8 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[strin
 }
 
 func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool, err error) {
-	snap, err := c.schema.GetSnapshot(ctx, job.BinlogInfo.FinishedTS)
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-
 	schemaID := uint64(job.SchemaID)
-	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && snap.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
+	if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil && c.schema.IsIneligibleTableID(job.BinlogInfo.TableInfo.ID) {
 		tableID := uint64(job.BinlogInfo.TableInfo.ID)
 		if _, exist := c.tables[tableID]; exist {
 			c.removeTable(schemaID, tableID)
@@ -380,7 +377,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			c.dropSchema(schemaID)
 		case timodel.ActionCreateTable, timodel.ActionRecoverTable:
 			addID := uint64(job.BinlogInfo.TableInfo.ID)
-			tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+			tableName, exist := c.schema.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
 			if !exist {
 				return errors.NotFoundf("table(%d)", addID)
 			}
@@ -389,7 +386,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			dropID := uint64(job.TableID)
 			c.removeTable(schemaID, dropID)
 		case timodel.ActionRenameTable:
-			tableName, exist := snap.GetTableNameByID(job.TableID)
+			tableName, exist := c.schema.GetTableNameByID(job.TableID)
 			if !exist {
 				return errors.NotFoundf("table(%d)", job.TableID)
 			}
@@ -399,7 +396,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			dropID := uint64(job.TableID)
 			c.removeTable(schemaID, dropID)
 
-			tableName, exist := snap.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+			tableName, exist := c.schema.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
 			if !exist {
 				return errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
 			}
@@ -410,7 +407,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 	}()
 	if err != nil {
 		log.Error("failed to applyJob, start to print debug info", zap.Error(err))
-		snap.PrintStatus(log.Error)
+		c.schema.PrintStatus(log.Error)
 	}
 	return false, err
 }
@@ -431,21 +428,21 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if len(c.taskStatus) > len(c.taskPositions) {
 		return nil
 	}
-	for cid, pInfo := range c.taskPositions {
-		if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
-			log.Debug("wait checkpoint ts", zap.String("cid", cid),
-				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
-				zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
-				zap.String("ddl query", todoDDLJob.Query))
-			return nil
-		}
+
+	if c.status.CheckpointTs != todoDDLJob.BinlogInfo.FinishedTS {
+		log.Debug("wait checkpoint ts",
+			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
+			zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
+			zap.String("ddl query", todoDDLJob.Query))
+		return nil
 	}
+
 	log.Info("apply job", zap.Stringer("job", todoDDLJob),
 		zap.String("schema", todoDDLJob.SchemaName),
 		zap.String("query", todoDDLJob.Query),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
-	err := c.schema.HandleDDLJob(todoDDLJob)
+	err := c.schema.HandleDDL(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -453,7 +450,6 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.schema.DoGC(todoDDLJob.BinlogInfo.FinishedTS)
 
 	ddlEvent := new(model.DDLEvent)
 	ddlEvent.FromJob(todoDDLJob)
@@ -506,16 +502,13 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
 func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
-	if c.ddlState != model.ChangeFeedSyncDML {
+	if c.ddlState != model.ChangeFeedSyncDML && c.ddlState != model.ChangeFeedWaitToExecDDL {
 		return nil
 	}
 
 	// ProcessorInfos don't contains the whole set table id now.
-	if len(c.orphanTables) > 0 || len(c.waitingConfirmTables) > 0 {
-		// TODO(neil) ignore mark tables in orphanTables or just split tables
-		// into orphanTables and markTables.
+	if len(c.waitingConfirmTables) > 0 {
 		log.Debug("skip calcResolvedTs",
-			zap.Reflect("orphanTables", c.orphanTables),
 			zap.Reflect("waitingConfirmTables", c.orphanTables))
 		return nil
 	}
@@ -538,6 +531,15 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			if minCheckpointTs > position.CheckPointTs {
 				minCheckpointTs = position.CheckPointTs
 			}
+		}
+	}
+
+	for _, orphanTable := range c.orphanTables {
+		if minCheckpointTs > orphanTable.StartTs {
+			minCheckpointTs = orphanTable.StartTs
+		}
+		if minResolvedTs > orphanTable.StartTs {
+			minResolvedTs = orphanTable.StartTs
 		}
 	}
 
@@ -579,17 +581,22 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	if minCheckpointTs > c.status.CheckpointTs {
 		c.status.CheckpointTs = minCheckpointTs
-		err := c.sink.EmitCheckpointEvent(ctx, minCheckpointTs)
-		if err != nil {
-			return errors.Trace(err)
+		// when the `c.ddlState` is `model.ChangeFeedWaitToExecDDL`,
+		// some DDL is waiting to executed, we can't ensure whether the DDL has been executed.
+		// so we can't emit checkpoint to sink
+		if c.ddlState != model.ChangeFeedWaitToExecDDL {
+			err := c.sink.EmitCheckpointTs(ctx, minCheckpointTs)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		tsUpdated = true
 	}
 
 	if tsUpdated {
 		log.Debug("update changefeed", zap.String("id", c.id),
-			zap.Uint64("checkpoint ts", minCheckpointTs),
-			zap.Uint64("resolved ts", minResolvedTs))
+			zap.Uint64("checkpoint ts", c.status.CheckpointTs),
+			zap.Uint64("resolved ts", c.status.ResolvedTs))
 	}
 	return nil
 }

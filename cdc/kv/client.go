@@ -89,18 +89,18 @@ type regionErrorInfo struct {
 }
 
 type regionFeedState struct {
-	sri       singleRegionInfo
-	requestID uint64
-	eventCh   chan *cdcpb.Event
-	stopped   int32
+	sri           singleRegionInfo
+	requestID     uint64
+	regionEventCh chan *cdcpb.Event
+	stopped       int32
 }
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
 	return &regionFeedState{
-		sri:       sri,
-		requestID: requestID,
-		eventCh:   make(chan *cdcpb.Event, 16),
-		stopped:   0,
+		sri:           sri,
+		requestID:     requestID,
+		regionEventCh: make(chan *cdcpb.Event, 16),
+		stopped:       0,
 	}
 }
 
@@ -290,14 +290,16 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 }
 
 func (c *CDCClient) newStream(ctx context.Context, addr string) (stream cdcpb.ChangeData_EventFeedClient, err error) {
-	err = retry.Run(50*time.Millisecond, 20, func() error {
+	err = retry.Run(50*time.Millisecond, 3, func() error {
 		conn, err := c.getConn(ctx, addr)
 		if err != nil {
+			log.Info("get connection to store failed, retry later", zap.String("addr", addr), zap.Error(err))
 			return errors.Trace(err)
 		}
 		client := cdcpb.NewChangeDataClient(conn)
 		stream, err = client.EventFeed(ctx)
 		if err != nil {
+			log.Info("establish stream to store failed, retry later", zap.String("addr", addr), zap.Error(err))
 			return errors.Trace(err)
 		}
 		log.Debug("created stream to store", zap.String("addr", addr))
@@ -617,6 +619,8 @@ MainLoop:
 			stream, ok := streams[rpcCtx.Addr]
 			// Establish the stream if it has not been connected yet.
 			if !ok {
+				log.Info("creating new stream to store to send request",
+					zap.Uint64("regionID", sri.verID.GetID()), zap.Uint64("requestID", requestID), zap.String("addr", rpcCtx.Addr))
 				stream, err = s.client.newStream(ctx, rpcCtx.Addr)
 				if err != nil {
 					// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
@@ -705,7 +709,7 @@ func (s *eventFeedSession) partialRegionFeed(
 	ctx context.Context,
 	state *regionFeedState,
 ) error {
-	receiver := state.eventCh
+	receiver := state.regionEventCh
 	defer func() {
 		state.markStopped()
 		// Workaround to avoid remaining messages in the channel blocks the receiver thread.
@@ -913,7 +917,7 @@ func (s *eventFeedSession) receiveFromStream(
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
 			for _, state := range regionStates {
-				close(state.eventCh)
+				close(state.regionEventCh)
 			}
 			return nil
 		}
@@ -926,7 +930,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 			for _, state := range regionStates {
 				select {
-				case state.eventCh <- nil:
+				case state.regionEventCh <- nil:
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -991,7 +995,7 @@ func (s *eventFeedSession) receiveFromStream(
 			}
 
 			select {
-			case state.eventCh <- event:
+			case state.regionEventCh <- event:
 			case <-ctx.Done():
 				return ctx.Err()
 			}
