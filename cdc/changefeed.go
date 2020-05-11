@@ -189,7 +189,7 @@ func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo
 
 func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo) error {
 	c.cleanTables(ctx)
-	return c.banlanceOrphanTables(ctx, captures)
+	return c.balanceOrphanTables(ctx, captures)
 }
 
 func (c *changeFeed) restoreTableInfos(infoSnapshot *model.TaskStatus, captureID string) {
@@ -255,7 +255,7 @@ func findTaskStatusWithTable(infos model.ProcessorsInfos, tableID uint64) (captu
 	return "", nil, false
 }
 
-func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo) error {
+func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo) error {
 	if len(captures) == 0 {
 		return nil
 	}
@@ -438,7 +438,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return nil
 	}
 
-	err = c.banlanceOrphanTables(ctx, captures)
+	err = c.balanceOrphanTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -477,6 +477,8 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	// ProcessorInfos don't contains the whole set table id now.
 	if len(c.waitingConfirmTables) > 0 {
+		log.Debug("skip calcResolvedTs",
+			zap.Reflect("waitingConfirmTables", c.orphanTables))
 		return nil
 	}
 

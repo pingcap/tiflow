@@ -47,10 +47,13 @@ type RawKVEntry struct {
 	OpType OpType
 	Key    []byte
 	// Nil fro delete type
-	Value []byte
-	Ts    uint64
+	Value   []byte
+	StartTs uint64
+	// Commit or resolved TS
+	CRTs uint64
 }
 
 func (v *RawKVEntry) String() string {
-	return fmt.Sprintf("OpType: %v, Key: %s, Value: %s, ts: %d", v.OpType, string(v.Key), string(v.Value), v.Ts)
+	return fmt.Sprintf("OpType: %v, Key: %s, Value: %s, StartTs: %d, CRTs: %d",
+		v.OpType, string(v.Key), string(v.Value), v.StartTs, v.CRTs)
 }

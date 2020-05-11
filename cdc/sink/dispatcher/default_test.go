@@ -15,8 +15,10 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 		exceptPartition int32
 	}{
 		{row: &model.RowChangedEvent{
-			Schema:       "test",
-			Table:        "t1",
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t1",
+			},
 			IndieMarkCol: "id",
 			Columns: map[string]*model.Column{
 				"id": {
@@ -25,8 +27,10 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 			},
 		}, exceptPartition: 7},
 		{row: &model.RowChangedEvent{
-			Schema:       "test",
-			Table:        "t1",
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t1",
+			},
 			IndieMarkCol: "id",
 			Columns: map[string]*model.Column{
 				"id": {
@@ -35,8 +39,10 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 			},
 		}, exceptPartition: 13},
 		{row: &model.RowChangedEvent{
-			Schema:       "test",
-			Table:        "t1",
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t1",
+			},
 			IndieMarkCol: "id",
 			Columns: map[string]*model.Column{
 				"id": {
@@ -45,8 +51,10 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 			},
 		}, exceptPartition: 11},
 		{row: &model.RowChangedEvent{
-			Schema:       "test",
-			Table:        "t2",
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t2",
+			},
 			IndieMarkCol: "id",
 			Columns: map[string]*model.Column{
 				"id": {
@@ -55,8 +63,10 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 			},
 		}, exceptPartition: 7},
 		{row: &model.RowChangedEvent{
-			Schema:       "test",
-			Table:        "t2",
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t2",
+			},
 			IndieMarkCol: "id",
 			Columns: map[string]*model.Column{
 				"id": {
@@ -65,8 +75,10 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 			},
 		}, exceptPartition: 13},
 		{row: &model.RowChangedEvent{
-			Schema:       "test",
-			Table:        "t2",
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t2",
+			},
 			IndieMarkCol: "id",
 			Columns: map[string]*model.Column{
 				"id": {
@@ -75,8 +87,10 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 			},
 		}, exceptPartition: 11},
 		{row: &model.RowChangedEvent{
-			Schema: "test",
-			Table:  "t3",
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t3",
+			},
 			Columns: map[string]*model.Column{
 				"id": {
 					Value: 1,
@@ -84,8 +98,10 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 			},
 		}, exceptPartition: 3},
 		{row: &model.RowChangedEvent{
-			Schema: "test",
-			Table:  "t3",
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t3",
+			},
 			Columns: map[string]*model.Column{
 				"id": {
 					Value: 2,
@@ -93,8 +109,10 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 			},
 		}, exceptPartition: 3},
 		{row: &model.RowChangedEvent{
-			Schema: "test",
-			Table:  "t3",
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t3",
+			},
 			Columns: map[string]*model.Column{
 				"id": {
 					Value: 3,
