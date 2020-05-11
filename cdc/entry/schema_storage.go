@@ -461,12 +461,12 @@ func (s *schemaSnapshot) dropSchema(id int64) error {
 	}
 
 	for _, table := range schema.Tables {
-		tableName := s.tables[table.ID].TableName
 		if pi := table.GetPartitionInfo(); pi != nil {
 			for _, partition := range pi.Definitions {
 				delete(s.partitionTable, partition.ID)
 			}
 		}
+		tableName := s.tables[table.ID].TableName
 		delete(s.tables, table.ID)
 		delete(s.tableNameToID, tableName)
 	}

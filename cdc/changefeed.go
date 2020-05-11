@@ -180,6 +180,7 @@ func (c *changeFeed) removeTable(sid, tid uint64) {
 		for _, id := range pids {
 			removeFunc(uint64(id))
 		}
+		delete(c.partitions, tid)
 	} else {
 		removeFunc(tid)
 	}

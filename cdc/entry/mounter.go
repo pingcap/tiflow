@@ -217,9 +217,9 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	row, err := func() (*model.RowChangedEvent, error) {
 		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
 		if !exist {
-			// TODO: truncate partition?
+			// TODO: truncate partition
 			if snap.IsTruncateTableID(physicalTableID) {
-				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.Ts), zap.Int64("tableID", tableInfo.ID))
+				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.Ts), zap.Int64("tableID", physicalTableID))
 				return nil, nil
 			}
 			return nil, errors.NotFoundf("table in schema storage, id: %d", physicalTableID)
