@@ -214,9 +214,12 @@ def coverage() {
 
 def find_cases() {
     dir("go/src/github.com/pingcap/ticdc/tests") {
-        new File(".").eachDirRecurse{directory->
-            sh "echo ${directory}"
-        }
+        def cases = []
+            def aa = sh """
+            find . -maxdepth 2 -mindepth 2 -name "run.sh" | awk -F/ '{print $2}'
+            """
+            sh "echo show ${aa}"
+        return cases
     }
 }
 
