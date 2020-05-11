@@ -215,10 +215,11 @@ def coverage() {
 def find_cases() {
     dir("go/src/github.com/pingcap/ticdc/tests") {
         def cases = []
-            def aa = sh """
-            find . -maxdepth 2 -mindepth 2 -name "run.sh" | awk -F/ '{print $2}'
-            """
-            sh "echo show ${aa}"
+        cases_list = sh (
+            script: 'find . -maxdepth 2 -mindepth 2 -name \'run.sh\' | awk -F/ \'{print $2}\'',
+            returnStdout: true
+        ).trim()
+        sh "echo show ${cases_list}"
         return cases
     }
 }
