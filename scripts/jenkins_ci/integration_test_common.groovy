@@ -169,7 +169,7 @@ def tests(sink_type, node_label) {
                 }
             }
         }
-
+        find_cases()
         test_case_names.each{ case_name ->
             test_cases["integration test ${case_name}"] = {
                 run_integration_test(case_name)
@@ -208,6 +208,14 @@ def coverage() {
                     }
                 }
             }
+        }
+    }
+}
+
+def find_cases() {
+    dir("go/src/github.com/pingcap/ticdc/tests") {
+        new File(".").eachDirRecurse{directory->
+            sh "echo ${directory}"
         }
     }
 }
