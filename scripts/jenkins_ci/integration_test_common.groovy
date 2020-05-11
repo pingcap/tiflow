@@ -1,7 +1,3 @@
-test_case_names = ["simple", "cdc", "multi_capture", "split_region", "row_format",
-"tiflash", "availability", "ddl_sequence", "sink_retry", "resolve_lock", "drop_many_tables",
-"file_sort", "batch_add_table"]
-
 def prepare_binaries() {
     stage('Prepare Binaries') {
         def TIDB_BRANCH = "master"
@@ -169,8 +165,7 @@ def tests(sink_type, node_label) {
                 }
             }
         }
-        find_cases()
-        test_case_names.each{ case_name ->
+        find_cases().each{ case_name ->
             test_cases["integration test ${case_name}"] = {
                 run_integration_test(case_name)
             }
@@ -188,7 +183,7 @@ def coverage() {
             unstash 'ticdc'
             unstash 'unit_test'
 
-            test_case_names.each{ case_name ->
+            find_cases().each{ case_name ->
                 unstash "integration_test_${case_name}"
             }
 
@@ -214,13 +209,10 @@ def coverage() {
 
 def find_cases() {
     dir("go/src/github.com/pingcap/ticdc/tests") {
-        def cases = []
-        cases_list = sh (
+        return sh (
             script: 'find . -maxdepth 2 -mindepth 2 -name \'run.sh\' | awk -F/ \'{print $2}\'',
             returnStdout: true
-        ).trim()
-        sh "echo show ${cases_list}"
-        return cases
+        ).trim().split()
     }
 }
 
