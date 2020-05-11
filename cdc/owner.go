@@ -761,7 +761,8 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 				log.Debug("capture deleted",
-					zap.String("captureid", c.ID))
+					zap.String("capture-id", c.ID),
+					zap.String("advertise-aadr", c.AdvertiseAddr))
 				o.removeCapture(c)
 			case clientv3.EventTypePut:
 				if !ev.IsCreate() {
@@ -771,7 +772,8 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 				log.Debug("capture added",
-					zap.String("captureid", c.ID))
+					zap.String("capture-id", c.ID),
+					zap.String("advertise-aadr", c.AdvertiseAddr))
 				o.addCapture(c)
 			}
 		}

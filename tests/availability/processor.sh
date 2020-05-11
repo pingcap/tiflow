@@ -19,7 +19,7 @@ function test_processor_ha() {
 function test_stop_processor() {
     echo "run test case test_stop_processor"
     # start a capture server
-    run_cdc_server $WORK_DIR $CDC_BINARY
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
     # ensure the server become the owner
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep '\"is-owner\": true'"
     owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')

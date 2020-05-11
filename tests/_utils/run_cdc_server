@@ -1,18 +1,49 @@
 #!/bin/bash
 
-# parameter 1: work directory
-# parameter 2: path to cdc test binary
-# parameter 3: log suffix
+# --workdir: work directory
+# --binary: path to cdc test binary
+# --logsuffix: log suffix
+# --addr: address
 
 set -e
 
-workdir=$1
-binary=$2
-log_suffix=$3
+workdir=
+binary=
+logsuffix=
+addr=
 pwd=$pwd
+
+while [[ ${1} ]]; do
+    case "${1}" in
+        --workdir)
+            workdir=${2}
+            shift
+            ;;
+        --binary)
+            binary=${2}
+            shift
+            ;;
+        --logsuffix)
+            logsuffix=${2}
+            shift
+            ;;
+        --addr)
+            addr="--addr ${2}"
+            shift
+            ;;
+        *)
+            echo "Unknown parameter: ${1}" >&2
+            return 1
+    esac
+
+    if ! shift; then
+        echo 'Missing parameter argument.' >&2
+        return 1
+    fi
+done
 
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
 pid=$(ps -C run_cdc_server -o pid=|tr -d '[:space:]')
-$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server --log-file $workdir/cdc$log_suffix.log --log-level info >> $workdir/stdout$log_suffix.log 2>&1 &
+$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server --log-file $workdir/cdc$logsuffix.log --log-level info $addr >> $workdir/stdout$log_suffix.log 2>&1 &
 cd $pwd

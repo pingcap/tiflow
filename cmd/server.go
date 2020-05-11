@@ -4,8 +4,6 @@ import (
 	"context"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/pingcap/errors"
@@ -17,10 +15,11 @@ import (
 )
 
 var (
-	serverPdAddr string
-	statusAddr   string
-	timezone     string
-	gcTTL        int64
+	serverPdAddr  string
+	address       string
+	advertiseAddr string
+	timezone      string
+	gcTTL         int64
 
 	serverCmd = &cobra.Command{
 		Use:              "server",
@@ -33,8 +32,9 @@ var (
 func init() {
 	rootCmd.AddCommand(serverCmd)
 
-	serverCmd.Flags().StringVar(&serverPdAddr, "pd", "http://127.0.0.1:2379", "PD address, separated by comma")
-	serverCmd.Flags().StringVar(&statusAddr, "status-addr", "0.0.0.0:8300", "Bind address for http status server")
+	serverCmd.Flags().StringVar(&serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use `,` to separate multiple PDs")
+	serverCmd.Flags().StringVar(&address, "addr", "0.0.0.0:8300", "Set the listening address")
+	serverCmd.Flags().StringVar(&advertiseAddr, "advertise-addr", "", "Set the advertise listening address for client communication")
 	serverCmd.Flags().StringVar(&timezone, "tz", "System", "Specify time zone of TiCDC cluster")
 	serverCmd.Flags().Int64Var(&gcTTL, "gc-ttl", cdc.DefaultCDCGCSafePointTTL, "CDC GC safepoint TTL duration, specified in seconds")
 }
@@ -44,15 +44,6 @@ func preRunLogInfo(cmd *cobra.Command, args []string) {
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
-	addrs := strings.Split(statusAddr, ":")
-	if len(addrs) != 2 {
-		return errors.Errorf("invalid status address: %s", statusAddr)
-	}
-	statusPort, err := strconv.ParseInt(addrs[1], 10, 64)
-	if err != nil {
-		return errors.Annotatef(err, "invalid status address: %s", statusAddr)
-	}
-
 	tz, err := util.GetTimezone(timezone)
 	if err != nil {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
@@ -60,8 +51,8 @@ func runEServer(cmd *cobra.Command, args []string) error {
 
 	opts := []cdc.ServerOption{
 		cdc.PDEndpoints(serverPdAddr),
-		cdc.StatusHost(addrs[0]),
-		cdc.StatusPort(int(statusPort)),
+		cdc.Address(address),
+		cdc.AdvertiseAddress(advertiseAddr),
 		cdc.GCTTL(gcTTL),
 		cdc.Timezone(tz)}
 
