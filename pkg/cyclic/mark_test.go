@@ -82,26 +82,26 @@ func (s *markSuit) TestMapMarkRowsGroupReduceCyclicRowsGroup(c *check.C) {
 			input: map[model.TableName][][]*model.RowChangedEvent{
 				{Table: "a"}:                     {{{StartTs: 1}}},
 				{Table: "b2"}:                    {{{StartTs: 2}}},
-				{Table: "b2.1"}:                  {{{StartTs: 2}}},
+				{Table: "b2_1"}:                  {{{StartTs: 2}}},
 				{Schema: "tidb_cdc", Table: "1"}: {{{StartTs: 1, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}}}},
 			},
 			output: map[uint64]map[model.TableName][]*model.RowChangedEvent{
 				1: {{Table: "a"}: {{StartTs: 1}}},
-				2: {{Table: "b2"}: {{StartTs: 2}}, {Table: "b2.1"}: {{StartTs: 2}}},
+				2: {{Table: "b2"}: {{StartTs: 2}}, {Table: "b2_1"}: {{StartTs: 2}}},
 			},
 			markMap: map[uint64]*model.RowChangedEvent{
 				1: {StartTs: 1, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}},
 			},
-			reduced:  map[model.TableName][][]*model.RowChangedEvent{{Table: "b2"}: {{{StartTs: 2}}}, {Table: "b2.1"}: {{{StartTs: 2}}}},
+			reduced:  map[model.TableName][][]*model.RowChangedEvent{{Table: "b2"}: {{{StartTs: 2}}}, {Table: "b2_1"}: {{{StartTs: 2}}}},
 			filterID: []uint64{10},
 		},
 		{
 			input: map[model.TableName][][]*model.RowChangedEvent{
 				{Table: "a"}:    {{{StartTs: 1}}},
 				{Table: "b2"}:   {{{StartTs: 2}}},
-				{Table: "b2.1"}: {{{StartTs: 2}}},
+				{Table: "b2_1"}: {{{StartTs: 2}}},
 				{Table: "b3"}:   {{{StartTs: 3, Table: &model.TableName{}}}},
-				{Table: "b3.1"}: {{{StartTs: 3, Table: &model.TableName{}}}},
+				{Table: "b3_1"}: {{{StartTs: 3, Table: &model.TableName{}}}},
 				{Schema: "tidb_cdc", Table: "1"}: {{
 					{StartTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}},
 					{StartTs: 3, Columns: map[string]*model.Column{rID: {Value: uint64(11)}}},
@@ -109,9 +109,9 @@ func (s *markSuit) TestMapMarkRowsGroupReduceCyclicRowsGroup(c *check.C) {
 			},
 			output: map[uint64]map[model.TableName][]*model.RowChangedEvent{
 				1: {{Table: "a"}: {{StartTs: 1}}},
-				2: {{Table: "b2"}: {{StartTs: 2}}, {Table: "b2.1"}: {{StartTs: 2}}},
+				2: {{Table: "b2"}: {{StartTs: 2}}, {Table: "b2_1"}: {{StartTs: 2}}},
 				3: {{Table: "b3"}: {{StartTs: 3, Table: &model.TableName{}}},
-					{Table: "b3.1"}: {{StartTs: 3, Table: &model.TableName{}}}},
+					{Table: "b3_1"}: {{StartTs: 3, Table: &model.TableName{}}}},
 			},
 			markMap: map[uint64]*model.RowChangedEvent{
 				2: {StartTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}},
@@ -123,7 +123,7 @@ func (s *markSuit) TestMapMarkRowsGroupReduceCyclicRowsGroup(c *check.C) {
 					{StartTs: 3, Columns: map[string]*model.Column{rID: {Value: uint64(11)}}, Table: &model.TableName{Schema: "tidb_cdc", Table: "repl_mark__b3"}},
 					{StartTs: 3, Table: &model.TableName{}},
 				}},
-				{Table: "b3.1"}: {{
+				{Table: "b3_1"}: {{
 					{StartTs: 3, Columns: map[string]*model.Column{rID: {Value: uint64(11)}}, Table: &model.TableName{Schema: "tidb_cdc", Table: "repl_mark__b3_1"}},
 					{StartTs: 3, Table: &model.TableName{}},
 				}},
