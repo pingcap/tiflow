@@ -3,7 +3,6 @@ def prepare_binaries() {
         def TIDB_BRANCH = "master"
         def TIKV_BRANCH = "master"
         def PD_BRANCH = "master"
-        def TIFLASH_BRANCH = "master"
 
         // parse tidb branch
         def m1 = ghprbCommentBody =~ /tidb\s*=\s*([^\s\\]+)(\s|\\|$)/
@@ -29,14 +28,6 @@ def prepare_binaries() {
         m3 = null
         println "PD_BRANCH=${PD_BRANCH}"
 
-        // parse tiflash branch
-        def m4 = ghprbCommentBody =~ /tiflash\s*=\s*([^\s\\]+)(\s|\\|$)/
-        if (m4) {
-            TIFLASH_BRANCH = "${m4[0][1]}"
-        }
-        m3 = null
-        println "TIFLASH_BRANCH=${TIFLASH_BRANCH}"
-
         def prepares = [:]
 
         prepares["download third binaries"] = {
@@ -46,7 +37,6 @@ def prepare_binaries() {
                     def tidb_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tidb/${TIDB_BRANCH}/sha1").trim()
                     def tikv_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tikv/${TIKV_BRANCH}/sha1").trim()
                     def pd_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/pd/${PD_BRANCH}/sha1").trim()
-                    def tiflash_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tiflash/${TIFLASH_BRANCH}/sha1").trim()
                     sh """
                         mkdir -p third_bin
                         mkdir -p tmp
@@ -54,14 +44,13 @@ def prepare_binaries() {
                         tidb_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
                         tikv_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
                         pd_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
-                        tiflash_url="${FILE_SERVER_URL}/download/builds/pingcap/tiflash/${TIFLASH_BRANCH}/${pd_sha1}/centos7/tiflash.tar.gz"
 
                         curl \${tidb_url} | tar xz -C ./tmp bin/tidb-server
                         curl \${pd_url} | tar xz -C ./tmp bin/*
                         curl \${tikv_url} | tar xz -C ./tmp bin/tikv-server
-                        curl \${tiflash_url} | tar xz -C ./tmp
-                        mv tmp/tiflash/* tmp/bin
                         mv tmp/bin/* third_bin
+                        curl http://download.pingcap.org/tiflash-nightly-linux-amd64.tar.gz | tar xz -C third_bin
+                        mv third_bin/tiflash-nightly-linux-amd64/* third_bin
                         curl ${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb -o third_bin/go-ycsb
                         curl -L https://github.com/etcd-io/etcd/releases/download/v3.4.7/etcd-v3.4.7-linux-amd64.tar.gz | tar xz -C ./tmp
                         mv tmp/etcd-v3.4.7-linux-amd64/etcdctl third_bin
