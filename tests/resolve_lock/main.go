@@ -40,7 +40,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	sourceDB, err := util.CreateDB(cfg.SourceDBCfg)
+	sourceDB, err := util.CreateDB(cfg.SourceDBCfg[0])
 	if err != nil {
 		log.S().Fatal(err)
 	}
@@ -93,7 +93,7 @@ func addLock(cfg *util.Config) error {
 	defer cancel()
 	http.DefaultClient.Timeout = 10 * time.Second
 
-	tableID, err := getTableID(cfg.SourceDBCfg.Host, "test", "t1")
+	tableID, err := getTableID(cfg.SourceDBCfg[0].Host, "test", "t1")
 	if err != nil {
 		return errors.Trace(err)
 	}
