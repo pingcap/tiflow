@@ -44,7 +44,7 @@ func formatColumnVal(c *column) {
 }
 
 type mqMessageKey struct {
-	// TODO: should we rename it to CRTs
+	// TODO: should we rename it to CommitTs
 	Ts     uint64              `json:"ts"`
 	Schema string              `json:"scm,omitempty"`
 	Table  string              `json:"tbl,omitempty"`
@@ -106,7 +106,7 @@ func newResolvedMessage(ts uint64) *mqMessageKey {
 
 func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow) {
 	key := &mqMessageKey{
-		Ts:     e.CRTs,
+		Ts:     e.CommitTs,
 		Schema: e.Table.Schema,
 		Table:  e.Table.Table,
 		Type:   model.MqMessageTypeRow,
@@ -122,7 +122,7 @@ func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow
 
 func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChangedEvent {
 	e := new(model.RowChangedEvent)
-	e.CRTs = key.Ts
+	e.CommitTs = key.Ts
 	e.Table = &model.TableName{
 		Schema: key.Schema,
 		Table:  key.Table,

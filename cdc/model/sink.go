@@ -26,9 +26,8 @@ type TableName struct {
 
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
-	StartTs uint64 `json:"start-ts"`
-	// Commit or resolved TS
-	CRTs uint64 `json:"cr-ts"`
+	StartTs  uint64 `json:"start-ts"`
+	CommitTs uint64 `json:"commit-ts"`
 
 	RowID int64 `json:"row-id"`
 

@@ -19,42 +19,42 @@ func (s TableDispatcherSuite) TestTableDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t1",
 			},
-			CRTs: 1,
+			CommitTs: 1,
 		}, exceptPartition: 15},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
-			CRTs: 2,
+			CommitTs: 2,
 		}, exceptPartition: 15},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
-			CRTs: 3,
+			CommitTs: 3,
 		}, exceptPartition: 15},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
-			CRTs: 1,
+			CommitTs: 1,
 		}, exceptPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
-			CRTs: 2,
+			CommitTs: 2,
 		}, exceptPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
-			CRTs: 3,
+			CommitTs: 3,
 		}, exceptPartition: 5},
 	}
 	p := &tableDispatcher{partitionNum: 16}

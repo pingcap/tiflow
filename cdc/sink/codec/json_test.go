@@ -23,21 +23,21 @@ type batchSuite struct {
 
 var _ = check.Suite(&batchSuite{
 	rowCases: [][]*model.RowChangedEvent{{{
-		CRTs:    1,
-		Table:   &model.TableName{Schema: "a", Table: "b"},
-		Columns: map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
 	}}, {{
-		CRTs:    1,
-		Table:   &model.TableName{Schema: "a", Table: "b"},
-		Columns: map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
 	}, {
-		CRTs:    2,
-		Table:   &model.TableName{Schema: "a", Table: "b"},
-		Columns: map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+		CommitTs: 2,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
 	}, {
-		CRTs:    3,
-		Table:   &model.TableName{Schema: "a", Table: "b"},
-		Columns: map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+		CommitTs: 3,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
 		Ts:     1,

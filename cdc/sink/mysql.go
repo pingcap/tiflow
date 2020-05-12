@@ -68,8 +68,8 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	s.unresolvedRowsMu.Lock()
 	defer s.unresolvedRowsMu.Unlock()
 	for _, row := range rows {
-		if s.filter.ShouldIgnoreDMLEvent(row.CRTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("ts", row.CRTs))
+		if s.filter.ShouldIgnoreDMLEvent(row.CommitTs, row.Table.Schema, row.Table.Table) {
+			log.Info("Row changed event ignored", zap.Uint64("ts", row.CommitTs))
 			continue
 		}
 		key := *row.Table
@@ -181,7 +181,7 @@ func splitRowsGroup(
 	minTs = resolvedTs
 	for key, rows := range unresolvedRows {
 		i := sort.Search(len(rows), func(i int) bool {
-			return rows[i].CRTs > resolvedTs
+			return rows[i].CommitTs > resolvedTs
 		})
 		if i == 0 {
 			continue
@@ -197,8 +197,8 @@ func splitRowsGroup(
 		}
 		resolvedRowsMap[key] = resolvedRows
 
-		if len(resolvedRows) > 0 && resolvedRows[0].CRTs < minTs {
-			minTs = resolvedRows[0].CRTs
+		if len(resolvedRows) > 0 && resolvedRows[0].CommitTs < minTs {
+			minTs = resolvedRows[0].CommitTs
 		}
 	}
 	return
@@ -516,8 +516,8 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent)
 	if err := s.execDMLWithMaxRetries(ctx, sqls, values, defaultDMLMaxRetryTime); err != nil {
 		ts := make([]uint64, 0, len(rows))
 		for _, row := range rows {
-			if len(ts) == 0 || ts[len(ts)-1] != row.CRTs {
-				ts = append(ts, row.CRTs)
+			if len(ts) == 0 || ts[len(ts)-1] != row.CommitTs {
+				ts = append(ts, row.CommitTs)
 			}
 		}
 		log.Error("execute DMLs failed", zap.String("err", err.Error()), zap.Uint64s("ts", ts))
