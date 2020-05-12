@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
@@ -65,6 +63,13 @@ function run() {
     jobtype=$(cdc cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
     if [[ $jobtype != 3 ]]; then
         echo "[$(date)] <<<<< unexpect admin job type! expect 3 got ${jobtype} >>>>>"
+        exit 1
+    fi
+
+    # Make sure bad sink url fails at creating changefeed.
+    badsink=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="mysql://badsink" | grep -oE 'fail')
+    if [[ -z $badsink ]]; then
+        echo "[$(date)] <<<<< unexpect output got ${badsink} >>>>>"
         exit 1
     fi
 

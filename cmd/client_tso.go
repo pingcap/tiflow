@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"os"
 
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -24,7 +23,9 @@ func newQueryTsoCommand() *cobra.Command {
 		Use:   "query",
 		Short: "Get tso from PD",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ts, logic, err := pdCli.GetTS(context.Background())
+			ctx, cancel := contextTimeout()
+			defer cancel()
+			ts, logic, err := pdCli.GetTS(ctx)
 			if err != nil {
 				return err
 			}

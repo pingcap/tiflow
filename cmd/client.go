@@ -9,6 +9,7 @@ import (
 	"github.com/chzyer/readline"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/mattn/go-shellwords"
+	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -44,6 +45,8 @@ var (
 	changefeedID string
 	captureID    string
 	interval     uint
+
+	defaultContextTimeoutDuration = 10 * time.Second
 )
 
 // cf holds changefeed id, which is used for output only
@@ -92,6 +95,8 @@ func newCliCommand() *cobra.Command {
 				Endpoints:   []string{cliPdAddr},
 				DialTimeout: 5 * time.Second,
 				DialOptions: []grpc.DialOption{
+					grpc.WithBlock(),
+					grpc.WithTimeout(defaultContextTimeoutDuration),
 					grpc.WithConnectParams(grpc.ConnectParams{
 						Backoff: backoff.Config{
 							BaseDelay:  time.Second,
@@ -104,12 +109,26 @@ func newCliCommand() *cobra.Command {
 				},
 			})
 			if err != nil {
-				return err
+				// PD embeds an etcd server.
+				return errors.Annotate(err, "fail to open PD client")
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
-			pdCli, err = pd.NewClient([]string{cliPdAddr}, pd.SecurityOption{})
+			pdCli, err = pd.NewClient([]string{cliPdAddr}, pd.SecurityOption{},
+				pd.WithGRPCDialOptions(
+					grpc.WithBlock(),
+					grpc.WithTimeout(defaultContextTimeoutDuration),
+					grpc.WithConnectParams(grpc.ConnectParams{
+						Backoff: backoff.Config{
+							BaseDelay:  time.Second,
+							Multiplier: 1.1,
+							Jitter:     0.1,
+							MaxDelay:   3 * time.Second,
+						},
+						MinConnectTimeout: 3 * time.Second,
+					}),
+				))
 			if err != nil {
-				return err
+				return errors.Annotate(err, "fail to open PD client")
 			}
 
 			return nil
