@@ -41,7 +41,9 @@ const (
 )
 
 type baseKVEntry struct {
-	Ts       uint64
+	StartTs  uint64
+	CommitTs uint64
+
 	TableID  int64
 	RecordID int64
 	Delete   bool
@@ -205,11 +207,12 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		return nil, errors.Trace(err)
 	}
 	baseInfo := baseKVEntry{
-		Ts:      raw.Ts,
-		TableID: tableID,
-		Delete:  raw.OpType == model.OpTypeDelete,
+		StartTs:  raw.StartTs,
+		CommitTs: raw.CommitTs,
+		TableID:  tableID,
+		Delete:   raw.OpType == model.OpTypeDelete,
 	}
-	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.Ts)
+	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CommitTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -217,7 +220,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		tableInfo, exist := snap.TableByID(tableID)
 		if !exist {
 			if snap.IsTruncateTableID(tableID) {
-				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.Ts), zap.Int64("tableID", tableID))
+				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CommitTs), zap.Int64("tableID", tableID))
 				return nil, nil
 			}
 			return nil, errors.NotFoundf("table in schema storage, id: %d", tableID)
@@ -327,7 +330,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	}
 	// FinishedTS is only set when the job is synced,
 	// but we can use the entry's ts here
-	job.BinlogInfo.FinishedTS = raw.Ts
+	job.BinlogInfo.FinishedTS = raw.CommitTs
 	return job, nil
 }
 
@@ -367,10 +370,13 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 
 	event := &model.RowChangedEvent{
-		Ts:           row.Ts,
-		RowID:        row.RecordID,
-		Schema:       tableInfo.TableName.Schema,
-		Table:        tableInfo.TableName.Table,
+		StartTs:  row.StartTs,
+		CommitTs: row.CommitTs,
+		RowID:    row.RecordID,
+		Table: &model.TableName{
+			Schema: tableInfo.TableName.Schema,
+			Table:  tableInfo.TableName.Table,
+		},
 		IndieMarkCol: tableInfo.IndieMarkCol,
 	}
 
@@ -392,7 +398,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 	event.Delete = row.Delete
 	event.Columns = values
-	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(event.Schema, event.Table))
+	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(event.Table.Schema, event.Table.Table))
 	return event, nil
 }
 
@@ -430,10 +436,13 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		}
 	}
 	return &model.RowChangedEvent{
-		Ts:           idx.Ts,
-		RowID:        idx.RecordID,
-		Schema:       tableInfo.TableName.Schema,
-		Table:        tableInfo.TableName.Table,
+		StartTs:  idx.StartTs,
+		CommitTs: idx.CommitTs,
+		RowID:    idx.RecordID,
+		Table: &model.TableName{
+			Schema: tableInfo.TableName.Schema,
+			Table:  tableInfo.TableName.Table,
+		},
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,
 		Columns:      values,

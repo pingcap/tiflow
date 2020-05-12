@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/filter"
+	cdcfilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 )
@@ -158,7 +158,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 				return err
 			}
 
-			cfg := new(filter.ReplicaConfig)
+			cfg := new(cdcfilter.ReplicaConfig)
 			if len(configFile) > 0 {
 				if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
 					return err

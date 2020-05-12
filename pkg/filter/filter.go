@@ -64,9 +64,16 @@ func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 	return len(left) == 0
 }
 
-// ShouldIgnoreEvent removes DDL/DMLs that's not wanted by this change feed.
+// ShouldIgnoreDMLEvent removes DMLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
-func (f *Filter) ShouldIgnoreEvent(ts uint64, schema, table string) bool {
+func (f *Filter) ShouldIgnoreDMLEvent(ts uint64, schema, table string) bool {
+	return f.shouldIgnoreCommitTs(ts) || f.ShouldIgnoreTable(schema, table)
+}
+
+// ShouldIgnoreDDLEvent removes DDLs that's not wanted by this change feed.
+// CDC only supports filtering by database/table now.
+func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, schema, table string) bool {
+	// TODO(neil) add more check.
 	return f.shouldIgnoreCommitTs(ts) || f.ShouldIgnoreTable(schema, table)
 }
 

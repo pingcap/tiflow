@@ -87,7 +87,8 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 	}
 
 	for _, tc := range testCases {
-		c.Assert(filter.ShouldIgnoreEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
+		c.Assert(filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
+		c.Assert(filter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
 	}
 }
 
@@ -100,5 +101,4 @@ func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
 	c.Assert(filter.ShouldDiscardDDL(model.ActionDropSchema), check.IsFalse)
 	c.Assert(filter.ShouldDiscardDDL(model.ActionAddForeignKey), check.IsFalse)
 	c.Assert(filter.ShouldDiscardDDL(model.ActionCreateSequence), check.IsTrue)
-
 }

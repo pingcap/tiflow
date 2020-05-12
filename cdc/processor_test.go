@@ -174,7 +174,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 
 		go func(rawTxnTs []uint64) {
 			for _, txnTs := range rawTxnTs {
-				input <- model.RawTxn{Ts: txnTs}
+				input <- model.RawTxn{CommitTs: txnTs}
 			}
 		}(rawTxnTs)
 	}
@@ -251,7 +251,7 @@ func (s *txnChannelSuite) TestShouldForwardTxnsByTs(c *check.C) {
 	tc := newTxnChannel(input, 5, callback)
 	for _, ts := range []uint64{1, 2, 4, 6} {
 		select {
-		case input <- model.RawTxn{Ts: ts}:
+		case input <- model.RawTxn{CommitTs: ts}:
 		case <-time.After(time.Second):
 			c.Fatal("Timeout sending to input")
 		}

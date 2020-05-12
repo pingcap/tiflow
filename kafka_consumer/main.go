@@ -356,7 +356,7 @@ ClaimMessages:
 					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
 				}
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-				if row.Ts <= globalResolvedTs || row.Ts <= sink.resolvedTs {
+				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
 					log.Debug("filter fallback row", zap.ByteString("row", message.Key),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs),

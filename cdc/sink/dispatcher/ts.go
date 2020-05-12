@@ -7,5 +7,5 @@ type tsDispatcher struct {
 }
 
 func (t *tsDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
-	return int32(row.Ts % uint64(t.partitionNum))
+	return int32(row.CommitTs % uint64(t.partitionNum))
 }
