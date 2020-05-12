@@ -37,54 +37,54 @@ func (s EmitSuite) TestSplitRowsGroup(c *check.C) {
 		expectedMinTs           uint64
 	}{{
 		inputGroup: map[model.TableName][]*model.RowChangedEvent{
-			{Table: "t1"}: {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
-			{Table: "t2"}: {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		resolvedTs:            5,
 		expectedResolvedGroup: map[model.TableName][][]*model.RowChangedEvent{},
 		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{
-			{Table: "t1"}: {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
-			{Table: "t2"}: {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		expectedMinTs: 5,
 	}, {
 		inputGroup: map[model.TableName][]*model.RowChangedEvent{
-			{Table: "t1"}: {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
-			{Table: "t2"}: {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		resolvedTs: 23,
 		expectedResolvedGroup: map[model.TableName][][]*model.RowChangedEvent{
-			{Table: "t1"}: {{{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}}},
-			{Table: "t2"}: {{{CRTs: 23}}},
+			{Table: "t1"}: {{{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}}},
+			{Table: "t2"}: {{{CommitTs: 23}}},
 		},
 		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{
-			{Table: "t1"}: {{CRTs: 33}, {CRTs: 34}},
-			{Table: "t2"}: {{CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+			{Table: "t1"}: {{CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		expectedMinTs: 11,
 	}, {
 		inputGroup: map[model.TableName][]*model.RowChangedEvent{
-			{Table: "t1"}: {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
-			{Table: "t2"}: {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		resolvedTs: 30,
 		expectedResolvedGroup: map[model.TableName][][]*model.RowChangedEvent{
-			{Table: "t1"}: {{{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}}},
-			{Table: "t2"}: {{{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}}},
+			{Table: "t1"}: {{{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}}},
+			{Table: "t2"}: {{{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}}},
 		},
 		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{
-			{Table: "t1"}: {{CRTs: 33}, {CRTs: 34}},
+			{Table: "t1"}: {{CommitTs: 33}, {CommitTs: 34}},
 		},
 		expectedMinTs: 11,
 	}, {
 		inputGroup: map[model.TableName][]*model.RowChangedEvent{
-			{Table: "t1"}: {{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}},
-			{Table: "t2"}: {{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}},
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		resolvedTs: 40,
 		expectedResolvedGroup: map[model.TableName][][]*model.RowChangedEvent{
-			{Table: "t1"}: {{{CRTs: 11}, {CRTs: 21}, {CRTs: 21}, {CRTs: 23}, {CRTs: 33}, {CRTs: 34}}},
-			{Table: "t2"}: {{{CRTs: 23}, {CRTs: 24}, {CRTs: 26}, {CRTs: 26}, {CRTs: 26}, {CRTs: 29}}},
+			{Table: "t1"}: {{{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}}},
+			{Table: "t2"}: {{{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}}},
 		},
 		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{},
 		expectedMinTs:           11,
@@ -105,19 +105,19 @@ func (s EmitSuite) TestTxnRowLimiter(c *check.C) {
 		inputGroup: nil,
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{CRTs: 1}},
+		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}},
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{CRTs: 1}, {CRTs: 2}, {CRTs: 3}, {CRTs: 4}, {CRTs: 5}, {CRTs: 6}},
+		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 2}, {CommitTs: 3}, {CommitTs: 4}, {CommitTs: 5}, {CommitTs: 6}},
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{CRTs: 1}, {CRTs: 2}, {CRTs: 3}, {CRTs: 4}, {CRTs: 5}, {CRTs: 6}, {CRTs: 7}, {CRTs: 8}},
+		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 2}, {CommitTs: 3}, {CommitTs: 4}, {CommitTs: 5}, {CommitTs: 6}, {CommitTs: 7}, {CommitTs: 8}},
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{CRTs: 1}, {CRTs: 2}, {CRTs: 3}, {CRTs: 4}, {CRTs: 4}, {CRTs: 4}, {CRTs: 6}},
+		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 2}, {CommitTs: 3}, {CommitTs: 4}, {CommitTs: 4}, {CommitTs: 4}, {CommitTs: 6}},
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{CRTs: 1}, {CRTs: 1}, {CRTs: 1}, {CRTs: 2}, {CRTs: 2}, {CRTs: 2}, {CRTs: 2}, {CRTs: 3}, {CRTs: 3}},
+		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}, {CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}, {CommitTs: 3}, {CommitTs: 3}},
 		maxTxnRow:  2,
 	}}
 

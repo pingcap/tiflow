@@ -132,35 +132,35 @@ func (s *markSuit) TestMapMarkRowsGroupReduceCyclicRowsGroup(c *check.C) {
 		},
 		{
 			input: map[model.TableName][][]*model.RowChangedEvent{
-				{Table: "b2"}: {{{StartTs: 2, CRTs: 2}}},
+				{Table: "b2"}: {{{StartTs: 2, CommitTs: 2}}},
 				{Table: "b3"}: {{
-					{StartTs: 2, CRTs: 2, Table: &model.TableName{}},
-					{StartTs: 3, CRTs: 3, Table: &model.TableName{}},
-					{StartTs: 3, CRTs: 3, Table: &model.TableName{}},
-					{StartTs: 4, CRTs: 4, Table: &model.TableName{}},
+					{StartTs: 2, CommitTs: 2, Table: &model.TableName{}},
+					{StartTs: 3, CommitTs: 3, Table: &model.TableName{}},
+					{StartTs: 3, CommitTs: 3, Table: &model.TableName{}},
+					{StartTs: 4, CommitTs: 4, Table: &model.TableName{}},
 				}},
 				{Schema: "tidb_cdc", Table: "1"}: {{
-					{StartTs: 2, CRTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}},
-					{StartTs: 3, CRTs: 3, Columns: map[string]*model.Column{rID: {Value: uint64(11)}}},
+					{StartTs: 2, CommitTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}},
+					{StartTs: 3, CommitTs: 3, Columns: map[string]*model.Column{rID: {Value: uint64(11)}}},
 				}},
 			},
 			output: map[uint64]map[model.TableName][]*model.RowChangedEvent{
-				2: {{Table: "b2"}: {{StartTs: 2, CRTs: 2}},
-					{Table: "b3"}: {{StartTs: 2, CRTs: 2, Table: &model.TableName{}}}},
-				3: {{Table: "b3"}: {{StartTs: 3, CRTs: 3, Table: &model.TableName{}},
-					{StartTs: 3, CRTs: 3, Table: &model.TableName{}}}},
-				4: {{Table: "b3"}: {{StartTs: 4, CRTs: 4, Table: &model.TableName{}}}},
+				2: {{Table: "b2"}: {{StartTs: 2, CommitTs: 2}},
+					{Table: "b3"}: {{StartTs: 2, CommitTs: 2, Table: &model.TableName{}}}},
+				3: {{Table: "b3"}: {{StartTs: 3, CommitTs: 3, Table: &model.TableName{}},
+					{StartTs: 3, CommitTs: 3, Table: &model.TableName{}}}},
+				4: {{Table: "b3"}: {{StartTs: 4, CommitTs: 4, Table: &model.TableName{}}}},
 			},
 			markMap: map[uint64]*model.RowChangedEvent{
-				2: {StartTs: 2, CRTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}},
-				3: {StartTs: 3, CRTs: 3, Columns: map[string]*model.Column{rID: {Value: uint64(11)}}},
+				2: {StartTs: 2, CommitTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}},
+				3: {StartTs: 3, CommitTs: 3, Columns: map[string]*model.Column{rID: {Value: uint64(11)}}},
 			},
 			reduced: map[model.TableName][][]*model.RowChangedEvent{
 				{Table: "b3"}: {
-					{{StartTs: 3, CRTs: 3, Columns: map[string]*model.Column{rID: {Value: uint64(11)}}, Table: &model.TableName{Schema: "tidb_cdc", Table: "repl_mark__b3"}},
-						{StartTs: 3, CRTs: 3, Table: &model.TableName{}},
-						{StartTs: 3, CRTs: 3, Table: &model.TableName{}}},
-					{{StartTs: 4, CRTs: 4, Table: &model.TableName{}}},
+					{{StartTs: 3, CommitTs: 3, Columns: map[string]*model.Column{rID: {Value: uint64(11)}}, Table: &model.TableName{Schema: "tidb_cdc", Table: "repl_mark__b3"}},
+						{StartTs: 3, CommitTs: 3, Table: &model.TableName{}},
+						{StartTs: 3, CommitTs: 3, Table: &model.TableName{}}},
+					{{StartTs: 4, CommitTs: 4, Table: &model.TableName{}}},
 				},
 			},
 			filterID: []uint64{10}, // 10 -> 2, filter start ts 2
