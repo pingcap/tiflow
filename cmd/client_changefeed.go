@@ -258,6 +258,7 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 				syscall.SIGQUIT)
 
 			ctx, cancel := context.WithCancel(context.TODO())
+			defer cancel()
 			tick := time.NewTicker(time.Duration(interval) * time.Second)
 			lastTime := time.Now()
 			var lastCount uint64

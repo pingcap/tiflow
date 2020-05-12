@@ -93,10 +93,9 @@ func newCliCommand() *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
-				DialTimeout: 5 * time.Second,
+				DialTimeout: defaultContextTimeoutDuration,
 				DialOptions: []grpc.DialOption{
 					grpc.WithBlock(),
-					grpc.WithTimeout(defaultContextTimeoutDuration),
 					grpc.WithConnectParams(grpc.ConnectParams{
 						Backoff: backoff.Config{
 							BaseDelay:  time.Second,
@@ -116,7 +115,6 @@ func newCliCommand() *cobra.Command {
 			pdCli, err = pd.NewClient([]string{cliPdAddr}, pd.SecurityOption{},
 				pd.WithGRPCDialOptions(
 					grpc.WithBlock(),
-					grpc.WithTimeout(defaultContextTimeoutDuration),
 					grpc.WithConnectParams(grpc.ConnectParams{
 						Backoff: backoff.Config{
 							BaseDelay:  time.Second,
