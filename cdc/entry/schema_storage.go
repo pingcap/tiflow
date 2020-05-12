@@ -257,7 +257,9 @@ func WrapTableInfo(schemaID int64, schemaName string, info *timodel.TableInfo) *
 	if uniqueIndexNum == 1 && len(ti.uniqueColumns) == 1 {
 		for col := range ti.uniqueColumns {
 			info, _ := ti.GetColumnInfo(col)
-			ti.IndieMarkCol = info.Name.O
+			if !info.IsGenerated() {
+				ti.IndieMarkCol = info.Name.O
+			}
 		}
 	}
 
