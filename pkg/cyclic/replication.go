@@ -73,13 +73,7 @@ func NewCyclic(config *filter.ReplicationConfig) *Cyclic {
 // MarkTableName returns mark table name regards to the tableID
 func MarkTableName(sourceSchema, sourceTable string) (schema, table string) {
 	// TODO(neil) better unquote or just crc32 the name.
-	sourceSchema = strings.Replace(sourceSchema, "`", "_", -1)
-	sourceSchema = strings.Replace(sourceSchema, ".", "_", -1)
-	sourceTable = strings.Replace(sourceTable, "`", "_", -1)
-	sourceTable = strings.Replace(sourceTable, ".", "_", -1)
-
-	source := strings.Join([]string{sourceSchema, sourceTable}, "_")
-	table = fmt.Sprintf("%s_%s", tableName, source)
+	table = strings.Join([]string{tableName, sourceSchema, sourceTable}, "_")
 	schema = SchemaName
 	return
 }
