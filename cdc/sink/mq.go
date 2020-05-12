@@ -80,8 +80,8 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
-		if k.filter.ShouldIgnoreEvent(row.Ts, row.Schema, row.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("ts", row.Ts))
+		if k.filter.ShouldIgnoreDMLEvent(row.CommitTs, row.Table.Schema, row.Table.Table) {
+			log.Info("Row changed event ignored", zap.Uint64("ts", row.CommitTs))
 			continue
 		}
 		partition := k.dispatcher.Dispatch(row)
@@ -151,7 +151,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if k.filter.ShouldIgnoreEvent(ddl.Ts, ddl.Schema, ddl.Table) {
+	if k.filter.ShouldIgnoreDDLEvent(ddl.Ts, ddl.Schema, ddl.Table) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),

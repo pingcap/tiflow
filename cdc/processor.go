@@ -356,7 +356,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 			continue
 		}
 		if ddlRawKV.OpType == model.OpTypeResolved {
-			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.Ts)
+			p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CommitTs)
 			p.localResolvedNotifier.Notify()
 		}
 		job, err := entry.UnmarshalDDL(ddlRawKV)
@@ -629,7 +629,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				continue
 			}
 			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
-				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.Ts)
+				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.CommitTs)
 				p.sinkEmittedResolvedNotifier.Notify()
 				continue
 			}
@@ -759,9 +759,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 					continue
 				}
 				if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
-					table.storeResolvedTS(pEvent.Ts)
+					table.storeResolvedTS(pEvent.CommitTs)
 					p.localResolvedNotifier.Notify()
-					resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.Ts)))
+					resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CommitTs)))
 					continue
 				}
 				select {

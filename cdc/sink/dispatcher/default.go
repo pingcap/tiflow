@@ -17,11 +17,11 @@ func (d *defaultDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	hash := crc32.NewIEEE()
 	if len(row.IndieMarkCol) == 0 {
 		// distribute partition by table
-		_, err := hash.Write([]byte(row.Schema))
+		_, err := hash.Write([]byte(row.Table.Schema))
 		if err != nil {
 			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
 		}
-		_, err = hash.Write([]byte(row.Table))
+		_, err = hash.Write([]byte(row.Table.Table))
 		if err != nil {
 			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
 		}

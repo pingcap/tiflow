@@ -38,7 +38,7 @@ type eventChecker struct {
 
 func valInSlice(val *model.RawKVEntry, vals []*model.RawKVEntry) bool {
 	for _, v := range vals {
-		if val.Ts == v.Ts && bytes.Equal(val.Key, v.Key) {
+		if val.CommitTs == v.CommitTs && bytes.Equal(val.Key, v.Key) {
 			return true
 		}
 	}
@@ -61,7 +61,7 @@ func newEventChecker(t require.TestingT) *eventChecker {
 					// check if the value event break the checkpoint guarantee
 					for _, cp := range ec.checkpoints {
 						if !regionspan.KeyInSpan(e.Val.Key, cp.Span) ||
-							e.Val.Ts > cp.ResolvedTs {
+							e.Val.CommitTs > cp.ResolvedTs {
 							continue
 						}
 

@@ -18,21 +18,28 @@ const (
 	MqMessageTypeResolved
 )
 
+// TableName represents name of a table, includes table name and schema name.
+type TableName struct {
+	Schema string `json:"shema"`
+	Table  string `json:"table"`
+}
+
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
-	Ts    uint64
-	RowID int64
+	StartTs  uint64 `json:"start-ts"`
+	CommitTs uint64 `json:"commit-ts"`
 
-	Schema string
-	Table  string
+	RowID int64 `json:"row-id"`
 
-	Delete bool
+	Table *TableName `json:"table"`
+
+	Delete bool `json:"delete"`
 
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
-	IndieMarkCol string
-	Columns      map[string]*Column
-	Keys         []string
+	IndieMarkCol string             `json:"indie-mark-col"`
+	Columns      map[string]*Column `json:"columns"`
+	Keys         []string           `json:"keys"`
 }
 
 // Column represents a column value in row changed event

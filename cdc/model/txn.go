@@ -7,7 +7,8 @@ import (
 
 // RawTxn represents a complete collection of Entries that belong to the same transaction
 type RawTxn struct {
-	Ts         uint64
+	StartTs    uint64
+	CommitTs   uint64
 	IsResolved bool
 	Entries    []*RawKVEntry
 }
