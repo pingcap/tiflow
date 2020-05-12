@@ -527,7 +527,7 @@ func fetchHandleValue(tableInfo *TableInfo, recordID int64) (pkCoID int64, pkVal
 func genMultipleKeys(ti *timodel.TableInfo, values map[string]*model.Column, table string) []string {
 	multipleKeys := make([]string, 0, len(ti.Indices)+1)
 	if ti.PKIsHandle {
-		if pk := ti.GetPkColInfo(); pk != nil {
+		if pk := ti.GetPkColInfo(); pk != nil && !pk.IsGenerated() {
 			cols := []*timodel.ColumnInfo{pk}
 			key := genKeyList(table, cols, values)
 			if len(key) > 0 { // ignore `null` value.
