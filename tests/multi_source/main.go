@@ -115,10 +115,6 @@ func createDropSchemaDDL(ctx context.Context, db *sql.DB) {
 		log.S().Fatal(err)
 	}
 	defer func() {
-		_, err := conn.ExecContext(context.Background(), "use test")
-		if err != nil {
-			log.S().Fatal(err)
-		}
 		conn.Close()
 	}()
 
@@ -129,14 +125,8 @@ func createDropSchemaDDL(ctx context.Context, db *sql.DB) {
 			return
 		default:
 		}
-
 		time.Sleep(time.Millisecond)
-
-		_, err = conn.ExecContext(context.Background(), "drop database test")
-		if err != nil {
-			log.S().Fatal(err)
-		}
-
+		util.MustExecWithConn(ctx, conn, "drop database test")
 	}
 }
 
