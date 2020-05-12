@@ -99,7 +99,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	if info.Config != nil && info.Config.Cyclic.IsEnabled() {
 		cyclicCfg, err := info.Config.Cyclic.Marshal()
 		if err != nil {
-			return errors.Annotatef(err, "Unmarshal data: %v", data)
+			return errors.Annotatef(err, "Marshal data: %v", data)
 		}
 		info.Opts[filter.OptCyclicConfig] = string(cyclicCfg)
 	}

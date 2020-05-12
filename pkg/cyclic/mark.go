@@ -169,10 +169,9 @@ func ReduceCyclicRowsGroup(
 			output[name] = multiRows
 		}
 	}
-	for name, events := range output {
+	for _, events := range output {
 		// Per table order may lose during map stage, we need to sort events.
 		sort.Slice(events, func(i, j int) bool { return events[i][0].CommitTs < events[j][0].CommitTs })
-		output[name] = events
 	}
 	return output
 }

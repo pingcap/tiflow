@@ -170,6 +170,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 					filter = append(filter, uint64(id))
 				}
 				cfg.Cyclic = &cdcfilter.ReplicationConfig{
+					Enable:          true,
 					ReplicaID:       cyclicReplicaID,
 					FilterReplicaID: filter,
 					SyncDDL:         cyclicSyncDDL,

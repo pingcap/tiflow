@@ -93,8 +93,8 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 
 	disableDDLFilter, err := NewFilter(&ReplicaConfig{
 		Cyclic: &ReplicationConfig{
-			ReplicaID: 1,
-			SyncDDL:   false,
+			Enable:  true,
+			SyncDDL: false,
 		}})
 	c.Assert(err, check.IsNil)
 	for _, tc := range testCases {

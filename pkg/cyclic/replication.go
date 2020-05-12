@@ -49,15 +49,45 @@ func RelaxSQLMode(oldMode string) string {
 	}
 
 	// concatenated by "," like: mode1,mode2
-	newMode := strings.Replace(oldMode, toRemove+",", "", -1)
-	newMode = strings.Replace(newMode, ","+toRemove, "", -1)
-	newMode = strings.Replace(newMode, toRemove, "", -1)
+	modes := strings.Split(oldMode, ",")
+	var newMode string
+	for idx := range modes {
+		m := modes[idx]
+		if strings.Contains(m, toRemove) {
+			continue
+		}
+		m = strings.TrimSpace(m)
+		if newMode == "" {
+			newMode = m
+		} else {
+			newMode = strings.Join([]string{newMode, modes[idx]}, ",")
+		}
+	}
 	return newMode
 }
 
-// Cyclic ...
+// Cyclic wraps a cyclic config.
 type Cyclic struct {
 	config filter.ReplicationConfig
+}
+
+// UdpateTableCyclicMark return a DML to update mark table regrad to the tableID
+// bucket and replicaID.
+func (*Cyclic) UdpateTableCyclicMark(sourceSchema, sourceTable string, bucket, replicaID uint64) string {
+	schema, table := MarkTableName(sourceSchema, sourceTable)
+	return fmt.Sprintf(
+		`INSERT INTO %s.%s VALUES (%d, %d, 0) ON DUPLICATE KEY UPDATE val = val + 1;`,
+		schema, table, bucket, replicaID)
+}
+
+// FilterReplicaID return a slice of replica IDs needs to be filtered.
+func (c *Cyclic) FilterReplicaID() []uint64 {
+	return c.config.FilterReplicaID
+}
+
+// ReplicaID return a replica ID of this cluster.
+func (c *Cyclic) ReplicaID() uint64 {
+	return c.config.ReplicaID
 }
 
 // NewCyclic creates a cyclic
@@ -98,25 +128,6 @@ func IsTablesPaired(tables []model.TableName) bool {
 		}
 	}
 	return true
-}
-
-// UdpateTableCyclicMark return a DML to update mark table regrad to the tableID
-// bucket and replicaID.
-func (*Cyclic) UdpateTableCyclicMark(sourceSchema, sourceTable string, bucket, replicaID uint64) string {
-	schema, table := MarkTableName(sourceSchema, sourceTable)
-	return fmt.Sprintf(
-		`INSERT INTO %s.%s VALUES (%d, %d, 0) ON DUPLICATE KEY UPDATE val = val + 1;`,
-		schema, table, bucket, replicaID)
-}
-
-// FilterReplicaID return a slice of replica IDs needs to be filtered.
-func (c *Cyclic) FilterReplicaID() []uint64 {
-	return c.config.FilterReplicaID
-}
-
-// ReplicaID return a replica ID of this cluster.
-func (c *Cyclic) ReplicaID() uint64 {
-	return c.config.ReplicaID
 }
 
 // IsMarkTable tells whether the table is a mark table or not.

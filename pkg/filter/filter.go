@@ -40,7 +40,8 @@ type DispatchRule struct {
 
 // ReplicationConfig represents config used for cyclic replication
 type ReplicationConfig struct {
-	ReplicaID       uint64   `toml:"enable" json:"enable"`
+	Enable          bool     `toml:"enable" json:"enable"`
+	ReplicaID       uint64   `toml:"replica-id" json:"replica-id"`
 	FilterReplicaID []uint64 `toml:"filter-replica-ids" json:"filter-replica-ids"`
 	IDBuckets       int      `toml:"id-buckets" json:"id-buckets"`
 	SyncDDL         bool     `toml:"sync-ddl" json:"sync-ddl"`
@@ -48,7 +49,7 @@ type ReplicationConfig struct {
 
 // IsEnabled returns whether cyclic replication is enabled or not.
 func (c *ReplicationConfig) IsEnabled() bool {
-	return c != nil && c.ReplicaID != 0
+	return c != nil && c.Enable
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig

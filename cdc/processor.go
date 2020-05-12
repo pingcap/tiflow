@@ -491,11 +491,10 @@ func (p *processor) removeTable(tableID int64) {
 func (p *processor) handleTables(
 	ctx context.Context, oldInfo, newInfo *model.TaskStatus, checkpointTs uint64,
 ) error {
-	removedTables, addedTables := diffProcessTableInfos(oldInfo.TableInfos, newInfo.TableInfos)
-	if p.changefeed.Config != nil && p.changefeed.Config.Cyclic.IsEnabled() {
-		// Make sure all normal tables and mark tables are paired.
-		schemaSnapshot := p.schemaStorage.GetLastSnapshot()
-		for _, tables := range [][]*model.ProcessTableInfo{addedTables, removedTables} {
+	checkPairedMarkTable := func(tables []*model.ProcessTableInfo, hint string) error {
+		if p.changefeed.Config != nil && p.changefeed.Config.Cyclic.IsEnabled() {
+			// Make sure all normal tables and mark tables are paired.
+			schemaSnapshot := p.schemaStorage.GetLastSnapshot()
 			tableNames := make([]model.TableName, 0, len(tables))
 			for _, table := range tables {
 				name, ok := schemaSnapshot.GetTableNameByID(int64(table.ID))
@@ -509,17 +508,25 @@ func (p *processor) handleTables(
 			}
 			if !cyclic.IsTablesPaired(tableNames) {
 				return errors.NotValidf(
-					"normal table and mark table not match %v", tableNames)
+					"%s normal table and mark table not match %v", hint, tableNames)
 			}
 		}
+		return nil
 	}
 
+	removedTables, addedTables := diffProcessTableInfos(oldInfo.TableInfos, newInfo.TableInfos)
 	// remove tables
+	if err := checkPairedMarkTable(removedTables, "remove table"); err != nil {
+		return err
+	}
 	for _, pinfo := range removedTables {
 		p.removeTable(int64(pinfo.ID))
 	}
 
 	// add tables
+	if err := checkPairedMarkTable(removedTables, "add table"); err != nil {
+		return err
+	}
 	for _, pinfo := range addedTables {
 		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
 	}
