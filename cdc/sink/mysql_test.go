@@ -30,63 +30,63 @@ var _ = check.Suite(&EmitSuite{})
 
 func (s EmitSuite) TestSplitRowsGroup(c *check.C) {
 	testCases := []struct {
-		inputGroup              map[string][]*model.RowChangedEvent
+		inputGroup              map[model.TableName][]*model.RowChangedEvent
 		resolvedTs              uint64
-		expectedResolvedGroup   map[string][]*model.RowChangedEvent
-		expectedUnresolvedGroup map[string][]*model.RowChangedEvent
+		expectedResolvedGroup   map[model.TableName][]*model.RowChangedEvent
+		expectedUnresolvedGroup map[model.TableName][]*model.RowChangedEvent
 		expectedMinTs           uint64
 	}{{
-		inputGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		inputGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		resolvedTs:            5,
-		expectedResolvedGroup: map[string][]*model.RowChangedEvent{},
-		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		expectedResolvedGroup: map[model.TableName][]*model.RowChangedEvent{},
+		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		expectedMinTs: 5,
 	}, {
-		inputGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		inputGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		resolvedTs: 23,
-		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}},
-			"t2": {{Ts: 23}},
+		expectedResolvedGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}},
+			{Table: "t2"}: {{CommitTs: 23}},
 		},
-		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		expectedMinTs: 11,
 	}, {
-		inputGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		inputGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		resolvedTs: 30,
-		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		expectedResolvedGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
-		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 33}, {Ts: 34}},
+		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CommitTs: 33}, {CommitTs: 34}},
 		},
 		expectedMinTs: 11,
 	}, {
-		inputGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		inputGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		resolvedTs: 40,
-		expectedResolvedGroup: map[string][]*model.RowChangedEvent{
-			"t1": {{Ts: 11}, {Ts: 21}, {Ts: 21}, {Ts: 23}, {Ts: 33}, {Ts: 34}},
-			"t2": {{Ts: 23}, {Ts: 24}, {Ts: 26}, {Ts: 26}, {Ts: 26}, {Ts: 29}},
+		expectedResolvedGroup: map[model.TableName][]*model.RowChangedEvent{
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
-		expectedUnresolvedGroup: map[string][]*model.RowChangedEvent{},
+		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{},
 		expectedMinTs:           11,
 	}}
 	for _, tc := range testCases {
@@ -105,27 +105,27 @@ func (s EmitSuite) TestTxnRowLimiter(c *check.C) {
 		inputGroup: nil,
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{Ts: 1}},
+		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}},
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{Ts: 1}, {Ts: 2}, {Ts: 3}, {Ts: 4}, {Ts: 5}, {Ts: 6}},
+		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 2}, {CommitTs: 3}, {CommitTs: 4}, {CommitTs: 5}, {CommitTs: 6}},
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{Ts: 1}, {Ts: 2}, {Ts: 3}, {Ts: 4}, {Ts: 5}, {Ts: 6}, {Ts: 7}, {Ts: 8}},
+		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 2}, {CommitTs: 3}, {CommitTs: 4}, {CommitTs: 5}, {CommitTs: 6}, {CommitTs: 7}, {CommitTs: 8}},
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{Ts: 1}, {Ts: 2}, {Ts: 3}, {Ts: 4}, {Ts: 4}, {Ts: 4}, {Ts: 6}},
+		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 2}, {CommitTs: 3}, {CommitTs: 4}, {CommitTs: 4}, {CommitTs: 4}, {CommitTs: 6}},
 		maxTxnRow:  4,
 	}, {
-		inputGroup: []*model.RowChangedEvent{{Ts: 1}, {Ts: 1}, {Ts: 1}, {Ts: 2}, {Ts: 2}, {Ts: 2}, {Ts: 2}, {Ts: 3}, {Ts: 3}},
+		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}, {CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}, {CommitTs: 3}, {CommitTs: 3}},
 		maxTxnRow:  2,
 	}}
 
 	for i, tc := range testCases {
 		var output []*model.RowChangedEvent
 		var err error
-		rowGroups := make(map[string][]*model.RowChangedEvent)
-		rowGroups["test"] = tc.inputGroup
+		rowGroups := make(map[model.TableName][]*model.RowChangedEvent)
+		rowGroups[model.TableName{Table: "test"}] = tc.inputGroup
 		err = concurrentExec(context.Background(), rowGroups, rand.Intn(16), tc.maxTxnRow, func(_ context.Context, rows []*model.RowChangedEvent) error {
 			output = append(output, rows...)
 			return nil

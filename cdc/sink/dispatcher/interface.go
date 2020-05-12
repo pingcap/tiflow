@@ -49,7 +49,7 @@ type dispatcherSwitcher struct {
 }
 
 func (s *dispatcherSwitcher) Dispatch(row *model.RowChangedEvent) int32 {
-	tableName := entry.TableName{Schema: row.Schema, Table: row.Table}
+	tableName := entry.TableName{Schema: row.Table.Schema, Table: row.Table.Table}
 	if !s.caseSensitive {
 		tableName.Schema = strings.ToLower(tableName.Schema)
 		tableName.Table = strings.ToLower(tableName.Table)

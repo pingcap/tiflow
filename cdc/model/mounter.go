@@ -19,7 +19,9 @@ import (
 
 // PolymorphicEvent describes a event can be in multiple states
 type PolymorphicEvent struct {
-	Ts       uint64
+	StartTs  uint64
+	CommitTs uint64
+
 	RawKV    *RawKVEntry
 	Row      *RowChangedEvent
 	finished chan struct{}
@@ -28,20 +30,21 @@ type PolymorphicEvent struct {
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
 func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 	if rawKV.OpType == OpTypeResolved {
-		return NewResolvedPolymorphicEvent(rawKV.Ts)
+		return NewResolvedPolymorphicEvent(rawKV.CommitTs)
 	}
 	return &PolymorphicEvent{
-		Ts:       rawKV.Ts,
+		StartTs:  rawKV.StartTs,
+		CommitTs: rawKV.CommitTs,
 		RawKV:    rawKV,
 		finished: make(chan struct{}),
 	}
 }
 
 // NewResolvedPolymorphicEvent creates a new PolymorphicEvent with the resolved ts
-func NewResolvedPolymorphicEvent(ts uint64) *PolymorphicEvent {
+func NewResolvedPolymorphicEvent(resolvedTs uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
-		Ts:       ts,
-		RawKV:    &RawKVEntry{Ts: ts, OpType: OpTypeResolved},
+		CommitTs: resolvedTs,
+		RawKV:    &RawKVEntry{CommitTs: resolvedTs, OpType: OpTypeResolved},
 		Row:      nil,
 		finished: nil,
 	}
