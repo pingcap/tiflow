@@ -142,6 +142,14 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 	return true
 }
 
+// MustExec executes sqls
+func MustExec(db *sql.DB, sql string, args ...interface{}) {
+	_, err := db.Exec(sql, args...)
+	if err != nil {
+		log.S().Fatalf("exec failed, sql: %s args: %v, err: %+v", sql, args, err)
+	}
+}
+
 // CreateSourceDBs return source sql.DB for test
 // we create two TiDB instance now in tests/run.sh, change it if needed
 func CreateSourceDBs() (dbs []*sql.DB, err error) {
