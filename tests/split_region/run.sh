@@ -20,7 +20,7 @@ function run() {
 
     run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-    run_cdc_server $WORK_DIR $CDC_BINARY
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     TOPIC_NAME="ticdc-split-region-test-$RANDOM"
     case $SINK_TYPE in

@@ -52,7 +52,7 @@ func (s *taskSuite) SetUpTest(c *check.C) {
 		pdEndpoints: s.endpoints,
 		etcdClient:  kv.NewCDCEtcdClient(client),
 		processors:  make(map[string]*processor),
-		info:        &model.CaptureInfo{ID: "task-suite-capture"},
+		info:        &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
 	c.Assert(capture, check.NotNil)
 	watcher := NewTaskWatcher(capture, &TaskWatcherConfig{
@@ -79,7 +79,7 @@ func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
 		pdEndpoints: s.endpoints,
 		etcdClient:  kv.NewCDCEtcdClient(s.c),
 		processors:  make(map[string]*processor),
-		info:        &model.CaptureInfo{ID: "task-suite-capture"},
+		info:        &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
 	c.Assert(capture, check.NotNil)
 	c.Assert(NewTaskWatcher(capture, &TaskWatcherConfig{

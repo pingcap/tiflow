@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -30,9 +31,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultStatusPort = 8300
-
-func (s *Server) startStatusHTTP() {
+func (s *Server) startStatusHTTP() error {
 	serverMux := http.NewServeMux()
 
 	serverMux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -49,15 +48,21 @@ func (s *Server) startStatusHTTP() {
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
 
-	addr := fmt.Sprintf("%s:%d", s.opts.statusHost, s.opts.statusPort)
+	addr := s.opts.addr
 	s.statusServer = &http.Server{Addr: addr, Handler: serverMux}
-	log.Info("status http server is running", zap.String("addr", addr))
+
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
 	go func() {
-		err := s.statusServer.ListenAndServe()
+		log.Info("status http server is running", zap.String("addr", addr))
+		err = s.statusServer.Serve(ln)
 		if err != nil && err != http.ErrServerClosed {
 			log.Error("status server error", zap.Error(err))
 		}
 	}()
+	return nil
 }
 
 // status of cdc server

@@ -16,7 +16,6 @@ package dailytest
 import (
 	"database/sql"
 	"fmt"
-	"math"
 	"math/rand"
 	"strings"
 	"sync"
@@ -25,74 +24,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 )
-
-// test different data type of mysql
-// mysql will change boolean to tinybit(1)
-var caseMultiDataType = []string{`
-CREATE TABLE binlog_multi_data_type (
-	id INT AUTO_INCREMENT,
-	t_boolean BOOLEAN,
-	t_bigint BIGINT,
-	t_double DOUBLE,
-	t_decimal DECIMAL(38,19),
-	t_bit BIT(64),
-	t_date DATE,
-	t_datetime DATETIME,
-	t_timestamp TIMESTAMP NULL,
-	t_time TIME,
-	t_year YEAR,
-	t_char CHAR,
-	t_varchar VARCHAR(10),
-	t_blob BLOB,
-	t_text TEXT,
-	t_enum ENUM('enum1', 'enum2', 'enum3'),
-	t_set SET('a', 'b', 'c'),
-	t_json JSON,
-	PRIMARY KEY(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
-`,
-	`
-INSERT INTO binlog_multi_data_type(t_boolean, t_bigint, t_double, t_decimal, t_bit
-	,t_date, t_datetime, t_timestamp, t_time, t_year
-	,t_char, t_varchar, t_blob, t_text, t_enum
-	,t_set, t_json) VALUES
-	(true, 9223372036854775807, 123.123, 123456789012.123456789012, b'1000001'
-	,'1000-01-01', '9999-12-31 23:59:59', '19731230153000', '23:59:59', 1970
-	,'测', '测试', 'blob', '测试text', 'enum2'
-	,'a,b', NULL);
-`,
-	`
-INSERT INTO binlog_multi_data_type(t_boolean, t_bigint, t_double, t_decimal, t_bit
-	,t_date, t_datetime, t_timestamp, t_time, t_year
-	,t_char, t_varchar, t_blob, t_text, t_enum
-	,t_set, t_json) VALUES
-	(true, 9223372036854775807, 678, 321, b'1000001'
-	,'1000-01-01', '9999-12-31 23:59:59', '19731230153000', '23:59:59', 1970
-	,'测', '测试', 'blob', '测试text', 'enum2'
-	,'a,b', NULL);
-`,
-	`
-INSERT INTO binlog_multi_data_type(t_boolean) VALUES(TRUE);
-`,
-	`
-INSERT INTO binlog_multi_data_type(t_boolean) VALUES(FALSE);
-`,
-	// minmum value of bigint
-	`
-INSERT INTO binlog_multi_data_type(t_bigint) VALUES(-9223372036854775808);
-`,
-	// maximum value of bigint
-	`
-INSERT INTO binlog_multi_data_type(t_bigint) VALUES(9223372036854775807);
-`,
-	`
-INSERT INTO binlog_multi_data_type(t_json) VALUES('{"key1": "value1", "key2": "value2"}');
-`,
-}
-
-var caseMultiDataTypeClean = []string{`
-	DROP TABLE binlog_multi_data_type`,
-}
 
 // https://internal.pingcap.net/jira/browse/TOOL-714
 // CDC don't support UK is null
@@ -212,13 +143,9 @@ func (tr *testRunner) execSQLs(sqls []string) {
 func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr := &testRunner{src: src, dst: dst, schema: schema}
 	ineligibleTable(tr, src, dst)
-	runPKorUKcases(tr)
 
 	tr.run(caseUpdateWhileAddingCol)
 	tr.execSQLs([]string{"DROP TABLE growing_cols;"})
-
-	tr.execSQLs(caseMultiDataType)
-	tr.execSQLs(caseMultiDataTypeClean)
 
 	tr.execSQLs(caseUKWithNoPK)
 	tr.execSQLs(caseUKWithNoPKClean)
@@ -628,101 +555,6 @@ func updatePKUK(db *sql.DB, opNum int) error {
 		i++
 	}
 	return nil
-}
-
-// create a table with one column id with different type
-// test the case whether it is primary key too, this can
-// also help test when the column is handle or not.
-func runPKorUKcases(tr *testRunner) {
-	cases := []struct {
-		Tp     string
-		Value  interface{}
-		Update interface{}
-	}{
-		{
-			Tp:     "BIGINT UNSIGNED",
-			Value:  uint64(math.MaxUint64),
-			Update: uint64(math.MaxUint64) - 1,
-		},
-		{
-			Tp:     "BIGINT SIGNED",
-			Value:  int64(math.MaxInt64),
-			Update: int64(math.MinInt64),
-		},
-		{
-			Tp:     "INT UNSIGNED",
-			Value:  uint32(math.MaxUint32),
-			Update: uint32(math.MaxUint32) - 1,
-		},
-		{
-			Tp:     "INT SIGNED",
-			Value:  int32(math.MaxInt32),
-			Update: int32(math.MinInt32),
-		},
-		{
-			Tp:     "SMALLINT UNSIGNED",
-			Value:  uint16(math.MaxUint16),
-			Update: uint16(math.MaxUint16) - 1,
-		},
-		{
-			Tp:     "SMALLINT SIGNED",
-			Value:  int16(math.MaxInt16),
-			Update: int16(math.MinInt16),
-		},
-		{
-			Tp:     "TINYINT UNSIGNED",
-			Value:  uint8(math.MaxUint8),
-			Update: uint8(math.MaxUint8) - 1,
-		},
-		{
-			Tp:     "TINYINT SIGNED",
-			Value:  int8(math.MaxInt8),
-			Update: int8(math.MaxInt8) - 1,
-		},
-	}
-
-	var g sync.WaitGroup
-
-	tr.run(func(src *sql.DB) {
-		for i, c := range cases {
-			for j, pkOrUK := range []string{"UNIQUE NOT NULL", "PRIMARY KEY"} {
-				g.Add(1)
-				tableName := fmt.Sprintf("pk_or_uk_%d_%d", i, j)
-				pkOrUK := pkOrUK
-				c := c
-				go func() {
-					sql := fmt.Sprintf("CREATE TABLE %s(id %s %s)", tableName, c.Tp, pkOrUK)
-					mustExec(src, sql)
-
-					sql = fmt.Sprintf("INSERT INTO %s(id) values( ? )", tableName)
-					mustExec(src, sql, c.Value)
-					sql = fmt.Sprintf("UPDATE %s set id = ? where id = ?", tableName)
-					mustExec(src, sql, c.Update, c.Value)
-					sql = fmt.Sprintf("INSERT INTO %s(id) values( ? )", tableName)
-					mustExec(src, sql, c.Value)
-					sql = fmt.Sprintf("DELETE from %s where id = ?", tableName)
-					mustExec(src, sql, c.Update)
-					g.Done()
-				}()
-			}
-		}
-		g.Wait()
-	})
-
-	tr.run(func(src *sql.DB) {
-		for i := range cases {
-			for j := range []string{"UNIQUE NOT NULL", "PRIMARY KEY"} {
-				g.Add(1)
-				tableName := fmt.Sprintf("pk_or_uk_%d_%d", i, j)
-				go func() {
-					sql := fmt.Sprintf("DROP TABLE %s", tableName)
-					mustExec(src, sql)
-					g.Done()
-				}()
-			}
-		}
-		g.Wait()
-	})
 }
 
 func mustExec(db *sql.DB, sql string, args ...interface{}) {

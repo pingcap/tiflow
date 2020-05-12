@@ -173,13 +173,9 @@ func (w *TaskWatcher) parseTask(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	status, err := w.capture.etcdClient.GetChangeFeedStatus(ctx, changeFeedID)
-	if err != nil {
-		if errors.Cause(err) == model.ErrChangeFeedNotExists {
-			status = &model.ChangeFeedStatus{}
-		} else {
-			return nil, err
-		}
+	status, _, err := w.capture.etcdClient.GetChangeFeedStatus(ctx, changeFeedID)
+	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+		return nil, err
 	}
 	checkpointTs := cf.GetCheckpointTs(status)
 	return &Task{ChangeFeedID: changeFeedID, CheckpointTS: checkpointTs}, nil

@@ -21,7 +21,7 @@ function prepare() {
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-    TOPIC_NAME="ticdc-resolve-lock-test-$RANDOM"
+    TOPIC_NAME="ticdc-many-pk-or-uk-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
         mysql) ;&
@@ -39,7 +39,7 @@ prepare $*
 cd "$(dirname "$0")"
 set -o pipefail
 GO111MODULE=on go run main.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log
-check_table_exists test.t2 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 check_sync_diff $WORK_DIR $CUR/diff_config.toml
 cleanup_process $CDC_BINARY
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
