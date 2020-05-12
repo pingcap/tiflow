@@ -200,7 +200,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				if !forwarded {
 					continue
 				}
-				err := output(&model.RawKVEntry{CommitTs: resolvedTs, OpType: model.OpTypeResolved})
+				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved})
 				if err != nil {
 					return errors.Trace(err)
 				}

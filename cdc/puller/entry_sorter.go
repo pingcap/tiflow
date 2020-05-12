@@ -49,7 +49,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 	metricEntrySorterMergeDuration := entrySorterMergeDuration.WithLabelValues(captureID, changefeedID, tableIDStr)
 
 	lessFunc := func(i *model.PolymorphicEvent, j *model.PolymorphicEvent) bool {
-		if i.CommitTs == j.CommitTs {
+		if i.CRTs == j.CRTs {
 			if i.RawKV.OpType == model.OpTypeDelete {
 				return true
 			}
@@ -57,7 +57,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 				return true
 			}
 		}
-		return i.CommitTs < j.CommitTs
+		return i.CRTs < j.CRTs
 	}
 	mergeFunc := func(kvsA []*model.PolymorphicEvent, kvsB []*model.PolymorphicEvent, output func(*model.PolymorphicEvent)) {
 		var i, j int
@@ -135,7 +135,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 				startTime = time.Now()
 				var merged []*model.PolymorphicEvent
 				mergeFunc(toSort, sorted, func(entry *model.PolymorphicEvent) {
-					if entry.CommitTs <= maxResolvedTs {
+					if entry.CRTs <= maxResolvedTs {
 						output(ctx, entry)
 					} else {
 						merged = append(merged, entry)
@@ -156,7 +156,7 @@ func (es *EntrySorter) AddEntry(ctx context.Context, entry *model.PolymorphicEve
 	}
 	es.lock.Lock()
 	if entry.RawKV.OpType == model.OpTypeResolved {
-		es.resolvedTsGroup = append(es.resolvedTsGroup, entry.CommitTs)
+		es.resolvedTsGroup = append(es.resolvedTsGroup, entry.CRTs)
 	} else {
 		es.unsorted = append(es.unsorted, entry)
 	}
