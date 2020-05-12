@@ -47,7 +47,7 @@ func main() {
 		}
 	}()
 	runDDLTest([]*sql.DB{sourceDB0, sourceDB1})
-	util.MustExec(sourceDB0, "create table finish_mark(a int primary key);")
+	util.MustExec(sourceDB0, "create table test.finish_mark(a int primary key);")
 }
 
 // for every DDL, run the DDL continuously, and one goroutine for one TiDB instance to do some DML op
