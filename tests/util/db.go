@@ -154,7 +154,7 @@ func MustExec(db *sql.DB, sql string, args ...interface{}) {
 func MustExecWithConn(ctx context.Context, conn *sql.Conn, sql string, args ...interface{}) {
 	var err error
 	_, err = conn.ExecContext(ctx, sql, args...)
-	if err != nil {
+	if err != nil && errors.Cause(err) == context.DeadlineExceeded && errors.Cause(err) == context.Canceled {
 		log.S().Fatal(err)
 	}
 }
