@@ -150,6 +150,15 @@ func MustExec(db *sql.DB, sql string, args ...interface{}) {
 	}
 }
 
+// MustExec executes sqls with context
+func MustExecWithConn(ctx context.Context, conn *sql.Conn, sql string, args ...interface{}) {
+	var err error
+	_, err = conn.ExecContext(ctx, sql, args...)
+	if err != nil {
+		log.S().Fatal(err)
+	}
+}
+
 // CreateSourceDBs return source sql.DB for test
 // we create two TiDB instance now in tests/run.sh, change it if needed
 func CreateSourceDBs() (dbs []*sql.DB, err error) {
