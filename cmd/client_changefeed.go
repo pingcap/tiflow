@@ -41,7 +41,8 @@ func newAdminChangefeedCommand() []*cobra.Command {
 			Use:   "pause",
 			Short: "Pause a replicaiton task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
-				ctx := context.Background()
+				ctx, cancel := contextTimeout()
+				defer cancel()
 				job := model.AdminJob{
 					CfID: changefeedID,
 					Type: model.AdminStop,
@@ -53,7 +54,8 @@ func newAdminChangefeedCommand() []*cobra.Command {
 			Use:   "resume",
 			Short: "Resume a paused replicaiton task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
-				ctx := context.Background()
+				ctx, cancel := contextTimeout()
+				defer cancel()
 				job := model.AdminJob{
 					CfID: changefeedID,
 					Type: model.AdminResume,
@@ -65,7 +67,8 @@ func newAdminChangefeedCommand() []*cobra.Command {
 			Use:   "remove",
 			Short: "Remove a replicaiton task (changefeed)",
 			RunE: func(cmd *cobra.Command, args []string) error {
-				ctx := context.Background()
+				ctx, cancel := contextTimeout()
+				defer cancel()
 				job := model.AdminJob{
 					CfID: changefeedID,
 					Type: model.AdminRemove,
@@ -87,7 +90,9 @@ func newListChangefeedCommand() *cobra.Command {
 		Use:   "list",
 		Short: "List all replication tasks (changefeeds) in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, raw, err := cdcEtcdCli.GetChangeFeeds(context.Background())
+			ctx, cancel := contextTimeout()
+			defer cancel()
+			_, raw, err := cdcEtcdCli.GetChangeFeeds(ctx)
 			if err != nil {
 				return err
 			}
@@ -106,15 +111,17 @@ func newQueryChangefeedCommand() *cobra.Command {
 		Use:   "query",
 		Short: "Query information and status of a replicaiton task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			info, err := cdcEtcdCli.GetChangeFeedInfo(context.Background(), changefeedID)
+			ctx, cancel := contextTimeout()
+			defer cancel()
+			info, err := cdcEtcdCli.GetChangeFeedInfo(ctx, changefeedID)
 			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 				return err
 			}
-			status, _, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
+			status, _, err := cdcEtcdCli.GetChangeFeedStatus(ctx, changefeedID)
 			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 				return err
 			}
-			taskPositions, err := cdcEtcdCli.GetAllTaskPositions(context.Background(), changefeedID)
+			taskPositions, err := cdcEtcdCli.GetAllTaskPositions(ctx, changefeedID)
 			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 				return err
 			}
@@ -122,7 +129,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 			for _, pinfo := range taskPositions {
 				count += pinfo.Count
 			}
-			processorInfos, err := cdcEtcdCli.GetAllTaskStatus(context.Background(), changefeedID)
+			processorInfos, err := cdcEtcdCli.GetAllTaskStatus(ctx, changefeedID)
 			if err != nil {
 				return err
 			}
@@ -145,7 +152,8 @@ func newCreateChangefeedCommand() *cobra.Command {
 		Short: "Create a new replication task (changefeed)",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
+			ctx, cancel := contextTimeout()
+			defer cancel()
 			id := uuid.New().String()
 			if startTs == 0 {
 				ts, logical, err := pdCli.GetTS(ctx)
@@ -217,6 +225,10 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			err = verifySink(ctx, info.SinkURI, info.Config, info.Opts)
+			if err != nil {
+				return err
+			}
 			cmd.Printf("Create changefeed successfully!\nID: %s\nInfo: %s\n", id, d)
 			return cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
 		},
@@ -245,6 +257,8 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 				syscall.SIGTERM,
 				syscall.SIGQUIT)
 
+			ctx, cancel := context.WithCancel(context.TODO())
+			defer cancel()
 			tick := time.NewTicker(time.Duration(interval) * time.Second)
 			lastTime := time.Now()
 			var lastCount uint64
@@ -253,17 +267,19 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 				case sig := <-sc:
 					switch sig {
 					case syscall.SIGTERM:
+						cancel()
 						os.Exit(0)
 					default:
+						cancel()
 						os.Exit(1)
 					}
 				case <-tick.C:
 					now := time.Now()
-					status, _, err := cdcEtcdCli.GetChangeFeedStatus(context.Background(), changefeedID)
+					status, _, err := cdcEtcdCli.GetChangeFeedStatus(ctx, changefeedID)
 					if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 						return err
 					}
-					taskPositions, err := cdcEtcdCli.GetAllTaskPositions(context.Background(), changefeedID)
+					taskPositions, err := cdcEtcdCli.GetAllTaskPositions(ctx, changefeedID)
 					if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 						return err
 					}
@@ -271,7 +287,7 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 					for _, pinfo := range taskPositions {
 						count += pinfo.Count
 					}
-					ts, _, err := pdCli.GetTS(context.Background())
+					ts, _, err := pdCli.GetTS(ctx)
 					if err != nil {
 						return err
 					}

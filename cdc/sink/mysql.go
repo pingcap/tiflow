@@ -295,9 +295,14 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 	}
 	db, err := sql.Open("mysql", dsnStr)
 	if err != nil {
-		return nil, errors.Annotatef(err, "Open database connection failed, dsn: %s", dsnStr)
+		return nil, errors.Annotate(err, "Open database connection failed")
 	}
-	log.Info("Start mysql sink", zap.String("dsn", dsnStr))
+	err = db.PingContext(ctx)
+	if err != nil {
+		return nil, errors.Annotatef(err, "fail to open MySQL connection")
+	}
+
+	log.Info("Start mysql sink")
 
 	db.SetMaxIdleConns(params.workerCount)
 	db.SetMaxOpenConns(params.workerCount)

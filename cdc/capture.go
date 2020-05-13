@@ -55,11 +55,13 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(pdEndpoints []string, advertiseAddr string) (c *Capture, err error) {
+func NewCapture(ctx context.Context, pdEndpoints []string, advertiseAddr string) (c *Capture, err error) {
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   pdEndpoints,
+		Context:     ctx,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
+			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{
 					BaseDelay:  time.Second,
