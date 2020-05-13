@@ -236,6 +236,10 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	return k, nil
 }
 
+func init() {
+	sarama.MaxRequestSize = 1024 * 1024 * 1024 // 1GB
+}
+
 // NewSaramaConfig return the default config and set the according version and metrics
 func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error) {
 	config := sarama.NewConfig()
@@ -255,7 +259,6 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 
 	config.ClientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureID, changefeedID)
 	config.Version = version
-	sarama.MaxRequestSize = int32(c.MaxMessageBytes)
 	config.Producer.Flush.MaxMessages = c.MaxMessageBytes
 	config.Metadata.Retry.Max = 20
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
