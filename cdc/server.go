@@ -183,7 +183,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 
 func (s *Server) run(ctx context.Context) (err error) {
 	capture, err := NewCapture(
-		strings.Split(s.opts.pdEndpoints, ","), s.opts.advertiseAddr)
+		ctx, strings.Split(s.opts.pdEndpoints, ","), s.opts.advertiseAddr)
 	if err != nil {
 		return err
 	}
