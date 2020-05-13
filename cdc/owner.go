@@ -67,13 +67,9 @@ type Owner struct {
 const cdcServiceSafePointID = "ticdc"
 
 // NewOwner creates a new Owner instance
-func NewOwner(sess *concurrency.Session, gcTTL int64) (*Owner, error) {
+func NewOwner(pdClient pd.Client, sess *concurrency.Session, gcTTL int64) (*Owner, error) {
 	cli := kv.NewCDCEtcdClient(sess.Client())
 	endpoints := sess.Client().Endpoints()
-	pdClient, err := pd.NewClient(endpoints, pd.SecurityOption{})
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 
 	owner := &Owner{
 		done:        make(chan struct{}),
