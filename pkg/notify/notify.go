@@ -20,23 +20,41 @@ func (n *Notifier) Notify() {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 	for _, receiver := range n.receivers {
-		signalNonBlocking(receiver.rec.c)
-	}
-}
-
-func signalNonBlocking(ch chan struct{}) {
-	select {
-	case ch <- struct{}{}:
-	default:
+		receiver.rec.signalNonBlocking()
 	}
 }
 
 // Receiver is a receiver of notifier, including the receiver channel and stop receiver function.
 type Receiver struct {
-	C      <-chan struct{}
-	Stop   func()
-	ticker *time.Ticker
-	c      chan struct{}
+	C       <-chan struct{}
+	c       chan struct{}
+	Stop    func()
+	ticker  *time.Ticker
+	closeCh chan struct{}
+}
+
+// returns true if the receiverCh should be closed
+func (r *Receiver) signalNonBlocking() bool {
+	select {
+	case <-r.closeCh:
+		return true
+	case r.c <- struct{}{}:
+	default:
+	}
+	return false
+}
+
+func (r *Receiver) signalTickLoop() {
+	go func() {
+	loop:
+		for range r.ticker.C {
+			exit := r.signalNonBlocking()
+			if exit {
+				break loop
+			}
+		}
+		close(r.c)
+	}()
 }
 
 // NewReceiver creates a receiver
@@ -47,22 +65,22 @@ func (n *Notifier) NewReceiver(tickTime time.Duration) *Receiver {
 	currentIndex := n.maxIndex
 	n.maxIndex++
 	receiverCh := make(chan struct{}, 1)
+	closeCh := make(chan struct{})
 	var ticker *time.Ticker
 	if tickTime > 0 {
 		ticker = time.NewTicker(tickTime)
-		go func() {
-			for range ticker.C {
-				signalNonBlocking(receiverCh)
-			}
-		}()
 	}
 	rec := &Receiver{
 		C: receiverCh,
+		c: receiverCh,
 		Stop: func() {
 			n.remove(currentIndex)
 		},
-		ticker: ticker,
-		c:      receiverCh,
+		ticker:  ticker,
+		closeCh: closeCh,
+	}
+	if tickTime > 0 {
+		rec.signalTickLoop()
 	}
 	n.receivers = append(n.receivers, struct {
 		rec   *Receiver
@@ -77,10 +95,10 @@ func (n *Notifier) remove(index int) {
 	for i, receiver := range n.receivers {
 		if receiver.index == index {
 			n.receivers = append(n.receivers[:i], n.receivers[i+1:]...)
+			close(receiver.rec.closeCh)
 			if receiver.rec.ticker != nil {
 				receiver.rec.ticker.Stop()
 			}
-			close(receiver.rec.c)
 			break
 		}
 	}
@@ -94,7 +112,7 @@ func (n *Notifier) Close() {
 		if receiver.rec.ticker != nil {
 			receiver.rec.ticker.Stop()
 		}
-		close(receiver.rec.c)
+		close(receiver.rec.closeCh)
 	}
 	n.receivers = nil
 }
