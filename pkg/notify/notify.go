@@ -2,6 +2,7 @@ package notify
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,14 +21,7 @@ func (n *Notifier) Notify() {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 	for _, receiver := range n.receivers {
-		signalNonBlocking(receiver.rec.c)
-	}
-}
-
-func signalNonBlocking(ch chan struct{}) {
-	select {
-	case ch <- struct{}{}:
-	default:
+		receiver.rec.notify()
 	}
 }
 
@@ -37,6 +31,17 @@ type Receiver struct {
 	Stop   func()
 	ticker *time.Ticker
 	c      chan struct{}
+	closed int32
+}
+
+func (r *Receiver) notify() {
+	if atomic.LoadInt32(&r.closed) != 0 {
+		return
+	}
+	select {
+	case r.c <- struct{}{}:
+	default:
+	}
 }
 
 // NewReceiver creates a receiver
@@ -47,22 +52,20 @@ func (n *Notifier) NewReceiver(tickTime time.Duration) *Receiver {
 	currentIndex := n.maxIndex
 	n.maxIndex++
 	receiverCh := make(chan struct{}, 1)
-	var ticker *time.Ticker
-	if tickTime > 0 {
-		ticker = time.NewTicker(tickTime)
-		go func() {
-			for range ticker.C {
-				signalNonBlocking(receiverCh)
-			}
-		}()
-	}
 	rec := &Receiver{
 		C: receiverCh,
 		Stop: func() {
 			n.remove(currentIndex)
 		},
-		ticker: ticker,
-		c:      receiverCh,
+		c: receiverCh,
+	}
+	if tickTime > 0 {
+		rec.ticker = time.NewTicker(tickTime)
+		go func() {
+			for range rec.ticker.C {
+				rec.notify()
+			}
+		}()
 	}
 	n.receivers = append(n.receivers, struct {
 		rec   *Receiver
@@ -76,6 +79,7 @@ func (n *Notifier) remove(index int) {
 	defer n.mu.Unlock()
 	for i, receiver := range n.receivers {
 		if receiver.index == index {
+			atomic.StoreInt32(&receiver.rec.closed, 1)
 			n.receivers = append(n.receivers[:i], n.receivers[i+1:]...)
 			if receiver.rec.ticker != nil {
 				receiver.rec.ticker.Stop()
