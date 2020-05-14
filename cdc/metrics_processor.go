@@ -81,8 +81,8 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "txn_output_chan_size",
-			Help:      "txn output channel size for a table",
-		}, []string{"changefeed", "capture", "table"})
+			Help:      "size of row changed event output channel from table to processor",
+		}, []string{"changefeed", "capture"})
 	processorErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
