@@ -16,11 +16,16 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
+
+func contextTimeout() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), defaultContextTimeoutDuration)
+}
 
 func getAllCaptures(ctx context.Context) ([]*capture, error) {
 	_, raw, err := cdcEtcdCli.GetCaptures(ctx)
@@ -136,6 +141,32 @@ func verifyTables(ctx context.Context, cfg *filter.ReplicaConfig, startTs uint64
 		}
 	}
 	return
+}
+
+func verifySink(
+	ctx context.Context, sinkURI string, cfg *filter.ReplicaConfig, opts map[string]string,
+) error {
+	filter, err := filter.NewFilter(cfg)
+	if err != nil {
+		return err
+	}
+	errCh := make(chan error)
+	s, err := sink.NewSink(ctx, sinkURI, filter, cfg, opts, errCh)
+	if err != nil {
+		return err
+	}
+	err = s.Close()
+	if err != nil {
+		return err
+	}
+	select {
+	case err = <-errCh:
+		if err != nil {
+			return err
+		}
+	default:
+	}
+	return nil
 }
 
 // strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped

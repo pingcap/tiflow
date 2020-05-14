@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"context"
-
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/spf13/cobra"
 )
@@ -24,7 +22,9 @@ func newListCaptureCommand() *cobra.Command {
 		Use:   "list",
 		Short: "List all captures in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			captures, err := getAllCaptures(context.Background())
+			ctx, cancel := contextTimeout()
+			defer cancel()
+			captures, err := getAllCaptures(ctx)
 			if err != nil {
 				return err
 			}

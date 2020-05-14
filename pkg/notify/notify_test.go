@@ -42,3 +42,18 @@ func (s *notifySuite) TestNotifyHub(c *check.C) {
 	<-r5.C
 	r5.Stop()
 }
+
+func (s *notifySuite) TestContinusStop(c *check.C) {
+	notifier := new(Notifier)
+	n := 5000
+	receivers := make([]*Receiver, n)
+	for i := 0; i < n; i++ {
+		receivers[i] = notifier.NewReceiver(10 * time.Millisecond)
+	}
+	for i := 0; i < n; i++ {
+		<-receivers[i].C
+	}
+	for i := 0; i < n; i++ {
+		receivers[i].Stop()
+	}
+}
