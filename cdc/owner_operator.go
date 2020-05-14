@@ -84,7 +84,7 @@ func newDDLHandler(pdCli pd.Client, kvStorage tidbkv.Storage, checkpointTS uint6
 func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
 	if rawDDL.OpType == model.OpTypeResolved {
 		h.mu.Lock()
-		h.resolvedTS = rawDDL.CommitTs
+		h.resolvedTS = rawDDL.CRTs
 		h.mu.Unlock()
 		return nil
 	}

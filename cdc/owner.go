@@ -261,6 +261,7 @@ func (o *Owner) newChangeFeed(
 		infoWriter:    storage.NewOwnerTaskStatusEtcdWriter(o.etcdClient),
 		filter:        filter,
 		sink:          sink,
+		cyclicEnabled: info.Config.Cyclic.IsEnabled(),
 	}
 	return cf, nil
 }
