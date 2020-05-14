@@ -241,8 +241,12 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			err = cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
+			if err != nil {
+				return err
+			}
 			cmd.Printf("Create changefeed successfully!\nID: %s\nInfo: %s\n", id, d)
-			return cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
+			return nil
 		},
 	}
 	command.PersistentFlags().Uint64Var(&startTs, "start-ts", 0, "Start ts of changefeed")
