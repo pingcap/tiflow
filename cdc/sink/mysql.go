@@ -399,7 +399,11 @@ func concurrentExec(
 	sendFn := func(rows []*model.RowChangedEvent, keys []string, idx int) {
 		causality.add(keys, idx)
 		jobWg.Add(1)
-		rowsChs[idx] <- rows
+		select {
+		case <-ctx.Done():
+			jobWg.Done()
+		case rowsChs[idx] <- rows:
+		}
 	}
 	for groupKey, multiRows := range rowGroups {
 		for _, rows := range multiRows {
