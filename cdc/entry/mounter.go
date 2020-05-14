@@ -41,8 +41,9 @@ const (
 )
 
 type baseKVEntry struct {
-	StartTs  uint64
-	CommitTs uint64
+	StartTs uint64
+	// Commit or resolved TS
+	CRTs uint64
 
 	PhysicalTableID int64
 	RecordID        int64
@@ -218,21 +219,20 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		return nil, errors.Trace(err)
 	}
 	baseInfo := baseKVEntry{
-		StartTs:         raw.StartTs,
-		CommitTs:        raw.CommitTs,
+		StartTs: raw.StartTs,
+		CRTs:    raw.CRTs,
 		PhysicalTableID: physicalTableID,
-		Delete:          raw.OpType == model.OpTypeDelete,
+		Delete:  raw.OpType == model.OpTypeDelete,
 	}
-	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CommitTs)
+	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CRTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	row, err := func() (*model.RowChangedEvent, error) {
 		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
 		if !exist {
-			// TODO: truncate partition
 			if snap.IsTruncateTableID(physicalTableID) {
-				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CommitTs), zap.Int64("tableID", physicalTableID))
+				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 				return nil, nil
 			}
 			return nil, errors.NotFoundf("table in schema storage, id: %d", physicalTableID)
@@ -342,7 +342,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	}
 	// FinishedTS is only set when the job is synced,
 	// but we can use the entry's ts here
-	job.BinlogInfo.FinishedTS = raw.CommitTs
+	job.BinlogInfo.FinishedTS = raw.CRTs
 	return job, nil
 }
 
@@ -362,7 +362,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		if !exist {
 			return nil, errors.NotFoundf("column info, colID: %d", index)
 		}
-		if !tableInfo.IsColWritable(colInfo) {
+		if !row.Delete && !tableInfo.IsColWritable(colInfo) {
 			continue
 		}
 		colName := colInfo.Name.O
@@ -383,7 +383,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 
 	event := &model.RowChangedEvent{
 		StartTs:  row.StartTs,
-		CommitTs: row.CommitTs,
+		CommitTs: row.CRTs,
 		RowID:    row.RecordID,
 		Table: &model.TableName{
 			Schema: tableInfo.TableName.Schema,
@@ -449,7 +449,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 	}
 	return &model.RowChangedEvent{
 		StartTs:  idx.StartTs,
-		CommitTs: idx.CommitTs,
+		CommitTs: idx.CRTs,
 		RowID:    idx.RecordID,
 		Table: &model.TableName{
 			Schema: tableInfo.TableName.Schema,
@@ -539,7 +539,7 @@ func fetchHandleValue(tableInfo *TableInfo, recordID int64) (pkCoID int64, pkVal
 func genMultipleKeys(ti *timodel.TableInfo, values map[string]*model.Column, table string) []string {
 	multipleKeys := make([]string, 0, len(ti.Indices)+1)
 	if ti.PKIsHandle {
-		if pk := ti.GetPkColInfo(); pk != nil {
+		if pk := ti.GetPkColInfo(); pk != nil && !pk.IsGenerated() {
 			cols := []*timodel.ColumnInfo{pk}
 			key := genKeyList(table, cols, values)
 			if len(key) > 0 { // ignore `null` value.
@@ -557,7 +557,18 @@ func genMultipleKeys(ti *timodel.TableInfo, values map[string]*model.Column, tab
 		cols := getIndexColumns(ti.Columns, indexCols)
 		key := genKeyList(table, cols, values)
 		if len(key) > 0 { // ignore `null` value.
-			multipleKeys = append(multipleKeys, key)
+			noGeneratedColumn := true
+			for _, col := range cols {
+				if col.IsGenerated() {
+					noGeneratedColumn = false
+					break
+				}
+			}
+			// If the index contain generated column, we can't use this key to detect conflict with other DML,
+			// Because such as insert can't specified the generated value.
+			if noGeneratedColumn {
+				multipleKeys = append(multipleKeys, key)
+			}
 		} else {
 			log.L().Debug("ignore empty index key", zap.String("table", table))
 		}

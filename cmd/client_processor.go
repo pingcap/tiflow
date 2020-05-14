@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"context"
-
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -26,7 +24,9 @@ func newListProcessorCommand() *cobra.Command {
 		Use:   "list",
 		Short: "List all processors in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			info, err := cdcEtcdCli.GetProcessors(context.Background())
+			ctx, cancel := contextTimeout()
+			defer cancel()
+			info, err := cdcEtcdCli.GetProcessors(ctx)
 			if err != nil {
 				return err
 			}
@@ -41,11 +41,13 @@ func newQueryProcessorCommand() *cobra.Command {
 		Use:   "query",
 		Short: "Query information and status of a sub replication task (processor)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, status, err := cdcEtcdCli.GetTaskStatus(context.Background(), changefeedID, captureID)
+			ctx, cancel := contextTimeout()
+			defer cancel()
+			_, status, err := cdcEtcdCli.GetTaskStatus(ctx, changefeedID, captureID)
 			if err != nil && errors.Cause(err) != model.ErrTaskStatusNotExists {
 				return err
 			}
-			_, position, err := cdcEtcdCli.GetTaskPosition(context.Background(), changefeedID, captureID)
+			_, position, err := cdcEtcdCli.GetTaskPosition(ctx, changefeedID, captureID)
 			if err != nil && errors.Cause(err) != model.ErrTaskPositionNotExists {
 				return err
 			}

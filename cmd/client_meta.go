@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +20,9 @@ func newDeleteMetaCommand() *cobra.Command {
 		Use:   "delete",
 		Short: "Delete all meta data in etcd, confirm that you know what this command will do and use it at your own risk",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := cdcEtcdCli.ClearAllCDCInfo(context.Background())
+			ctx, cancel := contextTimeout()
+			defer cancel()
+			err := cdcEtcdCli.ClearAllCDCInfo(ctx)
 			if err == nil {
 				cmd.Println("already truncate all meta in etcd!")
 			}

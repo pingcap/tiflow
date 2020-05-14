@@ -1,17 +1,24 @@
 package filter
 
 import (
+	"encoding/json"
 	"strings"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-tools/pkg/filter"
 )
+
+// OptCyclicConfig is the key that adds to changefeed options
+// automatically is cyclic replication is on.
+const OptCyclicConfig string = "_cyclic_relax_sql_mode"
 
 // Filter is a event filter implementation
 type Filter struct {
 	filter            *filter.Filter
 	ignoreTxnCommitTs []uint64
 	ddlWhitelist      []model.ActionType
+	disableDDL        bool
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
@@ -22,6 +29,7 @@ type ReplicaConfig struct {
 	IgnoreTxnCommitTs   []uint64           `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
 	SinkDispatchRules   []*DispatchRule    `toml:"sink-dispatch-rules" json:"sink-dispatch-rules"`
 	MounterWorkerNum    int                `toml:"mounter-worker-num" json:"mounter-worker-num"`
+	Cyclic              *ReplicationConfig `toml:"cyclic-replication" json:"cyclic-replication"`
 }
 
 // DispatchRule represents partition rule for a table
@@ -30,16 +38,46 @@ type DispatchRule struct {
 	Rule string `toml:"rule" json:"rule"`
 }
 
+// ReplicationConfig represents config used for cyclic replication
+type ReplicationConfig struct {
+	Enable          bool     `toml:"enable" json:"enable"`
+	ReplicaID       uint64   `toml:"replica-id" json:"replica-id"`
+	FilterReplicaID []uint64 `toml:"filter-replica-ids" json:"filter-replica-ids"`
+	IDBuckets       int      `toml:"id-buckets" json:"id-buckets"`
+	SyncDDL         bool     `toml:"sync-ddl" json:"sync-ddl"`
+}
+
+// IsEnabled returns whether cyclic replication is enabled or not.
+func (c *ReplicationConfig) IsEnabled() bool {
+	return c != nil && c.Enable
+}
+
+// Marshal returns the json marshal format of a ReplicationConfig
+func (c *ReplicationConfig) Marshal() (string, error) {
+	cfg, err := json.Marshal(c)
+	if err != nil {
+		return "", errors.Annotatef(err, "Unmarshal data: %v", c)
+	}
+	return string(cfg), nil
+}
+
+// Unmarshal unmarshals into *ReplicationConfig from json marshal byte slice
+func (c *ReplicationConfig) Unmarshal(data []byte) error {
+	return json.Unmarshal(data, c)
+}
+
 // NewFilter creates a filter
 func NewFilter(config *ReplicaConfig) (*Filter, error) {
 	filter, err := filter.New(config.FilterCaseSensitive, config.FilterRules)
 	if err != nil {
 		return nil, err
 	}
+	disableDDL := config.Cyclic.IsEnabled() && !config.Cyclic.SyncDDL
 	return &Filter{
 		filter:            filter,
 		ignoreTxnCommitTs: config.IgnoreTxnCommitTs,
 		ddlWhitelist:      config.DDLWhitelist,
+		disableDDL:        disableDDL,
 	}, nil
 }
 
@@ -73,11 +111,10 @@ func (f *Filter) ShouldIgnoreDMLEvent(ts uint64, schema, table string) bool {
 // ShouldIgnoreDDLEvent removes DDLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
 func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, schema, table string) bool {
-	// TODO(neil) add more check.
-	return f.shouldIgnoreCommitTs(ts) || f.ShouldIgnoreTable(schema, table)
+	return f.disableDDL || f.shouldIgnoreCommitTs(ts) || f.ShouldIgnoreTable(schema, table)
 }
 
-// ShouldDiscardDDL returns true if this kind of DDL should be discarded
+// ShouldDiscardDDL returns true if this DDL should be discarded
 func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
 	if !f.shouldDiscardByBuiltInDDLWhitelist(ddlType) {
 		return false

@@ -288,20 +288,20 @@ func prewrite2RawKV(req *kvrpcpb.PrewriteRequest, commitTs uint64) []*model.RawK
 		switch mut.Op {
 		case kvrpcpb.Op_Put, kvrpcpb.Op_Insert:
 			rawKV := &model.RawKVEntry{
-				StartTs:  req.GetStartVersion(),
-				CommitTs: commitTs,
-				Key:      mut.Key,
-				Value:    mut.Value,
-				OpType:   model.OpTypePut,
+				StartTs: req.GetStartVersion(),
+				CRTs:    commitTs,
+				Key:     mut.Key,
+				Value:   mut.Value,
+				OpType:  model.OpTypePut,
 			}
 			putEntries = append(putEntries, rawKV)
 		case kvrpcpb.Op_Del:
 			rawKV := &model.RawKVEntry{
-				StartTs:  req.GetStartVersion(),
-				CommitTs: commitTs,
-				Key:      mut.Key,
-				Value:    mut.Value,
-				OpType:   model.OpTypeResolved,
+				StartTs: req.GetStartVersion(),
+				CRTs:    commitTs,
+				Key:     mut.Key,
+				Value:   mut.Value,
+				OpType:  model.OpTypeResolved,
 			}
 			deleteEntries = append(deleteEntries, rawKV)
 		default:
@@ -309,7 +309,7 @@ func prewrite2RawKV(req *kvrpcpb.PrewriteRequest, commitTs uint64) []*model.RawK
 		}
 	}
 	entries := append(deleteEntries, putEntries...)
-	return append(entries, &model.RawKVEntry{CommitTs: commitTs, OpType: model.OpTypeResolved})
+	return append(entries, &model.RawKVEntry{CRTs: commitTs, OpType: model.OpTypeResolved})
 }
 
 func anyError(errs []error) bool {

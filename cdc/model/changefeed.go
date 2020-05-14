@@ -92,5 +92,16 @@ func (info *ChangeFeedInfo) Marshal() (string, error) {
 // Unmarshal unmarshals into *ChangeFeedInfo from json marshal byte slice
 func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, &info)
-	return errors.Annotatef(err, "Unmarshal data: %v", data)
+	if err != nil {
+		return errors.Annotatef(err, "Unmarshal data: %v", data)
+	}
+	// TODO(neil) find a better way to let sink know cyclic is enabled.
+	if info.Config != nil && info.Config.Cyclic.IsEnabled() {
+		cyclicCfg, err := info.Config.Cyclic.Marshal()
+		if err != nil {
+			return errors.Annotatef(err, "Marshal data: %v", data)
+		}
+		info.Opts[filter.OptCyclicConfig] = string(cyclicCfg)
+	}
+	return nil
 }
