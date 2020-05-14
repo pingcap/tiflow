@@ -219,10 +219,10 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		return nil, errors.Trace(err)
 	}
 	baseInfo := baseKVEntry{
-		StartTs: raw.StartTs,
-		CRTs:    raw.CRTs,
+		StartTs:         raw.StartTs,
+		CRTs:            raw.CRTs,
 		PhysicalTableID: physicalTableID,
-		Delete:  raw.OpType == model.OpTypeDelete,
+		Delete:          raw.OpType == model.OpTypeDelete,
 	}
 	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CRTs)
 	if err != nil {
