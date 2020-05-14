@@ -106,6 +106,7 @@ type processor struct {
 type tableInfo struct {
 	id         int64
 	resolvedTS uint64
+	workload   uint64
 	cancel     context.CancelFunc
 }
 
@@ -712,6 +713,10 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 			p.errCh <- err
 		}
 	}()
+
+	// TODO(leoppro) calculate the workload of this table
+	// We temporarily set the value to constant 1
+	table.workload = 1
 
 	var sorter puller.EventSorter
 	switch p.changefeed.Engine {

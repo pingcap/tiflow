@@ -37,6 +37,8 @@ const (
 	// TaskKeyPrefix is the prefix of task keys
 	TaskKeyPrefix = EtcdKeyBase + "/task"
 
+	TaskWorkloadKeyPrefix = TaskKeyPrefix + "/workload"
+
 	// TaskStatusKeyPrefix is the prefix of task status keys
 	TaskStatusKeyPrefix = TaskKeyPrefix + "/status"
 
@@ -85,6 +87,10 @@ func GetEtcdKeyCaptureInfo(id string) string {
 // GetEtcdKeyTaskStatus returns the key for the task status
 func GetEtcdKeyTaskStatus(changeFeedID, captureID string) string {
 	return TaskStatusKeyPrefix + "/" + captureID + "/" + changeFeedID
+}
+
+func GetEtcdKeyTaskWorkload(changeFeedID, captureID string) string {
+	return TaskWorkloadKeyPrefix + "/" + captureID + "/" + changeFeedID
 }
 
 // GetEtcdKeyJob returns the key for a job status
