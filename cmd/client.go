@@ -38,6 +38,10 @@ var (
 	sortEngine string
 	sortDir    string
 
+	cyclicReplicaID        uint64
+	cyclicFilterReplicaIDs []uint
+	cyclicSyncDDL          bool
+
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client
 
@@ -47,7 +51,7 @@ var (
 	captureID    string
 	interval     uint
 
-	defaultContextTimeoutDuration = 10 * time.Second
+	defaultContextTimeoutDuration = 30 * time.Second
 )
 
 // cf holds changefeed id, which is used for output only

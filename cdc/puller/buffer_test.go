@@ -37,14 +37,14 @@ func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
 		defer wg.Done()
 		first, err := b.Get(ctx)
 		c.Assert(err, check.IsNil)
-		c.Assert(first.Val.CommitTs, check.Equals, uint64(110))
+		c.Assert(first.Val.CRTs, check.Equals, uint64(110))
 		second, err := b.Get(ctx)
 		c.Assert(err, check.IsNil)
 		c.Assert(second.Resolved.ResolvedTs, check.Equals, uint64(111))
 	}()
 
 	err := b.AddEntry(ctx, model.RegionFeedEvent{
-		Val: &model.RawKVEntry{CommitTs: 110},
+		Val: &model.RawKVEntry{CRTs: 110},
 	})
 	c.Assert(err, check.IsNil)
 	err = b.AddEntry(ctx, model.RegionFeedEvent{

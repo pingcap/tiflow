@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
@@ -74,6 +75,8 @@ type changeFeed struct {
 	taskPositions map[string]*model.TaskPosition
 	filter        *filter.Filter
 	sink          sink.Sink
+
+	cyclicEnabled bool
 
 	ddlHandler    OwnerDDLHandler
 	ddlResolvedTs uint64
@@ -278,8 +281,32 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[strin
 	}
 
 	appendTableInfos := make(map[string][]*model.ProcessTableInfo, len(captures))
-
+	schemaSnapshot := c.schema
 	for tableID, orphan := range c.orphanTables {
+		var orphanMarkTable *model.ProcessTableInfo
+		if c.cyclicEnabled {
+			tableName, found := schemaSnapshot.GetTableNameByID(int64(tableID))
+			if !found || cyclic.IsMarkTable(tableName.Schema, tableName.Table) {
+				// Skip, mark tables should not be balanced alone.
+				continue
+			}
+			// TODO(neil) we could just use c.tables.
+			markTableSchameName, markTableTableName := cyclic.MarkTableName(tableName.Schema, tableName.Table)
+			id, found := schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
+			if !found {
+				// Mark table is not created yet, skip and wait.
+				log.Info("balance table info delay, wait mark table",
+					zap.String("changefeed", c.id),
+					zap.Uint64("tableID", tableID),
+					zap.String("markTableName", markTableTableName))
+				continue
+			}
+			orphanMarkTable = &model.ProcessTableInfo{
+				ID:      uint64(id),
+				StartTs: orphan.StartTs,
+			}
+		}
+
 		captureID := c.selectCapture(captures, appendTableInfos)
 		if len(captureID) == 0 {
 			return nil
@@ -289,6 +316,10 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[strin
 			ID:      tableID,
 			StartTs: orphan.StartTs,
 		})
+		// Table and mark table must be balanced to the same capture.
+		if orphanMarkTable != nil {
+			info = append(info, orphanMarkTable)
+		}
 		appendTableInfos[captureID] = info
 	}
 

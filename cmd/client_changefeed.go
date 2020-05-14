@@ -172,7 +172,19 @@ func newCreateChangefeedCommand() *cobra.Command {
 					return err
 				}
 			}
-
+			if cyclicReplicaID != 0 && len(cyclicFilterReplicaIDs) != 0 {
+				filter := make([]uint64, 0, len(cyclicFilterReplicaIDs))
+				for _, id := range cyclicFilterReplicaIDs {
+					filter = append(filter, uint64(id))
+				}
+				cfg.Cyclic = &cdcfilter.ReplicationConfig{
+					Enable:          true,
+					ReplicaID:       cyclicReplicaID,
+					FilterReplicaID: filter,
+					SyncDDL:         cyclicSyncDDL,
+					// TODO(neil) enable ID bucket.
+				}
+			}
 			info := &model.ChangeFeedInfo{
 				SinkURI:    sinkURI,
 				Opts:       make(map[string]string),
@@ -229,8 +241,12 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			err = cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
+			if err != nil {
+				return err
+			}
 			cmd.Printf("Create changefeed successfully!\nID: %s\nInfo: %s\n", id, d)
-			return cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
+			return nil
 		},
 	}
 	command.PersistentFlags().Uint64Var(&startTs, "start-ts", 0, "Start ts of changefeed")
@@ -241,6 +257,9 @@ func newCreateChangefeedCommand() *cobra.Command {
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", "memory", "sort engine used for data sort")
 	command.PersistentFlags().StringVar(&sortDir, "sort-dir", ".", "directory used for file sort")
+	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
+	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
+	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
 
 	return command
 }

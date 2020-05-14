@@ -44,7 +44,7 @@ func formatColumnVal(c *column) {
 }
 
 type mqMessageKey struct {
-	// TODO: should we rename it to CommitTs
+	// TODO: should we rename it to CRTs
 	Ts     uint64              `json:"ts"`
 	Schema string              `json:"scm,omitempty"`
 	Table  string              `json:"tbl,omitempty"`

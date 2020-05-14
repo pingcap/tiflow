@@ -90,6 +90,17 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 		c.Assert(filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
 		c.Assert(filter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
 	}
+
+	disableDDLFilter, err := NewFilter(&ReplicaConfig{
+		Cyclic: &ReplicationConfig{
+			Enable:  true,
+			SyncDDL: false,
+		}})
+	c.Assert(err, check.IsNil)
+	for _, tc := range testCases {
+		c.Assert(disableDDLFilter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table),
+			check.Equals, true)
+	}
 }
 
 func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
