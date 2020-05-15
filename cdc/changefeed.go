@@ -189,7 +189,7 @@ func (c *changeFeed) removeTable(sid, tid uint64) {
 	}
 }
 
-func (c *changeFeed) truncatePartition(tblInfo *timodel.TableInfo, startTs uint64) {
+func (c *changeFeed) updatePartition(tblInfo *timodel.TableInfo, startTs uint64) {
 	tid := uint64(tblInfo.ID)
 	partitionsID, ok := c.partitions[tid]
 	if !ok || len(partitionsID) == 0 {
@@ -199,12 +199,13 @@ func (c *changeFeed) truncatePartition(tblInfo *timodel.TableInfo, startTs uint6
 	for _, pid := range partitionsID {
 		oldIDs[pid] = struct{}{}
 	}
+	fmt.Printf("changedeef: oldIDs: %v  ------\n", oldIDs)
 
 	pi := tblInfo.GetPartitionInfo()
 	if pi == nil {
 		return
 	}
-	newPartitionIDs := make([]int64, len(pi.Definitions))
+	newPartitionIDs := make([]int64, 0, len(pi.Definitions))
 	for _, partition := range pi.Definitions {
 		pid := uint64(partition.ID)
 		_, ok := c.orphanTables[pid]
@@ -221,11 +222,12 @@ func (c *changeFeed) truncatePartition(tblInfo *timodel.TableInfo, startTs uint6
 	}
 	// update the table partition IDs.
 	c.partitions[tid] = newPartitionIDs
+	fmt.Printf("changedeef: newIDs: %v  ------\n", newPartitionIDs)
 
-	// drop truncated partition.
+	// drop partition.
 	for pid := range oldIDs {
 		id := uint64(pid)
-		fmt.Printf("drop truncate partition feed %v  ------\n", pid)
+		fmt.Printf("drop partition feed %v  ------\n", pid)
 		if _, ok := c.orphanTables[id]; ok {
 			delete(c.orphanTables, id)
 		} else {
@@ -474,8 +476,8 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			}
 			addID := uint64(job.BinlogInfo.TableInfo.ID)
 			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName, job.BinlogInfo.TableInfo)
-		case timodel.ActionTruncateTablePartition:
-			c.truncatePartition(job.BinlogInfo.TableInfo, job.BinlogInfo.FinishedTS)
+		case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
+			c.updatePartition(job.BinlogInfo.TableInfo, job.BinlogInfo.FinishedTS)
 		}
 		return nil
 	}()

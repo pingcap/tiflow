@@ -538,7 +538,7 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 	return nil
 }
 
-func (s *schemaSnapshot) truncatePartition(tbl *timodel.TableInfo) error {
+func (s *schemaSnapshot) updatePartition(tbl *timodel.TableInfo) error {
 	id := tbl.ID
 	table, ok := s.tables[id]
 	if !ok {
@@ -549,24 +549,28 @@ func (s *schemaSnapshot) truncatePartition(tbl *timodel.TableInfo) error {
 		return errors.NotFoundf("table(%d)'s schema", id)
 	}
 
-	pi := table.GetPartitionInfo()
-	if pi == nil {
+	oldPi := table.GetPartitionInfo()
+	if oldPi == nil {
 		return errors.NotFoundf("table %d is not a partition table, truncate partition failed", id)
 	}
-	oldIDs := make(map[int64]struct{}, len(pi.Definitions))
-	for _, p := range pi.Definitions {
+	oldIDs := make(map[int64]struct{}, len(oldPi.Definitions))
+	for _, p := range oldPi.Definitions {
 		oldIDs[p.ID] = struct{}{}
 	}
 
-	pi = tbl.GetPartitionInfo()
-	if pi == nil {
+	newPi := tbl.GetPartitionInfo()
+	if newPi == nil {
 		return errors.NotFoundf("table %d is not a partition table, truncate partition failed", id)
 	}
 
 	table = WrapTableInfo(schema.ID, schema.Name.O, tbl.Clone())
 	s.tables[id] = table
-	for _, partition := range pi.Definitions {
+	for _, partition := range newPi.Definitions {
 		// update table info.
+		if _, ok := s.partitionTable[partition.ID]; ok {
+			fmt.Printf("snap add partition  %v --------\n", partition.ID)
+			log.Debug("add table partition success", zap.String("name", table.Name.O), zap.Int64("tid", id), zap.Reflect("add partition id", partition.ID))
+		}
 		s.partitionTable[partition.ID] = table
 		if !table.ExistTableUniqueColumn() {
 			s.ineligibleTableID[partition.ID] = struct{}{}
@@ -574,15 +578,15 @@ func (s *schemaSnapshot) truncatePartition(tbl *timodel.TableInfo) error {
 		delete(oldIDs, partition.ID)
 	}
 
-	// drop truncated partition.
+	// drop old partition.
 	for pid := range oldIDs {
 		s.truncateTableID[pid] = struct{}{}
 		delete(s.partitionTable, pid)
 		delete(s.ineligibleTableID, pid)
 		fmt.Printf("snap truncate partition  %v --------\n", pid)
+		log.Debug("drop table partition success", zap.String("name", table.Name.O), zap.Int64("tid", id), zap.Reflect("truncated partition id", pid))
 	}
 
-	log.Debug("truncate table partition success", zap.String("name", table.Name.O), zap.Int64("tid", id), zap.Reflect("truncated id", oldIDs))
 	return nil
 }
 
@@ -696,8 +700,8 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 		}
 
 		s.truncateTableID[job.TableID] = struct{}{}
-	case timodel.ActionTruncateTablePartition:
-		err := s.truncatePartition(job.BinlogInfo.TableInfo)
+	case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
+		err := s.updatePartition(job.BinlogInfo.TableInfo)
 		if err != nil {
 			return errors.Trace(err)
 		}
