@@ -23,8 +23,7 @@ func newQueryTsoCommand() *cobra.Command {
 		Use:   "query",
 		Short: "Get tso from PD",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, cancel := contextTimeout()
-			defer cancel()
+			ctx := defaultContext
 			ts, logic, err := pdCli.GetTS(ctx)
 			if err != nil {
 				return err

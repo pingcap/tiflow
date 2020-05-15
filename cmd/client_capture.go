@@ -22,8 +22,7 @@ func newListCaptureCommand() *cobra.Command {
 		Use:   "list",
 		Short: "List all captures in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, cancel := contextTimeout()
-			defer cancel()
+			ctx := defaultContext
 			captures, err := getAllCaptures(ctx)
 			if err != nil {
 				return err
