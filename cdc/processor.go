@@ -60,7 +60,7 @@ const (
 )
 
 var (
-	fNewPDCli     = pd.NewClient
+	fNewPDCli     = pd.NewClientWithContext
 	fNewTsRWriter = createTsRWriter
 )
 
@@ -128,7 +128,7 @@ func newProcessor(
 	checkpointTs uint64) (*processor, error) {
 	etcdCli := session.Client()
 	endpoints := session.Client().Endpoints()
-	pdCli, err := fNewPDCli(endpoints, pd.SecurityOption{})
+	pdCli, err := fNewPDCli(ctx, endpoints, pd.SecurityOption{})
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", endpoints)
 	}

@@ -98,7 +98,8 @@ func addLock(cfg *util.Config) error {
 		return errors.Trace(err)
 	}
 
-	pdcli, err := pd.NewClient(strings.Split(cfg.PDAddr, ","), pd.SecurityOption{})
+	pdcli, err := pd.NewClientWithContext(
+		ctx, strings.Split(cfg.PDAddr, ","), pd.SecurityOption{})
 	if err != nil {
 		return errors.Trace(err)
 	}
