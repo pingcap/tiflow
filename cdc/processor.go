@@ -655,13 +655,24 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 	}
 }
 
-func (p *processor) waitPrepareWorkers(ctx context.Context, ch chan *model.PolymorphicEvent, wg *sync.WaitGroup) {
+func (p *processor) waitPrepareWorkers(ctx context.Context, ch chan *model.PolymorphicEvent, errCh chan error, wg *sync.WaitGroup) {
+	sendNoneBlock := func(err error) {
+		select {
+		case errCh <- err:
+		default:
+		}
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case ev := <-ch:
-			ev.WaitPrepare(ctx)
+			err := ev.WaitPrepare(ctx)
+			if err != nil {
+				sendNoneBlock(err)
+				wg.Done()
+				return
+			}
 			wg.Done()
 		}
 	}
@@ -677,11 +688,12 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	var wg sync.WaitGroup
 	workers := make([]chan *model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
 	events := make([]*model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
+	errCh := make(chan error)
 	for i := 0; i < defaultSyncResolvedBatch; i++ {
 		ch := make(chan *model.PolymorphicEvent)
 		workers = append(workers, ch)
 		go func() {
-			p.waitPrepareWorkers(ctx, ch, &wg)
+			p.waitPrepareWorkers(ctx, ch, errCh, &wg)
 		}()
 	}
 
@@ -721,6 +733,10 @@ func (p *processor) syncResolved(ctx context.Context) error {
 
 	for {
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-errCh:
+			return errors.Trace(err)
 		case row := <-p.output:
 			if row == nil {
 				continue
@@ -738,8 +754,6 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-		case <-ctx.Done():
-			return ctx.Err()
 		}
 	}
 }
