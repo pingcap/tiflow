@@ -568,7 +568,6 @@ func (s *schemaSnapshot) updatePartition(tbl *timodel.TableInfo) error {
 	for _, partition := range newPi.Definitions {
 		// update table info.
 		if _, ok := s.partitionTable[partition.ID]; ok {
-			fmt.Printf("snap add partition  %v --------\n", partition.ID)
 			log.Debug("add table partition success", zap.String("name", table.Name.O), zap.Int64("tid", id), zap.Reflect("add partition id", partition.ID))
 		}
 		s.partitionTable[partition.ID] = table
@@ -583,7 +582,6 @@ func (s *schemaSnapshot) updatePartition(tbl *timodel.TableInfo) error {
 		s.truncateTableID[pid] = struct{}{}
 		delete(s.partitionTable, pid)
 		delete(s.ineligibleTableID, pid)
-		fmt.Printf("snap truncate partition  %v --------\n", pid)
 		log.Debug("drop table partition success", zap.String("name", table.Name.O), zap.Int64("tid", id), zap.Reflect("truncated partition id", pid))
 	}
 

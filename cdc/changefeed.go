@@ -199,7 +199,6 @@ func (c *changeFeed) updatePartition(tblInfo *timodel.TableInfo, startTs uint64)
 	for _, pid := range partitionsID {
 		oldIDs[pid] = struct{}{}
 	}
-	fmt.Printf("changedeef: oldIDs: %v  ------\n", oldIDs)
 
 	pi := tblInfo.GetPartitionInfo()
 	if pi == nil {
@@ -215,19 +214,16 @@ func (c *changeFeed) updatePartition(tblInfo *timodel.TableInfo, startTs uint64)
 				ID:      pid,
 				StartTs: startTs,
 			}
-			fmt.Printf("add new partition feed %v  ------\n", pid)
 		}
 		delete(oldIDs, partition.ID)
 		newPartitionIDs = append(newPartitionIDs, partition.ID)
 	}
 	// update the table partition IDs.
 	c.partitions[tid] = newPartitionIDs
-	fmt.Printf("changedeef: newIDs: %v  ------\n", newPartitionIDs)
 
 	// drop partition.
 	for pid := range oldIDs {
 		id := uint64(pid)
-		fmt.Printf("drop partition feed %v  ------\n", pid)
 		if _, ok := c.orphanTables[id]; ok {
 			delete(c.orphanTables, id)
 		} else {
