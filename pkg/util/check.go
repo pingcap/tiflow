@@ -60,26 +60,26 @@ func CheckClusterVersion(ctx context.Context, client pd.Client, pdHTTP string) e
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/version", pdHTTP), nil)
 	if err != nil {
-		return errors.Annotatef(err, "fail to request PD 1")
+		return errors.Annotate(err, "fail to request PD")
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return errors.Annotatef(err, "fail to request PD 2")
+		return errors.Annotate(err, "fail to request PD")
 	}
 	if resp.StatusCode < 200 && resp.StatusCode >= 300 {
 		return errors.BadRequestf("fail to requet PD %s", resp.Status)
 	}
 	content, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Annotatef(err, "fail to request PD 3")
+		return errors.Annotate(err, "fail to request PD")
 	}
 	err = json.Unmarshal(content, &pdVer)
 	if err != nil {
-		return errors.Annotatef(err, "fail to request PD 4")
+		return errors.Annotate(err, "fail to request PD")
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		return errors.Annotatef(err, "fail to request PD 5")
+		return errors.Annotate(err, "fail to request PD")
 	}
 	ver, err := semver.NewVersion(removeV(pdVer.Version))
 	if err != nil {
