@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math/rand"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,12 +53,13 @@ import (
 const (
 	resolveTsInterval = time.Millisecond * 500
 
-	defaultOutputChanSize = 128000
+	defaultOutputChanSize = 1280000
 
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 
-	defaultSyncResolvedBatch = 128
+	defaultSyncResolvedBatch = 1024
+	defaultWaitPrepareCount  = 16
 )
 
 var (
@@ -655,7 +655,7 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 	}
 }
 
-func (p *processor) waitPrepareWorkers(ctx context.Context, ch chan *model.PolymorphicEvent, errCh chan error, wg *sync.WaitGroup) {
+func waitPrepareWorkers(ctx context.Context, ch chan *model.PolymorphicEvent, errCh chan error, wg *sync.WaitGroup) {
 	sendNoneBlock := func(err error) {
 		select {
 		case errCh <- err:
@@ -686,14 +686,14 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	}()
 
 	var wg sync.WaitGroup
-	workers := make([]chan *model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
+	workers := make([]chan *model.PolymorphicEvent, 0, defaultWaitPrepareCount)
 	events := make([]*model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
 	errCh := make(chan error)
-	for i := 0; i < defaultSyncResolvedBatch; i++ {
-		ch := make(chan *model.PolymorphicEvent)
+	for i := 0; i < defaultWaitPrepareCount; i++ {
+		ch := make(chan *model.PolymorphicEvent, defaultSyncResolvedBatch/defaultWaitPrepareCount+1)
 		workers = append(workers, ch)
 		go func() {
-			p.waitPrepareWorkers(ctx, ch, errCh, &wg)
+			waitPrepareWorkers(ctx, ch, errCh, &wg)
 		}()
 	}
 
@@ -712,15 +712,17 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		return nil
 	}
 
+	idx := 0
 	processRowChangedEvent := func(row *model.PolymorphicEvent) error {
 		events = append(events, row)
-		idx := rand.Intn(defaultSyncResolvedBatch)
+		idx = idx % defaultWaitPrepareCount
 		wg.Add(1)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case workers[idx] <- row:
 		}
+		idx += 1
 
 		if len(events) >= defaultSyncResolvedBatch {
 			err := flushRowChangedEvents()
