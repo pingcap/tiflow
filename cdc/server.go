@@ -21,10 +21,13 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 const (
@@ -102,6 +105,8 @@ type Server struct {
 	capture      *Capture
 	owner        *Owner
 	statusServer *http.Server
+	pdClient     pd.Client
+	pdEndpoints  []string
 }
 
 // NewServer creates a Server instance.
@@ -128,7 +133,31 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 
 // Run runs the server.
 func (s *Server) Run(ctx context.Context) error {
-	err := s.startStatusHTTP()
+	s.pdEndpoints = strings.Split(s.opts.pdEndpoints, ",")
+	pdClient, err := pd.NewClientWithContext(
+		ctx, s.pdEndpoints, pd.SecurityOption{},
+		pd.WithGRPCDialOptions(
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+		))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	s.pdClient = pdClient
+
+	err = util.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0])
+	if err != nil {
+		return err
+	}
+	err = s.startStatusHTTP()
 	if err != nil {
 		return err
 	}
@@ -157,7 +186,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			continue
 		}
 		log.Info("campaign owner successfully", zap.String("capture", s.capture.info.ID))
-		owner, err := NewOwner(s.capture.session, s.opts.gcTTL)
+		owner, err := NewOwner(s.pdClient, s.capture.session, s.opts.gcTTL)
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
 			continue
@@ -182,8 +211,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	capture, err := NewCapture(
-		ctx, strings.Split(s.opts.pdEndpoints, ","), s.opts.advertiseAddr)
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.advertiseAddr)
 	if err != nil {
 		return err
 	}

@@ -13,6 +13,7 @@ import (
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3"
 	"google.golang.org/grpc"
@@ -131,6 +132,12 @@ func newCliCommand() *cobra.Command {
 				))
 			if err != nil {
 				return errors.Annotate(err, "fail to open PD client")
+			}
+			ctx, cancel := contextTimeout()
+			defer cancel()
+			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr)
+			if err != nil {
+				return err
 			}
 
 			return nil
