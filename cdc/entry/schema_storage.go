@@ -469,6 +469,11 @@ func (s *schemaSnapshot) dropSchema(id int64) error {
 			}
 		}
 		tableName := s.tables[table.ID].TableName
+		if pi := table.GetPartitionInfo(); pi != nil {
+			for _, partition := range pi.Definitions {
+				delete(s.partitionTable, partition.ID)
+			}
+		}
 		delete(s.tables, table.ID)
 		delete(s.tableNameToID, tableName)
 	}
@@ -530,6 +535,54 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 	delete(s.ineligibleTableID, id)
 
 	log.Debug("drop table success", zap.String("name", table.Name.O), zap.Int64("id", id))
+	return nil
+}
+
+func (s *schemaSnapshot) truncatePartition(tbl *timodel.TableInfo) error {
+	id := tbl.ID
+	table, ok := s.tables[id]
+	if !ok {
+		return errors.NotFoundf("table %d", id)
+	}
+	schema, ok := s.SchemaByTableID(id)
+	if !ok {
+		return errors.NotFoundf("table(%d)'s schema", id)
+	}
+
+	pi := table.GetPartitionInfo()
+	if pi == nil {
+		return errors.NotFoundf("table %d is not a partition table, truncate partition failed", id)
+	}
+	oldIDs := make(map[int64]struct{}, len(pi.Definitions))
+	for _, p := range pi.Definitions {
+		oldIDs[p.ID] = struct{}{}
+	}
+
+	pi = tbl.GetPartitionInfo()
+	if pi == nil {
+		return errors.NotFoundf("table %d is not a partition table, truncate partition failed", id)
+	}
+
+	table = WrapTableInfo(schema.ID, schema.Name.O, tbl.Clone())
+	s.tables[id] = table
+	for _, partition := range pi.Definitions {
+		// update table info.
+		s.partitionTable[partition.ID] = table
+		if !table.ExistTableUniqueColumn() {
+			s.ineligibleTableID[partition.ID] = struct{}{}
+		}
+		delete(oldIDs, partition.ID)
+	}
+
+	// drop truncated partition.
+	for pid := range oldIDs {
+		s.truncateTableID[pid] = struct{}{}
+		delete(s.partitionTable, pid)
+		delete(s.ineligibleTableID, pid)
+		fmt.Printf("snap truncate partition  %v --------\n", pid)
+	}
+
+	log.Debug("truncate table partition success", zap.String("name", table.Name.O), zap.Int64("tid", id), zap.Reflect("truncated id", oldIDs))
 	return nil
 }
 
@@ -643,6 +696,11 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 		}
 
 		s.truncateTableID[job.TableID] = struct{}{}
+	case timodel.ActionTruncateTablePartition:
+		err := s.truncatePartition(job.BinlogInfo.TableInfo)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {

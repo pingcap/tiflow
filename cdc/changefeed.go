@@ -189,6 +189,51 @@ func (c *changeFeed) removeTable(sid, tid uint64) {
 	}
 }
 
+func (c *changeFeed) truncatePartition(tblInfo *timodel.TableInfo, startTs uint64) {
+	tid := uint64(tblInfo.ID)
+	partitionsID, ok := c.partitions[tid]
+	if !ok || len(partitionsID) == 0 {
+		return
+	}
+	oldIDs := make(map[int64]struct{}, len(partitionsID))
+	for _, pid := range partitionsID {
+		oldIDs[pid] = struct{}{}
+	}
+
+	pi := tblInfo.GetPartitionInfo()
+	if pi == nil {
+		return
+	}
+	newPartitionIDs := make([]int64, len(pi.Definitions))
+	for _, partition := range pi.Definitions {
+		pid := uint64(partition.ID)
+		_, ok := c.orphanTables[pid]
+		if !ok {
+			// new partition.
+			c.orphanTables[pid] = model.ProcessTableInfo{
+				ID:      pid,
+				StartTs: startTs,
+			}
+			fmt.Printf("add new partition feed %v  ------\n", pid)
+		}
+		delete(oldIDs, partition.ID)
+		newPartitionIDs = append(newPartitionIDs, partition.ID)
+	}
+	// update the table partition IDs.
+	c.partitions[tid] = newPartitionIDs
+
+	// drop truncated partition.
+	for pid := range oldIDs {
+		id := uint64(pid)
+		fmt.Printf("drop truncate partition feed %v  ------\n", pid)
+		if _, ok := c.orphanTables[id]; ok {
+			delete(c.orphanTables, id)
+		} else {
+			c.toCleanTables[id] = struct{}{}
+		}
+	}
+}
+
 func (c *changeFeed) selectCapture(captures map[string]*model.CaptureInfo, toAppend map[string][]*model.ProcessTableInfo) string {
 	return c.minimumTablesCapture(captures, toAppend)
 }
@@ -429,6 +474,8 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			}
 			addID := uint64(job.BinlogInfo.TableInfo.ID)
 			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName, job.BinlogInfo.TableInfo)
+		case timodel.ActionTruncateTablePartition:
+			c.truncatePartition(job.BinlogInfo.TableInfo, job.BinlogInfo.FinishedTS)
 		}
 		return nil
 	}()
