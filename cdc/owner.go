@@ -197,6 +197,7 @@ func (o *Owner) newChangeFeed(
 	ctx, cancel := context.WithCancel(ctx)
 	schemas := make(map[uint64]tableIDMap)
 	tables := make(map[uint64]entry.TableName)
+	partitions := make(map[uint64][]int64)
 	orphanTables := make(map[uint64]model.ProcessTableInfo)
 	for tid, table := range schemaSnap.CloneTables() {
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
@@ -218,10 +219,32 @@ func (o *Owner) newChangeFeed(
 			}
 			schemas[sid][tid] = struct{}{}
 		}
-		orphanTables[tid] = model.ProcessTableInfo{
-			ID:      tid,
-			StartTs: checkpointTs,
+		tblInfo, ok := schemaSnap.TableByID(int64(tid))
+		if !ok {
+			log.Warn("table not found for table ID", zap.Uint64("tid", tid))
+			continue
 		}
+		if pi := tblInfo.GetPartitionInfo(); pi != nil {
+			delete(partitions, tid)
+			for _, partition := range pi.Definitions {
+				id := uint64(partition.ID)
+				if ts, ok := existingTables[id]; ok {
+					log.Debug("ignore known table partition", zap.Uint64("tid", tid), zap.Uint64("partitionID", id), zap.Stringer("table", table), zap.Uint64("ts", ts))
+					continue
+				}
+				partitions[tid] = append(partitions[tid], partition.ID)
+				orphanTables[id] = model.ProcessTableInfo{
+					ID:      id,
+					StartTs: checkpointTs,
+				}
+			}
+		} else {
+			orphanTables[tid] = model.ProcessTableInfo{
+				ID:      tid,
+				StartTs: checkpointTs,
+			}
+		}
+
 	}
 	errCh := make(chan error, 1)
 
@@ -246,6 +269,7 @@ func (o *Owner) newChangeFeed(
 		schema:               schemaSnap,
 		schemas:              schemas,
 		tables:               tables,
+		partitions:           partitions,
 		orphanTables:         orphanTables,
 		waitingConfirmTables: make(map[uint64]string),
 		toCleanTables:        make(map[uint64]struct{}),

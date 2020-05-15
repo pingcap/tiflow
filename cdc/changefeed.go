@@ -83,12 +83,16 @@ type changeFeed struct {
 	ddlJobHistory []*timodel.Job
 	ddlExecutedTs uint64
 
-	schemas              map[uint64]tableIDMap
-	tables               map[uint64]entry.TableName
-	orphanTables         map[uint64]model.ProcessTableInfo
+	schemas    map[uint64]tableIDMap
+	tables     map[uint64]entry.TableName
+	partitions map[uint64][]int64 // key is table ID, value is the slice of partitions ID.
+	// The key is table ID or the partition ID.
+	orphanTables map[uint64]model.ProcessTableInfo
+	// The key is table ID or the partition ID.
 	waitingConfirmTables map[uint64]string
-	toCleanTables        map[uint64]struct{}
-	infoWriter           *storage.OwnerTaskStatusEtcdWriter
+	// The key is table ID or the partition ID.
+	toCleanTables map[uint64]struct{}
+	infoWriter    *storage.OwnerTaskStatusEtcdWriter
 }
 
 // String implements fmt.Stringer interface.
@@ -128,7 +132,7 @@ func (c *changeFeed) dropSchema(schemaID uint64) {
 	delete(c.schemas, schemaID)
 }
 
-func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
+func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName, tblInfo *timodel.TableInfo) {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
 	}
@@ -143,9 +147,21 @@ func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
 	}
 	c.schemas[sid][tid] = struct{}{}
 	c.tables[tid] = table
-	c.orphanTables[tid] = model.ProcessTableInfo{
-		ID:      tid,
-		StartTs: startTs,
+	if pi := tblInfo.GetPartitionInfo(); pi != nil {
+		delete(c.partitions, tid)
+		for _, partition := range pi.Definitions {
+			c.partitions[tid] = append(c.partitions[tid], partition.ID)
+			id := uint64(partition.ID)
+			c.orphanTables[id] = model.ProcessTableInfo{
+				ID:      id,
+				StartTs: startTs,
+			}
+		}
+	} else {
+		c.orphanTables[tid] = model.ProcessTableInfo{
+			ID:      tid,
+			StartTs: startTs,
+		}
 	}
 }
 
@@ -155,10 +171,21 @@ func (c *changeFeed) removeTable(sid, tid uint64) {
 	}
 	delete(c.tables, tid)
 
-	if _, ok := c.orphanTables[tid]; ok {
-		delete(c.orphanTables, tid)
+	removeFunc := func(id uint64) {
+		if _, ok := c.orphanTables[id]; ok {
+			delete(c.orphanTables, id)
+		} else {
+			c.toCleanTables[id] = struct{}{}
+		}
+	}
+
+	if pids, ok := c.partitions[tid]; ok {
+		for _, id := range pids {
+			removeFunc(uint64(id))
+		}
+		delete(c.partitions, tid)
 	} else {
-		c.toCleanTables[tid] = struct{}{}
+		removeFunc(tid)
 	}
 }
 
@@ -381,7 +408,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			if !exist {
 				return errors.NotFoundf("table(%d)", addID)
 			}
-			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
+			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName, job.BinlogInfo.TableInfo)
 		case timodel.ActionDropTable:
 			dropID := uint64(job.TableID)
 			c.removeTable(schemaID, dropID)
@@ -401,7 +428,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 				return errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
 			}
 			addID := uint64(job.BinlogInfo.TableInfo.ID)
-			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName)
+			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName, job.BinlogInfo.TableInfo)
 		}
 		return nil
 	}()

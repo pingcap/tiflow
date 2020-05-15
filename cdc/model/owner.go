@@ -22,6 +22,9 @@ import (
 
 // ProcessTableInfo contains the info about tables that processor need to process.
 type ProcessTableInfo struct {
+	// The ID is physical table ID. In detail:
+	// 1. ID is table ID when the table is not partition table.
+	// 2. ID is partition ID when the table is partition table.
 	ID      uint64 `json:"id"`
 	StartTs uint64 `json:"start-ts"`
 }
