@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"sort"
 	"strconv"
 	"strings"
@@ -57,6 +58,8 @@ const (
 
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
+
+	defaultSyncResolvedBatch = 128
 )
 
 var (
@@ -652,11 +655,70 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 	}
 }
 
+func (p *processor) waitPrepareWorkers(ctx context.Context, ch chan *model.PolymorphicEvent, wg *sync.WaitGroup) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev := <-ch:
+			ev.WaitPrepare(ctx)
+			wg.Done()
+		}
+	}
+}
+
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
-	defer log.Info("syncResolved stopped")
-	defer p.sinkEmittedResolvedReceiver.Stop()
-	metricWaitPrepare := waitEventPrepareDuration.WithLabelValues(p.changefeedID, p.captureID)
+	defer func() {
+		p.sinkEmittedResolvedReceiver.Stop()
+		log.Info("syncResolved stopped")
+	}()
+
+	var wg sync.WaitGroup
+	workers := make([]chan *model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
+	events := make([]*model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
+	for i := 0; i < defaultSyncResolvedBatch; i++ {
+		ch := make(chan *model.PolymorphicEvent)
+		workers = append(workers, ch)
+		go func() {
+			p.waitPrepareWorkers(ctx, ch, &wg)
+		}()
+	}
+
+	flushRowChangedEvents := func() error {
+		wg.Wait()
+		for _, ev := range events {
+			if ev.Row == nil {
+				continue
+			}
+			err := p.sink.EmitRowChangedEvents(ctx, ev.Row)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
+	}
+
+	processRowChangedEvent := func(row *model.PolymorphicEvent) error {
+		events = append(events, row)
+		idx := rand.Intn(defaultSyncResolvedBatch)
+		wg.Add(1)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case workers[idx] <- row:
+		}
+
+		if len(events) >= defaultSyncResolvedBatch {
+			err := flushRowChangedEvents()
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		events = events[:0]
+		return nil
+	}
+
 	for {
 		select {
 		case row := <-p.output:
@@ -664,20 +726,15 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				continue
 			}
 			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
+				err := flushRowChangedEvents()
+				if err != nil {
+					return errors.Trace(err)
+				}
 				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.CRTs)
 				p.sinkEmittedResolvedNotifier.Notify()
 				continue
 			}
-			startTime := time.Now()
-			err := row.WaitPrepare(ctx)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			metricWaitPrepare.Observe(time.Since(startTime).Seconds())
-			if row.Row == nil {
-				continue
-			}
-			err = p.sink.EmitRowChangedEvents(ctx, row.Row)
+			err := processRowChangedEvent(row)
 			if err != nil {
 				return errors.Trace(err)
 			}
