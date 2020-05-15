@@ -708,6 +708,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 		}
+		events = events[:0]
 		return nil
 	}
 
@@ -727,7 +728,6 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 		}
-		events = events[:0]
 		return nil
 	}
 
