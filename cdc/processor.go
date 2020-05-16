@@ -663,18 +663,19 @@ func waitPrepareWorkers(ctx context.Context, ch chan *model.PolymorphicEvent, er
 		}
 	}
 	for {
+		var ev *model.PolymorphicEvent
 		select {
 		case <-ctx.Done():
 			return
-		case ev := <-ch:
-			err := ev.WaitPrepare(ctx)
-			if err != nil {
-				sendNoneBlock(err)
-				wg.Done()
-				return
-			}
-			wg.Done()
+		case ev = <-ch:
 		}
+		err := ev.WaitPrepare(ctx)
+		if err != nil {
+			sendNoneBlock(err)
+			wg.Done()
+			return
+		}
+		wg.Done()
 	}
 }
 
