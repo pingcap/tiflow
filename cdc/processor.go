@@ -686,25 +686,18 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		log.Info("syncResolved stopped")
 	}()
 
-	var wg sync.WaitGroup
-	workers := make([]chan *model.PolymorphicEvent, 0, defaultWaitPrepareCount)
 	events := make([]*model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
-	errCh := make(chan error)
-	for i := 0; i < defaultWaitPrepareCount; i++ {
-		ch := make(chan *model.PolymorphicEvent, defaultSyncResolvedBatch/defaultWaitPrepareCount+1)
-		workers = append(workers, ch)
-		go func() {
-			waitPrepareWorkers(ctx, ch, errCh, &wg)
-		}()
-	}
 
 	flushRowChangedEvents := func() error {
-		wg.Wait()
 		for _, ev := range events {
+			err := ev.WaitPrepare(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
 			if ev.Row == nil {
 				continue
 			}
-			err := p.sink.EmitRowChangedEvents(ctx, ev.Row)
+			err = p.sink.EmitRowChangedEvents(ctx, ev.Row)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -713,17 +706,8 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		return nil
 	}
 
-	idx := 0
 	processRowChangedEvent := func(row *model.PolymorphicEvent) error {
 		events = append(events, row)
-		idx = idx % defaultWaitPrepareCount
-		wg.Add(1)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case workers[idx] <- row:
-		}
-		idx += 1
 
 		if len(events) >= defaultSyncResolvedBatch {
 			err := flushRowChangedEvents()
@@ -738,8 +722,6 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case err := <-errCh:
-			return errors.Trace(err)
 		case row := <-p.output:
 			if row == nil {
 				continue
