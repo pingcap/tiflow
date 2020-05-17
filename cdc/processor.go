@@ -53,13 +53,16 @@ import (
 const (
 	resolveTsInterval = time.Millisecond * 500
 
+	// TODO: processor output chan size, the accumulated data is determined by
+	// the count of sorted data and unmounted data. In current benchmark a single
+	// processor can reach 50k-100k QPS, and accumulated data is around
+	// 200k-400k in most cases. We need a better chan cache mechanism.
 	defaultOutputChanSize = 1280000
 
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 
 	defaultSyncResolvedBatch = 1024
-	defaultWaitPrepareCount  = 16
 )
 
 var (
@@ -655,30 +658,6 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 	}
 }
 
-func waitPrepareWorkers(ctx context.Context, ch chan *model.PolymorphicEvent, errCh chan error, wg *sync.WaitGroup) {
-	sendNoneBlock := func(err error) {
-		select {
-		case errCh <- err:
-		default:
-		}
-	}
-	for {
-		var ev *model.PolymorphicEvent
-		select {
-		case <-ctx.Done():
-			return
-		case ev = <-ch:
-		}
-		err := ev.WaitPrepare(ctx)
-		if err != nil {
-			sendNoneBlock(err)
-			wg.Done()
-			return
-		}
-		wg.Done()
-	}
-}
-
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
 	defer func() {
@@ -689,6 +668,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	events := make([]*model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
 
 	flushRowChangedEvents := func() error {
+		emitEvs := make([]*model.PolymorphicEvent, 0, len(events))
 		for _, ev := range events {
 			err := ev.WaitPrepare(ctx)
 			if err != nil {
@@ -697,10 +677,11 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if ev.Row == nil {
 				continue
 			}
-			err = p.sink.EmitRowChangedEvents(ctx, ev.Row)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			emitEvs = append(emitEvs, ev)
+		}
+		err := p.sink.EmitRowChangedEvents(ctx, emitEvs...)
+		if err != nil {
+			return errors.Trace(err)
 		}
 		events = events[:0]
 		return nil
