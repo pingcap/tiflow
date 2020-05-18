@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -91,8 +90,11 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 		err          error
 		revision     int64
 		info         = &model.TaskStatus{
-			TableInfos: []*model.ProcessTableInfo{
-				{ID: 11}, {ID: 12},
+			Tables: map[model.TableID]model.Ts{
+				1: 100,
+				2: 200,
+				3: 300,
+				4: 400,
 			},
 		}
 		getInfo *model.TaskStatus
@@ -131,31 +133,16 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 
 	// test table taskStatus changed, should return ErrWriteTsConflict.
 	getInfo = info.Clone()
-	getInfo.TableInfos = []*model.ProcessTableInfo{{ID: 11}, {ID: 12}, {ID: 13}}
+	getInfo.Tables = map[model.TableID]model.Ts{
+		4: 100,
+		5: 200,
+		6: 300,
+		7: 400,
+	}
 	sinfo, err = getInfo.Marshal()
 	c.Assert(err, check.IsNil)
 	_, err = s.client.Client.Put(context.Background(), kv.GetEtcdKeyTaskStatus(changefeedID, captureID), sinfo)
 	c.Assert(err, check.IsNil)
-
-	info.TableCLock = &model.TableLock{Ts: 6}
-	err = rw.WriteInfoIntoStorage(context.Background())
-	c.Assert(errors.Cause(err), check.Equals, model.ErrWriteTsConflict)
-
-	changed, locked, err := rw.UpdateInfo(context.Background())
-	c.Assert(err, check.IsNil)
-	c.Assert(changed, check.IsTrue)
-	c.Assert(locked, check.IsFalse)
-	c.Assert(rw.GetTaskStatus(), check.DeepEquals, getInfo)
-	info = rw.GetTaskStatus()
-
-	// update success again.
-	info.TableCLock = &model.TableLock{Ts: 6}
-	err = rw.WriteInfoIntoStorage(context.Background())
-	c.Assert(err, check.IsNil)
-	revision, getInfo, err = s.client.GetTaskStatus(context.Background(), changefeedID, captureID)
-	c.Assert(err, check.IsNil)
-	c.Assert(revision, check.Equals, rw.modRevision)
-	c.Assert(getInfo.TableCLock.Ts, check.Equals, uint64(6))
 }
 
 func (s *etcdSuite) TestProcessorTsWritePos(c *check.C) {
@@ -191,62 +178,4 @@ func (s *etcdSuite) TestProcessorTsReader(c *check.C) {
 	changedFeed, _, err := rw.GetChangeFeedStatus(context.Background())
 	c.Assert(err, check.IsNil)
 	c.Assert(changedFeed, check.DeepEquals, info)
-}
-
-func (s *etcdSuite) TestOwnerTableInfoWriter(c *check.C) {
-	var (
-		changefeedID = "test-owner-table-writer-changefeed"
-		captureID    = "test-owner-table-writer-capture"
-		info         = &model.TaskStatus{}
-		err          error
-	)
-
-	ow := NewOwnerTaskStatusEtcdWriter(s.client)
-
-	// owner adds table to processor
-	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 50, StartTs: 100})
-	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
-	c.Assert(err, check.IsNil)
-	c.Assert(info.TableInfos, check.HasLen, 1)
-
-	// owner adds table to processor when remote data is updated
-	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 52, StartTs: 100})
-	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
-	c.Assert(err, check.IsNil)
-	c.Assert(info.TableInfos, check.HasLen, 2)
-	// check ModRevision after write
-	revision, _, err := s.client.GetTaskStatus(context.Background(), changefeedID, captureID)
-	c.Assert(err, check.IsNil)
-	c.Assert(info.ModRevision, check.Equals, revision)
-
-	// owner removes table from processor
-	info.TableInfos = info.TableInfos[:len(info.TableInfos)-1]
-	info, err = ow.Write(context.Background(), changefeedID, captureID, info, true)
-	c.Assert(err, check.IsNil)
-	c.Assert(info.TableInfos, check.HasLen, 1)
-	c.Assert(info.TablePLock, check.NotNil)
-
-	// owner can't add table when plock is not resolved
-	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 52, StartTs: 100})
-	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrFindPLockNotCommit)
-	c.Assert(info.TableInfos, check.HasLen, 2)
-
-	// owner can't remove table when plock is not resolved
-	info.TableInfos = info.TableInfos[:0]
-	info, err = ow.Write(context.Background(), changefeedID, captureID, info, true)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrFindPLockNotCommit)
-	c.Assert(info.TableInfos, check.HasLen, 0)
-
-	// simulate processor removes table and commit table p-lock
-	info.TableCLock = &model.TableLock{Ts: info.TablePLock.Ts, CheckpointTs: 200}
-	err = s.client.PutTaskStatus(context.Background(), changefeedID, captureID, info)
-	c.Assert(err, check.IsNil)
-	info.TableCLock = nil
-
-	// owner adds table to processor again
-	info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{ID: 54, StartTs: 300})
-	info, err = ow.Write(context.Background(), changefeedID, captureID, info, false)
-	c.Assert(err, check.IsNil)
-	c.Assert(info.TableInfos, check.HasLen, 1)
 }
