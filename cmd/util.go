@@ -23,10 +23,6 @@ import (
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
-func contextTimeout() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), defaultContextTimeoutDuration)
-}
-
 func getAllCaptures(ctx context.Context) ([]*capture, error) {
 	_, raw, err := cdcEtcdCli.GetCaptures(ctx)
 	if err != nil {

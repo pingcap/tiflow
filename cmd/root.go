@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -51,6 +54,22 @@ func initLog() error {
 
 // Execute runs the root command
 func Execute() {
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defaultContext = ctx
+	go func() {
+		sig := <-sc
+		log.Info("got signal to exit", zap.Stringer("signal", sig))
+		cancel()
+	}()
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

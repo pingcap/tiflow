@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -51,7 +52,7 @@ var (
 	captureID    string
 	interval     uint
 
-	defaultContextTimeoutDuration = 30 * time.Second
+	defaultContext context.Context
 )
 
 // cf holds changefeed id, which is used for output only
@@ -98,7 +99,7 @@ func newCliCommand() *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
-				DialTimeout: defaultContextTimeoutDuration,
+				DialTimeout: 30 * time.Second,
 				DialOptions: []grpc.DialOption{
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
@@ -133,8 +134,7 @@ func newCliCommand() *cobra.Command {
 			if err != nil {
 				return errors.Annotate(err, "fail to open PD client")
 			}
-			ctx, cancel := contextTimeout()
-			defer cancel()
+			ctx := defaultContext
 			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr)
 			if err != nil {
 				return err

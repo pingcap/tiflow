@@ -24,8 +24,7 @@ func newListProcessorCommand() *cobra.Command {
 		Use:   "list",
 		Short: "List all processors in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, cancel := contextTimeout()
-			defer cancel()
+			ctx := defaultContext
 			info, err := cdcEtcdCli.GetProcessors(ctx)
 			if err != nil {
 				return err
@@ -41,8 +40,7 @@ func newQueryProcessorCommand() *cobra.Command {
 		Use:   "query",
 		Short: "Query information and status of a sub replication task (processor)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, cancel := contextTimeout()
-			defer cancel()
+			ctx := defaultContext
 			_, status, err := cdcEtcdCli.GetTaskStatus(ctx, changefeedID, captureID)
 			if err != nil && errors.Cause(err) != model.ErrTaskStatusNotExists {
 				return err
