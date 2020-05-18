@@ -338,6 +338,50 @@ func (c CDCEtcdClient) PutTaskStatus(
 	return nil
 }
 
+// GetTaskStatus queries task status from etcd, returns
+//  - ModRevision of the given key
+//  - *model.TaskStatus unmarshaled from the value
+//  - error if error happens
+func (c CDCEtcdClient) GetTaskWorkload(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+) (model.TaskWorkload, error) {
+	key := GetEtcdKeyTaskWorkload(changefeedID, captureID)
+	resp, err := c.Client.Get(ctx, key)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if resp.Count == 0 {
+		return nil, errors.Annotatef(model.ErrTaskStatusNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
+	}
+	workload := make(model.TaskWorkload)
+	err = workload.Unmarshal(resp.Kvs[0].Value)
+	return workload, errors.Trace(err)
+}
+
+// PutTaskStatus puts task status into etcd.
+func (c CDCEtcdClient) PutTaskWorkload(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+	info *model.TaskWorkload,
+) error {
+	data, err := info.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	key := GetEtcdKeyTaskWorkload(changefeedID, captureID)
+
+	_, err = c.Client.Put(ctx, key, data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
 // GetTaskPosition queries task process from etcd, returns
 //  - ModRevision of the given key
 //  - *model.TaskPosition unmarshaled from the value

@@ -110,6 +110,18 @@ func (tp *TaskPosition) String() string {
 	return string(data)
 }
 
+type TaskWorkload map[int64]uint64
+
+func (w *TaskWorkload) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, w)
+	return errors.Annotatef(err, "Unmarshal data: %v", data)
+}
+
+func (w *TaskWorkload) Marshal() (string, error) {
+	data, err := json.Marshal(w)
+	return string(data), errors.Trace(err)
+}
+
 // TaskStatus records the task information of a capture
 type TaskStatus struct {
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.

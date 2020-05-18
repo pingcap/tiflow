@@ -230,6 +230,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 		return p.mounter.Run(cctx)
 	})
 
+	wg.Go(func() error {
+		return p.workloadWorker(cctx)
+	})
+
 	go func() {
 		if err := wg.Wait(); err != nil {
 			errCh <- err
@@ -368,6 +372,27 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 			continue
 		}
 		if err := p.schemaStorage.HandleDDLJob(job); err != nil {
+			return errors.Trace(err)
+		}
+	}
+}
+
+func (p *processor) workloadWorker(ctx context.Context) error {
+	t := time.NewTicker(1 * time.Minute)
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-t.C:
+		}
+		workload := make(model.TaskWorkload, len(p.tables))
+		p.stateMu.Lock()
+		for _, table := range p.tables {
+			workload[table.id] = table.workload
+		}
+		p.stateMu.Unlock()
+		err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureID, &workload)
+		if err != nil {
 			return errors.Trace(err)
 		}
 	}
