@@ -123,6 +123,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 	metricEventCounterKv := kvEventCounter.WithLabelValues(captureID, changefeedID, "kv")
 	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved")
+	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv")
+	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv")
 
 	g.Go(func() error {
 		for {
@@ -185,12 +187,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			if e.Val != nil {
-				txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv").Inc()
+				metricTxnCollectCounterKv.Inc()
 				if err := output(e.Val); err != nil {
 					return errors.Trace(err)
 				}
 			} else if e.Resolved != nil {
-				txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "resolved").Inc()
+				metricTxnCollectCounterResolved.Inc()
 				resolvedTs := e.Resolved.ResolvedTs
 				// 1. Forward is called in a single thread
 				// 2. The only way the global minimum resolved Ts can be forwarded is that

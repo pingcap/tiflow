@@ -219,6 +219,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 	})
 
 	wg.Go(func() error {
+		return p.collectMetrics(cctx)
+	})
+
+	wg.Go(func() error {
 		return p.ddlPuller.Run(ddlPullerCtx)
 	})
 
@@ -482,7 +486,6 @@ func (p *processor) removeTable(tableID int64) {
 	delete(p.tables, tableID)
 	tableIDStr := strconv.FormatInt(tableID, 10)
 	tableInputChanSizeGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
-	tableOutputChanSizeGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
 	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Dec()
 }
@@ -687,18 +690,15 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	}
 }
 
-func (p *processor) collectMetrics(ctx context.Context, tableID int64) {
-	go func() {
-		for {
-			tableIDStr := strconv.FormatInt(tableID, 10)
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(defaultMetricInterval):
-				tableOutputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureID, tableIDStr).Set(float64(len(p.output)))
-			}
+func (p *processor) collectMetrics(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(defaultMetricInterval):
+			tableOutputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.output)))
 		}
-	}()
+	}
 }
 
 func createSchemaStorage(pdEndpoints []string, checkpointTs uint64, filter *filter.Filter) (*entry.SchemaStorage, error) {
@@ -818,7 +818,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 		p.position.ResolvedTs = startTs
 	}
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Inc()
-	p.collectMetrics(ctx, tableID)
 }
 
 func (p *processor) stop(ctx context.Context) error {
