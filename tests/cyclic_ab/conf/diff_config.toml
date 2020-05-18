@@ -5,7 +5,7 @@ chunk-size = 10
 check-thread-count = 4
 sample-percent = 100
 use-rowid = false
-use-checksum = true
+use-checksum = false
 fix-sql-file = "fix.sql"
 
 # tables need to check.

@@ -664,11 +664,11 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 }
 
 // CloneTables return a clone of the existing tables.
-func (s *schemaSnapshot) CloneTables() map[uint64]TableName {
-	mp := make(map[uint64]TableName, len(s.tables))
+func (s *schemaSnapshot) CloneTables() map[model.TableID]TableName {
+	mp := make(map[model.TableID]TableName, len(s.tables))
 
 	for id, table := range s.tables {
-		mp[uint64(id)] = table.TableName
+		mp[id] = table.TableName
 	}
 
 	return mp

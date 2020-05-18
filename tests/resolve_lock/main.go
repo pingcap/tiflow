@@ -53,7 +53,7 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := addLock(ctx, cfg); err != nil {
+	if err := addLock(ctx, cfg); err != nil && errors.Cause(err) != context.Canceled && errors.Cause(err) != context.DeadlineExceeded {
 		log.S().Fatal(err)
 	}
 	time.Sleep(5 * time.Second)
@@ -102,6 +102,7 @@ func addLock(ctx context.Context, cfg *util.Config) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	defer pdcli.Close()
 
 	driver := tikv.Driver{}
 	store, err := driver.Open(fmt.Sprintf("tikv://%s?disableGC=true", cfg.PDAddr))
@@ -170,7 +171,7 @@ func (c *Locker) generateLocks(pctx context.Context) error {
 	scannedKeys := 0
 	var batch []int64
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(pctx)
 	defer cancel()
 	for rowID := int64(0); ; rowID = (rowID + 1) % c.tableSize {
 		select {
