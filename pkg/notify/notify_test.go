@@ -2,7 +2,6 @@ package notify
 
 import (
 	"context"
-	_ "net/http/pprof"
 	"testing"
 	"time"
 
