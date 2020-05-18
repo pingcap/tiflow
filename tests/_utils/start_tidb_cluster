@@ -131,28 +131,28 @@ echo "Verifying Upstream TiDB is started..."
 i=0
 while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
     i=$((i + 1))
-    if [ "$i" -gt 40 ]; then
+    if [ "$i" -gt 60 ]; then
         echo 'Failed to start upstream TiDB'
         exit 2
     fi
-    sleep 1
+    sleep 2
 done
 
 i=0
 while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_OTHER_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
     i=$((i + 1))
-    if [ "$i" -gt 40 ]; then
+    if [ "$i" -gt 60 ]; then
         echo 'Failed to start upstream TiDB'
         exit 2
     fi
-    sleep 1
+    sleep 2
 done
 
 echo "Verifying Downstream TiDB is started..."
 i=0
 while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
     i=$((i + 1))
-    if [ "$i" -gt 10 ]; then
+    if [ "$i" -gt 60 ]; then
         echo 'Failed to start downstream TiDB'
         exit 1
     fi

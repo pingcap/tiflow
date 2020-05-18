@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -190,8 +189,8 @@ func newProcessor(
 		tables: make(map[int64]*tableInfo),
 	}
 
-	for _, table := range p.status.TableInfos {
-		p.addTable(ctx, int64(table.ID), table.StartTs)
+	for tableID, startTs := range p.status.Tables {
+		p.addTable(ctx, tableID, startTs)
 	}
 	return p, nil
 }
@@ -384,17 +383,16 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Debug("update task position", zap.Stringer("status", p.position))
+		log.Debug("update task position", zap.Stringer("position", p.position))
 		return nil
 	}
-	statusChanged, locked, err := p.tsRWriter.UpdateInfo(ctx)
+	statusChanged, err := p.tsRWriter.UpdateInfo(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if !statusChanged && !locked {
+	if !statusChanged && !p.tsRWriter.GetTaskStatus().SomeOperationsUnapplied() {
 		return updatePosition()
 	}
-	oldStatus := p.status
 	p.status = p.tsRWriter.GetTaskStatus()
 	if p.status.AdminJobType == model.AdminStop || p.status.AdminJobType == model.AdminRemove {
 		err = p.stop(ctx)
@@ -403,11 +401,11 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		}
 		return errors.Trace(model.ErrAdminStopProcessor)
 	}
-	err = p.handleTables(ctx, oldStatus, p.status, p.position.CheckPointTs)
+	err = p.handleTables(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.TableInfos)))
+	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.Tables)))
 	err = updatePosition()
 	if err != nil {
 		return errors.Trace(err)
@@ -428,46 +426,6 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	return nil
-}
-
-func diffProcessTableInfos(oldInfo, newInfo []*model.ProcessTableInfo) (removed, added []*model.ProcessTableInfo) {
-	sort.Slice(oldInfo, func(i, j int) bool {
-		return oldInfo[i].ID < oldInfo[j].ID
-	})
-
-	sort.Slice(newInfo, func(i, j int) bool {
-		return newInfo[i].ID < newInfo[j].ID
-	})
-
-	i, j := 0, 0
-	for i < len(oldInfo) && j < len(newInfo) {
-		if oldInfo[i].ID == newInfo[j].ID {
-			i++
-			j++
-		} else if oldInfo[i].ID < newInfo[j].ID {
-			removed = append(removed, oldInfo[i])
-			i++
-		} else {
-			added = append(added, newInfo[j])
-			j++
-		}
-	}
-	for ; i < len(oldInfo); i++ {
-		removed = append(removed, oldInfo[i])
-	}
-	for ; j < len(newInfo); j++ {
-		added = append(added, newInfo[j])
-	}
-
-	if len(removed) > 0 || len(added) > 0 {
-		log.Debug("table diff", zap.Reflect("old", oldInfo),
-			zap.Reflect("new", newInfo),
-			zap.Reflect("add", added),
-			zap.Reflect("remove", removed),
-		)
-	}
-
-	return
 }
 
 func (p *processor) removeTable(tableID int64) {
@@ -491,18 +449,16 @@ func (p *processor) removeTable(tableID int64) {
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
-func (p *processor) handleTables(
-	ctx context.Context, oldInfo, newInfo *model.TaskStatus, checkpointTs uint64,
-) error {
-	checkPairedMarkTable := func(tables []*model.ProcessTableInfo, hint string) error {
+func (p *processor) handleTables(ctx context.Context) error {
+	checkPairedMarkTable := func(tables map[model.TableID]model.Ts) error {
 		if p.changefeed.Config != nil && p.changefeed.Config.Cyclic.IsEnabled() {
 			// Make sure all normal tables and mark tables are paired.
 			schemaSnapshot := p.schemaStorage.GetLastSnapshot()
 			tableNames := make([]model.TableName, 0, len(tables))
-			for _, table := range tables {
-				name, ok := schemaSnapshot.GetTableNameByID(int64(table.ID))
+			for tableID := range tables {
+				name, ok := schemaSnapshot.GetTableNameByID(tableID)
 				if !ok {
-					return errors.NotFoundf("table(%d)", table.ID)
+					return errors.NotFoundf("table(%d)", tableID)
 				}
 				tableNames = append(tableNames, model.TableName{
 					Schema: name.Schema,
@@ -510,36 +466,29 @@ func (p *processor) handleTables(
 				})
 			}
 			if !cyclic.IsTablesPaired(tableNames) {
-				return errors.NotValidf(
-					"%s normal table and mark table not match %v", hint, tableNames)
+				return errors.NotValidf("normal table and mark table not match %v", tableNames)
 			}
 		}
 		return nil
 	}
 
-	removedTables, addedTables := diffProcessTableInfos(oldInfo.TableInfos, newInfo.TableInfos)
-	// remove tables
-	if err := checkPairedMarkTable(removedTables, "remove table"); err != nil {
+	if err := checkPairedMarkTable(p.status.Tables); err != nil {
 		return err
 	}
-	for _, pinfo := range removedTables {
-		p.removeTable(int64(pinfo.ID))
-	}
 
-	// add tables
-	if err := checkPairedMarkTable(removedTables, "add table"); err != nil {
-		return err
-	}
-	for _, pinfo := range addedTables {
-		p.addTable(ctx, int64(pinfo.ID), pinfo.StartTs)
-	}
-
-	// write clock if need
-	if newInfo.TablePLock != nil && newInfo.TableCLock == nil {
-		newInfo.TableCLock = &model.TableLock{
-			Ts:           newInfo.TablePLock.Ts,
-			CheckpointTs: checkpointTs,
+	for _, opt := range p.status.Operation {
+		if opt.Delete {
+			if opt.BoundaryTs <= p.position.CheckPointTs {
+				p.removeTable(opt.TableID)
+				opt.Done = true
+			}
+		} else {
+			p.addTable(ctx, opt.TableID, opt.BoundaryTs)
+			opt.Done = true
 		}
+	}
+	if !p.status.SomeOperationsUnapplied() {
+		p.status.Operation = nil
 	}
 	return nil
 }

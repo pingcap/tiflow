@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -116,11 +115,8 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 			startTs = feed.status.CheckpointTs
 		}
 
-		for _, table := range task.TableInfos {
-			feed.orphanTables[table.ID] = model.ProcessTableInfo{
-				ID:      table.ID,
-				StartTs: startTs,
-			}
+		for tableID := range task.Tables {
+			feed.orphanTables[tableID] = startTs
 		}
 
 		ctx := context.TODO()
@@ -135,11 +131,11 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 	}
 }
 
-func (o *Owner) addOrphanTable(cid string, table model.ProcessTableInfo) {
+func (o *Owner) addOrphanTable(cid model.CaptureID, tableID model.TableID, startTs model.Ts) {
 	o.l.Lock()
 	defer o.l.Unlock()
 	if cf, ok := o.changeFeeds[cid]; ok {
-		cf.orphanTables[table.ID] = table
+		cf.orphanTables[tableID] = startTs
 	} else {
 		log.Warn("changefeed not found", zap.String("changefeed", cid))
 	}
@@ -176,25 +172,25 @@ func (o *Owner) newChangeFeed(
 
 	ddlHandler := newDDLHandler(o.pdClient, kvStore, checkpointTs)
 
-	existingTables := make(map[uint64]uint64)
+	existingTables := make(map[model.TableID]model.Ts)
 	for captureID, taskStatus := range processorsInfos {
 		var checkpointTs uint64
 		if pos, exist := taskPositions[captureID]; exist {
 			checkpointTs = pos.CheckPointTs
 		}
-		for _, tbl := range taskStatus.TableInfos {
-			if tbl.StartTs > checkpointTs {
-				checkpointTs = tbl.StartTs
+		for tableID, startTs := range taskStatus.Tables {
+			if startTs > checkpointTs {
+				checkpointTs = startTs
 			}
-			existingTables[tbl.ID] = checkpointTs
+			existingTables[tableID] = checkpointTs
 		}
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	schemas := make(map[uint64]tableIDMap)
-	tables := make(map[uint64]entry.TableName)
-	partitions := make(map[uint64][]int64)
-	orphanTables := make(map[uint64]model.ProcessTableInfo)
+	schemas := make(map[model.SchemaID]tableIDMap)
+	tables := make(map[model.TableID]entry.TableName)
+	partitions := make(map[model.TableID][]int64)
+	orphanTables := make(map[model.TableID]model.Ts)
 	for tid, table := range schemaSnap.CloneTables() {
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
@@ -202,43 +198,37 @@ func (o *Owner) newChangeFeed(
 
 		tables[tid] = table
 		if ts, ok := existingTables[tid]; ok {
-			log.Debug("ignore known table", zap.Uint64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
+			log.Debug("ignore known table", zap.Int64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
 			continue
 		}
-		schema, ok := schemaSnap.SchemaByTableID(int64(tid))
+		schema, ok := schemaSnap.SchemaByTableID(tid)
 		if !ok {
-			log.Warn("schema not found for table", zap.Uint64("tid", tid))
+			log.Warn("schema not found for table", zap.Int64("tid", tid))
 		} else {
-			sid := uint64(schema.ID)
+			sid := schema.ID
 			if _, ok := schemas[sid]; !ok {
 				schemas[sid] = make(tableIDMap)
 			}
 			schemas[sid][tid] = struct{}{}
 		}
-		tblInfo, ok := schemaSnap.TableByID(int64(tid))
+		tblInfo, ok := schemaSnap.TableByID(tid)
 		if !ok {
-			log.Warn("table not found for table ID", zap.Uint64("tid", tid))
+			log.Warn("table not found for table ID", zap.Int64("tid", tid))
 			continue
 		}
 		if pi := tblInfo.GetPartitionInfo(); pi != nil {
 			delete(partitions, tid)
 			for _, partition := range pi.Definitions {
-				id := uint64(partition.ID)
+				id := partition.ID
 				if ts, ok := existingTables[id]; ok {
-					log.Debug("ignore known table partition", zap.Uint64("tid", tid), zap.Uint64("partitionID", id), zap.Stringer("table", table), zap.Uint64("ts", ts))
+					log.Debug("ignore known table partition", zap.Int64("tid", tid), zap.Int64("partitionID", id), zap.Stringer("table", table), zap.Uint64("ts", ts))
 					continue
 				}
 				partitions[tid] = append(partitions[tid], partition.ID)
-				orphanTables[id] = model.ProcessTableInfo{
-					ID:      id,
-					StartTs: checkpointTs,
-				}
+				orphanTables[id] = checkpointTs
 			}
 		} else {
-			orphanTables[tid] = model.ProcessTableInfo{
-				ID:      tid,
-				StartTs: checkpointTs,
-			}
+			orphanTables[tid] = checkpointTs
 		}
 
 	}
@@ -259,16 +249,15 @@ func (o *Owner) newChangeFeed(
 		cancel()
 	}()
 	cf := &changeFeed{
-		info:                 info,
-		id:                   id,
-		ddlHandler:           ddlHandler,
-		schema:               schemaSnap,
-		schemas:              schemas,
-		tables:               tables,
-		partitions:           partitions,
-		orphanTables:         orphanTables,
-		waitingConfirmTables: make(map[uint64]string),
-		toCleanTables:        make(map[uint64]struct{}),
+		info:          info,
+		id:            id,
+		ddlHandler:    ddlHandler,
+		schema:        schemaSnap,
+		schemas:       schemas,
+		tables:        tables,
+		partitions:    partitions,
+		orphanTables:  orphanTables,
+		toCleanTables: make(map[model.TableID]model.Ts),
 		status: &model.ChangeFeedStatus{
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
@@ -278,7 +267,7 @@ func (o *Owner) newChangeFeed(
 		targetTs:      info.GetTargetTs(),
 		taskStatus:    processorsInfos,
 		taskPositions: taskPositions,
-		infoWriter:    storage.NewOwnerTaskStatusEtcdWriter(o.etcdClient),
+		etcdCli:       o.etcdClient,
 		filter:        filter,
 		sink:          sink,
 		cyclicEnabled: info.Config.Cyclic.IsEnabled(),
@@ -402,14 +391,15 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	if !ok {
 		return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
 	}
-	for captureID, pinfo := range cf.taskStatus {
-		pinfo.TablePLock = nil
-		pinfo.TableCLock = nil
-		pinfo.AdminJobType = job.Type
-		_, err := cf.infoWriter.Write(ctx, cf.id, captureID, pinfo, false)
+	for captureID := range cf.taskStatus {
+		newStatus, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(taskStatus *model.TaskStatus) error {
+			taskStatus.AdminJobType = job.Type
+			return nil
+		})
 		if err != nil {
 			return errors.Trace(err)
 		}
+		cf.taskStatus[captureID] = newStatus.Clone()
 	}
 	// record admin job in changefeed status
 	cf.status.AdminJobType = job.Type
@@ -705,17 +695,11 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 							zap.Reflect("task status", status),
 						)
 					}
-					for _, table := range status.TableInfos {
-						var startTs uint64
+					for tableID, startTs := range status.Tables {
 						if taskPosFound {
 							startTs = pos.CheckPointTs
-						} else {
-							startTs = table.StartTs
 						}
-						o.addOrphanTable(changeFeedID, model.ProcessTableInfo{
-							ID:      table.ID,
-							StartTs: startTs,
-						})
+						o.addOrphanTable(changeFeedID, tableID, startTs)
 					}
 				}
 

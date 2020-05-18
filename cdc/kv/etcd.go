@@ -16,13 +16,16 @@ package kv
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/cenkalti/backoff"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/retry"
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 )
 
@@ -330,6 +333,63 @@ func (c CDCEtcdClient) PutTaskStatus(
 	}
 
 	return nil
+}
+
+// AtomicPutTaskStatus puts task status into etcd atomically.
+func (c CDCEtcdClient) AtomicPutTaskStatus(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+	update func(*model.TaskStatus) error,
+) (*model.TaskStatus, error) {
+	var status *model.TaskStatus
+	err := retry.Run(100*time.Millisecond, 3, func() error {
+		select {
+		case <-ctx.Done():
+			return backoff.Permanent(ctx.Err())
+		default:
+		}
+		var modRevision int64
+		var err error
+		modRevision, status, err = c.GetTaskStatus(ctx, changefeedID, captureID)
+		key := GetEtcdKeyTaskStatus(changefeedID, captureID)
+		var writeCmp clientv3.Cmp
+		switch errors.Cause(err) {
+		case model.ErrTaskStatusNotExists:
+			status = new(model.TaskStatus)
+			writeCmp = clientv3.Compare(clientv3.ModRevision(key), "=", 0)
+		case nil:
+			writeCmp = clientv3.Compare(clientv3.ModRevision(key), "=", modRevision)
+		default:
+			return errors.Trace(err)
+		}
+		err = update(status)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		value, err := status.Marshal()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		resp, err := c.Client.KV.Txn(ctx).If(writeCmp).Then(
+			clientv3.OpPut(key, value),
+		).Commit()
+
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if !resp.Succeeded {
+			log.Info("outdated table infos, ignore update taskStatus")
+			return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return status, nil
 }
 
 // GetTaskPosition queries task process from etcd, returns
