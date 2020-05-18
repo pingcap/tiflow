@@ -18,14 +18,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cenkalti/backoff"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/retry"
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 )
 
@@ -344,6 +344,11 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 ) (*model.TaskStatus, error) {
 	var status *model.TaskStatus
 	err := retry.Run(100*time.Millisecond, 3, func() error {
+		select {
+		case <-ctx.Done():
+			return backoff.Permanent(ctx.Err())
+		default:
+		}
 		var modRevision int64
 		var err error
 		modRevision, status, err = c.GetTaskStatus(ctx, changefeedID, captureID)

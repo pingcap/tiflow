@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/pingcap/ticdc/pkg/cyclic"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -27,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
