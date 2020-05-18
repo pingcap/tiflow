@@ -51,7 +51,9 @@ func main() {
 	if err := prepare(sourceDB); err != nil {
 		log.S().Fatal(err)
 	}
-	if err := addLock(cfg); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := addLock(ctx, cfg); err != nil {
 		log.S().Fatal(err)
 	}
 	time.Sleep(5 * time.Second)
@@ -87,9 +89,7 @@ func finishMark(sourceDB *sql.DB) error {
 	return nil
 }
 
-func addLock(cfg *util.Config) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func addLock(ctx context.Context, cfg *util.Config) error {
 	http.DefaultClient.Timeout = 10 * time.Second
 
 	tableID, err := getTableID(cfg.SourceDBCfg.Host, "test", "t1")
