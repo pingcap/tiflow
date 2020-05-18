@@ -101,7 +101,7 @@ func MapMarkRowsGroup(
 					first, ok := markMap[event.StartTs]
 					if ok {
 						// TiKV may emit the same row multiple times.
-						if event.CommitTs != first.CommitTs || event.RowID != event.RowID {
+						if event.CommitTs != first.CommitTs || event.RowID != first.RowID {
 							log.Fatal(
 								"there should be at most one mark row for each txn",
 								zap.Uint64("start-ts", event.StartTs),
