@@ -51,7 +51,7 @@ func main() {
 	if err := prepare(sourceDB); err != nil {
 		log.S().Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := addLock(ctx, cfg); err != nil && errors.Cause(err) != context.Canceled && errors.Cause(err) != context.DeadlineExceeded {
 		log.S().Fatal(err)
