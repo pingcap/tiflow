@@ -52,10 +52,16 @@ import (
 const (
 	resolveTsInterval = time.Millisecond * 500
 
-	defaultOutputChanSize = 128000
+	// TODO: processor output chan size, the accumulated data is determined by
+	// the count of sorted data and unmounted data. In current benchmark a single
+	// processor can reach 50k-100k QPS, and accumulated data is around
+	// 200k-400k in most cases. We need a better chan cache mechanism.
+	defaultOutputChanSize = 1280000
 
 	// defaultMemBufferCapacity is the default memory buffer per change feed.
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
+
+	defaultSyncResolvedBatch = 1024
 )
 
 var (
@@ -606,35 +612,67 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 
 // syncResolved handle `p.ddlJobsCh` and `p.resolvedTxns`
 func (p *processor) syncResolved(ctx context.Context) error {
-	defer log.Info("syncResolved stopped")
-	defer p.sinkEmittedResolvedReceiver.Stop()
-	metricWaitPrepare := waitEventPrepareDuration.WithLabelValues(p.changefeedID, p.captureID)
+	defer func() {
+		p.sinkEmittedResolvedReceiver.Stop()
+		log.Info("syncResolved stopped")
+	}()
+
+	events := make([]*model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
+	rows := make([]*model.RowChangedEvent, 0, defaultSyncResolvedBatch)
+
+	flushRowChangedEvents := func() error {
+		for _, ev := range events {
+			err := ev.WaitPrepare(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if ev.Row == nil {
+				continue
+			}
+			rows = append(rows, ev.Row)
+		}
+		err := p.sink.EmitRowChangedEvents(ctx, rows...)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		events = events[:0]
+		rows = rows[:0]
+		return nil
+	}
+
+	processRowChangedEvent := func(row *model.PolymorphicEvent) error {
+		events = append(events, row)
+
+		if len(events) >= defaultSyncResolvedBatch {
+			err := flushRowChangedEvents()
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
+	}
+
 	for {
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case row := <-p.output:
 			if row == nil {
 				continue
 			}
 			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
+				err := flushRowChangedEvents()
+				if err != nil {
+					return errors.Trace(err)
+				}
 				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.CRTs)
 				p.sinkEmittedResolvedNotifier.Notify()
 				continue
 			}
-			startTime := time.Now()
-			err := row.WaitPrepare(ctx)
+			err := processRowChangedEvent(row)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			metricWaitPrepare.Observe(time.Since(startTime).Seconds())
-			if row.Row == nil {
-				continue
-			}
-			err = p.sink.EmitRowChangedEvents(ctx, row.Row)
-			if err != nil {
-				return errors.Trace(err)
-			}
-		case <-ctx.Done():
-			return ctx.Err()
 		}
 	}
 }
