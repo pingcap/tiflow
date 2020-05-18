@@ -666,9 +666,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 	}()
 
 	events := make([]*model.PolymorphicEvent, 0, defaultSyncResolvedBatch)
+	rows := make([]*model.RowChangedEvent, 0, defaultSyncResolvedBatch)
 
 	flushRowChangedEvents := func() error {
-		emitEvs := make([]*model.RowChangedEvent, 0, len(events))
 		for _, ev := range events {
 			err := ev.WaitPrepare(ctx)
 			if err != nil {
@@ -677,13 +677,14 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if ev.Row == nil {
 				continue
 			}
-			emitEvs = append(emitEvs, ev.Row)
+			rows = append(rows, ev.Row)
 		}
-		err := p.sink.EmitRowChangedEvents(ctx, emitEvs...)
+		err := p.sink.EmitRowChangedEvents(ctx, rows...)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		events = events[:0]
+		rows = rows[:0]
 		return nil
 	}
 
