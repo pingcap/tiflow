@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/tests/util"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
@@ -210,7 +209,7 @@ func (c *Locker) lockKeys(ctx context.Context, rowIDs []int64) error {
 
 	keyPrefix := tablecodec.GenTableRecordPrefix(c.tableID)
 	for _, rowID := range rowIDs {
-		key := tablecodec.EncodeRecordKey(keyPrefix, kv.IntHandle(rowID))
+		key := tablecodec.EncodeRecordKey(keyPrefix, rowID)
 		keys = append(keys, key)
 	}
 
