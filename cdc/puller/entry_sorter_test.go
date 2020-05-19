@@ -26,6 +26,10 @@ type mockEntrySorterSuite struct{}
 
 var _ = check.Suite(&mockEntrySorterSuite{})
 
+func TestSuite(t *testing.T) {
+	check.TestingT(t)
+}
+
 func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 	testCases := []struct {
 		input      []*model.RawKVEntry
