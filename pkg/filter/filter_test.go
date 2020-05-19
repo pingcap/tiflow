@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -89,6 +89,17 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 	for _, tc := range testCases {
 		c.Assert(filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
 		c.Assert(filter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
+	}
+
+	disableDDLFilter, err := NewFilter(&ReplicaConfig{
+		Cyclic: &ReplicationConfig{
+			Enable:  true,
+			SyncDDL: false,
+		}})
+	c.Assert(err, check.IsNil)
+	for _, tc := range testCases {
+		c.Assert(disableDDLFilter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table),
+			check.Equals, true)
 	}
 }
 

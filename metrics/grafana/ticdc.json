@@ -3141,7 +3141,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${DS_TEST-CLUSTER}",
-      "description": "txn output channel size for a table in processor",
+      "description": "size of row changed event output channel from table to processor",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -3183,10 +3183,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(ticdc_processor_txn_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance, table)",
+          "expr": "sum(ticdc_processor_txn_output_chan_size{changefeed=\"$changefeed\",capture=\"$capture\"}) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}} - {{table}}",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],

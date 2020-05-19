@@ -1,8 +1,19 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cmd
 
 import (
-	"context"
-
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -26,7 +37,8 @@ func newListProcessorCommand() *cobra.Command {
 		Use:   "list",
 		Short: "List all processors in TiCDC cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			info, err := cdcEtcdCli.GetProcessors(context.Background())
+			ctx := defaultContext
+			info, err := cdcEtcdCli.GetProcessors(ctx)
 			if err != nil {
 				return err
 			}
@@ -41,11 +53,12 @@ func newQueryProcessorCommand() *cobra.Command {
 		Use:   "query",
 		Short: "Query information and status of a sub replication task (processor)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, status, err := cdcEtcdCli.GetTaskStatus(context.Background(), changefeedID, captureID)
+			ctx := defaultContext
+			_, status, err := cdcEtcdCli.GetTaskStatus(ctx, changefeedID, captureID)
 			if err != nil && errors.Cause(err) != model.ErrTaskStatusNotExists {
 				return err
 			}
-			_, position, err := cdcEtcdCli.GetTaskPosition(context.Background(), changefeedID, captureID)
+			_, position, err := cdcEtcdCli.GetTaskPosition(ctx, changefeedID, captureID)
 			if err != nil && errors.Cause(err) != model.ErrTaskPositionNotExists {
 				return err
 			}

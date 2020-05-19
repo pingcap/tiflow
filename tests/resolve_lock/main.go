@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -21,7 +34,6 @@ import (
 	"github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/tests/util"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
@@ -52,7 +64,7 @@ func main() {
 	if err := prepare(sourceDB); err != nil {
 		log.S().Fatal(err)
 	}
-	if err := addLock(cfg); err != nil {
+	if err := addLock(cfg); err != nil && errors.Cause(err) != context.Canceled && errors.Cause(err) != context.DeadlineExceeded {
 		log.S().Fatal(err)
 	}
 	time.Sleep(5 * time.Second)
@@ -98,10 +110,12 @@ func addLock(cfg *util.Config) error {
 		return errors.Trace(err)
 	}
 
-	pdcli, err := pd.NewClient(strings.Split(cfg.PDAddr, ","), pd.SecurityOption{})
+	pdcli, err := pd.NewClientWithContext(
+		context.Background(), strings.Split(cfg.PDAddr, ","), pd.SecurityOption{})
 	if err != nil {
 		return errors.Trace(err)
 	}
+	defer pdcli.Close()
 
 	driver := tikv.Driver{}
 	store, err := driver.Open(fmt.Sprintf("tikv://%s?disableGC=true", cfg.PDAddr))
@@ -209,7 +223,7 @@ func (c *Locker) lockKeys(ctx context.Context, rowIDs []int64) error {
 
 	keyPrefix := tablecodec.GenTableRecordPrefix(c.tableID)
 	for _, rowID := range rowIDs {
-		key := tablecodec.EncodeRecordKey(keyPrefix, kv.IntHandle(rowID))
+		key := tablecodec.EncodeRecordKey(keyPrefix, rowID)
 		keys = append(keys, key)
 	}
 

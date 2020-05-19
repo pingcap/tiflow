@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1127,11 +1127,11 @@ func (s *eventFeedSession) singleEventFeed(
 
 					revent := &model.RegionFeedEvent{
 						Val: &model.RawKVEntry{
-							OpType:   opType,
-							Key:      entry.Key,
-							Value:    entry.GetValue(),
-							StartTs:  entry.StartTs,
-							CommitTs: entry.CommitTs,
+							OpType:  opType,
+							Key:     entry.Key,
+							Value:   entry.GetValue(),
+							StartTs: entry.StartTs,
+							CRTs:    entry.CommitTs,
 						},
 					}
 					select {
@@ -1297,11 +1297,11 @@ func assembleCommitEvent(entry *cdcpb.Event_Row, value []byte) (*model.RegionFee
 
 	revent := &model.RegionFeedEvent{
 		Val: &model.RawKVEntry{
-			OpType:   opType,
-			Key:      entry.Key,
-			Value:    value,
-			StartTs:  entry.StartTs,
-			CommitTs: entry.CommitTs,
+			OpType:  opType,
+			Key:     entry.Key,
+			Value:   value,
+			StartTs: entry.StartTs,
+			CRTs:    entry.CommitTs,
 		},
 	}
 	return revent, nil

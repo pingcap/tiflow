@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -102,8 +102,8 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 	ctx := context.Background()
 	info := &model.TaskStatus{
-		TableInfos: []*model.ProcessTableInfo{
-			{ID: 1, StartTs: 100},
+		Tables: map[model.TableID]model.Ts{
+			1: 100,
 		},
 	}
 
@@ -126,8 +126,8 @@ func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
 	ctx := context.Background()
 	info := &model.TaskStatus{
-		TableInfos: []*model.ProcessTableInfo{
-			{ID: 1, StartTs: 100},
+		Tables: map[model.TableID]model.Ts{
+			1: 100,
 		},
 	}
 	feedID := "feedid"

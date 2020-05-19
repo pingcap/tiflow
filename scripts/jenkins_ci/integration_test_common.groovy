@@ -145,8 +145,9 @@ def tests(sink_type, node_label) {
                                 ls /tmp/tidb_cdc_test
                                 cp /tmp/tidb_cdc_test/cov*out cov_dir || touch cov_dir/dummy_file_${case_name}
                             """
+                            // cyclic tests do not run on kafka sink, so there is no cov* file.
                             sh """
-                            tail /tmp/tidb_cdc_test/cov*
+                            tail /tmp/tidb_cdc_test/cov* || true
                             """
                         } catch (Exception e) {
                             sh """

@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,8 +41,9 @@ type schemaSnapshot struct {
 	tableNameToID  map[TableName]int64
 	schemaNameToID map[string]int64
 
-	schemas map[int64]*timodel.DBInfo
-	tables  map[int64]*TableInfo
+	schemas        map[int64]*timodel.DBInfo
+	tables         map[int64]*TableInfo
+	partitionTable map[int64]*TableInfo
 
 	truncateTableID   map[int64]struct{}
 	ineligibleTableID map[int64]struct{}
@@ -68,8 +69,9 @@ func newEmptySchemaSnapshot() *schemaSnapshot {
 		tableNameToID:  make(map[TableName]int64),
 		schemaNameToID: make(map[string]int64),
 
-		schemas: make(map[int64]*timodel.DBInfo),
-		tables:  make(map[int64]*TableInfo),
+		schemas:        make(map[int64]*timodel.DBInfo),
+		tables:         make(map[int64]*TableInfo),
+		partitionTable: make(map[int64]*TableInfo),
 
 		truncateTableID:   make(map[int64]struct{}),
 		ineligibleTableID: make(map[int64]struct{}),
@@ -134,6 +136,9 @@ func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field
 			logger("[SchemaSnap] --> tableNameToID", zap.Stringer("tableName", tableName), zap.Int64("tableID", tableID))
 		}
 	}
+	for pid, table := range s.partitionTable {
+		logger("[SchemaSnap] --> Partitions", zap.Int64("partitionID", pid), zap.Int64("tableID", table.ID))
+	}
 	truncateTableID := make([]int64, 0, len(s.truncateTableID))
 	for id := range s.truncateTableID {
 		truncateTableID = append(truncateTableID, id)
@@ -153,8 +158,9 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 		tableNameToID:  make(map[TableName]int64, len(s.tableNameToID)),
 		schemaNameToID: make(map[string]int64, len(s.schemaNameToID)),
 
-		schemas: make(map[int64]*timodel.DBInfo, len(s.schemas)),
-		tables:  make(map[int64]*TableInfo, len(s.tables)),
+		schemas:        make(map[int64]*timodel.DBInfo, len(s.schemas)),
+		tables:         make(map[int64]*TableInfo, len(s.tables)),
+		partitionTable: make(map[int64]*TableInfo, len(s.partitionTable)),
 
 		truncateTableID:   make(map[int64]struct{}, len(s.truncateTableID)),
 		ineligibleTableID: make(map[int64]struct{}, len(s.ineligibleTableID)),
@@ -170,6 +176,9 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 	}
 	for k, v := range s.tables {
 		n.tables[k] = v.Clone()
+	}
+	for k, v := range s.partitionTable {
+		n.partitionTable[k] = v.Clone()
 	}
 	for k, v := range s.truncateTableID {
 		n.truncateTableID[k] = v
@@ -257,7 +266,9 @@ func WrapTableInfo(schemaID int64, schemaName string, info *timodel.TableInfo) *
 	if uniqueIndexNum == 1 && len(ti.uniqueColumns) == 1 {
 		for col := range ti.uniqueColumns {
 			info, _ := ti.GetColumnInfo(col)
-			ti.IndieMarkCol = info.Name.O
+			if !info.IsGenerated() {
+				ti.IndieMarkCol = info.Name.O
+			}
 		}
 	}
 
@@ -409,6 +420,15 @@ func (s *schemaSnapshot) TableByID(id int64) (val *TableInfo, ok bool) {
 	return
 }
 
+// PhysicalTableByID returns the TableInfo by table id or partition ID.
+func (s *schemaSnapshot) PhysicalTableByID(id int64) (val *TableInfo, ok bool) {
+	val, ok = s.tables[id]
+	if !ok {
+		val, ok = s.partitionTable[id]
+	}
+	return
+}
+
 // IsTruncateTableID returns true if the table id have been truncated by truncate table DDL
 func (s *schemaSnapshot) IsTruncateTableID(id int64) bool {
 	_, ok := s.truncateTableID[id]
@@ -443,6 +463,11 @@ func (s *schemaSnapshot) dropSchema(id int64) error {
 	}
 
 	for _, table := range schema.Tables {
+		if pi := table.GetPartitionInfo(); pi != nil {
+			for _, partition := range pi.Definitions {
+				delete(s.partitionTable, partition.ID)
+			}
+		}
 		tableName := s.tables[table.ID].TableName
 		delete(s.tables, table.ID)
 		delete(s.tableNameToID, tableName)
@@ -495,6 +520,12 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 
 	tableName := s.tables[id].TableName
 	delete(s.tables, id)
+	if pi := table.GetPartitionInfo(); pi != nil {
+		for _, partition := range pi.Definitions {
+			delete(s.partitionTable, partition.ID)
+			delete(s.ineligibleTableID, partition.ID)
+		}
+	}
 	delete(s.tableNameToID, tableName)
 	delete(s.ineligibleTableID, id)
 
@@ -520,6 +551,14 @@ func (s *schemaSnapshot) createTable(schemaID int64, tbl *timodel.TableInfo) err
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
 		s.ineligibleTableID[table.ID] = struct{}{}
 	}
+	if pi := table.GetPartitionInfo(); pi != nil {
+		for _, partition := range pi.Definitions {
+			s.partitionTable[partition.ID] = table
+			if !table.ExistTableUniqueColumn() {
+				s.ineligibleTableID[partition.ID] = struct{}{}
+			}
+		}
+	}
 	s.tableNameToID[table.TableName] = table.ID
 
 	log.Debug("create table success", zap.String("name", schema.Name.O+"."+table.Name.O), zap.Int64("id", table.ID))
@@ -538,6 +577,15 @@ func (s *schemaSnapshot) replaceTable(tbl *timodel.TableInfo) error {
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
 		s.ineligibleTableID[table.ID] = struct{}{}
 	}
+	if pi := table.GetPartitionInfo(); pi != nil {
+		for _, partition := range pi.Definitions {
+			s.partitionTable[partition.ID] = table
+			if !table.ExistTableUniqueColumn() {
+				s.ineligibleTableID[partition.ID] = struct{}{}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -616,11 +664,11 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 }
 
 // CloneTables return a clone of the existing tables.
-func (s *schemaSnapshot) CloneTables() map[uint64]TableName {
-	mp := make(map[uint64]TableName, len(s.tables))
+func (s *schemaSnapshot) CloneTables() map[model.TableID]TableName {
+	mp := make(map[model.TableID]TableName, len(s.tables))
 
 	for id, table := range s.tables {
-		mp[uint64(id)] = table.TableName
+		mp[id] = table.TableName
 	}
 
 	return mp
