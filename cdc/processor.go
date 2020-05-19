@@ -389,6 +389,10 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 
 func (p *processor) workloadWorker(ctx context.Context) error {
 	t := time.NewTicker(1 * time.Minute)
+	err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureID, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -508,14 +512,14 @@ func (p *processor) handleTables(ctx context.Context) error {
 		return err
 	}
 
-	for _, opt := range p.status.Operation {
+	for tableID, opt := range p.status.Operation {
 		if opt.Delete {
 			if opt.BoundaryTs <= p.position.CheckPointTs {
-				p.removeTable(opt.TableID)
+				p.removeTable(tableID)
 				opt.Done = true
 			}
 		} else {
-			p.addTable(ctx, opt.TableID, opt.BoundaryTs)
+			p.addTable(ctx, tableID, opt.BoundaryTs)
 			opt.Done = true
 		}
 	}

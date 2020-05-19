@@ -83,8 +83,7 @@ func (tp *TaskPosition) String() string {
 
 // TableOperation records the current information of a table migration
 type TableOperation struct {
-	TableID TableID `json:"table_id"`
-	Delete  bool    `json:"delete"`
+	Delete bool `json:"delete"`
 	// if the operation is a delete operation, BoundaryTs is checkpoint ts
 	// if the operation is a add operation, BoundaryTs is start ts
 	BoundaryTs uint64 `json:"boundary_ts"`
@@ -108,6 +107,9 @@ func (w *TaskWorkload) Unmarshal(data []byte) error {
 }
 
 func (w *TaskWorkload) Marshal() (string, error) {
+	if w == nil {
+		return "{}", nil
+	}
 	data, err := json.Marshal(w)
 	return string(data), errors.Trace(err)
 }
@@ -115,10 +117,10 @@ func (w *TaskWorkload) Marshal() (string, error) {
 // TaskStatus records the task information of a capture
 type TaskStatus struct {
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
-	Tables       map[TableID]Ts    `json:"tables"`
-	Operation    []*TableOperation `json:"operation"`
-	AdminJobType AdminJobType      `json:"admin-job-type"`
-	ModRevision  int64             `json:"-"`
+	Tables       map[TableID]Ts              `json:"tables"`
+	Operation    map[TableID]*TableOperation `json:"operation"`
+	AdminJobType AdminJobType                `json:"admin-job-type"`
+	ModRevision  int64                       `json:"-"`
 }
 
 // String implements fmt.Stringer interface.
@@ -196,9 +198,9 @@ func (ts *TaskStatus) Clone() *TaskStatus {
 		tables[tableID] = startTs
 	}
 	clone.Tables = tables
-	operation := make([]*TableOperation, 0, len(ts.Operation))
-	for _, opt := range ts.Operation {
-		operation = append(operation, opt.Clone())
+	operation := make(map[TableID]*TableOperation, len(ts.Operation))
+	for tableID, opt := range ts.Operation {
+		operation[tableID] = opt
 	}
 	clone.Operation = operation
 	return &clone

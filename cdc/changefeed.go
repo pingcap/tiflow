@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/pingcap/ticdc/pkg/scheduler"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -68,13 +70,15 @@ type changeFeed struct {
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
 
-	schema        *entry.SingleSchemaSnapshot
-	ddlState      model.ChangeFeedDDLState
-	targetTs      uint64
-	taskStatus    model.ProcessorsInfos
-	taskPositions map[model.CaptureID]*model.TaskPosition
-	filter        *filter.Filter
-	sink          sink.Sink
+	schema          *entry.SingleSchemaSnapshot
+	ddlState        model.ChangeFeedDDLState
+	targetTs        uint64
+	taskStatus      model.ProcessorsInfos
+	taskPositions   map[model.CaptureID]*model.TaskPosition
+	filter          *filter.Filter
+	sink            sink.Sink
+	scheduler       scheduler.Scheduler
+	manualScheduler scheduler.Scheduler
 
 	cyclicEnabled bool
 
@@ -86,10 +90,12 @@ type changeFeed struct {
 	schemas map[model.SchemaID]tableIDMap
 	tables  map[model.TableID]entry.TableName
 	// value of partitions is the slice of partitions ID.
-	partitions    map[model.TableID][]int64
-	orphanTables  map[model.TableID]model.Ts
-	toCleanTables map[model.TableID]model.Ts
-	etcdCli       kv.CDCEtcdClient
+	partitions        map[model.TableID][]int64
+	orphanTables      map[model.TableID]model.Ts
+	toCleanTables     map[model.TableID]model.Ts
+	todoAddOperations map[model.CaptureID]map[model.TableID]*model.TableOperation
+
+	etcdCli kv.CDCEtcdClient
 }
 
 // String implements fmt.Stringer interface.
@@ -234,8 +240,19 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 	}
 
 	newTaskStatus := make(map[model.CaptureID]*model.TaskStatus, len(captures))
+	captureIDs := make(map[model.CaptureID]struct{}, len(captures))
 	cleanedTables := make(map[model.TableID]struct{})
 	addedTables := make(map[model.TableID]struct{})
+
+	for cid := range captures {
+		captureIDs[cid] = struct{}{}
+		workloads, err := c.etcdCli.GetTaskWorkload(ctx, c.id, cid)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		c.scheduler.ResetWorkloads(cid, workloads)
+	}
+	c.scheduler.AlignCapture(captureIDs)
 
 	for id, targetTs := range c.toCleanTables {
 		captureID, taskStatus, ok := findTaskStatusWithTable(c.taskStatus, id)
@@ -249,18 +266,21 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			status = taskStatus.Clone()
 		}
 		status.RemoveTable(id)
-		status.Operation = append(status.Operation, &model.TableOperation{
-			TableID:    id,
+		if status.Operation == nil {
+			status.Operation = make(map[model.TableID]*model.TableOperation)
+		}
+		scheduler.AppendTaskOperation(status.Operation, id, &model.TableOperation{
 			Delete:     true,
 			BoundaryTs: targetTs,
 		})
 		newTaskStatus[captureID] = status
 		cleanedTables[id] = struct{}{}
 	}
-	schemaSnapshot := c.schema
-	for tableID, startTs := range c.orphanTables {
-		var orphanMarkTableID int64
-		if c.cyclicEnabled {
+
+	// TODO(leoppro) support to cyclic duplicate with scheduler
+	if c.cyclicEnabled {
+		schemaSnapshot := c.schema
+		for tableID, startTs := range c.orphanTables {
 			tableName, found := schemaSnapshot.GetTableNameByID(tableID)
 			if !found || cyclic.IsMarkTable(tableName.Schema, tableName.Table) {
 				// Skip, mark tables should not be balanced alone.
@@ -277,35 +297,100 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 					zap.String("markTableName", markTableTableName))
 				continue
 			}
-			orphanMarkTableID = id
-		}
-		captureID := c.selectCapture(captures, newTaskStatus)
-		if len(captureID) == 0 {
-			return nil
-		}
-		taskStatus := c.taskStatus[captureID]
-		if taskStatus == nil {
-			taskStatus = new(model.TaskStatus)
-		}
-		status, exist := newTaskStatus[captureID]
-		if !exist {
-			status = taskStatus.Clone()
-		}
-		status.Tables[tableID] = startTs
-		status.Operation = append(status.Operation, &model.TableOperation{
-			TableID:    tableID,
-			BoundaryTs: startTs,
-		})
-		if orphanMarkTableID != 0 {
-			status.Tables[orphanMarkTableID] = startTs
-			addedTables[orphanMarkTableID] = struct{}{}
-			status.Operation = append(status.Operation, &model.TableOperation{
-				TableID:    orphanMarkTableID,
+			orphanMarkTableID := id
+			captureID := c.selectCapture(captures, newTaskStatus)
+			if len(captureID) == 0 {
+				return nil
+			}
+			taskStatus := c.taskStatus[captureID]
+			if taskStatus == nil {
+				taskStatus = new(model.TaskStatus)
+			}
+			status, exist := newTaskStatus[captureID]
+			if !exist {
+				status = taskStatus.Clone()
+			}
+			if status.Operation == nil {
+				status.Operation = make(map[model.TableID]*model.TableOperation)
+			}
+			status.Tables[tableID] = startTs
+			scheduler.AppendTaskOperation(status.Operation, tableID, &model.TableOperation{
 				BoundaryTs: startTs,
 			})
+			status.Tables[orphanMarkTableID] = startTs
+			addedTables[orphanMarkTableID] = struct{}{}
+			scheduler.AppendTaskOperation(status.Operation, orphanMarkTableID, &model.TableOperation{
+				BoundaryTs: startTs,
+			})
+			newTaskStatus[captureID] = status
+			addedTables[tableID] = struct{}{}
 		}
-		newTaskStatus[captureID] = status
-		addedTables[tableID] = struct{}{}
+	} else {
+		operations := c.scheduler.DistributeTables(c.orphanTables)
+		for captureID, operation := range operations {
+			status, exist := newTaskStatus[captureID]
+			if !exist {
+				taskStatus := c.taskStatus[captureID]
+				if taskStatus == nil {
+					status = new(model.TaskStatus)
+				} else {
+					status = taskStatus.Clone()
+				}
+			}
+			if status.Operation == nil {
+				status.Operation = make(map[model.TableID]*model.TableOperation)
+			}
+			for tableID, op := range operation {
+				status.Tables[tableID] = op.BoundaryTs
+			}
+
+			scheduler.AppendTaskOperations(status.Operation, operation)
+		}
+
+		// rebanlance
+		if len(c.todoAddOperations) == 0 {
+			_, operations := c.scheduler.CalRebalanceOperates(0, 0 /*checkpointts*/)
+			deleteOperations, addOperations := splitTaskOperation(operations)
+			c.todoAddOperations = addOperations
+			for captureID, operation := range deleteOperations {
+
+				status, exist := newTaskStatus[captureID]
+				if !exist {
+					taskStatus := c.taskStatus[captureID]
+					if taskStatus == nil {
+						status = new(model.TaskStatus)
+					} else {
+						status = taskStatus.Clone()
+					}
+				}
+				if status.Operation == nil {
+					status.Operation = make(map[model.TableID]*model.TableOperation)
+				}
+				for tableID := range operation {
+					delete(status.Tables, tableID)
+				}
+				scheduler.AppendTaskOperations(status.Operation, operation)
+			}
+		} else {
+			for captureID, operation := range c.todoAddOperations {
+				status, exist := newTaskStatus[captureID]
+				if !exist {
+					taskStatus := c.taskStatus[captureID]
+					if taskStatus == nil {
+						status = new(model.TaskStatus)
+					} else {
+						status = taskStatus.Clone()
+					}
+				}
+				if status.Operation == nil {
+					status.Operation = make(map[model.TableID]*model.TableOperation)
+				}
+				for tableID, op := range operation {
+					status.Tables[tableID] = op.BoundaryTs
+				}
+				scheduler.AppendTaskOperations(status.Operation, operation)
+			}
+		}
 	}
 
 	for captureID, status := range newTaskStatus {
@@ -332,6 +417,30 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 	}
 
 	return nil
+}
+func splitTaskOperation(src map[model.CaptureID]map[model.TableID]*model.TableOperation) (delete, add map[model.CaptureID]map[model.TableID]*model.TableOperation) {
+	delete = make(map[model.CaptureID]map[model.TableID]*model.TableOperation, len(src))
+	add = make(map[model.CaptureID]map[model.TableID]*model.TableOperation, len(src))
+	for captureID, operations := range src {
+		deleteOperations := delete[captureID]
+		addOperations := add[captureID]
+		for tableID, operation := range operations {
+			if operation.Delete {
+				if deleteOperations == nil {
+					deleteOperations = make(map[model.TableID]*model.TableOperation)
+					delete[captureID] = deleteOperations
+				}
+				deleteOperations[tableID] = operation
+			} else {
+				if addOperations == nil {
+					addOperations = make(map[model.TableID]*model.TableOperation)
+					add[captureID] = addOperations
+				}
+				addOperations[tableID] = operation
+			}
+		}
+	}
+	return
 }
 
 func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool, err error) {

@@ -6,22 +6,35 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-type workloads map[model.CaptureID]map[int64]uint64
+type workloads map[model.CaptureID]map[model.TableID]uint64
 
-func (w workloads) SetCapture(captureID model.CaptureID, workloads map[int64]uint64) {
+func (w workloads) SetCapture(captureID model.CaptureID, workloads map[model.TableID]uint64) {
 	w[captureID] = workloads
 }
 
-func (w workloads) SetTable(captureID model.CaptureID, tableID int64, workload uint64) {
+func (w workloads) AlignCapture(captureIDs map[model.CaptureID]struct{}) {
+	for captureID := range captureIDs {
+		if _, exist := w[captureID]; !exist {
+			w[captureID] = make(map[model.TableID]uint64)
+		}
+	}
+	for captureID := range w {
+		if _, exist := captureIDs[captureID]; !exist {
+			delete(w, captureID)
+		}
+	}
+}
+
+func (w workloads) SetTable(captureID model.CaptureID, tableID model.TableID, workload uint64) {
 	captureWorkloads, exist := w[captureID]
 	if !exist {
-		captureWorkloads = make(map[int64]uint64)
+		captureWorkloads = make(map[model.TableID]uint64)
 		w[captureID] = captureWorkloads
 	}
 	captureWorkloads[tableID] = workload
 }
 
-func (w workloads) RemoveTable(captureID model.CaptureID, tableID int64) {
+func (w workloads) RemoveTable(captureID model.CaptureID, tableID model.TableID) {
 	captureWorkloads, exist := w[captureID]
 	if !exist {
 		return

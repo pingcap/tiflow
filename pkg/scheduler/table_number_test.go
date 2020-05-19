@@ -19,6 +19,6 @@ func (s *tableNumberSuite) TestTableNumberScheduler(c *check.C) {
 	c.Assert(len(scheduler.DistributeTables([]int64{10, 11, 12, 13, 14, 15, 16, 17})), check.Equals, 8)
 	c.Assert(fmt.Sprintf("%.2f%%", scheduler.Skewness()*100), check.Equals, "8.84%")
 	scheduler.ResetWorkloads("capture1", map[int64]uint64{})
-	_, _, err := scheduler.CalRebalanceOperates(0)
-	c.Assert(err, check.IsNil)
+
+	//TODO add more tests
 }

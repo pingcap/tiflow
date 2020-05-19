@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/scheduler"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -262,6 +264,7 @@ func (o *Owner) newChangeFeed(
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
 		},
+		scheduler:     scheduler.NewTableNumberScheduler(),
 		ddlState:      model.ChangeFeedSyncDML,
 		ddlExecutedTs: checkpointTs,
 		targetTs:      info.GetTargetTs(),
