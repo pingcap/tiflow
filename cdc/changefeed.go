@@ -339,6 +339,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 				} else {
 					status = taskStatus.Clone()
 				}
+				newTaskStatus[captureID] = status
 			}
 			if status.Operation == nil {
 				status.Operation = make(map[model.TableID]*model.TableOperation)
@@ -353,53 +354,53 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			scheduler.AppendTaskOperations(status.Operation, operation)
 		}
 
-		// rebanlance
-		if len(c.todoAddOperations) == 0 {
-			_, operations := c.scheduler.CalRebalanceOperates(0, 0 /*checkpointts*/)
-			deleteOperations, addOperations := splitTaskOperation(operations)
-			c.todoAddOperations = addOperations
-			for captureID, operation := range deleteOperations {
-
-				status, exist := newTaskStatus[captureID]
-				if !exist {
-					taskStatus := c.taskStatus[captureID]
-					if taskStatus == nil {
-						status = new(model.TaskStatus)
-					} else {
-						status = taskStatus.Clone()
-					}
-				}
-				if status.Operation == nil {
-					status.Operation = make(map[model.TableID]*model.TableOperation)
-				}
-				for tableID := range operation {
-					delete(status.Tables, tableID)
-				}
-				scheduler.AppendTaskOperations(status.Operation, operation)
-			}
-		} else {
-			for captureID, operation := range c.todoAddOperations {
-				status, exist := newTaskStatus[captureID]
-				if !exist {
-					taskStatus := c.taskStatus[captureID]
-					if taskStatus == nil {
-						status = new(model.TaskStatus)
-					} else {
-						status = taskStatus.Clone()
-					}
-				}
-				if status.Operation == nil {
-					status.Operation = make(map[model.TableID]*model.TableOperation)
-				}
-				if status.Tables == nil {
-					status.Tables = make(map[model.TableID]model.Ts)
-				}
-				for tableID, op := range operation {
-					status.Tables[tableID] = op.BoundaryTs
-				}
-				scheduler.AppendTaskOperations(status.Operation, operation)
-			}
-		}
+		//// rebanlance
+		//if len(c.todoAddOperations) == 0 {
+		//	_, operations := c.scheduler.CalRebalanceOperates(0, 0 /*checkpointts*/)
+		//	deleteOperations, addOperations := splitTaskOperation(operations)
+		//	c.todoAddOperations = addOperations
+		//	for captureID, operation := range deleteOperations {
+		//
+		//		status, exist := newTaskStatus[captureID]
+		//		if !exist {
+		//			taskStatus := c.taskStatus[captureID]
+		//			if taskStatus == nil {
+		//				status = new(model.TaskStatus)
+		//			} else {
+		//				status = taskStatus.Clone()
+		//			}
+		//		}
+		//		if status.Operation == nil {
+		//			status.Operation = make(map[model.TableID]*model.TableOperation)
+		//		}
+		//		for tableID := range operation {
+		//			delete(status.Tables, tableID)
+		//		}
+		//		scheduler.AppendTaskOperations(status.Operation, operation)
+		//	}
+		//} else {
+		//	for captureID, operation := range c.todoAddOperations {
+		//		status, exist := newTaskStatus[captureID]
+		//		if !exist {
+		//			taskStatus := c.taskStatus[captureID]
+		//			if taskStatus == nil {
+		//				status = new(model.TaskStatus)
+		//			} else {
+		//				status = taskStatus.Clone()
+		//			}
+		//		}
+		//		if status.Operation == nil {
+		//			status.Operation = make(map[model.TableID]*model.TableOperation)
+		//		}
+		//		if status.Tables == nil {
+		//			status.Tables = make(map[model.TableID]model.Ts)
+		//		}
+		//		for tableID, op := range operation {
+		//			status.Tables[tableID] = op.BoundaryTs
+		//		}
+		//		scheduler.AppendTaskOperations(status.Operation, operation)
+		//	}
+		//}
 	}
 
 	for captureID, status := range newTaskStatus {
