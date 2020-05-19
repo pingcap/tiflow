@@ -17,8 +17,10 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
+	"go.uber.org/zap"
 )
 
 // CreateMarkTable returns DDLs to create mark table regard to the tableID
@@ -96,12 +98,16 @@ func MapMarkRowsGroup(
 			// Group mark table rows by start ts
 			if IsMarkTable(name.Schema, name.Table) {
 				for _, event := range events {
-					_, ok := markMap[event.StartTs]
+					first, ok := markMap[event.StartTs]
 					if ok {
-						panic(fmt.Sprintf(
-							"there should be at most one mark row for each txn, start ts %d",
-							event.StartTs,
-						))
+						// TiKV may emit the same row multiple times.
+						if event.CommitTs != first.CommitTs || event.RowID != first.RowID {
+							log.Fatal(
+								"there should be at most one mark row for each txn",
+								zap.Uint64("start-ts", event.StartTs),
+								zap.Any("first", first),
+								zap.Any("second", event))
+						}
 					}
 					markMap[event.StartTs] = event
 				}

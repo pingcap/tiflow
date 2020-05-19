@@ -64,7 +64,9 @@ func main() {
 	if err := prepare(sourceDB); err != nil {
 		log.S().Fatal(err)
 	}
-	if err := addLock(cfg); err != nil && errors.Cause(err) != context.Canceled && errors.Cause(err) != context.DeadlineExceeded {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := addLock(ctx, cfg); err != nil {
 		log.S().Fatal(err)
 	}
 	time.Sleep(5 * time.Second)
@@ -100,9 +102,7 @@ func finishMark(sourceDB *sql.DB) error {
 	return nil
 }
 
-func addLock(cfg *util.Config) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func addLock(ctx context.Context, cfg *util.Config) error {
 	http.DefaultClient.Timeout = 10 * time.Second
 
 	tableID, err := getTableID(cfg.SourceDBCfg.Host, "test", "t1")
@@ -111,7 +111,7 @@ func addLock(cfg *util.Config) error {
 	}
 
 	pdcli, err := pd.NewClientWithContext(
-		context.Background(), strings.Split(cfg.PDAddr, ","), pd.SecurityOption{})
+		ctx, strings.Split(cfg.PDAddr, ","), pd.SecurityOption{})
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -130,7 +130,7 @@ func addLock(cfg *util.Config) error {
 		pdcli:     pdcli,
 		kv:        store.(tikv.Storage),
 	}
-	return errors.Trace(locker.generateLocks(ctx))
+	return errors.Trace(locker.generateLocks(ctx, 10*time.Second))
 }
 
 // getTableID of the table with specified table name.
@@ -172,7 +172,7 @@ type Locker struct {
 }
 
 // generateLocks sends Prewrite requests to TiKV to generate locks, without committing and rolling back.
-func (c *Locker) generateLocks(pctx context.Context) error {
+func (c *Locker) generateLocks(ctx context.Context, genDur time.Duration) error {
 	log.Info("genLock started")
 
 	const maxTxnSize = 1000
@@ -184,11 +184,11 @@ func (c *Locker) generateLocks(pctx context.Context) error {
 	scannedKeys := 0
 	var batch []int64
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Send lock for 10 seconds
+	timer := time.After(genDur)
 	for rowID := int64(0); ; rowID = (rowID + 1) % c.tableSize {
 		select {
-		case <-pctx.Done():
+		case <-timer:
 			log.Info("genLock done")
 			return nil
 		default:
