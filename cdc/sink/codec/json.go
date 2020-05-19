@@ -18,9 +18,9 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
-	"log"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"

@@ -15,12 +15,12 @@ package puller
 
 import (
 	"context"
-	"log"
 	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
