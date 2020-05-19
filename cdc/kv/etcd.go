@@ -356,7 +356,7 @@ func (c CDCEtcdClient) GetTaskWorkload(
 		return nil, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return nil, errors.Annotatef(model.ErrTaskStatusNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
+		return make(model.TaskWorkload), nil
 	}
 	workload := make(model.TaskWorkload)
 	err = workload.Unmarshal(resp.Kvs[0].Value)
