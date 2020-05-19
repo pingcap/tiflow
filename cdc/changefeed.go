@@ -349,6 +349,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			}
 			for tableID, op := range operation {
 				status.Tables[tableID] = op.BoundaryTs
+				addedTables[tableID] = struct{}{}
 			}
 
 			scheduler.AppendTaskOperations(status.Operation, operation)
