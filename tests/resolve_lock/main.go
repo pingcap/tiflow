@@ -64,9 +64,7 @@ func main() {
 	if err := prepare(sourceDB); err != nil {
 		log.S().Fatal(err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	if err := addLock(ctx, cfg); err != nil && errors.Cause(err) != context.Canceled && errors.Cause(err) != context.DeadlineExceeded {
+	if err := addLock(cfg); err != nil && errors.Cause(err) != context.Canceled && errors.Cause(err) != context.DeadlineExceeded {
 		log.S().Fatal(err)
 	}
 	time.Sleep(5 * time.Second)
@@ -102,7 +100,7 @@ func finishMark(sourceDB *sql.DB) error {
 	return nil
 }
 
-func addLock(ctx context.Context, cfg *util.Config) error {
+func addLock(cfg *util.Config) error {
 	http.DefaultClient.Timeout = 10 * time.Second
 
 	tableID, err := getTableID(cfg.SourceDBCfg.Host, "test", "t1")
@@ -110,8 +108,7 @@ func addLock(ctx context.Context, cfg *util.Config) error {
 		return errors.Trace(err)
 	}
 
-	pdcli, err := pd.NewClientWithContext(
-		ctx, strings.Split(cfg.PDAddr, ","), pd.SecurityOption{})
+	pdcli, err := pd.NewClient(strings.Split(cfg.PDAddr, ","), pd.SecurityOption{})
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -130,6 +127,8 @@ func addLock(ctx context.Context, cfg *util.Config) error {
 		pdcli:     pdcli,
 		kv:        store.(tikv.Storage),
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	return errors.Trace(locker.generateLocks(ctx))
 }
 
