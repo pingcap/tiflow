@@ -1135,7 +1135,7 @@ func (s *eventFeedSession) singleEventFeed(
 						},
 					}
 
-					if entry.CommitTs <= lastResolvedTs {
+					if atomic.LoadUint32(&initialized) == 1 && entry.CommitTs <= lastResolvedTs {
 						log.Fatal("The CommitTs must be greater than the resolvedTs",
 							zap.String("Event Type", "COMMITTED"),
 							zap.Uint64("CommitTs", entry.CommitTs),
@@ -1193,10 +1193,10 @@ func (s *eventFeedSession) singleEventFeed(
 		case *cdcpb.Event_Error:
 			return atomic.LoadUint64(&checkpointTs), errors.Trace(&eventError{err: x.Error})
 		case *cdcpb.Event_ResolvedTs:
+			lastResolvedTs = x.ResolvedTs
 			if atomic.LoadUint32(&initialized) == 0 {
 				continue
 			}
-			lastResolvedTs = x.ResolvedTs
 			// emit a checkpointTs
 			revent := &model.RegionFeedEvent{
 				Resolved: &model.ResolvedSpan{
