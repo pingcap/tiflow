@@ -30,6 +30,7 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -115,7 +116,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+	tableID := util.TableIDFromCtx(ctx)
+	tableIDStr := strconv.FormatInt(tableID, 10)
 
 	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
@@ -174,6 +176,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
+			if raw.CRTs <= p.resolvedTs {
+				log.Fatal("The CRTs must be greater than the resolvedTs",
+					zap.Uint64("CRTs", raw.CRTs),
+					zap.Uint64("resolvedTs", p.resolvedTs),
+					zap.Int64("tableID", tableID))
+			}
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())

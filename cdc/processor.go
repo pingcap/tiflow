@@ -652,6 +652,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		return nil
 	}
 
+	var resolvedTs uint64
 	for {
 		select {
 		case <-ctx.Done():
@@ -665,9 +666,15 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
+				resolvedTs = row.CRTs
 				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.CRTs)
 				p.sinkEmittedResolvedNotifier.Notify()
 				continue
+			}
+			if row.CRTs <= resolvedTs {
+				log.Fatal("The CRTs must be greater than the resolvedTs",
+					zap.Uint64("CRTs", row.CRTs),
+					zap.Uint64("resolvedTs", resolvedTs))
 			}
 			err := processRowChangedEvent(row)
 			if err != nil {
@@ -752,7 +759,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 			p.errCh <- err
 		}
 	}()
-
 	go func() {
 		resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID, strconv.FormatInt(table.id, 10))
 		for {
