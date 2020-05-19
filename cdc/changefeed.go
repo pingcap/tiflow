@@ -313,6 +313,9 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			if status.Operation == nil {
 				status.Operation = make(map[model.TableID]*model.TableOperation)
 			}
+			if status.Tables == nil {
+				status.Tables = make(map[model.TableID]model.Ts)
+			}
 			status.Tables[tableID] = startTs
 			scheduler.AppendTaskOperation(status.Operation, tableID, &model.TableOperation{
 				BoundaryTs: startTs,
@@ -339,6 +342,9 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			}
 			if status.Operation == nil {
 				status.Operation = make(map[model.TableID]*model.TableOperation)
+			}
+			if status.Tables == nil {
+				status.Tables = make(map[model.TableID]model.Ts)
 			}
 			for tableID, op := range operation {
 				status.Tables[tableID] = op.BoundaryTs
@@ -384,6 +390,9 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 				}
 				if status.Operation == nil {
 					status.Operation = make(map[model.TableID]*model.TableOperation)
+				}
+				if status.Tables == nil {
+					status.Tables = make(map[model.TableID]model.Ts)
 				}
 				for tableID, op := range operation {
 					status.Tables[tableID] = op.BoundaryTs
