@@ -394,6 +394,9 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 	if len(captures) == 0 {
 		return nil
 	}
+	if c.cyclicEnabled {
+		return nil
+	}
 	for _, status := range c.taskStatus {
 		if status.SomeOperationsUnapplied() {
 			return nil
