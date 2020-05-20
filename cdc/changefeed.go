@@ -457,9 +457,8 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 	}
 	c.scheduler.AlignCapture(captureIDs)
 
-	_, operations := c.scheduler.CalRebalanceOperates(0, c.status.CheckpointTs)
-	deleteOperations, addOperations := splitTaskOperation(operations)
-	log.Info("rebalance operations", zap.Reflect("operations", operations), zap.Reflect("deleteOperations", deleteOperations), zap.Reflect("addOperations", addOperations))
+	_, deleteOperations, addOperations := c.scheduler.CalRebalanceOperates(0, c.status.CheckpointTs)
+	log.Info("rebalance operations", zap.Reflect("deleteOperations", deleteOperations), zap.Reflect("addOperations", addOperations))
 	c.todoAddOperations = addOperations
 	newTaskStatus := make(map[model.CaptureID]*model.TaskStatus, len(captures))
 	applyOperation(newTaskStatus, deleteOperations)
