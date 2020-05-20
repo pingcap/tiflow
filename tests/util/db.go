@@ -170,13 +170,13 @@ func CreateSourceDBs() (dbs []*sql.DB, err error) {
 		Port:     4000,
 	}
 
-	src1, err := CreateDB(cfg, false)
+	src1, err := CreateDB(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	cfg.Port = 4001
-	src2, err := CreateDB(cfg, false)
+	src2, err := CreateDB(cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -195,7 +195,7 @@ func CreateSourceDB() (db *sql.DB, err error) {
 		Port:     4000,
 	}
 
-	return CreateDB(cfg, false)
+	return CreateDB(cfg)
 }
 
 // CreateSinkDB return sink sql.DB for test
@@ -208,5 +208,5 @@ func CreateSinkDB() (db *sql.DB, err error) {
 		Port:     3306,
 	}
 
-	return CreateDB(cfg, false)
+	return CreateDB(cfg)
 }
