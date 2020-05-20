@@ -215,12 +215,12 @@ func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo
 	return minID
 }
 
-func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo) error {
+func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, rebanlanceNow bool) error {
 	err := c.balanceOrphanTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = c.rebanlanceTables(ctx, captures)
+	err = c.rebanlanceTables(ctx, captures, rebanlanceNow)
 	return errors.Trace(err)
 }
 
@@ -391,7 +391,7 @@ func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.
 	return nil
 }
 
-func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
+func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo, rebanlanceNow bool) error {
 	if len(captures) == 0 {
 		return nil
 	}
@@ -441,7 +441,7 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 		return nil
 	}
 
-	if time.Since(c.lastRebanlanceTime) < 10*time.Minute {
+	if !rebanlanceNow && time.Since(c.lastRebanlanceTime) < 10*time.Minute {
 		return nil
 	}
 	c.lastRebanlanceTime = time.Now()

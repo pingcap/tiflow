@@ -102,3 +102,23 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 	err = s.owner.EnqueueJob(job)
 	handleOwnerResp(w, err)
 }
+
+func (s *Server) handleRebanlanceTrigger(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
+		return
+	}
+
+	if s.owner == nil {
+		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+	}
+
+	err := req.ParseForm()
+	if err != nil {
+		writeInternalServerError(w, err)
+		return
+	}
+	changefeedID := req.Form.Get(APIOpVarChangefeedID)
+	err = s.owner.TriggerRebanlance(changefeedID)
+	handleOwnerResp(w, err)
+}
