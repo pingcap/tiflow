@@ -1135,7 +1135,7 @@ func (s *eventFeedSession) singleEventFeed(
 						},
 					}
 
-					if atomic.LoadUint32(&initialized) == 1 && entry.CommitTs <= lastResolvedTs {
+					if entry.CommitTs <= lastResolvedTs && atomic.LoadUint32(&initialized) == 1 {
 						log.Fatal("The CommitTs must be greater than the resolvedTs",
 							zap.String("Event Type", "COMMITTED"),
 							zap.Uint64("CommitTs", entry.CommitTs),
