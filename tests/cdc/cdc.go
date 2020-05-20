@@ -36,7 +36,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	sourceDB, err := util.CreateDB(cfg.SourceDBCfg[0], false)
+	sourceDB, err := util.CreateDB(cfg.SourceDBCfg[0])
 	if err != nil {
 		log.S().Fatal(err)
 	}
@@ -46,7 +46,7 @@ func main() {
 		}
 	}()
 
-	targetDB, err := util.CreateDB(cfg.TargetDBCfg, false)
+	targetDB, err := util.CreateDB(cfg.TargetDBCfg)
 	if err != nil {
 		log.S().Fatal(err)
 	}

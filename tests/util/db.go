@@ -48,17 +48,13 @@ func (c *DBConfig) String() string {
 }
 
 // CreateDB create a mysql fd
-func CreateDB(cfg DBConfig, withoutDatabase bool) (*sql.DB, error) {
+func CreateDB(cfg DBConfig) (*sql.DB, error) {
 	// just set to the same timezone so the timestamp field of mysql will return the same value
 	// timestamp field will be display as the time zone of the Local time of drainer when write to kafka, so we set it to local time to pass CI now
 	_, offset := time.Now().Zone()
 	zone := fmt.Sprintf("'+%02d:00'", offset/3600)
 	var dbDSN string
-	if withoutDatabase {
-		dbDSN = fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8&interpolateParams=true&multiStatements=true&time_zone=%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, url.QueryEscape(zone))
-	} else {
-		dbDSN = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&interpolateParams=true&multiStatements=true&time_zone=%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name, url.QueryEscape(zone))
-	}
+	dbDSN = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&interpolateParams=true&multiStatements=true&time_zone=%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name, url.QueryEscape(zone))
 	db, err := sql.Open("mysql", dbDSN)
 	if err != nil {
 		return nil, errors.Trace(err)

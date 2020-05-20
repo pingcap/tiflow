@@ -29,7 +29,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	sourceDB0, err := util.CreateDB(cfg.SourceDBCfg[0], true)
+	sourceDB0, err := util.CreateDB(cfg.SourceDBCfg[0])
 	if err != nil {
 		log.S().Fatal(err)
 	}
@@ -38,7 +38,7 @@ func main() {
 			log.S().Errorf("Failed to close source database: %s\n", err)
 		}
 	}()
-	sourceDB1, err := util.CreateDB(cfg.SourceDBCfg[1], true)
+	sourceDB1, err := util.CreateDB(cfg.SourceDBCfg[1])
 	if err != nil {
 		log.S().Fatal(err)
 	}
