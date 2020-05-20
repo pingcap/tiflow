@@ -58,9 +58,10 @@ def prepare_binaries() {
                         mv tmp/tidb-tools-v2.1.6-linux-amd64/bin/* third_bin
                         chmod a+x third_bin/*
                         rm -rf tmp
+                        tar zcvf third_bin.tar.gz third_bin
                     """
 
-                    stash includes: "third_bin/**", name: "third_binaries"
+                    stash includes: "third_bin.tar.gz", name: "third_binaries"
                 }
             }
         }
@@ -132,6 +133,7 @@ def tests(sink_type, node_label) {
                     unstash 'ticdc'
                     unstash 'third_binaries'
                     unstash 'ticdc_binaries'
+                    sh "tar zxvf third_binaries.tar.gz"
 
                     dir("go/src/github.com/pingcap/ticdc") {
                         sh "mv ${ws}/third_bin/* ./bin/"
