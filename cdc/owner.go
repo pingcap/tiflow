@@ -656,6 +656,7 @@ func (o *Owner) EnqueueJob(job model.AdminJob) error {
 	return nil
 }
 
+// TriggerRebanlance triggers the rebalance in the specified changefeed
 func (o *Owner) TriggerRebanlance(changefeedID model.ChangeFeedID) error {
 	o.rebanlanceTiggerMu.Lock()
 	defer o.rebanlanceTiggerMu.Unlock()

@@ -99,13 +99,16 @@ func (o *TableOperation) Clone() *TableOperation {
 	return &clone
 }
 
+// TaskWorkload records the workloads of a task
 type TaskWorkload map[int64]uint64
 
+// Unmarshal unmarshals into *TaskWorkload from json marshal byte slice
 func (w *TaskWorkload) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, w)
 	return errors.Annotatef(err, "Unmarshal data: %v", data)
 }
 
+// Marshal returns the json marshal format of a TaskWorkload
 func (w *TaskWorkload) Marshal() (string, error) {
 	if w == nil {
 		return "{}", nil

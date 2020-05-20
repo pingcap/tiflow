@@ -70,15 +70,14 @@ type changeFeed struct {
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
 
-	schema          *entry.SingleSchemaSnapshot
-	ddlState        model.ChangeFeedDDLState
-	targetTs        uint64
-	taskStatus      model.ProcessorsInfos
-	taskPositions   map[model.CaptureID]*model.TaskPosition
-	filter          *filter.Filter
-	sink            sink.Sink
-	scheduler       scheduler.Scheduler
-	manualScheduler scheduler.Scheduler
+	schema        *entry.SingleSchemaSnapshot
+	ddlState      model.ChangeFeedDDLState
+	targetTs      uint64
+	taskStatus    model.ProcessorsInfos
+	taskPositions map[model.CaptureID]*model.TaskPosition
+	filter        *filter.Filter
+	sink          sink.Sink
+	scheduler     scheduler.Scheduler
 
 	cyclicEnabled bool
 
@@ -270,7 +269,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 		if status.Operation == nil {
 			status.Operation = make(map[model.TableID]*model.TableOperation)
 		}
-		scheduler.AppendTaskOperation(status.Operation, id, &model.TableOperation{
+		appendTaskOperation(status.Operation, id, &model.TableOperation{
 			Delete:     true,
 			BoundaryTs: targetTs,
 		})
@@ -318,12 +317,12 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 				status.Tables = make(map[model.TableID]model.Ts)
 			}
 			status.Tables[tableID] = startTs
-			scheduler.AppendTaskOperation(status.Operation, tableID, &model.TableOperation{
+			appendTaskOperation(status.Operation, tableID, &model.TableOperation{
 				BoundaryTs: startTs,
 			})
 			status.Tables[orphanMarkTableID] = startTs
 			addedTables[orphanMarkTableID] = struct{}{}
-			scheduler.AppendTaskOperation(status.Operation, orphanMarkTableID, &model.TableOperation{
+			appendTaskOperation(status.Operation, orphanMarkTableID, &model.TableOperation{
 				BoundaryTs: startTs,
 			})
 			newTaskStatus[captureID] = status
@@ -353,7 +352,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 				addedTables[tableID] = struct{}{}
 			}
 
-			scheduler.AppendTaskOperations(status.Operation, operation)
+			appendTaskOperations(status.Operation, operation)
 		}
 	}
 
@@ -427,7 +426,7 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 					status.Tables[tableID] = op.BoundaryTs
 				}
 			}
-			scheduler.AppendTaskOperations(status.Operation, operation)
+			appendTaskOperations(status.Operation, operation)
 		}
 	}
 	if len(c.todoAddOperations) != 0 {
@@ -466,29 +465,20 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 	return errors.Trace(err)
 }
 
-func splitTaskOperation(src map[model.CaptureID]map[model.TableID]*model.TableOperation) (delete, add map[model.CaptureID]map[model.TableID]*model.TableOperation) {
-	delete = make(map[model.CaptureID]map[model.TableID]*model.TableOperation, len(src))
-	add = make(map[model.CaptureID]map[model.TableID]*model.TableOperation, len(src))
-	for captureID, operations := range src {
-		deleteOperations := delete[captureID]
-		addOperations := add[captureID]
-		for tableID, operation := range operations {
-			if operation.Delete {
-				if deleteOperations == nil {
-					deleteOperations = make(map[model.TableID]*model.TableOperation)
-					delete[captureID] = deleteOperations
-				}
-				deleteOperations[tableID] = operation
-			} else {
-				if addOperations == nil {
-					addOperations = make(map[model.TableID]*model.TableOperation)
-					add[captureID] = addOperations
-				}
-				addOperations[tableID] = operation
-			}
-		}
+func appendTaskOperations(targetOperations map[model.TableID]*model.TableOperation, toAppendOperations map[model.TableID]*model.TableOperation) {
+	for tableID, operation := range toAppendOperations {
+		appendTaskOperation(targetOperations, tableID, operation)
 	}
-	return
+}
+
+func appendTaskOperation(targetOperations map[model.TableID]*model.TableOperation, tableID model.TableID, operation *model.TableOperation) {
+	if originalOperation, exist := targetOperations[tableID]; exist {
+		if originalOperation.Delete != operation.Delete {
+			delete(targetOperations, tableID)
+		}
+		return
+	}
+	targetOperations[tableID] = operation
 }
 
 func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool, err error) {

@@ -15,13 +15,23 @@ package scheduler
 
 import "github.com/pingcap/ticdc/cdc/model"
 
+// Scheduler is an abstraction for anything that provide the schedule table feature
 type Scheduler interface {
+	// ResetWorkloads resets the workloads info of the capture
 	ResetWorkloads(captureID model.CaptureID, workloads map[model.TableID]uint64)
+	// AlignCapture makes sure that the workloads of the capture is matched with the specified captureIDs
 	AlignCapture(captureIDs map[model.CaptureID]struct{})
+	// Skewness returns the skewness
 	Skewness() float64
+	// CalRebalanceOperates calculates the rebalance operates
+	// returns  * the skewness after rebalance
+	// 			* the delete operations need by rebalance
+	//          * the add operations need by rebalance
 	CalRebalanceOperates(targetSkewness float64, boundaryTs model.Ts) (
 		skewness float64,
 		deleteOperations map[model.CaptureID]map[model.TableID]*model.TableOperation,
 		addOperations map[model.CaptureID]map[model.TableID]*model.TableOperation)
+	// DistributeTables distributes the new tables to the captures
+	// returns the operations of the new tables
 	DistributeTables(tableIDs map[model.TableID]model.Ts) map[model.CaptureID]map[model.TableID]*model.TableOperation
 }

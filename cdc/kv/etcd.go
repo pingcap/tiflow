@@ -40,6 +40,7 @@ const (
 	// TaskKeyPrefix is the prefix of task keys
 	TaskKeyPrefix = EtcdKeyBase + "/task"
 
+	// TaskWorkloadKeyPrefix is the prefix of task workload keys
 	TaskWorkloadKeyPrefix = TaskKeyPrefix + "/workload"
 
 	// TaskStatusKeyPrefix is the prefix of task status keys
@@ -92,6 +93,7 @@ func GetEtcdKeyTaskStatus(changeFeedID, captureID string) string {
 	return TaskStatusKeyPrefix + "/" + captureID + "/" + changeFeedID
 }
 
+// GetEtcdKeyTaskWorkload returns the key for the task workload
 func GetEtcdKeyTaskWorkload(changeFeedID, captureID string) string {
 	return TaskWorkloadKeyPrefix + "/" + captureID + "/" + changeFeedID
 }
@@ -341,9 +343,8 @@ func (c CDCEtcdClient) PutTaskStatus(
 	return nil
 }
 
-// GetTaskStatus queries task status from etcd, returns
-//  - ModRevision of the given key
-//  - *model.TaskStatus unmarshaled from the value
+// GetTaskWorkload queries task workload from etcd, returns
+//  - model.TaskWorkload unmarshaled from the value
 //  - error if error happens
 func (c CDCEtcdClient) GetTaskWorkload(
 	ctx context.Context,
@@ -363,7 +364,7 @@ func (c CDCEtcdClient) GetTaskWorkload(
 	return workload, errors.Trace(err)
 }
 
-// PutTaskStatus puts task status into etcd.
+// PutTaskWorkload puts task workload into etcd.
 func (c CDCEtcdClient) PutTaskWorkload(
 	ctx context.Context,
 	changefeedID string,
