@@ -37,24 +37,27 @@ func (t *TableNumberScheduler) Skewness() float64 {
 	return t.workloads.Skewness()
 }
 
-func (t *TableNumberScheduler) CalRebalanceOperates(targetSkewness float64, boundaryTs model.Ts) (float64, map[model.CaptureID]map[model.TableID]*model.TableOperation) {
+func (t *TableNumberScheduler) CalRebalanceOperates(targetSkewness float64, boundaryTs model.Ts) (
+	skewness float64,
+	deleteOperations map[model.CaptureID]map[model.TableID]*model.TableOperation,
+	addOperations map[model.CaptureID]map[model.TableID]*model.TableOperation) {
 	var totalTableNumber uint64
 	for _, captureWorkloads := range t.workloads {
 		totalTableNumber += uint64(len(captureWorkloads))
 	}
 	limitTableNumber := (totalTableNumber / uint64(len(t.workloads))) + 1
 	appendTables := make(map[model.TableID]model.Ts)
-	result := make(map[model.CaptureID]map[model.TableID]*model.TableOperation, len(t.workloads))
+	deleteOperations = make(map[model.CaptureID]map[model.TableID]*model.TableOperation, len(t.workloads))
 
 	for captureID, captureWorkloads := range t.workloads {
 		for uint64(len(captureWorkloads)) > limitTableNumber {
 			for tableID := range captureWorkloads {
 				// find a table in this capture
 				appendTables[tableID] = boundaryTs
-				operations := result[captureID]
+				operations := deleteOperations[captureID]
 				if operations == nil {
 					operations = make(map[model.TableID]*model.TableOperation)
-					result[captureID] = operations
+					deleteOperations[captureID] = operations
 				}
 				operations[tableID] = &model.TableOperation{
 					Delete:     true,
@@ -65,16 +68,23 @@ func (t *TableNumberScheduler) CalRebalanceOperates(targetSkewness float64, boun
 			}
 		}
 	}
-	truncateTables := t.DistributeTables(appendTables)
-	for captureID, tableOperations := range truncateTables {
-		operations := result[captureID]
-		if operations == nil {
-			operations = make(map[model.TableID]*model.TableOperation)
-			result[captureID] = operations
+	addOperations = t.DistributeTables(appendTables)
+	for captureID, deleteOps := range deleteOperations {
+		for tableID := range deleteOps {
+			addOps := addOperations[captureID]
+			if addOps == nil {
+				continue
+			}
+			addOp := addOps[tableID]
+			if addOp == nil {
+				continue
+			}
+			delete(deleteOps, tableID)
+			delete(addOps, tableID)
 		}
-		AppendTaskOperations(operations, tableOperations)
 	}
-	return t.Skewness(), truncateTables
+	skewness = t.Skewness()
+	return
 }
 
 func (t *TableNumberScheduler) DistributeTables(tableIDs map[model.TableID]model.Ts) map[model.CaptureID]map[model.TableID]*model.TableOperation {
