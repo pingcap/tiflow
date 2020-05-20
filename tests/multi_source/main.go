@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -87,7 +88,8 @@ func runDDLTest(srcs []*sql.DB) {
 }
 
 func getFunctionName(i interface{}) string {
-	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
+	strs := strings.Split(runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name(), ".")
+	return strs[len(strs)-1]
 }
 
 func createDropSchemaDDL(ctx context.Context, db *sql.DB) {
