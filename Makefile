@@ -107,6 +107,10 @@ lint:tools/bin/revive
 	@echo "linting"
 	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
 
+check-copyright:
+	@echo "check-copyright"
+	@./scripts/check-copyright.sh
+
 vet:
 	@echo "vet"
 	$(GO) vet $(PACKAGES) 2>&1 | $(FAIL_ON_STDOUT)
@@ -115,7 +119,7 @@ tidy:
 	@echo "go mod tidy"
 	./tools/check/check-tidy.sh
 
-check: fmt lint check-static tidy
+check: check-copyright fmt lint check-static tidy
 
 coverage:
 	GO111MODULE=off go get github.com/zhouqiang-cl/gocovmerge

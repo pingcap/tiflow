@@ -1,10 +1,20 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cmd
 
 import (
 	"context"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -33,7 +43,7 @@ func init() {
 	rootCmd.AddCommand(serverCmd)
 
 	serverCmd.Flags().StringVar(&serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use `,` to separate multiple PDs")
-	serverCmd.Flags().StringVar(&address, "addr", "0.0.0.0:8300", "Set the listening address")
+	serverCmd.Flags().StringVar(&address, "addr", "127.0.0.1:8300", "Set the listening address")
 	serverCmd.Flags().StringVar(&advertiseAddr, "advertise-addr", "", "Set the advertise listening address for client communication")
 	serverCmd.Flags().StringVar(&timezone, "tz", "System", "Specify time zone of TiCDC cluster")
 	serverCmd.Flags().Int64Var(&gcTTL, "gc-ttl", cdc.DefaultCDCGCSafePointTTL, "CDC GC safepoint TTL duration, specified in seconds")
@@ -60,22 +70,7 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Annotate(err, "new server")
 	}
-
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc,
-		syscall.SIGHUP,
-		syscall.SIGINT,
-		syscall.SIGTERM,
-		syscall.SIGQUIT)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		sig := <-sc
-		log.Info("got signal to exit", zap.Stringer("signal", sig))
-		cancel()
-	}()
-
-	err = server.Run(ctx)
+	err = server.Run(defaultContext)
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("run server", zap.String("error", errors.ErrorStack(err)))
 		return errors.Annotate(err, "run server")

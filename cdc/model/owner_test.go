@@ -27,37 +27,51 @@ var _ = check.Suite(&taskStatusSuite{})
 
 func (s *taskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
 	info := TaskStatus{
-		TableInfos: []*ProcessTableInfo{
-			{ID: 1},
-			{ID: 2},
-			{ID: 3},
+
+		Tables: map[TableID]Ts{
+			1: 100,
+			2: 100,
+			3: 100,
+			4: 100,
 		},
-		TablePLock: &TableLock{Ts: 11},
+		Operation: []*TableOperation{
+			{
+				TableID: 5, Delete: true, BoundaryTs: 6, Done: true,
+			},
+		},
+		AdminJobType: AdminStop,
 	}
 
 	clone := info.Clone()
 	assertIsSnapshot := func() {
-		c.Assert(clone.TableInfos, check.HasLen, 3)
-		for i, info := range clone.TableInfos {
-			c.Assert(info.ID, check.Equals, uint64(i+1))
-		}
-		c.Assert(clone.TablePLock.Ts, check.Equals, uint64(11))
-		c.Assert(clone.TableCLock, check.IsNil)
+		c.Assert(clone.Tables, check.DeepEquals, map[TableID]Ts{
+			1: 100,
+			2: 100,
+			3: 100,
+			4: 100,
+		})
+		c.Assert(clone.Operation, check.DeepEquals, []*TableOperation{
+			{
+				TableID: 5, Delete: true, BoundaryTs: 6, Done: true,
+			},
+		})
+		c.Assert(clone.AdminJobType, check.Equals, AdminStop)
 	}
 
 	assertIsSnapshot()
 
-	info.TableInfos[2] = &ProcessTableInfo{ID: 1212}
-	info.TablePLock.Ts = 100
-	info.TableCLock = &TableLock{Ts: 100}
+	info.Tables[6] = 2
+	info.Operation = append(info.Operation, &TableOperation{
+		TableID: 6, Delete: true, BoundaryTs: 6, Done: true,
+	})
 
 	assertIsSnapshot()
 }
 
 func (s *taskStatusSuite) TestProcSnapshot(c *check.C) {
 	info := TaskStatus{
-		TableInfos: []*ProcessTableInfo{
-			{ID: 10, StartTs: 100},
+		Tables: map[TableID]Ts{
+			10: 100,
 		},
 	}
 	cfID := "changefeed-1"
@@ -66,7 +80,7 @@ func (s *taskStatusSuite) TestProcSnapshot(c *check.C) {
 	c.Assert(snap.CfID, check.Equals, cfID)
 	c.Assert(snap.CaptureID, check.Equals, captureID)
 	c.Assert(snap.Tables, check.HasLen, 1)
-	c.Assert(snap.Tables[0].StartTs, check.Equals, uint64(200))
+	c.Assert(snap.Tables[10], check.Equals, Ts(200))
 }
 
 type removeTableSuite struct{}
@@ -75,21 +89,21 @@ var _ = check.Suite(&removeTableSuite{})
 
 func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
 	info := TaskStatus{
-		TableInfos: []*ProcessTableInfo{
-			{ID: 1},
-			{ID: 2},
-			{ID: 3},
+		Tables: map[TableID]Ts{
+			1: 100,
+			2: 200,
+			3: 300,
+			4: 400,
 		},
 	}
 
-	t, found := info.RemoveTable(2)
+	startTs, found := info.RemoveTable(2)
 	c.Assert(found, check.IsTrue)
-	c.Assert(t.ID, check.Equals, uint64(2))
+	c.Assert(startTs, check.Equals, Ts(200))
 }
 
 func (s *removeTableSuite) TestShouldHandleTableNotFoundCorrectly(c *check.C) {
 	info := TaskStatus{}
-	t, found := info.RemoveTable(404)
+	_, found := info.RemoveTable(404)
 	c.Assert(found, check.IsFalse)
-	c.Assert(t, check.IsNil)
 }

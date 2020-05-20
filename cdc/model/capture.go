@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import (
 
 // CaptureInfo store in etcd.
 type CaptureInfo struct {
-	ID            string `json:"id"`
-	AdvertiseAddr string `json:"address"`
+	ID            CaptureID `json:"id"`
+	AdvertiseAddr string    `json:"address"`
 }
 
 // Marshal using json.Marshal.

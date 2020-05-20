@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cmd
 
 import (
@@ -16,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/spf13/cobra"
@@ -136,6 +150,32 @@ func verifyTables(ctx context.Context, cfg *filter.ReplicaConfig, startTs uint64
 		}
 	}
 	return
+}
+
+func verifySink(
+	ctx context.Context, sinkURI string, cfg *filter.ReplicaConfig, opts map[string]string,
+) error {
+	filter, err := filter.NewFilter(cfg)
+	if err != nil {
+		return err
+	}
+	errCh := make(chan error)
+	s, err := sink.NewSink(ctx, sinkURI, filter, cfg, opts, errCh)
+	if err != nil {
+		return err
+	}
+	err = s.Close()
+	if err != nil {
+		return err
+	}
+	select {
+	case err = <-errCh:
+		if err != nil {
+			return err
+		}
+	default:
+	}
+	return nil
 }
 
 // strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped

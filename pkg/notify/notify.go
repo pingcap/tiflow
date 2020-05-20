@@ -1,8 +1,20 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package notify
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -21,27 +33,41 @@ func (n *Notifier) Notify() {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 	for _, receiver := range n.receivers {
-		receiver.rec.notify()
+		receiver.rec.signalNonBlocking()
 	}
 }
 
 // Receiver is a receiver of notifier, including the receiver channel and stop receiver function.
 type Receiver struct {
-	C      <-chan struct{}
-	Stop   func()
-	ticker *time.Ticker
-	c      chan struct{}
-	closed int32
+	C       <-chan struct{}
+	c       chan struct{}
+	Stop    func()
+	ticker  *time.Ticker
+	closeCh chan struct{}
 }
 
-func (r *Receiver) notify() {
-	if atomic.LoadInt32(&r.closed) != 0 {
-		return
-	}
+// returns true if the receiverCh should be closed
+func (r *Receiver) signalNonBlocking() bool {
 	select {
+	case <-r.closeCh:
+		return true
 	case r.c <- struct{}{}:
 	default:
 	}
+	return false
+}
+
+func (r *Receiver) signalTickLoop() {
+	go func() {
+	loop:
+		for range r.ticker.C {
+			exit := r.signalNonBlocking()
+			if exit {
+				break loop
+			}
+		}
+		close(r.c)
+	}()
 }
 
 // NewReceiver creates a receiver
@@ -52,20 +78,22 @@ func (n *Notifier) NewReceiver(tickTime time.Duration) *Receiver {
 	currentIndex := n.maxIndex
 	n.maxIndex++
 	receiverCh := make(chan struct{}, 1)
+	closeCh := make(chan struct{})
+	var ticker *time.Ticker
+	if tickTime > 0 {
+		ticker = time.NewTicker(tickTime)
+	}
 	rec := &Receiver{
 		C: receiverCh,
+		c: receiverCh,
 		Stop: func() {
 			n.remove(currentIndex)
 		},
-		c: receiverCh,
+		ticker:  ticker,
+		closeCh: closeCh,
 	}
 	if tickTime > 0 {
-		rec.ticker = time.NewTicker(tickTime)
-		go func() {
-			for range rec.ticker.C {
-				rec.notify()
-			}
-		}()
+		rec.signalTickLoop()
 	}
 	n.receivers = append(n.receivers, struct {
 		rec   *Receiver
@@ -79,12 +107,11 @@ func (n *Notifier) remove(index int) {
 	defer n.mu.Unlock()
 	for i, receiver := range n.receivers {
 		if receiver.index == index {
-			atomic.StoreInt32(&receiver.rec.closed, 1)
 			n.receivers = append(n.receivers[:i], n.receivers[i+1:]...)
+			close(receiver.rec.closeCh)
 			if receiver.rec.ticker != nil {
 				receiver.rec.ticker.Stop()
 			}
-			close(receiver.rec.c)
 			break
 		}
 	}
@@ -98,7 +125,7 @@ func (n *Notifier) Close() {
 		if receiver.rec.ticker != nil {
 			receiver.rec.ticker.Stop()
 		}
-		close(receiver.rec.c)
+		close(receiver.rec.closeCh)
 	}
 	n.receivers = nil
 }

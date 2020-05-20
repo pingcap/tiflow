@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -84,7 +84,7 @@ func newDDLHandler(pdCli pd.Client, kvStorage tidbkv.Storage, checkpointTS uint6
 func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
 	if rawDDL.OpType == model.OpTypeResolved {
 		h.mu.Lock()
-		h.resolvedTS = rawDDL.CommitTs
+		h.resolvedTS = rawDDL.CRTs
 		h.mu.Unlock()
 		return nil
 	}

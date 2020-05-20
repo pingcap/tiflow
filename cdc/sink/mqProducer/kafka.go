@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package mqProducer
 
 import (
@@ -77,7 +90,12 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []by
 			Partition: int32(i),
 		}
 	}
-	return errors.Trace(k.syncClient.SendMessages(msgs))
+	select {
+	case <-k.closeCh:
+		return nil
+	default:
+		return errors.Trace(k.syncClient.SendMessages(msgs))
+	}
 }
 
 func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
@@ -121,7 +139,12 @@ func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
 }
 
 func (k *kafkaSaramaProducer) Close() error {
-	close(k.closeCh)
+	select {
+	case <-k.closeCh:
+		return nil
+	default:
+		close(k.closeCh)
+	}
 	err1 := k.syncClient.Close()
 	err2 := k.asyncClient.Close()
 	if err1 != nil {
@@ -134,7 +157,13 @@ func (k *kafkaSaramaProducer) Close() error {
 }
 
 func (k *kafkaSaramaProducer) run(ctx context.Context) error {
-	defer k.flushedReceiver.Stop()
+	defer func() {
+		k.flushedReceiver.Stop()
+		err := k.Close()
+		if err != nil {
+			log.Error("close kafkaSaramaProducer with error", zap.Error(err))
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
@@ -149,7 +178,6 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
 			k.flushedNotifier.Notify()
 		case err := <-k.asyncClient.Errors():
-			close(k.closeCh)
 			return errors.Annotate(err, "write kafka error")
 		}
 	}
