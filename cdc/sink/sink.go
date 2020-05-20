@@ -18,6 +18,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -57,7 +59,7 @@ type Sink interface {
 const DSNScheme = "dsn://"
 
 // NewSink creates a new sink with the sink-uri
-func NewSink(ctx context.Context, sinkURIStr string, filter *filter.Filter, config *filter.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
+func NewSink(ctx context.Context, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 	// check if sinkURI is a DSN
 	if strings.HasPrefix(strings.ToLower(sinkURIStr), DSNScheme) {
 		dsnStr := sinkURIStr[len(DSNScheme):]

@@ -26,6 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/cenkalti/backoff"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
@@ -348,7 +350,7 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 	}
 
 	if val, ok := opts[cyclic.OptCyclicConfig]; ok {
-		cfg := new(tifilter.ReplicationConfig)
+		cfg := new(config.CyclicConfig)
 		err := cfg.Unmarshal([]byte(val))
 		if err != nil {
 			return nil, errors.Trace(err)

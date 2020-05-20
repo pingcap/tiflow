@@ -165,7 +165,7 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
-	filter, err := filter.NewFilter(info.GetConfig())
+	filter, err := filter.NewFilter(info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -234,7 +234,7 @@ func (o *Owner) newChangeFeed(
 	}
 	errCh := make(chan error, 1)
 
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), info.Opts, errCh)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.Config, info.Opts, errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)

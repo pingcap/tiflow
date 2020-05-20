@@ -155,7 +155,7 @@ func newProcessor(
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
 	ddlPuller := puller.NewPuller(pdCli, kvStorage, checkpointTs, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false, limitter)
 	ctx = util.PutTableIDInCtx(ctx, 0)
-	filter, err := filter.NewFilter(changefeed.GetConfig())
+	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -178,7 +178,7 @@ func newProcessor(
 		session:       session,
 		sink:          sink,
 		ddlPuller:     ddlPuller,
-		mounter:       entry.NewMounter(schemaStorage, changefeed.GetConfig().MounterWorkerNum),
+		mounter:       entry.NewMounter(schemaStorage, changefeed.Config.Mounter.WorkerNum),
 		schemaStorage: schemaStorage,
 
 		tsRWriter: tsRWriter,
@@ -842,13 +842,13 @@ func runProcessor(
 	opts[sink.OptChangefeedID] = changefeedID
 	opts[sink.OptCaptureID] = captureID
 	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
-	filter, err := filter.NewFilter(info.GetConfig())
+	filter, err := filter.NewFilter(info.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.GetConfig(), opts, errCh)
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.Config, opts, errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)

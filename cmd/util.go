@@ -23,6 +23,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc"
@@ -117,7 +119,7 @@ func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) er
 	return nil
 }
 
-func verifyTables(ctx context.Context, cfg *filter.ReplicaConfig, startTs uint64) (ineligibleTables []entry.TableName, err error) {
+func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables []entry.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr)
 	if err != nil {
 		return nil, err
@@ -153,7 +155,7 @@ func verifyTables(ctx context.Context, cfg *filter.ReplicaConfig, startTs uint64
 }
 
 func verifySink(
-	ctx context.Context, sinkURI string, cfg *filter.ReplicaConfig, opts map[string]string,
+	ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, opts map[string]string,
 ) error {
 	filter, err := filter.NewFilter(cfg)
 	if err != nil {
