@@ -23,7 +23,7 @@ import (
 
 // Frontier checks resolved event of spans and moves the global resolved ts ahead
 type Frontier interface {
-	Forward(span regionspan.Span, ts uint64) bool
+	Forward(span regionspan.Span, ts uint64) uint64
 	Frontier() uint64
 	String() string
 }
@@ -91,13 +91,10 @@ func (s *spanFrontier) Frontier() uint64 {
 }
 
 // Forward advances the timestamp for a span.
-// True is returned if the frontier advanced.
-func (s *spanFrontier) Forward(span regionspan.Span, ts uint64) bool {
+func (s *spanFrontier) Forward(span regionspan.Span, ts uint64) uint64 {
 	span = span.Hack()
-
-	pre := s.Frontier()
 	s.insert(span, ts)
-	return pre < s.Frontier()
+	return s.Frontier()
 }
 
 func (s *spanFrontier) insert(span regionspan.Span, ts uint64) {

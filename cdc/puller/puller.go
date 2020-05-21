@@ -190,6 +190,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			}
 			return nil
 		}
+		var lastResolvedTs uint64
 		for {
 			e, err := p.buffer.Get(ctx)
 			if err != nil {
@@ -202,15 +203,16 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				}
 			} else if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
-				resolvedTs := e.Resolved.ResolvedTs
+				spanResolvedTs := e.Resolved.ResolvedTs
 				// 1. Forward is called in a single thread
 				// 2. The only way the global minimum resolved Ts can be forwarded is that
 				// 	  the resolveTs we pass in replaces the original one
 				// Thus, we can just use resolvedTs here as the new global minimum resolved Ts.
-				forwarded := p.tsTracker.Forward(e.Resolved.Span, resolvedTs)
-				if !forwarded {
+				resolvedTs := p.tsTracker.Forward(e.Resolved.Span, spanResolvedTs)
+				if resolvedTs == lastResolvedTs {
 					continue
 				}
+				lastResolvedTs = resolvedTs
 				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved})
 				if err != nil {
 					return errors.Trace(err)
