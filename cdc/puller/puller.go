@@ -204,7 +204,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			} else if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
 				// Forward is called in a single thread
-				resolvedTs := p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
+				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
+				resolvedTs := p.tsTracker.Frontier()
 				if resolvedTs == lastResolvedTs {
 					continue
 				}
