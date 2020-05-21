@@ -7,7 +7,7 @@
 if [ $# -ge 4 ]; then
     check_time=$4
 else
-    check_time=30
+    check_time=60
 fi
 
 i=0

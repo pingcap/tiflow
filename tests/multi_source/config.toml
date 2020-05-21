@@ -6,22 +6,16 @@ worker-count = 10
 job-count = 1000
 batch = 10
 
+pd = "127.0.0.1:2379"
+
 [[source-db]]
 host = "127.0.0.1"
 user = "root"
 password = ""
-name = "test"
 port = 4000
 
-[target-db]
+[[source-db]]
 host = "127.0.0.1"
 user = "root"
 password = ""
-name = "test"
-port = 3306
-
-[diff]
-equal-index = true
-equal-create-table = true
-equal-row-count = true
-equal-data = true
+port = 4001
