@@ -68,7 +68,7 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 	filter, err := NewFilter(&config.ReplicaConfig{
 		Filter: &config.FilterConfig{
-			IgnoreTxnCommitTs: []uint64{1, 3},
+			IgnoreTxnStartTs: []uint64{1, 3},
 			Rules: &filter.Rules{
 				DoDBs: []string{"sns", "ecom"},
 				IgnoreTables: []*filter.Table{

@@ -405,16 +405,16 @@ ClaimMessages:
 func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
-	if ddl.Ts <= c.maxDDLReceivedTs {
+	if ddl.CommitTs <= c.maxDDLReceivedTs {
 		return
 	}
 	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-	if ddl.Ts <= globalResolvedTs {
-		log.Error("unexpected ddl job", zap.Uint64("ddlts", ddl.Ts), zap.Uint64("globalResolvedTs", globalResolvedTs))
+	if ddl.CommitTs <= globalResolvedTs {
+		log.Error("unexpected ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
 		return
 	}
 	c.ddlList = append(c.ddlList, ddl)
-	c.maxDDLReceivedTs = ddl.Ts
+	c.maxDDLReceivedTs = ddl.CommitTs
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
@@ -477,13 +477,13 @@ func (c *Consumer) Run(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		todoDDL := c.getFrontDDL()
-		if todoDDL != nil && globalResolvedTs >= todoDDL.Ts {
+		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
 			//flush DMLs
 			err := c.forEachSink(func(sink *struct {
 				sink.Sink
 				resolvedTs uint64
 			}) error {
-				return sink.FlushRowChangedEvents(ctx, todoDDL.Ts)
+				return sink.FlushRowChangedEvents(ctx, todoDDL.CommitTs)
 			})
 			if err != nil {
 				return errors.Trace(err)
@@ -498,8 +498,8 @@ func (c *Consumer) Run(ctx context.Context) error {
 			continue
 		}
 
-		if todoDDL != nil && todoDDL.Ts < globalResolvedTs {
-			globalResolvedTs = todoDDL.Ts
+		if todoDDL != nil && todoDDL.CommitTs < globalResolvedTs {
+			globalResolvedTs = todoDDL.CommitTs
 		}
 		if lastGlobalResolvedTs == globalResolvedTs {
 			continue

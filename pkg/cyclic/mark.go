@@ -33,14 +33,12 @@ func CreateMarkTable(sourceSchema, sourceTable string) []*model.DDLEvent {
 	schema, table := MarkTableName(sourceSchema, sourceTable)
 	events := []*model.DDLEvent{
 		{
-			Ts:     0,
 			Schema: schema,
 			Table:  table,
 			Query:  fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", schema),
 			Type:   timodel.ActionCreateSchema,
 		},
 		{
-			Ts:     0,
 			Schema: schema,
 			Table:  table,
 			Query: fmt.Sprintf(

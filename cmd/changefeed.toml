@@ -7,9 +7,9 @@
 case-sensitive = true
 
 [filter]
-# 忽略哪些 CommitTS 的事务
-# Transactions with the following CommitTS will be ignored
-ignore-txn-commit-ts = [1, 2]
+# 忽略哪些 StartTs 的事务
+# Transactions with the following StartTs will be ignored
+ignore-txn-start-ts = [1, 2]
 
 # 同步哪些库
 # The following databases(schema) will be replicated

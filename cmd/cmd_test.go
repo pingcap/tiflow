@@ -39,7 +39,7 @@ func (s *decodeFileSuite) TestCanDecodeTOML(c *check.C) {
 case-sensitive = false
 
 [filter]
-ignore-txn-commit-ts = [1, 2]
+ignore-txn-start-ts = [1, 2]
 ddl-white-list = [1, 2]
 ignore-dbs = ["test", "sys"]
 do-dbs = ["test1", "sys1"]
@@ -77,8 +77,8 @@ sync-ddl = true
 
 	c.Assert(cfg.CaseSensitive, check.IsFalse)
 	c.Assert(cfg.Filter, check.DeepEquals, &config.FilterConfig{
-		IgnoreTxnCommitTs: []uint64{1, 2},
-		DDLWhitelist:      []model.ActionType{1, 2},
+		IgnoreTxnStartTs: []uint64{1, 2},
+		DDLWhitelist:     []model.ActionType{1, 2},
 		Rules: &filter.Rules{
 			IgnoreDBs: []string{"test", "sys"},
 			DoDBs:     []string{"test1", "sys1"},
@@ -120,9 +120,9 @@ func (s *decodeFileSuite) TestAndWriteExampleTOML(c *check.C) {
 case-sensitive = true
 
 [filter]
-# 忽略哪些 CommitTS 的事务
-# Transactions with the following CommitTS will be ignored
-ignore-txn-commit-ts = [1, 2]
+# 忽略哪些 StartTs 的事务
+# Transactions with the following StartTs will be ignored
+ignore-txn-start-ts = [1, 2]
 
 # 同步哪些库
 # The following databases(schema) will be replicated
@@ -184,7 +184,7 @@ sync-ddl = true
 
 	c.Assert(cfg.CaseSensitive, check.IsTrue)
 	c.Assert(cfg.Filter, check.DeepEquals, &config.FilterConfig{
-		IgnoreTxnCommitTs: []uint64{1, 2},
+		IgnoreTxnStartTs: []uint64{1, 2},
 		Rules: &filter.Rules{
 			IgnoreDBs: []string{"test", "sys"},
 			DoDBs:     []string{"test1", "sys1"},

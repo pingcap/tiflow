@@ -135,6 +135,8 @@ func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow
 
 func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChangedEvent {
 	e := new(model.RowChangedEvent)
+	// TODO: we lost the startTs from kafka message
+	// startTs-based txn filter is out of work
 	e.CommitTs = key.Ts
 	e.Table = &model.TableName{
 		Schema: key.Schema,
@@ -153,7 +155,7 @@ func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChang
 
 func ddlEventtoMqMessage(e *model.DDLEvent) (*mqMessageKey, *mqMessageDDL) {
 	key := &mqMessageKey{
-		Ts:     e.Ts,
+		Ts:     e.CommitTs,
 		Schema: e.Schema,
 		Table:  e.Table,
 		Type:   model.MqMessageTypeDDL,
@@ -167,7 +169,9 @@ func ddlEventtoMqMessage(e *model.DDLEvent) (*mqMessageKey, *mqMessageDDL) {
 
 func mqMessageToDDLEvent(key *mqMessageKey, value *mqMessageDDL) *model.DDLEvent {
 	e := new(model.DDLEvent)
-	e.Ts = key.Ts
+	// TODO: we lost the startTs from kafka message
+	// startTs-based txn filter is out of work
+	e.CommitTs = key.Ts
 	e.Table = key.Table
 	e.Schema = key.Schema
 	e.Type = value.Type

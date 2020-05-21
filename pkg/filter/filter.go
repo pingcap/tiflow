@@ -27,9 +27,9 @@ const OptCyclicConfig string = "_cyclic_relax_sql_mode"
 
 // Filter is a event filter implementation
 type Filter struct {
-	filter            *filter.Filter
-	ignoreTxnCommitTs []uint64
-	ddlWhitelist      []model.ActionType
+	filter           *filter.Filter
+	ignoreTxnStartTs []uint64
+	ddlWhitelist     []model.ActionType
 }
 
 // NewFilter creates a filter
@@ -39,15 +39,15 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 		return nil, err
 	}
 	return &Filter{
-		filter:            filter,
-		ignoreTxnCommitTs: cfg.Filter.IgnoreTxnCommitTs,
-		ddlWhitelist:      cfg.Filter.DDLWhitelist,
+		filter:           filter,
+		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
+		ddlWhitelist:     cfg.Filter.DDLWhitelist,
 	}, nil
 }
 
 // ShouldIgnoreTxn returns true is the given txn should be ignored
-func (f *Filter) shouldIgnoreCommitTs(ts uint64) bool {
-	for _, ignoreTs := range f.ignoreTxnCommitTs {
+func (f *Filter) shouldIgnoreStartTs(ts uint64) bool {
+	for _, ignoreTs := range f.ignoreTxnStartTs {
 		if ignoreTs == ts {
 			return true
 		}
@@ -69,13 +69,13 @@ func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 // ShouldIgnoreDMLEvent removes DMLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
 func (f *Filter) ShouldIgnoreDMLEvent(ts uint64, schema, table string) bool {
-	return f.shouldIgnoreCommitTs(ts) || f.ShouldIgnoreTable(schema, table)
+	return f.shouldIgnoreStartTs(ts) || f.ShouldIgnoreTable(schema, table)
 }
 
 // ShouldIgnoreDDLEvent removes DDLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
 func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, schema, table string) bool {
-	return f.shouldIgnoreCommitTs(ts) || f.ShouldIgnoreTable(schema, table)
+	return f.shouldIgnoreStartTs(ts) || f.ShouldIgnoreTable(schema, table)
 }
 
 // ShouldDiscardDDL returns true if this DDL should be discarded
