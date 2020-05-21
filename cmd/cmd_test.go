@@ -111,29 +111,36 @@ sync-ddl = true
 }
 
 func (s *decodeFileSuite) TestAndWriteExampleTOML(c *check.C) {
-	// TODO add english comment to config file
 	content := `
 # 指定配置文件中涉及的库名、表名是否为大小写敏感的
 # 该配置会同时影响 filter 和 sink 相关配置，默认为 true
+
+# Specify whether the schema name and table name in this configuration file are case sensitive
+# This configuration will affect both filter and sink related configurations, the default is true
 case-sensitive = true
 
 [filter]
 # 忽略哪些 CommitTS 的事务
+# Transactions with the following CommitTS will be ignored
 ignore-txn-commit-ts = [1, 2]
 
 # 同步哪些库
+# The following databases(schema) will be replicated
 do-dbs = ["test1", "sys1"]
 
 # 同步哪些表
+# The following tables will be replicated
 do-tables = [
 	{db-name = "test", tbl-name = "tbl1"},
 	{db-name = "test", tbl-name = "tbl2"},
 ]
 
 # 忽略哪些库
+# The following databases(schema) will be ignored
 ignore-dbs = ["test", "sys"]
 
 # 忽略哪些表
+# The following tables will be ignored
 ignore-tables = [
 	{db-name = "test", tbl-name = "tbl3"},
 	{db-name = "test", tbl-name = "tbl4"},
@@ -141,11 +148,14 @@ ignore-tables = [
 
 [mounter]
 # mounter 线程数
-worker-num = 64
+# the thread number of the the mounter
+worker-num = 16
 
 [sink]
 # 对于 MQ 类的 Sink，可以通过 dispatch-rules 配置 event 分发规则
 # 分发规则支持 default, ts, rowid, table
+# For MQ Sinks, you can configure event distribution rules through dispatch-rules
+# Distribution rules support default, ts, rowid and table
 dispatch-rules = [
 	{db-name = "test", tbl-name = "tbl3", rule = "ts"},
 	{db-name = "test", tbl-name = "tbl4", rule = "rowid"},
@@ -153,12 +163,16 @@ dispatch-rules = [
 
 [cyclic-replication]
 # 是否开启环形复制
-enable = true
+# Whether to enable cyclic replication
+enable = false
 # 当前 CDC 的复制 ID
+# The replica ID of this capture
 replica-id = 1
 # 需要过滤掉的复制 ID
+# The replica ID should be ignored
 filter-replica-ids = [2,3]
 # 是否同步 DDL
+# Whether to replicate DDL
 sync-ddl = true
 `
 	err := ioutil.WriteFile("changefeed.toml", []byte(content), 0644)
@@ -185,7 +199,7 @@ sync-ddl = true
 		},
 	})
 	c.Assert(cfg.Mounter, check.DeepEquals, &config.MounterConfig{
-		WorkerNum: 64,
+		WorkerNum: 16,
 	})
 	c.Assert(cfg.Sink, check.DeepEquals, &config.SinkConfig{
 		DispatchRules: []*config.DispatchRule{
@@ -194,7 +208,7 @@ sync-ddl = true
 		},
 	})
 	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
-		Enable:          true,
+		Enable:          false,
 		ReplicaID:       1,
 		FilterReplicaID: []uint64{2, 3},
 		SyncDDL:         true,
