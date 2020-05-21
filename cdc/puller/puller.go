@@ -203,12 +203,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				}
 			} else if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
-				spanResolvedTs := e.Resolved.ResolvedTs
-				// 1. Forward is called in a single thread
-				// 2. The only way the global minimum resolved Ts can be forwarded is that
-				// 	  the resolveTs we pass in replaces the original one
-				// Thus, we can just use resolvedTs here as the new global minimum resolved Ts.
-				resolvedTs := p.tsTracker.Forward(e.Resolved.Span, spanResolvedTs)
+				// Forward is called in a single thread
+				resolvedTs := p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
 				if resolvedTs == lastResolvedTs {
 					continue
 				}
