@@ -177,6 +177,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
 			if raw.CRTs <= p.resolvedTs {
+				log.Error("show forwarded", zap.Stringer("f", p.tsTracker))
 				log.Fatal("The CRTs must be greater than the resolvedTs",
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),

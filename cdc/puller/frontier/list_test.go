@@ -49,29 +49,42 @@ func (s *spanListSuite) TestInsert(c *check.C) {
 }
 
 func (s *spanListSuite) TestSeek(c *check.C) {
-	key1 := []byte("1")
-	keyA := []byte("a")
-	keyB := []byte("b")
-	keyC := []byte("c")
-	keyD := []byte("d")
-	keyZ := []byte("z")
+	key1 := []byte("15")
+	keyA := []byte("a5")
+	keyB := []byte("b5")
+	keyC := []byte("c5")
+	keyD := []byte("d5")
+	keyE := []byte("e5")
+	keyF := []byte("f5")
+	keyG := []byte("g5")
+	keyH := []byte("h5")
+	keyZ := []byte("z5")
 
 	var list spanList
 	list.init()
 
 	c.Assert(list.seek(keyA), check.IsNil)
 
-	s.insertIntoList(&list, keyB, keyD, keyA)
+	s.insertIntoList(&list, keyA, keyB, keyC, keyD, keyE, keyF, keyG, keyH)
 
 	// Point to the first node, if seek key is smaller than the first key in list.
 	c.Assert(list.seek(key1).start, check.BytesEquals, keyA)
 
 	// Point to the last node with key smaller than seek key.
-	c.Assert(list.seek(keyC).start, check.BytesEquals, keyB)
+	c.Assert(list.seek(keyH).start, check.BytesEquals, keyH)
 
 	// Point to itself.
-	c.Assert(list.seek(keyD).start, check.BytesEquals, keyD)
+	c.Assert(list.seek(keyG).start, check.BytesEquals, keyG)
 
 	// Ensure there is no problem to seek a larger key.
-	c.Assert(list.seek(keyZ).start, check.BytesEquals, keyD)
+	c.Assert(list.seek(keyZ).start, check.BytesEquals, keyH)
+
+	c.Assert(list.seek([]byte("b0")).start, check.BytesEquals, keyA)
+	c.Assert(list.seek([]byte("c0")).start, check.BytesEquals, keyB)
+	c.Assert(list.seek([]byte("d0")).start, check.BytesEquals, keyC)
+	c.Assert(list.seek([]byte("e0")).start, check.BytesEquals, keyD)
+	c.Assert(list.seek([]byte("f0")).start, check.BytesEquals, keyE)
+	c.Assert(list.seek([]byte("g0")).start, check.BytesEquals, keyF)
+	c.Assert(list.seek([]byte("h0")).start, check.BytesEquals, keyG)
+	c.Assert(list.seek([]byte("i0")).start, check.BytesEquals, keyH)
 }

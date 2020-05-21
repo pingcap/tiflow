@@ -25,6 +25,7 @@ import (
 type Frontier interface {
 	Forward(span regionspan.Span, ts uint64) bool
 	Frontier() uint64
+	String() string
 }
 
 type node struct {
