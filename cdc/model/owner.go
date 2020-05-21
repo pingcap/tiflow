@@ -100,7 +100,8 @@ func (o *TableOperation) Clone() *TableOperation {
 }
 
 // TaskWorkload records the workloads of a task
-type TaskWorkload map[int64]uint64
+// the value of the struct is the workload
+type TaskWorkload map[TableID]uint64
 
 // Unmarshal unmarshals into *TaskWorkload from json marshal byte slice
 func (w *TaskWorkload) Unmarshal(data []byte) error {

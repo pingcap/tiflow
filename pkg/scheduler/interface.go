@@ -25,7 +25,7 @@ type Scheduler interface {
 	Skewness() float64
 	// CalRebalanceOperates calculates the rebalance operates
 	// returns  * the skewness after rebalance
-	// 			* the delete operations need by rebalance
+	//          * the delete operations need by rebalance
 	//          * the add operations need by rebalance
 	CalRebalanceOperates(targetSkewness float64, boundaryTs model.Ts) (
 		skewness float64,
