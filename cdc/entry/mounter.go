@@ -342,6 +342,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	}
 	// FinishedTS is only set when the job is synced,
 	// but we can use the entry's ts here
+	job.StartTS = raw.StartTs
 	job.BinlogInfo.FinishedTS = raw.CRTs
 	return job, nil
 }

@@ -64,11 +64,12 @@ type Column struct {
 
 // DDLEvent represents a DDL event
 type DDLEvent struct {
-	Ts     uint64
-	Schema string
-	Table  string
-	Query  string
-	Type   model.ActionType
+	StartTs  uint64
+	CommitTs uint64
+	Schema   string
+	Table    string
+	Query    string
+	Type     model.ActionType
 }
 
 // FromJob fills the values of DDLEvent from DDL job
@@ -77,7 +78,8 @@ func (e *DDLEvent) FromJob(job *model.Job) {
 	if job.BinlogInfo.TableInfo != nil {
 		tableName = job.BinlogInfo.TableInfo.Name.O
 	}
-	e.Ts = job.BinlogInfo.FinishedTS
+	e.StartTs = job.StartTS
+	e.CommitTs = job.BinlogInfo.FinishedTS
 	e.Query = job.Query
 	e.Schema = job.SchemaName
 	e.Table = tableName

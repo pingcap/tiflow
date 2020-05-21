@@ -21,6 +21,6 @@ import (
 // FilterConfig represents filter config for a changefeed
 type FilterConfig struct {
 	*filter.Rules
-	IgnoreTxnCommitTs []uint64           `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
-	DDLWhitelist      []model.ActionType `toml:"ddl-white-list" json:"ddl-white-list"`
+	IgnoreTxnStartTs []uint64           `toml:"ignore-txn-start-ts" json:"ignore-txn-start-ts"`
+	DDLWhitelist     []model.ActionType `toml:"ddl-white-list" json:"ddl-white-list"`
 }
