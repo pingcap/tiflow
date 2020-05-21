@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/config"
 )
 
 const (
@@ -68,7 +68,7 @@ func RelaxSQLMode(oldMode string) string {
 
 // Cyclic wraps a cyclic config.
 type Cyclic struct {
-	config filter.ReplicationConfig
+	config config.CyclicConfig
 }
 
 // UdpateTableCyclicMark return a DML to update mark table regrad to the tableID
@@ -91,7 +91,7 @@ func (c *Cyclic) ReplicaID() uint64 {
 }
 
 // NewCyclic creates a cyclic
-func NewCyclic(config *filter.ReplicationConfig) *Cyclic {
+func NewCyclic(config *config.CyclicConfig) *Cyclic {
 	if config == nil || config.ReplicaID == 0 {
 		return nil
 	}

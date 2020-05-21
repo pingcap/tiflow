@@ -18,9 +18,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/filter"
-
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -47,15 +47,7 @@ type ChangeFeedInfo struct {
 	Engine       SortEngine   `json:"sort-engine"`
 	SortDir      string       `json:"sort-dir"`
 
-	Config *filter.ReplicaConfig `json:"config"`
-}
-
-// GetConfig returns ReplicaConfig.
-func (info *ChangeFeedInfo) GetConfig() *filter.ReplicaConfig {
-	if info.Config == nil {
-		info.Config = &filter.ReplicaConfig{}
-	}
-	return info.Config
+	Config *config.ReplicaConfig `json:"config"`
 }
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.

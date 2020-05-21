@@ -16,6 +16,8 @@ package filter
 import (
 	"testing"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb-tools/pkg/filter"
@@ -28,7 +30,7 @@ var _ = check.Suite(&filterSuite{})
 func Test(t *testing.T) { check.TestingT(t) }
 
 func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
-	filter, err := NewFilter(&ReplicaConfig{})
+	filter, err := NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
 	c.Assert(filter.ShouldIgnoreTable("information_schema", ""), check.IsTrue)
 	c.Assert(filter.ShouldIgnoreTable("information_schema", "statistics"), check.IsTrue)
@@ -38,12 +40,14 @@ func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
 }
 
 func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
-	filter, err := NewFilter(&ReplicaConfig{
-		FilterRules: &filter.Rules{
-			DoDBs: []string{"sns", "ecom"},
-			IgnoreTables: []*filter.Table{
-				{Schema: "sns", Name: "log"},
-				{Schema: "ecom", Name: "test"},
+	filter, err := NewFilter(&config.ReplicaConfig{
+		Filter: &config.FilterConfig{
+			Rules: &filter.Rules{
+				DoDBs: []string{"sns", "ecom"},
+				IgnoreTables: []*filter.Table{
+					{Schema: "sns", Name: "log"},
+					{Schema: "ecom", Name: "test"},
+				},
 			},
 		},
 	})
@@ -62,14 +66,18 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 }
 
 func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
-	filter, err := NewFilter(&ReplicaConfig{
-		IgnoreTxnCommitTs: []uint64{1, 3},
-		FilterRules: &filter.Rules{
-			DoDBs: []string{"sns", "ecom"},
-			IgnoreTables: []*filter.Table{
-				{Schema: "sns", Name: "log"},
-				{Schema: "ecom", Name: "test"},
-			}}})
+	filter, err := NewFilter(&config.ReplicaConfig{
+		Filter: &config.FilterConfig{
+			IgnoreTxnCommitTs: []uint64{1, 3},
+			Rules: &filter.Rules{
+				DoDBs: []string{"sns", "ecom"},
+				IgnoreTables: []*filter.Table{
+					{Schema: "sns", Name: "log"},
+					{Schema: "ecom", Name: "test"},
+				},
+			},
+		},
+	})
 	c.Assert(err, check.IsNil)
 	testCases := []struct {
 		schema string
@@ -91,21 +99,13 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 		c.Assert(filter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
 	}
 
-	disableDDLFilter, err := NewFilter(&ReplicaConfig{
-		Cyclic: &ReplicationConfig{
-			Enable:  true,
-			SyncDDL: false,
-		}})
-	c.Assert(err, check.IsNil)
-	for _, tc := range testCases {
-		c.Assert(disableDDLFilter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table),
-			check.Equals, true)
-	}
 }
 
 func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
-	config := &ReplicaConfig{
-		DDLWhitelist: []model.ActionType{model.ActionAddForeignKey},
+	config := &config.ReplicaConfig{
+		Filter: &config.FilterConfig{
+			DDLWhitelist: []model.ActionType{model.ActionAddForeignKey},
+		},
 	}
 	filter, err := NewFilter(config)
 	c.Assert(err, check.IsNil)

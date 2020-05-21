@@ -16,10 +16,11 @@ package dispatcher
 import (
 	"strings"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/filter"
 	"go.uber.org/zap"
 )
 
@@ -75,14 +76,14 @@ func (s *dispatcherSwitcher) Dispatch(row *model.RowChangedEvent) int32 {
 }
 
 // NewDispatcher creates a new dispatcher
-func NewDispatcher(config *filter.ReplicaConfig, partitionNum int32) Dispatcher {
+func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) Dispatcher {
 	p := &dispatcherSwitcher{
-		caseSensitive:     config.FilterCaseSensitive,
+		caseSensitive:     cfg.CaseSensitive,
 		partitionNum:      partitionNum,
-		rules:             make(map[entry.TableName]Dispatcher, len(config.SinkDispatchRules)),
+		rules:             make(map[entry.TableName]Dispatcher, len(cfg.Sink.DispatchRules)),
 		defaultDispatcher: &defaultDispatcher{partitionNum: partitionNum},
 	}
-	for _, ruleConfig := range config.SinkDispatchRules {
+	for _, ruleConfig := range cfg.Sink.DispatchRules {
 		tableName := entry.TableName{Schema: ruleConfig.Schema, Table: ruleConfig.Name}
 		if !p.caseSensitive {
 			tableName.Schema = strings.ToLower(tableName.Schema)

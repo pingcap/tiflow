@@ -28,6 +28,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/Shopify/sarama"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -278,7 +280,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		}
 	}
 	ctx = util.PutTimezoneInCtx(ctx, tz)
-	filter, err := cdcfilter.NewFilter(&cdcfilter.ReplicaConfig{})
+	filter, err := cdcfilter.NewFilter(config.GetDefaultReplicaConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -290,7 +292,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.NewSink(ctx, downstreamURIStr, filter, &cdcfilter.ReplicaConfig{}, nil, errCh)
+		s, err := sink.NewSink(ctx, downstreamURIStr, filter, config.GetDefaultReplicaConfig(), nil, errCh)
 		if err != nil {
 			cancel()
 			return nil, errors.Trace(err)
@@ -300,7 +302,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			resolvedTs uint64
 		}{Sink: s}
 	}
-	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, &cdcfilter.ReplicaConfig{}, nil, errCh)
+	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, config.GetDefaultReplicaConfig(), nil, errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)

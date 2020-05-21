@@ -18,10 +18,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
-	cdcfilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/tidb-tools/pkg/filter"
+
+	"github.com/pingcap/ticdc/pkg/config"
+
+	"github.com/pingcap/check"
 )
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
@@ -34,99 +36,182 @@ func (s *decodeFileSuite) TestCanDecodeTOML(c *check.C) {
 	dir := c.MkDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `
-filter-case-sensitive = false
+case-sensitive = false
+
+[filter]
 ignore-txn-commit-ts = [1, 2]
 ddl-white-list = [1, 2]
-mounter-worker-num = 64
-
-[filter-rules]
 ignore-dbs = ["test", "sys"]
+do-dbs = ["test1", "sys1"]
+do-tables = [
+	{db-name = "test", tbl-name = "tbl1"},
+	{db-name = "test", tbl-name = "tbl2"},
+]
+ignore-tables = [
+	{db-name = "test", tbl-name = "tbl3"},
+	{db-name = "test", tbl-name = "tbl4"},
+]
 
-[[filter-rules.do-tables]]
-db-name = "sns"
-tbl-name = "user"
+[mounter]
+worker-num = 64
 
-[[filter-rules.do-tables]]
-db-name = "sns"
-tbl-name = "following"
+[sink]
+dispatch-rules = [
+	{db-name = "test", tbl-name = "tbl3", rule = "ts"},
+	{db-name = "test", tbl-name = "tbl4", rule = "rowid"},
+]
 
-[[sink-dispatch-rules]]
-db-name = "sns"
-tbl-name = "user"
-rule = "ts"
-
-[[sink-dispatch-rules]]
-db-name = "sns"
-tbl-name = "following"
-rule = "rowid"
+[cyclic-replication]
+enable = true
+replica-id = 1
+filter-replica-ids = [2,3]
+id-buckets = 4
+sync-ddl = true
 `
 	err := ioutil.WriteFile(path, []byte(content), 0644)
 	c.Assert(err, check.IsNil)
 
-	cfg := new(cdcfilter.ReplicaConfig)
+	cfg := config.GetDefaultReplicaConfig()
 	err = strictDecodeFile(path, "cdc", &cfg)
 	c.Assert(err, check.IsNil)
 
-	c.Assert(cfg.FilterCaseSensitive, check.IsFalse)
-	c.Assert(cfg.MounterWorkerNum, check.Equals, 64)
-	c.Assert(cfg.IgnoreTxnCommitTs, check.DeepEquals, []uint64{1, 2})
-	c.Assert(cfg.DDLWhitelist, check.DeepEquals, []model.ActionType{1, 2})
-	c.Assert(cfg.FilterRules.IgnoreDBs, check.DeepEquals, []string{"test", "sys"})
-	c.Assert(cfg.FilterRules.DoTables, check.DeepEquals, []*filter.Table{
-		{Schema: "sns", Name: "user"},
-		{Schema: "sns", Name: "following"},
+	c.Assert(cfg.CaseSensitive, check.IsFalse)
+	c.Assert(cfg.Filter, check.DeepEquals, &config.FilterConfig{
+		IgnoreTxnCommitTs: []uint64{1, 2},
+		DDLWhitelist:      []model.ActionType{1, 2},
+		Rules: &filter.Rules{
+			IgnoreDBs: []string{"test", "sys"},
+			DoDBs:     []string{"test1", "sys1"},
+			DoTables: []*filter.Table{
+				{Schema: "test", Name: "tbl1"},
+				{Schema: "test", Name: "tbl2"},
+			},
+			IgnoreTables: []*filter.Table{
+				{Schema: "test", Name: "tbl3"},
+				{Schema: "test", Name: "tbl4"},
+			},
+		},
 	})
-	c.Assert(cfg.SinkDispatchRules, check.DeepEquals, []*cdcfilter.DispatchRule{
-		{Table: filter.Table{Schema: "sns", Name: "user"}, Rule: "ts"},
-		{Table: filter.Table{Schema: "sns", Name: "following"}, Rule: "rowid"},
+	c.Assert(cfg.Mounter, check.DeepEquals, &config.MounterConfig{
+		WorkerNum: 64,
+	})
+	c.Assert(cfg.Sink, check.DeepEquals, &config.SinkConfig{
+		DispatchRules: []*config.DispatchRule{
+			{Rule: "ts", Table: filter.Table{Schema: "test", Name: "tbl3"}},
+			{Rule: "rowid", Table: filter.Table{Schema: "test", Name: "tbl4"}},
+		},
+	})
+	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
+		Enable:          true,
+		ReplicaID:       1,
+		FilterReplicaID: []uint64{2, 3},
+		IDBuckets:       4,
+		SyncDDL:         true,
 	})
 }
 
 func (s *decodeFileSuite) TestAndWriteExampleTOML(c *check.C) {
-	// TODO add comment to config file
 	content := `
-filter-case-sensitive = false
-ignore-txn-commit-ts = []
+# 指定配置文件中涉及的库名、表名是否为大小写敏感的
+# 该配置会同时影响 filter 和 sink 相关配置，默认为 true
 
-[filter-rules]
+# Specify whether the schema name and table name in this configuration file are case sensitive
+# This configuration will affect both filter and sink related configurations, the default is true
+case-sensitive = true
+
+[filter]
+# 忽略哪些 CommitTS 的事务
+# Transactions with the following CommitTS will be ignored
+ignore-txn-commit-ts = [1, 2]
+
+# 同步哪些库
+# The following databases(schema) will be replicated
+do-dbs = ["test1", "sys1"]
+
+# 同步哪些表
+# The following tables will be replicated
+do-tables = [
+	{db-name = "test", tbl-name = "tbl1"},
+	{db-name = "test", tbl-name = "tbl2"},
+]
+
+# 忽略哪些库
+# The following databases(schema) will be ignored
 ignore-dbs = ["test", "sys"]
 
-[[filter-rules.do-tables]]
-db-name = "sns"
-tbl-name = "user"
+# 忽略哪些表
+# The following tables will be ignored
+ignore-tables = [
+	{db-name = "test", tbl-name = "tbl3"},
+	{db-name = "test", tbl-name = "tbl4"},
+]
 
-[[filter-rules.do-tables]]
-db-name = "sns"
-tbl-name = "following"
+[mounter]
+# mounter 线程数
+# the thread number of the the mounter
+worker-num = 16
 
-[[sink-dispatch-rules]]
-db-name = "sns"
-tbl-name = "user"
-rule = "ts"
+[sink]
+# 对于 MQ 类的 Sink，可以通过 dispatch-rules 配置 event 分发规则
+# 分发规则支持 default, ts, rowid, table
+# For MQ Sinks, you can configure event distribution rules through dispatch-rules
+# Distribution rules support default, ts, rowid and table
+dispatch-rules = [
+	{db-name = "test", tbl-name = "tbl3", rule = "ts"},
+	{db-name = "test", tbl-name = "tbl4", rule = "rowid"},
+]
 
-[[sink-dispatch-rules]]
-db-name = "sns"
-tbl-name = "following"
-rule = "rowid"
+[cyclic-replication]
+# 是否开启环形复制
+# Whether to enable cyclic replication
+enable = false
+# 当前 CDC 的复制 ID
+# The replica ID of this capture
+replica-id = 1
+# 需要过滤掉的复制 ID
+# The replica ID should be ignored
+filter-replica-ids = [2,3]
+# 是否同步 DDL
+# Whether to replicate DDL
+sync-ddl = true
 `
 	err := ioutil.WriteFile("changefeed.toml", []byte(content), 0644)
 	c.Assert(err, check.IsNil)
 
-	cfg := new(cdcfilter.ReplicaConfig)
+	cfg := config.GetDefaultReplicaConfig()
 	err = strictDecodeFile("changefeed.toml", "cdc", &cfg)
 	c.Assert(err, check.IsNil)
 
-	c.Assert(cfg.FilterCaseSensitive, check.IsFalse)
-	c.Assert(cfg.IgnoreTxnCommitTs, check.DeepEquals, []uint64{})
-	c.Assert(cfg.DDLWhitelist, check.IsNil)
-	c.Assert(cfg.FilterRules.IgnoreDBs, check.DeepEquals, []string{"test", "sys"})
-	c.Assert(cfg.FilterRules.DoTables, check.DeepEquals, []*filter.Table{
-		{Schema: "sns", Name: "user"},
-		{Schema: "sns", Name: "following"},
+	c.Assert(cfg.CaseSensitive, check.IsTrue)
+	c.Assert(cfg.Filter, check.DeepEquals, &config.FilterConfig{
+		IgnoreTxnCommitTs: []uint64{1, 2},
+		Rules: &filter.Rules{
+			IgnoreDBs: []string{"test", "sys"},
+			DoDBs:     []string{"test1", "sys1"},
+			DoTables: []*filter.Table{
+				{Schema: "test", Name: "tbl1"},
+				{Schema: "test", Name: "tbl2"},
+			},
+			IgnoreTables: []*filter.Table{
+				{Schema: "test", Name: "tbl3"},
+				{Schema: "test", Name: "tbl4"},
+			},
+		},
 	})
-	c.Assert(cfg.SinkDispatchRules, check.DeepEquals, []*cdcfilter.DispatchRule{
-		{Table: filter.Table{Schema: "sns", Name: "user"}, Rule: "ts"},
-		{Table: filter.Table{Schema: "sns", Name: "following"}, Rule: "rowid"},
+	c.Assert(cfg.Mounter, check.DeepEquals, &config.MounterConfig{
+		WorkerNum: 16,
+	})
+	c.Assert(cfg.Sink, check.DeepEquals, &config.SinkConfig{
+		DispatchRules: []*config.DispatchRule{
+			{Rule: "ts", Table: filter.Table{Schema: "test", Name: "tbl3"}},
+			{Rule: "rowid", Table: filter.Table{Schema: "test", Name: "tbl4"}},
+		},
+	})
+	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
+		Enable:          false,
+		ReplicaID:       1,
+		FilterReplicaID: []uint64{2, 3},
+		SyncDDL:         true,
 	})
 }
 
@@ -137,7 +222,7 @@ func (s *decodeFileSuite) TestShouldReturnErrForUnknownCfgs(c *check.C) {
 	err := ioutil.WriteFile(path, []byte(content), 0644)
 	c.Assert(err, check.IsNil)
 
-	cfg := new(cdcfilter.ReplicaConfig)
+	cfg := config.GetDefaultReplicaConfig()
 	err = strictDecodeFile(path, "cdc", &cfg)
 	c.Assert(err, check.NotNil)
 	c.Assert(err, check.ErrorMatches, ".*unknown config.*")

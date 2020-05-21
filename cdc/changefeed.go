@@ -449,8 +449,9 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	err = c.sink.EmitDDLEvent(ctx, ddlEvent)
+	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
+		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
+	}
 	// If DDL executing failed, pause the changefeed and print log, rather
 	// than return an error and break the running of this owner.
 	if err != nil {
