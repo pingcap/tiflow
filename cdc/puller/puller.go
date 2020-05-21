@@ -15,12 +15,12 @@ package puller
 
 import (
 	"context"
-	"log"
 	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -30,6 +30,7 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -115,7 +116,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableIDStr := strconv.FormatInt(util.TableIDFromCtx(ctx), 10)
+	tableID := util.TableIDFromCtx(ctx)
+	tableIDStr := strconv.FormatInt(tableID, 10)
 
 	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
@@ -174,6 +176,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
+			if raw.CRTs <= p.resolvedTs {
+				log.Fatal("The CRTs must be greater than the resolvedTs",
+					zap.Uint64("CRTs", raw.CRTs),
+					zap.Uint64("resolvedTs", p.resolvedTs),
+					zap.Int64("tableID", tableID))
+			}
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
@@ -181,6 +189,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			}
 			return nil
 		}
+		var lastResolvedTs uint64
 		for {
 			e, err := p.buffer.Get(ctx)
 			if err != nil {
@@ -193,15 +202,13 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				}
 			} else if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
-				resolvedTs := e.Resolved.ResolvedTs
-				// 1. Forward is called in a single thread
-				// 2. The only way the global minimum resolved Ts can be forwarded is that
-				// 	  the resolveTs we pass in replaces the original one
-				// Thus, we can just use resolvedTs here as the new global minimum resolved Ts.
-				forwarded := p.tsTracker.Forward(e.Resolved.Span, resolvedTs)
-				if !forwarded {
+				// Forward is called in a single thread
+				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
+				resolvedTs := p.tsTracker.Frontier()
+				if resolvedTs == lastResolvedTs {
 					continue
 				}
+				lastResolvedTs = resolvedTs
 				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved})
 				if err != nil {
 					return errors.Trace(err)

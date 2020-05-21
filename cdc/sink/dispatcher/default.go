@@ -16,8 +16,8 @@ package dispatcher
 import (
 	"encoding/json"
 	"hash/crc32"
-	"log"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
 )

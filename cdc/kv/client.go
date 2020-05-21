@@ -1134,6 +1134,14 @@ func (s *eventFeedSession) singleEventFeed(
 							CRTs:    entry.CommitTs,
 						},
 					}
+
+					if entry.CommitTs <= lastResolvedTs && atomic.LoadUint32(&initialized) == 1 {
+						log.Fatal("The CommitTs must be greater than the resolvedTs",
+							zap.String("Event Type", "COMMITTED"),
+							zap.Uint64("CommitTs", entry.CommitTs),
+							zap.Uint64("resolvedTs", lastResolvedTs),
+							zap.Uint64("regionID", regionID))
+					}
 					select {
 					case s.eventCh <- revent:
 						metricSendEventCommittedCounter.Inc()
@@ -1145,6 +1153,13 @@ func (s *eventFeedSession) singleEventFeed(
 					matcher.putPrewriteRow(entry)
 				case cdcpb.Event_COMMIT:
 					metricPullEventCommitCounter.Inc()
+					if entry.CommitTs <= lastResolvedTs {
+						log.Fatal("The CommitTs must be greater than the resolvedTs",
+							zap.String("Event Type", "COMMIT"),
+							zap.Uint64("CommitTs", entry.CommitTs),
+							zap.Uint64("resolvedTs", lastResolvedTs),
+							zap.Uint64("regionID", regionID))
+					}
 					// emit a value
 					value, ok := matcher.matchRow(entry)
 					if !ok {
