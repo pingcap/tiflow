@@ -11,4 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package config
+
+import (
+	"github.com/pingcap/parser/model"
+	"github.com/pingcap/tidb-tools/pkg/filter"
+)
+
+// FilterConfig represents filter config for a changefeed
+type FilterConfig struct {
+	*filter.Rules
+	IgnoreTxnCommitTs []uint64           `toml:"ignore-txn-commit-ts" json:"ignore-txn-commit-ts"`
+	DDLWhitelist      []model.ActionType `toml:"ddl-white-list" json:"ddl-white-list"`
+}

@@ -50,7 +50,7 @@ type Config struct {
 
 	PDAddr string `toml:"pd" json:"pd"`
 
-	SourceDBCfg DBConfig `toml:"source-db" json:"source-db"`
+	SourceDBCfg []DBConfig `toml:"source-db" json:"source-db"`
 
 	TargetDBCfg DBConfig `toml:"target-db" json:"target-db"`
 

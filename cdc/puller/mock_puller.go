@@ -179,10 +179,6 @@ func (p *mockPuller) GetResolvedTs() uint64 {
 	return p.resolvedTs
 }
 
-func (p *mockPuller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
-	panic("unreachable")
-}
-
 // NewMockPullerManager creates and sets up a mock puller manager
 func NewMockPullerManager(c *check.C, newRowFormat bool) *MockPullerManager {
 	m := &MockPullerManager{

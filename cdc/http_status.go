@@ -25,6 +25,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.etcd.io/etcd/clientv3"
@@ -72,6 +73,7 @@ type status struct {
 	GitHash string `json:"git_hash"`
 	ID      string `json:"id"`
 	Pid     int    `json:"pid"`
+	IsOwner bool   `json:"is_owner"`
 }
 
 func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.Writer) {
@@ -102,13 +104,14 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 
 func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
 	st := status{
-		Version: "0.0.1",
-		GitHash: "",
+		Version: util.ReleaseVersion,
+		GitHash: util.GitHash,
 		Pid:     os.Getpid(),
 	}
 	if s.capture != nil {
 		st.ID = s.capture.info.ID
 	}
+	st.IsOwner = s.owner != nil
 	writeData(w, st)
 }
 

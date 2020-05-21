@@ -53,7 +53,6 @@ func CreateDB(cfg DBConfig) (*sql.DB, error) {
 	// timestamp field will be display as the time zone of the Local time of drainer when write to kafka, so we set it to local time to pass CI now
 	_, offset := time.Now().Zone()
 	zone := fmt.Sprintf("'+%02d:00'", offset/3600)
-
 	dbDSN := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&interpolateParams=true&multiStatements=true&time_zone=%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name, url.QueryEscape(zone))
 	db, err := sql.Open("mysql", dbDSN)
 	if err != nil {
@@ -147,6 +146,15 @@ func MustExec(db *sql.DB, sql string, args ...interface{}) {
 	_, err := db.Exec(sql, args...)
 	if err != nil {
 		log.S().Fatalf("exec failed, sql: %s args: %v, err: %+v", sql, args, err)
+	}
+}
+
+// MustExecWithConn executes sqls with context
+func MustExecWithConn(ctx context.Context, conn *sql.Conn, sql string, args ...interface{}) {
+	var err error
+	_, err = conn.ExecContext(ctx, sql, args...)
+	if err != nil && errors.Cause(err) == context.DeadlineExceeded && errors.Cause(err) == context.Canceled {
+		log.S().Fatal(err)
 	}
 }
 

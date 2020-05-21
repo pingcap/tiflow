@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/config"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -52,7 +54,7 @@ type mqSink struct {
 	statistics *Statistics
 }
 
-func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filter.Filter, config *filter.ReplicaConfig, opts map[string]string, errCh chan error) *mqSink {
+func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) *mqSink {
 	partitionNum := mqProducer.GetPartitionNum()
 	partitionInput := make([]chan struct {
 		row        *model.RowChangedEvent
@@ -265,7 +267,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	}
 }
 
-func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *filter.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
 	scheme := strings.ToLower(sinkURI.Scheme)

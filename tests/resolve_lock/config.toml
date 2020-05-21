@@ -8,7 +8,7 @@ batch = 10
 
 pd = "127.0.0.1:2379"
 
-[source-db]
+[[source-db]]
 host = "127.0.0.1"
 user = "root"
 password = ""
