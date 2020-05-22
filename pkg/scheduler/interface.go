@@ -46,10 +46,8 @@ func NewScheduler(tp string) Scheduler {
 		return newTableNumberScheduler(false)
 	case "manual":
 		return newTableNumberScheduler(true)
-	case "default":
-		return newTableNumberScheduler(false)
 	default:
 		log.Info("invalid scheduler type, using default scheduler")
-		return newTableNumberScheduler(false)
+		return newTableNumberScheduler(true)
 	}
 }
