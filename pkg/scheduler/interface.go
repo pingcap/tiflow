@@ -23,7 +23,7 @@ type Scheduler interface {
 	// ResetWorkloads resets the workloads info of the capture
 	ResetWorkloads(captureID model.CaptureID, workloads model.TaskWorkload)
 	// AlignCapture makes sure that the workloads of the capture is matched with the specified captureIDs
-	AlignCapture(captureIDs map[model.CaptureID]struct{})
+	AlignCapture(captureIDs map[model.CaptureID]struct{}) bool
 	// Skewness returns the skewness
 	Skewness() float64
 	// CalRebalanceOperates calculates the rebalance operates

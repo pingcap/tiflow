@@ -35,8 +35,8 @@ func (t *TableNumberScheduler) ResetWorkloads(captureID model.CaptureID, workloa
 }
 
 // AlignCapture implements the Scheduler interface
-func (t *TableNumberScheduler) AlignCapture(captureIDs map[model.CaptureID]struct{}) {
-	t.workloads.AlignCapture(captureIDs)
+func (t *TableNumberScheduler) AlignCapture(captureIDs map[model.CaptureID]struct{}) bool {
+	return t.workloads.AlignCapture(captureIDs)
 }
 
 // Skewness implements the Scheduler interface
