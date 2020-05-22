@@ -42,11 +42,12 @@ import (
 
 // Owner manages the cdc cluster
 type Owner struct {
-	done               chan struct{}
-	session            *concurrency.Session
-	changeFeeds        map[model.ChangeFeedID]*changeFeed
-	rebanlanceTigger   map[model.ChangeFeedID]bool
-	rebanlanceTiggerMu sync.Mutex
+	done                  chan struct{}
+	session               *concurrency.Session
+	changeFeeds           map[model.ChangeFeedID]*changeFeed
+	rebanlanceTigger      map[model.ChangeFeedID]bool
+	manualScheduleCommand map[model.ChangeFeedID][]*model.MoveTable
+	rebanlanceMu          sync.Mutex
 
 	cfRWriter ChangeFeedRWriter
 
@@ -75,16 +76,17 @@ func NewOwner(pdClient pd.Client, sess *concurrency.Session, gcTTL int64) (*Owne
 	endpoints := sess.Client().Endpoints()
 
 	owner := &Owner{
-		done:             make(chan struct{}),
-		session:          sess,
-		pdClient:         pdClient,
-		changeFeeds:      make(map[model.ChangeFeedID]*changeFeed),
-		captures:         make(map[model.CaptureID]*model.CaptureInfo),
-		rebanlanceTigger: make(map[model.ChangeFeedID]bool),
-		pdEndpoints:      endpoints,
-		cfRWriter:        cli,
-		etcdClient:       cli,
-		gcTTL:            gcTTL,
+		done:                  make(chan struct{}),
+		session:               sess,
+		pdClient:              pdClient,
+		changeFeeds:           make(map[model.ChangeFeedID]*changeFeed),
+		captures:              make(map[model.CaptureID]*model.CaptureInfo),
+		rebanlanceTigger:      make(map[model.ChangeFeedID]bool),
+		manualScheduleCommand: make(map[model.ChangeFeedID][]*model.MoveTable),
+		pdEndpoints:           endpoints,
+		cfRWriter:             cli,
+		etcdClient:            cli,
+		gcTTL:                 gcTTL,
 	}
 
 	return owner, nil
@@ -329,13 +331,18 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 func (o *Owner) balanceTables(ctx context.Context) error {
 	for id, changefeed := range o.changeFeeds {
 		rebanlanceNow := false
-		o.rebanlanceTiggerMu.Lock()
+		var scheduleCommands []*model.MoveTable
+		o.rebanlanceMu.Lock()
 		if r, exist := o.rebanlanceTigger[id]; exist {
 			rebanlanceNow = r
-			o.rebanlanceTigger[id] = false
+			delete(o.rebanlanceTigger, id)
 		}
-		o.rebanlanceTiggerMu.Unlock()
-		err := changefeed.tryBalance(ctx, o.captures, rebanlanceNow)
+		if c, exist := o.manualScheduleCommand[id]; exist {
+			scheduleCommands = c
+			delete(o.manualScheduleCommand, id)
+		}
+		o.rebanlanceMu.Unlock()
+		err := changefeed.tryBalance(ctx, o.captures, rebanlanceNow, scheduleCommands)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -658,11 +665,21 @@ func (o *Owner) EnqueueJob(job model.AdminJob) error {
 
 // TriggerRebanlance triggers the rebalance in the specified changefeed
 func (o *Owner) TriggerRebanlance(changefeedID model.ChangeFeedID) error {
-	o.rebanlanceTiggerMu.Lock()
-	defer o.rebanlanceTiggerMu.Unlock()
+	o.rebanlanceMu.Lock()
+	defer o.rebanlanceMu.Unlock()
 	o.rebanlanceTigger[changefeedID] = true
 	// TODO(leoppro) throw an error if the changefeed is not exist
 	return nil
+}
+
+func (o *Owner) ManualSchedule(changefeedID model.ChangeFeedID, from model.CaptureID, to model.CaptureID, tableID model.TableID) {
+	o.rebanlanceMu.Lock()
+	defer o.rebanlanceMu.Unlock()
+	o.manualScheduleCommand[changefeedID] = append(o.manualScheduleCommand[changefeedID], &model.MoveTable{
+		From:    from,
+		To:      to,
+		TableID: tableID,
+	})
 }
 
 func (o *Owner) writeDebugInfo(w io.Writer) {

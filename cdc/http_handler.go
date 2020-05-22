@@ -28,6 +28,12 @@ const (
 	APIOpVarAdminJob = "admin-job"
 	// APIOpVarChangefeedID is the key of changefeed ID in HTTP API
 	APIOpVarChangefeedID = "cf-id"
+	// APIOpVarFromCaptureID is the key of from-capture ID in HTTP API
+	APIOpVarFromCaptureID = "from-cp-id"
+	// APIOpVarToCaptureID is the key of to-capture ID in HTTP API
+	APIOpVarToCaptureID = "to-cp-id"
+	// APIOpVarFromChangefeedID is the key of table ID in HTTP API
+	APIOpVarTableID = "table-id"
 )
 
 type commonResp struct {
@@ -121,4 +127,32 @@ func (s *Server) handleRebanlanceTrigger(w http.ResponseWriter, req *http.Reques
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
 	err = s.owner.TriggerRebanlance(changefeedID)
 	handleOwnerResp(w, err)
+}
+
+func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
+		return
+	}
+
+	if s.owner == nil {
+		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+	}
+
+	err := req.ParseForm()
+	if err != nil {
+		writeInternalServerError(w, err)
+		return
+	}
+	changefeedID := req.Form.Get(APIOpVarChangefeedID)
+	from := req.Form.Get(APIOpVarFromCaptureID)
+	to := req.Form.Get(APIOpVarToCaptureID)
+	tableIDStr := req.Form.Get(APIOpVarTableID)
+	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid tableID: %s", tableIDStr))
+		return
+	}
+	s.owner.ManualSchedule(changefeedID, from, to, tableID)
+	handleOwnerResp(w, nil)
 }

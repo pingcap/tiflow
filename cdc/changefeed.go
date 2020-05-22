@@ -89,10 +89,11 @@ type changeFeed struct {
 	schemas map[model.SchemaID]tableIDMap
 	tables  map[model.TableID]entry.TableName
 	// value of partitions is the slice of partitions ID.
-	partitions        map[model.TableID][]int64
-	orphanTables      map[model.TableID]model.Ts
-	toCleanTables     map[model.TableID]model.Ts
-	todoAddOperations map[model.CaptureID]map[model.TableID]*model.TableOperation
+	partitions         map[model.TableID][]int64
+	orphanTables       map[model.TableID]model.Ts
+	toCleanTables      map[model.TableID]model.Ts
+	todoAddOperations  map[model.CaptureID]map[model.TableID]*model.TableOperation
+	manualMoveCommands []*model.MoveTable
 
 	lastRebanlanceTime time.Time
 
@@ -214,8 +215,14 @@ func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo
 	return minID
 }
 
-func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, rebanlanceNow bool) error {
+func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, rebanlanceNow bool,
+	manualMoveCommands []*model.MoveTable) error {
 	err := c.balanceOrphanTables(ctx, captures)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.manualMoveCommands = append(c.manualMoveCommands, manualMoveCommands...)
+	err = c.handleManualMoveTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -390,6 +397,68 @@ func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.
 	return nil
 }
 
+func (c *changeFeed) handleManualMoveTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
+	if len(captures) == 0 {
+		return nil
+	}
+	if c.cyclicEnabled {
+		return nil
+	}
+	if len(c.todoAddOperations) > 0 {
+		return nil
+	}
+	for _, status := range c.taskStatus {
+		if status.SomeOperationsUnapplied() {
+			return nil
+		}
+	}
+	newTaskStatus := make(map[model.CaptureID]*model.TaskStatus, len(captures))
+	for len(c.manualMoveCommands) > 0 {
+		move := c.manualMoveCommands[0]
+		c.manualMoveCommands = c.manualMoveCommands[1:]
+		log.Info("handle the command of moving table manually", zap.Any("command", move))
+		fromStatus, exist := c.taskStatus[move.From]
+		if !exist {
+			log.Info("not found the source capture", zap.Any("command", move))
+			continue
+		}
+		if _, exist := fromStatus.Tables[move.TableID]; !exist {
+			log.Info("not found the table from source capture", zap.Any("command", move))
+			continue
+		}
+		if toStatus, exist := c.taskStatus[move.To]; exist {
+			if _, exist := toStatus.Tables[move.TableID]; exist {
+				log.Info("the table is already exist in target capture", zap.Any("command", move))
+				continue
+			}
+		} else {
+			if _, ok := captures[move.To]; !ok {
+				log.Info("not found the target capture", zap.Any("command", move))
+				continue
+			}
+		}
+		fromStatus = fromStatus.Clone()
+		fromStatus.RemoveTable(move.TableID)
+		fromStatus.Operation[move.TableID] = &model.TableOperation{
+			Delete:     true,
+			BoundaryTs: c.status.CheckpointTs,
+		}
+		newTaskStatus[move.From] = fromStatus
+		if c.todoAddOperations == nil {
+			c.todoAddOperations = make(map[model.CaptureID]map[model.TableID]*model.TableOperation)
+		}
+		addOperations, exist := c.todoAddOperations[move.To]
+		if !exist {
+			addOperations = make(map[model.TableID]*model.TableOperation)
+			c.todoAddOperations[move.To] = addOperations
+		}
+		addOperations[move.TableID] = &model.TableOperation{
+			BoundaryTs: c.status.CheckpointTs,
+		}
+	}
+	err := c.updateTaskStatus(ctx, newTaskStatus)
+	return errors.Trace(err)
+}
 func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo, rebanlanceNow bool) error {
 	if len(captures) == 0 {
 		return nil

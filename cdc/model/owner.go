@@ -81,6 +81,13 @@ func (tp *TaskPosition) String() string {
 	return data
 }
 
+// MoveTable records a move operation of a table
+type MoveTable struct {
+	From    CaptureID
+	To      CaptureID
+	TableID TableID
+}
+
 // TableOperation records the current information of a table migration
 type TableOperation struct {
 	Delete bool `json:"delete"`
