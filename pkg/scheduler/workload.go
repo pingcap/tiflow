@@ -36,7 +36,6 @@ func (w workloads) AlignCapture(captureIDs map[model.CaptureID]struct{}) {
 			delete(w, captureID)
 		}
 	}
-	return
 }
 
 func (w workloads) SetTable(captureID model.CaptureID, tableID model.TableID, workload model.WorkloadInfo) {
