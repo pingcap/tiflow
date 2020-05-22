@@ -18,7 +18,7 @@ import "github.com/pingcap/ticdc/cdc/model"
 // Scheduler is an abstraction for anything that provide the schedule table feature
 type Scheduler interface {
 	// ResetWorkloads resets the workloads info of the capture
-	ResetWorkloads(captureID model.CaptureID, workloads map[model.TableID]uint64)
+	ResetWorkloads(captureID model.CaptureID, workloads model.TaskWorkload)
 	// AlignCapture makes sure that the workloads of the capture is matched with the specified captureIDs
 	AlignCapture(captureIDs map[model.CaptureID]struct{})
 	// Skewness returns the skewness

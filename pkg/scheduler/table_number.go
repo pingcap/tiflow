@@ -28,7 +28,7 @@ func NewTableNumberScheduler() *TableNumberScheduler {
 }
 
 // ResetWorkloads implements the Scheduler interface
-func (t *TableNumberScheduler) ResetWorkloads(captureID model.CaptureID, workloads map[int64]uint64) {
+func (t *TableNumberScheduler) ResetWorkloads(captureID model.CaptureID, workloads model.TaskWorkload) {
 	t.workloads.SetCapture(captureID, workloads)
 }
 
@@ -106,7 +106,7 @@ func (t *TableNumberScheduler) DistributeTables(tableIDs map[model.TableID]model
 		operations[tableID] = &model.TableOperation{
 			BoundaryTs: boundaryTs,
 		}
-		t.workloads.SetTable(captureID, tableID, 1)
+		t.workloads.SetTable(captureID, tableID, model.WorkloadInfo{Workload: 1})
 	}
 	return result
 }
