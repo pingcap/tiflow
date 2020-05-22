@@ -105,7 +105,7 @@ type TaskWorkload map[TableID]WorkloadInfo
 
 // WorkloadInfo records the workload info of a table
 type WorkloadInfo struct {
-	Workload uint64
+	Workload uint64 `json:"workload"`
 }
 
 // Unmarshal unmarshals into *TaskWorkload from json marshal byte slice
