@@ -112,6 +112,7 @@ type processor struct {
 type tableInfo struct {
 	id         int64
 	resolvedTS uint64
+	workload   model.WorkloadInfo
 	cancel     context.CancelFunc
 }
 
@@ -237,6 +238,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 
 	wg.Go(func() error {
 		return p.mounter.Run(cctx)
+	})
+
+	wg.Go(func() error {
+		return p.workloadWorker(cctx)
 	})
 
 	go func() {
@@ -382,6 +387,31 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 	}
 }
 
+func (p *processor) workloadWorker(ctx context.Context) error {
+	t := time.NewTicker(1 * time.Minute)
+	err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureID, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-t.C:
+		}
+		workload := make(model.TaskWorkload, len(p.tables))
+		p.stateMu.Lock()
+		for _, table := range p.tables {
+			workload[table.id] = table.workload
+		}
+		p.stateMu.Unlock()
+		err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureID, &workload)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+}
+
 func (p *processor) updateInfo(ctx context.Context) error {
 	updatePosition := func() error {
 		//p.position.Count = p.sink.Count()
@@ -482,14 +512,14 @@ func (p *processor) handleTables(ctx context.Context) error {
 		return err
 	}
 
-	for _, opt := range p.status.Operation {
+	for tableID, opt := range p.status.Operation {
 		if opt.Delete {
 			if opt.BoundaryTs <= p.position.CheckPointTs {
-				p.removeTable(opt.TableID)
+				p.removeTable(tableID)
 				opt.Done = true
 			}
 		} else {
-			p.addTable(ctx, opt.TableID, opt.BoundaryTs)
+			p.addTable(ctx, tableID, opt.BoundaryTs)
 			opt.Done = true
 		}
 	}
@@ -741,6 +771,10 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 			p.errCh <- err
 		}
 	}()
+
+	// TODO(leoppro) calculate the workload of this table
+	// We temporarily set the value to constant 1
+	table.workload = model.WorkloadInfo{Workload: 1}
 
 	var sorter puller.EventSorter
 	switch p.changefeed.Engine {

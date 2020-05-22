@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/scheduler"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -40,9 +42,11 @@ import (
 
 // Owner manages the cdc cluster
 type Owner struct {
-	done        chan struct{}
-	session     *concurrency.Session
-	changeFeeds map[model.ChangeFeedID]*changeFeed
+	done               chan struct{}
+	session            *concurrency.Session
+	changeFeeds        map[model.ChangeFeedID]*changeFeed
+	rebanlanceTigger   map[model.ChangeFeedID]bool
+	rebanlanceTiggerMu sync.Mutex
 
 	cfRWriter ChangeFeedRWriter
 
@@ -71,15 +75,16 @@ func NewOwner(pdClient pd.Client, sess *concurrency.Session, gcTTL int64) (*Owne
 	endpoints := sess.Client().Endpoints()
 
 	owner := &Owner{
-		done:        make(chan struct{}),
-		session:     sess,
-		pdClient:    pdClient,
-		changeFeeds: make(map[model.ChangeFeedID]*changeFeed),
-		captures:    make(map[model.CaptureID]*model.CaptureInfo),
-		pdEndpoints: endpoints,
-		cfRWriter:   cli,
-		etcdClient:  cli,
-		gcTTL:       gcTTL,
+		done:             make(chan struct{}),
+		session:          sess,
+		pdClient:         pdClient,
+		changeFeeds:      make(map[model.ChangeFeedID]*changeFeed),
+		captures:         make(map[model.CaptureID]*model.CaptureInfo),
+		rebanlanceTigger: make(map[model.ChangeFeedID]bool),
+		pdEndpoints:      endpoints,
+		cfRWriter:        cli,
+		etcdClient:       cli,
+		gcTTL:            gcTTL,
 	}
 
 	return owner, nil
@@ -262,15 +267,17 @@ func (o *Owner) newChangeFeed(
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
 		},
-		ddlState:      model.ChangeFeedSyncDML,
-		ddlExecutedTs: checkpointTs,
-		targetTs:      info.GetTargetTs(),
-		taskStatus:    processorsInfos,
-		taskPositions: taskPositions,
-		etcdCli:       o.etcdClient,
-		filter:        filter,
-		sink:          sink,
-		cyclicEnabled: info.Config.Cyclic.IsEnabled(),
+		scheduler:          scheduler.NewTableNumberScheduler(),
+		ddlState:           model.ChangeFeedSyncDML,
+		ddlExecutedTs:      checkpointTs,
+		targetTs:           info.GetTargetTs(),
+		taskStatus:         processorsInfos,
+		taskPositions:      taskPositions,
+		etcdCli:            o.etcdClient,
+		filter:             filter,
+		sink:               sink,
+		cyclicEnabled:      info.Config.Cyclic.IsEnabled(),
+		lastRebanlanceTime: time.Now(),
 	}
 	return cf, nil
 }
@@ -320,8 +327,15 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 }
 
 func (o *Owner) balanceTables(ctx context.Context) error {
-	for _, changefeed := range o.changeFeeds {
-		err := changefeed.tryBalance(ctx, o.captures)
+	for id, changefeed := range o.changeFeeds {
+		rebanlanceNow := false
+		o.rebanlanceTiggerMu.Lock()
+		if r, exist := o.rebanlanceTigger[id]; exist {
+			rebanlanceNow = r
+			o.rebanlanceTigger[id] = false
+		}
+		o.rebanlanceTiggerMu.Unlock()
+		err := changefeed.tryBalance(ctx, o.captures, rebanlanceNow)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -639,6 +653,15 @@ func (o *Owner) EnqueueJob(job model.AdminJob) error {
 	o.adminJobsLock.Lock()
 	o.adminJobs = append(o.adminJobs, job)
 	o.adminJobsLock.Unlock()
+	return nil
+}
+
+// TriggerRebanlance triggers the rebalance in the specified changefeed
+func (o *Owner) TriggerRebanlance(changefeedID model.ChangeFeedID) error {
+	o.rebanlanceTiggerMu.Lock()
+	defer o.rebanlanceTiggerMu.Unlock()
+	o.rebanlanceTigger[changefeedID] = true
+	// TODO(leoppro) throw an error if the changefeed is not exist
 	return nil
 }
 

@@ -40,6 +40,9 @@ const (
 	// TaskKeyPrefix is the prefix of task keys
 	TaskKeyPrefix = EtcdKeyBase + "/task"
 
+	// TaskWorkloadKeyPrefix is the prefix of task workload keys
+	TaskWorkloadKeyPrefix = TaskKeyPrefix + "/workload"
+
 	// TaskStatusKeyPrefix is the prefix of task status keys
 	TaskStatusKeyPrefix = TaskKeyPrefix + "/status"
 
@@ -88,6 +91,11 @@ func GetEtcdKeyCaptureInfo(id string) string {
 // GetEtcdKeyTaskStatus returns the key for the task status
 func GetEtcdKeyTaskStatus(changeFeedID, captureID string) string {
 	return TaskStatusKeyPrefix + "/" + captureID + "/" + changeFeedID
+}
+
+// GetEtcdKeyTaskWorkload returns the key for the task workload
+func GetEtcdKeyTaskWorkload(changeFeedID, captureID string) string {
+	return TaskWorkloadKeyPrefix + "/" + captureID + "/" + changeFeedID
 }
 
 // GetEtcdKeyJob returns the key for a job status
@@ -326,6 +334,49 @@ func (c CDCEtcdClient) PutTaskStatus(
 	}
 
 	key := GetEtcdKeyTaskStatus(changefeedID, captureID)
+
+	_, err = c.Client.Put(ctx, key, data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+// GetTaskWorkload queries task workload from etcd, returns
+//  - model.TaskWorkload unmarshaled from the value
+//  - error if error happens
+func (c CDCEtcdClient) GetTaskWorkload(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+) (model.TaskWorkload, error) {
+	key := GetEtcdKeyTaskWorkload(changefeedID, captureID)
+	resp, err := c.Client.Get(ctx, key)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if resp.Count == 0 {
+		return make(model.TaskWorkload), nil
+	}
+	workload := make(model.TaskWorkload)
+	err = workload.Unmarshal(resp.Kvs[0].Value)
+	return workload, errors.Trace(err)
+}
+
+// PutTaskWorkload puts task workload into etcd.
+func (c CDCEtcdClient) PutTaskWorkload(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+	info *model.TaskWorkload,
+) error {
+	data, err := info.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	key := GetEtcdKeyTaskWorkload(changefeedID, captureID)
 
 	_, err = c.Client.Put(ctx, key, data)
 	if err != nil {

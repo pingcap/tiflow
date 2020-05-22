@@ -45,6 +45,7 @@ func (s *Server) startStatusHTTP() error {
 	serverMux.HandleFunc("/debug/info", s.handleDebugInfo)
 	serverMux.HandleFunc("/capture/owner/resign", s.handleResignOwner)
 	serverMux.HandleFunc("/capture/owner/admin", s.handleChangefeedAdmin)
+	serverMux.HandleFunc("/capture/owner/rebanlance_trigger", s.handleRebanlanceTrigger)
 
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
