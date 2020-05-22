@@ -224,7 +224,6 @@ func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.
 	}
 	c.manualMoveCommands = append(c.manualMoveCommands, manualMoveCommands...)
 	if rebanlanceNow {
-		log.Info("set rebanlanceNextTime true")
 		c.rebanlanceNextTick = true
 	}
 	err = c.handleManualMoveTables(ctx, captures)
@@ -464,6 +463,7 @@ func (c *changeFeed) handleManualMoveTables(ctx context.Context, captures map[mo
 	err := c.updateTaskStatus(ctx, newTaskStatus)
 	return errors.Trace(err)
 }
+
 func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	if len(captures) == 0 {
 		return nil
@@ -519,10 +519,8 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 
 	if !c.rebanlanceNextTick &&
 		time.Since(c.lastRebanlanceTime) < time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute {
-		log.Info("exit rebanlanceNextTick", zap.Bool("rebalanceNextTick", c.rebanlanceNextTick))
 		return nil
 	}
-	log.Info("show rebanlanceNextTick", zap.Bool("rebalanceNextTick", c.rebanlanceNextTick))
 	c.lastRebanlanceTime = time.Now()
 	c.rebanlanceNextTick = false
 

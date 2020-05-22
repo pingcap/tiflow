@@ -678,7 +678,6 @@ func (o *Owner) TriggerRebanlance(changefeedID model.ChangeFeedID) {
 	o.rebanlanceMu.Lock()
 	defer o.rebanlanceMu.Unlock()
 	o.rebanlanceTigger[changefeedID] = true
-	log.Info("TriggerRebanlance1", zap.String("changefeedID", changefeedID))
 	// TODO(leoppro) throw an error if the changefeed is not exist
 }
 
