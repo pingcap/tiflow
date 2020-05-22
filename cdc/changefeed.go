@@ -94,6 +94,7 @@ type changeFeed struct {
 	toCleanTables      map[model.TableID]model.Ts
 	todoAddOperations  map[model.CaptureID]map[model.TableID]*model.TableOperation
 	manualMoveCommands []*model.MoveTable
+	rebanlanceNextTime bool
 
 	lastRebanlanceTime time.Time
 
@@ -222,11 +223,14 @@ func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.
 		return errors.Trace(err)
 	}
 	c.manualMoveCommands = append(c.manualMoveCommands, manualMoveCommands...)
+	if rebanlanceNow {
+		c.rebanlanceNextTime = true
+	}
 	err = c.handleManualMoveTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = c.rebanlanceTables(ctx, captures, rebanlanceNow)
+	err = c.rebanlanceTables(ctx, captures)
 	return errors.Trace(err)
 }
 
@@ -459,7 +463,7 @@ func (c *changeFeed) handleManualMoveTables(ctx context.Context, captures map[mo
 	err := c.updateTaskStatus(ctx, newTaskStatus)
 	return errors.Trace(err)
 }
-func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo, rebanlanceNow bool) error {
+func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	if len(captures) == 0 {
 		return nil
 	}
@@ -518,7 +522,7 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 	}
 	c.scheduler.AlignCapture(captureIDs)
 
-	if !rebanlanceNow &&
+	if !c.rebanlanceNextTime &&
 		time.Since(c.lastRebanlanceTime) < time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute {
 		return nil
 	}
