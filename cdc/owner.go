@@ -672,6 +672,7 @@ func (o *Owner) TriggerRebanlance(changefeedID model.ChangeFeedID) error {
 	return nil
 }
 
+// ManualSchedule moves the table from a capture to another capture
 func (o *Owner) ManualSchedule(changefeedID model.ChangeFeedID, from model.CaptureID, to model.CaptureID, tableID model.TableID) {
 	o.rebanlanceMu.Lock()
 	defer o.rebanlanceMu.Unlock()

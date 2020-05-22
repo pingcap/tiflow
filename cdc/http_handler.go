@@ -32,7 +32,7 @@ const (
 	APIOpVarFromCaptureID = "from-cp-id"
 	// APIOpVarToCaptureID is the key of to-capture ID in HTTP API
 	APIOpVarToCaptureID = "to-cp-id"
-	// APIOpVarFromChangefeedID is the key of table ID in HTTP API
+	// APIOpVarTableID is the key of table ID in HTTP API
 	APIOpVarTableID = "table-id"
 )
 
