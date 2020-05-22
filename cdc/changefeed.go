@@ -94,7 +94,7 @@ type changeFeed struct {
 	toCleanTables      map[model.TableID]model.Ts
 	todoAddOperations  map[model.CaptureID]map[model.TableID]*model.TableOperation
 	manualMoveCommands []*model.MoveTable
-	rebanlanceNextTime bool
+	rebanlanceNextTick bool
 
 	lastRebanlanceTime time.Time
 
@@ -224,7 +224,8 @@ func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.
 	}
 	c.manualMoveCommands = append(c.manualMoveCommands, manualMoveCommands...)
 	if rebanlanceNow {
-		c.rebanlanceNextTime = true
+		log.Info("set rebanlanceNextTime true")
+		c.rebanlanceNextTick = true
 	}
 	err = c.handleManualMoveTables(ctx, captures)
 	if err != nil {
@@ -516,12 +517,14 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 		return nil
 	}
 
-	if !c.rebanlanceNextTime &&
+	if !c.rebanlanceNextTick &&
 		time.Since(c.lastRebanlanceTime) < time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute {
+		log.Info("exit rebanlanceNextTick", zap.Bool("rebalanceNextTick", c.rebanlanceNextTick))
 		return nil
 	}
+	log.Info("show rebanlanceNextTick", zap.Bool("rebalanceNextTick", c.rebanlanceNextTick))
 	c.lastRebanlanceTime = time.Now()
-	c.rebanlanceNextTime = false
+	c.rebanlanceNextTick = false
 
 	captureIDs := make(map[model.CaptureID]struct{}, len(captures))
 	for cid := range captures {
