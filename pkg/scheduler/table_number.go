@@ -17,13 +17,15 @@ import "github.com/pingcap/ticdc/cdc/model"
 
 // TableNumberScheduler provides a feature that scheduling by the table number
 type TableNumberScheduler struct {
-	workloads workloads
+	workloads      workloads
+	distributeOnly bool
 }
 
-// NewTableNumberScheduler creates a new table number scheduler
-func NewTableNumberScheduler() *TableNumberScheduler {
+// newTableNumberScheduler creates a new table number scheduler
+func newTableNumberScheduler(distributeOnly bool) *TableNumberScheduler {
 	return &TableNumberScheduler{
-		workloads: make(workloads),
+		workloads:      make(workloads),
+		distributeOnly: distributeOnly,
 	}
 }
 
@@ -47,6 +49,9 @@ func (t *TableNumberScheduler) CalRebalanceOperates(targetSkewness float64, boun
 	skewness float64,
 	deleteOperations map[model.CaptureID]map[model.TableID]*model.TableOperation,
 	addOperations map[model.CaptureID]map[model.TableID]*model.TableOperation) {
+	if t.distributeOnly {
+		return 0, nil, nil
+	}
 	var totalTableNumber uint64
 	for _, captureWorkloads := range t.workloads {
 		totalTableNumber += uint64(len(captureWorkloads))
