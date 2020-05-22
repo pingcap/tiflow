@@ -42,12 +42,13 @@ import (
 
 // Owner manages the cdc cluster
 type Owner struct {
-	done                  chan struct{}
-	session               *concurrency.Session
-	changeFeeds           map[model.ChangeFeedID]*changeFeed
-	rebanlanceTigger      map[model.ChangeFeedID]bool
-	manualScheduleCommand map[model.ChangeFeedID][]*model.MoveTable
-	rebanlanceMu          sync.Mutex
+	done                       chan struct{}
+	session                    *concurrency.Session
+	changeFeeds                map[model.ChangeFeedID]*changeFeed
+	rebanlanceTigger           map[model.ChangeFeedID]bool
+	rebanlanceForAllChangefeed bool
+	manualScheduleCommand      map[model.ChangeFeedID][]*model.MoveTable
+	rebanlanceMu               sync.Mutex
 
 	cfRWriter ChangeFeedRWriter
 
@@ -96,7 +97,9 @@ func (o *Owner) addCapture(info *model.CaptureInfo) {
 	o.l.Lock()
 	o.captures[info.ID] = info
 	o.l.Unlock()
-	o.TriggerRebanlance(info.ID)
+	o.rebanlanceMu.Lock()
+	o.rebanlanceForAllChangefeed = true
+	o.rebanlanceMu.Unlock()
 }
 
 func (o *Owner) removeCapture(info *model.CaptureInfo) {
@@ -338,6 +341,9 @@ func (o *Owner) balanceTables(ctx context.Context) error {
 			rebanlanceNow = r
 			delete(o.rebanlanceTigger, id)
 		}
+		if o.rebanlanceForAllChangefeed {
+			rebanlanceNow = true
+		}
 		if c, exist := o.manualScheduleCommand[id]; exist {
 			scheduleCommands = c
 			delete(o.manualScheduleCommand, id)
@@ -348,6 +354,9 @@ func (o *Owner) balanceTables(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 	}
+	o.rebanlanceMu.Lock()
+	o.rebanlanceForAllChangefeed = false
+	o.rebanlanceMu.Unlock()
 	return nil
 }
 
