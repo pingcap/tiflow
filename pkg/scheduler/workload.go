@@ -25,17 +25,15 @@ func (w workloads) SetCapture(captureID model.CaptureID, workloads model.TaskWor
 	w[captureID] = workloads
 }
 
-func (w workloads) AlignCapture(captureIDs map[model.CaptureID]struct{}) (changed bool) {
+func (w workloads) AlignCapture(captureIDs map[model.CaptureID]struct{}) {
 	for captureID := range captureIDs {
 		if _, exist := w[captureID]; !exist {
 			w[captureID] = make(model.TaskWorkload)
-			changed = true
 		}
 	}
 	for captureID := range w {
 		if _, exist := captureIDs[captureID]; !exist {
 			delete(w, captureID)
-			changed = true
 		}
 	}
 	return

@@ -125,8 +125,8 @@ func (s *Server) handleRebanlanceTrigger(w http.ResponseWriter, req *http.Reques
 		return
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
-	err = s.owner.TriggerRebanlance(changefeedID)
-	handleOwnerResp(w, err)
+	s.owner.TriggerRebanlance(changefeedID)
+	handleOwnerResp(w, nil)
 }
 
 func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {

@@ -516,9 +516,9 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 	for cid := range captures {
 		captureIDs[cid] = struct{}{}
 	}
-	captureChanged := c.scheduler.AlignCapture(captureIDs)
+	c.scheduler.AlignCapture(captureIDs)
 
-	if !rebanlanceNow && !captureChanged &&
+	if !rebanlanceNow &&
 		time.Since(c.lastRebanlanceTime) < time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute {
 		return nil
 	}

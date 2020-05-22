@@ -96,6 +96,7 @@ func (o *Owner) addCapture(info *model.CaptureInfo) {
 	o.l.Lock()
 	o.captures[info.ID] = info
 	o.l.Unlock()
+	o.TriggerRebanlance(info.ID)
 }
 
 func (o *Owner) removeCapture(info *model.CaptureInfo) {
@@ -664,12 +665,11 @@ func (o *Owner) EnqueueJob(job model.AdminJob) error {
 }
 
 // TriggerRebanlance triggers the rebalance in the specified changefeed
-func (o *Owner) TriggerRebanlance(changefeedID model.ChangeFeedID) error {
+func (o *Owner) TriggerRebanlance(changefeedID model.ChangeFeedID) {
 	o.rebanlanceMu.Lock()
 	defer o.rebanlanceMu.Unlock()
 	o.rebanlanceTigger[changefeedID] = true
 	// TODO(leoppro) throw an error if the changefeed is not exist
-	return nil
 }
 
 // ManualSchedule moves the table from a capture to another capture
