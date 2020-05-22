@@ -516,18 +516,14 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 		return nil
 	}
 
-	captureIDs := make(map[model.CaptureID]struct{}, len(captures))
-	for cid := range captures {
-		captureIDs[cid] = struct{}{}
-	}
-	c.scheduler.AlignCapture(captureIDs)
-
 	if !c.rebanlanceNextTime &&
 		time.Since(c.lastRebanlanceTime) < time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute {
 		return nil
 	}
 	c.lastRebanlanceTime = time.Now()
+	c.rebanlanceNextTime = false
 
+	captureIDs := make(map[model.CaptureID]struct{}, len(captures))
 	for cid := range captures {
 		captureIDs[cid] = struct{}{}
 		workloads, err := c.etcdCli.GetTaskWorkload(ctx, c.id, cid)
@@ -536,6 +532,7 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 		}
 		c.scheduler.ResetWorkloads(cid, workloads)
 	}
+	c.scheduler.AlignCapture(captureIDs)
 
 	_, deleteOperations, addOperations := c.scheduler.CalRebalanceOperates(0, c.status.CheckpointTs)
 	log.Info("rebalance operations", zap.Reflect("deleteOperations", deleteOperations), zap.Reflect("addOperations", addOperations))
