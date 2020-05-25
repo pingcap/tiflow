@@ -84,6 +84,7 @@ func (tp *TaskPosition) String() string {
 // MoveTableStatus represents for the status of a MoveTableJob
 type MoveTableStatus int
 
+// All MoveTable status
 const (
 	MoveTableStatusNone MoveTableStatus = iota
 	MoveTableStatusDeleted
@@ -141,6 +142,7 @@ func (w *TaskWorkload) Marshal() (string, error) {
 	return string(data), errors.Trace(err)
 }
 
+// TableReplicaInfo records the table replica info
 type TableReplicaInfo struct {
 	StartTs     Ts      `json:"start-ts"`
 	MarkTableID TableID `json:"mark-table-id"`
@@ -161,7 +163,7 @@ func (ts *TaskStatus) String() string {
 	return data
 }
 
-// RemoveTable remove the table in TableInfos.
+// RemoveTable remove the table in TableInfos and add a remove table operation.
 func (ts *TaskStatus) RemoveTable(id TableID, boundaryTs Ts) (*TableReplicaInfo, bool) {
 	if ts.Tables == nil {
 		return nil, false
@@ -181,6 +183,7 @@ func (ts *TaskStatus) RemoveTable(id TableID, boundaryTs Ts) (*TableReplicaInfo,
 	return table, true
 }
 
+// AddTable add the table in TableInfos and add a add table operation.
 func (ts *TaskStatus) AddTable(id TableID, table *TableReplicaInfo, boundaryTs Ts) {
 	if ts.Tables == nil {
 		ts.Tables = make(map[TableID]*TableReplicaInfo)
