@@ -132,8 +132,8 @@ func IsTablesPaired(tables []model.TableName) bool {
 
 // IsMarkTable tells whether the table is a mark table or not.
 func IsMarkTable(schema, table string) bool {
-	const quoteSchemaName string = "`" + SchemaName + "`"
-	const quotetableName string = "`" + tableName
+	const quoteSchemaName = "`" + SchemaName + "`"
+	const quotetableName = "`" + tableName
 
 	if schema == SchemaName || schema == quoteSchemaName {
 		return true

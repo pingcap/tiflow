@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/regionspan"
@@ -486,32 +485,6 @@ func (p *processor) removeTable(tableID int64) {
 
 // handleTables handles table scheduler on this processor, add or remove table puller
 func (p *processor) handleTables(ctx context.Context) error {
-	checkPairedMarkTable := func(tables map[model.TableID]model.Ts) error {
-		if p.changefeed.Config != nil && p.changefeed.Config.Cyclic.IsEnabled() {
-			// Make sure all normal tables and mark tables are paired.
-			schemaSnapshot := p.schemaStorage.GetLastSnapshot()
-			tableNames := make([]model.TableName, 0, len(tables))
-			for tableID := range tables {
-				name, ok := schemaSnapshot.GetTableNameByID(tableID)
-				if !ok {
-					return errors.NotFoundf("table(%d)", tableID)
-				}
-				tableNames = append(tableNames, model.TableName{
-					Schema: name.Schema,
-					Table:  name.Table,
-				})
-			}
-			if !cyclic.IsTablesPaired(tableNames) {
-				return errors.NotValidf("normal table and mark table not match %v", tableNames)
-			}
-		}
-		return nil
-	}
-
-	if err := checkPairedMarkTable(p.status.Tables); err != nil {
-		return err
-	}
-
 	for tableID, opt := range p.status.Operation {
 		if opt.Delete {
 			if opt.BoundaryTs <= p.position.CheckPointTs {
@@ -519,7 +492,14 @@ func (p *processor) handleTables(ctx context.Context) error {
 				opt.Done = true
 			}
 		} else {
-			p.addTable(ctx, tableID, opt.BoundaryTs)
+			replicaInfo, exist := p.status.Tables[tableID]
+			if !exist {
+				return errors.NotFoundf("replicaInfo of table(%d)", tableID)
+			}
+			if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
+				return errors.NotValidf("normal table(%d) and mark table not match ", tableID)
+			}
+			p.addTable(ctx, tableID, replicaInfo)
 			opt.Done = true
 		}
 	}
@@ -742,12 +722,12 @@ func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (stor
 	return storage.NewProcessorTsEtcdRWriter(cli, changefeedID, captureID)
 }
 
-func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64) {
+func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
 	ctx = util.PutTableIDInCtx(ctx, tableID)
 
-	log.Debug("Add table", zap.Int64("tableID", tableID), zap.Uint64("startTs", startTs))
+	log.Debug("Add table", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
 	if _, ok := p.tables[tableID]; ok {
 		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
 		return
@@ -756,93 +736,101 @@ func (p *processor) addTable(ctx context.Context, tableID int64, startTs uint64)
 	ctx, cancel := context.WithCancel(ctx)
 	table := &tableInfo{
 		id:         tableID,
-		resolvedTS: startTs,
+		resolvedTS: replicaInfo.StartTs,
 		cancel:     cancel,
 	}
-
-	// start table puller
-	// The key in DML kv pair returned from TiKV is not memcompariable encoded,
-	// so we set `needEncode` to true.
-	span := regionspan.GetTableSpan(tableID, true)
-	plr := puller.NewPuller(p.pdCli, p.kvStorage, startTs, []regionspan.Span{span}, true, p.limitter)
-	go func() {
-		err := plr.Run(ctx)
-		if errors.Cause(err) != context.Canceled {
-			p.errCh <- err
-		}
-	}()
-
 	// TODO(leoppro) calculate the workload of this table
 	// We temporarily set the value to constant 1
 	table.workload = model.WorkloadInfo{Workload: 1}
 
-	var sorter puller.EventSorter
-	switch p.changefeed.Engine {
-	case model.SortInMemory:
-		sorter = puller.NewEntrySorter()
-	case model.SortInFile:
-		sorter = puller.NewFileSorter(p.changefeed.SortDir)
-	default:
-		p.errCh <- errors.Errorf("unknown sort engine %s", p.changefeed.Engine)
-		return
-	}
+	startPuller := func(tableID model.TableID) {
 
-	go func() {
-		err := sorter.Run(ctx)
-		if errors.Cause(err) != context.Canceled {
-			p.errCh <- err
+		// start table puller
+		// The key in DML kv pair returned from TiKV is not memcompariable encoded,
+		// so we set `needEncode` to true.
+		span := regionspan.GetTableSpan(tableID, true)
+		plr := puller.NewPuller(p.pdCli, p.kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, true, p.limitter)
+		go func() {
+			err := plr.Run(ctx)
+			if errors.Cause(err) != context.Canceled {
+				p.errCh <- err
+			}
+		}()
+
+		var sorter puller.EventSorter
+		switch p.changefeed.Engine {
+		case model.SortInMemory:
+			sorter = puller.NewEntrySorter()
+		case model.SortInFile:
+			sorter = puller.NewFileSorter(p.changefeed.SortDir)
+		default:
+			p.errCh <- errors.Errorf("unknown sort engine %s", p.changefeed.Engine)
+			return
 		}
-	}()
-	go func() {
-		resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID, strconv.FormatInt(table.id, 10))
-		for {
-			select {
-			case <-ctx.Done():
-				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
-				}
-				return
-			case rawKV := <-plr.Output():
-				if rawKV == nil {
-					continue
-				}
-				pEvent := model.NewPolymorphicEvent(rawKV)
-				sorter.AddEntry(ctx, pEvent)
+		go func() {
+			err := sorter.Run(ctx)
+			if errors.Cause(err) != context.Canceled {
+				p.errCh <- err
+			}
+		}()
+		go func() {
+			resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID, strconv.FormatInt(table.id, 10))
+			for {
 				select {
 				case <-ctx.Done():
 					if errors.Cause(ctx.Err()) != context.Canceled {
 						p.errCh <- ctx.Err()
 					}
 					return
-				case p.mounter.Input() <- pEvent:
-				}
-			case pEvent := <-sorter.Output():
-				if pEvent == nil {
-					continue
-				}
-				if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
-					table.storeResolvedTS(pEvent.CRTs)
-					p.localResolvedNotifier.Notify()
-					resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
-					continue
-				}
-				select {
-				case <-ctx.Done():
-					if errors.Cause(ctx.Err()) != context.Canceled {
-						p.errCh <- ctx.Err()
+				case rawKV := <-plr.Output():
+					if rawKV == nil {
+						continue
 					}
-					return
-				case p.output <- pEvent:
+					pEvent := model.NewPolymorphicEvent(rawKV)
+					sorter.AddEntry(ctx, pEvent)
+					select {
+					case <-ctx.Done():
+						if errors.Cause(ctx.Err()) != context.Canceled {
+							p.errCh <- ctx.Err()
+						}
+						return
+					case p.mounter.Input() <- pEvent:
+					}
+				case pEvent := <-sorter.Output():
+					if pEvent == nil {
+						continue
+					}
+					if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
+						table.storeResolvedTS(pEvent.CRTs)
+						p.localResolvedNotifier.Notify()
+						resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
+						continue
+					}
+					select {
+					case <-ctx.Done():
+						if errors.Cause(ctx.Err()) != context.Canceled {
+							p.errCh <- ctx.Err()
+						}
+						return
+					case p.output <- pEvent:
+					}
 				}
 			}
-		}
-	}()
-	p.tables[tableID] = table
-	if p.position.CheckPointTs > startTs {
-		p.position.CheckPointTs = startTs
+		}()
 	}
-	if p.position.ResolvedTs > startTs {
-		p.position.ResolvedTs = startTs
+
+	startPuller(tableID)
+
+	if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID != 0 {
+		startPuller(replicaInfo.MarkTableID)
+	}
+
+	p.tables[tableID] = table
+	if p.position.CheckPointTs > replicaInfo.StartTs {
+		p.position.CheckPointTs = replicaInfo.StartTs
+	}
+	if p.position.ResolvedTs > replicaInfo.StartTs {
+		p.position.ResolvedTs = replicaInfo.StartTs
 	}
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Inc()
 }

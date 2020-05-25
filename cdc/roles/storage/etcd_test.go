@@ -90,11 +90,11 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 		err          error
 		revision     int64
 		info         = &model.TaskStatus{
-			Tables: map[model.TableID]model.Ts{
-				1: 100,
-				2: 200,
-				3: 300,
-				4: 400,
+			Tables: map[model.TableID]*model.TableReplicaInfo{
+				1: {StartTs: 100},
+				2: {StartTs: 200},
+				3: {StartTs: 300},
+				4: {StartTs: 400},
 			},
 		}
 		getInfo *model.TaskStatus
@@ -133,11 +133,11 @@ func (s *etcdSuite) TestProcessorTsWriter(c *check.C) {
 
 	// test table taskStatus changed, should return ErrWriteTsConflict.
 	getInfo = info.Clone()
-	getInfo.Tables = map[model.TableID]model.Ts{
-		4: 100,
-		5: 200,
-		6: 300,
-		7: 400,
+	getInfo.Tables = map[model.TableID]*model.TableReplicaInfo{
+		4: {StartTs: 100},
+		5: {StartTs: 200},
+		6: {StartTs: 300},
+		7: {StartTs: 400},
 	}
 	sinfo, err = getInfo.Marshal()
 	c.Assert(err, check.IsNil)
