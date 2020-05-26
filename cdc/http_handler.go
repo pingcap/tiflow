@@ -28,10 +28,8 @@ const (
 	APIOpVarAdminJob = "admin-job"
 	// APIOpVarChangefeedID is the key of changefeed ID in HTTP API
 	APIOpVarChangefeedID = "cf-id"
-	// APIOpVarFromCaptureID is the key of from-capture ID in HTTP API
-	APIOpVarFromCaptureID = "from-cp-id"
-	// APIOpVarToCaptureID is the key of to-capture ID in HTTP API
-	APIOpVarToCaptureID = "to-cp-id"
+	// APIOpVarTargetCaptureID is the key of to-capture ID in HTTP API
+	APIOpVarTargetCaptureID = "target-cp-id"
 	// APIOpVarTableID is the key of table ID in HTTP API
 	APIOpVarTableID = "table-id"
 )
@@ -145,14 +143,13 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
-	from := req.Form.Get(APIOpVarFromCaptureID)
-	to := req.Form.Get(APIOpVarToCaptureID)
+	to := req.Form.Get(APIOpVarTargetCaptureID)
 	tableIDStr := req.Form.Get(APIOpVarTableID)
 	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, errors.Errorf("invalid tableID: %s", tableIDStr))
 		return
 	}
-	s.owner.ManualSchedule(changefeedID, from, to, tableID)
+	s.owner.ManualSchedule(changefeedID, to, tableID)
 	handleOwnerResp(w, nil)
 }

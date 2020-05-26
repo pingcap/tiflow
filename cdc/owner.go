@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/cyclic"
+
 	"github.com/pingcap/ticdc/pkg/scheduler"
 
 	"github.com/pingcap/errors"
@@ -47,7 +49,7 @@ type Owner struct {
 	changeFeeds                map[model.ChangeFeedID]*changeFeed
 	rebanlanceTigger           map[model.ChangeFeedID]bool
 	rebanlanceForAllChangefeed bool
-	manualScheduleCommand      map[model.ChangeFeedID][]*model.MoveTable
+	manualScheduleCommand      map[model.ChangeFeedID][]*model.MoveTableJob
 	rebanlanceMu               sync.Mutex
 
 	cfRWriter ChangeFeedRWriter
@@ -83,7 +85,7 @@ func NewOwner(pdClient pd.Client, sess *concurrency.Session, gcTTL int64) (*Owne
 		changeFeeds:           make(map[model.ChangeFeedID]*changeFeed),
 		captures:              make(map[model.CaptureID]*model.CaptureInfo),
 		rebanlanceTigger:      make(map[model.ChangeFeedID]bool),
-		manualScheduleCommand: make(map[model.ChangeFeedID][]*model.MoveTable),
+		manualScheduleCommand: make(map[model.ChangeFeedID][]*model.MoveTableJob),
 		pdEndpoints:           endpoints,
 		cfRWriter:             cli,
 		etcdClient:            cli,
@@ -189,9 +191,9 @@ func (o *Owner) newChangeFeed(
 		if pos, exist := taskPositions[captureID]; exist {
 			checkpointTs = pos.CheckPointTs
 		}
-		for tableID, startTs := range taskStatus.Tables {
-			if startTs > checkpointTs {
-				checkpointTs = startTs
+		for tableID, replicaInfo := range taskStatus.Tables {
+			if replicaInfo.StartTs > checkpointTs {
+				checkpointTs = replicaInfo.StartTs
 			}
 			existingTables[tableID] = checkpointTs
 		}
@@ -204,6 +206,10 @@ func (o *Owner) newChangeFeed(
 	orphanTables := make(map[model.TableID]model.Ts)
 	for tid, table := range schemaSnap.CloneTables() {
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
+			continue
+		}
+		if info.Config.Cyclic.IsEnabled() && cyclic.IsMarkTable(table.Schema, table.Table) {
+			// skip the mark table if cyclic is enabled
 			continue
 		}
 
@@ -335,7 +341,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 func (o *Owner) balanceTables(ctx context.Context) error {
 	for id, changefeed := range o.changeFeeds {
 		rebanlanceNow := false
-		var scheduleCommands []*model.MoveTable
+		var scheduleCommands []*model.MoveTableJob
 		o.rebanlanceMu.Lock()
 		if r, exist := o.rebanlanceTigger[id]; exist {
 			rebanlanceNow = r
@@ -682,11 +688,10 @@ func (o *Owner) TriggerRebanlance(changefeedID model.ChangeFeedID) {
 }
 
 // ManualSchedule moves the table from a capture to another capture
-func (o *Owner) ManualSchedule(changefeedID model.ChangeFeedID, from model.CaptureID, to model.CaptureID, tableID model.TableID) {
+func (o *Owner) ManualSchedule(changefeedID model.ChangeFeedID, to model.CaptureID, tableID model.TableID) {
 	o.rebanlanceMu.Lock()
 	defer o.rebanlanceMu.Unlock()
-	o.manualScheduleCommand[changefeedID] = append(o.manualScheduleCommand[changefeedID], &model.MoveTable{
-		From:    from,
+	o.manualScheduleCommand[changefeedID] = append(o.manualScheduleCommand[changefeedID], &model.MoveTableJob{
 		To:      to,
 		TableID: tableID,
 	})
@@ -745,7 +750,8 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 							zap.Reflect("task status", status),
 						)
 					}
-					for tableID, startTs := range status.Tables {
+					for tableID, replicaInfo := range status.Tables {
+						startTs := replicaInfo.StartTs
 						if taskPosFound {
 							startTs = pos.CheckPointTs
 						}

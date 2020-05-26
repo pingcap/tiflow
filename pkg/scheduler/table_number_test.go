@@ -73,49 +73,15 @@ func (s *tableNumberSuite) TestCalRebalanceOperates(c *check.C) {
 		9:  model.WorkloadInfo{Workload: 1},
 		10: model.WorkloadInfo{Workload: 1}})
 	c.Assert(fmt.Sprintf("%.2f%%", scheduler.Skewness()*100), check.Equals, "56.57%")
-	skewness, deleteOperations, addOperations := scheduler.CalRebalanceOperates(0, 66)
-	resultSet := make(map[model.TableID]*struct {
-		from model.CaptureID
-		to   model.CaptureID
-	})
-	for captureID, ops := range deleteOperations {
-		for tableID, op := range ops {
-			r, exist := resultSet[tableID]
-			if !exist {
-				r = &struct {
-					from model.CaptureID
-					to   model.CaptureID
-				}{}
-				resultSet[tableID] = r
-			}
-			r.from = captureID
-			c.Assert(op.BoundaryTs, check.Equals, model.Ts(66))
-			c.Assert(op.Delete, check.IsTrue)
-			c.Assert(op.Done, check.IsFalse)
-		}
+	skewness, moveJobs := scheduler.CalRebalanceOperates(0)
+
+	for tableID, job := range moveJobs {
+		c.Assert(len(job.From), check.Greater, 0)
+		c.Assert(len(job.To), check.Greater, 0)
+		c.Assert(job.TableID, check.Equals, tableID)
+		c.Assert(job.From, check.Not(check.Equals), job.To)
+		c.Assert(job.Status, check.Equals, model.MoveTableStatusNone)
 	}
 
-	for captureID, ops := range addOperations {
-		for tableID, op := range ops {
-			r, exist := resultSet[tableID]
-			if !exist {
-				r = &struct {
-					from model.CaptureID
-					to   model.CaptureID
-				}{}
-				resultSet[tableID] = r
-			}
-			r.to = captureID
-			c.Assert(op.BoundaryTs, check.Equals, model.Ts(66))
-			c.Assert(op.Delete, check.IsFalse)
-			c.Assert(op.Done, check.IsFalse)
-		}
-	}
-
-	for _, r := range resultSet {
-		c.Assert(len(r.from), check.Greater, 0)
-		c.Assert(len(r.to), check.Greater, 0)
-		c.Assert(r.from, check.Not(check.Equals), r.to)
-	}
 	c.Assert(fmt.Sprintf("%.2f%%", skewness*100), check.Equals, "14.14%")
 }

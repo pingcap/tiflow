@@ -102,8 +102,8 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 	ctx := context.Background()
 	info := &model.TaskStatus{
-		Tables: map[model.TableID]model.Ts{
-			1: 100,
+		Tables: map[model.TableID]*model.TableReplicaInfo{
+			1: {StartTs: 100},
 		},
 	}
 
@@ -126,8 +126,8 @@ func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
 	ctx := context.Background()
 	info := &model.TaskStatus{
-		Tables: map[model.TableID]model.Ts{
-			1: 100,
+		Tables: map[model.TableID]*model.TableReplicaInfo{
+			1: {StartTs: 100},
 		},
 	}
 	feedID := "feedid"
