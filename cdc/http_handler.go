@@ -126,7 +126,7 @@ func (s *Server) handleRebanlanceTrigger(w http.ResponseWriter, req *http.Reques
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
 	if !util.IsValidUUIDv4(changefeedID) {
-		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %d", changefeedID))
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
 		return
 	}
 	s.owner.TriggerRebanlance(changefeedID)
@@ -150,12 +150,12 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
 	if !util.IsValidUUIDv4(changefeedID) {
-		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %d", changefeedID))
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
 		return
 	}
 	to := req.Form.Get(APIOpVarTargetCaptureID)
 	if !util.IsValidUUIDv4(to) {
-		writeError(w, http.StatusBadRequest, errors.Errorf("invalid target capture id: %d", to))
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid target capture id: %s", to))
 		return
 	}
 	tableIDStr := req.Form.Get(APIOpVarTableID)
