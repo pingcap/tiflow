@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -81,8 +81,8 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "txn_output_chan_size",
-			Help:      "txn output channel size for a table",
-		}, []string{"changefeed", "capture", "table"})
+			Help:      "size of row changed event output channel from table to processor",
+		}, []string{"changefeed", "capture"})
 	processorErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",

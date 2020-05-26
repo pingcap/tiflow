@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ type Config struct {
 
 	PDAddr string `toml:"pd" json:"pd"`
 
-	SourceDBCfg DBConfig `toml:"source-db" json:"source-db"`
+	SourceDBCfg []DBConfig `toml:"source-db" json:"source-db"`
 
 	TargetDBCfg DBConfig `toml:"target-db" json:"target-db"`
 

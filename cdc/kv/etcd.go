@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,13 +16,16 @@ package kv
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/cenkalti/backoff"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/retry"
+	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/cdc/model"
-	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 )
 
@@ -36,6 +39,9 @@ const (
 
 	// TaskKeyPrefix is the prefix of task keys
 	TaskKeyPrefix = EtcdKeyBase + "/task"
+
+	// TaskWorkloadKeyPrefix is the prefix of task workload keys
+	TaskWorkloadKeyPrefix = TaskKeyPrefix + "/workload"
 
 	// TaskStatusKeyPrefix is the prefix of task status keys
 	TaskStatusKeyPrefix = TaskKeyPrefix + "/status"
@@ -85,6 +91,11 @@ func GetEtcdKeyCaptureInfo(id string) string {
 // GetEtcdKeyTaskStatus returns the key for the task status
 func GetEtcdKeyTaskStatus(changeFeedID, captureID string) string {
 	return TaskStatusKeyPrefix + "/" + captureID + "/" + changeFeedID
+}
+
+// GetEtcdKeyTaskWorkload returns the key for the task workload
+func GetEtcdKeyTaskWorkload(changeFeedID, captureID string) string {
+	return TaskWorkloadKeyPrefix + "/" + captureID + "/" + changeFeedID
 }
 
 // GetEtcdKeyJob returns the key for a job status
@@ -330,6 +341,106 @@ func (c CDCEtcdClient) PutTaskStatus(
 	}
 
 	return nil
+}
+
+// GetTaskWorkload queries task workload from etcd, returns
+//  - model.TaskWorkload unmarshaled from the value
+//  - error if error happens
+func (c CDCEtcdClient) GetTaskWorkload(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+) (model.TaskWorkload, error) {
+	key := GetEtcdKeyTaskWorkload(changefeedID, captureID)
+	resp, err := c.Client.Get(ctx, key)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if resp.Count == 0 {
+		return make(model.TaskWorkload), nil
+	}
+	workload := make(model.TaskWorkload)
+	err = workload.Unmarshal(resp.Kvs[0].Value)
+	return workload, errors.Trace(err)
+}
+
+// PutTaskWorkload puts task workload into etcd.
+func (c CDCEtcdClient) PutTaskWorkload(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+	info *model.TaskWorkload,
+) error {
+	data, err := info.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	key := GetEtcdKeyTaskWorkload(changefeedID, captureID)
+
+	_, err = c.Client.Put(ctx, key, data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+// AtomicPutTaskStatus puts task status into etcd atomically.
+func (c CDCEtcdClient) AtomicPutTaskStatus(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+	update func(*model.TaskStatus) error,
+) (*model.TaskStatus, error) {
+	var status *model.TaskStatus
+	err := retry.Run(100*time.Millisecond, 3, func() error {
+		select {
+		case <-ctx.Done():
+			return backoff.Permanent(ctx.Err())
+		default:
+		}
+		var modRevision int64
+		var err error
+		modRevision, status, err = c.GetTaskStatus(ctx, changefeedID, captureID)
+		key := GetEtcdKeyTaskStatus(changefeedID, captureID)
+		var writeCmp clientv3.Cmp
+		switch errors.Cause(err) {
+		case model.ErrTaskStatusNotExists:
+			status = new(model.TaskStatus)
+			writeCmp = clientv3.Compare(clientv3.ModRevision(key), "=", 0)
+		case nil:
+			writeCmp = clientv3.Compare(clientv3.ModRevision(key), "=", modRevision)
+		default:
+			return errors.Trace(err)
+		}
+		err = update(status)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		value, err := status.Marshal()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		resp, err := c.Client.KV.Txn(ctx).If(writeCmp).Then(
+			clientv3.OpPut(key, value),
+		).Commit()
+
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if !resp.Succeeded {
+			log.Info("outdated table infos, ignore update taskStatus")
+			return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return status, nil
 }
 
 // GetTaskPosition queries task process from etcd, returns

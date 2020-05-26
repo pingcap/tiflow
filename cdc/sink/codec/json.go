@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package codec
 
 import (
@@ -5,9 +18,9 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
-	"log"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -122,6 +135,8 @@ func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow
 
 func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChangedEvent {
 	e := new(model.RowChangedEvent)
+	// TODO: we lost the startTs from kafka message
+	// startTs-based txn filter is out of work
 	e.CommitTs = key.Ts
 	e.Table = &model.TableName{
 		Schema: key.Schema,
@@ -140,7 +155,7 @@ func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChang
 
 func ddlEventtoMqMessage(e *model.DDLEvent) (*mqMessageKey, *mqMessageDDL) {
 	key := &mqMessageKey{
-		Ts:     e.Ts,
+		Ts:     e.CommitTs,
 		Schema: e.Schema,
 		Table:  e.Table,
 		Type:   model.MqMessageTypeDDL,
@@ -154,7 +169,9 @@ func ddlEventtoMqMessage(e *model.DDLEvent) (*mqMessageKey, *mqMessageDDL) {
 
 func mqMessageToDDLEvent(key *mqMessageKey, value *mqMessageDDL) *model.DDLEvent {
 	e := new(model.DDLEvent)
-	e.Ts = key.Ts
+	// TODO: we lost the startTs from kafka message
+	// startTs-based txn filter is out of work
+	e.CommitTs = key.Ts
 	e.Table = key.Table
 	e.Schema = key.Schema
 	e.Type = value.Type

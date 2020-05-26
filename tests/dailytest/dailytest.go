@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,11 +18,6 @@ import (
 
 	"github.com/pingcap/log"
 )
-
-// RunMultiSource runs the test that need multi instance TiDB, one instance for one *sql.DB* in srcs
-func RunMultiSource(srcs []*sql.DB, targetDB *sql.DB, schema string) {
-	runDDLTest(srcs, targetDB, schema)
-}
 
 // Run runs the daily test
 func Run(sourceDB *sql.DB, targetDB *sql.DB, schema string, workerCount int, jobCount int, batch int) {

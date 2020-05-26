@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cmd
 
 import (
@@ -9,6 +22,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
@@ -22,10 +37,6 @@ import (
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
-
-func contextTimeout() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), defaultContextTimeoutDuration)
-}
 
 func getAllCaptures(ctx context.Context) ([]*capture, error) {
 	_, raw, err := cdcEtcdCli.GetCaptures(ctx)
@@ -108,7 +119,7 @@ func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) er
 	return nil
 }
 
-func verifyTables(ctx context.Context, cfg *filter.ReplicaConfig, startTs uint64) (ineligibleTables []entry.TableName, err error) {
+func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables []entry.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr)
 	if err != nil {
 		return nil, err
@@ -144,7 +155,7 @@ func verifyTables(ctx context.Context, cfg *filter.ReplicaConfig, startTs uint64
 }
 
 func verifySink(
-	ctx context.Context, sinkURI string, cfg *filter.ReplicaConfig, opts map[string]string,
+	ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, opts map[string]string,
 ) error {
 	filter, err := filter.NewFilter(cfg)
 	if err != nil {

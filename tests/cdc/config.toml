@@ -6,7 +6,7 @@ worker-count = 10
 job-count = 1000
 batch = 10
 
-[source-db]
+[[source-db]]
 host = "127.0.0.1"
 user = "root"
 password = ""

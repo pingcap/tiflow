@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -625,7 +625,9 @@ MainLoop:
 				if err != nil {
 					// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
 					log.Warn("get grpc stream client failed",
-						zap.Uint64("regionID", sri.verID.GetID()), zap.Uint64("requestID", requestID), zap.Error(err))
+						zap.Uint64("regionID", sri.verID.GetID()),
+						zap.Uint64("requestID", requestID),
+						zap.String("error", err.Error()))
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 					s.client.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
 					// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
@@ -1134,6 +1136,14 @@ func (s *eventFeedSession) singleEventFeed(
 							CRTs:    entry.CommitTs,
 						},
 					}
+
+					if entry.CommitTs <= lastResolvedTs && atomic.LoadUint32(&initialized) == 1 {
+						log.Fatal("The CommitTs must be greater than the resolvedTs",
+							zap.String("Event Type", "COMMITTED"),
+							zap.Uint64("CommitTs", entry.CommitTs),
+							zap.Uint64("resolvedTs", lastResolvedTs),
+							zap.Uint64("regionID", regionID))
+					}
 					select {
 					case s.eventCh <- revent:
 						metricSendEventCommittedCounter.Inc()
@@ -1145,6 +1155,13 @@ func (s *eventFeedSession) singleEventFeed(
 					matcher.putPrewriteRow(entry)
 				case cdcpb.Event_COMMIT:
 					metricPullEventCommitCounter.Inc()
+					if entry.CommitTs <= lastResolvedTs {
+						log.Fatal("The CommitTs must be greater than the resolvedTs",
+							zap.String("Event Type", "COMMIT"),
+							zap.Uint64("CommitTs", entry.CommitTs),
+							zap.Uint64("resolvedTs", lastResolvedTs),
+							zap.Uint64("regionID", regionID))
+					}
 					// emit a value
 					value, ok := matcher.matchRow(entry)
 					if !ok {

@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -14,6 +27,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/Shopify/sarama"
 	"github.com/google/uuid"
@@ -265,7 +280,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		}
 	}
 	ctx = util.PutTimezoneInCtx(ctx, tz)
-	filter, err := cdcfilter.NewFilter(&cdcfilter.ReplicaConfig{})
+	filter, err := cdcfilter.NewFilter(config.GetDefaultReplicaConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -277,7 +292,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.NewSink(ctx, downstreamURIStr, filter, &cdcfilter.ReplicaConfig{}, nil, errCh)
+		s, err := sink.NewSink(ctx, downstreamURIStr, filter, config.GetDefaultReplicaConfig(), nil, errCh)
 		if err != nil {
 			cancel()
 			return nil, errors.Trace(err)
@@ -287,7 +302,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			resolvedTs uint64
 		}{Sink: s}
 	}
-	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, &cdcfilter.ReplicaConfig{}, nil, errCh)
+	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, config.GetDefaultReplicaConfig(), nil, errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
@@ -390,16 +405,16 @@ ClaimMessages:
 func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
-	if ddl.Ts <= c.maxDDLReceivedTs {
+	if ddl.CommitTs <= c.maxDDLReceivedTs {
 		return
 	}
 	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-	if ddl.Ts <= globalResolvedTs {
-		log.Error("unexpected ddl job", zap.Uint64("ddlts", ddl.Ts), zap.Uint64("globalResolvedTs", globalResolvedTs))
+	if ddl.CommitTs <= globalResolvedTs {
+		log.Error("unexpected ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
 		return
 	}
 	c.ddlList = append(c.ddlList, ddl)
-	c.maxDDLReceivedTs = ddl.Ts
+	c.maxDDLReceivedTs = ddl.CommitTs
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
@@ -462,13 +477,13 @@ func (c *Consumer) Run(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		todoDDL := c.getFrontDDL()
-		if todoDDL != nil && globalResolvedTs >= todoDDL.Ts {
+		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
 			//flush DMLs
 			err := c.forEachSink(func(sink *struct {
 				sink.Sink
 				resolvedTs uint64
 			}) error {
-				return sink.FlushRowChangedEvents(ctx, todoDDL.Ts)
+				return sink.FlushRowChangedEvents(ctx, todoDDL.CommitTs)
 			})
 			if err != nil {
 				return errors.Trace(err)
@@ -483,8 +498,8 @@ func (c *Consumer) Run(ctx context.Context) error {
 			continue
 		}
 
-		if todoDDL != nil && todoDDL.Ts < globalResolvedTs {
-			globalResolvedTs = todoDDL.Ts
+		if todoDDL != nil && todoDDL.CommitTs < globalResolvedTs {
+			globalResolvedTs = todoDDL.CommitTs
 		}
 		if lastGlobalResolvedTs == globalResolvedTs {
 			continue

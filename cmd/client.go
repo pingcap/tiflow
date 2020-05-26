@@ -1,6 +1,20 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -51,7 +65,7 @@ var (
 	captureID    string
 	interval     uint
 
-	defaultContextTimeoutDuration = 30 * time.Second
+	defaultContext context.Context
 )
 
 // cf holds changefeed id, which is used for output only
@@ -98,7 +112,7 @@ func newCliCommand() *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
-				DialTimeout: defaultContextTimeoutDuration,
+				DialTimeout: 30 * time.Second,
 				DialOptions: []grpc.DialOption{
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
@@ -133,8 +147,7 @@ func newCliCommand() *cobra.Command {
 			if err != nil {
 				return errors.Annotate(err, "fail to open PD client")
 			}
-			ctx, cancel := contextTimeout()
-			defer cancel()
+			ctx := defaultContext
 			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr)
 			if err != nil {
 				return err

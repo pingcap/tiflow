@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package model
 
 import (
@@ -51,11 +64,12 @@ type Column struct {
 
 // DDLEvent represents a DDL event
 type DDLEvent struct {
-	Ts     uint64
-	Schema string
-	Table  string
-	Query  string
-	Type   model.ActionType
+	StartTs  uint64
+	CommitTs uint64
+	Schema   string
+	Table    string
+	Query    string
+	Type     model.ActionType
 }
 
 // FromJob fills the values of DDLEvent from DDL job
@@ -64,7 +78,8 @@ func (e *DDLEvent) FromJob(job *model.Job) {
 	if job.BinlogInfo.TableInfo != nil {
 		tableName = job.BinlogInfo.TableInfo.Name.O
 	}
-	e.Ts = job.BinlogInfo.FinishedTS
+	e.StartTs = job.StartTS
+	e.CommitTs = job.BinlogInfo.FinishedTS
 	e.Query = job.Query
 	e.Schema = job.SchemaName
 	e.Table = tableName

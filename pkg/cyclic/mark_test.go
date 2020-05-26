@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cyclic
 
 import (
@@ -11,6 +24,10 @@ import (
 type markSuit struct{}
 
 var _ = check.Suite(&markSuit{})
+
+func prettyPrint(v interface{}) string {
+	return spew.Sprintf("%v", v)
+}
 
 func TestCyclic(t *testing.T) { check.TestingT(t) }
 
@@ -167,8 +184,68 @@ func (s *markSuit) TestMapMarkRowsGroupReduceCyclicRowsGroup(c *check.C) {
 		},
 	}
 
-	prettyPrint := func(v interface{}) string {
-		return spew.Sprintf("%v", v)
+	for i, test := range tests {
+		output, markMap := MapMarkRowsGroup(test.input)
+		checkOutput := func(m1, m2 map[uint64]map[model.TableName][]*model.RowChangedEvent) {
+			c.Assert(len(m1), check.DeepEquals, len(m2),
+				check.Commentf("case %d %+v\n%+v\n%+v", i, test, m1, m2))
+			for k, v := range m1 {
+				c.Assert(v, check.DeepEquals, m2[k],
+					check.Commentf("case %d %+v\n%+v\n%+v", i, test, m1, m2))
+			}
+		}
+		checkOutput(output, test.output)
+
+		checkMarkmap := func(m1, m2 map[uint64]*model.RowChangedEvent) {
+			c.Assert(len(m1), check.DeepEquals, len(m2),
+				check.Commentf("case %d %+v\n%+v\n%+v", i, test, m1, m2))
+			for k, v := range m1 {
+				c.Assert(v, check.DeepEquals, m2[k],
+					check.Commentf("case %d %+v\n%+v\n%+v", i, test, m1, m2))
+			}
+		}
+		checkMarkmap(markMap, test.markMap)
+
+		checkReduce := func(m1, m2 map[model.TableName][][]*model.RowChangedEvent) {
+			c.Assert(len(m1), check.DeepEquals, len(m2),
+				check.Commentf("case %d %+v\n%s\n%s", i, test, prettyPrint(m1), prettyPrint(m2)))
+			for k, v := range m1 {
+				c.Assert(v, check.DeepEquals, m2[k],
+					check.Commentf("case %d %+v\n%s\n%s", i, test, prettyPrint(m1), prettyPrint(m2)))
+			}
+		}
+		reduced := ReduceCyclicRowsGroup(output, markMap, test.filterID)
+		checkReduce(reduced, test.reduced)
+	}
+}
+
+func (s *markSuit) TestCyclicEdgeCases(c *check.C) {
+	rID := CyclicReplicaIDCol
+	tests := []struct {
+		input    map[model.TableName][][]*model.RowChangedEvent
+		output   map[uint64]map[model.TableName][]*model.RowChangedEvent
+		markMap  map[uint64]*model.RowChangedEvent
+		reduced  map[model.TableName][][]*model.RowChangedEvent
+		filterID []uint64
+	}{
+		{
+			input: map[model.TableName][][]*model.RowChangedEvent{
+				{Table: "b2"}: {{{StartTs: 2}}},
+				{Schema: "tidb_cdc", Table: "1"}: {{
+					// Duplicate mark table changes.
+					{StartTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}},
+					{StartTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}},
+				}},
+			},
+			output: map[uint64]map[model.TableName][]*model.RowChangedEvent{
+				2: {{Table: "b2"}: {{StartTs: 2}}},
+			},
+			markMap: map[uint64]*model.RowChangedEvent{
+				2: {StartTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}},
+			},
+			reduced:  map[model.TableName][][]*model.RowChangedEvent{},
+			filterID: []uint64{10}, // 10 -> 2, filter start ts 2
+		},
 	}
 
 	for i, test := range tests {

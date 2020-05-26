@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -21,7 +34,6 @@ import (
 	"github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/tests/util"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
@@ -40,7 +52,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	sourceDB, err := util.CreateDB(cfg.SourceDBCfg)
+	sourceDB, err := util.CreateDB(cfg.SourceDBCfg[0])
 	if err != nil {
 		log.S().Fatal(err)
 	}
@@ -52,7 +64,9 @@ func main() {
 	if err := prepare(sourceDB); err != nil {
 		log.S().Fatal(err)
 	}
-	if err := addLock(cfg); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := addLock(ctx, cfg); err != nil {
 		log.S().Fatal(err)
 	}
 	time.Sleep(5 * time.Second)
@@ -88,12 +102,10 @@ func finishMark(sourceDB *sql.DB) error {
 	return nil
 }
 
-func addLock(cfg *util.Config) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func addLock(ctx context.Context, cfg *util.Config) error {
 	http.DefaultClient.Timeout = 10 * time.Second
 
-	tableID, err := getTableID(cfg.SourceDBCfg.Host, "test", "t1")
+	tableID, err := getTableID(cfg.SourceDBCfg[0].Host, "test", "t1")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -103,6 +115,7 @@ func addLock(cfg *util.Config) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	defer pdcli.Close()
 
 	driver := tikv.Driver{}
 	store, err := driver.Open(fmt.Sprintf("tikv://%s?disableGC=true", cfg.PDAddr))
@@ -117,7 +130,7 @@ func addLock(cfg *util.Config) error {
 		pdcli:     pdcli,
 		kv:        store.(tikv.Storage),
 	}
-	return errors.Trace(locker.generateLocks(ctx))
+	return errors.Trace(locker.generateLocks(ctx, 10*time.Second))
 }
 
 // getTableID of the table with specified table name.
@@ -159,7 +172,7 @@ type Locker struct {
 }
 
 // generateLocks sends Prewrite requests to TiKV to generate locks, without committing and rolling back.
-func (c *Locker) generateLocks(pctx context.Context) error {
+func (c *Locker) generateLocks(ctx context.Context, genDur time.Duration) error {
 	log.Info("genLock started")
 
 	const maxTxnSize = 1000
@@ -171,11 +184,11 @@ func (c *Locker) generateLocks(pctx context.Context) error {
 	scannedKeys := 0
 	var batch []int64
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Send lock for 10 seconds
+	timer := time.After(genDur)
 	for rowID := int64(0); ; rowID = (rowID + 1) % c.tableSize {
 		select {
-		case <-pctx.Done():
+		case <-timer:
 			log.Info("genLock done")
 			return nil
 		default:
@@ -210,7 +223,7 @@ func (c *Locker) lockKeys(ctx context.Context, rowIDs []int64) error {
 
 	keyPrefix := tablecodec.GenTableRecordPrefix(c.tableID)
 	for _, rowID := range rowIDs {
-		key := tablecodec.EncodeRecordKey(keyPrefix, kv.IntHandle(rowID))
+		key := tablecodec.EncodeRecordKey(keyPrefix, rowID)
 		keys = append(keys, key)
 	}
 

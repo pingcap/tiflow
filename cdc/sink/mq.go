@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package sink
 
 import (
@@ -7,6 +20,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -39,7 +54,7 @@ type mqSink struct {
 	statistics *Statistics
 }
 
-func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filter.Filter, config *filter.ReplicaConfig, opts map[string]string, errCh chan error) *mqSink {
+func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) *mqSink {
 	partitionNum := mqProducer.GetPartitionNum()
 	partitionInput := make([]chan struct {
 		row        *model.RowChangedEvent
@@ -80,7 +95,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
-		if k.filter.ShouldIgnoreDMLEvent(row.CommitTs, row.Table.Schema, row.Table.Table) {
+		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("ts", row.CommitTs))
 			continue
 		}
@@ -151,11 +166,12 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if k.filter.ShouldIgnoreDDLEvent(ddl.Ts, ddl.Schema, ddl.Table) {
+	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),
-			zap.Uint64("ts", ddl.Ts),
+			zap.Uint64("startTs", ddl.StartTs),
+			zap.Uint64("commitTs", ddl.CommitTs),
 		)
 		return nil
 	}
@@ -252,7 +268,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	}
 }
 
-func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *filter.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
 	config := mqProducer.DefaultKafkaConfig
 
 	scheme := strings.ToLower(sinkURI.Scheme)

@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/cenkalti/backoff"
 	dmysql "github.com/go-sql-driver/mysql"
@@ -70,7 +72,7 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	s.unresolvedRowsMu.Lock()
 	defer s.unresolvedRowsMu.Unlock()
 	for _, row := range rows {
-		if s.filter.ShouldIgnoreDMLEvent(row.CommitTs, row.Table.Schema, row.Table.Table) {
+		if s.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("ts", row.CommitTs))
 			continue
 		}
@@ -120,11 +122,12 @@ func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if s.filter.ShouldIgnoreDDLEvent(ddl.Ts, ddl.Schema, ddl.Table) {
+	if s.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),
-			zap.Uint64("ts", ddl.Ts),
+			zap.Uint64("startTs", ddl.StartTs),
+			zap.Uint64("commitTs", ddl.CommitTs),
 		)
 		return nil
 	}
@@ -348,7 +351,7 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 	}
 
 	if val, ok := opts[cyclic.OptCyclicConfig]; ok {
-		cfg := new(tifilter.ReplicationConfig)
+		cfg := new(config.CyclicConfig)
 		err := cfg.Unmarshal([]byte(val))
 		if err != nil {
 			return nil, errors.Trace(err)
