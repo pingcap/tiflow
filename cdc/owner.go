@@ -288,6 +288,7 @@ func (o *Owner) newChangeFeed(
 		etcdCli:            o.etcdClient,
 		filter:             filter,
 		sink:               sink,
+		moveTableJobs:      make(map[model.TableID]*model.MoveTableJob),
 		cyclicEnabled:      info.Config.Cyclic.IsEnabled(),
 		lastRebanlanceTime: time.Now(),
 	}
