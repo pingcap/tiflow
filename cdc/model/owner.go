@@ -81,6 +81,25 @@ func (tp *TaskPosition) String() string {
 	return data
 }
 
+// MoveTableStatus represents for the status of a MoveTableJob
+type MoveTableStatus int
+
+// All MoveTable status
+const (
+	MoveTableStatusNone MoveTableStatus = iota
+	MoveTableStatusDeleted
+	MoveTableStatusFinished
+)
+
+// MoveTableJob records a move operation of a table
+type MoveTableJob struct {
+	From             CaptureID
+	To               CaptureID
+	TableID          TableID
+	TableReplicaInfo *TableReplicaInfo
+	Status           MoveTableStatus
+}
+
 // TableOperation records the current information of a table migration
 type TableOperation struct {
 	Delete bool `json:"delete"`
@@ -123,13 +142,19 @@ func (w *TaskWorkload) Marshal() (string, error) {
 	return string(data), errors.Trace(err)
 }
 
+// TableReplicaInfo records the table replica info
+type TableReplicaInfo struct {
+	StartTs     Ts      `json:"start-ts"`
+	MarkTableID TableID `json:"mark-table-id"`
+}
+
 // TaskStatus records the task information of a capture
 type TaskStatus struct {
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
-	Tables       map[TableID]Ts              `json:"tables"`
-	Operation    map[TableID]*TableOperation `json:"operation"`
-	AdminJobType AdminJobType                `json:"admin-job-type"`
-	ModRevision  int64                       `json:"-"`
+	Tables       map[TableID]*TableReplicaInfo `json:"tables"`
+	Operation    map[TableID]*TableOperation   `json:"operation"`
+	AdminJobType AdminJobType                  `json:"admin-job-type"`
+	ModRevision  int64                         `json:"-"`
 }
 
 // String implements fmt.Stringer interface.
@@ -138,13 +163,43 @@ func (ts *TaskStatus) String() string {
 	return data
 }
 
-// RemoveTable remove the table in TableInfos.
-func (ts *TaskStatus) RemoveTable(id TableID) (Ts, bool) {
-	if startTs, exist := ts.Tables[id]; exist {
-		delete(ts.Tables, id)
-		return startTs, true
+// RemoveTable remove the table in TableInfos and add a remove table operation.
+func (ts *TaskStatus) RemoveTable(id TableID, boundaryTs Ts) (*TableReplicaInfo, bool) {
+	if ts.Tables == nil {
+		return nil, false
 	}
-	return 0, false
+	table, exist := ts.Tables[id]
+	if !exist {
+		return nil, false
+	}
+	delete(ts.Tables, id)
+	if ts.Operation == nil {
+		ts.Operation = make(map[TableID]*TableOperation)
+	}
+	ts.Operation[id] = &TableOperation{
+		Delete:     true,
+		BoundaryTs: boundaryTs,
+	}
+	return table, true
+}
+
+// AddTable add the table in TableInfos and add a add table operation.
+func (ts *TaskStatus) AddTable(id TableID, table *TableReplicaInfo, boundaryTs Ts) {
+	if ts.Tables == nil {
+		ts.Tables = make(map[TableID]*TableReplicaInfo)
+	}
+	_, exist := ts.Tables[id]
+	if exist {
+		return
+	}
+	ts.Tables[id] = table
+	if ts.Operation == nil {
+		ts.Operation = make(map[TableID]*TableOperation)
+	}
+	ts.Operation[id] = &TableOperation{
+		Delete:     false,
+		BoundaryTs: boundaryTs,
+	}
 }
 
 // SomeOperationsUnapplied returns true if there are some operations not applied
@@ -175,14 +230,14 @@ func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID, checkpoin
 	snap := &ProcInfoSnap{
 		CfID:      cfID,
 		CaptureID: captureID,
-		Tables:    make(map[TableID]Ts, len(ts.Tables)),
+		Tables:    make(map[TableID]*TableReplicaInfo, len(ts.Tables)),
 	}
-	for tableID, startTs := range ts.Tables {
+	for tableID, table := range ts.Tables {
 		ts := checkpointTs
-		if ts < startTs {
-			ts = startTs
+		if ts < table.StartTs {
+			ts = table.StartTs
 		}
-		snap.Tables[tableID] = ts
+		snap.Tables[tableID] = &TableReplicaInfo{StartTs: ts, MarkTableID: table.MarkTableID}
 	}
 	return snap
 }
@@ -202,9 +257,9 @@ func (ts *TaskStatus) Unmarshal(data []byte) error {
 // Clone returns a deep-clone of the struct
 func (ts *TaskStatus) Clone() *TaskStatus {
 	clone := *ts
-	tables := make(map[TableID]Ts, len(ts.Tables))
-	for tableID, startTs := range ts.Tables {
-		tables[tableID] = startTs
+	tables := make(map[TableID]*TableReplicaInfo, len(ts.Tables))
+	for tableID, table := range ts.Tables {
+		tables[tableID] = &(*table)
 	}
 	clone.Tables = tables
 	operation := make(map[TableID]*TableOperation, len(ts.Operation))
@@ -297,7 +352,7 @@ func (status *ChangeFeedStatus) Unmarshal(data []byte) error {
 
 // ProcInfoSnap holds most important replication information of a processor
 type ProcInfoSnap struct {
-	CfID      string         `json:"changefeed-id"`
-	CaptureID string         `json:"capture-id"`
-	Tables    map[TableID]Ts `json:"-"`
+	CfID      string                        `json:"changefeed-id"`
+	CaptureID string                        `json:"capture-id"`
+	Tables    map[TableID]*TableReplicaInfo `json:"-"`
 }

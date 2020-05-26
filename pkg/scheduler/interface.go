@@ -25,12 +25,9 @@ type Scheduler interface {
 	Skewness() float64
 	// CalRebalanceOperates calculates the rebalance operates
 	// returns  * the skewness after rebalance
-	//          * the delete operations need by rebalance
-	//          * the add operations need by rebalance
-	CalRebalanceOperates(targetSkewness float64, boundaryTs model.Ts) (
-		skewness float64,
-		deleteOperations map[model.CaptureID]map[model.TableID]*model.TableOperation,
-		addOperations map[model.CaptureID]map[model.TableID]*model.TableOperation)
+	//          * the move jobs need by rebalance
+	CalRebalanceOperates(targetSkewness float64) (
+		skewness float64, moveTableJobs map[model.TableID]*model.MoveTableJob)
 	// DistributeTables distributes the new tables to the captures
 	// returns the operations of the new tables
 	DistributeTables(tableIDs map[model.TableID]model.Ts) map[model.CaptureID]map[model.TableID]*model.TableOperation
