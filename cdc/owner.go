@@ -450,7 +450,8 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			// update ChangeFeedDetail to tell capture ChangeFeedDetail watcher to cleanup
 			cf, ok := o.changeFeeds[job.CfID]
 			if !ok {
-				return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
+				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
+				continue
 			}
 			cf.info.AdminJobType = model.AdminStop
 			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
@@ -475,10 +476,18 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			}
 		case model.AdminResume:
 			cfStatus, _, err := o.etcdClient.GetChangeFeedStatus(ctx, job.CfID)
+			if errors.Cause(err) != model.ErrChangeFeedNotExists {
+				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
+				continue
+			}
 			if err != nil {
 				return errors.Trace(err)
 			}
 			cfInfo, err := o.etcdClient.GetChangeFeedInfo(ctx, job.CfID)
+			if errors.Cause(err) != model.ErrChangeFeedNotExists {
+				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
+				continue
+			}
 			if err != nil {
 				return errors.Trace(err)
 			}
