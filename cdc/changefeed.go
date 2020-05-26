@@ -363,6 +363,7 @@ func (c *changeFeed) handleManualMoveTableJobs(ctx context.Context, captures map
 			continue
 		}
 		c.moveTableJobs[moveJob.TableID] = moveJob
+		log.Info("received the manual move table job", zap.Reflect("job", moveJob))
 	}
 	return nil
 }
@@ -440,26 +441,32 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 			status, exist := cloneStatus(job.From)
 			if !exist {
 				delete(c.moveTableJobs, tableID)
+				log.Warn("ignored the move job, the source capture is not found", zap.Reflect("job", job))
 				continue
 			}
 			replicaInfo, exist := status.RemoveTable(tableID, c.status.CheckpointTs)
 			if !exist {
 				delete(c.moveTableJobs, tableID)
+				log.Warn("ignored the move job, the table is not exist in the source capture", zap.Reflect("job", job))
 				continue
 			}
 			replicaInfo.StartTs = c.status.CheckpointTs
 			job.TableReplicaInfo = replicaInfo
 			job.Status = model.MoveTableStatusDeleted
+			log.Info("handle the move job, remove table from the source capture", zap.Reflect("job", job))
 		case model.MoveTableStatusDeleted:
 			// add table to target capture
 			status, exist := cloneStatus(job.To)
 			if !exist {
 				// the target capture is not exist, add table to orphanTables.
 				c.orphanTables[tableID] = job.TableReplicaInfo.StartTs
+				log.Warn("the target capture is not exist, sent the table to orphanTables", zap.Reflect("job", job))
+				continue
 			}
 			status.AddTable(tableID, job.TableReplicaInfo, job.TableReplicaInfo.StartTs)
 			job.Status = model.MoveTableStatusFinished
 			delete(c.moveTableJobs, tableID)
+			log.Info("handle the move job, add table to the target capture", zap.Reflect("job", job))
 		}
 	}
 	err := c.updateTaskStatus(ctx, newTaskStatus)
