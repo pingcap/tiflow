@@ -15,12 +15,12 @@ package config
 
 import (
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
 // FilterConfig represents filter config for a changefeed
 type FilterConfig struct {
-	*filter.Rules
+	//filter-tables = ['*.*', '!mysql.*', '!*.secrets_*']
+	Rules            []string           `toml:"rules" json:"rules"`
 	IgnoreTxnStartTs []uint64           `toml:"ignore-txn-start-ts" json:"ignore-txn-start-ts"`
 	DDLWhitelist     []model.ActionType `toml:"ddl-white-list" json:"ddl-white-list"`
 }

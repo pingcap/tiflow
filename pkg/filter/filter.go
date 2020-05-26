@@ -18,7 +18,7 @@ import (
 
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 )
 
 // OptCyclicConfig is the key that adds to changefeed options
@@ -27,19 +27,22 @@ const OptCyclicConfig string = "_cyclic_relax_sql_mode"
 
 // Filter is a event filter implementation
 type Filter struct {
-	filter           *filter.Filter
+	filter           filter.Filter
 	ignoreTxnStartTs []uint64
 	ddlWhitelist     []model.ActionType
 }
 
 // NewFilter creates a filter
 func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
-	filter, err := filter.New(cfg.CaseSensitive, cfg.Filter.Rules)
+	f, err := filter.Parse(cfg.Filter.Rules)
 	if err != nil {
 		return nil, err
 	}
+	if !cfg.CaseSensitive {
+		f = filter.CaseInsensitive(f)
+	}
 	return &Filter{
-		filter:           filter,
+		filter:           f,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
 		ddlWhitelist:     cfg.Filter.DDLWhitelist,
 	}, nil
@@ -61,9 +64,7 @@ func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 	if IsSysSchema(db) {
 		return true
 	}
-	// TODO: Change filter to support simple check directly
-	left := f.filter.ApplyOn([]*filter.Table{{Schema: db, Name: tbl}})
-	return len(left) == 0
+	return !f.filter.MatchTable(db, tbl)
 }
 
 // ShouldIgnoreDMLEvent removes DMLs that's not wanted by this change feed.
