@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/cyclic"
+
 	"github.com/pingcap/ticdc/pkg/scheduler"
 
 	"github.com/pingcap/errors"
@@ -183,9 +185,9 @@ func (o *Owner) newChangeFeed(
 		if pos, exist := taskPositions[captureID]; exist {
 			checkpointTs = pos.CheckPointTs
 		}
-		for tableID, startTs := range taskStatus.Tables {
-			if startTs > checkpointTs {
-				checkpointTs = startTs
+		for tableID, replicaInfo := range taskStatus.Tables {
+			if replicaInfo.StartTs > checkpointTs {
+				checkpointTs = replicaInfo.StartTs
 			}
 			existingTables[tableID] = checkpointTs
 		}
@@ -198,6 +200,10 @@ func (o *Owner) newChangeFeed(
 	orphanTables := make(map[model.TableID]model.Ts)
 	for tid, table := range schemaSnap.CloneTables() {
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
+			continue
+		}
+		if info.Config.Cyclic.IsEnabled() && cyclic.IsMarkTable(table.Schema, table.Table) {
+			// skip the mark table if cyclic is enabled
 			continue
 		}
 
@@ -718,7 +724,8 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 							zap.Reflect("task status", status),
 						)
 					}
-					for tableID, startTs := range status.Tables {
+					for tableID, replicaInfo := range status.Tables {
+						startTs := replicaInfo.StartTs
 						if taskPosFound {
 							startTs = pos.CheckPointTs
 						}
