@@ -1090,6 +1090,11 @@ func (s *eventFeedSession) singleEventFeed(
 			for _, entry := range x.Entries.GetEntries() {
 				switch entry.Type {
 				case cdcpb.Event_INITIALIZED:
+					if time.Since(startFeedTime) > 20*time.Second {
+						log.Warn("The time cost of initializing is too mush",
+							zap.Duration("timeCost", time.Since(startFeedTime)),
+							zap.Uint64("regionID", regionID))
+					}
 					metricPullEventInitializedCounter.Inc()
 					initialized = true
 					for _, cacheEntry := range matcher.cachedCommit {
