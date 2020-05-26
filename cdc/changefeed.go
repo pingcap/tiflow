@@ -354,6 +354,10 @@ func (c *changeFeed) handleManualMoveTableJobs(ctx context.Context, captures map
 			log.Warn("invalid manual move job, the table is not found", zap.Reflect("job", moveJob))
 			continue
 		}
+		if moveJob.To == moveJob.From {
+			log.Warn("invalid manual move job, the table is already exists in the target capture", zap.Reflect("job", moveJob))
+			continue
+		}
 		if _, exist := captures[moveJob.To]; !exist {
 			log.Warn("invalid manual move job, the target capture is not found", zap.Reflect("job", moveJob))
 			continue
