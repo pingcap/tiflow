@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -123,6 +125,10 @@ func (s *Server) handleRebanlanceTrigger(w http.ResponseWriter, req *http.Reques
 		return
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
+	if !util.IsValidUUIDv4(changefeedID) {
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %d", changefeedID))
+		return
+	}
 	s.owner.TriggerRebanlance(changefeedID)
 	handleOwnerResp(w, nil)
 }
@@ -143,7 +149,15 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
+	if !util.IsValidUUIDv4(changefeedID) {
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %d", changefeedID))
+		return
+	}
 	to := req.Form.Get(APIOpVarTargetCaptureID)
+	if !util.IsValidUUIDv4(to) {
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid target capture id: %d", to))
+		return
+	}
 	tableIDStr := req.Form.Get(APIOpVarTableID)
 	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
 	if err != nil {

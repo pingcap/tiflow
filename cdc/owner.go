@@ -339,6 +339,13 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 }
 
 func (o *Owner) balanceTables(ctx context.Context) error {
+	rebanlanceForAllChangefeed := false
+	o.rebanlanceMu.Lock()
+	if o.rebanlanceForAllChangefeed {
+		rebanlanceForAllChangefeed = true
+		o.rebanlanceForAllChangefeed = false
+	}
+	o.rebanlanceMu.Unlock()
 	for id, changefeed := range o.changeFeeds {
 		rebanlanceNow := false
 		var scheduleCommands []*model.MoveTableJob
@@ -347,7 +354,7 @@ func (o *Owner) balanceTables(ctx context.Context) error {
 			rebanlanceNow = r
 			delete(o.rebanlanceTigger, id)
 		}
-		if o.rebanlanceForAllChangefeed {
+		if rebanlanceForAllChangefeed {
 			rebanlanceNow = true
 		}
 		if c, exist := o.manualScheduleCommand[id]; exist {
@@ -360,9 +367,6 @@ func (o *Owner) balanceTables(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 	}
-	o.rebanlanceMu.Lock()
-	o.rebanlanceForAllChangefeed = false
-	o.rebanlanceMu.Unlock()
 	return nil
 }
 

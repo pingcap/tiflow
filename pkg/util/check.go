@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/coreos/go-semver/semver"
@@ -91,4 +92,9 @@ func CheckClusterVersion(ctx context.Context, client pd.Client, pdHTTP string) e
 			removeV(pdVer.Version), minPDVersion)
 	}
 	return nil
+}
+
+func IsValidUUIDv4(uuid string) bool {
+	match, _ := regexp.Match("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", []byte(uuid))
+	return match
 }
