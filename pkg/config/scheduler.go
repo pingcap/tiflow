@@ -15,6 +15,7 @@ package config
 
 // SchedulerConfig represents scheduler config for a changefeed
 type SchedulerConfig struct {
-	Tp          string `toml:"type" json:"type"`
-	PollingTime int    `toml:"polling-time" json:"polling-time"`
+	Tp string `toml:"type" json:"type"`
+	// PollingTime represents the polling cycle of checking the skewness of workload and try to do schedule if needed
+	PollingTime int `toml:"polling-time" json:"polling-time"`
 }
