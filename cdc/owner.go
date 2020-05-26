@@ -443,10 +443,9 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 		o.adminJobs = o.adminJobs[removeIdx:]
 		o.adminJobsLock.Unlock()
 	}()
-	deletedIdx := -1
 	for i, job := range o.adminJobs {
 		log.Info("handle admin job", zap.String("changefeed", job.CfID), zap.Stringer("type", job.Type))
-		deletedIdx = i
+		removeIdx = i + 1
 		switch job.Type {
 		case model.AdminStop:
 			// update ChangeFeedDetail to tell capture ChangeFeedDetail watcher to cleanup
@@ -509,7 +508,6 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			}
 		}
 	}
-	removeIdx = deletedIdx + 1
 	return nil
 }
 
