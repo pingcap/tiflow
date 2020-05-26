@@ -43,50 +43,38 @@ func (t *TableNumberScheduler) Skewness() float64 {
 }
 
 // CalRebalanceOperates implements the Scheduler interface
-func (t *TableNumberScheduler) CalRebalanceOperates(targetSkewness float64, boundaryTs model.Ts) (
-	skewness float64,
-	deleteOperations map[model.CaptureID]map[model.TableID]*model.TableOperation,
-	addOperations map[model.CaptureID]map[model.TableID]*model.TableOperation) {
+func (t *TableNumberScheduler) CalRebalanceOperates(targetSkewness float64) (
+	skewness float64, moveTableJobs map[model.TableID]*model.MoveTableJob) {
 	var totalTableNumber uint64
 	for _, captureWorkloads := range t.workloads {
 		totalTableNumber += uint64(len(captureWorkloads))
 	}
 	limitTableNumber := (totalTableNumber / uint64(len(t.workloads))) + 1
 	appendTables := make(map[model.TableID]model.Ts)
-	deleteOperations = make(map[model.CaptureID]map[model.TableID]*model.TableOperation, len(t.workloads))
+	moveTableJobs = make(map[model.TableID]*model.MoveTableJob)
 
 	for captureID, captureWorkloads := range t.workloads {
 		for uint64(len(captureWorkloads)) > limitTableNumber {
 			for tableID := range captureWorkloads {
 				// find a table in this capture
-				appendTables[tableID] = boundaryTs
-				operations := deleteOperations[captureID]
-				if operations == nil {
-					operations = make(map[model.TableID]*model.TableOperation)
-					deleteOperations[captureID] = operations
-				}
-				operations[tableID] = &model.TableOperation{
-					Delete:     true,
-					BoundaryTs: boundaryTs,
+				appendTables[tableID] = 0
+				moveTableJobs[tableID] = &model.MoveTableJob{
+					From:    captureID,
+					TableID: tableID,
 				}
 				t.workloads.RemoveTable(captureID, tableID)
 				break
 			}
 		}
 	}
-	addOperations = t.DistributeTables(appendTables)
-	for captureID, deleteOps := range deleteOperations {
-		for tableID := range deleteOps {
-			addOps := addOperations[captureID]
-			if addOps == nil {
-				continue
+	addOperations := t.DistributeTables(appendTables)
+	for captureID, tableOperations := range addOperations {
+		for tableID := range tableOperations {
+			job := moveTableJobs[tableID]
+			job.To = captureID
+			if job.From == job.To {
+				delete(moveTableJobs, tableID)
 			}
-			addOp := addOps[tableID]
-			if addOp == nil {
-				continue
-			}
-			delete(deleteOps, tableID)
-			delete(addOps, tableID)
 		}
 	}
 	skewness = t.Skewness()
