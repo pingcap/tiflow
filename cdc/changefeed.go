@@ -362,6 +362,9 @@ func (c *changeFeed) handleManualMoveTableJobs(ctx context.Context, captures map
 			log.Warn("invalid manual move job, the target capture is not found", zap.Reflect("job", moveJob))
 			continue
 		}
+		if c.moveTableJobs == nil {
+			c.moveTableJobs = make(map[model.TableID]*model.MoveTableJob)
+		}
 		c.moveTableJobs[moveJob.TableID] = moveJob
 		log.Info("received the manual move table job", zap.Reflect("job", moveJob))
 	}
