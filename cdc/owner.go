@@ -477,7 +477,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			}
 		case model.AdminResume:
 			cfStatus, _, err := o.etcdClient.GetChangeFeedStatus(ctx, job.CfID)
-			if errors.Cause(err) != model.ErrChangeFeedNotExists {
+			if errors.Cause(err) == model.ErrChangeFeedNotExists {
 				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
 				continue
 			}
