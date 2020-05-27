@@ -22,8 +22,8 @@ func (s SwitcherSuite) TestSwitcher(c *check.C) {
 	d, err = NewDispatcher(&config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
-				{Matcher: []string{"test.*"}, Rules: "rowid"},
-				{Matcher: []string{"*.*", "!*.test"}, Rules: "ts"},
+				{Matcher: []string{"test.*"}, Dispatcher: "rowid"},
+				{Matcher: []string{"*.*", "!*.test"}, Dispatcher: "ts"},
 			},
 		},
 	}, 4)

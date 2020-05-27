@@ -45,9 +45,9 @@ rules = ['*.*', '!test.*']
 worker-num = 64
 
 [sink]
-dispatch-rules = [
-	{matcher = ['test1.*', 'test2.*'], rules = "ts"},
-	{matcher = ['test3.*', 'test4.*'], rules = "rowid"},
+dispatchers = [
+	{matcher = ['test1.*', 'test2.*'], dispatcher = "ts"},
+	{matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
 ]
 
 [cyclic-replication]
@@ -75,8 +75,8 @@ sync-ddl = true
 	})
 	c.Assert(cfg.Sink, check.DeepEquals, &config.SinkConfig{
 		DispatchRules: []*config.DispatchRule{
-			{Rules: "ts", Matcher: []string{"test1.*", "test2.*"}},
-			{Rules: "rowid", Matcher: []string{"test3.*", "test4.*"}},
+			{Dispatcher: "ts", Matcher: []string{"test1.*", "test2.*"}},
+			{Dispatcher: "rowid", Matcher: []string{"test3.*", "test4.*"}},
 		},
 	})
 	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
@@ -112,13 +112,13 @@ rules = ['*.*', '!test.*']
 worker-num = 16
 
 [sink]
-# 对于 MQ 类的 Sink，可以通过 dispatch-rules 配置 event 分发规则
-# 分发规则支持 default, ts, rowid, table
-# For MQ Sinks, you can configure event distribution rules through dispatch-rules
-# Distribution rules support default, ts, rowid and table
-dispatch-rules = [
-	{matcher = ['test1.*', 'test2.*'], rules = "ts"},
-	{matcher = ['test3.*', 'test4.*'], rules = "rowid"},
+# 对于 MQ 类的 Sink，可以通过 dispatchers 配置 event 分发器
+# 分发器支持 default, ts, rowid, table 四种
+# For MQ Sinks, you can configure event distribution rules through dispatchers
+# Dispatchers support default, ts, rowid and table
+dispatchers = [
+	{matcher = ['test1.*', 'test2.*'], dispatcher = "ts"},
+	{matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
 ]
 
 [cyclic-replication]
@@ -152,8 +152,8 @@ sync-ddl = true
 	})
 	c.Assert(cfg.Sink, check.DeepEquals, &config.SinkConfig{
 		DispatchRules: []*config.DispatchRule{
-			{Rules: "ts", Matcher: []string{"test1.*", "test2.*"}},
-			{Rules: "rowid", Matcher: []string{"test3.*", "test4.*"}},
+			{Dispatcher: "ts", Matcher: []string{"test1.*", "test2.*"}},
+			{Dispatcher: "rowid", Matcher: []string{"test3.*", "test4.*"}},
 		},
 	})
 	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
