@@ -1029,7 +1029,7 @@ func (s *eventFeedSession) singleEventFeed(
 	metricSendEventCommitCounter := sendEventCounter.WithLabelValues("commit", captureID, changefeedID)
 	metricSendEventCommittedCounter := sendEventCounter.WithLabelValues("committed", captureID, changefeedID)
 
-	var initialized uint32
+	initialized := false
 
 	matcher := newMatcher()
 	advanceCheckTicker := time.NewTicker(time.Second * 5)
@@ -1043,7 +1043,7 @@ func (s *eventFeedSession) singleEventFeed(
 		var ok bool
 		select {
 		case <-ctx.Done():
-			return atomic.LoadUint64(&checkpointTs), ctx.Err()
+			return checkpointTs, ctx.Err()
 		case <-advanceCheckTicker.C:
 			if time.Since(startFeedTime) < 20*time.Second {
 				continue
@@ -1075,12 +1075,12 @@ func (s *eventFeedSession) singleEventFeed(
 		}
 		if !ok {
 			log.Debug("singleEventFeed receiver closed")
-			return atomic.LoadUint64(&checkpointTs), nil
+			return checkpointTs, nil
 		}
 
 		if event == nil {
 			log.Debug("singleEventFeed closed by error")
-			return atomic.LoadUint64(&checkpointTs), errors.New("single event feed aborted")
+			return checkpointTs, errors.New("single event feed aborted")
 		}
 		lastReceivedEventTime = time.Now()
 
@@ -1090,8 +1090,13 @@ func (s *eventFeedSession) singleEventFeed(
 			for _, entry := range x.Entries.GetEntries() {
 				switch entry.Type {
 				case cdcpb.Event_INITIALIZED:
+					if time.Since(startFeedTime) > 20*time.Second {
+						log.Warn("The time cost of initializing is too mush",
+							zap.Duration("timeCost", time.Since(startFeedTime)),
+							zap.Uint64("regionID", regionID))
+					}
 					metricPullEventInitializedCounter.Inc()
-					atomic.StoreUint32(&initialized, 1)
+					initialized = true
 					for _, cacheEntry := range matcher.cachedCommit {
 						value, ok := matcher.matchRow(cacheEntry)
 						if !ok {
@@ -1105,13 +1110,13 @@ func (s *eventFeedSession) singleEventFeed(
 						}
 						revent, err := assembleCommitEvent(cacheEntry, value)
 						if err != nil {
-							return atomic.LoadUint64(&checkpointTs), errors.Trace(err)
+							return checkpointTs, errors.Trace(err)
 						}
 						select {
 						case s.eventCh <- revent:
 							metricSendEventCommitCounter.Inc()
 						case <-ctx.Done():
-							return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
+							return checkpointTs, errors.Trace(ctx.Err())
 						}
 					}
 					matcher.clearCacheCommit()
@@ -1124,7 +1129,7 @@ func (s *eventFeedSession) singleEventFeed(
 					case cdcpb.Event_Row_PUT:
 						opType = model.OpTypePut
 					default:
-						return atomic.LoadUint64(&checkpointTs), errors.Errorf("unknown tp: %v", entry.GetOpType())
+						return checkpointTs, errors.Errorf("unknown tp: %v", entry.GetOpType())
 					}
 
 					revent := &model.RegionFeedEvent{
@@ -1137,7 +1142,7 @@ func (s *eventFeedSession) singleEventFeed(
 						},
 					}
 
-					if entry.CommitTs <= lastResolvedTs && atomic.LoadUint32(&initialized) == 1 {
+					if entry.CommitTs <= lastResolvedTs && initialized {
 						log.Fatal("The CommitTs must be greater than the resolvedTs",
 							zap.String("Event Type", "COMMITTED"),
 							zap.Uint64("CommitTs", entry.CommitTs),
@@ -1148,7 +1153,7 @@ func (s *eventFeedSession) singleEventFeed(
 					case s.eventCh <- revent:
 						metricSendEventCommittedCounter.Inc()
 					case <-ctx.Done():
-						return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
+						return checkpointTs, errors.Trace(ctx.Err())
 					}
 				case cdcpb.Event_PREWRITE:
 					metricPullEventPrewriteCounter.Inc()
@@ -1165,25 +1170,25 @@ func (s *eventFeedSession) singleEventFeed(
 					// emit a value
 					value, ok := matcher.matchRow(entry)
 					if !ok {
-						if atomic.LoadUint32(&initialized) == 0 {
+						if !initialized {
 							matcher.cacheCommitRow(entry)
 							continue
 						}
-						return atomic.LoadUint64(&checkpointTs),
+						return checkpointTs,
 							errors.Errorf("prewrite not match, key: %b, start-ts: %d",
 								entry.GetKey(), entry.GetStartTs())
 					}
 
 					revent, err := assembleCommitEvent(entry, value)
 					if err != nil {
-						return atomic.LoadUint64(&checkpointTs), errors.Trace(err)
+						return checkpointTs, errors.Trace(err)
 					}
 
 					select {
 					case s.eventCh <- revent:
 						metricSendEventCommitCounter.Inc()
 					case <-ctx.Done():
-						return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
+						return checkpointTs, errors.Trace(ctx.Err())
 					}
 				case cdcpb.Event_ROLLBACK:
 					metricPullEventRollbackCounter.Inc()
@@ -1193,10 +1198,10 @@ func (s *eventFeedSession) singleEventFeed(
 		case *cdcpb.Event_Admin_:
 			log.Info("receive admin event", zap.Stringer("event", event))
 		case *cdcpb.Event_Error:
-			return atomic.LoadUint64(&checkpointTs), errors.Trace(&eventError{err: x.Error})
+			return checkpointTs, errors.Trace(&eventError{err: x.Error})
 		case *cdcpb.Event_ResolvedTs:
 			lastResolvedTs = x.ResolvedTs
-			if atomic.LoadUint32(&initialized) == 0 {
+			if !initialized {
 				continue
 			}
 			// emit a checkpointTs
@@ -1213,7 +1218,7 @@ func (s *eventFeedSession) singleEventFeed(
 			case s.eventCh <- revent:
 				metricSendEventResolvedCounter.Inc()
 			case <-ctx.Done():
-				return atomic.LoadUint64(&checkpointTs), errors.Trace(ctx.Err())
+				return checkpointTs, errors.Trace(ctx.Err())
 			}
 		}
 
