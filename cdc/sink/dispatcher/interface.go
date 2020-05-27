@@ -76,7 +76,7 @@ func (s *dispatcherSwitcher) Dispatch(row *model.RowChangedEvent) int32 {
 func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, error) {
 	ruleConfigs := append(cfg.Sink.DispatchRules, &config.DispatchRule{
 		Matcher: []string{"*.*"},
-		Rule:    "default",
+		Rules:   "default",
 	})
 	rules := make([]struct {
 		Dispatcher
@@ -93,7 +93,7 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		}
 		var d Dispatcher
 		var rule dispatchRule
-		rule.fromString(ruleConfig.Rule)
+		rule.fromString(ruleConfig.Rules)
 		switch rule {
 		case dispatchRuleRowID:
 			d = &rowIDDispatcher{partitionNum: partitionNum}

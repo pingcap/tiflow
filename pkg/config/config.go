@@ -23,7 +23,9 @@ import (
 
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive: true,
-	Filter:        &FilterConfig{},
+	Filter: &FilterConfig{
+		Rules: []string{"*.*"},
+	},
 	Mounter: &MounterConfig{
 		WorkerNum: 16,
 	},

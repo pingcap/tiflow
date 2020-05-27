@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
-	"github.com/pingcap/tidb-tools/pkg/filter"
 )
 
 type filterSuite struct{}
@@ -42,13 +41,7 @@ func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
 func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 	filter, err := NewFilter(&config.ReplicaConfig{
 		Filter: &config.FilterConfig{
-			Rules: &filter.Rules{
-				DoDBs: []string{"sns", "ecom"},
-				IgnoreTables: []*filter.Table{
-					{Schema: "sns", Name: "log"},
-					{Schema: "ecom", Name: "test"},
-				},
-			},
+			Rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
 		},
 	})
 	c.Assert(err, check.IsNil)
@@ -69,13 +62,7 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 	filter, err := NewFilter(&config.ReplicaConfig{
 		Filter: &config.FilterConfig{
 			IgnoreTxnStartTs: []uint64{1, 3},
-			Rules: &filter.Rules{
-				DoDBs: []string{"sns", "ecom"},
-				IgnoreTables: []*filter.Table{
-					{Schema: "sns", Name: "log"},
-					{Schema: "ecom", Name: "test"},
-				},
-			},
+			Rules:            []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
 		},
 	})
 	c.Assert(err, check.IsNil)

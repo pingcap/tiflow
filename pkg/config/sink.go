@@ -21,5 +21,5 @@ type SinkConfig struct {
 // DispatchRule represents partition rule for a table
 type DispatchRule struct {
 	Matcher []string `toml:"matcher" json:"matcher"`
-	Rule    string   `toml:"rule" json:"rule"`
+	Rules   string   `toml:"rules" json:"rules"`
 }
