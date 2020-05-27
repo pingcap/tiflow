@@ -62,14 +62,18 @@ type dispatcherSwitcher struct {
 }
 
 func (s *dispatcherSwitcher) Dispatch(row *model.RowChangedEvent) int32 {
+	return s.matchDispatcher(row).Dispatch(row)
+}
+
+func (s *dispatcherSwitcher) matchDispatcher(row *model.RowChangedEvent) Dispatcher {
 	for _, rule := range s.rules {
 		if !rule.MatchTable(row.Table.Schema, row.Table.Table) {
 			continue
 		}
-		return rule.Dispatch(row)
+		return rule.Dispatcher
 	}
-	log.Fatal("")
-	panic("unreachable")
+	log.Fatal("the dispatch rule must cover all tables")
+	return nil
 }
 
 // NewDispatcher creates a new dispatcher
