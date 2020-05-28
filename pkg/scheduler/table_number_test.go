@@ -26,7 +26,7 @@ type tableNumberSuite struct{}
 var _ = check.Suite(&tableNumberSuite{})
 
 func (s *tableNumberSuite) TestDistributeTables(c *check.C) {
-	scheduler := NewTableNumberScheduler()
+	scheduler := newTableNumberScheduler(false)
 	scheduler.ResetWorkloads("capture1", model.TaskWorkload{
 		1: model.WorkloadInfo{Workload: 1},
 		2: model.WorkloadInfo{Workload: 1}})
@@ -58,7 +58,7 @@ func (s *tableNumberSuite) TestDistributeTables(c *check.C) {
 }
 
 func (s *tableNumberSuite) TestCalRebalanceOperates(c *check.C) {
-	scheduler := NewTableNumberScheduler()
+	scheduler := newTableNumberScheduler(false)
 	scheduler.ResetWorkloads("capture1", model.TaskWorkload{
 		1: model.WorkloadInfo{Workload: 1},
 		2: model.WorkloadInfo{Workload: 1}})
