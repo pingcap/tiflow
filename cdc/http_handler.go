@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -28,6 +30,10 @@ const (
 	APIOpVarAdminJob = "admin-job"
 	// APIOpVarChangefeedID is the key of changefeed ID in HTTP API
 	APIOpVarChangefeedID = "cf-id"
+	// APIOpVarTargetCaptureID is the key of to-capture ID in HTTP API
+	APIOpVarTargetCaptureID = "target-cp-id"
+	// APIOpVarTableID is the key of table ID in HTTP API
+	APIOpVarTableID = "table-id"
 )
 
 type commonResp struct {
@@ -119,6 +125,45 @@ func (s *Server) handleRebanlanceTrigger(w http.ResponseWriter, req *http.Reques
 		return
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
-	err = s.owner.TriggerRebanlance(changefeedID)
-	handleOwnerResp(w, err)
+	if !util.IsValidUUIDv4(changefeedID) {
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
+		return
+	}
+	s.owner.TriggerRebanlance(changefeedID)
+	handleOwnerResp(w, nil)
+}
+
+func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
+		return
+	}
+
+	if s.owner == nil {
+		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+	}
+
+	err := req.ParseForm()
+	if err != nil {
+		writeInternalServerError(w, err)
+		return
+	}
+	changefeedID := req.Form.Get(APIOpVarChangefeedID)
+	if !util.IsValidUUIDv4(changefeedID) {
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
+		return
+	}
+	to := req.Form.Get(APIOpVarTargetCaptureID)
+	if !util.IsValidUUIDv4(to) {
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid target capture id: %s", to))
+		return
+	}
+	tableIDStr := req.Form.Get(APIOpVarTableID)
+	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid tableID: %s", tableIDStr))
+		return
+	}
+	s.owner.ManualSchedule(changefeedID, to, tableID)
+	handleOwnerResp(w, nil)
 }
