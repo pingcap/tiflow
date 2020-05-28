@@ -211,6 +211,7 @@ func (c *changeFeed) updatePartition(tblInfo *timodel.TableInfo, startTs uint64)
 		if !ok {
 			// new partition.
 			c.orphanTables[pid] = startTs
+			log.Info("add partition to orphan", zap.Int64("pid", pid))
 		}
 		delete(oldIDs, partition.ID)
 		newPartitionIDs = append(newPartitionIDs, partition.ID)
@@ -289,6 +290,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 	}
 
 	operations := c.scheduler.DistributeTables(c.orphanTables)
+	log.Info("dispatch orphanTables", zap.Reflect("orphanTables", c.orphanTables), zap.Reflect("operations", operations))
 	for captureID, operation := range operations {
 		status, exist := newTaskStatus[captureID]
 		if !exist {
