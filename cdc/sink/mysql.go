@@ -213,6 +213,7 @@ func splitRowsGroup(
 			minTs = resolvedRows[0].CommitTs
 		}
 	}
+
 	return
 }
 
