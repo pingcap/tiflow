@@ -114,3 +114,9 @@ func (s *checkSuite) TestCompareVersion(c *check.C) {
 	// BUG it should be "<" instead of ">".
 	// c.Assert(semver.New("4.0.0-rc-35-g31dae220").Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
 }
+
+func (s *checkSuite) TestIsValidUUIDv4(c *check.C) {
+	c.Assert(IsValidUUIDv4(""), check.IsFalse)
+	c.Assert(IsValidUUIDv4("697b2430-8c80-46ca-9b61-553f0173a214"), check.IsTrue)
+	c.Assert(IsValidUUIDv4("697b2430-8c80-46ca-9b61-553f011173a214"), check.IsFalse)
+}

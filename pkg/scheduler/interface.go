@@ -13,7 +13,10 @@
 
 package scheduler
 
-import "github.com/pingcap/ticdc/cdc/model"
+import (
+	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
+)
 
 // Scheduler is an abstraction for anything that provide the schedule table feature
 type Scheduler interface {
@@ -31,4 +34,17 @@ type Scheduler interface {
 	// DistributeTables distributes the new tables to the captures
 	// returns the operations of the new tables
 	DistributeTables(tableIDs map[model.TableID]model.Ts) map[model.CaptureID]map[model.TableID]*model.TableOperation
+}
+
+// NewScheduler creates a new Scheduler
+func NewScheduler(tp string) Scheduler {
+	switch tp {
+	case "table-number":
+		return newTableNumberScheduler(false)
+	case "manual":
+		return newTableNumberScheduler(true)
+	default:
+		log.Info("invalid scheduler type, using default scheduler")
+		return newTableNumberScheduler(true)
+	}
 }
