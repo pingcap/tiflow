@@ -89,10 +89,12 @@ type changeFeed struct {
 	schemas map[model.SchemaID]tableIDMap
 	tables  map[model.TableID]entry.TableName
 	// value of partitions is the slice of partitions ID.
-	partitions    map[model.TableID][]int64
-	orphanTables  map[model.TableID]model.Ts
-	toCleanTables map[model.TableID]model.Ts
-	moveTableJobs map[model.TableID]*model.MoveTableJob
+	partitions         map[model.TableID][]int64
+	orphanTables       map[model.TableID]model.Ts
+	toCleanTables      map[model.TableID]model.Ts
+	moveTableJobs      map[model.TableID]*model.MoveTableJob
+	manualMoveCommands []*model.MoveTableJob
+	rebanlanceNextTick bool
 
 	lastRebanlanceTime time.Time
 
@@ -189,12 +191,21 @@ func (c *changeFeed) removeTable(sid model.SchemaID, tid model.TableID, targetTs
 	}
 }
 
-func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, rebanlanceNow bool) error {
+func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, rebanlanceNow bool,
+	manualMoveCommands []*model.MoveTableJob) error {
 	err := c.balanceOrphanTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = c.rebanlanceTables(ctx, captures, rebanlanceNow)
+	c.manualMoveCommands = append(c.manualMoveCommands, manualMoveCommands...)
+	if rebanlanceNow {
+		c.rebanlanceNextTick = true
+	}
+	err = c.handleManualMoveTableJobs(ctx, captures)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = c.rebanlanceTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -319,7 +330,48 @@ func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.
 	return nil
 }
 
-func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo, rebanlanceNow bool) error {
+func (c *changeFeed) handleManualMoveTableJobs(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
+	if len(captures) == 0 {
+		return nil
+	}
+	if len(c.moveTableJobs) > 0 {
+		return nil
+	}
+	for len(c.manualMoveCommands) > 0 {
+		moveJob := c.manualMoveCommands[0]
+		if _, exist := c.moveTableJobs[moveJob.TableID]; exist {
+			break
+		}
+		c.manualMoveCommands = c.manualMoveCommands[1:]
+		moveJob.From = ""
+		for captureID, taskStatus := range c.taskStatus {
+			if _, exist := taskStatus.Tables[moveJob.TableID]; exist {
+				moveJob.From = captureID
+				break
+			}
+		}
+		if moveJob.From == "" {
+			log.Warn("invalid manual move job, the table is not found", zap.Reflect("job", moveJob))
+			continue
+		}
+		if moveJob.To == moveJob.From {
+			log.Warn("invalid manual move job, the table is already exists in the target capture", zap.Reflect("job", moveJob))
+			continue
+		}
+		if _, exist := captures[moveJob.To]; !exist {
+			log.Warn("invalid manual move job, the target capture is not found", zap.Reflect("job", moveJob))
+			continue
+		}
+		if c.moveTableJobs == nil {
+			c.moveTableJobs = make(map[model.TableID]*model.MoveTableJob)
+		}
+		c.moveTableJobs[moveJob.TableID] = moveJob
+		log.Info("received the manual move table job", zap.Reflect("job", moveJob))
+	}
+	return nil
+}
+
+func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	if len(captures) == 0 {
 		return nil
 	}
@@ -332,10 +384,12 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 		}
 	}
 
-	if !rebanlanceNow && time.Since(c.lastRebanlanceTime) < 10*time.Minute {
+	if !c.rebanlanceNextTick &&
+		time.Since(c.lastRebanlanceTime) < time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute {
 		return nil
 	}
 	c.lastRebanlanceTime = time.Now()
+	c.rebanlanceNextTick = false
 
 	captureIDs := make(map[model.CaptureID]struct{}, len(captures))
 	for cid := range captures {
@@ -367,38 +421,55 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 		}
 	}
 	newTaskStatus := make(map[model.CaptureID]*model.TaskStatus, len(captures))
-	cloneStatus := func(captureID model.CaptureID) *model.TaskStatus {
+	cloneStatus := func(captureID model.CaptureID) (*model.TaskStatus, bool) {
 		status, exist := newTaskStatus[captureID]
 		if !exist {
 			taskStatus := c.taskStatus[captureID]
 			if taskStatus == nil {
+				if _, exist := captures[captureID]; !exist {
+					return nil, false
+				}
 				status = new(model.TaskStatus)
 			} else {
 				status = taskStatus.Clone()
 			}
 			newTaskStatus[captureID] = status
 		}
-		return status
+		return status, true
 	}
 	for tableID, job := range c.moveTableJobs {
 		switch job.Status {
 		case model.MoveTableStatusNone:
 			// delete table from original capture
-			status := cloneStatus(job.From)
+			status, exist := cloneStatus(job.From)
+			if !exist {
+				delete(c.moveTableJobs, tableID)
+				log.Warn("ignored the move job, the source capture is not found", zap.Reflect("job", job))
+				continue
+			}
 			replicaInfo, exist := status.RemoveTable(tableID, c.status.CheckpointTs)
 			if !exist {
 				delete(c.moveTableJobs, tableID)
+				log.Warn("ignored the move job, the table is not exist in the source capture", zap.Reflect("job", job))
 				continue
 			}
 			replicaInfo.StartTs = c.status.CheckpointTs
 			job.TableReplicaInfo = replicaInfo
 			job.Status = model.MoveTableStatusDeleted
+			log.Info("handle the move job, remove table from the source capture", zap.Reflect("job", job))
 		case model.MoveTableStatusDeleted:
 			// add table to target capture
-			status := cloneStatus(job.To)
+			status, exist := cloneStatus(job.To)
+			if !exist {
+				// the target capture is not exist, add table to orphanTables.
+				c.orphanTables[tableID] = job.TableReplicaInfo.StartTs
+				log.Warn("the target capture is not exist, sent the table to orphanTables", zap.Reflect("job", job))
+				continue
+			}
 			status.AddTable(tableID, job.TableReplicaInfo, job.TableReplicaInfo.StartTs)
 			job.Status = model.MoveTableStatusFinished
 			delete(c.moveTableJobs, tableID)
+			log.Info("handle the move job, add table to the target capture", zap.Reflect("job", job))
 		}
 	}
 	err := c.updateTaskStatus(ctx, newTaskStatus)

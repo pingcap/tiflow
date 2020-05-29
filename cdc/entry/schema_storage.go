@@ -99,7 +99,7 @@ func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*schemaSnap
 			tableInfo := WrapTableInfo(dbinfo.ID, dbinfo.Name.O, tableInfo)
 			snap.tables[tableInfo.ID] = tableInfo
 			snap.tableNameToID[TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
-			if !tableInfo.ExistTableUniqueColumn() {
+			if !tableInfo.IsEligible() {
 				snap.ineligibleTableID[tableInfo.ID] = struct{}{}
 			}
 		}
@@ -346,6 +346,14 @@ func (ti *TableInfo) ExistTableUniqueColumn() bool {
 	return len(ti.uniqueColumns) != 0
 }
 
+// IsEligible returns whether the table is a eligible table
+func (ti *TableInfo) IsEligible() bool {
+	if ti.IsView() {
+		return true
+	}
+	return ti.ExistTableUniqueColumn()
+}
+
 // IsIndexUnique returns whether the index is unique
 func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 	if indexInfo.Primary {
@@ -547,14 +555,14 @@ func (s *schemaSnapshot) createTable(schemaID int64, tbl *timodel.TableInfo) err
 	schema.Tables = append(schema.Tables, table.TableInfo)
 
 	s.tables[table.ID] = table
-	if !table.ExistTableUniqueColumn() {
+	if !table.IsEligible() {
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
 		s.ineligibleTableID[table.ID] = struct{}{}
 	}
 	if pi := table.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
 			s.partitionTable[partition.ID] = table
-			if !table.ExistTableUniqueColumn() {
+			if !table.IsEligible() {
 				s.ineligibleTableID[partition.ID] = struct{}{}
 			}
 		}
@@ -573,14 +581,14 @@ func (s *schemaSnapshot) replaceTable(tbl *timodel.TableInfo) error {
 	}
 	table := WrapTableInfo(oldTable.SchemaID, oldTable.TableName.Schema, tbl.Clone())
 	s.tables[table.ID] = table
-	if !table.ExistTableUniqueColumn() {
+	if !table.IsEligible() {
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
 		s.ineligibleTableID[table.ID] = struct{}{}
 	}
 	if pi := table.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
 			s.partitionTable[partition.ID] = table
-			if !table.ExistTableUniqueColumn() {
+			if !table.IsEligible() {
 				s.ineligibleTableID[partition.ID] = struct{}{}
 			}
 		}

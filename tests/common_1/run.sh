@@ -20,7 +20,7 @@ function run() {
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-    TOPIC_NAME="ticdc-multi-data-type-test-$RANDOM"
+    TOPIC_NAME="ticdc-common-1-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
         mysql) ;&
@@ -30,9 +30,10 @@ function run() {
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
-    run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # sync_diff can't check non-exist table, so we check expected tables are created in downstream first
-    check_table_exists multi_data_type.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists common_1.v1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists common_1.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     cleanup_process $CDC_BINARY
