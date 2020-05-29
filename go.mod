@@ -42,3 +42,5 @@ require (
 	google.golang.org/genproto v0.0.0-20200113173426-e1de0a7b01eb // indirect
 	google.golang.org/grpc v1.26.0
 )
+
+replace github.com/pingcap/kvproto => github.com/MyonKeminta/kvproto v0.0.0-20200526074531-c6b1755e9382
