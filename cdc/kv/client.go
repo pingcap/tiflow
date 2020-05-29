@@ -53,6 +53,7 @@ const (
 	tikvRequestMaxBackoff     = 20000 // Maximum total sleep time(in ms)
 	grpcInitialWindowSize     = 1 << 30
 	grpcInitialConnWindowSize = 1 << 30
+	grpcInitialMaxRecvMsgSize = 1 << 30
 	grpcConnCount             = 10
 )
 
@@ -181,6 +182,7 @@ func (a *connArray) Init(ctx context.Context) error {
 			a.target,
 			grpc.WithInitialWindowSize(grpcInitialWindowSize),
 			grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcInitialMaxRecvMsgSize)),
 			grpc.WithInsecure(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: gbackoff.Config{
