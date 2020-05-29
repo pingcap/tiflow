@@ -33,8 +33,9 @@ const (
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema string `json:"shema"`
-	Table  string `json:"table"`
+	Schema    string `json:"schema"`
+	Table     string `json:"table"`
+	Partition int64  `json:"partition"`
 }
 
 // RowChangedEvent represents a row changed event
