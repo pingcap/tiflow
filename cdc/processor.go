@@ -615,6 +615,7 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			log.Info("update checkpoint in processor ", zap.Uint64("ts", minTs))
 			atomic.StoreUint64(&p.checkpointTs, minTs)
 		}
 	}
@@ -639,6 +640,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if ev.Row == nil {
 				continue
 			}
+			log.Info("emit row to sink", zap.Reflect("row", ev.Row))
 			rows = append(rows, ev.Row)
 		}
 		err := p.sink.EmitRowChangedEvents(ctx, rows...)
@@ -679,6 +681,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				resolvedTs = row.CRTs
 				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.CRTs)
 				p.sinkEmittedResolvedNotifier.Notify()
+				log.Info("update sink resolved", zap.Uint64("ts", row.CRTs))
 				continue
 			}
 			if row.CRTs <= resolvedTs {

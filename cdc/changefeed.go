@@ -211,7 +211,7 @@ func (c *changeFeed) updatePartition(tblInfo *timodel.TableInfo, startTs uint64)
 		if !ok {
 			// new partition.
 			c.orphanTables[pid] = startTs
-			log.Info("add partition to orphan", zap.Int64("pid", pid))
+			log.Info("add partition to orphan", zap.Int64("pid", pid), zap.String("table", tblInfo.Name.O))
 		}
 		delete(oldIDs, partition.ID)
 		newPartitionIDs = append(newPartitionIDs, partition.ID)
@@ -491,6 +491,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			addID := job.BinlogInfo.TableInfo.ID
 			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName, job.BinlogInfo.TableInfo)
 		case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
+			log.Info("updatePartition", zap.String("sql", job.Query))
 			c.updatePartition(job.BinlogInfo.TableInfo, job.BinlogInfo.FinishedTS)
 		}
 		return nil
