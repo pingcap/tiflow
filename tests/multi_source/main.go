@@ -96,6 +96,7 @@ func runDDLTest(srcs []*sql.DB) {
 		}()
 
 		wg.Wait()
+		time.Sleep(5 * time.Second)
 		cancel()
 	}
 }
