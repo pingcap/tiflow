@@ -18,9 +18,6 @@ import (
 
 	"github.com/pingcap/parser/mysql"
 
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/ticdc/cdc/model"
 
 	"github.com/pingcap/check"
@@ -51,6 +48,10 @@ var _ = check.Suite(&batchSuite{
 		CommitTs: 3,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+	}, {
+		CommitTs: 4,
+		Table:    &model.TableName{Schema: "a", Table: "c", Partition: 6},
+		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "cc"}},
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
 		CommitTs: 1,
@@ -88,7 +89,6 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
-		log.Info("a", zap.ByteStrings("a", [][]byte{key, value}))
 		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
 		decoder, err := newDecoder(key, value)
 		c.Assert(err, check.IsNil)
@@ -114,7 +114,6 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
-		log.Info("b", zap.ByteStrings("b", [][]byte{key, value}))
 		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
 		decoder, err := newDecoder(key, value)
 		c.Assert(err, check.IsNil)
@@ -140,7 +139,6 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
-		log.Info("c", zap.ByteStrings("c", [][]byte{key, value}))
 		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
 		decoder, err := newDecoder(key, value)
 		c.Assert(err, check.IsNil)

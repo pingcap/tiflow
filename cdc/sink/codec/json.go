@@ -58,10 +58,11 @@ func formatColumnVal(c *column) {
 
 type mqMessageKey struct {
 	// TODO: should we rename it to CRTs
-	Ts     uint64              `json:"ts"`
-	Schema string              `json:"scm,omitempty"`
-	Table  string              `json:"tbl,omitempty"`
-	Type   model.MqMessageType `json:"t"`
+	Ts        uint64              `json:"ts"`
+	Schema    string              `json:"scm,omitempty"`
+	Table     string              `json:"tbl,omitempty"`
+	Partition *int64              `json:"ptn,omitempty"`
+	Type      model.MqMessageType `json:"t"`
 }
 
 func (m *mqMessageKey) Encode() ([]byte, error) {
@@ -118,11 +119,16 @@ func newResolvedMessage(ts uint64) *mqMessageKey {
 }
 
 func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow) {
+	var partition *int64
+	if e.Table.Partition != 0 {
+		partition = &e.Table.Partition
+	}
 	key := &mqMessageKey{
-		Ts:     e.CommitTs,
-		Schema: e.Table.Schema,
-		Table:  e.Table.Table,
-		Type:   model.MqMessageTypeRow,
+		Ts:        e.CommitTs,
+		Schema:    e.Table.Schema,
+		Table:     e.Table.Table,
+		Partition: partition,
+		Type:      model.MqMessageTypeRow,
 	}
 	value := &mqMessageRow{}
 	if e.Delete {
@@ -141,6 +147,9 @@ func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChang
 	e.Table = &model.TableName{
 		Schema: key.Schema,
 		Table:  key.Table,
+	}
+	if key.Partition != nil {
+		e.Table.Partition = *key.Partition
 	}
 
 	if len(value.Delete) != 0 {
