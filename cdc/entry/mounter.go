@@ -179,6 +179,7 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		log.Info("show row change event", zap.Reflect("row", rowEvent))
 		pEvent.Row = rowEvent
 		pEvent.RawKV.Key = nil
 		pEvent.RawKV.Value = nil
