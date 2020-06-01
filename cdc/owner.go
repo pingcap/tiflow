@@ -449,6 +449,7 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// TODO Closing the resource should not be here
 	err = cf.ddlHandler.Close()
 	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
 	err = cf.sink.Close()
@@ -493,6 +494,11 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 
 			// remove changefeed info
 			err = o.etcdClient.DeleteChangeFeedInfo(ctx, job.CfID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			// set ttl to changefeed status
+			err = o.etcdClient.SetChangeFeedStatusTTL(ctx, job.CfID, 24*3600 /*24 hours*/)
 			if err != nil {
 				return errors.Trace(err)
 			}

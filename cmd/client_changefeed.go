@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/log"
+
 	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/google/uuid"
@@ -143,6 +145,9 @@ func newQueryChangefeedCommand() *cobra.Command {
 				taskStatus = append(taskStatus, captureTaskStatus{CaptureID: captureID, TaskStatus: status})
 			}
 			meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
+			if info == nil {
+				log.Warn("this changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.")
+			}
 			return jsonPrint(cmd, meta)
 		},
 	}
