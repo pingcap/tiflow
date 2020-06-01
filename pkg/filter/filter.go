@@ -48,7 +48,6 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 	}, nil
 }
 
-// ShouldIgnoreTxn returns true is the given txn should be ignored
 func (f *Filter) shouldIgnoreStartTs(ts uint64) bool {
 	for _, ignoreTs := range f.ignoreTxnStartTs {
 		if ignoreTs == ts {
