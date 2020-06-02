@@ -19,6 +19,9 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -261,14 +264,25 @@ func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
 	c.Assert(status, check.DeepEquals, &model.ChangeFeedStatus{
 		ResolvedTs: 1,
 	})
-	err = s.client.SetChangeFeedStatusTTL(ctx, "test1", 1 /* seconds */)
+	err = s.client.SetChangeFeedStatusTTL(ctx, "test1", 1 /* second */)
 	c.Assert(err, check.IsNil)
 	status, _, err = s.client.GetChangeFeedStatus(ctx, "test1")
 	c.Assert(err, check.IsNil)
 	c.Assert(status, check.DeepEquals, &model.ChangeFeedStatus{
 		ResolvedTs: 1,
 	})
-	time.Sleep(1.5 * time.Second)
-	_, _, err = s.client.GetChangeFeedStatus(ctx, "test1")
-	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
+	for i := 0; i < 50; i++ {
+		_, _, err = s.client.GetChangeFeedStatus(ctx, "test1")
+		log.Warn("nil", zap.Error(err))
+		switch errors.Cause(err) {
+		case model.ErrChangeFeedNotExists:
+			return
+		case nil:
+			time.Sleep(100 * time.Millisecond)
+			continue
+		default:
+			c.Fatal("got unexpected error", err)
+		}
+	}
+	c.Fatal("the change feed status is still exists after 5 seconds")
 }
