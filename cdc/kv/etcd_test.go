@@ -261,14 +261,14 @@ func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
 	c.Assert(status, check.DeepEquals, &model.ChangeFeedStatus{
 		ResolvedTs: 1,
 	})
-	err = s.client.SetChangeFeedStatusTTL(ctx, "test1", 2 /* seconds */)
+	err = s.client.SetChangeFeedStatusTTL(ctx, "test1", 1 /* seconds */)
 	c.Assert(err, check.IsNil)
 	status, _, err = s.client.GetChangeFeedStatus(ctx, "test1")
 	c.Assert(err, check.IsNil)
 	c.Assert(status, check.DeepEquals, &model.ChangeFeedStatus{
 		ResolvedTs: 1,
 	})
-	time.Sleep(3 * time.Second)
+	time.Sleep(1.5 * time.Second)
 	_, _, err = s.client.GetChangeFeedStatus(ctx, "test1")
 	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
 }
