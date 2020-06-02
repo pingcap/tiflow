@@ -50,10 +50,10 @@ import (
 const (
 	dialTimeout               = 10 * time.Second
 	maxRetry                  = 100
-	tikvRequestMaxBackoff     = 20000 // Maximum total sleep time(in ms)
-	grpcInitialWindowSize     = 1 << 30
-	grpcInitialConnWindowSize = 1 << 30
-	grpcInitialMaxRecvMsgSize = 1 << 30
+	tikvRequestMaxBackoff     = 20000   // Maximum total sleep time(in ms)
+	grpcInitialWindowSize     = 1 << 30 // The value for initial window size on a stream
+	grpcInitialConnWindowSize = 1 << 30 // The value for initial window size on a connection
+	grpcInitialMaxRecvMsgSize = 1 << 30 // The maximum message size the client can receive
 	grpcConnCount             = 10
 )
 
