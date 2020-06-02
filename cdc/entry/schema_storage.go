@@ -477,6 +477,11 @@ func (s *schemaSnapshot) dropSchema(id int64) error {
 			}
 		}
 		tableName := s.tables[table.ID].TableName
+		if pi := table.GetPartitionInfo(); pi != nil {
+			for _, partition := range pi.Definitions {
+				delete(s.partitionTable, partition.ID)
+			}
+		}
 		delete(s.tables, table.ID)
 		delete(s.tableNameToID, tableName)
 	}
@@ -538,6 +543,56 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 	delete(s.ineligibleTableID, id)
 
 	log.Debug("drop table success", zap.String("name", table.Name.O), zap.Int64("id", id))
+	return nil
+}
+
+func (s *schemaSnapshot) updatePartition(tbl *timodel.TableInfo) error {
+	id := tbl.ID
+	table, ok := s.tables[id]
+	if !ok {
+		return errors.NotFoundf("table %d", id)
+	}
+	schema, ok := s.SchemaByTableID(id)
+	if !ok {
+		return errors.NotFoundf("table(%d)'s schema", id)
+	}
+
+	oldPi := table.GetPartitionInfo()
+	if oldPi == nil {
+		return errors.NotFoundf("table %d is not a partition table, truncate partition failed", id)
+	}
+	oldIDs := make(map[int64]struct{}, len(oldPi.Definitions))
+	for _, p := range oldPi.Definitions {
+		oldIDs[p.ID] = struct{}{}
+	}
+
+	newPi := tbl.GetPartitionInfo()
+	if newPi == nil {
+		return errors.NotFoundf("table %d is not a partition table, truncate partition failed", id)
+	}
+
+	table = WrapTableInfo(schema.ID, schema.Name.O, tbl.Clone())
+	s.tables[id] = table
+	for _, partition := range newPi.Definitions {
+		// update table info.
+		if _, ok := s.partitionTable[partition.ID]; ok {
+			log.Debug("add table partition success", zap.String("name", table.Name.O), zap.Int64("tid", id), zap.Reflect("add partition id", partition.ID))
+		}
+		s.partitionTable[partition.ID] = table
+		if !table.ExistTableUniqueColumn() {
+			s.ineligibleTableID[partition.ID] = struct{}{}
+		}
+		delete(oldIDs, partition.ID)
+	}
+
+	// drop old partition.
+	for pid := range oldIDs {
+		s.truncateTableID[pid] = struct{}{}
+		delete(s.partitionTable, pid)
+		delete(s.ineligibleTableID, pid)
+		log.Debug("drop table partition success", zap.String("name", table.Name.O), zap.Int64("tid", id), zap.Reflect("truncated partition id", pid))
+	}
+
 	return nil
 }
 
@@ -651,6 +706,11 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 		}
 
 		s.truncateTableID[job.TableID] = struct{}{}
+	case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
+		err := s.updatePartition(job.BinlogInfo.TableInfo)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
