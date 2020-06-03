@@ -30,6 +30,7 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tidb/store/mockstore/cluster"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/util/testkit"
 	"go.uber.org/zap"
@@ -107,7 +108,7 @@ func (l *mvccListener) registerPostRollback(fn func(keys [][]byte, startTs uint6
 
 // MockPullerManager keeps track of transactions for mock pullers
 type MockPullerManager struct {
-	cluster   *mocktikv.Cluster
+	cluster   cluster.Cluster
 	mvccStore mocktikv.MVCCStore
 	store     tidbkv.Storage
 	domain    *domain.Domain
@@ -196,15 +197,16 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	log.SetLevel(zap.FatalLevel)
 	defer log.SetLevel(logLevel)
 
-	m.cluster = mocktikv.NewCluster()
-	mocktikv.BootstrapWithSingleStore(m.cluster)
-
-	mvccListener := newMVCCListener(mocktikv.MustNewMVCCStore())
-
-	m.mvccStore = mvccListener
-	store, err := mockstore.NewMockTikvStore(
-		mockstore.WithCluster(m.cluster),
-		mockstore.WithMVCCStore(m.mvccStore),
+	store, err := mockstore.NewMockStore(
+		mockstore.WithMVCCStoreHijacker(func(s mocktikv.MVCCStore) mocktikv.MVCCStore {
+			mvccListener := newMVCCListener(s)
+			m.mvccStore = mvccListener
+			return mvccListener
+		}),
+		mockstore.WithClusterInspector(func(c cluster.Cluster) {
+			mockstore.BootstrapWithSingleStore(c)
+			m.cluster = c
+		}),
 	)
 	if err != nil {
 		log.Fatal("create mock puller failed", zap.Error(err))
@@ -224,9 +226,9 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	m.MustExec("use test;")
 	m.tidbKit.Se.GetSessionVars().RowEncoder.Enable = newRowFormat
 
-	mvccListener.registerPostPrewrite(m.postPrewrite)
-	mvccListener.registerPostCommit(m.postCommit)
-	mvccListener.registerPostRollback(m.postRollback)
+	m.mvccStore.(*mvccListener).registerPostPrewrite(m.postPrewrite)
+	m.mvccStore.(*mvccListener).registerPostCommit(m.postCommit)
+	m.mvccStore.(*mvccListener).registerPostRollback(m.postRollback)
 }
 
 // CreatePuller returns a mock puller with the specified start ts and spans

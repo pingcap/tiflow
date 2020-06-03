@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/mockstore/mocktikv"
+	"github.com/pingcap/tidb/store/mockstore/cluster"
 	"github.com/pingcap/tidb/util/testkit"
 
 	. "github.com/pingcap/check"
@@ -643,12 +643,10 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 }
 
 func (t *schemaSuite) TestCreateSnapFromMeta(c *C) {
-	mockCluster := mocktikv.NewCluster()
-	mocktikv.BootstrapWithSingleStore(mockCluster)
-	mockMvccStore := mocktikv.MustNewMVCCStore()
-	store, err := mockstore.NewMockTikvStore(
-		mockstore.WithCluster(mockCluster),
-		mockstore.WithMVCCStore(mockMvccStore),
+	store, err := mockstore.NewMockStore(
+		mockstore.WithClusterInspector(func(c cluster.Cluster) {
+			mockstore.BootstrapWithSingleStore(c)
+		}),
 	)
 	c.Assert(err, IsNil)
 

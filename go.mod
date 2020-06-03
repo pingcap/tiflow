@@ -45,4 +45,4 @@ require (
 
 replace github.com/pingcap/kvproto => github.com/MyonKeminta/kvproto v0.0.0-20200526074531-c6b1755e9382
 
-replace github.com/pingcap/tidb => github.com/MyonKeminta/tidb v1.1.0-alpha.1.0.20200602074107-f88746a5875f
+replace github.com/pingcap/tidb => github.com/MyonKeminta/tidb v1.1.0-alpha.1.0.20200602122902-4d9571613547
