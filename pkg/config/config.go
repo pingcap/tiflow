@@ -15,6 +15,9 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
+
+	"github.com/pingcap/ticdc/pkg/config/outdated"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -55,7 +58,17 @@ func (c *ReplicaConfig) Marshal() (string, error) {
 
 // Unmarshal unmarshals into *ReplicationConfig from json marshal byte slice
 func (c *ReplicaConfig) Unmarshal(data []byte) error {
-	return json.Unmarshal(data, c)
+	err := json.Unmarshal(data, c)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	v1 := outdated.ReplicaConfigV1{}
+	err = v1.Unmarshal(data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.fillFromV1(&v1)
+	return nil
 }
 
 // Clone clones a replication
@@ -70,6 +83,18 @@ func (c *ReplicaConfig) Clone() *ReplicaConfig {
 		log.Fatal("failed to marshal replica config", zap.Error(err))
 	}
 	return clone
+}
+
+func (c *ReplicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
+	if v1 == nil || v1.Sink == nil {
+		return
+	}
+	for _, dispatch := range v1.Sink.DispatchRules {
+		c.Sink.DispatchRules = append(c.Sink.DispatchRules, &DispatchRule{
+			Matcher:    []string{fmt.Sprintf("%s.%s", dispatch.Schema, dispatch.Name)},
+			Dispatcher: dispatch.Rule,
+		})
+	}
 }
 
 // GetDefaultReplicaConfig returns the default replica config

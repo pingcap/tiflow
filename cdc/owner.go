@@ -293,6 +293,7 @@ func (o *Owner) checkAndCleanTasksInfo(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	cleaned := false
 	for changefeedID := range details {
 		_, err := o.cfRWriter.GetAllTaskStatus(ctx, changefeedID)
 		switch errors.Cause(err) {
@@ -301,6 +302,7 @@ func (o *Owner) checkAndCleanTasksInfo(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			cleaned = true
 		case nil:
 		default:
 			return errors.Trace(err)
@@ -315,10 +317,14 @@ func (o *Owner) checkAndCleanTasksInfo(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			cleaned = true
 		case nil:
 		default:
 			return errors.Trace(err)
 		}
+	}
+	if cleaned {
+		log.Warn("the task status or task positions is outdated, clean them")
 	}
 	return nil
 }
@@ -789,6 +795,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 	// When an owner just starts, changefeed information is not updated at once.
 	// Supposing a crased capture should be removed now, the owner will miss deleting
 	// task status and task position if changefeed information is not loaded.
+	// If the task positions and status decode failed, remove them.
 	if err := o.checkAndCleanTasksInfo(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -835,7 +842,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 				}
 				log.Debug("capture deleted",
 					zap.String("capture-id", c.ID),
-					zap.String("advertise-aadr", c.AdvertiseAddr))
+					zap.String("advertise-addr", c.AdvertiseAddr))
 				o.removeCapture(c)
 			case clientv3.EventTypePut:
 				if !ev.IsCreate() {
@@ -846,7 +853,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 				}
 				log.Debug("capture added",
 					zap.String("capture-id", c.ID),
-					zap.String("advertise-aadr", c.AdvertiseAddr))
+					zap.String("advertise-addr", c.AdvertiseAddr))
 				o.addCapture(c)
 			}
 		}
