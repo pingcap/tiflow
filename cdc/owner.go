@@ -449,6 +449,7 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// TODO Closing the resource should not be here
 	err = cf.ddlHandler.Close()
 	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
 	err = cf.sink.Close()
@@ -466,12 +467,14 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 	}()
 	for i, job := range o.adminJobs {
 		log.Info("handle admin job", zap.String("changefeed", job.CfID), zap.Stringer("type", job.Type))
+		removeIdx = i + 1
 		switch job.Type {
 		case model.AdminStop:
 			// update ChangeFeedDetail to tell capture ChangeFeedDetail watcher to cleanup
 			cf, ok := o.changeFeeds[job.CfID]
 			if !ok {
-				return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
+				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
+				continue
 			}
 			cf.info.AdminJobType = model.AdminStop
 			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
@@ -494,12 +497,25 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			// set ttl to changefeed status
+			err = o.etcdClient.SetChangeFeedStatusTTL(ctx, job.CfID, 24*3600 /*24 hours*/)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		case model.AdminResume:
 			cfStatus, _, err := o.etcdClient.GetChangeFeedStatus(ctx, job.CfID)
+			if errors.Cause(err) == model.ErrChangeFeedNotExists {
+				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
+				continue
+			}
 			if err != nil {
 				return errors.Trace(err)
 			}
 			cfInfo, err := o.etcdClient.GetChangeFeedInfo(ctx, job.CfID)
+			if errors.Cause(err) == model.ErrChangeFeedNotExists {
+				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
+				continue
+			}
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -518,7 +534,6 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 		}
-		removeIdx = i + 1
 	}
 	return nil
 }
