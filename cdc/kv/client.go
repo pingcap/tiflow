@@ -1279,6 +1279,13 @@ func (s *eventFeedSession) singleEventFeed(
 
 func (s *eventFeedSession) resolveLongTxn(ctx context.Context, regionID uint64, txns []*cdcpb.TxnInfo) error {
 	txnStatuses, remainingTxns := s.txnStatsCache.Get(txns)
+
+	log.Info("tikv reported long live transactions. Try to resolve.",
+		zap.Uint64("regionID", regionID),
+		zap.Int("txns", len(txns)),
+		zap.Int("cached", len(txnStatuses)),
+		zap.Int("uncached", len(remainingTxns)))
+
 	if len(txnStatuses) > 0 {
 		s.scheduleNotifyTxnStatus(ctx, regionID, txnStatuses)
 	}
