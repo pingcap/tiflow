@@ -288,6 +288,41 @@ func (o *Owner) newChangeFeed(
 	return cf, nil
 }
 
+func (o *Owner) checkAndCleanTasksInfo(ctx context.Context) error {
+	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
+	if err != nil {
+		return err
+	}
+	for changefeedID := range details {
+		_, err := o.cfRWriter.GetAllTaskStatus(ctx, changefeedID)
+		switch errors.Cause(err) {
+		case model.ErrDecodeFailed:
+			err := o.cfRWriter.RemoveAllTaskStatus(ctx, changefeedID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		case nil:
+		default:
+			return errors.Trace(err)
+		}
+		_, err = o.cfRWriter.GetAllTaskPositions(ctx, changefeedID)
+		if err != nil {
+			return err
+		}
+		switch errors.Cause(err) {
+		case model.ErrDecodeFailed:
+			err := o.cfRWriter.RemoveAllTaskPositions(ctx, changefeedID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		case nil:
+		default:
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
 	if err != nil {
@@ -754,6 +789,9 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 	// When an owner just starts, changefeed information is not updated at once.
 	// Supposing a crased capture should be removed now, the owner will miss deleting
 	// task status and task position if changefeed information is not loaded.
+	if err := o.checkAndCleanTasksInfo(ctx); err != nil {
+		return errors.Trace(err)
+	}
 	o.l.Lock()
 	if err := o.loadChangeFeeds(ctx); err != nil {
 		o.l.Unlock()
