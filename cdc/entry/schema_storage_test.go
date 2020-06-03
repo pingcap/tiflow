@@ -642,11 +642,9 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 }
 
 func (t *schemaSuite) TestCreateSnapFromMeta(c *C) {
-	var mockCluster cluster.Cluster
 	store, err := mockstore.NewMockStore(
 		mockstore.WithClusterInspector(func(c cluster.Cluster) {
 			mockstore.BootstrapWithSingleStore(c)
-			mockCluster = c
 		}),
 	)
 	c.Assert(err, IsNil)
