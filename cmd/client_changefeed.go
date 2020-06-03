@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -200,7 +201,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 				SortDir:    sortDir,
 			}
 
-			ineligibleTables, err := verifyTables(ctx, cfg, startTs)
+			ineligibleTables, allTables, err := verifyTables(ctx, cfg, startTs)
 			if err != nil {
 				return err
 			}
@@ -241,7 +242,14 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			err = verifySink(ctx, info.SinkURI, info.Config, info.Opts)
+			cyclicCreateTableDDL := []*model.DDLEvent{}
+			for _, table := range allTables {
+				if cfg.Cyclic.IsEnabled() && !cyclic.IsMarkTable(table.Schema, table.Table) {
+					events := cyclic.CreateMarkTable(table.Schema, table.Table)
+					cyclicCreateTableDDL = append(cyclicCreateTableDDL, events...)
+				}
+			}
+			err = verifySink(ctx, info.SinkURI, info.Config, info.Opts, cyclicCreateTableDDL)
 			if err != nil {
 				return err
 			}

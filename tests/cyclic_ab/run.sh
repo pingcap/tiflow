@@ -23,24 +23,9 @@ function run() {
 
     # create table to upstream.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    # TODO(neil) use cdc cli to create mark tabls.
-    run_sql "CREATE database tidb_cdc;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table tidb_cdc.repl_mark_test_simple (
-        bucket INT NOT NULL, \
-        replica_id BIGINT UNSIGNED NOT NULL, \
-        val BIGINT DEFAULT 0, \
-        PRIMARY KEY (bucket, replica_id) \
-    );" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
     # create table to downsteam.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-    run_sql "CREATE database tidb_cdc;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-    run_sql "CREATE table tidb_cdc.repl_mark_test_simple (
-        bucket INT NOT NULL, \
-        replica_id BIGINT UNSIGNED NOT NULL, \
-        val BIGINT DEFAULT 0, \
-        PRIMARY KEY (bucket, replica_id) \
-    );" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
     # record tso before we create tables to skip the system table DDLs
     # and make sure mark table is created.
@@ -74,10 +59,10 @@ function run() {
         --cyclic-filter-replica-ids 1 \
         --cyclic-sync-ddl false
 
-    for i in $(seq 1 10); do {
+    for i in $(seq 11 20); do {
         sqlup="START TRANSACTION;"
         sqldown="START TRANSACTION;"
-        for j in $(seq 1 4); do {
+        for j in $(seq 21 24); do {
             if [ $((j%2)) -eq 0 ]; then
                 sqldown+="INSERT INTO test.simple(id1, id2, source) VALUES (${i}, ${j}, 2);"
             else

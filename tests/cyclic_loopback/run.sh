@@ -23,13 +23,6 @@ function run() {
 
     # create table to upstream.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE database tidb_cdc;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table tidb_cdc.repl_mark_test_simple (
-        bucket INT NOT NULL, \
-        replica_id BIGINT UNSIGNED NOT NULL, \
-        val BIGINT DEFAULT 0, \
-        PRIMARY KEY (bucket, replica_id) \
-    );" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
     # record tso before we create tables to skip the system table DDLs
     # and make sure mark table is created.
