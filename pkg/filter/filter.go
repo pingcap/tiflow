@@ -39,7 +39,11 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
 		f, err = filter.ParseMySQLReplicationRules(cfg.Filter.MySQLReplicationRules)
 	} else {
-		f, err = filter.Parse(cfg.Filter.Rules)
+		rules := cfg.Filter.Rules
+		if len(rules) == 0 {
+			rules = []string{"*.*"}
+		}
+		f, err = filter.Parse(rules)
 	}
 	if err != nil {
 		return nil, err
