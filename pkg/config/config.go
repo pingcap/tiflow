@@ -39,7 +39,9 @@ var defaultReplicaConfig = &ReplicaConfig{
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
-type ReplicaConfig struct {
+type ReplicaConfig replicaConfig
+
+type replicaConfig struct {
 	CaseSensitive bool           `toml:"case-sensitive" json:"case-sensitive"`
 	Filter        *FilterConfig  `toml:"filter" json:"filter"`
 	Mounter       *MounterConfig `toml:"mounter" json:"mounter"`
@@ -58,7 +60,14 @@ func (c *ReplicaConfig) Marshal() (string, error) {
 
 // Unmarshal unmarshals into *ReplicationConfig from json marshal byte slice
 func (c *ReplicaConfig) Unmarshal(data []byte) error {
-	err := json.Unmarshal(data, c)
+	return c.UnmarshalJSON(data)
+}
+
+func (c *ReplicaConfig) UnmarshalJSON(data []byte) error {
+	// The purpose of casting ReplicaConfig to replicaConfig is to avoid recursive calls UnmarshalJSON,
+	// resulting in stack overflow
+	r := (*replicaConfig)(c)
+	err := json.Unmarshal(data, &r)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -67,7 +76,7 @@ func (c *ReplicaConfig) Unmarshal(data []byte) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.fillFromV1(&v1)
+	r.fillFromV1(&v1)
 	return nil
 }
 
@@ -85,7 +94,7 @@ func (c *ReplicaConfig) Clone() *ReplicaConfig {
 	return clone
 }
 
-func (c *ReplicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
+func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 	if v1 == nil || v1.Sink == nil {
 		return
 	}
