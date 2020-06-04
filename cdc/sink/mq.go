@@ -74,7 +74,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: d,
-		newEncoder: codec.NewJSONEventBatchEncoder,
+		newEncoder: codec.NewEventBatchEncoder(config),
 		filter:     filter,
 
 		partitionNum:        partitionNum,
@@ -315,6 +315,11 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	s = sinkURI.Query().Get("compression")
 	if s != "" {
 		config.Compression = s
+	}
+
+	s = sinkURI.Query().Get("protocol")
+	if s != "" {
+		replicaConfig.Sink.Protocol = s
 	}
 
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {

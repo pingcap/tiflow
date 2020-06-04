@@ -16,6 +16,7 @@ package config
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
 	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers"`
+	Protocol      string          `toml:"protocol" json:"protocol"`
 }
 
 // DispatchRule represents partition rule for a table

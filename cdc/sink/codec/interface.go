@@ -13,7 +13,13 @@
 
 package codec
 
-import "github.com/pingcap/ticdc/cdc/model"
+import (
+	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
+	"go.uber.org/zap"
+	"strings"
+)
 
 // EventBatchEncoder is an abstraction for events encoder
 type EventBatchEncoder interface {
@@ -43,4 +49,36 @@ type EventBatchDecoder interface {
 	NextRowChangedEvent() (*model.RowChangedEvent, error)
 	// NextDDLEvent returns the next DDL event if exists
 	NextDDLEvent() (*model.DDLEvent, error)
+}
+
+type codecProtocol int
+
+const (
+	codecProtocolDefault codecProtocol = iota
+	codecProtocolCanal
+)
+
+func (p *codecProtocol) fromString(protocol string) {
+	switch strings.ToLower(protocol) {
+	case "default":
+		*p = codecProtocolDefault
+	case "canal":
+		*p = codecProtocolCanal
+	default:
+		*p = codecProtocolDefault
+		log.Warn("can't support codec protocol , using default protocol", zap.String("protocol", protocol))
+	}
+}
+
+func NewEventBatchEncoder(cfg *config.ReplicaConfig) func() EventBatchEncoder {
+	var p codecProtocol
+	p.fromString(cfg.Sink.Protocol)
+	switch p {
+	case codecProtocolDefault:
+		return NewJSONEventBatchEncoder
+	case codecProtocolCanal:
+		return NewCanalEventBatchEncoder
+	default:
+		return NewJSONEventBatchEncoder
+	}
 }
