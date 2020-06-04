@@ -25,32 +25,6 @@ import (
 	"github.com/pingcap/log"
 )
 
-// https://internal.pingcap.net/jira/browse/TOOL-714
-// CDC don't support UK is null
-var caseUKWithNoPK = []string{`
-CREATE TABLE binlog_uk_with_no_pk (id INT, a1 INT NOT NULL, a3 INT NOT NULL, UNIQUE KEY dex1(a1, a3));
-`,
-	`
-INSERT INTO binlog_uk_with_no_pk(id, a1, a3) VALUES(1, 1, 2);
-`,
-	`
-INSERT INTO binlog_uk_with_no_pk(id, a1, a3) VALUES(2, 1, 1);
-`,
-	`
-UPDATE binlog_uk_with_no_pk SET id = 10, a1 = 2 WHERE a1 = 1;
-`,
-	`
-UPDATE binlog_uk_with_no_pk SET id = 100 WHERE a1 = 10;
-`,
-	`
-UPDATE binlog_uk_with_no_pk SET a3 = 4 WHERE a3 = 1;
-`,
-}
-
-var caseUKWithNoPKClean = []string{`
-	DROP TABLE binlog_uk_with_no_pk`,
-}
-
 var casePKAddDuplicateUK = []string{`
 CREATE TABLE binlog_pk_add_duplicate_uk(id INT PRIMARY KEY, a1 INT);
 `,
@@ -64,50 +38,6 @@ ALTER TABLE binlog_pk_add_duplicate_uk ADD UNIQUE INDEX aidx(a1);
 
 var casePKAddDuplicateUKClean = []string{
 	`DROP TABLE binlog_pk_add_duplicate_uk`,
-}
-
-// Test issue: TOOL-1346
-var caseInsertBit = []string{`
-CREATE TABLE binlog_insert_bit(a BIT(1) PRIMARY KEY, b BIT(64));
-`,
-	`
-INSERT INTO binlog_insert_bit VALUES (0x01, 0xffffffff);
-`,
-	`
-UPDATE binlog_insert_bit SET a = 0x00, b = 0xfffffffe;
-`,
-}
-
-var caseInsertBitClean = []string{`
-	DROP TABLE binlog_insert_bit;
-`,
-}
-
-// Test issue: TOOL-1407
-var caseRecoverAndInsert = []string{`
-CREATE TABLE binlog_recover_and_insert(id INT PRIMARY KEY, a INT);
-`,
-	`
-INSERT INTO binlog_recover_and_insert(id, a) VALUES(1, -1);
-`,
-	`
-UPDATE binlog_recover_and_insert SET a = -5 WHERE id = 1;
-`,
-	`
-DROP TABLE binlog_recover_and_insert;
-`,
-	`
-RECOVER TABLE binlog_recover_and_insert;
-`,
-	// make sure we can insert data after recovery
-	`
-INSERT INTO binlog_recover_and_insert(id, a) VALUES(2, -3);
-`,
-}
-
-var caseRecoverAndInsertClean = []string{`
-	DROP TABLE binlog_recover_and_insert;
-`,
 }
 
 var (
@@ -147,9 +77,6 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	tr.run(caseUpdateWhileAddingCol)
 	tr.execSQLs([]string{"DROP TABLE growing_cols;"})
 
-	tr.execSQLs(caseUKWithNoPK)
-	tr.execSQLs(caseUKWithNoPKClean)
-
 	tr.execSQLs(caseAlterDatabase)
 	tr.execSQLs(caseAlterDatabaseClean)
 
@@ -165,13 +92,6 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 
 	tr.run(caseUpdateWhileDroppingCol)
 	tr.execSQLs([]string{"DROP TABLE many_cols;"})
-
-	tr.execSQLs(caseInsertBit)
-	tr.execSQLs(caseInsertBitClean)
-
-	// run caseRecoverAndInsert
-	tr.execSQLs(caseRecoverAndInsert)
-	tr.execSQLs(caseRecoverAndInsertClean)
 
 	tr.run(caseTblWithGeneratedCol)
 	tr.execSQLs([]string{"DROP TABLE gen_contacts;"})
@@ -229,29 +149,28 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 	})
 
 	// test big cdc msg
-	// TODO: fix me
-	// tr.run(func(src *sql.DB) {
-	// 	mustExec(src, "create table binlog_big(id int primary key, data longtext);")
+	tr.run(func(src *sql.DB) {
+		mustExec(src, "create table binlog_big(id int primary key, data longtext);")
 
-	// 	tx, err := src.Begin()
-	// 	if err != nil {
-	// 		log.S().Fatal(err)
-	// 	}
-	// 	// insert 5 * 1M
-	// 	// note limitation of TiDB: https://github.com/pingcap/docs/blob/733a5b0284e70c5b4d22b93a818210a3f6fbb5a0/FAQ.md#the-error-message-transaction-too-large-is-displayed
-	// 	var data = make([]byte, 1<<20)
-	// 	for i := 0; i < 5; i++ {
-	// 		_, err = tx.Query("INSERT INTO binlog_big(id, data) VALUES(?, ?);", i, data)
-	// 		if err != nil {
-	// 			log.S().Fatal(err)
-	// 		}
-	// 	}
-	// 	err = tx.Commit()
-	// 	if err != nil {
-	// 		log.S().Fatal(err)
-	// 	}
-	// })
-	// tr.execSQLs([]string{"DROP TABLE binlog_big;"})
+		tx, err := src.Begin()
+		if err != nil {
+			log.S().Fatal(err)
+		}
+		// insert 5 * 1M
+		// note limitation of TiDB: https://github.com/pingcap/docs/blob/733a5b0284e70c5b4d22b93a818210a3f6fbb5a0/FAQ.md#the-error-message-transaction-too-large-is-displayed
+		var data = make([]byte, 1<<20)
+		for i := 0; i < 5; i++ {
+			_, err = tx.Query("INSERT INTO binlog_big(id, data) VALUES(?, ?);", i, data)
+			if err != nil {
+				log.S().Fatal(err)
+			}
+		}
+		err = tx.Commit()
+		if err != nil {
+			log.S().Fatal(err)
+		}
+	})
+	tr.execSQLs([]string{"DROP TABLE binlog_big;"})
 }
 
 func ineligibleTable(tr *testRunner, src *sql.DB, dst *sql.DB) {
