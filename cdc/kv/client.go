@@ -51,6 +51,7 @@ const (
 	dialTimeout               = 10 * time.Second
 	maxRetry                  = 100
 	tikvRequestMaxBackoff     = 20000 // Maximum total sleep time(in ms)
+	pdRequestMaxBackoff       = 20000
 	grpcInitialWindowSize     = 1 << 30
 	grpcInitialConnWindowSize = 1 << 30
 	grpcConnCount             = 10
@@ -348,10 +349,11 @@ type eventFeedSession struct {
 	txnStatsCache *TxnStatusCache
 
 	// To identify metrics of different eventFeedSession
-	id                string
-	regionChSizeGauge prometheus.Gauge
-	errChSizeGauge    prometheus.Gauge
-	rangeChSizeGauge  prometheus.Gauge
+	id                         string
+	regionChSizeGauge          prometheus.Gauge
+	errChSizeGauge             prometheus.Gauge
+	rangeChSizeGauge           prometheus.Gauge
+	notifyTxnStatusChSizeGauge prometheus.Gauge
 }
 
 type rangeRequestTask struct {
@@ -373,21 +375,22 @@ func newEventFeedSession(
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
 	return &eventFeedSession{
-		client:            client,
-		regionCache:       regionCache,
-		kvStorage:         kvStorage,
-		totalSpan:         totalSpan,
-		eventCh:           eventCh,
-		regionCh:          make(chan singleRegionInfo, 16),
-		errCh:             make(chan regionErrorInfo, 16),
-		requestRangeCh:    make(chan rangeRequestTask, 16),
-		notifyTxnStatusCh: make(chan notifyTxnStatusTask, 16),
-		rangeLock:         regionspan.NewRegionRangeLock(),
-		txnStatsCache:     NewTxnStatusCache(time.Second * 3),
-		id:                strconv.FormatUint(allocID(), 10),
-		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
-		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
-		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
+		client:                     client,
+		regionCache:                regionCache,
+		kvStorage:                  kvStorage,
+		totalSpan:                  totalSpan,
+		eventCh:                    eventCh,
+		regionCh:                   make(chan singleRegionInfo, 16),
+		errCh:                      make(chan regionErrorInfo, 16),
+		requestRangeCh:             make(chan rangeRequestTask, 16),
+		notifyTxnStatusCh:          make(chan notifyTxnStatusTask, 16),
+		rangeLock:                  regionspan.NewRegionRangeLock(),
+		txnStatsCache:              NewTxnStatusCache(time.Second * 3),
+		id:                         strconv.FormatUint(allocID(), 10),
+		regionChSizeGauge:          clientChannelSize.WithLabelValues(id, "region"),
+		errChSizeGauge:             clientChannelSize.WithLabelValues(id, "err"),
+		rangeChSizeGauge:           clientChannelSize.WithLabelValues(id, "range"),
+		notifyTxnStatusChSizeGauge: clientChannelSize.WithLabelValues(id, "notify-txn-status"),
 	}
 }
 
@@ -519,12 +522,14 @@ func (s *eventFeedSession) scheduleNotifyTxnStatus(ctx context.Context, regionID
 	}
 	select {
 	case s.notifyTxnStatusCh <- task:
+		s.notifyTxnStatusChSizeGauge.Inc()
 		return
 	default:
 	}
 	go func() {
 		select {
 		case s.notifyTxnStatusCh <- task:
+			s.notifyTxnStatusChSizeGauge.Inc()
 		case <-ctx.Done():
 		}
 	}()
@@ -579,17 +584,23 @@ func (s *eventFeedSession) dispatchRequest(
 
 	for {
 		// Note that when a region is received from the channel, it's range has been already locked.
-		var sri singleRegionInfo
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case sri = <-s.regionCh:
+		case sri := <-s.regionCh:
 			s.regionChSizeGauge.Dec()
-		}
-
-		err := s.dispatchChangeFeedRequest(ctx, g, sri, streams, storePendingRegions)
-		if err != nil {
-			return errors.Trace(err)
+			err := s.dispatchChangeFeedRequest(ctx, g, sri, streams, storePendingRegions)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		case t := <-s.notifyTxnStatusCh:
+			s.notifyTxnStatusChSizeGauge.Dec()
+			err := s.tryNotifyTxnStatus(ctx, t.regionID, t.txnStatus, streams)
+			if err != nil {
+				log.Error("failed to notify region with txn status",
+					zap.Uint64("regionID", t.regionID),
+					zap.Error(err))
+			}
 		}
 	}
 }
@@ -728,6 +739,48 @@ func (s *eventFeedSession) dispatchChangeFeedRequest(
 		}
 
 		break
+	}
+	return nil
+}
+
+func (s *eventFeedSession) tryNotifyTxnStatus(
+	ctx context.Context,
+	regionID uint64,
+	txnStatuses []*cdcpb.TxnStatus,
+	streams map[string]cdcpb.ChangeData_EventFeedClient,
+) error {
+	bo := tikv.NewBackoffer(ctx, pdRequestMaxBackoff)
+	loc, err := s.regionCache.LocateRegionByID(bo, regionID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	rpcCtx, err := s.getRPCContextForRegion(ctx, loc.Region)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	stream, ok := streams[rpcCtx.Addr]
+	if !ok {
+		return errors.Errorf("stream to region %v (store %v) not established", regionID, rpcCtx.Addr)
+	}
+
+	req := &cdcpb.ChangeDataRequest{
+		Header: &cdcpb.Header{
+			ClusterId: s.client.clusterID,
+		},
+		RegionId:    rpcCtx.Meta.GetId(),
+		RequestId:   allocID(),
+		RegionEpoch: rpcCtx.Meta.RegionEpoch,
+		Request: &cdcpb.ChangeDataRequest_NotifyTxnStatus_{
+			NotifyTxnStatus: &cdcpb.ChangeDataRequest_NotifyTxnStatus{
+				TxnStatus: txnStatuses,
+			},
+		},
+	}
+	err = stream.Send(req)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	return nil
 }
