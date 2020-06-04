@@ -10,7 +10,7 @@ fix-sql-file = "fix.sql"
 
 # tables need to check.
 [[check-tables]]
-    schema = "multi_data_type"
+    schema = "common_1"
     tables = ["~.*"]
 
 [[source-db]]

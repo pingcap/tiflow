@@ -1,6 +1,8 @@
-drop database if exists `multi_data_type`;
-create database `multi_data_type`;
-use `multi_data_type`;
+drop database if exists `common_1`;
+create database `common_1`;
+use `common_1`;
+
+-- multi data type test
 
 CREATE TABLE cdc_multi_data_type (
 	id INT AUTO_INCREMENT,
@@ -51,5 +53,15 @@ INSERT INTO cdc_multi_data_type(t_bigint) VALUES(-9223372036854775808);
 INSERT INTO cdc_multi_data_type(t_bigint) VALUES(9223372036854775807);
 
 INSERT INTO cdc_multi_data_type(t_json) VALUES('{"key1": "value1", "key2": "value2"}');
+
+-- view test
+
+CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY AUTO_INCREMENT, c1 INT NOT NULL);
+
+INSERT INTO t1 (c1) VALUES (1),(2),(3),(4),(5);
+
+CREATE VIEW v1 AS SELECT * FROM t1 WHERE c1 > 2;
+
+-- mark finish table
 
 CREATE TABLE finish_mark(a int primary key);

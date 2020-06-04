@@ -110,6 +110,12 @@ func newCliCommand() *cobra.Command {
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			err := util.InitLogger(&util.Config{Level: "warn"})
+			if err != nil {
+				fmt.Printf("init logger error %v", errors.ErrorStack(err))
+				os.Exit(1)
+			}
+
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
 				DialTimeout: 30 * time.Second,

@@ -36,17 +36,22 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Cyclic: &CyclicConfig{
 		Enable: false,
 	},
+	Scheduler: &SchedulerConfig{
+		Tp:          "manual",
+		PollingTime: 5,
+	},
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	CaseSensitive bool           `toml:"case-sensitive" json:"case-sensitive"`
-	Filter        *FilterConfig  `toml:"filter" json:"filter"`
-	Mounter       *MounterConfig `toml:"mounter" json:"mounter"`
-	Sink          *SinkConfig    `toml:"sink" json:"sink"`
-	Cyclic        *CyclicConfig  `toml:"cyclic-replication" json:"cyclic-replication"`
+	CaseSensitive bool             `toml:"case-sensitive" json:"case-sensitive"`
+	Filter        *FilterConfig    `toml:"filter" json:"filter"`
+	Mounter       *MounterConfig   `toml:"mounter" json:"mounter"`
+	Sink          *SinkConfig      `toml:"sink" json:"sink"`
+	Cyclic        *CyclicConfig    `toml:"cyclic-replication" json:"cyclic-replication"`
+	Scheduler     *SchedulerConfig `toml:"scheduler" json:"scheduler"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
