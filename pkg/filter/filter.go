@@ -36,8 +36,8 @@ type Filter struct {
 func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 	var f filter.Filter
 	var err error
-	if len(cfg.Filter.Rules) == 0 {
-		f, err = filter.ParseMySQLReplicationRules(&cfg.Filter.MySQLReplicationRules)
+	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
+		f, err = filter.ParseMySQLReplicationRules(cfg.Filter.MySQLReplicationRules)
 	} else {
 		f, err = filter.Parse(cfg.Filter.Rules)
 	}

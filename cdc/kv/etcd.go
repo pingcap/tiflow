@@ -240,6 +240,7 @@ func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID str
 	return positions, nil
 }
 
+// RemoveAllTaskPositions removes all task positions of a changefeed
 func (c CDCEtcdClient) RemoveAllTaskPositions(ctx context.Context, changefeedID string) error {
 	resp, err := c.Client.Get(ctx, TaskPositionKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
