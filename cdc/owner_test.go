@@ -177,7 +177,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 		c:                c,
 	}
 
-	tables := map[uint64]entry.TableName{1: {Schema: "any"}}
+	tables := map[uint64]model.TableName{1: {Schema: "any"}}
 
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
@@ -392,7 +392,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 		c:      c,
 	}
 
-	tables := map[uint64]entry.TableName{1: {Schema: "any"}}
+	tables := map[uint64]model.TableName{1: {Schema: "any"}}
 
 	filter, err := newTxnFilter(&model.ReplicaConfig{})
 	c.Assert(err, check.IsNil)
@@ -665,7 +665,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 			{},
 		}
 
-		expectTables = []map[uint64]entry.TableName{
+		expectTables = []map[uint64]model.TableName{
 			{},
 			{47: {Schema: "test", Table: "t1"}},
 			{47: {Schema: "test", Table: "t1"}, 49: {Schema: "test", Table: "t2"}},
@@ -682,7 +682,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 	cf := &changeFeed{
 		schema:        schemaStorage,
 		schemas:       make(map[uint64]map[uint64]struct{}),
-		tables:        make(map[uint64]entry.TableName),
+		tables:        make(map[uint64]model.TableName),
 		orphanTables:  make(map[uint64]model.ProcessTableInfo),
 		toCleanTables: make(map[uint64]struct{}),
 		filter:        filter,

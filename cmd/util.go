@@ -119,7 +119,7 @@ func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) er
 	return nil
 }
 
-func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, fullTables []entry.TableName, err error) {
+func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, fullTables []model.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr)
 	if err != nil {
 		return nil, nil, err
@@ -157,7 +157,6 @@ func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64
 
 func verifySink(
 	ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, opts map[string]string,
-	preEmitDDLEvents []*model.DDLEvent,
 ) error {
 	filter, err := filter.NewFilter(cfg)
 	if err != nil {
@@ -167,12 +166,6 @@ func verifySink(
 	s, err := sink.NewSink(ctx, sinkURI, filter, cfg, opts, errCh)
 	if err != nil {
 		return err
-	}
-	for _, ddl := range preEmitDDLEvents {
-		err = s.EmitDDLEvent(ctx, ddl)
-		if err != nil {
-			return err
-		}
 	}
 	err = s.Close()
 	if err != nil {

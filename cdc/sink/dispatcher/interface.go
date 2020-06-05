@@ -19,7 +19,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
 )
@@ -56,14 +55,14 @@ func (r *dispatchRule) fromString(rule string) {
 }
 
 type dispatcherSwitcher struct {
-	rules             map[entry.TableName]Dispatcher
+	rules             map[model.TableName]Dispatcher
 	caseSensitive     bool
 	partitionNum      int32
 	defaultDispatcher Dispatcher
 }
 
 func (s *dispatcherSwitcher) Dispatch(row *model.RowChangedEvent) int32 {
-	tableName := entry.TableName{Schema: row.Table.Schema, Table: row.Table.Table}
+	tableName := model.TableName{Schema: row.Table.Schema, Table: row.Table.Table}
 	if !s.caseSensitive {
 		tableName.Schema = strings.ToLower(tableName.Schema)
 		tableName.Table = strings.ToLower(tableName.Table)
@@ -80,11 +79,11 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) Dispatcher {
 	p := &dispatcherSwitcher{
 		caseSensitive:     cfg.CaseSensitive,
 		partitionNum:      partitionNum,
-		rules:             make(map[entry.TableName]Dispatcher, len(cfg.Sink.DispatchRules)),
+		rules:             make(map[model.TableName]Dispatcher, len(cfg.Sink.DispatchRules)),
 		defaultDispatcher: &defaultDispatcher{partitionNum: partitionNum},
 	}
 	for _, ruleConfig := range cfg.Sink.DispatchRules {
-		tableName := entry.TableName{Schema: ruleConfig.Schema, Table: ruleConfig.Name}
+		tableName := model.TableName{Schema: ruleConfig.Schema, Table: ruleConfig.Name}
 		if !p.caseSensitive {
 			tableName.Schema = strings.ToLower(tableName.Schema)
 			tableName.Table = strings.ToLower(tableName.Table)
