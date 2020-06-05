@@ -402,11 +402,13 @@ func concurrentExec(
 	rowsChIdx := 0
 	sendFn := func(rows []*model.RowChangedEvent, keys []string, idx int) {
 		causality.add(keys, idx)
-		jobWg.Add(1)
-		select {
-		case <-ctx.Done():
-			jobWg.Done()
-		case rowsChs[idx] <- rows:
+		for _, r := range rowsLenLimiter(rows, maxTxnRow) {
+			jobWg.Add(1)
+			select {
+			case <-ctx.Done():
+				jobWg.Done()
+			case rowsChs[idx] <- r:
+			}
 		}
 	}
 	for groupKey, multiRows := range rowGroups {
@@ -444,6 +446,19 @@ func concurrentExec(
 	default:
 		return nil
 	}
+}
+
+func rowsLenLimiter(rows []*model.RowChangedEvent, maxLen int) [][]*model.RowChangedEvent {
+	result := make([][]*model.RowChangedEvent, 0, (len(rows)/maxLen)+1)
+	for start := 0; start < len(rows); {
+		end := start + maxLen
+		if end > len(rows) {
+			end = len(rows)
+		}
+		result = append(result, rows[start:end])
+		start = end
+	}
+	return result
 }
 
 type mysqlSinkWorker struct {
