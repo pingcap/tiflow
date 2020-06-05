@@ -271,6 +271,10 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			err = verifySink(ctx, info.SinkURI, info.Config, info.Opts)
+			if err != nil {
+				return err
+			}
 			err = cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
 			if err != nil {
 				return err
