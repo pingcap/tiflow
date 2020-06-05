@@ -36,10 +36,9 @@ var (
 	logLevel      string
 
 	serverCmd = &cobra.Command{
-		Use:              "server",
-		Short:            "Start a TiCDC capture server",
-		PersistentPreRun: preRunLogInfo,
-		RunE:             runEServer,
+		Use:   "server",
+		Short: "Start a TiCDC capture server",
+		RunE:  runEServer,
 	}
 )
 
@@ -51,13 +50,9 @@ func init() {
 	serverCmd.Flags().StringVar(&advertiseAddr, "advertise-addr", "", "Set the advertise listening address for client communication")
 	serverCmd.Flags().StringVar(&timezone, "tz", "System", "Specify time zone of TiCDC cluster")
 	serverCmd.Flags().Int64Var(&gcTTL, "gc-ttl", cdc.DefaultCDCGCSafePointTTL, "CDC GC safepoint TTL duration, specified in seconds")
-	serverCmd.Flags().StringVar(&logFile, "log-file", "cdc.log", "log file path")
+	serverCmd.Flags().StringVar(&logFile, "log-file", "", "log file path")
 	serverCmd.Flags().StringVar(&logLevel, "log-level", "info", "log level (etc: debug|info|warn|error)")
 
-}
-
-func preRunLogInfo(cmd *cobra.Command, args []string) {
-	util.LogVersionInfo()
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
@@ -70,13 +65,13 @@ func runEServer(cmd *cobra.Command, args []string) error {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
 
+	util.LogVersionInfo()
 	opts := []cdc.ServerOption{
 		cdc.PDEndpoints(serverPdAddr),
 		cdc.Address(address),
 		cdc.AdvertiseAddress(advertiseAddr),
 		cdc.GCTTL(gcTTL),
 		cdc.Timezone(tz)}
-
 	server, err := cdc.NewServer(opts...)
 	if err != nil {
 		return errors.Annotate(err, "new server")
