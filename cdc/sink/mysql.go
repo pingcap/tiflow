@@ -400,8 +400,8 @@ func concurrentExec(
 	causality := newCausality()
 	rowsChIdx := 0
 	sendFn := func(rows []*model.RowChangedEvent, keys []string, idx int) {
+		causality.add(keys, idx)
 		for _, r := range rowsLenLimiter(rows, maxTxnRow) {
-			causality.add(keys, idx)
 			jobWg.Add(1)
 			select {
 			case <-ctx.Done():
