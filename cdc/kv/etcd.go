@@ -233,11 +233,39 @@ func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID str
 		info := &model.TaskPosition{}
 		err = info.Unmarshal(rawKv.Value)
 		if err != nil {
-			return nil, err
+			return nil, errors.Annotate(model.ErrDecodeFailed, "failed to unmarshal task position")
 		}
 		positions[captureID] = info
 	}
 	return positions, nil
+}
+
+// RemoveAllTaskPositions removes all task positions of a changefeed
+func (c CDCEtcdClient) RemoveAllTaskPositions(ctx context.Context, changefeedID string) error {
+	resp, err := c.Client.Get(ctx, TaskPositionKeyPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for _, rawKv := range resp.Kvs {
+		changeFeed, err := model.ExtractKeySuffix(string(rawKv.Key))
+		if err != nil {
+			return err
+		}
+		endIndex := len(rawKv.Key) - len(changeFeed) - 1
+		captureID, err := model.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		if err != nil {
+			return err
+		}
+		if changeFeed != changefeedID {
+			continue
+		}
+		key := GetEtcdKeyTaskPosition(changefeedID, captureID)
+		_, err = c.Client.Delete(ctx, key)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetProcessors queries all processors of the cdc cluster,
@@ -291,12 +319,40 @@ func (c CDCEtcdClient) GetAllTaskStatus(ctx context.Context, changefeedID string
 		info := &model.TaskStatus{}
 		err = info.Unmarshal(rawKv.Value)
 		if err != nil {
-			return nil, err
+			return nil, errors.Annotate(model.ErrDecodeFailed, "failed to unmarshal task status")
 		}
 		info.ModRevision = rawKv.ModRevision
 		pinfo[captureID] = info
 	}
 	return pinfo, nil
+}
+
+// RemoveAllTaskStatus removes all task status of a changefeed
+func (c CDCEtcdClient) RemoveAllTaskStatus(ctx context.Context, changefeedID string) error {
+	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for _, rawKv := range resp.Kvs {
+		changeFeed, err := model.ExtractKeySuffix(string(rawKv.Key))
+		if err != nil {
+			return err
+		}
+		endIndex := len(rawKv.Key) - len(changeFeed) - 1
+		captureID, err := model.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		if err != nil {
+			return err
+		}
+		if changeFeed != changefeedID {
+			continue
+		}
+		key := GetEtcdKeyTaskStatus(changefeedID, captureID)
+		_, err = c.Client.Delete(ctx, key)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetTaskStatus queries task status from etcd, returns

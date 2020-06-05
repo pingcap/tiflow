@@ -54,7 +54,7 @@ type mqSink struct {
 	statistics *Statistics
 }
 
-func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) *mqSink {
+func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
 	partitionNum := mqProducer.GetPartitionNum()
 	partitionInput := make([]chan struct {
 		row        *model.RowChangedEvent
@@ -66,10 +66,14 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 			resolvedTs uint64
 		}, 12800)
 	}
+	d, err := dispatcher.NewDispatcher(config, mqProducer.GetPartitionNum())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	notifier := new(notify.Notifier)
 	k := &mqSink{
 		mqProducer: mqProducer,
-		dispatcher: dispatcher.NewDispatcher(config, mqProducer.GetPartitionNum()),
+		dispatcher: d,
 		newEncoder: codec.NewJSONEventBatchEncoder,
 		filter:     filter,
 
@@ -90,7 +94,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 			}
 		}
 	}()
-	return k
+	return k, nil
 }
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -320,5 +324,9 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return newMqSink(ctx, producer, filter, replicaConfig, opts, errCh), nil
+	sink, err := newMqSink(ctx, producer, filter, replicaConfig, opts, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sink, nil
 }

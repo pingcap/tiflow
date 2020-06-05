@@ -55,9 +55,15 @@ type ChangeFeedRWriter interface {
 	// mapping from captureID to TaskStatus
 	GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error)
 
+	// RemoveAllTaskStatus removes all task status of a changefeed
+	RemoveAllTaskStatus(ctx context.Context, changefeedID string) error
+
 	// GetAllTaskPositions queries all task positions of a changefeed, and returns a map
 	// mapping from captureID to TaskPositions
 	GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error)
+
+	// RemoveAllTaskPositions removes all task partitions of a changefeed
+	RemoveAllTaskPositions(ctx context.Context, changefeedID string) error
 
 	// GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
 	GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, int64, error)

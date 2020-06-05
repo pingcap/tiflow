@@ -15,6 +15,9 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
+
+	"github.com/pingcap/ticdc/pkg/config/outdated"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -23,7 +26,9 @@ import (
 
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive: true,
-	Filter:        &FilterConfig{},
+	Filter: &FilterConfig{
+		Rules: []string{"*.*"},
+	},
 	Mounter: &MounterConfig{
 		WorkerNum: 16,
 	},
@@ -38,7 +43,9 @@ var defaultReplicaConfig = &ReplicaConfig{
 }
 
 // ReplicaConfig represents some addition replication config for a changefeed
-type ReplicaConfig struct {
+type ReplicaConfig replicaConfig
+
+type replicaConfig struct {
 	CaseSensitive bool             `toml:"case-sensitive" json:"case-sensitive"`
 	Filter        *FilterConfig    `toml:"filter" json:"filter"`
 	Mounter       *MounterConfig   `toml:"mounter" json:"mounter"`
@@ -58,7 +65,25 @@ func (c *ReplicaConfig) Marshal() (string, error) {
 
 // Unmarshal unmarshals into *ReplicationConfig from json marshal byte slice
 func (c *ReplicaConfig) Unmarshal(data []byte) error {
-	return json.Unmarshal(data, c)
+	return c.UnmarshalJSON(data)
+}
+
+// UnmarshalJSON unmarshals into *ReplicationConfig from json marshal byte slice
+func (c *ReplicaConfig) UnmarshalJSON(data []byte) error {
+	// The purpose of casting ReplicaConfig to replicaConfig is to avoid recursive calls UnmarshalJSON,
+	// resulting in stack overflow
+	r := (*replicaConfig)(c)
+	err := json.Unmarshal(data, &r)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	v1 := outdated.ReplicaConfigV1{}
+	err = v1.Unmarshal(data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	r.fillFromV1(&v1)
+	return nil
 }
 
 // Clone clones a replication
@@ -73,6 +98,18 @@ func (c *ReplicaConfig) Clone() *ReplicaConfig {
 		log.Fatal("failed to marshal replica config", zap.Error(err))
 	}
 	return clone
+}
+
+func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
+	if v1 == nil || v1.Sink == nil {
+		return
+	}
+	for _, dispatch := range v1.Sink.DispatchRules {
+		c.Sink.DispatchRules = append(c.Sink.DispatchRules, &DispatchRule{
+			Matcher:    []string{fmt.Sprintf("%s.%s", dispatch.Schema, dispatch.Name)},
+			Dispatcher: dispatch.Rule,
+		})
+	}
 }
 
 // GetDefaultReplicaConfig returns the default replica config

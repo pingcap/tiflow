@@ -18,7 +18,7 @@ import (
 
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/tidb-tools/pkg/filter"
+	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 )
 
 // OptCyclicConfig is the key that adds to changefeed options
@@ -27,25 +27,37 @@ const OptCyclicConfig string = "_cyclic_relax_sql_mode"
 
 // Filter is a event filter implementation
 type Filter struct {
-	filter           *filter.Filter
+	filter           filter.Filter
 	ignoreTxnStartTs []uint64
 	ddlWhitelist     []model.ActionType
 }
 
 // NewFilter creates a filter
 func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
-	filter, err := filter.New(cfg.CaseSensitive, cfg.Filter.Rules)
+	var f filter.Filter
+	var err error
+	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
+		f, err = filter.ParseMySQLReplicationRules(cfg.Filter.MySQLReplicationRules)
+	} else {
+		rules := cfg.Filter.Rules
+		if len(rules) == 0 {
+			rules = []string{"*.*"}
+		}
+		f, err = filter.Parse(rules)
+	}
 	if err != nil {
 		return nil, err
 	}
+	if !cfg.CaseSensitive {
+		f = filter.CaseInsensitive(f)
+	}
 	return &Filter{
-		filter:           filter,
+		filter:           f,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
 		ddlWhitelist:     cfg.Filter.DDLWhitelist,
 	}, nil
 }
 
-// ShouldIgnoreTxn returns true is the given txn should be ignored
 func (f *Filter) shouldIgnoreStartTs(ts uint64) bool {
 	for _, ignoreTs := range f.ignoreTxnStartTs {
 		if ignoreTs == ts {
@@ -61,9 +73,7 @@ func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 	if IsSysSchema(db) {
 		return true
 	}
-	// TODO: Change filter to support simple check directly
-	left := f.filter.ApplyOn([]*filter.Table{{Schema: db, Name: tbl}})
-	return len(left) == 0
+	return !f.filter.MatchTable(db, tbl)
 }
 
 // ShouldIgnoreDMLEvent removes DMLs that's not wanted by this change feed.
