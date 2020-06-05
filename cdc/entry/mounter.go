@@ -381,14 +381,19 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		}
 		values[colName] = col
 	}
+	var partitionID int64
+	if tableInfo.GetPartitionInfo() != nil {
+		partitionID = row.PhysicalTableID
+	}
 
 	event := &model.RowChangedEvent{
 		StartTs:  row.StartTs,
 		CommitTs: row.CRTs,
 		RowID:    row.RecordID,
 		Table: &model.TableName{
-			Schema: tableInfo.TableName.Schema,
-			Table:  tableInfo.TableName.Table,
+			Schema:    tableInfo.TableName.Schema,
+			Table:     tableInfo.TableName.Table,
+			Partition: partitionID,
 		},
 		IndieMarkCol: tableInfo.IndieMarkCol,
 	}

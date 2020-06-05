@@ -509,6 +509,32 @@ func (c CDCEtcdClient) PutChangeFeedStatus(
 	return errors.Trace(err)
 }
 
+// SetChangeFeedStatusTTL sets the TTL of changefeed synchronization status
+func (c CDCEtcdClient) SetChangeFeedStatusTTL(
+	ctx context.Context,
+	changefeedID string,
+	ttl int64,
+) error {
+	key := GetEtcdKeyJob(changefeedID)
+	leaseResp, err := c.Client.Grant(ctx, ttl)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	status, _, err := c.GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	statusStr, err := status.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = c.Client.Put(ctx, key, statusStr, clientv3.WithLease(leaseResp.ID))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return errors.Trace(err)
+}
+
 // PutAllChangeFeedStatus puts ChangeFeedStatus of each changefeed into etcd
 func (c CDCEtcdClient) PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
 	var (

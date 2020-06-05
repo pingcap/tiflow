@@ -67,6 +67,10 @@ replica-id = 1
 filter-replica-ids = [2,3]
 id-buckets = 4
 sync-ddl = true
+
+[scheduler]
+type = "manual"
+polling-time = 5
 `
 	err := ioutil.WriteFile(path, []byte(content), 0644)
 	c.Assert(err, check.IsNil)
@@ -107,6 +111,10 @@ sync-ddl = true
 		FilterReplicaID: []uint64{2, 3},
 		IDBuckets:       4,
 		SyncDDL:         true,
+	})
+	c.Assert(cfg.Scheduler, check.DeepEquals, &config.SchedulerConfig{
+		Tp:          "manual",
+		PollingTime: 5,
 	})
 }
 

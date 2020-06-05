@@ -35,8 +35,9 @@ const (
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema string `toml:"db-name" json:"db-name"`
-	Table  string `toml:"tbl-name" json:"tbl-name"`
+	Schema    string `toml:"db-name" json:"db-name"`
+	Table     string `toml:"tbl-name" json:"tbl-name"`
+	Partition int64  `json:"partition"`
 }
 
 // String implements fmt.Stringer interface.
