@@ -87,6 +87,8 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		return nil
 	}
 
+	defer s.statistics.PrintStatus()
+
 	s.unresolvedRowsMu.Lock()
 	if len(s.unresolvedRows) == 0 {
 		atomic.StoreUint64(&s.checkpointTs, resolvedTs)
@@ -112,7 +114,6 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		return errors.Trace(err)
 	}
 	atomic.StoreUint64(&s.checkpointTs, resolvedTs)
-	s.statistics.PrintStatus()
 	return nil
 }
 

@@ -148,6 +148,7 @@ flushLoop:
 		return errors.Trace(err)
 	}
 	k.checkpointTs = resolvedTs
+	k.statistics.PrintStatus()
 	return nil
 }
 
