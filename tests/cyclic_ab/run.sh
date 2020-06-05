@@ -37,7 +37,7 @@ function run() {
         --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
         --addr "127.0.0.1:8300"
 
-    cdc cli changefeed create --start-ts=$start_ts \
+    cdc cli changefeed create \
         --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
         --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
         --cyclic-replica-id 1 \
@@ -52,7 +52,7 @@ function run() {
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --addr "127.0.0.1:8301"
 
-    cdc cli changefeed create --start-ts=$start_ts \
+    cdc cli changefeed create \
         --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/" \
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --cyclic-replica-id 2 \

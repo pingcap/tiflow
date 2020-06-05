@@ -31,12 +31,13 @@ function run() {
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "_${TEST_NAME}_upsteam" --pd "http://${UP_PD_HOST}:${UP_PD_PORT}"
 
     # Loop back to self.
-    cdc cli changefeed create --start-ts=$start_ts \
+    cdc cli changefeed create \
         --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/" \
         --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
         --cyclic-replica-id 1 \
         --cyclic-filter-replica-ids 2 \
-        --cyclic-sync-ddl true
+        --cyclic-sync-ddl true \
+        --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
 
     for i in $(seq 1 10); do {
         sqlup="START TRANSACTION;"
