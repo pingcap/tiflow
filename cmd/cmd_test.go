@@ -111,7 +111,9 @@ case-sensitive = true
 ignore-txn-start-ts = [1, 2]
 
 # 过滤器规则
+# 过滤规则语法： https://github.com/pingcap/tidb-tools/tree/master/pkg/table-filter#syntax
 # The rules of the filter
+# Filter rule syntax: https://github.com/pingcap/tidb-tools/tree/master/pkg/table-filter#syntax
 rules = ['*.*', '!test.*']
 
 [mounter]

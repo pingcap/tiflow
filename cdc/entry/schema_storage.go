@@ -241,12 +241,8 @@ func WrapTableInfo(schemaID int64, schemaName string, info *timodel.TableInfo) *
 		}
 		ti.rowColInfos[i] = rowcodec.ColInfo{
 			ID:         col.ID,
-			Tp:         int32(col.Tp),
-			Flag:       int32(col.Flag),
-			Flen:       col.Flen,
-			Decimal:    col.Decimal,
-			Elems:      col.Elems,
 			IsPKHandle: isPK,
+			Ft:         rowcodec.FieldTypeFromModelColumn(col),
 		}
 	}
 

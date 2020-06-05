@@ -294,6 +294,9 @@ func (o *Owner) newChangeFeed(
 	return cf, nil
 }
 
+// This is a compatibility hack between v4.0.0 and v4.0.1
+// This function will try to decode the task status, if that throw a unmarshal error,
+// it will remove the invalid task status
 func (o *Owner) checkAndCleanTasksInfo(ctx context.Context) error {
 	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
 	if err != nil {
@@ -313,24 +316,9 @@ func (o *Owner) checkAndCleanTasksInfo(ctx context.Context) error {
 		default:
 			return errors.Trace(err)
 		}
-		_, err = o.cfRWriter.GetAllTaskPositions(ctx, changefeedID)
-		if err != nil {
-			return err
-		}
-		switch errors.Cause(err) {
-		case model.ErrDecodeFailed:
-			err := o.cfRWriter.RemoveAllTaskPositions(ctx, changefeedID)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			cleaned = true
-		case nil:
-		default:
-			return errors.Trace(err)
-		}
 	}
 	if cleaned {
-		log.Warn("the task status or task positions is outdated, clean them")
+		log.Warn("the task status is outdated, clean them")
 	}
 	return nil
 }
