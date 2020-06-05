@@ -33,6 +33,7 @@ function run() {
     run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # sync_diff can't check non-exist table, so we check expected tables are created in downstream first
     check_table_exists common_1.v1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists common_1.recover_and_insert ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_table_exists common_1.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
