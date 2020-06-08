@@ -528,7 +528,7 @@ func (w *mysqlSinkWorker) fetchAllPendingEvents(
 }
 
 func (s *mysqlSink) Close() error {
-	return nil
+	return s.db.Close()
 }
 
 func (s *mysqlSink) execDMLWithMaxRetries(

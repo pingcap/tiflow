@@ -843,11 +843,13 @@ func (p *processor) stop(ctx context.Context) error {
 	}
 	p.stateMu.Unlock()
 	atomic.StoreInt32(&p.stopped, 1)
-
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureID); err != nil {
 		return err
 	}
-	return p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID)
+	if err := p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID); err != nil {
+		return err
+	}
+	return p.sink.Close()
 }
 
 func (p *processor) isStopped() bool {
