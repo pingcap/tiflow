@@ -290,8 +290,8 @@ func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
 func (s *etcdSuite) TestDeleteTaskWorkload(c *check.C) {
 	ctx := context.Background()
 	workload := &model.TaskWorkload{
-		1001: model.WorkloadInfo{1},
-		1002: model.WorkloadInfo{3},
+		1001: model.WorkloadInfo{Workload: 1},
+		1002: model.WorkloadInfo{Workload: 3},
 	}
 	feedID := "feedid"
 	captureID := "captureid"
@@ -313,21 +313,21 @@ func (s *etcdSuite) TestGetAllTaskWorkload(c *check.C) {
 	captures := []string{"capture1", "capture2", "capture3"}
 	expected := []map[string]*model.TaskWorkload{
 		{
-			"capture1": {1000: model.WorkloadInfo{1}},
-			"capture2": {1001: model.WorkloadInfo{1}},
-			"capture3": {1002: model.WorkloadInfo{1}},
+			"capture1": {1000: model.WorkloadInfo{Workload: 1}},
+			"capture2": {1001: model.WorkloadInfo{Workload: 1}},
+			"capture3": {1002: model.WorkloadInfo{Workload: 1}},
 		},
 		{
-			"capture1": {2000: model.WorkloadInfo{1}},
-			"capture2": {2001: model.WorkloadInfo{1}},
-			"capture3": {2002: model.WorkloadInfo{1}},
+			"capture1": {2000: model.WorkloadInfo{Workload: 1}},
+			"capture2": {2001: model.WorkloadInfo{Workload: 1}},
+			"capture3": {2002: model.WorkloadInfo{Workload: 1}},
 		},
 	}
 
 	for i, feed := range feeds {
 		for j, capture := range captures {
 			err := s.client.PutTaskWorkload(ctx, feed, capture, &model.TaskWorkload{
-				int64(1000*(i+1) + j): model.WorkloadInfo{1},
+				int64(1000*(i+1) + j): model.WorkloadInfo{Workload: 1},
 			})
 			c.Assert(err, check.IsNil)
 		}
