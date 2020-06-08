@@ -240,6 +240,17 @@ func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
+// enableAutoRandom enables writing AutoRandom values to the sink by setting
+// the session variable "allow_auto_random_explicit_insert".
+func (s *mysqlSink) enableAutoRandom(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf("SET allow_auto_random_explicit_insert = true;"))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = rows.Close()
+	return errors.Trace(err)
+}
+
 var _ Sink = &mysqlSink{}
 
 type params struct {
@@ -279,9 +290,10 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 	tz := util.TimezoneFromCtx(ctx)
 
 	var dsnStr string
+	var scheme string
 	switch {
 	case sinkURI != nil:
-		scheme := strings.ToLower(sinkURI.Scheme)
+		scheme = strings.ToLower(sinkURI.Scheme)
 		if scheme != "mysql" && scheme != "tidb" {
 			return nil, errors.New("can create mysql sink with unsupported scheme")
 		}
@@ -360,6 +372,13 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		sink.cyclic = cyclic.NewCyclic(cfg)
 
 		err = sink.adjustSQLMode(ctx)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	if scheme == "tidb" {
+		err := sink.enableAutoRandom(ctx)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
