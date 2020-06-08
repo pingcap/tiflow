@@ -70,31 +70,24 @@ split-table = true
 EOF
 
 echo "Starting Upstream TiKV..."
-tikv-server \
-    --pd ${UP_PD_HOST}:${UP_PD_PORT} \
-    -A ${UP_TIKV_HOST_1}:${UP_TIKV_PORT_1} \
-    --log-file "$OUT_DIR/tikv1.log" \
-    -C "$OUT_DIR/tikv-config.toml" \
-    -s "$OUT_DIR/tikv1" &
-
-tikv-server \
-    --pd ${UP_PD_HOST}:${UP_PD_PORT} \
-    -A ${UP_TIKV_HOST_2}:${UP_TIKV_PORT_2} \
-    --log-file "$OUT_DIR/tikv2.log" \
-    -C "$OUT_DIR/tikv-config.toml" \
-    -s "$OUT_DIR/tikv2" &
-
-tikv-server \
-    --pd ${UP_PD_HOST}:${UP_PD_PORT} \
-    -A ${UP_TIKV_HOST_3}:${UP_TIKV_PORT_3} \
-    --log-file "$OUT_DIR/tikv3.log" \
-    -C "$OUT_DIR/tikv-config.toml" \
-    -s "$OUT_DIR/tikv3" &
+for idx in $(seq 1 3); do
+    host="UP_TIKV_HOST_$idx"
+    port="UP_TIKV_PORT_$idx"
+    status_port="UP_TIKV_STATUS_PORT_$idx"
+    tikv-server \
+        --pd ${UP_PD_HOST}:${UP_PD_PORT} \
+        -A ${!host}:${!port} \
+        --status-addr ${!host}:${!status_port} \
+        --log-file "$OUT_DIR/tikv$idx.log" \
+        -C "$OUT_DIR/tikv-config.toml" \
+        -s "$OUT_DIR/tikv$idx" &
+done
 
 echo "Starting Downstream TiKV..."
 tikv-server \
     --pd ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
     -A ${DOWN_TIKV_HOST}:${DOWN_TIKV_PORT} \
+    --status-addr ${DOWN_TIKV_HOST}:${DOWN_TIKV_STATUS_PORT} \
     --log-file "$OUT_DIR/tikv_down.log" \
     -C "$OUT_DIR/tikv-config.toml" \
     -s "$OUT_DIR/tikv_down" &
