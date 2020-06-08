@@ -43,6 +43,6 @@ require (
 	google.golang.org/grpc v1.26.0
 )
 
-replace github.com/pingcap/kvproto => github.com/MyonKeminta/kvproto v0.0.0-20200526074531-c6b1755e9382
+replace github.com/pingcap/kvproto => github.com/MyonKeminta/kvproto v0.0.0-20200608071553-babe7a4311be
 
 replace github.com/pingcap/tidb => github.com/MyonKeminta/tidb v1.1.0-alpha.1.0.20200602122902-4d9571613547

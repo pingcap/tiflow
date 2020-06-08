@@ -31,6 +31,8 @@ github.com/KyleBanks/depth v1.2.1 h1:5h8fQADFrWtarTdtDudMmGsC7GPbOAu6RVB3ffsVFHc
 github.com/KyleBanks/depth v1.2.1/go.mod h1:jzSb9d0L43HxTQfT+oSA1EEp2q+ne2uh6XgeJcm8brE=
 github.com/MyonKeminta/kvproto v0.0.0-20200526074531-c6b1755e9382 h1:Yy+B0e8aEakDN/fCNyFgDYaIlqBSGsy5ZhGKCy0KHL0=
 github.com/MyonKeminta/kvproto v0.0.0-20200526074531-c6b1755e9382/go.mod h1:IOdRDPLyda8GX2hE/jO7gqaCV/PNFh8BZQCQZXfIOqI=
+github.com/MyonKeminta/kvproto v0.0.0-20200608071553-babe7a4311be h1:ou3Vf+/Swtzqp3Mg+Rvm8KW3713J5ENQBBSIzlamby8=
+github.com/MyonKeminta/kvproto v0.0.0-20200608071553-babe7a4311be/go.mod h1:IOdRDPLyda8GX2hE/jO7gqaCV/PNFh8BZQCQZXfIOqI=
 github.com/MyonKeminta/tidb v1.1.0-alpha.1.0.20200602122902-4d9571613547 h1:XBssBBfH1Ed+aPdi8kTPnxnSJXhkIXpMIL9CSi8JFsw=
 github.com/MyonKeminta/tidb v1.1.0-alpha.1.0.20200602122902-4d9571613547/go.mod h1:uQL8+ywRrtB75/ZPzgySBsEfkaRTQ2iJb2+MQduK/O8=
 github.com/OneOfOne/xxhash v1.2.2 h1:KMrpdQIwFcEqXDklaen+P1axHaj9BSKzvpUUfnHldSE=
