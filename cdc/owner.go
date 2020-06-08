@@ -776,6 +776,10 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 		if err != nil {
 			return errors.Trace(err)
 		}
+		workloads, err := o.etcdClient.GetAllTaskWorkloads(ctx, changeFeedID)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		// in most cases statuses and positions have the same keys, or positions
 		// are more than statuses, as we always delete task status first.
 		captureIDs := make(map[string]struct{}, len(statuses))
@@ -783,6 +787,9 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 			captureIDs[captureID] = struct{}{}
 		}
 		for captureID := range positions {
+			captureIDs[captureID] = struct{}{}
+		}
+		for captureID := range workloads {
 			captureIDs[captureID] = struct{}{}
 		}
 
@@ -811,6 +818,9 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 					return errors.Trace(err)
 				}
 				if err := o.etcdClient.DeleteTaskPosition(ctx, changeFeedID, captureID); err != nil {
+					return errors.Trace(err)
+				}
+				if err := o.etcdClient.DeleteTaskWorkload(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
 				log.Debug("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
