@@ -442,6 +442,48 @@ func (c CDCEtcdClient) PutTaskWorkload(
 	return nil
 }
 
+// DeleteTaskWorkload deletes task workload from etcd
+func (c CDCEtcdClient) DeleteTaskWorkload(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+) error {
+	key := GetEtcdKeyTaskWorkload(changefeedID, captureID)
+	_, err := c.Client.Delete(ctx, key)
+	return errors.Trace(err)
+}
+
+// GetAllTaskWorkloads queries all task workloads of a changefeed, and returns a map
+// mapping from captureID to TaskWorkloads
+func (c CDCEtcdClient) GetAllTaskWorkloads(ctx context.Context, changefeedID string) (map[string]*model.TaskWorkload, error) {
+	resp, err := c.Client.Get(ctx, TaskWorkloadKeyPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	workloads := make(map[string]*model.TaskWorkload, resp.Count)
+	for _, rawKv := range resp.Kvs {
+		changeFeed, err := model.ExtractKeySuffix(string(rawKv.Key))
+		if err != nil {
+			return nil, err
+		}
+		endIndex := len(rawKv.Key) - len(changeFeed) - 1
+		captureID, err := model.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		if err != nil {
+			return nil, err
+		}
+		if changeFeed != changefeedID {
+			continue
+		}
+		info := &model.TaskWorkload{}
+		err = info.Unmarshal(rawKv.Value)
+		if err != nil {
+			return nil, errors.Annotate(model.ErrDecodeFailed, "failed to unmarshal task workload")
+		}
+		workloads[captureID] = info
+	}
+	return workloads, nil
+}
+
 // AtomicPutTaskStatus puts task status into etcd atomically.
 func (c CDCEtcdClient) AtomicPutTaskStatus(
 	ctx context.Context,

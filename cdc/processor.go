@@ -849,6 +849,9 @@ func (p *processor) stop(ctx context.Context) error {
 	if err := p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID); err != nil {
 		return err
 	}
+	if err := p.etcdCli.DeleteTaskWorkload(ctx, p.changefeedID, p.captureID); err != nil {
+		return err
+	}
 	return p.sink.Close()
 }
 
