@@ -442,7 +442,7 @@ func (c CDCEtcdClient) PutTaskWorkload(
 	return nil
 }
 
-// DeleteTaskWorkload deletes task status from etcd
+// DeleteTaskWorkload deletes task workload from etcd
 func (c CDCEtcdClient) DeleteTaskWorkload(
 	ctx context.Context,
 	changefeedID string,
