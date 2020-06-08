@@ -48,6 +48,14 @@ while ! curl -o /dev/null -sf http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/v
     sleep 1
 done
 
+while [ -z "$(curl http://${UP_PD_HOST}:${UP_PD_PORT}/pd/health 2> /dev/null | grep 'health' | grep 'true')" ]; do
+    sleep 1
+done
+
+while [ -z "$(curl http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/health 2> /dev/null | grep 'health' | grep 'true')" ]; do
+    sleep 1
+done
+
 # Tries to limit the max number of open files under the system limit
 cat - >"$OUT_DIR/tikv-config.toml" <<EOF
 [rocksdb]
