@@ -1355,6 +1355,7 @@ func (s *eventFeedSession) resolveLongTxn(ctx context.Context, regionID uint64, 
 
 	txnStatuses = make([]*cdcpb.TxnStatus, 0, len(remainingTxns))
 	var err1 error = nil
+ForEachTxn:
 	for _, txn := range remainingTxns {
 		status, err := s.kvStorage.GetLockResolver().GetTxnStatus(txn.GetStartTs(), now, txn.GetPrimary())
 		if err != nil {
@@ -1362,11 +1363,27 @@ func (s *eventFeedSession) resolveLongTxn(ctx context.Context, regionID uint64, 
 			break
 		}
 
-		if status.Action() == kvrpcpb.Action_MinCommitTSPushed {
+		switch status.Action() {
+		case kvrpcpb.Action_MinCommitTSPushed:
 			txnStatuses = append(txnStatuses, &cdcpb.TxnStatus{
 				StartTs:     txn.GetStartTs(),
 				MinCommitTs: now,
 			})
+		case kvrpcpb.Action_LockNotExistRollback:
+		case kvrpcpb.Action_TTLExpireRollback:
+			txnStatuses = append(txnStatuses, &cdcpb.TxnStatus{
+				StartTs: txn.GetStartTs(),
+			})
+		case kvrpcpb.Action_NoAction:
+			txnStatuses = append(txnStatuses, &cdcpb.TxnStatus{
+				StartTs:  txn.GetStartTs(),
+				CommitTs: status.CommitTS(),
+			})
+		default:
+			log.Error("Unsupported action returned by CheckTxnStatus. Do not resolve the transaction",
+				zap.Uint64("regionID", regionID),
+				zap.Uint64("startTs", txn.GetStartTs()))
+			continue ForEachTxn
 		}
 		// TODO: Otherwise, we can actually do resolvelocks here.
 	}

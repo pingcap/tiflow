@@ -21,8 +21,8 @@ import (
 )
 
 type txnStatusEntry struct {
-	minCommitTs uint64
-	updateTime  time.Time
+	txnStatus  *cdcpb.TxnStatus
+	updateTime time.Time
 }
 
 // TxnStatusCache caches statuses of transactions.
@@ -79,16 +79,25 @@ func (m *TxnStatusCache) CleanExpiredEntries() {
 	}
 }
 
+func isOlderThan(a, b *cdcpb.TxnStatus) bool {
+	// b is committed or rolled back
+	if a.MinCommitTs > 0 && b.MinCommitTs == 0 {
+		return true
+	}
+	// b has a nerwe min commit ts
+	return a.MinCommitTs < b.MinCommitTs
+}
+
 // Update updates statuses of some transactions.
 func (m *TxnStatusCache) Update(txnStatuses []*cdcpb.TxnStatus) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, txn := range txnStatuses {
 		entry, ok := m.m[txn.GetStartTs()]
-		if !ok || entry.minCommitTs < txn.GetMinCommitTs() {
+		if !ok || isOlderThan(entry.txnStatus, txn) {
 			m.m[txn.GetStartTs()] = txnStatusEntry{
-				minCommitTs: txn.GetMinCommitTs(),
-				updateTime:  time.Now(),
+				txnStatus:  txn,
+				updateTime: time.Now(),
 			}
 		}
 	}
@@ -108,10 +117,7 @@ func (m *TxnStatusCache) Get(txnInfo []*cdcpb.TxnInfo) ([]*cdcpb.TxnStatus, []*c
 		if !ok || time.Since(entry.updateTime) > m.ttl {
 			uncachedTxnInfo = append(uncachedTxnInfo, txn)
 		} else {
-			result = append(result, &cdcpb.TxnStatus{
-				StartTs:     txn.GetStartTs(),
-				MinCommitTs: entry.minCommitTs,
-			})
+			result = append(result, entry.txnStatus)
 		}
 	}
 	return result, uncachedTxnInfo
