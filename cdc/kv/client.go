@@ -387,7 +387,7 @@ func newEventFeedSession(
 		requestRangeCh:             make(chan rangeRequestTask, 16),
 		notifyTxnStatusCh:          notifyTxnStatusCh,
 		rangeLock:                  regionspan.NewRegionRangeLock(),
-		longTxnResolver:            NewLongTxnResolver(id, notifyTxnStatusCh, time.Second*1),
+		longTxnResolver:            NewLongTxnResolver(id, kvStorage, notifyTxnStatusCh, time.Second*1),
 		id:                         strconv.FormatUint(allocID(), 10),
 		regionChSizeGauge:          clientChannelSize.WithLabelValues(id, "region"),
 		errChSizeGauge:             clientChannelSize.WithLabelValues(id, "err"),

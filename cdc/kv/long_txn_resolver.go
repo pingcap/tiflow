@@ -140,11 +140,17 @@ type LongTxnResolver struct {
 }
 
 // NewLongTxnResolver creates a new LongTxnResolver
-func NewLongTxnResolver(id string, notifyTxnStatusCh chan notifyTxnStatusTask, cacheTTL time.Duration) *LongTxnResolver {
+func NewLongTxnResolver(
+	id string,
+	kvStorage tikv.Storage,
+	notifyTxnStatusCh chan notifyTxnStatusTask,
+	cacheTTL time.Duration,
+) *LongTxnResolver {
 	return &LongTxnResolver{
 		id:                         id,
 		notifyTxnStatusCh:          notifyTxnStatusCh,
 		txnStatusCache:             NewTxnStatusCache(cacheTTL),
+		kvStorage:                  kvStorage,
 		notifyTxnStatusChSizeGauge: clientChannelSize.WithLabelValues(id, "notify-txn-status"),
 	}
 }
