@@ -24,14 +24,13 @@ function run() {
     # create table to upstream.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-    # record tso before we create tables to skip the system table DDLs
-    # and make sure mark table is created.
+    cdc cli changefeed cyclic create_marktables \
+        --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
+
+    # record tso after we create tables to not block on waiting mark tables DDLs.
     start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "_${TEST_NAME}_upsteam" --pd "http://${UP_PD_HOST}:${UP_PD_PORT}"
-
-    cdc cli changefeed cyclic create_marktables \
-        --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
 
     # Loop back to self.
     cdc cli changefeed create --start-ts=$start_ts \

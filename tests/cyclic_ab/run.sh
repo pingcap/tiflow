@@ -27,8 +27,13 @@ function run() {
     # create table to downsteam.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-    # record tso before we create tables to skip the system table DDLs
-    # and make sure mark table is created.
+    cdc cli changefeed cyclic create_marktables \
+        --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
+
+    cdc cli changefeed cyclic create_marktables \
+        --cyclic-upstream-dsn="root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/"
+
+    # record tso after we create tables to not block on waiting mark tables DDLs.
     start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
 
     run_cdc_server \
@@ -38,16 +43,6 @@ function run() {
         --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
         --addr "127.0.0.1:8300"
 
-    cdc cli changefeed cyclic create_marktables \
-        --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
-
-    cdc cli changefeed create --start-ts=$start_ts \
-        --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
-        --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
-        --cyclic-replica-id 1 \
-        --cyclic-filter-replica-ids 2 \
-        --cyclic-sync-ddl true
-
     run_cdc_server \
         --workdir $WORK_DIR \
         --binary $CDC_BINARY \
@@ -55,8 +50,12 @@ function run() {
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --addr "127.0.0.1:8301"
 
-    cdc cli changefeed cyclic create_marktables \
-        --cyclic-upstream-dsn="root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/"
+    cdc cli changefeed create --start-ts=$start_ts \
+        --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
+        --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
+        --cyclic-replica-id 1 \
+        --cyclic-filter-replica-ids 2 \
+        --cyclic-sync-ddl true
 
     cdc cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/" \
