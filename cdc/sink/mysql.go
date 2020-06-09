@@ -254,7 +254,7 @@ var defaultParams = params{
 	maxTxnRow:   defaultMaxTxnRow,
 }
 
-func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location, ctx context.Context) (string, error) {
+func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
@@ -341,13 +341,13 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		dsnStr, err = configureSinkURI(dsn, tz, ctx)
+		dsnStr, err = configureSinkURI(ctx, dsn, tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	case dsn != nil:
 		var err error
-		dsnStr, err = configureSinkURI(dsn, tz, ctx)
+		dsnStr, err = configureSinkURI(ctx, dsn, tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
