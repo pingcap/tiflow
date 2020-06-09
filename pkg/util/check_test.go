@@ -111,8 +111,8 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 func (s *checkSuite) TestCompareVersion(c *check.C) {
 	c.Assert(semver.New("4.0.0-rc").Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
 	c.Assert(semver.New("4.0.0-rc.1").Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
-	// BUG it should be "<" instead of ">".
-	// c.Assert(semver.New("4.0.0-rc-35-g31dae220").Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
+	c.Assert(semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
+	c.Assert(semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), check.Equals, 1)
 }
 
 func (s *checkSuite) TestIsValidUUIDv4(c *check.C) {
