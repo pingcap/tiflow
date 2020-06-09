@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
-	"go.uber.org/zap"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -40,6 +39,7 @@ func newChangefeedCommand() *cobra.Command {
 		newQueryChangefeedCommand(),
 		newCreateChangefeedCommand(),
 		newStatisticsChangefeedCommand(),
+		newCreateChangefeedCyclicCommand(),
 	)
 	// Add pause, resume, remove changefeed
 	for _, cmd := range newAdminChangefeedCommand() {
@@ -165,6 +165,16 @@ func newCreateChangefeedCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 			id := uuid.New().String()
+			if startTs == 0 {
+				ts, logical, err := pdCli.GetTS(ctx)
+				if err != nil {
+					return err
+				}
+				startTs = oracle.ComposeTS(ts, logical)
+			}
+			if err := verifyStartTs(ctx, startTs, cdcEtcdCli); err != nil {
+				return err
+			}
 
 			cfg := config.GetDefaultReplicaConfig()
 			if len(configFile) > 0 {
@@ -172,15 +182,11 @@ func newCreateChangefeedCommand() *cobra.Command {
 					return err
 				}
 			}
-			if cyclicReplicaID != 0 || len(cyclicFilterReplicaIDs) != 0 || len(cyclicUpstreamDSN) != 0 {
-				if !(cyclicReplicaID != 0 && len(cyclicFilterReplicaIDs) != 0 && len(cyclicUpstreamDSN) != 0) {
+			if cyclicReplicaID != 0 || len(cyclicFilterReplicaIDs) != 0 {
+				if !(cyclicReplicaID != 0 && len(cyclicFilterReplicaIDs) != 0) {
 					return errors.Errorf(
-						"invaild cyclic config, please make sure using nonzero replica ID, " +
-							"specify filter replica IDs and privode an valid upstream DSN")
-				}
-				if startTs != 0 {
-					// TODO(neil) make cyclic replication compatible with specifying a start ts.
-					return errors.New("cyclic replication is not support specifying a start ts")
+						"invaild cyclic config, please make sure using nonzero replica ID " +
+							"and specify filter replica IDs")
 				}
 				filter := make([]uint64, 0, len(cyclicFilterReplicaIDs))
 				for _, id := range cyclicFilterReplicaIDs {
@@ -194,15 +200,15 @@ func newCreateChangefeedCommand() *cobra.Command {
 					// TODO(neil) enable ID bucket.
 				}
 			}
-			if startTs == 0 {
-				ts, logical, err := pdCli.GetTS(ctx)
-				if err != nil {
-					return err
-				}
-				startTs = oracle.ComposeTS(ts, logical)
-			}
-			if err := verifyStartTs(ctx, startTs, cdcEtcdCli); err != nil {
-				return err
+			info := &model.ChangeFeedInfo{
+				SinkURI:    sinkURI,
+				Opts:       make(map[string]string),
+				CreateTime: time.Now(),
+				StartTs:    startTs,
+				TargetTs:   targetTs,
+				Config:     cfg,
+				Engine:     model.SortEngine(sortEngine),
+				SortDir:    sortDir,
 			}
 
 			ineligibleTables, allTables, err := verifyTables(ctx, cfg, startTs)
@@ -224,35 +230,11 @@ func newCreateChangefeedCommand() *cobra.Command {
 					}
 				}
 			}
-			if cfg.Cyclic.IsEnabled() {
-				err = cyclic.CreateMarkTables(ctx, allTables, cyclicUpstreamDSN)
-				if err != nil {
-					return err
-				}
-
-				// Get a new TS since we have created some tables.
-				ts, logical, err := pdCli.GetTS(ctx)
-				if err != nil {
-					return err
-				}
-				log.Info("rebase start ts",
-					zap.Uint64("from", startTs), zap.Uint64("to", oracle.ComposeTS(ts, logical)))
-				startTs = oracle.ComposeTS(ts, logical)
-				if err := verifyStartTs(ctx, startTs, cdcEtcdCli); err != nil {
-					return err
-				}
+			if cfg.Cyclic.IsEnabled() && !cyclic.IsTablesPaired(allTables) {
+				return errors.Errorf("normal tables and mark tables are not paired, " +
+					"please run `cdc cli changefeed cyclic create_marktables`")
 			}
 
-			info := &model.ChangeFeedInfo{
-				SinkURI:    sinkURI,
-				Opts:       make(map[string]string),
-				CreateTime: time.Now(),
-				StartTs:    startTs,
-				TargetTs:   targetTs,
-				Config:     cfg,
-				Engine:     model.SortEngine(sortEngine),
-				SortDir:    sortDir,
-			}
 			for _, opt := range opts {
 				s := strings.SplitN(opt, "=", 2)
 				if len(s) <= 0 {
@@ -297,7 +279,6 @@ func newCreateChangefeedCommand() *cobra.Command {
 	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
 	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
 	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
-	command.PersistentFlags().StringVar(&cyclicUpstreamDSN, "cyclic-upstream-dsn", "", "(Expremental) Upsteam TiDB DSN in the form of [user[:password]@][net[(addr)]]/")
 
 	return command
 }
@@ -353,5 +334,47 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
 	command.PersistentFlags().UintVar(&interval, "interval", 10, "Interval for outputing the latest statistics")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
+	return command
+}
+
+func newCreateChangefeedCyclicCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "cyclic",
+		Short: "(Expremental) Utility about cyclic replication",
+	}
+	command.AddCommand(
+		&cobra.Command{
+			Use:   "create_marktables",
+			Short: "Create cyclic replication mark tables",
+			Long:  ``,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				ctx := defaultContext
+
+				cfg := config.GetDefaultReplicaConfig()
+				if len(configFile) > 0 {
+					if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
+						return err
+					}
+				}
+				ts, logical, err := pdCli.GetTS(ctx)
+				if err != nil {
+					return err
+				}
+				startTs = oracle.ComposeTS(ts, logical)
+
+				_, allTables, err := verifyTables(ctx, cfg, startTs)
+				if err != nil {
+					return err
+				}
+				err = cyclic.CreateMarkTables(ctx, allTables, cyclicUpstreamDSN)
+				if err != nil {
+					return err
+				}
+				cmd.Printf("Create cyclic replication mark tables successfully! Total tables: %d\n", len(allTables))
+				return nil
+			},
+		})
+	command.PersistentFlags().StringVar(&cyclicUpstreamDSN, "cyclic-upstream-dsn", "", "(Expremental) Upsteam TiDB DSN in the form of [user[:password]@][net[(addr)]]/")
+
 	return command
 }

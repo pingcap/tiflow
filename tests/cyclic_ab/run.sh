@@ -37,13 +37,15 @@ function run() {
         --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
         --addr "127.0.0.1:8300"
 
+    cdc cli changefeed cyclic create_marktables \
+        --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
+
     cdc cli changefeed create \
         --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
         --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
         --cyclic-replica-id 1 \
         --cyclic-filter-replica-ids 2 \
-        --cyclic-sync-ddl true \
-        --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
+        --cyclic-sync-ddl true
 
     run_cdc_server \
         --workdir $WORK_DIR \
@@ -52,13 +54,15 @@ function run() {
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --addr "127.0.0.1:8301"
 
+    cdc cli changefeed cyclic create_marktables \
+        --cyclic-upstream-dsn="root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/"
+
     cdc cli changefeed create \
         --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/" \
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --cyclic-replica-id 2 \
         --cyclic-filter-replica-ids 1 \
-        --cyclic-sync-ddl false \
-        --cyclic-upstream-dsn="root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/"
+        --cyclic-sync-ddl false
 
     for i in $(seq 11 20); do {
         sqlup="START TRANSACTION;"
