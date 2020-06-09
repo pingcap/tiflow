@@ -345,8 +345,8 @@ type eventFeedSession struct {
 	requestRangeCh    chan rangeRequestTask
 	notifyTxnStatusCh chan notifyTxnStatusTask
 
-	rangeLock     *regionspan.RegionRangeLock
-	txnStatsCache *TxnStatusCache
+	rangeLock       *regionspan.RegionRangeLock
+	longTxnResolver *LongTxnResolver
 
 	// To identify metrics of different eventFeedSession
 	id                         string
@@ -374,6 +374,8 @@ func newEventFeedSession(
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
+
+	notifyTxnStatusCh := make(chan notifyTxnStatusTask, 16)
 	return &eventFeedSession{
 		client:                     client,
 		regionCache:                regionCache,
@@ -383,9 +385,9 @@ func newEventFeedSession(
 		regionCh:                   make(chan singleRegionInfo, 16),
 		errCh:                      make(chan regionErrorInfo, 16),
 		requestRangeCh:             make(chan rangeRequestTask, 16),
-		notifyTxnStatusCh:          make(chan notifyTxnStatusTask, 16),
+		notifyTxnStatusCh:          notifyTxnStatusCh,
 		rangeLock:                  regionspan.NewRegionRangeLock(),
-		txnStatsCache:              NewTxnStatusCache(time.Second * 3),
+		longTxnResolver:            NewLongTxnResolver(id, notifyTxnStatusCh, time.Second*1),
 		id:                         strconv.FormatUint(allocID(), 10),
 		regionChSizeGauge:          clientChannelSize.WithLabelValues(id, "region"),
 		errChSizeGauge:             clientChannelSize.WithLabelValues(id, "err"),
@@ -400,8 +402,8 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 
 	log.Debug("event feed started", zap.Reflect("span", s.totalSpan), zap.Uint64("ts", ts))
 
-	s.txnStatsCache.StartBackgroundCleanup()
-	defer s.txnStatsCache.StopBackgroundCleanup()
+	s.longTxnResolver.Start()
+	defer s.longTxnResolver.Stop()
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -513,26 +515,6 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	}
 
 	handleResult(res)
-}
-
-func (s *eventFeedSession) scheduleNotifyTxnStatus(ctx context.Context, regionID uint64, txnStatus []*cdcpb.TxnStatus) {
-	task := notifyTxnStatusTask{
-		regionID:  regionID,
-		txnStatus: txnStatus,
-	}
-	select {
-	case s.notifyTxnStatusCh <- task:
-		s.notifyTxnStatusChSizeGauge.Inc()
-		return
-	default:
-	}
-	go func() {
-		select {
-		case s.notifyTxnStatusCh <- task:
-			s.notifyTxnStatusChSizeGauge.Inc()
-		case <-ctx.Done():
-		}
-	}()
 }
 
 // onRegionFail handles a region's failure, which means, unlock the region's range and send the error to the errCh for
@@ -1331,69 +1313,7 @@ func (s *eventFeedSession) singleEventFeed(
 }
 
 func (s *eventFeedSession) resolveLongTxn(ctx context.Context, regionID uint64, txns []*cdcpb.TxnInfo) error {
-	txnStatuses, remainingTxns := s.txnStatsCache.Get(txns)
-
-	log.Info("tikv reported long live transactions. Try to resolve.",
-		zap.Uint64("regionID", regionID),
-		zap.Int("txns", len(txns)),
-		zap.Int("cached", len(txnStatuses)),
-		zap.Int("uncached", len(remainingTxns)))
-
-	if len(txnStatuses) > 0 {
-		s.scheduleNotifyTxnStatus(ctx, regionID, txnStatuses)
-	}
-	if len(remainingTxns) == 0 {
-		return nil
-	}
-
-	// Access TiKV to get the status of these transactions.
-	currentVersion, err := s.kvStorage.CurrentVersion()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	now := currentVersion.Ver
-
-	txnStatuses = make([]*cdcpb.TxnStatus, 0, len(remainingTxns))
-	var err1 error = nil
-ForEachTxn:
-	for _, txn := range remainingTxns {
-		status, err := s.kvStorage.GetLockResolver().GetTxnStatus(txn.GetStartTs(), now, txn.GetPrimary())
-		if err != nil {
-			err1 = errors.Trace(err)
-			break
-		}
-
-		switch status.Action() {
-		case kvrpcpb.Action_MinCommitTSPushed:
-			txnStatuses = append(txnStatuses, &cdcpb.TxnStatus{
-				StartTs:     txn.GetStartTs(),
-				MinCommitTs: now,
-			})
-		case kvrpcpb.Action_LockNotExistRollback:
-		case kvrpcpb.Action_TTLExpireRollback:
-			txnStatuses = append(txnStatuses, &cdcpb.TxnStatus{
-				StartTs: txn.GetStartTs(),
-			})
-		case kvrpcpb.Action_NoAction:
-			txnStatuses = append(txnStatuses, &cdcpb.TxnStatus{
-				StartTs:  txn.GetStartTs(),
-				CommitTs: status.CommitTS(),
-			})
-		default:
-			log.Error("Unsupported action returned by CheckTxnStatus. Do not resolve the transaction",
-				zap.Uint64("regionID", regionID),
-				zap.Uint64("startTs", txn.GetStartTs()))
-			continue ForEachTxn
-		}
-		// TODO: Otherwise, we can actually do resolvelocks here.
-	}
-
-	if len(txnStatuses) > 0 {
-		s.txnStatsCache.Update(txnStatuses)
-		s.scheduleNotifyTxnStatus(ctx, regionID, txnStatuses)
-	}
-
-	return err1
+	return s.longTxnResolver.Resolve(ctx, regionID, txns)
 }
 
 const scanLockLimit = 1024
