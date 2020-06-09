@@ -16,6 +16,7 @@ package filter
 import (
 	"strings"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
@@ -46,7 +47,7 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 		f, err = filter.Parse(rules)
 	}
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	if !cfg.CaseSensitive {
 		f = filter.CaseInsensitive(f)

@@ -22,10 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/cyclic"
-
-	"github.com/pingcap/ticdc/pkg/scheduler"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -34,7 +30,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -353,6 +351,10 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 
 		cfInfo := &model.ChangeFeedInfo{}
 		err = cfInfo.Unmarshal(cfInfoRawValue.Value)
+		if err != nil {
+			return err
+		}
+		err = cfInfo.VerifyAndFix()
 		if err != nil {
 			return err
 		}
