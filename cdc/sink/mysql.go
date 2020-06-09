@@ -240,17 +240,6 @@ func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
-// enableAutoRandom enables writing AutoRandom values to the sink by setting
-// the session variable "allow_auto_random_explicit_insert".
-func (s *mysqlSink) enableAutoRandom(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, fmt.Sprintf("SET allow_auto_random_explicit_insert = true;"))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = rows.Close()
-	return errors.Trace(err)
-}
-
 var _ Sink = &mysqlSink{}
 
 type params struct {
@@ -265,7 +254,7 @@ var defaultParams = params{
 	maxTxnRow:   defaultMaxTxnRow,
 }
 
-func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
+func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location, ctx context.Context) (string, error) {
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
@@ -273,6 +262,28 @@ func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) 
 	dsnCfg.InterpolateParams = true
 	dsnCfg.MultiStatements = true
 	dsnCfg.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+
+	testDB, err := sql.Open("mysql", dsnCfg.FormatDSN())
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	defer testDB.Close()
+	log.Debug("Opened connection to test whether allow_auto_random_explicit_insert is present.")
+
+	var variableName string
+	var autoRandomInsertEnabled string
+	queryStr := "show session variables like 'allow_auto_random_explicit_insert';"
+	err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &autoRandomInsertEnabled)
+	if err != nil && err != sql.ErrNoRows {
+		return "", errors.Trace(err)
+	}
+
+	if err == nil && autoRandomInsertEnabled == "off" {
+		dsnCfg.Params["allow_auto_random_explicit_insert"] = "1"
+		log.Debug("Set allow_auto_random_explicit_insert to 1")
+	}
+
+	log.Info("Connection string:", zap.String("dsnStr", dsnCfg.FormatDSN()))
 	return dsnCfg.FormatDSN(), nil
 }
 
@@ -330,13 +341,13 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		dsnStr, err = configureSinkURI(dsn, tz)
+		dsnStr, err = configureSinkURI(dsn, tz, ctx)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	case dsn != nil:
 		var err error
-		dsnStr, err = configureSinkURI(dsn, tz)
+		dsnStr, err = configureSinkURI(dsn, tz, ctx)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -372,13 +383,6 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		sink.cyclic = cyclic.NewCyclic(cfg)
 
 		err = sink.adjustSQLMode(ctx)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-
-	if scheme == "tidb" {
-		err := sink.enableAutoRandom(ctx)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
