@@ -1,10 +1,10 @@
-FROM golang:1.13 as builder
+FROM golang:1.14-alpine as builder
+RUN apk add --no-cache git make bash
 WORKDIR /go/src/github.com/pingcap/ticdc
 COPY . .
-RUN go mod download
 RUN make
 
-FROM alpine:3.11
+FROM alpine:3.12
 RUN apk add --no-cache tzdata
 COPY --from=builder /go/src/github.com/pingcap/ticdc/bin/cdc /cdc
 EXPOSE 8300
