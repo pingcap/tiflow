@@ -128,6 +128,7 @@ func (s EmitSuite) TestTxnRowLimiter(c *check.C) {
 		rowGroups[model.TableName{Table: "test"}] = [][]*model.RowChangedEvent{tc.inputGroup}
 		err = concurrentExec(context.Background(), rowGroups, rand.Intn(16), tc.maxTxnRow, func(_ context.Context, rows []*model.RowChangedEvent, _ int) error {
 			output = append(output, rows...)
+			c.Assert(len(rows), check.LessEqual, tc.maxTxnRow)
 			return nil
 		})
 		c.Assert(err, check.IsNil)

@@ -294,6 +294,35 @@ func (o *Owner) newChangeFeed(
 	return cf, nil
 }
 
+// This is a compatibility hack between v4.0.0 and v4.0.1
+// This function will try to decode the task status, if that throw a unmarshal error,
+// it will remove the invalid task status
+func (o *Owner) checkAndCleanTasksInfo(ctx context.Context) error {
+	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
+	if err != nil {
+		return err
+	}
+	cleaned := false
+	for changefeedID := range details {
+		_, err := o.cfRWriter.GetAllTaskStatus(ctx, changefeedID)
+		switch errors.Cause(err) {
+		case model.ErrDecodeFailed:
+			err := o.cfRWriter.RemoveAllTaskStatus(ctx, changefeedID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			cleaned = true
+		case nil:
+		default:
+			return errors.Trace(err)
+		}
+	}
+	if cleaned {
+		log.Warn("the task status is outdated, clean them")
+	}
+	return nil
+}
+
 func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
 	if err != nil {
@@ -747,6 +776,10 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 		if err != nil {
 			return errors.Trace(err)
 		}
+		workloads, err := o.etcdClient.GetAllTaskWorkloads(ctx, changeFeedID)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		// in most cases statuses and positions have the same keys, or positions
 		// are more than statuses, as we always delete task status first.
 		captureIDs := make(map[string]struct{}, len(statuses))
@@ -754,6 +787,9 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 			captureIDs[captureID] = struct{}{}
 		}
 		for captureID := range positions {
+			captureIDs[captureID] = struct{}{}
+		}
+		for captureID := range workloads {
 			captureIDs[captureID] = struct{}{}
 		}
 
@@ -784,6 +820,9 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 				if err := o.etcdClient.DeleteTaskPosition(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
+				if err := o.etcdClient.DeleteTaskWorkload(ctx, changeFeedID, captureID); err != nil {
+					return errors.Trace(err)
+				}
 				log.Debug("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
 			}
 		}
@@ -799,6 +838,10 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 	// When an owner just starts, changefeed information is not updated at once.
 	// Supposing a crased capture should be removed now, the owner will miss deleting
 	// task status and task position if changefeed information is not loaded.
+	// If the task positions and status decode failed, remove them.
+	if err := o.checkAndCleanTasksInfo(ctx); err != nil {
+		return errors.Trace(err)
+	}
 	o.l.Lock()
 	if err := o.loadChangeFeeds(ctx); err != nil {
 		o.l.Unlock()
@@ -842,7 +885,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 				}
 				log.Debug("capture deleted",
 					zap.String("capture-id", c.ID),
-					zap.String("advertise-aadr", c.AdvertiseAddr))
+					zap.String("advertise-addr", c.AdvertiseAddr))
 				o.removeCapture(c)
 			case clientv3.EventTypePut:
 				if !ev.IsCreate() {
@@ -853,7 +896,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 				}
 				log.Debug("capture added",
 					zap.String("capture-id", c.ID),
-					zap.String("advertise-aadr", c.AdvertiseAddr))
+					zap.String("advertise-addr", c.AdvertiseAddr))
 				o.addCapture(c)
 			}
 		}
