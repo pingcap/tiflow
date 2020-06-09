@@ -1,5 +1,6 @@
 #!/bin/bash
 
+set -e
 
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
@@ -40,7 +41,7 @@ function run() {
     cdc cli changefeed cyclic create_marktables \
         --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
 
-    cdc cli changefeed create \
+    cdc cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
         --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
         --cyclic-replica-id 1 \
@@ -57,7 +58,7 @@ function run() {
     cdc cli changefeed cyclic create_marktables \
         --cyclic-upstream-dsn="root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/"
 
-    cdc cli changefeed create \
+    cdc cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/" \
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --cyclic-replica-id 2 \
