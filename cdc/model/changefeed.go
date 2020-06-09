@@ -103,6 +103,9 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 // If some necessary filed is missing but can use a default value, fillin it.
 func (info *ChangeFeedInfo) VerifyAndFix() error {
 	defaultConfig := config.GetDefaultReplicaConfig()
+	if info.Engine == "" {
+		info.Engine = SortInMemory
+	}
 	if info.Config.Filter == nil {
 		info.Config.Filter = defaultConfig.Filter
 	}
