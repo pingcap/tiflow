@@ -780,6 +780,11 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 		)
 		retryErr := retry.Run(50*time.Millisecond, maxRetry,
 			func() error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+				}
 				scanT0 := time.Now()
 				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 				regions, err = s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
