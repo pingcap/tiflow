@@ -184,7 +184,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 			}
 			if cyclicReplicaID != 0 || len(cyclicFilterReplicaIDs) != 0 {
 				if !(cyclicReplicaID != 0 && len(cyclicFilterReplicaIDs) != 0) {
-					return errors.Errorf(
+					return errors.New(
 						"invaild cyclic config, please make sure using nonzero replica ID " +
 							"and specify filter replica IDs")
 				}
