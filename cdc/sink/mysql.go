@@ -283,7 +283,6 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 		log.Debug("Set allow_auto_random_explicit_insert to 1")
 	}
 
-	log.Info("Connection string:", zap.String("dsnStr", dsnCfg.FormatDSN()))
 	return dsnCfg.FormatDSN(), nil
 }
 
@@ -301,10 +300,9 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 	tz := util.TimezoneFromCtx(ctx)
 
 	var dsnStr string
-	var scheme string
 	switch {
 	case sinkURI != nil:
-		scheme = strings.ToLower(sinkURI.Scheme)
+		scheme := strings.ToLower(sinkURI.Scheme)
 		if scheme != "mysql" && scheme != "tidb" {
 			return nil, errors.New("can create mysql sink with unsupported scheme")
 		}
