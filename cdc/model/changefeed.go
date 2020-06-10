@@ -97,3 +97,29 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	}
 	return nil
 }
+
+// VerifyAndFix verifies changefeed info and may fillin some fields.
+// If a must field is not provided, return an error.
+// If some necessary filed is missing but can use a default value, fillin it.
+func (info *ChangeFeedInfo) VerifyAndFix() error {
+	defaultConfig := config.GetDefaultReplicaConfig()
+	if info.Engine == "" {
+		info.Engine = SortInMemory
+	}
+	if info.Config.Filter == nil {
+		info.Config.Filter = defaultConfig.Filter
+	}
+	if info.Config.Mounter == nil {
+		info.Config.Mounter = defaultConfig.Mounter
+	}
+	if info.Config.Sink == nil {
+		info.Config.Sink = defaultConfig.Sink
+	}
+	if info.Config.Cyclic == nil {
+		info.Config.Cyclic = defaultConfig.Cyclic
+	}
+	if info.Config.Scheduler == nil {
+		info.Config.Scheduler = defaultConfig.Scheduler
+	}
+	return nil
+}
