@@ -201,7 +201,7 @@ func (o *Owner) newChangeFeed(
 
 	ctx, cancel := context.WithCancel(ctx)
 	schemas := make(map[model.SchemaID]tableIDMap)
-	tables := make(map[model.TableID]entry.TableName)
+	tables := make(map[model.TableID]model.TableName)
 	partitions := make(map[model.TableID][]int64)
 	orphanTables := make(map[model.TableID]model.Ts)
 	for tid, table := range schemaSnap.CloneTables() {

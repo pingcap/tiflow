@@ -14,6 +14,8 @@
 package model
 
 import (
+	"fmt"
+
 	"github.com/pingcap/parser/model"
 )
 
@@ -33,9 +35,14 @@ const (
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema    string `json:"schema"`
-	Table     string `json:"table"`
+	Schema    string `toml:"db-name" json:"db-name"`
+	Table     string `toml:"tbl-name" json:"tbl-name"`
 	Partition int64  `json:"partition"`
+}
+
+// String implements fmt.Stringer interface.
+func (t TableName) String() string {
+	return fmt.Sprintf("%s.%s", t.Schema, t.Table)
 }
 
 // RowChangedEvent represents a row changed event

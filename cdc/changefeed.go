@@ -93,7 +93,7 @@ type changeFeed struct {
 	ddlExecutedTs uint64
 
 	schemas map[model.SchemaID]tableIDMap
-	tables  map[model.TableID]entry.TableName
+	tables  map[model.TableID]model.TableName
 	// value of partitions is the slice of partitions ID.
 	partitions         map[model.TableID][]int64
 	orphanTables       map[model.TableID]model.Ts
@@ -144,7 +144,7 @@ func (c *changeFeed) dropSchema(schemaID model.SchemaID, targetTs model.Ts) {
 	delete(c.schemas, schemaID)
 }
 
-func (c *changeFeed) addTable(sid model.SchemaID, tid model.TableID, startTs model.Ts, table entry.TableName, tblInfo *timodel.TableInfo) {
+func (c *changeFeed) addTable(sid model.SchemaID, tid model.TableID, startTs model.Ts, table model.TableName, tblInfo *timodel.TableInfo) {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
 	}

@@ -14,44 +14,51 @@
 package cyclic
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"sort"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
 )
 
-// CreateMarkTable returns DDLs to create mark table regard to the tableID
+// CreateMarkTables creates mark table regard to the table name.
 //
-// Note table ID is only for avoid write hotspot there is *NO* guarantee
+// Note table name is only for avoid write hotspot there is *NO* guarantee
 // normal tables and mark tables are one:one map.
-//
-// For now, it's dead code. We need create table on changefeed creation.
-func CreateMarkTable(sourceSchema, sourceTable string) []*model.DDLEvent {
-	schema, table := MarkTableName(sourceSchema, sourceTable)
-	events := []*model.DDLEvent{
-		{
-			Schema: schema,
-			Table:  table,
-			Query:  fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", schema),
-			Type:   timodel.ActionCreateSchema,
-		},
-		{
-			Schema: schema,
-			Table:  table,
-			Query: fmt.Sprintf(
-				`CREATE TABLE IF NOT EXISTS %s.%s
-					(
-					bucket INT NOT NULL,
-					%s BIGINT UNSIGNED NOT NULL,
-					val BIGINT DEFAULT 0,
-					PRIMARY KEY (bucket, %s)
-				);`, schema, table, CyclicReplicaIDCol, CyclicReplicaIDCol),
-			Type: timodel.ActionCreateTable,
-		}}
-	return events
+func CreateMarkTables(ctx context.Context, tables []model.TableName, upstreamDSN string) error {
+	db, err := sql.Open("mysql", upstreamDSN)
+	if err != nil {
+		return errors.Annotate(err, "Open upsteam database connection failed")
+	}
+	err = db.PingContext(ctx)
+	if err != nil {
+		return errors.Annotate(err, "fail to open upstream TiDB connection")
+	}
+
+	for _, name := range tables {
+		schema, table := MarkTableName(name.Schema, name.Table)
+		_, err = db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", schema))
+		if err != nil {
+			return errors.Annotate(err, "fail to create mark database")
+		}
+		_, err = db.ExecContext(ctx, fmt.Sprintf(
+			`CREATE TABLE IF NOT EXISTS %s.%s
+			(
+				bucket INT NOT NULL,
+				%s BIGINT UNSIGNED NOT NULL,
+				val BIGINT DEFAULT 0,
+				PRIMARY KEY (bucket, %s)
+			);`, schema, table, CyclicReplicaIDCol, CyclicReplicaIDCol))
+		if err != nil {
+			return errors.Annotatef(err, "fail to create mark table %s", table)
+		}
+	}
+	log.Info("create upstream mark done", zap.Int("count", len(tables)))
+	return nil
 }
 
 // ExtractReplicaID extracts replica ID from the given mark row.
