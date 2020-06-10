@@ -24,7 +24,7 @@ function run() {
     # create table to upstream.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-    cdc cli changefeed cyclic create_marktables \
+    cdc cli changefeed cyclic create-marktables \
         --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
 
     # record tso after we create tables to not block on waiting mark tables DDLs.

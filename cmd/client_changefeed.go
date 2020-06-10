@@ -232,7 +232,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 			}
 			if cfg.Cyclic.IsEnabled() && !cyclic.IsTablesPaired(allTables) {
 				return errors.New("normal tables and mark tables are not paired, " +
-					"please run `cdc cli changefeed cyclic create_marktables`")
+					"please run `cdc cli changefeed cyclic create-marktables`")
 			}
 
 			for _, opt := range opts {
@@ -344,7 +344,7 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 	}
 	command.AddCommand(
 		&cobra.Command{
-			Use:   "create_marktables",
+			Use:   "create-marktables",
 			Short: "Create cyclic replication mark tables",
 			Long:  ``,
 			RunE: func(cmd *cobra.Command, args []string) error {
