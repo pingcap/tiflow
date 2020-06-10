@@ -231,7 +231,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 				}
 			}
 			if cfg.Cyclic.IsEnabled() && !cyclic.IsTablesPaired(allTables) {
-				return errors.Errorf("normal tables and mark tables are not paired, " +
+				return errors.New("normal tables and mark tables are not paired, " +
 					"please run `cdc cli changefeed cyclic create_marktables`")
 			}
 
