@@ -43,7 +43,7 @@ func CreateMarkTables(ctx context.Context, tables []model.TableName, upstreamDSN
 		schema, table := MarkTableName(name.Schema, name.Table)
 		_, err = db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", schema))
 		if err != nil {
-			return errors.Annotatef(err, "fail to create mark database")
+			return errors.Annotate(err, "fail to create mark database")
 		}
 		_, err = db.ExecContext(ctx, fmt.Sprintf(
 			`CREATE TABLE IF NOT EXISTS %s.%s
