@@ -11,15 +11,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//compatible with canal-1.1.4
+
 package codec
 
-import "github.com/pingcap/ticdc/cdc/model"
+import (
+	"github.com/pingcap/ticdc/cdc/model"
+	canal "github.com/pingcap/ticdc/proto/canal"
+)
+
+const (
+	CanalPacketVersion int32 = 1
+)
 
 type CanalEventBatchEncoder struct {
+	messages *canal.Messages
+	packet   *canal.Packet
 }
 
+// AppendResolvedEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
-	panic("implement me")
+	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
+	// Therefore the event is ignored.
+	return nil
 }
 
 func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
@@ -38,6 +52,18 @@ func (d *CanalEventBatchEncoder) Size() int {
 	panic("implement me")
 }
 
+// NewCanalEventBatchEncoder creates a new CanalEventBatchEncoder.
 func NewCanalEventBatchEncoder() EventBatchEncoder {
-	return &CanalEventBatchEncoder{}
+	p := &canal.Packet{
+		VersionPresent: &canal.Packet_Version{
+			Version: CanalPacketVersion,
+		},
+		Type: canal.PacketType_MESSAGES,
+	}
+
+	encoder := &CanalEventBatchEncoder{
+		messages: &canal.Messages{},
+		packet:   p,
+	}
+	return encoder
 }

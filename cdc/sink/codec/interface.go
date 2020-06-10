@@ -16,7 +16,6 @@ package codec
 import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/config"
 	"go.uber.org/zap"
 	"strings"
 )
@@ -51,32 +50,30 @@ type EventBatchDecoder interface {
 	NextDDLEvent() (*model.DDLEvent, error)
 }
 
-type codecProtocol int
+type Protocol int
 
 const (
-	codecProtocolDefault codecProtocol = iota
-	codecProtocolCanal
+	ProtocolDefault Protocol = iota
+	ProtocolCanal
 )
 
-func (p *codecProtocol) fromString(protocol string) {
+func (p *Protocol) FromString(protocol string) {
 	switch strings.ToLower(protocol) {
 	case "default":
-		*p = codecProtocolDefault
+		*p = ProtocolDefault
 	case "canal":
-		*p = codecProtocolCanal
+		*p = ProtocolCanal
 	default:
-		*p = codecProtocolDefault
+		*p = ProtocolDefault
 		log.Warn("can't support codec protocol , using default protocol", zap.String("protocol", protocol))
 	}
 }
 
-func NewEventBatchEncoder(cfg *config.ReplicaConfig) func() EventBatchEncoder {
-	var p codecProtocol
-	p.fromString(cfg.Sink.Protocol)
+func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
 	switch p {
-	case codecProtocolDefault:
+	case ProtocolDefault:
 		return NewJSONEventBatchEncoder
-	case codecProtocolCanal:
+	case ProtocolCanal:
 		return NewCanalEventBatchEncoder
 	default:
 		return NewJSONEventBatchEncoder
