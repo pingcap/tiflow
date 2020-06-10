@@ -18,7 +18,7 @@ function run() {
 
     cd $WORK_DIR
 
-    start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
     run_sql "CREATE DATABASE sink_retry;"
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=sink_retry
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/MySQLSinkTxnRandomError=25%return(true)'
@@ -30,7 +30,7 @@ function run() {
         mysql) ;&
         *) SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1";;
     esac
-    cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
