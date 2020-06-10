@@ -16,6 +16,7 @@
 package codec
 
 import (
+	"github.com/gogo/protobuf/proto"
 	"github.com/pingcap/ticdc/cdc/model"
 	canal "github.com/pingcap/ticdc/proto/canal"
 )
@@ -36,20 +37,49 @@ func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 	return nil
 }
 
+// AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
 	panic("implement me")
 }
 
+// AppendDDLEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 	panic("implement me")
 }
 
+// Build implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Build() (key []byte, value []byte) {
-	panic("implement me")
+	err := d.refreshPacketBody()
+	if err != nil {
+		panic(err)
+	}
+	value, err = proto.Marshal(d.packet)
+	if err != nil {
+		panic(err)
+	}
+	return nil, value
 }
 
+// Size implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Size() int {
-	panic("implement me")
+	// TODO: avoid marshaling the messages every time for calculating the size of the packet
+	err := d.refreshPacketBody()
+	if err != nil {
+		panic(err)
+	}
+	return proto.Size(d.packet)
+}
+
+// refreshPacketBody() marshals the messages to the packet body
+func (d *CanalEventBatchEncoder) refreshPacketBody() error {
+	oldSize := len(d.packet.Body)
+	newSize := proto.Size(d.messages)
+	if newSize > oldSize {
+		// resize packet body slice
+		d.packet.Body = append(d.packet.Body, make([]byte, newSize-oldSize)...)
+	}
+	_, err := d.messages.MarshalToSizedBuffer(d.packet.Body[:newSize])
+	return err
 }
 
 // NewCanalEventBatchEncoder creates a new CanalEventBatchEncoder.
