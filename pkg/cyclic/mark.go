@@ -36,7 +36,7 @@ func CreateMarkTables(ctx context.Context, tables []model.TableName, upstreamDSN
 	}
 	err = db.PingContext(ctx)
 	if err != nil {
-		return errors.Annotatef(err, "fail to open upstream TiDB connection")
+		return errors.Annotate(err, "fail to open upstream TiDB connection")
 	}
 
 	for _, name := range tables {
