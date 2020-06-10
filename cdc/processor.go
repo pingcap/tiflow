@@ -130,7 +130,9 @@ func newProcessor(
 	changefeed model.ChangeFeedInfo,
 	sink sink.Sink,
 	changefeedID, captureID string,
-	checkpointTs uint64) (*processor, error) {
+	checkpointTs uint64,
+	errCh chan error,
+) (*processor, error) {
 	etcdCli := session.Client()
 	endpoints := session.Client().Endpoints()
 	pdCli, err := fNewPDCli(ctx, endpoints, pd.SecurityOption{})
@@ -180,6 +182,7 @@ func newProcessor(
 		ddlPuller:     ddlPuller,
 		mounter:       entry.NewMounter(schemaStorage, changefeed.Config.Mounter.WorkerNum),
 		schemaStorage: schemaStorage,
+		errCh:         errCh,
 
 		tsRWriter: tsRWriter,
 		status:    tsRWriter.GetTaskStatus(),
@@ -201,10 +204,9 @@ func newProcessor(
 	return p, nil
 }
 
-func (p *processor) Run(ctx context.Context, errCh chan<- error) {
+func (p *processor) Run(ctx context.Context) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
-	p.errCh = errCh
 	ddlPullerCtx := util.PutTableIDInCtx(cctx, 0)
 
 	wg.Go(func() error {
@@ -245,7 +247,10 @@ func (p *processor) Run(ctx context.Context, errCh chan<- error) {
 
 	go func() {
 		if err := wg.Wait(); err != nil {
-			errCh <- err
+			select {
+			case p.errCh <- err:
+			default:
+			}
 		}
 	}()
 }
@@ -886,7 +891,7 @@ func runProcessor(
 		cancel()
 		return nil, errors.Trace(err)
 	}
-	processor, err := newProcessor(ctx, session, info, sink, changefeedID, captureID, checkpointTs)
+	processor, err := newProcessor(ctx, session, info, sink, changefeedID, captureID, checkpointTs, errCh)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -894,7 +899,7 @@ func runProcessor(
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
 
 	processorErrorCounter.WithLabelValues(changefeedID, captureID).Add(0)
-	processor.Run(ctx, errCh)
+	processor.Run(ctx)
 
 	go func() {
 		err := <-errCh
