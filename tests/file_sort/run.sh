@@ -21,7 +21,7 @@ function run() {
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
     run_sql "CREATE DATABASE file_sort;"
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=file_sort
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "info"
 
     TOPIC_NAME="ticdc-sink-retry-test-$RANDOM"
     case $SINK_TYPE in
