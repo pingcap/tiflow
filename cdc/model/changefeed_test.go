@@ -154,3 +154,24 @@ func (s *configSuite) TestFillV1(c *check.C) {
 		},
 	})
 }
+
+func (s *configSuite) TestVerifyAndFix(c *check.C) {
+	info := &ChangeFeedInfo{
+		SinkURI: "blackhole://",
+		Opts:    map[string]string{},
+		StartTs: 417257993615179777,
+		Config:  &config.ReplicaConfig{},
+	}
+
+	err := info.VerifyAndFix()
+	c.Assert(err, check.IsNil)
+	c.Assert(info.Engine, check.Equals, SortInMemory)
+
+	marshalConfig1, err := info.Config.Marshal()
+	c.Assert(err, check.IsNil)
+	defaultConfig := config.GetDefaultReplicaConfig()
+	defaultConfig.CaseSensitive = false
+	marshalConfig2, err := defaultConfig.Marshal()
+	c.Assert(err, check.IsNil)
+	c.Assert(marshalConfig1, check.Equals, marshalConfig2)
+}
