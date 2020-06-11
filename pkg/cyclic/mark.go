@@ -39,7 +39,12 @@ func CreateMarkTables(ctx context.Context, tables []model.TableName, upstreamDSN
 		return errors.Annotate(err, "fail to open upstream TiDB connection")
 	}
 
+	userTableCount := 0
 	for _, name := range tables {
+		if IsMarkTable(name.Schema, name.Table) {
+			continue
+		}
+		userTableCount++
 		schema, table := MarkTableName(name.Schema, name.Table)
 		_, err = db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", schema))
 		if err != nil {
@@ -57,7 +62,7 @@ func CreateMarkTables(ctx context.Context, tables []model.TableName, upstreamDSN
 			return errors.Annotatef(err, "fail to create mark table %s", table)
 		}
 	}
-	log.Info("create upstream mark done", zap.Int("count", len(tables)))
+	log.Info("create upstream mark done", zap.Int("count", userTableCount))
 	return nil
 }
 

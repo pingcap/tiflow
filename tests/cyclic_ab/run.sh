@@ -27,10 +27,10 @@ function run() {
     # create table to downsteam.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-    run_cdc_cli changefeed cyclic create_marktables \
+    run_cdc_cli changefeed cyclic create-marktables \
         --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
 
-    run_cdc_cli changefeed cyclic create_marktables \
+    run_cdc_cli changefeed cyclic create-marktables \
         --cyclic-upstream-dsn="root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/"
 
     # record tso after we create tables to not block on waiting mark tables DDLs.
