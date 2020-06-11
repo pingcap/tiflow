@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -684,23 +683,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				}
 				// global resolved ts
 				if row.Table == 0 {
-					p.stateMu.Lock()
-					sinkEmittedResolvedTs := uint64(math.MaxUint64)
-					for _, tbl := range p.tables {
-						rts := tbl.loadResolvedTS()
-						if rts == 0 {
-							sinkEmittedResolvedTs = uint64(math.MaxUint64)
-							break
-						}
-						if sinkEmittedResolvedTs > rts {
-							sinkEmittedResolvedTs = rts
-						}
-					}
-					p.stateMu.Unlock()
-					if sinkEmittedResolvedTs != uint64(math.MaxUint64) {
-						atomic.StoreUint64(&p.sinkEmittedResolvedTs, sinkEmittedResolvedTs)
-						resolvedTs = sinkEmittedResolvedTs
-					}
+					resolvedTs = row.CRTs
+					atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.CRTs)
+					p.sinkEmittedResolvedNotifier.Notify()
 				} else {
 					p.stateMu.Lock()
 					table := p.tables[row.Table]
