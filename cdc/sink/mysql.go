@@ -265,7 +265,7 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 
 	testDB, err := sql.Open("mysql", dsnCfg.FormatDSN())
 	if err != nil {
-		return "", errors.Trace(err)
+		return "", errors.Annotate(err, "fail to open MySQL connection when configuring sink")
 	}
 	defer testDB.Close()
 	log.Debug("Opened connection to test whether allow_auto_random_explicit_insert is present.")
@@ -275,7 +275,7 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 	queryStr := "show session variables like 'allow_auto_random_explicit_insert';"
 	err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &autoRandomInsertEnabled)
 	if err != nil && err != sql.ErrNoRows {
-		return "", errors.Trace(err)
+		return "", errors.Annotate(err, "fail to query sink for support of auto-random")
 	}
 
 	if err == nil && autoRandomInsertEnabled == "off" {
