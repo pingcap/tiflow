@@ -75,6 +75,8 @@ EOF
 # tidb server config file
 cat - >"$OUT_DIR/tidb-config.toml" <<EOF
 split-table = true
+[experimental]
+allow-auto-random = true
 EOF
 
 echo "Starting Upstream TiKV..."

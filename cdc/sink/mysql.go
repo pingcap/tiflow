@@ -254,7 +254,7 @@ var defaultParams = params{
 	maxTxnRow:   defaultMaxTxnRow,
 }
 
-func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
+func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
@@ -262,6 +262,27 @@ func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) 
 	dsnCfg.InterpolateParams = true
 	dsnCfg.MultiStatements = true
 	dsnCfg.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+
+	testDB, err := sql.Open("mysql", dsnCfg.FormatDSN())
+	if err != nil {
+		return "", errors.Annotate(err, "fail to open MySQL connection when configuring sink")
+	}
+	defer testDB.Close()
+	log.Debug("Opened connection to test whether allow_auto_random_explicit_insert is present.")
+
+	var variableName string
+	var autoRandomInsertEnabled string
+	queryStr := "show session variables like 'allow_auto_random_explicit_insert';"
+	err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &autoRandomInsertEnabled)
+	if err != nil && err != sql.ErrNoRows {
+		return "", errors.Annotate(err, "fail to query sink for support of auto-random")
+	}
+
+	if err == nil && autoRandomInsertEnabled == "off" {
+		dsnCfg.Params["allow_auto_random_explicit_insert"] = "1"
+		log.Debug("Set allow_auto_random_explicit_insert to 1")
+	}
+
 	return dsnCfg.FormatDSN(), nil
 }
 
@@ -318,13 +339,13 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		dsnStr, err = configureSinkURI(dsn, tz)
+		dsnStr, err = configureSinkURI(ctx, dsn, tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	case dsn != nil:
 		var err error
-		dsnStr, err = configureSinkURI(dsn, tz)
+		dsnStr, err = configureSinkURI(ctx, dsn, tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

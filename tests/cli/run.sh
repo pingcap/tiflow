@@ -67,7 +67,7 @@ function run() {
     fi
 
     # Make sure bad sink url fails at creating changefeed.
-    badsink=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://badsink" | grep -oE 'fail')
+    badsink=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://badsink" 2>&1 | grep -oE 'fail')
     if [[ -z $badsink ]]; then
         echo "[$(date)] <<<<< unexpect output got ${badsink} >>>>>"
         exit 1
