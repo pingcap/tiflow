@@ -16,6 +16,7 @@ package cdc
 import (
 	"context"
 	"fmt"
+	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"math"
 	"time"
 
@@ -639,6 +640,8 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return errors.Trace(err)
 	}
 	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
+		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
+		log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddlEvent.Query))
 		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
 	}
 	// If DDL executing failed, pause the changefeed and print log, rather

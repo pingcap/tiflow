@@ -44,7 +44,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"go.uber.org/zap"
 )
 
@@ -133,8 +132,6 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 		)
 		return nil
 	}
-	ddl.Query = binloginfo.AddSpecialComment(ddl.Query)
-	log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddl.Query))
 	err := s.execDDLWithMaxRetries(ctx, ddl, defaultDDLMaxRetryTime)
 	return errors.Trace(err)
 }
