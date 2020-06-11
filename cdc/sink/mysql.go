@@ -135,6 +135,7 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	}
 	ddl.Query = binloginfo.AddSpecialComment(ddl.Query)
 	err := s.execDDLWithMaxRetries(ctx, ddl, defaultDDLMaxRetryTime)
+	log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddl.Query))
 	return errors.Trace(err)
 }
 
