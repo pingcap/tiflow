@@ -16,7 +16,6 @@ package cdc
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"math"
 	"time"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
+	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 )
