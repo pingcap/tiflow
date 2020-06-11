@@ -25,6 +25,7 @@ type PolymorphicEvent struct {
 
 	RawKV    *RawKVEntry
 	Row      *RowChangedEvent
+	Table    int64
 	finished chan struct{}
 }
 

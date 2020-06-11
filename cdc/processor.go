@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -98,6 +99,7 @@ type processor struct {
 	status   *model.TaskStatus
 	position *model.TaskPosition
 	tables   map[int64]*tableInfo
+	tableRts map[int64]uint64
 
 	sinkEmittedResolvedNotifier *notify.Notifier
 	sinkEmittedResolvedReceiver *notify.Receiver
@@ -681,9 +683,37 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
-				resolvedTs = row.CRTs
-				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.CRTs)
-				p.sinkEmittedResolvedNotifier.Notify()
+				// global resolved ts
+				if row.Table == 0 {
+					p.stateMu.Lock()
+					sinkEmittedResolvedTs := uint64(math.MaxUint64)
+					for _, tbl := range p.tables {
+						rts := tbl.loadResolvedTS()
+						if rts == 0 {
+							sinkEmittedResolvedTs = uint64(math.MaxUint64)
+							break
+						}
+						if sinkEmittedResolvedTs > rts {
+							sinkEmittedResolvedTs = rts
+						}
+					}
+					p.stateMu.Unlock()
+					if sinkEmittedResolvedTs != uint64(math.MaxUint64) {
+						atomic.StoreUint64(&p.sinkEmittedResolvedTs, sinkEmittedResolvedTs)
+						resolvedTs = sinkEmittedResolvedTs
+					}
+				} else {
+					p.stateMu.Lock()
+					table := p.tables[row.Table]
+					if table == nil {
+						log.Warn("table not found in processor, ignore this event", zap.Int64("table", row.Table))
+						p.stateMu.Unlock()
+						continue
+					}
+					table.storeResolvedTS(row.CRTs)
+					p.localResolvedNotifier.Notify()
+					p.stateMu.Unlock()
+				}
 				continue
 			}
 			if row.CRTs <= resolvedTs {
@@ -806,10 +836,8 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						continue
 					}
 					if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
-						table.storeResolvedTS(pEvent.CRTs)
-						p.localResolvedNotifier.Notify()
+						pEvent.Table = table.id
 						resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
-						continue
 					}
 					select {
 					case <-ctx.Done():
