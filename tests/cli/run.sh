@@ -14,7 +14,7 @@ function run() {
     cd $WORK_DIR
 
     # record tso before we create tables to skip the system table DDLs
-    start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
@@ -24,7 +24,7 @@ function run() {
         mysql) ;&
         *) SINK_URI="mysql://root@127.0.0.1:3306/";;
     esac
-    cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
@@ -40,34 +40,34 @@ function run() {
     # Make sure changefeed is created.
     check_table_exists tidb_cdc.repl_mark_test_simple ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-    uuid=$(cdc cli changefeed list 2>&1 | grep -oE "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}")
+    uuid=$(run_cdc_cli changefeed list 2>&1 | grep -oE "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}")
 
     # Pause changefeed
-    cdc cli changefeed --changefeed-id $uuid pause && sleep 3
-    jobtype=$(cdc cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
+    run_cdc_cli changefeed --changefeed-id $uuid pause && sleep 3
+    jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
     if [[ $jobtype != 1 ]]; then
         echo "[$(date)] <<<<< unexpect admin job type! expect 1 got ${jobtype} >>>>>"
         exit 1
     fi
 
     # Resume changefeed
-    cdc cli changefeed --changefeed-id $uuid resume && sleep 3
-    jobtype=$(cdc cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
+    run_cdc_cli changefeed --changefeed-id $uuid resume && sleep 3
+    jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
     if [[ $jobtype != 2 ]]; then
         echo "[$(date)] <<<<< unexpect admin job type! expect 2 got ${jobtype} >>>>>"
         exit 1
     fi
 
     # Remove changefeed
-    cdc cli changefeed --changefeed-id $uuid remove && sleep 3
-    jobtype=$(cdc cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
+    run_cdc_cli changefeed --changefeed-id $uuid remove && sleep 3
+    jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
     if [[ $jobtype != 3 ]]; then
         echo "[$(date)] <<<<< unexpect admin job type! expect 3 got ${jobtype} >>>>>"
         exit 1
     fi
 
     # Make sure bad sink url fails at creating changefeed.
-    badsink=$(cdc cli changefeed create --start-ts=$start_ts --sink-uri="mysql://badsink" | grep -oE 'fail')
+    badsink=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://badsink" | grep -oE 'fail')
     if [[ -z $badsink ]]; then
         echo "[$(date)] <<<<< unexpect output got ${badsink} >>>>>"
         exit 1
