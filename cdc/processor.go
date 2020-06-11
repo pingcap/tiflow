@@ -99,7 +99,6 @@ type processor struct {
 	status   *model.TaskStatus
 	position *model.TaskPosition
 	tables   map[int64]*tableInfo
-	tableRts map[int64]uint64
 
 	sinkEmittedResolvedNotifier *notify.Notifier
 	sinkEmittedResolvedReceiver *notify.Receiver
