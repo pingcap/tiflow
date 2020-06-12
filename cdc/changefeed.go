@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
+	"github.com/pingcap/tidb/sessionctx/binloginfo"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 )
@@ -93,7 +94,7 @@ type changeFeed struct {
 	ddlExecutedTs uint64
 
 	schemas map[model.SchemaID]tableIDMap
-	tables  map[model.TableID]entry.TableName
+	tables  map[model.TableID]model.TableName
 	// value of partitions is the slice of partitions ID.
 	partitions         map[model.TableID][]int64
 	orphanTables       map[model.TableID]model.Ts
@@ -144,7 +145,7 @@ func (c *changeFeed) dropSchema(schemaID model.SchemaID, targetTs model.Ts) {
 	delete(c.schemas, schemaID)
 }
 
-func (c *changeFeed) addTable(sid model.SchemaID, tid model.TableID, startTs model.Ts, table entry.TableName, tblInfo *timodel.TableInfo) {
+func (c *changeFeed) addTable(sid model.SchemaID, tid model.TableID, startTs model.Ts, table model.TableName, tblInfo *timodel.TableInfo) {
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
 	}
@@ -639,6 +640,8 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return errors.Trace(err)
 	}
 	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
+		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
+		log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddlEvent.Query))
 		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
 	}
 	// If DDL executing failed, pause the changefeed and print log, rather

@@ -14,6 +14,7 @@ logsuffix=
 addr=
 pd_addr=
 pwd=$pwd
+log_level=debug
 
 while [[ ${1} ]]; do
     case "${1}" in
@@ -37,6 +38,10 @@ while [[ ${1} ]]; do
             pd_addr="--pd ${2}"
             shift
             ;;
+        --loglevel)
+            log_level=${2}
+            shift
+            ;;
         *)
             echo "Unknown parameter: ${1}" >&2
             exit 1
@@ -51,5 +56,5 @@ done
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
 pid=$(ps -C run_cdc_server -o pid=|tr -d '[:space:]')
-$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server --log-file $workdir/cdc$logsuffix.log --log-level info $addr $pd_addr >> $workdir/stdout$log_suffix.log 2>&1 &
+$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server --log-file $workdir/cdc$logsuffix.log --log-level $log_level $addr $pd_addr >> $workdir/stdout$log_suffix.log 2>&1 &
 cd $pwd

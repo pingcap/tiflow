@@ -38,7 +38,7 @@ import (
 // schemaSnapshot stores the source TiDB all schema information
 // schemaSnapshot is a READ ONLY struct
 type schemaSnapshot struct {
-	tableNameToID  map[TableName]int64
+	tableNameToID  map[model.TableName]int64
 	schemaNameToID map[string]int64
 
 	schemas        map[int64]*timodel.DBInfo
@@ -66,7 +66,7 @@ func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*Sing
 
 func newEmptySchemaSnapshot() *schemaSnapshot {
 	return &schemaSnapshot{
-		tableNameToID:  make(map[TableName]int64),
+		tableNameToID:  make(map[model.TableName]int64),
 		schemaNameToID: make(map[string]int64),
 
 		schemas:        make(map[int64]*timodel.DBInfo),
@@ -98,7 +98,7 @@ func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*schemaSnap
 			dbinfo.Tables = append(dbinfo.Tables, tableInfo)
 			tableInfo := WrapTableInfo(dbinfo.ID, dbinfo.Name.O, tableInfo)
 			snap.tables[tableInfo.ID] = tableInfo
-			snap.tableNameToID[TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
+			snap.tableNameToID[model.TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
 			if !tableInfo.IsEligible() {
 				snap.ineligibleTableID[tableInfo.ID] = struct{}{}
 			}
@@ -155,7 +155,7 @@ func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field
 // Clone clones Storage
 func (s *schemaSnapshot) Clone() *schemaSnapshot {
 	n := &schemaSnapshot{
-		tableNameToID:  make(map[TableName]int64, len(s.tableNameToID)),
+		tableNameToID:  make(map[model.TableName]int64, len(s.tableNameToID)),
 		schemaNameToID: make(map[string]int64, len(s.schemaNameToID)),
 
 		schemas:        make(map[int64]*timodel.DBInfo, len(s.schemas)),
@@ -189,22 +189,11 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 	return n
 }
 
-// TableName specify a Schema name and Table name
-type TableName struct {
-	Schema string `toml:"db-name" json:"db-name"`
-	Table  string `toml:"tbl-name" json:"tbl-name"`
-}
-
-// String implements fmt.Stringer interface.
-func (t TableName) String() string {
-	return fmt.Sprintf("%s.%s", t.Schema, t.Table)
-}
-
 // TableInfo provides meta data describing a DB table.
 type TableInfo struct {
 	*timodel.TableInfo
 	SchemaID      int64
-	TableName     TableName
+	TableName     model.TableName
 	columnsOffset map[int64]int
 	indicesOffset map[int64]int
 	uniqueColumns map[int64]struct{}
@@ -221,7 +210,7 @@ func WrapTableInfo(schemaID int64, schemaName string, info *timodel.TableInfo) *
 	ti := &TableInfo{
 		TableInfo:     info,
 		SchemaID:      schemaID,
-		TableName:     TableName{Schema: schemaName, Table: info.Name.O},
+		TableName:     model.TableName{Schema: schemaName, Table: info.Name.O},
 		columnsOffset: make(map[int64]int, len(info.Columns)),
 		indicesOffset: make(map[int64]int, len(info.Indices)),
 		uniqueColumns: make(map[int64]struct{}),
@@ -372,17 +361,17 @@ func (ti *TableInfo) Clone() *TableInfo {
 }
 
 // GetTableNameByID looks up a TableName with the given table id
-func (s *schemaSnapshot) GetTableNameByID(id int64) (TableName, bool) {
+func (s *schemaSnapshot) GetTableNameByID(id int64) (model.TableName, bool) {
 	tableInfo, ok := s.tables[id]
 	if !ok {
-		return TableName{}, false
+		return model.TableName{}, false
 	}
 	return tableInfo.TableName, true
 }
 
 // GetTableIDByName returns the tableID by table schemaName and tableName
 func (s *schemaSnapshot) GetTableIDByName(schemaName string, tableName string) (int64, bool) {
-	id, ok := s.tableNameToID[TableName{
+	id, ok := s.tableNameToID[model.TableName{
 		Schema: schemaName,
 		Table:  tableName,
 	}]
@@ -728,8 +717,8 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 }
 
 // CloneTables return a clone of the existing tables.
-func (s *schemaSnapshot) CloneTables() map[model.TableID]TableName {
-	mp := make(map[model.TableID]TableName, len(s.tables))
+func (s *schemaSnapshot) CloneTables() map[model.TableID]model.TableName {
+	mp := make(map[model.TableID]model.TableName, len(s.tables))
 
 	for id, table := range s.tables {
 		mp[id] = table.TableName

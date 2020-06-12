@@ -23,22 +23,24 @@ function run() {
 
     # create table to upstream.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE database tidb_cdc;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table tidb_cdc.repl_mark_test_simple (
-        bucket INT NOT NULL, \
-        replica_id BIGINT UNSIGNED NOT NULL, \
-        val BIGINT DEFAULT 0, \
-        PRIMARY KEY (bucket, replica_id) \
-    );" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-    # record tso before we create tables to skip the system table DDLs
-    # and make sure mark table is created.
-    start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    run_cdc_cli changefeed cyclic create-marktables \
+        --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
+
+    # make sure create-marktables does not create mark table for mark table.
+    for c in $(seq 1 10); do {
+        # must not cause an error table name too long.
+        run_cdc_cli changefeed cyclic create-marktables \
+            --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
+    } done
+
+    # record tso after we create tables to not block on waiting mark tables DDLs.
+    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "_${TEST_NAME}_upsteam" --pd "http://${UP_PD_HOST}:${UP_PD_PORT}"
 
     # Loop back to self.
-    cdc cli changefeed create --start-ts=$start_ts \
+    run_cdc_cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/" \
         --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
         --cyclic-replica-id 1 \
@@ -58,7 +60,7 @@ function run() {
 
     # Sleep a while to make sure no more events will be created in cyclic.
     sleep 5
-    uuid=$(cdc cli changefeed list --pd=http://$UP_PD_HOST:$UP_PD_PORT 2>&1 | grep -oE "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}")
+    uuid=$(run_cdc_cli changefeed list --pd=http://$UP_PD_HOST:$UP_PD_PORT 2>&1 | grep -oE "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}")
 
     # Why 50? 40 insert + 10 mark table insert.
     expect=50
