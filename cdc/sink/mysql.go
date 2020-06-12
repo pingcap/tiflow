@@ -87,6 +87,8 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		return nil
 	}
 
+	defer s.statistics.PrintStatus()
+
 	s.unresolvedRowsMu.Lock()
 	if len(s.unresolvedRows) == 0 {
 		atomic.StoreUint64(&s.checkpointTs, resolvedTs)
@@ -112,7 +114,6 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 		return errors.Trace(err)
 	}
 	atomic.StoreUint64(&s.checkpointTs, resolvedTs)
-	s.statistics.PrintStatus()
 	return nil
 }
 
@@ -253,7 +254,7 @@ var defaultParams = params{
 	maxTxnRow:   defaultMaxTxnRow,
 }
 
-func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
+func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
@@ -261,6 +262,27 @@ func configureSinkURI(dsnCfg *dmysql.Config, tz *time.Location) (string, error) 
 	dsnCfg.InterpolateParams = true
 	dsnCfg.MultiStatements = true
 	dsnCfg.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+
+	testDB, err := sql.Open("mysql", dsnCfg.FormatDSN())
+	if err != nil {
+		return "", errors.Annotate(err, "fail to open MySQL connection when configuring sink")
+	}
+	defer testDB.Close()
+	log.Debug("Opened connection to test whether allow_auto_random_explicit_insert is present.")
+
+	var variableName string
+	var autoRandomInsertEnabled string
+	queryStr := "show session variables like 'allow_auto_random_explicit_insert';"
+	err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &autoRandomInsertEnabled)
+	if err != nil && err != sql.ErrNoRows {
+		return "", errors.Annotate(err, "fail to query sink for support of auto-random")
+	}
+
+	if err == nil && autoRandomInsertEnabled == "off" {
+		dsnCfg.Params["allow_auto_random_explicit_insert"] = "1"
+		log.Debug("Set allow_auto_random_explicit_insert to 1")
+	}
+
 	return dsnCfg.FormatDSN(), nil
 }
 
@@ -317,13 +339,13 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		dsnStr, err = configureSinkURI(dsn, tz)
+		dsnStr, err = configureSinkURI(ctx, dsn, tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	case dsn != nil:
 		var err error
-		dsnStr, err = configureSinkURI(dsn, tz)
+		dsnStr, err = configureSinkURI(ctx, dsn, tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -401,11 +423,13 @@ func concurrentExec(
 	rowsChIdx := 0
 	sendFn := func(rows []*model.RowChangedEvent, keys []string, idx int) {
 		causality.add(keys, idx)
-		jobWg.Add(1)
-		select {
-		case <-ctx.Done():
-			jobWg.Done()
-		case rowsChs[idx] <- rows:
+		for _, r := range rowsLenLimiter(rows, maxTxnRow) {
+			jobWg.Add(1)
+			select {
+			case <-ctx.Done():
+				jobWg.Done()
+			case rowsChs[idx] <- r:
+			}
 		}
 	}
 	for groupKey, multiRows := range rowGroups {
@@ -443,6 +467,19 @@ func concurrentExec(
 	default:
 		return nil
 	}
+}
+
+func rowsLenLimiter(rows []*model.RowChangedEvent, maxLen int) [][]*model.RowChangedEvent {
+	result := make([][]*model.RowChangedEvent, 0, (len(rows)/maxLen)+1)
+	for start := 0; start < len(rows); {
+		end := start + maxLen
+		if end > len(rows) {
+			end = len(rows)
+		}
+		result = append(result, rows[start:end])
+		start = end
+	}
+	return result
 }
 
 type mysqlSinkWorker struct {
@@ -512,7 +549,7 @@ func (w *mysqlSinkWorker) fetchAllPendingEvents(
 }
 
 func (s *mysqlSink) Close() error {
-	return nil
+	return s.db.Close()
 }
 
 func (s *mysqlSink) execDMLWithMaxRetries(

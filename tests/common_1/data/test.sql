@@ -62,6 +62,46 @@ INSERT INTO t1 (c1) VALUES (1),(2),(3),(4),(5);
 
 CREATE VIEW v1 AS SELECT * FROM t1 WHERE c1 > 2;
 
+-- uk without pk
+-- https://internal.pingcap.net/jira/browse/TOOL-714
+-- CDC don't support UK is null
+
+CREATE TABLE uk_without_pk (id INT, a1 INT NOT NULL, a3 INT NOT NULL, UNIQUE KEY dex1(a1, a3));
+
+INSERT INTO uk_without_pk(id, a1, a3) VALUES(1, 1, 2);
+
+INSERT INTO uk_without_pk(id, a1, a3) VALUES(2, 1, 1);
+
+UPDATE uk_without_pk SET id = 10, a1 = 2 WHERE a1 = 1;
+
+UPDATE uk_without_pk SET id = 100 WHERE a1 = 10;
+
+UPDATE uk_without_pk SET a3 = 4 WHERE a3 = 1;
+
+-- bit column
+-- Test issue: TOOL-1346
+
+CREATE TABLE binlog_insert_bit(a BIT(1) PRIMARY KEY, b BIT(64));
+
+INSERT INTO binlog_insert_bit VALUES (0x01, 0xffffffff);
+
+UPDATE binlog_insert_bit SET a = 0x00, b = 0xfffffffe;
+
+-- recover test
+-- Test issue: TOOL-1407
+CREATE TABLE recover_and_insert(id INT PRIMARY KEY, a INT);
+
+INSERT INTO recover_and_insert(id, a) VALUES(1, -1);
+
+UPDATE recover_and_insert SET a = -5 WHERE id = 1;
+
+DROP TABLE recover_and_insert;
+
+RECOVER TABLE recover_and_insert;
+
+-- make sure we can insert data after recovery
+INSERT INTO recover_and_insert(id, a) VALUES(2, -3);
+
 -- mark finish table
 
 CREATE TABLE finish_mark(a int primary key);

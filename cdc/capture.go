@@ -206,6 +206,10 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error
 			zap.String("captureid", c.info.ID),
 			zap.Error(err))
 	}
+	err = cf.VerifyAndFix()
+	if err != nil {
+		return nil, err
+	}
 	log.Info("run processor", zap.String("captureid", c.info.ID),
 		zap.String("changefeedid", task.ChangeFeedID))
 

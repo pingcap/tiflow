@@ -15,7 +15,7 @@ package util
 
 import (
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -30,6 +30,21 @@ func GetTimezone(name string) (*time.Location, error) {
 	}
 }
 
+func getTimezoneFromZonefile(zonefile string) (*time.Location, error) {
+	// the linked path of `/etc/localtime` sample:
+	// MacOS: /var/db/timezone/zoneinfo/Asia/Shanghai
+	// Linux: /usr/share/zoneinfo/Asia/Shanghai
+	region := filepath.Base(filepath.Dir(zonefile))
+	zone := filepath.Base(zonefile)
+	var tzName string
+	if region == "zoneinfo" {
+		tzName = zone
+	} else {
+		tzName = filepath.Join(region, zone)
+	}
+	return time.LoadLocation(tzName)
+}
+
 // GetLocalTimezone returns the timezone in local system
 func GetLocalTimezone() (*time.Location, error) {
 	if time.Local.String() != "Local" {
@@ -39,9 +54,5 @@ func GetLocalTimezone() (*time.Location, error) {
 	if err != nil {
 		return nil, err
 	}
-	// the linked path of `/etc/localtime`
-	// MacOS: /var/db/timezone/zoneinfo/Asia/Shanghai
-	// Linux: /etc/usr/share/zoneinfo/Asia/Shanghai
-	tzName := path.Join(path.Base(path.Dir(str)), path.Base(str))
-	return time.LoadLocation(tzName)
+	return getTimezoneFromZonefile(str)
 }

@@ -18,18 +18,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tidb/store/mockstore/cluster"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/util/testkit"
 	"go.uber.org/zap"
@@ -107,7 +107,7 @@ func (l *mvccListener) registerPostRollback(fn func(keys [][]byte, startTs uint6
 
 // MockPullerManager keeps track of transactions for mock pullers
 type MockPullerManager struct {
-	cluster   *mocktikv.Cluster
+	cluster   cluster.Cluster
 	mvccStore mocktikv.MVCCStore
 	store     tidbkv.Storage
 	domain    *domain.Domain
@@ -196,15 +196,14 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	log.SetLevel(zap.FatalLevel)
 	defer log.SetLevel(logLevel)
 
-	m.cluster = mocktikv.NewCluster()
-	mocktikv.BootstrapWithSingleStore(m.cluster)
-
 	mvccListener := newMVCCListener(mocktikv.MustNewMVCCStore())
 
 	m.mvccStore = mvccListener
-	store, err := mockstore.NewMockTikvStore(
-		mockstore.WithCluster(m.cluster),
-		mockstore.WithMVCCStore(m.mvccStore),
+	store, err := mockstore.NewMockStore(
+		mockstore.WithClusterInspector(func(c cluster.Cluster) {
+			mockstore.BootstrapWithSingleStore(c)
+			m.cluster = c
+		}),
 	)
 	if err != nil {
 		log.Fatal("create mock puller failed", zap.Error(err))

@@ -119,34 +119,35 @@ func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) er
 	return nil
 }
 
-func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables []entry.TableName, err error) {
+func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, fullTables []model.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	meta, err := kv.GetSnapshotMeta(kvStore, startTs)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	filter, err := filter.NewFilter(cfg)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	for tID, tableName := range snap.CloneTables() {
 		tableInfo, exist := snap.TableByID(int64(tID))
 		if !exist {
-			return nil, errors.NotFoundf("table %d", int64(tID))
+			return nil, nil, errors.NotFoundf("table %d", int64(tID))
 		}
 		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
 			continue
 		}
+		fullTables = append(fullTables, tableName)
 		if !tableInfo.ExistTableUniqueColumn() {
 			ineligibleTables = append(ineligibleTables, tableName)
 		}

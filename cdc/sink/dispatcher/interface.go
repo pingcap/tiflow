@@ -16,11 +16,10 @@ package dispatcher
 import (
 	"strings"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
+	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"go.uber.org/zap"
 )
 
@@ -56,49 +55,65 @@ func (r *dispatchRule) fromString(rule string) {
 }
 
 type dispatcherSwitcher struct {
-	rules             map[entry.TableName]Dispatcher
-	caseSensitive     bool
-	partitionNum      int32
-	defaultDispatcher Dispatcher
+	rules []struct {
+		Dispatcher
+		filter.Filter
+	}
 }
 
 func (s *dispatcherSwitcher) Dispatch(row *model.RowChangedEvent) int32 {
-	tableName := entry.TableName{Schema: row.Table.Schema, Table: row.Table.Table}
-	if !s.caseSensitive {
-		tableName.Schema = strings.ToLower(tableName.Schema)
-		tableName.Table = strings.ToLower(tableName.Table)
+	return s.matchDispatcher(row).Dispatch(row)
+}
+
+func (s *dispatcherSwitcher) matchDispatcher(row *model.RowChangedEvent) Dispatcher {
+	for _, rule := range s.rules {
+		if !rule.MatchTable(row.Table.Schema, row.Table.Table) {
+			continue
+		}
+		return rule.Dispatcher
 	}
-	dispatcher, exist := s.rules[tableName]
-	if !exist {
-		return s.defaultDispatcher.Dispatch(row)
-	}
-	return dispatcher.Dispatch(row)
+	log.Fatal("the dispatch rule must cover all tables")
+	return nil
 }
 
 // NewDispatcher creates a new dispatcher
-func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) Dispatcher {
-	p := &dispatcherSwitcher{
-		caseSensitive:     cfg.CaseSensitive,
-		partitionNum:      partitionNum,
-		rules:             make(map[entry.TableName]Dispatcher, len(cfg.Sink.DispatchRules)),
-		defaultDispatcher: &defaultDispatcher{partitionNum: partitionNum},
-	}
-	for _, ruleConfig := range cfg.Sink.DispatchRules {
-		tableName := entry.TableName{Schema: ruleConfig.Schema, Table: ruleConfig.Name}
-		if !p.caseSensitive {
-			tableName.Schema = strings.ToLower(tableName.Schema)
-			tableName.Table = strings.ToLower(tableName.Table)
+func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, error) {
+	ruleConfigs := append(cfg.Sink.DispatchRules, &config.DispatchRule{
+		Matcher:    []string{"*.*"},
+		Dispatcher: "default",
+	})
+	rules := make([]struct {
+		Dispatcher
+		filter.Filter
+	}, 0, len(ruleConfigs))
+
+	for _, ruleConfig := range ruleConfigs {
+		f, err := filter.Parse(ruleConfig.Matcher)
+		if err != nil {
+			return nil, err
 		}
+		if !cfg.CaseSensitive {
+			f = filter.CaseInsensitive(f)
+		}
+		var d Dispatcher
 		var rule dispatchRule
-		rule.fromString(ruleConfig.Rule)
+		rule.fromString(ruleConfig.Dispatcher)
 		switch rule {
 		case dispatchRuleRowID:
-			p.rules[tableName] = &rowIDDispatcher{partitionNum: partitionNum}
+			d = &rowIDDispatcher{partitionNum: partitionNum}
 		case dispatchRuleTS:
-			p.rules[tableName] = &tsDispatcher{partitionNum: partitionNum}
+			d = &tsDispatcher{partitionNum: partitionNum}
 		case dispatchRuleTable:
-			p.rules[tableName] = &tableDispatcher{partitionNum: partitionNum}
+			d = &tableDispatcher{partitionNum: partitionNum}
+		case dispatchRuleDefault:
+			d = &defaultDispatcher{partitionNum: partitionNum}
 		}
+		rules = append(rules, struct {
+			Dispatcher
+			filter.Filter
+		}{Dispatcher: d, Filter: f})
 	}
-	return p
+	return &dispatcherSwitcher{
+		rules: rules,
+	}, nil
 }

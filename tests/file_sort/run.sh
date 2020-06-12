@@ -18,10 +18,10 @@ function run() {
 
     cd $WORK_DIR
 
-    start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
     run_sql "CREATE DATABASE file_sort;"
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=file_sort
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "info"
 
     TOPIC_NAME="ticdc-sink-retry-test-$RANDOM"
     case $SINK_TYPE in
@@ -31,7 +31,7 @@ function run() {
     esac
     sort_dir="$WORK_DIR/file_sort_cache"
     mkdir $sort_dir
-    cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --sort-engine="file" --sort-dir="$sort_dir"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --sort-engine="file" --sort-dir="$sort_dir"
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
@@ -40,12 +40,12 @@ function run() {
     # directly, there maybe a lot of diff data at first because of the incremental scan
     run_sql "CREATE table file_sort.check1(id int primary key);"
     check_table_exists "file_sort.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-    check_table_exists "file_sort.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
+    check_table_exists "file_sort.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=file_sort
     run_sql "CREATE table file_sort.check2(id int primary key);"
-    check_table_exists "file_sort.check2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
+    check_table_exists "file_sort.check2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     cleanup_process $CDC_BINARY
