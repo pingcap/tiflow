@@ -20,23 +20,27 @@ import (
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 
 	canal "github.com/pingcap/ticdc/proto/canal"
 	"strconv"
 )
 
-//compatible with canal-1.1.4
+// compatible with canal-1.1.4
+// https://github.com/alibaba/canal/tree/canal-1.1.4
 const (
 	CanalPacketVersion   int32  = 1
 	CanalProtocolVersion int32  = 1
 	CanalServerEncode    string = "UTF-8"
 )
 
+// convert ts in tidb to timestamp(in ms) in canal
 func convertToCanalTs(commitTs uint64) int64 {
 	return int64(commitTs >> 18)
 }
 
+// get the canal EventType according to the RowChangedEvent
 func convertRowEventType(e *model.RowChangedEvent) canal.EventType {
 	if e.Delete {
 		return canal.EventType_DELETE
@@ -45,7 +49,9 @@ func convertRowEventType(e *model.RowChangedEvent) canal.EventType {
 	}
 }
 
+// get the canal EventType according to the DDLEvent
 func convertDdlEventType(e *model.DDLEvent) canal.EventType {
+	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/ddl/DruidDdlParser.java
 	switch e.Type {
 	case mm.ActionCreateSchema, mm.ActionDropSchema, mm.ActionShardRowID, mm.ActionCreateView,
 		mm.ActionDropView, mm.ActionRecoverTable, mm.ActionModifySchemaCharsetAndCollate,
@@ -92,7 +98,12 @@ func isCanalDdl(t canal.EventType) bool {
 	return false
 }
 
-func buildHeader(commitTs uint64, schema string, table string, eventType canal.EventType, rowCount int) *canal.Header {
+type CanalEntryBuilder struct {
+	bytesDecoder *encoding.Decoder // default charset is ISO-8859-1
+}
+
+// build the header of a canal entry
+func (b *CanalEntryBuilder) buildHeader(commitTs uint64, schema string, table string, eventType canal.EventType, rowCount int) *canal.Header {
 	t := convertToCanalTs(commitTs)
 	h := &canal.Header{
 		VersionPresent:    &canal.Header_Version{Version: CanalProtocolVersion},
@@ -113,7 +124,8 @@ func buildHeader(commitTs uint64, schema string, table string, eventType canal.E
 	return h
 }
 
-func buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
+// build the Column in the canal RowData
+func (b *CanalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	sqlType := MysqlToJavaType(c.Type)
 	// Some cases specially handled in canal
 	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
@@ -148,12 +160,12 @@ func buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, 
 		case string:
 			value = v
 		case []byte:
-			b, err := charmap.ISO8859_1.NewDecoder().Bytes(v)
+			decoded, err := b.bytesDecoder.Bytes(v)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			value = string(b)
-			sqlType = JavaSqlTypeBLOB // change sql type to Blob according to canal
+			value = string(decoded)
+			sqlType = JavaSqlTypeBLOB // change sql type to Blob when the type is []byte according to canal
 		default:
 			value = fmt.Sprintf("%v", v)
 		}
@@ -170,14 +182,15 @@ func buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, 
 	return canalColumn, nil
 }
 
-func buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
+// build the RowData of a canal entry
+func (b *CanalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
 	var columns []*canal.Column
-	for n, c := range e.Columns {
-		cc, err := buildColumn(c, n, !e.Delete)
+	for name, column := range e.Columns {
+		c, err := b.buildColumn(column, name, !e.Delete)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		columns = append(columns, cc)
+		columns = append(columns, c)
 	}
 
 	rowData := &canal.RowData{}
@@ -189,11 +202,12 @@ func buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
 	return rowData, nil
 }
 
-func rowEventToCanalEntry(e *model.RowChangedEvent) (*canal.Entry, error) {
+// build canal entry from RowChangedEvent in cdc
+func (b *CanalEntryBuilder) FromRowEvent(e *model.RowChangedEvent) (*canal.Entry, error) {
 	eventType := convertRowEventType(e)
-	header := buildHeader(e.CommitTs, e.Table.Schema, e.Table.Table, eventType, 1)
+	header := b.buildHeader(e.CommitTs, e.Table.Schema, e.Table.Table, eventType, 1)
 	isDdl := isCanalDdl(eventType) // false
-	rowData, err := buildRowData(e)
+	rowData, err := b.buildRowData(e)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -216,9 +230,10 @@ func rowEventToCanalEntry(e *model.RowChangedEvent) (*canal.Entry, error) {
 	return entry, nil
 }
 
-func ddlEventToCanalEntry(e *model.DDLEvent) (*canal.Entry, error) {
+// build canal entry from DDLEvent in cdc
+func (b *CanalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error) {
 	eventType := convertDdlEventType(e)
-	header := buildHeader(e.CommitTs, e.Schema, e.Table, eventType, -1)
+	header := b.buildHeader(e.CommitTs, e.Schema, e.Table, eventType, -1)
 	isDdl := isCanalDdl(eventType)
 	rc := &canal.RowChange{
 		EventTypePresent: &canal.RowChange_EventType{EventType: eventType},
@@ -241,10 +256,19 @@ func ddlEventToCanalEntry(e *model.DDLEvent) (*canal.Entry, error) {
 	return entry, nil
 }
 
+// NewCanalEntryBuilder() creates a new CanalEntryBuilder
+func NewCanalEntryBuilder() *CanalEntryBuilder {
+	d := charmap.ISO8859_1.NewDecoder()
+	return &CanalEntryBuilder{
+		bytesDecoder: d,
+	}
+}
+
 // CanalEventBatchEncoder encodes the events into the byte of a batch into.
 type CanalEventBatchEncoder struct {
-	messages *canal.Messages
-	packet   *canal.Packet
+	messages     *canal.Messages
+	packet       *canal.Packet
+	entryBuilder *CanalEntryBuilder
 }
 
 // AppendResolvedEvent implements the EventBatchEncoder interface
@@ -256,7 +280,7 @@ func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
-	entry, err := rowEventToCanalEntry(e)
+	entry, err := d.entryBuilder.FromRowEvent(e)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -270,7 +294,7 @@ func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent)
 
 // AppendDDLEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
-	entry, err := ddlEventToCanalEntry(e)
+	entry, err := d.entryBuilder.FromDdlEvent(e)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -327,8 +351,9 @@ func NewCanalEventBatchEncoder() EventBatchEncoder {
 	}
 
 	encoder := &CanalEventBatchEncoder{
-		messages: &canal.Messages{},
-		packet:   p,
+		messages:     &canal.Messages{},
+		packet:       p,
+		entryBuilder: NewCanalEntryBuilder(),
 	}
 	return encoder
 }
