@@ -94,11 +94,10 @@ type processor struct {
 	output    chan *model.PolymorphicEvent
 	mounter   entry.Mounter
 
-	stateMu      sync.Mutex
-	status       *model.TaskStatus
-	position     *model.TaskPosition
-	tables       map[int64]*tableInfo
-	markTableMap map[int64]int64 // mapping from mark table id to its original table id
+	stateMu  sync.Mutex
+	status   *model.TaskStatus
+	position *model.TaskPosition
+	tables   map[int64]*tableInfo
 
 	sinkEmittedResolvedNotifier *notify.Notifier
 	sinkEmittedResolvedReceiver *notify.Receiver
@@ -209,8 +208,7 @@ func newProcessor(
 		localResolvedNotifier: localResolvedNotifier,
 		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
 
-		tables:       make(map[int64]*tableInfo),
-		markTableMap: make(map[int64]int64),
+		tables: make(map[int64]*tableInfo),
 	}
 
 	for tableID, startTs := range p.status.Tables {
@@ -497,9 +495,6 @@ func (p *processor) removeTable(tableID int64) {
 
 	table.cancel()
 	delete(p.tables, tableID)
-	if table.mid != 0 {
-		delete(p.markTableMap, table.mid)
-	}
 	tableIDStr := strconv.FormatInt(tableID, 10)
 	tableInputChanSizeGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
 	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
@@ -699,31 +694,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
-				// global resolved ts
-				if row.Table == 0 {
-					resolvedTs = row.CRTs
-					atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.CRTs)
-					p.sinkEmittedResolvedNotifier.Notify()
-				} else {
-					p.stateMu.Lock()
-					isMarkTable := false
-					table := p.tables[row.Table]
-					if table == nil {
-						if p.changefeed.Config.Cyclic.IsEnabled() {
-							tableID := p.markTableMap[row.Table]
-							table = p.tables[tableID]
-							isMarkTable = true
-						}
-						if table == nil {
-							log.Warn("table not found in processor, ignore this event", zap.Int64("table", row.Table))
-							p.stateMu.Unlock()
-							continue
-						}
-					}
-					table.storeResolvedTs(row.CRTs, isMarkTable)
-					p.localResolvedNotifier.Notify()
-					p.stateMu.Unlock()
-				}
+				resolvedTs = row.CRTs
+				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.CRTs)
+				p.sinkEmittedResolvedNotifier.Notify()
 				continue
 			}
 			if row.CRTs <= resolvedTs {
@@ -788,7 +761,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	// We temporarily set the value to constant 1
 	table.workload = model.WorkloadInfo{Workload: 1}
 
-	startPuller := func(tableID model.TableID) {
+	startPuller := func(tableID model.TableID, isMarkTable bool) {
 
 		// start table puller
 		// The key in DML kv pair returned from TiKV is not memcompariable encoded,
@@ -846,8 +819,10 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						continue
 					}
 					if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
-						pEvent.Table = tableID
+						table.storeResolvedTs(pEvent.CRTs, isMarkTable)
+						p.localResolvedNotifier.Notify()
 						resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
+						continue
 					}
 					select {
 					case <-ctx.Done():
@@ -862,16 +837,15 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		}()
 	}
 
-	startPuller(tableID)
+	startPuller(tableID, false)
 
 	if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID != 0 {
 		mTableID := replicaInfo.MarkTableID
 
-		startPuller(mTableID)
+		startPuller(mTableID, true)
 
 		table.mid = mTableID
 		table.mResolvedTs = replicaInfo.StartTs
-		p.markTableMap[mTableID] = tableID
 	}
 
 	p.tables[tableID] = table
