@@ -94,10 +94,12 @@ type processor struct {
 	output    chan *model.PolymorphicEvent
 	mounter   entry.Mounter
 
-	stateMu  sync.Mutex
-	status   *model.TaskStatus
-	position *model.TaskPosition
-	tables   map[int64]*tableInfo
+	stateMu      sync.Mutex
+	status       *model.TaskStatus
+	position     *model.TaskPosition
+	tables       map[int64]*tableInfo
+	markTables   map[int64]*tableInfo
+	tableMarkMap map[int64]int64 // mapping from table id to its mark table id
 
 	sinkEmittedResolvedNotifier *notify.Notifier
 	sinkEmittedResolvedReceiver *notify.Receiver
@@ -195,7 +197,9 @@ func newProcessor(
 		localResolvedNotifier: localResolvedNotifier,
 		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
 
-		tables: make(map[int64]*tableInfo),
+		tables:       make(map[int64]*tableInfo),
+		markTables:   make(map[int64]*tableInfo),
+		tableMarkMap: make(map[int64]int64),
 	}
 
 	for tableID, startTs := range p.status.Tables {
@@ -274,6 +278,9 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 	for _, table := range p.tables {
 		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", table.id, table.loadResolvedTS())
 	}
+	for _, table := range p.markTables {
+		fmt.Fprintf(w, "\tmark table id: %d, resolveTS: %d\n", table.id, table.loadResolvedTS())
+	}
 	p.stateMu.Unlock()
 
 	fmt.Fprintf(w, "\n")
@@ -330,6 +337,13 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			minResolvedTs := p.ddlPuller.GetResolvedTs()
 			p.stateMu.Lock()
 			for _, table := range p.tables {
+				ts := table.loadResolvedTS()
+
+				if ts < minResolvedTs {
+					minResolvedTs = ts
+				}
+			}
+			for _, table := range p.markTables {
 				ts := table.loadResolvedTS()
 
 				if ts < minResolvedTs {
@@ -408,6 +422,7 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 		for _, table := range p.tables {
 			workload[table.id] = table.workload
 		}
+		// TODO: Do we need to calculate the workload of mark tables ?
 		p.stateMu.Unlock()
 		err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureID, &workload)
 		if err != nil {
@@ -482,6 +497,15 @@ func (p *processor) removeTable(tableID int64) {
 
 	table.cancel()
 	delete(p.tables, tableID)
+	if p.changefeed.Config.Cyclic.IsEnabled() {
+		mTableID, ok := p.tableMarkMap[tableID]
+		if !ok {
+			log.Warn("mark table mapping not found", zap.Int64("table", tableID))
+		} else {
+			delete(p.markTables, mTableID)
+			delete(p.tableMarkMap, mTableID)
+		}
+	}
 	tableIDStr := strconv.FormatInt(tableID, 10)
 	tableInputChanSizeGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
 	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
@@ -820,7 +844,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						continue
 					}
 					if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
-						pEvent.Table = table.id
+						pEvent.Table = tableID
 						resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
 					}
 					select {
@@ -839,7 +863,17 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	startPuller(tableID)
 
 	if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID != 0 {
-		startPuller(replicaInfo.MarkTableID)
+		mTableID := replicaInfo.MarkTableID
+
+		startPuller(mTableID)
+
+		markTable := &tableInfo{
+			id:         mTableID,
+			resolvedTS: replicaInfo.StartTs,
+			cancel:     cancel,
+		}
+		p.markTables[mTableID] = markTable
+		p.tableMarkMap[tableID] = mTableID
 	}
 
 	p.tables[tableID] = table
@@ -858,6 +892,7 @@ func (p *processor) stop(ctx context.Context) error {
 	for _, tbl := range p.tables {
 		tbl.cancel()
 	}
+	// mark tables share the same context with its original table, don't need to cancel
 	p.stateMu.Unlock()
 	atomic.StoreInt32(&p.stopped, 1)
 	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureID); err != nil {
