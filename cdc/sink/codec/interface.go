@@ -50,13 +50,16 @@ type EventBatchDecoder interface {
 	NextDDLEvent() (*model.DDLEvent, error)
 }
 
+// Protocol is the protocol of the mq message
 type Protocol int
 
+// Enum types of the Protocol
 const (
 	ProtocolDefault Protocol = iota
 	ProtocolCanal
 )
 
+// FromString converts the protocol from string to Protocol enum type
 func (p *Protocol) FromString(protocol string) {
 	switch strings.ToLower(protocol) {
 	case "default":
@@ -69,6 +72,7 @@ func (p *Protocol) FromString(protocol string) {
 	}
 }
 
+// NewEventBatchEncoder returns a function of creating an EventBatchEncoder
 func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
 	switch p {
 	case ProtocolDefault:

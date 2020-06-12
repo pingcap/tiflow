@@ -15,136 +15,138 @@ package codec
 
 import "github.com/pingcap/parser/mysql"
 
-type JavaSqlType int32
+// JavaSQLType is the sql type defined in class java.sql.Types in java sdk
+type JavaSQLType int32
 
+// jdk 1.8
 const (
-	// jdk 1.8
-	JavaSqlTypeBIT           JavaSqlType = -7
-	JavaSqlTypeTINYINT       JavaSqlType = -6
-	JavaSqlTypeSMALLINT      JavaSqlType = 5
-	JavaSqlTypeINTEGER       JavaSqlType = 4
-	JavaSqlTypeBIGINT        JavaSqlType = -5
-	JavaSqlTypeREAL          JavaSqlType = 7
-	JavaSqlTypeDOUBLE        JavaSqlType = 8
-	JavaSqlTypeDECIMAL       JavaSqlType = 3
-	JavaSqlTypeCHAR          JavaSqlType = 1
-	JavaSqlTypeVARCHAR       JavaSqlType = 12
-	JavaSqlTypeLONGVARCHAR   JavaSqlType = -1
-	JavaSqlTypeDATE          JavaSqlType = 91
-	JavaSqlTypeTIME          JavaSqlType = 92
-	JavaSqlTypeTIMESTAMP     JavaSqlType = 93
-	JavaSqlTypeBINARY        JavaSqlType = -2
-	JavaSqlTypeVARBINARY     JavaSqlType = -3
-	JavaSqlTypeLONGVARBINARY JavaSqlType = -4
-	JavaSqlTypeNULL          JavaSqlType = 0
-	JavaSqlTypeBLOB          JavaSqlType = 2004
+	JavaSQLTypeBIT           JavaSQLType = -7
+	JavaSQLTypeTINYINT       JavaSQLType = -6
+	JavaSQLTypeSMALLINT      JavaSQLType = 5
+	JavaSQLTypeINTEGER       JavaSQLType = 4
+	JavaSQLTypeBIGINT        JavaSQLType = -5
+	JavaSQLTypeREAL          JavaSQLType = 7
+	JavaSQLTypeDOUBLE        JavaSQLType = 8
+	JavaSQLTypeDECIMAL       JavaSQLType = 3
+	JavaSQLTypeCHAR          JavaSQLType = 1
+	JavaSQLTypeVARCHAR       JavaSQLType = 12
+	JavaSQLTypeLONGVARCHAR   JavaSQLType = -1
+	JavaSQLTypeDATE          JavaSQLType = 91
+	JavaSQLTypeTIME          JavaSQLType = 92
+	JavaSQLTypeTIMESTAMP     JavaSQLType = 93
+	JavaSQLTypeBINARY        JavaSQLType = -2
+	JavaSQLTypeVARBINARY     JavaSQLType = -3
+	JavaSQLTypeLONGVARBINARY JavaSQLType = -4
+	JavaSQLTypeNULL          JavaSQLType = 0
+	JavaSQLTypeBLOB          JavaSQLType = 2004
 
 	// unused
-	//JavaSqlTypeFLOAT                   JavaSqlType = 6
-	//JavaSqlTypeNUMERIC                 JavaSqlType = 2
-	//JavaSqlTypeOTHER                   JavaSqlType = 1111
-	//JavaSqlTypeJAVA_OBJECT             JavaSqlType = 2000
-	//JavaSqlTypeDISTINCT                JavaSqlType = 2001
-	//JavaSqlTypeSTRUCT                  JavaSqlType = 2002
-	//JavaSqlTypeARRAY                   JavaSqlType = 2003
-	//JavaSqlTypeCLOB                    JavaSqlType = 2005
-	//JavaSqlTypeREF                     JavaSqlType = 2006
-	//JavaSqlTypeDATALINK                JavaSqlType = 70
-	//JavaSqlTypeBOOLEAN                 JavaSqlType = 16
-	//JavaSqlTypeROWID                   JavaSqlType = -8
-	//JavaSqlTypeNCHAR                   JavaSqlType = -15
-	//JavaSqlTypeNVARCHAR                JavaSqlType = -9
-	//JavaSqlTypeLONGNVARCHAR            JavaSqlType = -16
-	//JavaSqlTypeNCLOB                   JavaSqlType = 2011
-	//JavaSqlTypeSQLXML                  JavaSqlType = 2009
-	//JavaSqlTypeREF_CURSOR              JavaSqlType = 2012
-	//JavaSqlTypeTIME_WITH_TIMEZONE      JavaSqlType = 2013
-	//JavaSqlTypeTIMESTAMP_WITH_TIMEZONE JavaSqlType = 2014
+	//JavaSQLTypeFLOAT                   JavaSQLType = 6
+	//JavaSQLTypeNUMERIC                 JavaSQLType = 2
+	//JavaSQLTypeOTHER                   JavaSQLType = 1111
+	//JavaSQLTypeJAVA_OBJECT             JavaSQLType = 2000
+	//JavaSQLTypeDISTINCT                JavaSQLType = 2001
+	//JavaSQLTypeSTRUCT                  JavaSQLType = 2002
+	//JavaSQLTypeARRAY                   JavaSQLType = 2003
+	//JavaSQLTypeCLOB                    JavaSQLType = 2005
+	//JavaSQLTypeREF                     JavaSQLType = 2006
+	//JavaSQLTypeDATALINK                JavaSQLType = 70
+	//JavaSQLTypeBOOLEAN                 JavaSQLType = 16
+	//JavaSQLTypeROWID                   JavaSQLType = -8
+	//JavaSQLTypeNCHAR                   JavaSQLType = -15
+	//JavaSQLTypeNVARCHAR                JavaSQLType = -9
+	//JavaSQLTypeLONGNVARCHAR            JavaSQLType = -16
+	//JavaSQLTypeNCLOB                   JavaSQLType = 2011
+	//JavaSQLTypeSQLXML                  JavaSQLType = 2009
+	//JavaSQLTypeREF_CURSOR              JavaSQLType = 2012
+	//JavaSQLTypeTIME_WITH_TIMEZONE      JavaSQLType = 2013
+	//JavaSQLTypeTIMESTAMP_WITH_TIMEZONE JavaSQLType = 2014
 )
 
-func MysqlToJavaType(mysqlType byte) JavaSqlType {
+// MysqlToJavaType converts the mysql protocol types to java sql types
+func MysqlToJavaType(mysqlType byte) JavaSQLType {
 	// see https://github.com/mysql/mysql-connector-j/blob/5.1.49/src/com/mysql/jdbc/MysqlDefs.java
 	switch mysqlType {
 	case mysql.TypeNewDecimal, mysql.TypeDecimal:
-		return JavaSqlTypeDECIMAL
+		return JavaSQLTypeDECIMAL
 
 	case mysql.TypeTiny:
-		return JavaSqlTypeTINYINT
+		return JavaSQLTypeTINYINT
 
 	case mysql.TypeShort:
-		return JavaSqlTypeSMALLINT
+		return JavaSQLTypeSMALLINT
 
 	case mysql.TypeLong:
-		return JavaSqlTypeINTEGER
+		return JavaSQLTypeINTEGER
 
 	case mysql.TypeFloat:
-		return JavaSqlTypeREAL
+		return JavaSQLTypeREAL
 
 	case mysql.TypeDouble:
-		return JavaSqlTypeDOUBLE
+		return JavaSQLTypeDOUBLE
 
 	case mysql.TypeNull:
-		return JavaSqlTypeNULL
+		return JavaSQLTypeNULL
 
 	case mysql.TypeTimestamp:
-		return JavaSqlTypeTIMESTAMP
+		return JavaSQLTypeTIMESTAMP
 
 	case mysql.TypeLonglong:
-		return JavaSqlTypeBIGINT
+		return JavaSQLTypeBIGINT
 
 	case mysql.TypeInt24:
-		return JavaSqlTypeINTEGER
+		return JavaSQLTypeINTEGER
 
 	case mysql.TypeDate:
-		return JavaSqlTypeDATE
+		return JavaSQLTypeDATE
 
 	case mysql.TypeDuration:
-		return JavaSqlTypeTIME
+		return JavaSQLTypeTIME
 
 	case mysql.TypeDatetime:
-		return JavaSqlTypeTIMESTAMP
+		return JavaSQLTypeTIMESTAMP
 
 	case mysql.TypeYear:
-		return JavaSqlTypeDATE
+		return JavaSQLTypeDATE
 
 	case mysql.TypeNewDate:
-		return JavaSqlTypeDATE
+		return JavaSQLTypeDATE
 
 	case mysql.TypeEnum:
-		return JavaSqlTypeCHAR
+		return JavaSQLTypeCHAR
 
 	case mysql.TypeSet:
-		return JavaSqlTypeCHAR
+		return JavaSQLTypeCHAR
 
 	case mysql.TypeTinyBlob:
-		return JavaSqlTypeVARBINARY
+		return JavaSQLTypeVARBINARY
 
 	case mysql.TypeMediumBlob:
-		return JavaSqlTypeLONGVARBINARY
+		return JavaSQLTypeLONGVARBINARY
 
 	case mysql.TypeLongBlob:
-		return JavaSqlTypeLONGVARBINARY
+		return JavaSQLTypeLONGVARBINARY
 
 	case mysql.TypeBlob:
-		return JavaSqlTypeLONGVARBINARY
+		return JavaSQLTypeLONGVARBINARY
 
 	case mysql.TypeVarString, mysql.TypeVarchar:
-		return JavaSqlTypeVARCHAR
+		return JavaSQLTypeVARCHAR
 
 	case mysql.TypeJSON:
 		// json: see jdbc 8.0, https://github.com/mysql/mysql-connector-j/blob/8.0.20/src/main/core-api/java/com/mysql/cj/MysqlType.java
-		return JavaSqlTypeLONGVARCHAR
+		return JavaSQLTypeLONGVARCHAR
 
 	case mysql.TypeString:
-		return JavaSqlTypeCHAR
+		return JavaSQLTypeCHAR
 
 	case mysql.TypeGeometry:
-		return JavaSqlTypeBINARY
+		return JavaSQLTypeBINARY
 
 	case mysql.TypeBit:
-		return JavaSqlTypeBIT
+		return JavaSQLTypeBIT
 
 	default:
-		return JavaSqlTypeVARCHAR
+		return JavaSQLTypeVARCHAR
 	}
 }

@@ -44,9 +44,8 @@ func convertToCanalTs(commitTs uint64) int64 {
 func convertRowEventType(e *model.RowChangedEvent) canal.EventType {
 	if e.Delete {
 		return canal.EventType_DELETE
-	} else {
-		return canal.EventType_UPDATE
 	}
+	return canal.EventType_UPDATE
 }
 
 // get the canal EventType according to the DDLEvent
@@ -98,12 +97,12 @@ func isCanalDdl(t canal.EventType) bool {
 	return false
 }
 
-type CanalEntryBuilder struct {
+type canalEntryBuilder struct {
 	bytesDecoder *encoding.Decoder // default charset is ISO-8859-1
 }
 
 // build the header of a canal entry
-func (b *CanalEntryBuilder) buildHeader(commitTs uint64, schema string, table string, eventType canal.EventType, rowCount int) *canal.Header {
+func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table string, eventType canal.EventType, rowCount int) *canal.Header {
 	t := convertToCanalTs(commitTs)
 	h := &canal.Header{
 		VersionPresent:    &canal.Header_Version{Version: CanalProtocolVersion},
@@ -125,7 +124,7 @@ func (b *CanalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 }
 
 // build the Column in the canal RowData
-func (b *CanalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
+func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	sqlType := MysqlToJavaType(c.Type)
 	// Some special cases handled in canal
 	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
@@ -133,19 +132,19 @@ func (b *CanalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	// Since we cannot get the signed/unsigned flag of the column in the RowChangedEvent currently,
 	// we promote the sqlTypes regardless of the flag.
 	case mysql.TypeTiny:
-		sqlType = JavaSqlTypeSMALLINT
+		sqlType = JavaSQLTypeSMALLINT
 	case mysql.TypeShort:
-		sqlType = JavaSqlTypeINTEGER
+		sqlType = JavaSQLTypeINTEGER
 	case mysql.TypeInt24:
-		sqlType = JavaSqlTypeINTEGER
+		sqlType = JavaSQLTypeINTEGER
 	case mysql.TypeLong:
-		sqlType = JavaSqlTypeBIGINT
+		sqlType = JavaSQLTypeBIGINT
 	case mysql.TypeLonglong:
-		sqlType = JavaSqlTypeDECIMAL
+		sqlType = JavaSQLTypeDECIMAL
 	}
 	switch sqlType {
-	case JavaSqlTypeBINARY, JavaSqlTypeVARBINARY, JavaSqlTypeLONGVARBINARY:
-		sqlType = JavaSqlTypeBLOB
+	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
+		sqlType = JavaSQLTypeBLOB
 	}
 
 	isKey := c.WhereHandle != nil && *c.WhereHandle
@@ -169,7 +168,7 @@ func (b *CanalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 				return nil, errors.Trace(err)
 			}
 			value = string(decoded)
-			sqlType = JavaSqlTypeBLOB // change sql type to Blob when the type is []byte according to canal
+			sqlType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
 		default:
 			value = fmt.Sprintf("%v", v)
 		}
@@ -187,7 +186,7 @@ func (b *CanalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 }
 
 // build the RowData of a canal entry
-func (b *CanalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
+func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
 	var columns []*canal.Column
 	for name, column := range e.Columns {
 		c, err := b.buildColumn(column, name, !e.Delete)
@@ -206,8 +205,8 @@ func (b *CanalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 	return rowData, nil
 }
 
-// build canal entry from RowChangedEvent in cdc
-func (b *CanalEntryBuilder) FromRowEvent(e *model.RowChangedEvent) (*canal.Entry, error) {
+// FromRowEvent builds canal entry from cdc RowChangedEvent
+func (b *canalEntryBuilder) FromRowEvent(e *model.RowChangedEvent) (*canal.Entry, error) {
 	eventType := convertRowEventType(e)
 	header := b.buildHeader(e.CommitTs, e.Table.Schema, e.Table.Table, eventType, 1)
 	isDdl := isCanalDdl(eventType) // false
@@ -234,8 +233,8 @@ func (b *CanalEntryBuilder) FromRowEvent(e *model.RowChangedEvent) (*canal.Entry
 	return entry, nil
 }
 
-// build canal entry from DDLEvent in cdc
-func (b *CanalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error) {
+// FromDdlEvent builds canal entry from cdc DDLEvent
+func (b *canalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error) {
 	eventType := convertDdlEventType(e)
 	header := b.buildHeader(e.CommitTs, e.Schema, e.Table, eventType, -1)
 	isDdl := isCanalDdl(eventType)
@@ -260,10 +259,10 @@ func (b *CanalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error
 	return entry, nil
 }
 
-// NewCanalEntryBuilder() creates a new CanalEntryBuilder
-func NewCanalEntryBuilder() *CanalEntryBuilder {
+// NewCanalEntryBuilder creates a new canalEntryBuilder
+func NewCanalEntryBuilder() *canalEntryBuilder {
 	d := charmap.ISO8859_1.NewDecoder()
-	return &CanalEntryBuilder{
+	return &canalEntryBuilder{
 		bytesDecoder: d,
 	}
 }
@@ -272,7 +271,7 @@ func NewCanalEntryBuilder() *CanalEntryBuilder {
 type CanalEventBatchEncoder struct {
 	messages     *canal.Messages
 	packet       *canal.Packet
-	entryBuilder *CanalEntryBuilder
+	entryBuilder *canalEntryBuilder
 }
 
 // AppendResolvedEvent implements the EventBatchEncoder interface
