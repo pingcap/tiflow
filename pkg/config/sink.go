@@ -13,15 +13,13 @@
 
 package config
 
-import "github.com/pingcap/tidb-tools/pkg/filter"
-
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
-	DispatchRules []*DispatchRule `toml:"dispatch-rules" json:"dispatch-rules"`
+	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers"`
 }
 
 // DispatchRule represents partition rule for a table
 type DispatchRule struct {
-	filter.Table
-	Rule string `toml:"rule" json:"rule"`
+	Matcher    []string `toml:"matcher" json:"matcher"`
+	Dispatcher string   `toml:"dispatcher" json:"dispatcher"`
 }

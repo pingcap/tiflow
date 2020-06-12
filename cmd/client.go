@@ -55,6 +55,7 @@ var (
 	cyclicReplicaID        uint64
 	cyclicFilterReplicaIDs []uint
 	cyclicSyncDDL          bool
+	cyclicUpstreamDSN      string
 
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client

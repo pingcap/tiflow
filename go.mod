@@ -8,7 +8,6 @@ require (
 	github.com/Shopify/sarama v1.26.1
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
-	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/coreos/go-semver v0.3.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
@@ -27,13 +26,11 @@ require (
 	github.com/pingcap/log v0.0.0-20200511115504-543df19646ad
 	github.com/pingcap/parser v0.0.0-20200522094936-3b720a0512a6
 	github.com/pingcap/pd/v4 v4.0.0-rc.2.0.20200520083007-2c251bd8f181
-	github.com/pingcap/tidb v1.1.0-beta.0.20200515085842-dfbb1ff8b0a8
-	github.com/pingcap/tidb-tools v4.0.0-rc.1.0.20200514040632-f76b3e428e19+incompatible
+	github.com/pingcap/tidb v1.1.0-beta.0.20200603101356-552e7709de0d
+	github.com/pingcap/tidb-tools v4.0.0-rc.2.0.20200521050818-6dd445d83fe0+incompatible
 	github.com/prometheus/client_golang v1.5.1
-	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749 // indirect
 	github.com/spf13/cobra v1.0.0
 	github.com/stretchr/testify v1.5.1
-	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20191211224106-0dc78a144b31
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073 // indirect
@@ -43,6 +40,4 @@ require (
 	google.golang.org/grpc v1.26.0
 )
 
-replace github.com/pingcap/kvproto => github.com/MyonKeminta/kvproto v0.0.0-20200608071553-babe7a4311be
-
-replace github.com/pingcap/tidb => github.com/MyonKeminta/tidb v1.1.0-alpha.1.0.20200602122902-4d9571613547
+replace github.com/pingcap/kvproto => github.com/MyonKeminta/kvproto v0.0.0-20200612072928-d73039da42ad

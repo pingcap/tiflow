@@ -30,9 +30,13 @@ import (
 var minPDVersion *semver.Version = semver.New("4.0.0-rc.1")
 var minTiKVVersion *semver.Version = semver.New("4.0.0-rc.1")
 
-func removeV(v string) string {
+func removeVAndHash(v string) string {
 	if v == "" {
 		return v
+	}
+	hash := regexp.MustCompile("-[0-9]+-g[0-9a-f]{8,}")
+	if hash.Match([]byte(v)) {
+		v = hash.ReplaceAllLiteralString(v, "")
 	}
 	return strings.TrimPrefix(v, "v")
 }
@@ -44,14 +48,14 @@ func CheckClusterVersion(ctx context.Context, client pd.Client, pdHTTP string) e
 		return err
 	}
 	for _, s := range stores {
-		ver, err := semver.NewVersion(removeV(s.Version))
+		ver, err := semver.NewVersion(removeVAndHash(s.Version))
 		if err != nil {
 			return err
 		}
 		ord := ver.Compare(*minTiKVVersion)
 		if ord < 0 {
 			return errors.NotSupportedf("TiKV %s is not supported, require minimal version %s",
-				removeV(s.Version), minTiKVVersion)
+				removeVAndHash(s.Version), minTiKVVersion)
 		}
 	}
 	// See more: https://github.com/pingcap/pd/blob/v4.0.0-rc.1/server/api/version.go
@@ -82,14 +86,14 @@ func CheckClusterVersion(ctx context.Context, client pd.Client, pdHTTP string) e
 	if err != nil {
 		return errors.Annotate(err, "fail to request PD")
 	}
-	ver, err := semver.NewVersion(removeV(pdVer.Version))
+	ver, err := semver.NewVersion(removeVAndHash(pdVer.Version))
 	if err != nil {
 		return err
 	}
 	ord := ver.Compare(*minPDVersion)
 	if ord < 0 {
 		return errors.NotSupportedf("PD %s is not supported, require minimal version %s",
-			removeV(pdVer.Version), minPDVersion)
+			removeVAndHash(pdVer.Version), minPDVersion)
 	}
 	return nil
 }

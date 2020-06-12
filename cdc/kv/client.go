@@ -50,10 +50,11 @@ import (
 const (
 	dialTimeout               = 10 * time.Second
 	maxRetry                  = 100
-	tikvRequestMaxBackoff     = 20000 // Maximum total sleep time(in ms)
-	pdRequestMaxBackoff       = 20000
-	grpcInitialWindowSize     = 1 << 30
-	grpcInitialConnWindowSize = 1 << 30
+	tikvRequestMaxBackoff     = 20000   // Maximum total sleep time(in ms) of TiKV request backoff
+	pdRequestMaxBackoff       = 20000   // Maximum total sleep time(in ms) of PD request backoff
+	grpcInitialWindowSize     = 1 << 30 // The value for initial window size on a stream
+	grpcInitialConnWindowSize = 1 << 30 // The value for initial window size on a connection
+	grpcInitialMaxRecvMsgSize = 1 << 30 // The maximum message size the client can receive
 	grpcConnCount             = 10
 )
 
@@ -182,6 +183,7 @@ func (a *connArray) Init(ctx context.Context) error {
 			a.target,
 			grpc.WithInitialWindowSize(grpcInitialWindowSize),
 			grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcInitialMaxRecvMsgSize)),
 			grpc.WithInsecure(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: gbackoff.Config{
@@ -854,6 +856,11 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 		)
 		retryErr := retry.Run(50*time.Millisecond, maxRetry,
 			func() error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+				}
 				scanT0 := time.Now()
 				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 				regions, err = s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)

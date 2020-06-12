@@ -18,7 +18,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -37,6 +39,7 @@ func newChangefeedCommand() *cobra.Command {
 		newQueryChangefeedCommand(),
 		newCreateChangefeedCommand(),
 		newStatisticsChangefeedCommand(),
+		newCreateChangefeedCyclicCommand(),
 	)
 	// Add pause, resume, remove changefeed
 	for _, cmd := range newAdminChangefeedCommand() {
@@ -143,6 +146,9 @@ func newQueryChangefeedCommand() *cobra.Command {
 				taskStatus = append(taskStatus, captureTaskStatus{CaptureID: captureID, TaskStatus: status})
 			}
 			meta := &cfMeta{Info: info, Status: status, Count: count, TaskStatus: taskStatus}
+			if info == nil {
+				log.Warn("this changefeed has been deleted, the residual meta data will be completely deleted within 24 hours.")
+			}
 			return jsonPrint(cmd, meta)
 		},
 	}
@@ -176,7 +182,12 @@ func newCreateChangefeedCommand() *cobra.Command {
 					return err
 				}
 			}
-			if cyclicReplicaID != 0 && len(cyclicFilterReplicaIDs) != 0 {
+			if cyclicReplicaID != 0 || len(cyclicFilterReplicaIDs) != 0 {
+				if !(cyclicReplicaID != 0 && len(cyclicFilterReplicaIDs) != 0) {
+					return errors.New(
+						"invaild cyclic config, please make sure using nonzero replica ID " +
+							"and specify filter replica IDs")
+				}
 				filter := make([]uint64, 0, len(cyclicFilterReplicaIDs))
 				for _, id := range cyclicFilterReplicaIDs {
 					filter = append(filter, uint64(id))
@@ -200,7 +211,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 				SortDir:    sortDir,
 			}
 
-			ineligibleTables, err := verifyTables(ctx, cfg, startTs)
+			ineligibleTables, allTables, err := verifyTables(ctx, cfg, startTs)
 			if err != nil {
 				return err
 			}
@@ -218,6 +229,10 @@ func newCreateChangefeedCommand() *cobra.Command {
 						return nil
 					}
 				}
+			}
+			if cfg.Cyclic.IsEnabled() && !cyclic.IsTablesPaired(allTables) {
+				return errors.New("normal tables and mark tables are not paired, " +
+					"please run `cdc cli changefeed cyclic create-marktables`")
 			}
 
 			for _, opt := range opts {
@@ -319,5 +334,47 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
 	command.PersistentFlags().UintVar(&interval, "interval", 10, "Interval for outputing the latest statistics")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
+	return command
+}
+
+func newCreateChangefeedCyclicCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "cyclic",
+		Short: "(Expremental) Utility about cyclic replication",
+	}
+	command.AddCommand(
+		&cobra.Command{
+			Use:   "create-marktables",
+			Short: "Create cyclic replication mark tables",
+			Long:  ``,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				ctx := defaultContext
+
+				cfg := config.GetDefaultReplicaConfig()
+				if len(configFile) > 0 {
+					if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
+						return err
+					}
+				}
+				ts, logical, err := pdCli.GetTS(ctx)
+				if err != nil {
+					return err
+				}
+				startTs = oracle.ComposeTS(ts, logical)
+
+				_, allTables, err := verifyTables(ctx, cfg, startTs)
+				if err != nil {
+					return err
+				}
+				err = cyclic.CreateMarkTables(ctx, allTables, cyclicUpstreamDSN)
+				if err != nil {
+					return err
+				}
+				cmd.Printf("Create cyclic replication mark tables successfully! Total tables: %d\n", len(allTables))
+				return nil
+			},
+		})
+	command.PersistentFlags().StringVar(&cyclicUpstreamDSN, "cyclic-upstream-dsn", "", "(Expremental) Upsteam TiDB DSN in the form of [user[:password]@][net[(addr)]]/")
+
 	return command
 }

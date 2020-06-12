@@ -18,12 +18,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/tidb/domain"
@@ -197,12 +196,10 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	log.SetLevel(zap.FatalLevel)
 	defer log.SetLevel(logLevel)
 
+	mvccListener := newMVCCListener(mocktikv.MustNewMVCCStore())
+
+	m.mvccStore = mvccListener
 	store, err := mockstore.NewMockStore(
-		mockstore.WithMVCCStoreHijacker(func(s mocktikv.MVCCStore) mocktikv.MVCCStore {
-			mvccListener := newMVCCListener(s)
-			m.mvccStore = mvccListener
-			return mvccListener
-		}),
 		mockstore.WithClusterInspector(func(c cluster.Cluster) {
 			mockstore.BootstrapWithSingleStore(c)
 			m.cluster = c
@@ -226,9 +223,9 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	m.MustExec("use test;")
 	m.tidbKit.Se.GetSessionVars().RowEncoder.Enable = newRowFormat
 
-	m.mvccStore.(*mvccListener).registerPostPrewrite(m.postPrewrite)
-	m.mvccStore.(*mvccListener).registerPostCommit(m.postCommit)
-	m.mvccStore.(*mvccListener).registerPostRollback(m.postRollback)
+	mvccListener.registerPostPrewrite(m.postPrewrite)
+	mvccListener.registerPostCommit(m.postCommit)
+	mvccListener.registerPostRollback(m.postRollback)
 }
 
 // CreatePuller returns a mock puller with the specified start ts and spans

@@ -19,6 +19,9 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -247,5 +250,91 @@ func (s *etcdSuite) TestPutAllChangeFeedStatus(c *check.C) {
 			c.Assert(err, check.IsNil)
 			c.Assert(string(resp.Kvs[0].Value), check.Equals, infoStr)
 		}
+	}
+}
+
+func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
+	ctx := context.Background()
+	err := s.client.PutChangeFeedStatus(ctx, "test1", &model.ChangeFeedStatus{
+		ResolvedTs: 1,
+	})
+	c.Assert(err, check.IsNil)
+	status, _, err := s.client.GetChangeFeedStatus(ctx, "test1")
+	c.Assert(err, check.IsNil)
+	c.Assert(status, check.DeepEquals, &model.ChangeFeedStatus{
+		ResolvedTs: 1,
+	})
+	err = s.client.SetChangeFeedStatusTTL(ctx, "test1", 1 /* second */)
+	c.Assert(err, check.IsNil)
+	status, _, err = s.client.GetChangeFeedStatus(ctx, "test1")
+	c.Assert(err, check.IsNil)
+	c.Assert(status, check.DeepEquals, &model.ChangeFeedStatus{
+		ResolvedTs: 1,
+	})
+	for i := 0; i < 50; i++ {
+		_, _, err = s.client.GetChangeFeedStatus(ctx, "test1")
+		log.Warn("nil", zap.Error(err))
+		switch errors.Cause(err) {
+		case model.ErrChangeFeedNotExists:
+			return
+		case nil:
+			time.Sleep(100 * time.Millisecond)
+			continue
+		default:
+			c.Fatal("got unexpected error", err)
+		}
+	}
+	c.Fatal("the change feed status is still exists after 5 seconds")
+}
+
+func (s *etcdSuite) TestDeleteTaskWorkload(c *check.C) {
+	ctx := context.Background()
+	workload := &model.TaskWorkload{
+		1001: model.WorkloadInfo{Workload: 1},
+		1002: model.WorkloadInfo{Workload: 3},
+	}
+	feedID := "feedid"
+	captureID := "captureid"
+
+	err := s.client.PutTaskWorkload(ctx, feedID, captureID, workload)
+	c.Assert(err, check.IsNil)
+
+	err = s.client.DeleteTaskWorkload(ctx, feedID, captureID)
+	c.Assert(err, check.IsNil)
+
+	tw, err := s.client.GetTaskWorkload(ctx, feedID, captureID)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(tw), check.Equals, 0)
+}
+
+func (s *etcdSuite) TestGetAllTaskWorkload(c *check.C) {
+	ctx := context.Background()
+	feeds := []string{"feed1", "feed2"}
+	captures := []string{"capture1", "capture2", "capture3"}
+	expected := []map[string]*model.TaskWorkload{
+		{
+			"capture1": {1000: model.WorkloadInfo{Workload: 1}},
+			"capture2": {1001: model.WorkloadInfo{Workload: 1}},
+			"capture3": {1002: model.WorkloadInfo{Workload: 1}},
+		},
+		{
+			"capture1": {2000: model.WorkloadInfo{Workload: 1}},
+			"capture2": {2001: model.WorkloadInfo{Workload: 1}},
+			"capture3": {2002: model.WorkloadInfo{Workload: 1}},
+		},
+	}
+
+	for i, feed := range feeds {
+		for j, capture := range captures {
+			err := s.client.PutTaskWorkload(ctx, feed, capture, &model.TaskWorkload{
+				int64(1000*(i+1) + j): model.WorkloadInfo{Workload: 1},
+			})
+			c.Assert(err, check.IsNil)
+		}
+	}
+	for i := range feeds {
+		workloads, err := s.client.GetAllTaskWorkloads(ctx, feeds[i])
+		c.Assert(err, check.IsNil)
+		c.Assert(workloads, check.DeepEquals, expected[i])
 	}
 }

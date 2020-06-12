@@ -40,8 +40,9 @@ type clientSuite struct {
 var _ = check.Suite(&clientSuite{})
 
 func (s *clientSuite) TestNewClose(c *check.C) {
-	store := mocktikv.MustNewMVCCStore()
-	cluster := mocktikv.NewCluster(store)
+	mvccStore, err := mocktikv.NewMVCCLevelDB("")
+	c.Assert(err, check.IsNil)
+	cluster := mocktikv.NewCluster(mvccStore)
 	pdCli := mocktikv.NewPDClient(cluster)
 
 	cli, err := NewCDCClient(pdCli, nil)
@@ -147,7 +148,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("", nil)
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)

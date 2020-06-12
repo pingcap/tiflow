@@ -17,18 +17,17 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pingcap/ticdc/cdc/kv"
-	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/mockstore/cluster"
-	"github.com/pingcap/tidb/util/testkit"
-
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	parser_types "github.com/pingcap/parser/types"
+	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tidb/store/mockstore/cluster"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/testkit"
 )
 
 type schemaSuite struct{}

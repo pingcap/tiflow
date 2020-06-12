@@ -16,7 +16,7 @@ function run() {
     cd $WORK_DIR
 
     # record tso before we create tables to skip the system table DDLs
-    start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
@@ -26,7 +26,7 @@ function run() {
         mysql) ;&
         *) SINK_URI="mysql://root@127.0.0.1:3306/";;
     esac
-    cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi

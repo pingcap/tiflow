@@ -22,10 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/cyclic"
-
-	"github.com/pingcap/ticdc/pkg/scheduler"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -34,7 +30,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -201,7 +199,7 @@ func (o *Owner) newChangeFeed(
 
 	ctx, cancel := context.WithCancel(ctx)
 	schemas := make(map[model.SchemaID]tableIDMap)
-	tables := make(map[model.TableID]entry.TableName)
+	tables := make(map[model.TableID]model.TableName)
 	partitions := make(map[model.TableID][]int64)
 	orphanTables := make(map[model.TableID]model.Ts)
 	for tid, table := range schemaSnap.CloneTables() {
@@ -294,6 +292,35 @@ func (o *Owner) newChangeFeed(
 	return cf, nil
 }
 
+// This is a compatibility hack between v4.0.0 and v4.0.1
+// This function will try to decode the task status, if that throw a unmarshal error,
+// it will remove the invalid task status
+func (o *Owner) checkAndCleanTasksInfo(ctx context.Context) error {
+	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
+	if err != nil {
+		return err
+	}
+	cleaned := false
+	for changefeedID := range details {
+		_, err := o.cfRWriter.GetAllTaskStatus(ctx, changefeedID)
+		switch errors.Cause(err) {
+		case model.ErrDecodeFailed:
+			err := o.cfRWriter.RemoveAllTaskStatus(ctx, changefeedID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			cleaned = true
+		case nil:
+		default:
+			return errors.Trace(err)
+		}
+	}
+	if cleaned {
+		log.Warn("the task status is outdated, clean them")
+	}
+	return nil
+}
+
 func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
 	if err != nil {
@@ -324,6 +351,10 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 
 		cfInfo := &model.ChangeFeedInfo{}
 		err = cfInfo.Unmarshal(cfInfoRawValue.Value)
+		if err != nil {
+			return err
+		}
+		err = cfInfo.VerifyAndFix()
 		if err != nil {
 			return err
 		}
@@ -449,6 +480,7 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// TODO Closing the resource should not be here
 	err = cf.ddlHandler.Close()
 	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
 	err = cf.sink.Close()
@@ -466,12 +498,14 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 	}()
 	for i, job := range o.adminJobs {
 		log.Info("handle admin job", zap.String("changefeed", job.CfID), zap.Stringer("type", job.Type))
+		removeIdx = i + 1
 		switch job.Type {
 		case model.AdminStop:
 			// update ChangeFeedDetail to tell capture ChangeFeedDetail watcher to cleanup
 			cf, ok := o.changeFeeds[job.CfID]
 			if !ok {
-				return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
+				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
+				continue
 			}
 			cf.info.AdminJobType = model.AdminStop
 			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
@@ -494,12 +528,25 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			// set ttl to changefeed status
+			err = o.etcdClient.SetChangeFeedStatusTTL(ctx, job.CfID, 24*3600 /*24 hours*/)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		case model.AdminResume:
 			cfStatus, _, err := o.etcdClient.GetChangeFeedStatus(ctx, job.CfID)
+			if errors.Cause(err) == model.ErrChangeFeedNotExists {
+				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
+				continue
+			}
 			if err != nil {
 				return errors.Trace(err)
 			}
 			cfInfo, err := o.etcdClient.GetChangeFeedInfo(ctx, job.CfID)
+			if errors.Cause(err) == model.ErrChangeFeedNotExists {
+				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
+				continue
+			}
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -518,7 +565,6 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 		}
-		removeIdx = i + 1
 	}
 	return nil
 }
@@ -732,6 +778,10 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 		if err != nil {
 			return errors.Trace(err)
 		}
+		workloads, err := o.etcdClient.GetAllTaskWorkloads(ctx, changeFeedID)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		// in most cases statuses and positions have the same keys, or positions
 		// are more than statuses, as we always delete task status first.
 		captureIDs := make(map[string]struct{}, len(statuses))
@@ -739,6 +789,9 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 			captureIDs[captureID] = struct{}{}
 		}
 		for captureID := range positions {
+			captureIDs[captureID] = struct{}{}
+		}
+		for captureID := range workloads {
 			captureIDs[captureID] = struct{}{}
 		}
 
@@ -769,6 +822,9 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 				if err := o.etcdClient.DeleteTaskPosition(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
+				if err := o.etcdClient.DeleteTaskWorkload(ctx, changeFeedID, captureID); err != nil {
+					return errors.Trace(err)
+				}
 				log.Debug("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
 			}
 		}
@@ -784,6 +840,10 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 	// When an owner just starts, changefeed information is not updated at once.
 	// Supposing a crased capture should be removed now, the owner will miss deleting
 	// task status and task position if changefeed information is not loaded.
+	// If the task positions and status decode failed, remove them.
+	if err := o.checkAndCleanTasksInfo(ctx); err != nil {
+		return errors.Trace(err)
+	}
 	o.l.Lock()
 	if err := o.loadChangeFeeds(ctx); err != nil {
 		o.l.Unlock()
@@ -827,7 +887,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 				}
 				log.Debug("capture deleted",
 					zap.String("capture-id", c.ID),
-					zap.String("advertise-aadr", c.AdvertiseAddr))
+					zap.String("advertise-addr", c.AdvertiseAddr))
 				o.removeCapture(c)
 			case clientv3.EventTypePut:
 				if !ev.IsCreate() {
@@ -838,7 +898,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 				}
 				log.Debug("capture added",
 					zap.String("capture-id", c.ID),
-					zap.String("advertise-aadr", c.AdvertiseAddr))
+					zap.String("advertise-addr", c.AdvertiseAddr))
 				o.addCapture(c)
 			}
 		}
