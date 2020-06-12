@@ -16,13 +16,16 @@ package cdc
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
+	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/session"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -35,7 +38,17 @@ const (
 
 	// DefaultCDCGCSafePointTTL is the default value of cdc gc safe-point ttl, specified in seconds.
 	DefaultCDCGCSafePointTTL = 24 * 60 * 60
+
+	tidbNewCollationEnabled = "new_collation_enabled"
 )
+
+var (
+	globalSettings = new(clusterSettings)
+)
+
+type clusterSettings struct {
+	newCollationEnabled bool
+}
 
 type options struct {
 	pdEndpoints   string
@@ -153,6 +166,11 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.pdClient = pdClient
 
+	err = loadGlobalSettings(s.pdEndpoints)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	err = util.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0])
 	if err != nil {
 		return err
@@ -253,4 +271,46 @@ func (s *Server) Close() {
 		}
 		closeCancel()
 	}
+}
+
+func loadGlobalSettings(pdEndpoints []string) error {
+	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","))
+	if err != nil {
+		return err
+	}
+	se, err := session.CreateSession(kvStore)
+	if err != nil {
+		return err
+	}
+
+	para, err := loadParameter(se, tidbNewCollationEnabled)
+	if err != nil {
+		return err
+	}
+	n, err := strconv.ParseBool(para)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	globalSettings.newCollationEnabled = n
+
+	return nil
+}
+
+func loadParameter(se session.Session, name string) (string, error) {
+	sql := "select variable_value from mysql.tidb where variable_name = '" + name + "'"
+	rss, errLoad := se.Execute(context.Background(), sql)
+	if errLoad != nil {
+		return "", errLoad
+	}
+	// the record of mysql.tidb under where condition: variable_name = $name should shall only be one.
+	defer func() {
+		if err := rss[0].Close(); err != nil {
+			log.Error("close result set error", zap.Error(err))
+		}
+	}()
+	req := rss[0].NewChunk()
+	if err := rss[0].Next(context.Background(), req); err != nil {
+		return "", err
+	}
+	return req.GetRow(0).GetString(0), nil
 }

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -34,10 +35,12 @@ import (
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/kv"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/store/tikv/tikvrpc"
+	"github.com/pingcap/tidb/tablecodec"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -241,10 +244,12 @@ type CDCClient struct {
 
 	regionCache *tikv.RegionCache
 	kvStorage   tikv.Storage
+
+	newCollationEnabled bool
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(pd pd.Client, kvStorage tikv.Storage) (c *CDCClient, err error) {
+func NewCDCClient(pd pd.Client, kvStorage tikv.Storage, newCollationEnabled bool) (c *CDCClient, err error) {
 	clusterID := pd.GetClusterID(context.Background())
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
@@ -259,6 +264,7 @@ func NewCDCClient(pd pd.Client, kvStorage tikv.Storage) (c *CDCClient, err error
 		}{
 			conns: make(map[string]*connArray),
 		},
+		newCollationEnabled: newCollationEnabled,
 	}
 
 	return
@@ -317,7 +323,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string) (stream cdcpb.Ch
 func (c *CDCClient) EventFeed(
 	ctx context.Context, span regionspan.Span, ts uint64, eventCh chan<- *model.RegionFeedEvent,
 ) error {
-	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span, eventCh)
+	s := newEventFeedSession(c, c.regionCache, c.kvStorage, c.newCollationEnabled, span, eventCh)
 	return s.eventFeed(ctx, ts)
 }
 
@@ -352,6 +358,9 @@ type eventFeedSession struct {
 	regionChSizeGauge prometheus.Gauge
 	errChSizeGauge    prometheus.Gauge
 	rangeChSizeGauge  prometheus.Gauge
+
+	newCollationEnabled bool
+	tableID             int64
 }
 
 type rangeRequestTask struct {
@@ -363,24 +372,29 @@ func newEventFeedSession(
 	client *CDCClient,
 	regionCache *tikv.RegionCache,
 	kvStorage tikv.Storage,
+	newCollationEnabled bool,
 	totalSpan regionspan.Span,
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
+	// TODO: better way to get table id
+	tableID := tablecodec.DecodeTableID(totalSpan.Start)
 	return &eventFeedSession{
-		client:            client,
-		regionCache:       regionCache,
-		kvStorage:         kvStorage,
-		totalSpan:         totalSpan,
-		eventCh:           eventCh,
-		regionCh:          make(chan singleRegionInfo, 16),
-		errCh:             make(chan regionErrorInfo, 16),
-		requestRangeCh:    make(chan rangeRequestTask, 16),
-		rangeLock:         regionspan.NewRegionRangeLock(),
-		id:                strconv.FormatUint(allocID(), 10),
-		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
-		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
-		rangeChSizeGauge:  clientChannelSize.WithLabelValues(id, "range"),
+		client:              client,
+		regionCache:         regionCache,
+		kvStorage:           kvStorage,
+		totalSpan:           totalSpan,
+		newCollationEnabled: newCollationEnabled,
+		tableID:             tableID,
+		eventCh:             eventCh,
+		regionCh:            make(chan singleRegionInfo, 16),
+		errCh:               make(chan regionErrorInfo, 16),
+		requestRangeCh:      make(chan rangeRequestTask, 16),
+		rangeLock:           regionspan.NewRegionRangeLock(),
+		id:                  strconv.FormatUint(allocID(), 10),
+		regionChSizeGauge:   clientChannelSize.WithLabelValues(id, "region"),
+		errChSizeGauge:      clientChannelSize.WithLabelValues(id, "err"),
+		rangeChSizeGauge:    clientChannelSize.WithLabelValues(id, "range"),
 	}
 }
 
@@ -589,6 +603,8 @@ MainLoop:
 
 			requestID := allocID()
 
+			extraOp := s.getRegionExtraOp(rpcCtx.Meta)
+
 			req := &cdcpb.ChangeDataRequest{
 				Header: &cdcpb.Header{
 					ClusterId: s.client.clusterID,
@@ -599,6 +615,7 @@ MainLoop:
 				CheckpointTs: sri.ts,
 				StartKey:     sri.span.Start,
 				EndKey:       sri.span.End,
+				ExtraOp:      extraOp,
 			}
 
 			// The receiver thread need to know the span, which is only known in the sender thread. So create the
@@ -702,6 +719,32 @@ func needReloadRegion(failStoreIDs map[uint64]struct{}, rpcCtx *tikv.RPCContext)
 		}
 	}
 	return
+}
+
+func (s *eventFeedSession) getRegionExtraOp(meta *metapb.Region) kvrpcpb.ExtraOp {
+	if s.newCollationEnabled && s.tableID != 0 {
+		indexStart := tablecodec.GenTableIndexPrefix(s.tableID)
+		maxHandle := kv.IntHandle(math.MaxInt64).Encoded()
+		indexEnd := make(tidbkv.Key, len(indexStart)+len(maxHandle))
+		indexEnd = append(indexEnd, indexStart...)
+		indexEnd = append(indexEnd, maxHandle...)
+
+		regionStart := meta.GetStartKey()
+		if regionStart == nil {
+			regionStart = []byte{}
+		}
+		regionEnd := meta.GetStartKey()
+		if regionEnd == nil {
+			regionEnd = []byte{}
+		}
+		if _, err := regionspan.Intersect(
+			regionspan.Span{regionStart, regionEnd},
+			regionspan.Span{indexStart, indexEnd},
+		); err != nil {
+			return kvrpcpb.ExtraOp_ReadDeleted
+		}
+	}
+	return kvrpcpb.ExtraOp_Noop
 }
 
 // partialRegionFeed establishes a EventFeed to the region specified by regionInfo.
@@ -1108,7 +1151,7 @@ func (s *eventFeedSession) singleEventFeed(
 						value, ok := matcher.matchRow(cacheEntry)
 						if !ok {
 							// when cdc receives a commit log without a corresponding
-							// prewrite log before initialized, a committed log  with
+							// prewrite log before initialized, a committed log with
 							// the same key and start-ts must have been received.
 							log.Info("ignore commit event without prewrite",
 								zap.Binary("key", cacheEntry.GetKey()),
@@ -1141,11 +1184,12 @@ func (s *eventFeedSession) singleEventFeed(
 
 					revent := &model.RegionFeedEvent{
 						Val: &model.RawKVEntry{
-							OpType:  opType,
-							Key:     entry.Key,
-							Value:   entry.GetValue(),
-							StartTs: entry.StartTs,
-							CRTs:    entry.CommitTs,
+							OpType:   opType,
+							Key:      entry.Key,
+							Value:    entry.GetValue(),
+							OldValue: entry.GetOldValue(),
+							StartTs:  entry.StartTs,
+							CRTs:     entry.CommitTs,
 						},
 					}
 
@@ -1313,7 +1357,7 @@ func (s *eventFeedSession) resolveLock(ctx context.Context, regionID uint64, max
 	return nil
 }
 
-func assembleCommitEvent(entry *cdcpb.Event_Row, value []byte) (*model.RegionFeedEvent, error) {
+func assembleCommitEvent(entry *cdcpb.Event_Row, pending *pendingValue) (*model.RegionFeedEvent, error) {
 	var opType model.OpType
 	switch entry.GetOpType() {
 	case cdcpb.Event_Row_DELETE:
@@ -1326,11 +1370,12 @@ func assembleCommitEvent(entry *cdcpb.Event_Row, value []byte) (*model.RegionFee
 
 	revent := &model.RegionFeedEvent{
 		Val: &model.RawKVEntry{
-			OpType:  opType,
-			Key:     entry.Key,
-			Value:   value,
-			StartTs: entry.StartTs,
-			CRTs:    entry.CommitTs,
+			OpType:   opType,
+			Key:      entry.Key,
+			Value:    pending.value,
+			OldValue: pending.oldValue,
+			StartTs:  entry.StartTs,
+			CRTs:     entry.CommitTs,
 		},
 	}
 	return revent, nil

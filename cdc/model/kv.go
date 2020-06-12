@@ -60,8 +60,10 @@ type RawKVEntry struct {
 	OpType OpType
 	Key    []byte
 	// Nil fro delete type
-	Value   []byte
-	StartTs uint64
+	Value []byte
+	// Deleted/Updated value
+	OldValue []byte
+	StartTs  uint64
 	// Commit or resolved TS
 	CRTs uint64
 }

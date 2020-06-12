@@ -45,7 +45,7 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 	cluster := mocktikv.NewCluster(mvccStore)
 	pdCli := mocktikv.NewPDClient(cluster)
 
-	cli, err := NewCDCClient(pdCli, nil)
+	cli, err := NewCDCClient(pdCli, nil, false)
 	c.Assert(err, check.IsNil)
 
 	err = cli.Close()
@@ -157,7 +157,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	cluster.AddStore(2, "localhost:23376")
 	cluster.Bootstrap(3, []uint64{1, 2}, []uint64{4, 5}, 4)
 
-	cdcClient, err := NewCDCClient(pdClient, kvStorage.(tikv.Storage))
+	cdcClient, err := NewCDCClient(pdClient, kvStorage.(tikv.Storage), false)
 	c.Assert(err, check.IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

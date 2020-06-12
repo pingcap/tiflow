@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/codec"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -122,10 +123,12 @@ type mounterImpl struct {
 	rawRowChangedChs []chan *model.PolymorphicEvent
 	tz               *time.Location
 	workerNum        int
+
+	newCollationEnabled bool
 }
 
 // NewMounter creates a mounter
-func NewMounter(schemaStorage *SchemaStorage, workerNum int) Mounter {
+func NewMounter(schemaStorage *SchemaStorage, workerNum int, newCollationEnabled bool) Mounter {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
 	}
@@ -137,6 +140,8 @@ func NewMounter(schemaStorage *SchemaStorage, workerNum int) Mounter {
 		schemaStorage:    schemaStorage,
 		rawRowChangedChs: chs,
 		workerNum:        workerNum,
+
+		newCollationEnabled: newCollationEnabled,
 	}
 }
 
@@ -248,7 +253,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			}
 			return m.mountRowKVEntry(tableInfo, rowKV)
 		case bytes.HasPrefix(key, indexPrefix):
-			indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, baseInfo)
+			indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -285,7 +290,10 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, 
 	}, nil
 }
 
-func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*indexKVEntry, error) {
+func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*indexKVEntry, error) {
+	if m.newCollationEnabled {
+		return m.unmarshalIndexKVEntryV2(restKey, rawValue, rawOldValue, base)
+	}
 	// skip set index KV
 	if !base.Delete {
 		return nil, nil
@@ -305,6 +313,44 @@ func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, bas
 			return nil, errors.Trace(err)
 		}
 	}
+	base.RecordID = recordID
+	return &indexKVEntry{
+		baseKVEntry: base,
+		IndexID:     indexID,
+		IndexValue:  indexValue,
+	}, nil
+}
+
+// Unmarshal index kv for new collation encoding.
+func (m *mounterImpl) unmarshalIndexKVEntryV2(restKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*indexKVEntry, error) {
+	// skip set index KV
+	if !base.Delete {
+		return nil, nil
+	}
+
+	restKey = restKey[indexPrefixLen:]
+	_, indexID, err := codec.DecodeInt(restKey)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	vLen := len(rawOldValue)
+	tailLen := int(rawOldValue[0])
+	restoredVal := rawOldValue[1 : vLen-tailLen]
+	indexValue, err := codec.Decode(restoredVal, 2)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	var recordID int64
+
+	// primary key or unique index
+	buf := bytes.NewBuffer(rawOldValue[vLen-tailLen:])
+	err = binary.Read(buf, binary.BigEndian, &recordID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	base.RecordID = recordID
 	return &indexKVEntry{
 		baseKVEntry: base,

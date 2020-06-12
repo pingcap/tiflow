@@ -155,7 +155,15 @@ func newProcessor(
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
-	ddlPuller := puller.NewPuller(pdCli, kvStorage, checkpointTs, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false, limitter)
+	ddlPuller := puller.NewPuller(
+		pdCli,
+		kvStorage,
+		checkpointTs,
+		[]regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()},
+		false,
+		globalSettings.newCollationEnabled,
+		limitter,
+	)
 	ctx = util.PutTableIDInCtx(ctx, 0)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
@@ -168,6 +176,7 @@ func newProcessor(
 
 	sinkEmittedResolvedNotifier := new(notify.Notifier)
 	localResolvedNotifier := new(notify.Notifier)
+	mounter := entry.NewMounter(schemaStorage, changefeed.Config.Mounter.WorkerNum, globalSettings.newCollationEnabled)
 	p := &processor{
 		id:            uuid.New().String(),
 		limitter:      limitter,
@@ -180,7 +189,7 @@ func newProcessor(
 		session:       session,
 		sink:          sink,
 		ddlPuller:     ddlPuller,
-		mounter:       entry.NewMounter(schemaStorage, changefeed.Config.Mounter.WorkerNum),
+		mounter:       mounter,
 		schemaStorage: schemaStorage,
 		errCh:         errCh,
 
@@ -754,7 +763,15 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 		// so we set `needEncode` to true.
 		span := regionspan.GetTableSpan(tableID, true)
-		plr := puller.NewPuller(p.pdCli, p.kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, true, p.limitter)
+		plr := puller.NewPuller(
+			p.pdCli,
+			p.kvStorage,
+			replicaInfo.StartTs,
+			[]regionspan.Span{span},
+			true,
+			globalSettings.newCollationEnabled,
+			p.limitter,
+		)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
