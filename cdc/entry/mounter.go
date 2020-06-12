@@ -215,6 +215,7 @@ func (m *mounterImpl) collectMetrics(ctx context.Context) {
 	}
 }
 
+// TODO: Compatible with clustered index later. (See https://github.com/pingcap/tidb/pull/17044)
 func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
