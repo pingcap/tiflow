@@ -15,16 +15,16 @@ package codec
 
 import (
 	"fmt"
+	"strconv"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	canal "github.com/pingcap/ticdc/proto/canal"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
-
-	canal "github.com/pingcap/ticdc/proto/canal"
-	"strconv"
 )
 
 // compatible with canal-1.1.4
