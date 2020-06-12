@@ -128,10 +128,6 @@ func (t *tableInfo) loadResolvedTs() uint64 {
 	return tableRts
 }
 
-func (t *tableInfo) storeResolvedTs(ts uint64, rts *uint64) {
-	atomic.StoreUint64(rts, ts)
-}
-
 // newProcessor creates and returns a processor for the specified change feed
 func newProcessor(
 	ctx context.Context,
@@ -815,7 +811,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						continue
 					}
 					if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
-						table.storeResolvedTs(pEvent.CRTs, pResolvedTs)
+						atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
 						p.localResolvedNotifier.Notify()
 						resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
 						continue
