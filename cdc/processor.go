@@ -554,7 +554,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
 			backoff.NewExponentialBackOff(), ctx),
-		3,
+		5,
 	)
 	for {
 		select {
