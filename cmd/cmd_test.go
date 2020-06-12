@@ -49,6 +49,7 @@ dispatchers = [
 	{matcher = ['test1.*', 'test2.*'], dispatcher = "ts"},
 	{matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
 ]
+protocol = "default"
 
 [cyclic-replication]
 enable = true
@@ -82,6 +83,7 @@ polling-time = 5
 			{Dispatcher: "ts", Matcher: []string{"test1.*", "test2.*"}},
 			{Dispatcher: "rowid", Matcher: []string{"test3.*", "test4.*"}},
 		},
+		Protocol: "default",
 	})
 	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
 		Enable:          true,
@@ -130,6 +132,11 @@ dispatchers = [
 	{matcher = ['test1.*', 'test2.*'], dispatcher = "ts"},
 	{matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
 ]
+# 对于 MQ 类的 Sink，可以指定消息的协议格式
+# 协议目前支持 default, canal 两种，default 为 ticdc-open-protocol
+# For MQ Sinks, you can configure the protocol of the messages sending to MQ
+# Currently the protocol support default and canal
+protocol = "default"
 
 [cyclic-replication]
 # 是否开启环形复制
@@ -165,6 +172,7 @@ sync-ddl = true
 			{Dispatcher: "ts", Matcher: []string{"test1.*", "test2.*"}},
 			{Dispatcher: "rowid", Matcher: []string{"test3.*", "test4.*"}},
 		},
+		Protocol: "default",
 	})
 	c.Assert(cfg.Cyclic, check.DeepEquals, &config.CyclicConfig{
 		Enable:          false,

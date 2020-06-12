@@ -1,6 +1,6 @@
 copyright="// Copyright $(date '+%Y') PingCAP, Inc."
 
-result=$(find ./ -name "*.go" ! -path ".//vendor/*" | while read file_path; do
+result=$(find ./ -name "*.go" ! -path ".//vendor/*" | grep -v '.pb.go' | while read file_path; do
     head=`cat "${file_path}" | head -n 1`
     if [ "$head" != "$copyright" ];then
         echo "${file_path}"
