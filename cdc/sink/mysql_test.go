@@ -401,6 +401,36 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			},
 			exportedOutputReplicaIDs: []uint64{1, 2, 3},
 			maxTxnRow:                4,
+		}, {
+			txns: []*model.Txn{
+				{
+					CommitTs:  1,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
+					ReplicaID: 1,
+				},
+				{
+					CommitTs:  2,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
+					ReplicaID: 1,
+				},
+				{
+					CommitTs:  3,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
+					ReplicaID: 1,
+				},
+				{
+					CommitTs:  4,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 4}},
+					ReplicaID: 1,
+				},
+			},
+			expectedOutputRows: [][]*model.RowChangedEvent{
+				{{CommitTs: 1}},
+				{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
+				{{CommitTs: 3}, {CommitTs: 4}},
+			},
+			exportedOutputReplicaIDs: []uint64{1, 1, 1},
+			maxTxnRow:                2,
 		}}
 	ctx := context.Background()
 

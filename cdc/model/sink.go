@@ -96,6 +96,7 @@ func (e *DDLEvent) FromJob(job *model.Job) {
 	e.Type = job.Type
 }
 
+// Txn represents a transaction which includes many row events
 type Txn struct {
 	StartTs   uint64
 	CommitTs  uint64
@@ -104,6 +105,7 @@ type Txn struct {
 	ReplicaID uint64
 }
 
+// Append adds a row changed event into Txn
 func (t *Txn) Append(row *RowChangedEvent) {
 	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs {
 		log.Fatal("unexpected row change event",

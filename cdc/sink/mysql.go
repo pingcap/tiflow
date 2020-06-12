@@ -417,6 +417,7 @@ func concurrentExec(
 	workers := make([]*mysqlSinkWorker, nWorkers)
 	errg, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < nWorkers; i++ {
+		i := i
 		workers[i] = newMySQLSinkWorker(maxTxnRow, i, execDMLs)
 		errg.Go(func() error {
 			return workers[i].run(ctx)
