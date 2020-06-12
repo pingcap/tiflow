@@ -98,8 +98,7 @@ type processor struct {
 	status       *model.TaskStatus
 	position     *model.TaskPosition
 	tables       map[int64]*tableInfo
-	markTables   map[int64]*tableInfo
-	tableMarkMap map[int64]int64 // mapping from table id to its mark table id
+	markTableMap map[int64]int64 // mapping from mark table id to its original table id
 
 	sinkEmittedResolvedNotifier *notify.Notifier
 	sinkEmittedResolvedReceiver *notify.Receiver
@@ -111,18 +110,31 @@ type processor struct {
 }
 
 type tableInfo struct {
-	id         int64
-	resolvedTS uint64
-	workload   model.WorkloadInfo
-	cancel     context.CancelFunc
+	id          int64
+	resolvedTs  uint64
+	mid         int64
+	mResolvedTs uint64
+	workload    model.WorkloadInfo
+	cancel      context.CancelFunc
 }
 
-func (t *tableInfo) loadResolvedTS() uint64 {
-	return atomic.LoadUint64(&t.resolvedTS)
+func (t *tableInfo) loadResolvedTs() uint64 {
+	tableRts := atomic.LoadUint64(&t.resolvedTs)
+	if t.mid != 0 {
+		mTableRts := atomic.LoadUint64(&t.mResolvedTs)
+		if mTableRts < tableRts {
+			return mTableRts
+		}
+	}
+	return tableRts
 }
 
-func (t *tableInfo) storeResolvedTS(ts uint64) {
-	atomic.StoreUint64(&t.resolvedTS, ts)
+func (t *tableInfo) storeResolvedTs(ts uint64, isMarkTable bool) {
+	if isMarkTable {
+		atomic.StoreUint64(&t.mResolvedTs, ts)
+	} else {
+		atomic.StoreUint64(&t.resolvedTs, ts)
+	}
 }
 
 // newProcessor creates and returns a processor for the specified change feed
@@ -198,8 +210,7 @@ func newProcessor(
 		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
 
 		tables:       make(map[int64]*tableInfo),
-		markTables:   make(map[int64]*tableInfo),
-		tableMarkMap: make(map[int64]int64),
+		markTableMap: make(map[int64]int64),
 	}
 
 	for tableID, startTs := range p.status.Tables {
@@ -276,10 +287,7 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 
 	p.stateMu.Lock()
 	for _, table := range p.tables {
-		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", table.id, table.loadResolvedTS())
-	}
-	for _, table := range p.markTables {
-		fmt.Fprintf(w, "\tmark table id: %d, resolveTS: %d\n", table.id, table.loadResolvedTS())
+		fmt.Fprintf(w, "\ttable id: %d, resolveTS: %d\n", table.id, table.loadResolvedTs())
 	}
 	p.stateMu.Unlock()
 
@@ -337,14 +345,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			minResolvedTs := p.ddlPuller.GetResolvedTs()
 			p.stateMu.Lock()
 			for _, table := range p.tables {
-				ts := table.loadResolvedTS()
-
-				if ts < minResolvedTs {
-					minResolvedTs = ts
-				}
-			}
-			for _, table := range p.markTables {
-				ts := table.loadResolvedTS()
+				ts := table.loadResolvedTs()
 
 				if ts < minResolvedTs {
 					minResolvedTs = ts
@@ -422,7 +423,6 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 		for _, table := range p.tables {
 			workload[table.id] = table.workload
 		}
-		// TODO: Do we need to calculate the workload of mark tables ?
 		p.stateMu.Unlock()
 		err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureID, &workload)
 		if err != nil {
@@ -497,14 +497,8 @@ func (p *processor) removeTable(tableID int64) {
 
 	table.cancel()
 	delete(p.tables, tableID)
-	if p.changefeed.Config.Cyclic.IsEnabled() {
-		mTableID, ok := p.tableMarkMap[tableID]
-		if !ok {
-			log.Warn("mark table mapping not found", zap.Int64("table", tableID))
-		} else {
-			delete(p.markTables, mTableID)
-			delete(p.tableMarkMap, mTableID)
-		}
+	if table.mid != 0 {
+		delete(p.markTableMap, table.mid)
 	}
 	tableIDStr := strconv.FormatInt(tableID, 10)
 	tableInputChanSizeGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
@@ -712,10 +706,13 @@ func (p *processor) syncResolved(ctx context.Context) error {
 					p.sinkEmittedResolvedNotifier.Notify()
 				} else {
 					p.stateMu.Lock()
+					isMarkTable := false
 					table := p.tables[row.Table]
 					if table == nil {
 						if p.changefeed.Config.Cyclic.IsEnabled() {
-							table = p.markTables[row.Table]
+							tableID := p.markTableMap[row.Table]
+							table = p.tables[tableID]
+							isMarkTable = true
 						}
 						if table == nil {
 							log.Warn("table not found in processor, ignore this event", zap.Int64("table", row.Table))
@@ -723,7 +720,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 							continue
 						}
 					}
-					table.storeResolvedTS(row.CRTs)
+					table.storeResolvedTs(row.CRTs, isMarkTable)
 					p.localResolvedNotifier.Notify()
 					p.stateMu.Unlock()
 				}
@@ -784,7 +781,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	ctx, cancel := context.WithCancel(ctx)
 	table := &tableInfo{
 		id:         tableID,
-		resolvedTS: replicaInfo.StartTs,
+		resolvedTs: replicaInfo.StartTs,
 		cancel:     cancel,
 	}
 	// TODO(leoppro) calculate the workload of this table
@@ -872,13 +869,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 
 		startPuller(mTableID)
 
-		markTable := &tableInfo{
-			id:         mTableID,
-			resolvedTS: replicaInfo.StartTs,
-			cancel:     cancel,
-		}
-		p.markTables[mTableID] = markTable
-		p.tableMarkMap[tableID] = mTableID
+		table.mid = mTableID
+		table.mResolvedTs = replicaInfo.StartTs
+		p.markTableMap[mTableID] = tableID
 	}
 
 	p.tables[tableID] = table
