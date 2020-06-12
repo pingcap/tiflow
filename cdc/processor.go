@@ -128,12 +128,8 @@ func (t *tableInfo) loadResolvedTs() uint64 {
 	return tableRts
 }
 
-func (t *tableInfo) storeResolvedTs(ts uint64, isMarkTable bool) {
-	if isMarkTable {
-		atomic.StoreUint64(&t.mResolvedTs, ts)
-	} else {
-		atomic.StoreUint64(&t.resolvedTs, ts)
-	}
+func (t *tableInfo) storeResolvedTs(ts uint64, rts *uint64) {
+	atomic.StoreUint64(rts, ts)
 }
 
 // newProcessor creates and returns a processor for the specified change feed
@@ -761,7 +757,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	// We temporarily set the value to constant 1
 	table.workload = model.WorkloadInfo{Workload: 1}
 
-	startPuller := func(tableID model.TableID, isMarkTable bool) {
+	startPuller := func(tableID model.TableID, pResolvedTs *uint64) {
 
 		// start table puller
 		// The key in DML kv pair returned from TiKV is not memcompariable encoded,
@@ -819,7 +815,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						continue
 					}
 					if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
-						table.storeResolvedTs(pEvent.CRTs, isMarkTable)
+						table.storeResolvedTs(pEvent.CRTs, pResolvedTs)
 						p.localResolvedNotifier.Notify()
 						resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
 						continue
@@ -837,12 +833,12 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		}()
 	}
 
-	startPuller(tableID, false)
+	startPuller(tableID, &table.resolvedTs)
 
 	if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID != 0 {
 		mTableID := replicaInfo.MarkTableID
 
-		startPuller(mTableID, true)
+		startPuller(mTableID, &table.mResolvedTs)
 
 		table.markTableID = mTableID
 		table.mResolvedTs = replicaInfo.StartTs
