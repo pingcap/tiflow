@@ -231,28 +231,32 @@ ForEachTxn:
 			break
 		}
 
+		convertedStatus := &cdcpb.TxnStatus{
+			StartTs:      txn.GetStartTs(),
+			IsRolledBack: status.TTL() == 0 && status.CommitTS() == 0,
+			CommitTs:     status.CommitTS(),
+		}
+
 		switch status.Action() {
 		case kvrpcpb.Action_MinCommitTSPushed:
-			txnStatuses = append(txnStatuses, &cdcpb.TxnStatus{
-				StartTs:     txn.GetStartTs(),
-				MinCommitTs: now,
-			})
-		case kvrpcpb.Action_LockNotExistRollback:
-		case kvrpcpb.Action_TTLExpireRollback:
-			txnStatuses = append(txnStatuses, &cdcpb.TxnStatus{
-				StartTs: txn.GetStartTs(),
-			})
+			convertedStatus.MinCommitTs = now
 		case kvrpcpb.Action_NoAction:
-			txnStatuses = append(txnStatuses, &cdcpb.TxnStatus{
-				StartTs:  txn.GetStartTs(),
-				CommitTs: status.CommitTS(),
-			})
+			if status.TTL() != 0 {
+				log.Debug("a transaction is still running and cannot be pushed. Cannot resolve"+
+					"the transaction",
+					zap.Uint64("regionID", regionID),
+					zap.Uint64("startTs", txn.GetStartTs()))
+				continue ForEachTxn
+			}
 		default:
-			log.Error("Unsupported action returned by CheckTxnStatus. Do not resolve the transaction",
+			log.Error("unsupported action returned by CheckTxnStatus. Do not resolve the transaction",
 				zap.Uint64("regionID", regionID),
 				zap.Uint64("startTs", txn.GetStartTs()))
 			continue ForEachTxn
+		case kvrpcpb.Action_LockNotExistRollback:
+		case kvrpcpb.Action_TTLExpireRollback:
 		}
+
 		// TODO: Otherwise, we can actually do resolvelocks here.
 	}
 
