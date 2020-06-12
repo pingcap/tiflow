@@ -714,9 +714,14 @@ func (p *processor) syncResolved(ctx context.Context) error {
 					p.stateMu.Lock()
 					table := p.tables[row.Table]
 					if table == nil {
-						log.Warn("table not found in processor, ignore this event", zap.Int64("table", row.Table))
-						p.stateMu.Unlock()
-						continue
+						if p.changefeed.Config.Cyclic.IsEnabled() {
+							table = p.markTables[row.Table]
+						}
+						if table == nil {
+							log.Warn("table not found in processor, ignore this event", zap.Int64("table", row.Table))
+							p.stateMu.Unlock()
+							continue
+						}
 					}
 					table.storeResolvedTS(row.CRTs)
 					p.localResolvedNotifier.Notify()
