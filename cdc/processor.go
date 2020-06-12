@@ -111,7 +111,7 @@ type processor struct {
 type tableInfo struct {
 	id          int64
 	resolvedTs  uint64
-	mid         int64
+	markTableID int64
 	mResolvedTs uint64
 	workload    model.WorkloadInfo
 	cancel      context.CancelFunc
@@ -119,7 +119,7 @@ type tableInfo struct {
 
 func (t *tableInfo) loadResolvedTs() uint64 {
 	tableRts := atomic.LoadUint64(&t.resolvedTs)
-	if t.mid != 0 {
+	if t.markTableID != 0 {
 		mTableRts := atomic.LoadUint64(&t.mResolvedTs)
 		if mTableRts < tableRts {
 			return mTableRts
@@ -844,7 +844,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 
 		startPuller(mTableID, true)
 
-		table.mid = mTableID
+		table.markTableID = mTableID
 		table.mResolvedTs = replicaInfo.StartTs
 	}
 
