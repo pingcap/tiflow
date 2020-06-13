@@ -38,27 +38,19 @@ changefeedid=""
 SINK_URI="mysql://root@127.0.0.1:3306/"
 
 function check_ts_forward() {
-    i=0
-    check_time=10
-    while [ $i -lt 10 ]; do
-        rts1=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."resolved-ts"')
-        checkpoint1=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."checkpoint-ts"')
-        sleep 1
-        rts2=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."resolved-ts"')
-        checkpoint2=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."checkpoint-ts"')
-        if [[ "$rts1" != "null" ]] && [[ "$rts1" != "0" ]]; then
-            if [[  "$rts1" -ne "$rts2" ]] || [[ "$checkpoint1" -ne "$checkpoint2" ]]; then
-                echo "changefeed is working normally rts: ${rts1}->${rts2} checkpoint: ${checkpoint1}->${checkpoint2}"
-                break
-            fi
+    changefeedid=$1
+    rts1=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."resolved-ts"')
+    checkpoint1=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."checkpoint-ts"')
+    sleep 1
+    rts2=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."resolved-ts"')
+    checkpoint2=$(cdc cli changefeed query --changefeed-id=${changefeedid} 2>&1|jq '.status."checkpoint-ts"')
+    if [[ "$rts1" != "null" ]] && [[ "$rts1" != "0" ]]; then
+        if [[  "$rts1" -ne "$rts2" ]] || [[ "$checkpoint1" -ne "$checkpoint2" ]]; then
+            echo "changefeed is working normally rts: ${rts1}->${rts2} checkpoint: ${checkpoint1}->${checkpoint2}"
+            return
         fi
-        i=$((i+1))
-        echo "changefeed ts doesn't forward $i-th time, retry later"
-    done
-    if [ $i -ge $check_time ]; then
-        echo "changefeed is not working"
-        exit 1
     fi
+    exit 1
 }
 
 function check_ddl_executed() {
@@ -78,6 +70,8 @@ function check_ddl_executed() {
         exit 1
     fi
 }
+
+export -f check_ts_forward
 export -f check_ddl_executed
 
 function ddl_test() {
@@ -88,7 +82,7 @@ function ddl_test() {
     echo "test ddl $ddl, is_reentrant: $is_reentrant"
 
     run_sql $ddl ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    check_ts_forward
+    ensure 10 check_ts_forward $changefeedid
 
     echo $ddl > ${WORK_DIR}/ddl_temp.sql
     ensure 10 check_ddl_executed "${WORK_DIR}/cdc.log" "${WORK_DIR}/ddl_temp.sql" true
@@ -96,7 +90,7 @@ function ddl_test() {
     cdc cli changefeed remove --changefeed-id=${changefeedid}
     changefeedid=$(cdc cli changefeed create --no-confirm --start-ts=${ddl_start_ts} --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
     echo "create new changefeed ${changefeedid} from ${ddl_start_ts}"
-    check_ts_forward
+    ensure 10 check_ts_forward $changefeedid
     ensure 10 check_ddl_executed "${WORK_DIR}/cdc.log" "${WORK_DIR}/ddl_temp.sql" $is_reentrant
 }
 
