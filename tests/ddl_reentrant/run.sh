@@ -9,7 +9,7 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 ddls=("create database ddl_reentrant" false
-      "create table ddl_reentrant.t1 (id int primary key, a varchar(10) not null, unique a(a))" false
+      "create table ddl_reentrant.t1 (id int primary key, id2 int not null, a varchar(10) not null, unique a(a), unique id2(id2))" false
       "alter table ddl_reentrant.t1 add column b int" false
       "alter table ddl_reentrant.t1 drop column b" false
       "alter table ddl_reentrant.t1 add key index_a(a)" false
@@ -29,13 +29,10 @@ ddls=("create database ddl_reentrant" false
       "alter table ddl_reentrant.t3 default character set utf8mb4 default collate utf8mb4_unicode_ci" true
       "alter schema ddl_reentrant default character set utf8mb4 default collate utf8mb4_unicode_ci" true
       "alter table ddl_reentrant.t2 drop primary key" false
+      "alter table ddl_reentrant.t2 add primary key pk(id)" false
       "drop table ddl_reentrant.t2" false
       "drop database ddl_reentrant" false
 )
-
-# TODO: we should retry on DDL error only with specific errors
-# re execute `alter table add primary key` raises error "Error 1068: Multiple primary key defined"
-reentrant_not_support_ddls=("alter table ddl_reentrant.t2 add primary key pk(id)")
 
 changefeedid=""
 SINK_URI="mysql://root@127.0.0.1:3306/"

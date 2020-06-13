@@ -716,7 +716,7 @@ func isIgnorableDDLError(err error) bool {
 		infoschema.ErrTableExists.Code(), infoschema.ErrTableNotExists.Code(), infoschema.ErrTableDropExists.Code(),
 		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(), infoschema.ErrIndexExists.Code(),
 		infoschema.ErrKeyNotExists.Code(), tddl.ErrCantDropFieldOrKey.Code(), mysql.ErrDupKeyName, mysql.ErrSameNamePartition,
-		mysql.ErrDropPartitionNonExistent:
+		mysql.ErrDropPartitionNonExistent, mysql.ErrMultiplePriKey:
 		return true
 	default:
 		return false
