@@ -31,6 +31,7 @@ ddls=("create database ddl_reentrant" false
       "alter table ddl_reentrant.t2 drop primary key" false
       "alter table ddl_reentrant.t2 add primary key pk(id)" false
       "drop table ddl_reentrant.t2" false
+      "recover table ddl_reentrant.t2" false
       "drop database ddl_reentrant" false
 )
 
