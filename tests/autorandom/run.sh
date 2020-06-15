@@ -11,7 +11,7 @@ SINK_TYPE=$1
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-    start_tidb_cluster $WORK_DIR
+    start_tidb_cluster --workdir $WORK_DIR --tidb-config $CUR/conf/tidb_config.toml
 
     cd $WORK_DIR
 

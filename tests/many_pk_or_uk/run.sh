@@ -12,7 +12,7 @@ function prepare() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
     stop_tidb_cluster
 
-    start_tidb_cluster $WORK_DIR
+    start_tidb_cluster --workdir $WORK_DIR
 
     cd $WORK_DIR
 
