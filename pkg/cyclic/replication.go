@@ -71,13 +71,21 @@ type Cyclic struct {
 	config config.CyclicConfig
 }
 
-// UdpateTableCyclicMark return a DML to update mark table regrad to the tableID
-// bucket and replicaID.
-func (*Cyclic) UdpateTableCyclicMark(sourceSchema, sourceTable string, bucket, replicaID uint64) string {
+// UdpateSourceTableCyclicMark return a DML to update mark table regrad to
+// the source table name, bucket and replicaID.
+func (*Cyclic) UdpateSourceTableCyclicMark(sourceSchema, sourceTable string, bucket, replicaID uint64) string {
 	schema, table := MarkTableName(sourceSchema, sourceTable)
 	return fmt.Sprintf(
 		`INSERT INTO %s.%s VALUES (%d, %d, 0) ON DUPLICATE KEY UPDATE val = val + 1;`,
 		schema, table, bucket, replicaID)
+}
+
+// UdpateMarkTableCyclicMark return a DML to update mark table regrad to
+// the mark table name, bucket and replicaID.
+func (*Cyclic) UdpateMarkTableCyclicMark(markSchema, markTable string, bucket, replicaID uint64) string {
+	return fmt.Sprintf(
+		`INSERT INTO %s.%s VALUES (%d, %d, 0) ON DUPLICATE KEY UPDATE val = val + 1;`,
+		markSchema, markTable, bucket, replicaID)
 }
 
 // FilterReplicaID return a slice of replica IDs needs to be filtered.

@@ -609,7 +609,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, bucket int) ([]st
 			// Write mark table based on bucket ID and table ID.
 			replicaID := cyclic.ExtractReplicaID(row)
 			// Mark row's table ID is set to corresponding table ID.
-			query = s.cyclic.UdpateTableCyclicMark(
+			query = s.cyclic.UdpateMarkTableCyclicMark(
 				row.Table.Schema, row.Table.Table, uint64(bucket), replicaID)
 			markRowFound = true
 		} else if row.Delete {
@@ -625,7 +625,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, bucket int) ([]st
 	}
 	if s.cyclic != nil && !markRowFound && len(rows) > 0 {
 		// Write mark table with the current replica ID.
-		updateMark := s.cyclic.UdpateTableCyclicMark(
+		updateMark := s.cyclic.UdpateSourceTableCyclicMark(
 			rows[0].Table.Schema, rows[0].Table.Table, uint64(bucket), s.cyclic.ReplicaID())
 		sqls = append(sqls, updateMark)
 		values = append(values, nil)
