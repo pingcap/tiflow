@@ -90,17 +90,14 @@ func getMetaListKey(key string) Span {
 	copy(end, start)
 	end[len(end)-1]++
 	return Span{
-		Start: start,
-		End:   end,
+		Start: codec.EncodeBytes(nil, start),
+		End:   codec.EncodeBytes(nil, end),
 	}
 }
 
 // KeyInSpans check if k in the range of spans.
 func KeyInSpans(k []byte, spans []Span, needEncode bool) bool {
-	encodedK := k
-	if needEncode {
-		encodedK = codec.EncodeBytes(nil, k)
-	}
+	encodedK := codec.EncodeBytes(nil, k)
 	for _, span := range spans {
 		if KeyInSpan(encodedK, span) {
 			return true
