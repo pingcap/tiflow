@@ -1,16 +1,36 @@
 #!/bin/bash
-# parameter 1: full path of output directory
+
+# --workdir: work directory
+# --tidb-config: path to tidb config file
 
 set -e
 
+OUT_DIR=
+tidb_config=
+
+while [[ ${1} ]]; do
+    case "${1}" in
+        --workdir)
+            OUT_DIR=${2}
+            shift
+            ;;
+        --tidb-config)
+            tidb_config=${2}
+            shift
+            ;;
+        *)
+            echo "Unknown parameter: ${1}" >&2
+            exit 1
+    esac
+
+    if ! shift; then
+        echo 'Missing parameter argument.' >&2
+        exit 1
+    fi
+done
+
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
-
-OUT_DIR=$1
-if [[ -z $OUT_DIR ]]; then
-    echo "wrong out_dir value: $1"
-    exit 1
-fi
 
 stop_tidb_cluster
 
@@ -73,11 +93,13 @@ sync-log = false
 EOF
 
 # tidb server config file
-cat - >"$OUT_DIR/tidb-config.toml" <<EOF
+if [[ "$tidb_config" != "" ]]; then
+    cat $tidb_config > $OUT_DIR/tidb-config.toml
+else
+    cat - >"$OUT_DIR/tidb-config.toml" <<EOF
 split-table = true
-[experimental]
-allow-auto-random = true
 EOF
+fi
 
 echo "Starting Upstream TiKV..."
 for idx in $(seq 1 3); do

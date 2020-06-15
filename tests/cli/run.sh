@@ -9,7 +9,7 @@ SINK_TYPE=$1
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-    start_tidb_cluster $WORK_DIR
+    start_tidb_cluster --workdir $WORK_DIR
 
     cd $WORK_DIR
 
@@ -72,6 +72,10 @@ function run() {
         echo "[$(date)] <<<<< unexpect output got ${badsink} >>>>>"
         exit 1
     fi
+
+    # Smoke test meta delete-gc-ttl and delete
+    echo "y" | run_cdc_cli meta delete-gc-ttl
+    run_cdc_cli meta delete --no-confirm
 
     cleanup_process $CDC_BINARY
 }
