@@ -73,6 +73,10 @@ function run() {
         exit 1
     fi
 
+    # Smoke test meta delete-gc-ttl and delete
+    echo "y" | run_cdc_cli meta delete-gc-ttl
+    run_cdc_cli meta delete --no-confirm
+
     cleanup_process $CDC_BINARY
 }
 
