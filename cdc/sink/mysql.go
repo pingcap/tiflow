@@ -84,7 +84,10 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 			// fail-fast check
 			if len(txns) != 0 && txns[len(txns)-1].CommitTs > row.CommitTs {
 				log.Fatal("the commitTs of the emit row is less than the received row",
+					zap.Stringer("table", row.Table),
+					zap.Uint64("emit row startTs", row.StartTs),
 					zap.Uint64("emit row commitTs", row.CommitTs),
+					zap.Uint64("last received row startTs", txns[len(txns)-1].StartTs),
 					zap.Uint64("last received row commitTs", txns[len(txns)-1].CommitTs))
 			}
 			txns = append(txns, &model.Txn{

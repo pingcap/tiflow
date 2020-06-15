@@ -15,8 +15,8 @@ package model
 
 import (
 	"fmt"
-	"log"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"go.uber.org/zap"
 )
@@ -116,7 +116,7 @@ func (t *Txn) Append(row *RowChangedEvent) {
 	}
 	t.Rows = append(t.Rows, row)
 	if len(row.Keys) == 0 {
-		if len(row.Keys) == 0 {
+		if len(t.Keys) == 0 {
 			t.Keys = []string{QuoteSchema(row.Table.Schema, row.Table.Table)}
 		}
 	} else {
