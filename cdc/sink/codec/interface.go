@@ -14,10 +14,11 @@
 package codec
 
 import (
+	"strings"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
-	"strings"
 )
 
 // EventBatchEncoder is an abstraction for events encoder
@@ -68,7 +69,7 @@ func (p *Protocol) FromString(protocol string) {
 		*p = ProtocolCanal
 	default:
 		*p = ProtocolDefault
-		log.Warn("can't support codec protocol , using default protocol", zap.String("protocol", protocol))
+		log.Warn("can't support codec protocol, using default protocol", zap.String("protocol", protocol))
 	}
 }
 
@@ -80,6 +81,7 @@ func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
 	case ProtocolCanal:
 		return NewCanalEventBatchEncoder
 	default:
+		log.Warn("unknown codec protocol value of EventBatchEncoder", zap.Int("protocol_value", int(p)))
 		return NewJSONEventBatchEncoder
 	}
 }
