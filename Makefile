@@ -82,6 +82,7 @@ check_third_party_binary:
 	@which bin/sync_diff_inspector
 	@which bin/go-ycsb
 	@which bin/etcdctl
+	@which bin/jq
 
 integration_test_build: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)

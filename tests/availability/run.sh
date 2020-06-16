@@ -16,7 +16,7 @@ export DOWN_TIDB_PORT
 function prepare() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-    start_tidb_cluster $WORK_DIR
+    start_tidb_cluster --workdir $WORK_DIR
 
     cd $WORK_DIR
 
