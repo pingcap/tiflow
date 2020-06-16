@@ -738,8 +738,8 @@ func (s *eventFeedSession) getRegionExtraOp(meta *metapb.Region) kvrpcpb.ExtraOp
 			regionEnd = []byte{}
 		}
 		if _, err := regionspan.Intersect(
-			regionspan.Span{regionStart, regionEnd},
-			regionspan.Span{indexStart, indexEnd},
+			regionspan.Span{Start: regionStart, End: regionEnd},
+			regionspan.Span{Start: indexStart, End: indexEnd},
 		); err != nil {
 			return kvrpcpb.ExtraOp_ReadDeleted
 		}
