@@ -32,7 +32,9 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Mounter: &MounterConfig{
 		WorkerNum: 16,
 	},
-	Sink: &SinkConfig{},
+	Sink: &SinkConfig{
+		Protocol: "default",
+	},
 	Cyclic: &CyclicConfig{
 		Enable: false,
 	},
