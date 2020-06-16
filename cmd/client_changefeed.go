@@ -209,6 +209,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 				Config:     cfg,
 				Engine:     model.SortEngine(sortEngine),
 				SortDir:    sortDir,
+				State:      model.StateNormal,
 			}
 
 			ineligibleTables, allTables, err := verifyTables(ctx, cfg, startTs)
