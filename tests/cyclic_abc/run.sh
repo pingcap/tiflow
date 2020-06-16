@@ -16,8 +16,8 @@ function run() {
 
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-    start_tidb_cluster $WORK_DIR
-    start_third_tidb_cluster $WORK_DIR
+    start_tidb_cluster --workdir $WORK_DIR
+    start_third_tidb_cluster --workdir $WORK_DIR
 
     cd $WORK_DIR
 
