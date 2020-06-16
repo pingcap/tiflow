@@ -168,7 +168,7 @@ func (o *Owner) newChangeFeed(
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
 	failpoint.Inject("NewChangefeedError", func() {
-		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(0, checkpointTs))
+		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
 
 	// TODO here we create another pb client,we should reuse them

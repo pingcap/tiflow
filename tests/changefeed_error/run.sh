@@ -11,6 +11,19 @@ SINK_TYPE=$1
 CDC_COUNT=3
 DB_COUNT=4
 
+function check_changefeed_mark_failed() {
+    endpoints=$1
+    changefeedid=$2
+    ETCDCTL_API=3 etcdctl --endpoints=$endpoints get /tidb/cdc/changefeed/info/${changefeedid}
+    changefeed_info=$(ETCDCTL_API=3 etcdctl --endpoints=$endpoints get /tidb/cdc/changefeed/info/${changefeedid}|tail -n 1)
+    if [[ ! $changefeed_info == *"\"state\":\"failed\""* ]]; then
+        echo "changefeed is not marked as failed: $changefeed_info"
+        exit 1
+    fi
+}
+
+export -f check_changefeed_mark_failed
+
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
@@ -19,9 +32,9 @@ function run() {
     cd $WORK_DIR
 
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
-    run_sql "CREATE DATABASE changefeed_error;" ${UP_TIDB_PORT} ${UP_TIDB_PORT}
+    run_sql "CREATE DATABASE changefeed_error;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=changefeed_error
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/NewChangefeedError=1*return(true)'
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/NewChangefeedError=1*return(true)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     TOPIC_NAME="ticdc-sink-retry-test-$RANDOM"
@@ -35,11 +48,8 @@ function run() {
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
 
+    ensure 5 check_changefeed_mark_failed ${UP_PD_HOST}:${UP_PD_PORT} ${changefeedid}
     changefeed_info=$(ETCDCTL_API=3 etcdctl --endpoints=${UP_PD_HOST}:${UP_PD_PORT} get /tidb/cdc/changefeed/info/${changefeedid}|tail -n 1)
-    if [[ ! $changefeed_info == *"\"state\":\"failed\""* ]]; then
-        echo "changefeed is not marked as failed: $changefeed_info"
-        exit 1
-    fi
     new_info=$(echo $changefeed_info|sed 's/"state":"failed"/"state":"normal"/g')
     ETCDCTL_API=3 etcdctl --endpoints=${UP_PD_HOST}:${UP_PD_PORT} put /tidb/cdc/changefeed/info/${changefeedid} "$new_info"
 
@@ -49,6 +59,7 @@ function run() {
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=changefeed_error
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
+    export GO_FAILPOINTS=''
     cleanup_process $CDC_BINARY
 }
 
