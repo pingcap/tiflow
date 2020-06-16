@@ -1,16 +1,30 @@
 #!/bin/bash
-# parameter 1: full path of output directory
+
+# --workdir: work directory
 
 set -e
 
+OUT_DIR=
+
+while [[ ${1} ]]; do
+    case "${1}" in
+        --workdir)
+            OUT_DIR=${2}
+            shift
+            ;;
+        *)
+            echo "Unknown parameter: ${1}" >&2
+            exit 1
+    esac
+
+    if ! shift; then
+        echo 'Missing parameter argument.' >&2
+        exit 1
+    fi
+done
+
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
-
-OUT_DIR=$1
-if [[ -z $OUT_DIR ]]; then
-    echo "wrong out_dir value: $1"
-    exit 1
-fi
 
 cd $OUT_DIR && echo "start third tidb cluster in $OUT_DIR"
 
