@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# set -e
+set -e
 
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
@@ -16,7 +16,7 @@ function run() {
 
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-    start_tidb_cluster --work-dir $WORK_DIR
+    start_tidb_cluster --workdir $WORK_DIR
     start_third_tidb_cluster $WORK_DIR
 
     cd $WORK_DIR
