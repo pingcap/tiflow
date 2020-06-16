@@ -21,8 +21,5 @@ import (
 // ChangefeedFastFailError checks the error, returns true if it is meaningless
 // to retry on this error
 func ChangefeedFastFailError(err error) bool {
-	if terror.ErrorEqual(err, tikv.ErrGCTooEarly) {
-		return true
-	}
-	return false
+	return terror.ErrorEqual(err, tikv.ErrGCTooEarly)
 }

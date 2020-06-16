@@ -34,10 +34,12 @@ import (
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 // Owner manages the cdc cluster
@@ -164,6 +166,10 @@ func (o *Owner) newChangeFeed(
 	checkpointTs uint64) (*changeFeed, error) {
 	log.Info("Find new changefeed", zap.Reflect("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
+
+	failpoint.Inject("NewChangefeedError", func() {
+		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(0, checkpointTs))
+	})
 
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","))
@@ -959,7 +965,12 @@ func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures []*model.Capt
 func (o *Owner) startCaptureWatcher(ctx context.Context) {
 	log.Info("start to watch captures")
 	go func() {
+		rl := rate.NewLimiter(0.05, 5)
 		for {
+			if !rl.Allow() {
+				log.Error("owner capture watcher exceeds rate limit")
+				time.Sleep(10 * time.Second)
+			}
 			if err := o.watchCapture(ctx); err != nil {
 				// When the watching routine returns, the error must not
 				// be nil, it may be caused by a temporary error or a context
