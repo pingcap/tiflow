@@ -7,6 +7,9 @@ killall -w -s 9 cdc || true
 killall -w -s 9 cdc.test || true
 killall -w -s 9 tiflash || true
 
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source $CUR/../_utils/test_prepare
+
 kill -9 $(lsof -i tcp:${UP_TIDB_PORT} -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:${UP_TIDB_OTHER_PORT} -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:${UP_TIDB_STATUS} -t 2>/dev/null) &>/dev/null || true
