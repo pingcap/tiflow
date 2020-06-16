@@ -69,7 +69,8 @@ type Owner struct {
 	gcTTL int64
 }
 
-const cdcServiceSafePointID = "ticdc"
+// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
+const CDCServiceSafePointID = "ticdc"
 
 // NewOwner creates a new Owner instance
 func NewOwner(pdClient pd.Client, sess *concurrency.Session, gcTTL int64) (*Owner, error) {
@@ -417,7 +418,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, cdcServiceSafePointID, o.gcTTL, minCheckpointTs)
+	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 	if err != nil {
 		log.Info("failed to update service safe point", zap.Error(err))
 		return errors.Trace(err)

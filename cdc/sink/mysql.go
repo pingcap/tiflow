@@ -624,7 +624,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	}
 	if s.cyclic != nil && len(rows) > 0 {
 		// Write mark table with the current replica ID.
-		updateMark := s.cyclic.UdpateTableCyclicMark(
+		updateMark := s.cyclic.UdpateSourceTableCyclicMark(
 			rows[0].Table.Schema, rows[0].Table.Table, uint64(bucket), replicaID)
 		sqls = append(sqls, updateMark)
 		values = append(values, nil)
@@ -714,7 +714,8 @@ func isIgnorableDDLError(err error) bool {
 	case infoschema.ErrDatabaseExists.Code(), infoschema.ErrDatabaseNotExists.Code(), infoschema.ErrDatabaseDropExists.Code(),
 		infoschema.ErrTableExists.Code(), infoschema.ErrTableNotExists.Code(), infoschema.ErrTableDropExists.Code(),
 		infoschema.ErrColumnExists.Code(), infoschema.ErrColumnNotExists.Code(), infoschema.ErrIndexExists.Code(),
-		infoschema.ErrKeyNotExists.Code(), tddl.ErrCantDropFieldOrKey.Code(), mysql.ErrDupKeyName:
+		infoschema.ErrKeyNotExists.Code(), tddl.ErrCantDropFieldOrKey.Code(), mysql.ErrDupKeyName, mysql.ErrSameNamePartition,
+		mysql.ErrDropPartitionNonExistent, mysql.ErrMultiplePriKey:
 		return true
 	default:
 		return false
