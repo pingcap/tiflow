@@ -34,10 +34,12 @@ import (
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 // Owner manages the cdc cluster
@@ -45,6 +47,7 @@ type Owner struct {
 	done                       chan struct{}
 	session                    *concurrency.Session
 	changeFeeds                map[model.ChangeFeedID]*changeFeed
+	failedFeeds                map[model.ChangeFeedID]struct{}
 	rebanlanceTigger           map[model.ChangeFeedID]bool
 	rebanlanceForAllChangefeed bool
 	manualScheduleCommand      map[model.ChangeFeedID][]*model.MoveTableJob
@@ -82,6 +85,7 @@ func NewOwner(pdClient pd.Client, sess *concurrency.Session, gcTTL int64) (*Owne
 		session:               sess,
 		pdClient:              pdClient,
 		changeFeeds:           make(map[model.ChangeFeedID]*changeFeed),
+		failedFeeds:           make(map[model.ChangeFeedID]struct{}),
 		captures:              make(map[model.CaptureID]*model.CaptureInfo),
 		rebanlanceTigger:      make(map[model.ChangeFeedID]bool),
 		manualScheduleCommand: make(map[model.ChangeFeedID][]*model.MoveTableJob),
@@ -162,6 +166,10 @@ func (o *Owner) newChangeFeed(
 	checkpointTs uint64) (*changeFeed, error) {
 	log.Info("Find new changefeed", zap.Reflect("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
+
+	failpoint.Inject("NewChangefeedError", func() {
+		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(checkpointTs-300, checkpointTs))
+	})
 
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","))
@@ -341,7 +349,29 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			continue
 		}
 
-		// we find a new changefeed, init changefeed info here.
+		// we find a new changefeed, init changefeed here.
+		cfInfo := &model.ChangeFeedInfo{}
+		err = cfInfo.Unmarshal(cfInfoRawValue.Value)
+		if err != nil {
+			return err
+		}
+		if cfInfo.State == model.StateFailed {
+			if _, ok := o.failedFeeds[changeFeedID]; ok {
+				continue
+			}
+			log.Warn("changefeed is not in normal state", zap.String("changefeed", changeFeedID))
+			o.failedFeeds[changeFeedID] = struct{}{}
+			continue
+		}
+		if _, ok := o.failedFeeds[changeFeedID]; ok {
+			log.Info("changefeed recovered from failure", zap.String("changefeed", changeFeedID))
+			delete(o.failedFeeds, changeFeedID)
+		}
+		err = cfInfo.VerifyAndFix()
+		if err != nil {
+			return err
+		}
+
 		status, _, err := o.cfRWriter.GetChangeFeedStatus(ctx, changeFeedID)
 		if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 			return err
@@ -349,20 +379,20 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		if status != nil && (status.AdminJobType == model.AdminStop || status.AdminJobType == model.AdminRemove) {
 			continue
 		}
-
-		cfInfo := &model.ChangeFeedInfo{}
-		err = cfInfo.Unmarshal(cfInfoRawValue.Value)
-		if err != nil {
-			return err
-		}
-		err = cfInfo.VerifyAndFix()
-		if err != nil {
-			return err
-		}
 		checkpointTs := cfInfo.GetCheckpointTs(status)
 
 		newCf, err := o.newChangeFeed(ctx, changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
 		if err != nil {
+			if filter.ChangefeedFastFailError(err) {
+				log.Error("create changefeed with fast fail error, mark changefeed as failed",
+					zap.Error(err), zap.String("changefeedid", changeFeedID))
+				cfInfo.State = model.StateFailed
+				err := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
+				if err != nil {
+					return err
+				}
+				continue
+			}
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
 		o.changeFeeds[changeFeedID] = newCf
@@ -935,7 +965,12 @@ func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures []*model.Capt
 func (o *Owner) startCaptureWatcher(ctx context.Context) {
 	log.Info("start to watch captures")
 	go func() {
+		rl := rate.NewLimiter(0.05, 5)
 		for {
+			if !rl.Allow() {
+				log.Error("owner capture watcher exceeds rate limit")
+				time.Sleep(10 * time.Second)
+			}
 			if err := o.watchCapture(ctx); err != nil {
 				// When the watching routine returns, the error must not
 				// be nil, it may be caused by a temporary error or a context
