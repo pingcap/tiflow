@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# set -e
+set -e
 
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
@@ -28,13 +28,16 @@ function run() {
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${THIRD_TIDB_HOST} ${THIRD_TIDB_PORT}
 
     run_cdc_cli changefeed cyclic create-marktables \
-        --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
+        --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/" \
+        --pd "http://${UP_PD_HOST}:${UP_PD_PORT}"
 
     run_cdc_cli changefeed cyclic create-marktables \
-        --cyclic-upstream-dsn="root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/"
+        --cyclic-upstream-dsn="root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/" \
+        --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}"
 
     run_cdc_cli changefeed cyclic create-marktables \
-        --cyclic-upstream-dsn="root@tcp(${THIRD_TIDB_HOST}:${THIRD_TIDB_PORT})/"
+        --cyclic-upstream-dsn="root@tcp(${THIRD_TIDB_HOST}:${THIRD_TIDB_PORT})/" \
+        --pd "http://${THIRD_PD_HOST}:${THIRD_PD_PORT}"
 
     # record tso after we create tables to not block on waiting mark tables DDLs.
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
