@@ -80,14 +80,6 @@ func (*Cyclic) UdpateSourceTableCyclicMark(sourceSchema, sourceTable string, buc
 		schema, table, bucket, replicaID)
 }
 
-// UdpateMarkTableCyclicMark return a DML to update mark table regrad to
-// the mark table name, bucket and replicaID.
-func (*Cyclic) UdpateMarkTableCyclicMark(markSchema, markTable string, bucket, replicaID uint64) string {
-	return fmt.Sprintf(
-		`INSERT INTO %s.%s VALUES (%d, %d, 0) ON DUPLICATE KEY UPDATE val = val + 1;`,
-		markSchema, markTable, bucket, replicaID)
-}
-
 // FilterReplicaID return a slice of replica IDs needs to be filtered.
 func (c *Cyclic) FilterReplicaID() []uint64 {
 	return c.config.FilterReplicaID

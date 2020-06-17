@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"sort"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -96,98 +95,57 @@ func (m MarkMap) shouldFilterTxn(startTs uint64, filterReplicaIDs []uint64) (*mo
 	return markRow, false
 }
 
-// MapMarkRowsGroup maps row change events into two group, normal table group
-// and mark table group.
-func MapMarkRowsGroup(
-	inputs map[model.TableName][][]*model.RowChangedEvent,
-) (output TxnMap, markMap MarkMap) {
-	output = make(map[uint64]map[model.TableName][]*model.RowChangedEvent)
-	markMap = make(map[uint64]*model.RowChangedEvent)
-	for name, input := range inputs {
-		for _, events := range input {
-			// Group mark table rows by start ts
-			if IsMarkTable(name.Schema, name.Table) {
-				for _, event := range events {
-					first, ok := markMap[event.StartTs]
-					if ok {
-						// TiKV may emit the same row multiple times.
-						if event.CommitTs != first.CommitTs || event.RowID != first.RowID {
-							log.Fatal(
-								"there should be at most one mark row for each txn",
-								zap.Uint64("start-ts", event.StartTs),
-								zap.Any("first", first),
-								zap.Any("second", event))
-						}
-					}
-					markMap[event.StartTs] = event
-				}
-				continue
-			}
-			for _, event := range events {
-				sameTxn, txnFound := output[event.StartTs]
-				if !txnFound {
-					sameTxn = make(map[model.TableName][]*model.RowChangedEvent)
-				}
-				table, tableFound := sameTxn[name]
-				if !tableFound {
-					table = make([]*model.RowChangedEvent, 0, 1)
-				}
-				table = append(table, event)
-				sameTxn[name] = table
-				output[event.StartTs] = sameTxn
-			}
-		}
-	}
-	return
-}
-
-// ReduceCyclicRowsGroup filters duplicate rows bases on filterReplicaIDs and
-// join mark table rows and normal table rows into one group if start ts is
-// the same.
-func ReduceCyclicRowsGroup(
-	input TxnMap, markMap MarkMap, filterReplicaIDs []uint64,
-) map[model.TableName][][]*model.RowChangedEvent {
-	output := make(map[model.TableName][][]*model.RowChangedEvent, len(input))
-
-	for startTs, txn := range input {
-		// Check if we should skip this event
-		markRow, needSkip := markMap.shouldFilterTxn(startTs, filterReplicaIDs)
-		if needSkip {
-			// Found cyclic mark, skip this event as it originly created from
-			// downstream.
+// FilterAndReduceTxns filters duplicate txns bases on filterReplicaIDs and
+// if the mark table dml is exist in the txn, this functiong will set the replicaID by mark table dml
+// if the mark table dml is not exist, this function will set the replicaID by config
+func FilterAndReduceTxns(txnsMap map[model.TableName][]*model.Txn, filterReplicaIDs []uint64, replicaID uint64) {
+	markMap := make(MarkMap)
+	for table, txns := range txnsMap {
+		if !IsMarkTable(table.Schema, table.Table) {
 			continue
 		}
-
-		for name, events := range txn {
-			if startTs != events[0].StartTs {
-				panic(fmt.Sprintf(
-					"start ts mismatch %d != %d", startTs, events[0].StartTs))
-			}
-			multiRows := make([][]*model.RowChangedEvent, 0, 1)
-			rows := make([]*model.RowChangedEvent, 0, len(events)+1)
-			if markRow != nil {
-				var mark model.RowChangedEvent = *markRow
-				// Rewrite mark table name based on event's table ID.
-				schema, table := MarkTableName(name.Schema, name.Table)
-				mark.Table = &model.TableName{
-					Schema: schema,
-					Table:  table,
+		for _, txn := range txns {
+			for _, event := range txn.Rows {
+				first, ok := markMap[txn.StartTs]
+				if ok {
+					// TiKV may emit the same row multiple times.
+					if event.CommitTs != first.CommitTs ||
+						event.RowID != first.RowID {
+						log.Fatal(
+							"there should be at most one mark row for each txn",
+							zap.Uint64("start-ts", event.StartTs),
+							zap.Any("first", first),
+							zap.Any("second", event))
+					}
 				}
-				rows = append(rows, &mark)
+				markMap[event.StartTs] = event
 			}
-			rows = append(rows, events...)
-
-			if rs, ok := output[name]; ok {
-				multiRows = append(rs, rows)
-			} else {
-				multiRows = append(multiRows, rows)
-			}
-			output[name] = multiRows
 		}
 	}
-	for _, events := range output {
-		// Per table order may lose during map stage, we need to sort events.
-		sort.Slice(events, func(i, j int) bool { return events[i][0].CommitTs < events[j][0].CommitTs })
+	for table, txns := range txnsMap {
+		if IsMarkTable(table.Schema, table.Table) {
+			delete(txnsMap, table)
+			continue
+		}
+		filteredTxns := make([]*model.Txn, 0, len(txns))
+		for _, txn := range txns {
+			// Check if we should skip this event
+			markRow, needSkip := markMap.shouldFilterTxn(txn.StartTs, filterReplicaIDs)
+			if needSkip {
+				// Found cyclic mark, skip this event as it originly created from
+				// downstream.
+				continue
+			}
+			txn.ReplicaID = replicaID
+			if markRow != nil {
+				txn.ReplicaID = ExtractReplicaID(markRow)
+			}
+			filteredTxns = append(filteredTxns, txn)
+		}
+		if len(filteredTxns) == 0 {
+			delete(txnsMap, table)
+		} else {
+			txnsMap[table] = filteredTxns
+		}
 	}
-	return output
 }

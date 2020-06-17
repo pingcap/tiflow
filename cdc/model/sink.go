@@ -16,7 +16,9 @@ package model
 import (
 	"fmt"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
+	"go.uber.org/zap"
 )
 
 // MqMessageType is the type of message
@@ -92,4 +94,32 @@ func (e *DDLEvent) FromJob(job *model.Job) {
 	e.Schema = job.SchemaName
 	e.Table = tableName
 	e.Type = job.Type
+}
+
+// Txn represents a transaction which includes many row events
+type Txn struct {
+	StartTs   uint64
+	CommitTs  uint64
+	Rows      []*RowChangedEvent
+	Keys      []string
+	ReplicaID uint64
+}
+
+// Append adds a row changed event into Txn
+func (t *Txn) Append(row *RowChangedEvent) {
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs {
+		log.Fatal("unexpected row change event",
+			zap.Uint64("startTs of txn", t.StartTs),
+			zap.Uint64("commitTs of txn", t.CommitTs),
+			zap.Uint64("startTs of row", row.StartTs),
+			zap.Uint64("startTs of row", row.CommitTs))
+	}
+	t.Rows = append(t.Rows, row)
+	if len(row.Keys) == 0 {
+		if len(t.Keys) == 0 {
+			t.Keys = []string{QuoteSchema(row.Table.Schema, row.Table.Table)}
+		}
+	} else {
+		t.Keys = append(t.Keys, row.Keys...)
+	}
 }
