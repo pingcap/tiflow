@@ -16,11 +16,9 @@ package codec
 import (
 	"testing"
 
-	"github.com/pingcap/parser/mysql"
-
-	"github.com/pingcap/ticdc/cdc/model"
-
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }

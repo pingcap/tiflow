@@ -40,6 +40,7 @@ type mqSink struct {
 	dispatcher dispatcher.Dispatcher
 	newEncoder func() codec.EventBatchEncoder
 	filter     *filter.Filter
+	protocol   codec.Protocol
 
 	partitionNum   int32
 	partitionInput []chan struct {
@@ -71,11 +72,15 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 		return nil, errors.Trace(err)
 	}
 	notifier := new(notify.Notifier)
+	var protocol codec.Protocol
+	protocol.FromString(config.Sink.Protocol)
+
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: d,
-		newEncoder: codec.NewJSONEventBatchEncoder,
+		newEncoder: codec.NewEventBatchEncoder(protocol),
 		filter:     filter,
+		protocol:   protocol,
 
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
@@ -157,6 +162,10 @@ flushLoop:
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+	switch k.protocol {
+	case codec.ProtocolCanal: // ignore resolved events in canal protocol
+		return nil
+	}
 	encoder := k.newEncoder()
 	err := encoder.AppendResolvedEvent(ts)
 	if err != nil {
@@ -315,6 +324,11 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	s = sinkURI.Query().Get("compression")
 	if s != "" {
 		config.Compression = s
+	}
+
+	s = sinkURI.Query().Get("protocol")
+	if s != "" {
+		replicaConfig.Sink.Protocol = s
 	}
 
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {

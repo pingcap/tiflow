@@ -18,7 +18,7 @@ if [ "${1-}" = '--debug' ]; then
     LD_LIBRARY_PATH="$CUR/../bin:$CUR/_utils:$PATH" \
     OUT_DIR=$OUT_DIR \
     TEST_NAME="debug" \
-    start_tidb_cluster $WORK_DIR
+    start_tidb_cluster --workdir $WORK_DIR
 
     cdc server --log-file $WORK_DIR/cdc.log --log-level debug --addr 0.0.0.0:8300 > $WORK_DIR/stdout.log 2>&1 &
     sleep 1

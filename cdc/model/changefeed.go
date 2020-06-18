@@ -33,6 +33,15 @@ const (
 	SortInFile   SortEngine = "file"
 )
 
+// FeedState represents the running state of a changefeed
+type FeedState string
+
+// All FeedStates
+const (
+	StateNormal FeedState = "normal"
+	StateFailed FeedState = "failed"
+)
+
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
 	SinkURI    string            `json:"sink-uri"`
@@ -48,6 +57,7 @@ type ChangeFeedInfo struct {
 	SortDir      string       `json:"sort-dir"`
 
 	Config *config.ReplicaConfig `json:"config"`
+	State  FeedState             `json:"state"`
 }
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.

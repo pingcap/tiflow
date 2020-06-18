@@ -15,124 +15,447 @@ package sink
 
 import (
 	"context"
-	"math/rand"
 	"testing"
 
+	"golang.org/x/sync/errgroup"
+
+	"github.com/davecgh/go-spew/spew"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/filter"
 )
 
-type EmitSuite struct{}
+type MySQLSinkSuite struct{}
 
 func Test(t *testing.T) { check.TestingT(t) }
 
-var _ = check.Suite(&EmitSuite{})
+var _ = check.Suite(&MySQLSinkSuite{})
 
-func (s EmitSuite) TestSplitRowsGroup(c *check.C) {
+func newMySQLSink4Test(c *check.C) *mysqlSink {
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
+	c.Assert(err, check.IsNil)
+	return &mysqlSink{
+		unresolvedTxns: make(map[model.TableName][]*model.Txn),
+		filter:         f,
+	}
+}
+
+func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 	testCases := []struct {
-		inputGroup              map[model.TableName][]*model.RowChangedEvent
-		resolvedTs              uint64
-		expectedResolvedGroup   map[model.TableName][][]*model.RowChangedEvent
-		expectedUnresolvedGroup map[model.TableName][]*model.RowChangedEvent
-		expectedMinTs           uint64
+		input    []*model.RowChangedEvent
+		expected map[model.TableName][]*model.Txn
 	}{{
-		inputGroup: map[model.TableName][]*model.RowChangedEvent{
+		input:    []*model.RowChangedEvent{},
+		expected: map[model.TableName][]*model.Txn{},
+	}, {
+		input: []*model.RowChangedEvent{
+			{
+				StartTs:  1,
+				CommitTs: 2,
+				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Keys:     []string{"a", "b"},
+			},
+			{
+				StartTs:  1,
+				CommitTs: 2,
+				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Keys:     []string{"b", "c"},
+			},
+			{
+				StartTs:  1,
+				CommitTs: 2,
+				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Keys:     []string{"a", "b"},
+			},
+			{
+				StartTs:  3,
+				CommitTs: 4,
+				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+			},
+			{
+				StartTs:  3,
+				CommitTs: 4,
+				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+			},
+			{
+				StartTs:  3,
+				CommitTs: 4,
+				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+			},
+		},
+		expected: map[model.TableName][]*model.Txn{
+			{Schema: "s1", Table: "t1"}: {
+				{
+					StartTs:  1,
+					CommitTs: 2,
+					Rows: []*model.RowChangedEvent{
+						{
+							StartTs:  1,
+							CommitTs: 2,
+							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Keys:     []string{"a", "b"},
+						},
+						{
+							StartTs:  1,
+							CommitTs: 2,
+							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Keys:     []string{"b", "c"},
+						},
+						{
+							StartTs:  1,
+							CommitTs: 2,
+							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Keys:     []string{"a", "b"},
+						}},
+					Keys: []string{"a", "b", "b", "c", "a", "b"},
+				},
+				{
+					StartTs:  3,
+					CommitTs: 4,
+					Rows: []*model.RowChangedEvent{
+						{
+							StartTs:  3,
+							CommitTs: 4,
+							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+						},
+						{
+							StartTs:  3,
+							CommitTs: 4,
+							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+						},
+						{
+							StartTs:  3,
+							CommitTs: 4,
+							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+						}},
+					Keys: []string{"`s1`.`t1`"},
+				},
+			},
+		},
+	}, {
+		input: []*model.RowChangedEvent{
+			{
+				StartTs:  1,
+				CommitTs: 2,
+				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+			},
+			{
+				StartTs:  3,
+				CommitTs: 4,
+				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+			},
+			{
+				StartTs:  5,
+				CommitTs: 6,
+				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+			},
+			{
+				StartTs:  1,
+				CommitTs: 2,
+				Table:    &model.TableName{Schema: "s1", Table: "t2"},
+			},
+			{
+				StartTs:  3,
+				CommitTs: 4,
+				Table:    &model.TableName{Schema: "s1", Table: "t2"},
+			},
+			{
+				StartTs:  5,
+				CommitTs: 6,
+				Table:    &model.TableName{Schema: "s1", Table: "t2"},
+			},
+		},
+		expected: map[model.TableName][]*model.Txn{
+			{Schema: "s1", Table: "t1"}: {
+				{
+					StartTs:  1,
+					CommitTs: 2,
+					Rows: []*model.RowChangedEvent{
+						{
+							StartTs:  1,
+							CommitTs: 2,
+							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+						}},
+					Keys: []string{"`s1`.`t1`"},
+				},
+				{
+					StartTs:  3,
+					CommitTs: 4,
+					Rows: []*model.RowChangedEvent{
+						{
+							StartTs:  3,
+							CommitTs: 4,
+							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+						}},
+					Keys: []string{"`s1`.`t1`"},
+				},
+				{
+					StartTs:  5,
+					CommitTs: 6,
+					Rows: []*model.RowChangedEvent{
+						{
+							StartTs:  5,
+							CommitTs: 6,
+							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+						}},
+					Keys: []string{"`s1`.`t1`"},
+				},
+			},
+			{Schema: "s1", Table: "t2"}: {
+				{
+					StartTs:  1,
+					CommitTs: 2,
+					Rows: []*model.RowChangedEvent{
+						{
+							StartTs:  1,
+							CommitTs: 2,
+							Table:    &model.TableName{Schema: "s1", Table: "t2"},
+						}},
+					Keys: []string{"`s1`.`t2`"},
+				},
+				{
+					StartTs:  3,
+					CommitTs: 4,
+					Rows: []*model.RowChangedEvent{
+						{
+							StartTs:  3,
+							CommitTs: 4,
+							Table:    &model.TableName{Schema: "s1", Table: "t2"},
+						}},
+					Keys: []string{"`s1`.`t2`"},
+				},
+				{
+					StartTs:  5,
+					CommitTs: 6,
+					Rows: []*model.RowChangedEvent{
+						{
+							StartTs:  5,
+							CommitTs: 6,
+							Table:    &model.TableName{Schema: "s1", Table: "t2"},
+						}},
+					Keys: []string{"`s1`.`t2`"},
+				},
+			},
+		},
+	}}
+	ctx := context.Background()
+
+	for _, tc := range testCases {
+		ms := newMySQLSink4Test(c)
+		err := ms.EmitRowChangedEvents(ctx, tc.input...)
+		c.Assert(err, check.IsNil)
+		c.Assert(ms.unresolvedTxns, check.DeepEquals, tc.expected)
+	}
+}
+
+func (s MySQLSinkSuite) TestSplitResolvedTxn(c *check.C) {
+	testCases := []struct {
+		unresolvedTxns         map[model.TableName][]*model.Txn
+		resolvedTs             uint64
+		expectedResolvedTxns   map[model.TableName][]*model.Txn
+		expectedUnresolvedTxns map[model.TableName][]*model.Txn
+		expectedMinTs          uint64
+	}{{
+		unresolvedTxns: map[model.TableName][]*model.Txn{
 			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
 			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
-		resolvedTs:            5,
-		expectedResolvedGroup: map[model.TableName][][]*model.RowChangedEvent{},
-		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{
+		resolvedTs:           5,
+		expectedResolvedTxns: map[model.TableName][]*model.Txn{},
+		expectedUnresolvedTxns: map[model.TableName][]*model.Txn{
 			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
 			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		expectedMinTs: 5,
 	}, {
-		inputGroup: map[model.TableName][]*model.RowChangedEvent{
+		unresolvedTxns: map[model.TableName][]*model.Txn{
 			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
 			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		resolvedTs: 23,
-		expectedResolvedGroup: map[model.TableName][][]*model.RowChangedEvent{
-			{Table: "t1"}: {{{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}}},
-			{Table: "t2"}: {{{CommitTs: 23}}},
+		expectedResolvedTxns: map[model.TableName][]*model.Txn{
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}},
+			{Table: "t2"}: {{CommitTs: 23}},
 		},
-		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{
+		expectedUnresolvedTxns: map[model.TableName][]*model.Txn{
 			{Table: "t1"}: {{CommitTs: 33}, {CommitTs: 34}},
 			{Table: "t2"}: {{CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		expectedMinTs: 11,
 	}, {
-		inputGroup: map[model.TableName][]*model.RowChangedEvent{
+		unresolvedTxns: map[model.TableName][]*model.Txn{
 			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
 			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		resolvedTs: 30,
-		expectedResolvedGroup: map[model.TableName][][]*model.RowChangedEvent{
-			{Table: "t1"}: {{{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}}},
-			{Table: "t2"}: {{{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}}},
+		expectedResolvedTxns: map[model.TableName][]*model.Txn{
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
-		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{
+		expectedUnresolvedTxns: map[model.TableName][]*model.Txn{
 			{Table: "t1"}: {{CommitTs: 33}, {CommitTs: 34}},
 		},
 		expectedMinTs: 11,
 	}, {
-		inputGroup: map[model.TableName][]*model.RowChangedEvent{
+		unresolvedTxns: map[model.TableName][]*model.Txn{
 			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
 			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
 		resolvedTs: 40,
-		expectedResolvedGroup: map[model.TableName][][]*model.RowChangedEvent{
-			{Table: "t1"}: {{{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}}},
-			{Table: "t2"}: {{{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}}},
+		expectedResolvedTxns: map[model.TableName][]*model.Txn{
+			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
+			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
 		},
-		expectedUnresolvedGroup: map[model.TableName][]*model.RowChangedEvent{},
-		expectedMinTs:           11,
+		expectedUnresolvedTxns: map[model.TableName][]*model.Txn{},
+		expectedMinTs:          11,
 	}}
 	for _, tc := range testCases {
-		minTs, resolvedGroup := splitRowsGroup(tc.resolvedTs, tc.inputGroup)
+		minTs, resolvedTxns := splitResolvedTxn(tc.resolvedTs, tc.unresolvedTxns)
 		c.Assert(minTs, check.Equals, tc.expectedMinTs)
-		c.Assert(resolvedGroup, check.DeepEquals, tc.expectedResolvedGroup)
-		c.Assert(tc.inputGroup, check.DeepEquals, tc.expectedUnresolvedGroup)
+		c.Assert(resolvedTxns, check.DeepEquals, tc.expectedResolvedTxns)
+		c.Assert(tc.unresolvedTxns, check.DeepEquals, tc.expectedUnresolvedTxns)
 	}
 }
 
-func (s EmitSuite) TestTxnRowLimiter(c *check.C) {
+func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 	testCases := []struct {
-		inputGroup []*model.RowChangedEvent
-		maxTxnRow  int
-	}{{
-		inputGroup: nil,
-		maxTxnRow:  4,
-	}, {
-		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}},
-		maxTxnRow:  4,
-	}, {
-		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 2}, {CommitTs: 3}, {CommitTs: 4}, {CommitTs: 5}, {CommitTs: 6}},
-		maxTxnRow:  4,
-	}, {
-		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 2}, {CommitTs: 3}, {CommitTs: 4}, {CommitTs: 5}, {CommitTs: 6}, {CommitTs: 7}, {CommitTs: 8}},
-		maxTxnRow:  4,
-	}, {
-		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 2}, {CommitTs: 3}, {CommitTs: 4}, {CommitTs: 4}, {CommitTs: 4}, {CommitTs: 6}},
-		maxTxnRow:  4,
-	}, {
-		inputGroup: []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}, {CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}, {CommitTs: 3}, {CommitTs: 3}},
-		maxTxnRow:  2,
-	}}
+		txns                     []*model.Txn
+		expectedOutputRows       [][]*model.RowChangedEvent
+		exportedOutputReplicaIDs []uint64
+		maxTxnRow                int
+	}{
+		{
+			txns:      []*model.Txn{},
+			maxTxnRow: 4,
+		}, {
+			txns: []*model.Txn{
+				{
+					CommitTs:  1,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
+					ReplicaID: 1,
+				},
+			},
+			expectedOutputRows:       [][]*model.RowChangedEvent{{{CommitTs: 1}}},
+			exportedOutputReplicaIDs: []uint64{1},
+			maxTxnRow:                2,
+		}, {
+			txns: []*model.Txn{
+				{
+					CommitTs:  1,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
+					ReplicaID: 1,
+				},
+			},
+			expectedOutputRows: [][]*model.RowChangedEvent{
+				{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
+			},
+			exportedOutputReplicaIDs: []uint64{1},
+			maxTxnRow:                2,
+		}, {
+			txns: []*model.Txn{
+				{
+					CommitTs:  1,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}},
+					ReplicaID: 1,
+				},
+				{
+					CommitTs:  2,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 2}},
+					ReplicaID: 1,
+				},
+				{
+					CommitTs:  3,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 3}, {CommitTs: 3}},
+					ReplicaID: 1,
+				},
+			},
+			expectedOutputRows: [][]*model.RowChangedEvent{
+				{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 2}},
+				{{CommitTs: 3}, {CommitTs: 3}},
+			},
+			exportedOutputReplicaIDs: []uint64{1, 1},
+			maxTxnRow:                4,
+		}, {
+			txns: []*model.Txn{
+				{
+					CommitTs:  1,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
+					ReplicaID: 1,
+				},
+				{
+					CommitTs:  2,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 2}},
+					ReplicaID: 2,
+				},
+				{
+					CommitTs:  3,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
+					ReplicaID: 3,
+				},
+			},
+			expectedOutputRows: [][]*model.RowChangedEvent{
+				{{CommitTs: 1}},
+				{{CommitTs: 2}},
+				{{CommitTs: 3}},
+			},
+			exportedOutputReplicaIDs: []uint64{1, 2, 3},
+			maxTxnRow:                4,
+		}, {
+			txns: []*model.Txn{
+				{
+					CommitTs:  1,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
+					ReplicaID: 1,
+				},
+				{
+					CommitTs:  2,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
+					ReplicaID: 1,
+				},
+				{
+					CommitTs:  3,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 3}},
+					ReplicaID: 1,
+				},
+				{
+					CommitTs:  4,
+					Rows:      []*model.RowChangedEvent{{CommitTs: 4}},
+					ReplicaID: 1,
+				},
+			},
+			expectedOutputRows: [][]*model.RowChangedEvent{
+				{{CommitTs: 1}},
+				{{CommitTs: 2}, {CommitTs: 2}, {CommitTs: 2}},
+				{{CommitTs: 3}, {CommitTs: 4}},
+			},
+			exportedOutputReplicaIDs: []uint64{1, 1, 1},
+			maxTxnRow:                2,
+		}}
+	ctx := context.Background()
 
 	for i, tc := range testCases {
-		var output []*model.RowChangedEvent
-		var err error
-		rowGroups := make(map[model.TableName][][]*model.RowChangedEvent)
-		rowGroups[model.TableName{Table: "test"}] = [][]*model.RowChangedEvent{tc.inputGroup}
-		err = concurrentExec(context.Background(), rowGroups, rand.Intn(16), tc.maxTxnRow, func(_ context.Context, rows []*model.RowChangedEvent, _ int) error {
-			output = append(output, rows...)
-			c.Assert(len(rows), check.LessEqual, tc.maxTxnRow)
-			return nil
+		var outputRows [][]*model.RowChangedEvent
+		var outputReplicaIDs []uint64
+		w := newMySQLSinkWorker(tc.maxTxnRow, 1,
+			func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+				outputRows = append(outputRows, events)
+				outputReplicaIDs = append(outputReplicaIDs, replicaID)
+				return nil
+			})
+		errg, ctx := errgroup.WithContext(ctx)
+		errg.Go(func() error {
+			return w.run(ctx)
 		})
-		c.Assert(err, check.IsNil)
-		c.Assert(output, check.DeepEquals, tc.inputGroup, check.Commentf("case %v, %#v, %#v", i, output, tc.inputGroup))
+		for _, txn := range tc.txns {
+			w.appendTxn(ctx, txn)
+		}
+		w.waitAndClose()
+		c.Assert(errg.Wait(), check.IsNil)
+		c.Assert(outputRows, check.DeepEquals, tc.expectedOutputRows,
+			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputRows), spew.Sdump(tc.expectedOutputRows)))
+		c.Assert(outputReplicaIDs, check.DeepEquals, tc.exportedOutputReplicaIDs,
+			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputReplicaIDs), spew.Sdump(tc.exportedOutputReplicaIDs)))
 	}
 }
 
