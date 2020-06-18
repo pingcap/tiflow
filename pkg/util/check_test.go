@@ -113,6 +113,17 @@ func (s *checkSuite) TestCompareVersion(c *check.C) {
 	c.Assert(semver.New("4.0.0-rc.1").Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
 	c.Assert(semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
 	c.Assert(semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), check.Equals, 1)
+
+	c.Assert(semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
+	c.Assert(semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), check.Equals, 1)
+	c.Assert(semver.New(removeVAndHash("v3.0.0-beta-211-g09beefbe0-dirty")).
+		Compare(*semver.New("3.0.0-beta")), check.Equals, 0)
+	c.Assert(semver.New(removeVAndHash("v3.0.5-dirty")).
+		Compare(*semver.New("3.0.5")), check.Equals, 0)
+	c.Assert(semver.New(removeVAndHash("v3.0.5-beta.12-dirty")).
+		Compare(*semver.New("3.0.5-beta.12")), check.Equals, 0)
+	c.Assert(semver.New(removeVAndHash("v2.1.0-rc.1-7-g38c939f-dirty")).
+		Compare(*semver.New("2.1.0-rc.1")), check.Equals, 0)
 }
 
 func (s *checkSuite) TestIsValidUUIDv4(c *check.C) {
