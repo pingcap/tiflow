@@ -28,9 +28,16 @@ import (
 	pd "github.com/pingcap/pd/v4/client"
 )
 
+// minPDVersion is the version of the minimal compatible PD.
 var minPDVersion *semver.Version = semver.New("4.0.0-rc.1")
-var minTiKVVersion *semver.Version = semver.New("4.0.0-rc.1")
+
+// MinTiKVVersion is the version of the minimal compatible TiKV.
+var MinTiKVVersion *semver.Version = semver.New("4.0.0-rc.1")
+
 var versionHash = regexp.MustCompile("-[0-9]+-g[0-9a-f]{7,}")
+
+// ErrVersionIncompatible is an error for running CDC on an incompatible Cluster.
+var ErrVersionIncompatible = errors.NewNoStackError("version is incompatible")
 
 func removeVAndHash(v string) string {
 	if v == "" {
@@ -81,7 +88,7 @@ func CheckClusterVersion(ctx context.Context, client pd.Client, pdHTTP string) e
 	}
 	ord := ver.Compare(*minPDVersion)
 	if ord < 0 {
-		return errors.NotSupportedf("PD %s is not supported, require minimal version %s",
+		return errors.Annotatef(ErrVersionIncompatible, "PD %s is not supported, require minimal version %s",
 			removeVAndHash(pdVer.Version), minPDVersion)
 	}
 	return nil
@@ -107,10 +114,10 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 		if err != nil {
 			return err
 		}
-		ord := ver.Compare(*minTiKVVersion)
+		ord := ver.Compare(*MinTiKVVersion)
 		if ord < 0 {
-			return errors.NotSupportedf("TiKV %s is not supported, require minimal version %s",
-				removeVAndHash(s.Version), minTiKVVersion)
+			return errors.Annotatef(ErrVersionIncompatible, "TiKV %s is not supported, require minimal version %s",
+				removeVAndHash(s.Version), MinTiKVVersion)
 		}
 	}
 	return nil

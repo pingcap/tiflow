@@ -78,7 +78,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return minPDVersion.String()
 		}
 		mock.getAllStores = func() []*metapb.Store {
-			return []*metapb.Store{{Version: minTiKVVersion.String()}}
+			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdHTTP)
 		c.Assert(err, check.IsNil)
@@ -89,7 +89,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return `v1.0.0-alpha-271-g824ae7fd`
 		}
 		mock.getAllStores = func() []*metapb.Store {
-			return []*metapb.Store{{Version: minTiKVVersion.String()}}
+			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdHTTP)
 		c.Assert(err, check.ErrorMatches, "PD .* is not supported.*")
