@@ -112,18 +112,6 @@ function run() {
     check_sync_diff $WORK_DIR $CUR/conf/diff_config_up_down.toml
     check_sync_diff $WORK_DIR $CUR/conf/diff_config_down_third.toml
 
-    # Sleep a while to make sure no more events will be created in cyclic.
-    sleep 5
-
-    # Why 50? 10 insert from 1 + 20 insert from 3 + 10 mark table insert from 1 + 10 mark table insert from 3.
-    expect=50
-    uuid=$(run_cdc_cli changefeed list --pd=http://$UP_PD_HOST:$UP_PD_PORT 2>&1 | grep -oE "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}")
-    count=$(curl -sSf 127.0.0.1:8300/metrics | grep txn_batch_size_sum | grep ${uuid} | awk -F ' ' '{print $2}')
-    if [[ $count != $expect ]]; then
-        echo "[$(date)] <<<<< found extra mysql events! expect to ${expect} got ${count} >>>>>"
-        exit 1
-    fi
-
     cleanup_process $CDC_BINARY
 }
 
