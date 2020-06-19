@@ -743,6 +743,9 @@ func (s *eventFeedSession) tryNotifyTxnStatus(
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if rpcCtx == nil {
+		return errors.Errorf("cannot get rpcCtx to notify txn status for region %v", regionID)
+	}
 
 	stream, ok := streams[rpcCtx.Addr]
 	if !ok {
