@@ -112,7 +112,7 @@ func (t *Txn) Append(row *RowChangedEvent) {
 			zap.Uint64("startTs of txn", t.StartTs),
 			zap.Uint64("commitTs of txn", t.CommitTs),
 			zap.Uint64("startTs of row", row.StartTs),
-			zap.Uint64("startTs of row", row.CommitTs))
+			zap.Uint64("commitTs of row", row.CommitTs))
 	}
 	t.Rows = append(t.Rows, row)
 	if len(row.Keys) == 0 {
