@@ -429,9 +429,10 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 			return nil
 		}
 	}
+	timeToRebanlance := time.Since(c.lastRebanlanceTime) > time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute
+	timeToRebanlance = timeToRebanlance && c.info.Config.Scheduler.PollingTime > 0
 
-	if !c.rebanlanceNextTick &&
-		time.Since(c.lastRebanlanceTime) < time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute {
+	if !c.rebanlanceNextTick && !timeToRebanlance {
 		return nil
 	}
 	c.lastRebanlanceTime = time.Now()
