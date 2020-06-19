@@ -24,7 +24,7 @@ function run() {
         mysql) ;&
         *) SINK_URI="mysql://root@127.0.0.1:3306/";;
     esac
-    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai"
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
