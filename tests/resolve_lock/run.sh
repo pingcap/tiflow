@@ -25,7 +25,7 @@ function prepare() {
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
         mysql) ;&
-        *) SINK_URI="mysql://root@127.0.0.1:3306/";;
+        *) SINK_URI="mysql://root@127.0.0.1:3306/tidb-txn-mode=pessimistic";;
     esac
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
     if [ "$SINK_TYPE" == "kafka" ]; then

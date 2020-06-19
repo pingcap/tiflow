@@ -58,25 +58,6 @@ function run() {
         run_sql "${sqlup}" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     } done;
 
-    # Sleep a while to make sure no more events will be created in cyclic.
-    sleep 5
-    uuid=$(run_cdc_cli changefeed list --pd=http://$UP_PD_HOST:$UP_PD_PORT 2>&1 | grep -oE "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}")
-
-    # Why 50? 40 insert + 10 mark table insert.
-    expect=50
-    for i in $(seq 1 10); do {
-        count=$(curl -sSf 127.0.0.1:8300/metrics | grep txn_batch_size_sum | grep ${uuid} | awk -F ' ' '{print $2}')
-        if [[ $count == ${expect} ]]; then
-            break
-        fi
-        sleep 2
-    } done;
-
-    if [[ $count != $expect ]]; then
-        echo "[$(date)] <<<<< found extra mysql events! expect to ${expect} got ${count} >>>>>"
-        exit 1
-    fi
-
     cleanup_process $CDC_BINARY
 }
 

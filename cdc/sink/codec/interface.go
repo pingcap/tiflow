@@ -13,7 +13,13 @@
 
 package codec
 
-import "github.com/pingcap/ticdc/cdc/model"
+import (
+	"strings"
+
+	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
+	"go.uber.org/zap"
+)
 
 // EventBatchEncoder is an abstraction for events encoder
 type EventBatchEncoder interface {
@@ -43,4 +49,39 @@ type EventBatchDecoder interface {
 	NextRowChangedEvent() (*model.RowChangedEvent, error)
 	// NextDDLEvent returns the next DDL event if exists
 	NextDDLEvent() (*model.DDLEvent, error)
+}
+
+// Protocol is the protocol of the mq message
+type Protocol int
+
+// Enum types of the Protocol
+const (
+	ProtocolDefault Protocol = iota
+	ProtocolCanal
+)
+
+// FromString converts the protocol from string to Protocol enum type
+func (p *Protocol) FromString(protocol string) {
+	switch strings.ToLower(protocol) {
+	case "default":
+		*p = ProtocolDefault
+	case "canal":
+		*p = ProtocolCanal
+	default:
+		*p = ProtocolDefault
+		log.Warn("can't support codec protocol, using default protocol", zap.String("protocol", protocol))
+	}
+}
+
+// NewEventBatchEncoder returns a function of creating an EventBatchEncoder
+func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
+	switch p {
+	case ProtocolDefault:
+		return NewJSONEventBatchEncoder
+	case ProtocolCanal:
+		return NewCanalEventBatchEncoder
+	default:
+		log.Warn("unknown codec protocol value of EventBatchEncoder", zap.Int("protocol_value", int(p)))
+		return NewJSONEventBatchEncoder
+	}
 }

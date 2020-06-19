@@ -11,16 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package filter
 
-// SinkConfig represents sink config for a changefeed
-type SinkConfig struct {
-	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers"`
-	Protocol      string          `toml:"protocol" json:"protocol"`
-}
+import (
+	"github.com/pingcap/parser/terror"
+	"github.com/pingcap/tidb/store/tikv"
+)
 
-// DispatchRule represents partition rule for a table
-type DispatchRule struct {
-	Matcher    []string `toml:"matcher" json:"matcher"`
-	Dispatcher string   `toml:"dispatcher" json:"dispatcher"`
+// ChangefeedFastFailError checks the error, returns true if it is meaningless
+// to retry on this error
+func ChangefeedFastFailError(err error) bool {
+	return terror.ErrorEqual(err, tikv.ErrGCTooEarly)
 }
