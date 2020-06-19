@@ -178,17 +178,20 @@ func (m *LongTxnResolver) scheduleNotifyTxnStatus(
 	if blocking {
 		select {
 		case m.notifyTxnStatusCh <- task:
+			m.notifyTxnStatusChSizeGauge.Inc()
 		case <-ctx.Done():
 		}
 	} else {
 		select {
 		case m.notifyTxnStatusCh <- task:
+			m.notifyTxnStatusChSizeGauge.Inc()
 			return
 		default:
 		}
 		go func() {
 			select {
 			case m.notifyTxnStatusCh <- task:
+				m.notifyTxnStatusChSizeGauge.Inc()
 			case <-ctx.Done():
 			}
 		}()
@@ -256,6 +259,8 @@ ForEachTxn:
 		case kvrpcpb.Action_LockNotExistRollback:
 		case kvrpcpb.Action_TTLExpireRollback:
 		}
+
+		txnStatuses = append(txnStatuses, convertedStatus)
 
 		// TODO: Otherwise, we can actually do resolvelocks here.
 	}
