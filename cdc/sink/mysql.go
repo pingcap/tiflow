@@ -26,10 +26,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/cenkalti/backoff"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
@@ -39,6 +35,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/filter"
 	tifilter "github.com/pingcap/ticdc/pkg/filter"
@@ -47,6 +44,7 @@ import (
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -54,12 +52,13 @@ const (
 	defaultMaxTxnRow       = 256
 	defaultDMLMaxRetryTime = 8
 	defaultDDLMaxRetryTime = 20
+	defaultTiDBTxnMode     = "optimistic"
 )
 
 type mysqlSink struct {
 	db           *sql.DB
 	checkpointTs uint64
-	params       params
+	params       *sinkParams
 
 	filter *filter.Filter
 	cyclic *cyclic.Cyclic
@@ -259,19 +258,21 @@ func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 
 var _ Sink = &mysqlSink{}
 
-type params struct {
+type sinkParams struct {
 	workerCount  int
 	maxTxnRow    int
+	tidbTxnMode  string
 	changefeedID string
 	captureID    string
 }
 
-var defaultParams = params{
+var defaultParams = &sinkParams{
 	workerCount: defaultWorkerCount,
 	maxTxnRow:   defaultMaxTxnRow,
+	tidbTxnMode: defaultTiDBTxnMode,
 }
 
-func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
+func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location, params *sinkParams) (string, error) {
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
@@ -285,7 +286,7 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 		return "", errors.Annotate(err, "fail to open MySQL connection when configuring sink")
 	}
 	defer testDB.Close()
-	log.Debug("Opened connection to test whether allow_auto_random_explicit_insert is present.")
+	log.Debug("Opened connection to configure some tidb special parameters")
 
 	var variableName string
 	var autoRandomInsertEnabled string
@@ -294,11 +295,24 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 	if err != nil && err != sql.ErrNoRows {
 		return "", errors.Annotate(err, "fail to query sink for support of auto-random")
 	}
-
 	if err == nil && autoRandomInsertEnabled == "off" {
 		dsnCfg.Params["allow_auto_random_explicit_insert"] = "1"
 		log.Debug("Set allow_auto_random_explicit_insert to 1")
 	}
+
+	var txnMode string
+	queryStr = "show session variables like 'tidb_txn_mode';"
+	err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &txnMode)
+	if err != nil && err != sql.ErrNoRows {
+		return "", errors.Annotate(err, "fail to query sink for txn mode")
+	}
+	if err == nil {
+		dsnCfg.Params["tidb_txn_mode"] = params.tidbTxnMode
+	}
+
+	dsnClone := dsnCfg.Clone()
+	dsnClone.Passwd = "******"
+	log.Info("sink uri is configured", zap.String("format dsn", dsnClone.FormatDSN()))
 
 	return dsnCfg.FormatDSN(), nil
 }
@@ -339,6 +353,14 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 			}
 			params.maxTxnRow = c
 		}
+		s = sinkURI.Query().Get("tidb-txn-mode")
+		if s != "" {
+			if s == "pessimistic" || s == "optimistic" {
+				params.tidbTxnMode = s
+			} else {
+				log.Warn("invalid tidb-txn-mode, should be pessimistic or optimistic, use optimistic as default")
+			}
+		}
 		// dsn format of the driver:
 		// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 		username := sinkURI.User.Username()
@@ -356,13 +378,13 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		dsnStr, err = configureSinkURI(ctx, dsn, tz)
+		dsnStr, err = configureSinkURI(ctx, dsn, tz, params)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	case dsn != nil:
 		var err error
-		dsnStr, err = configureSinkURI(ctx, dsn, tz)
+		dsnStr, err = configureSinkURI(ctx, dsn, tz, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
