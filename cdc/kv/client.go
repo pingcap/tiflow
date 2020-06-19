@@ -1221,8 +1221,12 @@ func (s *eventFeedSession) singleEventFeed(
 			if !initialized {
 				continue
 			}
-			if x.ResolvedTs <= checkpointTs {
-				continue
+			if x.ResolvedTs < checkpointTs {
+				log.Fatal("The resolvedTs is fallen back in kvclient",
+					zap.String("Event Type", "RESOLVED"),
+					zap.Uint64("resolvedTs", x.ResolvedTs),
+					zap.Uint64("lastResolvedTs", checkpointTs),
+					zap.Uint64("regionID", regionID))
 			}
 			// emit a checkpointTs
 			revent := &model.RegionFeedEvent{
