@@ -40,11 +40,9 @@ type Scheduler interface {
 func NewScheduler(tp string) Scheduler {
 	switch tp {
 	case "table-number":
-		return newTableNumberScheduler(false)
-	case "manual":
-		return newTableNumberScheduler(true)
+		return newTableNumberScheduler()
 	default:
 		log.Info("invalid scheduler type, using default scheduler")
-		return newTableNumberScheduler(true)
+		return newTableNumberScheduler()
 	}
 }
