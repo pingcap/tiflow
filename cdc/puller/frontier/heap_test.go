@@ -16,7 +16,6 @@ package frontier
 import (
 	"math"
 	"math/rand"
-	"sort"
 
 	"github.com/pingcap/check"
 )
@@ -43,18 +42,26 @@ func (s *tsHeapSuite) TestInsert(c *check.C) {
 	c.Assert(heap.getMin().ts, check.Equals, target)
 }
 
-func (s *tsHeapSuite) TestIncreaseTs(c *check.C) {
+func (s *tsHeapSuite) TestUpdateTs(c *check.C) {
 	rand.Seed(0xdeadbeaf)
 	var heap minTsHeap
 	nodes := make([]*node, 50000)
 	for i := range nodes {
-		nodes[i] = s.insertIntoHeap(&heap, uint64(rand.Intn(len(nodes)/2)))
+		nodes[i] = s.insertIntoHeap(&heap, 10000+uint64(rand.Intn(len(nodes)/2)))
 	}
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i].ts < nodes[j].ts })
-
 	for i := range nodes {
 		min := heap.getMin().ts
-		c.Assert(min, check.Equals, nodes[i].ts)
-		heap.increaseTs(nodes[i], uint64(math.MaxUint64))
+		expectedMin := uint64(math.MaxUint64)
+		for _, n := range nodes {
+			if expectedMin > n.ts {
+				expectedMin = n.ts
+			}
+		}
+		c.Assert(min, check.Equals, expectedMin)
+		if rand.Intn(2) == 0 {
+			heap.updateTs(nodes[i], nodes[i].ts+uint64(10000))
+		} else {
+			heap.updateTs(nodes[i], nodes[i].ts-uint64(10000))
+		}
 	}
 }

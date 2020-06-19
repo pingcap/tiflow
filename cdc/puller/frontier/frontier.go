@@ -122,8 +122,8 @@ func (s *spanFrontier) insert(span regionspan.Span, ts uint64) {
 
 	for n != nil {
 		oldTs := n.ts
-		if ts > n.ts {
-			s.minHeap.increaseTs(n, ts)
+		if ts != n.ts {
+			s.minHeap.updateTs(n, ts)
 		}
 
 		next := n.next()
