@@ -26,6 +26,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	pd "github.com/pingcap/pd/v4/client"
+	"github.com/prometheus/common/log"
+	"go.uber.org/zap"
 )
 
 // minPDVersion is the version of the minimal compatible PD.
@@ -49,10 +51,15 @@ func removeVAndHash(v string) string {
 }
 
 // CheckClusterVersion check TiKV and PD version.
-func CheckClusterVersion(ctx context.Context, client pd.Client, pdHTTP string) error {
+func CheckClusterVersion(
+	ctx context.Context, client pd.Client, pdHTTP string, errorTiKVIncompat bool,
+) error {
 	err := CheckStoreVersion(ctx, client, 0 /* check all TiKV */)
 	if err != nil {
-		return err
+		if errorTiKVIncompat {
+			return err
+		}
+		log.Warn("check TiKV version failed", zap.Error(err))
 	}
 	// See more: https://github.com/pingcap/pd/blob/v4.0.0-rc.1/server/api/version.go
 	pdVer := struct {
