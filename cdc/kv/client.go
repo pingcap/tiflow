@@ -291,11 +291,16 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 	return ca.Get(), nil
 }
 
-func (c *CDCClient) newStream(ctx context.Context, addr string) (stream cdcpb.ChangeData_EventFeedClient, err error) {
+func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream cdcpb.ChangeData_EventFeedClient, err error) {
 	err = retry.Run(50*time.Millisecond, 3, func() error {
 		conn, err := c.getConn(ctx, addr)
 		if err != nil {
 			log.Info("get connection to store failed, retry later", zap.String("addr", addr), zap.Error(err))
+			return errors.Trace(err)
+		}
+		err = util.CheckStoreVersion(ctx, c.pd, storeID)
+		if err != nil {
+			log.Error("check tikv version failed", zap.Error(err), zap.Uint64("storeID", storeID))
 			return errors.Trace(err)
 		}
 		client := cdcpb.NewChangeDataClient(conn)
@@ -621,15 +626,24 @@ MainLoop:
 			stream, ok := streams[rpcCtx.Addr]
 			// Establish the stream if it has not been connected yet.
 			if !ok {
+				storeID := rpcCtx.Peer.GetStoreId()
 				log.Info("creating new stream to store to send request",
-					zap.Uint64("regionID", sri.verID.GetID()), zap.Uint64("requestID", requestID), zap.String("addr", rpcCtx.Addr))
-				stream, err = s.client.newStream(ctx, rpcCtx.Addr)
+					zap.Uint64("regionID", sri.verID.GetID()),
+					zap.Uint64("requestID", requestID),
+					zap.Uint64("storeID", storeID),
+					zap.String("addr", rpcCtx.Addr))
+				stream, err = s.client.newStream(ctx, rpcCtx.Addr, storeID)
 				if err != nil {
 					// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
 					log.Warn("get grpc stream client failed",
 						zap.Uint64("regionID", sri.verID.GetID()),
 						zap.Uint64("requestID", requestID),
+						zap.Uint64("storeID", storeID),
 						zap.String("error", err.Error()))
+					if errors.Cause(err) == util.ErrVersionIncompatible {
+						// It often occurs on rolling update. Sleep 20s to reduce logs.
+						time.Sleep(20 * time.Second)
+					}
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 					s.client.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
 					// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
