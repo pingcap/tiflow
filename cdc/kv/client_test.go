@@ -25,8 +25,11 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
+	"github.com/pingcap/kvproto/pkg/metapb"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
 	"google.golang.org/grpc"
@@ -137,6 +140,22 @@ func newMockService(c *check.C, port int, ch chan *cdcpb.ChangeDataEvent, wg *sy
 	return grpcServer
 }
 
+type mockPDClient struct {
+	pd.Client
+	version string
+}
+
+var _ pd.Client = &mockPDClient{}
+
+func (m *mockPDClient) GetStore(ctx context.Context, storeID uint64) (*metapb.Store, error) {
+	s, err := m.Client.GetStore(ctx, storeID)
+	if err != nil {
+		return nil, err
+	}
+	s.Version = m.version
+	return s, nil
+}
+
 // Use etcdSuite to workaround the race. See comments of `TestConnArray`.
 func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	wg := &sync.WaitGroup{}
@@ -150,6 +169,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, version: util.MinTiKVVersion.String()}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
 
@@ -201,6 +221,27 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 
 	checkEvent(event, ts.Ver)
 	cancel()
+}
+
+// TODO enable the test
+func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, version: "v2.1.0" /* CDC is not compatible with 2.1.0 */}
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+
+	cluster.AddStore(1, "localhost:23375")
+	cluster.Bootstrap(2, []uint64{1}, []uint64{3}, 3)
+
+	cdcClient, err := NewCDCClient(pdClient, kvStorage.(tikv.Storage))
+	c.Assert(err, check.IsNil)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	err = cdcClient.EventFeed(ctx, regionspan.Span{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
+	_ = err
+	// TODO find a way to verify the error
 }
 
 // Use etcdSuite for some special reasons, the embed etcd uses zap as the only candidate

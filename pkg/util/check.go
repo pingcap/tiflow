@@ -24,39 +24,42 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
+	"go.uber.org/zap"
 )
 
+// minPDVersion is the version of the minimal compatible PD.
 var minPDVersion *semver.Version = semver.New("4.0.0-rc.1")
-var minTiKVVersion *semver.Version = semver.New("4.0.0-rc.1")
+
+// MinTiKVVersion is the version of the minimal compatible TiKV.
+var MinTiKVVersion *semver.Version = semver.New("4.0.0-rc.1")
+
+var versionHash = regexp.MustCompile("-[0-9]+-g[0-9a-f]{7,}")
+
+// ErrVersionIncompatible is an error for running CDC on an incompatible Cluster.
+var ErrVersionIncompatible = errors.NewNoStackError("version is incompatible")
 
 func removeVAndHash(v string) string {
 	if v == "" {
 		return v
 	}
-	hash := regexp.MustCompile("-[0-9]+-g[0-9a-f]{8,}")
-	if hash.Match([]byte(v)) {
-		v = hash.ReplaceAllLiteralString(v, "")
-	}
+	v = versionHash.ReplaceAllLiteralString(v, "")
+	v = strings.TrimSuffix(v, "-dirty")
 	return strings.TrimPrefix(v, "v")
 }
 
 // CheckClusterVersion check TiKV and PD version.
-func CheckClusterVersion(ctx context.Context, client pd.Client, pdHTTP string) error {
-	stores, err := client.GetAllStores(ctx, pd.WithExcludeTombstone())
+func CheckClusterVersion(
+	ctx context.Context, client pd.Client, pdHTTP string, errorTiKVIncompat bool,
+) error {
+	err := CheckStoreVersion(ctx, client, 0 /* check all TiKV */)
 	if err != nil {
-		return err
-	}
-	for _, s := range stores {
-		ver, err := semver.NewVersion(removeVAndHash(s.Version))
-		if err != nil {
+		if errorTiKVIncompat {
 			return err
 		}
-		ord := ver.Compare(*minTiKVVersion)
-		if ord < 0 {
-			return errors.NotSupportedf("TiKV %s is not supported, require minimal version %s",
-				removeVAndHash(s.Version), minTiKVVersion)
-		}
+		log.Warn("check TiKV version failed", zap.Error(err))
 	}
 	// See more: https://github.com/pingcap/pd/blob/v4.0.0-rc.1/server/api/version.go
 	pdVer := struct {
@@ -92,8 +95,37 @@ func CheckClusterVersion(ctx context.Context, client pd.Client, pdHTTP string) e
 	}
 	ord := ver.Compare(*minPDVersion)
 	if ord < 0 {
-		return errors.NotSupportedf("PD %s is not supported, require minimal version %s",
+		return errors.Annotatef(ErrVersionIncompatible, "PD %s is not supported, require minimal version %s",
 			removeVAndHash(pdVer.Version), minPDVersion)
+	}
+	return nil
+}
+
+// CheckStoreVersion checks whether the given TiKV is compatible with this CDC.
+// If storeID is 0, it checks all TiKV.
+func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) error {
+	var stores []*metapb.Store
+	var err error
+	if storeID == 0 {
+		stores, err = client.GetAllStores(ctx, pd.WithExcludeTombstone())
+	} else {
+		stores = make([]*metapb.Store, 1)
+		stores[0], err = client.GetStore(ctx, storeID)
+	}
+	if err != nil {
+		return err
+	}
+
+	for _, s := range stores {
+		ver, err := semver.NewVersion(removeVAndHash(s.Version))
+		if err != nil {
+			return err
+		}
+		ord := ver.Compare(*MinTiKVVersion)
+		if ord < 0 {
+			return errors.Annotatef(ErrVersionIncompatible, "TiKV %s is not supported, require minimal version %s",
+				removeVAndHash(s.Version), MinTiKVVersion)
+		}
 	}
 	return nil
 }

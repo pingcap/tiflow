@@ -155,7 +155,8 @@ func newCliCommand() *cobra.Command {
 				return errors.Annotate(err, "fail to open PD client")
 			}
 			ctx := defaultContext
-			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr)
+			errorTiKVIncompatible := true // Error if TiKV is incompatible.
+			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr, errorTiKVIncompatible)
 			if err != nil {
 				return err
 			}
