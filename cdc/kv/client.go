@@ -1222,7 +1222,7 @@ func (s *eventFeedSession) singleEventFeed(
 				continue
 			}
 			if x.ResolvedTs < checkpointTs {
-				log.Fatal("The resolvedTs is fallen back in kvclient",
+				log.Warn("The resolvedTs is fallen back in kvclient",
 					zap.String("Event Type", "RESOLVED"),
 					zap.Uint64("resolvedTs", x.ResolvedTs),
 					zap.Uint64("lastResolvedTs", checkpointTs),
