@@ -640,6 +640,10 @@ MainLoop:
 						zap.Uint64("requestID", requestID),
 						zap.Uint64("storeID", storeID),
 						zap.String("error", err.Error()))
+					if errors.Cause(err) == util.ErrVersionIncompatible {
+						// It often occurs on rolling update. Sleep 20s to reduce logs.
+						time.Sleep(20 * time.Second)
+					}
 					bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 					s.client.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
 					// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
