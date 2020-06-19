@@ -82,35 +82,35 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 	c.Assert(f.Frontier(), check.Equals, uint64(2))
 	c.Assert(f.testStr(), check.Equals, `{a d}@2`)
 
-	// Forward to old ts is ignored.
+	// Forward to smaller ts
 	f.Forward(
 		regionspan.Span{Start: []byte("a"), End: []byte("d")},
 		1,
 	)
-	c.Assert(f.Frontier(), check.Equals, uint64(2))
-	c.Assert(f.testStr(), check.Equals, `{a d}@2`)
+	c.Assert(f.Frontier(), check.Equals, uint64(1))
+	c.Assert(f.testStr(), check.Equals, `{a d}@1`)
 
 	// Forward b-c
 	f.Forward(spBC, 3)
-	c.Assert(f.Frontier(), check.Equals, uint64(2))
-	c.Assert(f.testStr(), check.Equals, `{a b}@2 {b c}@3 {c d}@2`)
+	c.Assert(f.Frontier(), check.Equals, uint64(1))
+	c.Assert(f.testStr(), check.Equals, `{a b}@1 {b c}@3 {c d}@1`)
 
 	// Forward b-c more to be 4
 	f.Forward(spBC, 4)
-	c.Assert(f.Frontier(), check.Equals, uint64(2))
-	c.Assert(f.testStr(), check.Equals, `{a b}@2 {b c}@4 {c d}@2`)
+	c.Assert(f.Frontier(), check.Equals, uint64(1))
+	c.Assert(f.testStr(), check.Equals, `{a b}@1 {b c}@4 {c d}@1`)
 
 	// Forward all to at least 3
 	f.Forward(spAD, 3)
 	c.Assert(f.Frontier(), check.Equals, uint64(3))
-	c.Assert(f.testStr(), check.Equals, `{a b}@3 {b c}@4 {c d}@3`)
+	c.Assert(f.testStr(), check.Equals, `{a b}@3 {b c}@3 {c d}@3`)
 
 	// Forward AB and CD to be 5, keep BC at 4
 	f.Forward(spAB, 5)
 	c.Assert(f.Frontier(), check.Equals, uint64(3))
 	f.Forward(spCD, 5)
-	c.Assert(f.Frontier(), check.Equals, uint64(4))
-	c.Assert(f.testStr(), check.Equals, `{a b}@5 {b c}@4 {c d}@5`)
+	c.Assert(f.Frontier(), check.Equals, uint64(3))
+	c.Assert(f.testStr(), check.Equals, `{a b}@5 {b c}@3 {c d}@5`)
 
 	// Catch BC to be 5 too
 	f.Forward(spBC, 5)

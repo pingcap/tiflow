@@ -118,7 +118,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 	tableID := util.TableIDFromCtx(ctx)
 	tableIDStr := strconv.FormatInt(tableID, 10)
-
 	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
 	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
@@ -149,7 +148,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				if e.Val != nil {
 					metricEventCounterKv.Inc()
 					val := e.Val
-
 					// if a region with kv range [a, z)
 					// and we only want the get [b, c) from this region,
 					// tikv will return all key events in the region although we specified [b, c) int the request.
@@ -176,8 +174,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
-			if raw.CRTs <= p.resolvedTs {
+			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
 				log.Fatal("The CRTs must be greater than the resolvedTs",
+					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
 					zap.Int64("tableID", tableID))

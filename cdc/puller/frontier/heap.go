@@ -35,6 +35,17 @@ func (h *minTsHeap) insert(x *node) {
 	}
 }
 
+func (h *minTsHeap) updateTs(x *node, ts uint64) {
+	switch {
+	case x.ts == ts:
+		return
+	case x.ts > ts:
+		h.decreaseTs(x, ts)
+	case x.ts < ts:
+		h.increaseTs(x, ts)
+	}
+}
+
 func (h *minTsHeap) increaseTs(x *node, ts uint64) {
 	if x == h.min {
 		h.dirty = true
@@ -63,6 +74,23 @@ func (h *minTsHeap) increaseTs(x *node, ts uint64) {
 
 	if cascadingCut {
 		h.cascadingCut(x)
+	}
+}
+
+func (h *minTsHeap) decreaseTs(x *node, ts uint64) {
+	x.ts = ts
+	parent := x.parent
+	if parent != nil && parent.ts > x.ts {
+		h.removeChildren(parent, x)
+		h.addToRoot(x)
+		if parent.marked {
+			h.cascadingCut(parent)
+		} else {
+			parent.marked = true
+		}
+	}
+	if x.parent == nil && h.min.ts > ts {
+		h.min = x
 	}
 }
 

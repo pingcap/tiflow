@@ -397,7 +397,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 }
 
 func (p *processor) workloadWorker(ctx context.Context) error {
-	t := time.NewTicker(1 * time.Minute)
+	t := time.NewTicker(10 * time.Second)
 	err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureID, nil)
 	if err != nil {
 		return errors.Trace(err)

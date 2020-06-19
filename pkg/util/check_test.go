@@ -78,9 +78,9 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return minPDVersion.String()
 		}
 		mock.getAllStores = func() []*metapb.Store {
-			return []*metapb.Store{{Version: minTiKVVersion.String()}}
+			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
-		err := CheckClusterVersion(context.Background(), &mock, pdHTTP)
+		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, true)
 		c.Assert(err, check.IsNil)
 	}
 
@@ -89,9 +89,9 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return `v1.0.0-alpha-271-g824ae7fd`
 		}
 		mock.getAllStores = func() []*metapb.Store {
-			return []*metapb.Store{{Version: minTiKVVersion.String()}}
+			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
-		err := CheckClusterVersion(context.Background(), &mock, pdHTTP)
+		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, true)
 		c.Assert(err, check.ErrorMatches, "PD .* is not supported.*")
 	}
 
@@ -103,8 +103,10 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			// TiKV does not include 'v'.
 			return []*metapb.Store{{Version: `1.0.0-alpha-271-g824ae7fd`}}
 		}
-		err := CheckClusterVersion(context.Background(), &mock, pdHTTP)
+		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, true)
 		c.Assert(err, check.ErrorMatches, "TiKV .* is not supported.*")
+		err = CheckClusterVersion(context.Background(), &mock, pdHTTP, false)
+		c.Assert(err, check.IsNil)
 	}
 }
 
@@ -113,6 +115,17 @@ func (s *checkSuite) TestCompareVersion(c *check.C) {
 	c.Assert(semver.New("4.0.0-rc.1").Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
 	c.Assert(semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
 	c.Assert(semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), check.Equals, 1)
+
+	c.Assert(semver.New(removeVAndHash("4.0.0-rc-35-g31dae220")).Compare(*semver.New("4.0.0-rc.2")), check.Equals, -1)
+	c.Assert(semver.New(removeVAndHash("4.0.0-9-g30f0b014")).Compare(*semver.New("4.0.0-rc.1")), check.Equals, 1)
+	c.Assert(semver.New(removeVAndHash("v3.0.0-beta-211-g09beefbe0-dirty")).
+		Compare(*semver.New("3.0.0-beta")), check.Equals, 0)
+	c.Assert(semver.New(removeVAndHash("v3.0.5-dirty")).
+		Compare(*semver.New("3.0.5")), check.Equals, 0)
+	c.Assert(semver.New(removeVAndHash("v3.0.5-beta.12-dirty")).
+		Compare(*semver.New("3.0.5-beta.12")), check.Equals, 0)
+	c.Assert(semver.New(removeVAndHash("v2.1.0-rc.1-7-g38c939f-dirty")).
+		Compare(*semver.New("2.1.0-rc.1")), check.Equals, 0)
 }
 
 func (s *checkSuite) TestIsValidUUIDv4(c *check.C) {
