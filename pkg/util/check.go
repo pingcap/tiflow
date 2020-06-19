@@ -25,8 +25,8 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
-	"github.com/prometheus/common/log"
 	"go.uber.org/zap"
 )
 
