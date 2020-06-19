@@ -18,13 +18,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/cyclic"
-
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/cyclic"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 )
@@ -212,6 +212,12 @@ func newCreateChangefeedCommand() *cobra.Command {
 				State:      model.StateNormal,
 			}
 
+			tz, err := util.GetTimezone(timezone)
+			if err != nil {
+				return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
+			}
+
+			ctx = util.PutTimezoneInCtx(ctx, tz)
 			ineligibleTables, allTables, err := verifyTables(ctx, cfg, startTs)
 			if err != nil {
 				return err
@@ -277,6 +283,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", "memory", "sort engine used for data sort")
 	command.PersistentFlags().StringVar(&sortDir, "sort-dir", ".", "directory used for file sort")
+	command.PersistentFlags().StringVar(&timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
 	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
 	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
 	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
