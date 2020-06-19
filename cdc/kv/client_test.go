@@ -164,7 +164,13 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	case <-time.After(time.Second):
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
+	checkEvent(event, 1)
 
+	select {
+	case event = <-eventCh:
+	case <-time.After(time.Second):
+		c.Fatalf("reconnection not succeed in 1 second")
+	}
 	checkEvent(event, ts.Ver)
 	cancel()
 }
