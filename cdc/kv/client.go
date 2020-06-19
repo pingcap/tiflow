@@ -1227,6 +1227,7 @@ func (s *eventFeedSession) singleEventFeed(
 					zap.Uint64("resolvedTs", x.ResolvedTs),
 					zap.Uint64("lastResolvedTs", checkpointTs),
 					zap.Uint64("regionID", regionID))
+				continue
 			}
 			// emit a checkpointTs
 			revent := &model.RegionFeedEvent{
