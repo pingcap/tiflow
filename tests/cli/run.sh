@@ -16,7 +16,7 @@ function run() {
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
     run_sql "CREATE table test.simple(id int primary key, val int);"
-    run_sql "CREATE table test.`simple-dash`(id int primary key, val int);"
+    run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
