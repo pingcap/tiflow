@@ -35,7 +35,7 @@ function run() {
 
     # Make sure changefeed is created.
     check_table_exists tidb_cdc.repl_mark_test_simple ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-    check_table_exists tidb_cdc.repl_mark_test_simple-dash ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists tidb_cdc."\`repl_mark_test_simple-dash\`" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
     uuid=$(run_cdc_cli changefeed list 2>&1 | grep -oE "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}")
 
