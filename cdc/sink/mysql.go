@@ -535,14 +535,15 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		if len(toExecRows) == 0 {
 			return nil
 		}
-		defer w.txnWg.Add(-1 * txnNum)
 		rows := make([]*model.RowChangedEvent, len(toExecRows))
 		copy(rows, toExecRows)
 		err := w.execDMLs(ctx, rows, replicaID, w.bucket)
 		if err != nil {
+			w.txnWg.Add(-1 * txnNum)
 			return err
 		}
 		toExecRows = toExecRows[:0]
+		w.txnWg.Add(-1 * txnNum)
 		txnNum = 0
 		lastExecTime = time.Now()
 		return nil
