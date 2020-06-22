@@ -50,13 +50,13 @@ func CreateMarkTables(ctx context.Context, tables []model.TableName, upstreamDSN
 			return errors.Annotate(err, "fail to create mark database")
 		}
 		_, err = db.ExecContext(ctx, fmt.Sprintf(
-			`CREATE TABLE IF NOT EXISTS %s.%s
+			`CREATE TABLE IF NOT EXISTS %s
 			(
 				bucket INT NOT NULL,
 				%s BIGINT UNSIGNED NOT NULL,
 				val BIGINT DEFAULT 0,
 				PRIMARY KEY (bucket, %s)
-			);`, schema, table, CyclicReplicaIDCol, CyclicReplicaIDCol))
+			);`, model.QuoteSchema(schema, table), CyclicReplicaIDCol, CyclicReplicaIDCol))
 		if err != nil {
 			return errors.Annotatef(err, "fail to create mark table %s", table)
 		}
