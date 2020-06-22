@@ -14,62 +14,17 @@
 package cyclic
 
 import (
-	"context"
-	"database/sql"
-	"fmt"
-
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"go.uber.org/zap"
 )
 
-// CreateMarkTables creates mark table regard to the table name.
-//
-// Note table name is only for avoid write hotspot there is *NO* guarantee
-// normal tables and mark tables are one:one map.
-func CreateMarkTables(ctx context.Context, tables []model.TableName, upstreamDSN string) error {
-	db, err := sql.Open("mysql", upstreamDSN)
-	if err != nil {
-		return errors.Annotate(err, "Open upsteam database connection failed")
-	}
-	err = db.PingContext(ctx)
-	if err != nil {
-		return errors.Annotate(err, "fail to open upstream TiDB connection")
-	}
-
-	userTableCount := 0
-	for _, name := range tables {
-		if IsMarkTable(name.Schema, name.Table) {
-			continue
-		}
-		userTableCount++
-		schema, table := MarkTableName(name.Schema, name.Table)
-		_, err = db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", schema))
-		if err != nil {
-			return errors.Annotate(err, "fail to create mark database")
-		}
-		_, err = db.ExecContext(ctx, fmt.Sprintf(
-			`CREATE TABLE IF NOT EXISTS %s
-			(
-				bucket INT NOT NULL,
-				%s BIGINT UNSIGNED NOT NULL,
-				val BIGINT DEFAULT 0,
-				PRIMARY KEY (bucket, %s)
-			);`, model.QuoteSchema(schema, table), CyclicReplicaIDCol, CyclicReplicaIDCol))
-		if err != nil {
-			return errors.Annotatef(err, "fail to create mark table %s", table)
-		}
-	}
-	log.Info("create upstream mark done", zap.Int("count", userTableCount))
-	return nil
-}
-
 // ExtractReplicaID extracts replica ID from the given mark row.
 func ExtractReplicaID(markRow *model.RowChangedEvent) uint64 {
-	val, ok := markRow.Columns[CyclicReplicaIDCol]
+	val, ok := markRow.Columns[mark.CyclicReplicaIDCol]
 	if !ok {
-		panic("bad mark table, " + CyclicReplicaIDCol + " not found")
+		panic("bad mark table, " + mark.CyclicReplicaIDCol + " not found")
 	}
 	return val.Value.(uint64)
 }
@@ -101,7 +56,7 @@ func (m MarkMap) shouldFilterTxn(startTs uint64, filterReplicaIDs []uint64) (*mo
 func FilterAndReduceTxns(txnsMap map[model.TableName][]*model.Txn, filterReplicaIDs []uint64, replicaID uint64) {
 	markMap := make(MarkMap)
 	for table, txns := range txnsMap {
-		if !IsMarkTable(table.Schema, table.Table) {
+		if !mark.IsMarkTable(table.Schema, table.Table) {
 			continue
 		}
 		for _, txn := range txns {
@@ -123,7 +78,7 @@ func FilterAndReduceTxns(txnsMap map[model.TableName][]*model.Txn, filterReplica
 		}
 	}
 	for table, txns := range txnsMap {
-		if IsMarkTable(table.Schema, table.Table) {
+		if mark.IsMarkTable(table.Schema, table.Table) {
 			delete(txnsMap, table)
 			continue
 		}

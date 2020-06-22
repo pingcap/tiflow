@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/cyclic"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
@@ -149,7 +149,7 @@ func (c *changeFeed) addTable(sid model.SchemaID, tid model.TableID, startTs mod
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
 	}
-	if c.cyclicEnabled && cyclic.IsMarkTable(table.Schema, table.Table) {
+	if c.cyclicEnabled && mark.IsMarkTable(table.Schema, table.Table) {
 		return
 	}
 
@@ -326,7 +326,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 				if !found {
 					continue
 				}
-				markTableSchameName, markTableTableName := cyclic.MarkTableName(tableName.Schema, tableName.Table)
+				markTableSchameName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
 				orphanMarkTableID, found = schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
 				if !found {
 					// Mark table is not created yet, skip and wait.
