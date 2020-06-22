@@ -24,7 +24,7 @@ function run() {
     # create table to upstream.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # create an ineligible table to make sure cyclic replication works fine even with some ineligible tables.
-    # run_sql "CREATE table test.ineligible(id int, val int);"
+    run_sql "CREATE table test.ineligible(id int, val int);"
 
     # create table to downsteam.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
@@ -53,8 +53,7 @@ function run() {
         --addr "127.0.0.1:8301"
 
     # Echo y to ignore ineligible tables
-    # echo "y" | run_cdc_cli changefeed create --start-ts=$start_ts \
-    run_cdc_cli changefeed create --start-ts=$start_ts \
+    echo "y" | run_cdc_cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
         --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
         --cyclic-replica-id 1 \

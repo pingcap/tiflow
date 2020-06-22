@@ -158,6 +158,11 @@ func (c *changeFeed) addTable(sid model.SchemaID, tid model.TableID, startTs mod
 		return
 	}
 
+	if !entry.WrapTableInfo(sid, table.Schema, tblInfo).IsEligible() {
+		log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
+		return
+	}
+
 	if _, ok := c.schemas[sid]; !ok {
 		c.schemas[sid] = make(tableIDMap)
 	}

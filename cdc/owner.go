@@ -240,6 +240,10 @@ func (o *Owner) newChangeFeed(
 			log.Warn("table not found for table ID", zap.Int64("tid", tid))
 			continue
 		}
+		if !tblInfo.IsEligible() {
+			log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
+			continue
+		}
 		if pi := tblInfo.GetPartitionInfo(); pi != nil {
 			delete(partitions, tid)
 			for _, partition := range pi.Definitions {
