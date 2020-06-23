@@ -408,6 +408,9 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case <-t.C:
 		}
+		if p.isStopped() {
+			continue
+		}
 		workload := make(model.TaskWorkload, len(p.tables))
 		p.stateMu.Lock()
 		for _, table := range p.tables {
@@ -922,6 +925,12 @@ func runProcessor(
 				zap.String("changefeedid", changefeedID),
 				zap.String("processorid", processor.id),
 				zap.Error(err))
+			// record error information in etcd
+			processor.position.Error = err.Error()
+			err = processor.tsRWriter.WritePosition(ctx, processor.position)
+			if err != nil {
+				log.Warn("upload processor error failed", zap.Error(err))
+			}
 		} else {
 			log.Info("processor exited",
 				zap.String("captureid", captureID),

@@ -30,3 +30,10 @@ var (
 	ErrCaptureNotExist       = errors.New("capture not exists")
 	ErrUnresolved            = errors.New("unresolved")
 )
+
+// RunningError represents some running error from cdc components, such as processor.
+type RunningError struct {
+	ID        string `json:"id"`
+	Error     string `json:"error"`
+	Component string `json:"component"`
+}
