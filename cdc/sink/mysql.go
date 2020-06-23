@@ -539,6 +539,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		copy(rows, toExecRows)
 		err := w.execDMLs(ctx, rows, replicaID, w.bucket)
 		if err != nil {
+			w.txnWg.Add(-1 * txnNum)
 			return err
 		}
 		toExecRows = toExecRows[:0]
