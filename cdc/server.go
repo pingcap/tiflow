@@ -239,13 +239,6 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 // Close closes the server.
 func (s *Server) Close() {
-	if s.statusServer != nil {
-		err := s.statusServer.Close()
-		if err != nil {
-			log.Error("close status server", zap.Error(err))
-		}
-		s.statusServer = nil
-	}
 	if s.capture != nil {
 		s.capture.Cleanup()
 
@@ -255,5 +248,12 @@ func (s *Server) Close() {
 			log.Error("close capture", zap.Error(err))
 		}
 		closeCancel()
+	}
+	if s.statusServer != nil {
+		err := s.statusServer.Close()
+		if err != nil {
+			log.Error("close status server", zap.Error(err))
+		}
+		s.statusServer = nil
 	}
 }
