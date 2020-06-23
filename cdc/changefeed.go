@@ -101,9 +101,9 @@ type changeFeed struct {
 	toCleanTables      map[model.TableID]model.Ts
 	moveTableJobs      map[model.TableID]*model.MoveTableJob
 	manualMoveCommands []*model.MoveTableJob
-	rebanlanceNextTick bool
+	rebalanceNextTick  bool
 
-	lastRebanlanceTime time.Time
+	lastRebalanceTime time.Time
 
 	etcdCli kv.CDCEtcdClient
 }
@@ -242,21 +242,21 @@ func (c *changeFeed) updatePartition(tblInfo *timodel.TableInfo, startTs uint64)
 	}
 }
 
-func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, rebanlanceNow bool,
+func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, rebalanceNow bool,
 	manualMoveCommands []*model.MoveTableJob) error {
 	err := c.balanceOrphanTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	c.manualMoveCommands = append(c.manualMoveCommands, manualMoveCommands...)
-	if rebanlanceNow {
-		c.rebanlanceNextTick = true
+	if rebalanceNow {
+		c.rebalanceNextTick = true
 	}
 	err = c.handleManualMoveTableJobs(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = c.rebanlanceTables(ctx, captures)
+	err = c.rebalanceTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -422,7 +422,7 @@ func (c *changeFeed) handleManualMoveTableJobs(ctx context.Context, captures map
 	return nil
 }
 
-func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
+func (c *changeFeed) rebalanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	if len(captures) == 0 {
 		return nil
 	}
@@ -434,14 +434,14 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 			return nil
 		}
 	}
-	timeToRebanlance := time.Since(c.lastRebanlanceTime) > time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute
-	timeToRebanlance = timeToRebanlance && c.info.Config.Scheduler.PollingTime > 0
+	timeToRebalance := time.Since(c.lastRebalanceTime) > time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute
+	timeToRebalance = timeToRebalance && c.info.Config.Scheduler.PollingTime > 0
 
-	if !c.rebanlanceNextTick && !timeToRebanlance {
+	if !c.rebalanceNextTick && !timeToRebalance {
 		return nil
 	}
-	c.lastRebanlanceTime = time.Now()
-	c.rebanlanceNextTick = false
+	c.lastRebalanceTime = time.Now()
+	c.rebalanceNextTick = false
 
 	captureIDs := make(map[model.CaptureID]struct{}, len(captures))
 	for cid := range captures {

@@ -109,7 +109,7 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 	handleOwnerResp(w, err)
 }
 
-func (s *Server) handleRebanlanceTrigger(w http.ResponseWriter, req *http.Request) {
+func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
 		return
@@ -129,7 +129,7 @@ func (s *Server) handleRebanlanceTrigger(w http.ResponseWriter, req *http.Reques
 		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	s.owner.TriggerRebanlance(changefeedID)
+	s.owner.TriggerRebalance(changefeedID)
 	handleOwnerResp(w, nil)
 }
 
