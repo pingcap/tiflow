@@ -19,18 +19,16 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 )
-
-// OptCyclicConfig is the key that adds to changefeed options
-// automatically is cyclic replication is on.
-const OptCyclicConfig string = "_cyclic_relax_sql_mode"
 
 // Filter is a event filter implementation
 type Filter struct {
 	filter           filter.Filter
 	ignoreTxnStartTs []uint64
 	ddlWhitelist     []model.ActionType
+	isCyclicEnabled  bool
 }
 
 // NewFilter creates a filter
@@ -56,6 +54,7 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 		filter:           f,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
 		ddlWhitelist:     cfg.Filter.DDLWhitelist,
+		isCyclicEnabled:  cfg.Cyclic.IsEnabled(),
 	}, nil
 }
 
@@ -73,6 +72,10 @@ func (f *Filter) shouldIgnoreStartTs(ts uint64) bool {
 func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 	if IsSysSchema(db) {
 		return true
+	}
+	if f.isCyclicEnabled && mark.IsMarkTable(db, tbl) {
+		// Always replicate mark tables.
+		return false
 	}
 	return !f.filter.MatchTable(db, tbl)
 }
