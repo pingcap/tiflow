@@ -147,7 +147,7 @@ func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64
 		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
 			continue
 		}
-		if !tableInfo.ExistTableUniqueColumn() {
+		if !tableInfo. IsEligible() {
 			ineligibleTables = append(ineligibleTables, tableName)
 		} else {
 			eligibleTables = append(eligibleTables, tableName)
