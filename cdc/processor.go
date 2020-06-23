@@ -26,6 +26,7 @@ import (
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/entry"
@@ -684,6 +685,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if row == nil {
 				continue
 			}
+			failpoint.Inject("ProcessorSyncResolvedError", func() {
+				failpoint.Return(errors.New("processor sync resolvd injected error"))
+			})
 			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
 				err := flushRowChangedEvents()
 				if err != nil {
