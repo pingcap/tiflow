@@ -30,7 +30,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/cyclic"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -215,7 +215,7 @@ func (o *Owner) newChangeFeed(
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
 		}
-		if info.Config.Cyclic.IsEnabled() && cyclic.IsMarkTable(table.Schema, table.Table) {
+		if info.Config.Cyclic.IsEnabled() && mark.IsMarkTable(table.Schema, table.Table) {
 			// skip the mark table if cyclic is enabled
 			continue
 		}
@@ -238,6 +238,10 @@ func (o *Owner) newChangeFeed(
 		tblInfo, ok := schemaSnap.TableByID(tid)
 		if !ok {
 			log.Warn("table not found for table ID", zap.Int64("tid", tid))
+			continue
+		}
+		if !tblInfo.IsEligible() {
+			log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
 			continue
 		}
 		if pi := tblInfo.GetPartitionInfo(); pi != nil {

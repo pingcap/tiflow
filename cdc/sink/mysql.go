@@ -37,8 +37,10 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/filter"
 	tifilter "github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
@@ -180,7 +182,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	if shouldSwitchDB {
-		_, err = tx.ExecContext(ctx, "USE "+model.QuoteName(ddl.Schema)+";")
+		_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.Schema)+";")
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.Error(err))
@@ -411,7 +413,7 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		statistics:     NewStatistics("mysql", opts),
 	}
 
-	if val, ok := opts[cyclic.OptCyclicConfig]; ok {
+	if val, ok := opts[mark.OptCyclicConfig]; ok {
 		cfg := new(config.CyclicConfig)
 		err := cfg.Unmarshal([]byte(val))
 		if err != nil {
@@ -683,7 +685,7 @@ func prepareReplace(schema, table string, cols map[string]*model.Column) (string
 	}
 
 	colList := "(" + buildColumnList(columnNames) + ")"
-	tblName := model.QuoteSchema(schema, table)
+	tblName := quotes.QuoteSchema(schema, table)
 	builder.WriteString("REPLACE INTO " + tblName + colList + " VALUES ")
 	builder.WriteString("(" + model.HolderString(len(columnNames)) + ");")
 
@@ -692,7 +694,7 @@ func prepareReplace(schema, table string, cols map[string]*model.Column) (string
 
 func prepareDelete(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("DELETE FROM %s WHERE ", model.QuoteSchema(schema, table)))
+	builder.WriteString(fmt.Sprintf("DELETE FROM %s WHERE ", quotes.QuoteSchema(schema, table)))
 
 	colNames, wargs := whereSlice(cols)
 	args := make([]interface{}, 0, len(wargs))
@@ -701,9 +703,9 @@ func prepareDelete(schema, table string, cols map[string]*model.Column) (string,
 			builder.WriteString(" AND ")
 		}
 		if wargs[i] == nil {
-			builder.WriteString(model.QuoteName(colNames[i]) + " IS NULL")
+			builder.WriteString(quotes.QuoteName(colNames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(model.QuoteName(colNames[i]) + " = ?")
+			builder.WriteString(quotes.QuoteName(colNames[i]) + " = ?")
 			args = append(args, wargs[i])
 		}
 	}
@@ -760,7 +762,7 @@ func buildColumnList(names []string) string {
 		if i > 0 {
 			b.WriteString(",")
 		}
-		b.WriteString(model.QuoteName(name))
+		b.WriteString(quotes.QuoteName(name))
 
 	}
 

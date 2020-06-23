@@ -119,7 +119,7 @@ func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) er
 	return nil
 }
 
-func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, fullTables []model.TableName, err error) {
+func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr)
 	if err != nil {
 		return nil, nil, err
@@ -147,9 +147,10 @@ func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64
 		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
 			continue
 		}
-		fullTables = append(fullTables, tableName)
-		if !tableInfo.ExistTableUniqueColumn() {
+		if !tableInfo.IsEligible() {
 			ineligibleTables = append(ineligibleTables, tableName)
+		} else {
+			eligibleTables = append(eligibleTables, tableName)
 		}
 	}
 	return
