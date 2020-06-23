@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -103,7 +103,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 		if err != nil {
 			return errors.Annotatef(err, "Marshal data: %v", data)
 		}
-		info.Opts[filter.OptCyclicConfig] = string(cyclicCfg)
+		info.Opts[mark.OptCyclicConfig] = string(cyclicCfg)
 	}
 	return nil
 }

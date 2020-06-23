@@ -47,6 +47,16 @@ func (t TableName) String() string {
 	return fmt.Sprintf("%s.%s", t.Schema, t.Table)
 }
 
+// GetSchema returns schema name.
+func (t *TableName) GetSchema() string {
+	return t.Schema
+}
+
+// GetTable returns table name.
+func (t *TableName) GetTable() string {
+	return t.Table
+}
+
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
 	StartTs  uint64 `json:"start-ts"`

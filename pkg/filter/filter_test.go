@@ -36,6 +36,7 @@ func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
 	c.Assert(filter.ShouldIgnoreTable("performance_schema", ""), check.IsTrue)
 	c.Assert(filter.ShouldIgnoreTable("metric_schema", "query_duration"), check.IsTrue)
 	c.Assert(filter.ShouldIgnoreTable("sns", "user"), check.IsFalse)
+	c.Assert(filter.ShouldIgnoreTable("tidb_cdc", "repl_mark_a_a"), check.IsFalse)
 }
 
 func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
@@ -43,6 +44,7 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 		Filter: &config.FilterConfig{
 			Rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
 		},
+		Cyclic: &config.CyclicConfig{Enable: true},
 	})
 	c.Assert(err, check.IsNil)
 	assertIgnore := func(db, tbl string, boolCheck check.Checker) {
@@ -56,6 +58,7 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 	assertIgnore("ecom", "test", check.IsTrue)
 	assertIgnore("sns", "log", check.IsTrue)
 	assertIgnore("information_schema", "", check.IsTrue)
+	assertIgnore("tidb_cdc", "repl_mark_a_a", check.IsFalse)
 }
 
 func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {

@@ -23,6 +23,8 @@ function run() {
 
     # create table to upstream.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    # create an ineligible table to make sure cyclic replication works fine even with some ineligible tables.
+    run_sql "CREATE table test.ineligible(id int, val int);"
 
     # create table to downsteam.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
@@ -50,7 +52,8 @@ function run() {
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --addr "127.0.0.1:8301"
 
-    run_cdc_cli changefeed create --start-ts=$start_ts \
+    # Echo y to ignore ineligible tables
+    echo "y" | run_cdc_cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
         --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
         --cyclic-replica-id 1 \
@@ -62,7 +65,8 @@ function run() {
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --cyclic-replica-id 2 \
         --cyclic-filter-replica-ids 1 \
-        --cyclic-sync-ddl false
+        --cyclic-sync-ddl false \
+        --config $CUR/conf/only_test_simple.toml
 
     for i in $(seq 11 20); do {
         sqlup="START TRANSACTION;"
