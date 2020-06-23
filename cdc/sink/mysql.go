@@ -263,7 +263,7 @@ type sinkParams struct {
 	maxTxnRow    int
 	tidbTxnMode  string
 	changefeedID string
-	captureID    string
+	captureAddr  string
 }
 
 var defaultParams = &sinkParams{
@@ -325,8 +325,8 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 	if cid, ok := opts[OptChangefeedID]; ok {
 		params.changefeedID = cid
 	}
-	if cid, ok := opts[OptCaptureID]; ok {
-		params.captureID = cid
+	if caddr, ok := opts[OptCaptureAddr]; ok {
+		params.captureAddr = caddr
 	}
 	tz := util.TimezoneFromCtx(ctx)
 

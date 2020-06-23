@@ -282,10 +282,10 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 	} else {
 		role = "processor"
 	}
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
-	config.ClientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureID, changefeedID)
+	config.ClientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureAddr, changefeedID)
 	config.Version = version
 	config.Producer.Flush.MaxMessages = c.MaxMessageBytes
 	config.Metadata.Retry.Max = 20
