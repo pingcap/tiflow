@@ -30,14 +30,17 @@ import (
 	"go.uber.org/zap"
 )
 
+// AvroSchemaManager is used to register Avro Schemas to the Registry server,
+// look up local cache according to the table's name, and fetch from the Registry
+// in cache the local cache entry is missing.
 type AvroSchemaManager struct {
-	registryUrl string
+	registryURL string
 	cache       map[string]*schemaCacheEntry
 }
 
 type schemaCacheEntry struct {
-	tiSchemaId int64
-	registryId int64
+	tiSchemaID int64
+	registryID int64
 	codec      *goavro.Codec
 }
 
@@ -47,15 +50,16 @@ type registerRequest struct {
 }
 
 type registerResponse struct {
-	Id int `json:"id"`
+	ID int `json:"id"`
 }
 
 type lookupResponse struct {
 	Name       string `json:"name"`
-	RegistryId int64  `json:"id"`
+	RegistryID int64  `json:"id"`
 	Schema     string `json:"schema"`
 }
 
+// Create a new AvroSchemaManager
 func NewAvroSchemaManager(registryUrl string) (*AvroSchemaManager, error) {
 	registryUrl = strings.TrimRight(registryUrl, "/")
 	// Test connectivity to the Schema Registry
@@ -74,16 +78,17 @@ func NewAvroSchemaManager(registryUrl string) (*AvroSchemaManager, error) {
 		return nil, errors.New("Unexpected response from Schema Registry")
 	}
 
-	log.Info("Successfully tested connectivity to Schema Registry", zap.String("registryUrl", registryUrl))
+	log.Info("Successfully tested connectivity to Schema Registry", zap.String("registryURL", registryUrl))
 
 	return &AvroSchemaManager{
-		registryUrl: registryUrl,
+		registryURL: registryUrl,
 		cache:       make(map[string]*schemaCacheEntry, 1),
 	}, nil
 }
 
 var regexRemoveSpaces = regexp.MustCompile("\\s")
 
+// Register the latest schema for a table to the Registry, by passing in a Codec
 func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Codec) error {
 	// The Schema Registry expect the JSON to be without newline characters
 	reqBody := registerRequest{
@@ -92,7 +97,7 @@ func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Co
 	}
 	payload, err := json.Marshal(&reqBody)
 
-	uri := m.registryUrl + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName)) + "/versions"
+	uri := m.registryURL + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName)) + "/versions"
 	log.Debug("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
 	resp, err := http.Post(uri, "application/vnd.schemaregistry.v1+json", bytes.NewReader(payload))
@@ -125,36 +130,37 @@ func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Co
 		return errors.Annotate(err, "Failed to parse result from Registry")
 	}
 
-	if jsonResp.Id == 0 {
-		return errors.New(fmt.Sprintf("Illegal schema ID returned from Registry %d", jsonResp.Id))
+	if jsonResp.ID == 0 {
+		return errors.New(fmt.Sprintf("Illegal schema ID returned from Registry %d", jsonResp.ID))
 	}
 
 	log.Info("Registered schema successfully",
-		zap.Int("id", jsonResp.Id),
+		zap.Int("id", jsonResp.ID),
 		zap.String("uri", uri),
 		zap.ByteString("body", body))
 
 	return nil
 }
 
+// Lookup the latest schema and the Registry designated ID for that schema.
 // TiSchemaId is only used to trigger fetching from the Registry server.
-// Calling this method with a tiSchemaId other than that used last time will invariably trigger a RESTful request to the Registry.
+// Calling this method with a tiSchemaID other than that used last time will invariably trigger a RESTful request to the Registry.
 // Returns (codec, registry schema ID, error)
 func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaId int64) (*goavro.Codec, int64, error) {
 	key := tableNameToSchemaSubject(tableName)
-	if entry, exists := m.cache[key]; exists && entry.tiSchemaId == tiSchemaId {
+	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaId {
 		log.Info("Avro schema lookup cache hit",
 			zap.String("key", key),
-			zap.Int64("tiSchemaId", tiSchemaId),
-			zap.Int64("registryId", entry.registryId))
-		return entry.codec, entry.registryId, nil
+			zap.Int64("tiSchemaID", tiSchemaId),
+			zap.Int64("registryID", entry.registryID))
+		return entry.codec, entry.registryID, nil
 	}
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
-		zap.Int64("tiSchemaId", tiSchemaId))
+		zap.Int64("tiSchemaID", tiSchemaId))
 
-	uri := m.registryUrl + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName)) + "/versions/latest"
+	uri := m.registryURL + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName)) + "/versions/latest"
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
 
 	req, err := http.NewRequest("GET", uri, nil)
@@ -188,7 +194,7 @@ func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaId int64) 
 	if resp.StatusCode == 404 {
 		log.Warn("Specified schema not found in Registry",
 			zap.String("key", key),
-			zap.Int64("tiSchemaId", tiSchemaId))
+			zap.Int64("tiSchemaID", tiSchemaId))
 
 		return nil, 0, errors.New("Schema not found in Registry")
 	}
@@ -204,21 +210,21 @@ func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaId int64) 
 	if err != nil {
 		return nil, 0, errors.Annotate(err, "Creating Avro codec failed")
 	}
-	cacheEntry.registryId = jsonResp.RegistryId
-	cacheEntry.tiSchemaId = tiSchemaId
+	cacheEntry.registryID = jsonResp.RegistryID
+	cacheEntry.tiSchemaID = tiSchemaId
 	m.cache[tableNameToSchemaSubject(tableName)] = cacheEntry
 
 	log.Info("Avro schema lookup successful with cache miss",
-		zap.Int64("tiSchemaId", cacheEntry.tiSchemaId),
-		zap.Int64("registryId", cacheEntry.registryId),
+		zap.Int64("tiSchemaID", cacheEntry.tiSchemaID),
+		zap.Int64("registryID", cacheEntry.registryID),
 		zap.String("schema", cacheEntry.codec.Schema()))
 
-	return cacheEntry.codec, cacheEntry.registryId, nil
+	return cacheEntry.codec, cacheEntry.registryID, nil
 }
 
 // For testing only. Should be idempotent
 func (m *AvroSchemaManager) clearRegistry(tableName model.TableName) error {
-	uri := m.registryUrl + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName))
+	uri := m.registryURL + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName))
 	req, err := http.NewRequest("DELETE", uri, nil)
 	if err != nil {
 		log.Error("Could not construct request for clearRegistry", zap.String("uri", uri))
