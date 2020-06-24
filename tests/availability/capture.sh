@@ -72,7 +72,7 @@ function test_kill_capture() {
     ensure $MAX_RETRIES nonempty 'select id, val from test.availability1 where id=1 and val=1'
 
     # start the second capture
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "0.0.0.0:8301"
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301"
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
 
@@ -102,7 +102,7 @@ function test_hang_up_capture() {
     echo "owner id" $owner_id
 
     # start the second capture
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "0.0.0.0:8301"
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301"
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list 2>&1 | grep -v \"$owner_id\" | grep id"
     capture_id=$($CDC_BINARY cli capture list 2>&1 | awk -F '"' '/id/{print $4}' | grep -v "$owner_id")
 

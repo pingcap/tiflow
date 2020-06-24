@@ -58,9 +58,9 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "update_info_duration_seconds",
-			Help:      "The time it took to update sub change feed info.",
+			Help:      "The time it took to update sub changefeed info.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
-		}, []string{"captureID"})
+		}, []string{"capture"})
 	waitEventPrepareDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",

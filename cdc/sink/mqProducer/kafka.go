@@ -16,6 +16,7 @@ package mqProducer
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -268,6 +269,20 @@ func init() {
 	sarama.MaxRequestSize = 1024 * 1024 * 1024 // 1GB
 }
 
+var (
+	validClienID      *regexp.Regexp = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
+	commonInvalidChar *regexp.Regexp = regexp.MustCompile(`[\?:,"]`)
+)
+
+func kafkaClientID(role, captureAddr, changefeedID string) (string, error) {
+	clientID := fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureAddr, changefeedID)
+	clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
+	if !validClienID.MatchString(clientID) {
+		return "", errors.Errorf("invalid kafka client ID '%s'", clientID)
+	}
+	return clientID, nil
+}
+
 // NewSaramaConfig return the default config and set the according version and metrics
 func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error) {
 	config := sarama.NewConfig()
@@ -282,10 +297,13 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 	} else {
 		role = "processor"
 	}
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
-	config.ClientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureID, changefeedID)
+	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	config.Version = version
 	config.Producer.Flush.MaxMessages = c.MaxMessageBytes
 	config.Metadata.Retry.Max = 20

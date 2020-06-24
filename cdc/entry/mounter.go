@@ -160,9 +160,9 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 }
 
 func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMountDuration := mountDuration.WithLabelValues(captureID, changefeedID)
+	metricMountDuration := mountDuration.WithLabelValues(captureAddr, changefeedID)
 
 	for {
 		var pEvent *model.PolymorphicEvent
@@ -193,9 +193,9 @@ func (m *mounterImpl) Input() chan<- *model.PolymorphicEvent {
 }
 
 func (m *mounterImpl) collectMetrics(ctx context.Context) {
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureID, changefeedID)
+	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureAddr, changefeedID)
 
 	for {
 		select {

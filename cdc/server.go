@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -54,6 +55,16 @@ func (o *options) validateAndAdjust() error {
 	}
 	if o.advertiseAddr == "" {
 		o.advertiseAddr = o.addr
+	}
+	// Advertise address must be specified.
+	if idx := strings.LastIndex(o.advertiseAddr, ":"); idx >= 0 {
+		ip := net.ParseIP(o.advertiseAddr[:idx])
+		// Skip nil as it could be a domain name.
+		if ip != nil && ip.IsUnspecified() {
+			return errors.New("advertise address must be specified as a valid IP")
+		}
+	} else {
+		return errors.New("advertise address or address does not contain a port")
 	}
 	if o.gcTTL == 0 {
 		return errors.New("empty GC TTL is not allowed")
@@ -219,7 +230,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return err
 	}
 	s.capture = capture
-	ctx = util.PutCaptureIDInCtx(ctx, s.capture.info.ID)
+	ctx = util.PutCaptureAddrInCtx(ctx, s.capture.info.AdvertiseAddr)
 	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

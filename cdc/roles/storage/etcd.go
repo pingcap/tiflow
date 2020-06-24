@@ -56,8 +56,8 @@ type ProcessorTsEtcdRWriter struct {
 
 // NewProcessorTsEtcdRWriter returns a new `*ChangeFeedRWriter` instance
 func NewProcessorTsEtcdRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (*ProcessorTsEtcdRWriter, error) {
-	logger := log.L().With(zap.String("changefeed id", changefeedID)).
-		With(zap.String("capture id", captureID))
+	logger := log.L().With(zap.String("changefeedid", changefeedID)).
+		With(zap.String("captureid", captureID))
 
 	rw := &ProcessorTsEtcdRWriter{
 		etcdClient:   cli,
