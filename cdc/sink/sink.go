@@ -29,7 +29,7 @@ import (
 // Sink options keys
 const (
 	OptChangefeedID = "_changefeed_id"
-	OptCaptureID    = "_capture_id"
+	OptCaptureAddr  = "_capture_addr"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.

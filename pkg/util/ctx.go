@@ -22,25 +22,25 @@ type ctxKey string
 
 const (
 	ctxKeyTableID      = ctxKey("tableID")
-	ctxKeyCaptureID    = ctxKey("captureID")
+	ctxKeyCaptureAddr  = ctxKey("captureAddr")
 	ctxKeyChangefeedID = ctxKey("changefeedID")
 	ctxKeyIsOwner      = ctxKey("isOwner")
 	ctxKeyTimezone     = ctxKey("timezone")
 )
 
-// CaptureIDFromCtx returns a capture ID stored in the specified context.
+// CaptureAddrFromCtx returns a capture ID stored in the specified context.
 // It returns an empty string if there's no valid capture ID found.
-func CaptureIDFromCtx(ctx context.Context) string {
-	captureID, ok := ctx.Value(ctxKeyCaptureID).(string)
+func CaptureAddrFromCtx(ctx context.Context) string {
+	captureAddr, ok := ctx.Value(ctxKeyCaptureAddr).(string)
 	if !ok {
 		return ""
 	}
-	return captureID
+	return captureAddr
 }
 
-// PutCaptureIDInCtx returns a new child context with the specified capture ID stored.
-func PutCaptureIDInCtx(ctx context.Context, captureID string) context.Context {
-	return context.WithValue(ctx, ctxKeyCaptureID, captureID)
+// PutCaptureAddrInCtx returns a new child context with the specified capture ID stored.
+func PutCaptureAddrInCtx(ctx context.Context, captureAddr string) context.Context {
+	return context.WithValue(ctx, ctxKeyCaptureAddr, captureAddr)
 }
 
 // PutTimezoneInCtx returns a new child context with the given timezone
