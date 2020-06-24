@@ -70,7 +70,7 @@ var (
 
 type processor struct {
 	id           string
-	captureID    string
+	captureInfo  model.CaptureInfo
 	changefeedID string
 	changefeed   model.ChangeFeedInfo
 	limitter     *puller.BlurResourceLimitter
@@ -134,7 +134,8 @@ func newProcessor(
 	session *concurrency.Session,
 	changefeed model.ChangeFeedInfo,
 	sink sink.Sink,
-	changefeedID, captureID string,
+	changefeedID string,
+	captureInfo model.CaptureInfo,
 	checkpointTs uint64,
 	errCh chan error,
 ) (*processor, error) {
@@ -150,7 +151,7 @@ func newProcessor(
 	}
 	cdcEtcdCli := kv.NewCDCEtcdClient(etcdCli)
 
-	tsRWriter, err := fNewTsRWriter(cdcEtcdCli, changefeedID, captureID)
+	tsRWriter, err := fNewTsRWriter(cdcEtcdCli, changefeedID, captureInfo.ID)
 	if err != nil {
 		return nil, errors.Annotate(err, "failed to create ts RWriter")
 	}
@@ -176,7 +177,7 @@ func newProcessor(
 	p := &processor{
 		id:            uuid.New().String(),
 		limitter:      limitter,
-		captureID:     captureID,
+		captureInfo:   captureInfo,
 		changefeedID:  changefeedID,
 		changefeed:    changefeed,
 		pdCli:         pdCli,
@@ -265,7 +266,8 @@ func (p *processor) wait() {
 	err := p.wg.Wait()
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("processor wait error",
-			zap.String("captureID", p.captureID),
+			zap.String("captureid", p.captureInfo.ID),
+			zap.String("captureaddr", p.captureInfo.AdvertiseAddr),
 			zap.String("changefeedID", p.changefeedID),
 			zap.Error(err),
 		)
@@ -303,7 +305,9 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 			return inErr
 		})
-		updateInfoDuration.WithLabelValues(p.captureID).Observe(time.Since(t0Update).Seconds())
+		updateInfoDuration.
+			WithLabelValues(p.captureInfo.AdvertiseAddr).
+			Observe(time.Since(t0Update).Seconds())
 		if err != nil {
 			return errors.Annotate(err, "failed to update info")
 		}
@@ -324,8 +328,8 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		log.Info("Local resolved worker exited")
 	}()
 
-	resolvedTsGauge := resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID)
-	checkpointTsGauge := checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureID)
+	resolvedTsGauge := resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	checkpointTsGauge := checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 
 	for {
 		select {
@@ -398,7 +402,7 @@ func (p *processor) ddlPullWorker(ctx context.Context) error {
 
 func (p *processor) workloadWorker(ctx context.Context) error {
 	t := time.NewTicker(10 * time.Second)
-	err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureID, nil)
+	err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureInfo.ID, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -414,7 +418,7 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 			workload[table.id] = table.workload
 		}
 		p.stateMu.Unlock()
-		err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureID, &workload)
+		err := p.etcdCli.PutTaskWorkload(ctx, p.changefeedID, p.captureInfo.ID, &workload)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -450,7 +454,9 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.status.Tables)))
+	syncTableNumGauge.
+		WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).
+		Set(float64(len(p.status.Tables)))
 	err = updatePosition()
 	if err != nil {
 		return errors.Trace(err)
@@ -488,9 +494,9 @@ func (p *processor) removeTable(tableID int64) {
 	table.cancel()
 	delete(p.tables, tableID)
 	tableIDStr := strconv.FormatInt(tableID, 10)
-	tableInputChanSizeGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
-	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureID, tableIDStr)
-	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Dec()
+	tableInputChanSizeGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableIDStr)
+	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableIDStr)
+	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Dec()
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
@@ -710,7 +716,7 @@ func (p *processor) collectMetrics(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(defaultMetricInterval):
-			tableOutputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureID).Set(float64(len(p.output)))
+			tableOutputChanSizeGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Set(float64(len(p.output)))
 		}
 	}
 }
@@ -784,7 +790,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			}
 		}()
 		go func() {
-			resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureID, strconv.FormatInt(table.id, 10))
+			resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, strconv.FormatInt(table.id, 10))
 			for {
 				select {
 				case <-ctx.Done():
@@ -847,11 +853,11 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	if p.position.ResolvedTs > replicaInfo.StartTs {
 		p.position.ResolvedTs = replicaInfo.StartTs
 	}
-	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureID).Inc()
+	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
 func (p *processor) stop(ctx context.Context) error {
-	log.Info("stop processor", zap.String("id", p.id), zap.String("capture", p.captureID), zap.String("changefeed", p.changefeedID))
+	log.Info("stop processor", zap.String("id", p.id), zap.String("capture", p.captureInfo.AdvertiseAddr), zap.String("changefeed", p.changefeedID))
 	p.stateMu.Lock()
 	for _, tbl := range p.tables {
 		tbl.cancel()
@@ -859,13 +865,13 @@ func (p *processor) stop(ctx context.Context) error {
 	// mark tables share the same context with its original table, don't need to cancel
 	p.stateMu.Unlock()
 	atomic.StoreInt32(&p.stopped, 1)
-	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureID); err != nil {
+	if err := p.etcdCli.DeleteTaskPosition(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
 		return err
 	}
-	if err := p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureID); err != nil {
+	if err := p.etcdCli.DeleteTaskStatus(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
 		return err
 	}
-	if err := p.etcdCli.DeleteTaskWorkload(ctx, p.changefeedID, p.captureID); err != nil {
+	if err := p.etcdCli.DeleteTaskWorkload(ctx, p.changefeedID, p.captureInfo.ID); err != nil {
 		return err
 	}
 	return p.sink.Close()
@@ -881,7 +887,7 @@ func runProcessor(
 	session *concurrency.Session,
 	info model.ChangeFeedInfo,
 	changefeedID string,
-	captureID string,
+	captureInfo model.CaptureInfo,
 	checkpointTs uint64,
 ) (*processor, error) {
 	opts := make(map[string]string, len(info.Opts)+2)
@@ -889,7 +895,7 @@ func runProcessor(
 		opts[k] = v
 	}
 	opts[sink.OptChangefeedID] = changefeedID
-	opts[sink.OptCaptureID] = captureID
+	opts[sink.OptCaptureAddr] = captureInfo.AdvertiseAddr
 	ctx = util.PutChangefeedIDInCtx(ctx, changefeedID)
 	filter, err := filter.NewFilter(info.Config)
 	if err != nil {
@@ -902,29 +908,31 @@ func runProcessor(
 		cancel()
 		return nil, errors.Trace(err)
 	}
-	processor, err := newProcessor(ctx, session, info, sink, changefeedID, captureID, checkpointTs, errCh)
+	processor, err := newProcessor(ctx, session, info, sink, changefeedID, captureInfo, checkpointTs, errCh)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 	log.Info("start to run processor", zap.String("changefeed id", changefeedID))
 
-	processorErrorCounter.WithLabelValues(changefeedID, captureID).Add(0)
+	processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Add(0)
 	processor.Run(ctx)
 
 	go func() {
 		err := <-errCh
 		cause := errors.Cause(err)
 		if cause != nil && cause != context.Canceled && cause != model.ErrAdminStopProcessor {
-			processorErrorCounter.WithLabelValues(changefeedID, captureID).Inc()
+			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
 			log.Error("error on running processor",
-				zap.String("captureid", captureID),
+				zap.String("captureid", captureInfo.ID),
+				zap.String("captureaddr", captureInfo.AdvertiseAddr),
 				zap.String("changefeedid", changefeedID),
 				zap.String("processorid", processor.id),
 				zap.Error(err))
 		} else {
 			log.Info("processor exited",
-				zap.String("captureid", captureID),
+				zap.String("captureid", captureInfo.ID),
+				zap.String("captureaddr", captureInfo.AdvertiseAddr),
 				zap.String("changefeedid", changefeedID),
 				zap.String("processorid", processor.id))
 		}

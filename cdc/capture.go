@@ -214,11 +214,12 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error
 		zap.String("changefeedid", task.ChangeFeedID))
 
 	p, err := runProcessor(ctx, c.session, *cf, task.ChangeFeedID,
-		c.info.ID, task.CheckpointTS)
+		*c.info, task.CheckpointTS)
 	if err != nil {
 		log.Error("run processor failed",
 			zap.String("changefeedid", task.ChangeFeedID),
 			zap.String("captureid", c.info.ID),
+			zap.String("captureaddr", c.info.AdvertiseAddr),
 			zap.Error(err))
 		return nil, err
 	}
