@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -110,6 +109,7 @@ type processor struct {
 
 type tableInfo struct {
 	id          int64
+	name        string
 	resolvedTs  uint64
 	markTableID int64
 	mResolvedTs uint64
@@ -162,7 +162,7 @@ func newProcessor(
 	// so we set `needEncode` to false.
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
 	ddlPuller := puller.NewPuller(pdCli, kvStorage, checkpointTs, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false, limitter)
-	ctx = util.PutTableIDInCtx(ctx, 0)
+	ctx = util.PutTableInfoInCtx(ctx, 0, "")
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -213,7 +213,7 @@ func newProcessor(
 func (p *processor) Run(ctx context.Context) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
-	ddlPullerCtx := util.PutTableIDInCtx(cctx, 0)
+	ddlPullerCtx := util.PutTableInfoInCtx(cctx, 0, "")
 
 	wg.Go(func() error {
 		return p.positionWorker(cctx)
@@ -493,9 +493,7 @@ func (p *processor) removeTable(tableID int64) {
 
 	table.cancel()
 	delete(p.tables, tableID)
-	tableIDStr := strconv.FormatInt(tableID, 10)
-	tableInputChanSizeGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableIDStr)
-	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableIDStr)
+	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Dec()
 }
 
@@ -741,7 +739,7 @@ func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (stor
 func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
-	ctx = util.PutTableIDInCtx(ctx, tableID)
+	ctx = util.PutTableInfoInCtx(ctx, tableID, replicaInfo.Name)
 
 	log.Debug("Add table", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
 	if _, ok := p.tables[tableID]; ok {
@@ -752,6 +750,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	ctx, cancel := context.WithCancel(ctx)
 	table := &tableInfo{
 		id:         tableID,
+		name:       replicaInfo.Name,
 		resolvedTs: replicaInfo.StartTs,
 		cancel:     cancel,
 	}
@@ -790,7 +789,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			}
 		}()
 		go func() {
-			resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, strconv.FormatInt(table.id, 10))
+			resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
 			for {
 				select {
 				case <-ctx.Done():

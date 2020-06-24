@@ -323,14 +323,14 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			}
 			newTaskStatus[captureID] = status
 		}
+		schemaSnapshot := c.schema
 		for tableID, op := range operation {
 			var orphanMarkTableID model.TableID
+			tableName, found := schemaSnapshot.GetTableNameByID(tableID)
+			if !found {
+				continue
+			}
 			if c.cyclicEnabled {
-				schemaSnapshot := c.schema
-				tableName, found := schemaSnapshot.GetTableNameByID(tableID)
-				if !found {
-					continue
-				}
 				markTableSchameName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
 				orphanMarkTableID, found = schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
 				if !found {
@@ -342,7 +342,12 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 					continue
 				}
 			}
-			status.AddTable(tableID, &model.TableReplicaInfo{StartTs: op.BoundaryTs, MarkTableID: orphanMarkTableID}, op.BoundaryTs)
+			info := &model.TableReplicaInfo{
+				StartTs:     op.BoundaryTs,
+				MarkTableID: orphanMarkTableID,
+				Name:        tableName.String(),
+			}
+			status.AddTable(tableID, info, op.BoundaryTs)
 			addedTables[tableID] = struct{}{}
 		}
 	}
