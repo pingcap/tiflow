@@ -59,11 +59,11 @@ type lookupResponse struct {
 	Schema     string `json:"schema"`
 }
 
-// Create a new AvroSchemaManager
-func NewAvroSchemaManager(registryUrl string) (*AvroSchemaManager, error) {
-	registryUrl = strings.TrimRight(registryUrl, "/")
+// NewAvroSchemaManager creates a new AvroSchemaManager
+func NewAvroSchemaManager(registryURL string) (*AvroSchemaManager, error) {
+	registryURL = strings.TrimRight(registryURL, "/")
 	// Test connectivity to the Schema Registry
-	resp, err := http.Get(registryUrl)
+	resp, err := http.Get(registryURL)
 	if err != nil {
 		return nil, errors.Annotate(err, "Test connection to Schema Registry failed")
 	}
@@ -78,10 +78,10 @@ func NewAvroSchemaManager(registryUrl string) (*AvroSchemaManager, error) {
 		return nil, errors.New("Unexpected response from Schema Registry")
 	}
 
-	log.Info("Successfully tested connectivity to Schema Registry", zap.String("registryURL", registryUrl))
+	log.Info("Successfully tested connectivity to Schema Registry", zap.String("registryURL", registryURL))
 
 	return &AvroSchemaManager{
-		registryURL: registryUrl,
+		registryURL: registryURL,
 		cache:       make(map[string]*schemaCacheEntry, 1),
 	}, nil
 }
@@ -146,19 +146,19 @@ func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Co
 // TiSchemaId is only used to trigger fetching from the Registry server.
 // Calling this method with a tiSchemaID other than that used last time will invariably trigger a RESTful request to the Registry.
 // Returns (codec, registry schema ID, error)
-func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaId int64) (*goavro.Codec, int64, error) {
+func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaID int64) (*goavro.Codec, int64, error) {
 	key := tableNameToSchemaSubject(tableName)
-	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaId {
+	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
 		log.Info("Avro schema lookup cache hit",
 			zap.String("key", key),
-			zap.Int64("tiSchemaID", tiSchemaId),
+			zap.Int64("tiSchemaID", tiSchemaID),
 			zap.Int64("registryID", entry.registryID))
 		return entry.codec, entry.registryID, nil
 	}
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
-		zap.Int64("tiSchemaID", tiSchemaId))
+		zap.Int64("tiSchemaID", tiSchemaID))
 
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName)) + "/versions/latest"
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
@@ -194,7 +194,7 @@ func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaId int64) 
 	if resp.StatusCode == 404 {
 		log.Warn("Specified schema not found in Registry",
 			zap.String("key", key),
-			zap.Int64("tiSchemaID", tiSchemaId))
+			zap.Int64("tiSchemaID", tiSchemaID))
 
 		return nil, 0, errors.New("Schema not found in Registry")
 	}
@@ -211,7 +211,7 @@ func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaId int64) 
 		return nil, 0, errors.Annotate(err, "Creating Avro codec failed")
 	}
 	cacheEntry.registryID = jsonResp.RegistryID
-	cacheEntry.tiSchemaID = tiSchemaId
+	cacheEntry.tiSchemaID = tiSchemaID
 	m.cache[tableNameToSchemaSubject(tableName)] = cacheEntry
 
 	log.Info("Avro schema lookup successful with cache miss",
