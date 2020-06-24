@@ -203,8 +203,8 @@ func newProcessor(
 		tables: make(map[int64]*tableInfo),
 	}
 
-	for tableID, startTs := range p.status.Tables {
-		p.addTable(ctx, tableID, startTs)
+	for tableID, replicaInfo := range p.status.Tables {
+		p.addTable(ctx, tableID, replicaInfo)
 	}
 	return p, nil
 }
@@ -297,6 +297,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		err := retry.Run(500*time.Millisecond, 3, func() error {
 			inErr := p.updateInfo(ctx)
 			if inErr != nil {
+				log.Error("update info failed", zap.Error(inErr))
 				if p.isStopped() || errors.Cause(inErr) == model.ErrAdminStopProcessor {
 					return backoff.Permanent(errors.Trace(model.ErrAdminStopProcessor))
 				}
