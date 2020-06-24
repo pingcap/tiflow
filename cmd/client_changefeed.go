@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
@@ -218,7 +219,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 			}
 
 			ctx = util.PutTimezoneInCtx(ctx, tz)
-			ineligibleTables, allTables, err := verifyTables(ctx, cfg, startTs)
+			ineligibleTables, eligibleTables, err := verifyTables(ctx, cfg, startTs)
 			if err != nil {
 				return err
 			}
@@ -237,7 +238,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 					}
 				}
 			}
-			if cfg.Cyclic.IsEnabled() && !cyclic.IsTablesPaired(allTables) {
+			if cfg.Cyclic.IsEnabled() && !cyclic.IsTablesPaired(eligibleTables) {
 				return errors.New("normal tables and mark tables are not paired, " +
 					"please run `cdc cli changefeed cyclic create-marktables`")
 			}
@@ -370,15 +371,19 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 				}
 				startTs = oracle.ComposeTS(ts, logical)
 
-				_, allTables, err := verifyTables(ctx, cfg, startTs)
+				_, eligibleTables, err := verifyTables(ctx, cfg, startTs)
 				if err != nil {
 					return err
 				}
-				err = cyclic.CreateMarkTables(ctx, allTables, cyclicUpstreamDSN)
+				tables := make([]mark.TableName, len(eligibleTables))
+				for i := range eligibleTables {
+					tables[i] = &eligibleTables[i]
+				}
+				err = mark.CreateMarkTables(ctx, cyclicUpstreamDSN, tables...)
 				if err != nil {
 					return err
 				}
-				cmd.Printf("Create cyclic replication mark tables successfully! Total tables: %d\n", len(allTables))
+				cmd.Printf("Create cyclic replication mark tables successfully! Total tables: %d\n", len(eligibleTables))
 				return nil
 			},
 		})

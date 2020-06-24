@@ -266,8 +266,8 @@ func (p *processor) wait() {
 	err := p.wg.Wait()
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("processor wait error",
-			zap.Reflect("captureid", p.captureInfo.ID),
-			zap.Reflect("captureaddr", p.captureInfo.AdvertiseAddr),
+			zap.String("captureid", p.captureInfo.ID),
+			zap.String("captureaddr", p.captureInfo.AdvertiseAddr),
 			zap.String("changefeedID", p.changefeedID),
 			zap.Error(err),
 		)

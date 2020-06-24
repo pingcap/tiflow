@@ -30,7 +30,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/cyclic"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -44,14 +44,14 @@ import (
 
 // Owner manages the cdc cluster
 type Owner struct {
-	done                       chan struct{}
-	session                    *concurrency.Session
-	changeFeeds                map[model.ChangeFeedID]*changeFeed
-	failedFeeds                map[model.ChangeFeedID]struct{}
-	rebanlanceTigger           map[model.ChangeFeedID]bool
-	rebanlanceForAllChangefeed bool
-	manualScheduleCommand      map[model.ChangeFeedID][]*model.MoveTableJob
-	rebanlanceMu               sync.Mutex
+	done                      chan struct{}
+	session                   *concurrency.Session
+	changeFeeds               map[model.ChangeFeedID]*changeFeed
+	failedFeeds               map[model.ChangeFeedID]struct{}
+	rebalanceTigger           map[model.ChangeFeedID]bool
+	rebalanceForAllChangefeed bool
+	manualScheduleCommand     map[model.ChangeFeedID][]*model.MoveTableJob
+	rebalanceMu               sync.Mutex
 
 	cfRWriter ChangeFeedRWriter
 
@@ -87,7 +87,7 @@ func NewOwner(pdClient pd.Client, sess *concurrency.Session, gcTTL int64) (*Owne
 		changeFeeds:           make(map[model.ChangeFeedID]*changeFeed),
 		failedFeeds:           make(map[model.ChangeFeedID]struct{}),
 		captures:              make(map[model.CaptureID]*model.CaptureInfo),
-		rebanlanceTigger:      make(map[model.ChangeFeedID]bool),
+		rebalanceTigger:       make(map[model.ChangeFeedID]bool),
 		manualScheduleCommand: make(map[model.ChangeFeedID][]*model.MoveTableJob),
 		pdEndpoints:           endpoints,
 		cfRWriter:             cli,
@@ -102,9 +102,9 @@ func (o *Owner) addCapture(info *model.CaptureInfo) {
 	o.l.Lock()
 	o.captures[info.ID] = info
 	o.l.Unlock()
-	o.rebanlanceMu.Lock()
-	o.rebanlanceForAllChangefeed = true
-	o.rebanlanceMu.Unlock()
+	o.rebalanceMu.Lock()
+	o.rebalanceForAllChangefeed = true
+	o.rebalanceMu.Unlock()
 }
 
 func (o *Owner) removeCapture(info *model.CaptureInfo) {
@@ -215,7 +215,7 @@ func (o *Owner) newChangeFeed(
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
 		}
-		if info.Config.Cyclic.IsEnabled() && cyclic.IsMarkTable(table.Schema, table.Table) {
+		if info.Config.Cyclic.IsEnabled() && mark.IsMarkTable(table.Schema, table.Table) {
 			// skip the mark table if cyclic is enabled
 			continue
 		}
@@ -238,6 +238,10 @@ func (o *Owner) newChangeFeed(
 		tblInfo, ok := schemaSnap.TableByID(tid)
 		if !ok {
 			log.Warn("table not found for table ID", zap.Int64("tid", tid))
+			continue
+		}
+		if !tblInfo.IsEligible() {
+			log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
 			continue
 		}
 		if pi := tblInfo.GetPartitionInfo(); pi != nil {
@@ -286,17 +290,17 @@ func (o *Owner) newChangeFeed(
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
 		},
-		scheduler:          scheduler.NewScheduler(info.Config.Scheduler.Tp),
-		ddlState:           model.ChangeFeedSyncDML,
-		ddlExecutedTs:      checkpointTs,
-		targetTs:           info.GetTargetTs(),
-		taskStatus:         processorsInfos,
-		taskPositions:      taskPositions,
-		etcdCli:            o.etcdClient,
-		filter:             filter,
-		sink:               sink,
-		cyclicEnabled:      info.Config.Cyclic.IsEnabled(),
-		lastRebanlanceTime: time.Now(),
+		scheduler:         scheduler.NewScheduler(info.Config.Scheduler.Tp),
+		ddlState:          model.ChangeFeedSyncDML,
+		ddlExecutedTs:     checkpointTs,
+		targetTs:          info.GetTargetTs(),
+		taskStatus:        processorsInfos,
+		taskPositions:     taskPositions,
+		etcdCli:           o.etcdClient,
+		filter:            filter,
+		sink:              sink,
+		cyclicEnabled:     info.Config.Cyclic.IsEnabled(),
+		lastRebalanceTime: time.Now(),
 	}
 	return cf, nil
 }
@@ -401,30 +405,30 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 }
 
 func (o *Owner) balanceTables(ctx context.Context) error {
-	rebanlanceForAllChangefeed := false
-	o.rebanlanceMu.Lock()
-	if o.rebanlanceForAllChangefeed {
-		rebanlanceForAllChangefeed = true
-		o.rebanlanceForAllChangefeed = false
+	rebalanceForAllChangefeed := false
+	o.rebalanceMu.Lock()
+	if o.rebalanceForAllChangefeed {
+		rebalanceForAllChangefeed = true
+		o.rebalanceForAllChangefeed = false
 	}
-	o.rebanlanceMu.Unlock()
+	o.rebalanceMu.Unlock()
 	for id, changefeed := range o.changeFeeds {
-		rebanlanceNow := false
+		rebalanceNow := false
 		var scheduleCommands []*model.MoveTableJob
-		o.rebanlanceMu.Lock()
-		if r, exist := o.rebanlanceTigger[id]; exist {
-			rebanlanceNow = r
-			delete(o.rebanlanceTigger, id)
+		o.rebalanceMu.Lock()
+		if r, exist := o.rebalanceTigger[id]; exist {
+			rebalanceNow = r
+			delete(o.rebalanceTigger, id)
 		}
-		if rebanlanceForAllChangefeed {
-			rebanlanceNow = true
+		if rebalanceForAllChangefeed {
+			rebalanceNow = true
 		}
 		if c, exist := o.manualScheduleCommand[id]; exist {
 			scheduleCommands = c
 			delete(o.manualScheduleCommand, id)
 		}
-		o.rebanlanceMu.Unlock()
-		err := changefeed.tryBalance(ctx, o.captures, rebanlanceNow, scheduleCommands)
+		o.rebalanceMu.Unlock()
+		err := changefeed.tryBalance(ctx, o.captures, rebalanceNow, scheduleCommands)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -760,18 +764,18 @@ func (o *Owner) EnqueueJob(job model.AdminJob) error {
 	return nil
 }
 
-// TriggerRebanlance triggers the rebalance in the specified changefeed
-func (o *Owner) TriggerRebanlance(changefeedID model.ChangeFeedID) {
-	o.rebanlanceMu.Lock()
-	defer o.rebanlanceMu.Unlock()
-	o.rebanlanceTigger[changefeedID] = true
+// TriggerRebalance triggers the rebalance in the specified changefeed
+func (o *Owner) TriggerRebalance(changefeedID model.ChangeFeedID) {
+	o.rebalanceMu.Lock()
+	defer o.rebalanceMu.Unlock()
+	o.rebalanceTigger[changefeedID] = true
 	// TODO(leoppro) throw an error if the changefeed is not exist
 }
 
 // ManualSchedule moves the table from a capture to another capture
 func (o *Owner) ManualSchedule(changefeedID model.ChangeFeedID, to model.CaptureID, tableID model.TableID) {
-	o.rebanlanceMu.Lock()
-	defer o.rebanlanceMu.Unlock()
+	o.rebalanceMu.Lock()
+	defer o.rebalanceMu.Unlock()
 	o.manualScheduleCommand[changefeedID] = append(o.manualScheduleCommand[changefeedID], &model.MoveTableJob{
 		To:      to,
 		TableID: tableID,
