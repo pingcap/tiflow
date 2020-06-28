@@ -38,7 +38,7 @@ case-sensitive = false
 
 [filter]
 ignore-txn-start-ts = [1, 2]
-ddl-white-list = [1, 2]
+ddl-allow-list = [1, 2]
 rules = ['*.*', '!test.*']
 
 [mounter]
@@ -72,7 +72,7 @@ polling-time = 5
 	c.Assert(cfg.CaseSensitive, check.IsFalse)
 	c.Assert(cfg.Filter, check.DeepEquals, &config.FilterConfig{
 		IgnoreTxnStartTs: []uint64{1, 2},
-		DDLWhitelist:     []model.ActionType{1, 2},
+		DDLAllowlist:     []model.ActionType{1, 2},
 		Rules:            []string{"*.*", "!test.*"},
 	})
 	c.Assert(cfg.Mounter, check.DeepEquals, &config.MounterConfig{
