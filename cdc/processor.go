@@ -163,7 +163,6 @@ func newProcessor(
 	// so we set `needEncode` to false.
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
 	ddlPuller := puller.NewPuller(pdCli, kvStorage, checkpointTs, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false, limitter)
-	ctx = util.PutTableInfoInCtx(ctx, 0, "")
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -214,7 +213,8 @@ func newProcessor(
 func (p *processor) Run(ctx context.Context) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
-	ddlPullerCtx, ddlPullerCancel := context.WithCancel(util.PutTableInfoInCtx(cctx, 0, ""))
+	ddlPullerCtx, ddlPullerCancel :=
+		context.WithCancel(util.PutTableInfoInCtx(cctx, 0, "ticdc-processor-ddl"))
 	p.ddlPullerCancel = ddlPullerCancel
 
 	wg.Go(func() error {
