@@ -16,7 +16,6 @@ package sink
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -63,6 +62,7 @@ type lookupResponse struct {
 func NewAvroSchemaManager(registryURL string) (*AvroSchemaManager, error) {
 	registryURL = strings.TrimRight(registryURL, "/")
 	// Test connectivity to the Schema Registry
+	// TODO TLS support
 	resp, err := http.Get(registryURL)
 	if err != nil {
 		return nil, errors.Annotate(err, "Test connection to Schema Registry failed")
@@ -133,7 +133,7 @@ func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Co
 	}
 
 	if jsonResp.ID == 0 {
-		return errors.New(fmt.Sprintf("Illegal schema ID returned from Registry %d", jsonResp.ID))
+		return errors.Errorf("Illegal schema ID returned from Registry %d", jsonResp.ID)
 	}
 
 	log.Info("Registered schema successfully",
