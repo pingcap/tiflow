@@ -40,7 +40,7 @@ type AvroSchemaManager struct {
 
 type schemaCacheEntry struct {
 	tiSchemaID int64
-	registryID int64
+	registryID int
 	codec      *goavro.Codec
 }
 
@@ -55,7 +55,7 @@ type registerResponse struct {
 
 type lookupResponse struct {
 	Name       string `json:"name"`
-	RegistryID int64  `json:"id"`
+	RegistryID int    `json:"id"`
 	Schema     string `json:"schema"`
 }
 
@@ -148,13 +148,13 @@ func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Co
 // TiSchemaId is only used to trigger fetching from the Registry server.
 // Calling this method with a tiSchemaID other than that used last time will invariably trigger a RESTful request to the Registry.
 // Returns (codec, registry schema ID, error)
-func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaID int64) (*goavro.Codec, int64, error) {
+func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaID int64) (*goavro.Codec, int, error) {
 	key := tableNameToSchemaSubject(tableName)
 	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
 		log.Info("Avro schema lookup cache hit",
 			zap.String("key", key),
 			zap.Int64("tiSchemaID", tiSchemaID),
-			zap.Int64("registryID", entry.registryID))
+			zap.Int("registryID", entry.registryID))
 		return entry.codec, entry.registryID, nil
 	}
 
@@ -218,7 +218,7 @@ func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaID int64) 
 
 	log.Info("Avro schema lookup successful with cache miss",
 		zap.Int64("tiSchemaID", cacheEntry.tiSchemaID),
-		zap.Int64("registryID", cacheEntry.registryID),
+		zap.Int("registryID", cacheEntry.registryID),
 		zap.String("schema", cacheEntry.codec.Schema()))
 
 	return cacheEntry.codec, cacheEntry.registryID, nil

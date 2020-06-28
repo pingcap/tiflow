@@ -14,9 +14,13 @@
 package sink
 
 import (
+	"encoding/json"
+	"github.com/jarcoal/httpmock"
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"io/ioutil"
+	"net/http"
 )
 
 type AvroSchemaRegistrySuite struct {
@@ -24,14 +28,121 @@ type AvroSchemaRegistrySuite struct {
 
 var _ = check.Suite(&AvroSchemaRegistrySuite{})
 
+type mockRegistry struct {
+	subjects map[string]*mockRegistrySchema
+	newID    int
+}
+
+type mockRegistrySchema struct {
+	content string
+	version int
+	ID      int
+}
+
+func startRegistryHTTPMock(c *check.C) {
+	httpmock.Activate()
+
+	registry := mockRegistry{
+		subjects: make(map[string]*mockRegistrySchema),
+		newID:    1,
+	}
+
+	httpmock.RegisterResponder("GET", "http://127.0.0.1:8081", httpmock.NewStringResponder(200, "{}"))
+
+	httpmock.RegisterResponder("POST", `=~^http://127.0.0.1:8081/subjects/(.+)/versions`,
+		func(req *http.Request) (*http.Response, error) {
+			subject, err := httpmock.GetSubmatch(req, 1)
+			if err != nil {
+				return nil, err
+			}
+			reqBody, err := ioutil.ReadAll(req.Body)
+			if err != nil {
+				return nil, err
+			}
+			var reqData registerRequest
+			err = json.Unmarshal(reqBody, &reqData)
+			if err != nil {
+				return nil, err
+			}
+
+			c.Assert(reqData.SchemaType, check.Equals, "AVRO")
+
+			var respData registerResponse
+			item, exists := registry.subjects[subject]
+			if !exists {
+				item = &mockRegistrySchema{
+					content: reqData.Schema,
+					version: 0,
+					ID:      registry.newID,
+				}
+				registry.subjects[subject] = item
+				respData.ID = registry.newID
+			} else {
+				if item.content == reqData.Schema {
+					respData.ID = item.ID
+				} else {
+					item.content = reqData.Schema
+					item.version++
+					item.ID = registry.newID
+					respData.ID = registry.newID
+				}
+			}
+			registry.newID++
+			return httpmock.NewJsonResponse(200, &respData)
+		})
+
+	httpmock.RegisterResponder("GET", `=~^http://127.0.0.1:8081/subjects/(.+)/versions/latest`,
+		func(req *http.Request) (*http.Response, error) {
+			subject, err := httpmock.GetSubmatch(req, 1)
+			if err != nil {
+				return httpmock.NewStringResponse(500, "Internal Server Error"), err
+			}
+
+			item, exists := registry.subjects[subject]
+			if !exists {
+				return httpmock.NewStringResponse(404, ""), nil
+			}
+
+			var respData lookupResponse
+			respData.Schema = item.content
+			respData.Name = subject
+			respData.RegistryID = item.ID
+
+			return httpmock.NewJsonResponse(200, &respData)
+		})
+
+	httpmock.RegisterResponder("DELETE", `=~^http://127.0.0.1:8081/subjects/(.+)`,
+		func(req *http.Request) (*http.Response, error) {
+			subject, err := httpmock.GetSubmatch(req, 1)
+			if err != nil {
+				return nil, err
+			}
+
+			_, exists := registry.subjects[subject]
+			if !exists {
+				httpmock.NewStringResponse(404, "")
+			}
+
+			delete(registry.subjects, subject)
+			return httpmock.NewStringResponse(200, ""), nil
+		})
+
+}
+
+func stopRegistryHTTPMock() {
+	httpmock.DeactivateAndReset()
+}
+
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
+	startRegistryHTTPMock(c)
+
 	table := model.TableName{
 		Schema:    "testdb",
 		Table:     "test1",
 		Partition: 0,
 	}
 
-	manager, err := NewAvroSchemaManager("http://127.0.0.1:8081/")
+	manager, err := NewAvroSchemaManager("http://127.0.0.1:8081")
 	c.Assert(err, check.IsNil)
 
 	err = manager.ClearRegistry(table)
@@ -56,11 +167,11 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 	err = manager.Register(table, codec)
 	c.Assert(err, check.IsNil)
 
-	var id int64
+	var id int
 	for i := 0; i < 2; i++ {
 		_, id, err = manager.Lookup(table, 1)
 		c.Assert(err, check.IsNil)
-		c.Assert(id, check.Greater, int64(0))
+		c.Assert(id, check.Greater, 0)
 	}
 
 	codec, err = goavro.NewCodec(`{
@@ -90,24 +201,32 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(id2, check.Not(check.Equals), id)
 	c.Assert(codec.CanonicalSchema(), check.Equals, codec2.CanonicalSchema())
+
+	stopRegistryHTTPMock()
 }
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistryBad(c *check.C) {
+	startRegistryHTTPMock(c)
+
 	_, err := NewAvroSchemaManager("http://127.0.0.1:808")
 	c.Assert(err, check.NotNil)
 
 	_, err = NewAvroSchemaManager("https://127.0.0.1:8080")
 	c.Assert(err, check.NotNil)
+
+	stopRegistryHTTPMock()
 }
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
+	startRegistryHTTPMock(c)
+
 	table := model.TableName{
 		Schema:    "testdb",
 		Table:     "test1",
 		Partition: 0,
 	}
 
-	manager, err := NewAvroSchemaManager("http://127.0.0.1:8081/")
+	manager, err := NewAvroSchemaManager("http://127.0.0.1:8081")
 	c.Assert(err, check.IsNil)
 	for i := 0; i < 20; i++ {
 		err = manager.ClearRegistry(table)
@@ -138,4 +257,6 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 		err = manager.Register(table, codec)
 		c.Assert(err, check.IsNil)
 	}
+
+	stopRegistryHTTPMock()
 }
