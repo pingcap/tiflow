@@ -343,7 +343,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	errorFeeds := make(map[model.ChangeFeedID]model.RunningError)
+	errorFeeds := make(map[model.ChangeFeedID]*model.RunningError)
 	for changeFeedID, cfInfoRawValue := range details {
 		taskStatus, err := o.cfRWriter.GetAllTaskStatus(ctx, changeFeedID)
 		if err != nil {
@@ -355,15 +355,11 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 		if cf, exist := o.changeFeeds[changeFeedID]; exist {
 			cf.updateProcessorInfos(taskStatus, taskPositions)
-			for captureID, pos := range taskPositions {
+			for _, pos := range taskPositions {
 				// TODO: only record error of one capture,
 				// is it necessary to record all captures' error
-				if pos.Error != "" {
-					errorFeeds[changeFeedID] = model.RunningError{
-						ID:        captureID,
-						Error:     pos.Error,
-						Component: "processor",
-					}
+				if pos.Error != nil {
+					errorFeeds[changeFeedID] = pos.Error
 					break
 				}
 			}

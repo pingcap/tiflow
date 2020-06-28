@@ -28,7 +28,7 @@ type AdminJobType int
 type AdminJob struct {
 	CfID  string
 	Type  AdminJobType
-	Error RunningError
+	Error *RunningError
 }
 
 // All AdminJob types
@@ -62,7 +62,8 @@ type TaskPosition struct {
 	ResolvedTs uint64 `json:"resolved-ts"`
 	// The count of events were synchronized. This is updated by corresponding processor.
 	Count uint64 `json:"count"`
-	Error string `json:"error"`
+	// Error code when error happens
+	Error *RunningError `json:"error"`
 }
 
 // Marshal returns the json marshal format of a TaskStatus

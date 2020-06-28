@@ -33,7 +33,7 @@ var (
 
 // RunningError represents some running error from cdc components, such as processor.
 type RunningError struct {
-	ID        string `json:"id"`
-	Error     string `json:"error"`
-	Component string `json:"component"`
+	Addr    string `json:"addr"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }

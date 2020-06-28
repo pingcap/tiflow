@@ -940,7 +940,12 @@ func runProcessor(
 				zap.String("processorid", processor.id),
 				zap.Error(err))
 			// record error information in etcd
-			processor.position.Error = err.Error()
+			// TODO: design error codes for TiCDC
+			processor.position.Error = &model.RunningError{
+				Addr:    captureInfo.AdvertiseAddr,
+				Code:    "CDC-processor-1000",
+				Message: err.Error(),
+			}
 			err = processor.tsRWriter.WritePosition(ctx, processor.position)
 			if err != nil {
 				log.Warn("upload processor error failed", zap.Error(err))
