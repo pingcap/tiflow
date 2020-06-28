@@ -332,7 +332,9 @@ func newUpdateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Fix some fields that can't be updated.
 			info.CreateTime = old.CreateTime
+			info.AdminJobType = old.AdminJobType
 
 			changelog, err := diff.Diff(old, info)
 			if err != nil {

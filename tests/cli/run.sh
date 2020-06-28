@@ -55,7 +55,7 @@ case-sensitive = false
 worker-num = 4
 EOF
     run_cdc_cli changefeed update --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
-    changefeed_info=$(run_cdc cli changefeed query --changefeed-id $uuid 2>&1)
+    changefeed_info=$(run_cdc_cli changefeed query --changefeed-id $uuid 2>&1)
     if [[ ! $changefeed_info == *"\"case-sensitive\": false"* ]]; then
         echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
         exit 1
