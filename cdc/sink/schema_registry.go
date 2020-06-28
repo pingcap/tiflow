@@ -86,7 +86,7 @@ func NewAvroSchemaManager(registryURL string) (*AvroSchemaManager, error) {
 	}, nil
 }
 
-var regexRemoveSpaces = regexp.MustCompile("\\s")
+var regexRemoveSpaces = regexp.MustCompile(`\s`)
 
 // Register the latest schema for a table to the Registry, by passing in a Codec
 func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Codec) error {
@@ -96,7 +96,9 @@ func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Co
 		SchemaType: "AVRO",
 	}
 	payload, err := json.Marshal(&reqBody)
-
+	if err != nil {
+		return errors.Annotate(err, "Could not marshal request to the Registry")
+	}
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName)) + "/versions"
 	log.Debug("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
@@ -222,8 +224,9 @@ func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaID int64) 
 	return cacheEntry.codec, cacheEntry.registryID, nil
 }
 
-// For testing only. Should be idempotent
-func (m *AvroSchemaManager) clearRegistry(tableName model.TableName) error {
+// ClearRegistry clears the Registry subject for the given table. Should be idempotent.
+// Exported for testing.
+func (m *AvroSchemaManager) ClearRegistry(tableName model.TableName) error {
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName))
 	req, err := http.NewRequest("DELETE", uri, nil)
 	if err != nil {

@@ -22,8 +22,7 @@ import (
 type AvroSchemaRegistrySuite struct {
 }
 
-// This is temporarily disabled because testing environment is not ready on the CI
-// var _ = check.Suite(&AvroSchemaRegistrySuite{})
+var _ = check.Suite(&AvroSchemaRegistrySuite{})
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 	table := model.TableName{
@@ -35,7 +34,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 	manager, err := NewAvroSchemaManager("http://127.0.0.1:8081/")
 	c.Assert(err, check.IsNil)
 
-	err = manager.clearRegistry(table)
+	err = manager.ClearRegistry(table)
 	c.Assert(err, check.IsNil)
 
 	_, _, err = manager.Lookup(table, 1)
@@ -111,7 +110,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 	manager, err := NewAvroSchemaManager("http://127.0.0.1:8081/")
 	c.Assert(err, check.IsNil)
 	for i := 0; i < 20; i++ {
-		err = manager.clearRegistry(table)
+		err = manager.ClearRegistry(table)
 		c.Assert(err, check.IsNil)
 	}
 	codec, err := goavro.NewCodec(`{
