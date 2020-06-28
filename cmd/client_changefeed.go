@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
 )
 
@@ -322,16 +323,48 @@ func newUpdateChangefeedCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 
-			info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */)
+			old, err := cdcEtcdCli.GetChangeFeedInfo(ctx, changefeedID)
 			if err != nil {
 				return err
 			}
 
-			infoStr, err := info.Marshal()
+			info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */)
 			if err != nil {
 				return err
 			}
+			info.CreateTime = old.CreateTime
+
+			changelog, err := diff.Diff(old, info)
+			if err != nil {
+				return err
+			}
+			if len(changelog) == 0 {
+				cmd.Printf("changefeed config is the same with the old one, do nothing\n")
+				return nil
+			}
+			cmd.Printf("Diff of changefeed config:\n")
+			for _, change := range changelog {
+				cmd.Printf("%+v\n", change)
+			}
+
+			if !noConfirm {
+				cmd.Printf("Could you agree to apply changes above to changefeed [Y/N]\n")
+				var yOrN string
+				_, err = fmt.Scan(&yOrN)
+				if err != nil {
+					return err
+				}
+				if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+					cmd.Printf("No upadte to changefeed.\n")
+					return nil
+				}
+			}
+
 			err = cdcEtcdCli.SaveChangeFeedInfo(ctx, info, changefeedID)
+			if err != nil {
+				return err
+			}
+			infoStr, err := info.Marshal()
 			if err != nil {
 				return err
 			}
@@ -343,6 +376,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 	}
 	changefeedConfigVariables(command)
 	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
+	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to confirm update changefeed config")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command
