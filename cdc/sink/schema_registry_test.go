@@ -15,12 +15,13 @@ package sink
 
 import (
 	"encoding/json"
+	"io/ioutil"
+	"net/http"
+
 	"github.com/jarcoal/httpmock"
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
-	"io/ioutil"
-	"net/http"
 )
 
 type AvroSchemaRegistrySuite struct {

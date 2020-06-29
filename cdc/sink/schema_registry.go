@@ -102,7 +102,9 @@ func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Co
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName)) + "/versions"
 	log.Debug("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
-	resp, err := http.Post(uri, "application/vnd.schemaregistry.v1+json", bytes.NewReader(payload))
+	resp, err := httpRetry(func() (*http.Response, error) {
+		return http.Post(uri, "application/vnd.schemaregistry.v1+json", bytes.NewReader(payload))
+	})
 	if err != nil {
 		log.Warn("Failed to register schema to the Registry",
 			zap.String("uri", uri),
@@ -234,7 +236,9 @@ func (m *AvroSchemaManager) ClearRegistry(tableName model.TableName) error {
 		return err
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json, application/vnd.schemaregistry+json, application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpRetry(func() (*http.Response, error) {
+		return http.DefaultClient.Do(req)
+	})
 	if err != nil {
 		log.Error("Could not send delete request to clear Registry")
 		return err
@@ -245,7 +249,7 @@ func (m *AvroSchemaManager) ClearRegistry(tableName model.TableName) error {
 		return nil
 	}
 	if resp.StatusCode == 404 {
-		log.Info("Clearing Registry: topic does not exists, no-op", zap.String("uri", uri))
+		log.Info("Clearing Registry: topic does not exist, no-op", zap.String("uri", uri))
 		return nil
 	}
 
@@ -253,7 +257,30 @@ func (m *AvroSchemaManager) ClearRegistry(tableName model.TableName) error {
 	return err
 }
 
+func httpRetry(f func() (*http.Response, error)) (*http.Response, error) {
+	var (
+		err  error
+		resp *http.Response
+	)
+
+	for i := 0; i < 5; i++ {
+		resp, err = f()
+		if err != nil {
+			log.Warn("HTTP request failed", zap.String("msg", err.Error()))
+			continue
+		}
+
+		if resp.StatusCode >= 200 || resp.StatusCode < 300 {
+			break
+		}
+		log.Warn("HTTP server returned with error", zap.Int("status", resp.StatusCode))
+		_ = resp.Body.Close()
+	}
+
+	return resp, err
+}
+
 func tableNameToSchemaSubject(tableName model.TableName) string {
 	// We should guarantee unique names for subjects
-	return url.QueryEscape(tableName.Schema) + "%" + url.QueryEscape(tableName.Table)
+	return model.QuoteSchema(tableName.Schema, tableName.Table)
 }
