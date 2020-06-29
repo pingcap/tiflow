@@ -73,7 +73,7 @@ type mysqlSink struct {
 
 	// metrics used by mysql sink only
 	metricConflictDetectDurationHis prometheus.Observer
-	metricBucketSizeGauges          []prometheus.Gauge
+	metricBucketSizeCounters        []prometheus.Counter
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -414,9 +414,9 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 
 	metricConflictDetectDurationHis := conflictDetectDurationHis.WithLabelValues(
 		params.captureAddr, params.changefeedID)
-	metricBucketSizeGauges := make([]prometheus.Gauge, params.workerCount)
+	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
 	for i := 0; i < params.workerCount; i++ {
-		metricBucketSizeGauges[i] = bucketSizeGauge.WithLabelValues(
+		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
 			params.captureAddr, params.changefeedID, strconv.Itoa(i))
 	}
 
@@ -427,7 +427,7 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		filter:                          filter,
 		statistics:                      NewStatistics("mysql", opts),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
-		metricBucketSizeGauges:          metricBucketSizeGauges,
+		metricBucketSizeCounters:        metricBucketSizeCounters,
 	}
 
 	if val, ok := opts[mark.OptCyclicConfig]; ok {
@@ -453,7 +453,7 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, txnsGroup map[model.Tabl
 	errg, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < nWorkers; i++ {
 		i := i
-		workers[i] = newMySQLSinkWorker(s.params.maxTxnRow, i, s.metricBucketSizeGauges[i], s.execDMLs)
+		workers[i] = newMySQLSinkWorker(s.params.maxTxnRow, i, s.metricBucketSizeCounters[i], s.execDMLs)
 		errg.Go(func() error {
 			return workers[i].run(ctx)
 		})
@@ -499,13 +499,13 @@ type mysqlSinkWorker struct {
 	maxTxnRow        int
 	bucket           int
 	execDMLs         func(context.Context, []*model.RowChangedEvent, uint64, int) error
-	metricBucketSize prometheus.Gauge
+	metricBucketSize prometheus.Counter
 }
 
 func newMySQLSinkWorker(
 	maxTxnRow int,
 	bucket int,
-	metricBucketSize prometheus.Gauge,
+	metricBucketSize prometheus.Counter,
 	execDMLs func(context.Context, []*model.RowChangedEvent, uint64, int) error,
 ) *mysqlSinkWorker {
 	return &mysqlSinkWorker{
@@ -566,7 +566,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		}
 		toExecRows = toExecRows[:0]
 		w.txnWg.Add(-1 * txnNum)
-		w.metricBucketSize.Set(float64(txnNum))
+		w.metricBucketSize.Add(float64(txnNum))
 		txnNum = 0
 		lastExecTime = time.Now()
 		return nil

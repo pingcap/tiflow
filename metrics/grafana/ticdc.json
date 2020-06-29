@@ -3580,7 +3580,7 @@
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": true,
             "show": true,
@@ -3710,7 +3710,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_sink_bucket_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture,bucket)",
+              "expr": "sum(rate(ticdc_sink_bucket_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture,bucket)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,

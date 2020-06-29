@@ -49,8 +49,8 @@ var (
 			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 21),
 		}, []string{"capture", "changefeed"})
-	bucketSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	bucketSizeCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "bucket_size",
@@ -64,5 +64,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(execTxnHistogram)
 	registry.MustRegister(executionErrorCounter)
 	registry.MustRegister(conflictDetectDurationHis)
-	registry.MustRegister(bucketSizeGauge)
+	registry.MustRegister(bucketSizeCounter)
 }
