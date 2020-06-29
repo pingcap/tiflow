@@ -146,6 +146,7 @@ func (w *TaskWorkload) Marshal() (string, error) {
 type TableReplicaInfo struct {
 	StartTs     Ts      `json:"start-ts"`
 	MarkTableID TableID `json:"mark-table-id"`
+	Name        string  `json:"-"`
 }
 
 // TaskStatus records the task information of a capture
@@ -237,7 +238,11 @@ func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID, checkpoin
 		if ts < table.StartTs {
 			ts = table.StartTs
 		}
-		snap.Tables[tableID] = &TableReplicaInfo{StartTs: ts, MarkTableID: table.MarkTableID}
+		snap.Tables[tableID] = &TableReplicaInfo{
+			StartTs:     ts,
+			MarkTableID: table.MarkTableID,
+			Name:        table.Name,
+		}
 	}
 	return snap
 }

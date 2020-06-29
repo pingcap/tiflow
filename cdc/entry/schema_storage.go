@@ -99,8 +99,17 @@ func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*schemaSnap
 			tableInfo := WrapTableInfo(dbinfo.ID, dbinfo.Name.O, tableInfo)
 			snap.tables[tableInfo.ID] = tableInfo
 			snap.tableNameToID[model.TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
-			if !tableInfo.IsEligible() {
+			isEligible := tableInfo.IsEligible()
+			if !isEligible {
 				snap.ineligibleTableID[tableInfo.ID] = struct{}{}
+			}
+			if pi := tableInfo.GetPartitionInfo(); pi != nil {
+				for _, partition := range pi.Definitions {
+					snap.partitionTable[partition.ID] = tableInfo
+					if !isEligible {
+						snap.ineligibleTableID[partition.ID] = struct{}{}
+					}
+				}
 			}
 		}
 	}
@@ -364,7 +373,13 @@ func (ti *TableInfo) Clone() *TableInfo {
 func (s *schemaSnapshot) GetTableNameByID(id int64) (model.TableName, bool) {
 	tableInfo, ok := s.tables[id]
 	if !ok {
-		return model.TableName{}, false
+		// Try partition, it could be a partition table.
+		partInfo, ok := s.partitionTable[id]
+		if !ok {
+			return model.TableName{}, false
+		}
+		// Must exists an table that contains the partition.
+		tableInfo = s.tables[partInfo.ID]
 	}
 	return tableInfo.TableName, true
 }
