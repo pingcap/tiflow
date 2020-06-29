@@ -12,7 +12,9 @@ case-sensitive = true
 ignore-txn-start-ts = [1, 2]
 
 # 过滤器规则
+# 过滤规则语法： https://github.com/pingcap/tidb-tools/tree/master/pkg/table-filter#syntax
 # The rules of the filter
+# Filter rule syntax: https://github.com/pingcap/tidb-tools/tree/master/pkg/table-filter#syntax
 rules = ['*.*', '!test.*']
 
 [mounter]
@@ -29,6 +31,11 @@ dispatchers = [
 	{matcher = ['test1.*', 'test2.*'], dispatcher = "ts"},
 	{matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
 ]
+# 对于 MQ 类的 Sink，可以指定消息的协议格式
+# 协议目前支持 default, canal 两种，default 为 ticdc-open-protocol
+# For MQ Sinks, you can configure the protocol of the messages sending to MQ
+# Currently the protocol support default and canal
+protocol = "default"
 
 [cyclic-replication]
 # 是否开启环形复制
