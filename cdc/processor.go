@@ -25,6 +25,7 @@ import (
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/entry"
@@ -414,6 +415,9 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case <-t.C:
 		}
+		if p.isStopped() {
+			continue
+		}
 		workload := make(model.TaskWorkload, len(p.tables))
 		p.stateMu.Lock()
 		for _, table := range p.tables {
@@ -687,6 +691,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if row == nil {
 				continue
 			}
+			failpoint.Inject("ProcessorSyncResolvedError", func() {
+				failpoint.Return(errors.New("processor sync resolvd injected error"))
+			})
 			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
 				err := flushRowChangedEvents()
 				if err != nil {
@@ -931,6 +938,17 @@ func runProcessor(
 				zap.String("changefeedid", changefeedID),
 				zap.String("processorid", processor.id),
 				zap.Error(err))
+			// record error information in etcd
+			// TODO: design error codes for TiCDC
+			processor.position.Error = &model.RunningError{
+				Addr:    captureInfo.AdvertiseAddr,
+				Code:    "CDC-processor-1000",
+				Message: err.Error(),
+			}
+			err = processor.tsRWriter.WritePosition(ctx, processor.position)
+			if err != nil {
+				log.Warn("upload processor error failed", zap.Error(err))
+			}
 		} else {
 			log.Info("processor exited",
 				zap.String("captureid", captureInfo.ID),
