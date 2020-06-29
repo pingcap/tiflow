@@ -89,10 +89,12 @@ func runEServer(cmd *cobra.Command, args []string) error {
 
 func initLog() error {
 	// Init log.
+	cmdLogMu.Lock()
 	err := util.InitLogger(&util.Config{
 		File:  logFile,
 		Level: logLevel,
 	})
+	cmdLogMu.Unlock()
 	if err != nil {
 		fmt.Printf("init logger error %v", errors.ErrorStack(err))
 		os.Exit(1)

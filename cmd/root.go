@@ -45,7 +45,9 @@ func Execute() {
 	defaultContext = ctx
 	go func() {
 		sig := <-sc
+		cmdLogMu.Lock()
 		log.Info("got signal to exit", zap.Stringer("signal", sig))
+		cmdLogMu.Unlock()
 		cancel()
 	}()
 
