@@ -58,6 +58,7 @@ type ChangeFeedInfo struct {
 
 	Config *config.ReplicaConfig `json:"config"`
 	State  FeedState             `json:"state"`
+	Error  *RunningError         `json:"error"`
 }
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.

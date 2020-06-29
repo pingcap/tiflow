@@ -144,6 +144,10 @@ func (o *Owner) removeCapture(info *model.CaptureInfo) {
 			log.Warn("failed to delete task position",
 				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
+		if err := o.etcdClient.DeleteTaskWorkload(ctx, feed.id, info.ID); err != nil {
+			log.Warn("failed to delete task workload",
+				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
+		}
 	}
 }
 
@@ -339,6 +343,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	errorFeeds := make(map[model.ChangeFeedID]*model.RunningError)
 	for changeFeedID, cfInfoRawValue := range details {
 		taskStatus, err := o.cfRWriter.GetAllTaskStatus(ctx, changeFeedID)
 		if err != nil {
@@ -350,6 +355,14 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 		if cf, exist := o.changeFeeds[changeFeedID]; exist {
 			cf.updateProcessorInfos(taskStatus, taskPositions)
+			for _, pos := range taskPositions {
+				// TODO: only record error of one capture,
+				// is it necessary to record all captures' error
+				if pos.Error != nil {
+					errorFeeds[changeFeedID] = pos.Error
+					break
+				}
+			}
 			continue
 		}
 
@@ -401,6 +414,16 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 		o.changeFeeds[changeFeedID] = newCf
 	}
+	o.adminJobsLock.Lock()
+	for cfID, err := range errorFeeds {
+		job := model.AdminJob{
+			CfID:  cfID,
+			Type:  model.AdminStop,
+			Error: err,
+		}
+		o.adminJobs = append(o.adminJobs, job)
+	}
+	o.adminJobsLock.Unlock()
 	return nil
 }
 
@@ -543,6 +566,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				continue
 			}
 			cf.info.AdminJobType = model.AdminStop
+			cf.info.Error = job.Error
 			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
