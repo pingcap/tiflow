@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sink
+package codec
 
 import (
 	"encoding/json"
@@ -143,7 +143,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 		Partition: 0,
 	}
 
-	manager, err := NewAvroSchemaManager("http://127.0.0.1:8081")
+	manager, err := NewAvroSchemaManager("http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 
 	err = manager.ClearRegistry(table)
@@ -209,10 +209,10 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistryBad(c *check.C) {
 	startRegistryHTTPMock(c)
 
-	_, err := NewAvroSchemaManager("http://127.0.0.1:808")
+	_, err := NewAvroSchemaManager("http://127.0.0.1:808", "-value")
 	c.Assert(err, check.NotNil)
 
-	_, err = NewAvroSchemaManager("https://127.0.0.1:8080")
+	_, err = NewAvroSchemaManager("https://127.0.0.1:8080", "-value")
 	c.Assert(err, check.NotNil)
 
 	stopRegistryHTTPMock()
@@ -227,7 +227,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 		Partition: 0,
 	}
 
-	manager, err := NewAvroSchemaManager("http://127.0.0.1:8081")
+	manager, err := NewAvroSchemaManager("http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 	for i := 0; i < 20; i++ {
 		err = manager.ClearRegistry(table)

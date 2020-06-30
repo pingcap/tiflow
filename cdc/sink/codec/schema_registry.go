@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sink
+package codec
 
 import (
 	"bytes"
@@ -35,8 +35,9 @@ import (
 // look up local cache according to the table's name, and fetch from the Registry
 // in cache the local cache entry is missing.
 type AvroSchemaManager struct {
-	registryURL string
-	cache       map[string]*schemaCacheEntry
+	registryURL   string
+	cache         map[string]*schemaCacheEntry
+	subjectSuffix string
 }
 
 type schemaCacheEntry struct {
@@ -61,7 +62,7 @@ type lookupResponse struct {
 }
 
 // NewAvroSchemaManager creates a new AvroSchemaManager
-func NewAvroSchemaManager(registryURL string) (*AvroSchemaManager, error) {
+func NewAvroSchemaManager(registryURL string, subjectSuffix string) (*AvroSchemaManager, error) {
 	registryURL = strings.TrimRight(registryURL, "/")
 	// Test connectivity to the Schema Registry
 	// TODO TLS support
@@ -83,8 +84,9 @@ func NewAvroSchemaManager(registryURL string) (*AvroSchemaManager, error) {
 	log.Info("Successfully tested connectivity to Schema Registry", zap.String("registryURL", registryURL))
 
 	return &AvroSchemaManager{
-		registryURL: registryURL,
-		cache:       make(map[string]*schemaCacheEntry, 1),
+		registryURL:   registryURL,
+		cache:         make(map[string]*schemaCacheEntry, 1),
+		subjectSuffix: subjectSuffix,
 	}, nil
 }
 
@@ -101,7 +103,7 @@ func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Co
 	if err != nil {
 		return errors.Annotate(err, "Could not marshal request to the Registry")
 	}
-	uri := m.registryURL + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName)) + "/versions"
+	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(tableName)) + "/versions"
 	log.Debug("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
 	resp, err := httpRetry(func() (*http.Response, error) {
@@ -153,7 +155,7 @@ func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Co
 // Calling this method with a tiSchemaID other than that used last time will invariably trigger a RESTful request to the Registry.
 // Returns (codec, registry schema ID, error)
 func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaID int64) (*goavro.Codec, int, error) {
-	key := tableNameToSchemaSubject(tableName)
+	key := m.tableNameToSchemaSubject(tableName)
 	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
 		log.Info("Avro schema lookup cache hit",
 			zap.String("key", key),
@@ -166,7 +168,7 @@ func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaID int64) 
 		zap.String("key", key),
 		zap.Int64("tiSchemaID", tiSchemaID))
 
-	uri := m.registryURL + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName)) + "/versions/latest"
+	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(tableName)) + "/versions/latest"
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
 
 	req, err := http.NewRequest("GET", uri, nil)
@@ -218,7 +220,7 @@ func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaID int64) 
 	}
 	cacheEntry.registryID = jsonResp.RegistryID
 	cacheEntry.tiSchemaID = tiSchemaID
-	m.cache[tableNameToSchemaSubject(tableName)] = cacheEntry
+	m.cache[m.tableNameToSchemaSubject(tableName)] = cacheEntry
 
 	log.Info("Avro schema lookup successful with cache miss",
 		zap.Int64("tiSchemaID", cacheEntry.tiSchemaID),
@@ -231,7 +233,7 @@ func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaID int64) 
 // ClearRegistry clears the Registry subject for the given table. Should be idempotent.
 // Exported for testing.
 func (m *AvroSchemaManager) ClearRegistry(tableName model.TableName) error {
-	uri := m.registryURL + "/subjects/" + url.QueryEscape(tableNameToSchemaSubject(tableName))
+	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(tableName))
 	req, err := http.NewRequest("DELETE", uri, nil)
 	if err != nil {
 		log.Error("Could not construct request for clearRegistry", zap.String("uri", uri))
@@ -285,7 +287,7 @@ func httpRetry(f func() (*http.Response, error)) (*http.Response, error) {
 	return resp, err
 }
 
-func tableNameToSchemaSubject(tableName model.TableName) string {
+func (m *AvroSchemaManager) tableNameToSchemaSubject(tableName model.TableName) string {
 	// We should guarantee unique names for subjects
-	return model.QuoteSchema(tableName.Schema, tableName.Table)
+	return model.QuoteSchema(tableName.Schema, tableName.Table) + m.subjectSuffix
 }
