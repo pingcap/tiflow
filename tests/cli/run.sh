@@ -10,7 +10,7 @@ function check_changefeed_state() {
     changefeedid=$1
     expected=$2
     state=$(cdc cli changefeed query --changefeed-id $changefeedid --pd=http://$UP_PD_HOST:$UP_PD_PORT 2>&1|grep -oE "\"state\": \"[a-z]+\""|tr -d '" '|awk -F':' '{print $(NF)}')
-    if [ "state" != "$expected" ]; then
+    if [ "$state" != "$expected" ]; then
         echo "unexpected state $state, expected $expected"
         exit 1
     fi
