@@ -21,7 +21,9 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -263,7 +265,8 @@ func httpRetry(f func() (*http.Response, error)) (*http.Response, error) {
 		resp *http.Response
 	)
 
-	for i := 0; i < 5; i++ {
+	expBackoff := backoff.NewExponentialBackOff()
+	for {
 		resp, err = f()
 		if err != nil {
 			log.Warn("HTTP request failed", zap.String("msg", err.Error()))
@@ -275,6 +278,8 @@ func httpRetry(f func() (*http.Response, error)) (*http.Response, error) {
 		}
 		log.Warn("HTTP server returned with error", zap.Int("status", resp.StatusCode))
 		_ = resp.Body.Close()
+
+		time.Sleep(expBackoff.NextBackOff())
 	}
 
 	return resp, err
