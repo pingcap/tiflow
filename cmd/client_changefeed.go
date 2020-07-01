@@ -14,6 +14,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
 )
 
@@ -39,6 +41,7 @@ func newChangefeedCommand() *cobra.Command {
 		newListChangefeedCommand(),
 		newQueryChangefeedCommand(),
 		newCreateChangefeedCommand(),
+		newUpdateChangefeedCommand(),
 		newStatisticsChangefeedCommand(),
 		newCreateChangefeedCyclicCommand(),
 	)
@@ -158,6 +161,125 @@ func newQueryChangefeedCommand() *cobra.Command {
 	return command
 }
 
+func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate bool) (*model.ChangeFeedInfo, error) {
+	if isCreate {
+		if startTs == 0 {
+			ts, logical, err := pdCli.GetTS(ctx)
+			if err != nil {
+				return nil, err
+			}
+			startTs = oracle.ComposeTS(ts, logical)
+		}
+		if err := verifyStartTs(ctx, startTs, cdcEtcdCli); err != nil {
+			return nil, err
+		}
+	}
+
+	cfg := config.GetDefaultReplicaConfig()
+	if len(configFile) > 0 {
+		if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
+			return nil, err
+		}
+	}
+	if cyclicReplicaID != 0 || len(cyclicFilterReplicaIDs) != 0 {
+		if !(cyclicReplicaID != 0 && len(cyclicFilterReplicaIDs) != 0) {
+			return nil, errors.New("invaild cyclic config, please make sure using " +
+				"nonzero replica ID and specify filter replica IDs")
+		}
+		filter := make([]uint64, 0, len(cyclicFilterReplicaIDs))
+		for _, id := range cyclicFilterReplicaIDs {
+			filter = append(filter, uint64(id))
+		}
+		cfg.Cyclic = &config.CyclicConfig{
+			Enable:          true,
+			ReplicaID:       cyclicReplicaID,
+			FilterReplicaID: filter,
+			SyncDDL:         cyclicSyncDDL,
+			// TODO(neil) enable ID bucket.
+		}
+	}
+	info := &model.ChangeFeedInfo{
+		SinkURI:    sinkURI,
+		Opts:       make(map[string]string),
+		CreateTime: time.Now(),
+		StartTs:    startTs,
+		TargetTs:   targetTs,
+		Config:     cfg,
+		Engine:     model.SortEngine(sortEngine),
+		SortDir:    sortDir,
+		State:      model.StateNormal,
+	}
+
+	tz, err := util.GetTimezone(timezone)
+	if err != nil {
+		return nil, errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
+	}
+
+	if isCreate {
+		ctx = util.PutTimezoneInCtx(ctx, tz)
+		ineligibleTables, eligibleTables, err := verifyTables(ctx, cfg, startTs)
+		if err != nil {
+			return nil, err
+		}
+		if len(ineligibleTables) != 0 {
+			cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", ineligibleTables)
+			if !noConfirm {
+				cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
+				var yOrN string
+				_, err := fmt.Scan(&yOrN)
+				if err != nil {
+					return nil, err
+				}
+				if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+					cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
+					return nil, nil
+				}
+			}
+		}
+		if cfg.Cyclic.IsEnabled() && !cyclic.IsTablesPaired(eligibleTables) {
+			return nil, errors.New("normal tables and mark tables are not paired, " +
+				"please run `cdc cli changefeed cyclic create-marktables`")
+		}
+	}
+
+	for _, opt := range opts {
+		s := strings.SplitN(opt, "=", 2)
+		if len(s) <= 0 {
+			cmd.Printf("omit opt: %s", opt)
+			continue
+		}
+
+		var key string
+		var value string
+
+		key = s[0]
+		if len(s) > 1 {
+			value = s[1]
+		}
+		info.Opts[key] = value
+	}
+
+	err = verifySink(ctx, info.SinkURI, info.Config, info.Opts)
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+func changefeedConfigVariables(command *cobra.Command) {
+	command.PersistentFlags().Uint64Var(&startTs, "start-ts", 0, "Start ts of changefeed")
+	command.PersistentFlags().Uint64Var(&targetTs, "target-ts", 0, "Target ts of changefeed")
+	command.PersistentFlags().StringVar(&sinkURI, "sink-uri", "mysql://root:123456@127.0.0.1:3306/", "sink uri")
+	command.PersistentFlags().StringVar(&configFile, "config", "", "Path of the configuration file")
+	command.PersistentFlags().StringSliceVar(&opts, "opts", nil, "Extra options, in the `key=value` format")
+	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", "memory", "sort engine used for data sort")
+	command.PersistentFlags().StringVar(&sortDir, "sort-dir", ".", "directory used for file sort")
+	command.PersistentFlags().StringVar(&timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
+	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
+	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
+	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
+}
+
 func newCreateChangefeedCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "create",
@@ -166,105 +288,16 @@ func newCreateChangefeedCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
 			id := uuid.New().String()
-			if startTs == 0 {
-				ts, logical, err := pdCli.GetTS(ctx)
-				if err != nil {
-					return err
-				}
-				startTs = oracle.ComposeTS(ts, logical)
-			}
-			if err := verifyStartTs(ctx, startTs, cdcEtcdCli); err != nil {
-				return err
-			}
 
-			cfg := config.GetDefaultReplicaConfig()
-			if len(configFile) > 0 {
-				if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
-					return err
-				}
-			}
-			if cyclicReplicaID != 0 || len(cyclicFilterReplicaIDs) != 0 {
-				if !(cyclicReplicaID != 0 && len(cyclicFilterReplicaIDs) != 0) {
-					return errors.New(
-						"invaild cyclic config, please make sure using nonzero replica ID " +
-							"and specify filter replica IDs")
-				}
-				filter := make([]uint64, 0, len(cyclicFilterReplicaIDs))
-				for _, id := range cyclicFilterReplicaIDs {
-					filter = append(filter, uint64(id))
-				}
-				cfg.Cyclic = &config.CyclicConfig{
-					Enable:          true,
-					ReplicaID:       cyclicReplicaID,
-					FilterReplicaID: filter,
-					SyncDDL:         cyclicSyncDDL,
-					// TODO(neil) enable ID bucket.
-				}
-			}
-			info := &model.ChangeFeedInfo{
-				SinkURI:    sinkURI,
-				Opts:       make(map[string]string),
-				CreateTime: time.Now(),
-				StartTs:    startTs,
-				TargetTs:   targetTs,
-				Config:     cfg,
-				Engine:     model.SortEngine(sortEngine),
-				SortDir:    sortDir,
-				State:      model.StateNormal,
-			}
-
-			tz, err := util.GetTimezone(timezone)
-			if err != nil {
-				return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
-			}
-
-			ctx = util.PutTimezoneInCtx(ctx, tz)
-			ineligibleTables, eligibleTables, err := verifyTables(ctx, cfg, startTs)
+			info, err := verifyChangefeedParamers(ctx, cmd, true /* isCreate */)
 			if err != nil {
 				return err
 			}
-			if len(ineligibleTables) != 0 {
-				cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", ineligibleTables)
-				if !noConfirm {
-					cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
-					var yOrN string
-					_, err := fmt.Scan(&yOrN)
-					if err != nil {
-						return err
-					}
-					if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
-						cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
-						return nil
-					}
-				}
-			}
-			if cfg.Cyclic.IsEnabled() && !cyclic.IsTablesPaired(eligibleTables) {
-				return errors.New("normal tables and mark tables are not paired, " +
-					"please run `cdc cli changefeed cyclic create-marktables`")
+			if info == nil {
+				return nil
 			}
 
-			for _, opt := range opts {
-				s := strings.SplitN(opt, "=", 2)
-				if len(s) <= 0 {
-					cmd.Printf("omit opt: %s", opt)
-					continue
-				}
-
-				var key string
-				var value string
-
-				key = s[0]
-				if len(s) > 1 {
-					value = s[1]
-				}
-				info.Opts[key] = value
-			}
-
-			d, err := info.Marshal()
-			if err != nil {
-				return err
-			}
-			err = verifySink(ctx, info.SinkURI, info.Config, info.Opts)
+			infoStr, err := info.Marshal()
 			if err != nil {
 				return err
 			}
@@ -272,22 +305,81 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cmd.Printf("Create changefeed successfully!\nID: %s\nInfo: %s\n", id, d)
+			cmd.Printf("Create changefeed successfully!\nID: %s\nInfo: %s\n", id, infoStr)
 			return nil
 		},
 	}
-	command.PersistentFlags().Uint64Var(&startTs, "start-ts", 0, "Start ts of changefeed")
-	command.PersistentFlags().Uint64Var(&targetTs, "target-ts", 0, "Target ts of changefeed")
-	command.PersistentFlags().StringVar(&sinkURI, "sink-uri", "mysql://root:123456@127.0.0.1:3306/", "sink uri")
-	command.PersistentFlags().StringVar(&configFile, "config", "", "Path of the configuration file")
-	command.PersistentFlags().StringSliceVar(&opts, "opts", nil, "Extra options, in the `key=value` format")
+	changefeedConfigVariables(command)
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
-	command.PersistentFlags().StringVar(&sortEngine, "sort-engine", "memory", "sort engine used for data sort")
-	command.PersistentFlags().StringVar(&sortDir, "sort-dir", ".", "directory used for file sort")
-	command.PersistentFlags().StringVar(&timezone, "tz", "SYSTEM", "timezone used when checking sink uri (changefeed timezone is determined by cdc server)")
-	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
-	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
-	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
+
+	return command
+}
+
+func newUpdateChangefeedCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "update",
+		Short: "Update config of an existing replication task (changefeed)",
+		Long:  ``,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := defaultContext
+
+			old, err := cdcEtcdCli.GetChangeFeedInfo(ctx, changefeedID)
+			if err != nil {
+				return err
+			}
+
+			info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */)
+			if err != nil {
+				return err
+			}
+			// Fix some fields that can't be updated.
+			info.CreateTime = old.CreateTime
+			info.AdminJobType = old.AdminJobType
+
+			changelog, err := diff.Diff(old, info)
+			if err != nil {
+				return err
+			}
+			if len(changelog) == 0 {
+				cmd.Printf("changefeed config is the same with the old one, do nothing\n")
+				return nil
+			}
+			cmd.Printf("Diff of changefeed config:\n")
+			for _, change := range changelog {
+				cmd.Printf("%+v\n", change)
+			}
+
+			if !noConfirm {
+				cmd.Printf("Could you agree to apply changes above to changefeed [Y/N]\n")
+				var yOrN string
+				_, err = fmt.Scan(&yOrN)
+				if err != nil {
+					return err
+				}
+				if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+					cmd.Printf("No upadte to changefeed.\n")
+					return nil
+				}
+			}
+
+			err = cdcEtcdCli.SaveChangeFeedInfo(ctx, info, changefeedID)
+			if err != nil {
+				return err
+			}
+			infoStr, err := info.Marshal()
+			if err != nil {
+				return err
+			}
+			cmd.Printf("Update changefeed config successfully! "+
+				"Will take effect only if the changefeed has been paused before this command"+
+				"\nID: %s\nInfo: %s\n", changefeedID, infoStr)
+			return nil
+		},
+	}
+	changefeedConfigVariables(command)
+	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
+	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to confirm update changefeed config")
+	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
 	return command
 }

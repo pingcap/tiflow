@@ -30,6 +30,7 @@ require (
 	github.com/pingcap/tidb v1.1.0-beta.0.20200603101356-552e7709de0d
 	github.com/pingcap/tidb-tools v4.0.0-rc.2.0.20200521050818-6dd445d83fe0+incompatible
 	github.com/prometheus/client_golang v1.5.1
+	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
 	github.com/stretchr/testify v1.5.1
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20191211224106-0dc78a144b31

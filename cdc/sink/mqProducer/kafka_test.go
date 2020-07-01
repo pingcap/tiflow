@@ -26,15 +26,27 @@ var _ = check.Suite(&kafkaSuite{})
 func Test(t *testing.T) { check.TestingT(t) }
 
 func (s *kafkaSuite) TestClientID(c *check.C) {
-	_, err := kafkaClientID("owner", "domain:1234", "123-121-121-121")
-	c.Assert(err, check.IsNil)
-
-	_, err = kafkaClientID("owner", "127.0.0.1:1234", "123-121-121-121")
-	c.Assert(err, check.IsNil)
-
-	_, err = kafkaClientID("owner", "127.0.0.1:1234?:,\"", "123-121-121-121")
-	c.Assert(err, check.IsNil)
-
-	_, err = kafkaClientID("owner", "中文", "123-121-121-121")
-	c.Assert(err, check.NotNil)
+	testCases := []struct {
+		role         string
+		addr         string
+		changefeedID string
+		configuredID string
+		hasError     bool
+		expected     string
+	}{
+		{"owner", "domain:1234", "123-121-121-121", "", false, "TiCDC_sarama_producer_owner_domain_1234_123-121-121-121"},
+		{"owner", "127.0.0.1:1234", "123-121-121-121", "", false, "TiCDC_sarama_producer_owner_127.0.0.1_1234_123-121-121-121"},
+		{"owner", "127.0.0.1:1234?:,\"", "123-121-121-121", "", false, "TiCDC_sarama_producer_owner_127.0.0.1_1234_____123-121-121-121"},
+		{"owner", "中文", "123-121-121-121", "", true, ""},
+		{"owner", "127.0.0.1:1234", "123-121-121-121", "cdc-changefeed-1", false, "cdc-changefeed-1"},
+	}
+	for _, tc := range testCases {
+		id, err := kafkaClientID(tc.role, tc.addr, tc.changefeedID, tc.configuredID)
+		if tc.hasError {
+			c.Assert(err, check.NotNil)
+		} else {
+			c.Assert(err, check.IsNil)
+			c.Assert(id, check.Equals, tc.expected)
+		}
+	}
 }
