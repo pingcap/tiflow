@@ -89,7 +89,8 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 					zap.Uint64("emit row startTs", row.StartTs),
 					zap.Uint64("emit row commitTs", row.CommitTs),
 					zap.Uint64("last received row startTs", txns[len(txns)-1].StartTs),
-					zap.Uint64("last received row commitTs", txns[len(txns)-1].CommitTs))
+					zap.Uint64("last received row commitTs", txns[len(txns)-1].CommitTs),
+					zap.Reflect("lastRow", txns[len(txns)-1]), zap.Reflect("row", row))
 			}
 			txns = append(txns, &model.Txn{
 				StartTs:  row.StartTs,
