@@ -25,7 +25,7 @@ function prepare() {
 
     TOPIC_NAME="ticdc-simple-test-$RANDOM"
     case $SINK_TYPE in
-        kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
+        kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-client-id=cdc_test_simple";;
         mysql) ;&
         *) SINK_URI="mysql://root@127.0.0.1:3306/";;
     esac
