@@ -17,7 +17,6 @@ import (
 	"context"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -216,8 +215,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 	}
 	if status != nil {
 		resp.TSO = status.CheckpointTs
-		physical := oracle.ExtractPhysical(status.CheckpointTs)
-		tm := time.Unix(int64(physical/1000), int64(physical)%1000*time.Millisecond.Nanoseconds())
+		tm := oracle.GetTimeFromTS(status.CheckpointTs)
 		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
 	}
 	writeData(w, resp)
