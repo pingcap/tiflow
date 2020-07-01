@@ -80,7 +80,7 @@ func newSpanList() *skipList {
 
 func (l *skipList) randomHeight() int {
 	h := 1
-	for h < maxHeight && fastrand() < uint32(math.MaxUint32)/2 {
+	for h < maxHeight && fastrand() < uint32(math.MaxUint32)/4 {
 		h++
 	}
 	return h
