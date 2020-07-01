@@ -56,7 +56,8 @@ type pullerImpl struct {
 	tsTracker    frontier.Frontier
 	resolvedTs   uint64
 	// needEncode represents whether we need to encode a key when checking it is in span
-	needEncode bool
+	needEncode     bool
+	enableOldValue bool
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTs
@@ -67,6 +68,7 @@ func NewPuller(
 	checkpointTs uint64,
 	spans []regionspan.Span,
 	needEncode bool,
+	enableOldValue bool,
 	limitter *BlurResourceLimitter,
 ) *pullerImpl {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
@@ -74,15 +76,16 @@ func NewPuller(
 		log.Fatal("can't create puller for non-tikv storage")
 	}
 	p := &pullerImpl{
-		pdCli:        pdCli,
-		kvStorage:    tikvStorage,
-		checkpointTs: checkpointTs,
-		spans:        spans,
-		buffer:       makeMemBuffer(limitter),
-		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:    frontier.NewFrontier(spans...),
-		needEncode:   needEncode,
-		resolvedTs:   checkpointTs,
+		pdCli:          pdCli,
+		kvStorage:      tikvStorage,
+		checkpointTs:   checkpointTs,
+		spans:          spans,
+		buffer:         makeMemBuffer(limitter),
+		outputCh:       make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
+		tsTracker:      frontier.NewFrontier(spans...),
+		needEncode:     needEncode,
+		enableOldValue: enableOldValue,
+		resolvedTs:     checkpointTs,
 	}
 	return p
 }
@@ -93,7 +96,7 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	cli, err := kv.NewCDCClient(p.pdCli, p.kvStorage)
+	cli, err := kv.NewCDCClient(p.pdCli, p.kvStorage, p.enableOldValue)
 	if err != nil {
 		return errors.Annotate(err, "create cdc client failed")
 	}

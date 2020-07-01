@@ -59,9 +59,11 @@ type ResolvedSpan struct {
 type RawKVEntry struct {
 	OpType OpType
 	Key    []byte
-	// Nil fro delete type
-	Value   []byte
-	StartTs uint64
+	// nil for delete type
+	Value []byte
+	// nil for insert type
+	OldValue []byte
+	StartTs  uint64
 	// Commit or resolved TS
 	CRTs uint64
 }

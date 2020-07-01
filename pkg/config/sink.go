@@ -17,6 +17,7 @@ package config
 type SinkConfig struct {
 	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers"`
 	Protocol      string          `toml:"protocol" json:"protocol"`
+	OldValue      bool            `toml:"old-value" json:"old-value"`
 }
 
 // DispatchRule represents partition rule for a table

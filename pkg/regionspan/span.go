@@ -17,6 +17,7 @@ import (
 	"bytes"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
 )
@@ -53,11 +54,18 @@ func (s Span) Hack() Span {
 }
 
 // GetTableSpan returns the span to watch for the specified table
-func GetTableSpan(tableID int64, needEncode bool) Span {
+func GetTableSpan(tableID int64, needEncode bool, enableOldValue bool) Span {
 	sep := byte('_')
+	recordMarker := byte('r')
 	tablePrefix := tablecodec.GenTablePrefix(tableID)
-	start := append(tablePrefix, sep)
-	end := append(tablePrefix, sep+1)
+	var start, end kv.Key
+	if enableOldValue {
+		start = append(tablePrefix, sep, recordMarker)
+		end = append(tablePrefix, sep, recordMarker+1)
+	} else {
+		start = append(tablePrefix, sep)
+		end = append(tablePrefix, sep+1)
+	}
 	if needEncode {
 		start = codec.EncodeBytes(nil, start)
 		end = codec.EncodeBytes(nil, end)

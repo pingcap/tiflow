@@ -53,7 +53,8 @@ type baseKVEntry struct {
 
 type rowKVEntry struct {
 	baseKVEntry
-	Row map[int64]types.Datum
+	Row        map[int64]types.Datum
+	ChangedRow map[int64]types.Datum
 }
 
 type indexKVEntry struct {
@@ -123,10 +124,11 @@ type mounterImpl struct {
 	rawRowChangedChs []chan *model.PolymorphicEvent
 	tz               *time.Location
 	workerNum        int
+	enableOldValue   bool
 }
 
 // NewMounter creates a mounter
-func NewMounter(schemaStorage *SchemaStorage, workerNum int) Mounter {
+func NewMounter(schemaStorage *SchemaStorage, workerNum int, enableOldValue bool) Mounter {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
 	}
@@ -138,6 +140,7 @@ func NewMounter(schemaStorage *SchemaStorage, workerNum int) Mounter {
 		schemaStorage:    schemaStorage,
 		rawRowChangedChs: chs,
 		workerNum:        workerNum,
+		enableOldValue:   enableOldValue,
 	}
 }
 
@@ -240,7 +243,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		}
 		switch {
 		case bytes.HasPrefix(key, recordPrefix):
-			rowKV, err := m.unmarshalRowKVEntry(tableInfo, key, raw.Value, baseInfo)
+			rowKV, err := m.unmarshalRowKVEntry(tableInfo, key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -249,7 +252,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			}
 			return m.mountRowKVEntry(tableInfo, rowKV)
 		case bytes.HasPrefix(key, indexPrefix):
-			indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, baseInfo)
+			indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -267,7 +270,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	return row, err
 }
 
-func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, rawValue []byte, base baseKVEntry) (*rowKVEntry, error) {
+func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
 	key, recordID, err := decodeRecordID(restKey)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -279,16 +282,21 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	changedRow, err := decodeRow(rawOldValue, recordID, tableInfo, m.tz)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	base.RecordID = recordID
 	return &rowKVEntry{
 		baseKVEntry: base,
 		Row:         row,
+		ChangedRow:  changedRow,
 	}, nil
 }
 
-func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, base baseKVEntry) (*indexKVEntry, error) {
+func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*indexKVEntry, error) {
 	// skip set index KV
-	if !base.Delete {
+	if !base.Delete || m.enableOldValue {
 		return nil, nil
 	}
 
@@ -348,23 +356,14 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	return job, nil
 }
 
-func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
-
-	if row.Delete && !tableInfo.PKIsHandle {
-		return nil, nil
-	}
-
-	datumsNum := 1
-	if !row.Delete {
-		datumsNum = len(tableInfo.Columns)
-	}
-	values := make(map[string]*model.Column, datumsNum)
-	for index, colValue := range row.Row {
+func datum2Column(tableInfo *TableInfo, datums map[int64]types.Datum) (map[string]*model.Column, error) {
+	cols := make(map[string]*model.Column, len(datums))
+	for index, colValue := range datums {
 		colInfo, exist := tableInfo.GetColumnInfo(index)
 		if !exist {
 			return nil, errors.NotFoundf("column info, colID: %d", index)
 		}
-		if !row.Delete && !tableInfo.IsColWritable(colInfo) {
+		if !tableInfo.IsColWritable(colInfo) {
 			continue
 		}
 		colName := colInfo.Name.O
@@ -380,50 +379,74 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 			whereHandle := true
 			col.WhereHandle = &whereHandle
 		}
-		values[colName] = col
+		cols[colName] = col
+	}
+	for _, col := range tableInfo.Columns {
+		_, ok := cols[col.Name.O]
+		if !ok && tableInfo.IsColWritable(col) {
+			column := &model.Column{
+				Type:  col.Tp,
+				Value: getDefaultOrZeroValue(col),
+			}
+			if tableInfo.IsColumnUnique(col.ID) {
+				whereHandle := true
+				column.WhereHandle = &whereHandle
+			}
+			cols[col.Name.O] = column
+		}
+	}
+	return cols, nil
+}
+
+func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
+	if !m.enableOldValue && row.Delete && !tableInfo.PKIsHandle {
+		return nil, nil
+	}
+
+	var err error
+	var changedCols map[string]*model.Column
+	if len(row.ChangedRow) != 0 {
+		changedCols, err = datum2Column(tableInfo, row.ChangedRow)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	var cols map[string]*model.Column
+	if !row.Delete {
+		cols, err = datum2Column(tableInfo, row.Row)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	} else {
+		cols = changedCols
 	}
 	var partitionID int64
 	if tableInfo.GetPartitionInfo() != nil {
 		partitionID = row.PhysicalTableID
 	}
 
-	event := &model.RowChangedEvent{
+	schemaName := tableInfo.TableName.Schema
+	tableName := tableInfo.TableName.Table
+	return &model.RowChangedEvent{
 		StartTs:  row.StartTs,
 		CommitTs: row.CRTs,
 		RowID:    row.RecordID,
 		Table: &model.TableName{
-			Schema:    tableInfo.TableName.Schema,
-			Table:     tableInfo.TableName.Table,
+			Schema:    schemaName,
+			Table:     tableName,
 			Partition: partitionID,
 		},
-		IndieMarkCol: tableInfo.IndieMarkCol,
-	}
-
-	if !row.Delete {
-		for _, col := range tableInfo.Columns {
-			_, ok := values[col.Name.O]
-			if !ok && tableInfo.IsColWritable(col) {
-				column := &model.Column{
-					Type:  col.Tp,
-					Value: getDefaultOrZeroValue(col),
-				}
-				if tableInfo.IsColumnUnique(col.ID) {
-					whereHandle := true
-					column.WhereHandle = &whereHandle
-				}
-				values[col.Name.O] = column
-			}
-		}
-	}
-	event.Delete = row.Delete
-	event.Columns = values
-	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, quotes.QuoteSchema(event.Table.Schema, event.Table.Table))
-	return event, nil
+		IndieMarkCol:   tableInfo.IndieMarkCol,
+		Delete:         row.Delete,
+		Columns:        cols,
+		ChangedColumns: changedCols,
+		Keys:           genMultipleKeys(tableInfo.TableInfo, cols, quotes.QuoteSchema(schemaName, tableName)),
+	}, nil
 }
 
 func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry) (*model.RowChangedEvent, error) {
 	// skip set index KV
-	if !idx.Delete {
+	if !idx.Delete || m.enableOldValue {
 		return nil, nil
 	}
 
@@ -441,14 +464,14 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		return nil, errors.Trace(err)
 	}
 
-	values := make(map[string]*model.Column, len(idx.IndexValue))
+	cols := make(map[string]*model.Column, len(idx.IndexValue))
 	for i, idxCol := range indexInfo.Columns {
 		value, err := formatColVal(idx.IndexValue[i], tableInfo.Columns[idxCol.Offset].Tp)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		whereHandle := true
-		values[idxCol.Name.O] = &model.Column{
+		cols[idxCol.Name.O] = &model.Column{
 			Type:        tableInfo.Columns[idxCol.Offset].Tp,
 			WhereHandle: &whereHandle,
 			Value:       value,
@@ -464,8 +487,8 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		},
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,
-		Columns:      values,
-		Keys:         genMultipleKeys(tableInfo.TableInfo, values, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
+		Columns:      cols,
+		Keys:         genMultipleKeys(tableInfo.TableInfo, cols, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
 	}, nil
 }
 

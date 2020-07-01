@@ -70,9 +70,10 @@ type RowChangedEvent struct {
 
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
-	IndieMarkCol string             `json:"indie-mark-col"`
-	Columns      map[string]*Column `json:"columns"`
-	Keys         []string           `json:"keys"`
+	IndieMarkCol   string             `json:"indie-mark-col"`
+	Columns        map[string]*Column `json:"columns"`
+	ChangedColumns map[string]*Column `json:"changed-columns"`
+	Keys           []string           `json:"keys"`
 }
 
 // Column represents a column value in row changed event

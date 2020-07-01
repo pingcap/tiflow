@@ -241,18 +241,21 @@ type CDCClient struct {
 
 	regionCache *tikv.RegionCache
 	kvStorage   tikv.Storage
+
+	enableOldValue bool
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(pd pd.Client, kvStorage tikv.Storage) (c *CDCClient, err error) {
+func NewCDCClient(pd pd.Client, kvStorage tikv.Storage, enableOldValue bool) (c *CDCClient, err error) {
 	clusterID := pd.GetClusterID(context.Background())
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
 	c = &CDCClient{
-		clusterID:   clusterID,
-		pd:          pd,
-		kvStorage:   kvStorage,
-		regionCache: tikv.NewRegionCache(pd),
+		clusterID:      clusterID,
+		pd:             pd,
+		kvStorage:      kvStorage,
+		enableOldValue: enableOldValue,
+		regionCache:    tikv.NewRegionCache(pd),
 		mu: struct {
 			sync.Mutex
 			conns map[string]*connArray
@@ -594,6 +597,11 @@ MainLoop:
 
 			requestID := allocID()
 
+			extraOp := kvrpcpb.ExtraOp_Noop
+			if s.client.enableOldValue {
+				extraOp = kvrpcpb.ExtraOp_ReadOldValue
+			}
+
 			req := &cdcpb.ChangeDataRequest{
 				Header: &cdcpb.Header{
 					ClusterId: s.client.clusterID,
@@ -604,6 +612,7 @@ MainLoop:
 				CheckpointTs: sri.ts,
 				StartKey:     sri.span.Start,
 				EndKey:       sri.span.End,
+				ExtraOp:      extraOp,
 			}
 
 			// The receiver thread need to know the span, which is only known in the sender thread. So create the

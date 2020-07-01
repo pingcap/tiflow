@@ -58,6 +58,7 @@ type Protocol int
 const (
 	ProtocolDefault Protocol = iota
 	ProtocolCanal
+	ProtocolTiDBBinlog
 )
 
 // FromString converts the protocol from string to Protocol enum type
