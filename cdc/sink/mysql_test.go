@@ -22,6 +22,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 )
@@ -36,8 +37,8 @@ func newMySQLSink4Test(c *check.C) *mysqlSink {
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
 	return &mysqlSink{
-		unresolvedTxns: make(map[model.TableName][]*model.Txn),
-		filter:         f,
+		txnCache: common.NewUnresolvedTxnCache(),
+		filter:   f,
 	}
 }
 
@@ -245,76 +246,7 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 		ms := newMySQLSink4Test(c)
 		err := ms.EmitRowChangedEvents(ctx, tc.input...)
 		c.Assert(err, check.IsNil)
-		c.Assert(ms.unresolvedTxns, check.DeepEquals, tc.expected)
-	}
-}
-
-func (s MySQLSinkSuite) TestSplitResolvedTxn(c *check.C) {
-	testCases := []struct {
-		unresolvedTxns         map[model.TableName][]*model.Txn
-		resolvedTs             uint64
-		expectedResolvedTxns   map[model.TableName][]*model.Txn
-		expectedUnresolvedTxns map[model.TableName][]*model.Txn
-		expectedMinTs          uint64
-	}{{
-		unresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		resolvedTs:           5,
-		expectedResolvedTxns: map[model.TableName][]*model.Txn{},
-		expectedUnresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		expectedMinTs: 5,
-	}, {
-		unresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		resolvedTs: 23,
-		expectedResolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}},
-			{Table: "t2"}: {{CommitTs: 23}},
-		},
-		expectedUnresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		expectedMinTs: 11,
-	}, {
-		unresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		resolvedTs: 30,
-		expectedResolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		expectedUnresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 33}, {CommitTs: 34}},
-		},
-		expectedMinTs: 11,
-	}, {
-		unresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		resolvedTs: 40,
-		expectedResolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		expectedUnresolvedTxns: map[model.TableName][]*model.Txn{},
-		expectedMinTs:          11,
-	}}
-	for _, tc := range testCases {
-		minTs, resolvedTxns := splitResolvedTxn(tc.resolvedTs, tc.unresolvedTxns)
-		c.Assert(minTs, check.Equals, tc.expectedMinTs)
-		c.Assert(resolvedTxns, check.DeepEquals, tc.expectedResolvedTxns)
-		c.Assert(tc.unresolvedTxns, check.DeepEquals, tc.expectedUnresolvedTxns)
+		c.Assert(ms.txnCache.Unresolved(), check.DeepEquals, tc.expected)
 	}
 }
 

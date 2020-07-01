@@ -68,6 +68,10 @@ func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableName][]*
 	return resolvedTxnsMap
 }
 
+func (c *UnresolvedTxnCache) Unresolved() map[model.TableName][]*model.Txn {
+	return c.unresolvedTxns
+}
+
 func (c *UnresolvedTxnCache) UpdateCheckpoint(checkpointTs uint64) {
 	atomic.StoreUint64(&c.checkpointTs, checkpointTs)
 }
