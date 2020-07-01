@@ -48,6 +48,29 @@ function run() {
         exit 1
     fi
 
+    # Update changefeed
+cat - >"$WORK_DIR/changefeed.toml" <<EOF
+case-sensitive = false
+[mounter]
+worker-num = 4
+EOF
+    run_cdc_cli changefeed update --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
+    changefeed_info=$(run_cdc_cli changefeed query --changefeed-id $uuid 2>&1)
+    if [[ ! $changefeed_info == *"\"case-sensitive\": false"* ]]; then
+        echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+        exit 1
+    fi
+    if [[ ! $changefeed_info == *"\"worker-num\": 4"* ]]; then
+        echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+        exit 1
+    fi
+
+    jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
+    if [[ $jobtype != 1 ]]; then
+        echo "[$(date)] <<<<< unexpect admin job type! expect 1 got ${jobtype} >>>>>"
+        exit 1
+    fi
+
     # Resume changefeed
     run_cdc_cli changefeed --changefeed-id $uuid resume && sleep 3
     jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)

@@ -438,6 +438,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		var outputRows [][]*model.RowChangedEvent
 		var outputReplicaIDs []uint64
 		w := newMySQLSinkWorker(tc.maxTxnRow, 1,
+			bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
 			func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
 				outputRows = append(outputRows, events)
 				outputReplicaIDs = append(outputReplicaIDs, replicaID)
