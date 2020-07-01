@@ -37,6 +37,7 @@ type KafkaConfig struct {
 	Version         string
 	MaxMessageBytes int
 	Compression     string
+	ClientID        string
 }
 
 // DefaultKafkaConfig is the default Kafka configuration
@@ -274,13 +275,17 @@ var (
 	commonInvalidChar *regexp.Regexp = regexp.MustCompile(`[\?:,"]`)
 )
 
-func kafkaClientID(role, captureAddr, changefeedID string) (string, error) {
-	clientID := fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureAddr, changefeedID)
-	clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
+func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (clientID string, err error) {
+	if configuredClientID != "" {
+		clientID = configuredClientID
+	} else {
+		clientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureAddr, changefeedID)
+		clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
+	}
 	if !validClienID.MatchString(clientID) {
 		return "", errors.Errorf("invalid kafka client ID '%s'", clientID)
 	}
-	return clientID, nil
+	return
 }
 
 // NewSaramaConfig return the default config and set the according version and metrics
@@ -300,7 +305,7 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
-	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID)
+	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID, c.ClientID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
