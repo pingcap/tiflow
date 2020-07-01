@@ -694,7 +694,7 @@ func prepareReplace(schema, table string, cols map[string]*model.Column) (string
 
 func prepareDelete(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("DELETE FROM %s WHERE ", quotes.QuoteSchema(schema, table)))
+	builder.WriteString("DELETE FROM " + quotes.QuoteSchema(schema, table) + " WHERE")
 
 	colNames, wargs := whereSlice(cols)
 	args := make([]interface{}, 0, len(wargs))
