@@ -323,26 +323,34 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			}
 			newTaskStatus[captureID] = status
 		}
+		schemaSnapshot := c.schema
 		for tableID, op := range operation {
 			var orphanMarkTableID model.TableID
+			tableName, found := schemaSnapshot.GetTableNameByID(tableID)
+			if !found {
+				log.Warn("balance orphan tables delay, table not found",
+					zap.String("changefeed", c.id),
+					zap.Int64("tableID", tableID))
+				continue
+			}
 			if c.cyclicEnabled {
-				schemaSnapshot := c.schema
-				tableName, found := schemaSnapshot.GetTableNameByID(tableID)
-				if !found {
-					continue
-				}
 				markTableSchameName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
 				orphanMarkTableID, found = schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
 				if !found {
 					// Mark table is not created yet, skip and wait.
-					log.Info("balance table info delay, wait mark table",
+					log.Warn("balance table info delay, wait mark table",
 						zap.String("changefeed", c.id),
 						zap.Int64("tableID", tableID),
 						zap.String("markTableName", markTableTableName))
 					continue
 				}
 			}
-			status.AddTable(tableID, &model.TableReplicaInfo{StartTs: op.BoundaryTs, MarkTableID: orphanMarkTableID}, op.BoundaryTs)
+			info := &model.TableReplicaInfo{
+				StartTs:     op.BoundaryTs,
+				MarkTableID: orphanMarkTableID,
+				Name:        tableName.String(),
+			}
+			status.AddTable(tableID, info, op.BoundaryTs)
 			addedTables[tableID] = struct{}{}
 		}
 	}
