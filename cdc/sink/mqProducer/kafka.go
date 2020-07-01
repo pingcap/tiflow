@@ -305,7 +305,7 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
-	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID, config.ClientID)
+	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID, c.ClientID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
