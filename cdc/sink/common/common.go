@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package common
 
 import (
@@ -11,18 +24,21 @@ import (
 	"go.uber.org/zap"
 )
 
+// UnresolvedTxnCache caches unresolved txns
 type UnresolvedTxnCache struct {
 	unresolvedTxnsMu sync.Mutex
 	unresolvedTxns   map[model.TableName][]*model.Txn
 	checkpointTs     uint64
 }
 
+// NewUnresolvedTxnCache returns a new UnresolvedTxnCache
 func NewUnresolvedTxnCache() *UnresolvedTxnCache {
 	return &UnresolvedTxnCache{
 		unresolvedTxns: make(map[model.TableName][]*model.Txn),
 	}
 }
 
+// Append adds unresolved rows to cache
 func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowChangedEvent) {
 	c.unresolvedTxnsMu.Lock()
 	defer c.unresolvedTxnsMu.Unlock()
@@ -53,6 +69,7 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 	}
 }
 
+// Resolved returns resolved txns according to resolvedTs
 func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableName][]*model.Txn {
 	if resolvedTs <= atomic.LoadUint64(&c.checkpointTs) {
 		return nil
@@ -68,10 +85,12 @@ func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableName][]*
 	return resolvedTxnsMap
 }
 
+// Unresolved returns unresolved txns
 func (c *UnresolvedTxnCache) Unresolved() map[model.TableName][]*model.Txn {
 	return c.unresolvedTxns
 }
 
+// UpdateCheckpoint updates the checkpoint ts
 func (c *UnresolvedTxnCache) UpdateCheckpoint(checkpointTs uint64) {
 	atomic.StoreUint64(&c.checkpointTs, checkpointTs)
 }

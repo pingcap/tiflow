@@ -80,7 +80,7 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
 	resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
-	if resolvedTxnsMap == nil || len(resolvedTxnsMap) == 0 {
+	if len(resolvedTxnsMap) == 0 {
 		s.txnCache.UpdateCheckpoint(resolvedTs)
 		return nil
 	}
