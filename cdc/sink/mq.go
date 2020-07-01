@@ -333,6 +333,11 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		replicaConfig.Sink.Protocol = s
 	}
 
+	s = sinkURI.Query().Get("old-value")
+	if s != "" {
+		replicaConfig.Sink.OldValue = true
+	}
+
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
