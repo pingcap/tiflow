@@ -21,10 +21,12 @@ import (
 	"github.com/pingcap/errors"
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
-	canal "github.com/pingcap/ticdc/proto/canal"
+	parser_types `github.com/pingcap/parser/types`
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
+
+	"github.com/pingcap/ticdc/cdc/model"
+	canal "github.com/pingcap/ticdc/proto/canal"
 )
 
 // compatible with canal-1.1.4
@@ -126,6 +128,8 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 // build the Column in the canal RowData
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	sqlType := MysqlToJavaType(c.Type)
+	mysqlType := parser_types.TypeStr(c.Type)
+
 	// Some special cases handled in canal
 	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
 	switch c.Type {
@@ -149,28 +153,36 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 
 	isKey := c.WhereHandle != nil && *c.WhereHandle
 	isNull := c.Value == nil
+	length := 0
 	value := ""
 	if !isNull {
 		switch v := c.Value.(type) {
 		case int64:
 			value = strconv.FormatInt(v, 10)
+			length = 8
 		case uint64:
 			value = strconv.FormatUint(v, 10)
+			length = 8
 		case float32:
 			value = strconv.FormatFloat(float64(v), 'f', -1, 32)
+			length = 4
 		case float64:
 			value = strconv.FormatFloat(v, 'f', -1, 64)
+			length = 8
 		case string:
 			value = v
+			length = len(v)
 		case []byte:
 			decoded, err := b.bytesDecoder.Bytes(v)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 			value = string(decoded)
+			length = len(value)
 			sqlType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
 		default:
 			value = fmt.Sprintf("%v", v)
+			length = len(value)
 		}
 	}
 
@@ -181,6 +193,8 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		Updated:       updated,
 		IsNullPresent: &canal.Column_IsNull{IsNull: isNull},
 		Value:         value,
+		Length:        int32(length),
+		MysqlType:     mysqlType,
 	}
 	return canalColumn, nil
 }
