@@ -124,7 +124,7 @@ function run() {
         run_sql "${sqlthird}" ${THIRD_TIDB_HOST} ${THIRD_TIDB_PORT}
     } done;
 
-    sleep 500000
+    sleep 60
 
     check_sync_diff $WORK_DIR $CUR/conf/diff_config_up_down.toml
     check_sync_diff $WORK_DIR $CUR/conf/diff_config_down_third.toml
