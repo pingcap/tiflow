@@ -14,9 +14,11 @@
 package codec
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/jarcoal/httpmock"
 	"github.com/linkedin/goavro/v2"
@@ -134,6 +136,12 @@ func stopRegistryHTTPMock() {
 	httpmock.DeactivateAndReset()
 }
 
+func getTestingContext() context.Context {
+	// nolint:govet
+	ctx, _ := context.WithTimeout(context.Background(), time.Second*3)
+	return ctx
+}
+
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 	startRegistryHTTPMock(c)
 
@@ -143,14 +151,14 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 		Partition: 0,
 	}
 
-	manager, err := NewAvroSchemaManager("http://127.0.0.1:8081", "-value")
+	manager, err := NewAvroSchemaManager(getTestingContext(), "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 
-	err = manager.ClearRegistry(table)
+	err = manager.ClearRegistry(getTestingContext(), table)
 	c.Assert(err, check.IsNil)
 
-	_, _, err = manager.Lookup(table, 1)
-	c.Assert(err, check.ErrorMatches, `.*not\s+found.*`)
+	_, _, err = manager.Lookup(getTestingContext(), table, 1)
+	c.Assert(err, check.ErrorMatches, `.*cancelled.*`)
 
 	codec, err := goavro.NewCodec(`{
        "type": "record",
@@ -165,12 +173,12 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
      }`)
 	c.Assert(err, check.IsNil)
 
-	err = manager.Register(table, codec)
+	err = manager.Register(getTestingContext(), table, codec)
 	c.Assert(err, check.IsNil)
 
 	var id int
 	for i := 0; i < 2; i++ {
-		_, id, err = manager.Lookup(table, 1)
+		_, id, err = manager.Lookup(getTestingContext(), table, 1)
 		c.Assert(err, check.IsNil)
 		c.Assert(id, check.Greater, 0)
 	}
@@ -195,10 +203,10 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
           ]
      }`)
 	c.Assert(err, check.IsNil)
-	err = manager.Register(table, codec)
+	err = manager.Register(getTestingContext(), table, codec)
 	c.Assert(err, check.IsNil)
 
-	codec2, id2, err := manager.Lookup(table, 999)
+	codec2, id2, err := manager.Lookup(getTestingContext(), table, 999)
 	c.Assert(err, check.IsNil)
 	c.Assert(id2, check.Not(check.Equals), id)
 	c.Assert(codec.CanonicalSchema(), check.Equals, codec2.CanonicalSchema())
@@ -209,10 +217,10 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistryBad(c *check.C) {
 	startRegistryHTTPMock(c)
 
-	_, err := NewAvroSchemaManager("http://127.0.0.1:808", "-value")
+	_, err := NewAvroSchemaManager(getTestingContext(), "http://127.0.0.1:808", "-value")
 	c.Assert(err, check.NotNil)
 
-	_, err = NewAvroSchemaManager("https://127.0.0.1:8080", "-value")
+	_, err = NewAvroSchemaManager(getTestingContext(), "https://127.0.0.1:8080", "-value")
 	c.Assert(err, check.NotNil)
 
 	stopRegistryHTTPMock()
@@ -227,10 +235,10 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 		Partition: 0,
 	}
 
-	manager, err := NewAvroSchemaManager("http://127.0.0.1:8081", "-value")
+	manager, err := NewAvroSchemaManager(getTestingContext(), "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 	for i := 0; i < 20; i++ {
-		err = manager.ClearRegistry(table)
+		err = manager.ClearRegistry(getTestingContext(), table)
 		c.Assert(err, check.IsNil)
 	}
 	codec, err := goavro.NewCodec(`{
@@ -255,7 +263,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	for i := 0; i < 20; i++ {
-		err = manager.Register(table, codec)
+		err = manager.Register(getTestingContext(), table, codec)
 		c.Assert(err, check.IsNil)
 	}
 

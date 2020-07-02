@@ -15,6 +15,7 @@ package codec
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -62,11 +63,16 @@ type lookupResponse struct {
 }
 
 // NewAvroSchemaManager creates a new AvroSchemaManager
-func NewAvroSchemaManager(registryURL string, subjectSuffix string) (*AvroSchemaManager, error) {
+func NewAvroSchemaManager(ctx context.Context, registryURL string, subjectSuffix string) (*AvroSchemaManager, error) {
 	registryURL = strings.TrimRight(registryURL, "/")
 	// Test connectivity to the Schema Registry
 	// TODO TLS support
-	resp, err := http.Get(registryURL)
+	req, err := http.NewRequest("GET", registryURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+
 	if err != nil {
 		return nil, errors.Annotate(err, "Test connection to Schema Registry failed")
 	}
@@ -93,8 +99,8 @@ func NewAvroSchemaManager(registryURL string, subjectSuffix string) (*AvroSchema
 var regexRemoveSpaces = regexp.MustCompile(`\s`)
 
 // Register the latest schema for a table to the Registry, by passing in a Codec
-func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Codec) error {
-	// The Schema Registry expect the JSON to be without newline characters
+func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableName, codec *goavro.Codec) error {
+	// The Schema Registry expects the JSON to be without newline characters
 	reqBody := registerRequest{
 		Schema:     regexRemoveSpaces.ReplaceAllString(codec.Schema(), ""),
 		SchemaType: "AVRO",
@@ -106,17 +112,17 @@ func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Co
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(tableName)) + "/versions"
 	log.Debug("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
-	resp, err := httpRetry(func() (*http.Response, error) {
-		return http.Post(uri, "application/vnd.schemaregistry.v1+json", bytes.NewReader(payload))
-	})
+	req, err := http.NewRequest("POST", uri, bytes.NewReader(payload))
 	if err != nil {
-		log.Warn("Failed to register schema to the Registry",
-			zap.String("uri", uri),
-			zap.ByteString("payload", payload))
-		return errors.Annotate(err, "Failed to register schema to the Registry")
+		return err
 	}
-
+	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json")
+	resp, err := httpRetry(ctx, req)
+	if err != nil {
+		return err
+	}
 	defer resp.Body.Close()
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return errors.Annotate(err, "Failed to read response from Registry")
@@ -154,7 +160,7 @@ func (m *AvroSchemaManager) Register(tableName model.TableName, codec *goavro.Co
 // TiSchemaId is only used to trigger fetching from the Registry server.
 // Calling this method with a tiSchemaID other than that used last time will invariably trigger a RESTful request to the Registry.
 // Returns (codec, registry schema ID, error)
-func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaID int64) (*goavro.Codec, int, error) {
+func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableName, tiSchemaID int64) (*goavro.Codec, int, error) {
 	key := m.tableNameToSchemaSubject(tableName)
 	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
 		log.Info("Avro schema lookup cache hit",
@@ -177,14 +183,12 @@ func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaID int64) 
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json, application/vnd.schemaregistry+json, application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpRetry(ctx, req)
 	if err != nil {
-		log.Warn("Failed to query the registry",
-			zap.String("uri", uri))
-		return nil, 0, errors.Annotate(err, "Failed to query the registry")
+		return nil, 0, err
 	}
-
 	defer resp.Body.Close()
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, 0, errors.Annotate(err, "Failed to read response from Registry")
@@ -232,7 +236,7 @@ func (m *AvroSchemaManager) Lookup(tableName model.TableName, tiSchemaID int64) 
 
 // ClearRegistry clears the Registry subject for the given table. Should be idempotent.
 // Exported for testing.
-func (m *AvroSchemaManager) ClearRegistry(tableName model.TableName) error {
+func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.TableName) error {
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(tableName))
 	req, err := http.NewRequest("DELETE", uri, nil)
 	if err != nil {
@@ -240,51 +244,50 @@ func (m *AvroSchemaManager) ClearRegistry(tableName model.TableName) error {
 		return err
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json, application/vnd.schemaregistry+json, application/json")
-	resp, err := httpRetry(func() (*http.Response, error) {
-		return http.DefaultClient.Do(req)
-	})
-	if err != nil {
-		log.Error("Could not send delete request to clear Registry")
-		return err
-	}
-
+	resp, _ := httpRetry(ctx, req)
 	if resp.StatusCode == 200 {
 		log.Info("Clearing Registry successful")
 		return nil
 	}
-	if resp.StatusCode == 404 {
-		log.Info("Clearing Registry: topic does not exist, no-op", zap.String("uri", uri))
-		return nil
-	}
 
-	log.Error("Other error when clearing Registry")
+	log.Error("Error when clearing Registry", zap.Int("status", resp.StatusCode))
 	return err
 }
 
-func httpRetry(f func() (*http.Response, error)) (*http.Response, error) {
+func httpRetry(ctx context.Context, r *http.Request) (*http.Response, error) {
 	var (
 		err  error
 		resp *http.Response
 	)
 
 	expBackoff := backoff.NewExponentialBackOff()
+	expBackoff.MaxInterval = time.Second * 30
 	for {
-		resp, err = f()
+		resp, err = http.DefaultClient.Do(r.WithContext(ctx))
+
 		if err != nil {
 			log.Warn("HTTP request failed", zap.String("msg", err.Error()))
-			continue
+			goto checkCtx
 		}
 
-		if resp.StatusCode >= 200 || resp.StatusCode < 300 {
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			break
 		}
 		log.Warn("HTTP server returned with error", zap.Int("status", resp.StatusCode))
 		_ = resp.Body.Close()
 
+	checkCtx:
+		select {
+		case <-ctx.Done():
+			return nil, errors.New("HTTP retry cancelled")
+
+		default:
+		}
+
 		time.Sleep(expBackoff.NextBackOff())
 	}
 
-	return resp, err
+	return resp, nil
 }
 
 func (m *AvroSchemaManager) tableNameToSchemaSubject(tableName model.TableName) string {
