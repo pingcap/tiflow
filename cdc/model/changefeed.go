@@ -58,9 +58,10 @@ type ChangeFeedInfo struct {
 	Engine       SortEngine   `json:"sort-engine"`
 	SortDir      string       `json:"sort-dir"`
 
-	Config *config.ReplicaConfig `json:"config"`
-	State  FeedState             `json:"state"`
-	Error  *RunningError         `json:"error"`
+	Config   *config.ReplicaConfig `json:"config"`
+	State    FeedState             `json:"state"`
+	ErrorHis []int64               `json:"history"`
+	Error    *RunningError         `json:"error"`
 }
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.

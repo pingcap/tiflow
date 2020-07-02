@@ -34,6 +34,17 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// ErrorHistoryGCInterval represents how long we keep error record in changefeed info
+	ErrorHistoryGCInterval = time.Minute * 10
+	// ErrorHistoryGCInterval represents time window for failure check
+	ErrorHistoryCheckInterval = time.Minute * 2
+	// ErrorHistoryThreshold represents failure upper limit in time window, which
+	// means if the changefeed fails more than ErrorHistoryThreshold time, owner
+	// will dealy to initialize it.
+	ErrorHistoryThreshold = 5
+)
+
 type tableIDMap = map[model.TableID]struct{}
 
 // OwnerDDLHandler defines the ddl handler for Owner
