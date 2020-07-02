@@ -37,11 +37,13 @@ import (
 const (
 	// ErrorHistoryGCInterval represents how long we keep error record in changefeed info
 	ErrorHistoryGCInterval = time.Minute * 10
+
 	// ErrorHistoryGCInterval represents time window for failure check
 	ErrorHistoryCheckInterval = time.Minute * 2
-	// ErrorHistoryThreshold represents failure upper limit in time window, which
-	// means if the changefeed fails more than ErrorHistoryThreshold time, owner
-	// will dealy to initialize it.
+
+	// ErrorHistoryThreshold represents failure upper limit in time window.
+	// Before a changefeed is initialized, check the the failure count of this
+	// changefeed, if it is less than ErrorHistoryThreshold, then initialize it.
 	ErrorHistoryThreshold = 5
 )
 
