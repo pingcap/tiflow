@@ -60,7 +60,8 @@ var (
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client
 
-	interact bool
+	interact   bool
+	simplified bool
 
 	changefeedID string
 	captureID    string
