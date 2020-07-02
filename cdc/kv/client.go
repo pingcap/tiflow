@@ -93,7 +93,7 @@ type regionErrorInfo struct {
 type regionFeedState struct {
 	sri           singleRegionInfo
 	requestID     uint64
-	regionEventCh chan *cdcpb.Event
+	regionEventCh chan []*cdcpb.Event
 	stopped       int32
 }
 
@@ -101,7 +101,7 @@ func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState
 	return &regionFeedState{
 		sri:           sri,
 		requestID:     requestID,
-		regionEventCh: make(chan *cdcpb.Event, 16),
+		regionEventCh: make(chan []*cdcpb.Event, 256),
 		stopped:       0,
 	}
 }
@@ -377,7 +377,7 @@ func newEventFeedSession(
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
 
-	notifyTxnStatusCh := make(chan notifyTxnStatusTask, 16)
+	notifyTxnStatusCh := make(chan notifyTxnStatusTask, 10000)
 	return &eventFeedSession{
 		client:                     client,
 		regionCache:                regionCache,
@@ -765,6 +765,8 @@ func (s *eventFeedSession) tryNotifyTxnStatus(
 			},
 		},
 	}
+	log.Info("notify txn status to region", zap.Uint64("regionID", regionID), zap.Int("txns", len(txnStatuses)))
+	log.Info("send notify txn status req", zap.Stringer("req", req))
 	err = stream.Send(req)
 	if err != nil {
 		return errors.Trace(err)
@@ -999,8 +1001,15 @@ func (s *eventFeedSession) receiveFromStream(
 	// Each region has it's own goroutine to handle its messages. `regionStates` stores states of these regions.
 	regionStates := make(map[uint64]*regionFeedState)
 
+	captureID := util.CaptureIDFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	metricReceiveTiKV := singleEventFeedChDuration.WithLabelValues("receive_tikv", captureID, changefeedID)
+	metricSendToRegion := singleEventFeedChDuration.WithLabelValues("send_to_region", captureID, changefeedID)
+
 	for {
+		timer := time.Now()
 		cevent, err := stream.Recv()
+		metricReceiveTiKV.Observe(time.Since(timer).Seconds())
 
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
@@ -1029,7 +1038,19 @@ func (s *eventFeedSession) receiveFromStream(
 			return nil
 		}
 
-		for _, event := range cevent.Events {
+		// for _, event := range cevent.Events {
+		var batchStart = 0
+		var batchEnd = 0
+		for batchEnd < len(cevent.Events) {
+			batchStart = batchEnd
+			batchEnd++
+			for batchEnd < len(cevent.Events) &&
+				cevent.Events[batchStart].RequestId == cevent.Events[batchEnd].RequestId {
+				batchEnd++
+			}
+			eventBatch := cevent.Events[batchStart:batchEnd]
+			event := eventBatch[0]
+
 			state, ok := regionStates[event.RegionId]
 			// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
 			// is allocated while holding the range lock. Therefore the requestID is always incrementing. If a region
@@ -1082,8 +1103,10 @@ func (s *eventFeedSession) receiveFromStream(
 				continue
 			}
 
+			timer := time.Now()
 			select {
-			case state.regionEventCh <- event:
+			case state.regionEventCh <- eventBatch:
+				metricSendToRegion.Observe(time.Since(timer).Seconds())
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -1101,7 +1124,7 @@ func (s *eventFeedSession) singleEventFeed(
 	regionID uint64,
 	span regionspan.Span,
 	checkpointTs uint64,
-	receiverCh <-chan *cdcpb.Event,
+	receiverCh <-chan []*cdcpb.Event,
 ) (uint64, error) {
 	captureID := util.CaptureIDFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
@@ -1115,6 +1138,12 @@ func (s *eventFeedSession) singleEventFeed(
 	metricSendEventCommitCounter := sendEventCounter.WithLabelValues("commit", captureID, changefeedID)
 	metricSendEventCommittedCounter := sendEventCounter.WithLabelValues("committed", captureID, changefeedID)
 
+	metricsReceive := singleEventFeedChDuration.WithLabelValues("recv", captureID, changefeedID)
+	metricsSendCommit := singleEventFeedChDuration.WithLabelValues("commit", captureID, changefeedID)
+	metricsSendCommitted := singleEventFeedChDuration.WithLabelValues("committed", captureID, changefeedID)
+	metricsSendResolve := singleEventFeedChDuration.WithLabelValues("resolvets", captureID, changefeedID)
+	metricsProcess := singleEventFeedChDuration.WithLabelValues("process", captureID, changefeedID)
+
 	initialized := false
 
 	matcher := newMatcher()
@@ -1124,8 +1153,17 @@ func (s *eventFeedSession) singleEventFeed(
 	startFeedTime := time.Now()
 	var lastResolvedTs uint64
 
+	eventProcessTimeValid := false
+	var eventProcessTimer time.Time
+
 	for {
-		var event *cdcpb.Event
+		if eventProcessTimeValid {
+			metricsProcess.Observe(time.Since(eventProcessTimer).Seconds())
+			eventProcessTimeValid = false
+		}
+
+		timer := time.Now()
+		var eventBatch []*cdcpb.Event
 		var ok bool
 		select {
 		case <-ctx.Done():
@@ -1149,173 +1187,185 @@ func (s *eventFeedSession) singleEventFeed(
 			if sinceLastResolvedTs > time.Second*20 {
 				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 					zap.Uint64("regionID", regionID), zap.Reflect("span", span), zap.Duration("duration", sinceLastResolvedTs), zap.Uint64("lastResolvedTs", lastResolvedTs))
-				maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
-				err = s.resolveLock(ctx, regionID, maxVersion)
-				if err != nil {
-					log.Warn("failed to resolve lock", zap.Uint64("regionID", regionID), zap.Error(err))
-					continue
-				}
+				// maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
+				// err = s.resolveLock(ctx, regionID, maxVersion)
+				// if err != nil {
+				// 	log.Warn("failed to resolve lock", zap.Uint64("regionID", regionID), zap.Error(err))
+				// 	continue
+				// }
 			}
 			continue
-		case event, ok = <-receiverCh:
+		case eventBatch, ok = <-receiverCh:
 		}
 		if !ok {
 			log.Debug("singleEventFeed receiver closed")
 			return checkpointTs, nil
 		}
 
-		if event == nil {
+		if eventBatch == nil {
 			log.Debug("singleEventFeed closed by error")
 			return checkpointTs, errors.New("single event feed aborted")
 		}
 		lastReceivedEventTime = time.Now()
+		metricsReceive.Observe(time.Since(timer).Seconds())
 
-		metricEventSize.Observe(float64(event.Event.Size()))
-		switch x := event.Event.(type) {
-		case *cdcpb.Event_Entries_:
-			for _, entry := range x.Entries.GetEntries() {
-				switch entry.Type {
-				case cdcpb.Event_INITIALIZED:
-					if time.Since(startFeedTime) > 20*time.Second {
-						log.Warn("The time cost of initializing is too mush",
-							zap.Duration("timeCost", time.Since(startFeedTime)),
-							zap.Uint64("regionID", regionID))
-					}
-					metricPullEventInitializedCounter.Inc()
-					initialized = true
-					for _, cacheEntry := range matcher.cachedCommit {
-						value, ok := matcher.matchRow(cacheEntry)
-						if !ok {
-							// when cdc receives a commit log without a corresponding
-							// prewrite log before initialized, a committed log  with
-							// the same key and start-ts must have been received.
-							log.Info("ignore commit event without prewrite",
-								zap.Binary("key", cacheEntry.GetKey()),
-								zap.Uint64("ts", cacheEntry.GetStartTs()))
-							continue
+		eventProcessTimeValid = true
+		eventProcessTimer = time.Now()
+
+		for _, event := range eventBatch {
+			metricEventSize.Observe(float64(event.Event.Size()))
+			switch x := event.Event.(type) {
+			case *cdcpb.Event_Entries_:
+				for _, entry := range x.Entries.GetEntries() {
+					switch entry.Type {
+					case cdcpb.Event_INITIALIZED:
+						if time.Since(startFeedTime) > 20*time.Second {
+							log.Warn("The time cost of initializing is too mush",
+								zap.Duration("timeCost", time.Since(startFeedTime)),
+								zap.Uint64("regionID", regionID))
 						}
-						revent, err := assembleCommitEvent(cacheEntry, value)
-						if err != nil {
-							return checkpointTs, errors.Trace(err)
+						metricPullEventInitializedCounter.Inc()
+						initialized = true
+						for _, cacheEntry := range matcher.cachedCommit {
+							value, ok := matcher.matchRow(cacheEntry)
+							if !ok {
+								// when cdc receives a commit log without a corresponding
+								// prewrite log before initialized, a committed log  with
+								// the same key and start-ts must have been received.
+								log.Info("ignore commit event without prewrite",
+									zap.Binary("key", cacheEntry.GetKey()),
+									zap.Uint64("ts", cacheEntry.GetStartTs()))
+								continue
+							}
+							revent, err := assembleCommitEvent(cacheEntry, value)
+							if err != nil {
+								return checkpointTs, errors.Trace(err)
+							}
+							select {
+							case s.eventCh <- revent:
+								metricSendEventCommitCounter.Inc()
+							case <-ctx.Done():
+								return checkpointTs, errors.Trace(ctx.Err())
+							}
 						}
+						matcher.clearCacheCommit()
+					case cdcpb.Event_COMMITTED:
+						metricPullEventCommittedCounter.Inc()
+						var opType model.OpType
+						switch entry.GetOpType() {
+						case cdcpb.Event_Row_DELETE:
+							opType = model.OpTypeDelete
+						case cdcpb.Event_Row_PUT:
+							opType = model.OpTypePut
+						default:
+							return checkpointTs, errors.Errorf("unknown tp: %v", entry.GetOpType())
+						}
+
+						revent := &model.RegionFeedEvent{
+							Val: &model.RawKVEntry{
+								OpType:  opType,
+								Key:     entry.Key,
+								Value:   entry.GetValue(),
+								StartTs: entry.StartTs,
+								CRTs:    entry.CommitTs,
+							},
+						}
+
+						if entry.CommitTs <= lastResolvedTs && initialized {
+							log.Fatal("The CommitTs must be greater than the resolvedTs",
+								zap.String("Event Type", "COMMITTED"),
+								zap.Uint64("CommitTs", entry.CommitTs),
+								zap.Uint64("resolvedTs", lastResolvedTs),
+								zap.Uint64("regionID", regionID))
+						}
+						timer := time.Now()
 						select {
 						case s.eventCh <- revent:
-							metricSendEventCommitCounter.Inc()
+							metricSendEventCommittedCounter.Inc()
+							metricsSendCommitted.Observe(time.Since(timer).Seconds())
 						case <-ctx.Done():
 							return checkpointTs, errors.Trace(ctx.Err())
 						}
-					}
-					matcher.clearCacheCommit()
-				case cdcpb.Event_COMMITTED:
-					metricPullEventCommittedCounter.Inc()
-					var opType model.OpType
-					switch entry.GetOpType() {
-					case cdcpb.Event_Row_DELETE:
-						opType = model.OpTypeDelete
-					case cdcpb.Event_Row_PUT:
-						opType = model.OpTypePut
-					default:
-						return checkpointTs, errors.Errorf("unknown tp: %v", entry.GetOpType())
-					}
-
-					revent := &model.RegionFeedEvent{
-						Val: &model.RawKVEntry{
-							OpType:  opType,
-							Key:     entry.Key,
-							Value:   entry.GetValue(),
-							StartTs: entry.StartTs,
-							CRTs:    entry.CommitTs,
-						},
-					}
-
-					if entry.CommitTs <= lastResolvedTs && initialized {
-						log.Fatal("The CommitTs must be greater than the resolvedTs",
-							zap.String("Event Type", "COMMITTED"),
-							zap.Uint64("CommitTs", entry.CommitTs),
-							zap.Uint64("resolvedTs", lastResolvedTs),
-							zap.Uint64("regionID", regionID))
-					}
-					select {
-					case s.eventCh <- revent:
-						metricSendEventCommittedCounter.Inc()
-					case <-ctx.Done():
-						return checkpointTs, errors.Trace(ctx.Err())
-					}
-				case cdcpb.Event_PREWRITE:
-					metricPullEventPrewriteCounter.Inc()
-					matcher.putPrewriteRow(entry)
-				case cdcpb.Event_COMMIT:
-					metricPullEventCommitCounter.Inc()
-					if entry.CommitTs <= lastResolvedTs {
-						log.Fatal("The CommitTs must be greater than the resolvedTs",
-							zap.String("Event Type", "COMMIT"),
-							zap.Uint64("CommitTs", entry.CommitTs),
-							zap.Uint64("resolvedTs", lastResolvedTs),
-							zap.Uint64("regionID", regionID))
-					}
-					// emit a value
-					value, ok := matcher.matchRow(entry)
-					if !ok {
-						if !initialized {
-							matcher.cacheCommitRow(entry)
-							continue
+					case cdcpb.Event_PREWRITE:
+						metricPullEventPrewriteCounter.Inc()
+						matcher.putPrewriteRow(entry)
+					case cdcpb.Event_COMMIT:
+						metricPullEventCommitCounter.Inc()
+						if entry.CommitTs <= lastResolvedTs {
+							log.Fatal("The CommitTs must be greater than the resolvedTs",
+								zap.String("Event Type", "COMMIT"),
+								zap.Uint64("CommitTs", entry.CommitTs),
+								zap.Uint64("resolvedTs", lastResolvedTs),
+								zap.Uint64("regionID", regionID))
 						}
-						return checkpointTs,
-							errors.Errorf("prewrite not match, key: %b, start-ts: %d",
-								entry.GetKey(), entry.GetStartTs())
-					}
+						// emit a value
+						value, ok := matcher.matchRow(entry)
+						if !ok {
+							if !initialized {
+								matcher.cacheCommitRow(entry)
+								continue
+							}
+							return checkpointTs,
+								errors.Errorf("prewrite not match, key: %b, start-ts: %d",
+									entry.GetKey(), entry.GetStartTs())
+						}
 
-					revent, err := assembleCommitEvent(entry, value)
-					if err != nil {
-						return checkpointTs, errors.Trace(err)
-					}
+						revent, err := assembleCommitEvent(entry, value)
+						if err != nil {
+							return checkpointTs, errors.Trace(err)
+						}
 
-					select {
-					case s.eventCh <- revent:
-						metricSendEventCommitCounter.Inc()
-					case <-ctx.Done():
-						return checkpointTs, errors.Trace(ctx.Err())
+						timer := time.Now()
+						select {
+						case s.eventCh <- revent:
+							metricSendEventCommitCounter.Inc()
+							metricsSendCommit.Observe(time.Since(timer).Seconds())
+						case <-ctx.Done():
+							return checkpointTs, errors.Trace(ctx.Err())
+						}
+					case cdcpb.Event_ROLLBACK:
+						metricPullEventRollbackCounter.Inc()
+						matcher.rollbackRow(entry)
 					}
-				case cdcpb.Event_ROLLBACK:
-					metricPullEventRollbackCounter.Inc()
-					matcher.rollbackRow(entry)
 				}
-			}
-		case *cdcpb.Event_Admin_:
-			log.Info("receive admin event", zap.Stringer("event", event))
-		case *cdcpb.Event_Error:
-			return checkpointTs, errors.Trace(&eventError{err: x.Error})
-		case *cdcpb.Event_ResolvedTs:
-			lastResolvedTs = x.ResolvedTs
-			if !initialized {
-				continue
-			}
-			// emit a checkpointTs
-			revent := &model.RegionFeedEvent{
-				Resolved: &model.ResolvedSpan{
-					Span:       span,
-					ResolvedTs: x.ResolvedTs,
-				},
-			}
+			case *cdcpb.Event_Admin_:
+				log.Info("receive admin event", zap.Stringer("event", event))
+			case *cdcpb.Event_Error:
+				return checkpointTs, errors.Trace(&eventError{err: x.Error})
+			case *cdcpb.Event_ResolvedTs:
+				lastResolvedTs = x.ResolvedTs
+				if !initialized {
+					continue
+				}
+				// emit a checkpointTs
+				revent := &model.RegionFeedEvent{
+					Resolved: &model.ResolvedSpan{
+						Span:       span,
+						ResolvedTs: x.ResolvedTs,
+					},
+				}
 
-			updateCheckpointTS(&checkpointTs, x.ResolvedTs)
+				updateCheckpointTS(&checkpointTs, x.ResolvedTs)
 
-			select {
-			case s.eventCh <- revent:
-				metricSendEventResolvedCounter.Inc()
-			case <-ctx.Done():
-				return checkpointTs, errors.Trace(ctx.Err())
-			}
-		case *cdcpb.Event_LongTxn_:
-			// TODO: make resolveLongTxn async so that the region's change feed will not be blocked.
-			err := s.resolveLongTxn(ctx, regionID, x.LongTxn.TxnInfo)
-			if err != nil {
-				// Print a log for the error but do not exit since TiKV didn't deregister this
-				// region.
-				log.Warn("resolve long txn failed",
-					zap.Uint64("regionID", regionID),
-					zap.Uint64("checkpointTs", checkpointTs),
-					zap.Error(err))
+				timer := time.Now()
+				select {
+				case s.eventCh <- revent:
+					metricSendEventResolvedCounter.Inc()
+					metricsSendResolve.Observe(time.Since(timer).Seconds())
+				case <-ctx.Done():
+					return checkpointTs, errors.Trace(ctx.Err())
+				}
+			case *cdcpb.Event_LongTxn_:
+				// TODO: make resolveLongTxn async so that the region's change feed will not be blocked.
+				err := s.resolveLongTxn(ctx, regionID, x.LongTxn.TxnInfo)
+				if err != nil {
+					// Print a log for the error but do not exit since TiKV didn't deregister this
+					// region.
+					log.Warn("resolve long txn failed",
+						zap.Uint64("regionID", regionID),
+						zap.Uint64("checkpointTs", checkpointTs),
+						zap.Error(err))
+				}
 			}
 		}
 

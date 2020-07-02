@@ -67,6 +67,14 @@ var (
 			Name:      "channel_size",
 			Help:      "size of each channel in kv client",
 		}, []string{"id", "channel"})
+	singleEventFeedChDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "single_event_feed_ch_duration",
+			Help:      "The time it took by singleEventFeed to send to/receive from channels",
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 1.5, 30),
+		}, []string{"type", "capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in the kv package
@@ -78,4 +86,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(pullEventCounter)
 	registry.MustRegister(sendEventCounter)
 	registry.MustRegister(clientChannelSize)
+	registry.MustRegister(singleEventFeedChDuration)
 }

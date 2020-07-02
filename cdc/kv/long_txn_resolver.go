@@ -229,6 +229,12 @@ func (m *LongTxnResolver) Resolve(ctx context.Context, regionID uint64, txns []*
 ForEachTxn:
 	for _, txn := range remainingTxns {
 		status, err := m.kvStorage.GetLockResolver().GetTxnStatus(txn.GetStartTs(), now, txn.GetPrimary())
+		log.Info("got txn status for txn",
+			zap.Uint64("regionID", regionID),
+			zap.Uint64("startTs", txn.StartTs),
+			zap.Uint64("ttl", status.TTL()),
+			zap.Uint64("commitTs", status.CommitTS()),
+			zap.Stringer("action", status.Action()))
 		if err != nil {
 			err1 = errors.Trace(err)
 			break
@@ -245,7 +251,7 @@ ForEachTxn:
 			convertedStatus.MinCommitTs = now
 		case kvrpcpb.Action_NoAction:
 			if status.TTL() != 0 {
-				log.Debug("a transaction is still running and cannot be pushed. Cannot resolve"+
+				log.Info("a transaction is still running and cannot be pushed. Cannot resolve"+
 					"the transaction",
 					zap.Uint64("regionID", regionID),
 					zap.Uint64("startTs", txn.GetStartTs()))
@@ -264,6 +270,8 @@ ForEachTxn:
 
 		// TODO: Otherwise, we can actually do resolvelocks here.
 	}
+
+	log.Info("resolved txns for region", zap.Uint64("regionID", regionID), zap.Int("count", len(txnStatuses)))
 
 	if len(txnStatuses) > 0 {
 		m.txnStatusCache.Update(txnStatuses)
