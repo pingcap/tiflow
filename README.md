@@ -14,7 +14,7 @@
 
 ## Documentation
 
-[Chinese Document](https://pingcap.com/docs-cn/dev/reference/tools/ticdc/overview/)
+[Chinese Document](https://docs.pingcap.com/zh/tidb/dev/ticdc-overview/)
 
 [English Document](https://pingcap.com/docs/dev/reference/tools/ticdc/overview/)
 

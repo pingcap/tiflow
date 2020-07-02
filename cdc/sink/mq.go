@@ -326,6 +326,8 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		config.Compression = s
 	}
 
+	config.ClientID = sinkURI.Query().Get("kafka-client-id")
+
 	s = sinkURI.Query().Get("protocol")
 	if s != "" {
 		replicaConfig.Sink.Protocol = s

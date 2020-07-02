@@ -15,7 +15,6 @@ package puller
 
 import (
 	"context"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -114,18 +113,17 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		})
 	}
 
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableID := util.TableIDFromCtx(ctx)
-	tableIDStr := strconv.FormatInt(tableID, 10)
-	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricEventCounterKv := kvEventCounter.WithLabelValues(captureID, changefeedID, "kv")
-	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved")
-	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv")
-	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv")
+	tableID, tableName := util.TableIDFromCtx(ctx)
+	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEventCounterKv := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "kv")
+	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "resolved")
+	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
+	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
 
 	g.Go(func() error {
 		for {

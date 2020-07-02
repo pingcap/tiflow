@@ -30,19 +30,40 @@ func (s *serverOptionSuite) TestNewServer(c *check.C) {
 	c.Assert(svr, check.IsNil)
 	c.Assert(err, check.ErrorMatches, "empty address")
 
-	svr, err = NewServer(PDEndpoints("pd"), Address("cdc"))
+	svr, err = NewServer(PDEndpoints("pd"), Address("cdc:1234"))
 	c.Assert(svr, check.IsNil)
 	c.Assert(err, check.ErrorMatches, "empty GC TTL is not allowed")
 
-	svr, err = NewServer(PDEndpoints("pd"), Address("cdc"), GCTTL(DefaultCDCGCSafePointTTL))
+	svr, err = NewServer(PDEndpoints("pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL))
 	c.Assert(svr, check.NotNil)
 	c.Assert(err, check.IsNil)
-	c.Assert(svr.opts.advertiseAddr, check.Equals, "cdc")
+	c.Assert(svr.opts.advertiseAddr, check.Equals, "cdc:1234")
 
-	svr, err = NewServer(PDEndpoints("pd"), Address("cdc"), GCTTL(DefaultCDCGCSafePointTTL),
-		AdvertiseAddress("advertise"))
+	svr, err = NewServer(PDEndpoints("pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL),
+		AdvertiseAddress("advertise:1234"))
 	c.Assert(svr, check.NotNil)
 	c.Assert(err, check.IsNil)
-	c.Assert(svr.opts.addr, check.Equals, "cdc")
-	c.Assert(svr.opts.advertiseAddr, check.Equals, "advertise")
+	c.Assert(svr.opts.addr, check.Equals, "cdc:1234")
+	c.Assert(svr.opts.advertiseAddr, check.Equals, "advertise:1234")
+
+	svr, err = NewServer(PDEndpoints("pd"), Address("0.0.0.0:1234"), GCTTL(DefaultCDCGCSafePointTTL),
+		AdvertiseAddress("advertise:1234"))
+	c.Assert(svr, check.NotNil)
+	c.Assert(err, check.IsNil)
+	c.Assert(svr.opts.addr, check.Equals, "0.0.0.0:1234")
+	c.Assert(svr.opts.advertiseAddr, check.Equals, "advertise:1234")
+
+	svr, err = NewServer(PDEndpoints("pd"), Address("0.0.0.0:1234"), GCTTL(DefaultCDCGCSafePointTTL))
+	c.Assert(svr, check.IsNil)
+	c.Assert(err, check.ErrorMatches, ".*must be specified.*")
+
+	svr, err = NewServer(PDEndpoints("pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL),
+		AdvertiseAddress("0.0.0.0:1234"))
+	c.Assert(svr, check.IsNil)
+	c.Assert(err, check.ErrorMatches, ".*must be specified.*")
+
+	svr, err = NewServer(PDEndpoints("pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL),
+		AdvertiseAddress("advertise"))
+	c.Assert(svr, check.IsNil)
+	c.Assert(err, check.ErrorMatches, ".*does not contain a port")
 }
