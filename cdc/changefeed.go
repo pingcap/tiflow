@@ -38,7 +38,7 @@ const (
 	// ErrorHistoryGCInterval represents how long we keep error record in changefeed info
 	ErrorHistoryGCInterval = time.Minute * 10
 
-	// ErrorHistoryGCInterval represents time window for failure check
+	// ErrorHistoryCheckInterval represents time window for failure check
 	ErrorHistoryCheckInterval = time.Minute * 2
 
 	// ErrorHistoryThreshold represents failure upper limit in time window.
