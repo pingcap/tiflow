@@ -334,14 +334,6 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 				continue
 			}
 			if c.cyclicEnabled {
-				schemaSnapshot := c.schema
-				tableName, found := schemaSnapshot.GetTableNameByID(tableID)
-				if !found {
-					log.Info("balance orphan tables delay, table not found",
-						zap.String("changefeed", c.id),
-						zap.Int64("tableID", tableID))
-					continue
-				}
 				markTableSchameName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
 				orphanMarkTableID, found = schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
 				if !found {
