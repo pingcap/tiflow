@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/chzyer/readline"
@@ -68,7 +67,6 @@ var (
 	interval     uint
 
 	defaultContext context.Context
-	cmdLogMu       sync.Mutex
 )
 
 // cf holds changefeed id, which is used for output only
@@ -113,13 +111,7 @@ func newCliCommand() *cobra.Command {
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			cmdLogMu.Lock()
-			err := util.InitLogger(&util.Config{Level: "warn"})
-			cmdLogMu.Unlock()
-			if err != nil {
-				fmt.Printf("init logger error %v", errors.ErrorStack(err))
-				os.Exit(1)
-			}
+			initCmd(cmd, &util.Config{Level: "warn"})
 
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
