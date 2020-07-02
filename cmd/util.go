@@ -124,6 +124,28 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob) error {
 	return nil
 }
 
+func applyOwnerChangefeedQuery(ctx context.Context, cid model.ChangeFeedID) (string, error) {
+	owner, err := getOwnerCapture(ctx)
+	if err != nil {
+		return "", err
+	}
+	addr := fmt.Sprintf("http://%s/capture/owner/changefeed/query", owner.AdvertiseAddr)
+	resp, err := http.PostForm(addr, url.Values(map[string][]string{
+		cdc.APIOpVarChangefeedID: {cid},
+	}))
+	if err != nil {
+		return "", err
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.BadRequestf("query changefeed simplified status")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", errors.BadRequestf("%s", string(body))
+	}
+	return string(body), nil
+}
+
 func jsonPrint(cmd *cobra.Command, v interface{}) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {

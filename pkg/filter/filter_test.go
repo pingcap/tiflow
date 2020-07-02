@@ -94,7 +94,7 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
 	config := &config.ReplicaConfig{
 		Filter: &config.FilterConfig{
-			DDLWhitelist: []model.ActionType{model.ActionAddForeignKey},
+			DDLAllowlist: []model.ActionType{model.ActionAddForeignKey},
 		},
 	}
 	filter, err := NewFilter(config)
