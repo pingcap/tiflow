@@ -135,7 +135,8 @@ func newCliCommand() *cobra.Command {
 				return errors.Annotate(err, "fail to open PD client")
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
-			pdCli, err = pd.NewClient([]string{cliPdAddr}, pd.SecurityOption{},
+			pdCli, err = pd.NewClientWithContext(
+				defaultContext, []string{cliPdAddr}, pd.SecurityOption{},
 				pd.WithGRPCDialOptions(
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
