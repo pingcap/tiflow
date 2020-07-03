@@ -112,11 +112,7 @@ func newCliCommand() *cobra.Command {
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			err := util.InitLogger(&util.Config{Level: "warn"})
-			if err != nil {
-				fmt.Printf("init logger error %v", errors.ErrorStack(err))
-				os.Exit(1)
-			}
+			initCmd(cmd, &util.Config{Level: "warn"})
 
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
@@ -139,7 +135,8 @@ func newCliCommand() *cobra.Command {
 				return errors.Annotate(err, "fail to open PD client")
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
-			pdCli, err = pd.NewClient([]string{cliPdAddr}, pd.SecurityOption{},
+			pdCli, err = pd.NewClientWithContext(
+				defaultContext, []string{cliPdAddr}, pd.SecurityOption{},
 				pd.WithGRPCDialOptions(
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
