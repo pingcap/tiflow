@@ -708,13 +708,13 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 	store, err := mockstore.NewMockStore()
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ := store.Close()
+		_ = store.Close()
 	}()
 
 	txn, err := store.Begin()
 	c.Assert(err, check.IsNil)
 	defer func() {
-		_ := txn.Rollback()
+		_ = txn.Rollback()
 	}()
 	t := meta.NewMeta(txn)
 
