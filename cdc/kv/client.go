@@ -316,7 +316,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string) (stream cdcpb.Ch
 // provided channel.
 // The `Start` and `End` field in input span must be memcomparable encoded.
 func (c *CDCClient) EventFeed(
-	ctx context.Context, span regionspan.Span, ts uint64, eventCh chan<- *model.RegionFeedEvent,
+	ctx context.Context, span regionspan.Span, ts uint64, eventCh chan<- []*model.RegionFeedEvent,
 ) error {
 	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span, eventCh)
 	return s.eventFeed(ctx, ts)
@@ -337,7 +337,7 @@ type eventFeedSession struct {
 	totalSpan regionspan.Span
 
 	// The channel to send the processed events.
-	eventCh chan<- *model.RegionFeedEvent
+	eventCh chan<- []*model.RegionFeedEvent
 	// The channel to put the region that will be sent requests.
 	regionCh chan singleRegionInfo
 	// The channel to notify that an error is happening, so that the error will be handled and the affected region
@@ -373,7 +373,7 @@ func newEventFeedSession(
 	regionCache *tikv.RegionCache,
 	kvStorage tikv.Storage,
 	totalSpan regionspan.Span,
-	eventCh chan<- *model.RegionFeedEvent,
+	eventCh chan<- []*model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
 
@@ -1039,8 +1039,8 @@ func (s *eventFeedSession) receiveFromStream(
 		}
 
 		// for _, event := range cevent.Events {
-		var batchStart = 0
-		var batchEnd = 0
+		batchStart := 0
+		batchEnd := 0
 		for batchEnd < len(cevent.Events) {
 			batchStart = batchEnd
 			batchEnd++
@@ -1139,9 +1139,9 @@ func (s *eventFeedSession) singleEventFeed(
 	metricSendEventCommittedCounter := sendEventCounter.WithLabelValues("committed", captureID, changefeedID)
 
 	metricsReceive := singleEventFeedChDuration.WithLabelValues("recv", captureID, changefeedID)
-	metricsSendCommit := singleEventFeedChDuration.WithLabelValues("commit", captureID, changefeedID)
-	metricsSendCommitted := singleEventFeedChDuration.WithLabelValues("committed", captureID, changefeedID)
-	metricsSendResolve := singleEventFeedChDuration.WithLabelValues("resolvets", captureID, changefeedID)
+	// metricsSendCommit := singleEventFeedChDuration.WithLabelValues("commit", captureID, changefeedID)
+	// metricsSendCommitted := singleEventFeedChDuration.WithLabelValues("committed", captureID, changefeedID)
+	// metricsSendResolve := singleEventFeedChDuration.WithLabelValues("resolvets", captureID, changefeedID)
 	metricsProcess := singleEventFeedChDuration.WithLabelValues("process", captureID, changefeedID)
 
 	initialized := false
@@ -1187,12 +1187,15 @@ func (s *eventFeedSession) singleEventFeed(
 			if sinceLastResolvedTs > time.Second*20 {
 				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
 					zap.Uint64("regionID", regionID), zap.Reflect("span", span), zap.Duration("duration", sinceLastResolvedTs), zap.Uint64("lastResolvedTs", lastResolvedTs))
-				// maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
-				// err = s.resolveLock(ctx, regionID, maxVersion)
-				// if err != nil {
-				// 	log.Warn("failed to resolve lock", zap.Uint64("regionID", regionID), zap.Error(err))
-				// 	continue
-				// }
+				// Temporarily removed
+				if false {
+					maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
+					err = s.resolveLock(ctx, regionID, maxVersion)
+					if err != nil {
+						log.Warn("failed to resolve lock", zap.Uint64("regionID", regionID), zap.Error(err))
+						continue
+					}
+				}
 			}
 			continue
 		case eventBatch, ok = <-receiverCh:
@@ -1212,6 +1215,7 @@ func (s *eventFeedSession) singleEventFeed(
 		eventProcessTimeValid = true
 		eventProcessTimer = time.Now()
 
+		processedEventBatch := make([]*model.RegionFeedEvent, 0, len(eventBatch))
 		for _, event := range eventBatch {
 			metricEventSize.Observe(float64(event.Event.Size()))
 			switch x := event.Event.(type) {
@@ -1241,12 +1245,13 @@ func (s *eventFeedSession) singleEventFeed(
 							if err != nil {
 								return checkpointTs, errors.Trace(err)
 							}
-							select {
-							case s.eventCh <- revent:
-								metricSendEventCommitCounter.Inc()
-							case <-ctx.Done():
-								return checkpointTs, errors.Trace(ctx.Err())
-							}
+							// select {
+							// case s.eventCh <- revent:
+							metricSendEventCommitCounter.Inc()
+							// case <-ctx.Done():
+							// 	return checkpointTs, errors.Trace(ctx.Err())
+							// }
+							processedEventBatch = append(processedEventBatch, revent)
 						}
 						matcher.clearCacheCommit()
 					case cdcpb.Event_COMMITTED:
@@ -1278,14 +1283,15 @@ func (s *eventFeedSession) singleEventFeed(
 								zap.Uint64("resolvedTs", lastResolvedTs),
 								zap.Uint64("regionID", regionID))
 						}
-						timer := time.Now()
-						select {
-						case s.eventCh <- revent:
-							metricSendEventCommittedCounter.Inc()
-							metricsSendCommitted.Observe(time.Since(timer).Seconds())
-						case <-ctx.Done():
-							return checkpointTs, errors.Trace(ctx.Err())
-						}
+						// timer := time.Now()
+						// select {
+						// case s.eventCh <- revent:
+						metricSendEventCommittedCounter.Inc()
+						// 	metricsSendCommitted.Observe(time.Since(timer).Seconds())
+						// case <-ctx.Done():
+						// 	return checkpointTs, errors.Trace(ctx.Err())
+						// }
+						processedEventBatch = append(processedEventBatch, revent)
 					case cdcpb.Event_PREWRITE:
 						metricPullEventPrewriteCounter.Inc()
 						matcher.putPrewriteRow(entry)
@@ -1315,14 +1321,15 @@ func (s *eventFeedSession) singleEventFeed(
 							return checkpointTs, errors.Trace(err)
 						}
 
-						timer := time.Now()
-						select {
-						case s.eventCh <- revent:
-							metricSendEventCommitCounter.Inc()
-							metricsSendCommit.Observe(time.Since(timer).Seconds())
-						case <-ctx.Done():
-							return checkpointTs, errors.Trace(ctx.Err())
-						}
+						// timer := time.Now()
+						// select {
+						// case s.eventCh <- revent:
+						metricSendEventCommitCounter.Inc()
+						// 	metricsSendCommit.Observe(time.Since(timer).Seconds())
+						// case <-ctx.Done():
+						// 	return checkpointTs, errors.Trace(ctx.Err())
+						// }
+						processedEventBatch = append(processedEventBatch, revent)
 					case cdcpb.Event_ROLLBACK:
 						metricPullEventRollbackCounter.Inc()
 						matcher.rollbackRow(entry)
@@ -1347,14 +1354,15 @@ func (s *eventFeedSession) singleEventFeed(
 
 				updateCheckpointTS(&checkpointTs, x.ResolvedTs)
 
-				timer := time.Now()
-				select {
-				case s.eventCh <- revent:
-					metricSendEventResolvedCounter.Inc()
-					metricsSendResolve.Observe(time.Since(timer).Seconds())
-				case <-ctx.Done():
-					return checkpointTs, errors.Trace(ctx.Err())
-				}
+				// timer := time.Now()
+				// select {
+				// case s.eventCh <- revent:
+				metricSendEventResolvedCounter.Inc()
+				// 	metricsSendResolve.Observe(time.Since(timer).Seconds())
+				// case <-ctx.Done():
+				// 	return checkpointTs, errors.Trace(ctx.Err())
+				// }
+				processedEventBatch = append(processedEventBatch, revent)
 			case *cdcpb.Event_LongTxn_:
 				// TODO: make resolveLongTxn async so that the region's change feed will not be blocked.
 				err := s.resolveLongTxn(ctx, regionID, x.LongTxn.TxnInfo)
@@ -1368,7 +1376,11 @@ func (s *eventFeedSession) singleEventFeed(
 				}
 			}
 		}
-
+		select {
+		case s.eventCh <- processedEventBatch:
+		case <-ctx.Done():
+			return checkpointTs, errors.Trace(ctx.Err())
+		}
 	}
 }
 

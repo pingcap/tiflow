@@ -161,7 +161,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	c.Assert(err, check.IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eventCh := make(chan *model.RegionFeedEvent, 10)
+	eventCh := make(chan []*model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, regionspan.Span{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
@@ -192,14 +192,14 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	ts, err := kvStorage.CurrentVersion()
 	c.Assert(err, check.IsNil)
 	ch2 <- makeEvent(ts.Ver)
-	var event *model.RegionFeedEvent
+	var events []*model.RegionFeedEvent
 	select {
-	case event = <-eventCh:
+	case events = <-eventCh:
 	case <-time.After(time.Second):
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
 
-	checkEvent(event, ts.Ver)
+	checkEvent(events[0], ts.Ver)
 	cancel()
 }
 
