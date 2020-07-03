@@ -482,8 +482,10 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		_, err = s.client.Client.Put(ctx, key, pinfoStr)
 		c.Assert(err, check.IsNil)
 	}
-	owner.etcdClient.PutChangeFeedStatus(ctx, cfID, &model.ChangeFeedStatus{})
-	owner.etcdClient.SaveChangeFeedInfo(ctx, sampleCF.info, cfID)
+	err = owner.etcdClient.PutChangeFeedStatus(ctx, cfID, &model.ChangeFeedStatus{})
+	c.Assert(err, check.IsNil)
+	err = owner.etcdClient.SaveChangeFeedInfo(ctx, sampleCF.info, cfID)
+	c.Assert(err, check.IsNil)
 	checkAdminJobLen := func(length int) {
 		owner.adminJobsLock.Lock()
 		c.Assert(owner.adminJobs, check.HasLen, length)
@@ -705,11 +707,15 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 
 	store, err := mockstore.NewMockStore()
 	c.Assert(err, check.IsNil)
-	defer store.Close()
+	defer func() {
+		_ := store.Close()
+	}()
 
 	txn, err := store.Begin()
 	c.Assert(err, check.IsNil)
-	defer txn.Rollback()
+	defer func() {
+		_ := txn.Rollback()
+	}()
 	t := meta.NewMeta(txn)
 
 	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(t, 0)
@@ -734,8 +740,4 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 		c.Assert(cf.schemas, check.DeepEquals, expectSchemas[i])
 		c.Assert(cf.tables, check.DeepEquals, expectTables[i])
 	}
-}
-
-// TODO Test watchCapture
-func (s *ownerSuite) testWatchCapture(c *check.C) {
 }
