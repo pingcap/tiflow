@@ -1015,10 +1015,10 @@ func (s *eventFeedSession) receiveFromStream(
 	// Each region has it's own goroutine to handle its messages. `regionStates` stores states of these regions.
 	regionStates := make(map[uint64]*regionFeedState)
 
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricReceiveTiKV := singleEventFeedChDuration.WithLabelValues("receive_tikv", captureID, changefeedID)
-	metricSendToRegion := singleEventFeedChDuration.WithLabelValues("send_to_region", captureID, changefeedID)
+	metricReceiveTiKV := singleEventFeedChDuration.WithLabelValues("receive_tikv", captureAddr, changefeedID)
+	metricSendToRegion := singleEventFeedChDuration.WithLabelValues("send_to_region", captureAddr, changefeedID)
 
 	for {
 		timer := time.Now()
@@ -1152,11 +1152,11 @@ func (s *eventFeedSession) singleEventFeed(
 	metricSendEventCommitCounter := sendEventCounter.WithLabelValues("commit", captureAddr, changefeedID)
 	metricSendEventCommittedCounter := sendEventCounter.WithLabelValues("committed", captureAddr, changefeedID)
 
-	metricsReceive := singleEventFeedChDuration.WithLabelValues("recv", captureID, changefeedID)
+	metricsReceive := singleEventFeedChDuration.WithLabelValues("recv", captureAddr, changefeedID)
 	// metricsSendCommit := singleEventFeedChDuration.WithLabelValues("commit", captureID, changefeedID)
 	// metricsSendCommitted := singleEventFeedChDuration.WithLabelValues("committed", captureID, changefeedID)
 	// metricsSendResolve := singleEventFeedChDuration.WithLabelValues("resolvets", captureID, changefeedID)
-	metricsProcess := singleEventFeedChDuration.WithLabelValues("process", captureID, changefeedID)
+	metricsProcess := singleEventFeedChDuration.WithLabelValues("process", captureAddr, changefeedID)
 
 	initialized := false
 
@@ -1165,7 +1165,6 @@ func (s *eventFeedSession) singleEventFeed(
 	defer advanceCheckTicker.Stop()
 	lastReceivedEventTime := time.Now()
 	startFeedTime := time.Now()
-	var lastResolvedTs uint64
 
 	eventProcessTimeValid := false
 	var eventProcessTimer time.Time

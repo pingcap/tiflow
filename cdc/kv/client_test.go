@@ -184,14 +184,14 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	case <-time.After(time.Second):
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
-	checkEvent(event, 1)
+	checkEvent(events[0], 1)
 
 	select {
-	case event = <-eventCh:
+	case events = <-eventCh:
 	case <-time.After(time.Second):
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
-	checkEvent(event, ts.Ver)
+	checkEvent(events[0], ts.Ver)
 	cancel()
 }
 
@@ -210,7 +210,7 @@ func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
 	c.Assert(err, check.IsNil)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	eventCh := make(chan *model.RegionFeedEvent, 10)
+	eventCh := make(chan []*model.RegionFeedEvent, 10)
 	err = cdcClient.EventFeed(ctx, regionspan.Span{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
 	_ = err
 	// TODO find a way to verify the error
