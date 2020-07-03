@@ -35,6 +35,13 @@ function run() {
     run_cdc_cli changefeed cyclic create-marktables \
         --cyclic-upstream-dsn="root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/"
 
+    # make sure create-marktables does not create mark table for mark table.
+    for c in $(seq 1 10); do {
+        # must not cause an error table name too long.
+        run_cdc_cli changefeed cyclic create-marktables \
+            --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
+    } done
+
     # record tso after we create tables to not block on waiting mark tables DDLs.
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
 

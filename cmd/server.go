@@ -15,8 +15,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
-	"os"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -56,10 +54,11 @@ func init() {
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
-	err := initLog()
-	if err != nil {
-		return errors.Annotate(err, "init log failed")
-	}
+	cancel := initCmd(cmd, &util.Config{
+		File:  logFile,
+		Level: logLevel,
+	})
+	defer cancel()
 	tz, err := util.GetTimezone(timezone)
 	if err != nil {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
@@ -84,19 +83,5 @@ func runEServer(cmd *cobra.Command, args []string) error {
 	server.Close()
 	log.Info("cdc server exits successfully")
 
-	return nil
-}
-
-func initLog() error {
-	// Init log.
-	err := util.InitLogger(&util.Config{
-		File:  logFile,
-		Level: logLevel,
-	})
-	if err != nil {
-		fmt.Printf("init logger error %v", errors.ErrorStack(err))
-		os.Exit(1)
-	}
-	log.Info("init log", zap.String("file", logFile), zap.String("level", logLevel))
 	return nil
 }
