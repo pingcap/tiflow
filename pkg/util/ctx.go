@@ -22,25 +22,25 @@ type ctxKey string
 
 const (
 	ctxKeyTableID      = ctxKey("tableID")
-	ctxKeyCaptureID    = ctxKey("captureID")
+	ctxKeyCaptureAddr  = ctxKey("captureAddr")
 	ctxKeyChangefeedID = ctxKey("changefeedID")
 	ctxKeyIsOwner      = ctxKey("isOwner")
 	ctxKeyTimezone     = ctxKey("timezone")
 )
 
-// CaptureIDFromCtx returns a capture ID stored in the specified context.
+// CaptureAddrFromCtx returns a capture ID stored in the specified context.
 // It returns an empty string if there's no valid capture ID found.
-func CaptureIDFromCtx(ctx context.Context) string {
-	captureID, ok := ctx.Value(ctxKeyCaptureID).(string)
+func CaptureAddrFromCtx(ctx context.Context) string {
+	captureAddr, ok := ctx.Value(ctxKeyCaptureAddr).(string)
 	if !ok {
 		return ""
 	}
-	return captureID
+	return captureAddr
 }
 
-// PutCaptureIDInCtx returns a new child context with the specified capture ID stored.
-func PutCaptureIDInCtx(ctx context.Context, captureID string) context.Context {
-	return context.WithValue(ctx, ctxKeyCaptureID, captureID)
+// PutCaptureAddrInCtx returns a new child context with the specified capture ID stored.
+func PutCaptureAddrInCtx(ctx context.Context, captureAddr string) context.Context {
+	return context.WithValue(ctx, ctxKeyCaptureAddr, captureAddr)
 }
 
 // PutTimezoneInCtx returns a new child context with the given timezone
@@ -48,18 +48,23 @@ func PutTimezoneInCtx(ctx context.Context, timezone *time.Location) context.Cont
 	return context.WithValue(ctx, ctxKeyTimezone, timezone)
 }
 
-// PutTableIDInCtx returns a new child context with the specified table ID stored.
-func PutTableIDInCtx(ctx context.Context, tableID int64) context.Context {
-	return context.WithValue(ctx, ctxKeyTableID, tableID)
+type tableinfo struct {
+	id   int64
+	name string
+}
+
+// PutTableInfoInCtx returns a new child context with the specified table ID and name stored.
+func PutTableInfoInCtx(ctx context.Context, tableID int64, tableName string) context.Context {
+	return context.WithValue(ctx, ctxKeyTableID, tableinfo{id: tableID, name: tableName})
 }
 
 // TableIDFromCtx returns a table ID
-func TableIDFromCtx(ctx context.Context) int64 {
-	tableID, ok := ctx.Value(ctxKeyTableID).(int64)
+func TableIDFromCtx(ctx context.Context) (int64, string) {
+	info, ok := ctx.Value(ctxKeyTableID).(tableinfo)
 	if !ok {
-		return 0
+		return 0, ""
 	}
-	return tableID
+	return info.id, info.name
 }
 
 // TimezoneFromCtx returns a timezone

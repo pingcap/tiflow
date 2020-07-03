@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
@@ -38,8 +38,10 @@ type FeedState string
 
 // All FeedStates
 const (
-	StateNormal FeedState = "normal"
-	StateFailed FeedState = "failed"
+	StateNormal  FeedState = "normal"
+	StateFailed  FeedState = "failed"
+	StateStopped FeedState = "stopped"
+	StateRemoved FeedState = "removed"
 )
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
@@ -58,6 +60,7 @@ type ChangeFeedInfo struct {
 
 	Config *config.ReplicaConfig `json:"config"`
 	State  FeedState             `json:"state"`
+	Error  *RunningError         `json:"error"`
 }
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
@@ -103,7 +106,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 		if err != nil {
 			return errors.Annotatef(err, "Marshal data: %v", data)
 		}
-		info.Opts[filter.OptCyclicConfig] = string(cyclicCfg)
+		info.Opts[mark.OptCyclicConfig] = string(cyclicCfg)
 	}
 	return nil
 }

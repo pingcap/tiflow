@@ -52,7 +52,7 @@ func newDDLHandler(pdCli pd.Client, kvStorage tidbkv.Storage, checkpointTS uint6
 	}
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
-	ctx = util.PutTableIDInCtx(ctx, -1)
+	ctx = util.PutTableInfoInCtx(ctx, -1, "")
 
 	// FIXME: user of ddlHandler can't know error happen.
 	errg.Go(func() error {

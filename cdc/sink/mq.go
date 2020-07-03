@@ -105,7 +105,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("ts", row.CommitTs))
+			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
 		partition := k.dispatcher.Dispatch(row)
@@ -325,6 +325,8 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if s != "" {
 		config.Compression = s
 	}
+
+	config.ClientID = sinkURI.Query().Get("kafka-client-id")
 
 	s = sinkURI.Query().Get("protocol")
 	if s != "" {

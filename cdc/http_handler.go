@@ -18,10 +18,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/pingcap/ticdc/pkg/util"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
@@ -39,6 +39,13 @@ const (
 type commonResp struct {
 	Status  bool   `json:"status"`
 	Message string `json:"message"`
+}
+
+type changefeedResp struct {
+	FeedState    string              `json:"state"`
+	TSO          uint64              `json:"tso"`
+	Checkpoint   string              `json:"checkpoint"`
+	RunningError *model.RunningError `json:"error"`
 }
 
 func handleOwnerResp(w http.ResponseWriter, err error) {
@@ -109,7 +116,7 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 	handleOwnerResp(w, err)
 }
 
-func (s *Server) handleRebanlanceTrigger(w http.ResponseWriter, req *http.Request) {
+func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
 		return
@@ -129,7 +136,7 @@ func (s *Server) handleRebanlanceTrigger(w http.ResponseWriter, req *http.Reques
 		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
 		return
 	}
-	s.owner.TriggerRebanlance(changefeedID)
+	s.owner.TriggerRebalance(changefeedID)
 	handleOwnerResp(w, nil)
 }
 
@@ -166,4 +173,50 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 	}
 	s.owner.ManualSchedule(changefeedID, to, tableID)
 	handleOwnerResp(w, nil)
+}
+
+func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
+		return
+	}
+	if s.owner == nil {
+		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+	}
+
+	err := req.ParseForm()
+	if err != nil {
+		writeInternalServerError(w, err)
+		return
+	}
+	changefeedID := req.Form.Get(APIOpVarChangefeedID)
+	if !util.IsValidUUIDv4(changefeedID) {
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
+		return
+	}
+	cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
+	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+		writeInternalServerError(w, err)
+		return
+	}
+	feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
+	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+		writeInternalServerError(w, err)
+		return
+	}
+
+	resp := &changefeedResp{
+		FeedState: string(feedState),
+	}
+	if cf != nil {
+		resp.RunningError = cf.info.Error
+	} else if feedInfo != nil {
+		resp.RunningError = feedInfo.Error
+	}
+	if status != nil {
+		resp.TSO = status.CheckpointTs
+		tm := oracle.GetTimeFromTS(status.CheckpointTs)
+		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
+	}
+	writeData(w, resp)
 }

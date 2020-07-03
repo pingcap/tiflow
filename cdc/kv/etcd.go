@@ -424,7 +424,7 @@ func (c CDCEtcdClient) GetTaskWorkload(
 func (c CDCEtcdClient) PutTaskWorkload(
 	ctx context.Context,
 	changefeedID string,
-	captureID string,
+	captureID model.CaptureID,
 	info *model.TaskWorkload,
 ) error {
 	data, err := info.Marshal()

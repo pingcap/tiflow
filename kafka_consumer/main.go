@@ -378,6 +378,9 @@ ClaimMessages:
 						zap.Int32("partition", partition))
 					break ClaimMessages
 				}
+				// FIXME: hack to set start-ts in row changed event, as start-ts
+				// is not contained in TiCDC open protocol
+				row.StartTs = row.CommitTs
 				err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))

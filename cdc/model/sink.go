@@ -47,6 +47,16 @@ func (t TableName) String() string {
 	return fmt.Sprintf("%s.%s", t.Schema, t.Table)
 }
 
+// GetSchema returns schema name.
+func (t *TableName) GetSchema() string {
+	return t.Schema
+}
+
+// GetTable returns table name.
+func (t *TableName) GetTable() string {
+	return t.Table
+}
+
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
 	StartTs  uint64 `json:"start-ts"`
@@ -112,7 +122,7 @@ func (t *Txn) Append(row *RowChangedEvent) {
 			zap.Uint64("startTs of txn", t.StartTs),
 			zap.Uint64("commitTs of txn", t.CommitTs),
 			zap.Uint64("startTs of row", row.StartTs),
-			zap.Uint64("startTs of row", row.CommitTs))
+			zap.Uint64("commitTs of row", row.CommitTs))
 	}
 	t.Rows = append(t.Rows, row)
 	if len(row.Keys) == 0 {

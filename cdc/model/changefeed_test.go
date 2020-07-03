@@ -71,7 +71,7 @@ func (s *configSuite) TestFillV1(c *check.C) {
                 1,
                 2
             ],
-            "ddl-white-list":"AQI="
+            "ddl-allow-list":"AQI="
         },
         "mounter":{
             "worker-num":64
@@ -134,7 +134,7 @@ func (s *configSuite) TestFillV1(c *check.C) {
 					IgnoreDBs: []string{"test", "sys"},
 				},
 				IgnoreTxnStartTs: []uint64{1, 2},
-				DDLWhitelist:     []model.ActionType{1, 2},
+				DDLAllowlist:     []model.ActionType{1, 2},
 			},
 			Mounter: &config.MounterConfig{
 				WorkerNum: 64,

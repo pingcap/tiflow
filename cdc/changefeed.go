@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
-	"github.com/pingcap/ticdc/pkg/cyclic"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
@@ -101,9 +101,9 @@ type changeFeed struct {
 	toCleanTables      map[model.TableID]model.Ts
 	moveTableJobs      map[model.TableID]*model.MoveTableJob
 	manualMoveCommands []*model.MoveTableJob
-	rebanlanceNextTick bool
+	rebalanceNextTick  bool
 
-	lastRebanlanceTime time.Time
+	lastRebalanceTime time.Time
 
 	etcdCli kv.CDCEtcdClient
 }
@@ -149,12 +149,17 @@ func (c *changeFeed) addTable(sid model.SchemaID, tid model.TableID, startTs mod
 	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
 		return
 	}
-	if c.cyclicEnabled && cyclic.IsMarkTable(table.Schema, table.Table) {
+	if c.cyclicEnabled && mark.IsMarkTable(table.Schema, table.Table) {
 		return
 	}
 
 	if _, ok := c.tables[tid]; ok {
 		log.Warn("add table already exists", zap.Int64("tableID", tid), zap.Stringer("table", table))
+		return
+	}
+
+	if !entry.WrapTableInfo(sid, table.Schema, tblInfo).IsEligible() {
+		log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
 		return
 	}
 
@@ -237,21 +242,21 @@ func (c *changeFeed) updatePartition(tblInfo *timodel.TableInfo, startTs uint64)
 	}
 }
 
-func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, rebanlanceNow bool,
+func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, rebalanceNow bool,
 	manualMoveCommands []*model.MoveTableJob) error {
 	err := c.balanceOrphanTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	c.manualMoveCommands = append(c.manualMoveCommands, manualMoveCommands...)
-	if rebanlanceNow {
-		c.rebanlanceNextTick = true
+	if rebalanceNow {
+		c.rebalanceNextTick = true
 	}
 	err = c.handleManualMoveTableJobs(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	err = c.rebanlanceTables(ctx, captures)
+	err = c.rebalanceTables(ctx, captures)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -318,26 +323,34 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			}
 			newTaskStatus[captureID] = status
 		}
+		schemaSnapshot := c.schema
 		for tableID, op := range operation {
 			var orphanMarkTableID model.TableID
+			tableName, found := schemaSnapshot.GetTableNameByID(tableID)
+			if !found {
+				log.Warn("balance orphan tables delay, table not found",
+					zap.String("changefeed", c.id),
+					zap.Int64("tableID", tableID))
+				continue
+			}
 			if c.cyclicEnabled {
-				schemaSnapshot := c.schema
-				tableName, found := schemaSnapshot.GetTableNameByID(tableID)
-				if !found {
-					continue
-				}
-				markTableSchameName, markTableTableName := cyclic.MarkTableName(tableName.Schema, tableName.Table)
+				markTableSchameName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
 				orphanMarkTableID, found = schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
 				if !found {
 					// Mark table is not created yet, skip and wait.
-					log.Info("balance table info delay, wait mark table",
+					log.Warn("balance table info delay, wait mark table",
 						zap.String("changefeed", c.id),
 						zap.Int64("tableID", tableID),
 						zap.String("markTableName", markTableTableName))
 					continue
 				}
 			}
-			status.AddTable(tableID, &model.TableReplicaInfo{StartTs: op.BoundaryTs, MarkTableID: orphanMarkTableID}, op.BoundaryTs)
+			info := &model.TableReplicaInfo{
+				StartTs:     op.BoundaryTs,
+				MarkTableID: orphanMarkTableID,
+				Name:        tableName.String(),
+			}
+			status.AddTable(tableID, info, op.BoundaryTs)
 			addedTables[tableID] = struct{}{}
 		}
 	}
@@ -417,7 +430,7 @@ func (c *changeFeed) handleManualMoveTableJobs(ctx context.Context, captures map
 	return nil
 }
 
-func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
+func (c *changeFeed) rebalanceTables(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	if len(captures) == 0 {
 		return nil
 	}
@@ -429,13 +442,14 @@ func (c *changeFeed) rebanlanceTables(ctx context.Context, captures map[model.Ca
 			return nil
 		}
 	}
+	timeToRebalance := time.Since(c.lastRebalanceTime) > time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute
+	timeToRebalance = timeToRebalance && c.info.Config.Scheduler.PollingTime > 0
 
-	if !c.rebanlanceNextTick &&
-		time.Since(c.lastRebanlanceTime) < time.Duration(c.info.Config.Scheduler.PollingTime)*time.Minute {
+	if !c.rebalanceNextTick && !timeToRebalance {
 		return nil
 	}
-	c.lastRebanlanceTime = time.Now()
-	c.rebanlanceNextTick = false
+	c.lastRebalanceTime = time.Now()
+	c.rebalanceNextTick = false
 
 	captureIDs := make(map[model.CaptureID]struct{}, len(captures))
 	for cid := range captures {

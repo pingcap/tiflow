@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 )
 
 type cyclicSuit struct{}
@@ -49,16 +50,16 @@ func (s *cyclicSuit) TestIsTablePaired(c *check.C) {
 		isParied bool
 	}{
 		{[]model.TableName{}, true},
-		{[]model.TableName{{Schema: SchemaName, Table: "repl_mark_1"}},
+		{[]model.TableName{{Schema: mark.SchemaName, Table: "repl_mark_1"}},
 			true},
 		{[]model.TableName{{Schema: "a", Table: "a"}},
 			false},
-		{[]model.TableName{{Schema: SchemaName, Table: "repl_mark_a_a"},
+		{[]model.TableName{{Schema: mark.SchemaName, Table: "repl_mark_a_a"},
 			{Schema: "a", Table: "a"}},
 			true},
 		{[]model.TableName{
-			{Schema: SchemaName, Table: "repl_mark_a_a"},
-			{Schema: SchemaName, Table: "repl_mark_a_b"},
+			{Schema: mark.SchemaName, Table: "repl_mark_a_a"},
+			{Schema: mark.SchemaName, Table: "repl_mark_a_b"},
 			{Schema: "a", Table: "a"},
 			{Schema: "a", Table: "b"}},
 			true},
@@ -66,29 +67,6 @@ func (s *cyclicSuit) TestIsTablePaired(c *check.C) {
 
 	for _, test := range tests {
 		c.Assert(IsTablesPaired(test.tables), check.Equals, test.isParied,
-			check.Commentf("%v", test))
-	}
-}
-
-func (s *cyclicSuit) TestIsMarkTable(c *check.C) {
-	tests := []struct {
-		schema, table string
-		isMarkTable   bool
-	}{
-		{"", "", false},
-		{"a", "a", false},
-		{"a", "", false},
-		{"", "a", false},
-		{SchemaName, "", true},
-		{"", tableName, true},
-		{"`" + SchemaName + "`", "", true},
-		{"`" + SchemaName + "`", "repl_mark_1", true},
-		{SchemaName, tableName, true},
-		{SchemaName, "`repl_mark_1`", true},
-	}
-
-	for _, test := range tests {
-		c.Assert(IsMarkTable(test.schema, test.table), check.Equals, test.isMarkTable,
 			check.Commentf("%v", test))
 	}
 }

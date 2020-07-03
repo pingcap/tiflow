@@ -39,8 +39,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Enable: false,
 	},
 	Scheduler: &SchedulerConfig{
-		Tp:          "manual",
-		PollingTime: 5,
+		Tp:          "table-number",
+		PollingTime: -1,
 	},
 }
 

@@ -30,19 +30,19 @@ func NewStatistics(name string, opts map[string]string) *Statistics {
 	if cid, ok := opts[OptChangefeedID]; ok {
 		statistics.changefeedID = cid
 	}
-	if cid, ok := opts[OptCaptureID]; ok {
-		statistics.captureID = cid
+	if cid, ok := opts[OptCaptureAddr]; ok {
+		statistics.captureAddr = cid
 	}
-	statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.captureID, statistics.changefeedID)
-	statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.captureID, statistics.changefeedID)
-	statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.captureID, statistics.changefeedID)
+	statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
+	statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
+	statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 	return statistics
 }
 
 // Statistics maintains some status and metrics of the Sink
 type Statistics struct {
 	name         string
-	captureID    string
+	captureAddr  string
 	changefeedID string
 	accumulated  uint64
 
@@ -87,7 +87,7 @@ func (b *Statistics) PrintStatus() {
 	log.Info("sink replication status",
 		zap.String("name", b.name),
 		zap.String("changefeed", b.changefeedID),
-		zap.String("captureID", b.captureID),
+		zap.String("captureaddr", b.captureAddr),
 		zap.Uint64("count", count),
 		zap.Uint64("qps", qps))
 }

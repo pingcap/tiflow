@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -54,6 +55,16 @@ func (o *options) validateAndAdjust() error {
 	}
 	if o.advertiseAddr == "" {
 		o.advertiseAddr = o.addr
+	}
+	// Advertise address must be specified.
+	if idx := strings.LastIndex(o.advertiseAddr, ":"); idx >= 0 {
+		ip := net.ParseIP(o.advertiseAddr[:idx])
+		// Skip nil as it could be a domain name.
+		if ip != nil && ip.IsUnspecified() {
+			return errors.New("advertise address must be specified as a valid IP")
+		}
+	} else {
+		return errors.New("advertise address or address does not contain a port")
 	}
 	if o.gcTTL == 0 {
 		return errors.New("empty GC TTL is not allowed")
@@ -153,7 +164,10 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	s.pdClient = pdClient
 
-	err = util.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0])
+	// To not block CDC server startup, we need to warn instead of error
+	// when TiKV is incompatible.
+	errorTiKVIncompatible := false
+	err = util.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], errorTiKVIncompatible)
 	if err != nil {
 		return err
 	}
@@ -216,7 +230,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 		return err
 	}
 	s.capture = capture
-	ctx = util.PutCaptureIDInCtx(ctx, s.capture.info.ID)
+	ctx = util.PutCaptureAddrInCtx(ctx, s.capture.info.AdvertiseAddr)
 	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -236,13 +250,6 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 // Close closes the server.
 func (s *Server) Close() {
-	if s.statusServer != nil {
-		err := s.statusServer.Close()
-		if err != nil {
-			log.Error("close status server", zap.Error(err))
-		}
-		s.statusServer = nil
-	}
 	if s.capture != nil {
 		s.capture.Cleanup()
 
@@ -252,5 +259,12 @@ func (s *Server) Close() {
 			log.Error("close capture", zap.Error(err))
 		}
 		closeCancel()
+	}
+	if s.statusServer != nil {
+		err := s.statusServer.Close()
+		if err != nil {
+			log.Error("close status server", zap.Error(err))
+		}
+		s.statusServer = nil
 	}
 }

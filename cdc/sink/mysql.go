@@ -26,10 +26,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/cenkalti/backoff"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
@@ -39,14 +35,19 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/filter"
 	tifilter "github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -54,12 +55,13 @@ const (
 	defaultMaxTxnRow       = 256
 	defaultDMLMaxRetryTime = 8
 	defaultDDLMaxRetryTime = 20
+	defaultTiDBTxnMode     = "optimistic"
 )
 
 type mysqlSink struct {
 	db           *sql.DB
 	checkpointTs uint64
-	params       params
+	params       *sinkParams
 
 	filter *filter.Filter
 	cyclic *cyclic.Cyclic
@@ -68,6 +70,10 @@ type mysqlSink struct {
 	unresolvedTxns   map[model.TableName][]*model.Txn
 
 	statistics *Statistics
+
+	// metrics used by mysql sink only
+	metricConflictDetectDurationHis prometheus.Observer
+	metricBucketSizeCounters        []prometheus.Counter
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -75,7 +81,7 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	defer s.unresolvedTxnsMu.Unlock()
 	for _, row := range rows {
 		if s.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("ts", row.CommitTs))
+			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
 		key := *row.Table
@@ -181,7 +187,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	if shouldSwitchDB {
-		_, err = tx.ExecContext(ctx, "USE "+model.QuoteName(ddl.Schema)+";")
+		_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.Schema)+";")
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.Error(err))
@@ -259,19 +265,21 @@ func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 
 var _ Sink = &mysqlSink{}
 
-type params struct {
+type sinkParams struct {
 	workerCount  int
 	maxTxnRow    int
+	tidbTxnMode  string
 	changefeedID string
-	captureID    string
+	captureAddr  string
 }
 
-var defaultParams = params{
+var defaultParams = &sinkParams{
 	workerCount: defaultWorkerCount,
 	maxTxnRow:   defaultMaxTxnRow,
+	tidbTxnMode: defaultTiDBTxnMode,
 }
 
-func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
+func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location, params *sinkParams) (string, error) {
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
@@ -285,7 +293,7 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 		return "", errors.Annotate(err, "fail to open MySQL connection when configuring sink")
 	}
 	defer testDB.Close()
-	log.Debug("Opened connection to test whether allow_auto_random_explicit_insert is present.")
+	log.Debug("Opened connection to configure some tidb special parameters")
 
 	var variableName string
 	var autoRandomInsertEnabled string
@@ -294,11 +302,24 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 	if err != nil && err != sql.ErrNoRows {
 		return "", errors.Annotate(err, "fail to query sink for support of auto-random")
 	}
-
 	if err == nil && autoRandomInsertEnabled == "off" {
 		dsnCfg.Params["allow_auto_random_explicit_insert"] = "1"
 		log.Debug("Set allow_auto_random_explicit_insert to 1")
 	}
+
+	var txnMode string
+	queryStr = "show session variables like 'tidb_txn_mode';"
+	err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &txnMode)
+	if err != nil && err != sql.ErrNoRows {
+		return "", errors.Annotate(err, "fail to query sink for txn mode")
+	}
+	if err == nil {
+		dsnCfg.Params["tidb_txn_mode"] = params.tidbTxnMode
+	}
+
+	dsnClone := dsnCfg.Clone()
+	dsnClone.Passwd = "******"
+	log.Info("sink uri is configured", zap.String("format dsn", dsnClone.FormatDSN()))
 
 	return dsnCfg.FormatDSN(), nil
 }
@@ -311,8 +332,8 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 	if cid, ok := opts[OptChangefeedID]; ok {
 		params.changefeedID = cid
 	}
-	if cid, ok := opts[OptCaptureID]; ok {
-		params.captureID = cid
+	if caddr, ok := opts[OptCaptureAddr]; ok {
+		params.captureAddr = caddr
 	}
 	tz := util.TimezoneFromCtx(ctx)
 
@@ -329,7 +350,9 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			params.workerCount = c
+			if c > 0 {
+				params.workerCount = c
+			}
 		}
 		s = sinkURI.Query().Get("max-txn-row")
 		if s != "" {
@@ -338,6 +361,14 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 				return nil, errors.Trace(err)
 			}
 			params.maxTxnRow = c
+		}
+		s = sinkURI.Query().Get("tidb-txn-mode")
+		if s != "" {
+			if s == "pessimistic" || s == "optimistic" {
+				params.tidbTxnMode = s
+			} else {
+				log.Warn("invalid tidb-txn-mode, should be pessimistic or optimistic, use optimistic as default")
+			}
 		}
 		// dsn format of the driver:
 		// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
@@ -356,13 +387,13 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		dsnStr, err = configureSinkURI(ctx, dsn, tz)
+		dsnStr, err = configureSinkURI(ctx, dsn, tz, params)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	case dsn != nil:
 		var err error
-		dsnStr, err = configureSinkURI(ctx, dsn, tz)
+		dsnStr, err = configureSinkURI(ctx, dsn, tz, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -381,15 +412,25 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 	db.SetMaxIdleConns(params.workerCount)
 	db.SetMaxOpenConns(params.workerCount)
 
-	sink := &mysqlSink{
-		db:             db,
-		unresolvedTxns: make(map[model.TableName][]*model.Txn),
-		params:         params,
-		filter:         filter,
-		statistics:     NewStatistics("mysql", opts),
+	metricConflictDetectDurationHis := conflictDetectDurationHis.WithLabelValues(
+		params.captureAddr, params.changefeedID)
+	metricBucketSizeCounters := make([]prometheus.Counter, params.workerCount)
+	for i := 0; i < params.workerCount; i++ {
+		metricBucketSizeCounters[i] = bucketSizeCounter.WithLabelValues(
+			params.captureAddr, params.changefeedID, strconv.Itoa(i))
 	}
 
-	if val, ok := opts[cyclic.OptCyclicConfig]; ok {
+	sink := &mysqlSink{
+		db:                              db,
+		unresolvedTxns:                  make(map[model.TableName][]*model.Txn),
+		params:                          params,
+		filter:                          filter,
+		statistics:                      NewStatistics("mysql", opts),
+		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
+		metricBucketSizeCounters:        metricBucketSizeCounters,
+	}
+
+	if val, ok := opts[mark.OptCyclicConfig]; ok {
 		cfg := new(config.CyclicConfig)
 		err := cfg.Unmarshal([]byte(val))
 		if err != nil {
@@ -407,21 +448,12 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 }
 
 func (s *mysqlSink) concurrentExec(ctx context.Context, txnsGroup map[model.TableName][]*model.Txn) error {
-	return concurrentExec(ctx, txnsGroup, s.params.workerCount, s.params.maxTxnRow, s.execDMLs)
-}
-
-func concurrentExec(
-	ctx context.Context, txnsGroup map[model.TableName][]*model.Txn, nWorkers, maxTxnRow int,
-	execDMLs func(context.Context, []*model.RowChangedEvent, uint64, int) error,
-) error {
-	if nWorkers == 0 {
-		nWorkers = defaultParams.workerCount
-	}
+	nWorkers := s.params.workerCount
 	workers := make([]*mysqlSinkWorker, nWorkers)
 	errg, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < nWorkers; i++ {
 		i := i
-		workers[i] = newMySQLSinkWorker(maxTxnRow, i, execDMLs)
+		workers[i] = newMySQLSinkWorker(s.params.maxTxnRow, i, s.metricBucketSizeCounters[i], s.execDMLs)
 		errg.Go(func() error {
 			return workers[i].run(ctx)
 		})
@@ -433,21 +465,26 @@ func concurrentExec(
 		causality.add(txn.Keys, idx)
 		workers[idx].appendTxn(ctx, txn)
 	}
+	resolveConflict := func(txn *model.Txn) {
+		if conflict, idx := causality.detectConflict(txn.Keys); conflict {
+			if idx >= 0 {
+				sendFn(txn, idx)
+				return
+			}
+			for _, w := range workers {
+				w.waitAllTxnsExecuted()
+			}
+			causality.reset()
+		}
+		sendFn(txn, rowsChIdx)
+		rowsChIdx++
+		rowsChIdx = rowsChIdx % nWorkers
+	}
 	for _, txns := range txnsGroup {
 		for _, txn := range txns {
-			if conflict, idx := causality.detectConflict(txn.Keys); conflict {
-				if idx >= 0 {
-					sendFn(txn, idx)
-					continue
-				}
-				for _, w := range workers {
-					w.waitAllTxnsExecuted()
-				}
-				causality.reset()
-			}
-			sendFn(txn, rowsChIdx)
-			rowsChIdx++
-			rowsChIdx = rowsChIdx % nWorkers
+			startTime := time.Now()
+			resolveConflict(txn)
+			s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
 		}
 	}
 	for _, w := range workers {
@@ -457,19 +494,26 @@ func concurrentExec(
 }
 
 type mysqlSinkWorker struct {
-	txnCh     chan *model.Txn
-	txnWg     sync.WaitGroup
-	maxTxnRow int
-	bucket    int
-	execDMLs  func(context.Context, []*model.RowChangedEvent, uint64, int) error
+	txnCh            chan *model.Txn
+	txnWg            sync.WaitGroup
+	maxTxnRow        int
+	bucket           int
+	execDMLs         func(context.Context, []*model.RowChangedEvent, uint64, int) error
+	metricBucketSize prometheus.Counter
 }
 
-func newMySQLSinkWorker(maxTxnRow int, bucket int, execDMLs func(context.Context, []*model.RowChangedEvent, uint64, int) error) *mysqlSinkWorker {
+func newMySQLSinkWorker(
+	maxTxnRow int,
+	bucket int,
+	metricBucketSize prometheus.Counter,
+	execDMLs func(context.Context, []*model.RowChangedEvent, uint64, int) error,
+) *mysqlSinkWorker {
 	return &mysqlSinkWorker{
-		txnCh:     make(chan *model.Txn, 1024),
-		maxTxnRow: maxTxnRow,
-		bucket:    bucket,
-		execDMLs:  execDMLs,
+		txnCh:            make(chan *model.Txn, 1024),
+		maxTxnRow:        maxTxnRow,
+		bucket:           bucket,
+		metricBucketSize: metricBucketSize,
+		execDMLs:         execDMLs,
 	}
 }
 
@@ -517,10 +561,12 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		copy(rows, toExecRows)
 		err := w.execDMLs(ctx, rows, replicaID, w.bucket)
 		if err != nil {
+			w.txnWg.Add(-1 * txnNum)
 			return err
 		}
 		toExecRows = toExecRows[:0]
 		w.txnWg.Add(-1 * txnNum)
+		w.metricBucketSize.Add(float64(txnNum))
 		txnNum = 0
 		lastExecTime = time.Now()
 		return nil
@@ -660,7 +706,7 @@ func prepareReplace(schema, table string, cols map[string]*model.Column) (string
 	}
 
 	colList := "(" + buildColumnList(columnNames) + ")"
-	tblName := model.QuoteSchema(schema, table)
+	tblName := quotes.QuoteSchema(schema, table)
 	builder.WriteString("REPLACE INTO " + tblName + colList + " VALUES ")
 	builder.WriteString("(" + model.HolderString(len(columnNames)) + ");")
 
@@ -669,7 +715,7 @@ func prepareReplace(schema, table string, cols map[string]*model.Column) (string
 
 func prepareDelete(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("DELETE FROM %s WHERE ", model.QuoteSchema(schema, table)))
+	builder.WriteString("DELETE FROM " + quotes.QuoteSchema(schema, table) + " WHERE")
 
 	colNames, wargs := whereSlice(cols)
 	args := make([]interface{}, 0, len(wargs))
@@ -678,9 +724,9 @@ func prepareDelete(schema, table string, cols map[string]*model.Column) (string,
 			builder.WriteString(" AND ")
 		}
 		if wargs[i] == nil {
-			builder.WriteString(model.QuoteName(colNames[i]) + " IS NULL")
+			builder.WriteString(quotes.QuoteName(colNames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(model.QuoteName(colNames[i]) + " = ?")
+			builder.WriteString(quotes.QuoteName(colNames[i]) + " = ?")
 			args = append(args, wargs[i])
 		}
 	}
@@ -737,7 +783,7 @@ func buildColumnList(names []string) string {
 		if i > 0 {
 			b.WriteString(",")
 		}
-		b.WriteString(model.QuoteName(name))
+		b.WriteString(quotes.QuoteName(name))
 
 	}
 

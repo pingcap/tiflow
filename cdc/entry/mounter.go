@@ -29,6 +29,7 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
@@ -159,9 +160,9 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 }
 
 func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMountDuration := mountDuration.WithLabelValues(captureID, changefeedID)
+	metricMountDuration := mountDuration.WithLabelValues(captureAddr, changefeedID)
 
 	for {
 		var pEvent *model.PolymorphicEvent
@@ -192,9 +193,9 @@ func (m *mounterImpl) Input() chan<- *model.PolymorphicEvent {
 }
 
 func (m *mounterImpl) collectMetrics(ctx context.Context) {
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureID, changefeedID)
+	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureAddr, changefeedID)
 
 	for {
 		select {
@@ -416,7 +417,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 	event.Delete = row.Delete
 	event.Columns = values
-	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(event.Table.Schema, event.Table.Table))
+	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, quotes.QuoteSchema(event.Table.Schema, event.Table.Table))
 	return event, nil
 }
 
@@ -464,7 +465,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,
 		Columns:      values,
-		Keys:         genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
+		Keys:         genMultipleKeys(tableInfo.TableInfo, values, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
 	}, nil
 }
 

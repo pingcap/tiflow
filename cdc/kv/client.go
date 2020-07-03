@@ -292,11 +292,16 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 	return ca.Get(), nil
 }
 
-func (c *CDCClient) newStream(ctx context.Context, addr string) (stream cdcpb.ChangeData_EventFeedClient, err error) {
+func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream cdcpb.ChangeData_EventFeedClient, err error) {
 	err = retry.Run(50*time.Millisecond, 3, func() error {
 		conn, err := c.getConn(ctx, addr)
 		if err != nil {
 			log.Info("get connection to store failed, retry later", zap.String("addr", addr), zap.Error(err))
+			return errors.Trace(err)
+		}
+		err = util.CheckStoreVersion(ctx, c.pd, storeID)
+		if err != nil {
+			log.Error("check tikv version failed", zap.Error(err), zap.Uint64("storeID", storeID))
 			return errors.Trace(err)
 		}
 		client := cdcpb.NewChangeDataClient(conn)
@@ -655,15 +660,24 @@ func (s *eventFeedSession) dispatchChangeFeedRequest(
 		stream, ok := streams[rpcCtx.Addr]
 		// Establish the stream if it has not been connected yet.
 		if !ok {
+			storeID := rpcCtx.Peer.GetStoreId()
 			log.Info("creating new stream to store to send request",
-				zap.Uint64("regionID", sri.verID.GetID()), zap.Uint64("requestID", requestID), zap.String("addr", rpcCtx.Addr))
-			stream, err = s.client.newStream(ctx, rpcCtx.Addr)
+				zap.Uint64("regionID", sri.verID.GetID()),
+				zap.Uint64("requestID", requestID),
+				zap.Uint64("storeID", storeID),
+				zap.String("addr", rpcCtx.Addr))
+			stream, err = s.client.newStream(ctx, rpcCtx.Addr, storeID)
 			if err != nil {
 				// if get stream failed, maybe the store is down permanently, we should try to relocate the active store
 				log.Warn("get grpc stream client failed",
 					zap.Uint64("regionID", sri.verID.GetID()),
 					zap.Uint64("requestID", requestID),
+					zap.Uint64("storeID", storeID),
 					zap.String("error", err.Error()))
+				if errors.Cause(err) == util.ErrVersionIncompatible {
+					// It often occurs on rolling update. Sleep 20s to reduce logs.
+					time.Sleep(20 * time.Second)
+				}
 				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 				s.client.regionCache.OnSendFail(bo, rpcCtx, needReloadRegion(sri.failStoreIDs, rpcCtx), err)
 				// Delete the pendingRegion info from `pendingRegions` and retry connecting and sending the request.
@@ -852,7 +866,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 	limit := 20
 
 	nextSpan := span
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 
 	for {
 		var (
@@ -869,7 +883,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 				scanT0 := time.Now()
 				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 				regions, err = s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
-				scanRegionsDuration.WithLabelValues(captureID).Observe(time.Since(scanT0).Seconds())
+				scanRegionsDuration.WithLabelValues(captureAddr).Observe(time.Since(scanT0).Seconds())
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -1123,20 +1137,20 @@ func (s *eventFeedSession) singleEventFeed(
 	ctx context.Context,
 	regionID uint64,
 	span regionspan.Span,
-	checkpointTs uint64,
+	startTs uint64,
 	receiverCh <-chan []*cdcpb.Event,
 ) (uint64, error) {
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricEventSize := eventSize.WithLabelValues(captureID)
-	metricPullEventInitializedCounter := pullEventCounter.WithLabelValues(cdcpb.Event_INITIALIZED.String(), captureID, changefeedID)
-	metricPullEventCommittedCounter := pullEventCounter.WithLabelValues(cdcpb.Event_COMMITTED.String(), captureID, changefeedID)
-	metricPullEventCommitCounter := pullEventCounter.WithLabelValues(cdcpb.Event_COMMIT.String(), captureID, changefeedID)
-	metricPullEventPrewriteCounter := pullEventCounter.WithLabelValues(cdcpb.Event_PREWRITE.String(), captureID, changefeedID)
-	metricPullEventRollbackCounter := pullEventCounter.WithLabelValues(cdcpb.Event_ROLLBACK.String(), captureID, changefeedID)
-	metricSendEventResolvedCounter := sendEventCounter.WithLabelValues("native resolved", captureID, changefeedID)
-	metricSendEventCommitCounter := sendEventCounter.WithLabelValues("commit", captureID, changefeedID)
-	metricSendEventCommittedCounter := sendEventCounter.WithLabelValues("committed", captureID, changefeedID)
+	metricEventSize := eventSize.WithLabelValues(captureAddr)
+	metricPullEventInitializedCounter := pullEventCounter.WithLabelValues(cdcpb.Event_INITIALIZED.String(), captureAddr, changefeedID)
+	metricPullEventCommittedCounter := pullEventCounter.WithLabelValues(cdcpb.Event_COMMITTED.String(), captureAddr, changefeedID)
+	metricPullEventCommitCounter := pullEventCounter.WithLabelValues(cdcpb.Event_COMMIT.String(), captureAddr, changefeedID)
+	metricPullEventPrewriteCounter := pullEventCounter.WithLabelValues(cdcpb.Event_PREWRITE.String(), captureAddr, changefeedID)
+	metricPullEventRollbackCounter := pullEventCounter.WithLabelValues(cdcpb.Event_ROLLBACK.String(), captureAddr, changefeedID)
+	metricSendEventResolvedCounter := sendEventCounter.WithLabelValues("native resolved", captureAddr, changefeedID)
+	metricSendEventCommitCounter := sendEventCounter.WithLabelValues("commit", captureAddr, changefeedID)
+	metricSendEventCommittedCounter := sendEventCounter.WithLabelValues("committed", captureAddr, changefeedID)
 
 	metricsReceive := singleEventFeedChDuration.WithLabelValues("recv", captureID, changefeedID)
 	// metricsSendCommit := singleEventFeedChDuration.WithLabelValues("commit", captureID, changefeedID)
@@ -1156,6 +1170,17 @@ func (s *eventFeedSession) singleEventFeed(
 	eventProcessTimeValid := false
 	var eventProcessTimer time.Time
 
+	checkpointTs := startTs
+	select {
+	case s.eventCh <- []*model.RegionFeedEvent{{
+		Resolved: &model.ResolvedSpan{
+			Span:       span,
+			ResolvedTs: startTs,
+		},
+	}}:
+	case <-ctx.Done():
+		return checkpointTs, errors.Trace(ctx.Err())
+	}
 	for {
 		if eventProcessTimeValid {
 			metricsProcess.Observe(time.Since(eventProcessTimer).Seconds())
@@ -1183,18 +1208,17 @@ func (s *eventFeedSession) singleEventFeed(
 				continue
 			}
 			currentTimeFromPD := oracle.GetTimeFromTS(version.Ver)
-			sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(lastResolvedTs))
-			if sinceLastResolvedTs > time.Second*20 {
+			sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(checkpointTs))
+			if sinceLastResolvedTs > time.Second*20 && initialized {
 				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
-					zap.Uint64("regionID", regionID), zap.Reflect("span", span), zap.Duration("duration", sinceLastResolvedTs), zap.Uint64("lastResolvedTs", lastResolvedTs))
-				// Temporarily removed
-				if false {
-					maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
-					err = s.resolveLock(ctx, regionID, maxVersion)
-					if err != nil {
-						log.Warn("failed to resolve lock", zap.Uint64("regionID", regionID), zap.Error(err))
-						continue
-					}
+					zap.Uint64("regionID", regionID), zap.Reflect("span", span),
+					zap.Duration("duration", sinceLastResolvedTs),
+					zap.Uint64("checkpointTs", checkpointTs))
+				maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
+				err = s.resolveLock(ctx, regionID, maxVersion)
+				if err != nil {
+					log.Warn("failed to resolve lock", zap.Uint64("regionID", regionID), zap.Error(err))
+					continue
 				}
 			}
 			continue
@@ -1275,19 +1299,16 @@ func (s *eventFeedSession) singleEventFeed(
 								CRTs:    entry.CommitTs,
 							},
 						}
-
-						if entry.CommitTs <= lastResolvedTs && initialized {
+						if entry.CommitTs <= checkpointTs {
 							log.Fatal("The CommitTs must be greater than the resolvedTs",
 								zap.String("Event Type", "COMMITTED"),
 								zap.Uint64("CommitTs", entry.CommitTs),
-								zap.Uint64("resolvedTs", lastResolvedTs),
+								zap.Uint64("resolvedTs", checkpointTs),
 								zap.Uint64("regionID", regionID))
 						}
-						// timer := time.Now()
 						// select {
 						// case s.eventCh <- revent:
 						metricSendEventCommittedCounter.Inc()
-						// 	metricsSendCommitted.Observe(time.Since(timer).Seconds())
 						// case <-ctx.Done():
 						// 	return checkpointTs, errors.Trace(ctx.Err())
 						// }
@@ -1297,11 +1318,11 @@ func (s *eventFeedSession) singleEventFeed(
 						matcher.putPrewriteRow(entry)
 					case cdcpb.Event_COMMIT:
 						metricPullEventCommitCounter.Inc()
-						if entry.CommitTs <= lastResolvedTs {
+						if entry.CommitTs <= checkpointTs {
 							log.Fatal("The CommitTs must be greater than the resolvedTs",
 								zap.String("Event Type", "COMMIT"),
 								zap.Uint64("CommitTs", entry.CommitTs),
-								zap.Uint64("resolvedTs", lastResolvedTs),
+								zap.Uint64("resolvedTs", checkpointTs),
 								zap.Uint64("regionID", regionID))
 						}
 						// emit a value
@@ -1340,8 +1361,15 @@ func (s *eventFeedSession) singleEventFeed(
 			case *cdcpb.Event_Error:
 				return checkpointTs, errors.Trace(&eventError{err: x.Error})
 			case *cdcpb.Event_ResolvedTs:
-				lastResolvedTs = x.ResolvedTs
 				if !initialized {
+					continue
+				}
+				if x.ResolvedTs < checkpointTs {
+					log.Warn("The resolvedTs is fallen back in kvclient",
+						zap.String("Event Type", "RESOLVED"),
+						zap.Uint64("resolvedTs", x.ResolvedTs),
+						zap.Uint64("lastResolvedTs", checkpointTs),
+						zap.Uint64("regionID", regionID))
 					continue
 				}
 				// emit a checkpointTs
@@ -1351,8 +1379,7 @@ func (s *eventFeedSession) singleEventFeed(
 						ResolvedTs: x.ResolvedTs,
 					},
 				}
-
-				updateCheckpointTS(&checkpointTs, x.ResolvedTs)
+				checkpointTs = x.ResolvedTs
 
 				// timer := time.Now()
 				// select {
@@ -1490,15 +1517,6 @@ func assembleCommitEvent(entry *cdcpb.Event_Row, value []byte) (*model.RegionFee
 		},
 	}
 	return revent, nil
-}
-
-func updateCheckpointTS(checkpointTs *uint64, newValue uint64) {
-	for {
-		oldValue := atomic.LoadUint64(checkpointTs)
-		if oldValue >= newValue || atomic.CompareAndSwapUint64(checkpointTs, oldValue, newValue) {
-			return
-		}
-	}
 }
 
 // eventError wrap cdcpb.Event_Error to implements error interface.

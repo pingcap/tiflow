@@ -15,7 +15,6 @@ package puller
 
 import (
 	"context"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -81,7 +80,7 @@ func NewPuller(
 		spans:        spans,
 		buffer:       makeMemBuffer(limitter),
 		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:    frontier.NewFrontier(spans...),
+		tsTracker:    frontier.NewFrontier(checkpointTs, spans...),
 		needEncode:   needEncode,
 		resolvedTs:   checkpointTs,
 	}
@@ -114,19 +113,17 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		})
 	}
 
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableID := util.TableIDFromCtx(ctx)
-	tableIDStr := strconv.FormatInt(tableID, 10)
-
-	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricEventCounterKv := kvEventCounter.WithLabelValues(captureID, changefeedID, "kv")
-	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved")
-	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv")
-	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv")
+	tableID, tableName := util.TableIDFromCtx(ctx)
+	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEventCounterKv := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "kv")
+	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "resolved")
+	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
+	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
 
 	g.Go(func() error {
 		for {
@@ -150,7 +147,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					if e.Val != nil {
 						metricEventCounterKv.Inc()
 						val := e.Val
-
 						// if a region with kv range [a, z)
 						// and we only want the get [b, c) from this region,
 						// tikv will return all key events in the region although we specified [b, c) int the request.
@@ -178,8 +174,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
-			if raw.CRTs <= p.resolvedTs {
+			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
 				log.Fatal("The CRTs must be greater than the resolvedTs",
+					zap.Reflect("row", raw),
 					zap.Uint64("CRTs", raw.CRTs),
 					zap.Uint64("resolvedTs", p.resolvedTs),
 					zap.Int64("tableID", tableID))
