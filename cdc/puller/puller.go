@@ -80,7 +80,7 @@ func NewPuller(
 		spans:        spans,
 		buffer:       makeMemBuffer(limitter),
 		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:    frontier.NewFrontier(spans...),
+		tsTracker:    frontier.NewFrontier(checkpointTs, spans...),
 		needEncode:   needEncode,
 		resolvedTs:   checkpointTs,
 	}
