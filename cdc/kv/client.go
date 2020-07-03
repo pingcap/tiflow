@@ -1402,10 +1402,12 @@ func (s *eventFeedSession) singleEventFeed(
 				}
 			}
 		}
-		select {
-		case s.eventCh <- processedEventBatch:
-		case <-ctx.Done():
-			return checkpointTs, errors.Trace(ctx.Err())
+		if len(processedEventBatch) > 0 {
+			select {
+			case s.eventCh <- processedEventBatch:
+			case <-ctx.Done():
+				return checkpointTs, errors.Trace(ctx.Err())
+			}
 		}
 	}
 }
