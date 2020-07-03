@@ -39,7 +39,6 @@ import (
 )
 
 type ownerSuite struct {
-	owner     *Owner
 	e         *embed.Etcd
 	clientURL *url.URL
 	client    kv.CDCEtcdClient

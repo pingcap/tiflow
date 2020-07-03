@@ -386,7 +386,10 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 		needSave, canInit := cfInfo.CheckErrorHistory()
 		if needSave {
-			o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
+			err := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
+			if err != nil {
+				return err
+			}
 		}
 		if !canInit {
 			// avoid too many logs here
