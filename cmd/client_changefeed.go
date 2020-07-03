@@ -125,6 +125,16 @@ func newQueryChangefeedCommand() *cobra.Command {
 		Short: "Query information and status of a replicaiton task (changefeed)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
+
+			if simplified {
+				resp, err := applyOwnerChangefeedQuery(ctx, changefeedID)
+				if err != nil {
+					return err
+				}
+				cmd.Println(resp)
+				return nil
+			}
+
 			info, err := cdcEtcdCli.GetChangeFeedInfo(ctx, changefeedID)
 			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 				return err
@@ -156,6 +166,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 			return jsonPrint(cmd, meta)
 		},
 	}
+	command.PersistentFlags().BoolVar(&simplified, "simple", false, "Output simplified replication status")
 	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 	return command
