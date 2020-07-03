@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -533,7 +534,7 @@ func (s *mysqlSink) Close() error {
 }
 
 func (s *mysqlSink) execDMLWithMaxRetries(
-	ctx context.Context, sqls []string, values [][]interface{}, maxRetries uint64, bucket int,
+	ctx context.Context, sqls []*checkSQL, values []*checkValue, maxRetries uint64, bucket int,
 ) error {
 	checkTxnErr := func(err error) error {
 		if errors.Cause(err) == context.Canceled {
@@ -552,12 +553,35 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 				if err != nil {
 					return 0, checkTxnErr(errors.Trace(err))
 				}
+				var c converter
 				for i, query := range sqls {
 					args := values[i]
-					if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+					if len(query.selectQuery) > 0 {
+						if rs, err := tx.QueryContext(ctx, query.selectQuery, args.selectArgs...); err != nil {
+							if rs.Next() {
+								dest := make([]interface{}, len(args.checkArgs))
+								for i := range dest {
+									dest[i] = c.NewPointerOf(args.checkArgs[i])
+								}
+								if err := rs.Scan(dest...); err != nil {
+									log.Fatal("scan value failed")
+								}
+								for i := range dest {
+									dest[i] = c.PointerValue(dest[i])
+								}
+								for i := range dest {
+									if c.PointerValue(dest[i]) != args.checkArgs[i] {
+										log.Fatal("check old value failed", zap.Reflect("expected", args.checkArgs), zap.Reflect("got", dest))
+									}
+								}
+							}
+							rs.Close()
+						}
+					}
+					if _, err := tx.ExecContext(ctx, query.dmlQuery, args.dmlArgs...); err != nil {
 						return 0, checkTxnErr(errors.Trace(err))
 					}
-					log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+					log.Debug("exec row", zap.String("sql", query.dmlQuery), zap.Any("args", args))
 				}
 				if err = tx.Commit(); err != nil {
 					return 0, checkTxnErr(errors.Trace(err))
@@ -576,10 +600,21 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 	)
 }
 
+type checkSQL struct {
+	dmlQuery    string
+	selectQuery string
+}
+
+type checkValue struct {
+	dmlArgs    []interface{}
+	selectArgs []interface{}
+	checkArgs  []interface{}
+}
+
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
-func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64, bucket int) ([]string, [][]interface{}, error) {
-	sqls := make([]string, 0, len(rows))
-	values := make([][]interface{}, 0, len(rows))
+func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64, bucket int) ([]*checkSQL, []*checkValue, error) {
+	sqls := make([]*checkSQL, 0, len(rows))
+	values := make([]*checkValue, 0, len(rows))
 	for _, row := range rows {
 		var query string
 		var args []interface{}
@@ -592,14 +627,36 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		if err != nil {
 			return nil, nil, errors.Trace(err)
 		}
-		sqls = append(sqls, query)
-		values = append(values, args)
+		var selectQuery string
+		var selectArgs []interface{}
+		var checkArgs []interface{}
+		if len(row.ChangedColumns) > 0 {
+			selectQuery, selectArgs, err = prepareSelect(row.Table.Schema, row.Table.Table, row.ChangedColumns)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
+			}
+			checkArgs = make([]interface{}, 0, len(row.ChangedColumns))
+			for _, v := range row.ChangedColumns {
+				checkArgs = append(checkArgs, v.Value)
+			}
+		}
+		sqls = append(sqls, &checkSQL{
+			dmlQuery:    query,
+			selectQuery: selectQuery,
+		})
+		values = append(values, &checkValue{
+			dmlArgs:    args,
+			selectArgs: selectArgs,
+			checkArgs:  checkArgs,
+		})
 	}
 	if s.cyclic != nil && len(rows) > 0 {
 		// Write mark table with the current replica ID.
 		updateMark := s.cyclic.UdpateSourceTableCyclicMark(
 			rows[0].Table.Schema, rows[0].Table.Table, uint64(bucket), replicaID)
-		sqls = append(sqls, updateMark)
+		sqls = append(sqls, &checkSQL{
+			dmlQuery: updateMark,
+		})
 		values = append(values, nil)
 	}
 	return sqls, values, nil
@@ -662,6 +719,28 @@ func prepareDelete(schema, table string, cols map[string]*model.Column) (string,
 	return sql, args, nil
 }
 
+func prepareSelect(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
+	colNames, wargs := whereSlice(cols)
+	var builder strings.Builder
+	builder.WriteString("SELECT * FROM ")
+	builder.WriteString(quotes.QuoteSchema(schema, table) + " WHERE")
+	args := make([]interface{}, 0, len(wargs))
+	for i := 0; i < len(colNames); i++ {
+		if i > 0 {
+			builder.WriteString(" AND ")
+		}
+		if wargs[i] == nil {
+			builder.WriteString(quotes.QuoteName(colNames[i]) + " IS NULL")
+		} else {
+			builder.WriteString(quotes.QuoteName(colNames[i]) + " = ?")
+			args = append(args, wargs[i])
+		}
+	}
+	builder.WriteString(" ;")
+	sql := builder.String()
+	return sql, args, nil
+}
+
 func whereSlice(cols map[string]*model.Column) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for colName, col := range cols {
@@ -715,4 +794,14 @@ func buildColumnList(names []string) string {
 	}
 
 	return b.String()
+}
+
+type converter struct{}
+
+func (c converter) PointerValue(v interface{}) interface{} {
+	return reflect.ValueOf(v).Elem().Interface()
+}
+
+func (c converter) NewPointerOf(v interface{}) interface{} {
+	return reflect.New(reflect.TypeOf(v)).Interface()
 }
