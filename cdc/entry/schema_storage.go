@@ -596,6 +596,77 @@ func (s *schemaSnapshot) updatePartition(tbl *timodel.TableInfo) error {
 	return nil
 }
 
+func (s *schemaSnapshot) exchangePartition(tbl *timodel.TableInfo) error {
+	var sourceTable *TableInfo
+
+	id := tbl.ID
+	table, ok := s.tables[id]
+	if !ok {
+		return errors.NotFoundf("table %d", id)
+	}
+	schema, ok := s.SchemaByTableID(id)
+	if !ok {
+		return errors.NotFoundf("table(%d)'s schema", id)
+	}
+
+	// old partition info
+	oldPi := table.GetPartitionInfo()
+	if oldPi == nil {
+		return errors.NotFoundf("table %d is not a partition table, truncate partition failed", id)
+	}
+	oldIDs := make(map[int64]struct{}, len(oldPi.Definitions))
+	for _, p := range oldPi.Definitions {
+		oldIDs[p.ID] = struct{}{}
+	}
+
+	// new partition info
+	newPi := tbl.GetPartitionInfo()
+	if newPi == nil {
+		return errors.NotFoundf("table %d is not a partition table, truncate partition failed", id)
+	}
+	newIDs := make(map[int64]struct{}, len(newPi.Definitions))
+	for _, p := range newPi.Definitions {
+		newIDs[p.ID] = struct{}{}
+	}
+
+	// delete oldID from newID, filter out sourceTable
+	for pid := range oldIDs {
+		delete(newIDs, pid)
+	}
+	for pid := range newIDs {
+		sourceTable = s.tables[pid]
+	} 
+
+	// update target table partition
+	table = WrapTableInfo(schema.ID, schema.Name.O, tbl.Clone())
+	s.tables[id] = table
+	for _, partition := range newPi.Definitions {
+		// update table info.
+		if _, ok := s.partitionTable[partition.ID]; ok {
+			log.Debug("add table partition success", zap.String("name", table.Name.O), zap.Int64("tid", id), zap.Reflect("add partition id", partition.ID))
+		}
+		s.partitionTable[partition.ID] = table
+		if !table.ExistTableUniqueColumn() {
+			s.ineligibleTableID[partition.ID] = struct{}{}
+		}else{
+			delete(s.ineligibleTableID, partition.ID)
+		}
+		delete(oldIDs, partition.ID)
+	}
+
+	// update source table
+	for pid := range oldIDs {
+		s.partitionTable[pid] = sourceTable
+		if !table.ExistTableUniqueColumn() {
+			s.ineligibleTableID[pid] = struct{}{}
+		}else{
+			delete(s.ineligibleTableID, pid)
+		}
+	}
+
+	return nil
+}
+
 func (s *schemaSnapshot) createTable(schemaID int64, tbl *timodel.TableInfo) error {
 	schema, ok := s.schemas[schemaID]
 	if !ok {
@@ -708,6 +779,12 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 		s.truncateTableID[job.TableID] = struct{}{}
 	case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
 		err := s.updatePartition(job.BinlogInfo.TableInfo)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+	case timodel.ActionExchangeTablePartition:
+		err := s.exchangePartition(job.BinlogInfo.TableInfo)
 		if err != nil {
 			return errors.Trace(err)
 		}
