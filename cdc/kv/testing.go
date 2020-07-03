@@ -42,7 +42,7 @@ func genValue() []byte {
 
 type eventChecker struct {
 	t       require.TestingT
-	eventCh chan []*model.RegionFeedEvent
+	eventCh chan *model.RegionFeedEvent
 	closeCh chan struct{}
 
 	vals        []*model.RawKVEntry
@@ -61,33 +61,31 @@ func valInSlice(val *model.RawKVEntry, vals []*model.RawKVEntry) bool {
 func newEventChecker(t require.TestingT) *eventChecker {
 	ec := &eventChecker{
 		t:       t,
-		eventCh: make(chan []*model.RegionFeedEvent),
+		eventCh: make(chan *model.RegionFeedEvent),
 		closeCh: make(chan struct{}),
 	}
 
 	go func() {
 		for {
 			select {
-			case events := <-ec.eventCh:
-				for _, e := range events {
-					log.Debug("get event", zap.Reflect("event", e))
-					if e.Val != nil {
-						// check if the value event break the checkpoint guarantee
-						for _, cp := range ec.checkpoints {
-							if !regionspan.KeyInSpan(e.Val.Key, cp.Span) ||
-								e.Val.CRTs > cp.ResolvedTs {
-								continue
-							}
-
-							if !valInSlice(e.Val, ec.vals) {
-								require.FailNowf(t, "unexpected value event", "value: %+v checkpoint: %+v", e.Val, cp)
-							}
+			case e := <-ec.eventCh:
+				log.Debug("get event", zap.Reflect("event", e))
+				if e.Val != nil {
+					// check if the value event break the checkpoint guarantee
+					for _, cp := range ec.checkpoints {
+						if !regionspan.KeyInSpan(e.Val.Key, cp.Span) ||
+							e.Val.CRTs > cp.ResolvedTs {
+							continue
 						}
 
-						ec.vals = append(ec.vals, e.Val)
-					} else {
-						ec.checkpoints = append(ec.checkpoints, e.Resolved)
+						if !valInSlice(e.Val, ec.vals) {
+							require.FailNowf(t, "unexpected value event", "value: %+v checkpoint: %+v", e.Val, cp)
+						}
 					}
+
+					ec.vals = append(ec.vals, e.Val)
+				} else {
+					ec.checkpoints = append(ec.checkpoints, e.Resolved)
 				}
 			case <-ec.closeCh:
 				return
@@ -121,16 +119,15 @@ func mustGetTimestamp(t require.TestingT, storage kv.Storage) uint64 {
 	return ts
 }
 
-func mustGetValue(t require.TestingT, eventCh <-chan []*model.RegionFeedEvent, value []byte) {
+func mustGetValue(t require.TestingT, eventCh <-chan *model.RegionFeedEvent, value []byte) {
 	timeout := time.After(time.Second * 20)
 
 	for {
 		select {
-		case <-eventCh:
-			// TODO: Fix this
-			// if e.Val != nil && bytes.Equal(e.Val.Value, value) {
-			// 	return
-			// }
+		case e := <-eventCh:
+			if e.Val != nil && bytes.Equal(e.Val.Value, value) {
+				return
+			}
 		case <-timeout:
 			require.FailNowf(t, "timeout to get value", "value: %v", value)
 		}
@@ -144,7 +141,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	require.NoError(t, err)
 	defer cli.Close()
 
-	eventCh := make(chan []*model.RegionFeedEvent, 1<<20)
+	eventCh := make(chan *model.RegionFeedEvent, 1<<20)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

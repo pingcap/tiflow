@@ -147,7 +147,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	c.Assert(err, check.IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eventCh := make(chan []*model.RegionFeedEvent, 10)
+	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx, regionspan.Span{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
@@ -178,20 +178,20 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	ts, err := kvStorage.CurrentVersion()
 	c.Assert(err, check.IsNil)
 	ch2 <- makeEvent(ts.Ver)
-	var events []*model.RegionFeedEvent
+	var event *model.RegionFeedEvent
 	select {
-	case events = <-eventCh:
+	case event = <-eventCh:
 	case <-time.After(time.Second):
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
-	checkEvent(events[0], 1)
+	checkEvent(event, 1)
 
 	select {
-	case events = <-eventCh:
+	case event = <-eventCh:
 	case <-time.After(time.Second):
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
-	checkEvent(events[0], ts.Ver)
+	checkEvent(event, ts.Ver)
 	cancel()
 }
 
@@ -210,7 +210,7 @@ func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
 	c.Assert(err, check.IsNil)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	eventCh := make(chan []*model.RegionFeedEvent, 10)
+	eventCh := make(chan *model.RegionFeedEvent, 10)
 	err = cdcClient.EventFeed(ctx, regionspan.Span{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
 	_ = err
 	// TODO find a way to verify the error

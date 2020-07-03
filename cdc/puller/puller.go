@@ -103,7 +103,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	checkpointTs := p.checkpointTs
-	eventCh := make(chan []*model.RegionFeedEvent, defaultPullerEventChanSize)
+	eventCh := make(chan *model.RegionFeedEvent, defaultPullerEventChanSize)
 
 	for _, span := range p.spans {
 		span := span
@@ -142,28 +142,26 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g.Go(func() error {
 		for {
 			select {
-			case events := <-eventCh:
-				for _, e := range events {
-					if e.Val != nil {
-						metricEventCounterKv.Inc()
-						val := e.Val
-						// if a region with kv range [a, z)
-						// and we only want the get [b, c) from this region,
-						// tikv will return all key events in the region although we specified [b, c) int the request.
-						// we can make tikv only return the events about the keys in the specified range.
-						if !regionspan.KeyInSpans(val.Key, p.spans, p.needEncode) {
-							// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
-							continue
-						}
+			case e := <-eventCh:
+				if e.Val != nil {
+					metricEventCounterKv.Inc()
+					val := e.Val
+					// if a region with kv range [a, z)
+					// and we only want the get [b, c) from this region,
+					// tikv will return all key events in the region although we specified [b, c) int the request.
+					// we can make tikv only return the events about the keys in the specified range.
+					if !regionspan.KeyInSpans(val.Key, p.spans, p.needEncode) {
+						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
+						continue
+					}
 
-						if err := p.buffer.AddEntry(ctx, *e); err != nil {
-							return errors.Trace(err)
-						}
-					} else if e.Resolved != nil {
-						metricEventCounterResolved.Inc()
-						if err := p.buffer.AddEntry(ctx, *e); err != nil {
-							return errors.Trace(err)
-						}
+					if err := p.buffer.AddEntry(ctx, *e); err != nil {
+						return errors.Trace(err)
+					}
+				} else if e.Resolved != nil {
+					metricEventCounterResolved.Inc()
+					if err := p.buffer.AddEntry(ctx, *e); err != nil {
+						return errors.Trace(err)
 					}
 				}
 			case <-ctx.Done():
