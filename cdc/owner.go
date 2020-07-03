@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -339,26 +338,6 @@ func (o *Owner) checkAndCleanTasksInfo(ctx context.Context) error {
 	return nil
 }
 
-// checkErrorHistory checks error history of a changefeed, if error counts reach
-// threshold, return false to represent refuse to initialize changefeed now.
-func (o *Owner) checkErrorHistory(info *model.ChangeFeedInfo) bool {
-	i := sort.Search(len(info.ErrorHis), func(i int) bool {
-		ts := info.ErrorHis[i]
-		return time.Since(time.Unix(ts/1000, ts%1000*1e6)) < ErrorHistoryGCInterval
-	})
-	if i == len(info.ErrorHis) {
-		info.ErrorHis = info.ErrorHis[:]
-	} else {
-		info.ErrorHis = info.ErrorHis[i:]
-	}
-
-	i = sort.Search(len(info.ErrorHis), func(i int) bool {
-		ts := info.ErrorHis[i]
-		return time.Since(time.Unix(ts/1000, ts%1000*1e6)) < ErrorHistoryCheckInterval
-	})
-	return len(info.ErrorHis)-i < ErrorHistoryThreshold
-}
-
 func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
 	if err != nil {
@@ -405,7 +384,10 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			log.Info("changefeed recovered from failure", zap.String("changefeed", changeFeedID))
 			delete(o.failedFeeds, changeFeedID)
 		}
-		canInit := o.checkErrorHistory(cfInfo)
+		needSave, canInit := cfInfo.CheckErrorHistory()
+		if needSave {
+			o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
+		}
 		if !canInit {
 			// avoid too many logs here
 			if time.Now().Unix()%60 == 0 {

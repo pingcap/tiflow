@@ -16,6 +16,7 @@ package model
 import (
 	"encoding/json"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -42,6 +43,19 @@ const (
 	StateFailed  FeedState = "failed"
 	StateStopped FeedState = "stopped"
 	StateRemoved FeedState = "removed"
+)
+
+const (
+	// ErrorHistoryGCInterval represents how long we keep error record in changefeed info
+	ErrorHistoryGCInterval = time.Minute * 10
+
+	// ErrorHistoryCheckInterval represents time window for failure check
+	ErrorHistoryCheckInterval = time.Minute * 2
+
+	// ErrorHistoryThreshold represents failure upper limit in time window.
+	// Before a changefeed is initialized, check the the failure count of this
+	// changefeed, if it is less than ErrorHistoryThreshold, then initialize it.
+	ErrorHistoryThreshold = 5
 )
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
@@ -136,4 +150,29 @@ func (info *ChangeFeedInfo) VerifyAndFix() error {
 		info.Config.Scheduler = defaultConfig.Scheduler
 	}
 	return nil
+}
+
+// CheckErrorHistory checks error history of a changefeed
+// if having error record older than GC interval, set needSave to true.
+// if error counts reach threshold, set canInit to false.
+func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
+	i := sort.Search(len(info.ErrorHis), func(i int) bool {
+		ts := info.ErrorHis[i]
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryGCInterval
+	})
+	if i == len(info.ErrorHis) {
+		info.ErrorHis = info.ErrorHis[:]
+	} else {
+		info.ErrorHis = info.ErrorHis[i:]
+	}
+	if i > 0 {
+		needSave = true
+	}
+
+	i = sort.Search(len(info.ErrorHis), func(i int) bool {
+		ts := info.ErrorHis[i]
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryCheckInterval
+	})
+	canInit = len(info.ErrorHis)-i < ErrorHistoryThreshold
+	return
 }
