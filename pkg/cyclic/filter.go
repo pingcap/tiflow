@@ -36,14 +36,19 @@ type TxnMap map[uint64]map[model.TableName][]*model.RowChangedEvent
 // There is at most one mark table row that is modified for each transaction.
 type MarkMap map[uint64]*model.RowChangedEvent
 
-func (m MarkMap) shouldFilterTxn(startTs uint64, filterReplicaIDs []uint64) (*model.RowChangedEvent, bool) {
+func (m MarkMap) shouldFilterTxn(startTs uint64, filterReplicaIDs []uint64, replicaID uint64) (*model.RowChangedEvent, bool) {
 	markRow, markFound := m[startTs]
 	if !markFound {
 		return nil, false
 	}
-	replicaID := ExtractReplicaID(markRow)
+	from := ExtractReplicaID(markRow)
+	if from == replicaID {
+		log.Fatal("cyclic replication loopback detected",
+			zap.Any("markRow", markRow),
+			zap.Uint64("replicaID", replicaID))
+	}
 	for i := range filterReplicaIDs {
-		if filterReplicaIDs[i] == replicaID {
+		if filterReplicaIDs[i] == from {
 			return markRow, true
 		}
 	}
@@ -85,7 +90,7 @@ func FilterAndReduceTxns(txnsMap map[model.TableName][]*model.Txn, filterReplica
 		filteredTxns := make([]*model.Txn, 0, len(txns))
 		for _, txn := range txns {
 			// Check if we should skip this event
-			markRow, needSkip := markMap.shouldFilterTxn(txn.StartTs, filterReplicaIDs)
+			markRow, needSkip := markMap.shouldFilterTxn(txn.StartTs, filterReplicaIDs, replicaID)
 			if needSkip {
 				// Found cyclic mark, skip this event as it originly created from
 				// downstream.

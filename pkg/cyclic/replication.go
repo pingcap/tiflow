@@ -64,8 +64,8 @@ type Cyclic struct {
 func (*Cyclic) UdpateSourceTableCyclicMark(sourceSchema, sourceTable string, bucket, replicaID uint64) string {
 	schema, table := mark.GetMarkTableName(sourceSchema, sourceTable)
 	return fmt.Sprintf(
-		`INSERT INTO %s.%s VALUES (%d, %d, 0) ON DUPLICATE KEY UPDATE val = val + 1;`,
-		schema, table, bucket, replicaID)
+		`INSERT INTO %s VALUES (%d, %d, 0) ON DUPLICATE KEY UPDATE val = val + 1;`,
+		model.QuoteSchema(schema, table), bucket, replicaID)
 }
 
 // FilterReplicaID return a slice of replica IDs needs to be filtered.
