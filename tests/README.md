@@ -11,7 +11,13 @@
     * [bin/etcdctl](https://github.com/etcd-io/etcd/tree/master/etcdctl)
     * [bin/jq](https://stedolan.github.io/jq/)
 
-2. The user used to execute the tests must have permission to create the folder /tmp/tidb_cdc_test. All test artifacts will be written into this folder.
+    > If you are running tests on MacOS, tidb related binaries can be downloaded from tiup mirrors, such as https://tiup-mirrors.pingcap.com/tidb-v4.0.2-darwin-amd64.tar.gz. And `sync_diff_inspector` can be compiled by yourself from source [tidb-tools](https://github.com/pingcap/tidb-tools)
+
+2. The following programs must be installed:
+
+    * `mysql` (the MySQL cli client, currently [mysql client 8.0 is not supported](https://github.com/pingcap/tidb/issues/14021))
+
+3. The user used to execute the tests must have permission to create the folder /tmp/tidb_cdc_test. All test artifacts will be written into this folder.
 
 
 ## Running
