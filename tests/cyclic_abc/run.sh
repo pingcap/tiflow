@@ -23,9 +23,24 @@ function run() {
 
 
     # create table in all cluters.
-    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${THIRD_TIDB_HOST} ${THIRD_TIDB_PORT}
+    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2)) \
+            partition by range (id1) ( \
+                partition p0 values less than (10), \
+                partition p1 values less than (20), \
+                partition p3 values less than (30) \
+            );" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2)) \
+            partition by range (id1) ( \
+                partition p0 values less than (10), \
+                partition p1 values less than (20), \
+                partition p3 values less than (30) \
+            );" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2)) \
+            partition by range (id1) ( \
+                partition p0 values less than (10), \
+                partition p1 values less than (20), \
+                partition p3 values less than (30) \
+            );" ${THIRD_TIDB_HOST} ${THIRD_TIDB_PORT}
 
     run_cdc_cli changefeed cyclic create-marktables \
         --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/" \
@@ -84,7 +99,7 @@ function run() {
         --cyclic-filter-replica-ids 1 \
         --cyclic-sync-ddl false
 
-    for i in $(seq 11 20); do {
+    for i in $(seq 6 15); do {
         sqlup="START TRANSACTION;"
         sqldown="START TRANSACTION;"
         sqlthird="START TRANSACTION;"
