@@ -338,7 +338,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 				orphanMarkTableID, found = schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
 				if !found {
 					// Mark table is not created yet, skip and wait.
-					log.Warn("balance table info delay, wait mark table",
+					log.Info("balance orphan tables delay, wait mark table",
 						zap.String("changefeed", c.id),
 						zap.Int64("tableID", tableID),
 						zap.String("markTableName", markTableTableName))
@@ -686,13 +686,34 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
 func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if c.ddlState != model.ChangeFeedSyncDML && c.ddlState != model.ChangeFeedWaitToExecDDL {
+		log.Debug("skip update resolved ts", zap.String("ddlState", c.ddlState.String()))
 		return nil
 	}
 
 	minResolvedTs := c.targetTs
 	minCheckpointTs := c.targetTs
 
+	prevMinResolvedTs := c.targetTs
+	prevMinCheckpointTs := c.targetTs
+	checkUpdateTs := func() {
+		if prevMinCheckpointTs != minCheckpointTs {
+			log.L().WithOptions(zap.AddCallerSkip(1)).Debug("min checkpoint updated",
+				zap.Uint64("prevMinCheckpointTs", prevMinCheckpointTs),
+				zap.Uint64("minCheckpointTs", minCheckpointTs))
+			prevMinCheckpointTs = minCheckpointTs
+		}
+		if prevMinResolvedTs != minResolvedTs {
+			log.L().WithOptions(zap.AddCallerSkip(1)).Debug("min resolved updated",
+				zap.Uint64("prevMinResolvedTs", prevMinResolvedTs),
+				zap.Uint64("minResolvedTs", minResolvedTs))
+			prevMinResolvedTs = minResolvedTs
+		}
+	}
+
 	if len(c.taskPositions) < len(c.taskStatus) {
+		log.Debug("skip update resolved ts",
+			zap.Int("taskPositions", len(c.taskPositions)),
+			zap.Int("taskStatus", len(c.taskStatus)))
 		return nil
 	}
 	if len(c.taskPositions) == 0 {
@@ -709,6 +730,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			}
 		}
 	}
+	checkUpdateTs()
 
 	for captureID, status := range c.taskStatus {
 		appliedTs := status.AppliedTs()
@@ -719,9 +741,13 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			minResolvedTs = appliedTs
 		}
 		if appliedTs != math.MaxUint64 {
-			log.Info("some operation is still unapplied", zap.String("captureID", captureID), zap.Uint64("appliedTs", appliedTs), zap.Stringer("status", status))
+			log.Info("some operation is still unapplied",
+				zap.String("captureID", captureID),
+				zap.Uint64("appliedTs", appliedTs),
+				zap.Stringer("status", status))
 		}
 	}
+	checkUpdateTs()
 
 	for _, startTs := range c.orphanTables {
 		if minCheckpointTs > startTs {
@@ -731,6 +757,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			minResolvedTs = startTs
 		}
 	}
+	checkUpdateTs()
 
 	for _, targetTs := range c.toCleanTables {
 		if minCheckpointTs > targetTs {
@@ -740,6 +767,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			minResolvedTs = targetTs
 		}
 	}
+	checkUpdateTs()
 
 	// if minResolvedTs is greater than ddlResolvedTs,
 	// it means that ddlJobHistory in memory is not intact,
@@ -769,6 +797,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if minCheckpointTs > minResolvedTs {
 		minCheckpointTs = minResolvedTs
 	}
+	checkUpdateTs()
 
 	var tsUpdated bool
 
@@ -790,6 +819,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		}
 		tsUpdated = true
 	}
+	checkUpdateTs()
 
 	if tsUpdated {
 		log.Debug("update changefeed", zap.String("id", c.id),

@@ -95,10 +95,11 @@ type processor struct {
 	output    chan *model.PolymorphicEvent
 	mounter   entry.Mounter
 
-	stateMu  sync.Mutex
-	status   *model.TaskStatus
-	position *model.TaskPosition
-	tables   map[int64]*tableInfo
+	stateMu      sync.Mutex
+	status       *model.TaskStatus
+	position     *model.TaskPosition
+	tables       map[int64]*tableInfo
+	markTableIDs map[int64]struct{}
 
 	sinkEmittedResolvedNotifier *notify.Notifier
 	sinkEmittedResolvedReceiver *notify.Receiver
@@ -202,11 +203,12 @@ func newProcessor(
 		localResolvedNotifier: localResolvedNotifier,
 		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
 
-		tables: make(map[int64]*tableInfo),
+		tables:       make(map[int64]*tableInfo),
+		markTableIDs: make(map[int64]struct{}),
 	}
 
-	for tableID, startTs := range p.status.Tables {
-		p.addTable(ctx, tableID, startTs)
+	for tableID, replicaInfo := range p.status.Tables {
+		p.addTable(ctx, tableID, replicaInfo)
 	}
 	return p, nil
 }
@@ -302,6 +304,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		err := retry.Run(500*time.Millisecond, 3, func() error {
 			inErr := p.updateInfo(ctx)
 			if inErr != nil {
+				log.Error("update info failed", zap.Error(inErr))
 				if p.isStopped() || errors.Cause(inErr) == model.ErrAdminStopProcessor {
 					return backoff.Permanent(errors.Trace(model.ErrAdminStopProcessor))
 				}
@@ -499,6 +502,9 @@ func (p *processor) removeTable(tableID int64) {
 
 	table.cancel()
 	delete(p.tables, tableID)
+	if table.markTableID != 0 {
+		delete(p.markTableIDs, table.markTableID)
+	}
 	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Dec()
 }
@@ -847,11 +853,14 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 
 	if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID != 0 {
 		mTableID := replicaInfo.MarkTableID
+		// we should to make sure a mark table is only listened once.
+		if _, exist := p.markTableIDs[mTableID]; !exist {
+			p.markTableIDs[mTableID] = struct{}{}
+			startPuller(mTableID, &table.mResolvedTs)
 
-		startPuller(mTableID, &table.mResolvedTs)
-
-		table.markTableID = mTableID
-		table.mResolvedTs = replicaInfo.StartTs
+			table.markTableID = mTableID
+			table.mResolvedTs = replicaInfo.StartTs
+		}
 	}
 
 	p.tables[tableID] = table
