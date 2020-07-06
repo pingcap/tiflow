@@ -41,7 +41,8 @@ type commonResp struct {
 	Message string `json:"message"`
 }
 
-type changefeedResp struct {
+// ChangefeedResp holds the most common usage information for a changefeed
+type ChangefeedResp struct {
 	FeedState    string              `json:"state"`
 	TSO          uint64              `json:"tso"`
 	Checkpoint   string              `json:"checkpoint"`
@@ -205,7 +206,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	resp := &changefeedResp{
+	resp := &ChangefeedResp{
 		FeedState: string(feedState),
 	}
 	if cf != nil {
