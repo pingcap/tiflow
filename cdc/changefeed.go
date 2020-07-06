@@ -71,8 +71,8 @@ type ChangeFeedRWriter interface {
 	// PutAllChangeFeedStatus the changefeed info to storage such as etcd.
 	PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error
 }
-
 type changeFeed struct {
+
 	id     string
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
@@ -241,6 +241,43 @@ func (c *changeFeed) updatePartition(tblInfo *timodel.TableInfo, startTs uint64)
 		}
 	}
 }
+
+func (c *changeFeed) exchangePartition(tblInfo *timodel.TableInfo, startTs uint64) {
+	tid := tblInfo.ID
+	partitionsID, ok := c.partitions[tid]
+	if !ok || len(partitionsID) == 0 {
+		return
+	}
+	oldIDs := make(map[int64]struct{}, len(partitionsID))
+	for _, pid := range partitionsID {
+		oldIDs[pid] = struct{}{}
+	}
+
+	pi := tblInfo.GetPartitionInfo()
+	if pi == nil {
+		return
+	}
+	newPartitionIDs := make([]int64, 0, len(pi.Definitions))
+	for _, partition := range pi.Definitions {
+		pid := partition.ID
+		_, ok := c.orphanTables[pid]
+		if !ok {
+			// new partition.
+			c.orphanTables[pid] = startTs
+		}
+		delete(oldIDs, partition.ID)
+		newPartitionIDs = append(newPartitionIDs, partition.ID)
+	}
+	// update the table partition IDs.
+	c.partitions[tid] = newPartitionIDs
+
+	// transform to non-partition table.
+	for pid := range oldIDs {
+		delete(c.partitions, pid)
+	}
+}
+
+
 
 func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo, rebalanceNow bool,
 	manualMoveCommands []*model.MoveTableJob) error {
@@ -582,6 +619,8 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName, job.BinlogInfo.TableInfo)
 		case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
 			c.updatePartition(job.BinlogInfo.TableInfo, job.BinlogInfo.FinishedTS)
+		case timodel.ActionExchangeTablePartition:
+			c.exchangePartition(job.BinlogInfo.TableInfo, job.BinlogInfo.FinishedTS)
 		}
 		return nil
 	}()
