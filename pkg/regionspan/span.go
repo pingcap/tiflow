@@ -17,8 +17,10 @@ import (
 	"bytes"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
+	"go.uber.org/zap"
 )
 
 // Span represents a arbitrary kv range
@@ -173,7 +175,16 @@ func Intersect(lhs Span, rhs Span) (span Span, err error) {
 	return Span{Start: start, End: end}, nil
 }
 
-func IsSubSpan(sub Span, parent ...Span) bool {
+func IsSubSpan(sub Span, parents ...Span) bool {
+	if bytes.Compare(sub.Start, sub.End) >= 0 {
+		log.Fatal("the sub span is invalid", zap.Reflect("sub span", sub))
+	}
+	for _, parent := range parents {
+		if StartCompare(parent.Start, sub.Start) <= 0 &&
+			EndCompare(sub.End, parent.End) <= 0 {
+			return true
+		}
+	}
 	return false
 }
 
