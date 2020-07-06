@@ -117,7 +117,7 @@ func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableN
 		return err
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json")
-	resp, err := httpRetry(ctx, req)
+	resp, err := httpRetry(ctx, req, false)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json, application/vnd.schemaregistry+json, application/json")
 
-	resp, err := httpRetry(ctx, req)
+	resp, err := httpRetry(ctx, req, false)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -244,7 +244,11 @@ func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.T
 		return err
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json, application/vnd.schemaregistry+json, application/json")
-	resp, _ := httpRetry(ctx, req)
+	resp, err := httpRetry(ctx, req, true)
+	if err != nil {
+		return err
+	}
+
 	if resp.StatusCode == 200 {
 		log.Info("Clearing Registry successful")
 		return nil
@@ -254,7 +258,7 @@ func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.T
 	return err
 }
 
-func httpRetry(ctx context.Context, r *http.Request) (*http.Response, error) {
+func httpRetry(ctx context.Context, r *http.Request, allow404 bool) (*http.Response, error) {
 	var (
 		err  error
 		resp *http.Response
@@ -270,7 +274,7 @@ func httpRetry(ctx context.Context, r *http.Request) (*http.Response, error) {
 			goto checkCtx
 		}
 
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 || (resp.StatusCode == 404 && allow404) {
 			break
 		}
 		log.Warn("HTTP server returned with error", zap.Int("status", resp.StatusCode))

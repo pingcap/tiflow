@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/jarcoal/httpmock"
@@ -29,11 +30,12 @@ import (
 type AvroSchemaRegistrySuite struct {
 }
 
-var _ = check.SerialSuites(&AvroSchemaRegistrySuite{})
+var _ = check.Suite(&AvroSchemaRegistrySuite{})
 
 type mockRegistry struct {
 	subjects map[string]*mockRegistrySchema
 	newID    int
+	mu       sync.Mutex
 }
 
 type mockRegistrySchema struct {
@@ -42,7 +44,7 @@ type mockRegistrySchema struct {
 	ID      int
 }
 
-func startRegistryHTTPMock(c *check.C) {
+func (s *AvroSchemaRegistrySuite) SetUpSuite(c *check.C) {
 	httpmock.Activate()
 
 	registry := mockRegistry{
@@ -71,6 +73,7 @@ func startRegistryHTTPMock(c *check.C) {
 			c.Assert(reqData.SchemaType, check.Equals, "AVRO")
 
 			var respData registerResponse
+			registry.mu.Lock()
 			item, exists := registry.subjects[subject]
 			if !exists {
 				item = &mockRegistrySchema{
@@ -90,6 +93,7 @@ func startRegistryHTTPMock(c *check.C) {
 					respData.ID = registry.newID
 				}
 			}
+			registry.mu.Unlock()
 			registry.newID++
 			return httpmock.NewJsonResponse(200, &respData)
 		})
@@ -101,7 +105,9 @@ func startRegistryHTTPMock(c *check.C) {
 				return httpmock.NewStringResponse(500, "Internal Server Error"), err
 			}
 
+			registry.mu.Lock()
 			item, exists := registry.subjects[subject]
+			registry.mu.Unlock()
 			if !exists {
 				return httpmock.NewStringResponse(404, ""), nil
 			}
@@ -121,9 +127,11 @@ func startRegistryHTTPMock(c *check.C) {
 				return nil, err
 			}
 
+			registry.mu.Lock()
+			defer registry.mu.Unlock()
 			_, exists := registry.subjects[subject]
 			if !exists {
-				httpmock.NewStringResponse(404, "")
+				return httpmock.NewStringResponse(404, ""), nil
 			}
 
 			delete(registry.subjects, subject)
@@ -132,7 +140,7 @@ func startRegistryHTTPMock(c *check.C) {
 
 }
 
-func stopRegistryHTTPMock() {
+func (s *AvroSchemaRegistrySuite) TearDownSuite(c *check.C) {
 	httpmock.DeactivateAndReset()
 }
 
@@ -143,8 +151,6 @@ func getTestingContext() context.Context {
 }
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
-	startRegistryHTTPMock(c)
-
 	table := model.TableName{
 		Schema:    "testdb",
 		Table:     "test1",
@@ -210,25 +216,17 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(id2, check.Not(check.Equals), id)
 	c.Assert(codec.CanonicalSchema(), check.Equals, codec2.CanonicalSchema())
-
-	stopRegistryHTTPMock()
 }
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistryBad(c *check.C) {
-	startRegistryHTTPMock(c)
-
 	_, err := NewAvroSchemaManager(getTestingContext(), "http://127.0.0.1:808", "-value")
 	c.Assert(err, check.NotNil)
 
 	_, err = NewAvroSchemaManager(getTestingContext(), "https://127.0.0.1:8080", "-value")
 	c.Assert(err, check.NotNil)
-
-	stopRegistryHTTPMock()
 }
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
-	startRegistryHTTPMock(c)
-
 	table := model.TableName{
 		Schema:    "testdb",
 		Table:     "test1",
@@ -266,6 +264,4 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 		err = manager.Register(getTestingContext(), table, codec)
 		c.Assert(err, check.IsNil)
 	}
-
-	stopRegistryHTTPMock()
 }
