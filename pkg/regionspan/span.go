@@ -53,15 +53,11 @@ func (s Span) Hack() Span {
 }
 
 // GetTableSpan returns the span to watch for the specified table
-func GetTableSpan(tableID int64, needEncode bool) Span {
+func GetTableSpan(tableID int64) Span {
 	sep := byte('_')
 	tablePrefix := tablecodec.GenTablePrefix(tableID)
 	start := append(tablePrefix, sep)
 	end := append(tablePrefix, sep+1)
-	if needEncode {
-		start = codec.EncodeBytes(nil, start)
-		end = codec.EncodeBytes(nil, end)
-	}
 	return Span{
 		Start: start,
 		End:   end,
@@ -96,13 +92,9 @@ func getMetaListKey(key string) Span {
 }
 
 // KeyInSpans check if k in the range of spans.
-func KeyInSpans(k []byte, spans []Span, needEncode bool) bool {
-	encodedK := k
-	if needEncode {
-		encodedK = codec.EncodeBytes(nil, k)
-	}
+func KeyInSpans(k []byte, spans []Span) bool {
 	for _, span := range spans {
-		if KeyInSpan(encodedK, span) {
+		if KeyInSpan(k, span) {
 			return true
 		}
 	}
@@ -179,4 +171,15 @@ func Intersect(lhs Span, rhs Span) (span Span, err error) {
 	}
 
 	return Span{Start: start, End: end}, nil
+}
+
+func IsSubSpan(sub Span, parent ...Span) bool {
+	return false
+}
+
+func ComparableSpan(span Span) Span {
+	return Span{
+		Start: codec.EncodeBytes(nil, span.Start),
+		End:   codec.EncodeBytes(nil, span.End),
+	}
 }

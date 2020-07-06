@@ -149,7 +149,7 @@ func (p *mockPuller) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 					continue
 				}
 				p.resolvedTs = rawKV.StartTs
-				if !regionspan.KeyInSpans(rawKV.Key, p.spans, false) {
+				if !regionspan.KeyInSpans(rawKV.Key, p.spans) {
 					continue
 				}
 				select {

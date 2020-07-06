@@ -55,8 +55,6 @@ type pullerImpl struct {
 	outputCh     chan *model.RawKVEntry
 	tsTracker    frontier.Frontier
 	resolvedTs   uint64
-	// needEncode represents whether we need to encode a key when checking it is in span
-	needEncode bool
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTs
@@ -66,12 +64,14 @@ func NewPuller(
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
-	needEncode bool,
 	limitter *BlurResourceLimitter,
 ) *pullerImpl {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
 		log.Fatal("can't create puller for non-tikv storage")
+	}
+	for i := range spans {
+		spans[i] = regionspan.ComparableSpan(spans[i])
 	}
 	p := &pullerImpl{
 		pdCli:        pdCli,
@@ -81,7 +81,6 @@ func NewPuller(
 		buffer:       makeMemBuffer(limitter),
 		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
 		tsTracker:    frontier.NewFrontier(checkpointTs, spans...),
-		needEncode:   needEncode,
 		resolvedTs:   checkpointTs,
 	}
 	return p
@@ -150,7 +149,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// and we only want the get [b, c) from this region,
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
-					if !regionspan.KeyInSpans(val.Key, p.spans, p.needEncode) {
+					if !regionspan.KeyInSpans(val.Key, p.spans) {
 						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
 						continue
 					}
