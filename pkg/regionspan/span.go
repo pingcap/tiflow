@@ -175,6 +175,7 @@ func Intersect(lhs Span, rhs Span) (span Span, err error) {
 	return Span{Start: start, End: end}, nil
 }
 
+// IsSubSpan returns true if the sub span is parents spans
 func IsSubSpan(sub Span, parents ...Span) bool {
 	if bytes.Compare(sub.Start, sub.End) >= 0 {
 		log.Fatal("the sub span is invalid", zap.Reflect("sub span", sub))
@@ -188,6 +189,7 @@ func IsSubSpan(sub Span, parents ...Span) bool {
 	return false
 }
 
+// ComparableSpan returns a memcomparable span
 func ComparableSpan(span Span) Span {
 	return Span{
 		Start: codec.EncodeBytes(nil, span.Start),
@@ -195,6 +197,7 @@ func ComparableSpan(span Span) Span {
 	}
 }
 
+// ComparableKey returns a memcomparable key.
 func ComparableKey(key []byte) []byte {
 	return codec.EncodeBytes(nil, key)
 }
