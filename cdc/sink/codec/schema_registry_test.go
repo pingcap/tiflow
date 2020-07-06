@@ -29,7 +29,7 @@ import (
 type AvroSchemaRegistrySuite struct {
 }
 
-var _ = check.Suite(&AvroSchemaRegistrySuite{})
+var _ = check.SerialSuites(&AvroSchemaRegistrySuite{})
 
 type mockRegistry struct {
 	subjects map[string]*mockRegistrySchema
