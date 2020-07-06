@@ -14,9 +14,11 @@
 package util
 
 import (
+	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // _globalP is the global ZapProperties in log
@@ -83,6 +85,11 @@ func InitLogger(cfg *Config) error {
 
 	log.ReplaceGlobals(lg, _globalP)
 
+	err = initSaramaLogger(cfg.Level)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -95,4 +102,22 @@ func ZapErrorFilter(err error, filterErrors ...error) zap.Field {
 		}
 	}
 	return zap.Error(err)
+}
+
+// InitSaramaLogger hacks logger used in sarama lib
+func initSaramaLogger(logLevel string) error {
+	var level zapcore.Level
+	err := level.UnmarshalText([]byte(logLevel))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// only available less than info level
+	if !zapcore.InfoLevel.Enabled(level) {
+		logger, err := zap.NewStdLogAt(log.L().With(zap.String("name", "sarama")), level)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		sarama.Logger = logger
+	}
+	return nil
 }
