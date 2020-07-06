@@ -38,6 +38,7 @@ func init() {
 	cliCmd := newCliCommand()
 	cliCmd.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address")
 	cliCmd.PersistentFlags().BoolVarP(&interact, "interact", "i", false, "Run cdc cli with readline")
+	cliCmd.PersistentFlags().StringVar(&cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
 	rootCmd.AddCommand(cliCmd)
 }
 
@@ -60,7 +61,9 @@ var (
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client
 
-	interact bool
+	interact    bool
+	simplified  bool
+	cliLogLevel string
 
 	changefeedID string
 	captureID    string
@@ -111,11 +114,7 @@ func newCliCommand() *cobra.Command {
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			err := util.InitLogger(&util.Config{Level: "warn"})
-			if err != nil {
-				fmt.Printf("init logger error %v", errors.ErrorStack(err))
-				os.Exit(1)
-			}
+			initCmd(cmd, &util.Config{Level: cliLogLevel})
 
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
@@ -138,7 +137,8 @@ func newCliCommand() *cobra.Command {
 				return errors.Annotate(err, "fail to open PD client")
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
-			pdCli, err = pd.NewClient([]string{cliPdAddr}, pd.SecurityOption{},
+			pdCli, err = pd.NewClientWithContext(
+				defaultContext, []string{cliPdAddr}, pd.SecurityOption{},
 				pd.WithGRPCDialOptions(
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{

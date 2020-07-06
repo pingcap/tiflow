@@ -15,7 +15,10 @@ package frontier
 
 import (
 	"bytes"
+	"fmt"
+	"log"
 	"math"
+	"strings"
 
 	_ "unsafe" // required by go:linkname
 )
@@ -24,45 +27,58 @@ const (
 	maxHeight = 12
 )
 
-type spanList struct {
-	head   node
+type skipListNode struct {
+	key   []byte
+	value *fibonacciHeapNode
+
+	nexts []*skipListNode
+}
+
+// Key is the key of the node
+func (s *skipListNode) Key() []byte {
+	return s.key
+}
+
+// Value is the value of the node
+func (s *skipListNode) Value() *fibonacciHeapNode {
+	return s.value
+}
+
+// Next returns the next node in the list
+func (s *skipListNode) Next() *skipListNode {
+	return s.nexts[0]
+}
+
+type seekResult []*skipListNode
+
+// Next points to the next seek result
+func (s seekResult) Next() {
+	next := s.Node().Next()
+	for i := range next.nexts {
+		s[i] = next
+	}
+}
+
+// Node returns the node point by the seek result
+func (s seekResult) Node() *skipListNode {
+	if len(s) == 0 {
+		return nil
+	}
+	return s[0]
+}
+
+type skipList struct {
+	head   skipListNode
 	height int
 }
 
-func (n *node) next() *node {
-	return n.nexts[0]
+func newSpanList() *skipList {
+	l := new(skipList)
+	l.head.nexts = make([]*skipListNode, maxHeight)
+	return l
 }
 
-func (l *spanList) init() {
-	l.head.nexts = make([]*node, maxHeight)
-}
-
-func (l *spanList) insert(n *node) {
-	head := &l.head
-	lsHeight := l.height
-	var prev [maxHeight + 1]*node
-	var next [maxHeight + 1]*node
-	prev[lsHeight] = head
-
-	for i := lsHeight - 1; i >= 0; i-- {
-		prev[i], next[i] = l.findSpliceForLevel(n.start, prev[i+1], i)
-	}
-	height := l.randomHeight()
-	n.nexts = make([]*node, height)
-	if height > l.height {
-		l.height = height
-	}
-
-	for i := 0; i < height; i++ {
-		n.nexts[i] = next[i]
-		if prev[i] == nil {
-			prev[i] = &l.head
-		}
-		prev[i].nexts[i] = n
-	}
-}
-
-func (l *spanList) randomHeight() int {
+func (l *skipList) randomHeight() int {
 	h := 1
 	for h < maxHeight && fastrand() < uint32(math.MaxUint32)/4 {
 		h++
@@ -73,51 +89,131 @@ func (l *spanList) randomHeight() int {
 //go:linkname fastrand runtime.fastrand
 func fastrand() uint32
 
-func (l *spanList) findSpliceForLevel(key []byte, prev *node, level int) (*node, *node) {
-	for {
-		next := prev.nexts[level]
-		if next == nil {
-			return prev, nil
+// Seek returns the seek result
+// the seek result is a slice of nodes,
+// Each element in the slice represents the nearest(left) node to the target value at each level of the skip list.
+func (l *skipList) Seek(key []byte) seekResult {
+	head := &l.head
+	current := head
+	result := make(seekResult, maxHeight)
+
+LevelLoop:
+	for level := l.height - 1; level >= 0; level-- {
+		for {
+			next := current.nexts[level]
+			if next == nil {
+				result[level] = current
+				continue LevelLoop
+			}
+			cmp := bytes.Compare(key, next.key)
+			if cmp < 0 {
+				result[level] = current
+				continue LevelLoop
+			}
+			if cmp == 0 {
+				for ; level >= 0; level-- {
+					result[level] = next
+				}
+				return result
+			}
+			current = next
 		}
-		cmp := bytes.Compare(next.start, key)
-		if cmp >= 0 {
-			return prev, next
+	}
+
+	return result
+}
+
+// InsertNextToNode insert the specified node after the seek result
+func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonacciHeapNode) {
+	if seekR.Node() != nil && !nextTo(seekR.Node(), key) {
+		log.Fatal("the InsertNextToNode function can only append node to the seek result.")
+	}
+	height := l.randomHeight()
+	if l.height < height {
+		l.height = height
+	}
+	n := &skipListNode{
+		key:   key,
+		value: value,
+		nexts: make([]*skipListNode, height),
+	}
+
+	for level := 0; level < height; level++ {
+
+		prev := seekR[level]
+		if prev == nil {
+			prev = &l.head
 		}
-		prev = next
+		n.nexts[level] = prev.nexts[level]
+		prev.nexts[level] = n
 	}
 }
 
-func (l *spanList) seek(start []byte) *node {
-	if l.head.next() == nil {
-		return nil
+// Insert inserts the specified node
+func (l *skipList) Insert(key []byte, value *fibonacciHeapNode) {
+	seekR := l.Seek(key)
+	l.InsertNextToNode(seekR, key, value)
+}
+
+// Remove removes the specified node after the seek result
+func (l *skipList) Remove(seekR seekResult, toRemove *skipListNode) {
+	seekCurrent := seekR.Node()
+	if seekCurrent == nil || seekCurrent.Next() != toRemove {
+		log.Fatal("the Remove function can only remove node right next to the seek result.")
 	}
+	for i := range toRemove.nexts {
+		seekR[i].nexts[i] = toRemove.nexts[i]
+	}
+}
 
-	head := &l.head
-	prev := head
-	level := l.height - 1
+// First returns the first node in the list
+func (l *skipList) First() *skipListNode {
+	return l.head.Next()
+}
 
-	for {
-		next := prev.nexts[level]
-		if next != nil {
-			cmp := bytes.Compare(start, next.start)
-			if cmp > 0 {
-				prev = next
-				continue
-			}
-			if cmp == 0 {
-				return next
-			}
+// Entries visit all the nodes in the list
+func (l *skipList) Entries(fn func(*skipListNode) bool) {
+	for node := l.First(); node != nil; node = node.Next() {
+		if cont := fn(node); !cont {
+			return
 		}
-		if level > 0 {
-			level--
-			continue
-		}
-		break
 	}
+}
 
-	// The seek key is smaller than all keys in the list.
-	if prev == head {
-		return head.next()
+// String implements fmt.Stringer interface.
+func (l *skipList) String() string {
+	var buf strings.Builder
+	l.Entries(func(node *skipListNode) bool {
+		buf.WriteString(fmt.Sprintf("[%s] ", node.key))
+		return true
+	})
+	return buf.String()
+}
+
+// nextTo check if the key is right next to the node in list.
+// the specified node is a node in the list.
+// the specified key is a bytes to check position.
+// return true if the key is right next to the node.
+func nextTo(node *skipListNode, key []byte) bool {
+	cmp := bytes.Compare(node.key, key)
+	switch {
+	case cmp == 0:
+		return true
+	case cmp > 0:
+		return false
 	}
-	return prev
+	// cmp must be less than 0 here
+	next := node.nexts[0]
+	if next == nil {
+		// the node is the last node in the list
+		// we can insert the key after the last node.
+		return true
+	}
+	if bytes.Compare(next.key, key) <= 0 {
+		// the key of next node is less or equal to the specified key,
+		// this specified key should be inserted after the next node.
+		return false
+	}
+	// the key is between with the node and the next node.
+	return true
 }

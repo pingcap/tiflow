@@ -20,23 +20,55 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
 	"strconv"
 	"strings"
-
-	"github.com/pingcap/ticdc/pkg/config"
+	"syscall"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.uber.org/zap"
 )
+
+// initCmd initializes the logger, the default context and returns its cancel function.
+func initCmd(cmd *cobra.Command, logCfg *util.Config) context.CancelFunc {
+	// Init log.
+	err := util.InitLogger(logCfg)
+	if err != nil {
+		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
+		os.Exit(1)
+	}
+	log.Info("init log", zap.String("file", logFile), zap.String("level", logLevel))
+
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		sig := <-sc
+		log.Info("got signal to exit", zap.Stringer("signal", sig))
+		cancel()
+	}()
+	defaultContext = ctx
+	return cancel
+}
 
 func getAllCaptures(ctx context.Context) ([]*capture, error) {
 	_, raw, err := cdcEtcdCli.GetCaptures(ctx)
@@ -90,6 +122,28 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob) error {
 		return errors.BadRequestf("%s", string(body))
 	}
 	return nil
+}
+
+func applyOwnerChangefeedQuery(ctx context.Context, cid model.ChangeFeedID) (string, error) {
+	owner, err := getOwnerCapture(ctx)
+	if err != nil {
+		return "", err
+	}
+	addr := fmt.Sprintf("http://%s/capture/owner/changefeed/query", owner.AdvertiseAddr)
+	resp, err := http.PostForm(addr, url.Values(map[string][]string{
+		cdc.APIOpVarChangefeedID: {cid},
+	}))
+	if err != nil {
+		return "", err
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.BadRequestf("query changefeed simplified status")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", errors.BadRequestf("%s", string(body))
+	}
+	return string(body), nil
 }
 
 func jsonPrint(cmd *cobra.Command, v interface{}) error {

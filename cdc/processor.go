@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,6 +25,7 @@ import (
 	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/entry"
@@ -95,10 +95,11 @@ type processor struct {
 	output    chan *model.PolymorphicEvent
 	mounter   entry.Mounter
 
-	stateMu  sync.Mutex
-	status   *model.TaskStatus
-	position *model.TaskPosition
-	tables   map[int64]*tableInfo
+	stateMu      sync.Mutex
+	status       *model.TaskStatus
+	position     *model.TaskPosition
+	tables       map[int64]*tableInfo
+	markTableIDs map[int64]struct{}
 
 	sinkEmittedResolvedNotifier *notify.Notifier
 	sinkEmittedResolvedReceiver *notify.Receiver
@@ -111,6 +112,7 @@ type processor struct {
 
 type tableInfo struct {
 	id          int64
+	name        string
 	resolvedTs  uint64
 	markTableID int64
 	mResolvedTs uint64
@@ -163,7 +165,6 @@ func newProcessor(
 	// so we set `needEncode` to false.
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
 	ddlPuller := puller.NewPuller(pdCli, kvStorage, checkpointTs, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false, limitter)
-	ctx = util.PutTableIDInCtx(ctx, 0)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -202,11 +203,12 @@ func newProcessor(
 		localResolvedNotifier: localResolvedNotifier,
 		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
 
-		tables: make(map[int64]*tableInfo),
+		tables:       make(map[int64]*tableInfo),
+		markTableIDs: make(map[int64]struct{}),
 	}
 
-	for tableID, startTs := range p.status.Tables {
-		p.addTable(ctx, tableID, startTs)
+	for tableID, replicaInfo := range p.status.Tables {
+		p.addTable(ctx, tableID, replicaInfo)
 	}
 	return p, nil
 }
@@ -214,7 +216,8 @@ func newProcessor(
 func (p *processor) Run(ctx context.Context) {
 	wg, cctx := errgroup.WithContext(ctx)
 	p.wg = wg
-	ddlPullerCtx, ddlPullerCancel := context.WithCancel(util.PutTableIDInCtx(cctx, 0))
+	ddlPullerCtx, ddlPullerCancel :=
+		context.WithCancel(util.PutTableInfoInCtx(cctx, 0, "ticdc-processor-ddl"))
 	p.ddlPullerCancel = ddlPullerCancel
 
 	wg.Go(func() error {
@@ -301,6 +304,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		err := retry.Run(500*time.Millisecond, 3, func() error {
 			inErr := p.updateInfo(ctx)
 			if inErr != nil {
+				log.Error("update info failed", zap.Error(inErr))
 				if p.isStopped() || errors.Cause(inErr) == model.ErrAdminStopProcessor {
 					return backoff.Permanent(errors.Trace(model.ErrAdminStopProcessor))
 				}
@@ -414,6 +418,9 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 			return errors.Trace(ctx.Err())
 		case <-t.C:
 		}
+		if p.isStopped() {
+			continue
+		}
 		workload := make(model.TaskWorkload, len(p.tables))
 		p.stateMu.Lock()
 		for _, table := range p.tables {
@@ -495,9 +502,10 @@ func (p *processor) removeTable(tableID int64) {
 
 	table.cancel()
 	delete(p.tables, tableID)
-	tableIDStr := strconv.FormatInt(tableID, 10)
-	tableInputChanSizeGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableIDStr)
-	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableIDStr)
+	if table.markTableID != 0 {
+		delete(p.markTableIDs, table.markTableID)
+	}
+	tableResolvedTsGauge.DeleteLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Dec()
 }
 
@@ -689,6 +697,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if row == nil {
 				continue
 			}
+			failpoint.Inject("ProcessorSyncResolvedError", func() {
+				failpoint.Return(errors.New("processor sync resolvd injected error"))
+			})
 			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
 				err := flushRowChangedEvents()
 				if err != nil {
@@ -743,7 +754,7 @@ func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (stor
 func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
-	ctx = util.PutTableIDInCtx(ctx, tableID)
+	ctx = util.PutTableInfoInCtx(ctx, tableID, replicaInfo.Name)
 
 	log.Debug("Add table", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
 	if _, ok := p.tables[tableID]; ok {
@@ -754,6 +765,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	ctx, cancel := context.WithCancel(ctx)
 	table := &tableInfo{
 		id:         tableID,
+		name:       replicaInfo.Name,
 		resolvedTs: replicaInfo.StartTs,
 		cancel:     cancel,
 	}
@@ -792,7 +804,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			}
 		}()
 		go func() {
-			resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, strconv.FormatInt(table.id, 10))
+			resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
 			for {
 				select {
 				case <-ctx.Done():
@@ -841,11 +853,14 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 
 	if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID != 0 {
 		mTableID := replicaInfo.MarkTableID
+		// we should to make sure a mark table is only listened once.
+		if _, exist := p.markTableIDs[mTableID]; !exist {
+			p.markTableIDs[mTableID] = struct{}{}
+			startPuller(mTableID, &table.mResolvedTs)
 
-		startPuller(mTableID, &table.mResolvedTs)
-
-		table.markTableID = mTableID
-		table.mResolvedTs = replicaInfo.StartTs
+			table.markTableID = mTableID
+			table.mResolvedTs = replicaInfo.StartTs
+		}
 	}
 
 	p.tables[tableID] = table
@@ -932,6 +947,17 @@ func runProcessor(
 				zap.String("changefeedid", changefeedID),
 				zap.String("processorid", processor.id),
 				zap.Error(err))
+			// record error information in etcd
+			// TODO: design error codes for TiCDC
+			processor.position.Error = &model.RunningError{
+				Addr:    captureInfo.AdvertiseAddr,
+				Code:    "CDC-processor-1000",
+				Message: err.Error(),
+			}
+			err = processor.tsRWriter.WritePosition(ctx, processor.position)
+			if err != nil {
+				log.Warn("upload processor error failed", zap.Error(err))
+			}
 		} else {
 			log.Info("processor exited",
 				zap.String("captureid", captureInfo.ID),

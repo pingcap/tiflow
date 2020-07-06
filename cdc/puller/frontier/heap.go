@@ -13,45 +13,91 @@
 
 package frontier
 
-type minTsHeap struct {
-	root *node
-	min  *node
+type fibonacciHeapNode struct {
+	key uint64
+
+	left     *fibonacciHeapNode
+	right    *fibonacciHeapNode
+	children *fibonacciHeapNode
+	parent   *fibonacciHeapNode
+	rank     int
+	marked   bool
+}
+
+type fibonacciHeap struct {
+	root *fibonacciHeapNode
+	min  *fibonacciHeapNode
 
 	dirty bool
 }
 
-func (h *minTsHeap) getMin() *node {
+// GetMinKey returns the minimum key in the heap
+func (h *fibonacciHeap) GetMinKey() uint64 {
 	if h.dirty {
 		h.consolidate()
 		h.dirty = false
 	}
-	return h.min
+	return h.min.key
 }
 
-func (h *minTsHeap) insert(x *node) {
+// Insert inserts a new node into the heap and returns this new node
+func (h *fibonacciHeap) Insert(key uint64) *fibonacciHeapNode {
+	x := &fibonacciHeapNode{key: key}
 	h.addToRoot(x)
-	if h.min == nil || h.min.ts > x.ts {
+	if h.min == nil || h.min.key > x.key {
 		h.min = x
 	}
+	return x
 }
 
-func (h *minTsHeap) updateTs(x *node, ts uint64) {
-	switch {
-	case x.ts == ts:
-		return
-	case x.ts > ts:
-		h.decreaseTs(x, ts)
-	case x.ts < ts:
-		h.increaseTs(x, ts)
-	}
-}
-
-func (h *minTsHeap) increaseTs(x *node, ts uint64) {
+// Remove removes a node from the heap
+func (h *fibonacciHeap) Remove(x *fibonacciHeapNode) {
 	if x == h.min {
 		h.dirty = true
 	}
 
-	x.ts = ts
+	child := x.children
+	isLast := child == nil
+
+	for !isLast {
+		next := child.right
+		isLast = next == x.children
+		h.removeChildren(x, child)
+		h.addToRoot(child)
+		child = next
+	}
+
+	parent := x.parent
+	if parent != nil {
+		h.removeChildren(parent, x)
+		if parent.marked {
+			h.cascadingCut(parent)
+		} else {
+			parent.marked = true
+		}
+	} else {
+		h.cutFromRoot(x)
+	}
+}
+
+// UpdateKey updates the key of the node in the heap
+func (h *fibonacciHeap) UpdateKey(x *fibonacciHeapNode, key uint64) {
+	switch {
+	case x.key == key:
+		return
+	case x.key > key:
+		h.decreaseKey(x, key)
+	case x.key < key:
+		h.increaseKey(x, key)
+	}
+}
+
+func (h *fibonacciHeap) increaseKey(x *fibonacciHeapNode, key uint64) {
+	if x == h.min {
+		h.dirty = true
+	}
+
+	x.key = key
 	child := x.children
 	cascadingCut := false
 	isLast := child == nil
@@ -60,7 +106,7 @@ func (h *minTsHeap) increaseTs(x *node, ts uint64) {
 		next := child.right
 		isLast = next == x.children
 
-		if child.ts < x.ts {
+		if child.key < x.key {
 			h.removeChildren(x, child)
 			h.addToRoot(child)
 			if x.marked {
@@ -77,10 +123,10 @@ func (h *minTsHeap) increaseTs(x *node, ts uint64) {
 	}
 }
 
-func (h *minTsHeap) decreaseTs(x *node, ts uint64) {
-	x.ts = ts
+func (h *fibonacciHeap) decreaseKey(x *fibonacciHeapNode, key uint64) {
+	x.key = key
 	parent := x.parent
-	if parent != nil && parent.ts > x.ts {
+	if parent != nil && parent.key > x.key {
 		h.removeChildren(parent, x)
 		h.addToRoot(x)
 		if parent.marked {
@@ -89,12 +135,12 @@ func (h *minTsHeap) decreaseTs(x *node, ts uint64) {
 			parent.marked = true
 		}
 	}
-	if x.parent == nil && h.min.ts > ts {
+	if x.parent == nil && h.min.key > key {
 		h.min = x
 	}
 }
 
-func (h *minTsHeap) cascadingCut(x *node) {
+func (h *fibonacciHeap) cascadingCut(x *fibonacciHeapNode) {
 	x.marked = false
 	for p := x.parent; p != nil; p = p.parent {
 		h.removeChildren(p, x)
@@ -113,8 +159,8 @@ func (h *minTsHeap) cascadingCut(x *node) {
 // we can know the size of consolidate table is around 46.09545510610244.
 const consolidateTableSize = 47
 
-func (h *minTsHeap) consolidate() {
-	var table [consolidateTableSize]*node
+func (h *fibonacciHeap) consolidate() {
+	var table [consolidateTableSize]*fibonacciHeapNode
 	x := h.root
 	maxOrder := 0
 	h.min = h.root
@@ -125,7 +171,7 @@ func (h *minTsHeap) consolidate() {
 		z := table[y.rank]
 		for z != nil {
 			table[y.rank] = nil
-			if y.ts > z.ts {
+			if y.key > z.key {
 				y, z = z, y
 			}
 			h.addChildren(y, z)
@@ -146,30 +192,34 @@ func (h *minTsHeap) consolidate() {
 		if n == nil {
 			continue
 		}
-		if h.min.ts > n.ts {
+		if h.min.key > n.key {
 			h.min = n
 		}
 		h.addToRoot(n)
 	}
 }
 
-func (h *minTsHeap) addChildren(root, x *node) {
+func (h *fibonacciHeap) addChildren(root, x *fibonacciHeapNode) {
 	root.children = h.insertInto(root.children, x)
 	root.rank++
 	x.parent = root
 }
 
-func (h *minTsHeap) removeChildren(root, x *node) {
+func (h *fibonacciHeap) removeChildren(root, x *fibonacciHeapNode) {
 	root.children = h.cutFrom(root.children, x)
 	root.rank--
 	x.parent = nil
 }
 
-func (h *minTsHeap) addToRoot(x *node) {
+func (h *fibonacciHeap) addToRoot(x *fibonacciHeapNode) {
 	h.root = h.insertInto(h.root, x)
 }
 
-func (h *minTsHeap) insertInto(head *node, x *node) *node {
+func (h *fibonacciHeap) cutFromRoot(x *fibonacciHeapNode) {
+	h.root = h.cutFrom(h.root, x)
+}
+
+func (h *fibonacciHeap) insertInto(head *fibonacciHeapNode, x *fibonacciHeapNode) *fibonacciHeapNode {
 	if head == nil {
 		x.left = x
 		x.right = x
@@ -182,7 +232,7 @@ func (h *minTsHeap) insertInto(head *node, x *node) *node {
 	return x
 }
 
-func (h *minTsHeap) cutFrom(head *node, x *node) *node {
+func (h *fibonacciHeap) cutFrom(head *fibonacciHeapNode, x *fibonacciHeapNode) *fibonacciHeapNode {
 	if x.right == x {
 		x.right = nil
 		x.left = nil
