@@ -108,6 +108,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		span := span
 
 		g.Go(func() error {
+			log.Info("start event feed", zap.Reflect("span", span))
 			return cli.EventFeed(ctx, span, checkpointTs, eventCh)
 		})
 	}
@@ -149,7 +150,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// and we only want the get [b, c) from this region,
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
-					if !regionspan.KeyInSpans(val.Key, p.spans) {
+					comparableKey := regionspan.ComparableKey(val.Key)
+					if !regionspan.KeyInSpans(comparableKey, p.spans) {
 						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
 						continue
 					}

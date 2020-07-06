@@ -183,3 +183,7 @@ func ComparableSpan(span Span) Span {
 		End:   codec.EncodeBytes(nil, span.End),
 	}
 }
+
+func ComparableKey(key []byte) []byte {
+	return codec.EncodeBytes(nil, key)
+}
