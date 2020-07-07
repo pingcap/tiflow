@@ -43,12 +43,12 @@ TiDB 实际上在汇报 GC safepoint 之前，会调用 delete range 删除因 d
 
 从上述两节可以看到，我们消除了 limiter 的概念，因此 TiDB 通过 GetGCSafePoint 接口获取到的值，是系统最小值，这个最小值可能是 TiDB 自己维护的，这跟原来的实现有些差异：
 
-假设 TiDB 设置 `safepoint = 100`， TiCDC 设置 `safepoint = 150`，TiDB 更新下次 `safepoint = 200` 之前，执行 delete range 操作，因此需要从 PD 中获取一个合适的 safepoint，即 safepoint = 150。但是，如果按现在的设计，系统中的最小值是 100，则跟原来的行为逻辑不符了。这是消除 limiter 的方案带来的最大争议。
+假设 TiDB 设置 `safepoint = 100`， TiCDC 设置 `safepoint = 150`，TiDB 更新下次 `safepoint = 200` 之前，执行 delete range 操作，因此需要从 PD 中获取一个合适的 safepoint，即 `safepoint = 150`。但是，如果按现在的设计，系统中的最小值是 100，则跟原来的行为逻辑不符了。这是消除 limiter 的方案带来的最大争议。
 
 这里，分三个层面解释
 
-1. 在上述情况中，TiDB 如果获取到的 `safepoint = 100`，则 100 ~ 150 之间的数据不能通过 delete range 删除掉，但在下一轮 GC 的时候，系统返回最小 safepoint = 150，这时 100 ~ 150 之间的数据自然会被清除掉。因此，这种情况只是推迟了数据清除的时间，不影响正确性。
-2. 稍微修改一下上述场景，假设TiCDC 设置 `safepoint = 100`， TiDB 设置 safepoint = 150，在 TiDB 更新下次 GC safepoint 时，从系统中获取到的 `safepoint = 100`，仍然无法 delete range 删除 100 ~ 150 之间的数据。因此， 1 只是 2 的特殊情况而已。
+1. 在上述情况中，TiDB 如果获取到的 `safepoint = 100`，则 100 ~ 150 之间的数据不能通过 delete range 删除掉，但在下一轮 GC 的时候，系统返回最小 `safepoint = 150`，这时 100 ~ 150 之间的数据自然会被清除掉。因此，这种情况只是推迟了数据清除的时间，不影响正确性。
+2. 稍微修改一下上述场景，假设TiCDC 设置 `safepoint = 100`， TiDB 设置 `safepoint = 150`，在 TiDB 更新下次 GC safepoint 时，从系统中获取到的 `safepoint = 100`，仍然无法 delete range 删除 100 ~ 150 之间的数据。因此， 1 只是 2 的特殊情况而已。
 3. TiDB 在汇报 GC safepoint 之前，调用 delete range 删除数据，这本身违反了 safepoint 的定义，使得大于等于 safepoint 的数据也可能被删除，是一种不严谨的实现，这个实现在只有 TiDB 的时候可能没有问题，但随着其他组件也依赖 safepoint，维护其语义的正确性也变得重要了起来。因此，强烈建议将 GC 的流程改为先更新 safepoint 再 delete range。
 
 ### 兼容中心化 GC
@@ -82,7 +82,7 @@ message UpdateGCSafePointRequest {
 
 ### 维护 safepoint 最小值
 
-```
+```golang
 func (s *Server) UpdateServiceGCSafePoint(ctx context.Context, request pdpb.UpdateGCSafePointRequest) (pdpb.UpdateGCSafePointResponse, error) {
 
     ...
