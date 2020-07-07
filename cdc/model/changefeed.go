@@ -46,16 +46,16 @@ const (
 )
 
 const (
-	// ErrorHistoryGCInterval represents how long we keep error record in changefeed info
-	ErrorHistoryGCInterval = time.Minute * 10
+	// errorHistoryGCInterval represents how long we keep error record in changefeed info
+	errorHistoryGCInterval = time.Minute * 10
 
-	// ErrorHistoryCheckInterval represents time window for failure check
-	ErrorHistoryCheckInterval = time.Minute * 2
+	// errorHistoryCheckInterval represents time window for failure check
+	errorHistoryCheckInterval = time.Minute * 2
 
-	// ErrorHistoryThreshold represents failure upper limit in time window.
+	// errorHistoryThreshold represents failure upper limit in time window.
 	// Before a changefeed is initialized, check the the failure count of this
-	// changefeed, if it is less than ErrorHistoryThreshold, then initialize it.
-	ErrorHistoryThreshold = 5
+	// changefeed, if it is less than errorHistoryThreshold, then initialize it.
+	errorHistoryThreshold = 5
 )
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
@@ -158,7 +158,7 @@ func (info *ChangeFeedInfo) VerifyAndFix() error {
 func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
 	i := sort.Search(len(info.ErrorHis), func(i int) bool {
 		ts := info.ErrorHis[i]
-		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryGCInterval
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryGCInterval
 	})
 	if i == len(info.ErrorHis) {
 		info.ErrorHis = info.ErrorHis[:]
@@ -171,8 +171,8 @@ func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
 
 	i = sort.Search(len(info.ErrorHis), func(i int) bool {
 		ts := info.ErrorHis[i]
-		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < ErrorHistoryCheckInterval
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryCheckInterval
 	})
-	canInit = len(info.ErrorHis)-i < ErrorHistoryThreshold
+	canInit = len(info.ErrorHis)-i < errorHistoryThreshold
 	return
 }
