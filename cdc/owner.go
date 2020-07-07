@@ -386,6 +386,20 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			log.Info("changefeed recovered from failure", zap.String("changefeed", changeFeedID))
 			delete(o.failedFeeds, changeFeedID)
 		}
+		needSave, canInit := cfInfo.CheckErrorHistory()
+		if needSave {
+			err := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
+			if err != nil {
+				return err
+			}
+		}
+		if !canInit {
+			// avoid too many logs here
+			if time.Now().Unix()%60 == 0 {
+				log.Warn("changefeed fails reach rate limit, try to initialize it later", zap.Int64s("history", cfInfo.ErrorHis))
+			}
+			continue
+		}
 		err = cfInfo.VerifyAndFix()
 		if err != nil {
 			return err
@@ -402,6 +416,13 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 
 		newCf, err := o.newChangeFeed(ctx, changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
 		if err != nil {
+			cfInfo.Error = &model.RunningError{
+				Addr:    util.CaptureAddrFromCtx(ctx),
+				Code:    "CDC-owner-1001",
+				Message: err.Error(),
+			}
+			cfInfo.ErrorHis = append(cfInfo.ErrorHis, time.Now().UnixNano()/1e6)
+
 			if filter.ChangefeedFastFailError(err) {
 				log.Error("create changefeed with fast fail error, mark changefeed as failed",
 					zap.Error(err), zap.String("changefeedid", changeFeedID))
@@ -411,6 +432,11 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 					return err
 				}
 				continue
+			}
+
+			err2 := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
+			if err2 != nil {
+				return err2
 			}
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
@@ -604,6 +630,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 
 			cf.info.AdminJobType = model.AdminStop
 			cf.info.Error = job.Error
+			cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
 			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
@@ -1054,11 +1081,15 @@ func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures []*model.Capt
 func (o *Owner) startCaptureWatcher(ctx context.Context) {
 	log.Info("start to watch captures")
 	go func() {
-		rl := rate.NewLimiter(0.05, 5)
+		rl := rate.NewLimiter(0.05, 2)
 		for {
-			if !rl.Allow() {
-				log.Error("owner capture watcher exceeds rate limit")
-				time.Sleep(10 * time.Second)
+			err := rl.Wait(ctx)
+			if err != nil {
+				if errors.Cause(err) == context.Canceled {
+					return
+				}
+				log.Error("capture watcher wait limit token error", zap.Error(err))
+				return
 			}
 			if err := o.watchCapture(ctx); err != nil {
 				// When the watching routine returns, the error must not

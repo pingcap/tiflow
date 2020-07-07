@@ -49,10 +49,9 @@ func (s *taskSuite) SetUpTest(c *check.C) {
 
 	// Create a task watcher
 	capture := &Capture{
-		pdEndpoints: s.endpoints,
-		etcdClient:  kv.NewCDCEtcdClient(client),
-		processors:  make(map[string]*processor),
-		info:        &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
+		etcdClient: kv.NewCDCEtcdClient(client),
+		processors: make(map[string]*processor),
+		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
 	c.Assert(capture, check.NotNil)
 	watcher := NewTaskWatcher(capture, &TaskWatcherConfig{
@@ -76,10 +75,9 @@ func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
 	// initialize the PD service witch does not support to
 	// be embeded.
 	capture := &Capture{
-		pdEndpoints: s.endpoints,
-		etcdClient:  kv.NewCDCEtcdClient(s.c),
-		processors:  make(map[string]*processor),
-		info:        &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
+		etcdClient: kv.NewCDCEtcdClient(s.c),
+		processors: make(map[string]*processor),
+		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
 	c.Assert(capture, check.NotNil)
 	c.Assert(NewTaskWatcher(capture, &TaskWatcherConfig{
