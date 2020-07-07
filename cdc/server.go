@@ -27,6 +27,7 @@ import (
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -187,7 +188,17 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 	// In most failure cases, we don't return error directly, just run another
 	// campaign loop. We treat campaign loop as a special background routine.
+
+	rl := rate.NewLimiter(0.05, 2)
 	for {
+		err := rl.Wait(ctx)
+		if err != nil {
+			if errors.Cause(err) == context.Canceled {
+				return nil
+			}
+			return errors.Trace(err)
+		}
+
 		// Campaign to be an owner, it blocks until it becomes the owner
 		if err := s.capture.Campaign(ctx); err != nil {
 			switch errors.Cause(err) {
