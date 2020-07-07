@@ -40,6 +40,8 @@ import (
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
+
+	timodel "github.com/pingcap/parser/model"
 )
 
 // Owner manages the cdc cluster
@@ -693,7 +695,8 @@ func (o *Owner) throne(ctx context.Context) error {
 	// Start a routine to keep watching on the liveness of
 	// captures.
 	o.startCaptureWatcher(ctx)
-	return nil
+	return nil// for loop all change feed
+
 }
 
 // Close stops a running owner
@@ -804,6 +807,8 @@ func (o *Owner) run(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	o.rebalanceTableIfNeed(ctx)
+	
 	err = o.balanceTables(ctx)
 	if err != nil {
 		return errors.Trace(err)
@@ -1075,3 +1080,51 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 		}
 	}()
 }
+
+func (o *Owner) rebalanceTableIfNeed(ctx context.Context) {
+	// for loop all change feed
+	for id, changefeed := range o.changeFeeds {
+		// rebalanceNow := false
+		// var scheduleCommands []*model.MoveTableJob
+		todoDDLJob := changefeed.ddlJobHistory[0]
+
+		if todoDDLJob.Type != timodel.ActionExchangeTablePartition {
+			continue
+		}
+		tbl := todoDDLJob.BinlogInfo.TableInfo
+		
+		tid := tbl.ID
+
+		// old partition info (contain target partition id)
+		partitionsID, ok := changefeed.partitions[tid]
+		if !ok || len(partitionsID) == 0 {
+			return
+		}
+
+		
+		// new partition info (contain source table id)
+		pi := tbl.GetPartitionInfo()
+		if pi == nil {
+			return
+		}
+		newIDs := make(map[int64]struct{}, len(pi.Definitions))
+		for _, partition := range pi.Definitions {
+			pid := partition.ID
+			newIDs[pid] = struct{}{}
+		}
+		
+		// left element in newIDs is source table id
+		for pid := range partitionsID {
+			delete(newIDs, int64(pid))
+		}
+
+		// move sourceTable to captureID if possible
+		for pid := range newIDs {
+			captureID, _, _ := findTaskStatusWithTable(changefeed.taskStatus, pid)
+			o.ManualSchedule(id, captureID, pid)
+		}
+
+		changefeed.ddlJobHistory = changefeed.ddlJobHistory[1:]
+	}
+}
+

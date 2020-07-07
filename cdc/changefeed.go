@@ -271,7 +271,7 @@ func (c *changeFeed) exchangePartition(tblInfo *timodel.TableInfo, startTs uint6
 	// update the table partition IDs.
 	c.partitions[tid] = newPartitionIDs
 
-	// transform to non-partition table.
+	// transform target_partition to non-partition table.
 	for pid := range oldIDs {
 		delete(c.partitions, pid)
 	}
@@ -883,3 +883,4 @@ func (c *changeFeed) pullDDLJob() error {
 	}
 	return nil
 }
+
