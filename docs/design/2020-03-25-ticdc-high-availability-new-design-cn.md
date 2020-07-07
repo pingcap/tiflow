@@ -13,6 +13,8 @@ TiCDC 高可用是指任何一个 cdc 节点挂掉，都不影响集群整体的
 
 本文总结已有代码发现的一些问题，并给出解决方案。
 
+> 注意，本文分析代码基于 [v4.0.0-beta.2](https://github.com/pingcap/ticdc/tree/v4.0.0-beta.2) 版本
+
 ## 问题
 
 ### Capture 没有维持统一 Session
@@ -21,7 +23,7 @@ TiCDC 高可用是指任何一个 cdc 节点挂掉，都不影响集群整体的
 
 起初，Capture 并没有使用 Session，而是仅仅在竞选 Owner 的时候创建了 Session。这样导致 Capture 挂掉后，其注册信息是无法被清理的。Capture 节点挂掉后（非正常退出），其负责的任务没有及时重新分配。这个问题在 PR [Refactor/capture watcher](https://github.com/pingcap/ticdc/pull/319) 中解决。
 
-另外，为了减少 RTO，我们引入了 Processor 的 Session，用来及时发现挂掉的 Processor。PR：[Reduce the RTO by watching the liveness of processors](https://github.com/pingcap/ticdc/pull/312) 
+另外，为了减少 RTO，我们引入了 Processor 的 Session，用来及时发现挂掉的 Processor。PR：[Reduce the RTO by watching the liveness of processors](https://github.com/pingcap/ticdc/pull/312)
 
 因此，我们目前有三个 Session，一个是 Capture Session，用来维持 Capture 存活信息，一个是 Processor Session，用来维护 Processor 存活信息，还有一个是原来存在的 Manager Session，用来竞选 Owner。
 
