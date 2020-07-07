@@ -127,9 +127,3 @@ func (s *checkSuite) TestCompareVersion(c *check.C) {
 	c.Assert(semver.New(removeVAndHash("v2.1.0-rc.1-7-g38c939f-dirty")).
 		Compare(*semver.New("2.1.0-rc.1")), check.Equals, 0)
 }
-
-func (s *checkSuite) TestIsValidUUIDv4(c *check.C) {
-	c.Assert(IsValidUUIDv4(""), check.IsFalse)
-	c.Assert(IsValidUUIDv4("697b2430-8c80-46ca-9b61-553f0173a214"), check.IsTrue)
-	c.Assert(IsValidUUIDv4("697b2430-8c80-46ca-9b61-553f011173a214"), check.IsFalse)
-}

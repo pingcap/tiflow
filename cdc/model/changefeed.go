@@ -16,6 +16,7 @@ package model
 import (
 	"encoding/json"
 	"math"
+	"regexp"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -61,6 +62,17 @@ type ChangeFeedInfo struct {
 	Config *config.ReplicaConfig `json:"config"`
 	State  FeedState             `json:"state"`
 	Error  *RunningError         `json:"error"`
+}
+
+var changeFeedIDRe *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$`)
+
+// ValidateChangefeedID returns true if the changefeed ID matches
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task".
+func ValidateChangefeedID(changefeedID string) error {
+	if !changeFeedIDRe.MatchString(changefeedID) {
+		return errors.Errorf(`bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task"`)
+	}
+	return nil
 }
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
