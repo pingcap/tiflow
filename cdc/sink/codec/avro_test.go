@@ -17,9 +17,13 @@ import (
 	"context"
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	model2 "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 	"time"
@@ -45,7 +49,7 @@ func (s *AvroBatchEncoderSuite) SetUpSuite(c *check.C) {
 }
 
 func (s *AvroBatchEncoderSuite) TearDownSuite(c *check.C) {
-	StopHttpInterceptForTestingRegistry()
+	StopHTTPInterceptForTestingRegistry()
 }
 
 func (s *AvroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
@@ -56,7 +60,7 @@ func (s *AvroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
           "fields" : [
             {"name": "id", "type": ["null", "int"], "default": null},
 			{"name": "myint", "type": ["null", "int"], "default": null},
-			{"name": "mybool", "type": ["null", "boolean"], "default": null},
+			{"name": "mybool", "type": ["null", "int"], "default": null},
 			{"name": "myfloat", "type": ["null", "float"], "default": null},
 			{"name": "mybytes", "type": ["null", "bytes"], "default": null},
 			{"name": "ts", "type": ["null", "long.timestamp-millis"], "default": null}
@@ -77,7 +81,7 @@ func (s *AvroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	r, err := s.encoder.avroEncode(&table, 1, map[string]*model.Column{
 		"id":      {Value: int32(1), Type: mysql.TypeLong},
 		"myint":   {Value: int32(2), Type: mysql.TypeLong},
-		"mybool":  {Value: true, Type: mysql.TypeTiny},
+		"mybool":  {Value: uint8(1), Type: mysql.TypeTiny},
 		"myfloat": {Value: float32(3.14), Type: mysql.TypeFloat},
 		"mybytes": {Value: []byte("Hello World"), Type: mysql.TypeBlob},
 		"ts":      {Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
@@ -112,8 +116,8 @@ func (s *AvroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 	c.Check(err, check.IsNil)
 
 	res := avroEncodeResult{
-		data: bin,
-		registryId: 7,
+		data:       bin,
+		registryID: 7,
 	}
 
 	evlp, err := res.toEnvelope()
@@ -123,10 +127,58 @@ func (s *AvroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 	c.Assert(evlp[1:5], check.BytesEquals, []byte{7, 0, 0, 0})
 
 	parsed, _, err := avroCodec.NativeFromBinary(evlp[5:])
+	c.Assert(err, check.NotNil)
 	c.Assert(parsed, check.NotNil)
 
 	id, exists := parsed.(map[string]interface{})["id"]
 	c.Assert(exists, check.IsTrue)
 	c.Assert(id, check.Equals, int32(7))
+}
 
+func (s *AvroBatchEncoderSuite) TestAvroEncode(c *check.C) {
+	trueVar := true
+	testCaseUpdate := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "test",
+			Table:  "person",
+		},
+		Delete: false,
+		Columns: map[string]*model.Column{
+			"id":      {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1},
+			"name":    {Type: mysql.TypeVarchar, Value: "Bob"},
+			"tiny":    {Type: mysql.TypeTiny, Value: uint8(255)},
+			"comment": {Type: mysql.TypeBlob, Value: []byte("测试")},
+		},
+	}
+
+	testCaseDdl := &model.DDLEvent{
+		CommitTs: 417318403368288260,
+		Schema:   "test",
+		Table:    "person",
+		Query:    "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+		Type:     model2.ActionCreateTable,
+	}
+
+	ctx := context.Background()
+
+	pm := puller.NewMockPullerManager(c, true)
+	pm.MustExec(testCaseDdl.Query)
+	ddlPlr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetDDLSpan()})
+	go func() {
+		err := ddlPlr.Run(ctx)
+		if err != nil && errors.Cause(err) != context.Canceled {
+			c.Fail()
+		}
+	}()
+
+	info := pm.GetTableInfo("test", "person")
+	testCaseDdl.Info = info
+	testCaseDdl.SchemaID = info.SchemaID
+
+	err := s.encoder.AppendDDLEvent(testCaseDdl)
+	c.Check(err, check.IsNil)
+
+	err = s.encoder.AppendRowChangedEvent(testCaseUpdate)
+	c.Check(err, check.IsNil)
 }

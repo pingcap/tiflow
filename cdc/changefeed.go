@@ -633,6 +633,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 	ddlEvent := new(model.DDLEvent)
 	ddlEvent.FromJob(todoDDLJob)
+	ddlEvent.Info, _ = c.schema.GetTableByName(ddlEvent.Schema, ddlEvent.Table)
 
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL

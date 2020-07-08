@@ -140,7 +140,7 @@ func StartHTTPInterceptForTestingRegistry(c *check.C) {
 
 }
 
-func StopHttpInterceptForTestingRegistry() {
+func StopHTTPInterceptForTestingRegistry() {
 	httpmock.DeactivateAndReset()
 }
 
@@ -149,7 +149,7 @@ func (s *AvroSchemaRegistrySuite) SetUpSuite(c *check.C) {
 }
 
 func (s *AvroSchemaRegistrySuite) TearDownSuite(c *check.C) {
-	StopHttpInterceptForTestingRegistry()
+	StopHTTPInterceptForTestingRegistry()
 }
 
 func getTestingContext() context.Context {

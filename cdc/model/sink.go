@@ -15,7 +15,6 @@ package model
 
 import (
 	"fmt"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"go.uber.org/zap"
@@ -89,7 +88,9 @@ type DDLEvent struct {
 	StartTs  uint64
 	CommitTs uint64
 	Schema   string
+	SchemaID int64
 	Table    string
+	Info     interface{}
 	Query    string
 	Type     model.ActionType
 }
@@ -104,6 +105,7 @@ func (e *DDLEvent) FromJob(job *model.Job) {
 	e.CommitTs = job.BinlogInfo.FinishedTS
 	e.Query = job.Query
 	e.Schema = job.SchemaName
+	e.SchemaID = job.SchemaID
 	e.Table = tableName
 	e.Type = job.Type
 }

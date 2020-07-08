@@ -230,12 +230,12 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 
 // CreatePuller returns a mock puller with the specified start ts and spans
 func (m *MockPullerManager) CreatePuller(startTs uint64, spans []regionspan.Span) Puller {
-	//return &mockPuller{
-	//	spans:   spans,
-	//	pm:      m,
-	//	startTs: startTs,
-	//}
-	return nil
+	return &mockPuller{
+		spans:   spans,
+		pm:      m,
+		startTs: startTs,
+	}
+	//return nil
 }
 
 // MustExec delegates to TestKit.MustExec

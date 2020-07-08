@@ -17,16 +17,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"time"
 
+	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/types/json"
+	tijson "github.com/pingcap/tidb/types/json"
+	"go.uber.org/zap"
 )
 
 // AvroEventBatchEncoder converts the events to binary Avro data
@@ -40,9 +44,20 @@ type AvroEventBatchEncoder struct {
 
 type avroEncodeResult struct {
 	data       []byte
-	registryId int
+	registryID int
 }
 
+// NewAvroEventBatchEncoder creates an AvroEventBatchEncoder from an AvroSchemaManager
+func NewAvroEventBatchEncoder(manager *AvroSchemaManager) *AvroEventBatchEncoder {
+	return &AvroEventBatchEncoder{
+		valueSchemaManager: manager,
+		keyBuf:             nil,
+		valueBuf:           nil,
+	}
+}
+
+// AppendRowChangedEvent appends a row change event to the encoder
+// NOTE: the encoder can only store one RowChangedEvent!
 func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
 	if a.keyBuf != nil || a.valueBuf != nil {
 		return errors.New("Fatal sink bug. Batch size must be 1")
@@ -67,15 +82,39 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	return nil
 }
 
+// AppendResolvedEvent is no-op for now
 func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 	// nothing for now
 	return nil
 }
 
+// AppendDDLEvent generates new schema and registers it to the Registry
 func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+	cols := e.Info.(*entry.TableInfo).Cols()
+	schemaStr, err := columnInfoToAvroSchema(e.Table, cols)
+	if err != nil {
+		return errors.Annotate(err, "AppendDDLEvent failed")
+	}
+	log.Info("AppendDDLEvent: new schema generated", zap.String("schema_str", schemaStr))
 
+	avroCodec, err := goavro.NewCodec(schemaStr)
+	if err != nil {
+		return errors.Annotate(err, "AppendDDLEvent failed: could not verify schema, probably bug")
+	}
+
+	err = a.valueSchemaManager.Register(context.Background(), model.TableName{
+		Schema: e.Schema,
+		Table:  e.Table,
+	}, avroCodec)
+
+	if err != nil {
+		return errors.Annotate(err, "AppendDDLEvent failed: could not registry schema")
+	}
+
+	return nil
 }
 
+// Build a MQ message
 func (a *AvroEventBatchEncoder) Build() (key []byte, value []byte) {
 	k := a.keyBuf
 	v := a.valueBuf
@@ -84,17 +123,16 @@ func (a *AvroEventBatchEncoder) Build() (key []byte, value []byte) {
 	return k, v
 }
 
+// Size is always 0 or 1
 func (a *AvroEventBatchEncoder) Size() int {
 	if a.valueBuf == nil {
 		return 0
-	} else {
-		return 1
 	}
+	return 1
 }
 
-
-func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tiSchemaId int64, cols map[string]*model.Column) (*avroEncodeResult, error) {
-	avroCodec, registryId, err := a.valueSchemaManager.Lookup(context.Background(), *table, tiSchemaId)
+func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tiSchemaID int64, cols map[string]*model.Column) (*avroEncodeResult, error) {
+	avroCodec, registryID, err := a.valueSchemaManager.Lookup(context.Background(), *table, tiSchemaID)
 	if err != nil {
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: lookup failed")
 	}
@@ -104,7 +142,6 @@ func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tiSchemaId in
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: converting to native failed")
 	}
 
-
 	bin, err := avroCodec.BinaryFromNative(nil, native)
 	if err != nil {
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: converting to Avro binary failed")
@@ -112,8 +149,43 @@ func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tiSchemaId in
 
 	return &avroEncodeResult{
 		data:       bin,
-		registryId: registryId,
+		registryID: registryID,
 	}, nil
+}
+
+type avroSchemaTop struct {
+	Tp     string            `json:"type"`
+	Name   string            `json:"name"`
+	Fields []avroSchemaField `json:"fields"`
+}
+
+type avroSchemaField struct {
+	Name         string      `json:"name"`
+	Tp           []string    `json:"type"`
+	DefaultValue interface{} `json:"default"`
+}
+
+func columnInfoToAvroSchema(name string, columnInfo []*timodel.ColumnInfo) (string, error) {
+	top := avroSchemaTop{
+		Tp:     "record",
+		Name:   name,
+		Fields: nil,
+	}
+
+	for _, col := range columnInfo {
+		field := avroSchemaField{
+			Name:         col.Name.String(),
+			Tp:           []string{"null", getAvroDataTypeNameMysql(col.Tp)},
+			DefaultValue: nil,
+		}
+		top.Fields = append(top.Fields, field)
+	}
+
+	str, err := json.Marshal(&top)
+	if err != nil {
+		return "", errors.Annotate(err, "columnInfoToAvroSchema: failed to generate json")
+	}
+	return string(str), nil
 }
 
 func rowToAvroNativeData(cols map[string]*model.Column) (interface{}, error) {
@@ -143,22 +215,61 @@ func getAvroDataTypeName(v interface{}) string {
 		return "float"
 	case int64, uint64:
 		return "long"
-	case int32, uint32:
+	case int, int32, uint32:
 		return "int"
 	case nil:
 		return "null"
 	case string:
 		return "string"
 	case time.Duration:
-		return "int.time-millis"
+		return "long.time-millis"
 	case time.Time:
 		return "long.timestamp-millis"
 	default:
+		log.Warn("getAvroDataTypeName: unknown type")
 		return "errorType"
 	}
 }
 
+func getAvroDataTypeNameMysql(tp byte) string {
+	switch tp {
+	case mysql.TypeFloat:
+		return "float"
+	case mysql.TypeDouble:
+		return "double"
+	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
+		return "string"
+	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
+		return "long.timestamp-millis"
+	case mysql.TypeDuration: //duration should read fsp from column meta data
+		return "long.time-millis"
+	case mysql.TypeEnum:
+		return "long"
+	case mysql.TypeSet:
+		return "long"
+	case mysql.TypeBit:
+		return "long"
+	case mysql.TypeNewDecimal, mysql.TypeDecimal:
+		return "string"
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
+		return "int"
+	case mysql.TypeLong, mysql.TypeLonglong:
+		return "long"
+	case mysql.TypeNull:
+		return "null"
+	case mysql.TypeJSON:
+		return "string"
+	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+		return "bytes"
+	default:
+		return "error"
+	}
+}
+
 func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
+	if v, e := col.Value.(int); e {
+		col.Value = int64(v)
+	}
 	switch col.Type {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		str := col.Value.(string)
@@ -185,7 +296,7 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 		}
 		return d, "long.timestamp-millis", nil
 	case mysql.TypeJSON:
-		return col.Value.(json.BinaryJSON).String(), "string", nil
+		return col.Value.(tijson.BinaryJSON).String(), "string", nil
 	case mysql.TypeNewDecimal, mysql.TypeDecimal:
 		dec := col.Value.(*types.MyDecimal)
 		if dec == nil {
@@ -198,6 +309,8 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 		return col.Value.(types.Set).Value, "long", nil
 	case mysql.TypeBit:
 		return col.Value.(uint64), "long", nil
+	case mysql.TypeTiny:
+		return int32(col.Value.(uint8)), "int", nil
 	default:
 		return col.Value, getAvroDataTypeName(col.Value), nil
 	}
@@ -207,7 +320,7 @@ const magicByte = uint8(0)
 
 func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	data := []interface{}{magicByte, int32(r.registryId), r.data}
+	data := []interface{}{magicByte, int32(r.registryID), r.data}
 	for _, v := range data {
 		err := binary.Write(buf, binary.LittleEndian, v)
 		if err != nil {
