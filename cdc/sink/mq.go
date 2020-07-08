@@ -104,6 +104,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
+		log.Info("show row event", zap.Reflect("row", row))
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
