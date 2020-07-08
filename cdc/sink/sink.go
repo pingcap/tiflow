@@ -32,11 +32,6 @@ const (
 	OptCaptureAddr  = "_capture_addr"
 )
 
-// EmitEventResult records some emit action result
-type EmitEventResult struct {
-	Ignored bool
-}
-
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
 
@@ -46,7 +41,7 @@ type Sink interface {
 
 	// EmitDDLEvent sends DDL Event to Sink
 	// EmitDDLEvent should execute DDL to downstream synchronously
-	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (EmitEventResult, error)
+	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 
 	// FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
 	// TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`

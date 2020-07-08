@@ -179,8 +179,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	return errors.Trace(err)
 }
 
-func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (EmitEventResult, error) {
-	result := EmitEventResult{}
+func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table) {
 		log.Info(
 			"DDL event ignored",
@@ -188,21 +187,20 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (EmitEve
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
 		)
-		result.Ignored = true
-		return result, nil
+		return errors.Trace(model.ErrorDDLEventIgnored)
 	}
 	encoder := k.newEncoder()
 	err := encoder.AppendDDLEvent(ddl)
 	if err != nil {
-		return result, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	key, value := encoder.Build()
 	log.Info("emit ddl event", zap.ByteString("key", key), zap.ByteString("value", value))
 	err = k.mqProducer.SyncBroadcastMessage(ctx, key, value)
 	if err != nil {
-		return result, errors.Trace(err)
+		return errors.Trace(err)
 	}
-	return result, nil
+	return nil
 }
 
 func (k *mqSink) Close() error {

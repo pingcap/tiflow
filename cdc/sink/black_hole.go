@@ -68,9 +68,9 @@ func (b *blackHoleSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	return nil
 }
 
-func (b *blackHoleSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (EmitEventResult, error) {
+func (b *blackHoleSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	log.Info("BlockHoleSink: DDL Event", zap.Any("ddl", ddl))
-	return EmitEventResult{}, nil
+	return nil
 }
 
 func (b *blackHoleSink) Close() error {
