@@ -68,6 +68,8 @@ type RowChangedEvent struct {
 
 	Delete bool `json:"delete"`
 
+	SchemaID int64 `json:"schema-id,omitempty"`
+
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
 	IndieMarkCol string             `json:"indie-mark-col"`

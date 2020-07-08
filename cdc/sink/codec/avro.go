@@ -17,6 +17,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -31,8 +34,8 @@ type AvroEventBatchEncoder struct {
 	// TODO use Avro for Kafka keys
 	// keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
-	keyBuf             *bytes.Buffer
-	valueBuf           *bytes.Buffer
+	keyBuf             []byte
+	valueBuf           []byte
 }
 
 type avroEncodeResult struct {
@@ -41,8 +44,54 @@ type avroEncodeResult struct {
 }
 
 func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+	if a.keyBuf != nil || a.valueBuf != nil {
+		return errors.New("Fatal sink bug. Batch size must be 1")
+	}
+
+	res, err := a.avroEncode(e.Table, e.SchemaID, e.Columns)
+	if err != nil {
+		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
+		return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
+	}
+
+	evlp, err := res.toEnvelope()
+	if err != nil {
+		log.Warn("AppendRowChangedEvent: could not construct Avro envelope", zap.String("table", e.Table.String()))
+		return errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
+	}
+
+	a.valueBuf = evlp
+	// TODO use primary key(s) as kafka key
+	a.keyBuf = []byte(fmt.Sprintf("%d", e.RowID))
+
 	return nil
 }
+
+func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
+	// nothing for now
+	return nil
+}
+
+func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+
+}
+
+func (a *AvroEventBatchEncoder) Build() (key []byte, value []byte) {
+	k := a.keyBuf
+	v := a.valueBuf
+	a.keyBuf = nil
+	a.valueBuf = nil
+	return k, v
+}
+
+func (a *AvroEventBatchEncoder) Size() int {
+	if a.valueBuf == nil {
+		return 0
+	} else {
+		return 1
+	}
+}
+
 
 func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tiSchemaId int64, cols map[string]*model.Column) (*avroEncodeResult, error) {
 	avroCodec, registryId, err := a.valueSchemaManager.Lookup(context.Background(), *table, tiSchemaId)
@@ -158,10 +207,12 @@ const magicByte = uint8(0)
 
 func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	data := []interface{}{magicByte, r.registryId, r.data}
-	err := binary.Write(buf, binary.LittleEndian, data)
-	if err != nil {
-		return nil, errors.Annotate(err, "converting Avro data to envelop failed")
+	data := []interface{}{magicByte, int32(r.registryId), r.data}
+	for _, v := range data {
+		err := binary.Write(buf, binary.LittleEndian, v)
+		if err != nil {
+			return nil, errors.Annotate(err, "converting Avro data to envelope failed")
+		}
 	}
 	return buf.Bytes(), nil
 }

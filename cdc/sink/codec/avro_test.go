@@ -32,10 +32,10 @@ type AvroBatchEncoderSuite struct {
 var _ = check.Suite(&AvroBatchEncoderSuite{})
 
 func (s *AvroBatchEncoderSuite) SetUpSuite(c *check.C) {
+	StartHTTPInterceptForTestingRegistry(c)
+
 	manager, err := NewAvroSchemaManager(context.Background(), "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
-
-	StartHTTPInterceptForTestingRegistry(c)
 
 	s.encoder = &AvroEventBatchEncoder{
 		valueSchemaManager: manager,
@@ -75,12 +75,12 @@ func (s *AvroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	r, err := s.encoder.avroEncode(&table, 1, map[string]*model.Column{
-		"id": {Value: int32(1), Type: mysql.TypeLong},
-		"myint": {Value: int32(2), Type: mysql.TypeLong},
-		"mybool": {Value: true, Type: mysql.TypeTiny},
+		"id":      {Value: int32(1), Type: mysql.TypeLong},
+		"myint":   {Value: int32(2), Type: mysql.TypeLong},
+		"mybool":  {Value: true, Type: mysql.TypeTiny},
 		"myfloat": {Value: float32(3.14), Type: mysql.TypeFloat},
 		"mybytes": {Value: []byte("Hello World"), Type: mysql.TypeBlob},
-		"ts": {Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
+		"ts":      {Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
 	})
 	c.Assert(err, check.IsNil)
 
@@ -91,4 +91,42 @@ func (s *AvroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	txt, err := avroCodec.TextualFromNative(nil, res)
 	c.Check(err, check.IsNil)
 	log.Info("TestAvroEncodeOnly", zap.ByteString("result", txt))
+}
+
+func (s *AvroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
+	avroCodec, err := goavro.NewCodec(`
+        {
+          "type": "record",
+          "name": "test2",
+          "fields" : [
+            {"name": "id", "type": "int", "default": 0}
+          ]
+        }`)
+
+	c.Assert(err, check.IsNil)
+
+	testNativeData := make(map[string]interface{})
+	testNativeData["id"] = 7
+
+	bin, err := avroCodec.BinaryFromNative(nil, testNativeData)
+	c.Check(err, check.IsNil)
+
+	res := avroEncodeResult{
+		data: bin,
+		registryId: 7,
+	}
+
+	evlp, err := res.toEnvelope()
+	c.Check(err, check.IsNil)
+
+	c.Assert(evlp[0], check.Equals, magicByte)
+	c.Assert(evlp[1:5], check.BytesEquals, []byte{7, 0, 0, 0})
+
+	parsed, _, err := avroCodec.NativeFromBinary(evlp[5:])
+	c.Assert(parsed, check.NotNil)
+
+	id, exists := parsed.(map[string]interface{})["id"]
+	c.Assert(exists, check.IsTrue)
+	c.Assert(id, check.Equals, int32(7))
+
 }
