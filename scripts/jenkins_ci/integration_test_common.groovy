@@ -211,12 +211,7 @@ def coverage() {
 }
 
 def find_cases() {
-    dir("go/src/github.com/pingcap/ticdc/tests") {
-        return sh (
-            script: 'find . -maxdepth 2 -mindepth 2 -name \'run.sh\' | awk -F/ \'{print $2}\'',
-            returnStdout: true
-        ).trim().split()
-    }
+    return ['row_format']
 }
 
 return this
