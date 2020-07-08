@@ -127,7 +127,7 @@ func (s *AvroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 	c.Assert(evlp[1:5], check.BytesEquals, []byte{7, 0, 0, 0})
 
 	parsed, _, err := avroCodec.NativeFromBinary(evlp[5:])
-	c.Assert(err, check.NotNil)
+	c.Assert(err, check.IsNil)
 	c.Assert(parsed, check.NotNil)
 
 	id, exists := parsed.(map[string]interface{})["id"]

@@ -254,8 +254,13 @@ func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.T
 		return nil
 	}
 
+	if resp.StatusCode == 404 {
+		log.Info("Registry already cleaned")
+		return nil
+	}
+
 	log.Error("Error when clearing Registry", zap.Int("status", resp.StatusCode))
-	return err
+	return errors.Errorf("Error when clearing Registry, status = %d", resp.StatusCode)
 }
 
 func httpRetry(ctx context.Context, r *http.Request, allow404 bool) (*http.Response, error) {
