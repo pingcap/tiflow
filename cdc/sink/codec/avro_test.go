@@ -14,7 +14,6 @@
 package codec
 
 import (
-	"context"
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -26,6 +25,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
+
+	"context"
 	"time"
 )
 
