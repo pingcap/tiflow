@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,12 +26,18 @@ type httpStatusSuite struct{}
 
 var _ = check.Suite(&httpStatusSuite{})
 
-var defaultStatusHost = "127.0.0.1"
-
 const retryTime = 20
 
+var testingServerOptions = options{
+	pdEndpoints:   "http://127.0.0.1:2379",
+	addr:          "127.0.0.1:8300",
+	advertiseAddr: "127.0.0.1:8300",
+	timezone:      nil,
+	gcTTL:         DefaultCDCGCSafePointTTL,
+}
+
 func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
-	statusURL := fmt.Sprintf("http://%s:%d/status", defaultStatusHost, defaultStatusPort)
+	statusURL := fmt.Sprintf("http://%s/status", testingServerOptions.advertiseAddr)
 	for i := 0; i < retryTime; i++ {
 		resp, err := http.Get(statusURL)
 		if err == nil {
@@ -46,9 +52,9 @@ func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
 }
 
 func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
-	cfg := &Config{PD: "http://127.0.0.1:2379", StatusAddr: fmt.Sprintf("%s:%d", defaultStatusHost, defaultStatusPort)}
-	server := &Server{config: cfg}
-	server.startStatusHTTP()
+	server := &Server{opts: testingServerOptions}
+	err := server.startStatusHTTP()
+	c.Assert(err, check.IsNil)
 	defer func() {
 		c.Assert(server.statusServer.Close(), check.IsNil)
 	}()
@@ -60,7 +66,7 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 }
 
 func testPprof(c *check.C) {
-	resp, err := http.Get(fmt.Sprintf("http://%s:%d/debug/pprof/cmdline", defaultStatusHost, defaultStatusPort))
+	resp, err := http.Get(fmt.Sprintf("http://%s/debug/pprof/cmdline", testingServerOptions.advertiseAddr))
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, 200)
@@ -69,7 +75,7 @@ func testPprof(c *check.C) {
 }
 
 func testReisgnOwner(c *check.C) {
-	uri := fmt.Sprintf("http://%s:%d/capture/owner/resign", defaultStatusHost, defaultStatusPort)
+	uri := fmt.Sprintf("http://%s/capture/owner/resign", testingServerOptions.advertiseAddr)
 	resp, err := http.Get(uri)
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()

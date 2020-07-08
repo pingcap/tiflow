@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,38 +16,9 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 
 	"github.com/pingcap/errors"
-)
-
-// ProcessTableInfo contains the info about tables that processor need to process.
-type ProcessTableInfo struct {
-	ID      uint64 `json:"id"`
-	StartTs uint64 `json:"start-ts"`
-}
-
-// TableLock is used when applying table re-assignment to a processor.
-// There are two kinds of locks, P-lock and C-lock. P-lock is set by owner when
-// owner removes one or more tables from one processor. C-lock is a pair to
-// P-lock and set by processor to indicate that the processor has synchronized
-// the checkpoint and won't synchronize the removed table any more.
-type TableLock struct {
-	// Ts is the create timestamp of lock, it is used to pair P-lock and C-lock
-	Ts uint64 `json:"ts"`
-	// CreatorID is the lock creator ID
-	CreatorID string `json:"creator-id"`
-	// CheckpointTs is used in C-lock only, it records the table synchronization checkpoint
-	CheckpointTs uint64 `json:"checkpoint-ts"`
-}
-
-// TableLockStatus for the table lock in TaskStatus
-type TableLockStatus int
-
-// Table lock status
-const (
-	TableNoLock TableLockStatus = iota + 1
-	TablePLock
-	TablePLockCommited
 )
 
 // AdminJobType represents for admin job type, both used in owner and processor
@@ -55,8 +26,9 @@ type AdminJobType int
 
 // AdminJob holds an admin job
 type AdminJob struct {
-	CfID string
-	Type AdminJobType
+	CfID  string
+	Type  AdminJobType
+	Error *RunningError
 }
 
 // All AdminJob types
@@ -88,6 +60,10 @@ type TaskPosition struct {
 	CheckPointTs uint64 `json:"checkpoint-ts"`
 	// The event that satisfies CommitTs <= ResolvedTs can be synchronized. This is updated by corresponding processor.
 	ResolvedTs uint64 `json:"resolved-ts"`
+	// The count of events were synchronized. This is updated by corresponding processor.
+	Count uint64 `json:"count"`
+	// Error code when error happens
+	Error *RunningError `json:"error"`
 }
 
 // Marshal returns the json marshal format of a TaskStatus
@@ -105,59 +81,171 @@ func (tp *TaskPosition) Unmarshal(data []byte) error {
 // String implements fmt.Stringer interface.
 func (tp *TaskPosition) String() string {
 	data, _ := tp.Marshal()
-	return string(data)
+	return data
+}
+
+// MoveTableStatus represents for the status of a MoveTableJob
+type MoveTableStatus int
+
+// All MoveTable status
+const (
+	MoveTableStatusNone MoveTableStatus = iota
+	MoveTableStatusDeleted
+	MoveTableStatusFinished
+)
+
+// MoveTableJob records a move operation of a table
+type MoveTableJob struct {
+	From             CaptureID
+	To               CaptureID
+	TableID          TableID
+	TableReplicaInfo *TableReplicaInfo
+	Status           MoveTableStatus
+}
+
+// TableOperation records the current information of a table migration
+type TableOperation struct {
+	Delete bool `json:"delete"`
+	// if the operation is a delete operation, BoundaryTs is checkpoint ts
+	// if the operation is a add operation, BoundaryTs is start ts
+	BoundaryTs uint64 `json:"boundary_ts"`
+	Done       bool   `json:"done"`
+}
+
+// Clone returns a deep-clone of the struct
+func (o *TableOperation) Clone() *TableOperation {
+	if o == nil {
+		return nil
+	}
+	clone := *o
+	return &clone
+}
+
+// TaskWorkload records the workloads of a task
+// the value of the struct is the workload
+type TaskWorkload map[TableID]WorkloadInfo
+
+// WorkloadInfo records the workload info of a table
+type WorkloadInfo struct {
+	Workload uint64 `json:"workload"`
+}
+
+// Unmarshal unmarshals into *TaskWorkload from json marshal byte slice
+func (w *TaskWorkload) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, w)
+	return errors.Annotatef(err, "Unmarshal data: %v", data)
+}
+
+// Marshal returns the json marshal format of a TaskWorkload
+func (w *TaskWorkload) Marshal() (string, error) {
+	if w == nil {
+		return "{}", nil
+	}
+	data, err := json.Marshal(w)
+	return string(data), errors.Trace(err)
+}
+
+// TableReplicaInfo records the table replica info
+type TableReplicaInfo struct {
+	StartTs     Ts      `json:"start-ts"`
+	MarkTableID TableID `json:"mark-table-id"`
+	Name        string  `json:"-"`
 }
 
 // TaskStatus records the task information of a capture
 type TaskStatus struct {
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
-	// TODO change to be a map for easy update.
-	TableInfos   []*ProcessTableInfo `json:"table-infos"`
-	TablePLock   *TableLock          `json:"table-p-lock"`
-	TableCLock   *TableLock          `json:"table-c-lock"`
-	AdminJobType AdminJobType        `json:"admin-job-type"`
-	ModRevision  int64               `json:"-"`
+	Tables       map[TableID]*TableReplicaInfo `json:"tables"`
+	Operation    map[TableID]*TableOperation   `json:"operation"`
+	AdminJobType AdminJobType                  `json:"admin-job-type"`
+	ModRevision  int64                         `json:"-"`
 }
 
 // String implements fmt.Stringer interface.
 func (ts *TaskStatus) String() string {
 	data, _ := ts.Marshal()
-	return string(data)
+	return data
 }
 
-// RemoveTable remove the table in TableInfos.
-func (ts *TaskStatus) RemoveTable(id uint64) (*ProcessTableInfo, bool) {
-	for idx, table := range ts.TableInfos {
-		if table.ID == id {
-			last := ts.TableInfos[len(ts.TableInfos)-1]
-			removedTable := ts.TableInfos[idx]
+// RemoveTable remove the table in TableInfos and add a remove table operation.
+func (ts *TaskStatus) RemoveTable(id TableID, boundaryTs Ts) (*TableReplicaInfo, bool) {
+	if ts.Tables == nil {
+		return nil, false
+	}
+	table, exist := ts.Tables[id]
+	if !exist {
+		return nil, false
+	}
+	delete(ts.Tables, id)
+	if ts.Operation == nil {
+		ts.Operation = make(map[TableID]*TableOperation)
+	}
+	ts.Operation[id] = &TableOperation{
+		Delete:     true,
+		BoundaryTs: boundaryTs,
+	}
+	return table, true
+}
 
-			ts.TableInfos[idx] = last
-			ts.TableInfos = ts.TableInfos[:len(ts.TableInfos)-1]
+// AddTable add the table in TableInfos and add a add table operation.
+func (ts *TaskStatus) AddTable(id TableID, table *TableReplicaInfo, boundaryTs Ts) {
+	if ts.Tables == nil {
+		ts.Tables = make(map[TableID]*TableReplicaInfo)
+	}
+	_, exist := ts.Tables[id]
+	if exist {
+		return
+	}
+	ts.Tables[id] = table
+	if ts.Operation == nil {
+		ts.Operation = make(map[TableID]*TableOperation)
+	}
+	ts.Operation[id] = &TableOperation{
+		Delete:     false,
+		BoundaryTs: boundaryTs,
+	}
+}
 
-			return removedTable, true
+// SomeOperationsUnapplied returns true if there are some operations not applied
+func (ts *TaskStatus) SomeOperationsUnapplied() bool {
+	for _, o := range ts.Operation {
+		if !o.Done {
+			return true
 		}
 	}
+	return false
+}
 
-	return nil, false
+// AppliedTs returns a Ts which less or equal to the ts boundary of any unapplied operation
+func (ts *TaskStatus) AppliedTs() Ts {
+	appliedTs := uint64(math.MaxUint64)
+	for _, o := range ts.Operation {
+		if !o.Done {
+			if appliedTs > o.BoundaryTs {
+				appliedTs = o.BoundaryTs
+			}
+		}
+	}
+	return appliedTs
 }
 
 // Snapshot takes a snapshot of `*TaskStatus` and returns a new `*ProcInfoSnap`
-func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID, checkpointTs uint64) *ProcInfoSnap {
+func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID, checkpointTs Ts) *ProcInfoSnap {
 	snap := &ProcInfoSnap{
 		CfID:      cfID,
 		CaptureID: captureID,
-		Tables:    make([]ProcessTableInfo, 0, len(ts.TableInfos)),
+		Tables:    make(map[TableID]*TableReplicaInfo, len(ts.Tables)),
 	}
-	for _, tbl := range ts.TableInfos {
+	for tableID, table := range ts.Tables {
 		ts := checkpointTs
-		if ts < tbl.StartTs {
-			ts = tbl.StartTs
+		if ts < table.StartTs {
+			ts = table.StartTs
 		}
-		snap.Tables = append(snap.Tables, ProcessTableInfo{
-			ID:      tbl.ID,
-			StartTs: ts,
-		})
+		snap.Tables[tableID] = &TableReplicaInfo{
+			StartTs:     ts,
+			MarkTableID: table.MarkTableID,
+			Name:        table.Name,
+		}
 	}
 	return snap
 }
@@ -177,20 +265,16 @@ func (ts *TaskStatus) Unmarshal(data []byte) error {
 // Clone returns a deep-clone of the struct
 func (ts *TaskStatus) Clone() *TaskStatus {
 	clone := *ts
-	infos := make([]*ProcessTableInfo, 0, len(ts.TableInfos))
-	for _, ti := range ts.TableInfos {
-		c := *ti
-		infos = append(infos, &c)
+	tables := make(map[TableID]*TableReplicaInfo, len(ts.Tables))
+	for tableID, table := range ts.Tables {
+		tables[tableID] = &(*table)
 	}
-	clone.TableInfos = infos
-	if ts.TablePLock != nil {
-		pLock := *ts.TablePLock
-		clone.TablePLock = &pLock
+	clone.Tables = tables
+	operation := make(map[TableID]*TableOperation, len(ts.Operation))
+	for tableID, opt := range ts.Operation {
+		operation[tableID] = opt
 	}
-	if ts.TableCLock != nil {
-		cLock := *ts.TableCLock
-		clone.TableCLock = &cLock
-	}
+	clone.Operation = operation
 	return &clone
 }
 
@@ -199,6 +283,15 @@ type CaptureID = string
 
 // ChangeFeedID is the type for change feed ID
 type ChangeFeedID = string
+
+// TableID is the ID of the table
+type TableID = int64
+
+// SchemaID is the ID of the schema
+type SchemaID = int64
+
+// Ts is the timestamp with a logical count
+type Ts = uint64
 
 // ProcessorsInfos maps from capture IDs to TaskStatus
 type ProcessorsInfos map[CaptureID]*TaskStatus
@@ -267,7 +360,7 @@ func (status *ChangeFeedStatus) Unmarshal(data []byte) error {
 
 // ProcInfoSnap holds most important replication information of a processor
 type ProcInfoSnap struct {
-	CfID      string
-	CaptureID string
-	Tables    []ProcessTableInfo
+	CfID      string                        `json:"changefeed-id"`
+	CaptureID string                        `json:"capture-id"`
+	Tables    map[TableID]*TableReplicaInfo `json:"-"`
 }

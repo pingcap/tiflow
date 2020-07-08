@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/entry"
 
 	"github.com/pingcap/check"
-	pd "github.com/pingcap/pd/v4/client"
+	pd "github.com/pingcap/pd/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/roles/storage"
@@ -174,7 +174,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 
 		go func(rawTxnTs []uint64) {
 			for _, txnTs := range rawTxnTs {
-				input <- model.RawTxn{Ts: txnTs}
+				input <- model.RawTxn{CRTs: txnTs}
 			}
 		}(rawTxnTs)
 	}
@@ -251,7 +251,7 @@ func (s *txnChannelSuite) TestShouldForwardTxnsByTs(c *check.C) {
 	tc := newTxnChannel(input, 5, callback)
 	for _, ts := range []uint64{1, 2, 4, 6} {
 		select {
-		case input <- model.RawTxn{Ts: ts}:
+		case input <- model.RawTxn{CRTs: ts}:
 		case <-time.After(time.Second):
 			c.Fatal("Timeout sending to input")
 		}

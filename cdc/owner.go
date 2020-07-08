@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,498 +18,154 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/roles"
-	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/scheduler"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
-	"go.etcd.io/etcd/mvcc/mvccpb"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
 
-const (
-	captureInfoWatchRetryDelay = time.Millisecond * 500
-)
-
-type tableIDMap = map[uint64]struct{}
-
-// OwnerDDLHandler defines the ddl handler for Owner
-// which can pull ddl jobs and execute ddl jobs
-type OwnerDDLHandler interface {
-	// PullDDL pulls the ddl jobs and returns resolvedTs of DDL Puller and job list.
-	PullDDL() (resolvedTs uint64, jobs []*timodel.Job, err error)
-
-	// Close cancels the executing of OwnerDDLHandler and releases resource
-	Close() error
-}
-
-// ChangeFeedRWriter defines the Reader and Writer for changeFeed
-type ChangeFeedRWriter interface {
-
-	// GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
-	GetChangeFeeds(ctx context.Context) (int64, map[string]*mvccpb.KeyValue, error)
-
-	// GetAllTaskStatus queries all task status of a changefeed, and returns a map
-	// mapping from captureID to TaskStatus
-	GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error)
-
-	// GetAllTaskPositions queries all task positions of a changefeed, and returns a map
-	// mapping from captureID to TaskPositions
-	GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error)
-
-	// GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
-	GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error)
-	// PutAllChangeFeedStatus the changefeed info to storage such as etcd.
-	PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error
-}
-
-type changeFeed struct {
-	id     string
-	info   *model.ChangeFeedInfo
-	status *model.ChangeFeedStatus
-
-	schema        *entry.Storage
-	ddlState      model.ChangeFeedDDLState
-	targetTs      uint64
-	taskStatus    model.ProcessorsInfos
-	taskPositions map[string]*model.TaskPosition
-	filter        *util.Filter
-	sink          sink.Sink
-
-	ddlHandler    OwnerDDLHandler
-	ddlResolvedTs uint64
-	ddlJobHistory []*timodel.Job
-	ddlExecutedTs uint64
-
-	schemas       map[uint64]tableIDMap
-	tables        map[uint64]entry.TableName
-	orphanTables  map[uint64]model.ProcessTableInfo
-	toCleanTables map[uint64]struct{}
-	infoWriter    *storage.OwnerTaskStatusEtcdWriter
-}
-
-// String implements fmt.Stringer interface.
-func (c *changeFeed) String() string {
-	format := "{\n ID: %s\n info: %+v\n status: %+v\n State: %v\n ProcessorInfos: %+v\n tables: %+v\n orphanTables: %+v\n toCleanTables: %v\n ddlResolvedTs: %d\n ddlJobHistory: %+v\n}\n\n"
-	s := fmt.Sprintf(format,
-		c.id, c.info, c.status, c.ddlState, c.taskStatus, c.tables,
-		c.orphanTables, c.toCleanTables, c.ddlResolvedTs, c.ddlJobHistory)
-
-	if len(c.ddlJobHistory) > 0 {
-		job := c.ddlJobHistory[0]
-		s += fmt.Sprintf("next to exec job: %s query: %s\n\n", job, job.Query)
-	}
-
-	return s
-}
-
-func (c *changeFeed) updateProcessorInfos(processInfos model.ProcessorsInfos, positions map[string]*model.TaskPosition) {
-	c.taskStatus = processInfos
-	c.taskPositions = positions
-}
-
-func (c *changeFeed) addSchema(schemaID uint64) {
-	if _, ok := c.schemas[schemaID]; ok {
-		log.Warn("add schema already exists", zap.Uint64("schemaID", schemaID))
-		return
-	}
-	c.schemas[schemaID] = make(map[uint64]struct{})
-}
-
-func (c *changeFeed) dropSchema(schemaID uint64) {
-	if schema, ok := c.schemas[schemaID]; ok {
-		for tid := range schema {
-			c.removeTable(schemaID, tid)
-		}
-	}
-	delete(c.schemas, schemaID)
-}
-
-func (c *changeFeed) reAddTable(id, startTs uint64) {
-	c.orphanTables[id] = model.ProcessTableInfo{
-		ID:      id,
-		StartTs: startTs,
-	}
-}
-
-func (c *changeFeed) addTable(sid, tid, startTs uint64, table entry.TableName) {
-	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
-		return
-	}
-
-	if _, ok := c.tables[tid]; ok {
-		log.Warn("add table already exists", zap.Uint64("tableID", tid), zap.Stringer("table", table))
-		return
-	}
-
-	if _, ok := c.schemas[sid]; !ok {
-		c.schemas[sid] = make(tableIDMap)
-	}
-	c.schemas[sid][tid] = struct{}{}
-	c.tables[tid] = table
-	c.orphanTables[tid] = model.ProcessTableInfo{
-		ID:      tid,
-		StartTs: startTs,
-	}
-}
-
-func (c *changeFeed) removeTable(sid, tid uint64) {
-	if _, ok := c.schemas[sid]; ok {
-		delete(c.schemas[sid], tid)
-	}
-	delete(c.tables, tid)
-
-	if _, ok := c.orphanTables[tid]; ok {
-		delete(c.orphanTables, tid)
-	} else {
-		c.toCleanTables[tid] = struct{}{}
-	}
-}
-
-func (c *changeFeed) selectCapture(captures map[string]*model.CaptureInfo) string {
-	return c.minimumTablesCapture(captures)
-}
-
-func (c *changeFeed) minimumTablesCapture(captures map[string]*model.CaptureInfo) string {
-	if len(captures) == 0 {
-		return ""
-	}
-
-	for id := range captures {
-		// We have not dispatch any table to this capture yet.
-		if _, ok := c.taskStatus[id]; !ok {
-			return id
-		}
-	}
-
-	var minCount int = math.MaxInt64
-	var minID string
-
-	for id, pinfo := range c.taskStatus {
-		if len(pinfo.TableInfos) < minCount {
-			minID = id
-			minCount = len(pinfo.TableInfos)
-		}
-	}
-
-	return minID
-}
-
-func (c *changeFeed) tryBalance(ctx context.Context, captures map[string]*model.CaptureInfo) {
-	c.cleanTables(ctx)
-	c.banlanceOrphanTables(ctx, captures)
-}
-
-func (c *changeFeed) restoreTableInfos(infoSnapshot *model.TaskStatus, captureID string) {
-	c.taskStatus[captureID].TableInfos = infoSnapshot.TableInfos
-}
-
-func (c *changeFeed) cleanTables(ctx context.Context) {
-	var cleanIDs []uint64
-
-cleanLoop:
-	for id := range c.toCleanTables {
-		captureID, taskStatus, ok := findTaskStatusWithTable(c.taskStatus, id)
-		if !ok {
-			log.Warn("ignore clean table id", zap.Uint64("id", id))
-			cleanIDs = append(cleanIDs, id)
-			continue
-		}
-
-		infoClone := taskStatus.Clone()
-		taskStatus.RemoveTable(id)
-
-		newInfo, err := c.infoWriter.Write(ctx, c.id, captureID, taskStatus, true)
-		if err == nil {
-			c.taskStatus[captureID] = newInfo
-		}
-		switch errors.Cause(err) {
-		case model.ErrFindPLockNotCommit:
-			c.restoreTableInfos(infoClone, captureID)
-			log.Info("write table info delay, wait plock resolve",
-				zap.String("changefeed", c.id),
-				zap.String("capture", captureID))
-		case nil:
-			log.Info("cleanup table success",
-				zap.Uint64("table id", id),
-				zap.String("capture id", captureID))
-			log.Debug("after remove", zap.Stringer("task status", taskStatus))
-			cleanIDs = append(cleanIDs, id)
-		default:
-			c.restoreTableInfos(infoClone, captureID)
-			log.Error("fail to put sub changefeed info", zap.Error(err))
-			break cleanLoop
-		}
-	}
-
-	for _, id := range cleanIDs {
-		delete(c.toCleanTables, id)
-	}
-}
-
-func findTaskStatusWithTable(infos model.ProcessorsInfos, tableID uint64) (captureID string, info *model.TaskStatus, ok bool) {
-	for id, info := range infos {
-		for _, table := range info.TableInfos {
-			if table.ID == tableID {
-				return id, info, true
-			}
-		}
-	}
-
-	return "", nil, false
-}
-
-func (c *changeFeed) banlanceOrphanTables(ctx context.Context, captures map[string]*model.CaptureInfo) {
-	if len(captures) == 0 {
-		return
-	}
-
-	for tableID, orphan := range c.orphanTables {
-		captureID := c.selectCapture(captures)
-		if len(captureID) == 0 {
-			return
-		}
-
-		info := c.taskStatus[captureID]
-		if info == nil {
-			info = new(model.TaskStatus)
-		}
-		infoClone := info.Clone()
-		info.TableInfos = append(info.TableInfos, &model.ProcessTableInfo{
-			ID:      tableID,
-			StartTs: orphan.StartTs,
-		})
-
-		newInfo, err := c.infoWriter.Write(ctx, c.id, captureID, info, false)
-		if err == nil {
-			c.taskStatus[captureID] = newInfo
-		}
-		switch errors.Cause(err) {
-		case model.ErrFindPLockNotCommit:
-			c.restoreTableInfos(infoClone, captureID)
-			log.Info("write table info delay, wait plock resolve",
-				zap.String("changefeed", c.id),
-				zap.String("capture", captureID))
-		case nil:
-			log.Info("dispatch table success",
-				zap.Uint64("table id", tableID),
-				zap.Uint64("start ts", orphan.StartTs),
-				zap.String("capture", captureID))
-			delete(c.orphanTables, tableID)
-		default:
-			c.restoreTableInfos(infoClone, captureID)
-			log.Error("fail to put sub changefeed info", zap.Error(err))
-			return
-		}
-	}
-}
-
-func (c *changeFeed) applyJob(job *timodel.Job) error {
-	log.Info("apply job", zap.String("sql", job.Query), zap.Stringer("job", job))
-
-	schamaName, tableName, _, err := c.schema.HandleDDL(job)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	schemaID := uint64(job.SchemaID)
-	// case table id set may change
-	switch job.Type {
-	case timodel.ActionCreateSchema:
-		c.addSchema(schemaID)
-	case timodel.ActionDropSchema:
-		c.dropSchema(schemaID)
-	case timodel.ActionCreateTable, timodel.ActionRecoverTable:
-		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, entry.TableName{Schema: schamaName, Table: tableName})
-	case timodel.ActionDropTable:
-		dropID := uint64(job.TableID)
-		c.removeTable(schemaID, dropID)
-	case timodel.ActionRenameTable:
-		// no id change just update name
-		c.tables[uint64(job.TableID)] = entry.TableName{Schema: schamaName, Table: tableName}
-	case timodel.ActionTruncateTable:
-		dropID := uint64(job.TableID)
-		c.removeTable(schemaID, dropID)
-
-		addID := uint64(job.BinlogInfo.TableInfo.ID)
-		c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, entry.TableName{Schema: schamaName, Table: tableName})
-	}
-
-	return nil
-}
-
-type ownerImpl struct {
-	changeFeeds map[model.ChangeFeedID]*changeFeed
-
-	// processorLock protects markDownProcessor and activeProcessors
-	processorLock     sync.RWMutex
-	markDownProcessor []*model.ProcInfoSnap
-	activeProcessors  map[string]*model.ProcessorInfo
+// Owner manages the cdc cluster
+type Owner struct {
+	done                      chan struct{}
+	session                   *concurrency.Session
+	changeFeeds               map[model.ChangeFeedID]*changeFeed
+	failedFeeds               map[model.ChangeFeedID]struct{}
+	rebalanceTigger           map[model.ChangeFeedID]bool
+	rebalanceForAllChangefeed bool
+	manualScheduleCommand     map[model.ChangeFeedID][]*model.MoveTableJob
+	rebalanceMu               sync.Mutex
 
 	cfRWriter ChangeFeedRWriter
 
 	l sync.RWMutex
 
 	pdEndpoints []string
-	security    *util.Security
+	security    *security.Security
 	pdClient    pd.Client
 	etcdClient  kv.CDCEtcdClient
-	manager     roles.Manager
 
-	captureWatchC      <-chan *CaptureInfoWatchResp
-	cancelWatchCapture func()
-	captures           map[model.CaptureID]*model.CaptureInfo
+	captures map[model.CaptureID]*model.CaptureInfo
 
 	adminJobs     []model.AdminJob
 	adminJobsLock sync.Mutex
+
+	stepDown func(ctx context.Context) error
+
+	// gcTTL is the ttl of cdc gc safepoint ttl.
+	gcTTL int64
 }
 
-// NewOwner creates a new ownerImpl instance
-func NewOwner(pdEndpoints []string, security *util.Security, cli kv.CDCEtcdClient, manager roles.Manager) (*ownerImpl, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	infos, watchC, err := newCaptureInfoWatch(ctx, cli)
-	if err != nil {
-		cancel()
-		return nil, errors.Trace(err)
-	}
+// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
+const CDCServiceSafePointID = "ticdc"
 
-	captures := make(map[model.CaptureID]*model.CaptureInfo, len(infos))
-	for _, info := range infos {
-		captures[info.ID] = info
-	}
+// NewOwner creates a new Owner instance
+func NewOwner(pdClient pd.Client, security *security.Security, sess *concurrency.Session, gcTTL int64) (*Owner, error) {
+	cli := kv.NewCDCEtcdClient(sess.Client())
+	endpoints := sess.Client().Endpoints()
 
-	pdClient, err := pd.NewClient(pdEndpoints, security.PDSecurityOption())
-	if err != nil {
-		cancel()
-		return nil, errors.Trace(err)
-	}
-
-	owner := &ownerImpl{
-		pdEndpoints:        pdEndpoints,
-		security:           security,
-		pdClient:           pdClient,
-		changeFeeds:        make(map[model.ChangeFeedID]*changeFeed),
-		activeProcessors:   make(map[string]*model.ProcessorInfo),
-		cfRWriter:          cli,
-		etcdClient:         cli,
-		manager:            manager,
-		captureWatchC:      watchC,
-		captures:           captures,
-		cancelWatchCapture: cancel,
+	owner := &Owner{
+		done:                  make(chan struct{}),
+		session:               sess,
+		pdClient:              pdClient,
+		security:              security,
+		changeFeeds:           make(map[model.ChangeFeedID]*changeFeed),
+		failedFeeds:           make(map[model.ChangeFeedID]struct{}),
+		captures:              make(map[model.CaptureID]*model.CaptureInfo),
+		rebalanceTigger:       make(map[model.ChangeFeedID]bool),
+		manualScheduleCommand: make(map[model.ChangeFeedID][]*model.MoveTableJob),
+		pdEndpoints:           endpoints,
+		cfRWriter:             cli,
+		etcdClient:            cli,
+		gcTTL:                 gcTTL,
 	}
 
 	return owner, nil
 }
 
-func (o *ownerImpl) addCapture(info *model.CaptureInfo) {
+func (o *Owner) addCapture(info *model.CaptureInfo) {
 	o.l.Lock()
 	o.captures[info.ID] = info
 	o.l.Unlock()
+	o.rebalanceMu.Lock()
+	o.rebalanceForAllChangefeed = true
+	o.rebalanceMu.Unlock()
 }
 
-func (o *ownerImpl) handleMarkdownProcessor(ctx context.Context) {
-	o.processorLock.Lock()
-	defer o.processorLock.Unlock()
-	var deletedCapture = make(map[string]struct{})
-	remainProcs := make([]*model.ProcInfoSnap, 0)
-	for _, snap := range o.markDownProcessor {
-		changefeed, ok := o.changeFeeds[snap.CfID]
-		if !ok {
-			log.Error("changefeed not found in owner cache, can't rebalance",
-				zap.String("changefeedID", snap.CfID))
-			continue
-		}
-		for _, tbl := range snap.Tables {
-			log.Debug("readd table", zap.Uint64("tid", tbl.ID),
-				zap.Uint64("startts", tbl.StartTs))
-			changefeed.reAddTable(tbl.ID, tbl.StartTs)
-		}
-		log.Debug("delete task status for down processor",
-			zap.String("captureid", snap.CaptureID))
-		err := o.etcdClient.DeleteTaskStatus(ctx, snap.CfID, snap.CaptureID)
-		if err != nil {
-			log.Warn("failed to delete processor info",
-				zap.String("changefeedID", snap.CfID),
-				zap.String("captureID", snap.CaptureID),
-				zap.Error(err),
-			)
-			remainProcs = append(remainProcs, snap)
-			continue
-		}
-		err = o.etcdClient.DeleteTaskPosition(ctx, snap.CfID, snap.CaptureID)
-		if err != nil {
-			log.Warn("failed to delete task position",
-				zap.String("changefeedID", snap.CfID),
-				zap.String("captureID", snap.CaptureID),
-				zap.Error(err),
-			)
-			remainProcs = append(remainProcs, snap)
-			continue
-		}
-		deletedCapture[snap.CaptureID] = struct{}{}
-	}
-	o.markDownProcessor = remainProcs
-
-	for id := range deletedCapture {
-		err := o.etcdClient.DeleteCaptureInfo(ctx, id)
-		if err != nil {
-			log.Warn("failed to delete capture info", zap.Error(err))
-		}
-	}
-}
-
-func (o *ownerImpl) removeCapture(info *model.CaptureInfo) {
+func (o *Owner) removeCapture(info *model.CaptureInfo) {
 	o.l.Lock()
 	defer o.l.Unlock()
 
 	delete(o.captures, info.ID)
-}
 
-func (o *ownerImpl) resetCaptureInfoWatcher(ctx context.Context) error {
-	infos, watchC, err := newCaptureInfoWatch(ctx, o.etcdClient)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	for _, info := range infos {
-		// use addCapture is ok, old info will be covered
-		o.addCapture(info)
-	}
-	o.captureWatchC = watchC
-	return nil
-}
-
-func (o *ownerImpl) handleWatchCapture() error {
-	for resp := range o.captureWatchC {
-		if resp.Err != nil {
-			return errors.Trace(resp.Err)
+	for _, feed := range o.changeFeeds {
+		task, ok := feed.taskStatus[info.ID]
+		if !ok {
+			log.Warn("task status not found", zap.String("capture", info.ID), zap.String("changefeed", feed.id))
+			continue
 		}
-
-		if resp.IsDelete {
-			o.removeCapture(resp.Info)
+		var startTs uint64
+		pos, ok := feed.taskPositions[info.ID]
+		if ok {
+			startTs = pos.CheckPointTs
 		} else {
-			o.addCapture(resp.Info)
+			log.Warn("task position not found, fallback to use changefeed checkpointts",
+				zap.String("capture", info.ID), zap.String("changefeed", feed.id))
+			// maybe the processor hasn't added table yet, fallback to use the
+			// global checkpoint ts as the start ts of the table.
+			startTs = feed.status.CheckpointTs
+		}
+
+		for tableID := range task.Tables {
+			feed.orphanTables[tableID] = startTs
+		}
+
+		ctx := context.TODO()
+		if err := o.etcdClient.DeleteTaskStatus(ctx, feed.id, info.ID); err != nil {
+			log.Warn("failed to delete task status",
+				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
+		}
+		if err := o.etcdClient.DeleteTaskPosition(ctx, feed.id, info.ID); err != nil {
+			log.Warn("failed to delete task position",
+				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
+		}
+		if err := o.etcdClient.DeleteTaskWorkload(ctx, feed.id, info.ID); err != nil {
+			log.Warn("failed to delete task workload",
+				zap.String("capture", info.ID), zap.String("changefeed", feed.id), zap.Error(err))
 		}
 	}
-
-	log.Info("handleWatchCapture quit")
-	return nil
 }
 
-func (o *ownerImpl) newChangeFeed(
+func (o *Owner) addOrphanTable(cid model.CaptureID, tableID model.TableID, startTs model.Ts) {
+	o.l.Lock()
+	defer o.l.Unlock()
+	if cf, ok := o.changeFeeds[cid]; ok {
+		cf.orphanTables[tableID] = startTs
+	} else {
+		log.Warn("changefeed not found", zap.String("changefeed", cid))
+	}
+}
+
+func (o *Owner) newChangeFeed(
+	ctx context.Context,
 	id model.ChangeFeedID,
 	processorsInfos model.ProcessorsInfos,
 	taskPositions map[string]*model.TaskPosition,
@@ -518,109 +174,179 @@ func (o *ownerImpl) newChangeFeed(
 	log.Info("Find new changefeed", zap.Reflect("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
-	jobs, err := getHistoryDDLJobs(o.pdEndpoints, o.security)
+	failpoint.Inject("NewChangefeedError", func() {
+		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(checkpointTs-300, checkpointTs))
+	})
+
+	// TODO here we create another pb client,we should reuse them
+	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","), o.security)
+	if err != nil {
+		return nil, err
+	}
+	meta, err := kv.GetSnapshotMeta(kvStore, checkpointTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	schemaStorage := entry.NewSingleStorage()
-
-	for _, job := range jobs {
-		if job.BinlogInfo.FinishedTS > checkpointTs {
-			break
-		}
-		_, _, _, err := schemaStorage.HandleDDL(job)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	filter, err := filter.NewFilter(info.Config)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
-	ddlHandler := newDDLHandler(o.pdClient, o.security, checkpointTs)
+	ddlHandler := newDDLHandler(o.pdClient, o.security, kvStore, checkpointTs)
 
-	existingTables := make(map[uint64]uint64)
+	existingTables := make(map[model.TableID]model.Ts)
 	for captureID, taskStatus := range processorsInfos {
 		var checkpointTs uint64
 		if pos, exist := taskPositions[captureID]; exist {
 			checkpointTs = pos.CheckPointTs
 		}
-		for _, tbl := range taskStatus.TableInfos {
-			if tbl.StartTs > checkpointTs {
-				checkpointTs = tbl.StartTs
+		for tableID, replicaInfo := range taskStatus.Tables {
+			if replicaInfo.StartTs > checkpointTs {
+				checkpointTs = replicaInfo.StartTs
 			}
-			existingTables[tbl.ID] = checkpointTs
+			existingTables[tableID] = checkpointTs
 		}
 	}
 
-	filter, err := util.NewFilter(info.GetConfig())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	schemas := make(map[uint64]tableIDMap)
-	tables := make(map[uint64]entry.TableName)
-	orphanTables := make(map[uint64]model.ProcessTableInfo)
-	for tid, table := range schemaStorage.CloneTables() {
+	ctx, cancel := context.WithCancel(ctx)
+	schemas := make(map[model.SchemaID]tableIDMap)
+	tables := make(map[model.TableID]model.TableName)
+	partitions := make(map[model.TableID][]int64)
+	orphanTables := make(map[model.TableID]model.Ts)
+	for tid, table := range schemaSnap.CloneTables() {
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
+			continue
+		}
+		if info.Config.Cyclic.IsEnabled() && mark.IsMarkTable(table.Schema, table.Table) {
+			// skip the mark table if cyclic is enabled
 			continue
 		}
 
 		tables[tid] = table
 		if ts, ok := existingTables[tid]; ok {
-			log.Debug("ignore known table", zap.Uint64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
+			log.Debug("ignore known table", zap.Int64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
 			continue
 		}
-		schema, ok := schemaStorage.SchemaByTableID(int64(tid))
+		schema, ok := schemaSnap.SchemaByTableID(tid)
 		if !ok {
-			log.Warn("schema not found for table", zap.Uint64("tid", tid))
+			log.Warn("schema not found for table", zap.Int64("tid", tid))
 		} else {
-			sid := uint64(schema.ID)
+			sid := schema.ID
 			if _, ok := schemas[sid]; !ok {
 				schemas[sid] = make(tableIDMap)
 			}
 			schemas[sid][tid] = struct{}{}
 		}
-		orphanTables[tid] = model.ProcessTableInfo{
-			ID:      tid,
-			StartTs: checkpointTs,
+		tblInfo, ok := schemaSnap.TableByID(tid)
+		if !ok {
+			log.Warn("table not found for table ID", zap.Int64("tid", tid))
+			continue
 		}
-	}
+		if !tblInfo.IsEligible() {
+			log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
+			continue
+		}
+		if pi := tblInfo.GetPartitionInfo(); pi != nil {
+			delete(partitions, tid)
+			for _, partition := range pi.Definitions {
+				id := partition.ID
+				if ts, ok := existingTables[id]; ok {
+					log.Debug("ignore known table partition", zap.Int64("tid", tid), zap.Int64("partitionID", id), zap.Stringer("table", table), zap.Uint64("ts", ts))
+					continue
+				}
+				partitions[tid] = append(partitions[tid], partition.ID)
+				orphanTables[id] = checkpointTs
+			}
+		} else {
+			orphanTables[tid] = checkpointTs
+		}
 
-	sink, err := sink.NewSink(info.SinkURI, filter, info.Opts)
+	}
+	errCh := make(chan error, 1)
+
+	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.Config, info.Opts, errCh)
 	if err != nil {
+		cancel()
 		return nil, errors.Trace(err)
 	}
-
+	go func() {
+		err := <-errCh
+		if errors.Cause(err) != context.Canceled {
+			log.Error("error on running owner", zap.Error(err))
+		} else {
+			log.Info("owner exited")
+		}
+		cancel()
+	}()
 	cf := &changeFeed{
 		info:          info,
 		id:            id,
 		ddlHandler:    ddlHandler,
-		schema:        schemaStorage,
+		schema:        schemaSnap,
 		schemas:       schemas,
 		tables:        tables,
+		partitions:    partitions,
 		orphanTables:  orphanTables,
-		toCleanTables: make(map[uint64]struct{}),
+		toCleanTables: make(map[model.TableID]model.Ts),
 		status: &model.ChangeFeedStatus{
 			ResolvedTs:   0,
 			CheckpointTs: checkpointTs,
 		},
-		ddlState:      model.ChangeFeedSyncDML,
-		ddlJobHistory: jobs,
-		ddlExecutedTs: checkpointTs,
-		targetTs:      info.GetTargetTs(),
-		taskStatus:    processorsInfos,
-		taskPositions: taskPositions,
-		infoWriter:    storage.NewOwnerTaskStatusEtcdWriter(o.etcdClient),
-		filter:        filter,
-		sink:          sink,
+		scheduler:         scheduler.NewScheduler(info.Config.Scheduler.Tp),
+		ddlState:          model.ChangeFeedSyncDML,
+		ddlExecutedTs:     checkpointTs,
+		targetTs:          info.GetTargetTs(),
+		taskStatus:        processorsInfos,
+		taskPositions:     taskPositions,
+		etcdCli:           o.etcdClient,
+		filter:            filter,
+		sink:              sink,
+		cyclicEnabled:     info.Config.Cyclic.IsEnabled(),
+		lastRebalanceTime: time.Now(),
 	}
 	return cf, nil
 }
 
-func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
+// This is a compatibility hack between v4.0.0 and v4.0.1
+// This function will try to decode the task status, if that throw a unmarshal error,
+// it will remove the invalid task status
+func (o *Owner) checkAndCleanTasksInfo(ctx context.Context) error {
 	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
 	if err != nil {
 		return err
 	}
+	cleaned := false
+	for changefeedID := range details {
+		_, err := o.cfRWriter.GetAllTaskStatus(ctx, changefeedID)
+		switch errors.Cause(err) {
+		case model.ErrDecodeFailed:
+			err := o.cfRWriter.RemoveAllTaskStatus(ctx, changefeedID)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			cleaned = true
+		case nil:
+		default:
+			return errors.Trace(err)
+		}
+	}
+	if cleaned {
+		log.Warn("the task status is outdated, clean them")
+	}
+	return nil
+}
+
+func (o *Owner) loadChangeFeeds(ctx context.Context) error {
+	_, details, err := o.cfRWriter.GetChangeFeeds(ctx)
+	if err != nil {
+		return err
+	}
+	errorFeeds := make(map[model.ChangeFeedID]*model.RunningError)
 	for changeFeedID, cfInfoRawValue := range details {
 		taskStatus, err := o.cfRWriter.GetAllTaskStatus(ctx, changeFeedID)
 		if err != nil {
@@ -632,143 +358,162 @@ func (o *ownerImpl) loadChangeFeeds(ctx context.Context) error {
 		}
 		if cf, exist := o.changeFeeds[changeFeedID]; exist {
 			cf.updateProcessorInfos(taskStatus, taskPositions)
+			for _, pos := range taskPositions {
+				// TODO: only record error of one capture,
+				// is it necessary to record all captures' error
+				if pos.Error != nil {
+					errorFeeds[changeFeedID] = pos.Error
+					break
+				}
+			}
 			continue
 		}
 
-		// we find a new changefeed, init changefeed info here.
-		status, err := o.cfRWriter.GetChangeFeedStatus(ctx, changeFeedID)
+		// we find a new changefeed, init changefeed here.
+		cfInfo := &model.ChangeFeedInfo{}
+		err = cfInfo.Unmarshal(cfInfoRawValue.Value)
+		if err != nil {
+			return err
+		}
+		if cfInfo.State == model.StateFailed {
+			if _, ok := o.failedFeeds[changeFeedID]; ok {
+				continue
+			}
+			log.Warn("changefeed is not in normal state", zap.String("changefeed", changeFeedID))
+			o.failedFeeds[changeFeedID] = struct{}{}
+			continue
+		}
+		if _, ok := o.failedFeeds[changeFeedID]; ok {
+			log.Info("changefeed recovered from failure", zap.String("changefeed", changeFeedID))
+			delete(o.failedFeeds, changeFeedID)
+		}
+		needSave, canInit := cfInfo.CheckErrorHistory()
+		if needSave {
+			err := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
+			if err != nil {
+				return err
+			}
+		}
+		if !canInit {
+			// avoid too many logs here
+			if time.Now().Unix()%60 == 0 {
+				log.Warn("changefeed fails reach rate limit, try to initialize it later", zap.Int64s("history", cfInfo.ErrorHis))
+			}
+			continue
+		}
+		err = cfInfo.VerifyAndFix()
+		if err != nil {
+			return err
+		}
+
+		status, _, err := o.cfRWriter.GetChangeFeedStatus(ctx, changeFeedID)
 		if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 			return err
 		}
 		if status != nil && (status.AdminJobType == model.AdminStop || status.AdminJobType == model.AdminRemove) {
 			continue
 		}
-
-		cfInfo := &model.ChangeFeedInfo{}
-		err = cfInfo.Unmarshal(cfInfoRawValue.Value)
-		if err != nil {
-			return err
-		}
 		checkpointTs := cfInfo.GetCheckpointTs(status)
 
-		newCf, err := o.newChangeFeed(changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
+		newCf, err := o.newChangeFeed(ctx, changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
 		if err != nil {
+			cfInfo.Error = &model.RunningError{
+				Addr:    util.CaptureAddrFromCtx(ctx),
+				Code:    "CDC-owner-1001",
+				Message: err.Error(),
+			}
+			cfInfo.ErrorHis = append(cfInfo.ErrorHis, time.Now().UnixNano()/1e6)
+
+			if filter.ChangefeedFastFailError(err) {
+				log.Error("create changefeed with fast fail error, mark changefeed as failed",
+					zap.Error(err), zap.String("changefeedid", changeFeedID))
+				cfInfo.State = model.StateFailed
+				err := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+
+			err2 := o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, changeFeedID)
+			if err2 != nil {
+				return err2
+			}
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
 		o.changeFeeds[changeFeedID] = newCf
 	}
-
-	for _, changefeed := range o.changeFeeds {
-		changefeed.tryBalance(ctx, o.captures)
+	o.adminJobsLock.Lock()
+	for cfID, err := range errorFeeds {
+		job := model.AdminJob{
+			CfID:  cfID,
+			Type:  model.AdminStop,
+			Error: err,
+		}
+		o.adminJobs = append(o.adminJobs, job)
 	}
-
+	o.adminJobsLock.Unlock()
 	return nil
 }
 
-func (o *ownerImpl) flushChangeFeedInfos(ctx context.Context) error {
-	snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
+func (o *Owner) balanceTables(ctx context.Context) error {
+	rebalanceForAllChangefeed := false
+	o.rebalanceMu.Lock()
+	if o.rebalanceForAllChangefeed {
+		rebalanceForAllChangefeed = true
+		o.rebalanceForAllChangefeed = false
+	}
+	o.rebalanceMu.Unlock()
 	for id, changefeed := range o.changeFeeds {
-		snapshot[id] = changefeed.status
-	}
-	return errors.Trace(o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot))
-}
-
-func (c *changeFeed) pullDDLJob() error {
-	ddlResolvedTs, ddlJobs, err := c.ddlHandler.PullDDL()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	c.ddlResolvedTs = ddlResolvedTs
-	c.ddlJobHistory = append(c.ddlJobHistory, ddlJobs...)
-	return nil
-}
-
-// calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
-func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
-	if c.ddlState != model.ChangeFeedSyncDML {
-		return nil
-	}
-
-	// ProcessorInfos don't contains the whole set table id now.
-	if len(c.orphanTables) > 0 {
-		return nil
-	}
-
-	minResolvedTs := c.targetTs
-	minCheckpointTs := c.targetTs
-
-	if len(c.taskPositions) == 0 {
-		minCheckpointTs = c.status.CheckpointTs
-	} else if len(c.taskPositions) < len(c.taskStatus) {
-		return nil
-	} else {
-		// calc the min of all resolvedTs in captures
-		for _, position := range c.taskPositions {
-			if minResolvedTs > position.ResolvedTs {
-				minResolvedTs = position.ResolvedTs
-			}
-
-			if minCheckpointTs > position.CheckPointTs {
-				minCheckpointTs = position.CheckPointTs
-			}
+		rebalanceNow := false
+		var scheduleCommands []*model.MoveTableJob
+		o.rebalanceMu.Lock()
+		if r, exist := o.rebalanceTigger[id]; exist {
+			rebalanceNow = r
+			delete(o.rebalanceTigger, id)
 		}
-	}
-
-	// if minResolvedTs is greater than ddlResolvedTs,
-	// it means that ddlJobHistory in memory is not intact,
-	// there are some ddl jobs which finishedTs is smaller than minResolvedTs we don't know.
-	// so we need to call `pullDDLJob`, update the ddlJobHistory and ddlResolvedTs.
-	if minResolvedTs > c.ddlResolvedTs {
-		if err := c.pullDDLJob(); err != nil {
-			return errors.Trace(err)
+		if rebalanceForAllChangefeed {
+			rebalanceNow = true
 		}
-
-		if minResolvedTs > c.ddlResolvedTs {
-			minResolvedTs = c.ddlResolvedTs
+		if c, exist := o.manualScheduleCommand[id]; exist {
+			scheduleCommands = c
+			delete(o.manualScheduleCommand, id)
 		}
-	}
-
-	// if minResolvedTs is greater than the finishedTS of ddl job which is not executed,
-	// we need to execute this ddl job
-	for len(c.ddlJobHistory) > 0 && c.ddlJobHistory[0].BinlogInfo.FinishedTS <= c.ddlExecutedTs {
-		c.ddlJobHistory = c.ddlJobHistory[1:]
-	}
-	if len(c.ddlJobHistory) > 0 && minResolvedTs > c.ddlJobHistory[0].BinlogInfo.FinishedTS {
-		minResolvedTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
-		c.ddlState = model.ChangeFeedWaitToExecDDL
-	}
-
-	// if downstream sink is the MQ sink, the MQ sink do not promise that checkpoint is less than globalResolvedTs
-	if minCheckpointTs > minResolvedTs {
-		minCheckpointTs = minResolvedTs
-	}
-
-	var tsUpdated bool
-
-	if minResolvedTs > c.status.ResolvedTs {
-		c.status.ResolvedTs = minResolvedTs
-		tsUpdated = true
-	}
-
-	if minCheckpointTs > c.status.CheckpointTs {
-		c.status.CheckpointTs = minCheckpointTs
-		err := c.sink.EmitCheckpointEvent(ctx, minCheckpointTs)
+		o.rebalanceMu.Unlock()
+		err := changefeed.tryBalance(ctx, o.captures, rebalanceNow, scheduleCommands)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		tsUpdated = true
 	}
+	return nil
+}
 
-	if tsUpdated {
-		log.Debug("update changefeed", zap.String("id", c.id),
-			zap.Uint64("checkpoint ts", minCheckpointTs),
-			zap.Uint64("resolved ts", minResolvedTs))
+func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
+	if len(o.changeFeeds) == 0 {
+		return nil
+	}
+	snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
+	minCheckpointTs := uint64(math.MaxUint64)
+	for id, changefeed := range o.changeFeeds {
+		snapshot[id] = changefeed.status
+		if changefeed.status.CheckpointTs < minCheckpointTs {
+			minCheckpointTs = changefeed.status.CheckpointTs
+		}
+	}
+	err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
+	if err != nil {
+		log.Info("failed to update service safe point", zap.Error(err))
+		return errors.Trace(err)
 	}
 	return nil
 }
 
 // calcResolvedTs call calcResolvedTs of every changefeeds
-func (o *ownerImpl) calcResolvedTs(ctx context.Context) error {
+func (o *Owner) calcResolvedTs(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
 		if err := cf.calcResolvedTs(ctx); err != nil {
 			return errors.Trace(err)
@@ -778,7 +523,7 @@ func (o *ownerImpl) calcResolvedTs(ctx context.Context) error {
 }
 
 // handleDDL call handleDDL of every changefeeds
-func (o *ownerImpl) handleDDL(ctx context.Context) error {
+func (o *Owner) handleDDL(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
 		err := cf.handleDDL(ctx, o.captures)
 		switch errors.Cause(err) {
@@ -799,108 +544,21 @@ func (o *ownerImpl) handleDDL(ctx context.Context) error {
 	return nil
 }
 
-// handleDDL check if we can change the status to be `ChangeFeedExecDDL` and execute the DDL asynchronously
-// if the status is in ChangeFeedWaitToExecDDL.
-// After executing the DDL successfully, the status will be changed to be ChangeFeedSyncDML.
-func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.CaptureInfo) error {
-	if c.ddlState != model.ChangeFeedWaitToExecDDL {
-		return nil
-	}
-	if len(c.ddlJobHistory) == 0 {
-		log.Fatal("ddl job history can not be empty in changefeed when should to execute DDL")
-	}
-	todoDDLJob := c.ddlJobHistory[0]
-
-	// Check if all the checkpointTs of capture are achieving global resolvedTs(which is equal to todoDDLJob.FinishedTS)
-	if len(c.taskStatus) > len(c.taskPositions) {
-		return nil
-	}
-	for cid, pInfo := range c.taskPositions {
-		if pInfo.CheckPointTs != todoDDLJob.BinlogInfo.FinishedTS {
-			log.Debug("wait checkpoint ts", zap.String("cid", cid),
-				zap.Uint64("checkpoint ts", pInfo.CheckPointTs),
-				zap.Uint64("finish ts", todoDDLJob.BinlogInfo.FinishedTS),
-				zap.String("ddl query", todoDDLJob.Query))
-			return nil
-		}
-	}
-
-	// Execute DDL Job asynchronously
-	c.ddlState = model.ChangeFeedExecDDL
-	log.Debug("apply job", zap.Stringer("job", todoDDLJob),
-		zap.String("schema", todoDDLJob.SchemaName),
-		zap.String("query", todoDDLJob.Query),
-		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
-
-	var tableName, schemaName string
-	if todoDDLJob.BinlogInfo.TableInfo != nil {
-		tableName = todoDDLJob.BinlogInfo.TableInfo.Name.O
-	}
-	// TODO consider some newly added DDL types such as `ActionCreateSequence`
-	if todoDDLJob.Type != timodel.ActionCreateSchema {
-		dbInfo, exist := c.schema.SchemaByID(todoDDLJob.SchemaID)
-		if !exist {
-			return errors.NotFoundf("schema %d not found", todoDDLJob.SchemaID)
-		}
-		schemaName = dbInfo.Name.O
-	} else {
-		schemaName = todoDDLJob.BinlogInfo.DBInfo.Name.O
-	}
-	ddlEvent := &model.DDLEvent{
-		Ts:     todoDDLJob.BinlogInfo.FinishedTS,
-		Query:  todoDDLJob.Query,
-		Schema: schemaName,
-		Table:  tableName,
-		Type:   todoDDLJob.Type,
-	}
-
-	err := c.applyJob(todoDDLJob)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	c.banlanceOrphanTables(ctx, captures)
-
-	err = c.sink.EmitDDLEvent(ctx, ddlEvent)
-	// If DDL executing failed, pause the changefeed and print log, rather
-	// than return an error and break the running of this owner.
-	if err != nil {
-		c.ddlState = model.ChangeFeedDDLExecuteFailed
-		log.Error("Execute DDL failed",
-			zap.String("ChangeFeedID", c.id),
-			zap.Error(err),
-			zap.Reflect("ddlJob", todoDDLJob))
-		return errors.Trace(model.ErrExecDDLFailed)
-	}
-	log.Info("Execute DDL succeeded",
-		zap.String("ChangeFeedID", c.id),
-		zap.Reflect("ddlJob", todoDDLJob))
-
-	if c.ddlState != model.ChangeFeedExecDDL {
-		log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
-			zap.String("ChangeFeedID", c.id),
-			zap.String("ChangeFeedDDLState", c.ddlState.String()))
-	}
-	c.ddlJobHistory = c.ddlJobHistory[1:]
-	c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
-	c.ddlState = model.ChangeFeedSyncDML
-	return nil
-}
-
 // dispatchJob dispatches job to processors
-func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
+func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	cf, ok := o.changeFeeds[job.CfID]
 	if !ok {
 		return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
 	}
-	for captureID, pinfo := range cf.taskStatus {
-		pinfo.TablePLock = nil
-		pinfo.TableCLock = nil
-		pinfo.AdminJobType = job.Type
-		_, err := cf.infoWriter.Write(ctx, cf.id, captureID, pinfo, false)
+	for captureID := range cf.taskStatus {
+		newStatus, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(taskStatus *model.TaskStatus) error {
+			taskStatus.AdminJobType = job.Type
+			return nil
+		})
 		if err != nil {
 			return errors.Trace(err)
 		}
+		cf.taskStatus[captureID] = newStatus.Clone()
 	}
 	// record admin job in changefeed status
 	cf.status.AdminJobType = job.Type
@@ -909,13 +567,35 @@ func (o *ownerImpl) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// TODO Closing the resource should not be here
 	err = cf.ddlHandler.Close()
 	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
+	err = cf.sink.Close()
+	log.Info("stop changefeed sink", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
 	delete(o.changeFeeds, job.CfID)
 	return nil
 }
 
-func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
+func (o *Owner) collectChangefeedInfo(ctx context.Context, cid model.ChangeFeedID) (*changeFeed, *model.ChangeFeedStatus, model.FeedState, error) {
+	cf, ok := o.changeFeeds[cid]
+	if ok {
+		return cf, cf.status, cf.info.State, nil
+	}
+	status, _, err := o.etcdClient.GetChangeFeedStatus(ctx, cid)
+	if err != nil {
+		return nil, nil, model.StateNormal, err
+	}
+	feedState := model.StateNormal
+	switch status.AdminJobType {
+	case model.AdminStop:
+		feedState = model.StateStopped
+	case model.AdminRemove:
+		feedState = model.StateRemoved
+	}
+	return nil, status, feedState, nil
+}
+
+func (o *Owner) handleAdminJob(ctx context.Context) error {
 	removeIdx := 0
 	o.adminJobsLock.Lock()
 	defer func() {
@@ -924,14 +604,34 @@ func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
 	}()
 	for i, job := range o.adminJobs {
 		log.Info("handle admin job", zap.String("changefeed", job.CfID), zap.Stringer("type", job.Type))
+		removeIdx = i + 1
+
+		cf, status, feedState, err := o.collectChangefeedInfo(ctx, job.CfID)
+		if err != nil {
+			if errors.Cause(err) == model.ErrChangeFeedNotExists {
+				log.Warn("invalid admin job, changefeed status not found", zap.String("changefeed", job.CfID))
+				continue
+			}
+			return err
+		}
 		switch job.Type {
 		case model.AdminStop:
-			// update ChangeFeedDetail to tell capture ChangeFeedDetail watcher to cleanup
-			cf, ok := o.changeFeeds[job.CfID]
-			if !ok {
-				return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
+			switch feedState {
+			case model.StateStopped:
+				log.Info("changefeed has been stopped, pause command will do nothing")
+				continue
+			case model.StateRemoved:
+				log.Info("changefeed has been removed, pause command will do nothing")
+				continue
 			}
+			if cf == nil {
+				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
+				continue
+			}
+
 			cf.info.AdminJobType = model.AdminStop
+			cf.info.Error = job.Error
+			cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
 			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
@@ -942,20 +642,47 @@ func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 		case model.AdminRemove:
-			err := o.dispatchJob(ctx, job)
+			if cf != nil {
+				err := o.dispatchJob(ctx, job)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			} else {
+				switch feedState {
+				case model.StateRemoved:
+					// remove a removed changefeed
+					log.Info("changefeed has been removed, remove command will do nothing")
+					continue
+				case model.StateStopped:
+					// remove a paused changefeed
+					status.AdminJobType = model.AdminRemove
+					err = o.etcdClient.PutChangeFeedStatus(ctx, job.CfID, status)
+					if err != nil {
+						return errors.Trace(err)
+					}
+				default:
+					return errors.Errorf("changefeed in abnormal state: %+v", status)
+				}
+			}
+			// remove changefeed info
+			err := o.etcdClient.DeleteChangeFeedInfo(ctx, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
 			}
-
-			// remove changefeed info
-			err = o.etcdClient.DeleteChangeFeedInfo(ctx, job.CfID)
+			// set ttl to changefeed status
+			err = o.etcdClient.SetChangeFeedStatusTTL(ctx, job.CfID, 24*3600 /*24 hours*/)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		case model.AdminResume:
-			cfStatus, err := o.etcdClient.GetChangeFeedStatus(ctx, job.CfID)
-			if err != nil {
-				return errors.Trace(err)
+			// resume changefeed must read checkpoint from ChangeFeedStatus
+			if errors.Cause(err) == model.ErrChangeFeedNotExists {
+				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
+				continue
+			}
+			if feedState == model.StateRemoved {
+				log.Info("changefeed has been removed, cannot be resumed anymore")
+				continue
 			}
 			cfInfo, err := o.etcdClient.GetChangeFeedInfo(ctx, job.CfID)
 			if err != nil {
@@ -963,155 +690,181 @@ func (o *ownerImpl) handleAdminJob(ctx context.Context) error {
 			}
 
 			// set admin job in changefeed status to tell owner resume changefeed
-			cfStatus.AdminJobType = model.AdminResume
-			err = o.etcdClient.PutChangeFeedStatus(ctx, job.CfID, cfStatus)
+			status.AdminJobType = model.AdminResume
+			err = o.etcdClient.PutChangeFeedStatus(ctx, job.CfID, status)
 			if err != nil {
 				return errors.Trace(err)
 			}
 
 			// set admin job in changefeed cfInfo to trigger each capture's changefeed list watch event
 			cfInfo.AdminJobType = model.AdminResume
+			// clear last running error
+			cfInfo.State = model.StateNormal
+			cfInfo.Error = nil
 			err = o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		}
-		removeIdx = i + 1
+		// TODO: we need a better admin job workflow. Supposing uses create
+		// multiple admin jobs to a specific changefeed at the same time, such
+		// as pause -> resume -> pause, should the one job handler waits for
+		// the previous job finished? However it is difficult to distinguish
+		// whether a job is totally finished in some cases, for example when
+		// resuming a changefeed, seems we should mark the job finished if all
+		// processors have started. Currently the owner only processes one
+		// admin job in each tick loop as a workaround.
+		break
 	}
 	return nil
 }
 
-// TODO avoid this tick style, this means we get `tickTime` latency here.
-func (o *ownerImpl) Run(ctx context.Context, tickTime time.Duration) error {
-	defer o.cancelWatchCapture()
-	handleWatchCaptureC := make(chan error, 1)
-	rl := rate.NewLimiter(0.1, 5)
-	go func() {
-		var err error
-		for {
-			if !rl.Allow() {
-				err = errors.New("capture info watcher exceeds rate limit")
-				break
-			}
-			err = o.handleWatchCapture()
-			if errors.Cause(err) != mvcc.ErrCompacted {
-				break
-			}
-			log.Warn("capture info watcher retryable error", zap.Error(err))
-			time.Sleep(captureInfoWatchRetryDelay)
-			err = o.resetCaptureInfoWatcher(ctx)
-			if err != nil {
-				break
-			}
-		}
-		if err != nil {
-			handleWatchCaptureC <- err
-		}
-	}()
+func (o *Owner) throne(ctx context.Context) error {
+	// Start a routine to keep watching on the liveness of
+	// captures.
+	o.startCaptureWatcher(ctx)
+	return nil
+}
 
-	// ownerChanged
-	ownerChanged := true
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case err := <-handleWatchCaptureC:
-			return errors.Annotate(err, "handleWatchCapture failed")
-		case <-time.After(tickTime):
-			if !o.IsOwner(ctx) {
-				ownerChanged = true
-				continue
-			}
-			if ownerChanged {
-				// Do something initialize when the capture becomes an owner.
-				ownerChanged = false
+// Close stops a running owner
+func (o *Owner) Close(ctx context.Context, stepDown func(ctx context.Context) error) {
+	// stepDown is called after exiting the main loop by the owner, it is useful
+	// to clean up some resource, like dropping the leader key.
+	o.stepDown = stepDown
 
-				// When an owner crashed, its processors crashed too,
-				// clean up the tasks for these processors.
-				if err := o.cleanUpStaleTasks(ctx); err != nil {
-					log.Error("clean up stale tasks failed",
-						zap.Error(err))
-				}
+	// Close and Run should be in separated goroutines
+	// A channel is used here to sychronize the steps.
 
-				// Start a routine to keep watching on the liveness of
-				// processors.
-				o.startProcessorInfoWatcher(ctx)
-			}
+	// Single the Run function to exit
+	select {
+	case o.done <- struct{}{}:
+	case <-ctx.Done():
+	}
 
-			err := o.run(ctx)
-			// owner may be evicted during running, ignore the context canceled error directly
-			if err != nil && errors.Cause(err) != context.Canceled {
-				return err
-			}
-		}
+	// Wait until it exited
+	select {
+	case <-o.done:
+	case <-ctx.Done():
 	}
 }
 
-func (o *ownerImpl) run(ctx context.Context) error {
-	cctx, cancel := context.WithCancel(ctx)
+// Run the owner
+// TODO avoid this tick style, this means we get `tickTime` latency here.
+func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
+	failpoint.Inject("owner-run-with-error", func() {
+		failpoint.Return(errors.New("owner run with injected error"))
+	})
+
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	go func() {
+
+	if err := o.throne(ctx); err != nil {
+		return err
+	}
+
+	ctx1, cancel := context.WithCancel(ctx)
+	defer cancel()
+	changedFeeds := o.watchFeedChange(ctx1)
+
+	ticker := time.NewTicker(tickTime)
+	defer ticker.Stop()
+
+loop:
+	for {
 		select {
-		case <-cctx.Done():
-		case <-o.manager.RetireNotify():
-			cancel()
+		case <-o.done:
+			close(o.done)
+			break loop
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-changedFeeds:
+		case <-ticker.C:
+		}
+
+		err := o.run(ctx)
+		if err != nil {
+			if errors.Cause(err) != context.Canceled {
+				log.Error("owner exited with error", zap.Error(err))
+			}
+			break loop
+		}
+	}
+	if o.stepDown != nil {
+		if err := o.stepDown(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
+	output := make(chan struct{}, 1)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			wch := o.etcdClient.Client.Watch(ctx, kv.TaskPositionKeyPrefix, clientv3.WithFilterDelete(), clientv3.WithPrefix())
+
+			for resp := range wch {
+				if resp.Err() != nil {
+					log.Error("position watcher restarted with error", zap.Error(resp.Err()))
+					break
+				}
+
+				// TODO: because the main loop has many serial steps, it is hard to do a partial update without change
+				// majority logical. For now just to wakeup the main loop ASAP to reduce latency, the efficiency of etcd
+				// operations should be resolved in future release.
+				output <- struct{}{}
+			}
 		}
 	}()
+	return output
+}
 
+func (o *Owner) run(ctx context.Context) error {
 	o.l.Lock()
 	defer o.l.Unlock()
 
-	err := o.loadChangeFeeds(cctx)
+	err := o.loadChangeFeeds(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	// Handle the down processors.
-	//
-	// Since the processor watcher runs asynchronously,
-	// it may detected a processor down before
-	// loading the the change feeds, in which case the down processor
-	// will be ignored when doing rebalance. So we must call this
-	// function after calling loadChangeFeeds.
-	o.handleMarkdownProcessor(cctx)
-
-	err = o.calcResolvedTs(cctx)
+	err = o.balanceTables(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = o.handleDDL(cctx)
+	err = o.calcResolvedTs(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = o.handleAdminJob(cctx)
+	err = o.handleDDL(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = o.flushChangeFeedInfos(cctx)
+	err = o.handleAdminJob(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = o.flushChangeFeedInfos(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func (o *ownerImpl) IsOwner(_ context.Context) bool {
-	return o.manager.IsOwner()
-}
-
-func (o *ownerImpl) EnqueueJob(job model.AdminJob) error {
-	if !o.manager.IsOwner() {
-		return errors.Trace(concurrency.ErrElectionNotLeader)
-	}
+// EnqueueJob adds an admin job
+func (o *Owner) EnqueueJob(job model.AdminJob) error {
 	switch job.Type {
-	case model.AdminResume:
-	case model.AdminStop, model.AdminRemove:
-		_, ok := o.changeFeeds[job.CfID]
-		if !ok {
-			return errors.Errorf("changefeed [%s] not found", job.CfID)
-		}
+	case model.AdminResume, model.AdminRemove, model.AdminStop:
 	default:
 		return errors.Errorf("invalid admin job type: %d", job.Type)
 	}
@@ -1121,165 +874,29 @@ func (o *ownerImpl) EnqueueJob(job model.AdminJob) error {
 	return nil
 }
 
-func (o *ownerImpl) writeDebugInfo(w io.Writer) {
+// TriggerRebalance triggers the rebalance in the specified changefeed
+func (o *Owner) TriggerRebalance(changefeedID model.ChangeFeedID) {
+	o.rebalanceMu.Lock()
+	defer o.rebalanceMu.Unlock()
+	o.rebalanceTigger[changefeedID] = true
+	// TODO(leoppro) throw an error if the changefeed is not exist
+}
+
+// ManualSchedule moves the table from a capture to another capture
+func (o *Owner) ManualSchedule(changefeedID model.ChangeFeedID, to model.CaptureID, tableID model.TableID) {
+	o.rebalanceMu.Lock()
+	defer o.rebalanceMu.Unlock()
+	o.manualScheduleCommand[changefeedID] = append(o.manualScheduleCommand[changefeedID], &model.MoveTableJob{
+		To:      to,
+		TableID: tableID,
+	})
+}
+
+func (o *Owner) writeDebugInfo(w io.Writer) {
 	for _, info := range o.changeFeeds {
 		// fmt.Fprintf(w, "%+v\n", *info)
 		fmt.Fprintf(w, "%s\n", info)
 	}
-}
-
-func (o *ownerImpl) markProcessorDown(ctx context.Context,
-	p *model.ProcessorInfo) error {
-	statuses, err := o.cfRWriter.GetAllTaskStatus(ctx, p.ChangeFeedID)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	positions, err := o.cfRWriter.GetAllTaskPositions(ctx, p.ChangeFeedID)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// lookup the task position for the processor
-	pos, exist := positions[p.CaptureID]
-	if !exist {
-		log.Warn("unkown processor deletion detected",
-			zap.String("processorid", p.ID),
-			zap.String("captureid", p.CaptureID))
-		return nil
-	}
-	// lookup the task position for the processor
-	status, exist := statuses[p.CaptureID]
-	if !exist {
-		log.Warn("unkown processor deletion detected",
-			zap.String("processorid", p.ID),
-			zap.String("capture", p.CaptureID))
-		return nil
-	}
-	snap := status.Snapshot(p.ChangeFeedID,
-		p.CaptureID,
-		pos.CheckPointTs)
-	log.Info("mark processor down",
-		zap.String("processorid", p.ID),
-		zap.String("captureid", p.CaptureID),
-		zap.String("changefeed", p.ChangeFeedID),
-		zap.Reflect("tables", snap.Tables))
-	o.processorLock.Lock()
-	o.markDownProcessor = append(o.markDownProcessor, snap)
-	delete(o.activeProcessors, p.ID)
-	o.processorLock.Unlock()
-	return nil
-}
-
-func (o *ownerImpl) markProcessorActive(ctx context.Context,
-	p *model.ProcessorInfo) error {
-	o.processorLock.Lock()
-	o.activeProcessors[p.ID] = p
-	o.processorLock.Unlock()
-	return nil
-}
-
-func (o *ownerImpl) rebuildProcessorEvents(ctx context.Context,
-	processors []*model.ProcessorInfo) error {
-	current := make(map[string]*model.ProcessorInfo)
-	for _, p := range processors {
-		current[p.ID] = p
-		if _, ok := o.activeProcessors[p.ID]; !ok {
-			if err := o.markProcessorActive(ctx, p); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
-	for _, p := range o.activeProcessors {
-		if _, ok := current[p.ID]; !ok {
-			if err := o.markProcessorDown(ctx, p); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
-	return nil
-}
-
-func (o *ownerImpl) watchProcessorInfo(ctx context.Context) error {
-	ctx = clientv3.WithRequireLeader(ctx)
-
-	rev, processors, err := o.etcdClient.GetAllProcessors(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// before watching, rebuild events according to
-	// the existed processors. This is necessary because
-	// the etcd events may be compacted.
-	if err := o.rebuildProcessorEvents(ctx, processors); err != nil {
-		return errors.Trace(err)
-	}
-
-	log.Info("monitoring processors",
-		zap.String("key", kv.ProcessorInfoKeyPrefix),
-		zap.Int64("rev", rev))
-	ch := o.etcdClient.Client.Watch(ctx, kv.ProcessorInfoKeyPrefix,
-		clientv3.WithPrefix(),
-		clientv3.WithRev(rev),
-		clientv3.WithPrevKV())
-
-	for resp := range ch {
-		if resp.Err() != nil {
-			return errors.Trace(resp.Err())
-		}
-		for _, ev := range resp.Events {
-			p := &model.ProcessorInfo{}
-			switch ev.Type {
-			case clientv3.EventTypeDelete:
-				if err := p.Unmarshal(ev.PrevKv.Value); err != nil {
-					return errors.Trace(err)
-				}
-				log.Debug("processor deleted",
-					zap.String("processorid", p.ID),
-					zap.String("captureid", p.CaptureID),
-					zap.String("changefeedid", p.ChangeFeedID))
-				if err := o.markProcessorDown(ctx, p); err != nil {
-					return errors.Trace(err)
-				}
-			case clientv3.EventTypePut:
-				if err := p.Unmarshal(ev.Kv.Value); err != nil {
-					return errors.Trace(err)
-				}
-				log.Debug("processor created",
-					zap.String("processorid", p.ID),
-					zap.String("captureid", p.CaptureID),
-					zap.String("changefeedid", p.ChangeFeedID))
-				if err := o.markProcessorActive(ctx, p); err != nil {
-					return errors.Trace(err)
-				}
-			}
-		}
-	}
-	return nil
-}
-func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
-	// ownerCtx is valid only when the server is an owner, when
-	// the owner steps down, the ownerCtx would be canceled.
-	ownerCtx, cancel := context.WithCancel(ctx)
-	go func() {
-		<-o.manager.RetireNotify()
-		cancel()
-	}()
-	log.Info("start to watch processors")
-	go func() {
-		for {
-			if err := o.watchProcessorInfo(ownerCtx); err != nil {
-				// When the watching routine returns, the error must not
-				// be nil, it may be caused by a temporary error or a context
-				// error(ownerCtx.Err())
-				if ownerCtx.Err() != nil {
-					// The context error indicates the termination of the owner
-					log.Error("watch processor failed", zap.Error(ctx.Err()))
-					return
-				}
-				log.Warn("watch processor returned", zap.Error(err))
-				// Otherwise, a temporary error occured(ErrCompact),
-				// restart the watching routine.
-			}
-		}
-	}()
 }
 
 // cleanUpStaleTasks cleans up the task status which does not associated
@@ -1288,31 +905,69 @@ func (o *ownerImpl) startProcessorInfoWatcher(ctx context.Context) {
 // When a new owner is elected, it does not know the events occurs before, like
 // processor deletion. In this case, the new owner should check if the task
 // status is stale because of the processor deletion.
-func (o *ownerImpl) cleanUpStaleTasks(ctx context.Context) error {
+func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.CaptureInfo) error {
 	_, changefeeds, err := o.etcdClient.GetChangeFeeds(ctx)
 	if err != nil {
 		return errors.Trace(err)
+	}
+	active := make(map[string]struct{})
+	for _, c := range captures {
+		active[c.ID] = struct{}{}
 	}
 	for changeFeedID := range changefeeds {
 		statuses, err := o.etcdClient.GetAllTaskStatus(ctx, changeFeedID)
 		if err != nil {
 			return errors.Trace(err)
 		}
-
-		active := make(map[string]*model.ProcessorInfo)
+		positions, err := o.etcdClient.GetAllTaskPositions(ctx, changeFeedID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		workloads, err := o.etcdClient.GetAllTaskWorkloads(ctx, changeFeedID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// in most cases statuses and positions have the same keys, or positions
+		// are more than statuses, as we always delete task status first.
+		captureIDs := make(map[string]struct{}, len(statuses))
 		for captureID := range statuses {
-			_, processors, err := o.etcdClient.GetProcessors(ctx, captureID)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			for _, p := range processors {
-				active[p.CaptureID] = p
-			}
+			captureIDs[captureID] = struct{}{}
+		}
+		for captureID := range positions {
+			captureIDs[captureID] = struct{}{}
+		}
+		for captureID := range workloads {
+			captureIDs[captureID] = struct{}{}
+		}
+
+		for captureID := range captureIDs {
 			if _, ok := active[captureID]; !ok {
+				status, ok1 := statuses[captureID]
+				if ok1 {
+					pos, taskPosFound := positions[captureID]
+					if !taskPosFound {
+						log.Warn("task position not found, fallback to use original start ts",
+							zap.String("capture", captureID),
+							zap.String("changefeed", changeFeedID),
+							zap.Reflect("task status", status),
+						)
+					}
+					for tableID, replicaInfo := range status.Tables {
+						startTs := replicaInfo.StartTs
+						if taskPosFound {
+							startTs = pos.CheckPointTs
+						}
+						o.addOrphanTable(changeFeedID, tableID, startTs)
+					}
+				}
+
 				if err := o.etcdClient.DeleteTaskStatus(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
 				if err := o.etcdClient.DeleteTaskPosition(ctx, changeFeedID, captureID); err != nil {
+					return errors.Trace(err)
+				}
+				if err := o.etcdClient.DeleteTaskWorkload(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
 				log.Debug("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
@@ -1320,4 +975,137 @@ func (o *ownerImpl) cleanUpStaleTasks(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (o *Owner) watchCapture(ctx context.Context) error {
+	ctx = clientv3.WithRequireLeader(ctx)
+
+	failpoint.Inject("sleep-before-watch-capture", nil)
+
+	// When an owner just starts, changefeed information is not updated at once.
+	// Supposing a crased capture should be removed now, the owner will miss deleting
+	// task status and task position if changefeed information is not loaded.
+	// If the task positions and status decode failed, remove them.
+	if err := o.checkAndCleanTasksInfo(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	o.l.Lock()
+	if err := o.loadChangeFeeds(ctx); err != nil {
+		o.l.Unlock()
+		return errors.Trace(err)
+	}
+	o.l.Unlock()
+
+	rev, captures, err := o.etcdClient.GetCaptures(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// before watching, rebuild events according to
+	// the existed captures. This is necessary because
+	// the etcd events may be compacted.
+	if err := o.rebuildCaptureEvents(ctx, captures); err != nil {
+		return errors.Trace(err)
+	}
+
+	log.Info("monitoring captures",
+		zap.String("key", kv.CaptureInfoKeyPrefix),
+		zap.Int64("rev", rev))
+	ch := o.etcdClient.Client.Watch(ctx, kv.CaptureInfoKeyPrefix,
+		clientv3.WithPrefix(),
+		clientv3.WithRev(rev+1),
+		clientv3.WithPrevKV())
+
+	for resp := range ch {
+		err := resp.Err()
+		failpoint.Inject("restart-capture-watch", func() {
+			err = mvcc.ErrCompacted
+		})
+		if err != nil {
+			return errors.Trace(resp.Err())
+		}
+		for _, ev := range resp.Events {
+			c := &model.CaptureInfo{}
+			switch ev.Type {
+			case clientv3.EventTypeDelete:
+				if err := c.Unmarshal(ev.PrevKv.Value); err != nil {
+					return errors.Trace(err)
+				}
+				log.Debug("capture deleted",
+					zap.String("capture-id", c.ID),
+					zap.String("advertise-addr", c.AdvertiseAddr))
+				o.removeCapture(c)
+			case clientv3.EventTypePut:
+				if !ev.IsCreate() {
+					continue
+				}
+				if err := c.Unmarshal(ev.Kv.Value); err != nil {
+					return errors.Trace(err)
+				}
+				log.Debug("capture added",
+					zap.String("capture-id", c.ID),
+					zap.String("advertise-addr", c.AdvertiseAddr))
+				o.addCapture(c)
+			}
+		}
+	}
+	return nil
+}
+
+func (o *Owner) rebuildCaptureEvents(ctx context.Context, captures []*model.CaptureInfo) error {
+	current := make(map[string]*model.CaptureInfo)
+	for _, c := range captures {
+		current[c.ID] = c
+		o.addCapture(c)
+	}
+	for _, c := range o.captures {
+		if _, ok := current[c.ID]; !ok {
+			o.removeCapture(c)
+		}
+	}
+	// clean up stale tasks each time before watch capture event starts,
+	// for two reasons:
+	// 1. when a new owner is elected, it must clean up stale task status and positions.
+	// 2. when error happens in owner's capture event watch, the owner just resets
+	//    the watch loop, with the following two steps:
+	//    1) load all captures from PD, having a revision for data
+	//	  2) start a new watch from revision in step1
+	//    the step-2 may meet an error such as ErrCompacted, and we will continue
+	//    from step-1, however other capture may crash just after step-2 returns
+	//    and before step-1 starts, the longer time gap between step-2 to step-1,
+	//    missing a crashed capture is more likey to happen.
+	return errors.Trace(o.cleanUpStaleTasks(ctx, captures))
+}
+
+func (o *Owner) startCaptureWatcher(ctx context.Context) {
+	log.Info("start to watch captures")
+	go func() {
+		rl := rate.NewLimiter(0.05, 2)
+		for {
+			err := rl.Wait(ctx)
+			if err != nil {
+				if errors.Cause(err) == context.Canceled {
+					return
+				}
+				log.Error("capture watcher wait limit token error", zap.Error(err))
+				return
+			}
+			if err := o.watchCapture(ctx); err != nil {
+				// When the watching routine returns, the error must not
+				// be nil, it may be caused by a temporary error or a context
+				// error(ctx.Err())
+				if ctx.Err() != nil {
+					if errors.Cause(ctx.Err()) != context.Canceled {
+						// The context error indicates the termination of the owner
+						log.Error("watch capture failed", zap.Error(ctx.Err()))
+					} else {
+						log.Info("watch capture exited")
+					}
+					return
+				}
+				log.Warn("watch capture returned", zap.Error(err))
+				// Otherwise, a temporary error occured(ErrCompact),
+				// restart the watching routine.
+			}
+		}
+	}()
 }

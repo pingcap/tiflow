@@ -1,36 +1,45 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cdc
 
-/*
 import (
 	"context"
-	"math"
 	"net/url"
-	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-
-	"go.etcd.io/etcd/mvcc/mvccpb"
-
-	"github.com/google/uuid"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/parser/types"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/roles"
-	"github.com/pingcap/ticdc/cdc/roles/storage"
+	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/store/mockstore"
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
 )
 
 type ownerSuite struct {
-	owner     *ownerImpl
 	e         *embed.Etcd
 	clientURL *url.URL
 	client    kv.CDCEtcdClient
@@ -65,6 +74,7 @@ func (s *ownerSuite) TearDownTest(c *check.C) {
 	}
 }
 
+/*
 type handlerForPrueDMLTest struct {
 	mu               sync.RWMutex
 	index            int
@@ -164,7 +174,7 @@ func (s *ownerSuite) TestPureDML(c *check.C) {
 		c:                c,
 	}
 
-	tables := map[uint64]entry.TableName{1: {Schema: "any"}}
+	tables := map[uint64]model.TableName{1: {Schema: "any"}}
 
 	changeFeeds := map[model.ChangeFeedID]*changeFeed{
 		"test_change_feed": {
@@ -379,7 +389,7 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 		c:      c,
 	}
 
-	tables := map[uint64]entry.TableName{1: {Schema: "any"}}
+	tables := map[uint64]model.TableName{1: {Schema: "any"}}
 
 	filter, err := newTxnFilter(&model.ReplicaConfig{})
 	c.Assert(err, check.IsNil)
@@ -419,9 +429,19 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 	err = owner.Run(ctx, 50*time.Millisecond)
 	c.Assert(errors.Cause(err), check.DeepEquals, context.Canceled)
 }
+*/
 
 func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	cfID := "test_handle_admin"
+
+	ctx := context.TODO()
+	cctx, cancel := context.WithCancel(ctx)
+	errg, _ := errgroup.WithContext(cctx)
+
+	replicaConf := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(replicaConf)
+	c.Assert(err, check.IsNil)
+
 	sampleCF := &changeFeed{
 		id:       cfID,
 		info:     &model.ChangeFeedInfo{},
@@ -435,17 +455,25 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 			"capture_1": {ResolvedTs: 10001},
 			"capture_2": {},
 		},
-		infoWriter: storage.NewOwnerTaskStatusEtcdWriter(s.client),
-		ddlHandler: &handlerForDDLTest{},
+		ddlHandler: &ddlHandler{
+			cancel: cancel,
+			wg:     errg,
+		},
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	manager := roles.NewMockManager(uuid.New().String(), cancel)
-	owner := &ownerImpl{
-		cancelWatchCapture: cancel,
-		manager:            manager,
-		etcdClient:         s.client,
-		cfRWriter:          s.client,
-	}
+	errCh := make(chan error, 1)
+	sink, err := sink.NewSink(ctx, "blackhole://", f, replicaConf, map[string]string{}, errCh)
+	c.Assert(err, check.IsNil)
+	sampleCF.sink = sink
+
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, &security.Security{}, "127.0.0.1:12034")
+	c.Assert(err, check.IsNil)
+	err = capture.Campaign(ctx)
+	c.Assert(err, check.IsNil)
+
+	owner, err := NewOwner(nil, &security.Security{}, capture.session, DefaultCDCGCSafePointTTL)
+	c.Assert(err, check.IsNil)
+
+	sampleCF.etcdCli = owner.etcdClient
 	owner.changeFeeds = map[model.ChangeFeedID]*changeFeed{cfID: sampleCF}
 	for cid, pinfo := range sampleCF.taskPositions {
 		key := kv.GetEtcdKeyTaskStatus(cfID, cid)
@@ -454,15 +482,15 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		_, err = s.client.Client.Put(ctx, key, pinfoStr)
 		c.Assert(err, check.IsNil)
 	}
+	err = owner.etcdClient.PutChangeFeedStatus(ctx, cfID, &model.ChangeFeedStatus{})
+	c.Assert(err, check.IsNil)
+	err = owner.etcdClient.SaveChangeFeedInfo(ctx, sampleCF.info, cfID)
+	c.Assert(err, check.IsNil)
 	checkAdminJobLen := func(length int) {
 		owner.adminJobsLock.Lock()
 		c.Assert(owner.adminJobs, check.HasLen, length)
 		owner.adminJobsLock.Unlock()
 	}
-
-	err := owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminStop})
-	c.Assert(errors.Cause(err), check.Equals, concurrency.ErrElectionNotLeader)
-	c.Assert(manager.CampaignOwner(ctx), check.IsNil)
 
 	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminStop}), check.IsNil)
 	checkAdminJobLen(1)
@@ -480,7 +508,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminStop)
 	}
 	// check changefeed status is set admin job
-	st, err := owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
+	st, _, err := owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminStop)
 
@@ -492,7 +520,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(info.AdminJobType, check.Equals, model.AdminResume)
 	// check changefeed status is set admin job
-	st, err = owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
+	st, _, err = owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminResume)
 
@@ -511,7 +539,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		c.Assert(subInfo.AdminJobType, check.Equals, model.AdminRemove)
 	}
 	// check changefeed status is set admin job
-	st, err = owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
+	st, _, err = owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminRemove)
 }
@@ -546,8 +574,12 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 						Name: timodel.NewCIStr("test"),
 					},
 					TableInfo: &timodel.TableInfo{
-						ID:   47,
-						Name: timodel.NewCIStr("t1"),
+						ID:         47,
+						Name:       timodel.NewCIStr("t1"),
+						PKIsHandle: true,
+						Columns: []*timodel.ColumnInfo{
+							{ID: 1, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}},
+						},
 					},
 				},
 			},
@@ -564,8 +596,12 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 						Name: timodel.NewCIStr("test"),
 					},
 					TableInfo: &timodel.TableInfo{
-						ID:   49,
-						Name: timodel.NewCIStr("t2"),
+						ID:         49,
+						Name:       timodel.NewCIStr("t2"),
+						PKIsHandle: true,
+						Columns: []*timodel.ColumnInfo{
+							{ID: 1, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}},
+						},
 					},
 				},
 			},
@@ -602,8 +638,12 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 						Name: timodel.NewCIStr("test"),
 					},
 					TableInfo: &timodel.TableInfo{
-						ID:   51,
-						Name: timodel.NewCIStr("t1"),
+						ID:         51,
+						Name:       timodel.NewCIStr("t1"),
+						PKIsHandle: true,
+						Columns: []*timodel.ColumnInfo{
+							{ID: 1, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}},
+						},
 					},
 				},
 			},
@@ -642,7 +682,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 			},
 		}
 
-		expectSchemas = []map[uint64]tableIDMap{
+		expectSchemas = []map[int64]tableIDMap{
 			{1: make(tableIDMap)},
 			{1: {47: struct{}{}}},
 			{1: {47: struct{}{}, 49: struct{}{}}},
@@ -652,7 +692,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 			{},
 		}
 
-		expectTables = []map[uint64]entry.TableName{
+		expectTables = []map[int64]model.TableName{
 			{},
 			{47: {Schema: "test", Table: "t1"}},
 			{47: {Schema: "test", Table: "t1"}, 49: {Schema: "test", Table: "t2"}},
@@ -662,55 +702,42 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 			{},
 		}
 	)
-	schemaStorage, err := entry.NewStorage(nil)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
-	filter, err := newTxnFilter(&model.ReplicaConfig{})
+
+	store, err := mockstore.NewMockStore()
 	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = store.Close()
+	}()
+
+	txn, err := store.Begin()
+	c.Assert(err, check.IsNil)
+	defer func() {
+		_ = txn.Rollback()
+	}()
+	t := meta.NewMeta(txn)
+
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(t, 0)
+	c.Assert(err, check.IsNil)
+
 	cf := &changeFeed{
-		schema:        schemaStorage,
-		schemas:       make(map[uint64]map[uint64]struct{}),
-		tables:        make(map[uint64]entry.TableName),
-		orphanTables:  make(map[uint64]model.ProcessTableInfo),
-		toCleanTables: make(map[uint64]struct{}),
-		filter:        filter,
+		schema:        schemaSnap,
+		schemas:       make(map[model.SchemaID]tableIDMap),
+		tables:        make(map[model.TableID]model.TableName),
+		partitions:    make(map[model.TableID][]int64),
+		orphanTables:  make(map[model.TableID]model.Ts),
+		toCleanTables: make(map[model.TableID]model.Ts),
+		filter:        f,
 	}
 	for i, job := range jobs {
-		err = cf.applyJob(job)
+		err = cf.schema.HandleDDL(job)
+		c.Assert(err, check.IsNil)
+		err = cf.schema.FillSchemaName(job)
+		c.Assert(err, check.IsNil)
+		_, err = cf.applyJob(context.TODO(), job)
 		c.Assert(err, check.IsNil)
 		c.Assert(cf.schemas, check.DeepEquals, expectSchemas[i])
 		c.Assert(cf.tables, check.DeepEquals, expectTables[i])
 	}
 }
-
-type changefeedInfoSuite struct {
-}
-
-var _ = check.Suite(&changefeedInfoSuite{})
-
-func (s *changefeedInfoSuite) TestMinimumTables(c *check.C) {
-	cf := &changeFeed{
-		taskStatus: map[model.CaptureID]*model.TaskStatus{
-			"c1": {
-				TableInfos: make([]*model.ProcessTableInfo, 2),
-			},
-			"c2": {
-				TableInfos: make([]*model.ProcessTableInfo, 1),
-			},
-			"c3": {
-				TableInfos: make([]*model.ProcessTableInfo, 3),
-			},
-		},
-	}
-
-	captures := map[string]*model.CaptureInfo{
-		"c1": {},
-		"c2": {},
-		"c3": {},
-	}
-
-	c.Assert(cf.minimumTablesCapture(captures), check.Equals, "c2")
-
-	captures["c4"] = &model.CaptureInfo{}
-	c.Assert(cf.minimumTablesCapture(captures), check.Equals, "c4")
-}
-*/

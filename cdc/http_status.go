@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,12 +18,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -31,9 +34,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultStatusPort = 8300
-
-func (s *Server) startStatusHTTP() {
+func (s *Server) startStatusHTTP() error {
 	serverMux := http.NewServeMux()
 
 	serverMux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -46,32 +47,41 @@ func (s *Server) startStatusHTTP() {
 	serverMux.HandleFunc("/debug/info", s.handleDebugInfo)
 	serverMux.HandleFunc("/capture/owner/resign", s.handleResignOwner)
 	serverMux.HandleFunc("/capture/owner/admin", s.handleChangefeedAdmin)
+	serverMux.HandleFunc("/capture/owner/rebalance_trigger", s.handleRebalanceTrigger)
+	serverMux.HandleFunc("/capture/owner/move_table", s.handleMoveTable)
+	serverMux.HandleFunc("/capture/owner/changefeed/query", s.handleChangefeedQuery)
 
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
 
-	security := &util.Security{}
-	if s.config.Security != nil {
-		security = s.config.Security
+	security := &security.Security{}
+	if s.opts.security != nil {
+		security = s.opts.security
 	}
 	tlsConfig, err := security.ToTLSConfig()
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))
-		return
+		return errors.Trace(err)
 	}
-	s.statusServer = &http.Server{Addr: s.config.StatusAddr, Handler: serverMux, TLSConfig: tlsConfig}
-	log.Info("status http server is running", zap.String("addr", s.config.StatusAddr))
+	addr := s.opts.addr
+	s.statusServer = &http.Server{Addr: addr, Handler: serverMux, TLSConfig: tlsConfig}
+
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
 	go func() {
-		var err error
+		log.Info("status http server is running", zap.String("addr", addr))
 		if tlsConfig != nil {
 			err = s.statusServer.ListenAndServeTLS(security.CertPath, security.KeyPath)
 		} else {
-			err = s.statusServer.ListenAndServe()
+			err = s.statusServer.Serve(ln)
 		}
 		if err != nil && err != http.ErrServerClosed {
 			log.Error("status server error", zap.Error(err))
 		}
 	}()
+	return nil
 }
 
 // status of cdc server
@@ -80,6 +90,7 @@ type status struct {
 	GitHash string `json:"git_hash"`
 	ID      string `json:"id"`
 	Pid     int    `json:"pid"`
+	IsOwner bool   `json:"is_owner"`
 }
 
 func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.Writer) {
@@ -96,7 +107,7 @@ func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.W
 
 func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
-	s.capture.ownerWorker.writeDebugInfo(w)
+	s.owner.writeDebugInfo(w)
 
 	fmt.Fprintf(w, "\n\n*** processors info ***:\n\n")
 	for _, p := range s.capture.processors {
@@ -110,13 +121,14 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 
 func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
 	st := status{
-		Version: "0.0.1",
-		GitHash: "",
+		Version: util.ReleaseVersion,
+		GitHash: util.GitHash,
 		Pid:     os.Getpid(),
 	}
 	if s.capture != nil {
 		st.ID = s.capture.info.ID
 	}
+	st.IsOwner = s.owner != nil
 	writeData(w, st)
 }
 

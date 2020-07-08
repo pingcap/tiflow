@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,14 +20,20 @@ import (
 // common errors
 // use a language builtin error type without error trace stack
 var (
-	ErrWriteTsConflict        = errors.New("write ts conflict")
-	ErrChangeFeedNotExists    = errors.New("changefeed not exists")
-	ErrTaskStatusNotExists    = errors.New("task status not exists")
-	ErrTaskPositionNotExists  = errors.New("task position not exists")
-	ErrWriteTaskStatusConlict = errors.New("write task status conflict")
-	ErrFindPLockNotCommit     = errors.New("task status has p-lock not committed")
-	ErrAdminStopProcessor     = errors.New("stop processor by admin command")
-	ErrExecDDLFailed          = errors.New("exec DDL failed")
-	ErrCaptureNotExist        = errors.New("capture not exists")
-	ErrUnresolved             = errors.New("the ts more than resolvedTs")
+	ErrWriteTsConflict       = errors.New("write ts conflict")
+	ErrChangeFeedNotExists   = errors.New("changefeed not exists")
+	ErrTaskStatusNotExists   = errors.New("task status not exists")
+	ErrTaskPositionNotExists = errors.New("task position not exists")
+	ErrDecodeFailed          = errors.New("decode failed")
+	ErrAdminStopProcessor    = errors.New("stop processor by admin command")
+	ErrExecDDLFailed         = errors.New("exec DDL failed")
+	ErrCaptureNotExist       = errors.New("capture not exists")
+	ErrUnresolved            = errors.New("unresolved")
 )
+
+// RunningError represents some running error from cdc components, such as processor.
+type RunningError struct {
+	Addr    string `json:"addr"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}

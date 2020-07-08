@@ -1,8 +1,22 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
 	"context"
 	"flag"
+	"fmt"
 	"math"
 	"net/url"
 	"os"
@@ -14,14 +28,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/util"
-	"go.uber.org/zap"
+	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/Shopify/sarama"
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
+	cdcfilter "github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 )
 
 // Sarama configuration options
@@ -29,13 +47,14 @@ var (
 	kafkaAddrs        []string
 	kafkaTopic        string
 	kafkaPartitionNum int32
-	kafkaGroupID      = "ticdc_kafka_consumer"
+	kafkaGroupID      = fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
 	kafkaVersion      = "2.4.0"
 
 	downstreamURIStr string
 
 	logPath  string
 	logLevel string
+	timezone string
 )
 
 func init() {
@@ -45,6 +64,7 @@ func init() {
 	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
+	flag.StringVar(&timezone, "tz", "System", "Specify time zone of Kafka consumer")
 	flag.Parse()
 
 	err := util.InitLogger(&util.Config{
@@ -61,18 +81,9 @@ func init() {
 	}
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if scheme != "kafka" {
-		log.Fatal("invalid upstream-uri scheme, the scheme of upstream-uri must be `kafka`")
+		log.Fatal("invalid upstream-uri scheme, the scheme of upstream-uri must be `kafka`", zap.String("upstream-uri", upstreamURIStr))
 	}
-	s := upstreamURI.Query().Get("partition-num")
-	if s == "" {
-		log.Fatal("partition-num of upstream-uri can not be empty")
-	}
-	c, err := strconv.Atoi(s)
-	if err != nil {
-		log.Fatal("invalid partition-num of upstream-uri")
-	}
-	kafkaPartitionNum = int32(c)
-	s = upstreamURI.Query().Get("version")
+	s := upstreamURI.Query().Get("version")
 	if s != "" {
 		kafkaVersion = s
 	}
@@ -84,8 +95,69 @@ func init() {
 		return r == '/'
 	})
 	kafkaAddrs = strings.Split(upstreamURI.Host, ",")
+
+	config, err := newSaramaConfig()
+	if err != nil {
+		log.Fatal("Error creating sarama config", zap.Error(err))
+	}
+
+	s = upstreamURI.Query().Get("partition-num")
+	if s == "" {
+		partition, err := getPartitionNum(kafkaAddrs, kafkaTopic, config)
+		if err != nil {
+			log.Fatal("can not get partition number", zap.String("topic", kafkaTopic), zap.Error(err))
+		}
+		kafkaPartitionNum = partition
+	} else {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			log.Fatal("invalid partition-num of upstream-uri")
+		}
+		kafkaPartitionNum = int32(c)
+	}
 }
 
+func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32, error) {
+	// get partition number or create topic automatically
+	admin, err := sarama.NewClusterAdmin(address, cfg)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	topics, err := admin.ListTopics()
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	err = admin.Close()
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	topicDetail, exist := topics[topic]
+	if !exist {
+		return 0, errors.Errorf("can not find topic %s", topic)
+	}
+	log.Info("get partition number of topic", zap.String("topic", topic), zap.Int32("partition_num", topicDetail.NumPartitions))
+	return topicDetail.NumPartitions, nil
+}
+
+func waitTopicCreated(address []string, topic string, cfg *sarama.Config) error {
+	admin, err := sarama.NewClusterAdmin(address, cfg)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer admin.Close()
+	for i := 0; i <= 30; i++ {
+		topics, err := admin.ListTopics()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if _, ok := topics[topic]; ok {
+			return nil
+		}
+		log.Info("wait the topic created", zap.String("topic", topic))
+		time.Sleep(1 * time.Second)
+	}
+	return errors.Errorf("wait the topic(%s) created timeout", topic)
+}
 func newSaramaConfig() (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
@@ -116,11 +188,14 @@ func main() {
 	if err != nil {
 		log.Fatal("Error creating sarama config", zap.Error(err))
 	}
-
+	err = waitTopicCreated(kafkaAddrs, kafkaTopic, config)
+	if err != nil {
+		log.Fatal("wait topic created failed", zap.Error(err))
+	}
 	/**
 	 * Setup a new Sarama consumer group
 	 */
-	consumer, err := NewConsumer()
+	consumer, err := NewConsumer(context.TODO())
 	if err != nil {
 		log.Fatal("Error creating consumer", zap.Error(err))
 	}
@@ -194,9 +269,18 @@ type Consumer struct {
 }
 
 // NewConsumer creates a new cdc kafka consumer
-func NewConsumer() (*Consumer, error) {
+func NewConsumer(ctx context.Context) (*Consumer, error) {
 	// TODO support filter in downstream sink
-	filter, err := util.NewFilter(&util.ReplicaConfig{})
+	tz := time.Local
+	if strings.ToLower(timezone) != "system" {
+		var err error
+		tz, err = time.LoadLocation(timezone)
+		if err != nil {
+			return nil, errors.Annotate(err, "can not load timezone")
+		}
+	}
+	ctx = util.PutTimezoneInCtx(ctx, tz)
+	filter, err := cdcfilter.NewFilter(config.GetDefaultReplicaConfig())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -205,9 +289,12 @@ func NewConsumer() (*Consumer, error) {
 		sink.Sink
 		resolvedTs uint64
 	}, kafkaPartitionNum)
+	ctx, cancel := context.WithCancel(ctx)
+	errCh := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.NewSink(downstreamURIStr, filter, nil)
+		s, err := sink.NewSink(ctx, downstreamURIStr, filter, config.GetDefaultReplicaConfig(), nil, errCh)
 		if err != nil {
+			cancel()
 			return nil, errors.Trace(err)
 		}
 		c.sinks[i] = &struct {
@@ -215,10 +302,20 @@ func NewConsumer() (*Consumer, error) {
 			resolvedTs uint64
 		}{Sink: s}
 	}
-	sink, err := sink.NewSink(downstreamURIStr, filter, nil)
+	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, config.GetDefaultReplicaConfig(), nil, errCh)
 	if err != nil {
+		cancel()
 		return nil, errors.Trace(err)
 	}
+	go func() {
+		err := <-errCh
+		if errors.Cause(err) != context.Canceled {
+			log.Error("error on running consumer", zap.Error(err))
+		} else {
+			log.Info("consumer exited")
+		}
+		cancel()
+	}()
 	c.ddlSink = sink
 	c.ready = make(chan bool)
 	return c, nil
@@ -246,55 +343,63 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	if sink == nil {
 		panic("sink should initialized")
 	}
+ClaimMessages:
 	for message := range claim.Messages() {
-		log.Debug("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
-		key := new(model.MqMessageKey)
-		err := key.Decode(message.Key)
+		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
+		batchDecoder, err := codec.NewJSONEventBatchDecoder(message.Key, message.Value)
 		if err != nil {
-			log.Fatal("decode message key failed", zap.Error(err))
+			return errors.Trace(err)
 		}
-
-		switch key.Type {
-		case model.MqMessageTypeDDL:
-			value := new(model.MqMessageDDL)
-			err := value.Decode(message.Value)
+		for {
+			tp, hasNext, err := batchDecoder.HasNext()
 			if err != nil {
-				log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+				log.Fatal("decode message key failed", zap.Error(err))
 			}
-
-			ddl := new(model.DDLEvent)
-			ddl.FromMqMessage(key, value)
-			c.appendDDL(ddl)
-		case model.MqMessageTypeRow:
-			globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-			if key.Ts <= globalResolvedTs || key.Ts <= sink.resolvedTs {
-				log.Info("filter fallback row", zap.ByteString("row", message.Key),
-					zap.Uint64("globalResolvedTs", globalResolvedTs),
-					zap.Uint64("sinkResolvedTs", sink.resolvedTs))
+			if !hasNext {
 				break
 			}
-			value := new(model.MqMessageRow)
-			err := value.Decode(message.Value)
-			if err != nil {
-				log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+			switch tp {
+			case model.MqMessageTypeDDL:
+				ddl, err := batchDecoder.NextDDLEvent()
+				if err != nil {
+					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+				}
+				c.appendDDL(ddl)
+			case model.MqMessageTypeRow:
+				row, err := batchDecoder.NextRowChangedEvent()
+				if err != nil {
+					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+				}
+				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
+				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
+					log.Debug("filter fallback row", zap.ByteString("row", message.Key),
+						zap.Uint64("globalResolvedTs", globalResolvedTs),
+						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
+						zap.Int32("partition", partition))
+					break ClaimMessages
+				}
+				// FIXME: hack to set start-ts in row changed event, as start-ts
+				// is not contained in TiCDC open protocol
+				row.StartTs = row.CommitTs
+				err = sink.EmitRowChangedEvents(ctx, row)
+				if err != nil {
+					log.Fatal("emit row changed event failed", zap.Error(err))
+				}
+			case model.MqMessageTypeResolved:
+				ts, err := batchDecoder.NextResolvedEvent()
+				if err != nil {
+					log.Fatal("decode message value failed", zap.ByteString("value", message.Value))
+				}
+				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
+				if resolvedTs < ts {
+					log.Debug("update sink resolved ts",
+						zap.Uint64("ts", ts),
+						zap.Int32("partition", partition))
+					atomic.StoreUint64(&sink.resolvedTs, ts)
+				}
 			}
-			row := new(model.RowChangedEvent)
-			row.FromMqMessage(key, value)
-			err = sink.EmitRowChangedEvent(ctx, row)
-			if err != nil {
-				log.Fatal("emit row changed event failed", zap.Error(err))
-			}
-		case model.MqMessageTypeResolved:
-			err := sink.EmitRowChangedEvent(ctx, &model.RowChangedEvent{Ts: key.Ts, Resolved: true})
-			if err != nil {
-				log.Fatal("meit row changed event failed", zap.Error(err))
-			}
-			resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-			if resolvedTs < key.Ts {
-				atomic.StoreUint64(&sink.resolvedTs, key.Ts)
-			}
+			session.MarkMessage(message, "")
 		}
-		session.MarkMessage(message, "")
 	}
 
 	return nil
@@ -303,16 +408,16 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
-	if ddl.Ts <= c.maxDDLReceivedTs {
+	if ddl.CommitTs <= c.maxDDLReceivedTs {
 		return
 	}
 	globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-	if ddl.Ts <= globalResolvedTs {
-		log.Error("unexpected ddl job", zap.Uint64("ddlts", ddl.Ts), zap.Uint64("globalResolvedTs", globalResolvedTs))
+	if ddl.CommitTs <= globalResolvedTs {
+		log.Error("unexpected ddl job", zap.Uint64("ddlts", ddl.CommitTs), zap.Uint64("globalResolvedTs", globalResolvedTs))
 		return
 	}
 	c.ddlList = append(c.ddlList, ddl)
-	c.maxDDLReceivedTs = ddl.Ts
+	c.maxDDLReceivedTs = ddl.CommitTs
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
@@ -351,61 +456,17 @@ func (c *Consumer) forEachSink(fn func(sink *struct {
 
 // Run runs the Consumer
 func (c *Consumer) Run(ctx context.Context) error {
-	wg := &sync.WaitGroup{}
-	err := c.forEachSink(func(sink *struct {
-		sink.Sink
-		resolvedTs uint64
-	}) error {
-		wg.Add(1)
-		go func() {
-			if err := sink.Run(ctx); err != nil {
-				log.Fatal("sink running error", zap.Error(err))
-			}
-			wg.Done()
-		}()
-		return nil
-	})
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	var lastGlobalResolvedTs uint64
 	for {
 		select {
 		case <-ctx.Done():
-			wg.Wait()
 			return ctx.Err()
 		default:
 		}
 		time.Sleep(100 * time.Millisecond)
 		// handle ddl
-		globalCheckpointTs := uint64(math.MaxUint64)
-		err = c.forEachSink(func(sink *struct {
-			sink.Sink
-			resolvedTs uint64
-		}) error {
-			checkpointTs := sink.CheckpointTs()
-			if checkpointTs < globalCheckpointTs {
-				globalCheckpointTs = checkpointTs
-			}
-			return nil
-		})
-		if err != nil {
-			return errors.Trace(err)
-		}
-		todoDDL := c.getFrontDDL()
-		if todoDDL != nil && globalCheckpointTs == todoDDL.Ts {
-			// execute ddl
-			err := c.ddlSink.EmitDDLEvent(ctx, todoDDL)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			c.popDDL()
-		}
-
-		//handle global resolvedTs
 		globalResolvedTs := uint64(math.MaxUint64)
-		err = c.forEachSink(func(sink *struct {
+		err := c.forEachSink(func(sink *struct {
 			sink.Sink
 			resolvedTs uint64
 		}) error {
@@ -418,23 +479,43 @@ func (c *Consumer) Run(ctx context.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		todoDDL := c.getFrontDDL()
+		if todoDDL != nil && globalResolvedTs >= todoDDL.CommitTs {
+			//flush DMLs
+			err := c.forEachSink(func(sink *struct {
+				sink.Sink
+				resolvedTs uint64
+			}) error {
+				return sink.FlushRowChangedEvents(ctx, todoDDL.CommitTs)
+			})
+			if err != nil {
+				return errors.Trace(err)
+			}
 
-		todoDDL = c.getFrontDDL()
-		if todoDDL != nil && todoDDL.Ts < globalResolvedTs {
-			globalResolvedTs = todoDDL.Ts
+			// execute ddl
+			err = c.ddlSink.EmitDDLEvent(ctx, todoDDL)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			c.popDDL()
+			continue
+		}
+
+		if todoDDL != nil && todoDDL.CommitTs < globalResolvedTs {
+			globalResolvedTs = todoDDL.CommitTs
 		}
 		if lastGlobalResolvedTs == globalResolvedTs {
 			continue
 		}
 		lastGlobalResolvedTs = globalResolvedTs
 		atomic.StoreUint64(&c.globalResolvedTs, globalResolvedTs)
-		log.Debug("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
+		log.Info("update globalResolvedTs", zap.Uint64("ts", globalResolvedTs))
 
 		err = c.forEachSink(func(sink *struct {
 			sink.Sink
 			resolvedTs uint64
 		}) error {
-			return sink.EmitResolvedEvent(ctx, globalResolvedTs)
+			return sink.FlushRowChangedEvents(ctx, globalResolvedTs)
 		})
 		if err != nil {
 			return errors.Trace(err)

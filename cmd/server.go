@@ -1,12 +1,20 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cmd
 
 import (
 	"context"
-	"os"
-	"os/signal"
-	"strconv"
-	"strings"
-	"syscall"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -17,74 +25,58 @@ import (
 )
 
 var (
-	serverPdAddr string
-	statusAddr   string
-	caPath       string
-	certPath     string
-	keyPath      string
+	serverPdAddr  string
+	address       string
+	advertiseAddr string
+	timezone      string
+	gcTTL         int64
+	logFile       string
+	logLevel      string
 
 	serverCmd = &cobra.Command{
-		Use:              "server",
-		Short:            "Start a TiCDC capture server",
-		PersistentPreRun: preRunLogInfo,
-		RunE:             runEServer,
+		Use:   "server",
+		Short: "Start a TiCDC capture server",
+		RunE:  runEServer,
 	}
 )
 
 func init() {
 	rootCmd.AddCommand(serverCmd)
 
-	serverCmd.Flags().StringVar(&serverPdAddr, "pd", "http://127.0.0.1:2379", "PD address, separated by comma")
-	serverCmd.Flags().StringVar(&statusAddr, "status-addr", "127.0.0.1:8300", "Bind address for http status server")
-	serverCmd.Flags().StringVar(&caPath, "ca", "", "CA certificate path for TLS connection")
-	serverCmd.Flags().StringVar(&certPath, "cert", "", "Certificate path for TLS connection")
-	serverCmd.Flags().StringVar(&keyPath, "key", "", "Private key path for TLS connection")
-}
-
-func preRunLogInfo(cmd *cobra.Command, args []string) {
-	util.LogVersionInfo()
+	serverCmd.Flags().StringVar(&serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
+	serverCmd.Flags().StringVar(&address, "addr", "127.0.0.1:8300", "Set the listening address")
+	serverCmd.Flags().StringVar(&advertiseAddr, "advertise-addr", "", "Set the advertise listening address for client communication")
+	serverCmd.Flags().StringVar(&timezone, "tz", "System", "Specify time zone of TiCDC cluster")
+	serverCmd.Flags().Int64Var(&gcTTL, "gc-ttl", cdc.DefaultCDCGCSafePointTTL, "CDC GC safepoint TTL duration, specified in seconds")
+	serverCmd.Flags().StringVar(&logFile, "log-file", "", "log file path")
+	serverCmd.Flags().StringVar(&logLevel, "log-level", "info", "log level (etc: debug|info|warn|error)")
+	addSecurityFlags(serverCmd.Flags())
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
-	addrs := strings.Split(statusAddr, ":")
-	if len(addrs) != 2 {
-		return errors.Errorf("invalid status address: %s", statusAddr)
-	}
-	_, err := strconv.ParseInt(addrs[1], 10, 64)
+	cancel := initCmd(cmd, &util.Config{
+		File:  logFile,
+		Level: logLevel,
+	})
+	defer cancel()
+	tz, err := util.GetTimezone(timezone)
 	if err != nil {
-		return errors.Annotatef(err, "invalid status address: %s", statusAddr)
+		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
 
-	config := &cdc.Config{
-		PD:         serverPdAddr,
-		StatusAddr: statusAddr,
-		Security: &util.Security{
-			CAPath:   caPath,
-			CertPath: certPath,
-			KeyPath:  keyPath,
-		},
-	}
-
-	server, err := cdc.NewServer(config)
+	util.LogVersionInfo()
+	opts := []cdc.ServerOption{
+		cdc.PDEndpoints(serverPdAddr),
+		cdc.Address(address),
+		cdc.AdvertiseAddress(advertiseAddr),
+		cdc.GCTTL(gcTTL),
+		cdc.Timezone(tz),
+		cdc.Security(getSecurity())}
+	server, err := cdc.NewServer(opts...)
 	if err != nil {
 		return errors.Annotate(err, "new server")
 	}
-
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc,
-		syscall.SIGHUP,
-		syscall.SIGINT,
-		syscall.SIGTERM,
-		syscall.SIGQUIT)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		sig := <-sc
-		log.Info("got signal to exit", zap.Stringer("signal", sig))
-		cancel()
-	}()
-
-	err = server.Run(ctx)
+	err = server.Run(defaultContext)
 	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Error("run server", zap.String("error", errors.ErrorStack(err)))
 		return errors.Annotate(err, "run server")

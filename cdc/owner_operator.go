@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,12 +17,16 @@ import (
 	"context"
 	"sync"
 
+	tidbkv "github.com/pingcap/tidb/kv"
+
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
 )
@@ -38,24 +42,25 @@ type ddlHandler struct {
 	cancel func()
 }
 
-func newDDLHandler(pdCli pd.Client, security *util.Security, checkpointTS uint64) *ddlHandler {
+func newDDLHandler(pdCli pd.Client, security *security.Security, kvStorage tidbkv.Storage, checkpointTS uint64) *ddlHandler {
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
-	puller := puller.NewPuller(pdCli, security, checkpointTS, []util.Span{util.GetDDLSpan()}, false, nil)
+	plr := puller.NewPuller(pdCli, security, kvStorage, checkpointTS, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &ddlHandler{
-		puller: puller,
+		puller: plr,
 		cancel: cancel,
 	}
 	// Set it up so that one failed goroutine cancels all others sharing the same ctx
 	errg, ctx := errgroup.WithContext(ctx)
+	ctx = util.PutTableInfoInCtx(ctx, -1, "")
 
 	// FIXME: user of ddlHandler can't know error happen.
 	errg.Go(func() error {
-		return puller.Run(ctx)
+		return plr.Run(ctx)
 	})
 
-	rawDDLCh := puller.SortedOutput(ctx)
+	rawDDLCh := puller.SortOutput(ctx, plr.Output())
 
 	errg.Go(func() error {
 		for {
@@ -63,6 +68,9 @@ func newDDLHandler(pdCli pd.Client, security *util.Security, checkpointTS uint64
 			case <-ctx.Done():
 				return ctx.Err()
 			case e := <-rawDDLCh:
+				if e == nil {
+					continue
+				}
 				err := h.receiveDDL(e)
 				if err != nil {
 					return errors.Trace(err)
@@ -77,7 +85,7 @@ func newDDLHandler(pdCli pd.Client, security *util.Security, checkpointTS uint64
 func (h *ddlHandler) receiveDDL(rawDDL *model.RawKVEntry) error {
 	if rawDDL.OpType == model.OpTypeResolved {
 		h.mu.Lock()
-		h.resolvedTS = rawDDL.Ts
+		h.resolvedTS = rawDDL.CRTs
 		h.mu.Unlock()
 		return nil
 	}

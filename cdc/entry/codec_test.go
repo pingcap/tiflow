@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
 )
@@ -30,7 +31,7 @@ var _ = check.Suite(&codecSuite{})
 
 func (s *codecSuite) TestDecodeRecordKey(c *check.C) {
 	recordPrefix := tablecodec.GenTableRecordPrefix(12345)
-	key := tablecodec.EncodeRecordKey(recordPrefix, 67890)
+	key := tablecodec.EncodeRecordKey(recordPrefix, kv.IntHandle(67890))
 	key, tableID, err := decodeTableID(key)
 	c.Assert(err, check.IsNil)
 	c.Assert(tableID, check.Equals, int64(12345))

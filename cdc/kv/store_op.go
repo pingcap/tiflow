@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,41 +14,50 @@
 package kv
 
 import (
-	"sort"
+	"fmt"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/pkg/flags"
+	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/store"
+	"github.com/pingcap/tidb/store/tikv"
 )
 
-// LoadHistoryDDLJobs loads all history DDL jobs from TiDB.
-func LoadHistoryDDLJobs(tiStore tidbkv.Storage) ([]*model.Job, error) {
-	snapMeta, err := getSnapshotMeta(tiStore)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	jobs, err := snapMeta.GetAllHistoryDDLJobs()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	// jobs from GetAllHistoryDDLJobs are sorted by job id, need sorted by schema version
-	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].BinlogInfo.FinishedTS < jobs[j].BinlogInfo.FinishedTS
-	})
-
-	return jobs, nil
-}
-
-func getSnapshotMeta(tiStore tidbkv.Storage) (*meta.Meta, error) {
-	version, err := tiStore.CurrentVersion()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	snapshot, err := tiStore.GetSnapshot(version)
+// GetSnapshotMeta returns tidb meta information
+func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
+	snapshot, err := tiStore.GetSnapshot(tidbkv.NewVersion(ts))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	return meta.NewSnapshotMeta(snapshot), nil
+}
+
+// CreateTiStore creates a new tikv storage client
+func CreateTiStore(urls string, security *security.Security) (tidbkv.Storage, error) {
+	urlv, err := flags.NewURLsValue(urls)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// Ignore error if it is already registered.
+	_ = store.Register("tikv", tikv.Driver{})
+
+	if security.CAPath != "" {
+		conf := config.GetGlobalConfig()
+		conf.Security.ClusterSSLCA = security.CAPath
+		conf.Security.ClusterSSLCert = security.CertPath
+		conf.Security.ClusterSSLKey = security.KeyPath
+		config.StoreGlobalConfig(conf)
+	}
+
+	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
+	tiStore, err := store.New(tiPath)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return tiStore, nil
 }

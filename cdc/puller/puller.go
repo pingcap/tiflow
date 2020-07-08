@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,13 +23,20 @@ import (
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/puller/frontier"
+	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
-	defaultPullerEventChanSize = 128
+	defaultPullerEventChanSize  = 128000
+	defaultPullerOutputChanSize = 128000
 )
 
 // Puller pull data from tikv and push changes into a buffer
@@ -37,103 +44,60 @@ type Puller interface {
 	// Run the puller, continually fetch event from TiKV and add event into buffer
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
-	Output() ChanBuffer
-	SortedOutput(ctx context.Context) <-chan *model.RawKVEntry
-}
-
-// resolveTsTracker checks resolved event of spans and moves the global resolved ts ahead
-type resolveTsTracker interface {
-	Forward(span util.Span, ts uint64) bool
-	Frontier() uint64
+	Output() <-chan *model.RawKVEntry
 }
 
 type pullerImpl struct {
 	pdCli        pd.Client
-	security     *util.Security
+	security     *security.Security
+	kvStorage    tikv.Storage
 	checkpointTs uint64
-	spans        []util.Span
+	spans        []regionspan.Span
 	buffer       *memBuffer
-	chanBuffer   ChanBuffer
-	tsTracker    resolveTsTracker
+	outputCh     chan *model.RawKVEntry
+	tsTracker    frontier.Frontier
 	resolvedTs   uint64
 	// needEncode represents whether we need to encode a key when checking it is in span
 	needEncode bool
-}
-
-// CancellablePuller is a puller that can be stopped with the Cancel function
-type CancellablePuller struct {
-	Puller
-
-	Cancel context.CancelFunc
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTs
 // and put into buf.
 func NewPuller(
 	pdCli pd.Client,
-	security *util.Security,
+	security *security.Security,
+	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
-	spans []util.Span,
+	spans []regionspan.Span,
 	needEncode bool,
 	limitter *BlurResourceLimitter,
 ) *pullerImpl {
+	tikvStorage, ok := kvStorage.(tikv.Storage)
+	if !ok {
+		log.Fatal("can't create puller for non-tikv storage")
+	}
 	p := &pullerImpl{
 		pdCli:        pdCli,
 		security:     security,
+		kvStorage:    tikvStorage,
 		checkpointTs: checkpointTs,
 		spans:        spans,
 		buffer:       makeMemBuffer(limitter),
-		chanBuffer:   makeChanBuffer(),
-		tsTracker:    makeSpanFrontier(spans...),
+		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
+		tsTracker:    frontier.NewFrontier(checkpointTs, spans...),
 		needEncode:   needEncode,
+		resolvedTs:   checkpointTs,
 	}
-
 	return p
 }
 
-func (p *pullerImpl) Output() ChanBuffer {
-	return p.chanBuffer
-}
-
-func (p *pullerImpl) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry {
-	captureID := util.CaptureIDFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	sorter := NewEntrySorter()
-	go func() {
-		sorter.Run(ctx)
-		for {
-			be, err := p.chanBuffer.Get(ctx)
-			if err != nil {
-				if errors.Cause(err) != context.Canceled {
-					log.Error("error in puller", zap.Error(err))
-				}
-				break
-			}
-			if be.Val != nil {
-				txnCollectCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
-				sorter.AddEntry(be.Val)
-			} else if be.Resolved != nil {
-				txnCollectCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
-				resolvedTs := be.Resolved.ResolvedTs
-				// 1. Forward is called in a single thread
-				// 2. The only way the global minimum resolved Ts can be forwarded is that
-				// 	  the resolveTs we pass in replaces the original one
-				// Thus, we can just use resolvedTs here as the new global minimum resolved Ts.
-				forwarded := p.tsTracker.Forward(be.Resolved.Span, resolvedTs)
-				if !forwarded {
-					continue
-				}
-				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
-				sorter.AddEntry(&model.RawKVEntry{Ts: resolvedTs, OpType: model.OpTypeResolved})
-			}
-		}
-	}()
-	return sorter.Output()
+func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
+	return p.outputCh
 }
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	cli, err := kv.NewCDCClient(p.pdCli, p.security)
+	cli, err := kv.NewCDCClient(p.pdCli, p.kvStorage, p.security)
 	if err != nil {
 		return errors.Annotate(err, "create cdc client failed")
 	}
@@ -153,17 +117,28 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		})
 	}
 
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	tableID, tableName := util.TableIDFromCtx(ctx)
+	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEventCounterKv := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "kv")
+	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "resolved")
+	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
+	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
 
 	g.Go(func() error {
 		for {
 			select {
 			case <-ctx.Done():
 				return nil
-			case <-time.After(time.Minute):
-				entryBufferSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(p.chanBuffer)))
-				eventChanSizeGauge.WithLabelValues(captureID, changefeedID).Set(float64(len(eventCh)))
+			case <-time.After(15 * time.Second):
+				metricEventChanSize.Set(float64(len(eventCh)))
+				metricMemBufferSize.Set(float64(p.buffer.Size()))
+				metricOutputChanSize.Set(float64(len(p.outputCh)))
+				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
 			}
 		}
 	})
@@ -173,14 +148,13 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			select {
 			case e := <-eventCh:
 				if e.Val != nil {
-					kvEventCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
+					metricEventCounterKv.Inc()
 					val := e.Val
-
 					// if a region with kv range [a, z)
 					// and we only want the get [b, c) from this region,
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
-					if !util.KeyInSpans(val.Key, p.spans, p.needEncode) {
+					if !regionspan.KeyInSpans(val.Key, p.spans, p.needEncode) {
 						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
 						continue
 					}
@@ -189,7 +163,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						return errors.Trace(err)
 					}
 				} else if e.Resolved != nil {
-					kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
+					metricEventCounterResolved.Inc()
 					if err := p.buffer.AddEntry(ctx, *e); err != nil {
 						return errors.Trace(err)
 					}
@@ -201,76 +175,52 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	})
 
 	g.Go(func() error {
+		output := func(raw *model.RawKVEntry) error {
+			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
+				log.Fatal("The CRTs must be greater than the resolvedTs",
+					zap.Reflect("row", raw),
+					zap.Uint64("CRTs", raw.CRTs),
+					zap.Uint64("resolvedTs", p.resolvedTs),
+					zap.Int64("tableID", tableID))
+			}
+			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			case p.outputCh <- raw:
+			}
+			return nil
+		}
+		var lastResolvedTs uint64
 		for {
 			e, err := p.buffer.Get(ctx)
 			if err != nil {
 				return errors.Trace(err)
 			}
-
-			err = p.chanBuffer.AddEntry(ctx, e)
-			if err != nil {
-				return errors.Trace(err)
+			if e.Val != nil {
+				metricTxnCollectCounterKv.Inc()
+				if err := output(e.Val); err != nil {
+					return errors.Trace(err)
+				}
+			} else if e.Resolved != nil {
+				metricTxnCollectCounterResolved.Inc()
+				// Forward is called in a single thread
+				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
+				resolvedTs := p.tsTracker.Frontier()
+				if resolvedTs == lastResolvedTs {
+					continue
+				}
+				lastResolvedTs = resolvedTs
+				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved})
+				if err != nil {
+					return errors.Trace(err)
+				}
+				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 			}
 		}
 	})
-
 	return g.Wait()
 }
 
 func (p *pullerImpl) GetResolvedTs() uint64 {
-	return p.tsTracker.Frontier()
-}
-
-// TODO remove this function
-// collectRawTxns collects KV events from the inputFn,
-// groups them by transactions and sends them to the outputFn.
-func collectRawTxns(
-	ctx context.Context,
-	inputFn func(context.Context) (model.RegionFeedEvent, error),
-	outputFn func(context.Context, model.RawTxn) error,
-	tracker resolveTsTracker,
-) error {
-	captureID := util.CaptureIDFromCtx(ctx)
-	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	entryGroup := NewEntryGroup()
-	for {
-		be, err := inputFn(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if be.Val != nil {
-			txnCollectCounter.WithLabelValues(captureID, changefeedID, "kv").Inc()
-			entryGroup.AddEntry(be.Val.Ts, be.Val)
-		} else if be.Resolved != nil {
-			txnCollectCounter.WithLabelValues(captureID, changefeedID, "resolved").Inc()
-			resolvedTs := be.Resolved.ResolvedTs
-			// 1. Forward is called in a single thread
-			// 2. The only way the global minimum resolved Ts can be forwarded is that
-			// 	  the resolveTs we pass in replaces the original one
-			// Thus, we can just use resolvedTs here as the new global minimum resolved Ts.
-			forwarded := tracker.Forward(be.Resolved.Span, resolvedTs)
-			if !forwarded {
-				continue
-			}
-			readyTxns := entryGroup.Consume(resolvedTs)
-			for _, t := range readyTxns {
-				err := outputFn(ctx, t)
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-			resolvedTxnsBatchSize.Observe(float64(len(readyTxns)))
-			if len(readyTxns) == 0 {
-				log.Debug("Forwarding fake txn", zap.Uint64("ts", resolvedTs))
-				fakeTxn := model.RawTxn{
-					Ts:      resolvedTs,
-					Entries: nil,
-				}
-				err := outputFn(ctx, fakeTxn)
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-		}
-	}
+	return atomic.LoadUint64(&p.resolvedTs)
 }

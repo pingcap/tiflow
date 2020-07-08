@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import (
 // NewConfig creates a new config.
 func NewConfig() *Config {
 	cfg := &Config{}
-	cfg.FlagSet = flag.NewFlagSet("binlogTest", flag.ContinueOnError)
+	cfg.FlagSet = flag.NewFlagSet("ticdcTest", flag.ContinueOnError)
 	fs := cfg.FlagSet
 
 	fs.StringVar(&cfg.configFile, "config", "", "Config file")
@@ -48,7 +48,9 @@ type Config struct {
 
 	Batch int `toml:"batch" json:"batch"`
 
-	SourceDBCfg DBConfig `toml:"source-db" json:"source-db"`
+	PDAddr string `toml:"pd" json:"pd"`
+
+	SourceDBCfg []DBConfig `toml:"source-db" json:"source-db"`
 
 	TargetDBCfg DBConfig `toml:"target-db" json:"target-db"`
 

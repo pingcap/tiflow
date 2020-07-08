@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package puller
 
 import (
@@ -5,19 +18,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/entry"
-
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
+	"github.com/pingcap/tidb/store/mockstore/cluster"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/util/testkit"
 	"go.uber.org/zap"
@@ -95,7 +107,7 @@ func (l *mvccListener) registerPostRollback(fn func(keys [][]byte, startTs uint6
 
 // MockPullerManager keeps track of transactions for mock pullers
 type MockPullerManager struct {
-	cluster   *mocktikv.Cluster
+	cluster   cluster.Cluster
 	mvccStore mocktikv.MVCCStore
 	store     tidbkv.Storage
 	domain    *domain.Domain
@@ -112,12 +124,18 @@ type MockPullerManager struct {
 	c *check.C
 }
 
+var _ Puller = &mockPuller{}
+
 type mockPuller struct {
 	pm          *MockPullerManager
-	spans       []util.Span
+	spans       []regionspan.Span
 	resolvedTs  uint64
 	startTs     uint64
 	rawKVOffset int
+}
+
+func (p *mockPuller) Output() <-chan *model.RawKVEntry {
+	panic("implement me")
 }
 
 func (p *mockPuller) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry {
@@ -127,11 +145,11 @@ func (p *mockPuller) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 			p.pm.rawKVEntriesMu.RLock()
 			for ; p.rawKVOffset < len(p.pm.rawKVEntries); p.rawKVOffset++ {
 				rawKV := p.pm.rawKVEntries[p.rawKVOffset]
-				if rawKV.Ts < p.startTs {
+				if rawKV.StartTs < p.startTs {
 					continue
 				}
-				p.resolvedTs = rawKV.Ts
-				if !util.KeyInSpans(rawKV.Key, p.spans, false) {
+				p.resolvedTs = rawKV.StartTs
+				if !regionspan.KeyInSpans(rawKV.Key, p.spans, false) {
 					continue
 				}
 				select {
@@ -161,14 +179,6 @@ func (p *mockPuller) GetResolvedTs() uint64 {
 	return p.resolvedTs
 }
 
-func (p *mockPuller) CollectRawTxns(ctx context.Context, outputFn func(context.Context, model.RawTxn) error) error {
-	panic("unreachable")
-}
-
-func (p *mockPuller) Output() ChanBuffer {
-	panic("unreachable")
-}
-
 // NewMockPullerManager creates and sets up a mock puller manager
 func NewMockPullerManager(c *check.C, newRowFormat bool) *MockPullerManager {
 	m := &MockPullerManager{
@@ -186,15 +196,14 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	log.SetLevel(zap.FatalLevel)
 	defer log.SetLevel(logLevel)
 
-	m.cluster = mocktikv.NewCluster()
-	mocktikv.BootstrapWithSingleStore(m.cluster)
-
 	mvccListener := newMVCCListener(mocktikv.MustNewMVCCStore())
 
 	m.mvccStore = mvccListener
-	store, err := mockstore.NewMockTikvStore(
-		mockstore.WithCluster(m.cluster),
-		mockstore.WithMVCCStore(m.mvccStore),
+	store, err := mockstore.NewMockStore(
+		mockstore.WithClusterInspector(func(c cluster.Cluster) {
+			mockstore.BootstrapWithSingleStore(c)
+			m.cluster = c
+		}),
 	)
 	if err != nil {
 		log.Fatal("create mock puller failed", zap.Error(err))
@@ -220,12 +229,13 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 }
 
 // CreatePuller returns a mock puller with the specified start ts and spans
-func (m *MockPullerManager) CreatePuller(startTs uint64, spans []util.Span) Puller {
-	return &mockPuller{
-		spans:   spans,
-		pm:      m,
-		startTs: startTs,
-	}
+func (m *MockPullerManager) CreatePuller(startTs uint64, spans []regionspan.Span) Puller {
+	//return &mockPuller{
+	//	spans:   spans,
+	//	pm:      m,
+	//	startTs: startTs,
+	//}
+	return nil
 }
 
 // MustExec delegates to TestKit.MustExec
@@ -238,14 +248,9 @@ func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *entry.Ta
 	is := m.domain.InfoSchema()
 	tbl, err := is.TableByName(timodel.NewCIStr(schemaName), timodel.NewCIStr(tableName))
 	m.c.Assert(err, check.IsNil)
-	return entry.WrapTableInfo(tbl.Meta())
-}
-
-// GetDDLJobs returns the ddl jobs
-func (m *MockPullerManager) GetDDLJobs() []*timodel.Job {
-	jobs, err := kv.LoadHistoryDDLJobs(m.store)
-	m.c.Assert(err, check.IsNil)
-	return jobs
+	dbInfo, exist := is.SchemaByTable(tbl.Meta())
+	m.c.Assert(exist, check.IsTrue)
+	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, tbl.Meta())
 }
 
 func (m *MockPullerManager) postPrewrite(req *kvrpcpb.PrewriteRequest, result []error) {
@@ -291,18 +296,20 @@ func prewrite2RawKV(req *kvrpcpb.PrewriteRequest, commitTs uint64) []*model.RawK
 		switch mut.Op {
 		case kvrpcpb.Op_Put, kvrpcpb.Op_Insert:
 			rawKV := &model.RawKVEntry{
-				Ts:     commitTs,
-				Key:    mut.Key,
-				Value:  mut.Value,
-				OpType: model.OpTypePut,
+				StartTs: req.GetStartVersion(),
+				CRTs:    commitTs,
+				Key:     mut.Key,
+				Value:   mut.Value,
+				OpType:  model.OpTypePut,
 			}
 			putEntries = append(putEntries, rawKV)
 		case kvrpcpb.Op_Del:
 			rawKV := &model.RawKVEntry{
-				Ts:     commitTs,
-				Key:    mut.Key,
-				Value:  mut.Value,
-				OpType: model.OpTypeResolved,
+				StartTs: req.GetStartVersion(),
+				CRTs:    commitTs,
+				Key:     mut.Key,
+				Value:   mut.Value,
+				OpType:  model.OpTypeResolved,
 			}
 			deleteEntries = append(deleteEntries, rawKV)
 		default:
@@ -310,7 +317,7 @@ func prewrite2RawKV(req *kvrpcpb.PrewriteRequest, commitTs uint64) []*model.RawK
 		}
 	}
 	entries := append(deleteEntries, putEntries...)
-	return append(entries, &model.RawKVEntry{Ts: commitTs, OpType: model.OpTypeResolved})
+	return append(entries, &model.RawKVEntry{CRTs: commitTs, OpType: model.OpTypeResolved})
 }
 
 func anyError(errs []error) bool {

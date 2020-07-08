@@ -34,10 +34,35 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 18),
 		}, []string{"capture", "changefeed"})
+	executionErrorCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "execution_error",
+			Help:      "total count of execution errors",
+		}, []string{"capture", "changefeed"})
+	conflictDetectDurationHis = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "conflict_detect_duration",
+			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement",
+			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 21),
+		}, []string{"capture", "changefeed"})
+	bucketSizeCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "bucket_size",
+			Help:      "size of the DML bucket",
+		}, []string{"capture", "changefeed", "bucket"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(execBatchHistogram)
 	registry.MustRegister(execTxnHistogram)
+	registry.MustRegister(executionErrorCounter)
+	registry.MustRegister(conflictDetectDurationHis)
+	registry.MustRegister(bucketSizeCounter)
 }

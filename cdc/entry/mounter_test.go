@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package entry
 
 /*
@@ -24,7 +37,7 @@ func setUpPullerAndSchema(ctx context.Context, c *check.C, newRowFormat bool, sq
 	for _, sql := range sqls {
 		pm.MustExec(sql)
 	}
-	ddlPlr := pm.CreatePuller(0, []util.Span{util.GetDDLSpan()})
+	ddlPlr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetDDLSpan()})
 	go func() {
 		err := ddlPlr.Run(ctx)
 		if err != nil && errors.Cause(err) != context.Canceled {
@@ -68,7 +81,7 @@ func (cs *mountTxnsSuite) testInsertPkNotHandle(c *check.C, newRowFormat bool) {
 	tableInfo := pm.GetTableInfo("testDB", "test1")
 	tableID := tableInfo.ID
 	mounter := NewTxnMounter(schema)
-	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into testDB.test1 values('ttt',6)")
 	rawTxn := getFirstRealTxn(ctx, c, plr)
@@ -145,7 +158,7 @@ func (cs *mountTxnsSuite) testIncompleteRow(c *check.C, newRowFormat bool) {
 	tableInfo := pm.GetTableInfo("testDB", "test1")
 	tableID := tableInfo.ID
 	mounter := NewTxnMounter(schema)
-	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into testDB.test1(id) values (16),(32);")
 	rawTxn := getFirstRealTxn(ctx, c, plr)
@@ -206,7 +219,7 @@ func (cs *mountTxnsSuite) testInsertPkIsHandle(c *check.C, newRowFormat bool) {
 	tableInfo := pm.GetTableInfo("testDB", "test1")
 	tableID := tableInfo.ID
 	mounter := NewTxnMounter(schema)
-	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into testDB.test1 values(777,888)")
 	rawTxn := getFirstRealTxn(ctx, c, plr)
@@ -299,7 +312,7 @@ func (cs *mountTxnsSuite) testUk(c *check.C, newRowFormat bool) {
 	tableInfo := pm.GetTableInfo("testDB", "test1")
 	tableID := tableInfo.ID
 	mounter := NewTxnMounter(schema)
-	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into testDB.test1 values(1, 2, 3, 4, 5, 6)")
 	rawTxn := getFirstRealTxn(ctx, c, plr)
@@ -402,7 +415,7 @@ func (cs *mountTxnsSuite) testLargeInteger(c *check.C, newRowFormat bool) {
 	tableInfo := pm.GetTableInfo("testDB", "large_int")
 	tableID := tableInfo.ID
 	mounter := NewTxnMounter(schema)
-	plr := pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+	plr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into testDB.large_int values(?, ?)", uint64(math.MaxUint64), 123)
 	rawTxn := getFirstRealTxn(ctx, c, plr)
@@ -432,7 +445,7 @@ func (cs *mountTxnsSuite) testLargeInteger(c *check.C, newRowFormat bool) {
 	tableInfo = pm.GetTableInfo("testDB", "large_int")
 	tableID = tableInfo.ID
 	mounter = NewTxnMounter(schema)
-	plr = pm.CreatePuller(0, []util.Span{util.GetTableSpan(tableID, false)})
+	plr = pm.CreatePuller(0, []regionspan.Span{regionspan.GetTableSpan(tableID, false)})
 
 	pm.MustExec("insert into testDB.large_int values(?, ?)", int64(math.MinInt64), 123)
 	rawTxn = getFirstRealTxn(ctx, c, plr)

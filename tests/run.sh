@@ -15,11 +15,12 @@ if [ "${1-}" = '--debug' ]; then
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
     PATH="$CUR/../bin:$CUR/_utils:$PATH" \
+    LD_LIBRARY_PATH="$CUR/../bin:$CUR/_utils:$PATH" \
     OUT_DIR=$OUT_DIR \
     TEST_NAME="debug" \
-    start_tidb_cluster $WORK_DIR
+    start_tidb_cluster --workdir $WORK_DIR
 
-    cdc server --log-file $WORK_DIR/cdc.log --log-level debug --status-addr 0.0.0.0:8300 > $WORK_DIR/stdout.log 2>&1 &
+    cdc server --log-file $WORK_DIR/cdc.log --log-level debug --addr 127.0.0.1:8300 > $WORK_DIR/stdout.log 2>&1 &
     sleep 1
     cdc cli changefeed create --sink-uri="mysql://root@127.0.0.1:3306/"
 
@@ -31,28 +32,31 @@ fi
 run_case() {
     local case=$1
     local script=$2
-    echo "Running test $script..."
+    local sink_type=$3
+    echo "Running test $script using Sink-Type: $sink_type..."
     PATH="$CUR/../bin:$CUR/_utils:$PATH" \
+    LD_LIBRARY_PATH="$CUR/../bin:$CUR/_utils:$PATH" \
     OUT_DIR=$OUT_DIR \
     TEST_NAME=$case \
-    bash "$script"
+    bash "$script" "$sink_type"
 }
 
-if [ "$#" -ge 1 ]; then
-    test_case=$1
-else
+test_case=$1
+sink_type=$2
+
+if [ -z "$test_case" ]; then
     test_case="*"
 fi
 
 if [ "$test_case" == "*" ]; then
     for script in $CUR/*/run.sh; do
         test_name="$(basename "$(dirname "$script")")"
-        run_case $test_name $script
+        run_case $test_name $script $sink_type
     done
 else
     for name in $test_case; do
         script="$CUR/$name/run.sh"
-        run_case $name $script
+        run_case $name $script $sink_type
     done
 fi
 
