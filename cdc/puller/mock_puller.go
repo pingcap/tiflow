@@ -128,7 +128,7 @@ var _ Puller = &mockPuller{}
 
 type mockPuller struct {
 	pm          *MockPullerManager
-	spans       []regionspan.Span
+	spans       []regionspan.ComparableSpan
 	resolvedTs  uint64
 	startTs     uint64
 	rawKVOffset int

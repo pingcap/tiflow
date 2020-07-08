@@ -50,7 +50,7 @@ type pullerImpl struct {
 	pdCli        pd.Client
 	kvStorage    tikv.Storage
 	checkpointTs uint64
-	spans        []regionspan.Span
+	spans        []regionspan.ComparableSpan
 	buffer       *memBuffer
 	outputCh     chan *model.RawKVEntry
 	tsTracker    frontier.Frontier
@@ -70,17 +70,18 @@ func NewPuller(
 	if !ok {
 		log.Fatal("can't create puller for non-tikv storage")
 	}
+	comparableSpans := make([]regionspan.ComparableSpan, len(spans))
 	for i := range spans {
-		spans[i] = regionspan.ComparableSpan(spans[i])
+		comparableSpans[i] = regionspan.ToComparableSpan(spans[i])
 	}
 	p := &pullerImpl{
 		pdCli:        pdCli,
 		kvStorage:    tikvStorage,
 		checkpointTs: checkpointTs,
-		spans:        spans,
+		spans:        comparableSpans,
 		buffer:       makeMemBuffer(limitter),
 		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:    frontier.NewFrontier(checkpointTs, spans...),
+		tsTracker:    frontier.NewFrontier(checkpointTs, comparableSpans...),
 		resolvedTs:   checkpointTs,
 	}
 	return p
@@ -108,7 +109,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		span := span
 
 		g.Go(func() error {
-			log.Info("start event feed", zap.Reflect("span", span))
 			return cli.EventFeed(ctx, span, checkpointTs, eventCh)
 		})
 	}
@@ -150,7 +150,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// and we only want the get [b, c) from this region,
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
-					comparableKey := regionspan.ComparableKey(val.Key)
+					comparableKey := regionspan.ToComparableKey(val.Key)
 					if !regionspan.KeyInSpans(comparableKey, p.spans) {
 						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
 						continue
