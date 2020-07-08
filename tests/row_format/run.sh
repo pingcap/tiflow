@@ -39,4 +39,5 @@ function run() {
 
 trap stop_tidb_cluster EXIT
 run $*
+exit 1
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
