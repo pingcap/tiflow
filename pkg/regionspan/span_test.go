@@ -68,16 +68,16 @@ func (s *spanSuite) TestEndCompare(c *check.C) {
 
 func (s *spanSuite) TestIntersect(c *check.C) {
 	tests := []struct {
-		lhs Span
-		rhs Span
+		lhs ComparableSpan
+		rhs ComparableSpan
 		// Set nil for non-intersect
-		res *Span
+		res *ComparableSpan
 	}{
-		{Span{nil, []byte{1}}, Span{[]byte{1}, nil}, nil},
-		{Span{nil, nil}, Span{nil, nil}, &Span{nil, nil}},
-		{Span{nil, nil}, Span{[]byte{1}, []byte{2}}, &Span{[]byte{1}, []byte{2}}},
-		{Span{[]byte{0}, []byte{3}}, Span{[]byte{1}, []byte{2}}, &Span{[]byte{1}, []byte{2}}},
-		{Span{[]byte{0}, []byte{2}}, Span{[]byte{1}, []byte{2}}, &Span{[]byte{1}, []byte{2}}},
+		{ComparableSpan{nil, []byte{1}}, ComparableSpan{[]byte{1}, nil}, nil},
+		{ComparableSpan{nil, nil}, ComparableSpan{nil, nil}, &ComparableSpan{nil, nil}},
+		{ComparableSpan{nil, nil}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
+		{ComparableSpan{[]byte{0}, []byte{3}}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
+		{ComparableSpan{[]byte{0}, []byte{2}}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
 	}
 
 	for _, t := range tests {
