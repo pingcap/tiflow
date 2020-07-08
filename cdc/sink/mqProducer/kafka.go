@@ -65,6 +65,7 @@ type kafkaSaramaProducer struct {
 }
 
 func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
+	log.Info("show messages to kafka", zap.ByteString("key", key), zap.ByteString("value", value), zap.Int32("partition", partition))
 	msg := &sarama.ProducerMessage{
 		Topic:     k.topic,
 		Key:       sarama.ByteEncoder(key),

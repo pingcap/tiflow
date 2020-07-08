@@ -1,76 +1,69 @@
 drop database if exists `row_format`;
 create database `row_format`;
 use `row_format`;
-
-SET GLOBAL tidb_row_format_version = 2;
-
-CREATE TABLE multi_data_type
-(
-    id          INT AUTO_INCREMENT,
-    t_boolean   BOOLEAN,
-    t_bigint    BIGINT,
-    t_double    DOUBLE,
-    t_decimal   DECIMAL(38, 19),
-    t_bit       BIT(64),
-    t_date      DATE,
-    t_datetime  DATETIME,
-    t_timestamp TIMESTAMP NULL,
-    t_time      TIME,
-    t_year      YEAR,
-    t_char      CHAR,
-    t_varchar   VARCHAR(10),
-    t_blob      BLOB,
-    t_text      TEXT,
-    t_enum      ENUM ('enum1', 'enum2', 'enum3'),
-    t_set       SET ('a', 'b', 'c'),
-    t_json      JSON,
-    PRIMARY KEY (id)
-) ENGINE = InnoDB
-  DEFAULT CHARSET = utf8
-  COLLATE = utf8_bin;
-
-INSERT INTO multi_data_type( t_boolean, t_bigint, t_double, t_decimal, t_bit
-                           , t_date, t_datetime, t_timestamp, t_time, t_year
-                           , t_char, t_varchar, t_blob, t_text, t_enum
-                           , t_set, t_json)
-VALUES ( true, 9223372036854775807, 123.123, 123456789012.123456789012, b'1000001'
-       , '1000-01-01', '9999-12-31 23:59:59', '19731230153000', '23:59:59', 1970
-       , '测', '测试', 'blob', '测试text', 'enum2'
-       , 'a,b', NULL);
-
-SET GLOBAL tidb_row_format_version = 1;
-
-INSERT INTO multi_data_type( t_boolean, t_bigint, t_double, t_decimal, t_bit
-                           , t_date, t_datetime, t_timestamp, t_time, t_year
-                           , t_char, t_varchar, t_blob, t_text, t_enum
-                           , t_set, t_json)
-VALUES ( false, 666, 123.777, 123456789012.123456789012, b'1000001'
-       , '1000-01-01', '9999-12-31 23:59:59', '19731230153000', '23:59:59', 1970
-       , '测', '测试', 'blob', '测试text11', 'enum3'
-       , 'a,b', NULL);
-
-UPDATE multi_data_type
-SET t_bigint = 555
-WHERE id = 1;
-
-SET GLOBAL tidb_row_format_version = 2;
-
-INSERT INTO multi_data_type( t_boolean, t_bigint, t_double, t_decimal, t_bit
-                           , t_date, t_datetime, t_timestamp, t_time, t_year
-                           , t_char, t_varchar, t_blob, t_text, t_enum
-                           , t_set, t_json)
-VALUES ( true, 9223372036875807, 153.123, 123456669012.123456789012, b'1010001'
-       , '2000-01-01', '9999-12-31 23:59:59', '19731230153000', '23:59:59', 1970
-       , '测', '测试', 'blob', '测试text', 'enum1'
-       , 'a,b', '{
-    "key1": "value1",
-    "key2": "value2"
-  }');
-
-UPDATE multi_data_type
-SET t_bigint = 888,
-    t_json   = '{
-      "key0": "value0",
-      "key2": "value2"
-    }'
-WHERE id = 2;
+CREATE TABLE `mars_task_verify_statistics` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `resource_id` varchar(24) NOT NULL,
+  `task_id` bigint(20) NOT NULL,
+  `source` varchar(36) NOT NULL,
+  `category` varchar(26) DEFAULT NULL,
+  `priority` smallint(6) DEFAULT 0,
+  `type` smallint(6) NOT NULL,
+  `task_time` timestamp NOT NULL,
+  `start_time` timestamp NULL DEFAULT NULL,
+  `end_time` timestamp NULL DEFAULT NULL,
+  `reason` varchar(256) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_resource_id` (`resource_id`),
+  UNIQUE KEY `u_source_task` (`source`, `task_id`),
+  KEY `idx_task_time` (`task_time`),
+  KEY `idx_end_time` (`end_time`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
+insert into `mars_task_verify_statistics` (
+    `resource_id`,
+    `task_id`,
+    `source`,
+    `category`,
+    `priority`,
+    `type`,
+    `task_time`,
+    `start_time`,
+    `end_time`,
+    `reason`
+  )
+VALUES (
+    '11',
+    1,
+    '11',
+    '11',
+    1,
+    1,
+    '2020-01-01 00:00:00',
+    '2020-01-01 00:00:00',
+    '2020-01-01 00:00:00',
+    '11'
+  );
+insert into `mars_task_verify_statistics` (
+    `resource_id`,
+    `task_id`,
+    `source`,
+    `category`,
+    `priority`,
+    `type`,
+    `task_time`,
+    `start_time`,
+    `end_time`,
+    `reason`
+  )
+VALUES (
+    '22',
+    2,
+    '22',
+    '22',
+    2,
+    2,
+    '2020-01-01 22:00:00',
+    '2020-01-01 22:00:00',
+    '2020-01-01 22:00:00',
+    '22'
+  );
