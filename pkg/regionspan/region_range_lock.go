@@ -206,7 +206,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		}
 	}
 	if isStale {
-		retryRanges := make([]Span, 0)
+		retryRanges := make([]ComparableSpan, 0)
 		currentRangeStartKey := startKey
 
 		log.Info("tryLockRange stale", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
@@ -214,12 +214,12 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 
 		for _, r := range overlappingRanges {
 			if bytes.Compare(currentRangeStartKey, r.startKey) < 0 {
-				retryRanges = append(retryRanges, Span{Start: currentRangeStartKey, End: r.startKey})
+				retryRanges = append(retryRanges, ComparableSpan{Start: currentRangeStartKey, End: r.startKey})
 			}
 			currentRangeStartKey = r.endKey
 		}
 		if bytes.Compare(currentRangeStartKey, endKey) < 0 {
-			retryRanges = append(retryRanges, Span{Start: currentRangeStartKey, End: endKey})
+			retryRanges = append(retryRanges, ComparableSpan{Start: currentRangeStartKey, End: endKey})
 		}
 
 		return LockRangeResult{
@@ -322,5 +322,5 @@ type LockRangeResult struct {
 	Status       int
 	CheckpointTs uint64
 	WaitFn       func() LockRangeResult
-	RetryRanges  []Span
+	RetryRanges  []ComparableSpan
 }
