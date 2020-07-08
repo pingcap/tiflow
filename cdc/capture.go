@@ -41,8 +41,7 @@ var ErrSuicide = errors.New("Suicide")
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
-	pdEndpoints []string
-	etcdClient  kv.CDCEtcdClient
+	etcdClient kv.CDCEtcdClient
 
 	processors map[string]*processor
 	procLock   sync.Mutex
@@ -92,12 +91,11 @@ func NewCapture(ctx context.Context, pdEndpoints []string, advertiseAddr string)
 		zap.String("capture-id", id), zap.String("advertise-addr", advertiseAddr))
 
 	c = &Capture{
-		processors:  make(map[string]*processor),
-		pdEndpoints: pdEndpoints,
-		etcdClient:  cli,
-		session:     sess,
-		election:    elec,
-		info:        info,
+		processors: make(map[string]*processor),
+		etcdClient: cli,
+		session:    sess,
+		election:   elec,
+		info:       info,
 	}
 
 	return
