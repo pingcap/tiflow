@@ -48,9 +48,8 @@ func (s Span) Hack() Span {
 }
 
 func hackSpan(originStart []byte, originEnd []byte) (start []byte, end []byte) {
-	if originStart != nil && originEnd != nil {
-		return originStart, originEnd
-	}
+	start = originStart
+	end = originEnd
 
 	if originStart == nil {
 		start = []byte{}
