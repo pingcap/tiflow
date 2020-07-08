@@ -67,3 +67,5 @@ VALUES (
     '2020-01-01 22:00:00',
     '22'
   );
+
+delete from `mars_task_verify_statistics` where `id` = 1;
