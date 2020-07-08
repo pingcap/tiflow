@@ -493,7 +493,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			}
 
 			// execute ddl
-			err = c.ddlSink.EmitDDLEvent(ctx, todoDDL)
+			_, err = c.ddlSink.EmitDDLEvent(ctx, todoDDL)
 			if err != nil {
 				return errors.Trace(err)
 			}

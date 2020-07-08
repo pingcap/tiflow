@@ -643,6 +643,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return errors.Trace(err)
 	}
 	if skip {
+		log.Info("ddl job ignored", zap.String("changefeed", c.id), zap.Reflect("job", todoDDLJob))
 		c.ddlJobHistory = c.ddlJobHistory[1:]
 		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedSyncDML
@@ -653,30 +654,29 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if err != nil {
 		return errors.Trace(err)
 	}
+	ignored := true
 	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
 		log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddlEvent.Query))
-		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
+		result, err := c.sink.EmitDDLEvent(ctx, ddlEvent)
+		// If DDL executing failed, pause the changefeed and print log, rather
+		// than return an error and break the running of this owner.
+		if err != nil {
+			c.ddlState = model.ChangeFeedDDLExecuteFailed
+			log.Error("Execute DDL failed",
+				zap.String("ChangeFeedID", c.id),
+				zap.Error(err),
+				zap.Reflect("ddlJob", todoDDLJob))
+			return errors.Trace(model.ErrExecDDLFailed)
+		}
+		ignored = result.Ignored
 	}
-	// If DDL executing failed, pause the changefeed and print log, rather
-	// than return an error and break the running of this owner.
-	if err != nil {
-		c.ddlState = model.ChangeFeedDDLExecuteFailed
-		log.Error("Execute DDL failed",
-			zap.String("ChangeFeedID", c.id),
-			zap.Error(err),
-			zap.Reflect("ddlJob", todoDDLJob))
-		return errors.Trace(model.ErrExecDDLFailed)
+	if ignored {
+		log.Info("Execute DDL ignored", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
+	} else {
+		log.Info("Execute DDL succeeded", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
 	}
-	log.Info("Execute DDL succeeded",
-		zap.String("ChangeFeedID", c.id),
-		zap.Reflect("ddlJob", todoDDLJob))
 
-	if c.ddlState != model.ChangeFeedExecDDL {
-		log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
-			zap.String("ChangeFeedID", c.id),
-			zap.String("ChangeFeedDDLState", c.ddlState.String()))
-	}
 	c.ddlJobHistory = c.ddlJobHistory[1:]
 	c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
 	c.ddlState = model.ChangeFeedSyncDML

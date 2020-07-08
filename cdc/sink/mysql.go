@@ -146,7 +146,7 @@ func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	return nil
 }
 
-func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (EmitEventResult, error) {
 	if s.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table) {
 		log.Info(
 			"DDL event ignored",
@@ -154,10 +154,10 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
 		)
-		return nil
+		return EmitEventResult{Ignored: true}, nil
 	}
 	err := s.execDDLWithMaxRetries(ctx, ddl, defaultDDLMaxRetryTime)
-	return errors.Trace(err)
+	return EmitEventResult{}, errors.Trace(err)
 }
 
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent, maxRetries uint64) error {
