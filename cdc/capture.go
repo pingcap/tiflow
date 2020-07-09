@@ -43,7 +43,7 @@ var ErrSuicide = errors.New("Suicide")
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	etcdClient kv.CDCEtcdClient
-	security   *security.Security
+	credential *security.Credential
 
 	processors map[string]*processor
 	procLock   sync.Mutex
@@ -56,8 +56,8 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(ctx context.Context, pdEndpoints []string, security *security.Security, advertiseAddr string) (c *Capture, err error) {
-	tlsConfig, err := security.ToTLSConfig()
+func NewCapture(ctx context.Context, pdEndpoints []string, credential *security.Credential, advertiseAddr string) (c *Capture, err error) {
+	tlsConfig, err := credential.ToTLSConfig()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -100,7 +100,7 @@ func NewCapture(ctx context.Context, pdEndpoints []string, security *security.Se
 	c = &Capture{
 		processors: make(map[string]*processor),
 		etcdClient: cli,
-		security:   security,
+		credential: credential,
 		session:    sess,
 		election:   elec,
 		info:       info,
@@ -220,7 +220,7 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error
 		zap.String("changefeedid", task.ChangeFeedID))
 
 	p, err := runProcessor(
-		ctx, c.security, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS)
+		ctx, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS)
 	if err != nil {
 		log.Error("run processor failed",
 			zap.String("changefeedid", task.ChangeFeedID),

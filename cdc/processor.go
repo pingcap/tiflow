@@ -77,11 +77,11 @@ type processor struct {
 	limitter     *puller.BlurResourceLimitter
 	stopped      int32
 
-	pdCli     pd.Client
-	security  *security.Security
-	kvStorage tidbkv.Storage
-	etcdCli   kv.CDCEtcdClient
-	session   *concurrency.Session
+	pdCli      pd.Client
+	credential *security.Credential
+	kvStorage  tidbkv.Storage
+	etcdCli    kv.CDCEtcdClient
+	session    *concurrency.Session
 
 	sink sink.Sink
 
@@ -136,7 +136,7 @@ func (t *tableInfo) loadResolvedTs() uint64 {
 // newProcessor creates and returns a processor for the specified change feed
 func newProcessor(
 	ctx context.Context,
-	security *security.Security,
+	credential *security.Credential,
 	session *concurrency.Session,
 	changefeed model.ChangeFeedInfo,
 	sink sink.Sink,
@@ -147,11 +147,11 @@ func newProcessor(
 ) (*processor, error) {
 	etcdCli := session.Client()
 	endpoints := session.Client().Endpoints()
-	pdCli, err := fNewPDCli(ctx, endpoints, security.PDSecurityOption())
+	pdCli, err := fNewPDCli(ctx, endpoints, credential.PDSecurityOption())
 	if err != nil {
 		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", endpoints)
 	}
-	kvStorage, err := kv.CreateTiStore(strings.Join(endpoints, ","), security)
+	kvStorage, err := kv.CreateTiStore(strings.Join(endpoints, ","), credential)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -167,12 +167,12 @@ func newProcessor(
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
 	// so we set `needEncode` to false.
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
-	ddlPuller := puller.NewPuller(pdCli, security, kvStorage, checkpointTs, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false, limitter)
+	ddlPuller := puller.NewPuller(pdCli, credential, kvStorage, checkpointTs, []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}, false, limitter)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := createSchemaStorage(endpoints, security, checkpointTs, filter)
+	schemaStorage, err := createSchemaStorage(endpoints, credential, checkpointTs, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -737,9 +737,9 @@ func (p *processor) collectMetrics(ctx context.Context) error {
 	}
 }
 
-func createSchemaStorage(pdEndpoints []string, security *security.Security, checkpointTs uint64, filter *filter.Filter) (*entry.SchemaStorage, error) {
+func createSchemaStorage(pdEndpoints []string, credential *security.Credential, checkpointTs uint64, filter *filter.Filter) (*entry.SchemaStorage, error) {
 	// TODO here we create another pb client,we should reuse them
-	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","), security)
+	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","), credential)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -782,7 +782,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		// The key in DML kv pair returned from TiKV is not memcompariable encoded,
 		// so we set `needEncode` to true.
 		span := regionspan.GetTableSpan(tableID, true)
-		plr := puller.NewPuller(p.pdCli, p.security, p.kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, true, p.limitter)
+		plr := puller.NewPuller(p.pdCli, p.credential, p.kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, true, p.limitter)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
@@ -905,7 +905,7 @@ func (p *processor) isStopped() bool {
 // runProcessor creates a new processor then starts it.
 func runProcessor(
 	ctx context.Context,
-	security *security.Security,
+	credential *security.Credential,
 	session *concurrency.Session,
 	info model.ChangeFeedInfo,
 	changefeedID string,
@@ -930,7 +930,7 @@ func runProcessor(
 		cancel()
 		return nil, errors.Trace(err)
 	}
-	processor, err := newProcessor(ctx, security, session, info, sink, changefeedID, captureInfo, checkpointTs, errCh)
+	processor, err := newProcessor(ctx, credential, session, info, sink, changefeedID, captureInfo, checkpointTs, errCh)
 	if err != nil {
 		cancel()
 		return nil, err

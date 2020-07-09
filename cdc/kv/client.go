@@ -156,18 +156,18 @@ func (m *syncRegionFeedStateMap) takeAll() map[uint64]*regionFeedState {
 }
 
 type connArray struct {
-	security *security.Security
-	target   string
-	index    uint32
-	v        []*grpc.ClientConn
+	credential *security.Credential
+	target     string
+	index      uint32
+	v          []*grpc.ClientConn
 }
 
-func newConnArray(ctx context.Context, maxSize uint, addr string, security *security.Security) (*connArray, error) {
+func newConnArray(ctx context.Context, maxSize uint, addr string, credential *security.Credential) (*connArray, error) {
 	a := &connArray{
-		target:   addr,
-		security: security,
-		index:    0,
-		v:        make([]*grpc.ClientConn, maxSize),
+		target:     addr,
+		credential: credential,
+		index:      0,
+		v:          make([]*grpc.ClientConn, maxSize),
 	}
 	err := a.Init(ctx)
 	if err != nil {
@@ -177,7 +177,7 @@ func newConnArray(ctx context.Context, maxSize uint, addr string, security *secu
 }
 
 func (a *connArray) Init(ctx context.Context) error {
-	securityOpt, err := a.security.ToGRPCDialOption()
+	securityOpt, err := a.credential.ToGRPCDialOption()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -237,8 +237,8 @@ func (a *connArray) Close() {
 
 // CDCClient to get events from TiKV
 type CDCClient struct {
-	pd       pd.Client
-	security *security.Security
+	pd         pd.Client
+	credential *security.Credential
 
 	clusterID uint64
 
@@ -252,14 +252,14 @@ type CDCClient struct {
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(pd pd.Client, kvStorage tikv.Storage, security *security.Security) (c *CDCClient, err error) {
+func NewCDCClient(pd pd.Client, kvStorage tikv.Storage, credential *security.Credential) (c *CDCClient, err error) {
 	clusterID := pd.GetClusterID(context.Background())
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
 	c = &CDCClient{
 		clusterID:   clusterID,
 		pd:          pd,
-		security:    security,
+		credential:  credential,
 		kvStorage:   kvStorage,
 		regionCache: tikv.NewRegionCache(pd),
 		mu: struct {
@@ -292,7 +292,7 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 	if conns, ok := c.mu.conns[addr]; ok {
 		return conns.Get(), nil
 	}
-	ca, err := newConnArray(ctx, grpcConnCount, addr, c.security)
+	ca, err := newConnArray(ctx, grpcConnCount, addr, c.credential)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

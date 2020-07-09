@@ -173,7 +173,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 	return command
 }
 
-func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate bool, security *security.Security) (*model.ChangeFeedInfo, error) {
+func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential) (*model.ChangeFeedInfo, error) {
 	if isCreate {
 		if startTs == 0 {
 			ts, logical, err := pdCli.GetTS(ctx)
@@ -229,7 +229,7 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 
 	if isCreate {
 		ctx = util.PutTimezoneInCtx(ctx, tz)
-		ineligibleTables, eligibleTables, err := verifyTables(ctx, security, cfg, startTs)
+		ineligibleTables, eligibleTables, err := verifyTables(ctx, credential, cfg, startTs)
 		if err != nil {
 			return nil, err
 		}
@@ -301,7 +301,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 			ctx := defaultContext
 			id := uuid.New().String()
 
-			info, err := verifyChangefeedParamers(ctx, cmd, true /* isCreate */, getSecurity())
+			info, err := verifyChangefeedParamers(ctx, cmd, true /* isCreate */, getCredential())
 			if err != nil {
 				return err
 			}
@@ -340,7 +340,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 				return err
 			}
 
-			info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, getSecurity())
+			info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, getCredential())
 			if err != nil {
 				return err
 			}
@@ -475,7 +475,7 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 				}
 				startTs = oracle.ComposeTS(ts, logical)
 
-				_, eligibleTables, err := verifyTables(ctx, getSecurity(), cfg, startTs)
+				_, eligibleTables, err := verifyTables(ctx, getCredential(), cfg, startTs)
 				if err != nil {
 					return err
 				}

@@ -42,7 +42,7 @@ const (
 
 type options struct {
 	pdEndpoints   string
-	security      *security.Security
+	credential    *security.Credential
 	addr          string
 	advertiseAddr string
 	gcTTL         int64
@@ -72,12 +72,12 @@ func (o *options) validateAndAdjust() error {
 	if o.gcTTL == 0 {
 		return errors.New("empty GC TTL is not allowed")
 	}
-	if o.security != nil {
-		_, err := o.security.ToTLSConfig()
+	if o.credential != nil {
+		_, err := o.credential.ToTLSConfig()
 		if err != nil {
 			return errors.New("invalidate TLS config")
 		}
-		_, err = o.security.ToGRPCDialOption()
+		_, err = o.credential.ToGRPCDialOption()
 		if err != nil {
 			return errors.New("invalidate TLS config")
 		}
@@ -120,10 +120,10 @@ func Timezone(tz *time.Location) ServerOption {
 	}
 }
 
-// Security returns a ServerOption that sets the TLS
-func Security(security *security.Security) ServerOption {
+// Credential returns a ServerOption that sets the TLS
+func Credential(credential *security.Credential) ServerOption {
 	return func(o *options) {
-		o.security = security
+		o.credential = credential
 	}
 }
 
@@ -166,7 +166,7 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 func (s *Server) Run(ctx context.Context) error {
 	s.pdEndpoints = strings.Split(s.opts.pdEndpoints, ",")
 	pdClient, err := pd.NewClientWithContext(
-		ctx, s.pdEndpoints, s.opts.security.PDSecurityOption(),
+		ctx, s.pdEndpoints, s.opts.credential.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
@@ -230,7 +230,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			continue
 		}
 		log.Info("campaign owner successfully", zap.String("capture", s.capture.info.ID))
-		owner, err := NewOwner(s.pdClient, s.opts.security, s.capture.session, s.opts.gcTTL)
+		owner, err := NewOwner(s.pdClient, s.opts.credential, s.capture.session, s.opts.gcTTL)
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
 			continue
@@ -255,7 +255,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.security, s.opts.advertiseAddr)
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.credential, s.opts.advertiseAddr)
 	if err != nil {
 		return err
 	}

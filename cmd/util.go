@@ -57,8 +57,8 @@ func addSecurityFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&keyPath, "key", "", "Private key path for TLS connection")
 }
 
-func getSecurity() *security.Security {
-	return &security.Security{
+func getCredential() *security.Credential {
+	return &security.Credential{
 		CAPath:   caPath,
 		CertPath: certPath,
 		KeyPath:  keyPath,
@@ -195,8 +195,8 @@ func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) er
 	return nil
 }
 
-func verifyTables(ctx context.Context, security *security.Security, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
-	kvStore, err := kv.CreateTiStore(cliPdAddr, security)
+func verifyTables(ctx context.Context, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
+	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
 	if err != nil {
 		return nil, nil, err
 	}

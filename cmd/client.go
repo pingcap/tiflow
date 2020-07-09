@@ -117,8 +117,8 @@ func newCliCommand() *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			initCmd(cmd, &util.Config{Level: cliLogLevel})
 
-			security := getSecurity()
-			tlsConfig, err := security.ToTLSConfig()
+			credential := getCredential()
+			tlsConfig, err := credential.ToTLSConfig()
 			if err != nil {
 				return errors.Annotate(err, "fail to validate TLS settings")
 			}
@@ -145,7 +145,7 @@ func newCliCommand() *cobra.Command {
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
 			pdCli, err = pd.NewClientWithContext(
-				defaultContext, []string{cliPdAddr}, security.PDSecurityOption(),
+				defaultContext, []string{cliPdAddr}, credential.PDSecurityOption(),
 				pd.WithGRPCDialOptions(
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{

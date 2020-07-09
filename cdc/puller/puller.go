@@ -49,7 +49,7 @@ type Puller interface {
 
 type pullerImpl struct {
 	pdCli        pd.Client
-	security     *security.Security
+	credential   *security.Credential
 	kvStorage    tikv.Storage
 	checkpointTs uint64
 	spans        []regionspan.Span
@@ -65,7 +65,7 @@ type pullerImpl struct {
 // and put into buf.
 func NewPuller(
 	pdCli pd.Client,
-	security *security.Security,
+	credential *security.Credential,
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
@@ -78,7 +78,7 @@ func NewPuller(
 	}
 	p := &pullerImpl{
 		pdCli:        pdCli,
-		security:     security,
+		credential:   credential,
 		kvStorage:    tikvStorage,
 		checkpointTs: checkpointTs,
 		spans:        spans,
@@ -97,7 +97,7 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	cli, err := kv.NewCDCClient(p.pdCli, p.kvStorage, p.security)
+	cli, err := kv.NewCDCClient(p.pdCli, p.kvStorage, p.credential)
 	if err != nil {
 		return errors.Annotate(err, "create cdc client failed")
 	}

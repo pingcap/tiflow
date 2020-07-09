@@ -54,11 +54,11 @@ func (s *Server) startStatusHTTP() error {
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
 
-	security := &security.Security{}
-	if s.opts.security != nil {
-		security = s.opts.security
+	credential := &security.Credential{}
+	if s.opts.credential != nil {
+		credential = s.opts.credential
 	}
-	tlsConfig, err := security.ToTLSConfig()
+	tlsConfig, err := credential.ToTLSConfig()
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))
 		return errors.Trace(err)
@@ -73,7 +73,7 @@ func (s *Server) startStatusHTTP() error {
 	go func() {
 		log.Info("status http server is running", zap.String("addr", addr))
 		if tlsConfig != nil {
-			err = s.statusServer.ListenAndServeTLS(security.CertPath, security.KeyPath)
+			err = s.statusServer.ListenAndServeTLS(credential.CertPath, credential.KeyPath)
 		} else {
 			err = s.statusServer.Serve(ln)
 		}

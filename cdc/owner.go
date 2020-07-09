@@ -59,7 +59,7 @@ type Owner struct {
 	l sync.RWMutex
 
 	pdEndpoints []string
-	security    *security.Security
+	credential  *security.Credential
 	pdClient    pd.Client
 	etcdClient  kv.CDCEtcdClient
 
@@ -78,7 +78,7 @@ type Owner struct {
 const CDCServiceSafePointID = "ticdc"
 
 // NewOwner creates a new Owner instance
-func NewOwner(pdClient pd.Client, security *security.Security, sess *concurrency.Session, gcTTL int64) (*Owner, error) {
+func NewOwner(pdClient pd.Client, credential *security.Credential, sess *concurrency.Session, gcTTL int64) (*Owner, error) {
 	cli := kv.NewCDCEtcdClient(sess.Client())
 	endpoints := sess.Client().Endpoints()
 
@@ -86,7 +86,7 @@ func NewOwner(pdClient pd.Client, security *security.Security, sess *concurrency
 		done:                  make(chan struct{}),
 		session:               sess,
 		pdClient:              pdClient,
-		security:              security,
+		credential:            credential,
 		changeFeeds:           make(map[model.ChangeFeedID]*changeFeed),
 		failedFeeds:           make(map[model.ChangeFeedID]struct{}),
 		captures:              make(map[model.CaptureID]*model.CaptureInfo),
@@ -179,7 +179,7 @@ func (o *Owner) newChangeFeed(
 	})
 
 	// TODO here we create another pb client,we should reuse them
-	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","), o.security)
+	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","), o.credential)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
-	ddlHandler := newDDLHandler(o.pdClient, o.security, kvStore, checkpointTs)
+	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs)
 
 	existingTables := make(map[model.TableID]model.Ts)
 	for captureID, taskStatus := range processorsInfos {

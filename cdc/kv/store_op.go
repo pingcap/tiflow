@@ -36,7 +36,7 @@ func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
 }
 
 // CreateTiStore creates a new tikv storage client
-func CreateTiStore(urls string, security *security.Security) (tidbkv.Storage, error) {
+func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -45,11 +45,11 @@ func CreateTiStore(urls string, security *security.Security) (tidbkv.Storage, er
 	// Ignore error if it is already registered.
 	_ = store.Register("tikv", tikv.Driver{})
 
-	if security.CAPath != "" {
+	if credential.CAPath != "" {
 		conf := config.GetGlobalConfig()
-		conf.Security.ClusterSSLCA = security.CAPath
-		conf.Security.ClusterSSLCert = security.CertPath
-		conf.Security.ClusterSSLKey = security.KeyPath
+		conf.Security.ClusterSSLCA = credential.CAPath
+		conf.Security.ClusterSSLCert = credential.CertPath
+		conf.Security.ClusterSSLKey = credential.KeyPath
 		config.StoreGlobalConfig(conf)
 	}
 

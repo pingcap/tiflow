@@ -71,7 +71,7 @@ func runEServer(cmd *cobra.Command, args []string) error {
 		cdc.AdvertiseAddress(advertiseAddr),
 		cdc.GCTTL(gcTTL),
 		cdc.Timezone(tz),
-		cdc.Security(getSecurity())}
+		cdc.Credential(getCredential())}
 	server, err := cdc.NewServer(opts...)
 	if err != nil {
 		return errors.Annotate(err, "new server")

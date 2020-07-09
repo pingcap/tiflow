@@ -48,7 +48,7 @@ func (s *clientSuite) TestNewClose(c *check.C) {
 	cluster := mocktikv.NewCluster(mvccStore)
 	pdCli := mocktikv.NewPDClient(cluster)
 
-	cli, err := NewCDCClient(pdCli, nil, &security.Security{})
+	cli, err := NewCDCClient(pdCli, nil, &security.Credential{})
 	c.Assert(err, check.IsNil)
 
 	err = cli.Close()
@@ -144,7 +144,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	cluster.AddStore(2, "localhost:23376")
 	cluster.Bootstrap(3, []uint64{1, 2}, []uint64{4, 5}, 4)
 
-	cdcClient, err := NewCDCClient(pdClient, kvStorage.(tikv.Storage), &security.Security{})
+	cdcClient, err := NewCDCClient(pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	c.Assert(err, check.IsNil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -207,7 +207,7 @@ func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
 	cluster.AddStore(1, "localhost:23375")
 	cluster.Bootstrap(2, []uint64{1}, []uint64{3}, 3)
 
-	cdcClient, err := NewCDCClient(pdClient, kvStorage.(tikv.Storage), &security.Security{})
+	cdcClient, err := NewCDCClient(pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	c.Assert(err, check.IsNil)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -223,7 +223,7 @@ func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
 // ref: https://github.com/grpc/grpc-go/blob/master/grpclog/loggerv2.go#L67-L72
 func (s *etcdSuite) TestConnArray(c *check.C) {
 	addr := "127.0.0.1:2379"
-	ca, err := newConnArray(context.TODO(), 2, addr, &security.Security{})
+	ca, err := newConnArray(context.TODO(), 2, addr, &security.Credential{})
 	c.Assert(err, check.IsNil)
 
 	conn1 := ca.Get()

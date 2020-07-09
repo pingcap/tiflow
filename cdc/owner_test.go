@@ -465,12 +465,12 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(err, check.IsNil)
 	sampleCF.sink = sink
 
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, &security.Security{}, "127.0.0.1:12034")
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, &security.Credential{}, "127.0.0.1:12034")
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
 
-	owner, err := NewOwner(nil, &security.Security{}, capture.session, DefaultCDCGCSafePointTTL)
+	owner, err := NewOwner(nil, &security.Credential{}, capture.session, DefaultCDCGCSafePointTTL)
 	c.Assert(err, check.IsNil)
 
 	sampleCF.etcdCli = owner.etcdClient

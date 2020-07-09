@@ -23,15 +23,15 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-// Security holds necessary path parameter to build a tls.Config
-type Security struct {
+// Credential holds necessary path parameter to build a tls.Config
+type Credential struct {
 	CAPath   string `toml:"ca-path" json:"ca-path"`
 	CertPath string `toml:"cert-path" json:"cert-path"`
 	KeyPath  string `toml:"key-path" json:"key-path"`
 }
 
 // PDSecurityOption creates a new pd SecurityOption from Security
-func (s *Security) PDSecurityOption() pd.SecurityOption {
+func (s *Credential) PDSecurityOption() pd.SecurityOption {
 	return pd.SecurityOption{
 		CAPath:   s.CAPath,
 		CertPath: s.CertPath,
@@ -40,7 +40,7 @@ func (s *Security) PDSecurityOption() pd.SecurityOption {
 }
 
 // ToGRPCDialOption constructs a gRPC dial option.
-func (s *Security) ToGRPCDialOption() (grpc.DialOption, error) {
+func (s *Credential) ToGRPCDialOption() (grpc.DialOption, error) {
 	tlsCfg, err := s.ToTLSConfig()
 	if err != nil || tlsCfg == nil {
 		return grpc.WithInsecure(), errors.Trace(err)
@@ -49,6 +49,6 @@ func (s *Security) ToGRPCDialOption() (grpc.DialOption, error) {
 }
 
 // ToTLSConfig generates tls's config from *Security
-func (s *Security) ToTLSConfig() (*tls.Config, error) {
+func (s *Credential) ToTLSConfig() (*tls.Config, error) {
 	return utils.ToTLSConfig(s.CAPath, s.CertPath, s.KeyPath)
 }

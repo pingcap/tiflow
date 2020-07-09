@@ -138,7 +138,7 @@ func mustGetValue(t require.TestingT, eventCh <-chan *model.RegionFeedEvent, val
 // TestSplit try split on every region, and test can get value event from
 // every region after split.
 func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
-	cli, err := NewCDCClient(pdCli, storage.(tikv.Storage), &security.Security{})
+	cli, err := NewCDCClient(pdCli, storage.(tikv.Storage), &security.Credential{})
 	require.NoError(t, err)
 	defer cli.Close()
 
@@ -225,7 +225,7 @@ func mustDeleteKey(t require.TestingT, storage kv.Storage, key []byte) {
 
 // TestGetKVSimple test simple KV operations
 func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
-	cli, err := NewCDCClient(pdCli, storage.(tikv.Storage), &security.Security{})
+	cli, err := NewCDCClient(pdCli, storage.(tikv.Storage), &security.Credential{})
 	require.NoError(t, err)
 	defer cli.Close()
 
