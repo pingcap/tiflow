@@ -18,7 +18,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/linkedin/goavro/v2"
@@ -75,7 +75,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 	a.valueBuf = evlp
 	// TODO use primary key(s) as kafka key
-	a.keyBuf = []byte(fmt.Sprintf("%d", e.RowID))
+	a.keyBuf = []byte(strconv.FormatInt(e.RowID, 10))
 
 	return nil
 }
@@ -88,6 +88,11 @@ func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 
 // AppendDDLEvent generates new schema and registers it to the Registry
 func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+	if e.ColumnInfo == nil {
+		log.Info("AppendDDLEvent: no schema generation needed, skip")
+		return nil
+	}
+
 	schemaStr, err := columnInfoToAvroSchema(e.Table, e.ColumnInfo)
 	if err != nil {
 		return errors.Annotate(err, "AppendDDLEvent failed")
@@ -105,7 +110,7 @@ func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 	}, avroCodec)
 
 	if err != nil {
-		return errors.Annotate(err, "AppendDDLEvent failed: could not registry schema")
+		return errors.Annotate(err, "AppendDDLEvent failed: could not register schema")
 	}
 
 	return nil
@@ -170,9 +175,14 @@ func columnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string
 	}
 
 	for _, col := range columnInfo {
+		avroType, err := getAvroDataTypeNameMysql(col.Type)
+		if err != nil {
+			return "", err
+		}
+
 		field := avroSchemaField{
 			Name:         col.Name,
-			Tp:           []string{"null", getAvroDataTypeNameMysql(col.Type)},
+			Tp:           []string{"null", avroType},
 			DefaultValue: nil,
 		}
 		top.Fields = append(top.Fields, field)
@@ -200,73 +210,74 @@ func rowToAvroNativeData(cols map[string]*model.Column) (interface{}, error) {
 	return ret, nil
 }
 
-func getAvroDataTypeName(v interface{}) string {
+func getAvroDataTypeName(v interface{}) (string, error) {
 	switch v.(type) {
 	case bool:
-		return "boolean"
+		return "boolean", nil
 	case []byte:
-		return "bytes"
+		return "bytes", nil
 	case float64:
-		return "double"
+		return "double", nil
 	case float32:
-		return "float"
+		return "float", nil
 	case int64, uint64:
-		return "long"
+		return "long", nil
 	case int, int32, uint32:
-		return "int"
+		return "int", nil
 	case nil:
-		return "null"
+		return "null", nil
 	case string:
-		return "string"
+		return "string", nil
 	case time.Duration:
-		return "long.time-millis"
+		return "long.time-millis", nil
 	case time.Time:
-		return "long.timestamp-millis"
+		return "long.timestamp-millis", nil
 	default:
 		log.Warn("getAvroDataTypeName: unknown type")
-		return "errorType"
+		return "", errors.New("unknown type for Avro")
 	}
 }
 
-func getAvroDataTypeNameMysql(tp byte) string {
+func getAvroDataTypeNameMysql(tp byte) (string, error) {
 	switch tp {
 	case mysql.TypeFloat:
-		return "float"
+		return "float", nil
 	case mysql.TypeDouble:
-		return "double"
+		return "double", nil
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
-		return "string"
+		return "string", nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		return "long.timestamp-millis"
+		return "long.timestamp-millis", nil
 	case mysql.TypeDuration: //duration should read fsp from column meta data
-		return "long.time-millis"
+		return "long.time-millis", nil
 	case mysql.TypeEnum:
-		return "long"
+		return "long", nil
 	case mysql.TypeSet:
-		return "long"
+		return "long", nil
 	case mysql.TypeBit:
-		return "long"
+		return "long", nil
 	case mysql.TypeNewDecimal, mysql.TypeDecimal:
-		return "string"
+		return "string", nil
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
-		return "int"
+		return "int", nil
 	case mysql.TypeLong, mysql.TypeLonglong:
-		return "long"
+		return "long", nil
 	case mysql.TypeNull:
-		return "null"
+		return "null", nil
 	case mysql.TypeJSON:
-		return "string"
+		return "string", nil
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		return "bytes"
+		return "bytes", nil
 	default:
-		return "error"
+		return "", errors.New("Unknown Mysql type")
 	}
 }
 
 func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
-	if v, e := col.Value.(int); e {
+	if v, ok := col.Value.(int); ok {
 		col.Value = int64(v)
 	}
+
 	switch col.Type {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		str := col.Value.(string)
@@ -309,7 +320,11 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 	case mysql.TypeTiny:
 		return int32(col.Value.(uint8)), "int", nil
 	default:
-		return col.Value, getAvroDataTypeName(col.Value), nil
+		avroType, err := getAvroDataTypeName(col.Value)
+		if err != nil {
+			return nil, "", err
+		}
+		return col.Value, avroType, nil
 	}
 }
 
