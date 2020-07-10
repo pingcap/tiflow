@@ -352,5 +352,5 @@ func (s *etcdSuite) TestCreateChangefeed(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	err = s.client.CreateChangefeedInfo(ctx, detail, "test-id")
-	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedAlreadtExists)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedAlreadyExists)
 }

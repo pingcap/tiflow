@@ -213,10 +213,13 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.Cha
 	).Then(
 		clientv3.OpPut(key, value),
 	).Commit()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	if !resp.Succeeded {
 		log.Warn("changefeed already exists, ignore create changefeed",
 			zap.String("changefeedid", changeFeedID))
-		return errors.Annotatef(model.ErrChangeFeedAlreadtExists, "key: %s", key)
+		return errors.Annotatef(model.ErrChangeFeedAlreadyExists, "key: %s", key)
 	}
 	return errors.Trace(err)
 }

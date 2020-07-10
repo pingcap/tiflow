@@ -22,7 +22,7 @@ import (
 var (
 	ErrWriteTsConflict         = errors.New("write ts conflict")
 	ErrChangeFeedNotExists     = errors.New("changefeed not exists")
-	ErrChangeFeedAlreadtExists = errors.New("changefeed already exists")
+	ErrChangeFeedAlreadyExists = errors.New("changefeed already exists")
 	ErrTaskStatusNotExists     = errors.New("task status not exists")
 	ErrTaskPositionNotExists   = errors.New("task position not exists")
 	ErrDecodeFailed            = errors.New("decode failed")
