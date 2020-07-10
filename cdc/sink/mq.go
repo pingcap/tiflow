@@ -75,10 +75,28 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 	var protocol codec.Protocol
 	protocol.FromString(config.Sink.Protocol)
 
+	newEncoder := codec.NewEventBatchEncoder(protocol)
+	if protocol == codec.ProtocolAvro {
+		registryURI, ok := opts["registry"]
+		if !ok {
+			return nil, errors.New(`Avro protocol requires parameter "registry"`)
+		}
+		schemaManager, err := codec.NewAvroSchemaManager(ctx, registryURI, "-value")
+		if err != nil {
+			return nil, errors.Annotate(err, "Could not create Avro schema manager")
+		}
+		newEncoder1 := newEncoder
+		newEncoder = func() codec.EventBatchEncoder {
+			avroEncoder := newEncoder1().(*codec.AvroEventBatchEncoder)
+			avroEncoder.SetValueSchemaManager(schemaManager)
+			return avroEncoder
+		}
+	}
+
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: d,
-		newEncoder: codec.NewEventBatchEncoder(protocol),
+		newEncoder: newEncoder,
 		filter:     filter,
 		protocol:   protocol,
 
@@ -90,6 +108,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 
 		statistics: NewStatistics("MQ", opts),
 	}
+
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			select {

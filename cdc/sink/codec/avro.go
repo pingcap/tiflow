@@ -45,13 +45,18 @@ type avroEncodeResult struct {
 	registryID int
 }
 
-// NewAvroEventBatchEncoder creates an AvroEventBatchEncoder from an AvroSchemaManager
-func NewAvroEventBatchEncoder(manager *AvroSchemaManager) *AvroEventBatchEncoder {
+// NewAvroEventBatchEncoder creates an AvroEventBatchEncoder
+func NewAvroEventBatchEncoder() EventBatchEncoder {
 	return &AvroEventBatchEncoder{
-		valueSchemaManager: manager,
+		valueSchemaManager: nil,
 		keyBuf:             nil,
 		valueBuf:           nil,
 	}
+}
+
+// SetValueSchemaManager sets the value schema manager for an Avro encoder
+func (a *AvroEventBatchEncoder) SetValueSchemaManager(manager *AvroSchemaManager) {
+	a.valueSchemaManager = manager
 }
 
 // AppendRowChangedEvent appends a row change event to the encoder
@@ -61,7 +66,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		return errors.New("Fatal sink bug. Batch size must be 1")
 	}
 
-	res, err := a.avroEncode(e.Table, e.SchemaID, e.Columns)
+	res, err := a.avroEncode(e.Table, int64(e.SchemaVersion), e.Columns)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
 		return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
@@ -334,7 +339,7 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
 	data := []interface{}{magicByte, int32(r.registryID), r.data}
 	for _, v := range data {
-		err := binary.Write(buf, binary.LittleEndian, v)
+		err := binary.Write(buf, binary.BigEndian, v)
 		if err != nil {
 			return nil, errors.Annotate(err, "converting Avro data to envelope failed")
 		}

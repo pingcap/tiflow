@@ -301,5 +301,5 @@ func httpRetry(ctx context.Context, r *http.Request, allow404 bool) (*http.Respo
 
 func (m *AvroSchemaManager) tableNameToSchemaSubject(tableName model.TableName) string {
 	// We should guarantee unique names for subjects
-	return model.QuoteSchema(tableName.Schema, tableName.Table) + m.subjectSuffix
+	return tableName.Schema + "." + tableName.Table + m.subjectSuffix
 }
