@@ -44,7 +44,7 @@ type mockRegistrySchema struct {
 	ID      int
 }
 
-func StartHTTPInterceptForTestingRegistry(c *check.C) {
+func startHTTPInterceptForTestingRegistry(c *check.C) {
 	httpmock.Activate()
 
 	registry := mockRegistry{
@@ -140,16 +140,16 @@ func StartHTTPInterceptForTestingRegistry(c *check.C) {
 
 }
 
-func StopHTTPInterceptForTestingRegistry() {
+func stopHTTPInterceptForTestingRegistry() {
 	httpmock.DeactivateAndReset()
 }
 
 func (s *AvroSchemaRegistrySuite) SetUpSuite(c *check.C) {
-	StartHTTPInterceptForTestingRegistry(c)
+	startHTTPInterceptForTestingRegistry(c)
 }
 
 func (s *AvroSchemaRegistrySuite) TearDownSuite(c *check.C) {
-	StopHTTPInterceptForTestingRegistry()
+	stopHTTPInterceptForTestingRegistry()
 }
 
 func getTestingContext() context.Context {

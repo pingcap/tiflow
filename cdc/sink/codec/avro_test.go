@@ -14,6 +14,9 @@
 package codec
 
 import (
+	"context"
+	"time"
+
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -25,19 +28,16 @@ import (
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
-
-	"context"
-	"time"
 )
 
-type AvroBatchEncoderSuite struct {
+type avroBatchEncoderSuite struct {
 	encoder *AvroEventBatchEncoder
 }
 
-var _ = check.Suite(&AvroBatchEncoderSuite{})
+var _ = check.Suite(&avroBatchEncoderSuite{})
 
-func (s *AvroBatchEncoderSuite) SetUpSuite(c *check.C) {
-	StartHTTPInterceptForTestingRegistry(c)
+func (s *avroBatchEncoderSuite) SetUpSuite(c *check.C) {
+	startHTTPInterceptForTestingRegistry(c)
 
 	manager, err := NewAvroSchemaManager(context.Background(), "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
@@ -49,11 +49,11 @@ func (s *AvroBatchEncoderSuite) SetUpSuite(c *check.C) {
 	}
 }
 
-func (s *AvroBatchEncoderSuite) TearDownSuite(c *check.C) {
-	StopHTTPInterceptForTestingRegistry()
+func (s *avroBatchEncoderSuite) TearDownSuite(c *check.C) {
+	stopHTTPInterceptForTestingRegistry()
 }
 
-func (s *AvroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
+func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	avroCodec, err := goavro.NewCodec(`
         {
           "type": "record",
@@ -98,7 +98,7 @@ func (s *AvroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	log.Info("TestAvroEncodeOnly", zap.ByteString("result", txt))
 }
 
-func (s *AvroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
+func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 	avroCodec, err := goavro.NewCodec(`
         {
           "type": "record",
@@ -136,7 +136,7 @@ func (s *AvroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 	c.Assert(id, check.Equals, int32(7))
 }
 
-func (s *AvroBatchEncoderSuite) TestAvroEncode(c *check.C) {
+func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 	trueVar := true
 	testCaseUpdate := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
@@ -174,7 +174,11 @@ func (s *AvroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 	}()
 
 	info := pm.GetTableInfo("test", "person")
-	testCaseDdl.Info = info
+	testCaseDdl.ColumnInfo = make([]*model.ColumnInfo, len(info.Columns))
+	for i, v := range info.Columns {
+		testCaseDdl.ColumnInfo[i] = new(model.ColumnInfo)
+		testCaseDdl.ColumnInfo[i].FromTiColumnInfo(v)
+	}
 	testCaseDdl.SchemaID = info.SchemaID
 
 	err := s.encoder.AppendDDLEvent(testCaseDdl)

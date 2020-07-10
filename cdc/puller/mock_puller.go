@@ -235,7 +235,6 @@ func (m *MockPullerManager) CreatePuller(startTs uint64, spans []regionspan.Span
 		pm:      m,
 		startTs: startTs,
 	}
-	//return nil
 }
 
 // MustExec delegates to TestKit.MustExec

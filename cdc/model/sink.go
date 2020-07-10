@@ -83,16 +83,28 @@ type Column struct {
 	Value       interface{} `json:"v"`
 }
 
+// ColumnInfo represents the name and type information passed to the sink
+type ColumnInfo struct {
+	Name string
+	Type byte
+}
+
+// FromTiColumnInfo populates cdc's ColumnInfo from TiDB's model.ColumnInfo
+func (c *ColumnInfo) FromTiColumnInfo(tiColumnInfo *model.ColumnInfo) {
+	c.Type = tiColumnInfo.Tp
+	c.Name = tiColumnInfo.Name.String()
+}
+
 // DDLEvent represents a DDL event
 type DDLEvent struct {
-	StartTs  uint64
-	CommitTs uint64
-	Schema   string
-	SchemaID int64
-	Table    string
-	Info     interface{}
-	Query    string
-	Type     model.ActionType
+	StartTs    uint64
+	CommitTs   uint64
+	Schema     string
+	SchemaID   int64
+	Table      string
+	ColumnInfo []*ColumnInfo
+	Query      string
+	Type       model.ActionType
 }
 
 // FromJob fills the values of DDLEvent from DDL job

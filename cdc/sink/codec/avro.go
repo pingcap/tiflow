@@ -24,9 +24,7 @@ import (
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/types"
 	tijson "github.com/pingcap/tidb/types/json"
@@ -90,8 +88,7 @@ func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 
 // AppendDDLEvent generates new schema and registers it to the Registry
 func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
-	cols := e.Info.(*entry.TableInfo).Cols()
-	schemaStr, err := columnInfoToAvroSchema(e.Table, cols)
+	schemaStr, err := columnInfoToAvroSchema(e.Table, e.ColumnInfo)
 	if err != nil {
 		return errors.Annotate(err, "AppendDDLEvent failed")
 	}
@@ -165,7 +162,7 @@ type avroSchemaField struct {
 	DefaultValue interface{} `json:"default"`
 }
 
-func columnInfoToAvroSchema(name string, columnInfo []*timodel.ColumnInfo) (string, error) {
+func columnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string, error) {
 	top := avroSchemaTop{
 		Tp:     "record",
 		Name:   name,
@@ -174,8 +171,8 @@ func columnInfoToAvroSchema(name string, columnInfo []*timodel.ColumnInfo) (stri
 
 	for _, col := range columnInfo {
 		field := avroSchemaField{
-			Name:         col.Name.String(),
-			Tp:           []string{"null", getAvroDataTypeNameMysql(col.Tp)},
+			Name:         col.Name,
+			Tp:           []string{"null", getAvroDataTypeNameMysql(col.Type)},
 			DefaultValue: nil,
 		}
 		top.Fields = append(top.Fields, field)
