@@ -29,6 +29,7 @@ var (
 	ErrExecDDLFailed         = errors.New("exec DDL failed")
 	ErrCaptureNotExist       = errors.New("capture not exists")
 	ErrUnresolved            = errors.New("unresolved")
+	ErrorDDLEventIgnored     = errors.New("ddl event is ignored")
 )
 
 // RunningError represents some running error from cdc components, such as processor.

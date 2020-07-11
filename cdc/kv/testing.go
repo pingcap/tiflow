@@ -149,7 +149,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	startTS := mustGetTimestamp(t, storage)
 
 	go func() {
-		err := cli.EventFeed(ctx, regionspan.Span{Start: nil, End: nil}, startTS, eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -236,7 +236,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	startTS := mustGetTimestamp(t, storage)
 
 	go func() {
-		err := cli.EventFeed(ctx, regionspan.Span{Start: nil, End: nil}, startTS, checker.eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, checker.eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -258,7 +258,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		if i == 1 {
 			checker = newEventChecker(t)
 			go func() {
-				err := cli.EventFeed(ctx, regionspan.Span{Start: nil, End: nil}, startTS, checker.eventCh)
+				err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, checker.eventCh)
 				require.Equal(t, err, context.Canceled)
 			}()
 		}

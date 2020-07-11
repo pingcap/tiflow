@@ -35,12 +35,12 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 	keyC := []byte("c")
 	keyD := []byte("d")
 
-	spAB := regionspan.Span{Start: keyA, End: keyB}
-	spAC := regionspan.Span{Start: keyA, End: keyC}
-	spAD := regionspan.Span{Start: keyA, End: keyD}
-	spBC := regionspan.Span{Start: keyB, End: keyC}
-	spBD := regionspan.Span{Start: keyB, End: keyD}
-	spCD := regionspan.Span{Start: keyC, End: keyD}
+	spAB := regionspan.ComparableSpan{Start: keyA, End: keyB}
+	spAC := regionspan.ComparableSpan{Start: keyA, End: keyC}
+	spAD := regionspan.ComparableSpan{Start: keyA, End: keyD}
+	spBC := regionspan.ComparableSpan{Start: keyB, End: keyC}
+	spBD := regionspan.ComparableSpan{Start: keyB, End: keyD}
+	spCD := regionspan.ComparableSpan{Start: keyC, End: keyD}
 
 	f := NewFrontier(5, spAD).(*spanFrontier)
 
@@ -49,7 +49,7 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 	checkFrontier(c, f)
 
 	f.Forward(
-		regionspan.Span{Start: []byte("d"), End: []byte("e")},
+		regionspan.ComparableSpan{Start: []byte("d"), End: []byte("e")},
 		100,
 	)
 	c.Assert(f.Frontier(), check.Equals, uint64(5))
@@ -57,7 +57,7 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 	checkFrontier(c, f)
 
 	f.Forward(
-		regionspan.Span{Start: []byte("g"), End: []byte("h")},
+		regionspan.ComparableSpan{Start: []byte("g"), End: []byte("h")},
 		200,
 	)
 	c.Assert(f.Frontier(), check.Equals, uint64(5))
@@ -66,7 +66,7 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 
 	// Forward the tracked span space.
 	f.Forward(
-		regionspan.Span{Start: []byte("a"), End: []byte("d")},
+		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
 		1,
 	)
 	c.Assert(f.Frontier(), check.Equals, uint64(1))
@@ -75,7 +75,7 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 
 	// // Forward it again
 	f.Forward(
-		regionspan.Span{Start: []byte("a"), End: []byte("d")},
+		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
 		2,
 	)
 	c.Assert(f.Frontier(), check.Equals, uint64(2))
@@ -84,7 +84,7 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 
 	// // Forward to smaller ts
 	f.Forward(
-		regionspan.Span{Start: []byte("a"), End: []byte("d")},
+		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
 		1,
 	)
 	c.Assert(f.Frontier(), check.Equals, uint64(1))
@@ -150,12 +150,12 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 	c.Assert(f.String(), check.Equals, `[a @ 8] [b @ 8] [d @ 100] [e @ Max] [g @ 200] [h @ Max] `)
 	checkFrontier(c, f)
 
-	f.Forward(regionspan.Span{Start: []byte("1"), End: []byte("g")}, 9)
+	f.Forward(regionspan.ComparableSpan{Start: []byte("1"), End: []byte("g")}, 9)
 	c.Assert(f.Frontier(), check.Equals, uint64(9))
 	c.Assert(f.String(), check.Equals, `[1 @ 9] [g @ 200] [h @ Max] `)
 	checkFrontier(c, f)
 
-	f.Forward(regionspan.Span{Start: []byte("g"), End: []byte("i")}, 10)
+	f.Forward(regionspan.ComparableSpan{Start: []byte("g"), End: []byte("i")}, 10)
 	c.Assert(f.Frontier(), check.Equals, uint64(9))
 	c.Assert(f.String(), check.Equals, `[1 @ 9] [g @ 10] [i @ Max] `)
 	checkFrontier(c, f)
@@ -167,9 +167,9 @@ func (s *spanFrontierSuite) TestMinMax(c *check.C) {
 	var keyMax []byte
 	var keyMid = []byte("m")
 
-	spMinMid := regionspan.Span{Start: keyMin, End: keyMid}
-	spMidMax := regionspan.Span{Start: keyMid, End: keyMax}
-	spMinMax := regionspan.Span{Start: keyMin, End: keyMax}
+	spMinMid := regionspan.ComparableSpan{Start: keyMin, End: keyMid}
+	spMidMax := regionspan.ComparableSpan{Start: keyMid, End: keyMax}
+	spMinMax := regionspan.ComparableSpan{Start: keyMin, End: keyMax}
 
 	f := NewFrontier(0, spMinMax)
 	c.Assert(f.Frontier(), check.Equals, uint64(0))
@@ -207,13 +207,13 @@ func (s *spanFrontierSuite) TestSpanFrontierDisjoinSpans(c *check.C) {
 	keyE := []byte("e")
 	keyF := []byte("f")
 
-	spAB := regionspan.Span{Start: keyA, End: keyB}
-	spAD := regionspan.Span{Start: keyA, End: keyD}
-	spAE := regionspan.Span{Start: keyA, End: keyE}
-	spDE := regionspan.Span{Start: keyD, End: keyE}
-	spCE := regionspan.Span{Start: keyC, End: keyE}
-	sp12 := regionspan.Span{Start: key1, End: key2}
-	sp1F := regionspan.Span{Start: key1, End: keyF}
+	spAB := regionspan.ComparableSpan{Start: keyA, End: keyB}
+	spAD := regionspan.ComparableSpan{Start: keyA, End: keyD}
+	spAE := regionspan.ComparableSpan{Start: keyA, End: keyE}
+	spDE := regionspan.ComparableSpan{Start: keyD, End: keyE}
+	spCE := regionspan.ComparableSpan{Start: keyC, End: keyE}
+	sp12 := regionspan.ComparableSpan{Start: key1, End: key2}
+	sp1F := regionspan.ComparableSpan{Start: key1, End: keyF}
 
 	f := NewFrontier(0, spAB, spCE)
 	c.Assert(f.Frontier(), check.Equals, uint64(0))
@@ -264,12 +264,12 @@ func (s *spanFrontierSuite) TestSpanFrontierDisjoinSpans(c *check.C) {
 func (s *spanFrontierSuite) TestSpanFrontierRandomly(c *check.C) {
 	var keyMin []byte
 	var keyMax []byte
-	spMinMax := regionspan.Span{Start: keyMin, End: keyMax}
+	spMinMax := regionspan.ComparableSpan{Start: keyMin, End: keyMax}
 	f := NewFrontier(0, spMinMax)
 
-	var spans []regionspan.Span
+	var spans []regionspan.ComparableSpan
 	for len(spans) < 500000 {
-		span := regionspan.Span{
+		span := regionspan.ComparableSpan{
 			Start: make([]byte, rand.Intn(32)+1),
 			End:   make([]byte, rand.Intn(32)+1),
 		}

@@ -52,13 +52,11 @@ type pullerImpl struct {
 	credential   *security.Credential
 	kvStorage    tikv.Storage
 	checkpointTs uint64
-	spans        []regionspan.Span
+	spans        []regionspan.ComparableSpan
 	buffer       *memBuffer
 	outputCh     chan *model.RawKVEntry
 	tsTracker    frontier.Frontier
 	resolvedTs   uint64
-	// needEncode represents whether we need to encode a key when checking it is in span
-	needEncode bool
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTs
@@ -69,23 +67,25 @@ func NewPuller(
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
-	needEncode bool,
 	limitter *BlurResourceLimitter,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
 		log.Fatal("can't create puller for non-tikv storage")
 	}
+	comparableSpans := make([]regionspan.ComparableSpan, len(spans))
+	for i := range spans {
+		comparableSpans[i] = regionspan.ToComparableSpan(spans[i])
+	}
 	p := &pullerImpl{
 		pdCli:        pdCli,
 		credential:   credential,
 		kvStorage:    tikvStorage,
 		checkpointTs: checkpointTs,
-		spans:        spans,
+		spans:        comparableSpans,
 		buffer:       makeMemBuffer(limitter),
 		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:    frontier.NewFrontier(checkpointTs, spans...),
-		needEncode:   needEncode,
+		tsTracker:    frontier.NewFrontier(checkpointTs, comparableSpans...),
 		resolvedTs:   checkpointTs,
 	}
 	return p
@@ -154,7 +154,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// and we only want the get [b, c) from this region,
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
-					if !regionspan.KeyInSpans(val.Key, p.spans, p.needEncode) {
+					comparableKey := regionspan.ToComparableKey(val.Key)
+					if !regionspan.KeyInSpans(comparableKey, p.spans) {
 						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
 						continue
 					}
@@ -203,6 +204,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				}
 			} else if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
+				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
+					log.Fatal("the resolved span is not in the total span", zap.Reflect("resolved", e.Resolved), zap.Int64("tableID", tableID))
+				}
 				// Forward is called in a single thread
 				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
 				resolvedTs := p.tsTracker.Frontier()

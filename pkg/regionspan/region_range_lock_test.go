@@ -28,7 +28,7 @@ func mustSuccess(c *check.C, res LockRangeResult, expectedCheckpointTs uint64) {
 	c.Assert(res.CheckpointTs, check.Equals, expectedCheckpointTs)
 }
 
-func mustStale(c *check.C, res LockRangeResult, expectedRetryRanges ...Span) {
+func mustStale(c *check.C, res LockRangeResult, expectedRetryRanges ...ComparableSpan) {
 	c.Assert(res.Status, check.Equals, LockRangeStatusStale)
 	c.Assert(res.RetryRanges, check.DeepEquals, expectedRetryRanges)
 }
@@ -45,9 +45,9 @@ func mustLockRangeSuccess(c *check.C, l *RegionRangeLock, startKey, endKey strin
 
 func mustLockRangeStale(c *check.C, l *RegionRangeLock, startKey, endKey string, version uint64, expectRetrySpans ...string) {
 	res := l.LockRange([]byte(startKey), []byte(endKey), 1, version)
-	spans := make([]Span, 0)
+	spans := make([]ComparableSpan, 0)
 	for i := 0; i < len(expectRetrySpans); i += 2 {
-		spans = append(spans, Span{Start: []byte(expectRetrySpans[i]), End: []byte(expectRetrySpans[i+1])})
+		spans = append(spans, ComparableSpan{Start: []byte(expectRetrySpans[i]), End: []byte(expectRetrySpans[i+1])})
 	}
 	mustStale(c, res, spans...)
 }
