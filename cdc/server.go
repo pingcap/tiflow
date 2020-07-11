@@ -165,9 +165,14 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 // Run runs the server.
 func (s *Server) Run(ctx context.Context) error {
 	s.pdEndpoints = strings.Split(s.opts.pdEndpoints, ",")
+	grpcTLSOption, err := s.opts.credential.ToGRPCDialOption()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	pdClient, err := pd.NewClientWithContext(
 		ctx, s.pdEndpoints, s.opts.credential.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
+			grpcTLSOption,
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{
@@ -187,7 +192,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	err = util.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], errorTiKVIncompatible)
+	err = util.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], s.opts.credential, errorTiKVIncompatible)
 	if err != nil {
 		return err
 	}

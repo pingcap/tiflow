@@ -177,7 +177,7 @@ func newConnArray(ctx context.Context, maxSize uint, addr string, credential *se
 }
 
 func (a *connArray) Init(ctx context.Context) error {
-	securityOpt, err := a.credential.ToGRPCDialOption()
+	grpcTLSOption, err := a.credential.ToGRPCDialOption()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -187,7 +187,7 @@ func (a *connArray) Init(ctx context.Context) error {
 		conn, err := grpc.DialContext(
 			ctx,
 			a.target,
-			securityOpt,
+			grpcTLSOption,
 			grpc.WithInitialWindowSize(grpcInitialWindowSize),
 			grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
 			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcInitialMaxRecvMsgSize)),
@@ -252,8 +252,8 @@ type CDCClient struct {
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(pd pd.Client, kvStorage tikv.Storage, credential *security.Credential) (c *CDCClient, err error) {
-	clusterID := pd.GetClusterID(context.Background())
+func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, credential *security.Credential) (c *CDCClient, err error) {
+	clusterID := pd.GetClusterID(ctx)
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
 	c = &CDCClient{
@@ -269,7 +269,6 @@ func NewCDCClient(pd pd.Client, kvStorage tikv.Storage, credential *security.Cre
 			conns: make(map[string]*connArray),
 		},
 	}
-
 	return
 }
 
@@ -945,6 +944,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 	for {
 		cevent, err := stream.Recv()
+		log.Debug("recv events", zap.Reflect("events", cevent))
 
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {

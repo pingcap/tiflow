@@ -71,7 +71,7 @@ func NewPuller(
 	spans []regionspan.Span,
 	needEncode bool,
 	limitter *BlurResourceLimitter,
-) *pullerImpl {
+) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
 		log.Fatal("can't create puller for non-tikv storage")
@@ -97,7 +97,7 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	cli, err := kv.NewCDCClient(p.pdCli, p.kvStorage, p.credential)
+	cli, err := kv.NewCDCClient(ctx, p.pdCli, p.kvStorage, p.credential)
 	if err != nil {
 		return errors.Annotate(err, "create cdc client failed")
 	}

@@ -95,13 +95,17 @@ cluster-ssl-key = "$TLS_DIR/server-key.pem"
 EOF
 
 echo "Starting TLS TiKV..."
+
+# Uncomment to turn on grpc versbose log.
+# GRPC_VERBOSITY=debug \
+# GRPC_TRACE=server_channel,call_error,handshaker,tsi \
 tikv-server \
     --pd ${TLS_PD_HOST}:${TLS_PD_PORT} \
     -A ${TLS_TIKV_HOST}:${TLS_TIKV_PORT} \
-    --status-addr ${THIRD_TIKV_HOST}:${THIRD_TIKV_STATUS_PORT} \
+    --status-addr ${TLS_TIKV_HOST}:${TLS_TIKV_STATUS_PORT} \
     --log-file "$OUT_DIR/tikv_tls.log" \
     -C "$OUT_DIR/tikv-config-tls.toml" \
-    -s "$OUT_DIR/tikv_tls" &
+    -s "$OUT_DIR/tikv_tls" &> $OUT_DIR/tikv_tls.stdout &
 
 sleep 2
 

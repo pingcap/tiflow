@@ -61,12 +61,17 @@ func NewCapture(ctx context.Context, pdEndpoints []string, credential *security.
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	grpcTLSOption, err := credential.ToGRPCDialOption()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   pdEndpoints,
 		TLS:         tlsConfig,
 		Context:     ctx,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
+			grpcTLSOption,
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{

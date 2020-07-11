@@ -21,7 +21,7 @@ function prepare() {
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(run_cdc_cli tso query --pd=https://${TLS_PD_HOST}:${TLS_PD_PORT} --ca=$TLS_DIR/ca.pem --cert=$TLS_DIR/client.pem --key=$TLS_DIR/client-key.pem)
 
-    run_sql "CREATE table test.simple1(id int primary key, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "CREATE table test.simple1(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT}
     run_sql "CREATE table test.simple2(id int primary key, val int);" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT}
 
     run_cdc_server \
@@ -29,10 +29,16 @@ function prepare() {
         --binary $CDC_BINARY \
         --logsuffix "_${TEST_NAME}_tls" \
         --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
-        --addr "127.0.0.1:8300"
+        --addr "127.0.0.1:8300" \
         --tlsdir $TLS_DIR
 
-    run_cdc_cli changefeed create --pd=https://${TLS_PD_HOST}:${TLS_PD_PORT} --start-ts=$start_ts --sink-uri="mysql://root@127.0.0.1:3306/" --ca=$TLS_DIR/ca.pem --cert=$TLS_DIR/cli.pem --key=$TLS_DIR/cli.key
+    run_cdc_cli changefeed create \
+        --pd=https://${TLS_PD_HOST}:${TLS_PD_PORT} \
+        --start-ts=$start_ts \
+        --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/" \
+        --ca=$TLS_DIR/ca.pem \
+        --cert=$TLS_DIR/client.pem \
+        --key=$TLS_DIR/client-key.pem
 }
 
 function sql_check() {

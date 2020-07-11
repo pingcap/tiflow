@@ -186,6 +186,7 @@ func newProcessor(
 		changefeedID:  changefeedID,
 		changefeed:    changefeed,
 		pdCli:         pdCli,
+		credential:    credential,
 		kvStorage:     kvStorage,
 		etcdCli:       cdcEtcdCli,
 		session:       session,

@@ -122,11 +122,16 @@ func newCliCommand() *cobra.Command {
 			if err != nil {
 				return errors.Annotate(err, "fail to validate TLS settings")
 			}
+			grpcTLSOption, err := credential.ToGRPCDialOption()
+			if err != nil {
+				return errors.Annotate(err, "fail to validate TLS settings")
+			}
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
 				TLS:         tlsConfig,
 				DialTimeout: 30 * time.Second,
 				DialOptions: []grpc.DialOption{
+					grpcTLSOption,
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
 						Backoff: backoff.Config{
@@ -147,6 +152,7 @@ func newCliCommand() *cobra.Command {
 			pdCli, err = pd.NewClientWithContext(
 				defaultContext, []string{cliPdAddr}, credential.PDSecurityOption(),
 				pd.WithGRPCDialOptions(
+					grpcTLSOption,
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
 						Backoff: backoff.Config{
@@ -163,7 +169,7 @@ func newCliCommand() *cobra.Command {
 			}
 			ctx := defaultContext
 			errorTiKVIncompatible := true // Error if TiKV is incompatible.
-			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr, errorTiKVIncompatible)
+			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr, credential, errorTiKVIncompatible)
 			if err != nil {
 				return err
 			}
