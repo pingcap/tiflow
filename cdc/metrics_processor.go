@@ -25,6 +25,13 @@ var (
 			Name:      "resolved_ts",
 			Help:      "local resolved ts of processor",
 		}, []string{"changefeed", "capture"})
+	resolvedTsGapGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "resolved_ts_gap",
+			Help:      "local resolved ts gap of processor",
+		}, []string{"changefeed", "capture"})
 	tableResolvedTsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -38,6 +45,13 @@ var (
 			Subsystem: "processor",
 			Name:      "checkpoint_ts",
 			Help:      "global checkpoint ts of processor",
+		}, []string{"changefeed", "capture"})
+	checkpointTsGapGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "checkpoint_ts_gap",
+			Help:      "global checkpoint ts gap of processor",
 		}, []string{"changefeed", "capture"})
 	syncTableNumGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -88,8 +102,10 @@ var (
 // initProcessorMetrics registers all metrics used in processor
 func initProcessorMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(resolvedTsGauge)
+	registry.MustRegister(resolvedTsGapGauge)
 	registry.MustRegister(tableResolvedTsGauge)
 	registry.MustRegister(checkpointTsGauge)
+	registry.MustRegister(checkpointTsGapGauge)
 	registry.MustRegister(syncTableNumGauge)
 	registry.MustRegister(txnCounter)
 	registry.MustRegister(updateInfoDuration)

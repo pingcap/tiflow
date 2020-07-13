@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -112,7 +113,7 @@ type processor struct {
 
 type tableInfo struct {
 	id          int64
-	name        string
+	name        string // quoted schema and table, used in metircs only
 	resolvedTs  uint64
 	markTableID int64
 	mResolvedTs uint64
@@ -340,7 +341,9 @@ func (p *processor) positionWorker(ctx context.Context) error {
 	}()
 
 	resolvedTsGauge := resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	metricResolvedTsGapGauge := resolvedTsGapGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	checkpointTsGauge := checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	metricCheckpointTsGapGauge := checkpointTsGapGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 
 	for {
 		select {
@@ -363,7 +366,11 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 
 			p.position.ResolvedTs = minResolvedTs
-			resolvedTsGauge.Set(float64(oracle.ExtractPhysical(minResolvedTs)))
+			phyTs := oracle.ExtractPhysical(minResolvedTs)
+			resolvedTsGauge.Set(float64(phyTs))
+			// It is more accurate to get tso from PD, but in most cases we have
+			// deployed NTP service, a little bias is acceptable here.
+			metricResolvedTsGapGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 			if err := updateInfo(); err != nil {
 				return errors.Trace(err)
 			}
@@ -374,7 +381,11 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				continue
 			}
 			p.position.CheckPointTs = checkpointTs
-			checkpointTsGauge.Set(float64(oracle.ExtractPhysical(checkpointTs)))
+			phyTs := oracle.ExtractPhysical(checkpointTs)
+			checkpointTsGauge.Set(float64(phyTs))
+			// It is more accurate to get tso from PD, but in most cases we have
+			// deployed NTP service, a little bias is acceptable here.
+			metricCheckpointTsGapGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 			if err := updateInfo(); err != nil {
 				return errors.Trace(err)
 			}
@@ -759,18 +770,26 @@ func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (stor
 func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
-	ctx = util.PutTableInfoInCtx(ctx, tableID, replicaInfo.Name)
 
-	log.Debug("Add table", zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo))
+	var tableName string
+	if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
+		tableName = name.QuoteString()
+	} else {
+		log.Warn("failed to get table name, fallback to use table id", zap.Int64("table-id", tableID))
+		tableName = strconv.Itoa(int(tableID))
+	}
+
 	if _, ok := p.tables[tableID]; ok {
 		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
 		return
 	}
+	log.Debug("Add table", zap.Int64("tableID", tableID), zap.String("name", tableName), zap.Any("replicaInfo", replicaInfo))
 
+	ctx = util.PutTableInfoInCtx(ctx, tableID, tableName)
 	ctx, cancel := context.WithCancel(ctx)
 	table := &tableInfo{
 		id:         tableID,
-		name:       replicaInfo.Name,
+		name:       tableName,
 		resolvedTs: replicaInfo.StartTs,
 		cancel:     cancel,
 	}
