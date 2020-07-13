@@ -25,6 +25,7 @@ import (
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/v4/client"
+	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -72,9 +73,10 @@ var (
 	defaultContext context.Context
 )
 
-// cf holds changefeed id, which is used for output only
-type cf struct {
-	ID string `json:"id"`
+// changefeedCommonInfo holds some common used information of a changefeed
+type changefeedCommonInfo struct {
+	ID      string              `json:"id"`
+	Summary *cdc.ChangefeedResp `json:"summary"`
 }
 
 // capture holds capture information

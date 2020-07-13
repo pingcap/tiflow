@@ -150,7 +150,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
-		err := cdcClient.EventFeed(ctx, regionspan.Span{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
 		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 		wg.Done()
 	}()
@@ -211,7 +211,7 @@ func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	eventCh := make(chan *model.RegionFeedEvent, 10)
-	err = cdcClient.EventFeed(ctx, regionspan.Span{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
+	err = cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, eventCh)
 	_ = err
 	// TODO find a way to verify the error
 }
