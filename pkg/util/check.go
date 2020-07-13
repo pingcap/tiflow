@@ -129,12 +129,3 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 	}
 	return nil
 }
-
-// IsValidUUIDv4 returns true if the uuid is a valid uuid
-func IsValidUUIDv4(uuid string) bool {
-	if len(uuid) != 36 {
-		return false
-	}
-	match, _ := regexp.Match("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", []byte(uuid))
-	return match
-}

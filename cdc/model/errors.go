@@ -20,16 +20,17 @@ import (
 // common errors
 // use a language builtin error type without error trace stack
 var (
-	ErrWriteTsConflict       = errors.New("write ts conflict")
-	ErrChangeFeedNotExists   = errors.New("changefeed not exists")
-	ErrTaskStatusNotExists   = errors.New("task status not exists")
-	ErrTaskPositionNotExists = errors.New("task position not exists")
-	ErrDecodeFailed          = errors.New("decode failed")
-	ErrAdminStopProcessor    = errors.New("stop processor by admin command")
-	ErrExecDDLFailed         = errors.New("exec DDL failed")
-	ErrCaptureNotExist       = errors.New("capture not exists")
-	ErrUnresolved            = errors.New("unresolved")
-	ErrorDDLEventIgnored     = errors.New("ddl event is ignored")
+	ErrWriteTsConflict         = errors.New("write ts conflict")
+	ErrChangeFeedNotExists     = errors.New("changefeed not exists")
+	ErrChangeFeedAlreadyExists = errors.New("changefeed already exists")
+	ErrTaskStatusNotExists     = errors.New("task status not exists")
+	ErrTaskPositionNotExists   = errors.New("task position not exists")
+	ErrDecodeFailed            = errors.New("decode failed")
+	ErrAdminStopProcessor      = errors.New("stop processor by admin command")
+	ErrExecDDLFailed           = errors.New("exec DDL failed")
+	ErrCaptureNotExist         = errors.New("capture not exists")
+	ErrUnresolved              = errors.New("unresolved")
+	ErrorDDLEventIgnored       = errors.New("ddl event is ignored")
 )
 
 // RunningError represents some running error from cdc components, such as processor.

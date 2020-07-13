@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
@@ -133,7 +132,7 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 		return
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
-	if !util.IsValidUUIDv4(changefeedID) {
+	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
 		return
 	}
@@ -157,12 +156,12 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
-	if !util.IsValidUUIDv4(changefeedID) {
+	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
 		return
 	}
 	to := req.Form.Get(APIOpVarTargetCaptureID)
-	if !util.IsValidUUIDv4(to) {
+	if err := model.ValidateChangefeedID(to); err != nil {
 		writeError(w, http.StatusBadRequest, errors.Errorf("invalid target capture id: %s", to))
 		return
 	}
@@ -191,7 +190,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		return
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
-	if !util.IsValidUUIDv4(changefeedID) {
+	if err := model.ValidateChangefeedID(changefeedID); err != nil {
 		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
 		return
 	}
