@@ -47,6 +47,7 @@ func (t TableName) String() string {
 	return fmt.Sprintf("%s.%s", t.Schema, t.Table)
 }
 
+// QuoteString returns quoted full table name
 func (t TableName) QuoteString() string {
 	return QuoteSchema(t.Schema, t.Table)
 }
