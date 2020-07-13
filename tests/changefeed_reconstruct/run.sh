@@ -34,9 +34,7 @@ export -f check_no_capture
 
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
-
     start_tidb_cluster --workdir $WORK_DIR
-
     cd $WORK_DIR
 
     pd_addr="http://$UP_PD_HOST:$UP_PD_PORT"
@@ -54,19 +52,20 @@ function run() {
 
     run_sql "CREATE DATABASE changefeed_reconstruct;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=changefeed_reconstruct
-
     check_table_exists "changefeed_reconstruct.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
+    # kill capture
     kill $owner_pid
     ensure $MAX_RETRIES check_no_capture $pd_addr
 
-    # run another server
+    # run another cdc server
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --logsuffix server2
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list --pd=$pd_addr 2>&1 | grep id"
     capture_id=$($CDC_BINARY cli --pd=$pd_addr capture list 2>&1 | awk -F '"' '/id/{print $4}')
     echo "capture_id:" $capture_id
 
+    # check table has been dispatched to new capture
     ensure $MAX_RETRIES check_processor_table_count $pd_addr $changefeed_id $capture_id 1
     run_sql "DROP DATABASE changefeed_reconstruct;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     # check table has been removed from processor
