@@ -944,7 +944,6 @@ func (s *eventFeedSession) receiveFromStream(
 
 	for {
 		cevent, err := stream.Recv()
-		log.Debug("recv events", zap.Reflect("events", cevent))
 
 		// TODO: Should we have better way to handle the errors?
 		if err == io.EOF {
