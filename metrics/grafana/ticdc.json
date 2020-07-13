@@ -1984,7 +1984,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:115",
               "format": "s",
               "label": null,
               "logBase": 1,
@@ -1993,7 +1992,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:116",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -2081,7 +2079,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:279",
               "format": "s",
               "label": null,
               "logBase": 1,
@@ -2090,7 +2087,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:280",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -2281,7 +2277,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:514",
               "format": "dateTimeAsIso",
               "label": null,
               "logBase": 1,
@@ -2290,7 +2285,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:515",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -2474,7 +2468,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:688",
               "format": "dateTimeAsIso",
               "label": null,
               "logBase": 1,
@@ -2483,7 +2476,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:689",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -3858,7 +3850,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:241",
               "format": "s",
               "label": null,
               "logBase": 2,
@@ -3867,7 +3858,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:242",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -3956,7 +3946,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:860",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -3965,7 +3954,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:861",
               "format": "short",
               "label": null,
               "logBase": 1,
