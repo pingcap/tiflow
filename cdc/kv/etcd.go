@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,13 +16,16 @@ package kv
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"go.etcd.io/etcd/embed"
-
+	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 )
 
@@ -30,12 +33,24 @@ const (
 	// EtcdKeyBase is the common prefix of the keys in CDC
 	EtcdKeyBase = "/tidb/cdc"
 	// CaptureOwnerKey is the capture owner path that is saved to etcd
-	CaptureOwnerKey = EtcdKeyBase + "/capture/owner"
+	CaptureOwnerKey = EtcdKeyBase + "/owner"
 	// CaptureInfoKeyPrefix is the capture info path that is saved to etcd
-	CaptureInfoKeyPrefix = EtcdKeyBase + "/capture/info"
+	CaptureInfoKeyPrefix = EtcdKeyBase + "/capture"
 
-	// ProcessorInfoKeyPrefix is the processor info path that is saved to etcd
-	ProcessorInfoKeyPrefix = EtcdKeyBase + "/processor/info"
+	// TaskKeyPrefix is the prefix of task keys
+	TaskKeyPrefix = EtcdKeyBase + "/task"
+
+	// TaskWorkloadKeyPrefix is the prefix of task workload keys
+	TaskWorkloadKeyPrefix = TaskKeyPrefix + "/workload"
+
+	// TaskStatusKeyPrefix is the prefix of task status keys
+	TaskStatusKeyPrefix = TaskKeyPrefix + "/status"
+
+	// TaskPositionKeyPrefix is the prefix of task position keys
+	TaskPositionKeyPrefix = TaskKeyPrefix + "/position"
+
+	// JobKeyPrefix is the prefix of job keys
+	JobKeyPrefix = EtcdKeyBase + "/job"
 )
 
 // GetEtcdKeyChangeFeedList returns the prefix key of all changefeed config
@@ -50,7 +65,7 @@ func GetEtcdKeyChangeFeedInfo(changefeedID string) string {
 
 // GetEtcdKeyChangeFeedStatus returns the key of a changefeed status
 func GetEtcdKeyChangeFeedStatus(changefeedID string) string {
-	return fmt.Sprintf("%s/changefeed/status/%s", EtcdKeyBase, changefeedID)
+	return GetEtcdKeyJob(changefeedID)
 }
 
 // GetEtcdKeyTaskStatusList returns the key of a task status without captureID part
@@ -63,14 +78,9 @@ func GetEtcdKeyTaskPositionList(changefeedID string) string {
 	return fmt.Sprintf("%s/changefeed/task/position/%s", EtcdKeyBase, changefeedID)
 }
 
-// GetEtcdKeyTaskStatus returns the key of a task status
-func GetEtcdKeyTaskStatus(changefeedID, captureID string) string {
-	return fmt.Sprintf("%s/%s", GetEtcdKeyTaskStatusList(changefeedID), captureID)
-}
-
 // GetEtcdKeyTaskPosition returns the key of a task position
 func GetEtcdKeyTaskPosition(changefeedID, captureID string) string {
-	return fmt.Sprintf("%s/%s", GetEtcdKeyTaskPositionList(changefeedID), captureID)
+	return TaskPositionKeyPrefix + "/" + captureID + "/" + changefeedID
 }
 
 // GetEtcdKeyCaptureInfo returns the key of a capture info
@@ -78,9 +88,19 @@ func GetEtcdKeyCaptureInfo(id string) string {
 	return CaptureInfoKeyPrefix + "/" + id
 }
 
-// GetEtcdKeyProcessorInfo returns the key of a processor
-func GetEtcdKeyProcessorInfo(captureID, processorID string) string {
-	return ProcessorInfoKeyPrefix + "/" + captureID + "/" + processorID
+// GetEtcdKeyTaskStatus returns the key for the task status
+func GetEtcdKeyTaskStatus(changeFeedID, captureID string) string {
+	return TaskStatusKeyPrefix + "/" + captureID + "/" + changeFeedID
+}
+
+// GetEtcdKeyTaskWorkload returns the key for the task workload
+func GetEtcdKeyTaskWorkload(changeFeedID, captureID string) string {
+	return TaskWorkloadKeyPrefix + "/" + captureID + "/" + changeFeedID
+}
+
+// GetEtcdKeyJob returns the key for a job status
+func GetEtcdKeyJob(changeFeedID string) string {
+	return JobKeyPrefix + "/" + changeFeedID
 }
 
 // CDCEtcdClient is a wrap of etcd client
@@ -110,7 +130,7 @@ func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (int64, map[string]*m
 	revision := resp.Header.Revision
 	details := make(map[string]*mvccpb.KeyValue, resp.Count)
 	for _, kv := range resp.Kvs {
-		id, err := util.ExtractKeySuffix(string(kv.Key))
+		id, err := model.ExtractKeySuffix(string(kv.Key))
 		if err != nil {
 			return 0, nil, err
 		}
@@ -142,18 +162,18 @@ func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context, id string) erro
 }
 
 // GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
-func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error) {
-	key := GetEtcdKeyChangeFeedStatus(id)
+func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, int64, error) {
+	key := GetEtcdKeyJob(id)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, 0, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return nil, errors.Annotatef(model.ErrChangeFeedNotExists, "query status id %s", id)
+		return nil, 0, errors.Annotatef(model.ErrChangeFeedNotExists, "query status id %s", id)
 	}
 	info := &model.ChangeFeedStatus{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
-	return info, errors.Trace(err)
+	return info, resp.Kvs[0].ModRevision, errors.Trace(err)
 }
 
 // GetCaptures returns kv revision and CaptureInfo list
@@ -177,36 +197,6 @@ func (c CDCEtcdClient) GetCaptures(ctx context.Context) (int64, []*model.Capture
 	return revision, infos, nil
 }
 
-// GetAllProcessors returns kv revison and the ProcessorInfo list
-func (c CDCEtcdClient) GetAllProcessors(ctx context.Context) (int64, []*model.ProcessorInfo, error) {
-	return c.getProcessorsFromPrefix(ctx, ProcessorInfoKeyPrefix)
-}
-
-// GetProcessors returns the ProcessorInfo list for a change feed
-func (c CDCEtcdClient) GetProcessors(ctx context.Context, captureID string) (int64, []*model.ProcessorInfo, error) {
-	prefix := ProcessorInfoKeyPrefix + "/" + captureID
-	return c.getProcessorsFromPrefix(ctx, prefix)
-}
-
-func (c CDCEtcdClient) getProcessorsFromPrefix(ctx context.Context, prefix string) (int64, []*model.ProcessorInfo, error) {
-	resp, err := c.Client.Get(ctx, prefix,
-		clientv3.WithPrefix())
-	if err != nil {
-		return 0, nil, errors.Trace(err)
-	}
-
-	var processors []*model.ProcessorInfo
-	for _, kv := range resp.Kvs {
-		p := &model.ProcessorInfo{}
-		if err := p.Unmarshal(kv.Value); err != nil {
-			return 0, nil, errors.Trace(err)
-		}
-		processors = append(processors, p)
-	}
-	return resp.Header.GetRevision(), processors, nil
-
-}
-
 // SaveChangeFeedInfo stores change feed info into etcd
 // TODO: this should be called from outer system, such as from a TiDB client
 func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context, info *model.ChangeFeedInfo, changeFeedID string) error {
@@ -222,50 +212,147 @@ func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context, info *model.Chang
 // GetAllTaskPositions queries all task positions of a changefeed, and returns a map
 // mapping from captureID to TaskPositions
 func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error) {
-	key := GetEtcdKeyTaskPositionList(changefeedID)
-	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
+	resp, err := c.Client.Get(ctx, TaskPositionKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	positions := make(map[string]*model.TaskPosition, resp.Count)
 	for _, rawKv := range resp.Kvs {
-		captureID, err := util.ExtractKeySuffix(string(rawKv.Key))
+		changeFeed, err := model.ExtractKeySuffix(string(rawKv.Key))
 		if err != nil {
 			return nil, err
+		}
+		endIndex := len(rawKv.Key) - len(changeFeed) - 1
+		captureID, err := model.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		if err != nil {
+			return nil, err
+		}
+		if changeFeed != changefeedID {
+			continue
 		}
 		info := &model.TaskPosition{}
 		err = info.Unmarshal(rawKv.Value)
 		if err != nil {
-			return nil, err
+			return nil, errors.Annotate(model.ErrDecodeFailed, "failed to unmarshal task position")
 		}
 		positions[captureID] = info
 	}
 	return positions, nil
 }
 
+// RemoveAllTaskPositions removes all task positions of a changefeed
+func (c CDCEtcdClient) RemoveAllTaskPositions(ctx context.Context, changefeedID string) error {
+	resp, err := c.Client.Get(ctx, TaskPositionKeyPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for _, rawKv := range resp.Kvs {
+		changeFeed, err := model.ExtractKeySuffix(string(rawKv.Key))
+		if err != nil {
+			return err
+		}
+		endIndex := len(rawKv.Key) - len(changeFeed) - 1
+		captureID, err := model.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		if err != nil {
+			return err
+		}
+		if changeFeed != changefeedID {
+			continue
+		}
+		key := GetEtcdKeyTaskPosition(changefeedID, captureID)
+		_, err = c.Client.Delete(ctx, key)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetProcessors queries all processors of the cdc cluster,
+// and returns a slice of ProcInfoSnap(without table info)
+func (c CDCEtcdClient) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
+	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	infos := make([]*model.ProcInfoSnap, 0, resp.Count)
+	for _, rawKv := range resp.Kvs {
+		changefeedID, err := model.ExtractKeySuffix(string(rawKv.Key))
+		if err != nil {
+			return nil, err
+		}
+		endIndex := len(rawKv.Key) - len(changefeedID) - 1
+		captureID, err := model.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		if err != nil {
+			return nil, err
+		}
+		info := &model.ProcInfoSnap{
+			CfID:      changefeedID,
+			CaptureID: captureID,
+		}
+		infos = append(infos, info)
+	}
+	return infos, nil
+}
+
 // GetAllTaskStatus queries all task status of a changefeed, and returns a map
 // mapping from captureID to TaskStatus
 func (c CDCEtcdClient) GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
-	key := GetEtcdKeyTaskStatusList(changefeedID)
-	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
+	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	pinfo := make(map[string]*model.TaskStatus, resp.Count)
 	for _, rawKv := range resp.Kvs {
-		captureID, err := util.ExtractKeySuffix(string(rawKv.Key))
+		changeFeed, err := model.ExtractKeySuffix(string(rawKv.Key))
 		if err != nil {
 			return nil, err
+		}
+		endIndex := len(rawKv.Key) - len(changeFeed) - 1
+		captureID, err := model.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		if err != nil {
+			return nil, err
+		}
+		if changeFeed != changefeedID {
+			continue
 		}
 		info := &model.TaskStatus{}
 		err = info.Unmarshal(rawKv.Value)
 		if err != nil {
-			return nil, err
+			return nil, errors.Annotate(model.ErrDecodeFailed, "failed to unmarshal task status")
 		}
 		info.ModRevision = rawKv.ModRevision
 		pinfo[captureID] = info
 	}
 	return pinfo, nil
+}
+
+// RemoveAllTaskStatus removes all task status of a changefeed
+func (c CDCEtcdClient) RemoveAllTaskStatus(ctx context.Context, changefeedID string) error {
+	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for _, rawKv := range resp.Kvs {
+		changeFeed, err := model.ExtractKeySuffix(string(rawKv.Key))
+		if err != nil {
+			return err
+		}
+		endIndex := len(rawKv.Key) - len(changeFeed) - 1
+		captureID, err := model.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		if err != nil {
+			return err
+		}
+		if changeFeed != changefeedID {
+			continue
+		}
+		key := GetEtcdKeyTaskStatus(changefeedID, captureID)
+		_, err = c.Client.Delete(ctx, key)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetTaskStatus queries task status from etcd, returns
@@ -310,6 +397,148 @@ func (c CDCEtcdClient) PutTaskStatus(
 	}
 
 	return nil
+}
+
+// GetTaskWorkload queries task workload from etcd, returns
+//  - model.TaskWorkload unmarshaled from the value
+//  - error if error happens
+func (c CDCEtcdClient) GetTaskWorkload(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+) (model.TaskWorkload, error) {
+	key := GetEtcdKeyTaskWorkload(changefeedID, captureID)
+	resp, err := c.Client.Get(ctx, key)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if resp.Count == 0 {
+		return make(model.TaskWorkload), nil
+	}
+	workload := make(model.TaskWorkload)
+	err = workload.Unmarshal(resp.Kvs[0].Value)
+	return workload, errors.Trace(err)
+}
+
+// PutTaskWorkload puts task workload into etcd.
+func (c CDCEtcdClient) PutTaskWorkload(
+	ctx context.Context,
+	changefeedID string,
+	captureID model.CaptureID,
+	info *model.TaskWorkload,
+) error {
+	data, err := info.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	key := GetEtcdKeyTaskWorkload(changefeedID, captureID)
+
+	_, err = c.Client.Put(ctx, key, data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+// DeleteTaskWorkload deletes task workload from etcd
+func (c CDCEtcdClient) DeleteTaskWorkload(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+) error {
+	key := GetEtcdKeyTaskWorkload(changefeedID, captureID)
+	_, err := c.Client.Delete(ctx, key)
+	return errors.Trace(err)
+}
+
+// GetAllTaskWorkloads queries all task workloads of a changefeed, and returns a map
+// mapping from captureID to TaskWorkloads
+func (c CDCEtcdClient) GetAllTaskWorkloads(ctx context.Context, changefeedID string) (map[string]*model.TaskWorkload, error) {
+	resp, err := c.Client.Get(ctx, TaskWorkloadKeyPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	workloads := make(map[string]*model.TaskWorkload, resp.Count)
+	for _, rawKv := range resp.Kvs {
+		changeFeed, err := model.ExtractKeySuffix(string(rawKv.Key))
+		if err != nil {
+			return nil, err
+		}
+		endIndex := len(rawKv.Key) - len(changeFeed) - 1
+		captureID, err := model.ExtractKeySuffix(string(rawKv.Key[0:endIndex]))
+		if err != nil {
+			return nil, err
+		}
+		if changeFeed != changefeedID {
+			continue
+		}
+		info := &model.TaskWorkload{}
+		err = info.Unmarshal(rawKv.Value)
+		if err != nil {
+			return nil, errors.Annotate(model.ErrDecodeFailed, "failed to unmarshal task workload")
+		}
+		workloads[captureID] = info
+	}
+	return workloads, nil
+}
+
+// AtomicPutTaskStatus puts task status into etcd atomically.
+func (c CDCEtcdClient) AtomicPutTaskStatus(
+	ctx context.Context,
+	changefeedID string,
+	captureID string,
+	update func(*model.TaskStatus) error,
+) (*model.TaskStatus, error) {
+	var status *model.TaskStatus
+	err := retry.Run(100*time.Millisecond, 3, func() error {
+		select {
+		case <-ctx.Done():
+			return backoff.Permanent(ctx.Err())
+		default:
+		}
+		var modRevision int64
+		var err error
+		modRevision, status, err = c.GetTaskStatus(ctx, changefeedID, captureID)
+		key := GetEtcdKeyTaskStatus(changefeedID, captureID)
+		var writeCmp clientv3.Cmp
+		switch errors.Cause(err) {
+		case model.ErrTaskStatusNotExists:
+			status = new(model.TaskStatus)
+			writeCmp = clientv3.Compare(clientv3.ModRevision(key), "=", 0)
+		case nil:
+			writeCmp = clientv3.Compare(clientv3.ModRevision(key), "=", modRevision)
+		default:
+			return errors.Trace(err)
+		}
+		err = update(status)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		value, err := status.Marshal()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		resp, err := c.Client.KV.Txn(ctx).If(writeCmp).Then(
+			clientv3.OpPut(key, value),
+		).Commit()
+
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if !resp.Succeeded {
+			log.Info("outdated table infos, ignore update taskStatus")
+			return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return status, nil
 }
 
 // GetTaskPosition queries task process from etcd, returns
@@ -369,12 +598,38 @@ func (c CDCEtcdClient) PutChangeFeedStatus(
 	changefeedID string,
 	status *model.ChangeFeedStatus,
 ) error {
-	key := GetEtcdKeyChangeFeedStatus(changefeedID)
+	key := GetEtcdKeyJob(changefeedID)
 	value, err := status.Marshal()
 	if err != nil {
 		return errors.Trace(err)
 	}
 	_, err = c.Client.Put(ctx, key, value)
+	return errors.Trace(err)
+}
+
+// SetChangeFeedStatusTTL sets the TTL of changefeed synchronization status
+func (c CDCEtcdClient) SetChangeFeedStatusTTL(
+	ctx context.Context,
+	changefeedID string,
+	ttl int64,
+) error {
+	key := GetEtcdKeyJob(changefeedID)
+	leaseResp, err := c.Client.Grant(ctx, ttl)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	status, _, err := c.GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	statusStr, err := status.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	_, err = c.Client.Put(ctx, key, statusStr, clientv3.WithLease(leaseResp.ID))
+	if err != nil {
+		return errors.Trace(err)
+	}
 	return errors.Trace(err)
 }
 
@@ -389,7 +644,7 @@ func (c CDCEtcdClient) PutAllChangeFeedStatus(ctx context.Context, infos map[mod
 		if err != nil {
 			return errors.Trace(err)
 		}
-		key := GetEtcdKeyChangeFeedStatus(changefeedID)
+		key := GetEtcdKeyJob(changefeedID)
 		ops = append(ops, clientv3.OpPut(key, storeVal))
 		if uint(len(ops)) >= embed.DefaultMaxTxnOps {
 			_, err = txn.Then(ops...).Commit()
@@ -462,27 +717,14 @@ func (c CDCEtcdClient) GetCaptureInfo(ctx context.Context, id string) (info *mod
 	return
 }
 
-// PutProcessorInfo writes the processor info into etcd
-func (c CDCEtcdClient) PutProcessorInfo(ctx context.Context, captureID string, info *model.ProcessorInfo, leaseID clientv3.LeaseID) error {
-	data, err := info.Marshal()
+// GetOwnerID returns the owner id by querying etcd
+func (c CDCEtcdClient) GetOwnerID(ctx context.Context, key string) (string, error) {
+	resp, err := c.Client.Get(ctx, key, clientv3.WithFirstCreate()...)
 	if err != nil {
-		return errors.Trace(err)
+		return "", errors.Trace(err)
 	}
-	key := GetEtcdKeyProcessorInfo(captureID, info.ID)
-
-	_, err = c.Client.Put(ctx, key, string(data), clientv3.WithLease(leaseID))
-	if err != nil {
-		return errors.Trace(err)
+	if len(resp.Kvs) == 0 {
+		return "", concurrency.ErrElectionNoLeader
 	}
-	return nil
-}
-
-// DeleteProcessorInfo deletes the processor info from etcd
-func (c CDCEtcdClient) DeleteProcessorInfo(ctx context.Context, captureID, processorID string) error {
-	key := GetEtcdKeyProcessorInfo(captureID, processorID)
-	_, err := c.Client.Delete(ctx, key)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	return string(resp.Kvs[0].Value), nil
 }

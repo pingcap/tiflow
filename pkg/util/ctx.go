@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,28 +13,78 @@
 
 package util
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type ctxKey string
 
 const (
-	ctxKeyCaptureID    = ctxKey("captureID")
+	ctxKeyTableID      = ctxKey("tableID")
+	ctxKeyCaptureAddr  = ctxKey("captureAddr")
 	ctxKeyChangefeedID = ctxKey("changefeedID")
+	ctxKeyIsOwner      = ctxKey("isOwner")
+	ctxKeyTimezone     = ctxKey("timezone")
 )
 
-// CaptureIDFromCtx returns a capture ID stored in the specified context.
+// CaptureAddrFromCtx returns a capture ID stored in the specified context.
 // It returns an empty string if there's no valid capture ID found.
-func CaptureIDFromCtx(ctx context.Context) string {
-	captureID, ok := ctx.Value(ctxKeyCaptureID).(string)
+func CaptureAddrFromCtx(ctx context.Context) string {
+	captureAddr, ok := ctx.Value(ctxKeyCaptureAddr).(string)
 	if !ok {
 		return ""
 	}
-	return captureID
+	return captureAddr
 }
 
-// PutCaptureIDInCtx returns a new child context with the specified capture ID stored.
-func PutCaptureIDInCtx(ctx context.Context, captureID string) context.Context {
-	return context.WithValue(ctx, ctxKeyCaptureID, captureID)
+// PutCaptureAddrInCtx returns a new child context with the specified capture ID stored.
+func PutCaptureAddrInCtx(ctx context.Context, captureAddr string) context.Context {
+	return context.WithValue(ctx, ctxKeyCaptureAddr, captureAddr)
+}
+
+// PutTimezoneInCtx returns a new child context with the given timezone
+func PutTimezoneInCtx(ctx context.Context, timezone *time.Location) context.Context {
+	return context.WithValue(ctx, ctxKeyTimezone, timezone)
+}
+
+type tableinfo struct {
+	id   int64
+	name string
+}
+
+// PutTableInfoInCtx returns a new child context with the specified table ID and name stored.
+func PutTableInfoInCtx(ctx context.Context, tableID int64, tableName string) context.Context {
+	return context.WithValue(ctx, ctxKeyTableID, tableinfo{id: tableID, name: tableName})
+}
+
+// TableIDFromCtx returns a table ID
+func TableIDFromCtx(ctx context.Context) (int64, string) {
+	info, ok := ctx.Value(ctxKeyTableID).(tableinfo)
+	if !ok {
+		return 0, ""
+	}
+	return info.id, info.name
+}
+
+// TimezoneFromCtx returns a timezone
+func TimezoneFromCtx(ctx context.Context) *time.Location {
+	tz, ok := ctx.Value(ctxKeyTimezone).(*time.Location)
+	if !ok {
+		return nil
+	}
+	return tz
+}
+
+// SetOwnerInCtx returns a new child context with the owner flag set.
+func SetOwnerInCtx(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ctxKeyIsOwner, true)
+}
+
+// IsOwnerFromCtx returns true if this capture is owner
+func IsOwnerFromCtx(ctx context.Context) bool {
+	isOwner := ctx.Value(ctxKeyIsOwner)
+	return isOwner != nil && isOwner.(bool)
 }
 
 // ChangefeedIDFromCtx returns a changefeedID stored in the specified context.

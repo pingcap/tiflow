@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,9 @@ import (
 	"fmt"
 	"net/url"
 	"time"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -102,8 +105,8 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 	ctx := context.Background()
 	info := &model.TaskStatus{
-		TableInfos: []*model.ProcessTableInfo{
-			{ID: 1, StartTs: 100},
+		Tables: map[model.TableID]*model.TableReplicaInfo{
+			1: {StartTs: 100},
 		},
 	}
 
@@ -126,8 +129,8 @@ func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
 	ctx := context.Background()
 	info := &model.TaskStatus{
-		TableInfos: []*model.ProcessTableInfo{
-			{ID: 1, StartTs: 100},
+		Tables: map[model.TableID]*model.TableReplicaInfo{
+			1: {StartTs: 100},
 		},
 	}
 	feedID := "feedid"
@@ -250,186 +253,88 @@ func (s *etcdSuite) TestPutAllChangeFeedStatus(c *check.C) {
 	}
 }
 
-func (s *etcdSuite) TestGetEtcdKeyProcessorInfo(c *check.C) {
-	tests := []struct {
-		cid string // capture id
-		pid string // processor id
-		key string // generated key
-	}{
-		{"a", "b", ProcessorInfoKeyPrefix + "/a/b"},
-		{"", "b", ProcessorInfoKeyPrefix + "//b"},
-		{"a", "", ProcessorInfoKeyPrefix + "/a/"},
-		{"", "", ProcessorInfoKeyPrefix + "//"},
-	}
-
-	for _, t := range tests {
-		c.Assert(GetEtcdKeyProcessorInfo(t.cid, t.pid), check.Equals, t.key)
-	}
-}
-
-func setupProcessors(s *etcdSuite, c *check.C) clientv3.LeaseID {
+func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
 	ctx := context.Background()
-	lease, err := s.client.Client.Grant(ctx, 3600)
+	err := s.client.PutChangeFeedStatus(ctx, "test1", &model.ChangeFeedStatus{
+		ResolvedTs: 1,
+	})
 	c.Assert(err, check.IsNil)
-	// setup processors:
-	//   a/b
-	//   a/c
-	//   d/e
-	c.Assert(s.client.PutProcessorInfo(ctx, "a", &model.ProcessorInfo{
-		ID: "b",
-	}, lease.ID), check.IsNil)
-
-	c.Assert(s.client.PutProcessorInfo(ctx, "a", &model.ProcessorInfo{
-		ID: "c",
-	}, lease.ID), check.IsNil)
-
-	c.Assert(s.client.PutProcessorInfo(ctx, "d", &model.ProcessorInfo{
-		ID: "e",
-	}, lease.ID), check.IsNil)
-	return lease.ID
-}
-func teardownProcessors(s *etcdSuite, c *check.C, leaseID clientv3.LeaseID) {
-	ctx := context.Background()
-	c.Assert(s.client.DeleteProcessorInfo(ctx, "a", "b"), check.IsNil)
-	c.Assert(s.client.DeleteProcessorInfo(ctx, "a", "c"), check.IsNil)
-	c.Assert(s.client.DeleteProcessorInfo(ctx, "d", "e"), check.IsNil)
-	_, err := s.client.Client.Revoke(ctx, leaseID)
+	status, _, err := s.client.GetChangeFeedStatus(ctx, "test1")
 	c.Assert(err, check.IsNil)
-}
-func (s *etcdSuite) TestGetProcessorsFromPrefix(c *check.C) {
-	ctx := context.Background()
-	leaseID := setupProcessors(s, c)
-	defer teardownProcessors(s, c, leaseID)
-
-	tests := []struct {
-		prefix     string
-		processors []*model.ProcessorInfo
-	}{
-		// list all processors
-		{ProcessorInfoKeyPrefix, []*model.ProcessorInfo{
-			{ID: "b"},
-			{ID: "c"},
-			{ID: "e"},
-		}},
-
-		// list processors for capture "a"
-		{ProcessorInfoKeyPrefix + "/a/", []*model.ProcessorInfo{
-			{ID: "b"},
-			{ID: "c"},
-		}},
-
-		// list processors for capture "d"
-		{ProcessorInfoKeyPrefix + "/d/", []*model.ProcessorInfo{
-			{ID: "e"},
-		}},
-
-		// list processors for a non-exist capture "f"
-		{ProcessorInfoKeyPrefix + "/f/", nil},
-	}
-
-	for _, t := range tests {
-		c.Log("testing on ", t.prefix)
-		rev, processors, err := s.client.getProcessorsFromPrefix(ctx, t.prefix)
-		c.Assert(rev, check.Greater, int64(0))
-		c.Assert(err, check.IsNil)
-		if t.processors != nil {
-			c.Assert(len(processors), check.Equals, len(t.processors))
-			for i, p := range processors {
-				c.Assert(p.ID, check.Equals, t.processors[i].ID)
-			}
-
-		} else {
-			c.Assert(processors, check.IsNil)
+	c.Assert(status, check.DeepEquals, &model.ChangeFeedStatus{
+		ResolvedTs: 1,
+	})
+	err = s.client.SetChangeFeedStatusTTL(ctx, "test1", 1 /* second */)
+	c.Assert(err, check.IsNil)
+	status, _, err = s.client.GetChangeFeedStatus(ctx, "test1")
+	c.Assert(err, check.IsNil)
+	c.Assert(status, check.DeepEquals, &model.ChangeFeedStatus{
+		ResolvedTs: 1,
+	})
+	for i := 0; i < 50; i++ {
+		_, _, err = s.client.GetChangeFeedStatus(ctx, "test1")
+		log.Warn("nil", zap.Error(err))
+		switch errors.Cause(err) {
+		case model.ErrChangeFeedNotExists:
+			return
+		case nil:
+			time.Sleep(100 * time.Millisecond)
+			continue
+		default:
+			c.Fatal("got unexpected error", err)
 		}
 	}
+	c.Fatal("the change feed status is still exists after 5 seconds")
 }
 
-func (s *etcdSuite) TestGetProcessors(c *check.C) {
+func (s *etcdSuite) TestDeleteTaskWorkload(c *check.C) {
 	ctx := context.Background()
-	leaseID := setupProcessors(s, c)
-	defer teardownProcessors(s, c, leaseID)
-
-	tests := []struct {
-		cid        string // capture id
-		processors []*model.ProcessorInfo
-	}{
-		// list processors for capture "a"
-		{"a", []*model.ProcessorInfo{
-			{ID: "b"},
-			{ID: "c"},
-		}},
-
-		// list processors for capture "d"
-		{"d", []*model.ProcessorInfo{
-			{ID: "e"},
-		}},
-
-		// list processors for a non-exist capture "f"
-		{"f", nil},
+	workload := &model.TaskWorkload{
+		1001: model.WorkloadInfo{Workload: 1},
+		1002: model.WorkloadInfo{Workload: 3},
 	}
-	for _, t := range tests {
-		c.Log("testing on ", t.cid)
-		rev, processors, err := s.client.GetProcessors(ctx, t.cid)
-		c.Assert(rev, check.Greater, int64(0))
-		c.Assert(err, check.IsNil)
-		if t.processors != nil {
-			c.Assert(len(processors), check.Equals, len(t.processors))
-			for i, p := range processors {
-				c.Assert(p.ID, check.Equals, t.processors[i].ID)
-			}
+	feedID := "feedid"
+	captureID := "captureid"
 
-		} else {
-			c.Assert(processors, check.IsNil)
+	err := s.client.PutTaskWorkload(ctx, feedID, captureID, workload)
+	c.Assert(err, check.IsNil)
+
+	err = s.client.DeleteTaskWorkload(ctx, feedID, captureID)
+	c.Assert(err, check.IsNil)
+
+	tw, err := s.client.GetTaskWorkload(ctx, feedID, captureID)
+	c.Assert(err, check.IsNil)
+	c.Assert(len(tw), check.Equals, 0)
+}
+
+func (s *etcdSuite) TestGetAllTaskWorkload(c *check.C) {
+	ctx := context.Background()
+	feeds := []string{"feed1", "feed2"}
+	captures := []string{"capture1", "capture2", "capture3"}
+	expected := []map[string]*model.TaskWorkload{
+		{
+			"capture1": {1000: model.WorkloadInfo{Workload: 1}},
+			"capture2": {1001: model.WorkloadInfo{Workload: 1}},
+			"capture3": {1002: model.WorkloadInfo{Workload: 1}},
+		},
+		{
+			"capture1": {2000: model.WorkloadInfo{Workload: 1}},
+			"capture2": {2001: model.WorkloadInfo{Workload: 1}},
+			"capture3": {2002: model.WorkloadInfo{Workload: 1}},
+		},
+	}
+
+	for i, feed := range feeds {
+		for j, capture := range captures {
+			err := s.client.PutTaskWorkload(ctx, feed, capture, &model.TaskWorkload{
+				int64(1000*(i+1) + j): model.WorkloadInfo{Workload: 1},
+			})
+			c.Assert(err, check.IsNil)
 		}
 	}
-}
-
-func (s *etcdSuite) TestGetAllProcessors(c *check.C) {
-	ctx := context.Background()
-	leaseID := setupProcessors(s, c)
-	defer teardownProcessors(s, c, leaseID)
-	rev, processors, err := s.client.GetAllProcessors(ctx)
-	c.Assert(rev, check.Greater, int64(0))
-	c.Assert(err, check.IsNil)
-	ids := []string{"b", "c", "e"}
-	for i, p := range processors {
-		c.Assert(p.ID, check.Equals, ids[i])
+	for i := range feeds {
+		workloads, err := s.client.GetAllTaskWorkloads(ctx, feeds[i])
+		c.Assert(err, check.IsNil)
+		c.Assert(workloads, check.DeepEquals, expected[i])
 	}
-}
-
-func (s *etcdSuite) TestPutProcessorInfo(c *check.C) {
-	ctx := context.Background()
-	lease, err := s.client.Client.Grant(ctx, 3600)
-	c.Assert(err, check.IsNil)
-
-	tests := []struct {
-		cid       string
-		processor *model.ProcessorInfo
-	}{
-		{"a", &model.ProcessorInfo{ID: "b"}},
-		{"a", &model.ProcessorInfo{ID: "c"}},
-		{"d", &model.ProcessorInfo{ID: "e"}},
-	}
-
-	for _, t := range tests {
-		c.Assert(s.client.PutProcessorInfo(ctx, t.cid, t.processor, lease.ID), check.IsNil)
-	}
-}
-
-func (s *etcdSuite) TestDeleteProcessorInfo(c *check.C) {
-	ctx := context.Background()
-	setupProcessors(s, c)
-	processors := []*model.ProcessorInfo{
-		{CaptureID: "a", ID: "b"},
-		{CaptureID: "a", ID: "c"},
-		{CaptureID: "d", ID: "e"},
-	}
-	for _, p := range processors {
-		c.Assert(s.client.DeleteProcessorInfo(ctx, p.CaptureID, p.ID), check.IsNil)
-	}
-
-	rev, procs, err := s.client.GetAllProcessors(ctx)
-	c.Assert(rev, check.Greater, int64(0))
-	c.Assert(procs, check.IsNil)
-	c.Assert(err, check.IsNil)
 }

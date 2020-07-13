@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	sourceDB, err := util.CreateDB(cfg.SourceDBCfg)
+	sourceDB, err := util.CreateDB(cfg.SourceDBCfg[0])
 	if err != nil {
 		log.S().Fatal(err)
 	}
@@ -66,6 +66,5 @@ func main() {
 		}
 	}()
 
-	dailytest.RunMultiSource(sourceDBs, targetDB, cfg.SourceDBCfg.Name)
-	dailytest.Run(sourceDB, targetDB, cfg.SourceDBCfg.Name, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
+	dailytest.Run(sourceDB, targetDB, cfg.SourceDBCfg[0].Name, cfg.WorkerCount, cfg.JobCount, cfg.Batch)
 }

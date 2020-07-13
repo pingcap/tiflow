@@ -2,6 +2,7 @@
 
 [![Build Status](https://internal.pingcap.net/idc-jenkins/job/build_cdc_master/badge/icon)](https://internal.pingcap.net/idc-jenkins/job/build_cdc_master/)
 [![codecov](https://codecov.io/gh/pingcap/ticdc/branch/master/graph/badge.svg)](https://codecov.io/gh/pingcap/ticdc)
+[![Coverage Status](https://coveralls.io/repos/github/pingcap/ticdc/badge.svg)](https://coveralls.io/github/pingcap/ticdc)
 [![LICENSE](https://img.shields.io/github/license/pingcap/ticdc.svg)](https://github.com/pingcap/ticdc/blob/master/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/pingcap/ticdc)](https://goreportcard.com/report/github.com/pingcap/ticdc)
 
@@ -13,7 +14,9 @@
 
 ## Documentation
 
-TODO
+[Chinese Document](https://docs.pingcap.com/zh/tidb/dev/ticdc-overview/)
+
+[English Document](https://pingcap.com/docs/dev/reference/tools/ticdc/overview/)
 
 ## Building
 
@@ -26,7 +29,7 @@ $ make test
 
 Notice ticdc supports building with Go version `Go >= 1.13`
 
-When ticdc is built successfully, you can find binary in the `bin` directory.
+When ticdc is built successfully, you can find binary in the `bin` directory. Instructions for unit test and integration test can be found in [Running tests](tests/README.md).
 
 ## Deployment
 

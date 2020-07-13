@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package puller
 
 import (
@@ -16,7 +29,7 @@ import (
 var ErrReachLimit = errors.New("reach limit")
 
 const (
-	defaultBufferSize = 128
+	defaultBufferSize = 128000
 )
 
 // EventBuffer in a interface for communicating kv entries.
@@ -125,6 +138,16 @@ func (b *memBuffer) Get(ctx context.Context) (model.RegionFeedEvent, error) {
 		case <-b.signalCh:
 		}
 	}
+}
+
+// Size returns the memory size of memBuffer
+func (b *memBuffer) Size() int64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.limitter == nil {
+		return 0
+	}
+	return atomic.LoadInt64(&b.limitter.used)
 }
 
 var sizeOfVal = unsafe.Sizeof(model.RawKVEntry{})

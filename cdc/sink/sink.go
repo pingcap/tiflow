@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,43 +18,48 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/config"
 
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/filter"
 )
 
 // Sink options keys
 const (
 	OptChangefeedID = "_changefeed_id"
-	OptCaptureID    = "_capture_id"
+	OptCaptureAddr  = "_capture_addr"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
-	// EmitResolvedEvent saves the global resolved to the sink backend
-	EmitResolvedEvent(ctx context.Context, ts uint64) error
-	// EmitCheckpointEvent saves the global checkpoint to the sink backend
-	EmitCheckpointEvent(ctx context.Context, ts uint64) error
-	// EmitDMLs saves the specified DMLs to the sink backend
-	EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error
-	// EmitDDL saves the specified DDL to the sink backend
+
+	// EmitRowChangedEvents sends Row Changed Event to Sink
+	// EmitRowChangedEvents may write rows to downstream directly;
+	EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error
+
+	// EmitDDLEvent sends DDL Event to Sink
+	// EmitDDLEvent should execute DDL to downstream synchronously
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
-	// CheckpointTs returns the sink checkpoint
-	CheckpointTs() uint64
-	// Run runs the sink
-	Run(ctx context.Context) error
-	// PrintStatus prints necessary status periodically
-	PrintStatus(ctx context.Context) error
+
+	// FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
+	// TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
+	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error
+
+	// EmitCheckpointTs sends CheckpointTs to Sink
+	// TiCDC guarantees that all Events **in the cluster** which of commitTs less than or equal `checkpointTs` are sent to downstream successfully.
+	EmitCheckpointTs(ctx context.Context, ts uint64) error
+
+	// Close closes the Sink
+	Close() error
 }
 
 // DSNScheme is the scheme name of DSN
 const DSNScheme = "dsn://"
 
 // NewSink creates a new sink with the sink-uri
-func NewSink(sinkURIStr string, filter *util.Filter, opts map[string]string) (Sink, error) {
+func NewSink(ctx context.Context, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 	// check if sinkURI is a DSN
 	if strings.HasPrefix(strings.ToLower(sinkURIStr), DSNScheme) {
 		dsnStr := sinkURIStr[len(DSNScheme):]
@@ -62,7 +67,7 @@ func NewSink(sinkURIStr string, filter *util.Filter, opts map[string]string) (Si
 		if err != nil {
 			return nil, errors.Annotatef(err, "parse sinkURI failed")
 		}
-		return newMySQLSink(nil, dsnCfg, filter, opts)
+		return newMySQLSink(ctx, nil, dsnCfg, filter, opts)
 	}
 
 	// parse sinkURI as a URI
@@ -72,11 +77,11 @@ func NewSink(sinkURIStr string, filter *util.Filter, opts map[string]string) (Si
 	}
 	switch strings.ToLower(sinkURI.Scheme) {
 	case "blackhole":
-		return newBlackHoleSink(), nil
+		return newBlackHoleSink(opts), nil
 	case "mysql", "tidb":
-		return newMySQLSink(sinkURI, nil, filter, opts)
+		return newMySQLSink(ctx, sinkURI, nil, filter, opts)
 	case "kafka":
-		return newKafkaSaramaSink(sinkURI, filter, opts)
+		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh)
 	default:
 		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}

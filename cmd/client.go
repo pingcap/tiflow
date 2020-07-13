@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cmd
 
 import (
@@ -5,22 +18,17 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/chzyer/readline"
 	_ "github.com/go-sql-driver/mysql" // mysql driver
-	"github.com/google/uuid"
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
+	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3"
 	"google.golang.org/grpc"
@@ -31,6 +39,7 @@ func init() {
 	cliCmd := newCliCommand()
 	cliCmd.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address")
 	cliCmd.PersistentFlags().BoolVarP(&interact, "interact", "i", false, "Run cdc cli with readline")
+	cliCmd.PersistentFlags().StringVar(&cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
 	rootCmd.AddCommand(cliCmd)
 }
 
@@ -41,22 +50,79 @@ var (
 	sinkURI    string
 	configFile string
 	cliPdAddr  string
+	noConfirm  bool
+	sortEngine string
+	sortDir    string
+
+	cyclicReplicaID        uint64
+	cyclicFilterReplicaIDs []uint
+	cyclicSyncDDL          bool
+	cyclicUpstreamDSN      string
 
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client
 
-	interact bool
+	interact    bool
+	simplified  bool
+	cliLogLevel string
+
+	changefeedID string
+	captureID    string
+	interval     uint
+
+	defaultContext context.Context
 )
+
+// changefeedCommonInfo holds some common used information of a changefeed
+type changefeedCommonInfo struct {
+	ID      string              `json:"id"`
+	Summary *cdc.ChangefeedResp `json:"summary"`
+}
+
+// capture holds capture information
+type capture struct {
+	ID            string `json:"id"`
+	IsOwner       bool   `json:"is-owner"`
+	AdvertiseAddr string `json:"address"`
+}
+
+// cfMeta holds changefeed info and changefeed status
+type cfMeta struct {
+	Info       *model.ChangeFeedInfo   `json:"info"`
+	Status     *model.ChangeFeedStatus `json:"status"`
+	Count      uint64                  `json:"count"`
+	TaskStatus []captureTaskStatus     `json:"task-status"`
+}
+
+type captureTaskStatus struct {
+	CaptureID  string            `json:"capture-id"`
+	TaskStatus *model.TaskStatus `json:"status"`
+}
+
+type profileStatus struct {
+	OPS            uint64 `json:"ops"`
+	Count          uint64 `json:"count"`
+	SinkGap        string `json:"sink_gap"`
+	ReplicationGap string `json:"replication_gap"`
+}
+
+type processorMeta struct {
+	Status   *model.TaskStatus   `json:"status"`
+	Position *model.TaskPosition `json:"position"`
+}
 
 func newCliCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			initCmd(cmd, &util.Config{Level: cliLogLevel})
+
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
-				DialTimeout: 5 * time.Second,
+				DialTimeout: 30 * time.Second,
 				DialOptions: []grpc.DialOption{
+					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
 						Backoff: backoff.Config{
 							BaseDelay:  time.Second,
@@ -69,10 +135,30 @@ func newCliCommand() *cobra.Command {
 				},
 			})
 			if err != nil {
-				return err
+				// PD embeds an etcd server.
+				return errors.Annotate(err, "fail to open PD client")
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
-			pdCli, err = pd.NewClient([]string{cliPdAddr}, pd.SecurityOption{})
+			pdCli, err = pd.NewClientWithContext(
+				defaultContext, []string{cliPdAddr}, pd.SecurityOption{},
+				pd.WithGRPCDialOptions(
+					grpc.WithBlock(),
+					grpc.WithConnectParams(grpc.ConnectParams{
+						Backoff: backoff.Config{
+							BaseDelay:  time.Second,
+							Multiplier: 1.1,
+							Jitter:     0.1,
+							MaxDelay:   3 * time.Second,
+						},
+						MinConnectTimeout: 3 * time.Second,
+					}),
+				))
+			if err != nil {
+				return errors.Annotate(err, "fail to open PD client")
+			}
+			ctx := defaultContext
+			errorTiKVIncompatible := true // Error if TiKV is incompatible.
+			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr, errorTiKVIncompatible)
 			if err != nil {
 				return err
 			}
@@ -94,176 +180,6 @@ func newCliCommand() *cobra.Command {
 	)
 
 	return command
-}
-
-func newCaptureCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "capture",
-		Short: "Manage capture (capture is a CDC server instance)",
-	}
-	command.AddCommand(
-		newListCaptureCommand(),
-		// TODO: add resign owner command
-	)
-	return command
-}
-
-func newChangefeedCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "changefeed",
-		Short: "Manage changefeed (changefeed is a replication task)",
-	}
-	command.AddCommand(
-		newListChangefeedCommand(),
-		newQueryChangefeedCommand(),
-		newCreateChangefeedCommand(),
-		// TODO: add stop, resume, delete changefeed
-	)
-	return command
-}
-
-func newProcessorCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "processor",
-		Short: "Manage processor (processor is a sub replication task running on a specified capture)",
-	}
-	command.AddCommand(
-		newListProcessorCommand(),
-		newQueryProcessorCommand(),
-	)
-	return command
-}
-
-func newMetadataCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "meta",
-		Short: "Manage metadata stored in PD",
-	}
-	command.AddCommand(
-		newDeleteMetaCommand(),
-	)
-	return command
-}
-
-func newTsoCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "tso",
-		Short: "Manage tso",
-	}
-	command.AddCommand(
-		newQueryTsoCommand(),
-	)
-	return command
-}
-
-func newCreateChangefeedCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "create",
-		Short: "Create a new replication task (changefeed)",
-		Long:  ``,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
-			id := uuid.New().String()
-			if startTs == 0 {
-				ts, logical, err := pdCli.GetTS(ctx)
-				if err != nil {
-					return err
-				}
-				startTs = oracle.ComposeTS(ts, logical)
-			}
-			if err := verifyStartTs(ctx, startTs, cdcEtcdCli); err != nil {
-				return err
-			}
-
-			cfg := new(util.ReplicaConfig)
-			if len(configFile) > 0 {
-				if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
-					return err
-				}
-			}
-
-			info := &model.ChangeFeedInfo{
-				SinkURI:    sinkURI,
-				Opts:       make(map[string]string),
-				CreateTime: time.Now(),
-				StartTs:    startTs,
-				TargetTs:   targetTs,
-				Config:     cfg,
-			}
-
-			for _, opt := range opts {
-				s := strings.SplitN(opt, "=", 2)
-				if len(s) <= 0 {
-					cmd.Printf("omit opt: %s", opt)
-					continue
-				}
-
-				var key string
-				var value string
-
-				key = s[0]
-				if len(s) > 1 {
-					value = s[1]
-				}
-				info.Opts[key] = value
-			}
-
-			d, err := info.Marshal()
-			if err != nil {
-				return err
-			}
-			cmd.Printf("create changefeed ID: %s info %s\n", id, d)
-			return cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
-		},
-	}
-	command.PersistentFlags().Uint64Var(&startTs, "start-ts", 0, "Start ts of changefeed")
-	command.PersistentFlags().Uint64Var(&targetTs, "target-ts", 0, "Target ts of changefeed")
-	command.PersistentFlags().StringVar(&sinkURI, "sink-uri", "mysql://root:123456@127.0.0.1:3306/", "sink uri")
-	command.PersistentFlags().StringVar(&configFile, "config", "", "Path of the configuration file")
-	command.PersistentFlags().StringSliceVar(&opts, "opts", nil, "Extra options, in the `key=value` format")
-
-	return command
-}
-
-func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) error {
-	resp, err := cli.Client.Get(ctx, tikv.GcSavedSafePoint)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if resp.Count == 0 {
-		return nil
-	}
-	safePoint, err := strconv.ParseUint(string(resp.Kvs[0].Value), 10, 64)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if startTs < safePoint {
-		return errors.Errorf("startTs %d less than gcSafePoint %d", startTs, safePoint)
-	}
-	return nil
-}
-
-// strictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
-// into the Config struct, issue an error and stop the server from starting.
-func strictDecodeFile(path, component string, cfg interface{}) error {
-	metaData, err := toml.DecodeFile(path, cfg)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
-		var b strings.Builder
-		for i, item := range undecoded {
-			if i != 0 {
-				b.WriteString(", ")
-			}
-			b.WriteString(item.String())
-		}
-		err = errors.Errorf("component %s's config file %s contained unknown configuration options: %s",
-			component, path, b.String())
-	}
-
-	return errors.Trace(err)
 }
 
 func loop() {
@@ -301,7 +217,7 @@ func loop() {
 		command := newCliCommand()
 		command.SetArgs(args)
 		_ = command.ParseFlags(args)
-		command.SetOutput((os.Stdout))
+		command.SetOutput(os.Stdout)
 		if err = command.Execute(); err != nil {
 			command.Println(err)
 		}

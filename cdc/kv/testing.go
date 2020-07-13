@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package kv
 
 import (
@@ -10,9 +23,9 @@ import (
 
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/client"
+	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
@@ -38,7 +51,7 @@ type eventChecker struct {
 
 func valInSlice(val *model.RawKVEntry, vals []*model.RawKVEntry) bool {
 	for _, v := range vals {
-		if val.Ts == v.Ts && bytes.Equal(val.Key, v.Key) {
+		if val.CRTs == v.CRTs && bytes.Equal(val.Key, v.Key) {
 			return true
 		}
 	}
@@ -60,8 +73,8 @@ func newEventChecker(t require.TestingT) *eventChecker {
 				if e.Val != nil {
 					// check if the value event break the checkpoint guarantee
 					for _, cp := range ec.checkpoints {
-						if !util.KeyInSpan(e.Val.Key, cp.Span) ||
-							e.Val.Ts > cp.ResolvedTs {
+						if !regionspan.KeyInSpan(e.Val.Key, cp.Span) ||
+							e.Val.CRTs > cp.ResolvedTs {
 							continue
 						}
 
@@ -124,7 +137,7 @@ func mustGetValue(t require.TestingT, eventCh <-chan *model.RegionFeedEvent, val
 // TestSplit try split on every region, and test can get value event from
 // every region after split.
 func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
-	cli, err := NewCDCClient(pdCli)
+	cli, err := NewCDCClient(pdCli, storage.(tikv.Storage))
 	require.NoError(t, err)
 	defer cli.Close()
 
@@ -135,7 +148,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	startTS := mustGetTimestamp(t, storage)
 
 	go func() {
-		err := cli.EventFeed(ctx, util.Span{Start: nil, End: nil}, startTS, eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -211,7 +224,7 @@ func mustDeleteKey(t require.TestingT, storage kv.Storage, key []byte) {
 
 // TestGetKVSimple test simple KV operations
 func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
-	cli, err := NewCDCClient(pdCli)
+	cli, err := NewCDCClient(pdCli, storage.(tikv.Storage))
 	require.NoError(t, err)
 	defer cli.Close()
 
@@ -222,7 +235,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	startTS := mustGetTimestamp(t, storage)
 
 	go func() {
-		err := cli.EventFeed(ctx, util.Span{Start: nil, End: nil}, startTS, checker.eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, checker.eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -244,7 +257,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		if i == 1 {
 			checker = newEventChecker(t)
 			go func() {
-				err := cli.EventFeed(ctx, util.Span{Start: nil, End: nil}, startTS, checker.eventCh)
+				err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, checker.eventCh)
 				require.Equal(t, err, context.Canceled)
 			}()
 		}

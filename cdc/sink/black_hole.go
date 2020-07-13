@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package sink
 
 import (
@@ -10,48 +23,53 @@ import (
 )
 
 // newBlackHoleSink creates a block hole sink
-func newBlackHoleSink() *blackHoleSink {
-	return &blackHoleSink{}
+func newBlackHoleSink(opts map[string]string) *blackHoleSink {
+	return &blackHoleSink{
+		statistics: NewStatistics("blackhole", opts),
+	}
 }
 
 type blackHoleSink struct {
-	checkpointTs uint64
+	statistics      *Statistics
+	checkpointTs    uint64
+	accumulated     uint64
+	lastAccumulated uint64
 }
 
-func (b *blackHoleSink) Run(ctx context.Context) error {
-	return nil
-}
-
-func (b *blackHoleSink) EmitResolvedEvent(ctx context.Context, ts uint64) error {
-	log.Info("BlockHoleSink: Resolved Event", zap.Uint64("resolved ts", ts))
-	return nil
-}
-
-func (b *blackHoleSink) EmitCheckpointEvent(ctx context.Context, ts uint64) error {
-	log.Info("BlockHoleSink: Checkpoint Event", zap.Uint64("checkpoint ts", ts))
-	return nil
-}
-
-func (b *blackHoleSink) EmitRowChangedEvent(ctx context.Context, rows ...*model.RowChangedEvent) error {
+func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	checkpointTs := atomic.LoadUint64(&b.checkpointTs)
 	for _, row := range rows {
-		if row.Resolved {
-			atomic.StoreUint64(&b.checkpointTs, row.Ts)
+		if row.CommitTs <= checkpointTs {
+			log.Fatal("The CommitTs must be greater than the checkpointTs",
+				zap.Uint64("CommitTs", row.CommitTs),
+				zap.Uint64("checkpointTs", checkpointTs))
 		}
 	}
+	atomic.AddUint64(&b.accumulated, uint64(len(rows)))
+	return nil
+}
+
+func (b *blackHoleSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
+	log.Info("BlockHoleSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolvedTs))
+	err := b.statistics.RecordBatchExecution(func() (int, error) {
+		// TODO: add some random replication latency
+		accumulated := atomic.LoadUint64(&b.accumulated)
+		batchSize := accumulated - b.lastAccumulated
+		b.lastAccumulated = accumulated
+		return int(batchSize), nil
+	})
+	b.statistics.PrintStatus()
+	atomic.StoreUint64(&b.checkpointTs, resolvedTs)
+	return err
+}
+
+func (b *blackHoleSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
+	log.Info("BlockHoleSink: Checkpoint Event", zap.Uint64("ts", ts))
 	return nil
 }
 
 func (b *blackHoleSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	log.Info("BlockHoleSink: DDL Event", zap.Any("ddl", ddl))
-	return nil
-}
-
-func (b *blackHoleSink) CheckpointTs() uint64 {
-	return atomic.LoadUint64(&b.checkpointTs)
-}
-
-func (b *blackHoleSink) PrintStatus(ctx context.Context) error {
-	<-ctx.Done()
 	return nil
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2019 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,23 +58,31 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "update_info_duration_seconds",
-			Help:      "The time it took to update sub change feed info.",
+			Help:      "The time it took to update sub changefeed info.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
-		}, []string{"captureID"})
-	tableInputChanSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+		}, []string{"capture"})
+	waitEventPrepareDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
-			Name:      "table_input_chan_size",
-			Help:      "txn input channel size for a table",
-		}, []string{"changefeed", "capture", "table"})
+			Name:      "wait_event_prepare",
+			Help:      "Bucketed histogram of processing time (s) of waiting event prepare in processor.",
+			Buckets:   prometheus.ExponentialBuckets(0.000001, 10, 10),
+		}, []string{"changefeed", "capture"})
 	tableOutputChanSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "txn_output_chan_size",
-			Help:      "txn output channel size for a table",
-		}, []string{"changefeed", "capture", "table"})
+			Help:      "size of row changed event output channel from table to processor",
+		}, []string{"changefeed", "capture"})
+	processorErrorCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "exit_with_error_count",
+			Help:      "counter for processor exits with error",
+		}, []string{"changefeed", "capture"})
 )
 
 // initProcessorMetrics registers all metrics used in processor
@@ -85,6 +93,7 @@ func initProcessorMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(syncTableNumGauge)
 	registry.MustRegister(txnCounter)
 	registry.MustRegister(updateInfoDuration)
-	registry.MustRegister(tableInputChanSizeGauge)
 	registry.MustRegister(tableOutputChanSizeGauge)
+	registry.MustRegister(waitEventPrepareDuration)
+	registry.MustRegister(processorErrorCounter)
 }

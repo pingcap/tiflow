@@ -78,9 +78,12 @@ check_third_party_binary:
 	@which bin/tidb-server
 	@which bin/tikv-server
 	@which bin/pd-server
+	@which bin/tiflash
 	@which bin/pd-ctl
 	@which bin/sync_diff_inspector
 	@which bin/go-ycsb
+	@which bin/etcdctl
+	@which bin/jq
 
 integration_test_build: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
@@ -106,6 +109,10 @@ lint:tools/bin/revive
 	@echo "linting"
 	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
 
+check-copyright:
+	@echo "check-copyright"
+	@./scripts/check-copyright.sh
+
 vet:
 	@echo "vet"
 	$(GO) vet $(PACKAGES) 2>&1 | $(FAIL_ON_STDOUT)
@@ -114,12 +121,12 @@ tidy:
 	@echo "go mod tidy"
 	./tools/check/check-tidy.sh
 
-check: fmt lint check-static tidy
+check: check-copyright fmt lint check-static tidy
 
 coverage:
 	GO111MODULE=off go get github.com/zhouqiang-cl/gocovmerge
-	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE "$(CDC_PKG)/cdc/kv/testing.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
-	grep -vE "$(CDC_PKG)/cdc/kv/testing.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
+	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
+	grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls
 	@goveralls -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
