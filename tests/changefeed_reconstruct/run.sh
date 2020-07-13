@@ -29,7 +29,8 @@ function check_no_capture() {
     fi
 }
 
-export -f check_changefeed_mark_failed
+export -f check_processor_table_count
+export -f check_no_capture
 
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
@@ -39,13 +40,6 @@ function run() {
     cd $WORK_DIR
 
     pd_addr="http://$UP_PD_HOST:$UP_PD_PORT"
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" ---logsuffix server1 --pd $pd_addr
-    owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
-    changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
-
-    run_sql "CREATE DATABASE changefeed_reconstruct;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=changefeed_reconstruct
-
     TOPIC_NAME="ticdc-changefeed-reconstruct-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
@@ -54,6 +48,12 @@ function run() {
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --logsuffix server1 --pd $pd_addr
+    owner_pid=$(ps -C $CDC_BINARY -o pid= | awk '{print $1}')
+    changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
+
+    run_sql "CREATE DATABASE changefeed_reconstruct;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=changefeed_reconstruct
 
     check_table_exists "changefeed_reconstruct.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
@@ -62,7 +62,7 @@ function run() {
     ensure $MAX_RETRIES check_no_capture $pd_addr
 
     # run another server
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" ---logsuffix server2
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --logsuffix server2
     ensure $MAX_RETRIES "$CDC_BINARY cli capture list --pd=$pd_addr 2>&1 | grep id"
     capture_id=$($CDC_BINARY cli --pd=$pd_addr capture list 2>&1 | awk -F '"' '/id/{print $4}')
     echo "capture_id:" $capture_id
