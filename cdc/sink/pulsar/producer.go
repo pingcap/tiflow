@@ -50,6 +50,7 @@ func NewProducer(u *url.URL, errCh chan error) (*Producer, error) {
 	}, nil
 }
 
+// Producer is a pulsar producer
 type Producer struct {
 	opt        Option
 	client     pulsar.Client
@@ -58,6 +59,7 @@ type Producer struct {
 	partitions int
 }
 
+// SendMessage implements the Producer interface
 func (p *Producer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
 	p.producer.SendAsync(ctx, &pulsar.ProducerMessage{
 		Payload:    value,
@@ -76,6 +78,7 @@ func (p *Producer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err err
 	}
 }
 
+// SyncBroadcastMessage implements the Producer interface
 func (p *Producer) SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error {
 	for i := 0; i < p.partitions; i++ {
 		_, err := p.producer.Send(ctx, &pulsar.ProducerMessage{
@@ -90,14 +93,17 @@ func (p *Producer) SyncBroadcastMessage(ctx context.Context, key []byte, value [
 	return nil
 }
 
+// Flush implements the Producer interface
 func (p *Producer) Flush(_ context.Context) error {
 	return p.producer.Flush()
 }
 
+// GetPartitionNum implements the Producer interface
 func (p *Producer) GetPartitionNum() int32 {
 	return int32(p.partitions)
 }
 
+// Close implements the Producer interface
 func (p *Producer) Close() error {
 	err := p.producer.Flush()
 	if err != nil {

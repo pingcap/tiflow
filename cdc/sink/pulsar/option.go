@@ -24,6 +24,7 @@ import (
 	"github.com/apache/pulsar-client-go/pulsar"
 )
 
+// Option represents the options needed by the pulsar client
 type Option struct {
 	clientOptions   *pulsar.ClientOptions
 	producerOptions *pulsar.ProducerOptions
