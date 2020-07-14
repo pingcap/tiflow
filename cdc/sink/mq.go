@@ -188,7 +188,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
 		)
-		return nil
+		return errors.Trace(model.ErrorDDLEventIgnored)
 	}
 	encoder := k.newEncoder()
 	err := encoder.AppendDDLEvent(ddl)

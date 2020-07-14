@@ -310,7 +310,6 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
-	config.Producer.Flush.MaxMessages = c.MaxMessageBytes
 	config.Metadata.Retry.Max = 20
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 

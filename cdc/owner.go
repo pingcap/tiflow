@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
 	"go.etcd.io/etcd/clientv3"
@@ -58,6 +59,7 @@ type Owner struct {
 	l sync.RWMutex
 
 	pdEndpoints []string
+	credential  *security.Credential
 	pdClient    pd.Client
 	etcdClient  kv.CDCEtcdClient
 
@@ -76,7 +78,7 @@ type Owner struct {
 const CDCServiceSafePointID = "ticdc"
 
 // NewOwner creates a new Owner instance
-func NewOwner(pdClient pd.Client, sess *concurrency.Session, gcTTL int64) (*Owner, error) {
+func NewOwner(pdClient pd.Client, credential *security.Credential, sess *concurrency.Session, gcTTL int64) (*Owner, error) {
 	cli := kv.NewCDCEtcdClient(sess.Client())
 	endpoints := sess.Client().Endpoints()
 
@@ -84,6 +86,7 @@ func NewOwner(pdClient pd.Client, sess *concurrency.Session, gcTTL int64) (*Owne
 		done:                  make(chan struct{}),
 		session:               sess,
 		pdClient:              pdClient,
+		credential:            credential,
 		changeFeeds:           make(map[model.ChangeFeedID]*changeFeed),
 		failedFeeds:           make(map[model.ChangeFeedID]struct{}),
 		captures:              make(map[model.CaptureID]*model.CaptureInfo),
@@ -176,7 +179,7 @@ func (o *Owner) newChangeFeed(
 	})
 
 	// TODO here we create another pb client,we should reuse them
-	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","))
+	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","), o.credential)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +197,7 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
-	ddlHandler := newDDLHandler(o.pdClient, kvStore, checkpointTs)
+	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs)
 
 	existingTables := make(map[model.TableID]model.Ts)
 	for captureID, taskStatus := range processorsInfos {
@@ -225,10 +228,6 @@ func (o *Owner) newChangeFeed(
 		}
 
 		tables[tid] = table
-		if ts, ok := existingTables[tid]; ok {
-			log.Debug("ignore known table", zap.Int64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
-			continue
-		}
 		schema, ok := schemaSnap.SchemaByTableID(tid)
 		if !ok {
 			log.Warn("schema not found for table", zap.Int64("tid", tid))
@@ -248,15 +247,23 @@ func (o *Owner) newChangeFeed(
 			log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
 			continue
 		}
+		// `existingTables` are tables dispatched to a processor, however the
+		// capture that this processor belongs to could have crashed or exited.
+		// So we check this before task dispatching, but after the update of
+		// changefeed schema information.
+		if ts, ok := existingTables[tid]; ok {
+			log.Info("ignore known table", zap.Int64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
+			continue
+		}
 		if pi := tblInfo.GetPartitionInfo(); pi != nil {
 			delete(partitions, tid)
 			for _, partition := range pi.Definitions {
 				id := partition.ID
+				partitions[tid] = append(partitions[tid], id)
 				if ts, ok := existingTables[id]; ok {
-					log.Debug("ignore known table partition", zap.Int64("tid", tid), zap.Int64("partitionID", id), zap.Stringer("table", table), zap.Uint64("ts", ts))
+					log.Info("ignore known table partition", zap.Int64("tid", tid), zap.Int64("partitionID", id), zap.Stringer("table", table), zap.Uint64("ts", ts))
 					continue
 				}
-				partitions[tid] = append(partitions[tid], partition.ID)
 				orphanTables[id] = checkpointTs
 			}
 		} else {
@@ -967,7 +974,7 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 				if err := o.etcdClient.DeleteTaskWorkload(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
-				log.Debug("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
+				log.Info("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
 			}
 		}
 	}

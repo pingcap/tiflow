@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller/frontier"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -48,6 +49,7 @@ type Puller interface {
 
 type pullerImpl struct {
 	pdCli        pd.Client
+	credential   *security.Credential
 	kvStorage    tikv.Storage
 	checkpointTs uint64
 	spans        []regionspan.ComparableSpan
@@ -61,11 +63,12 @@ type pullerImpl struct {
 // and put into buf.
 func NewPuller(
 	pdCli pd.Client,
+	credential *security.Credential,
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
 	limitter *BlurResourceLimitter,
-) *pullerImpl {
+) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
 		log.Fatal("can't create puller for non-tikv storage")
@@ -76,6 +79,7 @@ func NewPuller(
 	}
 	p := &pullerImpl{
 		pdCli:        pdCli,
+		credential:   credential,
 		kvStorage:    tikvStorage,
 		checkpointTs: checkpointTs,
 		spans:        comparableSpans,
@@ -93,7 +97,7 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	cli, err := kv.NewCDCClient(p.pdCli, p.kvStorage)
+	cli, err := kv.NewCDCClient(ctx, p.pdCli, p.kvStorage, p.credential)
 	if err != nil {
 		return errors.Annotate(err, "create cdc client failed")
 	}
