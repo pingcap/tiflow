@@ -165,7 +165,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 
 	pm := puller.NewMockPullerManager(c, true)
 	pm.MustExec(testCaseDdl.Query)
-	ddlPlr := pm.CreatePuller(0, []regionspan.Span{regionspan.GetDDLSpan()})
+	ddlPlr := pm.CreatePuller(0, []regionspan.ComparableSpan{regionspan.ToComparableSpan(regionspan.GetDDLSpan())})
 	go func() {
 		err := ddlPlr.Run(ctx)
 		if err != nil && errors.Cause(err) != context.Canceled {
