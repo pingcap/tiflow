@@ -25,9 +25,10 @@ import (
 
 // Credential holds necessary path parameter to build a tls.Config
 type Credential struct {
-	CAPath   string `toml:"ca-path" json:"ca-path"`
-	CertPath string `toml:"cert-path" json:"cert-path"`
-	KeyPath  string `toml:"key-path" json:"key-path"`
+	CAPath        string   `toml:"ca-path" json:"ca-path"`
+	CertPath      string   `toml:"cert-path" json:"cert-path"`
+	KeyPath       string   `toml:"key-path" json:"key-path"`
+	CertAllowedCN []string `toml:"cert-allowed-cn" json:"cert-allowed-cn"`
 }
 
 // PDSecurityOption creates a new pd SecurityOption from Security

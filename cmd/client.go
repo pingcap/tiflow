@@ -41,7 +41,7 @@ func init() {
 	cliCmd.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address")
 	cliCmd.PersistentFlags().BoolVarP(&interact, "interact", "i", false, "Run cdc cli with readline")
 	cliCmd.PersistentFlags().StringVar(&cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
-	addSecurityFlags(cliCmd.PersistentFlags())
+	addSecurityFlags(cliCmd.PersistentFlags(), false /* isServer */)
 	rootCmd.AddCommand(cliCmd)
 }
 
