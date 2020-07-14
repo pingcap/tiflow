@@ -115,7 +115,7 @@ ignore-txn-start-ts = [1, 2]
 # 过滤器规则
 # 过滤规则语法： https://docs.pingcap.com/zh/tidb/stable/table-filter
 # The rules of the filter
-# Filter rule syntax: https://docs.pingcap.com/tidb/stable/table-filter
+# Filter rules syntax: https://docs.pingcap.com/tidb/stable/table-filter
 rules = ['*.*', '!test.*']
 
 [mounter]
