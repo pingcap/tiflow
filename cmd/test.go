@@ -53,7 +53,7 @@ var testKVCmd = &cobra.Command{
 	Long:   ``,
 	Run: func(cmd *cobra.Command, args []string) {
 		addrs := strings.Split(testPdAddr, ",")
-		cli, err := pd.NewClient(addrs, pd.SecurityOption{})
+		cli, err := pd.NewClient(addrs, getCredential().PDSecurityOption())
 		if err != nil {
 			fmt.Println(err)
 			return
