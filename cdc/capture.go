@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/security"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
@@ -41,8 +42,8 @@ var ErrSuicide = errors.New("Suicide")
 
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
-	pdEndpoints []string
-	etcdClient  kv.CDCEtcdClient
+	etcdClient kv.CDCEtcdClient
+	credential *security.Credential
 
 	processors map[string]*processor
 	procLock   sync.Mutex
@@ -55,12 +56,22 @@ type Capture struct {
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(ctx context.Context, pdEndpoints []string, advertiseAddr string) (c *Capture, err error) {
+func NewCapture(ctx context.Context, pdEndpoints []string, credential *security.Credential, advertiseAddr string) (c *Capture, err error) {
+	tlsConfig, err := credential.ToTLSConfig()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	grpcTLSOption, err := credential.ToGRPCDialOption()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   pdEndpoints,
+		TLS:         tlsConfig,
 		Context:     ctx,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
+			grpcTLSOption,
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{
@@ -92,12 +103,12 @@ func NewCapture(ctx context.Context, pdEndpoints []string, advertiseAddr string)
 		zap.String("capture-id", id), zap.String("advertise-addr", advertiseAddr))
 
 	c = &Capture{
-		processors:  make(map[string]*processor),
-		pdEndpoints: pdEndpoints,
-		etcdClient:  cli,
-		session:     sess,
-		election:    elec,
-		info:        info,
+		processors: make(map[string]*processor),
+		etcdClient: cli,
+		credential: credential,
+		session:    sess,
+		election:   elec,
+		info:       info,
 	}
 
 	return
@@ -213,8 +224,8 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error
 	log.Info("run processor", zap.String("captureid", c.info.ID),
 		zap.String("changefeedid", task.ChangeFeedID))
 
-	p, err := runProcessor(ctx, c.session, *cf, task.ChangeFeedID,
-		*c.info, task.CheckpointTS)
+	p, err := runProcessor(
+		ctx, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS)
 	if err != nil {
 		log.Error("run processor failed",
 			zap.String("changefeedid", task.ChangeFeedID),

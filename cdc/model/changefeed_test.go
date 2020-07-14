@@ -14,6 +14,8 @@
 package model
 
 import (
+	"time"
+
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
@@ -174,4 +176,34 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 	marshalConfig2, err := defaultConfig.Marshal()
 	c.Assert(err, check.IsNil)
 	c.Assert(marshalConfig1, check.Equals, marshalConfig2)
+}
+
+type changefeedSuite struct{}
+
+var _ = check.Suite(&changefeedSuite{})
+
+func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
+	now := time.Now()
+	info := &ChangeFeedInfo{
+		ErrorHis: []int64{},
+	}
+	for i := 0; i < 5; i++ {
+		tm := now.Add(-errorHistoryGCInterval)
+		info.ErrorHis = append(info.ErrorHis, tm.UnixNano()/1e6)
+		time.Sleep(time.Millisecond)
+	}
+	for i := 0; i < errorHistoryThreshold-1; i++ {
+		info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(time.Millisecond)
+	needSave, canInit := info.CheckErrorHistory()
+	c.Assert(needSave, check.IsTrue)
+	c.Assert(canInit, check.IsTrue)
+	c.Assert(info.ErrorHis, check.HasLen, errorHistoryThreshold-1)
+
+	info.ErrorHis = append(info.ErrorHis, time.Now().UnixNano()/1e6)
+	needSave, canInit = info.CheckErrorHistory()
+	c.Assert(needSave, check.IsFalse)
+	c.Assert(canInit, check.IsFalse)
 }

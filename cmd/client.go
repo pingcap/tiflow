@@ -25,6 +25,7 @@ import (
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/v4/client"
+	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -39,6 +40,7 @@ func init() {
 	cliCmd.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address")
 	cliCmd.PersistentFlags().BoolVarP(&interact, "interact", "i", false, "Run cdc cli with readline")
 	cliCmd.PersistentFlags().StringVar(&cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
+	addSecurityFlags(cliCmd.PersistentFlags())
 	rootCmd.AddCommand(cliCmd)
 }
 
@@ -72,9 +74,10 @@ var (
 	defaultContext context.Context
 )
 
-// cf holds changefeed id, which is used for output only
-type cf struct {
-	ID string `json:"id"`
+// changefeedCommonInfo holds some common used information of a changefeed
+type changefeedCommonInfo struct {
+	ID      string              `json:"id"`
+	Summary *cdc.ChangefeedResp `json:"summary"`
 }
 
 // capture holds capture information
@@ -116,10 +119,21 @@ func newCliCommand() *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			initCmd(cmd, &util.Config{Level: cliLogLevel})
 
+			credential := getCredential()
+			tlsConfig, err := credential.ToTLSConfig()
+			if err != nil {
+				return errors.Annotate(err, "fail to validate TLS settings")
+			}
+			grpcTLSOption, err := credential.ToGRPCDialOption()
+			if err != nil {
+				return errors.Annotate(err, "fail to validate TLS settings")
+			}
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
+				TLS:         tlsConfig,
 				DialTimeout: 30 * time.Second,
 				DialOptions: []grpc.DialOption{
+					grpcTLSOption,
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
 						Backoff: backoff.Config{
@@ -138,8 +152,9 @@ func newCliCommand() *cobra.Command {
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
 			pdCli, err = pd.NewClientWithContext(
-				defaultContext, []string{cliPdAddr}, pd.SecurityOption{},
+				defaultContext, []string{cliPdAddr}, credential.PDSecurityOption(),
 				pd.WithGRPCDialOptions(
+					grpcTLSOption,
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
 						Backoff: backoff.Config{
@@ -156,7 +171,7 @@ func newCliCommand() *cobra.Command {
 			}
 			ctx := defaultContext
 			errorTiKVIncompatible := true // Error if TiKV is incompatible.
-			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr, errorTiKVIncompatible)
+			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr, credential, errorTiKVIncompatible)
 			if err != nil {
 				return err
 			}

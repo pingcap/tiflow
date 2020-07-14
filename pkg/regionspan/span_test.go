@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/util/codec"
 )
 
 type spanSuite struct{}
@@ -69,16 +68,16 @@ func (s *spanSuite) TestEndCompare(c *check.C) {
 
 func (s *spanSuite) TestIntersect(c *check.C) {
 	tests := []struct {
-		lhs Span
-		rhs Span
+		lhs ComparableSpan
+		rhs ComparableSpan
 		// Set nil for non-intersect
-		res *Span
+		res *ComparableSpan
 	}{
-		{Span{nil, []byte{1}}, Span{[]byte{1}, nil}, nil},
-		{Span{nil, nil}, Span{nil, nil}, &Span{nil, nil}},
-		{Span{nil, nil}, Span{[]byte{1}, []byte{2}}, &Span{[]byte{1}, []byte{2}}},
-		{Span{[]byte{0}, []byte{3}}, Span{[]byte{1}, []byte{2}}, &Span{[]byte{1}, []byte{2}}},
-		{Span{[]byte{0}, []byte{2}}, Span{[]byte{1}, []byte{2}}, &Span{[]byte{1}, []byte{2}}},
+		{ComparableSpan{nil, []byte{1}}, ComparableSpan{[]byte{1}, nil}, nil},
+		{ComparableSpan{nil, nil}, ComparableSpan{nil, nil}, &ComparableSpan{nil, nil}},
+		{ComparableSpan{nil, nil}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
+		{ComparableSpan{[]byte{0}, []byte{3}}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
+		{ComparableSpan{[]byte{0}, []byte{2}}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
 	}
 
 	for _, t := range tests {
@@ -101,16 +100,9 @@ func (s *spanSuite) TestIntersect(c *check.C) {
 }
 
 func (s *spanSuite) TestGetTableSpan(c *check.C) {
-	span := GetTableSpan(123, true)
+	span := GetTableSpan(123)
 	c.Assert(span.Start, check.Less, span.End)
 	prefix := []byte(tablecodec.GenTablePrefix(123))
-	c.Assert(span.Start, check.Greater, codec.EncodeBytes(nil, prefix))
-	prefix[len(prefix)-1]++
-	c.Assert(span.End, check.Less, codec.EncodeBytes(nil, prefix))
-
-	span = GetTableSpan(123, false)
-	c.Assert(span.Start, check.Less, span.End)
-	prefix = []byte(tablecodec.GenTablePrefix(123))
 	c.Assert(span.Start, check.Greater, prefix)
 	prefix[len(prefix)-1]++
 	c.Assert(span.End, check.Less, prefix)

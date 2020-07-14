@@ -128,7 +128,7 @@ var _ Puller = &mockPuller{}
 
 type mockPuller struct {
 	pm          *MockPullerManager
-	spans       []regionspan.Span
+	spans       []regionspan.ComparableSpan
 	resolvedTs  uint64
 	startTs     uint64
 	rawKVOffset int
@@ -149,7 +149,7 @@ func (p *mockPuller) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 					continue
 				}
 				p.resolvedTs = rawKV.StartTs
-				if !regionspan.KeyInSpans(rawKV.Key, p.spans, false) {
+				if !regionspan.KeyInSpans(rawKV.Key, p.spans) {
 					continue
 				}
 				select {

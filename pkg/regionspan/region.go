@@ -20,7 +20,7 @@ import (
 )
 
 // CheckRegionsLeftCover checks whether the regions cover the left part of given span
-func CheckRegionsLeftCover(regions []*metapb.Region, span Span) bool {
+func CheckRegionsLeftCover(regions []*metapb.Region, span ComparableSpan) bool {
 	if len(regions) == 0 {
 		return false
 	}

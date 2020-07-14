@@ -15,6 +15,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -22,14 +23,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 func newChangefeedCommand() *cobra.Command {
@@ -93,7 +97,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 	}
 
 	for _, cmd := range cmds {
-		cmd.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
+		cmd.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 		_ = cmd.MarkPersistentFlagRequired("changefeed-id")
 	}
 	return cmds
@@ -109,9 +113,22 @@ func newListChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cfs := make([]*cf, 0, len(raw))
+			cfs := make([]*changefeedCommonInfo, 0, len(raw))
 			for id := range raw {
-				cfs = append(cfs, &cf{ID: id})
+				cfci := &changefeedCommonInfo{ID: id}
+				resp, err := applyOwnerChangefeedQuery(ctx, id)
+				if err != nil {
+					// if no capture is available, the query will fail, just add a warning here
+					log.Warn("query changefeed info failed", zap.String("error", err.Error()))
+				} else {
+					info := &cdc.ChangefeedResp{}
+					err = json.Unmarshal([]byte(resp), info)
+					if err != nil {
+						return err
+					}
+					cfci.Summary = info
+				}
+				cfs = append(cfs, cfci)
 			}
 			return jsonPrint(cmd, cfs)
 		},
@@ -166,13 +183,13 @@ func newQueryChangefeedCommand() *cobra.Command {
 			return jsonPrint(cmd, meta)
 		},
 	}
-	command.PersistentFlags().BoolVar(&simplified, "simple", false, "Output simplified replication status")
-	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
+	command.PersistentFlags().BoolVarP(&simplified, "simple", "s", false, "Output simplified replication status")
+	command.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 	return command
 }
 
-func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate bool) (*model.ChangeFeedInfo, error) {
+func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate bool, credential *security.Credential) (*model.ChangeFeedInfo, error) {
 	if isCreate {
 		if startTs == 0 {
 			ts, logical, err := pdCli.GetTS(ctx)
@@ -228,7 +245,7 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 
 	if isCreate {
 		ctx = util.PutTimezoneInCtx(ctx, tz)
-		ineligibleTables, eligibleTables, err := verifyTables(ctx, cfg, startTs)
+		ineligibleTables, eligibleTables, err := verifyTables(ctx, credential, cfg, startTs)
 		if err != nil {
 			return nil, err
 		}
@@ -298,9 +315,12 @@ func newCreateChangefeedCommand() *cobra.Command {
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
-			id := uuid.New().String()
+			id := changefeedID
+			if id == "" {
+				id = uuid.New().String()
+			}
 
-			info, err := verifyChangefeedParamers(ctx, cmd, true /* isCreate */)
+			info, err := verifyChangefeedParamers(ctx, cmd, true /* isCreate */, getCredential())
 			if err != nil {
 				return err
 			}
@@ -312,7 +332,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			err = cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
+			err = cdcEtcdCli.CreateChangefeedInfo(ctx, info, id)
 			if err != nil {
 				return err
 			}
@@ -322,6 +342,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 	}
 	changefeedConfigVariables(command)
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
+	command.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 
 	return command
 }
@@ -339,7 +360,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 				return err
 			}
 
-			info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */)
+			info, err := verifyChangefeedParamers(ctx, cmd, false /* isCreate */, getCredential())
 			if err != nil {
 				return err
 			}
@@ -388,7 +409,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 		},
 	}
 	changefeedConfigVariables(command)
-	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
+	command.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to confirm update changefeed config")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 
@@ -443,8 +464,8 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 			}
 		},
 	}
-	command.PersistentFlags().StringVar(&changefeedID, "changefeed-id", "", "Replication task (changefeed) ID")
-	command.PersistentFlags().UintVar(&interval, "interval", 10, "Interval for outputing the latest statistics")
+	command.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
+	command.PersistentFlags().UintVarP(&interval, "interval", "I", 10, "Interval for outputing the latest statistics")
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 	return command
 }
@@ -474,7 +495,7 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 				}
 				startTs = oracle.ComposeTS(ts, logical)
 
-				_, eligibleTables, err := verifyTables(ctx, cfg, startTs)
+				_, eligibleTables, err := verifyTables(ctx, getCredential(), cfg, startTs)
 				if err != nil {
 					return err
 				}
