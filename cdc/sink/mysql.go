@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/cenkalti/backoff"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
@@ -159,6 +160,11 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	}
 	err := s.execDDLWithMaxRetries(ctx, ddl, defaultDDLMaxRetryTime)
 	return errors.Trace(err)
+}
+
+// Initialize is no-op for Mysql sink
+func (s *mysqlSink) Initialize(ctx context.Context, schemaSnap *entry.SingleSchemaSnapshot) error {
+	return nil
 }
 
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent, maxRetries uint64) error {

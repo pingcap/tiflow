@@ -125,7 +125,7 @@ func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 	c.Check(err, check.IsNil)
 
 	c.Assert(evlp[0], check.Equals, magicByte)
-	c.Assert(evlp[1:5], check.BytesEquals, []byte{7, 0, 0, 0})
+	c.Assert(evlp[1:5], check.BytesEquals, []byte{0, 0, 0, 7})
 
 	parsed, _, err := avroCodec.NativeFromBinary(evlp[5:])
 	c.Assert(err, check.IsNil)

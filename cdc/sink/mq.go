@@ -15,6 +15,7 @@ package sink
 
 import (
 	"context"
+
 	"net/url"
 	"strconv"
 	"strings"
@@ -22,7 +23,8 @@ import (
 	"time"
 
 	"github.com/pingcap/ticdc/pkg/config"
-
+	"github.com/linkedin/goavro/v2"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -213,11 +215,60 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	key, value := encoder.Build()
-	log.Info("emit ddl event", zap.ByteString("key", key), zap.ByteString("value", value))
-	err = k.mqProducer.SyncBroadcastMessage(ctx, key, value)
-	if err != nil {
-		return errors.Trace(err)
+
+	if k.protocol != codec.ProtocolAvro {
+		key, value := encoder.Build()
+		log.Info("emit ddl event", zap.ByteString("key", key), zap.ByteString("value", value))
+		err = k.mqProducer.SyncBroadcastMessage(ctx, key, value)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+// Initialize registers Avro schemas for all tables
+func (k *mqSink) Initialize(ctx context.Context, schemaSnap *entry.SingleSchemaSnapshot) error {
+	if k.protocol == codec.ProtocolAvro {
+		avroEncoder := k.newEncoder().(*codec.AvroEventBatchEncoder)
+		manager := avroEncoder.GetValueSchemaManager()
+		if manager == nil {
+			return errors.New("No schema manager in Avro encoder, probably bug")
+		}
+
+		for _, tableName := range schemaSnap.CloneTables() {
+			info, ok := schemaSnap.GetTableByName(tableName.Schema, tableName.Table)
+			if !ok {
+				return errors.Errorf("Table %s not found, probably bug", tableName.String())
+			}
+
+			if !info.IsEligible() || tableName.Schema == "mysql" {
+				log.Info("Skip creating schema for table", zap.String("table-name", info.Name.String()))
+				continue
+			}
+
+			columnInfo := make([]*model.ColumnInfo, len(info.Cols()))
+			for i := range columnInfo {
+				columnInfo[i] = new(model.ColumnInfo)
+				columnInfo[i].FromTiColumnInfo(info.Cols()[i])
+			}
+
+			str, err := codec.ColumnInfoToAvroSchema(tableName.Table, columnInfo)
+			if err != nil {
+				return errors.New("Error in Initialize")
+			}
+
+			avroCodec, err := goavro.NewCodec(str)
+			if err != nil {
+				return errors.Annotate(err, "Initialize failed: could not verify schema, probably bug")
+			}
+
+			err = manager.Register(context.Background(), tableName, avroCodec)
+
+			if err != nil {
+				return errors.Annotate(err, "Initialize failed: could not register schema")
+			}
+		}
 	}
 	return nil
 }

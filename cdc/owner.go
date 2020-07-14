@@ -287,6 +287,12 @@ func (o *Owner) newChangeFeed(
 		}
 		cancel()
 	}()
+
+	err = sink.Initialize(ctx, schemaSnap)
+	if err != nil {
+		log.Error("error on running owner", zap.Error(err))
+	}
+
 	cf := &changeFeed{
 		info:          info,
 		id:            id,

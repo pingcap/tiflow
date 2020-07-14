@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"math/rand"
 	"strconv"
 	"time"
 
@@ -59,6 +60,11 @@ func (a *AvroEventBatchEncoder) SetValueSchemaManager(manager *AvroSchemaManager
 	a.valueSchemaManager = manager
 }
 
+// GetValueSchemaManager gets the value schema manager for an Avro encoder
+func (a *AvroEventBatchEncoder) GetValueSchemaManager() *AvroSchemaManager {
+	return a.valueSchemaManager
+}
+
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
 func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
@@ -66,7 +72,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		return errors.New("Fatal sink bug. Batch size must be 1")
 	}
 
-	res, err := a.avroEncode(e.Table, int64(e.SchemaVersion), e.Columns)
+	res, err := a.avroEncode(e.Table, e.SchemaVersion, e.Columns)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
 		return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
@@ -98,7 +104,7 @@ func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 		return nil
 	}
 
-	schemaStr, err := columnInfoToAvroSchema(e.Table, e.ColumnInfo)
+	schemaStr, err := ColumnInfoToAvroSchema(e.Table, e.ColumnInfo)
 	if err != nil {
 		return errors.Annotate(err, "AppendDDLEvent failed")
 	}
@@ -138,7 +144,7 @@ func (a *AvroEventBatchEncoder) Size() int {
 	return 1
 }
 
-func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tiSchemaID int64, cols map[string]*model.Column) (*avroEncodeResult, error) {
+func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tiSchemaID uint64, cols map[string]*model.Column) (*avroEncodeResult, error) {
 	avroCodec, registryID, err := a.valueSchemaManager.Lookup(context.Background(), *table, tiSchemaID)
 	if err != nil {
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: lookup failed")
@@ -172,10 +178,11 @@ type avroSchemaField struct {
 	DefaultValue interface{} `json:"default"`
 }
 
-func columnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string, error) {
+// ColumnInfoToAvroSchema generates the Avro schema JSON for the corresponding columns
+func ColumnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string, error) {
 	top := avroSchemaTop{
 		Tp:     "record",
-		Name:   name,
+		Name:   name + "_" + strconv.FormatInt(rand.Int63(), 10),
 		Fields: nil,
 	}
 
@@ -195,7 +202,7 @@ func columnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string
 
 	str, err := json.Marshal(&top)
 	if err != nil {
-		return "", errors.Annotate(err, "columnInfoToAvroSchema: failed to generate json")
+		return "", errors.Annotate(err, "ColumnInfoToAvroSchema: failed to generate json")
 	}
 	return string(str), nil
 }
