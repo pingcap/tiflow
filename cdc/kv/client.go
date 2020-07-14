@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -157,16 +158,18 @@ func (m *syncRegionFeedStateMap) takeAll() map[uint64]*regionFeedState {
 }
 
 type connArray struct {
-	target string
-	index  uint32
-	v      []*grpc.ClientConn
+	credential *security.Credential
+	target     string
+	index      uint32
+	v          []*grpc.ClientConn
 }
 
-func newConnArray(ctx context.Context, maxSize uint, addr string) (*connArray, error) {
+func newConnArray(ctx context.Context, maxSize uint, addr string, credential *security.Credential) (*connArray, error) {
 	a := &connArray{
-		target: addr,
-		index:  0,
-		v:      make([]*grpc.ClientConn, maxSize),
+		target:     addr,
+		credential: credential,
+		index:      0,
+		v:          make([]*grpc.ClientConn, maxSize),
 	}
 	err := a.Init(ctx)
 	if err != nil {
@@ -176,16 +179,20 @@ func newConnArray(ctx context.Context, maxSize uint, addr string) (*connArray, e
 }
 
 func (a *connArray) Init(ctx context.Context) error {
+	grpcTLSOption, err := a.credential.ToGRPCDialOption()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	for i := range a.v {
 		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 
 		conn, err := grpc.DialContext(
 			ctx,
 			a.target,
+			grpcTLSOption,
 			grpc.WithInitialWindowSize(grpcInitialWindowSize),
 			grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
 			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcInitialMaxRecvMsgSize)),
-			grpc.WithInsecure(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: gbackoff.Config{
 					BaseDelay:  time.Second,
@@ -232,7 +239,8 @@ func (a *connArray) Close() {
 
 // CDCClient to get events from TiKV
 type CDCClient struct {
-	pd pd.Client
+	pd         pd.Client
+	credential *security.Credential
 
 	clusterID uint64
 
@@ -246,13 +254,14 @@ type CDCClient struct {
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(pd pd.Client, kvStorage tikv.Storage) (c *CDCClient, err error) {
-	clusterID := pd.GetClusterID(context.Background())
+func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, credential *security.Credential) (c *CDCClient, err error) {
+	clusterID := pd.GetClusterID(ctx)
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
 	c = &CDCClient{
 		clusterID:   clusterID,
 		pd:          pd,
+		credential:  credential,
 		kvStorage:   kvStorage,
 		regionCache: tikv.NewRegionCache(pd),
 		mu: struct {
@@ -262,7 +271,6 @@ func NewCDCClient(pd pd.Client, kvStorage tikv.Storage) (c *CDCClient, err error
 			conns: make(map[string]*connArray),
 		},
 	}
-
 	return
 }
 
@@ -285,7 +293,7 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 	if conns, ok := c.mu.conns[addr]; ok {
 		return conns.Get(), nil
 	}
-	ca, err := newConnArray(ctx, grpcConnCount, addr)
+	ca, err := newConnArray(ctx, grpcConnCount, addr, c.credential)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

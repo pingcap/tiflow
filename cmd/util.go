@@ -36,12 +36,34 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
 )
+
+var (
+	caPath   string
+	certPath string
+	keyPath  string
+)
+
+func addSecurityFlags(flags *pflag.FlagSet) {
+	flags.StringVar(&caPath, "ca", "", "CA certificate path for TLS connection")
+	flags.StringVar(&certPath, "cert", "", "Certificate path for TLS connection")
+	flags.StringVar(&keyPath, "key", "", "Private key path for TLS connection")
+}
+
+func getCredential() *security.Credential {
+	return &security.Credential{
+		CAPath:   caPath,
+		CertPath: certPath,
+		KeyPath:  keyPath,
+	}
+}
 
 // initCmd initializes the logger, the default context and returns its cancel function.
 func initCmd(cmd *cobra.Command, logCfg *util.Config) context.CancelFunc {
@@ -173,8 +195,8 @@ func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) er
 	return nil
 }
 
-func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
-	kvStore, err := kv.CreateTiStore(cliPdAddr)
+func verifyTables(ctx context.Context, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
+	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
 	if err != nil {
 		return nil, nil, err
 	}
