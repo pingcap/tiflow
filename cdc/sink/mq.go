@@ -182,7 +182,7 @@ flushLoop:
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	switch k.protocol {
-	case codec.ProtocolCanal: // ignore resolved events in canal protocol
+	case codec.ProtocolCanal, codec.ProtocolAvro: // ignore resolved events in canal protocol
 		return nil
 	}
 	encoder := k.newEncoder()
