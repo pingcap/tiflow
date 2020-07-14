@@ -292,7 +292,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	errCh := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		s, err := sink.NewSink(ctx, downstreamURIStr, filter, config.GetDefaultReplicaConfig(), nil, errCh)
+		s, err := sink.NewSink(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), nil, errCh)
 		if err != nil {
 			cancel()
 			return nil, errors.Trace(err)
@@ -302,7 +302,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			resolvedTs uint64
 		}{Sink: s}
 	}
-	sink, err := sink.NewSink(ctx, downstreamURIStr, filter, config.GetDefaultReplicaConfig(), nil, errCh)
+	sink, err := sink.NewSink(ctx, "kafka-consumer", downstreamURIStr, filter, config.GetDefaultReplicaConfig(), nil, errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
