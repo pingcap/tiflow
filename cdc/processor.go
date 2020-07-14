@@ -341,9 +341,9 @@ func (p *processor) positionWorker(ctx context.Context) error {
 	}()
 
 	resolvedTsGauge := resolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	metricResolvedTsGapGauge := resolvedTsGapGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	metricResolvedTsLagGauge := resolvedTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	checkpointTsGauge := checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	metricCheckpointTsGapGauge := checkpointTsGapGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
+	metricCheckpointTsLagGauge := checkpointTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 
 	for {
 		select {
@@ -370,7 +370,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			resolvedTsGauge.Set(float64(phyTs))
 			// It is more accurate to get tso from PD, but in most cases we have
 			// deployed NTP service, a little bias is acceptable here.
-			metricResolvedTsGapGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+			metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 			if err := updateInfo(); err != nil {
 				return errors.Trace(err)
 			}
@@ -385,7 +385,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			checkpointTsGauge.Set(float64(phyTs))
 			// It is more accurate to get tso from PD, but in most cases we have
 			// deployed NTP service, a little bias is acceptable here.
-			metricCheckpointTsGapGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+			metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 			if err := updateInfo(); err != nil {
 				return errors.Trace(err)
 			}

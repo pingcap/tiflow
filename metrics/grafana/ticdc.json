@@ -1914,7 +1914,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "local resolved ts gap of processor",
+          "description": "local resolved ts lag of processor",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
@@ -1956,7 +1956,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_processor_resolved_ts_gap{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "sum(ticdc_processor_resolved_ts_lag{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -1968,7 +1968,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "processor resolved ts gap",
+          "title": "processor resolved ts lag",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -2011,7 +2011,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "global checkpoint ts gap of processor",
+          "description": "global checkpoint ts lag of processor",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
@@ -2051,7 +2051,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_processor_checkpoint_ts_gap{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "expr": "sum(ticdc_processor_checkpoint_ts_lag{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
