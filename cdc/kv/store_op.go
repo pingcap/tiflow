@@ -19,7 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/flags"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/tidb/config"
+	tidbconfig "github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store"
@@ -46,11 +46,11 @@ func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage
 	_ = store.Register("tikv", tikv.Driver{})
 
 	if credential.CAPath != "" {
-		conf := config.GetGlobalConfig()
+		conf := tidbconfig.GetGlobalConfig()
 		conf.Security.ClusterSSLCA = credential.CAPath
 		conf.Security.ClusterSSLCert = credential.CertPath
 		conf.Security.ClusterSSLKey = credential.KeyPath
-		config.StoreGlobalConfig(conf)
+		tidbconfig.StoreGlobalConfig(conf)
 	}
 
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
