@@ -45,7 +45,9 @@ import (
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	gbackoff "google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -953,11 +955,20 @@ func (s *eventFeedSession) receiveFromStream(
 			return nil
 		}
 		if err != nil {
-			log.Error(
-				"failed to receive from stream",
-				zap.String("addr", addr),
-				zap.Uint64("storeID", storeID),
-				zap.Error(err))
+			if status.Code(errors.Cause(err)) == codes.Canceled {
+				log.Debug(
+					"receive from stream canceled",
+					zap.String("addr", addr),
+					zap.Uint64("storeID", storeID),
+				)
+			} else {
+				log.Error(
+					"failed to receive from stream",
+					zap.String("addr", addr),
+					zap.Uint64("storeID", storeID),
+					zap.Error(err),
+				)
+			}
 
 			for _, state := range regionStates {
 				select {

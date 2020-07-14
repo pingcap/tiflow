@@ -315,7 +315,10 @@ func newCreateChangefeedCommand() *cobra.Command {
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := defaultContext
-			id := uuid.New().String()
+			id := changefeedID
+			if id == "" {
+				id = uuid.New().String()
+			}
 
 			info, err := verifyChangefeedParamers(ctx, cmd, true /* isCreate */, getCredential())
 			if err != nil {
@@ -329,7 +332,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			err = cdcEtcdCli.SaveChangeFeedInfo(ctx, info, id)
+			err = cdcEtcdCli.CreateChangefeedInfo(ctx, info, id)
 			if err != nil {
 				return err
 			}
@@ -339,6 +342,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 	}
 	changefeedConfigVariables(command)
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
+	command.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 
 	return command
 }

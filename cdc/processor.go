@@ -309,7 +309,12 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		err := retry.Run(500*time.Millisecond, 3, func() error {
 			inErr := p.updateInfo(ctx)
 			if inErr != nil {
-				log.Error("update info failed", zap.Error(inErr))
+				if errors.Cause(inErr) != context.Canceled {
+					log.Error(
+						"update info failed",
+						zap.String("changefeed", p.changefeedID), zap.Error(inErr),
+					)
+				}
 				if p.isStopped() || errors.Cause(inErr) == model.ErrAdminStopProcessor {
 					return backoff.Permanent(errors.Trace(model.ErrAdminStopProcessor))
 				}
