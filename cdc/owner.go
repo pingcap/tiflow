@@ -228,10 +228,6 @@ func (o *Owner) newChangeFeed(
 		}
 
 		tables[tid] = table
-		if ts, ok := existingTables[tid]; ok {
-			log.Debug("ignore known table", zap.Int64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
-			continue
-		}
 		schema, ok := schemaSnap.SchemaByTableID(tid)
 		if !ok {
 			log.Warn("schema not found for table", zap.Int64("tid", tid))
@@ -251,15 +247,23 @@ func (o *Owner) newChangeFeed(
 			log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
 			continue
 		}
+		// `existingTables` are tables dispatched to a processor, however the
+		// capture that this processor belongs to could have crashed or exited.
+		// So we check this before task dispatching, but after the update of
+		// changefeed schema information.
+		if ts, ok := existingTables[tid]; ok {
+			log.Info("ignore known table", zap.Int64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
+			continue
+		}
 		if pi := tblInfo.GetPartitionInfo(); pi != nil {
 			delete(partitions, tid)
 			for _, partition := range pi.Definitions {
 				id := partition.ID
+				partitions[tid] = append(partitions[tid], id)
 				if ts, ok := existingTables[id]; ok {
-					log.Debug("ignore known table partition", zap.Int64("tid", tid), zap.Int64("partitionID", id), zap.Stringer("table", table), zap.Uint64("ts", ts))
+					log.Info("ignore known table partition", zap.Int64("tid", tid), zap.Int64("partitionID", id), zap.Stringer("table", table), zap.Uint64("ts", ts))
 					continue
 				}
-				partitions[tid] = append(partitions[tid], partition.ID)
 				orphanTables[id] = checkpointTs
 			}
 		} else {
@@ -970,7 +974,7 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 				if err := o.etcdClient.DeleteTaskWorkload(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
-				log.Debug("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
+				log.Info("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
 			}
 		}
 	}
