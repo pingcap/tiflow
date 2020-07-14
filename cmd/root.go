@@ -27,6 +27,8 @@ var rootCmd = &cobra.Command{
 
 // Execute runs the root command
 func Execute() {
+	// Ouputs cmd.Print to stdout.
+	rootCmd.SetOut(os.Stdout)
 	if err := rootCmd.Execute(); err != nil {
 		rootCmd.Println(err)
 		os.Exit(1)
