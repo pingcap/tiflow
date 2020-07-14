@@ -348,7 +348,6 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			info := &model.TableReplicaInfo{
 				StartTs:     op.BoundaryTs,
 				MarkTableID: orphanMarkTableID,
-				Name:        tableName.String(),
 			}
 			status.AddTable(tableID, info, op.BoundaryTs)
 			addedTables[tableID] = struct{}{}
