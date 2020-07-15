@@ -128,7 +128,7 @@ var _ Puller = &mockPuller{}
 
 type mockPuller struct {
 	pm          *MockPullerManager
-	spans       []regionspan.Span
+	spans       []regionspan.ComparableSpan
 	resolvedTs  uint64
 	startTs     uint64
 	rawKVOffset int
@@ -149,7 +149,7 @@ func (p *mockPuller) SortedOutput(ctx context.Context) <-chan *model.RawKVEntry 
 					continue
 				}
 				p.resolvedTs = rawKV.StartTs
-				if !regionspan.KeyInSpans(rawKV.Key, p.spans, false) {
+				if !regionspan.KeyInSpans(rawKV.Key, p.spans) {
 					continue
 				}
 				select {
@@ -177,6 +177,9 @@ func (p *mockPuller) Run(ctx context.Context) error {
 
 func (p *mockPuller) GetResolvedTs() uint64 {
 	return p.resolvedTs
+}
+
+func (p *mockPuller) EnableOldValue() {
 }
 
 // NewMockPullerManager creates and sets up a mock puller manager
@@ -229,13 +232,12 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 }
 
 // CreatePuller returns a mock puller with the specified start ts and spans
-func (m *MockPullerManager) CreatePuller(startTs uint64, spans []regionspan.Span) Puller {
-	//return &mockPuller{
-	//	spans:   spans,
-	//	pm:      m,
-	//	startTs: startTs,
-	//}
-	return nil
+func (m *MockPullerManager) CreatePuller(startTs uint64, spans []regionspan.ComparableSpan) Puller {
+	return &mockPuller{
+		spans:   spans,
+		pm:      m,
+		startTs: startTs,
+	}
 }
 
 // MustExec delegates to TestKit.MustExec

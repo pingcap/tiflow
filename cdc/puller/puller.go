@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller/frontier"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -44,19 +45,19 @@ type Puller interface {
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
 	Output() <-chan *model.RawKVEntry
+	EnableOldValue()
 }
 
 type pullerImpl struct {
-	pdCli        pd.Client
-	kvStorage    tikv.Storage
-	checkpointTs uint64
-	spans        []regionspan.Span
-	buffer       *memBuffer
-	outputCh     chan *model.RawKVEntry
-	tsTracker    frontier.Frontier
-	resolvedTs   uint64
-	// needEncode represents whether we need to encode a key when checking it is in span
-	needEncode     bool
+	pdCli          pd.Client
+	credential     *security.Credential
+	kvStorage      tikv.Storage
+	checkpointTs   uint64
+	spans          []regionspan.ComparableSpan
+	buffer         *memBuffer
+	outputCh       chan *model.RawKVEntry
+	tsTracker      frontier.Frontier
+	resolvedTs     uint64
 	enableOldValue bool
 }
 
@@ -64,28 +65,30 @@ type pullerImpl struct {
 // and put into buf.
 func NewPuller(
 	pdCli pd.Client,
+	credential *security.Credential,
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
-	needEncode bool,
-	enableOldValue bool,
 	limitter *BlurResourceLimitter,
-) *pullerImpl {
+) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
 		log.Fatal("can't create puller for non-tikv storage")
 	}
+	comparableSpans := make([]regionspan.ComparableSpan, len(spans))
+	for i := range spans {
+		comparableSpans[i] = regionspan.ToComparableSpan(spans[i])
+	}
 	p := &pullerImpl{
-		pdCli:          pdCli,
-		kvStorage:      tikvStorage,
-		checkpointTs:   checkpointTs,
-		spans:          spans,
-		buffer:         makeMemBuffer(limitter),
-		outputCh:       make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:      frontier.NewFrontier(spans...),
-		needEncode:     needEncode,
-		enableOldValue: enableOldValue,
-		resolvedTs:     checkpointTs,
+		pdCli:        pdCli,
+		credential:   credential,
+		kvStorage:    tikvStorage,
+		checkpointTs: checkpointTs,
+		spans:        comparableSpans,
+		buffer:       makeMemBuffer(limitter),
+		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
+		tsTracker:    frontier.NewFrontier(checkpointTs, comparableSpans...),
+		resolvedTs:   checkpointTs,
 	}
 	return p
 }
@@ -94,9 +97,16 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 	return p.outputCh
 }
 
+func (p *pullerImpl) EnableOldValue() {
+	p.enableOldValue = true
+}
+
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	cli, err := kv.NewCDCClient(p.pdCli, p.kvStorage, p.enableOldValue)
+	cli, err := kv.NewCDCClient(ctx, p.pdCli, p.kvStorage, p.credential)
+	if p.enableOldValue {
+		cli.EnableOldValue()
+	}
 	if err != nil {
 		return errors.Annotate(err, "create cdc client failed")
 	}
@@ -153,7 +163,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// and we only want the get [b, c) from this region,
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
-					if !regionspan.KeyInSpans(val.Key, p.spans, p.needEncode) {
+					comparableKey := regionspan.ToComparableKey(val.Key)
+					if !regionspan.KeyInSpans(comparableKey, p.spans) {
 						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
 						continue
 					}
@@ -202,6 +213,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				}
 			} else if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
+				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
+					log.Fatal("the resolved span is not in the total span", zap.Reflect("resolved", e.Resolved), zap.Int64("tableID", tableID))
+				}
 				// Forward is called in a single thread
 				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
 				resolvedTs := p.tsTracker.Frontier()

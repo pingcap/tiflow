@@ -160,7 +160,7 @@ func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	s.testBatchCodec(c, NewJSONEventBatchEncoder, NewJSONEventBatchDecoder)
 }
 
-var _ = check.Suite(columnSuite{})
+var _ = check.Suite(&columnSuite{})
 
 type columnSuite struct{}
 

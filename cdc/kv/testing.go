@@ -26,6 +26,7 @@ import (
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
@@ -137,7 +138,7 @@ func mustGetValue(t require.TestingT, eventCh <-chan *model.RegionFeedEvent, val
 // TestSplit try split on every region, and test can get value event from
 // every region after split.
 func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
-	cli, err := NewCDCClient(pdCli, storage.(tikv.Storage), false)
+	cli, err := NewCDCClient(context.Background(), pdCli, storage.(tikv.Storage), &security.Credential{})
 	require.NoError(t, err)
 	defer cli.Close()
 
@@ -148,7 +149,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	startTS := mustGetTimestamp(t, storage)
 
 	go func() {
-		err := cli.EventFeed(ctx, regionspan.Span{Start: nil, End: nil}, startTS, eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -224,7 +225,7 @@ func mustDeleteKey(t require.TestingT, storage kv.Storage, key []byte) {
 
 // TestGetKVSimple test simple KV operations
 func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
-	cli, err := NewCDCClient(pdCli, storage.(tikv.Storage), false)
+	cli, err := NewCDCClient(context.Background(), pdCli, storage.(tikv.Storage), &security.Credential{})
 	require.NoError(t, err)
 	defer cli.Close()
 
@@ -235,7 +236,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	startTS := mustGetTimestamp(t, storage)
 
 	go func() {
-		err := cli.EventFeed(ctx, regionspan.Span{Start: nil, End: nil}, startTS, checker.eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, checker.eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -257,7 +258,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		if i == 1 {
 			checker = newEventChecker(t)
 			go func() {
-				err := cli.EventFeed(ctx, regionspan.Span{Start: nil, End: nil}, startTS, checker.eventCh)
+				err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, checker.eventCh)
 				require.Equal(t, err, context.Canceled)
 			}()
 		}

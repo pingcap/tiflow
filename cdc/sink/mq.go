@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/sink/pulsar"
 	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/pingcap/errors"
@@ -105,7 +106,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("ts", row.CommitTs))
+			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
 		partition := k.dispatcher.Dispatch(row)
@@ -187,7 +188,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
 		)
-		return nil
+		return errors.Trace(model.ErrorDDLEventIgnored)
 	}
 	encoder := k.newEncoder()
 	err := encoder.AppendDDLEvent(ddl)
@@ -344,6 +345,22 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	producer, err := mqProducer.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+	sink, err := newMqSink(ctx, producer, filter, replicaConfig, opts, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sink, nil
+}
+
+func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+	producer, err := pulsar.NewProducer(sinkURI, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	s := sinkURI.Query().Get("protocol")
+	if s != "" {
+		replicaConfig.Sink.Protocol = s
 	}
 	sink, err := newMqSink(ctx, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {

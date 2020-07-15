@@ -49,7 +49,7 @@ func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
 	c.Assert(err, check.IsNil)
 	err = b.AddEntry(ctx, model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpan{
-			Span:       regionspan.Span{},
+			Span:       regionspan.ComparableSpan{},
 			ResolvedTs: 111,
 		},
 	})
@@ -69,7 +69,7 @@ func (bs *bufferSuite) TestWaitsCanBeCanceled(c *check.C) {
 		for {
 			err := b.AddEntry(timeout, model.RegionFeedEvent{
 				Resolved: &model.ResolvedSpan{
-					Span:       regionspan.Span{},
+					Span:       regionspan.ComparableSpan{},
 					ResolvedTs: 111,
 				},
 			})

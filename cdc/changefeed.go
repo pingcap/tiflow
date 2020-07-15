@@ -338,7 +338,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 				orphanMarkTableID, found = schemaSnapshot.GetTableIDByName(markTableSchameName, markTableTableName)
 				if !found {
 					// Mark table is not created yet, skip and wait.
-					log.Warn("balance table info delay, wait mark table",
+					log.Info("balance orphan tables delay, wait mark table",
 						zap.String("changefeed", c.id),
 						zap.Int64("tableID", tableID),
 						zap.String("markTableName", markTableTableName))
@@ -348,7 +348,6 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			info := &model.TableReplicaInfo{
 				StartTs:     op.BoundaryTs,
 				MarkTableID: orphanMarkTableID,
-				Name:        tableName.String(),
 			}
 			status.AddTable(tableID, info, op.BoundaryTs)
 			addedTables[tableID] = struct{}{}
@@ -633,6 +632,17 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 	ddlEvent := new(model.DDLEvent)
 	ddlEvent.FromJob(todoDDLJob)
+	tableInfo, ok := c.schema.GetTableByName(ddlEvent.Schema, ddlEvent.Table)
+	if ok {
+		ddlEvent.ColumnInfo = make([]*model.ColumnInfo, len(tableInfo.Columns))
+
+		for i, colInfo := range tableInfo.Columns {
+			ddlEvent.ColumnInfo[i] = new(model.ColumnInfo)
+			ddlEvent.ColumnInfo[i].FromTiColumnInfo(colInfo)
+		}
+	} else {
+		ddlEvent.ColumnInfo = nil
+	}
 
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL
@@ -643,6 +653,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return errors.Trace(err)
 	}
 	if skip {
+		log.Info("ddl job ignored", zap.String("changefeed", c.id), zap.Reflect("job", todoDDLJob))
 		c.ddlJobHistory = c.ddlJobHistory[1:]
 		c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedSyncDML
@@ -653,30 +664,32 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	if err != nil {
 		return errors.Trace(err)
 	}
+	executed := false
 	if !c.cyclicEnabled || c.info.Config.Cyclic.SyncDDL {
 		ddlEvent.Query = binloginfo.AddSpecialComment(ddlEvent.Query)
 		log.Debug("DDL processed to make special features mysql-compatible", zap.String("query", ddlEvent.Query))
 		err = c.sink.EmitDDLEvent(ctx, ddlEvent)
+		// If DDL executing failed, pause the changefeed and print log, rather
+		// than return an error and break the running of this owner.
+		if err != nil {
+			if errors.Cause(err) != model.ErrorDDLEventIgnored {
+				c.ddlState = model.ChangeFeedDDLExecuteFailed
+				log.Error("Execute DDL failed",
+					zap.String("ChangeFeedID", c.id),
+					zap.Error(err),
+					zap.Reflect("ddlJob", todoDDLJob))
+				return errors.Trace(model.ErrExecDDLFailed)
+			}
+		} else {
+			executed = true
+		}
 	}
-	// If DDL executing failed, pause the changefeed and print log, rather
-	// than return an error and break the running of this owner.
-	if err != nil {
-		c.ddlState = model.ChangeFeedDDLExecuteFailed
-		log.Error("Execute DDL failed",
-			zap.String("ChangeFeedID", c.id),
-			zap.Error(err),
-			zap.Reflect("ddlJob", todoDDLJob))
-		return errors.Trace(model.ErrExecDDLFailed)
+	if executed {
+		log.Info("Execute DDL succeeded", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
+	} else {
+		log.Info("Execute DDL ignored", zap.String("changefeed", c.id), zap.Reflect("ddlJob", todoDDLJob))
 	}
-	log.Info("Execute DDL succeeded",
-		zap.String("ChangeFeedID", c.id),
-		zap.Reflect("ddlJob", todoDDLJob))
 
-	if c.ddlState != model.ChangeFeedExecDDL {
-		log.Fatal("changeFeedState must be ChangeFeedExecDDL when DDL is executed",
-			zap.String("ChangeFeedID", c.id),
-			zap.String("ChangeFeedDDLState", c.ddlState.String()))
-	}
 	c.ddlJobHistory = c.ddlJobHistory[1:]
 	c.ddlExecutedTs = todoDDLJob.BinlogInfo.FinishedTS
 	c.ddlState = model.ChangeFeedSyncDML
@@ -686,13 +699,34 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
 func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if c.ddlState != model.ChangeFeedSyncDML && c.ddlState != model.ChangeFeedWaitToExecDDL {
+		log.Debug("skip update resolved ts", zap.String("ddlState", c.ddlState.String()))
 		return nil
 	}
 
 	minResolvedTs := c.targetTs
 	minCheckpointTs := c.targetTs
 
+	prevMinResolvedTs := c.targetTs
+	prevMinCheckpointTs := c.targetTs
+	checkUpdateTs := func() {
+		if prevMinCheckpointTs != minCheckpointTs {
+			log.L().WithOptions(zap.AddCallerSkip(1)).Debug("min checkpoint updated",
+				zap.Uint64("prevMinCheckpointTs", prevMinCheckpointTs),
+				zap.Uint64("minCheckpointTs", minCheckpointTs))
+			prevMinCheckpointTs = minCheckpointTs
+		}
+		if prevMinResolvedTs != minResolvedTs {
+			log.L().WithOptions(zap.AddCallerSkip(1)).Debug("min resolved updated",
+				zap.Uint64("prevMinResolvedTs", prevMinResolvedTs),
+				zap.Uint64("minResolvedTs", minResolvedTs))
+			prevMinResolvedTs = minResolvedTs
+		}
+	}
+
 	if len(c.taskPositions) < len(c.taskStatus) {
+		log.Debug("skip update resolved ts",
+			zap.Int("taskPositions", len(c.taskPositions)),
+			zap.Int("taskStatus", len(c.taskStatus)))
 		return nil
 	}
 	if len(c.taskPositions) == 0 {
@@ -709,6 +743,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			}
 		}
 	}
+	checkUpdateTs()
 
 	for captureID, status := range c.taskStatus {
 		appliedTs := status.AppliedTs()
@@ -719,9 +754,13 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			minResolvedTs = appliedTs
 		}
 		if appliedTs != math.MaxUint64 {
-			log.Info("some operation is still unapplied", zap.String("captureID", captureID), zap.Uint64("appliedTs", appliedTs), zap.Stringer("status", status))
+			log.Info("some operation is still unapplied",
+				zap.String("captureID", captureID),
+				zap.Uint64("appliedTs", appliedTs),
+				zap.Stringer("status", status))
 		}
 	}
+	checkUpdateTs()
 
 	for _, startTs := range c.orphanTables {
 		if minCheckpointTs > startTs {
@@ -731,6 +770,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			minResolvedTs = startTs
 		}
 	}
+	checkUpdateTs()
 
 	for _, targetTs := range c.toCleanTables {
 		if minCheckpointTs > targetTs {
@@ -740,6 +780,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			minResolvedTs = targetTs
 		}
 	}
+	checkUpdateTs()
 
 	// if minResolvedTs is greater than ddlResolvedTs,
 	// it means that ddlJobHistory in memory is not intact,
@@ -769,6 +810,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if minCheckpointTs > minResolvedTs {
 		minCheckpointTs = minResolvedTs
 	}
+	checkUpdateTs()
 
 	var tsUpdated bool
 
@@ -790,6 +832,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		}
 		tsUpdated = true
 	}
+	checkUpdateTs()
 
 	if tsUpdated {
 		log.Debug("update changefeed", zap.String("id", c.id),

@@ -78,6 +78,9 @@ done
 
 # Tries to limit the max number of open files under the system limit
 cat - >"$OUT_DIR/tikv-config.toml" <<EOF
+[storage]
+# Disable creating a large temp file.
+reserve-space = "0MB"
 [rocksdb]
 max-open-files = 4096
 [raftdb]
@@ -85,11 +88,6 @@ max-open-files = 4096
 [raftstore]
 # true (default value) for high reliability, this can prevent data loss when power failure.
 sync-log = false
-
-
-# [coprocessor]
-# region-max-keys = 6000
-# region-split-keys = 5000
 EOF
 
 # tidb server config file
@@ -152,7 +150,7 @@ tidb-server \
     --store tikv \
     --path ${DOWN_PD_HOST}:${DOWN_PD_PORT} \
     --status=${DOWN_TIDB_STATUS} \
-    --log-file "$OUT_DIR/down_tidb.log" &
+    --log-file "$OUT_DIR/tidb_down.log" &
 
 echo "Verifying Upstream TiDB is started..."
 i=0

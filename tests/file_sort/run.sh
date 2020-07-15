@@ -26,7 +26,6 @@ function run() {
     TOPIC_NAME="ticdc-sink-retry-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
-        mysql) ;&
         *) SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1";;
     esac
     sort_dir="$WORK_DIR/file_sort_cache"

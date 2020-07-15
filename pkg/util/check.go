@@ -27,6 +27,8 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
+	"github.com/pingcap/ticdc/pkg/httputil"
+	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
 )
 
@@ -52,7 +54,7 @@ func removeVAndHash(v string) string {
 
 // CheckClusterVersion check TiKV and PD version.
 func CheckClusterVersion(
-	ctx context.Context, client pd.Client, pdHTTP string, errorTiKVIncompat bool,
+	ctx context.Context, client pd.Client, pdHTTP string, credential *security.Credential, errorTiKVIncompat bool,
 ) error {
 	err := CheckStoreVersion(ctx, client, 0 /* check all TiKV */)
 	if err != nil {
@@ -60,6 +62,10 @@ func CheckClusterVersion(
 			return err
 		}
 		log.Warn("check TiKV version failed", zap.Error(err))
+	}
+	httpCli, err := httputil.NewClient(credential)
+	if err != nil {
+		return errors.Annotate(err, "fail to validate TLS settings")
 	}
 	// See more: https://github.com/pingcap/pd/blob/v4.0.0-rc.1/server/api/version.go
 	pdVer := struct {
@@ -70,7 +76,7 @@ func CheckClusterVersion(
 	if err != nil {
 		return errors.Annotate(err, "fail to request PD")
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpCli.Do(req)
 	if err != nil {
 		return errors.Annotate(err, "fail to request PD")
 	}
@@ -128,13 +134,4 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 		}
 	}
 	return nil
-}
-
-// IsValidUUIDv4 returns true if the uuid is a valid uuid
-func IsValidUUIDv4(uuid string) bool {
-	if len(uuid) != 36 {
-		return false
-	}
-	match, _ := regexp.Match("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", []byte(uuid))
-	return match
 }
