@@ -50,7 +50,7 @@ func init() {
 	serverCmd.Flags().Int64Var(&gcTTL, "gc-ttl", cdc.DefaultCDCGCSafePointTTL, "CDC GC safepoint TTL duration, specified in seconds")
 	serverCmd.Flags().StringVar(&logFile, "log-file", "", "log file path")
 	serverCmd.Flags().StringVar(&logLevel, "log-level", "info", "log level (etc: debug|info|warn|error)")
-
+	addSecurityFlags(serverCmd.Flags())
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
@@ -70,7 +70,8 @@ func runEServer(cmd *cobra.Command, args []string) error {
 		cdc.Address(address),
 		cdc.AdvertiseAddress(advertiseAddr),
 		cdc.GCTTL(gcTTL),
-		cdc.Timezone(tz)}
+		cdc.Timezone(tz),
+		cdc.Credential(getCredential())}
 	server, err := cdc.NewServer(opts...)
 	if err != nil {
 		return errors.Annotate(err, "new server")

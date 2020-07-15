@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store/mockstore"
@@ -464,12 +465,12 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(err, check.IsNil)
 	sampleCF.sink = sink
 
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, "127.0.0.1:12034")
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, &security.Credential{}, "127.0.0.1:12034")
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
 
-	owner, err := NewOwner(nil, capture.session, DefaultCDCGCSafePointTTL)
+	owner, err := NewOwner(nil, &security.Credential{}, capture.session, DefaultCDCGCSafePointTTL)
 	c.Assert(err, check.IsNil)
 
 	sampleCF.etcdCli = owner.etcdClient
