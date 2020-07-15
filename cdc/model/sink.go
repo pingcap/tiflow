@@ -126,8 +126,8 @@ type DDLEvent struct {
 
 // FromJob fills the values of DDLEvent from DDL job
 func (e *DDLEvent) FromJob(job *model.Job) {
-	tableName := job.BinlogInfo.TableInfo.Name.String()
 	if job.BinlogInfo.TableInfo != nil {
+		tableName := job.BinlogInfo.TableInfo.Name.String()
 		tableInfo := job.BinlogInfo.TableInfo
 		e.TableInfo = new(TableInfo)
 		e.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
@@ -140,6 +140,7 @@ func (e *DDLEvent) FromJob(job *model.Job) {
 		e.TableInfo.Schema = job.SchemaName
 		e.TableInfo.Table = tableName
 		e.TableInfo.UpdateTs = tableInfo.UpdateTS
+		e.Table = tableName
 	} else {
 		log.Warn("BinlogInfo.TableInfo is null")
 	}
@@ -147,7 +148,6 @@ func (e *DDLEvent) FromJob(job *model.Job) {
 	e.CommitTs = job.BinlogInfo.FinishedTS
 	e.Query = job.Query
 	e.Schema = job.SchemaName
-	e.Table = tableName
 	e.Type = job.Type
 }
 
