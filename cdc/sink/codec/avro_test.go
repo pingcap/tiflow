@@ -172,6 +172,8 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 
 	info := pm.GetTableInfo("test", "person")
 	testCaseDdl.TableInfo = new(model.TableInfo)
+	testCaseDdl.TableInfo.Schema = "test"
+	testCaseDdl.TableInfo.Table = "person"
 	testCaseDdl.TableInfo.ColumnInfo = make([]*model.ColumnInfo, len(info.Columns))
 	for i, v := range info.Columns {
 		testCaseDdl.TableInfo.ColumnInfo[i] = new(model.ColumnInfo)
