@@ -81,6 +81,9 @@ func parseClientOption(u *url.URL) (opt *pulsar.ClientOptions, err error) {
 	}
 	param := jsonStr(vs.SubPathKV("auth"))
 	opt.Authentication, err = pulsar.NewAuthentication(auth, param)
+	if err != nil {
+		return nil, err
+	}
 	return opt, nil
 }
 
