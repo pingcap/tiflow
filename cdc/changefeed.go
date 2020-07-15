@@ -632,17 +632,6 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 
 	ddlEvent := new(model.DDLEvent)
 	ddlEvent.FromJob(todoDDLJob)
-	tableInfo, ok := c.schema.GetTableByName(ddlEvent.Schema, ddlEvent.Table)
-	if ok {
-		ddlEvent.ColumnInfo = make([]*model.ColumnInfo, len(tableInfo.Columns))
-
-		for i, colInfo := range tableInfo.Columns {
-			ddlEvent.ColumnInfo[i] = new(model.ColumnInfo)
-			ddlEvent.ColumnInfo[i].FromTiColumnInfo(colInfo)
-		}
-	} else {
-		ddlEvent.ColumnInfo = nil
-	}
 
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL

@@ -161,6 +161,11 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	return errors.Trace(err)
 }
 
+// Initialize is no-op for Mysql sink
+func (s *mysqlSink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) error {
+	return nil
+}
+
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent, maxRetries uint64) error {
 	return retry.Run(500*time.Millisecond, maxRetries,
 		func() error {

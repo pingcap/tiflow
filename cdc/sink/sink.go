@@ -18,10 +18,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 )
 
@@ -33,6 +32,7 @@ const (
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
+	Initialize(ctx context.Context, tableInfo []*model.TableInfo) error
 
 	// EmitRowChangedEvents sends Row Changed Event to Sink
 	// EmitRowChangedEvents may write rows to downstream directly;
