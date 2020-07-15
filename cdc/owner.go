@@ -273,7 +273,7 @@ func (o *Owner) newChangeFeed(
 	}
 	errCh := make(chan error, 1)
 
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.Config, info.Opts, errCh)
+	sink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)

@@ -94,6 +94,10 @@ function run() {
         run_sql "${sqldown}" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     } done;
 
+    # sync-diff creates table which may block cyclic replication.
+    # Sleep a while to make sure all changes has been replicated.
+    sleep 10
+
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     cleanup_process $CDC_BINARY

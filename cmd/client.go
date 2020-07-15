@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/chzyer/readline"
@@ -124,6 +125,13 @@ func newCliCommand() *cobra.Command {
 			if err != nil {
 				return errors.Annotate(err, "fail to validate TLS settings")
 			}
+			if tlsConfig != nil {
+				if strings.Contains(cliPdAddr, "http://") {
+					return errors.New("PD endpoint scheme should be https")
+				}
+			} else if !strings.Contains(cliPdAddr, "http://") {
+				return errors.New("PD endpoint scheme should be http")
+			}
 			grpcTLSOption, err := credential.ToGRPCDialOption()
 			if err != nil {
 				return errors.Annotate(err, "fail to validate TLS settings")
@@ -148,7 +156,7 @@ func newCliCommand() *cobra.Command {
 			})
 			if err != nil {
 				// PD embeds an etcd server.
-				return errors.Annotate(err, "fail to open PD client")
+				return errors.Annotate(err, "fail to open PD etcd client")
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
 			pdCli, err = pd.NewClientWithContext(
