@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
 	"net/http"
 	"strings"
@@ -72,8 +73,10 @@ func (o *options) validateAndAdjust() error {
 	if o.gcTTL == 0 {
 		return errors.New("empty GC TTL is not allowed")
 	}
+	var tlsConfig *tls.Config
 	if o.credential != nil {
-		_, err := o.credential.ToTLSConfig()
+		var err error
+		tlsConfig, err = o.credential.ToTLSConfig()
 		if err != nil {
 			return errors.New("invalidate TLS config")
 		}
@@ -82,6 +85,16 @@ func (o *options) validateAndAdjust() error {
 			return errors.New("invalidate TLS config")
 		}
 	}
+	for _, ep := range strings.Split(o.pdEndpoints, ",") {
+		if tlsConfig != nil {
+			if strings.Index(ep, "http://") == 0 {
+				return errors.New("PD endpoint scheme should be https")
+			}
+		} else if strings.Index(ep, "http://") != 0 {
+			return errors.New("PD endpoint scheme should be http")
+		}
+	}
+
 	return nil
 }
 

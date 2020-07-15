@@ -69,6 +69,9 @@ done
 
 # Tries to limit the max number of open files under the system limit
 cat - > "$OUT_DIR/tikv-config-tls.toml" <<EOF
+[storage]
+# Disable creating a large temp file.
+reserve-space = "0MB"
 [rocksdb]
 max-open-files = 4096
 [raftdb]
@@ -129,4 +132,7 @@ while ! mysql -uroot -h${TLS_TIDB_HOST} -P${TLS_TIDB_PORT} --default-character-s
     sleep 2
 done
 
-run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT}
+run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
+    --ssl-ca=$TLS_DIR/ca.pem \
+    --ssl-cert=$TLS_DIR/server.pem \
+    --ssl-key=$TLS_DIR/server-key.pem

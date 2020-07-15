@@ -503,7 +503,7 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 				for i := range eligibleTables {
 					tables[i] = &eligibleTables[i]
 				}
-				err = mark.CreateMarkTables(ctx, cyclicUpstreamDSN, tables...)
+				err = mark.CreateMarkTables(ctx, cyclicUpstreamDSN, getUpstreamCredential(), tables...)
 				if err != nil {
 					return err
 				}
@@ -512,6 +512,23 @@ func newCreateChangefeedCyclicCommand() *cobra.Command {
 			},
 		})
 	command.PersistentFlags().StringVar(&cyclicUpstreamDSN, "cyclic-upstream-dsn", "", "(Expremental) Upsteam TiDB DSN in the form of [user[:password]@][net[(addr)]]/")
+	command.PersistentFlags().StringVar(&upstreamSslCaPath, "cyclic-upstream-ssl-ca", "", "CA certificate path for TLS connection")
+	command.PersistentFlags().StringVar(&upstreamSslCertPath, "cyclic-upstream-ssl-cert", "", "Certificate path for TLS connection")
+	command.PersistentFlags().StringVar(&upstreamSslKeyPath, "cyclic-upstream-ssl-key", "", "Private key path for TLS connection")
 
 	return command
+}
+
+var (
+	upstreamSslCaPath   string
+	upstreamSslCertPath string
+	upstreamSslKeyPath  string
+)
+
+func getUpstreamCredential() *security.Credential {
+	return &security.Credential{
+		CAPath:   upstreamSslCaPath,
+		CertPath: upstreamSslCertPath,
+		KeyPath:  upstreamSslKeyPath,
+	}
 }
