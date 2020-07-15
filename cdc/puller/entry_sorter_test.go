@@ -185,7 +185,9 @@ func BenchmarkSorter(b *testing.B) {
 	go func() {
 		defer wg.Done()
 		err := es.Run(ctx)
-		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		if errors.Cause(err) != context.Canceled {
+			panic(errors.Annotate(err, "unexpected error"))
+		}
 	}()
 
 	maxTs := uint64(10000000)
@@ -221,4 +223,5 @@ func BenchmarkSorter(b *testing.B) {
 		}
 	}
 	cancel()
+	wg.Wait()
 }
