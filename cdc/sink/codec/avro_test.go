@@ -15,8 +15,6 @@ package codec
 
 import (
 	"context"
-	"time"
-
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -26,7 +24,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/regionspan"
-	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )
 
@@ -85,7 +82,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 		"mybool":  {Value: uint8(1), Type: mysql.TypeTiny},
 		"myfloat": {Value: float32(3.14), Type: mysql.TypeFloat},
 		"mybytes": {Value: []byte("Hello World"), Type: mysql.TypeBlob},
-		"ts":      {Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
+		//"ts":      {Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
 	})
 	c.Assert(err, check.IsNil)
 
@@ -174,12 +171,13 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 	}()
 
 	info := pm.GetTableInfo("test", "person")
-	testCaseDdl.ColumnInfo = make([]*model.ColumnInfo, len(info.Columns))
+	testCaseDdl.TableInfo = new(model.TableInfo)
+	testCaseDdl.TableInfo.ColumnInfo = make([]*model.ColumnInfo, len(info.Columns))
 	for i, v := range info.Columns {
-		testCaseDdl.ColumnInfo[i] = new(model.ColumnInfo)
-		testCaseDdl.ColumnInfo[i].FromTiColumnInfo(v)
+		testCaseDdl.TableInfo.ColumnInfo[i] = new(model.ColumnInfo)
+		testCaseDdl.TableInfo.ColumnInfo[i].FromTiColumnInfo(v)
 	}
-	testCaseDdl.SchemaID = info.SchemaID
+	testCaseDdl.TableInfo.UpdateTs = 0xbeefbeef
 
 	err := s.encoder.AppendDDLEvent(testCaseDdl)
 	c.Check(err, check.IsNil)

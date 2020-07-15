@@ -25,7 +25,6 @@ import (
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
@@ -228,32 +227,25 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 // Initialize registers Avro schemas for all tables
-func (k *mqSink) Initialize(ctx context.Context, schemaSnap *entry.SingleSchemaSnapshot) error {
-	if k.protocol == codec.ProtocolAvro {
+func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) error {
+	if k.protocol == codec.ProtocolAvro && tableInfo != nil {
 		avroEncoder := k.newEncoder().(*codec.AvroEventBatchEncoder)
 		manager := avroEncoder.GetValueSchemaManager()
 		if manager == nil {
 			return errors.New("No schema manager in Avro encoder, probably bug")
 		}
 
-		for _, tableName := range schemaSnap.CloneTables() {
-			info, ok := schemaSnap.GetTableByName(tableName.Schema, tableName.Table)
-			if !ok {
-				return errors.Errorf("Table %s not found, probably bug", tableName.String())
-			}
-
-			if !info.IsEligible() || tableName.Schema == "mysql" {
-				log.Info("Skip creating schema for table", zap.String("table-name", info.Name.String()))
+		for _, info := range tableInfo {
+			if info == nil {
 				continue
 			}
 
-			columnInfo := make([]*model.ColumnInfo, len(info.Cols()))
-			for i := range columnInfo {
-				columnInfo[i] = new(model.ColumnInfo)
-				columnInfo[i].FromTiColumnInfo(info.Cols()[i])
+			if info.Schema == "mysql" {
+				log.Info("Skip creating schema for table", zap.String("table-name", info.Table))
+				continue
 			}
 
-			str, err := codec.ColumnInfoToAvroSchema(tableName.Table, columnInfo)
+			str, err := codec.ColumnInfoToAvroSchema(info.Table, info.ColumnInfo)
 			if err != nil {
 				return errors.New("Error in Initialize")
 			}
@@ -263,7 +255,10 @@ func (k *mqSink) Initialize(ctx context.Context, schemaSnap *entry.SingleSchemaS
 				return errors.Annotate(err, "Initialize failed: could not verify schema, probably bug")
 			}
 
-			err = manager.Register(context.Background(), tableName, avroCodec)
+			err = manager.Register(context.Background(), model.TableName{
+				Schema: info.Schema,
+				Table:  info.Table,
+			}, avroCodec)
 
 			if err != nil {
 				return errors.Annotate(err, "Initialize failed: could not register schema")

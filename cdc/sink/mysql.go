@@ -34,7 +34,6 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
-	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
@@ -163,7 +162,7 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 }
 
 // Initialize is no-op for Mysql sink
-func (s *mysqlSink) Initialize(ctx context.Context, schemaSnap *entry.SingleSchemaSnapshot) error {
+func (s *mysqlSink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) error {
 	return nil
 }
 

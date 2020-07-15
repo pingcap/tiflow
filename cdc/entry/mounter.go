@@ -392,7 +392,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		CommitTs:      row.CRTs,
 		RowID:         row.RecordID,
 		SchemaID:      tableInfo.SchemaID,
-		SchemaVersion: tableInfo.UpdateTS,
+		TableUpdateTs: tableInfo.UpdateTS,
 		Table: &model.TableName{
 			Schema:    tableInfo.TableName.Schema,
 			Table:     tableInfo.TableName.Table,

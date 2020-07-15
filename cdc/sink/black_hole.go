@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
 )
@@ -75,7 +74,7 @@ func (b *blackHoleSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) e
 }
 
 // Initialize is no-op for blackhole
-func (b *blackHoleSink) Initialize(ctx context.Context, schemaSnap *entry.SingleSchemaSnapshot) error {
+func (b *blackHoleSink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) error {
 	return nil
 }
 

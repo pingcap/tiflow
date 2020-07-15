@@ -72,7 +72,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		return errors.New("Fatal sink bug. Batch size must be 1")
 	}
 
-	res, err := a.avroEncode(e.Table, e.SchemaVersion, e.Columns)
+	res, err := a.avroEncode(e.Table, e.TableUpdateTs, e.Columns)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
 		return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
@@ -99,12 +99,12 @@ func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 
 // AppendDDLEvent generates new schema and registers it to the Registry
 func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
-	if e.ColumnInfo == nil {
+	if e.TableInfo == nil {
 		log.Info("AppendDDLEvent: no schema generation needed, skip")
 		return nil
 	}
 
-	schemaStr, err := ColumnInfoToAvroSchema(e.Table, e.ColumnInfo)
+	schemaStr, err := ColumnInfoToAvroSchema(e.TableInfo.Table, e.TableInfo.ColumnInfo)
 	if err != nil {
 		return errors.Annotate(err, "AppendDDLEvent failed")
 	}
@@ -116,8 +116,8 @@ func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 	}
 
 	err = a.valueSchemaManager.Register(context.Background(), model.TableName{
-		Schema: e.Schema,
-		Table:  e.Table,
+		Schema: e.TableInfo.Schema,
+		Table:  e.TableInfo.Table,
 	}, avroCodec)
 
 	if err != nil {
@@ -144,8 +144,8 @@ func (a *AvroEventBatchEncoder) Size() int {
 	return 1
 }
 
-func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tiSchemaID uint64, cols map[string]*model.Column) (*avroEncodeResult, error) {
-	avroCodec, registryID, err := a.valueSchemaManager.Lookup(context.Background(), *table, tiSchemaID)
+func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, updateTs uint64, cols map[string]*model.Column) (*avroEncodeResult, error) {
+	avroCodec, registryID, err := a.valueSchemaManager.Lookup(context.Background(), *table, updateTs)
 	if err != nil {
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: lookup failed")
 	}

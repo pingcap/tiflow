@@ -218,6 +218,7 @@ func (o *Owner) newChangeFeed(
 	tables := make(map[model.TableID]model.TableName)
 	partitions := make(map[model.TableID][]int64)
 	orphanTables := make(map[model.TableID]model.Ts)
+	sinkTableInfo := make([]*model.TableInfo, len(schemaSnap.CloneTables()))
 	for tid, table := range schemaSnap.CloneTables() {
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
@@ -270,6 +271,14 @@ func (o *Owner) newChangeFeed(
 			orphanTables[tid] = checkpointTs
 		}
 
+		sinkTableInfo[tid] = new(model.TableInfo)
+		sinkTableInfo[tid].ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
+
+		for i, colInfo := range tblInfo.Cols() {
+			sinkTableInfo[tid].ColumnInfo[i] = new(model.ColumnInfo)
+			sinkTableInfo[tid].ColumnInfo[i].FromTiColumnInfo(colInfo)
+		}
+
 	}
 	errCh := make(chan error, 1)
 
@@ -288,7 +297,7 @@ func (o *Owner) newChangeFeed(
 		cancel()
 	}()
 
-	err = sink.Initialize(ctx, schemaSnap)
+	err = sink.Initialize(ctx, sinkTableInfo)
 	if err != nil {
 		log.Error("error on running owner", zap.Error(err))
 	}
