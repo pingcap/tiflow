@@ -183,8 +183,10 @@ flushLoop:
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	switch k.protocol {
-	case codec.ProtocolCanal, codec.ProtocolAvro: // ignore resolved events in canal protocol
+	case codec.ProtocolAvro: // ignore resolved events in avro protocol
+	case codec.ProtocolCanal:
 		return nil
+
 	}
 	encoder := k.newEncoder()
 	err := encoder.AppendResolvedEvent(ts)
@@ -240,14 +242,14 @@ func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) e
 				continue
 			}
 
-			if info.Schema == "mysql" {
+			if k.filter.ShouldIgnoreTable(info.Schema, info.Table) {
 				log.Info("Skip creating schema for table", zap.String("table-name", info.Table))
 				continue
 			}
 
 			str, err := codec.ColumnInfoToAvroSchema(info.Table, info.ColumnInfo)
 			if err != nil {
-				return errors.New("Error in Initialize")
+				return errors.Annotate(err, "Error in Initialize")
 			}
 
 			avroCodec, err := goavro.NewCodec(str)
