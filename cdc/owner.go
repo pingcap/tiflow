@@ -219,7 +219,9 @@ func (o *Owner) newChangeFeed(
 	partitions := make(map[model.TableID][]int64)
 	orphanTables := make(map[model.TableID]model.Ts)
 	sinkTableInfo := make([]*model.TableInfo, len(schemaSnap.CloneTables()))
+	j := 0
 	for tid, table := range schemaSnap.CloneTables() {
+		j++
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
 		}
@@ -271,12 +273,12 @@ func (o *Owner) newChangeFeed(
 			orphanTables[tid] = checkpointTs
 		}
 
-		sinkTableInfo[tid] = new(model.TableInfo)
-		sinkTableInfo[tid].ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
+		sinkTableInfo[j-1] = new(model.TableInfo)
+		sinkTableInfo[j-1].ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
 
 		for i, colInfo := range tblInfo.Cols() {
-			sinkTableInfo[tid].ColumnInfo[i] = new(model.ColumnInfo)
-			sinkTableInfo[tid].ColumnInfo[i].FromTiColumnInfo(colInfo)
+			sinkTableInfo[j-1].ColumnInfo[i] = new(model.ColumnInfo)
+			sinkTableInfo[j-1].ColumnInfo[i].FromTiColumnInfo(colInfo)
 		}
 
 	}
