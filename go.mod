@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DATA-DOG/go-sqlmock v1.3.3 // indirect
 	github.com/Shopify/sarama v1.26.1
+	github.com/apache/pulsar-client-go v0.1.1
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/coreos/go-semver v0.3.0
@@ -18,7 +19,6 @@ require (
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/jarcoal/httpmock v1.0.5
-	github.com/klauspost/compress v1.10.2 // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2

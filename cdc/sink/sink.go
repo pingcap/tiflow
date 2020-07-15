@@ -68,6 +68,8 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 		return newMySQLSink(ctx, changefeedID, sinkURI, filter, opts)
 	case "kafka":
 		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh)
+	case "pulsar", "pulsar+ssl":
+		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	default:
 		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}

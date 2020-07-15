@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/sink/pulsar"
 	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/pingcap/errors"
@@ -339,6 +340,22 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	producer, err := mqProducer.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+	sink, err := newMqSink(ctx, producer, filter, replicaConfig, opts, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sink, nil
+}
+
+func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+	producer, err := pulsar.NewProducer(sinkURI, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	s := sinkURI.Query().Get("protocol")
+	if s != "" {
+		replicaConfig.Sink.Protocol = s
 	}
 	sink, err := newMqSink(ctx, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {
