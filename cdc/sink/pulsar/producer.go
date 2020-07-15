@@ -50,6 +50,7 @@ func NewProducer(u *url.URL, errCh chan error) (*Producer, error) {
 	}, nil
 }
 
+// Producer provide a way to send msg to pulsar.
 type Producer struct {
 	opt        Option
 	client     pulsar.Client
@@ -58,6 +59,7 @@ type Producer struct {
 	partitions int
 }
 
+// SendMessage send key-value msg to target partition.
 func (p *Producer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
 	p.producer.SendAsync(ctx, &pulsar.ProducerMessage{
 		Payload:    value,
@@ -76,6 +78,7 @@ func (p *Producer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err err
 	}
 }
 
+// SyncBroadcastMessage send key-value msg to all partition.
 func (p *Producer) SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error {
 	for i := 0; i < p.partitions; i++ {
 		_, err := p.producer.Send(ctx, &pulsar.ProducerMessage{
@@ -90,14 +93,17 @@ func (p *Producer) SyncBroadcastMessage(ctx context.Context, key []byte, value [
 	return nil
 }
 
+// Flush flush all in memory msgs to server.
 func (p *Producer) Flush(_ context.Context) error {
 	return p.producer.Flush()
 }
 
+// GetPartitionNum got current topic's partitions size.
 func (p *Producer) GetPartitionNum() int32 {
 	return int32(p.partitions)
 }
 
+// Close close the producer.
 func (p *Producer) Close() error {
 	err := p.producer.Flush()
 	if err != nil {

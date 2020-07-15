@@ -29,5 +29,4 @@
 //
 // For example:
 // pulsar://{host}/{topic}?auth=token&auth.token={token}
-
 package pulsar
