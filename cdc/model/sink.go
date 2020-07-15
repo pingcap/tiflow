@@ -141,8 +141,6 @@ func (e *DDLEvent) FromJob(job *model.Job) {
 		e.TableInfo.Table = tableName
 		e.TableInfo.UpdateTs = tableInfo.UpdateTS
 		e.Table = tableName
-	} else {
-		log.Warn("BinlogInfo.TableInfo is null")
 	}
 	e.StartTs = job.StartTS
 	e.CommitTs = job.BinlogInfo.FinishedTS
