@@ -243,6 +243,13 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		return nil, errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
 
+	if sortEngine == string(model.SortInFile) {
+		err = util.IsDirAndWritable(sortDir)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if isCreate {
 		ctx = util.PutTimezoneInCtx(ctx, tz)
 		ineligibleTables, eligibleTables, err := verifyTables(ctx, credential, cfg, startTs)
