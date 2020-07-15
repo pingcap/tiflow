@@ -461,7 +461,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 		},
 	}
 	errCh := make(chan error, 1)
-	sink, err := sink.NewSink(ctx, "blackhole://", f, replicaConf, map[string]string{}, errCh)
+	sink, err := sink.NewSink(ctx, cfID, "blackhole://", f, replicaConf, map[string]string{}, errCh)
 	c.Assert(err, check.IsNil)
 	sampleCF.sink = sink
 

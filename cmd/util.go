@@ -240,7 +240,7 @@ func verifySink(
 		return err
 	}
 	errCh := make(chan error)
-	s, err := sink.NewSink(ctx, sinkURI, filter, cfg, opts, errCh)
+	s, err := sink.NewSink(ctx, "cli-verify", sinkURI, filter, cfg, opts, errCh)
 	if err != nil {
 		return err
 	}
