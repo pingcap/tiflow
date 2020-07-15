@@ -241,9 +241,9 @@ func getAvroDataTypeName(v interface{}) (string, error) {
 	case string:
 		return "string", nil
 	case time.Duration:
-		return "long.time-millis", nil
+		return "long", nil
 	case time.Time:
-		return "long.timestamp-millis", nil
+		return "long", nil
 	default:
 		log.Warn("getAvroDataTypeName: unknown type")
 		return "", errors.New("unknown type for Avro")
@@ -259,9 +259,9 @@ func getAvroDataTypeNameMysql(tp byte) (string, error) {
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
 		return "string", nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		return "long.timestamp-millis", nil
+		return "long", nil
 	case mysql.TypeDuration: //duration should read fsp from column meta data
-		return "long.time-millis", nil
+		return "long", nil
 	case mysql.TypeEnum:
 		return "long", nil
 	case mysql.TypeSet:
@@ -295,26 +295,26 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 		str := col.Value.(string)
 		t, err := time.Parse(types.DateFormat, str)
 		if err == nil {
-			return t, "long.timestamp-millis", nil
+			return t, "long", nil
 		}
 
 		t, err = time.Parse(types.TimeFormat, str)
 		if err == nil {
-			return t, "long.timestamp-millis", nil
+			return t, "long", nil
 		}
 
 		t, err = time.Parse(types.TimeFSPFormat, str)
 		if err != nil {
 			return nil, "error", err
 		}
-		return t, "long.timestamp-millis", nil
+		return t, "long", nil
 	case mysql.TypeDuration:
 		str := col.Value.(string)
 		d, err := time.ParseDuration(str)
 		if err != nil {
 			return nil, "error", err
 		}
-		return d, "long.timestamp-millis", nil
+		return d, "long", nil
 	case mysql.TypeJSON:
 		return col.Value.(tijson.BinaryJSON).String(), "string", nil
 	case mysql.TypeNewDecimal, mysql.TypeDecimal:
