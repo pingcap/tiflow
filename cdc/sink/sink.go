@@ -18,10 +18,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 )
 
