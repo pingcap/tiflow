@@ -15,7 +15,6 @@ package model
 
 import (
 	"fmt"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"go.uber.org/zap"
@@ -73,6 +72,8 @@ type RowChangedEvent struct {
 
 	Delete bool `json:"delete"`
 
+	SchemaID int64 `json:"schema-id,omitempty"`
+
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
 	IndieMarkCol string             `json:"indie-mark-col"`
@@ -87,14 +88,28 @@ type Column struct {
 	Value       interface{} `json:"v"`
 }
 
+// ColumnInfo represents the name and type information passed to the sink
+type ColumnInfo struct {
+	Name string
+	Type byte
+}
+
+// FromTiColumnInfo populates cdc's ColumnInfo from TiDB's model.ColumnInfo
+func (c *ColumnInfo) FromTiColumnInfo(tiColumnInfo *model.ColumnInfo) {
+	c.Type = tiColumnInfo.Tp
+	c.Name = tiColumnInfo.Name.String()
+}
+
 // DDLEvent represents a DDL event
 type DDLEvent struct {
-	StartTs  uint64
-	CommitTs uint64
-	Schema   string
-	Table    string
-	Query    string
-	Type     model.ActionType
+	StartTs    uint64
+	CommitTs   uint64
+	Schema     string
+	SchemaID   int64
+	Table      string
+	ColumnInfo []*ColumnInfo
+	Query      string
+	Type       model.ActionType
 }
 
 // FromJob fills the values of DDLEvent from DDL job
@@ -107,6 +122,7 @@ func (e *DDLEvent) FromJob(job *model.Job) {
 	e.CommitTs = job.BinlogInfo.FinishedTS
 	e.Query = job.Query
 	e.Schema = job.SchemaName
+	e.SchemaID = job.SchemaID
 	e.Table = tableName
 	e.Type = job.Type
 }
