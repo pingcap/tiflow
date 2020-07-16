@@ -16,13 +16,13 @@ package codec
 import (
 	"fmt"
 	"strconv"
-	`strings`
+	"strings"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	parser_types `github.com/pingcap/parser/types`
+	parser_types "github.com/pingcap/parser/types"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 
@@ -148,11 +148,11 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	}
 	switch sqlType {
 	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
-		if strings.Index(mysqlType, "text") != -1 {
+		if strings.Contains(mysqlType, "text") {
 			// In jdbc, text type is mapping to JavaSQLTypeVARCHAR
 			// see https://dev.mysql.com/doc/connector-j/5.1/en/connector-j-reference-type-conversions.html
 			sqlType = JavaSQLTypeVARCHAR
-		}else{
+		} else {
 			sqlType = JavaSQLTypeBLOB
 		}
 	}
@@ -175,9 +175,9 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		case []byte:
 			// special handle for text and blob
 			// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
-			if strings.Index(mysqlType, "text") != -1 {
+			if strings.Contains(mysqlType, "text") {
 				value = string(v)
-			}else{
+			} else {
 				decoded, err := b.bytesDecoder.Bytes(v)
 				if err != nil {
 					return nil, errors.Trace(err)

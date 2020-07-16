@@ -88,7 +88,7 @@ type RowChangedEvent struct {
 type Column struct {
 	Type        byte        `json:"t"`
 	WhereHandle *bool       `json:"h,omitempty"`
-	Charset     string      `json:"c, omitempty"`
+	Charset     string      `json:"c"`
 	Value       interface{} `json:"v"`
 }
 
