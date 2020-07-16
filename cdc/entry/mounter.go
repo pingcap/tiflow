@@ -358,6 +358,13 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	if !row.Delete {
 		datumsNum = len(tableInfo.Columns)
 	}
+
+	charsetFlag := func(charset string) uint32 {
+		if charset != "binary" {
+			return model.NotBinaryFlag
+		}
+		return model.BinaryFlag
+	}
 	values := make(map[string]*model.Column, datumsNum)
 	for index, colValue := range row.Row {
 		colInfo, exist := tableInfo.GetColumnInfo(index)
@@ -372,10 +379,11 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+
 		col := &model.Column{
-			Type:    colInfo.Tp,
-			Value:   value,
-			Charset: colInfo.Charset,
+			Type:  colInfo.Tp,
+			Value: value,
+			Flag:  charsetFlag(colInfo.Charset),
 		}
 		if tableInfo.IsColumnUnique(colInfo.ID) {
 			whereHandle := true
@@ -407,9 +415,9 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 			_, ok := values[col.Name.O]
 			if !ok && tableInfo.IsColWritable(col) {
 				column := &model.Column{
-					Type:    col.Tp,
-					Value:   getDefaultOrZeroValue(col),
-					Charset: col.Charset,
+					Type:  col.Tp,
+					Value: getDefaultOrZeroValue(col),
+					Flag:  charsetFlag(col.Charset),
 				}
 				if tableInfo.IsColumnUnique(col.ID) {
 					whereHandle := true

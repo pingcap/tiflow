@@ -35,6 +35,11 @@ const (
 	MqMessageTypeResolved
 )
 
+const (
+	BinaryFlag    uint32 = 1 << 0
+	NotBinaryFlag uint32 = 1 << 1
+)
+
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
 	Schema    string `toml:"db-name" json:"db-name"`
@@ -88,7 +93,7 @@ type RowChangedEvent struct {
 type Column struct {
 	Type        byte        `json:"t"`
 	WhereHandle *bool       `json:"h,omitempty"`
-	Charset     string      `json:"c"`
+	Flag        uint32      `json:"f"`
 	Value       interface{} `json:"v"`
 }
 

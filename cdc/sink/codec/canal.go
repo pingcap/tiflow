@@ -129,7 +129,14 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 // build the Column in the canal RowData
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	sqlType := MysqlToJavaType(c.Type)
-	mysqlType := parser_types.TypeToStr(c.Type, c.Charset)
+	mysqlType := parser_types.TypeStr(c.Type)
+	if c.Flag == model.BinaryFlag {
+		if parser_types.IsTypeBlob(c.Type) {
+			mysqlType = strings.Replace(mysqlType, "text", "blob", 1)
+		} else if parser_types.IsTypeChar(c.Type) {
+			mysqlType = strings.Replace(mysqlType, "char", "binary", 1)
+		}
+	}
 	// Some special cases handled in canal
 	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
 	switch c.Type {
@@ -148,12 +155,12 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	}
 	switch sqlType {
 	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
-		if strings.Contains(mysqlType, "text") {
+		if c.Flag == model.BinaryFlag {
+			sqlType = JavaSQLTypeBLOB
+		} else {
 			// In jdbc, text type is mapping to JavaSQLTypeVARCHAR
 			// see https://dev.mysql.com/doc/connector-j/5.1/en/connector-j-reference-type-conversions.html
 			sqlType = JavaSQLTypeVARCHAR
-		} else {
-			sqlType = JavaSQLTypeBLOB
 		}
 	}
 
@@ -175,9 +182,10 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		case []byte:
 			// special handle for text and blob
 			// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
-			if strings.Contains(mysqlType, "text") {
+			switch sqlType {
+			case JavaSQLTypeVARCHAR:
 				value = string(v)
-			} else {
+			default:
 				decoded, err := b.bytesDecoder.Bytes(v)
 				if err != nil {
 					return nil, errors.Trace(err)

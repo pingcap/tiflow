@@ -134,11 +134,11 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 		},
 		Delete: false,
 		Columns: map[string]*model.Column{
-			"id":      {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1, Charset: "binary"},
-			"name":    {Type: mysql.TypeVarchar, Value: "Bob", Charset: "utf8"},
-			"tiny":    {Type: mysql.TypeTiny, Value: 255, Charset: "binary"},
-			"comment": {Type: mysql.TypeBlob, Value: []byte("测试"), Charset: "utf8"},
-			"blob":    {Type: mysql.TypeBlob, Value: []byte("测试blob"), Charset: "binary"},
+			"id":      {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1, Flag: model.BinaryFlag},
+			"name":    {Type: mysql.TypeVarchar, Value: "Bob", Flag: model.NotBinaryFlag},
+			"tiny":    {Type: mysql.TypeTiny, Value: 255, Flag: model.BinaryFlag},
+			"comment": {Type: mysql.TypeBlob, Value: []byte("测试"), Flag: model.NotBinaryFlag},
+			"blob":    {Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		},
 	}
 	testCaseDelete := &model.RowChangedEvent{
@@ -149,7 +149,7 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 		},
 		Delete: true,
 		Columns: map[string]*model.Column{
-			"id": {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1, Charset: "binary"},
+			"id": {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1, Flag: model.BinaryFlag},
 		},
 	}
 	testCaseDdl := &model.DDLEvent{
