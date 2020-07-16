@@ -282,9 +282,12 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	changedRow, err := decodeRow(rawOldValue, recordID, tableInfo, m.tz)
-	if err != nil {
-		return nil, errors.Trace(err)
+	var changedRow map[int64]types.Datum
+	if rawOldValue != nil {
+		changedRow, err = decodeRow(rawOldValue, recordID, tableInfo, m.tz)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 	base.RecordID = recordID
 	return &rowKVEntry{
@@ -428,10 +431,11 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	schemaName := tableInfo.TableName.Schema
 	tableName := tableInfo.TableName.Table
 	return &model.RowChangedEvent{
-		StartTs:  row.StartTs,
-		CommitTs: row.CRTs,
-		RowID:    row.RecordID,
-		SchemaID: tableInfo.SchemaID,
+		StartTs:       row.StartTs,
+		CommitTs:      row.CRTs,
+		RowID:         row.RecordID,
+		SchemaID:      tableInfo.SchemaID,
+		TableUpdateTs: tableInfo.UpdateTS,
 		Table: &model.TableName{
 			Schema:    schemaName,
 			Table:     tableName,

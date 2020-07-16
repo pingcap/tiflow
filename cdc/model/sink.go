@@ -74,6 +74,8 @@ type RowChangedEvent struct {
 
 	SchemaID int64 `json:"schema-id,omitempty"`
 
+	TableUpdateTs uint64 `json:"table-update-ts,omitempty"`
+
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
 	IndieMarkCol   string             `json:"indie-mark-col"`
@@ -101,30 +103,50 @@ func (c *ColumnInfo) FromTiColumnInfo(tiColumnInfo *model.ColumnInfo) {
 	c.Name = tiColumnInfo.Name.String()
 }
 
+// TableInfo is the simplified table info passed to the sink
+type TableInfo struct {
+	// db name
+	Schema string
+	// table name
+	Table string
+	// unique identifier for the current table schema.
+	UpdateTs   uint64
+	ColumnInfo []*ColumnInfo
+}
+
 // DDLEvent represents a DDL event
 type DDLEvent struct {
-	StartTs    uint64
-	CommitTs   uint64
-	Schema     string
-	SchemaID   int64
-	Table      string
-	ColumnInfo []*ColumnInfo
-	Query      string
-	Type       model.ActionType
+	StartTs   uint64
+	CommitTs  uint64
+	Schema    string
+	Table     string
+	TableInfo *TableInfo
+	Query     string
+	Type      model.ActionType
 }
 
 // FromJob fills the values of DDLEvent from DDL job
 func (e *DDLEvent) FromJob(job *model.Job) {
-	var tableName string
 	if job.BinlogInfo.TableInfo != nil {
-		tableName = job.BinlogInfo.TableInfo.Name.O
+		tableName := job.BinlogInfo.TableInfo.Name.String()
+		tableInfo := job.BinlogInfo.TableInfo
+		e.TableInfo = new(TableInfo)
+		e.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
+
+		for i, colInfo := range tableInfo.Columns {
+			e.TableInfo.ColumnInfo[i] = new(ColumnInfo)
+			e.TableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
+		}
+
+		e.TableInfo.Schema = job.SchemaName
+		e.TableInfo.Table = tableName
+		e.TableInfo.UpdateTs = tableInfo.UpdateTS
+		e.Table = tableName
 	}
 	e.StartTs = job.StartTS
 	e.CommitTs = job.BinlogInfo.FinishedTS
 	e.Query = job.Query
 	e.Schema = job.SchemaName
-	e.SchemaID = job.SchemaID
-	e.Table = tableName
 	e.Type = job.Type
 }
 

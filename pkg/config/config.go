@@ -34,6 +34,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	Sink: &SinkConfig{
 		Protocol: "default",
+		OldValue: true,
 	},
 	Cyclic: &CyclicConfig{
 		Enable: false,

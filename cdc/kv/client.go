@@ -1376,7 +1376,7 @@ func (s *eventFeedSession) resolveLock(ctx context.Context, regionID uint64, max
 	return nil
 }
 
-func assembleCommitEvent(entry *cdcpb.Event_Row, value []byte) (*model.RegionFeedEvent, error) {
+func assembleCommitEvent(entry *cdcpb.Event_Row, value *pendingValue) (*model.RegionFeedEvent, error) {
 	var opType model.OpType
 	switch entry.GetOpType() {
 	case cdcpb.Event_Row_DELETE:
@@ -1389,11 +1389,12 @@ func assembleCommitEvent(entry *cdcpb.Event_Row, value []byte) (*model.RegionFee
 
 	revent := &model.RegionFeedEvent{
 		Val: &model.RawKVEntry{
-			OpType:  opType,
-			Key:     entry.Key,
-			Value:   value,
-			StartTs: entry.StartTs,
-			CRTs:    entry.CommitTs,
+			OpType:   opType,
+			Key:      entry.Key,
+			Value:    value.value,
+			OldValue: value.oldValue,
+			StartTs:  entry.StartTs,
+			CRTs:     entry.CommitTs,
 		},
 	}
 	return revent, nil
