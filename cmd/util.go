@@ -63,7 +63,10 @@ func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 }
 
 func getCredential() *security.Credential {
-	certAllowedCN := strings.Split(allowedCertCN, ",")
+	var certAllowedCN []string
+	if len(allowedCertCN) != 0 {
+		certAllowedCN = strings.Split(allowedCertCN, ",")
+	}
 	return &security.Credential{
 		CAPath:        caPath,
 		CertPath:      certPath,

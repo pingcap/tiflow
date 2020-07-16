@@ -15,8 +15,6 @@ package cdc
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,7 +22,6 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
-	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -65,29 +62,6 @@ func (s *Server) startStatusHTTP() error {
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))
 		return errors.Trace(err)
-	}
-	if tlsConfig != nil && len(credential.CertAllowedCN) != 0 {
-		// Verify incomming connection common name.
-		checkCN := make(map[string]struct{})
-		for _, cn := range credential.CertAllowedCN {
-			cn = strings.TrimSpace(cn)
-			checkCN[cn] = struct{}{}
-		}
-		errCN := errors.NewNoStackError(fmt.Sprintf("client certificate authentication failed. "+
-			"The Common Name from the client certificate was not found "+
-			"in %s", credential.CertAllowedCN))
-		tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-			for _, chain := range verifiedChains {
-				if len(chain) != 0 {
-					if _, match := checkCN[chain[0].Subject.CommonName]; match {
-						return nil
-					}
-				}
-			}
-			log.Warn("reject bad certificate connection", zap.Error(errCN))
-			return errCN
-		}
-		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
 	}
 	addr := s.opts.addr
 	s.statusServer = &http.Server{Addr: addr, Handler: serverMux, TLSConfig: tlsConfig}

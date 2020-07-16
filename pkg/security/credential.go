@@ -51,5 +51,5 @@ func (s *Credential) ToGRPCDialOption() (grpc.DialOption, error) {
 
 // ToTLSConfig generates tls's config from *Security
 func (s *Credential) ToTLSConfig() (*tls.Config, error) {
-	return utils.ToTLSConfig(s.CAPath, s.CertPath, s.KeyPath)
+	return utils.ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, s.CertAllowedCN)
 }
