@@ -36,7 +36,9 @@ const (
 )
 
 const (
-	BinaryFlag    uint32 = 1 << 0
+	// BinaryFlag means col charset is binary
+	BinaryFlag uint32 = 1 << 0
+	// NotBinaryFlag means col charset is not binary
 	NotBinaryFlag uint32 = 1 << 1
 )
 
