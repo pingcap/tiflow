@@ -16,9 +16,11 @@ package codec
 import (
 	"fmt"
 	"strconv"
+	`strings`
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
+	`github.com/pingcap/log`
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	parser_types `github.com/pingcap/parser/types`
@@ -128,8 +130,7 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 // build the Column in the canal RowData
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	sqlType := MysqlToJavaType(c.Type)
-	mysqlType := parser_types.TypeStr(c.Type)
-
+	mysqlType := parser_types.TypeToStr(c.Type, c.Charset)
 	// Some special cases handled in canal
 	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
 	switch c.Type {
@@ -148,41 +149,45 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	}
 	switch sqlType {
 	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
-		sqlType = JavaSQLTypeBLOB
+		if strings.Index(mysqlType, "text") != -1 {
+			// In jdbc, text type is mapping to JavaSQLTypeVARCHAR
+			// see https://dev.mysql.com/doc/connector-j/5.1/en/connector-j-reference-type-conversions.html
+			sqlType = JavaSQLTypeVARCHAR
+		}else{
+			sqlType = JavaSQLTypeBLOB
+		}
 	}
 
 	isKey := c.WhereHandle != nil && *c.WhereHandle
 	isNull := c.Value == nil
-	length := 0
 	value := ""
 	if !isNull {
 		switch v := c.Value.(type) {
 		case int64:
 			value = strconv.FormatInt(v, 10)
-			length = 8
 		case uint64:
 			value = strconv.FormatUint(v, 10)
-			length = 8
 		case float32:
 			value = strconv.FormatFloat(float64(v), 'f', -1, 32)
-			length = 4
 		case float64:
 			value = strconv.FormatFloat(v, 'f', -1, 64)
-			length = 8
 		case string:
 			value = v
-			length = len(v)
 		case []byte:
-			decoded, err := b.bytesDecoder.Bytes(v)
-			if err != nil {
-				return nil, errors.Trace(err)
+			// special handle for text and blob
+			// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
+			if strings.Index(mysqlType, "text") != -1 {
+				value = string(v)
+			}else{
+				decoded, err := b.bytesDecoder.Bytes(v)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+				value = string(decoded)
+				sqlType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
 			}
-			value = string(decoded)
-			length = len(value)
-			sqlType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
 		default:
 			value = fmt.Sprintf("%v", v)
-			length = len(value)
 		}
 	}
 
@@ -193,7 +198,6 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		Updated:       updated,
 		IsNullPresent: &canal.Column_IsNull{IsNull: isNull},
 		Value:         value,
-		Length:        int32(length),
 		MysqlType:     mysqlType,
 	}
 	return canalColumn, nil
@@ -202,6 +206,8 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 // build the RowData of a canal entry
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
 	var columns []*canal.Column
+	log.Info("[qinggniq] buildRowData")
+
 	for name, column := range e.Columns {
 		c, err := b.buildColumn(column, name, !e.Delete)
 		if err != nil {

@@ -28,13 +28,14 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/quotes"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/quotes"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 const (
@@ -349,7 +350,6 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 }
 
 func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
-
 	if row.Delete && !tableInfo.PKIsHandle {
 		return nil, nil
 	}
@@ -373,8 +373,9 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 			return nil, errors.Trace(err)
 		}
 		col := &model.Column{
-			Type:  colInfo.Tp,
-			Value: value,
+			Type:    colInfo.Tp,
+			Value:   value,
+			Charset: colInfo.Charset,
 		}
 		if tableInfo.IsColumnUnique(colInfo.ID) {
 			whereHandle := true
@@ -388,11 +389,10 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 
 	event := &model.RowChangedEvent{
-		StartTs:       row.StartTs,
-		CommitTs:      row.CRTs,
-		RowID:         row.RecordID,
-		SchemaID:      tableInfo.SchemaID,
-		TableUpdateTs: tableInfo.UpdateTS,
+		StartTs:  row.StartTs,
+		CommitTs: row.CRTs,
+		RowID:    row.RecordID,
+		SchemaID: tableInfo.SchemaID,
 		Table: &model.TableName{
 			Schema:    tableInfo.TableName.Schema,
 			Table:     tableInfo.TableName.Table,
@@ -406,8 +406,9 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 			_, ok := values[col.Name.O]
 			if !ok && tableInfo.IsColWritable(col) {
 				column := &model.Column{
-					Type:  col.Tp,
-					Value: getDefaultOrZeroValue(col),
+					Type:    col.Tp,
+					Value:   getDefaultOrZeroValue(col),
+					Charset: col.Charset,
 				}
 				if tableInfo.IsColumnUnique(col.ID) {
 					whereHandle := true

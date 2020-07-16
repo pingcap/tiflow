@@ -15,6 +15,7 @@ package model
 
 import (
 	"fmt"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"go.uber.org/zap"
@@ -87,6 +88,7 @@ type RowChangedEvent struct {
 type Column struct {
 	Type        byte        `json:"t"`
 	WhereHandle *bool       `json:"h,omitempty"`
+	Charset     string      `json:"c, omitempty"`
 	Value       interface{} `json:"v"`
 }
 
