@@ -35,11 +35,10 @@ source $CUR/../_utils/test_prepare
 
 for i in {0..3}
 do
-    echo "The ${i} time to try to start tidb cluster..."
-    stop_tidb_cluster
-    start_tidb_cluster --workdir ${OUT_DIR} --tidb-config ${tidb_config}
+    echo "The ${i} times to try to start tidb cluster..."
+    start_tidb_cluster_impl --workdir ${OUT_DIR} --tidb-config ${tidb_config}
     if [ $? -eq 0 ]; then
         break
     fi
-    echo "start tidb cluster failed, "
+    echo "start tidb cluster failed"
 done
