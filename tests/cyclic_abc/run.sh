@@ -158,7 +158,7 @@ function run() {
         --cert $TLS_DIR/server.pem \
         --key $TLS_DIR/server-key.pem \
         -sf --show-error \
-        https://127.0.0.1:8302/status 2>&1 ; then
+        https://127.0.0.1:8302/status ; then
         echo "must not connect successfully"
         exit 1
     fi
