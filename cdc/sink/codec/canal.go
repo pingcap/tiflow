@@ -20,7 +20,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
-	`github.com/pingcap/log`
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	parser_types `github.com/pingcap/parser/types`
@@ -206,7 +205,6 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 // build the RowData of a canal entry
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
 	var columns []*canal.Column
-	log.Info("[qinggniq] buildRowData")
 
 	for name, column := range e.Columns {
 		c, err := b.buildColumn(column, name, !e.Delete)
