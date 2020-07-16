@@ -153,6 +153,8 @@ Value:
 
 使用 schemaID 和 tableID 计算 hash 分发到 partition
 
+注：在当前的实现中，基于 table 分发使用的是 schemaName 与 tableName 的值计算 hash
+
 使用限制：
 
 * 无，但是这种分发方式粒度粗，partition 之间负载不均
