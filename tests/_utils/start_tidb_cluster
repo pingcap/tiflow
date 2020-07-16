@@ -47,7 +47,7 @@ do
     if [[ "$tidb_config" != "" ]]; then
         start_tidb_cluster_impl --workdir ${OUT_DIR} --tidb-config ${tidb_config}
     else
-        start_tidb_cluster_impl --workkdir ${OUT_DIR}
+        start_tidb_cluster_impl --workdir ${OUT_DIR}
     fi
 
     if [ $? -eq 0 ]; then
