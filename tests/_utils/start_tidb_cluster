@@ -2,11 +2,13 @@
 
 # --workdir: work directory
 # --tidb-config: path to tidb config file
+# --retry: retry times
 
 set -e
 
 OUT_DIR=
 tidb_config=
+retry_times=3
 
 while [[ ${1} ]]; do
     case "${1}" in
@@ -16,6 +18,10 @@ while [[ ${1} ]]; do
             ;;
         --tidb-config)
             tidb_config=${2}
+            shift
+            ;;
+        --retry)
+            retry_times=${2}
             shift
             ;;
         *)
@@ -32,8 +38,8 @@ done
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 
-
-for i in {1..3}
+i=1
+while [ $i -le $retry_times ]
 do
     echo "The ${i} times to try to start tidb cluster..."
 
@@ -46,5 +52,6 @@ do
     if [ $? -eq 0 ]; then
         break
     fi
+    let i++
     echo "start tidb cluster failed"
 done
