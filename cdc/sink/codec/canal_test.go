@@ -135,9 +135,9 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 		Delete: false,
 		Columns: map[string]*model.Column{
 			"id":      {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1, Flag: model.BinaryFlag},
-			"name":    {Type: mysql.TypeVarchar, Value: "Bob", Flag: model.NotBinaryFlag},
+			"name":    {Type: mysql.TypeVarchar, Value: "Bob", Flag: 0},
 			"tiny":    {Type: mysql.TypeTiny, Value: 255, Flag: model.BinaryFlag},
-			"comment": {Type: mysql.TypeBlob, Value: []byte("测试"), Flag: model.NotBinaryFlag},
+			"comment": {Type: mysql.TypeBlob, Value: []byte("测试"), Flag: 0},
 			"blob":    {Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		},
 	}

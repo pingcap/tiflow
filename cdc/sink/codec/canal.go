@@ -130,7 +130,7 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	sqlType := MysqlToJavaType(c.Type)
 	mysqlType := parser_types.TypeStr(c.Type)
-	if c.Flag == model.BinaryFlag {
+	if c.Flag.Isset(model.BinaryFlag) {
 		if parser_types.IsTypeBlob(c.Type) {
 			mysqlType = strings.Replace(mysqlType, "text", "blob", 1)
 		} else if parser_types.IsTypeChar(c.Type) {
@@ -155,7 +155,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	}
 	switch sqlType {
 	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
-		if c.Flag == model.BinaryFlag {
+		if c.Flag.Isset(model.BinaryFlag) {
 			sqlType = JavaSQLTypeBLOB
 		} else {
 			// In jdbc, text type is mapping to JavaSQLTypeVARCHAR
