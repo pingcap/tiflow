@@ -15,20 +15,22 @@ package sink
 
 import (
 	"context"
+
 	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
+	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
 	"github.com/pingcap/ticdc/cdc/sink/mqProducer"
+	"github.com/pingcap/ticdc/cdc/sink/pulsar"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"go.uber.org/zap"
@@ -75,10 +77,28 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 	var protocol codec.Protocol
 	protocol.FromString(config.Sink.Protocol)
 
+	newEncoder := codec.NewEventBatchEncoder(protocol)
+	if protocol == codec.ProtocolAvro {
+		registryURI, ok := opts["registry"]
+		if !ok {
+			return nil, errors.New(`Avro protocol requires parameter "registry"`)
+		}
+		schemaManager, err := codec.NewAvroSchemaManager(ctx, registryURI, "-value")
+		if err != nil {
+			return nil, errors.Annotate(err, "Could not create Avro schema manager")
+		}
+		newEncoder1 := newEncoder
+		newEncoder = func() codec.EventBatchEncoder {
+			avroEncoder := newEncoder1().(*codec.AvroEventBatchEncoder)
+			avroEncoder.SetValueSchemaManager(schemaManager)
+			return avroEncoder
+		}
+	}
+
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: d,
-		newEncoder: codec.NewEventBatchEncoder(protocol),
+		newEncoder: newEncoder,
 		filter:     filter,
 		protocol:   protocol,
 
@@ -90,6 +110,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 
 		statistics: NewStatistics("MQ", opts),
 	}
+
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			select {
@@ -163,8 +184,10 @@ flushLoop:
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	switch k.protocol {
-	case codec.ProtocolCanal: // ignore resolved events in canal protocol
+	case codec.ProtocolAvro: // ignore resolved events in avro protocol
+	case codec.ProtocolCanal:
 		return nil
+
 	}
 	encoder := k.newEncoder()
 	err := encoder.AppendResolvedEvent(ts)
@@ -194,11 +217,56 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	key, value := encoder.Build()
-	log.Info("emit ddl event", zap.ByteString("key", key), zap.ByteString("value", value))
-	err = k.mqProducer.SyncBroadcastMessage(ctx, key, value)
-	if err != nil {
-		return errors.Trace(err)
+
+	if k.protocol != codec.ProtocolAvro {
+		key, value := encoder.Build()
+		log.Info("emit ddl event", zap.ByteString("key", key), zap.ByteString("value", value))
+		err = k.mqProducer.SyncBroadcastMessage(ctx, key, value)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+// Initialize registers Avro schemas for all tables
+func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) error {
+	if k.protocol == codec.ProtocolAvro && tableInfo != nil {
+		avroEncoder := k.newEncoder().(*codec.AvroEventBatchEncoder)
+		manager := avroEncoder.GetValueSchemaManager()
+		if manager == nil {
+			return errors.New("No schema manager in Avro encoder, probably bug")
+		}
+
+		for _, info := range tableInfo {
+			if info == nil {
+				continue
+			}
+
+			if k.filter.ShouldIgnoreTable(info.Schema, info.Table) {
+				log.Info("Skip creating schema for table", zap.String("table-name", info.Table))
+				continue
+			}
+
+			str, err := codec.ColumnInfoToAvroSchema(info.Table, info.ColumnInfo)
+			if err != nil {
+				return errors.Annotate(err, "Error in Initialize")
+			}
+
+			avroCodec, err := goavro.NewCodec(str)
+			if err != nil {
+				return errors.Annotate(err, "Initialize failed: could not verify schema, probably bug")
+			}
+
+			err = manager.Register(context.Background(), model.TableName{
+				Schema: info.Schema,
+				Table:  info.Table,
+			}, avroCodec)
+
+			if err != nil {
+				return errors.Annotate(err, "Initialize failed: could not register schema")
+			}
+		}
 	}
 	return nil
 }
@@ -339,6 +407,22 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	producer, err := mqProducer.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+	sink, err := newMqSink(ctx, producer, filter, replicaConfig, opts, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sink, nil
+}
+
+func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+	producer, err := pulsar.NewProducer(sinkURI, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	s := sinkURI.Query().Get("protocol")
+	if s != "" {
+		replicaConfig.Sink.Protocol = s
 	}
 	sink, err := newMqSink(ctx, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {
