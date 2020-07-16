@@ -33,10 +33,16 @@ CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 
 
-for i in {0..3}
+for i in {1..3}
 do
     echo "The ${i} times to try to start tidb cluster..."
-    start_tidb_cluster_impl --workdir ${OUT_DIR} --tidb-config ${tidb_config}
+
+    if [[ "$tidb_config" != "" ]]; then
+        start_tidb_cluster_impl --workdir ${OUT_DIR} --tidb-config ${tidb_config}
+    else
+        start_tidb_cluster_impl --workdir ${OUT_DIR}
+    fi
+
     if [ $? -eq 0 ]; then
         break
     fi
