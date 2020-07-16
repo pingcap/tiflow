@@ -154,13 +154,14 @@ function run() {
         --key $TLS_DIR/client-key.pem \
         https://127.0.0.1:8302/status
 
-    output=$(curl --cacert $TLS_DIR/ca.pem \
+    if curl --cacert $TLS_DIR/ca.pem \
         --cert $TLS_DIR/server.pem \
         --key $TLS_DIR/server-key.pem \
         -sf --show-error \
-        https://127.0.0.1:8302/status 2>&1 || true)
-    echo "${output}"
-    echo "${output}" | grep "bad certificate"
+        https://127.0.0.1:8302/status 2>&1 ; then
+        echo "must not connect successfully"
+        exit 1
+    fi
 
     cleanup_process $CDC_BINARY
 }
