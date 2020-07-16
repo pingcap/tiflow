@@ -38,6 +38,7 @@ done
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 
+set +e
 i=1
 while [ $i -le $retry_times ]
 do
@@ -46,7 +47,7 @@ do
     if [[ "$tidb_config" != "" ]]; then
         start_tidb_cluster_impl --workdir ${OUT_DIR} --tidb-config ${tidb_config}
     else
-        start_tidb_cluster_impl --workdir ${OUT_DIR}
+        start_tidb_cluster_impl --workkdir ${OUT_DIR}
     fi
 
     if [ $? -eq 0 ]; then
