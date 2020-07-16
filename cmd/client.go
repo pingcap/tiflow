@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/chzyer/readline"
@@ -25,6 +26,7 @@ import (
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/v4/client"
+	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -38,6 +40,8 @@ func init() {
 	cliCmd := newCliCommand()
 	cliCmd.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address")
 	cliCmd.PersistentFlags().BoolVarP(&interact, "interact", "i", false, "Run cdc cli with readline")
+	cliCmd.PersistentFlags().StringVar(&cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
+	addSecurityFlags(cliCmd.PersistentFlags())
 	rootCmd.AddCommand(cliCmd)
 }
 
@@ -60,7 +64,9 @@ var (
 	cdcEtcdCli kv.CDCEtcdClient
 	pdCli      pd.Client
 
-	interact bool
+	interact    bool
+	simplified  bool
+	cliLogLevel string
 
 	changefeedID string
 	captureID    string
@@ -69,9 +75,10 @@ var (
 	defaultContext context.Context
 )
 
-// cf holds changefeed id, which is used for output only
-type cf struct {
-	ID string `json:"id"`
+// changefeedCommonInfo holds some common used information of a changefeed
+type changefeedCommonInfo struct {
+	ID      string              `json:"id"`
+	Summary *cdc.ChangefeedResp `json:"summary"`
 }
 
 // capture holds capture information
@@ -111,16 +118,30 @@ func newCliCommand() *cobra.Command {
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			err := util.InitLogger(&util.Config{Level: "warn"})
-			if err != nil {
-				fmt.Printf("init logger error %v", errors.ErrorStack(err))
-				os.Exit(1)
-			}
+			initCmd(cmd, &util.Config{Level: cliLogLevel})
 
+			credential := getCredential()
+			tlsConfig, err := credential.ToTLSConfig()
+			if err != nil {
+				return errors.Annotate(err, "fail to validate TLS settings")
+			}
+			if tlsConfig != nil {
+				if strings.Contains(cliPdAddr, "http://") {
+					return errors.New("PD endpoint scheme should be https")
+				}
+			} else if !strings.Contains(cliPdAddr, "http://") {
+				return errors.New("PD endpoint scheme should be http")
+			}
+			grpcTLSOption, err := credential.ToGRPCDialOption()
+			if err != nil {
+				return errors.Annotate(err, "fail to validate TLS settings")
+			}
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Endpoints:   []string{cliPdAddr},
+				TLS:         tlsConfig,
 				DialTimeout: 30 * time.Second,
 				DialOptions: []grpc.DialOption{
+					grpcTLSOption,
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
 						Backoff: backoff.Config{
@@ -135,11 +156,13 @@ func newCliCommand() *cobra.Command {
 			})
 			if err != nil {
 				// PD embeds an etcd server.
-				return errors.Annotate(err, "fail to open PD client")
+				return errors.Annotate(err, "fail to open PD etcd client")
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
-			pdCli, err = pd.NewClient([]string{cliPdAddr}, pd.SecurityOption{},
+			pdCli, err = pd.NewClientWithContext(
+				defaultContext, []string{cliPdAddr}, credential.PDSecurityOption(),
 				pd.WithGRPCDialOptions(
+					grpcTLSOption,
 					grpc.WithBlock(),
 					grpc.WithConnectParams(grpc.ConnectParams{
 						Backoff: backoff.Config{
@@ -156,7 +179,7 @@ func newCliCommand() *cobra.Command {
 			}
 			ctx := defaultContext
 			errorTiKVIncompatible := true // Error if TiKV is incompatible.
-			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr, errorTiKVIncompatible)
+			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr, credential, errorTiKVIncompatible)
 			if err != nil {
 				return err
 			}

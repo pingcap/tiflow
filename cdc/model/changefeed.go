@@ -16,6 +16,8 @@ package model
 import (
 	"encoding/json"
 	"math"
+	"regexp"
+	"sort"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -38,8 +40,23 @@ type FeedState string
 
 // All FeedStates
 const (
-	StateNormal FeedState = "normal"
-	StateFailed FeedState = "failed"
+	StateNormal  FeedState = "normal"
+	StateFailed  FeedState = "failed"
+	StateStopped FeedState = "stopped"
+	StateRemoved FeedState = "removed"
+)
+
+const (
+	// errorHistoryGCInterval represents how long we keep error record in changefeed info
+	errorHistoryGCInterval = time.Minute * 10
+
+	// errorHistoryCheckInterval represents time window for failure check
+	errorHistoryCheckInterval = time.Minute * 2
+
+	// errorHistoryThreshold represents failure upper limit in time window.
+	// Before a changefeed is initialized, check the the failure count of this
+	// changefeed, if it is less than errorHistoryThreshold, then initialize it.
+	errorHistoryThreshold = 5
 )
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
@@ -56,9 +73,21 @@ type ChangeFeedInfo struct {
 	Engine       SortEngine   `json:"sort-engine"`
 	SortDir      string       `json:"sort-dir"`
 
-	Config *config.ReplicaConfig `json:"config"`
-	State  FeedState             `json:"state"`
-	Error  *RunningError         `json:"error"`
+	Config   *config.ReplicaConfig `json:"config"`
+	State    FeedState             `json:"state"`
+	ErrorHis []int64               `json:"history"`
+	Error    *RunningError         `json:"error"`
+}
+
+var changeFeedIDRe *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$`)
+
+// ValidateChangefeedID returns true if the changefeed ID matches
+// the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task".
+func ValidateChangefeedID(changefeedID string) error {
+	if !changeFeedIDRe.MatchString(changefeedID) {
+		return errors.New(`bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task"`)
+	}
+	return nil
 }
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
@@ -133,4 +162,29 @@ func (info *ChangeFeedInfo) VerifyAndFix() error {
 		info.Config.Scheduler = defaultConfig.Scheduler
 	}
 	return nil
+}
+
+// CheckErrorHistory checks error history of a changefeed
+// if having error record older than GC interval, set needSave to true.
+// if error counts reach threshold, set canInit to false.
+func (info *ChangeFeedInfo) CheckErrorHistory() (needSave bool, canInit bool) {
+	i := sort.Search(len(info.ErrorHis), func(i int) bool {
+		ts := info.ErrorHis[i]
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryGCInterval
+	})
+	if i == len(info.ErrorHis) {
+		info.ErrorHis = info.ErrorHis[:]
+	} else {
+		info.ErrorHis = info.ErrorHis[i:]
+	}
+	if i > 0 {
+		needSave = true
+	}
+
+	i = sort.Search(len(info.ErrorHis), func(i int) bool {
+		ts := info.ErrorHis[i]
+		return time.Since(time.Unix(ts/1e3, (ts%1e3)*1e6)) < errorHistoryCheckInterval
+	})
+	canInit = len(info.ErrorHis)-i < errorHistoryThreshold
+	return
 }

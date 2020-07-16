@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -44,7 +45,9 @@ import (
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	gbackoff "google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -59,7 +62,7 @@ const (
 
 type singleRegionInfo struct {
 	verID        tikv.RegionVerID
-	span         regionspan.Span
+	span         regionspan.ComparableSpan
 	ts           uint64
 	failStoreIDs map[uint64]struct{}
 	rpcCtx       *tikv.RPCContext
@@ -74,7 +77,7 @@ var (
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
 )
 
-func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.Span, ts uint64, rpcCtx *tikv.RPCContext) singleRegionInfo {
+func newSingleRegionInfo(verID tikv.RegionVerID, span regionspan.ComparableSpan, ts uint64, rpcCtx *tikv.RPCContext) singleRegionInfo {
 	return singleRegionInfo{
 		verID:        verID,
 		span:         span,
@@ -155,16 +158,18 @@ func (m *syncRegionFeedStateMap) takeAll() map[uint64]*regionFeedState {
 }
 
 type connArray struct {
-	target string
-	index  uint32
-	v      []*grpc.ClientConn
+	credential *security.Credential
+	target     string
+	index      uint32
+	v          []*grpc.ClientConn
 }
 
-func newConnArray(ctx context.Context, maxSize uint, addr string) (*connArray, error) {
+func newConnArray(ctx context.Context, maxSize uint, addr string, credential *security.Credential) (*connArray, error) {
 	a := &connArray{
-		target: addr,
-		index:  0,
-		v:      make([]*grpc.ClientConn, maxSize),
+		target:     addr,
+		credential: credential,
+		index:      0,
+		v:          make([]*grpc.ClientConn, maxSize),
 	}
 	err := a.Init(ctx)
 	if err != nil {
@@ -174,16 +179,20 @@ func newConnArray(ctx context.Context, maxSize uint, addr string) (*connArray, e
 }
 
 func (a *connArray) Init(ctx context.Context) error {
+	grpcTLSOption, err := a.credential.ToGRPCDialOption()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	for i := range a.v {
 		ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 
 		conn, err := grpc.DialContext(
 			ctx,
 			a.target,
+			grpcTLSOption,
 			grpc.WithInitialWindowSize(grpcInitialWindowSize),
 			grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
 			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcInitialMaxRecvMsgSize)),
-			grpc.WithInsecure(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: gbackoff.Config{
 					BaseDelay:  time.Second,
@@ -230,7 +239,8 @@ func (a *connArray) Close() {
 
 // CDCClient to get events from TiKV
 type CDCClient struct {
-	pd pd.Client
+	pd         pd.Client
+	credential *security.Credential
 
 	clusterID uint64
 
@@ -244,13 +254,14 @@ type CDCClient struct {
 }
 
 // NewCDCClient creates a CDCClient instance
-func NewCDCClient(pd pd.Client, kvStorage tikv.Storage) (c *CDCClient, err error) {
-	clusterID := pd.GetClusterID(context.Background())
+func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, credential *security.Credential) (c *CDCClient, err error) {
+	clusterID := pd.GetClusterID(ctx)
 	log.Info("get clusterID", zap.Uint64("id", clusterID))
 
 	c = &CDCClient{
 		clusterID:   clusterID,
 		pd:          pd,
+		credential:  credential,
 		kvStorage:   kvStorage,
 		regionCache: tikv.NewRegionCache(pd),
 		mu: struct {
@@ -260,7 +271,6 @@ func NewCDCClient(pd pd.Client, kvStorage tikv.Storage) (c *CDCClient, err error
 			conns: make(map[string]*connArray),
 		},
 	}
-
 	return
 }
 
@@ -283,7 +293,7 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 	if conns, ok := c.mu.conns[addr]; ok {
 		return conns.Get(), nil
 	}
-	ca, err := newConnArray(ctx, grpcConnCount, addr)
+	ca, err := newConnArray(ctx, grpcConnCount, addr, c.credential)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -320,7 +330,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 // provided channel.
 // The `Start` and `End` field in input span must be memcomparable encoded.
 func (c *CDCClient) EventFeed(
-	ctx context.Context, span regionspan.Span, ts uint64, eventCh chan<- *model.RegionFeedEvent,
+	ctx context.Context, span regionspan.ComparableSpan, ts uint64, eventCh chan<- *model.RegionFeedEvent,
 ) error {
 	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span, eventCh)
 	return s.eventFeed(ctx, ts)
@@ -338,7 +348,7 @@ type eventFeedSession struct {
 	kvStorage   tikv.Storage
 
 	// The whole range that is being subscribed.
-	totalSpan regionspan.Span
+	totalSpan regionspan.ComparableSpan
 
 	// The channel to send the processed events.
 	eventCh chan<- *model.RegionFeedEvent
@@ -360,7 +370,7 @@ type eventFeedSession struct {
 }
 
 type rangeRequestTask struct {
-	span regionspan.Span
+	span regionspan.ComparableSpan
 	ts   uint64
 }
 
@@ -368,7 +378,7 @@ func newEventFeedSession(
 	client *CDCClient,
 	regionCache *tikv.RegionCache,
 	kvStorage tikv.Storage,
-	totalSpan regionspan.Span,
+	totalSpan regionspan.ComparableSpan,
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
@@ -436,7 +446,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 
 // scheduleDivideRegionAndRequest schedules a range to be divided by regions, and these regions will be then scheduled
 // to send ChangeData requests.
-func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, span regionspan.Span, ts uint64, blocking bool) {
+func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, span regionspan.ComparableSpan, ts uint64, blocking bool) {
 	task := rangeRequestTask{span: span, ts: ts}
 	if blocking {
 		select {
@@ -780,7 +790,7 @@ func (s *eventFeedSession) partialRegionFeed(
 // to region boundaries. When region merging happens, it's possible that it
 // will produce some overlapping spans.
 func (s *eventFeedSession) divideAndSendEventFeedToRegions(
-	ctx context.Context, span regionspan.Span, ts uint64,
+	ctx context.Context, span regionspan.ComparableSpan, ts uint64,
 ) error {
 	limit := 20
 
@@ -830,7 +840,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 
 		for _, tiRegion := range regions {
 			region := tiRegion.GetMeta()
-			partialSpan, err := regionspan.Intersect(s.totalSpan, regionspan.Span{Start: region.StartKey, End: region.EndKey})
+			partialSpan, err := regionspan.Intersect(s.totalSpan, regionspan.ComparableSpan{Start: region.StartKey, End: region.EndKey})
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -945,11 +955,20 @@ func (s *eventFeedSession) receiveFromStream(
 			return nil
 		}
 		if err != nil {
-			log.Error(
-				"failed to receive from stream",
-				zap.String("addr", addr),
-				zap.Uint64("storeID", storeID),
-				zap.Error(err))
+			if status.Code(errors.Cause(err)) == codes.Canceled {
+				log.Debug(
+					"receive from stream canceled",
+					zap.String("addr", addr),
+					zap.Uint64("storeID", storeID),
+				)
+			} else {
+				log.Error(
+					"failed to receive from stream",
+					zap.String("addr", addr),
+					zap.Uint64("storeID", storeID),
+					zap.Error(err),
+				)
+			}
 
 			for _, state := range regionStates {
 				select {
@@ -1034,7 +1053,7 @@ func (s *eventFeedSession) receiveFromStream(
 func (s *eventFeedSession) singleEventFeed(
 	ctx context.Context,
 	regionID uint64,
-	span regionspan.Span,
+	span regionspan.ComparableSpan,
 	startTs uint64,
 	receiverCh <-chan *cdcpb.Event,
 ) (uint64, error) {
