@@ -25,6 +25,7 @@ function run() {
 
     cd $WORK_DIR
 
+    i=0
     while [ $i -lt 500 ]
     do
         ((i++))
