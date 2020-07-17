@@ -172,6 +172,18 @@ type FileSorter struct {
 	cache    *fileCache
 }
 
+func (fs *FileSorter) GetStatus() model.SorterStatus {
+	panic("implement me")
+}
+
+func (fs *FileSorter) GetMaxResolvedTs() model.Ts {
+	panic("implement me")
+}
+
+func (fs *FileSorter) SafeStop() {
+	panic("implement me")
+}
+
 // flushEventsToFile writes a slice of model.PolymorphicEvent to a given file in sequence
 func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.PolymorphicEvent) (int, error) {
 	if len(entries) == 0 {

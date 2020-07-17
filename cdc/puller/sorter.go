@@ -26,6 +26,6 @@ type EventSorter interface {
 	AddEntry(ctx context.Context, entry *model.PolymorphicEvent)
 	GetStatus() model.SorterStatus
 	GetMaxResolvedTs() model.Ts
-	SafetyStop()
+	SafeStop()
 	Output() <-chan *model.PolymorphicEvent
 }

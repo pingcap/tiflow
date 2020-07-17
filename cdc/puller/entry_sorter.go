@@ -59,7 +59,7 @@ func (es *EntrySorter) GetMaxResolvedTs() model.Ts {
 	return atomic.LoadUint64(&es.maxSentResolvedTs)
 }
 
-func (es *EntrySorter) SafetyStop() {
+func (es *EntrySorter) SafeStop() {
 	atomic.CompareAndSwapInt32(&es.status,
 		model.SorterStatusWorking,
 		model.SorterStatusStopping)

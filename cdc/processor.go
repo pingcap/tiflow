@@ -119,6 +119,7 @@ type tableInfo struct {
 	resolvedTs  uint64
 	markTableID int64
 	mResolvedTs uint64
+	sorter      puller.EventSorter
 	workload    model.WorkloadInfo
 	cancel      context.CancelFunc
 }
@@ -132,6 +133,15 @@ func (t *tableInfo) loadResolvedTs() uint64 {
 		}
 	}
 	return tableRts
+}
+
+// safeStop will stop the table change feed safety
+func (t *tableInfo) safeStop() (stopped bool, checkpointTs model.Ts) {
+	t.sorter.SafeStop()
+	if t.sorter.GetStatus() != model.SorterStatusStopped {
+		return false, 0
+	}
+	return true, t.sorter.GetMaxResolvedTs()
 }
 
 // newProcessor creates and returns a processor for the specified change feed
@@ -533,10 +543,26 @@ func (p *processor) removeTable(tableID int64) {
 // handleTables handles table scheduler on this processor, add or remove table puller
 func (p *processor) handleTables(ctx context.Context) error {
 	for tableID, opt := range p.status.Operation {
+		if opt.Done {
+			continue
+		}
 		if opt.Delete {
 			if opt.BoundaryTs <= p.position.CheckPointTs {
-				p.removeTable(tableID)
-				opt.Done = true
+				table, exist := p.tables[tableID]
+				if !exist {
+					log.Warn("table which will be deleted is not found", zap.Int64("tableID", tableID))
+					opt.Done = true
+					continue
+				}
+
+				stopped, checkpointTs := table.safeStop()
+				if stopped {
+					opt.BoundaryTs = checkpointTs
+					if checkpointTs <= p.position.CheckPointTs {
+						p.removeTable(tableID)
+						opt.Done = true
+					}
+				}
 			}
 		} else {
 			replicaInfo, exist := p.status.Tables[tableID]
@@ -802,7 +828,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	// We temporarily set the value to constant 1
 	table.workload = model.WorkloadInfo{Workload: 1}
 
-	startPuller := func(tableID model.TableID, pResolvedTs *uint64) {
+	startPuller := func(tableID model.TableID, pResolvedTs *uint64) puller.EventSorter {
 
 		// start table puller
 		// The key in DML kv pair returned from TiKV is not memcompariable encoded,
@@ -824,7 +850,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			sorter = puller.NewFileSorter(p.changefeed.SortDir)
 		default:
 			p.errCh <- errors.Errorf("unknown sort engine %s", p.changefeed.Engine)
-			return
+			return nil
 		}
 		go func() {
 			err := sorter.Run(ctx)
@@ -876,9 +902,10 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				}
 			}
 		}()
+		return sorter
 	}
 
-	startPuller(tableID, &table.resolvedTs)
+	table.sorter = startPuller(tableID, &table.resolvedTs)
 
 	if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID != 0 {
 		mTableID := replicaInfo.MarkTableID
