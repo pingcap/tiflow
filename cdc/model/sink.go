@@ -37,10 +37,28 @@ const (
 	MqMessageTypeResolved
 )
 
+// ColumnFlagType is for encapsulating the flag operations for different flags.
+type ColumnFlagType util.Flag
+
 const (
 	// BinaryFlag means col charset is binary
-	BinaryFlag util.Flag = 1 << util.Flag(iota)
+	BinaryFlag ColumnFlagType = 1 << 0
 )
+
+//SetIsBinary set BinaryFlag
+func (b *ColumnFlagType) SetIsBinary() {
+	(*util.Flag)(b).Add(util.Flag(BinaryFlag))
+}
+
+//UnSetIsBinary unset BinaryFlag
+func (b *ColumnFlagType) UnSetIsBinary() {
+	(*util.Flag)(b).Remove(util.Flag(BinaryFlag))
+}
+
+//IsSetBinary show whether BinaryFlag is set
+func (b *ColumnFlagType) IsSetBinary() bool {
+	return (*util.Flag)(b).HasAll(util.Flag(BinaryFlag))
+}
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
@@ -93,10 +111,10 @@ type RowChangedEvent struct {
 
 // Column represents a column value in row changed event
 type Column struct {
-	Type        byte        `json:"t"`
-	WhereHandle *bool       `json:"h,omitempty"`
-	Flag        util.Flag   `json:"f"`
-	Value       interface{} `json:"v"`
+	Type        byte           `json:"t"`
+	WhereHandle *bool          `json:"h,omitempty"`
+	Flag        ColumnFlagType `json:"f"`
+	Value       interface{}    `json:"v"`
 }
 
 // ColumnInfo represents the name and type information passed to the sink
