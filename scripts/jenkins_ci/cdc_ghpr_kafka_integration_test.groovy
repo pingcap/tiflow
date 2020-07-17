@@ -4,12 +4,16 @@ sh"""
 wc -l ${script_path}
 """
 def common = load script_path
-def truststore_path = "go/src/github.com/pingcap/ticdc/tests/_certificates"
+
+// HACK! Download jks by injecting RACK_COMMAND
+// https://git.io/JJZXX -> https://github.com/pingcap/ticdc/raw/6e62afcfecc4e3965d8818784327d4bf2600d9fa/tests/_certificates/kafka.server.keystore.jks
+// https://git.io/JJZXM -> https://github.com/pingcap/ticdc/raw/6e62afcfecc4e3965d8818784327d4bf2600d9fa/tests/_certificates/kafka.server.truststore.jks
+def download_jks = 'curl -sfL https://git.io/JJZXX -o /tmp/kafka.server.keystore.jks && curl -sfL https://git.io/JJZXM -o /tmp/kafka.server.truststore.jks'
 
 catchError {
     common.prepare_binaries()
 
-    def label = "${GO_TEST_SLAVE}"
+    def label = "cdc-kafka-integration-${UUID.randomUUID().toString()}"
     podTemplate(label: label, idleMinutes: 0,
         containers: [
             containerTemplate(name: 'golang',alwaysPullImage: false, image: "${GO_DOCKER_IMAGE}",
@@ -28,19 +32,19 @@ catchError {
                     envVar(key: 'KAFKA_MESSAGE_MAX_BYTES', value: '1073741824'),
                     envVar(key: 'KAFKA_REPLICA_FETCH_MAX_BYTES', value: '1073741824'),
                     envVar(key: 'KAFKA_BROKER_ID', value: '1'),
+                    envVar(key: 'RACK_COMMAND', value: download_jks),
                     envVar(key: 'KAFKA_LISTENERS', value: 'SSL://127.0.0.1:9093,PLAINTEXT://127.0.0.1:9092'),
                     envVar(key: 'KAFKA_ADVERTISED_LISTENERS', value: 'SSL://127.0.0.1:9093,PLAINTEXT://127.0.0.1:9092'),
-                    envVar(key: 'KAFKA_SSL_KEYSTORE_LOCATION', value: '/truststore/kafka.server.keystore.jks'),
+                    envVar(key: 'KAFKA_SSL_KEYSTORE_LOCATION', value: '/tmp/kafka.server.keystore.jks'),
                     envVar(key: 'KAFKA_SSL_KEYSTORE_PASSWORD', value: 'test1234'),
                     envVar(key: 'KAFKA_SSL_KEY_PASSWORD', value: 'test1234'),
-                    envVar(key: 'KAFKA_SSL_TRUSTSTORE_LOCATION', value: '/truststore/kafka.server.truststore.jks'),
+                    envVar(key: 'KAFKA_SSL_TRUSTSTORE_LOCATION', value: '/tmp/kafka.server.truststore.jks'),
                     envVar(key: 'KAFKA_SSL_TRUSTSTORE_PASSWORD', value: 'test1234'),
                     envVar(key: 'ZK', value: 'zk'),
                     envVar(key: 'KAFKA_ZOOKEEPER_CONNECT', value: 'localhost:2181'),
                 ]
         )],
         volumes:[
-            hostPathVolume(hostPath: truststore_path, mountPath: '/truststore'),
             emptyDirVolume(mountPath: '/tmp', memory: true),
             emptyDirVolume(mountPath: '/home/jenkins', memory: true)
         ]

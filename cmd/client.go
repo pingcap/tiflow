@@ -137,6 +137,7 @@ func newCliCommand() *cobra.Command {
 				return errors.Annotate(err, "fail to validate TLS settings")
 			}
 			etcdCli, err := clientv3.New(clientv3.Config{
+				Context:     defaultContext,
 				Endpoints:   []string{cliPdAddr},
 				TLS:         tlsConfig,
 				DialTimeout: 30 * time.Second,
