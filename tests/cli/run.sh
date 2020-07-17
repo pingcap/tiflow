@@ -25,14 +25,6 @@ function run() {
 
     cd $WORK_DIR
 
-    i=0
-    while [ $i -lt 500 ]
-    do
-        ((i++))
-        echo "sleep 60s $i-th"
-        sleep 60
-    done
-
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
     run_sql "CREATE table test.simple(id int primary key, val int);"
