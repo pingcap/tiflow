@@ -9,7 +9,7 @@ def truststore_path = "go/src/github.com/pingcap/ticdc/tests/_certificates"
 catchError {
     common.prepare_binaries()
 
-    def label = "cdc-kafka-integration-${UUID.randomUUID().toString()}"
+    def label = "${GO_TEST_SLAVE}"
     podTemplate(label: label, idleMinutes: 0,
         containers: [
             containerTemplate(name: 'golang',alwaysPullImage: false, image: "${GO_DOCKER_IMAGE}",
