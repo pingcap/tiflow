@@ -43,12 +43,15 @@ type KafkaConfig struct {
 	// TODO support SASL authentication
 }
 
-// DefaultKafkaConfig is the default Kafka configuration
-var DefaultKafkaConfig = KafkaConfig{
-	Version:           "2.4.0",
-	MaxMessageBytes:   512 * 1024 * 1024, // 512M
-	ReplicationFactor: 1,
-	Compression:       "none",
+// NewKafkaConfig returns a default Kafka configuration
+func NewKafkaConfig() KafkaConfig {
+	return KafkaConfig{
+		Version:           "2.4.0",
+		MaxMessageBytes:   512 * 1024 * 1024, // 512M
+		ReplicationFactor: 1,
+		Compression:       "none",
+		Credential:        &security.Credential{},
+	}
 }
 
 type kafkaSaramaProducer struct {

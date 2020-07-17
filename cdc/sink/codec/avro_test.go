@@ -15,6 +15,7 @@ package codec
 
 import (
 	"context"
+
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -24,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +38,7 @@ var _ = check.Suite(&avroBatchEncoderSuite{})
 func (s *avroBatchEncoderSuite) SetUpSuite(c *check.C) {
 	startHTTPInterceptForTestingRegistry(c)
 
-	manager, err := NewAvroSchemaManager(context.Background(), "http://127.0.0.1:8081", "-value")
+	manager, err := NewAvroSchemaManager(context.Background(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 
 	s.encoder = &AvroEventBatchEncoder{
