@@ -462,10 +462,15 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 			return nil, errors.Trace(err)
 		}
 		whereHandle := true
+		var flag bitflag.Flag
+		if tableInfo.Columns[idxCol.Offset].Charset == "binary" {
+			flag.Set(model.BinaryFlag)
+		}
 		values[idxCol.Name.O] = &model.Column{
 			Type:        tableInfo.Columns[idxCol.Offset].Tp,
 			WhereHandle: &whereHandle,
 			Value:       value,
+			Flag:        flag,
 		}
 	}
 	return &model.RowChangedEvent{
