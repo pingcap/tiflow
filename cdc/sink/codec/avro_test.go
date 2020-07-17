@@ -15,6 +15,7 @@ package codec
 
 import (
 	"context"
+	"time"
 
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
@@ -26,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )
 
@@ -63,7 +65,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 			{"name": "mybool", "type": ["null", "int"], "default": null},
 			{"name": "myfloat", "type": ["null", "float"], "default": null},
 			{"name": "mybytes", "type": ["null", "bytes"], "default": null},
-			{"name": "ts", "type": ["null", "long.timestamp-millis"], "default": null}
+			{"name": "ts", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null}
           ]
         }`)
 
@@ -84,7 +86,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 		"mybool":  {Value: uint8(1), Type: mysql.TypeTiny},
 		"myfloat": {Value: float32(3.14), Type: mysql.TypeFloat},
 		"mybytes": {Value: []byte("Hello World"), Type: mysql.TypeBlob},
-		//"ts":      {Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
+		"ts":      {Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
 	})
 	c.Assert(err, check.IsNil)
 
