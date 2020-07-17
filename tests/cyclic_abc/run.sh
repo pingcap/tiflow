@@ -7,7 +7,7 @@ source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
-TLS_DIR=$CUR/certificates
+TLS_DIR=$( cd $CUR/../_certificates && pwd )
 
 function run() {
     # kafka is not supported yet.

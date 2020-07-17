@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -399,6 +400,22 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	s = sinkURI.Query().Get("protocol")
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
+	}
+
+	s = sinkURI.Query().Get("ca")
+	if s != "" {
+		config.Credential = &security.Credential{}
+		config.Credential.CAPath = s
+	}
+
+	s = sinkURI.Query().Get("cert")
+	if s != "" {
+		config.Credential.CertPath = s
+	}
+
+	s = sinkURI.Query().Get("key")
+	if s != "" {
+		config.Credential.KeyPath = s
 	}
 
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {

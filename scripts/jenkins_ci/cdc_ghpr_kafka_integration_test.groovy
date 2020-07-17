@@ -4,6 +4,7 @@ sh"""
 wc -l ${script_path}
 """
 def common = load script_path
+def truststore_path = "go/src/github.com/pingcap/ticdc/tests/_certificates"
 
 catchError {
     common.prepare_binaries()
@@ -26,21 +27,27 @@ catchError {
                 envVars: [
                     envVar(key: 'KAFKA_MESSAGE_MAX_BYTES', value: '1073741824'),
                     envVar(key: 'KAFKA_REPLICA_FETCH_MAX_BYTES', value: '1073741824'),
-                    envVar(key: 'KAFKA_ADVERTISED_PORT', value: '9092'),
-                    envVar(key: 'KAFKA_ADVERTISED_HOST_NAME', value:'127.0.0.1'),
                     envVar(key: 'KAFKA_BROKER_ID', value: '1'),
+                    envVar(key: 'KAFKA_LISTENERS', value: 'SSL://127.0.0.1:9093,PLAINTEXT://127.0.0.1:9092'),
+                    envVar(key: 'KAFKA_ADVERTISED_LISTENERS', value: 'SSL://127.0.0.1:9093,PLAINTEXT://127.0.0.1:9092'),
+                    envVar(key: 'KAFKA_SSL_KEYSTORE_LOCATION', value: '/truststore/kafka.server.keystore.jks'),
+                    envVar(key: 'KAFKA_SSL_KEYSTORE_PASSWORD', value: 'test1234'),
+                    envVar(key: 'KAFKA_SSL_KEY_PASSWORD', value: 'test1234'),
+                    envVar(key: 'KAFKA_SSL_TRUSTSTORE_LOCATION', value: '/truststore/kafka.server.truststore.jks'),
+                    envVar(key: 'KAFKA_SSL_TRUSTSTORE_PASSWORD', value: 'test1234'),
                     envVar(key: 'ZK', value: 'zk'),
                     envVar(key: 'KAFKA_ZOOKEEPER_CONNECT', value: 'localhost:2181'),
                 ]
-        )], 
+        )],
         volumes:[
+            hostPathVolume(hostPath: truststore_path, mountPath: '/truststore'),
             emptyDirVolume(mountPath: '/tmp', memory: true),
             emptyDirVolume(mountPath: '/home/jenkins', memory: true)
         ]
     ) {
         common.tests("kafka", label)
     }
-    
+
     currentBuild.result = "SUCCESS"
 }
 
