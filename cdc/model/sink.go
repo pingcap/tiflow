@@ -42,7 +42,7 @@ type ColumnFlagType util.Flag
 
 const (
 	// BinaryFlag means col charset is binary
-	BinaryFlag ColumnFlagType = 1 << 0
+	BinaryFlag ColumnFlagType = 1 << ColumnFlagType(iota)
 )
 
 //SetIsBinary set BinaryFlag
@@ -50,13 +50,13 @@ func (b *ColumnFlagType) SetIsBinary() {
 	(*util.Flag)(b).Add(util.Flag(BinaryFlag))
 }
 
-//UnSetIsBinary unset BinaryFlag
-func (b *ColumnFlagType) UnSetIsBinary() {
+//UnsetIsBinary unset BinaryFlag
+func (b *ColumnFlagType) UnsetIsBinary() {
 	(*util.Flag)(b).Remove(util.Flag(BinaryFlag))
 }
 
-//IsSetBinary show whether BinaryFlag is set
-func (b *ColumnFlagType) IsSetBinary() bool {
+//IsBinary show whether BinaryFlag is set
+func (b *ColumnFlagType) IsBinary() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(BinaryFlag))
 }
 

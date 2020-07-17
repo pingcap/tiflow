@@ -22,11 +22,11 @@ var _ = check.Suite(&columnFlagTypeSuite{})
 func (s *configSuite) TestBinaryFlag(c *check.C) {
 	var flag ColumnFlagType
 	flag.SetIsBinary()
-	if !flag.IsSetBinary() {
+	if !flag.IsBinary() {
 		c.Fatal("Binary Flag should be set, but not!")
 	}
-	flag.UnSetIsBinary()
-	if flag.IsSetBinary() {
+	flag.UnsetIsBinary()
+	if flag.IsBinary() {
 		c.Fatal("Binary Flag should not be set, but set!")
 	}
 }
