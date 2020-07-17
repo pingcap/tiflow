@@ -185,6 +185,7 @@ flushLoop:
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	switch k.protocol {
 	case codec.ProtocolAvro: // ignore resolved events in avro protocol
+		return nil
 	case codec.ProtocolCanal:
 		return nil
 
@@ -342,7 +343,9 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			return errors.Trace(err)
 		}
 		batchSize++
-		if encoder.Size() >= batchSizeLimit {
+		// This is only a temporary fix so that the Avro encoder does not overflow.
+		// Pending further refactoring
+		if encoder.Size() >= batchSizeLimit || (k.protocol == codec.ProtocolAvro && encoder.Size() >= 1) {
 			if err := flushToProducer(); err != nil {
 				return errors.Trace(err)
 			}
