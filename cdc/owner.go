@@ -431,7 +431,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
 			return err
 		}
-		if status != nil && (status.AdminJobType == model.AdminStop || status.AdminJobType == model.AdminRemove) {
+		if status != nil && status.AdminJobType.IsStopState() {
 			continue
 		}
 		checkpointTs := cfInfo.GetCheckpointTs(status)
@@ -612,8 +612,28 @@ func (o *Owner) collectChangefeedInfo(ctx context.Context, cid model.ChangeFeedI
 		feedState = model.StateStopped
 	case model.AdminRemove:
 		feedState = model.StateRemoved
+	case model.AdminFinish:
+		feedState = model.StateFinished
 	}
 	return nil, status, feedState, nil
+}
+
+func (o *Owner) checkClusterHealth(_ context.Context) error {
+	// check whether a changefeed has finished by comparing checkpoint-ts and target-ts
+	for _, cf := range o.changeFeeds {
+		if cf.status.CheckpointTs == cf.info.GetTargetTs() {
+			log.Info("changefeed replication finished", zap.String("changefeed", cf.id), zap.Uint64("ts", cf.status.CheckpointTs))
+			err := o.EnqueueJob(model.AdminJob{
+				CfID: cf.id,
+				Type: model.AdminFinish,
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+	// TODO: check processor normal exited
+	return nil
 }
 
 func (o *Owner) handleAdminJob(ctx context.Context) error {
@@ -644,6 +664,9 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			case model.StateRemoved:
 				log.Info("changefeed has been removed, pause command will do nothing")
 				continue
+			case model.StateFinished:
+				log.Info("changefeed has finished, pause command will do nothing")
+				continue
 			}
 			if cf == nil {
 				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
@@ -662,7 +685,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-		case model.AdminRemove:
+		case model.AdminRemove, model.AdminFinish:
 			if cf != nil {
 				err := o.dispatchJob(ctx, job)
 				if err != nil {
@@ -670,13 +693,13 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				}
 			} else {
 				switch feedState {
-				case model.StateRemoved:
+				case model.StateRemoved, model.StateFinished:
 					// remove a removed changefeed
-					log.Info("changefeed has been removed, remove command will do nothing")
+					log.Info("changefeed has been removed or finished, remove command will do nothing")
 					continue
 				case model.StateStopped:
-					// remove a paused changefeed
-					status.AdminJobType = model.AdminRemove
+					// remove or finish a paused changefeed
+					status.AdminJobType = job.Type
 					err = o.etcdClient.PutChangeFeedStatus(ctx, job.CfID, status)
 					if err != nil {
 						return errors.Trace(err)
@@ -701,8 +724,8 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
 				continue
 			}
-			if feedState == model.StateRemoved {
-				log.Info("changefeed has been removed, cannot be resumed anymore")
+			if feedState == model.StateRemoved || feedState == model.StateFinished {
+				log.Info("changefeed has been removed or finished, cannot be resumed anymore")
 				continue
 			}
 			cfInfo, err := o.etcdClient.GetChangeFeedInfo(ctx, job.CfID)
@@ -879,13 +902,19 @@ func (o *Owner) run(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	err = o.checkClusterHealth(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 
 // EnqueueJob adds an admin job
 func (o *Owner) EnqueueJob(job model.AdminJob) error {
 	switch job.Type {
-	case model.AdminResume, model.AdminRemove, model.AdminStop:
+	case model.AdminResume, model.AdminRemove, model.AdminStop, model.AdminFinish:
 	default:
 		return errors.Errorf("invalid admin job type: %d", job.Type)
 	}

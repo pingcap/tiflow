@@ -473,7 +473,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		return updatePosition()
 	}
 	p.status = p.tsRWriter.GetTaskStatus()
-	if p.status.AdminJobType == model.AdminStop || p.status.AdminJobType == model.AdminRemove {
+	if p.status.AdminJobType.IsStopState() {
 		err = p.stop(ctx)
 		if err != nil {
 			return errors.Trace(err)
