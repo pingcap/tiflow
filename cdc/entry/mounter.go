@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mvpninjas/go-bitflag"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -374,7 +373,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		var flag bitflag.Flag
+		var flag util.Flag
 		if colInfo.Charset == "binary" {
 			flag.Set(model.BinaryFlag)
 		}
@@ -412,7 +411,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		for _, col := range tableInfo.Columns {
 			_, ok := values[col.Name.O]
 			if !ok && tableInfo.IsColWritable(col) {
-				var flag bitflag.Flag
+				var flag util.Flag
 				if col.Charset == "binary" {
 					flag.Set(model.BinaryFlag)
 				}
@@ -462,7 +461,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 			return nil, errors.Trace(err)
 		}
 		whereHandle := true
-		var flag bitflag.Flag
+		var flag util.Flag
 		if tableInfo.Columns[idxCol.Offset].Charset == "binary" {
 			flag.Set(model.BinaryFlag)
 		}
