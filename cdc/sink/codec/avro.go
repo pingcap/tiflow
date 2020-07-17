@@ -347,7 +347,7 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 		fsp := len(frac)
 		fracInt, err := strconv.ParseInt(frac, 10, 32)
 		if err != nil {
-			return "", "", err
+			return nil, "", err
 		}
 		fracInt = int64(float64(fracInt) * math.Pow10(6-fsp))
 
