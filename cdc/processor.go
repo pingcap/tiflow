@@ -547,6 +547,7 @@ func (p *processor) handleTables(ctx context.Context) error {
 			continue
 		}
 		if opt.Delete {
+			log.Info("LEOPPRO: delete table", zap.Int64("tableID", tableID))
 			if opt.BoundaryTs <= p.position.CheckPointTs {
 				table, exist := p.tables[tableID]
 				if !exist {
@@ -557,8 +558,10 @@ func (p *processor) handleTables(ctx context.Context) error {
 
 				stopped, checkpointTs := table.safeStop()
 				if stopped {
+					log.Info("LEOPPRO: stopped", zap.Int64("tableID", tableID), zap.Uint64("checkpointTs", checkpointTs))
 					opt.BoundaryTs = checkpointTs
 					if checkpointTs <= p.position.CheckPointTs {
+						log.Info("LEOPPRO: removed", zap.Int64("tableID", tableID), zap.Uint64("checkpointTs", checkpointTs))
 						p.removeTable(tableID)
 						opt.Done = true
 					}
