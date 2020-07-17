@@ -181,10 +181,17 @@ type avroSchemaField struct {
 	DefaultValue interface{}   `json:"default"`
 }
 
+type logicalType string
+
 type avroLogicalType struct {
-	Type        string `json:"type"`
-	LogicalType string `json:"logicalType"`
+	Type        string      `json:"type"`
+	LogicalType logicalType `json:"logicalType"`
 }
+
+const (
+	timestampMillis logicalType = "timestamp-millis"
+	timeMicros      logicalType = "time-micros"
+)
 
 // ColumnInfoToAvroSchema generates the Avro schema JSON for the corresponding columns
 func ColumnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string, error) {
@@ -269,12 +276,12 @@ func getAvroDataTypeNameMysql(tp byte) (interface{}, error) {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
 		return avroLogicalType{
 			Type:        "long",
-			LogicalType: "timestamp-millis",
+			LogicalType: timestampMillis,
 		}, nil
 	case mysql.TypeDuration: //duration should read fsp from column meta data
 		return avroLogicalType{
 			Type:        "long",
-			LogicalType: "time-micros",
+			LogicalType: timeMicros,
 		}, nil
 	case mysql.TypeEnum:
 		return "long", nil
@@ -312,20 +319,21 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		str := col.Value.(string)
 		t, err := time.Parse(types.DateFormat, str)
+		const fullType = "long." + timestampMillis
 		if err == nil {
-			return t, "long.timestamp-millis", nil
+			return t, string(fullType), nil
 		}
 
 		t, err = time.Parse(types.TimeFormat, str)
 		if err == nil {
-			return t, "long.timestamp-millis", nil
+			return t, string(fullType), nil
 		}
 
 		t, err = time.Parse(types.TimeFSPFormat, str)
 		if err != nil {
 			return nil, "", err
 		}
-		return t, "long.timestamp-millis", nil
+		return t, string(fullType), nil
 	case mysql.TypeDuration:
 		str := col.Value.(string)
 		var (
@@ -352,7 +360,8 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 		fracInt = int64(float64(fracInt) * math.Pow10(6-fsp))
 
 		d := types.NewDuration(hours, minutes, seconds, int(fracInt), int8(fsp)).Duration
-		return d, "long.time-micros", nil
+		const fullType = "long." + timeMicros
+		return d, string(fullType), nil
 	case mysql.TypeJSON:
 		return col.Value.(tijson.BinaryJSON).String(), "string", nil
 	case mysql.TypeNewDecimal, mysql.TypeDecimal:
