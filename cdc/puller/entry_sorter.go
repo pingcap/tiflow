@@ -32,10 +32,12 @@ import (
 
 // EntrySorter accepts out-of-order raw kv entries and output sorted entries
 type EntrySorter struct {
-	unsorted        []*model.PolymorphicEvent
-	lock            sync.Mutex
-	resolvedTsGroup []uint64
-	closed          int32
+	unsorted          []*model.PolymorphicEvent
+	lock              sync.Mutex
+	resolvedTsGroup   []uint64
+	closed            int32
+	status            model.SorterStatus
+	maxSentResolvedTs uint64
 
 	outputCh       chan *model.PolymorphicEvent
 	resolvedNotify chan struct{}
@@ -47,6 +49,20 @@ func NewEntrySorter() *EntrySorter {
 		resolvedNotify: make(chan struct{}, 128000),
 		outputCh:       make(chan *model.PolymorphicEvent, 128000),
 	}
+}
+
+func (es *EntrySorter) GetStatus() model.SorterStatus {
+	return atomic.LoadInt32(&es.status)
+}
+
+func (es *EntrySorter) GetMaxResolvedTs() model.Ts {
+	return atomic.LoadUint64(&es.maxSentResolvedTs)
+}
+
+func (es *EntrySorter) SafetyStop() {
+	atomic.CompareAndSwapInt32(&es.status,
+		model.SorterStatusWorking,
+		model.SorterStatusStopping)
 }
 
 // Run runs EntrySorter
@@ -121,6 +137,13 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 				close(es.outputCh)
 				return errors.Trace(ctx.Err())
 			case <-es.resolvedNotify:
+				switch atomic.LoadInt32(&es.status) {
+				case model.SorterStatusStopping:
+					atomic.StoreInt32(&es.status, model.SorterStatusStopped)
+				case model.SorterStatusStopped:
+					continue
+				case model.SorterStatusWorking:
+				}
 				es.lock.Lock()
 				if len(es.resolvedTsGroup) == 0 {
 					es.lock.Unlock()
@@ -155,6 +178,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 				})
 				metricEntrySorterMergeDuration.Observe(time.Since(startTime).Seconds())
 				sorted = merged
+				atomic.StoreUint64(&es.maxSentResolvedTs, maxResolvedTs)
 			}
 		}
 	})
