@@ -355,7 +355,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	config := mqProducer.NewDefaultKafkaConfig()
+	config := mqProducer.NewKafkaConfig()
 
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "kafka" {
