@@ -32,31 +32,31 @@ func (b *bitFlagSuite) TestExample(c *check.C) {
 
 	var flag Flag
 
-	flag.Set(FlagA)
-	flag.Set(FlagB, FlagC)
-	flag.Set(FlagC | FlagD)
+	flag.Add(FlagA)
+	flag.Add(FlagB, FlagC)
+	flag.Add(FlagC, FlagD)
 
 	flag.Clear()
 
-	flag.Set(FlagA, FlagB, FlagC, FlagD)
+	flag.Add(FlagA, FlagB, FlagC, FlagD)
 
-	flag.Unset(FlagA)
+	flag.Remove(FlagA)
 
-	flag.Unset(FlagB, FlagC)
+	flag.Remove(FlagB, FlagC)
 
-	if flag.Isset(FlagA) {
+	if flag.HasAll(FlagA) {
 		c.Fatal("A should not be set, but set!")
 	}
 
-	if flag.Isset(FlagB) {
+	if flag.HasAll(FlagB) {
 		c.Fatal("B should not be set, but set!")
 	}
 
-	if flag.Isset(FlagC) {
+	if flag.HasAll(FlagC) {
 		c.Fatal("C should not be set, but set!")
 	}
 
-	if !flag.Isset(FlagD) {
+	if !flag.HasAll(FlagD) {
 		c.Fatal("D should not set, but not!")
 	}
 }
@@ -65,25 +65,21 @@ func (b *bitFlagSuite) TestSet(c *check.C) {
 
 	var flag Flag
 
-	flag.Set(FlagA)
-	flag.Set(FlagB)
+	flag.Add(FlagA)
+	flag.Add(FlagB)
 
-	if !flag.Isset(FlagA) {
+	if !flag.HasAll(FlagA) {
 		c.Fatal("A should be set, but not!")
 	}
 
-	if !flag.Isset(FlagB) {
+	if !flag.HasAll(FlagB) {
 		c.Fatal("B should be set, but not!")
 	}
 
-	flag.Set(FlagA, FlagB)
+	flag.Add(FlagA, FlagB)
 
-	if !flag.Isset(FlagA, FlagB) {
+	if !flag.HasAll(FlagA, FlagB) {
 		c.Fatal("A B should be set, but not!")
-	}
-
-	if !flag.One(FlagB) {
-		c.Fatal("B should be set, but not!")
 	}
 }
 
@@ -91,19 +87,19 @@ func (b *bitFlagSuite) TestUnset(c *check.C) {
 
 	var flag Flag
 
-	flag.Set(FlagA, FlagB, FlagC)
+	flag.Add(FlagA, FlagB, FlagC)
 
-	if !flag.Isset(FlagA, FlagB, FlagC) {
-		c.Fatal("A should be set, but not!")
+	if !flag.HasAll(FlagA, FlagB, FlagC) {
+		c.Fatal("A B C should be set, but not!")
 	}
 
-	flag.Unset(FlagB)
+	flag.Remove(FlagB)
 
-	if flag.Isset(FlagB) {
+	if flag.HasAll(FlagB) {
 		c.Fatal("B should be unset, but set!")
 	}
 
-	if !flag.Isset(FlagA, FlagC) {
+	if !flag.HasAll(FlagA, FlagC) {
 		c.Fatal("A C should be set, but not!")
 	}
 }
@@ -112,15 +108,15 @@ func (b *bitFlagSuite) TestClear(c *check.C) {
 
 	var flag Flag
 
-	flag.Set(FlagA, FlagB, FlagC)
+	flag.Add(FlagA, FlagB, FlagC)
 
-	if !flag.Isset(FlagA, FlagB, FlagC) {
+	if !flag.HasAll(FlagA, FlagB, FlagC) {
 		c.Fatal("A B C should be set, but not!")
 	}
 
 	flag.Clear()
 
-	if flag.One(FlagA, FlagB, FlagC) {
+	if flag.HasOne(FlagA, FlagB, FlagC) {
 		c.Fatal("A B C should be cleared, but not!")
 	}
 }

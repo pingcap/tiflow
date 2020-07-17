@@ -16,45 +16,41 @@ package util
 // Flag is a uint64 flag to show a 64 bit mask
 type Flag uint64
 
-// Set flag : Set(&flag, FLAG_B, FLAG_C)
-func (f *Flag) Set(opts ...Flag) {
-	for _, o := range opts {
-		*f |= o
-	}
-}
-
-// Unset flag : Unset(&flag, FLAG_B, FLAG_C)
-func (f *Flag) Unset(opts ...Flag) {
-	for _, o := range opts {
-		*f ^= o
-	}
-}
-
-// Isset : judge a list of flags is setted. Isset(&flag, FLAG_A), Isset(&flag, FLAG_A, FLAG_B), Isset(&flag, FLAG_A | FLAG_B)
-func (f Flag) Isset(opts ...Flag) (isset bool) {
-
-	for _, o := range opts {
-		if f&o == 0 {
+//HasAll means has all flags
+func (f *Flag) HasAll(flags ...Flag) bool {
+	for _, flag := range flags {
+		if flag&*f == 0 {
 			return false
 		}
 	}
-
 	return true
 }
 
-// One of opts is setted in flag : OneOf(flag, FLAG_A, FLAG_B)
-func (f Flag) One(opts ...Flag) (isset bool) {
-
-	for _, o := range opts {
-		if f&o > 0 {
+//HasOne means has one of the flags
+func (f *Flag) HasOne(flags ...Flag) bool {
+	for _, flag := range flags {
+		if flag&*f != 0 {
 			return true
 		}
 	}
-
-	return
+	return false
 }
 
-// Clear all bit
+// Add add flags
+func (f *Flag) Add(flags ...Flag) {
+	for _, flag := range flags {
+		*f |= flag
+	}
+}
+
+//Remove remove flags
+func (f *Flag) Remove(flags ...Flag) {
+	for _, flag := range flags {
+		*f ^= flag
+	}
+}
+
+//Clear clear all flags
 func (f *Flag) Clear() {
-	*f = 0
+	*f ^= *f
 }

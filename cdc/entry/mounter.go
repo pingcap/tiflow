@@ -375,7 +375,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		}
 		var flag util.Flag
 		if colInfo.Charset == "binary" {
-			flag.Set(model.BinaryFlag)
+			flag.Add(model.BinaryFlag)
 		}
 		col := &model.Column{
 			Type:  colInfo.Tp,
@@ -413,7 +413,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 			if !ok && tableInfo.IsColWritable(col) {
 				var flag util.Flag
 				if col.Charset == "binary" {
-					flag.Set(model.BinaryFlag)
+					flag.Add(model.BinaryFlag)
 				}
 				column := &model.Column{
 					Type:  col.Tp,
@@ -463,7 +463,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		whereHandle := true
 		var flag util.Flag
 		if tableInfo.Columns[idxCol.Offset].Charset == "binary" {
-			flag.Set(model.BinaryFlag)
+			flag.Add(model.BinaryFlag)
 		}
 		values[idxCol.Name.O] = &model.Column{
 			Type:        tableInfo.Columns[idxCol.Offset].Tp,
