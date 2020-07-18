@@ -1,6 +1,6 @@
 # Background
 
-- Apache Avro is a data serialization system, which provides algorithms to convert complex data structures to and from compact binary representations. The Avro format is compact in the sense that it is *not* self-explanatory the way JSON is, and ideally the schema of the data should be acquired separately from the data, and therefore a centralized Schema Registry could be ideal in some cases. 
+- [Apache Avro](https://avro.apache.org/) is a data serialization system, which provides algorithms to convert complex data structures to and from compact binary representations. The Avro format is compact in the sense that it is *not* self-explanatory the way JSON is, and ideally the schema of the data should be acquired separately from the data, and therefore a centralized Schema Registry could be ideal in some cases. 
 
 - Kafka Connect is a component of the Kafka platform that aims to provide out-of-the-box integration of Kafka with other data sources & sinks, especially RDBMSes such as Mysql, Postgresql and many others. Kafka Connect has out-of-the-box support to use Avro as the wire format of each Kafka message. To solve the aforementioned schema problem, Kafka Connect ships with **Confluent Schema Registry**, which, through RESTful APIs, provides Kafka itself as well as other applications ability to acquire and share schemas of data that are to be transmitted in the Avro format.
 
