@@ -98,9 +98,7 @@ type RowChangedEvent struct {
 
 	Delete bool `json:"delete"`
 
-	SchemaID int64 `json:"schema-id,omitempty"`
-
-	TableUpdateTs uint64 `json:"table-update-ts,omitempty"`
+	TableInfoVersion uint64 `json:"table-info-version,omitempty"`
 
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
@@ -134,9 +132,7 @@ type TableInfo struct {
 	// db name
 	Schema string
 	// table name
-	Table string
-	// unique identifier for the current table schema.
-	UpdateTs   uint64
+	Table      string
 	ColumnInfo []*ColumnInfo
 }
 
@@ -166,7 +162,6 @@ func (e *DDLEvent) FromJob(job *model.Job) {
 
 		e.TableInfo.Schema = job.SchemaName
 		e.TableInfo.Table = tableName
-		e.TableInfo.UpdateTs = tableInfo.UpdateTS
 		e.Table = tableName
 	}
 	e.StartTs = job.StartTS
