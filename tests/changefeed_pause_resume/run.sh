@@ -57,7 +57,7 @@ function run() {
 
         cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
 
-        check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+        check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 120
     done
 
     cleanup_process $CDC_BINARY
