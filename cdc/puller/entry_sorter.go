@@ -144,6 +144,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 				switch atomic.LoadInt32(&es.status) {
 				case model.SorterStatusStopping:
 					atomic.StoreInt32(&es.status, model.SorterStatusStopped)
+					continue
 				case model.SorterStatusStopped:
 					continue
 				case model.SorterStatusWorking:

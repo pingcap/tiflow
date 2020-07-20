@@ -170,18 +170,9 @@ type FileSorter struct {
 	outputCh chan *model.PolymorphicEvent
 	inputCh  chan *model.PolymorphicEvent
 	cache    *fileCache
-}
 
-func (fs *FileSorter) GetStatus() model.SorterStatus {
-	panic("implement me")
-}
-
-func (fs *FileSorter) GetMaxResolvedTs() model.Ts {
-	panic("implement me")
-}
-
-func (fs *FileSorter) SafeStop() {
-	panic("implement me")
+	status            model.SorterStatus
+	maxSentResolvedTs uint64
 }
 
 // flushEventsToFile writes a slice of model.PolymorphicEvent to a given file in sequence
@@ -466,6 +457,20 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 	return nil
 }
 
+func (fs *FileSorter) GetStatus() model.SorterStatus {
+	return atomic.LoadInt32(&fs.status)
+}
+
+func (fs *FileSorter) GetMaxResolvedTs() model.Ts {
+	return atomic.LoadUint64(&fs.maxSentResolvedTs)
+}
+
+func (fs *FileSorter) SafeStop() {
+	atomic.CompareAndSwapInt32(&fs.status,
+		model.SorterStatusWorking,
+		model.SorterStatusStopping)
+}
+
 // AddEntry adds an RawKVEntry to file sorter cache
 func (fs *FileSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 	select {
@@ -512,6 +517,14 @@ func (fs *FileSorter) sortAndOutput(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case ev := <-fs.inputCh:
+			switch atomic.LoadInt32(&fs.status) {
+			case model.SorterStatusStopping:
+				atomic.StoreInt32(&fs.status, model.SorterStatusStopped)
+				continue
+			case model.SorterStatusStopped:
+				continue
+			case model.SorterStatusWorking:
+			}
 			if ev.RawKV.OpType == model.OpTypeResolved {
 				err := flush()
 				if err != nil {
@@ -521,6 +534,7 @@ func (fs *FileSorter) sortAndOutput(ctx context.Context) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
+				atomic.StoreUint64(&fs.maxSentResolvedTs, ev.RawKV.CRTs)
 				continue
 			}
 			buffer = append(buffer, ev)

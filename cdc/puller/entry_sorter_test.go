@@ -169,9 +169,8 @@ func (s *mockEntrySorterSuite) TestSafeStop(c *check.C) {
 		{
 			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
 			resolvedTs: 6,
-			expect: []*model.RawKVEntry{
-				{CRTs: 6, OpType: model.OpTypeResolved}},
-			stop: true,
+			expect:     []*model.RawKVEntry{},
+			stop:       true,
 		},
 		{
 			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
