@@ -23,11 +23,10 @@ import (
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	parser_types "github.com/pingcap/parser/types"
-	"golang.org/x/text/encoding"
-	"golang.org/x/text/encoding/charmap"
-
 	"github.com/pingcap/ticdc/cdc/model"
 	canal "github.com/pingcap/ticdc/proto/canal"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
 )
 
 // compatible with canal-1.1.4
@@ -300,38 +299,38 @@ type CanalEventBatchEncoder struct {
 }
 
 // AppendResolvedEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
+func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore the event is ignored.
-	return nil
+	return EncoderNoOperation, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	entry, err := d.entryBuilder.FromRowEvent(e)
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
-	return nil
+	return EncoderNeedAsyncWrite, nil
 }
 
 // AppendDDLEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
 	entry, err := d.entryBuilder.FromDdlEvent(e)
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
-	return nil
+	return EncoderNeedSyncWrite, nil
 }
 
 // Build implements the EventBatchEncoder interface

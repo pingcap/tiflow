@@ -69,52 +69,52 @@ func (a *AvroEventBatchEncoder) GetValueSchemaManager() *AvroSchemaManager {
 
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
-func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	if a.keyBuf != nil || a.valueBuf != nil {
-		return errors.New("Fatal sink bug. Batch size must be 1")
+		return EncoderNoOperation, errors.New("Fatal sink bug. Batch size must be 1")
 	}
 
 	res, err := a.avroEncode(e.Table, e.TableUpdateTs, e.Columns)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
-		return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
+		return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
 	}
 
 	evlp, err := res.toEnvelope()
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: could not construct Avro envelope", zap.String("table", e.Table.String()))
-		return errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
+		return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
 	}
 
 	a.valueBuf = evlp
 	// TODO use primary key(s) as kafka key
 	a.keyBuf = []byte(strconv.FormatInt(e.RowID, 10))
 
-	return nil
+	return EncoderNeedAsyncWrite, nil
 }
 
 // AppendResolvedEvent is no-op for now
-func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
+func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
 	// nothing for now
-	return nil
+	return EncoderNoOperation, nil
 }
 
 // AppendDDLEvent generates new schema and registers it to the Registry
-func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
 	if e.TableInfo == nil {
 		log.Info("AppendDDLEvent: no schema generation needed, skip")
-		return nil
+		return EncoderNoOperation, nil
 	}
 
 	schemaStr, err := ColumnInfoToAvroSchema(e.TableInfo.Table, e.TableInfo.ColumnInfo)
 	if err != nil {
-		return errors.Annotate(err, "AppendDDLEvent failed")
+		return EncoderNoOperation, errors.Annotate(err, "AppendDDLEvent failed")
 	}
 	log.Info("AppendDDLEvent: new schema generated", zap.String("schema_str", schemaStr))
 
 	avroCodec, err := goavro.NewCodec(schemaStr)
 	if err != nil {
-		return errors.Annotate(err, "AppendDDLEvent failed: could not verify schema, probably bug")
+		return EncoderNoOperation, errors.Annotate(err, "AppendDDLEvent failed: could not verify schema, probably bug")
 	}
 
 	err = a.valueSchemaManager.Register(context.Background(), model.TableName{
@@ -123,10 +123,10 @@ func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 	}, avroCodec)
 
 	if err != nil {
-		return errors.Annotate(err, "AppendDDLEvent failed: could not register schema")
+		return EncoderNoOperation, errors.Annotate(err, "AppendDDLEvent failed: could not register schema")
 	}
 
-	return nil
+	return EncoderNoOperation, nil
 }
 
 // Build a MQ message
