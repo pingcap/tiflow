@@ -434,7 +434,7 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 				case <-tick.C:
 					now := time.Now()
 					status, _, err := cdcEtcdCli.GetChangeFeedStatus(ctx, changefeedID)
-					if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+					if err != nil {
 						return err
 					}
 					taskPositions, err := cdcEtcdCli.GetAllTaskPositions(ctx, changefeedID)
