@@ -316,7 +316,7 @@ func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent)
 		return EncoderNoOperation, errors.Trace(err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
-	return EncoderNeedAsyncWrite, nil
+	return EncoderNoOperation, nil
 }
 
 // AppendDDLEvent implements the EventBatchEncoder interface

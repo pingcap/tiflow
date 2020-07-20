@@ -236,7 +236,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 	d.valueBuf.Write(valueLenByte[:])
 	d.valueBuf.Write(value)
-	return EncoderNeedAsyncWrite, nil
+	return EncoderNoOperation, nil
 }
 
 // AppendDDLEvent implements the EventBatchEncoder interface
