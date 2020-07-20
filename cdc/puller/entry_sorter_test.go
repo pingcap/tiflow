@@ -17,6 +17,7 @@ import (
 	"context"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -113,6 +114,102 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 			c.Check(e.RawKV, check.DeepEquals, tc.expect[i])
 		}
 	}
+}
+
+func (s *mockEntrySorterSuite) TestSafeStop(c *check.C) {
+
+	testCases := []struct {
+		input      []*model.RawKVEntry
+		resolvedTs uint64
+		expect     []*model.RawKVEntry
+		stop       bool
+	}{
+		{
+			input: []*model.RawKVEntry{
+				{CRTs: 1, OpType: model.OpTypePut},
+				{CRTs: 2, OpType: model.OpTypePut},
+				{CRTs: 4, OpType: model.OpTypeDelete},
+				{CRTs: 2, OpType: model.OpTypeDelete}},
+			resolvedTs: 0,
+			expect: []*model.RawKVEntry{
+				{CRTs: 0, OpType: model.OpTypeResolved}},
+			stop: false,
+		},
+		{
+			input: []*model.RawKVEntry{
+				{CRTs: 3, OpType: model.OpTypePut},
+				{CRTs: 2, OpType: model.OpTypePut},
+				{CRTs: 5, OpType: model.OpTypePut}},
+			resolvedTs: 3,
+			expect: []*model.RawKVEntry{
+				{CRTs: 1, OpType: model.OpTypePut},
+				{CRTs: 2, OpType: model.OpTypeDelete},
+				{CRTs: 2, OpType: model.OpTypePut},
+				{CRTs: 2, OpType: model.OpTypePut},
+				{CRTs: 3, OpType: model.OpTypePut},
+				{CRTs: 3, OpType: model.OpTypeResolved}},
+			stop: false,
+		},
+		{
+			input:      []*model.RawKVEntry{},
+			resolvedTs: 3,
+			expect:     []*model.RawKVEntry{{CRTs: 3, OpType: model.OpTypeResolved}},
+			stop:       false,
+		},
+		{
+			input: []*model.RawKVEntry{
+				{CRTs: 7, OpType: model.OpTypePut}},
+			resolvedTs: 6,
+			expect: []*model.RawKVEntry{
+				{CRTs: 4, OpType: model.OpTypeDelete},
+				{CRTs: 5, OpType: model.OpTypePut},
+				{CRTs: 6, OpType: model.OpTypeResolved}},
+			stop: false,
+		},
+		{
+			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
+			resolvedTs: 6,
+			expect: []*model.RawKVEntry{
+				{CRTs: 6, OpType: model.OpTypeResolved}},
+			stop: true,
+		},
+		{
+			input:      []*model.RawKVEntry{{CRTs: 7, OpType: model.OpTypeDelete}},
+			resolvedTs: 8,
+			expect:     []*model.RawKVEntry{},
+			stop:       false,
+		},
+		{
+			input:      []*model.RawKVEntry{},
+			resolvedTs: 15,
+			expect:     []*model.RawKVEntry{},
+			stop:       false,
+		},
+	}
+	es := NewEntrySorter()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		err := es.Run(ctx)
+		c.Assert(err, check.IsNil)
+	}()
+	for _, tc := range testCases {
+		for _, entry := range tc.input {
+			es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
+		}
+		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(tc.resolvedTs))
+		if tc.stop {
+			es.SafeStop()
+			for es.GetStatus() != model.SorterStatusStopped {
+				time.Sleep(time.Millisecond * 10)
+			}
+		}
+		for i := 0; i < len(tc.expect); i++ {
+			e := <-es.Output()
+			c.Check(e.RawKV, check.DeepEquals, tc.expect[i])
+		}
+	}
+	c.Assert(es.GetMaxResolvedTs(), check.Equals, uint64(6))
 }
 
 func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {

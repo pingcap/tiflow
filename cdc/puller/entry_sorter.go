@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/notify"
+
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 
@@ -39,15 +41,15 @@ type EntrySorter struct {
 	status            model.SorterStatus
 	maxSentResolvedTs uint64
 
-	outputCh       chan *model.PolymorphicEvent
-	resolvedNotify chan struct{}
+	outputCh         chan *model.PolymorphicEvent
+	resolvedNotifier *notify.Notifier
 }
 
 // NewEntrySorter creates a new EntrySorter
 func NewEntrySorter() *EntrySorter {
 	return &EntrySorter{
-		resolvedNotify: make(chan struct{}, 128000),
-		outputCh:       make(chan *model.PolymorphicEvent, 128000),
+		resolvedNotifier: new(notify.Notifier),
+		outputCh:         make(chan *model.PolymorphicEvent, 128000),
 	}
 }
 
@@ -120,14 +122,16 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
 			case <-time.After(defaultMetricInterval):
-				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedNotify)))
 				metricEntrySorterOutputChanSizeGauge.Set(float64(len(es.outputCh)))
 				es.lock.Lock()
+				metricEntrySorterResolvedChanSizeGuage.Set(float64(len(es.resolvedTsGroup)))
 				metricEntryUnsortedSizeGauge.Set(float64(len(es.unsorted)))
 				es.lock.Unlock()
 			}
 		}
 	})
+	receiver := es.resolvedNotifier.NewReceiver(1000 * time.Millisecond)
+	defer es.resolvedNotifier.Close()
 	errg.Go(func() error {
 		var sorted []*model.PolymorphicEvent
 		for {
@@ -136,7 +140,7 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 				atomic.StoreInt32(&es.closed, 1)
 				close(es.outputCh)
 				return errors.Trace(ctx.Err())
-			case <-es.resolvedNotify:
+			case <-receiver.C:
 				switch atomic.LoadInt32(&es.status) {
 				case model.SorterStatusStopping:
 					atomic.StoreInt32(&es.status, model.SorterStatusStopped)
@@ -193,13 +197,11 @@ func (es *EntrySorter) AddEntry(ctx context.Context, entry *model.PolymorphicEve
 	es.lock.Lock()
 	if entry.RawKV.OpType == model.OpTypeResolved {
 		es.resolvedTsGroup = append(es.resolvedTsGroup, entry.CRTs)
+		es.resolvedNotifier.Notify()
 	} else {
 		es.unsorted = append(es.unsorted, entry)
 	}
 	es.lock.Unlock()
-	if entry.RawKV.OpType == model.OpTypeResolved {
-		es.resolvedNotify <- struct{}{}
-	}
 }
 
 // Output returns the sorted raw kv output channel
