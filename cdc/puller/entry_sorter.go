@@ -53,14 +53,17 @@ func NewEntrySorter() *EntrySorter {
 	}
 }
 
+// GetStatus implements the EventSorter interface
 func (es *EntrySorter) GetStatus() model.SorterStatus {
 	return atomic.LoadInt32(&es.status)
 }
 
+// GetMaxResolvedTs implements the EventSorter interface
 func (es *EntrySorter) GetMaxResolvedTs() model.Ts {
 	return atomic.LoadUint64(&es.maxSentResolvedTs)
 }
 
+// SafeStop implements the EventSorter interface
 func (es *EntrySorter) SafeStop() {
 	atomic.CompareAndSwapInt32(&es.status,
 		model.SorterStatusWorking,

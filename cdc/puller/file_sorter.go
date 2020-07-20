@@ -457,14 +457,17 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 	return nil
 }
 
+// GetStatus implements the EventSorter interface
 func (fs *FileSorter) GetStatus() model.SorterStatus {
 	return atomic.LoadInt32(&fs.status)
 }
 
+// GetMaxResolvedTs implements the EventSorter interface
 func (fs *FileSorter) GetMaxResolvedTs() model.Ts {
 	return atomic.LoadUint64(&fs.maxSentResolvedTs)
 }
 
+// SafeStop implements the EventSorter interface
 func (fs *FileSorter) SafeStop() {
 	atomic.CompareAndSwapInt32(&fs.status,
 		model.SorterStatusWorking,
