@@ -366,31 +366,33 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 			p.stateMu.Unlock()
 
+			phyTs := oracle.ExtractPhysical(minResolvedTs)
+			// It is more accurate to get tso from PD, but in most cases we have
+			// deployed NTP service, a little bias is acceptable here.
+			metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+
 			if minResolvedTs == p.position.ResolvedTs {
 				continue
 			}
 
 			p.position.ResolvedTs = minResolvedTs
-			phyTs := oracle.ExtractPhysical(minResolvedTs)
 			resolvedTsGauge.Set(float64(phyTs))
-			// It is more accurate to get tso from PD, but in most cases we have
-			// deployed NTP service, a little bias is acceptable here.
-			metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 			if err := updateInfo(); err != nil {
 				return errors.Trace(err)
 			}
 
 		case <-checkpointTsTick.C:
 			checkpointTs := atomic.LoadUint64(&p.checkpointTs)
+			phyTs := oracle.ExtractPhysical(checkpointTs)
+			// It is more accurate to get tso from PD, but in most cases we have
+			// deployed NTP service, a little bias is acceptable here.
+			metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
+
 			if p.position.CheckPointTs >= checkpointTs {
 				continue
 			}
 			p.position.CheckPointTs = checkpointTs
-			phyTs := oracle.ExtractPhysical(checkpointTs)
 			checkpointTsGauge.Set(float64(phyTs))
-			// It is more accurate to get tso from PD, but in most cases we have
-			// deployed NTP service, a little bias is acceptable here.
-			metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 			if err := updateInfo(); err != nil {
 				return errors.Trace(err)
 			}

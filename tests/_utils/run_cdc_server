@@ -2,6 +2,7 @@
 
 # --workdir: work directory
 # --tlsdir: work directory
+# --cert-allowed-cn: cert allowed cn
 # --binary: path to cdc test binary
 # --logsuffix: log suffix
 # --addr: address
@@ -11,6 +12,7 @@ set -e
 
 workdir=
 tls=
+certcn=
 binary=
 logsuffix=
 addr=
@@ -26,6 +28,10 @@ while [[ ${1} ]]; do
             ;;
         --tlsdir)
             tls="--ca ${2}/ca.pem --cert ${2}/server.pem --key ${2}/server-key.pem"
+            shift
+            ;;
+        --cert-allowed-cn)
+            certcn="--cert-allowed-cn ${2}"
             shift
             ;;
         --binary)
@@ -64,5 +70,11 @@ cd $workdir
 pid=$(ps -C run_cdc_server -o pid=|tr -d '[:space:]')
 # Uncomment to turn on grpc versbose log.
 # GRPC_GO_LOG_VERBOSITY_LEVEL=99 GRPC_GO_LOG_SEVERITY_LEVEL=debug \
-$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server --log-file $workdir/cdc$logsuffix.log --log-level $log_level $tls $addr $pd_addr &>> $workdir/stdout$log_suffix.log &
+$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
+    --log-file $workdir/cdc$logsuffix.log \
+    --log-level $log_level \
+    $tls \
+    $certcn \
+    $addr \
+    $pd_addr &>> $workdir/stdout$log_suffix.log &
 cd $pwd
