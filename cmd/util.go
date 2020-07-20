@@ -20,23 +20,87 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
 	"strconv"
 	"strings"
-
-	"github.com/pingcap/ticdc/pkg/config"
+	"syscall"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.uber.org/zap"
 )
+
+var (
+	caPath        string
+	certPath      string
+	keyPath       string
+	allowedCertCN string
+)
+
+func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
+	flags.StringVar(&caPath, "ca", "", "CA certificate path for TLS connection")
+	flags.StringVar(&certPath, "cert", "", "Certificate path for TLS connection")
+	flags.StringVar(&keyPath, "key", "", "Private key path for TLS connection")
+	if isServer {
+		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity "+
+			"(cert Common Name). Use `,` to separate multiple CN")
+	}
+}
+
+func getCredential() *security.Credential {
+	var certAllowedCN []string
+	if len(allowedCertCN) != 0 {
+		certAllowedCN = strings.Split(allowedCertCN, ",")
+	}
+	return &security.Credential{
+		CAPath:        caPath,
+		CertPath:      certPath,
+		KeyPath:       keyPath,
+		CertAllowedCN: certAllowedCN,
+	}
+}
+
+// initCmd initializes the logger, the default context and returns its cancel function.
+func initCmd(cmd *cobra.Command, logCfg *util.Config) context.CancelFunc {
+	// Init log.
+	err := util.InitLogger(logCfg)
+	if err != nil {
+		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
+		os.Exit(1)
+	}
+	log.Info("init log", zap.String("file", logFile), zap.String("level", logLevel))
+
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		sig := <-sc
+		log.Info("got signal to exit", zap.Stringer("signal", sig))
+		cancel()
+	}()
+	defaultContext = ctx
+	return cancel
+}
 
 func getAllCaptures(ctx context.Context) ([]*capture, error) {
 	_, raw, err := cdcEtcdCli.GetCaptures(ctx)
@@ -92,6 +156,28 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob) error {
 	return nil
 }
 
+func applyOwnerChangefeedQuery(ctx context.Context, cid model.ChangeFeedID) (string, error) {
+	owner, err := getOwnerCapture(ctx)
+	if err != nil {
+		return "", err
+	}
+	addr := fmt.Sprintf("http://%s/capture/owner/changefeed/query", owner.AdvertiseAddr)
+	resp, err := http.PostForm(addr, url.Values(map[string][]string{
+		cdc.APIOpVarChangefeedID: {cid},
+	}))
+	if err != nil {
+		return "", err
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.BadRequestf("query changefeed simplified status")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", errors.BadRequestf("%s", string(body))
+	}
+	return string(body), nil
+}
+
 func jsonPrint(cmd *cobra.Command, v interface{}) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -119,8 +205,8 @@ func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) er
 	return nil
 }
 
-func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, fullTables []model.TableName, err error) {
-	kvStore, err := kv.CreateTiStore(cliPdAddr)
+func verifyTables(ctx context.Context, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
+	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -147,9 +233,10 @@ func verifyTables(ctx context.Context, cfg *config.ReplicaConfig, startTs uint64
 		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
 			continue
 		}
-		fullTables = append(fullTables, tableName)
-		if !tableInfo.ExistTableUniqueColumn() {
+		if !tableInfo.IsEligible() {
 			ineligibleTables = append(ineligibleTables, tableName)
+		} else {
+			eligibleTables = append(eligibleTables, tableName)
 		}
 	}
 	return
@@ -163,7 +250,7 @@ func verifySink(
 		return err
 	}
 	errCh := make(chan error)
-	s, err := sink.NewSink(ctx, sinkURI, filter, cfg, opts, errCh)
+	s, err := sink.NewSink(ctx, "cli-verify", sinkURI, filter, cfg, opts, errCh)
 	if err != nil {
 		return err
 	}

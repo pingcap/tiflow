@@ -15,7 +15,6 @@ package puller
 
 import (
 	"context"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller/frontier"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -49,40 +49,43 @@ type Puller interface {
 
 type pullerImpl struct {
 	pdCli        pd.Client
+	credential   *security.Credential
 	kvStorage    tikv.Storage
 	checkpointTs uint64
-	spans        []regionspan.Span
+	spans        []regionspan.ComparableSpan
 	buffer       *memBuffer
 	outputCh     chan *model.RawKVEntry
 	tsTracker    frontier.Frontier
 	resolvedTs   uint64
-	// needEncode represents whether we need to encode a key when checking it is in span
-	needEncode bool
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTs
 // and put into buf.
 func NewPuller(
 	pdCli pd.Client,
+	credential *security.Credential,
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	spans []regionspan.Span,
-	needEncode bool,
 	limitter *BlurResourceLimitter,
-) *pullerImpl {
+) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
 		log.Fatal("can't create puller for non-tikv storage")
 	}
+	comparableSpans := make([]regionspan.ComparableSpan, len(spans))
+	for i := range spans {
+		comparableSpans[i] = regionspan.ToComparableSpan(spans[i])
+	}
 	p := &pullerImpl{
 		pdCli:        pdCli,
+		credential:   credential,
 		kvStorage:    tikvStorage,
 		checkpointTs: checkpointTs,
-		spans:        spans,
+		spans:        comparableSpans,
 		buffer:       makeMemBuffer(limitter),
 		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:    frontier.NewFrontier(spans...),
-		needEncode:   needEncode,
+		tsTracker:    frontier.NewFrontier(checkpointTs, comparableSpans...),
 		resolvedTs:   checkpointTs,
 	}
 	return p
@@ -94,7 +97,7 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
-	cli, err := kv.NewCDCClient(p.pdCli, p.kvStorage)
+	cli, err := kv.NewCDCClient(ctx, p.pdCli, p.kvStorage, p.credential)
 	if err != nil {
 		return errors.Annotate(err, "create cdc client failed")
 	}
@@ -114,18 +117,17 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		})
 	}
 
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	tableID := util.TableIDFromCtx(ctx)
-	tableIDStr := strconv.FormatInt(tableID, 10)
-	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureID, changefeedID, tableIDStr)
-	metricEventCounterKv := kvEventCounter.WithLabelValues(captureID, changefeedID, "kv")
-	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureID, changefeedID, "resolved")
-	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv")
-	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureID, changefeedID, tableIDStr, "kv")
+	tableID, tableName := util.TableIDFromCtx(ctx)
+	metricOutputChanSize := outputChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEventChanSize := eventChanSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricMemBufferSize := memBufferSizeGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricPullerResolvedTs := pullerResolvedTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricEventCounterKv := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "kv")
+	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "resolved")
+	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
+	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
 
 	g.Go(func() error {
 		for {
@@ -152,7 +154,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// and we only want the get [b, c) from this region,
 					// tikv will return all key events in the region although we specified [b, c) int the request.
 					// we can make tikv only return the events about the keys in the specified range.
-					if !regionspan.KeyInSpans(val.Key, p.spans, p.needEncode) {
+					comparableKey := regionspan.ToComparableKey(val.Key)
+					if !regionspan.KeyInSpans(comparableKey, p.spans) {
 						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
 						continue
 					}
@@ -201,6 +204,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				}
 			} else if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Inc()
+				if !regionspan.IsSubSpan(e.Resolved.Span, p.spans...) {
+					log.Fatal("the resolved span is not in the total span", zap.Reflect("resolved", e.Resolved), zap.Int64("tableID", tableID))
+				}
 				// Forward is called in a single thread
 				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
 				resolvedTs := p.tsTracker.Frontier()

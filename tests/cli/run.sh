@@ -6,6 +6,17 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
+function check_changefeed_state() {
+    changefeedid=$1
+    expected=$2
+    output=$(cdc cli changefeed query --simple --changefeed-id $changefeedid --pd=http://$UP_PD_HOST:$UP_PD_PORT 2>&1)
+    state=$(echo $output | grep -oE "\"state\": \"[a-z]+\""|tr -d '" '|awk -F':' '{print $(NF)}')
+    if [ "$state" != "$expected" ]; then
+        echo "unexpected state $output, expected $expected"
+        exit 1
+    fi
+}
+
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
@@ -15,35 +26,65 @@ function run() {
 
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    run_sql "CREATE table test.simple(id int primary key, val int);"
+    run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     TOPIC_NAME="ticdc-cli-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
-        mysql) ;&
         *) SINK_URI="mysql://root@127.0.0.1:3306/";;
     esac
-    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai"
+
+    uuid="custom-changefeed-name"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" -c="$uuid"
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
 
-    run_sql "CREATE database tidb_cdc;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "CREATE table tidb_cdc.repl_mark_test_simple (
-        bucket INT NOT NULL, \
-        replica_id BIGINT UNSIGNED NOT NULL, \
-        val BIGINT DEFAULT 0, \
-        PRIMARY KEY (bucket, replica_id) \
-    );" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_cdc_cli changefeed cyclic create-marktables \
+        --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
 
     # Make sure changefeed is created.
     check_table_exists tidb_cdc.repl_mark_test_simple ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists tidb_cdc."\`repl_mark_test_simple-dash\`" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-    uuid=$(run_cdc_cli changefeed list 2>&1 | grep -oE "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}")
+    check_changefeed_state $uuid "normal"
+
+    # Make sure changefeed can not be created if the name is already exists.
+    exists=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="$uuid" 2>&1 | grep -oE 'already exists')
+    if [[ -z $exists ]]; then
+        echo "[$(date)] <<<<< unexpect output got ${exists} >>>>>"
+        exit 1
+    fi
 
     # Pause changefeed
     run_cdc_cli changefeed --changefeed-id $uuid pause && sleep 3
+    jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
+    if [[ $jobtype != 1 ]]; then
+        echo "[$(date)] <<<<< unexpect admin job type! expect 1 got ${jobtype} >>>>>"
+        exit 1
+    fi
+    check_changefeed_state $uuid "stopped"
+
+    # Update changefeed
+cat - >"$WORK_DIR/changefeed.toml" <<EOF
+case-sensitive = false
+[mounter]
+worker-num = 4
+EOF
+    run_cdc_cli changefeed update --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
+    changefeed_info=$(run_cdc_cli changefeed query --changefeed-id $uuid 2>&1)
+    if [[ ! $changefeed_info == *"\"case-sensitive\": false"* ]]; then
+        echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+        exit 1
+    fi
+    if [[ ! $changefeed_info == *"\"worker-num\": 4"* ]]; then
+        echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+        exit 1
+    fi
+
     jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
     if [[ $jobtype != 1 ]]; then
         echo "[$(date)] <<<<< unexpect admin job type! expect 1 got ${jobtype} >>>>>"
@@ -57,6 +98,7 @@ function run() {
         echo "[$(date)] <<<<< unexpect admin job type! expect 2 got ${jobtype} >>>>>"
         exit 1
     fi
+    check_changefeed_state $uuid "normal"
 
     # Remove changefeed
     run_cdc_cli changefeed --changefeed-id $uuid remove && sleep 3
@@ -65,6 +107,7 @@ function run() {
         echo "[$(date)] <<<<< unexpect admin job type! expect 3 got ${jobtype} >>>>>"
         exit 1
     fi
+    check_changefeed_state $uuid "removed"
 
     # Make sure bad sink url fails at creating changefeed.
     badsink=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://badsink" 2>&1 | grep -oE 'fail')

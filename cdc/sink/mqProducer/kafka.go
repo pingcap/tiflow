@@ -16,6 +16,7 @@ package mqProducer
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -36,6 +37,7 @@ type KafkaConfig struct {
 	Version         string
 	MaxMessageBytes int
 	Compression     string
+	ClientID        string
 }
 
 // DefaultKafkaConfig is the default Kafka configuration
@@ -268,6 +270,24 @@ func init() {
 	sarama.MaxRequestSize = 1024 * 1024 * 1024 // 1GB
 }
 
+var (
+	validClienID      *regexp.Regexp = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
+	commonInvalidChar *regexp.Regexp = regexp.MustCompile(`[\?:,"]`)
+)
+
+func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (clientID string, err error) {
+	if configuredClientID != "" {
+		clientID = configuredClientID
+	} else {
+		clientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureAddr, changefeedID)
+		clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
+	}
+	if !validClienID.MatchString(clientID) {
+		return "", errors.Errorf("invalid kafka client ID '%s'", clientID)
+	}
+	return
+}
+
 // NewSaramaConfig return the default config and set the according version and metrics
 func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error) {
 	config := sarama.NewConfig()
@@ -282,12 +302,14 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 	} else {
 		role = "processor"
 	}
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
 
-	config.ClientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s", role, captureID, changefeedID)
+	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID, c.ClientID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	config.Version = version
-	config.Producer.Flush.MaxMessages = c.MaxMessageBytes
 	config.Metadata.Retry.Max = 20
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 

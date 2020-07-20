@@ -26,8 +26,9 @@ type AdminJobType int
 
 // AdminJob holds an admin job
 type AdminJob struct {
-	CfID string
-	Type AdminJobType
+	CfID  string
+	Type  AdminJobType
+	Error *RunningError
 }
 
 // All AdminJob types
@@ -61,6 +62,8 @@ type TaskPosition struct {
 	ResolvedTs uint64 `json:"resolved-ts"`
 	// The count of events were synchronized. This is updated by corresponding processor.
 	Count uint64 `json:"count"`
+	// Error code when error happens
+	Error *RunningError `json:"error"`
 }
 
 // Marshal returns the json marshal format of a TaskStatus
@@ -237,7 +240,10 @@ func (ts *TaskStatus) Snapshot(cfID ChangeFeedID, captureID CaptureID, checkpoin
 		if ts < table.StartTs {
 			ts = table.StartTs
 		}
-		snap.Tables[tableID] = &TableReplicaInfo{StartTs: ts, MarkTableID: table.MarkTableID}
+		snap.Tables[tableID] = &TableReplicaInfo{
+			StartTs:     ts,
+			MarkTableID: table.MarkTableID,
+		}
 	}
 	return snap
 }

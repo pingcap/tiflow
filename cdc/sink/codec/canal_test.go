@@ -18,9 +18,10 @@ import (
 	"github.com/pingcap/check"
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"golang.org/x/text/encoding/charmap"
+
 	"github.com/pingcap/ticdc/cdc/model"
 	canal "github.com/pingcap/ticdc/proto/canal"
-	"golang.org/x/text/encoding/charmap"
 )
 
 type canalBatchSuite struct {
@@ -121,7 +122,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 
 type canalEntrySuite struct{}
 
-var _ = check.Suite(canalEntrySuite{})
+var _ = check.Suite(&canalEntrySuite{})
 
 func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 	trueVar := true
@@ -137,6 +138,7 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			"name":    {Type: mysql.TypeVarchar, Value: "Bob"},
 			"tiny":    {Type: mysql.TypeTiny, Value: 255},
 			"comment": {Type: mysql.TypeBlob, Value: []byte("测试")},
+			"blob":    {Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		},
 	}
 	testCaseDelete := &model.RowChangedEvent{
@@ -164,7 +166,7 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
 	header := entry.GetHeader()
-	c.Assert(header.GetExecuteTime(), check.Equals, 1591943372224)
+	c.Assert(header.GetExecuteTime(), check.Equals, int64(1591943372224))
 	c.Assert(header.GetSourceType(), check.Equals, canal.Type_MYSQL)
 	c.Assert(header.GetSchemaName(), check.Equals, testCaseUpdate.Table.Schema)
 	c.Assert(header.GetTableName(), check.Equals, testCaseUpdate.Table.Table)
@@ -183,27 +185,37 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 		c.Assert(col.GetUpdated(), check.IsTrue)
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, JavaSQLTypeBIGINT)
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
+			c.Assert(col.GetMysqlType(), check.Equals, "int")
 		case "name":
-			c.Assert(col.GetSqlType(), check.Equals, JavaSQLTypeVARCHAR)
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "Bob")
+			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
 		case "tiny":
-			c.Assert(col.GetSqlType(), check.Equals, JavaSQLTypeSMALLINT)
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeSMALLINT))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "255")
 		case "comment":
-			c.Assert(col.GetSqlType(), check.Equals, JavaSQLTypeBLOB)
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
+			c.Assert(col.GetIsKey(), check.IsFalse)
+			c.Assert(col.GetIsNull(), check.IsFalse)
+			c.Assert(err, check.IsNil)
+			c.Assert(col.GetValue(), check.Equals, "测试")
+			c.Assert(col.GetMysqlType(), check.Equals, "text")
+		case "blob":
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBLOB))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			s, err := charmap.ISO8859_1.NewEncoder().String(col.GetValue())
 			c.Assert(err, check.IsNil)
-			c.Assert(s, check.Equals, "测试")
+			c.Assert(s, check.Equals, "测试blob")
+			c.Assert(col.GetMysqlType(), check.Equals, "blob")
 		}
 	}
 
@@ -229,10 +241,11 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 		c.Assert(col.GetUpdated(), check.IsFalse)
 		switch col.GetName() {
 		case "id":
-			c.Assert(col.GetSqlType(), check.Equals, JavaSQLTypeBIGINT)
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
+			c.Assert(col.GetMysqlType(), check.Equals, "int")
 		}
 	}
 

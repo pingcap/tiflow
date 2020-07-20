@@ -18,6 +18,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/pkg/flags"
+	"github.com/pingcap/ticdc/pkg/security"
+	tidbconfig "github.com/pingcap/tidb/config"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store"
@@ -34,7 +36,7 @@ func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
 }
 
 // CreateTiStore creates a new tikv storage client
-func CreateTiStore(urls string) (tidbkv.Storage, error) {
+func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage, error) {
 	urlv, err := flags.NewURLsValue(urls)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -42,6 +44,14 @@ func CreateTiStore(urls string) (tidbkv.Storage, error) {
 
 	// Ignore error if it is already registered.
 	_ = store.Register("tikv", tikv.Driver{})
+
+	if credential.CAPath != "" {
+		conf := tidbconfig.GetGlobalConfig()
+		conf.Security.ClusterSSLCA = credential.CAPath
+		conf.Security.ClusterSSLCert = credential.CertPath
+		conf.Security.ClusterSSLKey = credential.KeyPath
+		tidbconfig.StoreGlobalConfig(conf)
+	}
 
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := store.New(tiPath)

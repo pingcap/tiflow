@@ -23,6 +23,8 @@ function run() {
 
     # create table to upstream.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    # create an ineligible table to make sure cyclic replication works fine even with some ineligible tables.
+    run_sql "CREATE table test.ineligible(id int, val int);"
 
     # create table to downsteam.
     run_sql "CREATE table test.simple(id1 int, id2 int, source int, primary key (id1, id2));" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
@@ -32,6 +34,13 @@ function run() {
 
     run_cdc_cli changefeed cyclic create-marktables \
         --cyclic-upstream-dsn="root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/"
+
+    # make sure create-marktables does not create mark table for mark table.
+    for c in $(seq 1 10); do {
+        # must not cause an error table name too long.
+        run_cdc_cli changefeed cyclic create-marktables \
+            --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/"
+    } done
 
     # record tso after we create tables to not block on waiting mark tables DDLs.
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
@@ -50,7 +59,8 @@ function run() {
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --addr "127.0.0.1:8301"
 
-    run_cdc_cli changefeed create --start-ts=$start_ts \
+    # Echo y to ignore ineligible tables
+    echo "y" | run_cdc_cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
         --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
         --cyclic-replica-id 1 \
@@ -62,7 +72,8 @@ function run() {
         --pd "http://${DOWN_PD_HOST}:${DOWN_PD_PORT}" \
         --cyclic-replica-id 2 \
         --cyclic-filter-replica-ids 1 \
-        --cyclic-sync-ddl false
+        --cyclic-sync-ddl false \
+        --config $CUR/conf/only_test_simple.toml
 
     for i in $(seq 11 20); do {
         sqlup="START TRANSACTION;"
@@ -82,6 +93,10 @@ function run() {
         run_sql "${sqlup}" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
         run_sql "${sqldown}" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     } done;
+
+    # sync-diff creates table which may block cyclic replication.
+    # Sleep a while to make sure all changes has been replicated.
+    sleep 10
 
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 

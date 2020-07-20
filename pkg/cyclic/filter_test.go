@@ -19,6 +19,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 )
 
 type markSuit struct{}
@@ -28,7 +29,7 @@ var _ = check.Suite(&markSuit{})
 func TestCyclic(t *testing.T) { check.TestingT(t) }
 
 func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
-	rID := CyclicReplicaIDCol
+	rID := mark.CyclicReplicaIDCol
 	testCases := []struct {
 		input     map[model.TableName][]*model.Txn
 		output    map[model.TableName][]*model.Txn

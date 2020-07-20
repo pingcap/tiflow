@@ -14,7 +14,7 @@
 
 ## Documentation
 
-[Chinese Document](https://pingcap.com/docs-cn/dev/reference/tools/ticdc/overview/)
+[Chinese Document](https://docs.pingcap.com/zh/tidb/dev/ticdc-overview/)
 
 [English Document](https://pingcap.com/docs/dev/reference/tools/ticdc/overview/)
 
@@ -29,7 +29,7 @@ $ make test
 
 Notice ticdc supports building with Go version `Go >= 1.13`
 
-When ticdc is built successfully, you can find binary in the `bin` directory.
+When ticdc is built successfully, you can find binary in the `bin` directory. Instructions for unit test and integration test can be found in [Running tests](tests/README.md).
 
 ## Deployment
 

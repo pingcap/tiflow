@@ -23,8 +23,10 @@ import (
 	"net/http/pprof"
 	"os"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -45,14 +47,24 @@ func (s *Server) startStatusHTTP() error {
 	serverMux.HandleFunc("/debug/info", s.handleDebugInfo)
 	serverMux.HandleFunc("/capture/owner/resign", s.handleResignOwner)
 	serverMux.HandleFunc("/capture/owner/admin", s.handleChangefeedAdmin)
-	serverMux.HandleFunc("/capture/owner/rebanlance_trigger", s.handleRebanlanceTrigger)
+	serverMux.HandleFunc("/capture/owner/rebalance_trigger", s.handleRebalanceTrigger)
 	serverMux.HandleFunc("/capture/owner/move_table", s.handleMoveTable)
+	serverMux.HandleFunc("/capture/owner/changefeed/query", s.handleChangefeedQuery)
 
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
 
+	credential := &security.Credential{}
+	if s.opts.credential != nil {
+		credential = s.opts.credential
+	}
+	tlsConfig, err := credential.ToTLSConfigWithVerify()
+	if err != nil {
+		log.Error("status server get tls config failed", zap.Error(err))
+		return errors.Trace(err)
+	}
 	addr := s.opts.addr
-	s.statusServer = &http.Server{Addr: addr, Handler: serverMux}
+	s.statusServer = &http.Server{Addr: addr, Handler: serverMux, TLSConfig: tlsConfig}
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -60,7 +72,11 @@ func (s *Server) startStatusHTTP() error {
 	}
 	go func() {
 		log.Info("status http server is running", zap.String("addr", addr))
-		err = s.statusServer.Serve(ln)
+		if tlsConfig != nil {
+			err = s.statusServer.ServeTLS(ln, credential.CertPath, credential.KeyPath)
+		} else {
+			err = s.statusServer.Serve(ln)
+		}
 		if err != nil && err != http.ErrServerClosed {
 			log.Error("status server error", zap.Error(err))
 		}

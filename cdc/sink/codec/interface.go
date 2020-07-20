@@ -58,6 +58,7 @@ type Protocol int
 const (
 	ProtocolDefault Protocol = iota
 	ProtocolCanal
+	ProtocolAvro
 )
 
 // FromString converts the protocol from string to Protocol enum type
@@ -67,6 +68,8 @@ func (p *Protocol) FromString(protocol string) {
 		*p = ProtocolDefault
 	case "canal":
 		*p = ProtocolCanal
+	case "avro":
+		*p = ProtocolAvro
 	default:
 		*p = ProtocolDefault
 		log.Warn("can't support codec protocol, using default protocol", zap.String("protocol", protocol))
@@ -80,6 +83,8 @@ func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
 		return NewJSONEventBatchEncoder
 	case ProtocolCanal:
 		return NewCanalEventBatchEncoder
+	case ProtocolAvro:
+		return NewAvroEventBatchEncoder
 	default:
 		log.Warn("unknown codec protocol value of EventBatchEncoder", zap.Int("protocol_value", int(p)))
 		return NewJSONEventBatchEncoder

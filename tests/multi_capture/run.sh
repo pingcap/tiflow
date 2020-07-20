@@ -30,13 +30,12 @@ function run() {
 
     # start $CDC_COUNT cdc servers, and create a changefeed
     for i in $(seq $CDC_COUNT); do
-        run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "$i" --addr "0.0.0.0:830${i}"
+        run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "$i" --addr "127.0.0.1:830${i}"
     done
 
     TOPIC_NAME="ticdc-multi-capture-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
-        mysql) ;&
         *) SINK_URI="mysql://root@127.0.0.1:3306/";;
     esac
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"

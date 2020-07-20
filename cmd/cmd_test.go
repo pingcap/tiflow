@@ -38,7 +38,7 @@ case-sensitive = false
 
 [filter]
 ignore-txn-start-ts = [1, 2]
-ddl-white-list = [1, 2]
+ddl-allow-list = [1, 2]
 rules = ['*.*', '!test.*']
 
 [mounter]
@@ -72,7 +72,7 @@ polling-time = 5
 	c.Assert(cfg.CaseSensitive, check.IsFalse)
 	c.Assert(cfg.Filter, check.DeepEquals, &config.FilterConfig{
 		IgnoreTxnStartTs: []uint64{1, 2},
-		DDLWhitelist:     []model.ActionType{1, 2},
+		DDLAllowlist:     []model.ActionType{1, 2},
 		Rules:            []string{"*.*", "!test.*"},
 	})
 	c.Assert(cfg.Mounter, check.DeepEquals, &config.MounterConfig{
@@ -113,9 +113,9 @@ case-sensitive = true
 ignore-txn-start-ts = [1, 2]
 
 # 过滤器规则
-# 过滤规则语法： https://github.com/pingcap/tidb-tools/tree/master/pkg/table-filter#syntax
+# 过滤规则语法：https://docs.pingcap.com/zh/tidb/stable/table-filter#%E8%A1%A8%E5%BA%93%E8%BF%87%E6%BB%A4%E8%AF%AD%E6%B3%95
 # The rules of the filter
-# Filter rule syntax: https://github.com/pingcap/tidb-tools/tree/master/pkg/table-filter#syntax
+# Filter rules syntax: https://docs.pingcap.com/tidb/stable/table-filter#syntax
 rules = ['*.*', '!test.*']
 
 [mounter]

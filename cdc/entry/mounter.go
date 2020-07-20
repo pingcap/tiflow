@@ -28,12 +28,14 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/quotes"
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 const (
@@ -159,9 +161,9 @@ func (m *mounterImpl) Run(ctx context.Context) error {
 }
 
 func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMountDuration := mountDuration.WithLabelValues(captureID, changefeedID)
+	metricMountDuration := mountDuration.WithLabelValues(captureAddr, changefeedID)
 
 	for {
 		var pEvent *model.PolymorphicEvent
@@ -192,9 +194,9 @@ func (m *mounterImpl) Input() chan<- *model.PolymorphicEvent {
 }
 
 func (m *mounterImpl) collectMetrics(ctx context.Context) {
-	captureID := util.CaptureIDFromCtx(ctx)
+	captureAddr := util.CaptureAddrFromCtx(ctx)
 	changefeedID := util.ChangefeedIDFromCtx(ctx)
-	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureID, changefeedID)
+	metricMounterInputChanSize := mounterInputChanSizeGauge.WithLabelValues(captureAddr, changefeedID)
 
 	for {
 		select {
@@ -348,7 +350,6 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 }
 
 func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
-
 	if row.Delete && !tableInfo.PKIsHandle {
 		return nil, nil
 	}
@@ -357,6 +358,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	if !row.Delete {
 		datumsNum = len(tableInfo.Columns)
 	}
+
 	values := make(map[string]*model.Column, datumsNum)
 	for index, colValue := range row.Row {
 		colInfo, exist := tableInfo.GetColumnInfo(index)
@@ -374,6 +376,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		col := &model.Column{
 			Type:  colInfo.Tp,
 			Value: value,
+			Flag:  transColumnFlag(colInfo),
 		}
 		if tableInfo.IsColumnUnique(colInfo.ID) {
 			whereHandle := true
@@ -387,9 +390,11 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 
 	event := &model.RowChangedEvent{
-		StartTs:  row.StartTs,
-		CommitTs: row.CRTs,
-		RowID:    row.RecordID,
+		StartTs:       row.StartTs,
+		CommitTs:      row.CRTs,
+		RowID:         row.RecordID,
+		SchemaID:      tableInfo.SchemaID,
+		TableUpdateTs: tableInfo.UpdateTS,
 		Table: &model.TableName{
 			Schema:    tableInfo.TableName.Schema,
 			Table:     tableInfo.TableName.Table,
@@ -405,6 +410,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 				column := &model.Column{
 					Type:  col.Tp,
 					Value: getDefaultOrZeroValue(col),
+					Flag:  transColumnFlag(col),
 				}
 				if tableInfo.IsColumnUnique(col.ID) {
 					whereHandle := true
@@ -416,7 +422,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 	event.Delete = row.Delete
 	event.Columns = values
-	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(event.Table.Schema, event.Table.Table))
+	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, quotes.QuoteSchema(event.Table.Schema, event.Table.Table))
 	return event, nil
 }
 
@@ -452,12 +458,14 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 			Type:        tableInfo.Columns[idxCol.Offset].Tp,
 			WhereHandle: &whereHandle,
 			Value:       value,
+			Flag:        transColumnFlag(tableInfo.Columns[idxCol.Offset]),
 		}
 	}
 	return &model.RowChangedEvent{
 		StartTs:  idx.StartTs,
 		CommitTs: idx.CRTs,
 		RowID:    idx.RecordID,
+		SchemaID: tableInfo.SchemaID,
 		Table: &model.TableName{
 			Schema: tableInfo.TableName.Schema,
 			Table:  tableInfo.TableName.Table,
@@ -465,7 +473,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,
 		Columns:      values,
-		Keys:         genMultipleKeys(tableInfo.TableInfo, values, model.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
+		Keys:         genMultipleKeys(tableInfo.TableInfo, values, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
 	}, nil
 }
 
@@ -633,6 +641,14 @@ func columnValue(value interface{}) string {
 	}
 
 	return data
+}
+
+func transColumnFlag(col *timodel.ColumnInfo) model.ColumnFlagType {
+	var flag model.ColumnFlagType
+	if col.Charset == "binary" {
+		flag.SetIsBinary()
+	}
+	return flag
 }
 
 func genKeyList(table string, columns []*timodel.ColumnInfo, values map[string]*model.Column) string {

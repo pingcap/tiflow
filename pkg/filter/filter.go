@@ -19,18 +19,16 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 )
-
-// OptCyclicConfig is the key that adds to changefeed options
-// automatically is cyclic replication is on.
-const OptCyclicConfig string = "_cyclic_relax_sql_mode"
 
 // Filter is a event filter implementation
 type Filter struct {
 	filter           filter.Filter
 	ignoreTxnStartTs []uint64
-	ddlWhitelist     []model.ActionType
+	ddlAllowlist     []model.ActionType
+	isCyclicEnabled  bool
 }
 
 // NewFilter creates a filter
@@ -55,7 +53,8 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 	return &Filter{
 		filter:           f,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
-		ddlWhitelist:     cfg.Filter.DDLWhitelist,
+		ddlAllowlist:     cfg.Filter.DDLAllowlist,
+		isCyclicEnabled:  cfg.Cyclic.IsEnabled(),
 	}, nil
 }
 
@@ -74,6 +73,10 @@ func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 	if IsSysSchema(db) {
 		return true
 	}
+	if f.isCyclicEnabled && mark.IsMarkTable(db, tbl) {
+		// Always replicate mark tables.
+		return false
+	}
 	return !f.filter.MatchTable(db, tbl)
 }
 
@@ -91,18 +94,18 @@ func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, schema, table string) bool {
 
 // ShouldDiscardDDL returns true if this DDL should be discarded
 func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
-	if !f.shouldDiscardByBuiltInDDLWhitelist(ddlType) {
+	if !f.shouldDiscardByBuiltInDDLAllowlist(ddlType) {
 		return false
 	}
-	for _, whiteDDLType := range f.ddlWhitelist {
-		if whiteDDLType == ddlType {
+	for _, allowDDLType := range f.ddlAllowlist {
+		if allowDDLType == ddlType {
 			return false
 		}
 	}
 	return true
 }
 
-func (f *Filter) shouldDiscardByBuiltInDDLWhitelist(ddlType model.ActionType) bool {
+func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bool {
 	/* The following DDL will be filter:
 	ActionAddForeignKey                 ActionType = 9
 	ActionDropForeignKey                ActionType = 10

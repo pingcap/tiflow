@@ -871,7 +871,7 @@ type TransactionBegin struct {
 	TransactionId string `protobuf:"bytes,2,opt,name=transactionId,proto3" json:"transactionId,omitempty"`
 	//*预留扩展*
 	Props []*Pair `protobuf:"bytes,3,rep,name=props,proto3" json:"props,omitempty"`
-	//*执行的thread Id*
+	//*执行的thread ID*
 	ThreadId             int64    `protobuf:"varint,4,opt,name=threadId,proto3" json:"threadId,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
