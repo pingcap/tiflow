@@ -86,7 +86,8 @@ function run() {
         --logsuffix "_${TEST_NAME}_tls" \
         --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
         --addr "127.0.0.1:8302" \
-        --tlsdir $TLS_DIR
+        --tlsdir $TLS_DIR \
+        --cert-allowed-cn "client" # The common name of client.pem
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
@@ -146,6 +147,21 @@ function run() {
 
     check_sync_diff $WORK_DIR $CUR/conf/diff_config_up_down.toml
     check_sync_diff $WORK_DIR $CUR/conf/diff_config_down_tls.toml
+
+    # Check cert Common Name.
+    curl --cacert $TLS_DIR/ca.pem \
+        --cert $TLS_DIR/client.pem \
+        --key $TLS_DIR/client-key.pem \
+        https://127.0.0.1:8302/status
+
+    if curl --cacert $TLS_DIR/ca.pem \
+        --cert $TLS_DIR/server.pem \
+        --key $TLS_DIR/server-key.pem \
+        -sf --show-error \
+        https://127.0.0.1:8302/status ; then
+        echo "must not connect successfully"
+        exit 1
+    fi
 
     cleanup_process $CDC_BINARY
 }
