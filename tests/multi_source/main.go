@@ -167,15 +167,16 @@ func truncateDDL(ctx context.Context, db *sql.DB) {
 func dml(ctx context.Context, db *sql.DB, table string, id int) {
 	var err error
 	var i int
-	var success int
+	var insertSuccess int
+	var deleteSuccess int
 	insertSQL := fmt.Sprintf("insert into test.`%s`(id1, id2) values(?,?)", table)
 	deleteSQL := fmt.Sprintf("delete from test.`%s` where id1 = ? or id2 = ?", table)
 	for i = 0; ; i++ {
 		_, err = db.Exec(insertSQL, i+id*100000000, i+id*100000000+1)
 		if err == nil {
-			success++
-			if success%100 == 0 {
-				log.S().Info(id, " insert success: ", success)
+			insertSuccess++
+			if insertSuccess%100 == 0 {
+				log.S().Info(id, " insert success: ", insertSuccess)
 			}
 		}
 		if err != nil && !strings.HasPrefix(err.Error(), "Error 1146:") {
@@ -187,9 +188,9 @@ func dml(ctx context.Context, db *sql.DB, table string, id int) {
 			if err == nil {
 				rows, _ := result.RowsAffected()
 				if rows != 0 {
-					success++
-					if success%100 == 0 {
-						log.S().Info(id, " delete success: ", success)
+					deleteSuccess++
+					if deleteSuccess%100 == 0 {
+						log.S().Info(id, " delete success: ", deleteSuccess)
 					}
 				}
 			}
