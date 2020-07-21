@@ -823,6 +823,11 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		case model.SortInMemory:
 			sorter = puller.NewEntrySorter()
 		case model.SortInFile:
+			err := util.IsDirAndWritable(p.changefeed.SortDir)
+			if err != nil {
+				p.errCh <- errors.Annotate(err, "sort dir check")
+				return
+			}
 			sorter = puller.NewFileSorter(p.changefeed.SortDir)
 		default:
 			p.errCh <- errors.Errorf("unknown sort engine %s", p.changefeed.Engine)
