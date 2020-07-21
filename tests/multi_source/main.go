@@ -241,14 +241,58 @@ func modifyColumnDDL(ctx context.Context, db *sql.DB) {
 	}
 }
 
+func addDropIndexDDL(ctx context.Context, db *sql.DB) {
+	testName := getFunctionName(addDropIndexDDL)
+	mustCreateTable(db, testName)
+
+	for value := 1; ; value++ {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		sql := fmt.Sprintf("alter table test.`%s` drop column v1", testName)
+		util.MustExec(db, sql)
+		time.Sleep(time.Millisecond)
+
+		var notNULL string
+		var defaultValue interface{}
+
+		if value%5 == 0 {
+			// use default <value> not null
+			notNULL = "not null"
+			defaultValue = value
+		} else if value%5 == 1 {
+			// use default null
+			defaultValue = nil
+		} else {
+			// use default <value>
+			defaultValue = value
+		}
+		sql = fmt.Sprintf("alter table test.`%s` add column v1 int default ? %s", testName, notNULL)
+		util.MustExec(db, sql, defaultValue)
+		time.Sleep(time.Millisecond)
+	}
+}
+
+const createDatabaseSQL = "create database if not exists test"
+const createTableSQL = `
+create table if not exists test.%s
+(
+    id1 int unique key not null,
+    id2 int unique key not null auto_increment,
+    v1  int default null
+)
+`
+
 func mustCreateTable(db *sql.DB, tableName string) {
-	util.MustExec(db, "create database if not exists test")
-	sql := fmt.Sprintf("create table if not exists test.`%s`(id int primary key, v1 int default null)", tableName)
+	util.MustExec(db, createDatabaseSQL)
+	sql := fmt.Sprintf(createTableSQL, tableName)
 	util.MustExec(db, sql)
 }
 
 func mustCreateTableWithConn(ctx context.Context, conn *sql.Conn, tableName string) {
-	util.MustExecWithConn(ctx, conn, "create database if not exists test")
-	sql := fmt.Sprintf("create table if not exists test.`%s`(id int primary key, v1 int default null)", tableName)
+	util.MustExecWithConn(ctx, conn, createDatabaseSQL)
+	sql := fmt.Sprintf(createTableSQL, tableName)
 	util.MustExecWithConn(ctx, conn, sql)
 }
