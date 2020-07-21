@@ -18,10 +18,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 )
 
@@ -33,6 +32,7 @@ const (
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
+	Initialize(ctx context.Context, tableInfo []*model.TableInfo) error
 
 	// EmitRowChangedEvents sends Row Changed Event to Sink
 	// EmitRowChangedEvents may write rows to downstream directly;
@@ -68,6 +68,8 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 		return newMySQLSink(ctx, changefeedID, sinkURI, filter, opts)
 	case "kafka":
 		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh)
+	case "pulsar", "pulsar+ssl":
+		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	default:
 		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}

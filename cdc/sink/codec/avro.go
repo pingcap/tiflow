@@ -18,6 +18,9 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
+	"math"
+	"math/rand"
 	"strconv"
 	"time"
 
@@ -45,13 +48,23 @@ type avroEncodeResult struct {
 	registryID int
 }
 
-// NewAvroEventBatchEncoder creates an AvroEventBatchEncoder from an AvroSchemaManager
-func NewAvroEventBatchEncoder(manager *AvroSchemaManager) *AvroEventBatchEncoder {
+// NewAvroEventBatchEncoder creates an AvroEventBatchEncoder
+func NewAvroEventBatchEncoder() EventBatchEncoder {
 	return &AvroEventBatchEncoder{
-		valueSchemaManager: manager,
+		valueSchemaManager: nil,
 		keyBuf:             nil,
 		valueBuf:           nil,
 	}
+}
+
+// SetValueSchemaManager sets the value schema manager for an Avro encoder
+func (a *AvroEventBatchEncoder) SetValueSchemaManager(manager *AvroSchemaManager) {
+	a.valueSchemaManager = manager
+}
+
+// GetValueSchemaManager gets the value schema manager for an Avro encoder
+func (a *AvroEventBatchEncoder) GetValueSchemaManager() *AvroSchemaManager {
+	return a.valueSchemaManager
 }
 
 // AppendRowChangedEvent appends a row change event to the encoder
@@ -61,7 +74,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		return errors.New("Fatal sink bug. Batch size must be 1")
 	}
 
-	res, err := a.avroEncode(e.Table, e.SchemaID, e.Columns)
+	res, err := a.avroEncode(e.Table, e.TableUpdateTs, e.Columns)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
 		return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
@@ -88,12 +101,12 @@ func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 
 // AppendDDLEvent generates new schema and registers it to the Registry
 func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
-	if e.ColumnInfo == nil {
+	if e.TableInfo == nil {
 		log.Info("AppendDDLEvent: no schema generation needed, skip")
 		return nil
 	}
 
-	schemaStr, err := columnInfoToAvroSchema(e.Table, e.ColumnInfo)
+	schemaStr, err := ColumnInfoToAvroSchema(e.TableInfo.Table, e.TableInfo.ColumnInfo)
 	if err != nil {
 		return errors.Annotate(err, "AppendDDLEvent failed")
 	}
@@ -105,8 +118,8 @@ func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 	}
 
 	err = a.valueSchemaManager.Register(context.Background(), model.TableName{
-		Schema: e.Schema,
-		Table:  e.Table,
+		Schema: e.TableInfo.Schema,
+		Table:  e.TableInfo.Table,
 	}, avroCodec)
 
 	if err != nil {
@@ -133,8 +146,8 @@ func (a *AvroEventBatchEncoder) Size() int {
 	return 1
 }
 
-func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tiSchemaID int64, cols map[string]*model.Column) (*avroEncodeResult, error) {
-	avroCodec, registryID, err := a.valueSchemaManager.Lookup(context.Background(), *table, tiSchemaID)
+func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, updateTs uint64, cols map[string]*model.Column) (*avroEncodeResult, error) {
+	avroCodec, registryID, err := a.valueSchemaManager.Lookup(context.Background(), *table, updateTs)
 	if err != nil {
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: lookup failed")
 	}
@@ -162,15 +175,29 @@ type avroSchemaTop struct {
 }
 
 type avroSchemaField struct {
-	Name         string      `json:"name"`
-	Tp           []string    `json:"type"`
-	DefaultValue interface{} `json:"default"`
+	Name string `json:"name"`
+	// Tp can be a string or an avroLogicalType
+	Tp           []interface{} `json:"type"`
+	DefaultValue interface{}   `json:"default"`
 }
 
-func columnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string, error) {
+type logicalType string
+
+type avroLogicalType struct {
+	Type        string      `json:"type"`
+	LogicalType logicalType `json:"logicalType"`
+}
+
+const (
+	timestampMillis logicalType = "timestamp-millis"
+	timeMicros      logicalType = "time-micros"
+)
+
+// ColumnInfoToAvroSchema generates the Avro schema JSON for the corresponding columns
+func ColumnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string, error) {
 	top := avroSchemaTop{
 		Tp:     "record",
-		Name:   name,
+		Name:   name + "_" + strconv.FormatInt(rand.Int63(), 10),
 		Fields: nil,
 	}
 
@@ -182,7 +209,7 @@ func columnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string
 
 		field := avroSchemaField{
 			Name:         col.Name,
-			Tp:           []string{"null", avroType},
+			Tp:           []interface{}{"null", avroType},
 			DefaultValue: nil,
 		}
 		top.Fields = append(top.Fields, field)
@@ -190,7 +217,7 @@ func columnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string
 
 	str, err := json.Marshal(&top)
 	if err != nil {
-		return "", errors.Annotate(err, "columnInfoToAvroSchema: failed to generate json")
+		return "", errors.Annotate(err, "ColumnInfoToAvroSchema: failed to generate json")
 	}
 	return string(str), nil
 }
@@ -229,16 +256,16 @@ func getAvroDataTypeName(v interface{}) (string, error) {
 	case string:
 		return "string", nil
 	case time.Duration:
-		return "long.time-millis", nil
+		return "long", nil
 	case time.Time:
-		return "long.timestamp-millis", nil
+		return "long", nil
 	default:
 		log.Warn("getAvroDataTypeName: unknown type")
 		return "", errors.New("unknown type for Avro")
 	}
 }
 
-func getAvroDataTypeNameMysql(tp byte) (string, error) {
+func getAvroDataTypeNameMysql(tp byte) (interface{}, error) {
 	switch tp {
 	case mysql.TypeFloat:
 		return "float", nil
@@ -247,9 +274,15 @@ func getAvroDataTypeNameMysql(tp byte) (string, error) {
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
 		return "string", nil
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		return "long.timestamp-millis", nil
+		return avroLogicalType{
+			Type:        "long",
+			LogicalType: timestampMillis,
+		}, nil
 	case mysql.TypeDuration: //duration should read fsp from column meta data
-		return "long.time-millis", nil
+		return avroLogicalType{
+			Type:        "long",
+			LogicalType: timeMicros,
+		}, nil
 	case mysql.TypeEnum:
 		return "long", nil
 	case mysql.TypeSet:
@@ -278,31 +311,57 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 		col.Value = int64(v)
 	}
 
+	if col.Value == nil {
+		return nil, "null", nil
+	}
+
 	switch col.Type {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		str := col.Value.(string)
 		t, err := time.Parse(types.DateFormat, str)
+		const fullType = "long." + timestampMillis
 		if err == nil {
-			return t, "long.timestamp-millis", nil
+			return t, string(fullType), nil
 		}
 
 		t, err = time.Parse(types.TimeFormat, str)
 		if err == nil {
-			return t, "long.timestamp-millis", nil
+			return t, string(fullType), nil
 		}
 
 		t, err = time.Parse(types.TimeFSPFormat, str)
 		if err != nil {
-			return nil, "error", err
+			return nil, "", err
 		}
-		return t, "long.timestamp-millis", nil
+		return t, string(fullType), nil
 	case mysql.TypeDuration:
 		str := col.Value.(string)
-		d, err := time.ParseDuration(str)
+		var (
+			hours   int
+			minutes int
+			seconds int
+			frac    string
+		)
+		_, err := fmt.Sscanf(str, "%d:%d:%d.%s", &hours, &minutes, &seconds, &frac)
 		if err != nil {
-			return nil, "error", err
+			_, err := fmt.Sscanf(str, "%d:%d:%d", &hours, &minutes, &seconds)
+			frac = "0"
+
+			if err != nil {
+				return nil, "", err
+			}
 		}
-		return d, "long.timestamp-millis", nil
+
+		fsp := len(frac)
+		fracInt, err := strconv.ParseInt(frac, 10, 32)
+		if err != nil {
+			return nil, "", err
+		}
+		fracInt = int64(float64(fracInt) * math.Pow10(6-fsp))
+
+		d := types.NewDuration(hours, minutes, seconds, int(fracInt), int8(fsp)).Duration
+		const fullType = "long." + timeMicros
+		return d, string(fullType), nil
 	case mysql.TypeJSON:
 		return col.Value.(tijson.BinaryJSON).String(), "string", nil
 	case mysql.TypeNewDecimal, mysql.TypeDecimal:
@@ -334,7 +393,7 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
 	data := []interface{}{magicByte, int32(r.registryID), r.data}
 	for _, v := range data {
-		err := binary.Write(buf, binary.LittleEndian, v)
+		err := binary.Write(buf, binary.BigEndian, v)
 		if err != nil {
 			return nil, errors.Annotate(err, "converting Avro data to envelope failed")
 		}

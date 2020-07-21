@@ -46,22 +46,32 @@ import (
 )
 
 var (
-	caPath   string
-	certPath string
-	keyPath  string
+	caPath        string
+	certPath      string
+	keyPath       string
+	allowedCertCN string
 )
 
-func addSecurityFlags(flags *pflag.FlagSet) {
+func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
 	flags.StringVar(&caPath, "ca", "", "CA certificate path for TLS connection")
 	flags.StringVar(&certPath, "cert", "", "Certificate path for TLS connection")
 	flags.StringVar(&keyPath, "key", "", "Private key path for TLS connection")
+	if isServer {
+		flags.StringVar(&allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity "+
+			"(cert Common Name). Use `,` to separate multiple CN")
+	}
 }
 
 func getCredential() *security.Credential {
+	var certAllowedCN []string
+	if len(allowedCertCN) != 0 {
+		certAllowedCN = strings.Split(allowedCertCN, ",")
+	}
 	return &security.Credential{
-		CAPath:   caPath,
-		CertPath: certPath,
-		KeyPath:  keyPath,
+		CAPath:        caPath,
+		CertPath:      certPath,
+		KeyPath:       keyPath,
+		CertAllowedCN: certAllowedCN,
 	}
 }
 
