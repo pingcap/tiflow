@@ -166,7 +166,7 @@ func dml(ctx context.Context, db *sql.DB, table string, id int) {
 	var err error
 	var i int
 	var success int
-	sql := fmt.Sprintf("insert into test.`%s`(id) values(?)", table)
+	sql := fmt.Sprintf("insert into test.`%s`(id1) values(?)", table)
 	for i = 0; ; i++ {
 		_, err = db.Exec(sql, i+id*100000000)
 		if err == nil {
