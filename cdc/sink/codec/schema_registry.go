@@ -42,7 +42,7 @@ type AvroSchemaManager struct {
 }
 
 type schemaCacheEntry struct {
-	tiSchemaID int64
+	tiSchemaID uint64
 	registryID int
 	codec      *goavro.Codec
 }
@@ -160,19 +160,19 @@ func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableN
 // TiSchemaId is only used to trigger fetching from the Registry server.
 // Calling this method with a tiSchemaID other than that used last time will invariably trigger a RESTful request to the Registry.
 // Returns (codec, registry schema ID, error)
-func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableName, tiSchemaID int64) (*goavro.Codec, int, error) {
+func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableName, tiSchemaID uint64) (*goavro.Codec, int, error) {
 	key := m.tableNameToSchemaSubject(tableName)
 	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
 		log.Info("Avro schema lookup cache hit",
 			zap.String("key", key),
-			zap.Int64("tiSchemaID", tiSchemaID),
+			zap.Uint64("tiSchemaID", tiSchemaID),
 			zap.Int("registryID", entry.registryID))
 		return entry.codec, entry.registryID, nil
 	}
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
-		zap.Int64("tiSchemaID", tiSchemaID))
+		zap.Uint64("tiSchemaID", tiSchemaID))
 
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(tableName)) + "/versions/latest"
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
@@ -206,7 +206,7 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 	if resp.StatusCode == 404 {
 		log.Warn("Specified schema not found in Registry",
 			zap.String("key", key),
-			zap.Int64("tiSchemaID", tiSchemaID))
+			zap.Uint64("tiSchemaID", tiSchemaID))
 
 		return nil, 0, errors.New("Schema not found in Registry")
 	}
@@ -227,7 +227,7 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 	m.cache[m.tableNameToSchemaSubject(tableName)] = cacheEntry
 
 	log.Info("Avro schema lookup successful with cache miss",
-		zap.Int64("tiSchemaID", cacheEntry.tiSchemaID),
+		zap.Uint64("tiSchemaID", cacheEntry.tiSchemaID),
 		zap.Int("registryID", cacheEntry.registryID),
 		zap.String("schema", cacheEntry.codec.Schema()))
 
@@ -254,8 +254,13 @@ func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.T
 		return nil
 	}
 
+	if resp.StatusCode == 404 {
+		log.Info("Registry already cleaned")
+		return nil
+	}
+
 	log.Error("Error when clearing Registry", zap.Int("status", resp.StatusCode))
-	return err
+	return errors.Errorf("Error when clearing Registry, status = %d", resp.StatusCode)
 }
 
 func httpRetry(ctx context.Context, r *http.Request, allow404 bool) (*http.Response, error) {
@@ -296,5 +301,5 @@ func httpRetry(ctx context.Context, r *http.Request, allow404 bool) (*http.Respo
 
 func (m *AvroSchemaManager) tableNameToSchemaSubject(tableName model.TableName) string {
 	// We should guarantee unique names for subjects
-	return model.QuoteSchema(tableName.Schema, tableName.Table) + m.subjectSuffix
+	return tableName.Schema + "." + tableName.Table + m.subjectSuffix
 }

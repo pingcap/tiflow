@@ -18,11 +18,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/ticdc/pkg/config"
-
-	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 )
 
@@ -34,6 +32,7 @@ const (
 
 // Sink is an abstraction for anything that a changefeed may emit into.
 type Sink interface {
+	Initialize(ctx context.Context, tableInfo []*model.TableInfo) error
 
 	// EmitRowChangedEvents sends Row Changed Event to Sink
 	// EmitRowChangedEvents may write rows to downstream directly;
@@ -55,21 +54,8 @@ type Sink interface {
 	Close() error
 }
 
-// DSNScheme is the scheme name of DSN
-const DSNScheme = "dsn://"
-
 // NewSink creates a new sink with the sink-uri
-func NewSink(ctx context.Context, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
-	// check if sinkURI is a DSN
-	if strings.HasPrefix(strings.ToLower(sinkURIStr), DSNScheme) {
-		dsnStr := sinkURIStr[len(DSNScheme):]
-		dsnCfg, err := dmysql.ParseDSN(dsnStr)
-		if err != nil {
-			return nil, errors.Annotatef(err, "parse sinkURI failed")
-		}
-		return newMySQLSink(ctx, nil, dsnCfg, filter, opts)
-	}
-
+func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
@@ -78,10 +64,12 @@ func NewSink(ctx context.Context, sinkURIStr string, filter *filter.Filter, conf
 	switch strings.ToLower(sinkURI.Scheme) {
 	case "blackhole":
 		return newBlackHoleSink(opts), nil
-	case "mysql", "tidb":
-		return newMySQLSink(ctx, sinkURI, nil, filter, opts)
+	case "mysql", "tidb", "mysql+ssl", "tidb+ssl":
+		return newMySQLSink(ctx, changefeedID, sinkURI, filter, opts)
 	case "kafka":
 		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh)
+	case "pulsar", "pulsar+ssl":
+		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	default:
 		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}

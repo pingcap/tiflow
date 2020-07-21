@@ -73,6 +73,11 @@ func (b *blackHoleSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) e
 	return nil
 }
 
+// Initialize is no-op for blackhole
+func (b *blackHoleSink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) error {
+	return nil
+}
+
 func (b *blackHoleSink) Close() error {
 	return nil
 }
