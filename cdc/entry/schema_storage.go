@@ -646,6 +646,9 @@ func (s *schemaSnapshot) replaceTable(table *TableInfo) error {
 }
 
 func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
+	if err := s.FillSchemaName(job); err != nil {
+		return errors.Trace(err)
+	}
 	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
 	getWrapTableInfo := func(job *timodel.Job) *TableInfo {
 		return WrapTableInfo(job.SchemaID, job.SchemaName,
@@ -840,9 +843,6 @@ func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 		snap = lastSnap.Clone()
 	} else {
 		snap = newEmptySchemaSnapshot()
-	}
-	if err := snap.FillSchemaName(job); err != nil {
-		return errors.Trace(err)
 	}
 	if err := snap.handleDDL(job); err != nil {
 		return errors.Trace(err)
