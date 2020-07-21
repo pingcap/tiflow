@@ -5,6 +5,7 @@ source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
+TLS_DIR=$( cd $CUR/../_certificates && pwd )
 
 function check_changefeed_state() {
     changefeedid=$1
@@ -114,6 +115,13 @@ EOF
     if [[ -z $badsink ]]; then
         echo "[$(date)] <<<<< unexpect output got ${badsink} >>>>>"
         exit 1
+    fi
+
+    # Test Kafka SSL connection.
+    if [ "$SINK_TYPE" == "kafka" ]; then
+        SSL_TOPIC_NAME="ticdc-cli-test-ssl-$RANDOM"
+        SINK_URI="kafka://127.0.0.1:9093/$SSL_TOPIC_NAME?ca=${TLS_DIR}/ca.pem&cert=${TLS_DIR}/client.pem&key=${TLS_DIR}/client-key.pem"
+        run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai"
     fi
 
     # Smoke test meta delete-gc-ttl and delete
