@@ -72,7 +72,7 @@ func runDDLTest(srcs []*sql.DB) {
 		log.S().Infof("runDDLTest take %v", time.Since(start))
 	}()
 
-	for _, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL, modifyColumnDDL} {
+	for _, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL, modifyColumnDDL, addDropIndexDDL} {
 		testName := getFunctionName(ddlFunc)
 		log.S().Info("running ddl test: ", testName)
 
@@ -251,26 +251,20 @@ func addDropIndexDDL(ctx context.Context, db *sql.DB) {
 			return
 		default:
 		}
-		sql := fmt.Sprintf("alter table test.`%s` drop column v1", testName)
+		sql := fmt.Sprintf("drop index id1 on `%s`;", testName)
 		util.MustExec(db, sql)
 		time.Sleep(time.Millisecond)
 
-		var notNULL string
-		var defaultValue interface{}
+		sql = fmt.Sprintf("create unique index `id1` on `%s` (id1);", testName)
+		util.MustExec(db, sql)
+		time.Sleep(time.Millisecond)
 
-		if value%5 == 0 {
-			// use default <value> not null
-			notNULL = "not null"
-			defaultValue = value
-		} else if value%5 == 1 {
-			// use default null
-			defaultValue = nil
-		} else {
-			// use default <value>
-			defaultValue = value
-		}
-		sql = fmt.Sprintf("alter table test.`%s` add column v1 int default ? %s", testName, notNULL)
-		util.MustExec(db, sql, defaultValue)
+		sql = fmt.Sprintf("drop index id2 on `%s`;", testName)
+		util.MustExec(db, sql)
+		time.Sleep(time.Millisecond)
+
+		sql = fmt.Sprintf("create unique index `id2` on `%s` (id2);", testName)
+		util.MustExec(db, sql)
 		time.Sleep(time.Millisecond)
 	}
 }
