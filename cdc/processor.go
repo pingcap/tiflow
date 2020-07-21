@@ -444,8 +444,8 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 		if p.isStopped() {
 			continue
 		}
-		workload := make(model.TaskWorkload, len(p.tables))
 		p.stateMu.Lock()
+		workload := make(model.TaskWorkload, len(p.tables))
 		for _, table := range p.tables {
 			workload[table.id] = table.workload
 		}
