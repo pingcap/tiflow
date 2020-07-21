@@ -169,17 +169,33 @@ func dml(ctx context.Context, db *sql.DB, table string, id int) {
 	var i int
 	var success int
 	insertSQL := fmt.Sprintf("insert into test.`%s`(id1, id2) values(?,?)", table)
-	//deleteSQL := fmt.Sprintf("delete from test.`%s`(id1, id2) values(?,?)", table)
+	deleteSQL := fmt.Sprintf("delete from test.`%s` where id1 = ? or id2 = ?", table)
 	for i = 0; ; i++ {
 		_, err = db.Exec(insertSQL, i+id*100000000, i+id*100000000+1)
 		if err == nil {
 			success++
 			if success%100 == 0 {
-				log.S().Info(id, " success: ", success)
+				log.S().Info(id, " insert success: ", success)
 			}
 		}
 		if err != nil && !strings.HasPrefix(err.Error(), "Error 1146:") {
 			log.Fatal("unexpected error when executing sql", zap.Error(err))
+		}
+
+		if i%2 == 0 {
+			result, err := db.Exec(deleteSQL, i+id*100000000, i+id*100000000+1)
+			if err == nil {
+				rows, _ := result.RowsAffected()
+				if rows != 0 {
+					success++
+					if success%100 == 0 {
+						log.S().Info(id, " delete success: ", success)
+					}
+				}
+			}
+			if err != nil && !strings.HasPrefix(err.Error(), "Error 1146:") {
+				log.Fatal("unexpected error when executing sql", zap.Error(err))
+			}
 		}
 
 		select {
