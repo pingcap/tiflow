@@ -197,6 +197,13 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
+	if info.Engine == model.SortInFile {
+		err = util.IsDirAndWritable(info.SortDir)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs)
 
 	existingTables := make(map[model.TableID]model.Ts)
