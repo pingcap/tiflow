@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/tests/util"
@@ -175,6 +177,9 @@ func dml(ctx context.Context, db *sql.DB, table string, id int) {
 				log.S().Info(id, " success: ", success)
 			}
 		}
+		if err != nil {
+			log.Info("-", zap.Error(err))
+		}
 
 		select {
 		case <-ctx.Done():
@@ -251,19 +256,19 @@ func addDropIndexDDL(ctx context.Context, db *sql.DB) {
 			return
 		default:
 		}
-		sql := fmt.Sprintf("drop index id1 on `%s`;", testName)
+		sql := fmt.Sprintf("drop index id1 on test.`%s`;", testName)
 		util.MustExec(db, sql)
 		time.Sleep(time.Millisecond)
 
-		sql = fmt.Sprintf("create unique index `id1` on `%s` (id1);", testName)
+		sql = fmt.Sprintf("create unique index `id1` on test.`%s` (id1);", testName)
 		util.MustExec(db, sql)
 		time.Sleep(time.Millisecond)
 
-		sql = fmt.Sprintf("drop index id2 on `%s`;", testName)
+		sql = fmt.Sprintf("drop index id2 on test.`%s`;", testName)
 		util.MustExec(db, sql)
 		time.Sleep(time.Millisecond)
 
-		sql = fmt.Sprintf("create unique index `id2` on `%s` (id2);", testName)
+		sql = fmt.Sprintf("create unique index `id2` on test.`%s` (id2);", testName)
 		util.MustExec(db, sql)
 		time.Sleep(time.Millisecond)
 	}
