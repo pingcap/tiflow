@@ -64,7 +64,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 			{"name": "mybool", "type": ["null", "int"], "default": null},
 			{"name": "myfloat", "type": ["null", "float"], "default": null},
 			{"name": "mybytes", "type": ["null", "bytes"], "default": null},
-			{"name": "ts", "type": ["null", "long.timestamp-millis"], "default": null}
+			{"name": "ts", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null}
           ]
         }`)
 
@@ -125,7 +125,7 @@ func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 	c.Check(err, check.IsNil)
 
 	c.Assert(evlp[0], check.Equals, magicByte)
-	c.Assert(evlp[1:5], check.BytesEquals, []byte{7, 0, 0, 0})
+	c.Assert(evlp[1:5], check.BytesEquals, []byte{0, 0, 0, 7})
 
 	parsed, _, err := avroCodec.NativeFromBinary(evlp[5:])
 	c.Assert(err, check.IsNil)
@@ -174,12 +174,15 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 	}()
 
 	info := pm.GetTableInfo("test", "person")
-	testCaseDdl.ColumnInfo = make([]*model.ColumnInfo, len(info.Columns))
+	testCaseDdl.TableInfo = new(model.TableInfo)
+	testCaseDdl.TableInfo.Schema = "test"
+	testCaseDdl.TableInfo.Table = "person"
+	testCaseDdl.TableInfo.ColumnInfo = make([]*model.ColumnInfo, len(info.Columns))
 	for i, v := range info.Columns {
-		testCaseDdl.ColumnInfo[i] = new(model.ColumnInfo)
-		testCaseDdl.ColumnInfo[i].FromTiColumnInfo(v)
+		testCaseDdl.TableInfo.ColumnInfo[i] = new(model.ColumnInfo)
+		testCaseDdl.TableInfo.ColumnInfo[i].FromTiColumnInfo(v)
 	}
-	testCaseDdl.SchemaID = info.SchemaID
+	testCaseDdl.TableInfo.UpdateTs = 0xbeefbeef
 
 	err := s.encoder.AppendDDLEvent(testCaseDdl)
 	c.Check(err, check.IsNil)

@@ -19,9 +19,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/quotes"
+	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
 )
 
@@ -71,7 +73,23 @@ type TableName interface {
 //
 // Note table name is only for avoid write hotspot there is *NO* guarantee
 // normal tables and mark tables are one:one map.
-func CreateMarkTables(ctx context.Context, upstreamDSN string, tables ...TableName) error {
+func CreateMarkTables(ctx context.Context, upstreamDSN string, upstreamCred *security.Credential, tables ...TableName) error {
+	tlsCfg, err := upstreamCred.ToTLSConfig()
+	if err != nil {
+		return errors.Annotate(err, "fail to open upstream TiDB connection")
+	}
+	if tlsCfg != nil {
+		tlsName := "cli-marktable"
+		err = mysql.RegisterTLSConfig(tlsName, tlsCfg)
+		if err != nil {
+			return errors.Annotate(err, "fail to open upstream TiDB connection")
+		}
+		if strings.Contains(upstreamDSN, "?") && strings.Contains(upstreamDSN, "=") {
+			upstreamDSN += ("&tls=" + tlsName)
+		} else {
+			upstreamDSN += ("?tls=" + tlsName)
+		}
+	}
 	db, err := sql.Open("mysql", upstreamDSN)
 	if err != nil {
 		return errors.Annotate(err, "Open upsteam database connection failed")
