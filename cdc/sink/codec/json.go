@@ -211,7 +211,7 @@ func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, e
 	d.keyBuf.Write(key)
 
 	d.valueBuf.Write(valueLenByte[:])
-	return EncoderNeedAsyncWrite, nil
+	return EncoderNeedSyncWrite, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
