@@ -755,7 +755,7 @@ func prepareDelete(schema, table string, cols map[string]*model.Column) (string,
 func whereSlice(cols map[string]*model.Column) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for colName, col := range cols {
-		if col.WhereHandle == nil || !*col.WhereHandle {
+		if !col.Flag.IsHandleKey() {
 			continue
 		}
 		colNames = append(colNames, colName)
