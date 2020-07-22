@@ -438,7 +438,8 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 
 	indexInfo, exist := tableInfo.GetIndexInfo(idx.IndexID)
 	if !exist {
-		return nil, errors.NotFoundf("index info %d", idx.IndexID)
+		log.Warn("index info not found", zap.Int64("indexID", idx.IndexID))
+		return nil, nil
 	}
 
 	if !tableInfo.IsIndexUnique(indexInfo) {
