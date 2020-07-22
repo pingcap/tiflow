@@ -27,6 +27,7 @@
           - ./docker/logs:/logs
         entrypoint: "/cdc server"
         command:
+          - --addr=0.0.0.0:8300
           - --pd=http://upstream-pd:2379
           - --log-file=/logs/capturer0.log
         depends_on:
@@ -44,6 +45,7 @@
           - ./docker/logs:/logs
         entrypoint: "/cdc server"
         command:
+          - --addr=0.0.0.0:8300
           - --pd=http://upstream-pd:2379
           - --log-file=/logs/capturer1.log
         depends_on:
@@ -61,6 +63,7 @@
           - ./docker/logs:/logs
         entrypoint: "/cdc server"
         command:
+          - --addr=0.0.0.0:8300
           - --pd=http://upstream-pd:2379
           - --log-file=/logs/capturer2.log
         depends_on:

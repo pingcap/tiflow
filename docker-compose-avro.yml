@@ -10,12 +10,19 @@ services:
     volumes:
       - ./docker/data:/data
       - ./docker/logs:/logs
-    command: -c "/usr/bin/tail -f /dev/null"
-    entrypoint: "/bin/sh"
+      - ./docker/config:/config
+    command:
+      - /bin/bash
+      - -c
+      - /usr/bin/tail -f /dev/null
     depends_on:
-      - "upstream-tidb"
-      - "downstream-tidb"
+      - "upstream-pd"
+      - "schema-registry"
+      - "kafka-connect-01"
       - "kafka"
+      - "capturer0"
+      - "capturer1"
+      - "capturer2"
     restart: on-failure
 
   capturer0:
@@ -259,6 +266,8 @@ services:
       - "downstream-tikv1"
       - "downstream-tikv2"
     restart: on-failure
+
+# The rest of the file is adapted from https://github.com/confluentinc/demo-scene/blob/master/connect-jdbc/docker-compose.yml
 
   zookeeper:
     image: confluentinc/cp-zookeeper:5.5.1
