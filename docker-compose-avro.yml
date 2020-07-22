@@ -261,14 +261,14 @@ services:
     restart: on-failure
 
   zookeeper:
-    image: confluentinc/cp-zookeeper:5.4.0
+    image: confluentinc/cp-zookeeper:5.5.1
     container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
 
   kafka:
-    image: confluentinc/cp-enterprise-kafka:5.4.0
+    image: confluentinc/cp-enterprise-kafka:5.5.1
     container_name: kafka
     depends_on:
       - zookeeper
@@ -294,7 +294,7 @@ services:
       CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
 
   schema-registry:
-    image: confluentinc/cp-schema-registry:5.4.0
+    image: confluentinc/cp-schema-registry:5.5.1
     container_name: schema-registry
     ports:
       - 8081:8081
@@ -306,7 +306,7 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:2181
 
   kafka-connect-01:
-    image: confluentinc/cp-kafka-connect:5.4.0
+    image: confluentinc/cp-kafka-connect:5.5.1
     container_name: kafka-connect-01
     depends_on:
       - zookeeper
@@ -343,7 +343,9 @@ services:
         # ------------
         # MySQL
         cd /usr/share/java/kafka-connect-jdbc/
-        curl https://cdn.mysql.com/Downloads/Connector-J/mysql-connector-java-8.0.16.tar.gz | tar xz
+        wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-java-8.0.21.tar.gz
+        tar -xf mysql-connector-java-8.0.21.tar.gz
+        mv mysql-connector-java-8.0.21/mysql-connector-java-8.0.21.jar ./
         # Now launch Kafka Connect
         sleep infinity &
         /etc/confluent/docker/run
