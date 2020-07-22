@@ -32,45 +32,115 @@ func (s RowIDDispatcherSuite) TestRowIDDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t1",
 			},
-			RowID: 1,
+			Columns: map[string]*model.Column{
+				"a": {
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				},
+				"b": {
+					Value: 22,
+					Flag:  0,
+				},
+			},
 		}, exceptPartition: 1},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
-			RowID: 2,
-		}, exceptPartition: 2},
+			Columns: map[string]*model.Column{
+				"a": {
+					Value: 22,
+					Flag:  model.HandleKeyFlag,
+				},
+				"b": {
+					Value: 22,
+					Flag:  0,
+				},
+			},
+		}, exceptPartition: 11},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
-			RowID: 3,
+			Columns: map[string]*model.Column{
+				"a": {
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				},
+				"b": {
+					Value: 33,
+					Flag:  0,
+				},
+			},
+		}, exceptPartition: 1},
+		{row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t2",
+			},
+			Columns: map[string]*model.Column{
+				"a": {
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				},
+				"b": {
+					Value: 22,
+					Flag:  model.HandleKeyFlag,
+				},
+			},
+		}, exceptPartition: 5},
+		{row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t2",
+			},
+			Columns: map[string]*model.Column{
+				"b": {
+					Value: 22,
+					Flag:  model.HandleKeyFlag,
+				},
+				"a": {
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				},
+			},
+		}, exceptPartition: 5},
+		{row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t2",
+			},
+			Columns: map[string]*model.Column{
+				"a": {
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				},
+				"b": {
+					Value: 0,
+					Flag:  model.HandleKeyFlag,
+				},
+			},
+		}, exceptPartition: 5},
+		{row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t2",
+			},
+			Columns: map[string]*model.Column{
+				"a": {
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				},
+				"b": {
+					Value: 33,
+					Flag:  model.HandleKeyFlag,
+				},
+			},
 		}, exceptPartition: 3},
-		{row: &model.RowChangedEvent{
-			Table: &model.TableName{
-				Schema: "test",
-				Table:  "t2",
-			},
-			RowID: 1,
-		}, exceptPartition: 1},
-		{row: &model.RowChangedEvent{
-			Table: &model.TableName{
-				Schema: "test",
-				Table:  "t2",
-			},
-			RowID: 2,
-		}, exceptPartition: 2},
-		{row: &model.RowChangedEvent{
-			Table: &model.TableName{
-				Schema: "test",
-				Table:  "t2",
-			},
-			RowID: 88,
-		}, exceptPartition: 8},
 	}
-	p := &rowIDDispatcher{partitionNum: 16}
+	p := &indexValueDispatcher{partitionNum: 16}
 	for _, tc := range testCases {
 		c.Assert(p.Dispatch(tc.row), check.Equals, tc.exceptPartition)
 	}

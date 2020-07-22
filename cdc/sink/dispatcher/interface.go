@@ -36,6 +36,7 @@ const (
 	dispatchRuleRowID
 	dispatchRuleTS
 	dispatchRuleTable
+	dispatchRuleIndexValue
 )
 
 func (r *dispatchRule) fromString(rule string) {
@@ -48,6 +49,8 @@ func (r *dispatchRule) fromString(rule string) {
 		*r = dispatchRuleTS
 	case "table":
 		*r = dispatchRuleTable
+	case "index-value":
+		*r = dispatchRuleIndexValue
 	default:
 		*r = dispatchRuleDefault
 		log.Warn("can't support dispatch rule, using default rule", zap.String("rule", rule))
@@ -99,8 +102,8 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		var rule dispatchRule
 		rule.fromString(ruleConfig.Dispatcher)
 		switch rule {
-		case dispatchRuleRowID:
-			d = &rowIDDispatcher{partitionNum: partitionNum}
+		case dispatchRuleRowID, dispatchRuleIndexValue:
+			d = &indexValueDispatcher{partitionNum: partitionNum}
 		case dispatchRuleTS:
 			d = &tsDispatcher{partitionNum: partitionNum}
 		case dispatchRuleTable:

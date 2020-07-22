@@ -33,42 +33,49 @@ func (s TableDispatcherSuite) TestTableDispatcher(c *check.C) {
 				Table:  "t1",
 			},
 			CommitTs: 1,
-		}, exceptPartition: 15},
+		}, exceptPartition: 10},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
 			CommitTs: 2,
-		}, exceptPartition: 15},
+		}, exceptPartition: 10},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
 			CommitTs: 3,
-		}, exceptPartition: 15},
+		}, exceptPartition: 10},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
 			CommitTs: 1,
-		}, exceptPartition: 5},
+		}, exceptPartition: 12},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
 			CommitTs: 2,
-		}, exceptPartition: 5},
+		}, exceptPartition: 12},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
 			CommitTs: 3,
-		}, exceptPartition: 5},
+		}, exceptPartition: 12},
+		{row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t3",
+			},
+			CommitTs: 3,
+		}, exceptPartition: 14},
 	}
 	p := &tableDispatcher{partitionNum: 16}
 	for _, tc := range testCases {

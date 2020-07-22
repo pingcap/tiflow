@@ -14,11 +14,8 @@
 package dispatcher
 
 import (
-	"hash/crc32"
-
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"go.uber.org/zap"
+	"github.com/pingcap/ticdc/pkg/hash"
 )
 
 type tableDispatcher struct {
@@ -26,15 +23,9 @@ type tableDispatcher struct {
 }
 
 func (t *tableDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
-	hash := crc32.NewIEEE()
+	var h hash.PositionInertia
 	// distribute partition by table
-	_, err := hash.Write([]byte(row.Table.Schema))
-	if err != nil {
-		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-	}
-	_, err = hash.Write([]byte(row.Table.Table))
-	if err != nil {
-		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-	}
-	return int32(hash.Sum32() % uint32(t.partitionNum))
+	h.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
+	h ^= h<<4 | h>>4
+	return int32(byte(h) % byte(t.partitionNum))
 }

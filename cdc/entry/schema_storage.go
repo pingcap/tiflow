@@ -206,7 +206,15 @@ type TableInfo struct {
 	columnsOffset map[int64]int
 	indicesOffset map[int64]int
 	uniqueColumns map[int64]struct{}
-	handleColID   int64
+
+	// only for new row format decoder
+	handleColID int64
+
+	// the mounter will chose this index to output delete events
+	// special value:
+	// -1 : pk is handle
+	// -2 : the table is not eligible
+	HandleIndexID int64
 
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
@@ -224,6 +232,7 @@ func WrapTableInfo(schemaID int64, schemaName string, info *timodel.TableInfo) *
 		indicesOffset: make(map[int64]int, len(info.Indices)),
 		uniqueColumns: make(map[int64]struct{}),
 		handleColID:   -1,
+		HandleIndexID: -2,
 		rowColInfos:   make([]rowcodec.ColInfo, len(info.Columns)),
 	}
 
@@ -234,6 +243,7 @@ func WrapTableInfo(schemaID int64, schemaName string, info *timodel.TableInfo) *
 		isPK := (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == timodel.ExtraHandleID
 		if isPK {
 			ti.handleColID = col.ID
+			ti.HandleIndexID = -1
 			ti.uniqueColumns[col.ID] = struct{}{}
 			uniqueIndexNum++
 		}
@@ -265,8 +275,37 @@ func WrapTableInfo(schemaID int64, schemaName string, info *timodel.TableInfo) *
 			}
 		}
 	}
-
+	ti.findHandleIndex()
 	return ti
+}
+
+func (ti *TableInfo) findHandleIndex() {
+	if ti.HandleIndexID == -1 {
+		// pk is handle
+		return
+	}
+	handleIndexOffset := -1
+	for i, idx := range ti.Indices {
+		if !ti.IsIndexUnique(idx) {
+			continue
+		}
+		if idx.Primary {
+			handleIndexOffset = i
+			break
+		}
+		if handleIndexOffset < 0 {
+			handleIndexOffset = i
+		} else {
+			if len(ti.Indices[handleIndexOffset].Columns) > len(ti.Indices[i].Columns) ||
+				(len(ti.Indices[handleIndexOffset].Columns) == len(ti.Indices[i].Columns) &&
+					ti.Indices[handleIndexOffset].ID > ti.Indices[i].ID) {
+				handleIndexOffset = i
+			}
+		}
+	}
+	if handleIndexOffset >= 0 {
+		ti.HandleIndexID = ti.Indices[handleIndexOffset].ID
+	}
 }
 
 // GetColumnInfo returns the column info by ID

@@ -13,12 +13,23 @@
 
 package dispatcher
 
-import "github.com/pingcap/ticdc/cdc/model"
+import (
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/hash"
+)
 
-type rowIDDispatcher struct {
+type indexValueDispatcher struct {
 	partitionNum int32
 }
 
-func (r *rowIDDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
-	return int32(uint64(row.RowID) % uint64(r.partitionNum))
+func (r *indexValueDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
+	var h hash.PositionInertia
+	h.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
+	for name, col := range row.Columns {
+		if col.Flag.IsHandleKey() {
+			h.Write([]byte(name), []byte(model.ColumnValueString(col.Value)))
+		}
+	}
+	h ^= h<<4 | h>>4
+	return int32(byte(h) % byte(r.partitionNum))
 }

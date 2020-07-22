@@ -15,6 +15,7 @@ package model
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
@@ -42,7 +43,8 @@ type ColumnFlagType util.Flag
 
 const (
 	// BinaryFlag means col charset is binary
-	BinaryFlag ColumnFlagType = 1 << ColumnFlagType(iota)
+	BinaryFlag    ColumnFlagType = 1 << ColumnFlagType(iota)
+	HandleKeyFlag ColumnFlagType = 1 << ColumnFlagType(iota)
 )
 
 //SetIsBinary set BinaryFlag
@@ -58,6 +60,18 @@ func (b *ColumnFlagType) UnsetIsBinary() {
 //IsBinary show whether BinaryFlag is set
 func (b *ColumnFlagType) IsBinary() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(BinaryFlag))
+}
+
+func (b *ColumnFlagType) SetIsHandleKey() {
+	(*util.Flag)(b).Add(util.Flag(HandleKeyFlag))
+}
+
+func (b *ColumnFlagType) UnsetIsHandleKey() {
+	(*util.Flag)(b).Remove(util.Flag(HandleKeyFlag))
+}
+
+func (b *ColumnFlagType) IsHandleKey() bool {
+	return (*util.Flag)(b).HasAll(util.Flag(HandleKeyFlag))
 }
 
 // TableName represents name of a table, includes table name and schema name.
@@ -115,6 +129,49 @@ type Column struct {
 	WhereHandle *bool          `json:"h,omitempty"`
 	Flag        ColumnFlagType `json:"f"`
 	Value       interface{}    `json:"v"`
+}
+
+func ColumnValueString(c interface{}) string {
+	var data string
+	switch v := c.(type) {
+	case nil:
+		data = "null"
+	case bool:
+		if v {
+			data = "1"
+		} else {
+			data = "0"
+		}
+	case int:
+		data = strconv.FormatInt(int64(v), 10)
+	case int8:
+		data = strconv.FormatInt(int64(v), 10)
+	case int16:
+		data = strconv.FormatInt(int64(v), 10)
+	case int32:
+		data = strconv.FormatInt(int64(v), 10)
+	case int64:
+		data = strconv.FormatInt(int64(v), 10)
+	case uint8:
+		data = strconv.FormatUint(uint64(v), 10)
+	case uint16:
+		data = strconv.FormatUint(uint64(v), 10)
+	case uint32:
+		data = strconv.FormatUint(uint64(v), 10)
+	case uint64:
+		data = strconv.FormatUint(uint64(v), 10)
+	case float32:
+		data = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		data = strconv.FormatFloat(float64(v), 'f', -1, 64)
+	case string:
+		data = v
+	case []byte:
+		data = string(v)
+	default:
+		data = fmt.Sprintf("%v", v)
+	}
+	return data
 }
 
 // ColumnInfo represents the name and type information passed to the sink

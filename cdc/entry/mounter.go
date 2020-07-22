@@ -18,9 +18,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"math/rand"
-	"strconv"
 	"strings"
 	"time"
 
@@ -420,15 +418,51 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 			}
 		}
 	}
+	err := setHandleKeyFlag(tableInfo, values)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	event.Delete = row.Delete
 	event.Columns = values
 	event.Keys = genMultipleKeys(tableInfo.TableInfo, values, quotes.QuoteSchema(event.Table.Schema, event.Table.Table))
 	return event, nil
 }
 
+func setHandleKeyFlag(tableInfo *TableInfo, colValues map[string]*model.Column) error {
+	switch tableInfo.HandleIndexID {
+	case -2:
+		log.Fatal("this table is not a eligible", zap.Int64("tableID", tableInfo.ID))
+	case -1:
+		// pk is handle
+		if !tableInfo.PKIsHandle {
+			log.Fatal("the pk of this table is not handle", zap.Int64("tableID", tableInfo.ID))
+		}
+		for _, colInfo := range tableInfo.Columns {
+			if mysql.HasPriKeyFlag(colInfo.Flag) {
+				colValues[colInfo.Name.O].Flag.SetIsHandleKey()
+				break
+			}
+		}
+	default:
+		handleIndexInfo, exist := tableInfo.GetIndexInfo(tableInfo.HandleIndexID)
+		if !exist {
+			return errors.NotFoundf("handle index info(%d) in table(%d)", tableInfo.HandleIndexID, tableInfo.ID)
+		}
+		for _, colInfo := range handleIndexInfo.Columns {
+			colName := tableInfo.Columns[colInfo.Offset].Name.O
+			colValues[colName].Flag.SetIsHandleKey()
+		}
+	}
+	return nil
+}
+
 func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry) (*model.RowChangedEvent, error) {
 	// skip set index KV
 	if !idx.Delete {
+		return nil, nil
+	}
+	// skip the index which not handle
+	if idx.IndexID != tableInfo.HandleIndexID {
 		return nil, nil
 	}
 
@@ -454,12 +488,14 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 			return nil, errors.Trace(err)
 		}
 		whereHandle := true
-		values[idxCol.Name.O] = &model.Column{
+		col := &model.Column{
 			Type:        tableInfo.Columns[idxCol.Offset].Tp,
 			WhereHandle: &whereHandle,
 			Value:       value,
 			Flag:        transColumnFlag(tableInfo.Columns[idxCol.Offset]),
 		}
+		col.Flag.SetIsHandleKey()
+		values[idxCol.Name.O] = col
 	}
 	return &model.RowChangedEvent{
 		StartTs:  idx.StartTs,
@@ -599,50 +635,6 @@ func genMultipleKeys(ti *timodel.TableInfo, values map[string]*model.Column, tab
 	return multipleKeys
 }
 
-func columnValue(value interface{}) string {
-	var data string
-	switch v := value.(type) {
-	case nil:
-		data = "null"
-	case bool:
-		if v {
-			data = "1"
-		} else {
-			data = "0"
-		}
-	case int:
-		data = strconv.FormatInt(int64(v), 10)
-	case int8:
-		data = strconv.FormatInt(int64(v), 10)
-	case int16:
-		data = strconv.FormatInt(int64(v), 10)
-	case int32:
-		data = strconv.FormatInt(int64(v), 10)
-	case int64:
-		data = strconv.FormatInt(int64(v), 10)
-	case uint8:
-		data = strconv.FormatUint(uint64(v), 10)
-	case uint16:
-		data = strconv.FormatUint(uint64(v), 10)
-	case uint32:
-		data = strconv.FormatUint(uint64(v), 10)
-	case uint64:
-		data = strconv.FormatUint(uint64(v), 10)
-	case float32:
-		data = strconv.FormatFloat(float64(v), 'f', -1, 32)
-	case float64:
-		data = strconv.FormatFloat(float64(v), 'f', -1, 64)
-	case string:
-		data = v
-	case []byte:
-		data = string(v)
-	default:
-		data = fmt.Sprintf("%v", v)
-	}
-
-	return data
-}
-
 func transColumnFlag(col *timodel.ColumnInfo) model.ColumnFlagType {
 	var flag model.ColumnFlagType
 	if col.Charset == "binary" {
@@ -659,7 +651,7 @@ func genKeyList(table string, columns []*timodel.ColumnInfo, values map[string]*
 			log.L().Debug("ignore null value", zap.String("column", col.Name.O), zap.String("table", table))
 			continue // ignore `null` value.
 		}
-		buf.WriteString(columnValue(val.Value))
+		buf.WriteString(model.ColumnValueString(val.Value))
 	}
 	if buf.Len() == 0 {
 		log.L().Debug("all value are nil, no key generated", zap.String("table", table))
