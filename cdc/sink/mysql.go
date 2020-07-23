@@ -85,25 +85,7 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
-		key := *row.Table
-		txns := s.unresolvedTxns[key]
-		if len(txns) == 0 || txns[len(txns)-1].StartTs != row.StartTs {
-			// fail-fast check
-			if len(txns) != 0 && txns[len(txns)-1].CommitTs > row.CommitTs {
-				log.Fatal("the commitTs of the emit row is less than the received row",
-					zap.Stringer("table", row.Table),
-					zap.Uint64("emit row startTs", row.StartTs),
-					zap.Uint64("emit row commitTs", row.CommitTs),
-					zap.Uint64("last received row startTs", txns[len(txns)-1].StartTs),
-					zap.Uint64("last received row commitTs", txns[len(txns)-1].CommitTs))
-			}
-			txns = append(txns, &model.Txn{
-				StartTs:  row.StartTs,
-				CommitTs: row.CommitTs,
-			})
-			s.unresolvedTxns[key] = txns
-		}
-		txns[len(txns)-1].Append(row)
+		appendRowChangeEvent(s.unresolvedTxns, row)
 	}
 	return nil
 }
@@ -215,6 +197,28 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
 	return nil
+}
+
+func appendRowChangeEvent(unresolvedTxns map[model.TableName][]*model.Txn, row *model.RowChangedEvent) {
+	key := *row.Table
+	txns := unresolvedTxns[key]
+	if len(txns) == 0 || txns[len(txns)-1].StartTs != row.StartTs {
+		// fail-fast check
+		if len(txns) != 0 && txns[len(txns)-1].CommitTs > row.CommitTs {
+			log.Fatal("the commitTs of the emit row is less than the received row",
+				zap.Stringer("table", row.Table),
+				zap.Uint64("emit row startTs", row.StartTs),
+				zap.Uint64("emit row commitTs", row.CommitTs),
+				zap.Uint64("last received row startTs", txns[len(txns)-1].StartTs),
+				zap.Uint64("last received row commitTs", txns[len(txns)-1].CommitTs))
+		}
+		txns = append(txns, &model.Txn{
+			StartTs:  row.StartTs,
+			CommitTs: row.CommitTs,
+		})
+		unresolvedTxns[key] = txns
+	}
+	txns[len(txns)-1].Append(row)
 }
 
 func splitResolvedTxn(
