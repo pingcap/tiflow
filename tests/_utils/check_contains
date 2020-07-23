@@ -3,7 +3,7 @@
 set -eu
 OUT_DIR=/tmp/tidb_cdc_test
 
-if ! grep -Fq "$1" "$OUT_DIR/sql_res.$TEST_NAME.txt"; then
+if ! grep -Eq "$1" "$OUT_DIR/sql_res.$TEST_NAME.txt"; then
     echo "TEST FAILED: OUTPUT DOES NOT CONTAIN '$1'"
     echo "____________________________________"
     cat "$OUT_DIR/sql_res.$TEST_NAME.txt"
