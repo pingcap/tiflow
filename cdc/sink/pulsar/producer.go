@@ -59,13 +59,29 @@ type Producer struct {
 	partitions int
 }
 
-// SendMessage send key-value msg to target partition.
-func (p *Producer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
+// AsyncSendMessage async send key-value msg to target partition.
+func (p *Producer) AsyncSendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
 	p.producer.SendAsync(ctx, &pulsar.ProducerMessage{
 		Payload:    value,
 		Key:        string(key),
 		Properties: map[string]string{route: strconv.Itoa(int(partition))},
 	}, p.errors)
+	return nil
+}
+
+// SyncSendMessage sync send key-value msg to target partition.
+func (p *Producer) SyncSendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
+	_, err := p.producer.Send(ctx, &pulsar.ProducerMessage{
+		Payload:    value,
+		Key:        string(key),
+		Properties: map[string]string{route: strconv.Itoa(int(partition))},
+	})
+	if err != nil {
+		select {
+		case p.errCh <- err:
+		default:
+		}
+	}
 	return nil
 }
 
