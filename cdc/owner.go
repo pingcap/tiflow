@@ -45,10 +45,13 @@ import (
 
 // Owner manages the cdc cluster
 type Owner struct {
-	done                      chan struct{}
-	session                   *concurrency.Session
-	changeFeeds               map[model.ChangeFeedID]*changeFeed
-	failedFeeds               map[model.ChangeFeedID]struct{}
+	done        chan struct{}
+	session     *concurrency.Session
+	changeFeeds map[model.ChangeFeedID]*changeFeed
+	// failInitFeeds record changefeeds that meet error during initialization
+	failInitFeeds map[model.ChangeFeedID]struct{}
+	// stoppedFeeds record changefeeds that meet running error
+	stoppedFeeds              map[model.ChangeFeedID]*model.ChangeFeedStatus
 	rebalanceTigger           map[model.ChangeFeedID]bool
 	rebalanceForAllChangefeed bool
 	manualScheduleCommand     map[model.ChangeFeedID][]*model.MoveTableJob
@@ -88,7 +91,8 @@ func NewOwner(pdClient pd.Client, credential *security.Credential, sess *concurr
 		pdClient:              pdClient,
 		credential:            credential,
 		changeFeeds:           make(map[model.ChangeFeedID]*changeFeed),
-		failedFeeds:           make(map[model.ChangeFeedID]struct{}),
+		failInitFeeds:         make(map[model.ChangeFeedID]struct{}),
+		stoppedFeeds:          make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
 		captures:              make(map[model.CaptureID]*model.CaptureInfo),
 		rebalanceTigger:       make(map[model.ChangeFeedID]bool),
 		manualScheduleCommand: make(map[model.ChangeFeedID][]*model.MoveTableJob),
@@ -408,16 +412,16 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			return err
 		}
 		if cfInfo.State == model.StateFailed {
-			if _, ok := o.failedFeeds[changeFeedID]; ok {
+			if _, ok := o.failInitFeeds[changeFeedID]; ok {
 				continue
 			}
 			log.Warn("changefeed is not in normal state", zap.String("changefeed", changeFeedID))
-			o.failedFeeds[changeFeedID] = struct{}{}
+			o.failInitFeeds[changeFeedID] = struct{}{}
 			continue
 		}
-		if _, ok := o.failedFeeds[changeFeedID]; ok {
+		if _, ok := o.failInitFeeds[changeFeedID]; ok {
 			log.Info("changefeed recovered from failure", zap.String("changefeed", changeFeedID))
-			delete(o.failedFeeds, changeFeedID)
+			delete(o.failInitFeeds, changeFeedID)
 		}
 		needSave, canInit := cfInfo.CheckErrorHistory()
 		if needSave {
@@ -443,7 +447,15 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			return err
 		}
 		if status != nil && (status.AdminJobType == model.AdminStop || status.AdminJobType == model.AdminRemove) {
-			continue
+			switch status.AdminJobType {
+			case model.AdminStop:
+				if _, ok := o.stoppedFeeds[changeFeedID]; !ok {
+					o.stoppedFeeds[changeFeedID] = status
+				}
+				continue
+			case model.AdminRemove:
+				continue
+			}
 		}
 		checkpointTs := cfInfo.GetCheckpointTs(status)
 
@@ -474,6 +486,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			return errors.Annotatef(err, "create change feed %s", changeFeedID)
 		}
 		o.changeFeeds[changeFeedID] = newCf
+		delete(o.stoppedFeeds, changeFeedID)
 	}
 	o.adminJobsLock.Lock()
 	for cfID, err := range errorFeeds {
@@ -521,6 +534,8 @@ func (o *Owner) balanceTables(ctx context.Context) error {
 }
 
 func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
+	// if no active changefeeds, we can skip both changefeed status flush and
+	// GC safepoint update, the GC safepoint will keep the old value.
 	if len(o.changeFeeds) == 0 {
 		return nil
 	}
@@ -535,6 +550,12 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	for _, status := range o.stoppedFeeds {
+		if status.CheckpointTs < minCheckpointTs {
+			minCheckpointTs = status.CheckpointTs
+		}
 	}
 	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 	if err != nil {
@@ -604,6 +625,12 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
 	err = cf.sink.Close()
 	log.Info("stop changefeed sink", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
+	// Only need to process stoppedFeeds with `AdminStop` command here.
+	// For `AdminResume`, we remove stopped feed in changefeed initialization phase.
+	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
+	if job.Type == model.AdminStop {
+		o.stoppedFeeds[job.CfID] = cf.status
+	}
 	delete(o.changeFeeds, job.CfID)
 	return nil
 }
@@ -727,6 +754,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 					if err != nil {
 						return errors.Trace(err)
 					}
+					delete(o.stoppedFeeds, job.CfID)
 				default:
 					return errors.Errorf("changefeed in abnormal state: %s, replication status: %+v", feedState, status)
 				}
