@@ -394,11 +394,10 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 
 	event := &model.RowChangedEvent{
-		StartTs:       row.StartTs,
-		CommitTs:      row.CRTs,
-		RowID:         row.RecordID,
-		SchemaID:      tableInfo.SchemaID,
-		TableUpdateTs: tableInfo.UpdateTS,
+		StartTs:          row.StartTs,
+		CommitTs:         row.CRTs,
+		RowID:            row.RecordID,
+		TableInfoVersion: tableInfo.TableInfoVersion,
 		Table: &model.TableName{
 			Schema:    tableInfo.TableName.Schema,
 			Table:     tableInfo.TableName.Table,
@@ -469,7 +468,6 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		StartTs:  idx.StartTs,
 		CommitTs: idx.CRTs,
 		RowID:    idx.RecordID,
-		SchemaID: tableInfo.SchemaID,
 		Table: &model.TableName{
 			Schema: tableInfo.TableName.Schema,
 			Table:  tableInfo.TableName.Table,

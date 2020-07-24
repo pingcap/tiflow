@@ -64,7 +64,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 		State:      timodel.JobStateSynced,
 		SchemaID:   1,
 		Type:       timodel.ActionDropSchema,
-		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 3, FinishedTS: 124},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 3, DBInfo: dbInfo, FinishedTS: 124},
 		Query:      "drop database test",
 	}
 	err = snap.handleDDL(job)
@@ -93,7 +93,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 		State:      timodel.JobStateSynced,
 		SchemaID:   1,
 		Type:       timodel.ActionDropSchema,
-		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, FinishedTS: 123},
+		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
 		Query:      "drop database test",
 	}
 	err = snap.handleDDL(job)
@@ -274,11 +274,6 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 	tbName := timodel.NewCIStr("T")
 	newTbName := timodel.NewCIStr("RT")
 
-	// check rollback done job
-	job := &timodel.Job{ID: 1, State: timodel.JobStateRollbackDone}
-	err := snap.handleDDL(job)
-	c.Assert(err, IsNil)
-
 	// db info
 	dbInfo := &timodel.DBInfo{
 		ID:    2,
@@ -320,7 +315,7 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 		{name: "truncateTable", jobID: 10, schemaID: 2, tableID: 6, jobType: timodel.ActionTruncateTable, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 5, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "truncate table T;", resultQuery: "truncate table T;", schemaName: dbInfo.Name.O, tableName: tblInfo.Name.O},
 		{name: "renameTable", jobID: 11, schemaID: 2, tableID: 10, jobType: timodel.ActionRenameTable, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 6, DBInfo: nil, TableInfo: tblInfo, FinishedTS: 123}, query: "rename table T to RT;", resultQuery: "rename table T to RT;", schemaName: dbInfo.Name.O, tableName: newTbName.O},
 		{name: "dropTable", jobID: 12, schemaID: 2, tableID: 12, jobType: timodel.ActionDropTable, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 7, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop table RT;", resultQuery: "drop table RT;", schemaName: dbInfo.Name.O, tableName: newTbName.O},
-		{name: "dropSchema", jobID: 13, schemaID: 2, tableID: 0, jobType: timodel.ActionDropSchema, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 8, DBInfo: nil, TableInfo: nil, FinishedTS: 123}, query: "drop database test;", resultQuery: "drop database test;", schemaName: dbInfo.Name.O, tableName: ""},
+		{name: "dropSchema", jobID: 13, schemaID: 2, tableID: 0, jobType: timodel.ActionDropSchema, binlogInfo: &timodel.HistoryInfo{SchemaVersion: 8, DBInfo: dbInfo, TableInfo: nil, FinishedTS: 123}, query: "drop database test;", resultQuery: "drop database test;", schemaName: dbInfo.Name.O, tableName: ""},
 	}
 
 	for _, testCase := range testCases {
@@ -335,7 +330,7 @@ func (t *schemaSuite) TestHandleDDL(c *C) {
 			tblInfo.Name = newTbName
 		}
 
-		job = &timodel.Job{
+		job := &timodel.Job{
 			ID:         testCase.jobID,
 			State:      timodel.JobStateDone,
 			SchemaID:   testCase.schemaID,
@@ -415,7 +410,7 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *C
 		},
 		PKIsHandle: false,
 	}
-	info := WrapTableInfo(1, "", &t)
+	info := WrapTableInfo(1, "", 0, &t)
 	cols := info.GetUniqueKeys()
 	c.Assert(cols, DeepEquals, [][]string{
 		{"id"}, {"name"},
@@ -455,7 +450,7 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
 		},
 		PKIsHandle: true,
 	}
-	info := WrapTableInfo(1, "", &t)
+	info := WrapTableInfo(1, "", 0, &t)
 	cols := info.GetUniqueKeys()
 	c.Assert(cols, DeepEquals, [][]string{
 		{"uid"}, {"job"},
@@ -549,7 +544,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 		State:      timodel.JobStateSynced,
 		SchemaID:   1,
 		Type:       timodel.ActionDropSchema,
-		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 140},
+		BinlogInfo: &timodel.HistoryInfo{FinishedTS: 140, DBInfo: dbInfo},
 	}
 
 	err = storage.HandleDDLJob(job)
