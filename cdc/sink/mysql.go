@@ -718,6 +718,9 @@ func prepareReplace(schema, table string, cols map[string]*model.Column) (string
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols))
 	for k, v := range cols {
+		if v.Flag.IsGeneratedColumn() {
+			continue
+		}
 		columnNames = append(columnNames, k)
 		args = append(args, v.Value)
 	}

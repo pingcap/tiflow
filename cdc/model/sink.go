@@ -43,8 +43,9 @@ type ColumnFlagType util.Flag
 
 const (
 	// BinaryFlag means col charset is binary
-	BinaryFlag    ColumnFlagType = 1 << ColumnFlagType(iota)
-	HandleKeyFlag ColumnFlagType = 1 << ColumnFlagType(iota)
+	BinaryFlag          ColumnFlagType = 1 << ColumnFlagType(iota)
+	HandleKeyFlag       ColumnFlagType = 1 << ColumnFlagType(iota)
+	GeneratedColumnFlag ColumnFlagType = 1 << ColumnFlagType(iota)
 )
 
 //SetIsBinary set BinaryFlag
@@ -72,6 +73,18 @@ func (b *ColumnFlagType) UnsetIsHandleKey() {
 
 func (b *ColumnFlagType) IsHandleKey() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(HandleKeyFlag))
+}
+
+func (b *ColumnFlagType) SetIsGeneratedColumn() {
+	(*util.Flag)(b).Add(util.Flag(GeneratedColumnFlag))
+}
+
+func (b *ColumnFlagType) UnsetIsGeneratedColumn() {
+	(*util.Flag)(b).Remove(util.Flag(GeneratedColumnFlag))
+}
+
+func (b *ColumnFlagType) IsGeneratedColumn() bool {
+	return (*util.Flag)(b).HasAll(util.Flag(GeneratedColumnFlag))
 }
 
 // TableName represents name of a table, includes table name and schema name.

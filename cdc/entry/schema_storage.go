@@ -335,9 +335,13 @@ func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
 	return ti.handleColID, ti.rowColInfos
 }
 
-// IsColWritable returns is the col is writeable
-func (ti *TableInfo) IsColWritable(col *timodel.ColumnInfo) bool {
-	return col.State == timodel.StatePublic && !col.IsGenerated()
+// IsColCDCVisible returns is the col is visible for CDC
+func (ti *TableInfo) IsColCDCVisible(col *timodel.ColumnInfo) bool {
+	// this column is a virtual generated column
+	if col.IsGenerated() && !col.GeneratedStored {
+		return false
+	}
+	return col.State == timodel.StatePublic
 }
 
 // GetUniqueKeys returns all unique keys of the table as a slice of column names
@@ -394,7 +398,12 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
 	}
 	if indexInfo.Unique {
 		for _, col := range indexInfo.Columns {
-			if !mysql.HasNotNullFlag(ti.Columns[col.Offset].Flag) {
+			colInfo := ti.Columns[col.Offset]
+			if !mysql.HasNotNullFlag(colInfo.Flag) {
+				return false
+			}
+			// this column is a virtual generated column
+			if colInfo.IsGenerated() && !colInfo.GeneratedStored {
 				return false
 			}
 		}

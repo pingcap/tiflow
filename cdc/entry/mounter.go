@@ -367,7 +367,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		if !exist {
 			return nil, errors.NotFoundf("column info, colID: %d", index)
 		}
-		if !row.Delete && !tableInfo.IsColWritable(colInfo) {
+		if !tableInfo.IsColCDCVisible(colInfo) {
 			continue
 		}
 		colName := colInfo.Name.O
@@ -408,7 +408,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	if !row.Delete {
 		for _, col := range tableInfo.Columns {
 			_, ok := values[col.Name.O]
-			if !ok && tableInfo.IsColWritable(col) {
+			if !ok && tableInfo.IsColCDCVisible(col) {
 				column := &model.Column{
 					Type:  col.Tp,
 					Value: getDefaultOrZeroValue(col),
@@ -643,6 +643,9 @@ func transColumnFlag(col *timodel.ColumnInfo) model.ColumnFlagType {
 	var flag model.ColumnFlagType
 	if col.Charset == "binary" {
 		flag.SetIsBinary()
+	}
+	if col.IsGenerated() {
+		flag.SetIsGeneratedColumn()
 	}
 	return flag
 }
