@@ -413,6 +413,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 
 	var err error
+	// Decode changed columns.
 	var changedCols map[string]*model.Column
 	if len(row.ChangedRow) != 0 {
 		changedCols, err = datum2Column(tableInfo, row.ChangedRow)
@@ -420,6 +421,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 			return nil, errors.Trace(err)
 		}
 	}
+	// Try to decode columns, if row represents a delete event, columns should be == changed columns
 	var cols map[string]*model.Column
 	if !row.Delete {
 		cols, err = datum2Column(tableInfo, row.Row)
@@ -428,6 +430,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		}
 	} else {
 		cols = changedCols
+		changedCols = nil
 	}
 	var partitionID int64
 	if tableInfo.GetPartitionInfo() != nil {
