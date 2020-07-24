@@ -444,8 +444,8 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 		if p.isStopped() {
 			continue
 		}
-		workload := make(model.TaskWorkload, len(p.tables))
 		p.stateMu.Lock()
+		workload := make(model.TaskWorkload, len(p.tables))
 		for _, table := range p.tables {
 			workload[table.id] = table.workload
 		}
@@ -823,6 +823,11 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		case model.SortInMemory:
 			sorter = puller.NewEntrySorter()
 		case model.SortInFile:
+			err := util.IsDirAndWritable(p.changefeed.SortDir)
+			if err != nil {
+				p.errCh <- errors.Annotate(err, "sort dir check")
+				return
+			}
 			sorter = puller.NewFileSorter(p.changefeed.SortDir)
 		default:
 			p.errCh <- errors.Errorf("unknown sort engine %s", p.changefeed.Engine)

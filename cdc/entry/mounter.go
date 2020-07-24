@@ -231,6 +231,10 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		return nil, errors.Trace(err)
 	}
 	row, err := func() (*model.RowChangedEvent, error) {
+		if snap.IsIneligibleTableID(physicalTableID) {
+			log.Debug("skip the DML of ineligible table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
+			return nil, nil
+		}
 		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
 		if !exist {
 			if snap.IsTruncateTableID(physicalTableID) {
@@ -433,7 +437,8 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 
 	indexInfo, exist := tableInfo.GetIndexInfo(idx.IndexID)
 	if !exist {
-		return nil, errors.NotFoundf("index info %d", idx.IndexID)
+		log.Warn("index info not found", zap.Int64("indexID", idx.IndexID))
+		return nil, nil
 	}
 
 	if !tableInfo.IsIndexUnique(indexInfo) {
