@@ -696,8 +696,9 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	}
 	if s.cyclic != nil && len(rows) > 0 {
 		// Write mark table with the current replica ID.
+		row := rows[0]
 		updateMark := s.cyclic.UdpateSourceTableCyclicMark(
-			rows[0].Table.Schema, rows[0].Table.Table, uint64(bucket), replicaID)
+			row.Table.Schema, row.Table.Table, uint64(bucket), replicaID, row.StartTs)
 		sqls = append(sqls, updateMark)
 		values = append(values, nil)
 	}
