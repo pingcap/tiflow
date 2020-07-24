@@ -415,7 +415,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			// file sorter outputs all events in this rotate round.
 			rowCount += 1
 			if rowCount%defaultAutoResolvedRows == 0 {
-				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.CRTs))
+				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.CRTs-1))
 			}
 		} else {
 			lastSortedFileUpdated = true
