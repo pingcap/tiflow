@@ -314,14 +314,14 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	batchSize := 0
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
-
+	var resolvedTs uint64
 	flushToProducer := func() error {
 		if k.protocol == codec.ProtocolCanal {
 			return k.statistics.RecordBatchExecution(func() (int, error) {
 				if batchSize == 0 {
 					return 0, nil
 				}
-				_, resolvedTxnsMap := splitResolvedTxn(k.partitionResolvedTs[partition], k.partitionTxns[partition])
+				_, resolvedTxnsMap := splitResolvedTxn(resolvedTs, k.partitionTxns[partition])
 				if len(resolvedTxnsMap) == 0 {
 					return 0, nil
 				}
@@ -375,6 +375,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		}
 		if e.row == nil {
 			if e.resolvedTs != 0 {
+				resolvedTs = e.resolvedTs
 				if err := flushToProducer(); err != nil {
 					return errors.Trace(err)
 				}
