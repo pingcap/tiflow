@@ -93,7 +93,7 @@ func (s *Server) UpdateServiceGCSafePoint(ctx context.Context, request pdpb.Upda
     minSafePoint := atomic.LoadUint64(&s.minSafePoint)
 
     // Only save the safe point if it's greater than the previous one
-    if safePoint > minSafePoint {
+    if safePoint >= minSafePoint {
         if err := s.storage.SaveGCSafePoint(serviceID,
             safePoint, ttl); err != nil {
             return nil, err
