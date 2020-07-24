@@ -340,9 +340,15 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			return errors.Trace(err)
 		}
 		batchSize++
-		// This is only a temporary fix so that the Avro encoder does not overflow.
-		// Pending further refactoring
-		if encoder.Size() >= batchSizeLimit || op == codec.EncoderNeedSyncWrite || op == codec.EncoderNeedAsyncWrite {
+
+		if encoder.Size() >= batchSizeLimit {
+			if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
+				return errors.Trace(err)
+			}
+			continue
+		}
+
+		if op == codec.EncoderNeedSyncWrite || op == codec.EncoderNeedAsyncWrite {
 			if err := flushToProducer(op); err != nil {
 				return errors.Trace(err)
 			}
