@@ -15,6 +15,8 @@ package codec
 
 import (
 	"context"
+	"time"
+
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
@@ -24,6 +26,8 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +40,7 @@ var _ = check.Suite(&avroBatchEncoderSuite{})
 func (s *avroBatchEncoderSuite) SetUpSuite(c *check.C) {
 	startHTTPInterceptForTestingRegistry(c)
 
-	manager, err := NewAvroSchemaManager(context.Background(), "http://127.0.0.1:8081", "-value")
+	manager, err := NewAvroSchemaManager(context.Background(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 
 	s.encoder = &AvroEventBatchEncoder{
@@ -61,7 +65,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 			{"name": "mybool", "type": ["null", "int"], "default": null},
 			{"name": "myfloat", "type": ["null", "float"], "default": null},
 			{"name": "mybytes", "type": ["null", "bytes"], "default": null},
-			{"name": "ts", "type": ["null", "long.timestamp-millis"], "default": null}
+			{"name": "ts", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null}
           ]
         }`)
 
@@ -82,7 +86,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 		"mybool":  {Value: uint8(1), Type: mysql.TypeTiny},
 		"myfloat": {Value: float32(3.14), Type: mysql.TypeFloat},
 		"mybytes": {Value: []byte("Hello World"), Type: mysql.TypeBlob},
-		//"ts":      {Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
+		"ts":      {Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
 	})
 	c.Assert(err, check.IsNil)
 

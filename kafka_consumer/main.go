@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/security"
 
 	"github.com/Shopify/sarama"
 	"github.com/google/uuid"
@@ -52,9 +53,10 @@ var (
 
 	downstreamURIStr string
 
-	logPath  string
-	logLevel string
-	timezone string
+	logPath       string
+	logLevel      string
+	timezone      string
+	ca, cert, key string
 )
 
 func init() {
@@ -65,6 +67,10 @@ func init() {
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
 	flag.StringVar(&timezone, "tz", "System", "Specify time zone of Kafka consumer")
+	flag.StringVar(&ca, "ca", "", "CA certificate path for Kafka SSL connection")
+	flag.StringVar(&cert, "cert", "", "Certificate path for Kafka SSL connection")
+	flag.StringVar(&key, "key", "", "Private key path for Kafka SSL connection")
+
 	flag.Parse()
 
 	err := util.InitLogger(&util.Config{
@@ -173,6 +179,18 @@ func newSaramaConfig() (*sarama.Config, error) {
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+
+	if len(ca) != 0 {
+		config.Net.TLS.Enable = true
+		config.Net.TLS.Config, err = (&security.Credential{
+			CAPath:   ca,
+			CertPath: cert,
+			KeyPath:  key,
+		}).ToTLSConfig()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
 
 	return config, err
 }
