@@ -42,9 +42,11 @@ const (
 type ColumnFlagType util.Flag
 
 const (
-	// BinaryFlag means col charset is binary
-	BinaryFlag          ColumnFlagType = 1 << ColumnFlagType(iota)
-	HandleKeyFlag       ColumnFlagType = 1 << ColumnFlagType(iota)
+	// BinaryFlag means the column charset is binary
+	BinaryFlag ColumnFlagType = 1 << ColumnFlagType(iota)
+	// HandleKeyFlag means the column selected as the handle key
+	HandleKeyFlag ColumnFlagType = 1 << ColumnFlagType(iota)
+	// GeneratedColumnFlag means the column is a generated column
 	GeneratedColumnFlag ColumnFlagType = 1 << ColumnFlagType(iota)
 )
 
@@ -63,26 +65,32 @@ func (b *ColumnFlagType) IsBinary() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(BinaryFlag))
 }
 
+//SetIsHandleKey set HandleKey
 func (b *ColumnFlagType) SetIsHandleKey() {
 	(*util.Flag)(b).Add(util.Flag(HandleKeyFlag))
 }
 
+//UnsetIsHandleKey unset HandleKey
 func (b *ColumnFlagType) UnsetIsHandleKey() {
 	(*util.Flag)(b).Remove(util.Flag(HandleKeyFlag))
 }
 
+//IsHandleKey show whether HandleKey is set
 func (b *ColumnFlagType) IsHandleKey() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(HandleKeyFlag))
 }
 
+//SetIsGeneratedColumn set GeneratedColumn
 func (b *ColumnFlagType) SetIsGeneratedColumn() {
 	(*util.Flag)(b).Add(util.Flag(GeneratedColumnFlag))
 }
 
+//UnsetIsGeneratedColumn unset GeneratedColumn
 func (b *ColumnFlagType) UnsetIsGeneratedColumn() {
 	(*util.Flag)(b).Remove(util.Flag(GeneratedColumnFlag))
 }
 
+//IsGeneratedColumn show whether GeneratedColumn is set
 func (b *ColumnFlagType) IsGeneratedColumn() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(GeneratedColumnFlag))
 }
@@ -144,6 +152,7 @@ type Column struct {
 	Value       interface{}    `json:"v"`
 }
 
+// ColumnValueString returns a string representation of the column value
 func ColumnValueString(c interface{}) string {
 	var data string
 	switch v := c.(type) {
