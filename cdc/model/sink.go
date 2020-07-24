@@ -146,7 +146,9 @@ type RowChangedEvent struct {
 
 // Column represents a column value in row changed event
 type Column struct {
-	Type        byte           `json:"t"`
+	Type byte `json:"t"`
+	// WhereHandle is deprecation
+	// WhereHandle is instead by HandleKey in Flag
 	WhereHandle *bool          `json:"h,omitempty"`
 	Flag        ColumnFlagType `json:"f"`
 	Value       interface{}    `json:"v"`

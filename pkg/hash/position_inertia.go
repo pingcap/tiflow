@@ -13,7 +13,7 @@
 
 package hash
 
-// PositionInertia is a 8-bits hash
+// PositionInertia is a 8-bits hash which is bytes partitions inertia
 type PositionInertia byte
 
 func (p *PositionInertia) Write(bss ...[]byte) {
