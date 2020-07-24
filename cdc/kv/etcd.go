@@ -27,6 +27,7 @@ import (
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
 	"go.etcd.io/etcd/mvcc/mvccpb"
+	"go.uber.org/zap"
 )
 
 const (
@@ -195,6 +196,32 @@ func (c CDCEtcdClient) GetCaptures(ctx context.Context) (int64, []*model.Capture
 		infos = append(infos, info)
 	}
 	return revision, infos, nil
+}
+
+// CreateChangefeedInfo creates a change feed info into etcd and fails if it is already exists.
+func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.ChangeFeedInfo, changeFeedID string) error {
+	if err := model.ValidateChangefeedID(changeFeedID); err != nil {
+		return err
+	}
+	key := GetEtcdKeyChangeFeedInfo(changeFeedID)
+	value, err := info.Marshal()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	resp, err := c.Client.Txn(ctx).If(
+		clientv3.Compare(clientv3.ModRevision(key), "=", 0),
+	).Then(
+		clientv3.OpPut(key, value),
+	).Commit()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !resp.Succeeded {
+		log.Warn("changefeed already exists, ignore create changefeed",
+			zap.String("changefeedid", changeFeedID))
+		return errors.Annotatef(model.ErrChangeFeedAlreadyExists, "key: %s", key)
+	}
+	return errors.Trace(err)
 }
 
 // SaveChangeFeedInfo stores change feed info into etcd

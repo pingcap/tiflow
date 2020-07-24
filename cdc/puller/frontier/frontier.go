@@ -24,7 +24,7 @@ import (
 
 // Frontier checks resolved event of spans and moves the global resolved ts ahead
 type Frontier interface {
-	Forward(span regionspan.Span, ts uint64)
+	Forward(span regionspan.ComparableSpan, ts uint64)
 	Frontier() uint64
 	String() string
 }
@@ -36,7 +36,7 @@ type spanFrontier struct {
 }
 
 // NewFrontier creates Froniter from the given spans.
-func NewFrontier(checkpointTs uint64, spans ...regionspan.Span) Frontier {
+func NewFrontier(checkpointTs uint64, spans ...regionspan.ComparableSpan) Frontier {
 	// spanFrontier don't support use Nil as the maximum key of End range
 	// So we use set it as util.UpperBoundKey, the means the real use case *should not* have a
 	// End key bigger than util.UpperBoundKey
@@ -67,12 +67,12 @@ func (s *spanFrontier) Frontier() uint64 {
 }
 
 // Forward advances the timestamp for a span.
-func (s *spanFrontier) Forward(span regionspan.Span, ts uint64) {
+func (s *spanFrontier) Forward(span regionspan.ComparableSpan, ts uint64) {
 	span = span.Hack()
 	s.insert(span, ts)
 }
 
-func (s *spanFrontier) insert(span regionspan.Span, ts uint64) {
+func (s *spanFrontier) insert(span regionspan.ComparableSpan, ts uint64) {
 	seekRes := s.spanList.Seek(span.Start)
 
 	// if there is no change in the region span

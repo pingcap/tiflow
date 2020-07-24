@@ -338,3 +338,19 @@ func (s *etcdSuite) TestGetAllTaskWorkload(c *check.C) {
 		c.Assert(workloads, check.DeepEquals, expected[i])
 	}
 }
+
+func (s *etcdSuite) TestCreateChangefeed(c *check.C) {
+	ctx := context.Background()
+	detail := &model.ChangeFeedInfo{
+		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
+	}
+
+	err := s.client.CreateChangefeedInfo(ctx, detail, "bad.id👻")
+	c.Assert(err, check.ErrorMatches, "bad changefeed id.*")
+
+	err = s.client.CreateChangefeedInfo(ctx, detail, "test-id")
+	c.Assert(err, check.IsNil)
+
+	err = s.client.CreateChangefeedInfo(ctx, detail, "test-id")
+	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedAlreadyExists)
+}

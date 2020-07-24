@@ -5,13 +5,15 @@ source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
+TLS_DIR=$( cd $CUR/../_certificates && pwd )
 
 function check_changefeed_state() {
     changefeedid=$1
     expected=$2
-    state=$(cdc cli changefeed query --simple --changefeed-id $changefeedid --pd=http://$UP_PD_HOST:$UP_PD_PORT 2>&1|grep -oE "\"state\": \"[a-z]+\""|tr -d '" '|awk -F':' '{print $(NF)}')
+    output=$(cdc cli changefeed query --simple --changefeed-id $changefeedid --pd=http://$UP_PD_HOST:$UP_PD_PORT 2>&1)
+    state=$(echo $output | grep -oE "\"state\": \"[a-z]+\""|tr -d '" '|awk -F':' '{print $(NF)}')
     if [ "$state" != "$expected" ]; then
-        echo "unexpected state $state, expected $expected"
+        echo "unexpected state $output, expected $expected"
         exit 1
     fi
 }
@@ -35,7 +37,9 @@ function run() {
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
         *) SINK_URI="mysql://root@127.0.0.1:3306/";;
     esac
-    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai"
+
+    uuid="custom-changefeed-name"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" -c="$uuid"
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
@@ -47,8 +51,14 @@ function run() {
     check_table_exists tidb_cdc.repl_mark_test_simple ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_table_exists tidb_cdc."\`repl_mark_test_simple-dash\`" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-    uuid=$(run_cdc_cli changefeed list 2>&1 | grep -oE "[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}")
     check_changefeed_state $uuid "normal"
+
+    # Make sure changefeed can not be created if the name is already exists.
+    exists=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="$uuid" 2>&1 | grep -oE 'already exists')
+    if [[ -z $exists ]]; then
+        echo "[$(date)] <<<<< unexpect output got ${exists} >>>>>"
+        exit 1
+    fi
 
     # Pause changefeed
     run_cdc_cli changefeed --changefeed-id $uuid pause && sleep 3
@@ -105,6 +115,13 @@ EOF
     if [[ -z $badsink ]]; then
         echo "[$(date)] <<<<< unexpect output got ${badsink} >>>>>"
         exit 1
+    fi
+
+    # Test Kafka SSL connection.
+    if [ "$SINK_TYPE" == "kafka" ]; then
+        SSL_TOPIC_NAME="ticdc-cli-test-ssl-$RANDOM"
+        SINK_URI="kafka://127.0.0.1:9093/$SSL_TOPIC_NAME?ca=${TLS_DIR}/ca.pem&cert=${TLS_DIR}/client.pem&key=${TLS_DIR}/client-key.pem"
+        run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai"
     fi
 
     # Smoke test meta delete-gc-ttl and delete
