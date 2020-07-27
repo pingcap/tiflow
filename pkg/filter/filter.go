@@ -18,15 +18,21 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
+	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
+
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 )
+
+//errNoSuchMySQLType means the input mysql type is invalid
+var errNoSuchMySQLType = errors.New("No such mysql type")
 
 // Filter is a event filter implementation
 type Filter struct {
 	filter           filter.Filter
 	ignoreTxnStartTs []uint64
+	ignoreColumnType map[byte]struct{}
 	ddlAllowlist     []model.ActionType
 	isCyclicEnabled  bool
 }
@@ -35,6 +41,7 @@ type Filter struct {
 func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 	var f filter.Filter
 	var err error
+	var ignoreColumnType map[byte]struct{}
 	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
 		f, err = filter.ParseMySQLReplicationRules(cfg.Filter.MySQLReplicationRules)
 	} else {
@@ -47,12 +54,17 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	ignoreColumnType, err = strsToColumnTypes(cfg.Filter.IgnoreColumnType)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	if !cfg.CaseSensitive {
 		f = filter.CaseInsensitive(f)
 	}
 	return &Filter{
 		filter:           f,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
+		ignoreColumnType: ignoreColumnType,
 		ddlAllowlist:     cfg.Filter.DDLAllowlist,
 		isCyclicEnabled:  cfg.Cyclic.IsEnabled(),
 	}, nil
@@ -82,14 +94,14 @@ func (f *Filter) ShouldIgnoreTable(db, tbl string) bool {
 
 // ShouldIgnoreDMLEvent removes DMLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
-func (f *Filter) ShouldIgnoreDMLEvent(ts uint64, schema, table string) bool {
-	return f.shouldIgnoreStartTs(ts) || f.ShouldIgnoreTable(schema, table)
+func (f *Filter) ShouldIgnoreDMLEvent(ts uint64, schema, table string, columnTypes []byte) bool {
+	return f.shouldIgnoreStartTs(ts) || f.ShouldIgnoreTable(schema, table) || f.shouldIgnoreColumnTypes(columnTypes)
 }
 
 // ShouldIgnoreDDLEvent removes DDLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
-func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, schema, table string) bool {
-	return f.shouldIgnoreStartTs(ts) || f.ShouldIgnoreTable(schema, table)
+func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, schema, table string, columnTypes []byte) bool {
+	return f.shouldIgnoreStartTs(ts) || f.ShouldIgnoreTable(schema, table) || f.shouldIgnoreColumnTypes(columnTypes)
 }
 
 // ShouldDiscardDDL returns true if this DDL should be discarded
@@ -103,6 +115,15 @@ func (f *Filter) ShouldDiscardDDL(ddlType model.ActionType) bool {
 		}
 	}
 	return true
+}
+
+func (f *Filter) shouldIgnoreColumnTypes(columnTypes []byte) bool {
+	for _, typ := range columnTypes {
+		if _, exist := f.ignoreColumnType[typ]; exist {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bool {
@@ -148,6 +169,63 @@ func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bo
 		return false
 	}
 	return true
+}
+
+var str2Type = map[string]byte{
+	"bit":         mysql.TypeBit,
+	"text":        mysql.TypeBlob,
+	"date":        mysql.TypeDate,
+	"datetime":    mysql.TypeDatetime,
+	"unspecified": mysql.TypeDecimal,
+	"decimal":     mysql.TypeNewDecimal,
+	"double":      mysql.TypeDouble,
+	"enum":        mysql.TypeEnum,
+	"float":       mysql.TypeFloat,
+	"geometry":    mysql.TypeGeometry,
+	"mediumint":   mysql.TypeInt24,
+	"json":        mysql.TypeJSON,
+	"int":         mysql.TypeLong,
+	"bigint":      mysql.TypeLonglong,
+	"longtext":    mysql.TypeLongBlob,
+	"mediumtext":  mysql.TypeMediumBlob,
+	"null":        mysql.TypeNull,
+	"set":         mysql.TypeSet,
+	"smallint":    mysql.TypeShort,
+	"char":        mysql.TypeString,
+	"time":        mysql.TypeDuration,
+	"timestamp":   mysql.TypeTimestamp,
+	"tinyint":     mysql.TypeTiny,
+	"tinytext":    mysql.TypeTinyBlob,
+	"varchar":     mysql.TypeVarchar,
+	"var_string":  mysql.TypeVarString,
+	"year":        mysql.TypeYear,
+}
+
+// StrType converts string to a type.
+func StrType(str string) (r byte, err error) {
+	typStr := strings.ToLower(str)
+	if strings.Contains(typStr, "blob") {
+		typStr = strings.ReplaceAll(typStr, "blob", "text")
+	}
+	if strings.Contains(typStr, "binary") {
+		typStr = strings.ReplaceAll(typStr, "binary", "char")
+	}
+	if typ, exist := str2Type[typStr]; exist {
+		return typ, nil
+	}
+	return 0, errNoSuchMySQLType
+}
+
+func strsToColumnTypes(columnTypeStr []string) (map[byte]struct{}, error) {
+	columnTypeByte := make(map[byte]struct{}, len(columnTypeStr))
+	for i := range columnTypeStr {
+		typ, err := StrType(columnTypeStr[i])
+		if err != nil {
+			return nil, err
+		}
+		columnTypeByte[typ] = struct{}{}
+	}
+	return columnTypeByte, nil
 }
 
 // IsSysSchema returns true if the given schema is a system schema

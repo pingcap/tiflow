@@ -23,5 +23,6 @@ type FilterConfig struct {
 	Rules []string `toml:"rules" json:"rules"`
 	*filter.MySQLReplicationRules
 	IgnoreTxnStartTs []uint64           `toml:"ignore-txn-start-ts" json:"ignore-txn-start-ts"`
+	IgnoreColumnType []string           `toml:"ignore-column-type" json:"ignore-column-type"`
 	DDLAllowlist     []model.ActionType `toml:"ddl-allow-list" json:"ddl-allow-list"`
 }

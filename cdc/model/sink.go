@@ -107,6 +107,15 @@ type RowChangedEvent struct {
 	Keys         []string           `json:"keys"`
 }
 
+//GetColumnTypes get column types from dml query
+func (e *RowChangedEvent) GetColumnTypes() []byte {
+	res := make([]byte, 0, len(e.Columns))
+	for _, col := range e.Columns {
+		res = append(res, col.Type)
+	}
+	return res
+}
+
 // Column represents a column value in row changed event
 type Column struct {
 	Type        byte           `json:"t"`
@@ -145,6 +154,18 @@ type DDLEvent struct {
 	TableInfo *TableInfo
 	Query     string
 	Type      model.ActionType
+}
+
+//GetColumnTypes get column types from ddl query
+func (e *DDLEvent) GetColumnTypes() []byte {
+	if e.TableInfo == nil || len(e.TableInfo.ColumnInfo) == 0 {
+		return nil
+	}
+	typs := make([]byte, len(e.TableInfo.ColumnInfo))
+	for i := 0; i < len(typs); i++ {
+		typs[i] = e.TableInfo.ColumnInfo[i].Type
+	}
+	return typs
 }
 
 // FromJob fills the values of DDLEvent from DDL job

@@ -129,7 +129,7 @@ func newMqSink(
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
-		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
+		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table, row.GetColumnTypes()) {
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
@@ -208,7 +208,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table) {
+	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table, ddl.GetColumnTypes()) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),

@@ -81,7 +81,7 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	s.unresolvedTxnsMu.Lock()
 	defer s.unresolvedTxnsMu.Unlock()
 	for _, row := range rows {
-		if s.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
+		if s.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table, row.GetColumnTypes()) {
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
@@ -148,7 +148,7 @@ func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if s.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table) {
+	if s.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table, ddl.GetColumnTypes()) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),
