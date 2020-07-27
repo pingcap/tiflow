@@ -16,6 +16,8 @@ package filter
 import (
 	"testing"
 
+	`github.com/pingcap/parser/mysql`
+
 	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/pingcap/check"
@@ -66,6 +68,7 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 		Filter: &config.FilterConfig{
 			IgnoreTxnStartTs: []uint64{1, 3},
 			Rules:            []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
+			IgnoreColumnType: []string{"blob", "bit", "int", "binary"},
 		},
 	})
 	c.Assert(err, check.IsNil)
@@ -73,22 +76,26 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 		schema string
 		table  string
 		ts     uint64
+		columnTypes []byte
 		ignore bool
 	}{
-		{"sns", "ttta", 1, true},
-		{"ecom", "aabb", 2, false},
-		{"sns", "log", 3, true},
-		{"sns", "log", 4, true},
-		{"ecom", "test", 5, true},
-		{"test", "test", 6, true},
-		{"ecom", "log", 6, false},
+		{"sns", "ttta", 1, nil,true},
+		{"ecom", "aabb", 2, nil,false},
+		{"sns", "log", 3, nil,true},
+		{"sns", "log", 4, nil,true},
+		{"ecom", "test", 5, nil,true},
+		{"test", "test", 6,nil, true},
+		{"ecom", "log", 6, nil,false},
+		{"ecom", "log", 6, []byte{mysql.TypeBit, mysql.TypeTinyBlob}, true},
+		{"ecom", "log", 6, []byte{mysql.TypeJSON, mysql.TypeTinyBlob}, false},
+		{"ecom", "log", 6, []byte{mysql.TypeString}, true},
+
 	}
 
 	for _, tc := range testCases {
-		c.Assert(filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
-		c.Assert(filter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
+		c.Assert(filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table, tc.columnTypes), check.Equals, tc.ignore)
+		c.Assert(filter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table, tc.columnTypes), check.Equals, tc.ignore)
 	}
-
 }
 
 func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
