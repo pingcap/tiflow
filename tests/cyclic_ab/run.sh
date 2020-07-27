@@ -100,6 +100,13 @@ function run() {
 
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
+    # At the time of writing, tso is at least 18 digits long in decimal format.
+    # $ pd-ctl tso 418252158551982113
+    # system:  2020-07-23 19:56:05.57 +0800 CST
+    # logic:  33
+    run_sql "SELECT start_timestamp FROM tidb_cdc.repl_mark_test_simple LIMIT 1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} && \
+    check_contains "start_timestamp: [0-9]{18,}"
+
     cleanup_process $CDC_BINARY
 }
 

@@ -201,6 +201,13 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
+	if info.Engine == model.SortInFile {
+		err = util.IsDirAndWritable(info.SortDir)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs)
 
 	existingTables := make(map[model.TableID]model.Ts)
@@ -689,7 +696,9 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 
 			cf.info.AdminJobType = model.AdminStop
 			cf.info.Error = job.Error
-			cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
+			if job.Error != nil {
+				cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
+			}
 			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
