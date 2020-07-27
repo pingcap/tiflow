@@ -68,6 +68,66 @@ func (b *ColumnFlagType) IsBinary() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(BinaryFlag))
 }
 
+//SetIsPrimaryKey set PrimaryKeyFlag
+func (b *ColumnFlagType) SetIsPrimaryKey() {
+	(*util.Flag)(b).Add(util.Flag(PrimaryKeyFlag))
+}
+
+//UnsetIsPrimaryKey unset PrimaryKeyFlag
+func (b *ColumnFlagType) UnsetIsPrimaryKey() {
+	(*util.Flag)(b).Remove(util.Flag(PrimaryKeyFlag))
+}
+
+//PrimaryKeyFlag show whether PrimaryKeyFlag is set
+func (b *ColumnFlagType) IsPrimaryKey() bool {
+	return (*util.Flag)(b).HasAll(util.Flag(PrimaryKeyFlag))
+}
+
+//SetIsUniqueKey set UniqueKeyFlag
+func (b *ColumnFlagType) SetIsUniqueKey() {
+	(*util.Flag)(b).Add(util.Flag(UniqueKeyFlag))
+}
+
+//UnsetIsUniqueKey unset UniqueKeyFlag
+func (b *ColumnFlagType) UnsetIsUniqueKey() {
+	(*util.Flag)(b).Remove(util.Flag(UniqueKeyFlag))
+}
+
+//IsUniqueKey show whether UniqueKeyFlag is set
+func (b *ColumnFlagType) IsUniqueKey() bool {
+	return (*util.Flag)(b).HasAll(util.Flag(UniqueKeyFlag))
+}
+
+//IsMultipleKey show whether MultipleKeyFlag is set
+func (b *ColumnFlagType) IsMultipleKey() bool {
+	return (*util.Flag)(b).HasAll(util.Flag(MultipleKeyFlag))
+}
+
+//SetIsMultipleKey set MultipleKeyFlag
+func (b *ColumnFlagType) SetIsMultipleKey() {
+	(*util.Flag)(b).Add(util.Flag(MultipleKeyFlag))
+}
+
+//UnsetIsMultipleKey unset MultipleKeyFlag
+func (b *ColumnFlagType) UnsetIsMultipleKey() {
+	(*util.Flag)(b).Remove(util.Flag(MultipleKeyFlag))
+}
+
+//IsNullable show whether NullableFlag is set
+func (b *ColumnFlagType) IsNullable() bool {
+	return (*util.Flag)(b).HasAll(util.Flag(NullableFlag))
+}
+
+//SetIsNullable set NullableFlag
+func (b *ColumnFlagType) SetIsNullable() {
+	(*util.Flag)(b).Add(util.Flag(NullableFlag))
+}
+
+//UnsetIsNullable unset NullableFlag
+func (b *ColumnFlagType) UnsetIsNullable() {
+	(*util.Flag)(b).Remove(util.Flag(NullableFlag))
+}
+
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
 	Schema    string `toml:"db-name" json:"db-name"`
