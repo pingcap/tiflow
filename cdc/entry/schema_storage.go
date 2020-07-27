@@ -201,12 +201,12 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 // TableInfo provides meta data describing a DB table.
 type TableInfo struct {
 	*timodel.TableInfo
-	SchemaID      int64
-	TableName     model.TableName
+	SchemaID         int64
+	TableName        model.TableName
 	TableInfoVersion uint64
-	columnsOffset map[int64]int
-	indicesOffset map[int64]int
-	uniqueColumns map[int64]struct{}
+	columnsOffset    map[int64]int
+	indicesOffset    map[int64]int
+	uniqueColumns    map[int64]struct{}
 
 	// only for new row format decoder
 	handleColID int64
@@ -226,16 +226,16 @@ type TableInfo struct {
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
 func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *timodel.TableInfo) *TableInfo {
 	ti := &TableInfo{
-		TableInfo:     info,
-		SchemaID:      schemaID,
-		TableName:     model.TableName{Schema: schemaName, Table: info.Name.O},
+		TableInfo:        info,
+		SchemaID:         schemaID,
+		TableName:        model.TableName{Schema: schemaName, Table: info.Name.O},
 		TableInfoVersion: version,
-		columnsOffset: make(map[int64]int, len(info.Columns)),
-		indicesOffset: make(map[int64]int, len(info.Indices)),
-		uniqueColumns: make(map[int64]struct{}),
-		handleColID:   -1,
-		HandleIndexID: -2,
-		rowColInfos:   make([]rowcodec.ColInfo, len(info.Columns)),
+		columnsOffset:    make(map[int64]int, len(info.Columns)),
+		indicesOffset:    make(map[int64]int, len(info.Indices)),
+		uniqueColumns:    make(map[int64]struct{}),
+		handleColID:      -1,
+		HandleIndexID:    -2,
+		rowColInfos:      make([]rowcodec.ColInfo, len(info.Columns)),
 	}
 
 	uniqueIndexNum := 0
