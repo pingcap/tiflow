@@ -315,5 +315,5 @@ func httpRetry(ctx context.Context, credential *security.Credential, r *http.Req
 
 func (m *AvroSchemaManager) tableNameToSchemaSubject(tableName model.TableName) string {
 	// We should guarantee unique names for subjects
-	return tableName.Schema + "." + tableName.Table + m.subjectSuffix
+	return tableName.Schema + "_" + tableName.Table + m.subjectSuffix
 }

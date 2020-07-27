@@ -174,8 +174,12 @@ func (o *Owner) newChangeFeed(
 	log.Info("Find new changefeed", zap.Reflect("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
-	failpoint.Inject("NewChangefeedError", func() {
+	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(checkpointTs-300, checkpointTs))
+	})
+
+	failpoint.Inject("NewChangefeedRetryError", func() {
+		failpoint.Return(nil, errors.New("failpoint injected retriable error"))
 	})
 
 	// TODO here we create another pb client,we should reuse them
@@ -604,23 +608,47 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	return nil
 }
 
-func (o *Owner) collectChangefeedInfo(ctx context.Context, cid model.ChangeFeedID) (*changeFeed, *model.ChangeFeedStatus, model.FeedState, error) {
-	cf, ok := o.changeFeeds[cid]
+func (o *Owner) collectChangefeedInfo(ctx context.Context, cid model.ChangeFeedID) (
+	cf *changeFeed,
+	status *model.ChangeFeedStatus,
+	feedState model.FeedState,
+	err error,
+) {
+	var ok bool
+	cf, ok = o.changeFeeds[cid]
 	if ok {
 		return cf, cf.status, cf.info.State, nil
 	}
-	status, _, err := o.etcdClient.GetChangeFeedStatus(ctx, cid)
-	if err != nil {
-		return nil, nil, model.StateNormal, err
+	feedState = model.StateNormal
+
+	var cfInfo *model.ChangeFeedInfo
+	cfInfo, err = o.etcdClient.GetChangeFeedInfo(ctx, cid)
+	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+		return
 	}
-	feedState := model.StateNormal
+
+	status, _, err = o.etcdClient.GetChangeFeedStatus(ctx, cid)
+	if err != nil {
+		if errors.Cause(err) == model.ErrChangeFeedNotExists {
+			// Only changefeed info exists and error field is not nil means
+			// the changefeed has met error, mark it as failed.
+			if cfInfo != nil && cfInfo.Error != nil {
+				feedState = model.StateFailed
+			}
+		}
+		return
+	}
 	switch status.AdminJobType {
+	case model.AdminNone, model.AdminResume:
+		if cfInfo != nil && cfInfo.Error != nil {
+			feedState = model.StateFailed
+		}
 	case model.AdminStop:
 		feedState = model.StateStopped
 	case model.AdminRemove:
 		feedState = model.StateRemoved
 	}
-	return nil, status, feedState, nil
+	return
 }
 
 func (o *Owner) handleAdminJob(ctx context.Context) error {
@@ -636,11 +664,20 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 
 		cf, status, feedState, err := o.collectChangefeedInfo(ctx, job.CfID)
 		if err != nil {
-			if errors.Cause(err) == model.ErrChangeFeedNotExists {
-				log.Warn("invalid admin job, changefeed status not found", zap.String("changefeed", job.CfID))
-				continue
+			if errors.Cause(err) != model.ErrChangeFeedNotExists {
+				return err
 			}
-			return err
+			if feedState == model.StateFailed && job.Type == model.AdminRemove {
+				// changefeed in failed state, but changefeed status has not
+				// been created yet. Try to remove changefeed info only.
+				err := o.etcdClient.DeleteChangeFeedInfo(ctx, job.CfID)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			} else {
+				log.Warn("invalid admin job, changefeed status not found", zap.String("changefeed", job.CfID))
+			}
+			continue
 		}
 		switch job.Type {
 		case model.AdminStop:
@@ -683,7 +720,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 					// remove a removed changefeed
 					log.Info("changefeed has been removed, remove command will do nothing")
 					continue
-				case model.StateStopped:
+				case model.StateStopped, model.StateFailed:
 					// remove a paused changefeed
 					status.AdminJobType = model.AdminRemove
 					err = o.etcdClient.PutChangeFeedStatus(ctx, job.CfID, status)
@@ -691,7 +728,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 						return errors.Trace(err)
 					}
 				default:
-					return errors.Errorf("changefeed in abnormal state: %+v", status)
+					return errors.Errorf("changefeed in abnormal state: %s, replication status: %+v", feedState, status)
 				}
 			}
 			// remove changefeed info
