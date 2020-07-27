@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net/url"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,7 +33,14 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
+	tddl "github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/infoschema"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
@@ -44,11 +50,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
-	tddl "github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/infoschema"
-	"github.com/prometheus/client_golang/prometheus"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -67,10 +68,9 @@ type mysqlSink struct {
 	filter *filter.Filter
 	cyclic *cyclic.Cyclic
 
-	unresolvedTxnsMu sync.Mutex
-	unresolvedTxns   map[model.TableName][]*model.Txn
-
-	statistics *Statistics
+	txnGeneratorMu sync.Mutex
+	txnGenerator   *codec.TxnGenerator
+	statistics     *Statistics
 
 	// metrics used by mysql sink only
 	metricConflictDetectDurationHis prometheus.Observer
@@ -78,14 +78,14 @@ type mysqlSink struct {
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	s.unresolvedTxnsMu.Lock()
-	defer s.unresolvedTxnsMu.Unlock()
+	s.txnGeneratorMu.Lock()
+	defer s.txnGeneratorMu.Unlock()
 	for _, row := range rows {
-		if s.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table, row.GetColumnTypes()) {
+		if s.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
-		appendRowChangeEvent(s.unresolvedTxns, row)
+		s.txnGenerator.Append(row)
 	}
 	return nil
 }
@@ -97,15 +97,15 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 
 	defer s.statistics.PrintStatus()
 
-	s.unresolvedTxnsMu.Lock()
-	if len(s.unresolvedTxns) == 0 {
+	s.txnGeneratorMu.Lock()
+	if s.txnGenerator.Empty() {
 		atomic.StoreUint64(&s.checkpointTs, resolvedTs)
-		s.unresolvedTxnsMu.Unlock()
+		s.txnGeneratorMu.Unlock()
 		return nil
 	}
 
-	_, resolvedTxnsMap := splitResolvedTxn(resolvedTs, s.unresolvedTxns)
-	s.unresolvedTxnsMu.Unlock()
+	_, resolvedTxnsMap := s.txnGenerator.SplitResolvedTxns(resolvedTs) //splitResolvedTxn(resolvedTs, s.unresolvedTxns)
+	s.txnGeneratorMu.Unlock()
 
 	if len(resolvedTxnsMap) == 0 {
 		atomic.StoreUint64(&s.checkpointTs, resolvedTs)
@@ -130,7 +130,7 @@ func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if s.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table, ddl.GetColumnTypes()) {
+	if s.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),
@@ -197,57 +197,6 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
 	return nil
-}
-
-func appendRowChangeEvent(unresolvedTxns map[model.TableName][]*model.Txn, row *model.RowChangedEvent) {
-	key := *row.Table
-	txns := unresolvedTxns[key]
-	if len(txns) == 0 || txns[len(txns)-1].StartTs != row.StartTs {
-		// fail-fast check
-		if len(txns) != 0 && txns[len(txns)-1].CommitTs > row.CommitTs {
-			log.Fatal("the commitTs of the emit row is less than the received row",
-				zap.Stringer("table", row.Table),
-				zap.Uint64("emit row startTs", row.StartTs),
-				zap.Uint64("emit row commitTs", row.CommitTs),
-				zap.Uint64("last received row startTs", txns[len(txns)-1].StartTs),
-				zap.Uint64("last received row commitTs", txns[len(txns)-1].CommitTs))
-		}
-		txns = append(txns, &model.Txn{
-			StartTs:  row.StartTs,
-			CommitTs: row.CommitTs,
-		})
-		unresolvedTxns[key] = txns
-	}
-	txns[len(txns)-1].Append(row)
-}
-
-func splitResolvedTxn(
-	resolvedTs uint64, unresolvedTxns map[model.TableName][]*model.Txn,
-) (minTs uint64, resolvedRowsMap map[model.TableName][]*model.Txn) {
-	resolvedRowsMap = make(map[model.TableName][]*model.Txn, len(unresolvedTxns))
-	minTs = resolvedTs
-	for key, txns := range unresolvedTxns {
-		i := sort.Search(len(txns), func(i int) bool {
-			return txns[i].CommitTs > resolvedTs
-		})
-		if i == 0 {
-			continue
-		}
-		var resolvedTxns []*model.Txn
-		if i == len(txns) {
-			resolvedTxns = txns
-			delete(unresolvedTxns, key)
-		} else {
-			resolvedTxns = txns[:i]
-			unresolvedTxns[key] = txns[i:]
-		}
-		resolvedRowsMap[key] = resolvedTxns
-
-		if len(resolvedTxns) > 0 && resolvedTxns[0].CommitTs < minTs {
-			minTs = resolvedTxns[0].CommitTs
-		}
-	}
-	return
 }
 
 // adjustSQLMode adjust sql mode according to sink config.
@@ -443,7 +392,7 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 
 	sink := &mysqlSink{
 		db:                              db,
-		unresolvedTxns:                  make(map[model.TableName][]*model.Txn),
+		txnGenerator:                    codec.NewTxnGenerator(),
 		params:                          params,
 		filter:                          filter,
 		statistics:                      NewStatistics("mysql", opts),

@@ -28,10 +28,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/types"
 	tijson "github.com/pingcap/tidb/types/json"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 // AvroEventBatchEncoder converts the events to binary Avro data
@@ -130,12 +131,11 @@ func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 }
 
 // Build a MQ message
-func (a *AvroEventBatchEncoder) Build() (key []byte, value []byte) {
-	k := a.keyBuf
-	v := a.valueBuf
-	a.keyBuf = nil
-	a.valueBuf = nil
-	return k, v
+func (a *AvroEventBatchEncoder) Build(resolvedTs uint64) (keys [][]byte, values [][]byte) {
+	defer a.reset()
+	keys = append(keys, a.keyBuf)
+	values = append(values, a.valueBuf)
+	return
 }
 
 // Size is always 0 or 1
@@ -144,6 +144,12 @@ func (a *AvroEventBatchEncoder) Size() int {
 		return 0
 	}
 	return 1
+}
+
+func (a *AvroEventBatchEncoder) reset() {
+	a.valueSchemaManager = nil
+	a.keyBuf = nil
+	a.valueBuf = nil
 }
 
 func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tableVersion uint64, cols map[string]*model.Column) (*avroEncodeResult, error) {

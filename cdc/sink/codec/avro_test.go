@@ -56,18 +56,18 @@ func (s *avroBatchEncoderSuite) TearDownSuite(c *check.C) {
 
 func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	avroCodec, err := goavro.NewCodec(`
-        {
-          "type": "record",
-          "name": "test1",
-          "fields" : [
-            {"name": "id", "type": ["null", "int"], "default": null},
+       {
+         "type": "record",
+         "name": "test1",
+         "fields" : [
+           {"name": "id", "type": ["null", "int"], "default": null},
 			{"name": "myint", "type": ["null", "int"], "default": null},
 			{"name": "mybool", "type": ["null", "int"], "default": null},
 			{"name": "myfloat", "type": ["null", "float"], "default": null},
 			{"name": "mybytes", "type": ["null", "bytes"], "default": null},
 			{"name": "ts", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null}
-          ]
-        }`)
+         ]
+       }`)
 
 	c.Assert(err, check.IsNil)
 
@@ -101,13 +101,13 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 
 func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 	avroCodec, err := goavro.NewCodec(`
-        {
-          "type": "record",
-          "name": "test2",
-          "fields" : [
-            {"name": "id", "type": "int", "default": 0}
-          ]
-        }`)
+       {
+         "type": "record",
+         "name": "test2",
+         "fields" : [
+           {"name": "id", "type": "int", "default": 0}
+         ]
+       }`)
 
 	c.Assert(err, check.IsNil)
 

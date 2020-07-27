@@ -29,8 +29,8 @@ type EventBatchEncoder interface {
 	AppendRowChangedEvent(e *model.RowChangedEvent) error
 	// AppendDDLEvent appends a DDL event into the batch
 	AppendDDLEvent(e *model.DDLEvent) error
-	// Build builds the batch and returns the bytes of key and value.
-	Build() (key []byte, value []byte)
+	// Build builds the batch before resolvedTs and return a list of <key value>, it always reset the encoder state based on implementation.
+	Build(resolvedTs uint64) (key [][]byte, value [][]byte)
 	// Size returns the size of the batch(bytes)
 	Size() int
 }

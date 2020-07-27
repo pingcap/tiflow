@@ -20,6 +20,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	parser_types "github.com/pingcap/parser/types"
@@ -294,9 +295,9 @@ func NewCanalEntryBuilder() *canalEntryBuilder {
 
 // CanalEventBatchEncoder encodes the events into the byte of a batch into.
 type CanalEventBatchEncoder struct {
-	messages     *canal.Messages
-	packet       *canal.Packet
-	entryBuilder *canalEntryBuilder
+	size         int
+	ddls         []*model.DDLEvent
+	txnGenerator *TxnGenerator
 }
 
 // AppendResolvedEvent implements the EventBatchEncoder interface
@@ -308,6 +309,81 @@ func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+	// FIXME better way?
+	d.size++
+	d.txnGenerator.Append(e)
+	return nil
+}
+
+// AppendDDLEvent implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+	d.size++
+	d.ddls = append(d.ddls, e)
+	return nil
+}
+
+//Size implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) Size() int {
+	d.size++
+	return d.size
+}
+
+// Build implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) Build(resolvedTs uint64) (keys [][]byte, values [][]byte) {
+	_, resolvedTxns := d.txnGenerator.SplitResolvedTxns(resolvedTs)
+	if len(d.ddls) != 0 && len(resolvedTxns) != 0 {
+		log.Warn("ddl and dml is encoded both.")
+	}
+	keys = make([][]byte, 0, len(resolvedTxns)+len(d.ddls))
+	values = make([][]byte, 0, len(resolvedTxns)+len(d.ddls))
+	for _, txns := range resolvedTxns {
+		for _, txn := range txns {
+			canalMessageEncoder := NewCanalMessageEncoder()
+			for _, row := range txn.Rows {
+				err := canalMessageEncoder.appendRowChangedEvent(row)
+				if err != nil {
+					panic(err)
+				}
+			}
+			d.size -= len(txn.Rows)
+			key, value := canalMessageEncoder.build()
+			keys = append(keys, key)
+			values = append(values, value)
+		}
+	}
+	if len(d.ddls) != 0 {
+		canalMessageEncoder := NewCanalMessageEncoder()
+		for _, ddl := range d.ddls {
+			err := canalMessageEncoder.appendDDLEvent(ddl)
+			if err != nil {
+				panic(err)
+			}
+		}
+		d.size -= len(d.ddls)
+		d.ddls = nil
+		key, value := canalMessageEncoder.build()
+		keys = append(keys, key)
+		values = append(values, value)
+	}
+	return keys, values
+}
+
+// NewCanalEventBatchEncoder creates a new CanalEventBatchEncoder.
+func NewCanalEventBatchEncoder() EventBatchEncoder {
+	encoder := &CanalEventBatchEncoder{
+		txnGenerator: NewTxnGenerator(),
+	}
+	return encoder
+}
+
+type canalMessageEncoder struct {
+	messages     *canal.Messages
+	packet       *canal.Packet
+	entryBuilder *canalEntryBuilder
+}
+
+// AppendRowChangedEvent implements the EventBatchEncoder interface
+func (d *canalMessageEncoder) appendRowChangedEvent(e *model.RowChangedEvent) error {
 	entry, err := d.entryBuilder.FromRowEvent(e)
 	if err != nil {
 		return errors.Trace(err)
@@ -321,7 +397,7 @@ func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent)
 }
 
 // AppendDDLEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+func (d *canalMessageEncoder) appendDDLEvent(e *model.DDLEvent) error {
 	entry, err := d.entryBuilder.FromDdlEvent(e)
 	if err != nil {
 		return errors.Trace(err)
@@ -335,7 +411,7 @@ func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) Build() (key []byte, value []byte) {
+func (d *canalMessageEncoder) build() (key []byte, value []byte) {
 	err := d.refreshPacketBody()
 	if err != nil {
 		panic(err)
@@ -347,18 +423,8 @@ func (d *CanalEventBatchEncoder) Build() (key []byte, value []byte) {
 	return nil, value
 }
 
-// Size implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) Size() int {
-	// TODO: avoid marshaling the messages every time for calculating the size of the packet
-	err := d.refreshPacketBody()
-	if err != nil {
-		panic(err)
-	}
-	return proto.Size(d.packet)
-}
-
 // refreshPacketBody() marshals the messages to the packet body
-func (d *CanalEventBatchEncoder) refreshPacketBody() error {
+func (d *canalMessageEncoder) refreshPacketBody() error {
 	oldSize := len(d.packet.Body)
 	newSize := proto.Size(d.messages)
 	if newSize > oldSize {
@@ -369,8 +435,7 @@ func (d *CanalEventBatchEncoder) refreshPacketBody() error {
 	return err
 }
 
-// NewCanalEventBatchEncoder creates a new CanalEventBatchEncoder.
-func NewCanalEventBatchEncoder() EventBatchEncoder {
+func newCanalMessageEncoder() *canalMessageEncoder {
 	p := &canal.Packet{
 		VersionPresent: &canal.Packet_Version{
 			Version: CanalPacketVersion,
@@ -378,7 +443,7 @@ func NewCanalEventBatchEncoder() EventBatchEncoder {
 		Type: canal.PacketType_MESSAGES,
 	}
 
-	encoder := &CanalEventBatchEncoder{
+	encoder := &canalMessageEncoder{
 		messages:     &canal.Messages{},
 		packet:       p,
 		entryBuilder: NewCanalEntryBuilder(),

@@ -265,8 +265,17 @@ func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) Build() (key []byte, value []byte) {
-	return d.keyBuf.Bytes(), d.valueBuf.Bytes()
+func (d *JSONEventBatchEncoder) Build(resolvedTs uint64) (keys [][]byte, values [][]byte) {
+	defer d.reset()
+	keys = append(keys, d.keyBuf.Bytes())
+	values = append(values, d.valueBuf.Bytes())
+	return
+}
+
+// Reset implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) reset() {
+	d.keyBuf.Reset()
+	d.valueBuf.Reset()
 }
 
 // Size implements the EventBatchEncoder interface

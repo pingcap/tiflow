@@ -79,16 +79,17 @@ var _ = check.Suite(&batchSuite{
 	resolvedTsCases: [][]uint64{{1}, {1, 2, 3}, {}},
 })
 
-func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
+func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(keys []byte, values []byte) (EventBatchDecoder, error)) {
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
 		for _, row := range cs {
 			err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
+		encoderSize := encoder.Size()
+		keys, values := encoder.Build(0)
+		c.Assert(len(keys[0])+len(values[0]), check.Equals, encoderSize)
+		decoder, err := newDecoder(keys[0], values[0])
 		c.Assert(err, check.IsNil)
 		index := 0
 		for {
@@ -111,9 +112,10 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			err := encoder.AppendDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
 		}
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
+		encoderSize := encoder.Size()
+		keys, values := encoder.Build(0)
+		c.Assert(len(keys[0])+len(values[0]), check.Equals, encoderSize)
+		decoder, err := newDecoder(keys[0], values[0])
 		c.Assert(err, check.IsNil)
 		index := 0
 		for {
@@ -136,9 +138,10 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			err := encoder.AppendResolvedEvent(ts)
 			c.Assert(err, check.IsNil)
 		}
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
+		encoderSize := encoder.Size()
+		keys, values := encoder.Build(0)
+		c.Assert(len(keys[0])+len(values[0]), check.Equals, encoderSize)
+		decoder, err := newDecoder(keys[0], values[0])
 		c.Assert(err, check.IsNil)
 		index := 0
 		for {

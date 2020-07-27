@@ -68,13 +68,11 @@ func newMqSink(
 		row        *model.RowChangedEvent
 		resolvedTs uint64
 	}, partitionNum)
-	partitionTxns := make([]map[model.TableName][]*model.Txn, partitionNum)
 	for i := 0; i < int(partitionNum); i++ {
 		partitionInput[i] = make(chan struct {
 			row        *model.RowChangedEvent
 			resolvedTs uint64
 		}, 12800)
-		partitionTxns[i] = make(map[model.TableName][]*model.Txn)
 	}
 	d, err := dispatcher.NewDispatcher(config, mqProducer.GetPartitionNum())
 	if err != nil {
@@ -111,7 +109,6 @@ func newMqSink(
 
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
-		partitionTxns:       partitionTxns,
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
@@ -133,7 +130,7 @@ func newMqSink(
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	for _, row := range rows {
-		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table, row.GetColumnTypes()) {
+		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
@@ -203,16 +200,18 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	key, value := encoder.Build()
-	err = k.mqProducer.SyncBroadcastMessage(ctx, key, value)
-	if err != nil {
-		return errors.Trace(err)
+	keys, values := encoder.Build(ts)
+	for i := range keys {
+		err = k.mqProducer.SyncBroadcastMessage(ctx, keys[i], values[i])
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 	return errors.Trace(err)
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table, ddl.GetColumnTypes()) {
+	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),
@@ -228,17 +227,24 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	if k.protocol != codec.ProtocolAvro {
-		key, value := encoder.Build()
-		log.Info("emit ddl event", zap.ByteString("key", key), zap.ByteString("value", value))
+		// ddl always does not need resolved ts
+		keys, values := encoder.Build(0)
+		log.Info("emit ddl event", zap.ByteStrings("keys", keys), zap.ByteStrings("values", values))
 		if k.protocol == codec.ProtocolCanal {
 			// see https://github.com/alibaba/canal/blob/master/connector/core/src/main/java/com/alibaba/otter/canal/connector/core/producer/MQMessageUtils.java#L257
-			err = k.mqProducer.SyncSendMessage(ctx, key, value, 0)
+			for i := range keys {
+				err = k.mqProducer.SyncSendMessage(ctx, keys[i], values[i], 0)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			}
 		} else {
-			err = k.mqProducer.SyncBroadcastMessage(ctx, key, value)
-		}
-
-		if err != nil {
-			return errors.Trace(err)
+			for i := range keys {
+				err = k.mqProducer.SyncBroadcastMessage(ctx, keys[i], values[i])
+				if err != nil {
+					return errors.Trace(err)
+				}
+			}
 		}
 	}
 	return nil
@@ -316,46 +322,23 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	defer tick.Stop()
 	var resolvedTs uint64
 	flushToProducer := func() error {
-		if k.protocol == codec.ProtocolCanal {
-			return k.statistics.RecordBatchExecution(func() (int, error) {
-				if batchSize == 0 {
-					return 0, nil
-				}
-				_, resolvedTxnsMap := splitResolvedTxn(resolvedTs, k.partitionTxns[partition])
-				if len(resolvedTxnsMap) == 0 {
-					return 0, nil
-				}
-				sentSize := 0
-				for _, txns := range resolvedTxnsMap {
-					for _, txn := range txns {
-						encoder = k.newEncoder()
-						for _, row := range txn.Rows {
-							err := encoder.AppendRowChangedEvent(row)
-							if err != nil {
-								return sentSize, errors.Trace(err)
-							}
-						}
-						sentSize += len(txn.Rows)
-						key, value := encoder.Build()
-						err := k.mqProducer.AsyncSendMessage(ctx, key, value, partition)
-						if err != nil {
-							return sentSize, errors.Trace(err)
-						}
-					}
-				}
-				batchSize -= sentSize
-				return sentSize, nil
-			})
-		}
 		return k.statistics.RecordBatchExecution(func() (int, error) {
 			if batchSize == 0 {
 				return 0, nil
 			}
-			key, value := encoder.Build()
-			encoder = k.newEncoder()
 			thisBatchSize := batchSize
 			batchSize = 0
-			return thisBatchSize, k.mqProducer.AsyncSendMessage(ctx, key, value, partition)
+			if k.protocol == codec.ProtocolCanal {
+				batchSize += thisBatchSize - encoder.Size()
+			}
+			keys, values := encoder.Build(resolvedTs)
+			for i := range keys {
+				err := k.mqProducer.AsyncSendMessage(ctx, keys[i], values[i], partition)
+				if err != nil {
+					return thisBatchSize, errors.Trace(err)
+				}
+			}
+			return thisBatchSize, nil
 		})
 	}
 	for {
@@ -383,18 +366,13 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 				k.resolvedNotifier.Notify()
 			}
 		} else {
-			if k.protocol == codec.ProtocolCanal {
-				appendRowChangeEvent(k.partitionTxns[partition], e.row)
-			} else {
-				err := encoder.AppendRowChangedEvent(e.row)
-				if err != nil {
-					return errors.Trace(err)
-				}
+			err := encoder.AppendRowChangedEvent(e.row)
+			if err != nil {
+				return errors.Trace(err)
 			}
 			// This is only a temporary fix so that the Avro encoder does not overflow.
 			// Pending further refactoring
-			// canal encoder is now always empty, so just assume 256 byte peer rowsChangeEvent.
-			if encoder.Size() >= batchSizeLimit || (k.protocol == codec.ProtocolAvro && encoder.Size() >= 1) || (k.protocol == codec.ProtocolCanal && batchSize >= batchSizeLimit/256) {
+			if encoder.Size() >= batchSizeLimit || (k.protocol == codec.ProtocolAvro && encoder.Size() >= 1) {
 				if err := flushToProducer(); err != nil {
 					return errors.Trace(err)
 				}

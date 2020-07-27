@@ -16,7 +16,7 @@ package filter
 import (
 	"testing"
 
-	`github.com/pingcap/parser/mysql`
+	"github.com/pingcap/parser/mysql"
 
 	"github.com/pingcap/ticdc/pkg/config"
 
@@ -73,28 +73,27 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 	testCases := []struct {
-		schema string
-		table  string
-		ts     uint64
+		schema      string
+		table       string
+		ts          uint64
 		columnTypes []byte
-		ignore bool
+		ignore      bool
 	}{
-		{"sns", "ttta", 1, nil,true},
-		{"ecom", "aabb", 2, nil,false},
-		{"sns", "log", 3, nil,true},
-		{"sns", "log", 4, nil,true},
-		{"ecom", "test", 5, nil,true},
-		{"test", "test", 6,nil, true},
-		{"ecom", "log", 6, nil,false},
+		{"sns", "ttta", 1, nil, true},
+		{"ecom", "aabb", 2, nil, false},
+		{"sns", "log", 3, nil, true},
+		{"sns", "log", 4, nil, true},
+		{"ecom", "test", 5, nil, true},
+		{"test", "test", 6, nil, true},
+		{"ecom", "log", 6, nil, false},
 		{"ecom", "log", 6, []byte{mysql.TypeBit, mysql.TypeTinyBlob}, true},
 		{"ecom", "log", 6, []byte{mysql.TypeJSON, mysql.TypeTinyBlob}, false},
 		{"ecom", "log", 6, []byte{mysql.TypeString}, true},
-
 	}
 
 	for _, tc := range testCases {
-		c.Assert(filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table, tc.columnTypes), check.Equals, tc.ignore)
-		c.Assert(filter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table, tc.columnTypes), check.Equals, tc.ignore)
+		c.Assert(filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
+		c.Assert(filter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
 	}
 }
 

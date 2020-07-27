@@ -21,7 +21,9 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pingcap/check"
+
 	"github.com/pingcap/ticdc/cdc/model"
+	codec2 "github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 )
@@ -36,8 +38,8 @@ func newMySQLSink4Test(c *check.C) *mysqlSink {
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
 	return &mysqlSink{
-		unresolvedTxns: make(map[model.TableName][]*model.Txn),
-		filter:         f,
+		txnGenerator: codec2.NewTxnGenerator(),
+		filter:       f,
 	}
 }
 
@@ -245,7 +247,7 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 		ms := newMySQLSink4Test(c)
 		err := ms.EmitRowChangedEvents(ctx, tc.input...)
 		c.Assert(err, check.IsNil)
-		c.Assert(ms.unresolvedTxns, check.DeepEquals, tc.expected)
+		c.Assert(ms.txnGenerator.UnresolvedTxns, check.DeepEquals, tc.expected)
 	}
 }
 
@@ -311,7 +313,7 @@ func (s MySQLSinkSuite) TestSplitResolvedTxn(c *check.C) {
 		expectedMinTs:          11,
 	}}
 	for _, tc := range testCases {
-		minTs, resolvedTxns := splitResolvedTxn(tc.resolvedTs, tc.unresolvedTxns)
+		minTs, resolvedTxns := codec2.SplitResolvedTxn(tc.resolvedTs, tc.unresolvedTxns)
 		c.Assert(minTs, check.Equals, tc.expectedMinTs)
 		c.Assert(resolvedTxns, check.DeepEquals, tc.expectedResolvedTxns)
 		c.Assert(tc.unresolvedTxns, check.DeepEquals, tc.expectedUnresolvedTxns)
