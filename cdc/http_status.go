@@ -58,7 +58,7 @@ func (s *Server) startStatusHTTP() error {
 	if s.opts.credential != nil {
 		credential = s.opts.credential
 	}
-	tlsConfig, err := credential.ToTLSConfig()
+	tlsConfig, err := credential.ToTLSConfigWithVerify()
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))
 		return errors.Trace(err)

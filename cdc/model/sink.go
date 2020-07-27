@@ -15,9 +15,12 @@ package model
 
 import (
 	"fmt"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/ticdc/pkg/util"
 )
 
 // MqMessageType is the type of message
@@ -33,6 +36,29 @@ const (
 	// MqMessageTypeResolved is resolved type of message key
 	MqMessageTypeResolved
 )
+
+// ColumnFlagType is for encapsulating the flag operations for different flags.
+type ColumnFlagType util.Flag
+
+const (
+	// BinaryFlag means col charset is binary
+	BinaryFlag ColumnFlagType = 1 << ColumnFlagType(iota)
+)
+
+//SetIsBinary set BinaryFlag
+func (b *ColumnFlagType) SetIsBinary() {
+	(*util.Flag)(b).Add(util.Flag(BinaryFlag))
+}
+
+//UnsetIsBinary unset BinaryFlag
+func (b *ColumnFlagType) UnsetIsBinary() {
+	(*util.Flag)(b).Remove(util.Flag(BinaryFlag))
+}
+
+//IsBinary show whether BinaryFlag is set
+func (b *ColumnFlagType) IsBinary() bool {
+	return (*util.Flag)(b).HasAll(util.Flag(BinaryFlag))
+}
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
@@ -72,9 +98,7 @@ type RowChangedEvent struct {
 
 	Delete bool `json:"delete"`
 
-	SchemaID int64 `json:"schema-id,omitempty"`
-
-	TableUpdateTs uint64 `json:"table-update-ts,omitempty"`
+	TableInfoVersion uint64 `json:"table-info-version,omitempty"`
 
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
@@ -85,9 +109,10 @@ type RowChangedEvent struct {
 
 // Column represents a column value in row changed event
 type Column struct {
-	Type        byte        `json:"t"`
-	WhereHandle *bool       `json:"h,omitempty"`
-	Value       interface{} `json:"v"`
+	Type        byte           `json:"t"`
+	WhereHandle *bool          `json:"h,omitempty"`
+	Flag        ColumnFlagType `json:"f"`
+	Value       interface{}    `json:"v"`
 }
 
 // ColumnInfo represents the name and type information passed to the sink
@@ -107,9 +132,7 @@ type TableInfo struct {
 	// db name
 	Schema string
 	// table name
-	Table string
-	// unique identifier for the current table schema.
-	UpdateTs   uint64
+	Table      string
 	ColumnInfo []*ColumnInfo
 }
 
@@ -139,7 +162,6 @@ func (e *DDLEvent) FromJob(job *model.Job) {
 
 		e.TableInfo.Schema = job.SchemaName
 		e.TableInfo.Table = tableName
-		e.TableInfo.UpdateTs = tableInfo.UpdateTS
 		e.Table = tableName
 	}
 	e.StartTs = job.StartTS

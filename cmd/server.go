@@ -50,7 +50,7 @@ func init() {
 	serverCmd.Flags().Int64Var(&gcTTL, "gc-ttl", cdc.DefaultCDCGCSafePointTTL, "CDC GC safepoint TTL duration, specified in seconds")
 	serverCmd.Flags().StringVar(&logFile, "log-file", "", "log file path")
 	serverCmd.Flags().StringVar(&logLevel, "log-level", "info", "log level (etc: debug|info|warn|error)")
-	addSecurityFlags(serverCmd.Flags())
+	addSecurityFlags(serverCmd.Flags(), true /* isServer */)
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
