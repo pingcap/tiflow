@@ -413,9 +413,12 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			// If we don't output a resovled ts event, the processor will still
 			// cache all events in memory until it receives the resolved ts when
 			// file sorter outputs all events in this rotate round.
+			// Events after this one could have the same commit ts with
+			// `item.entry.CRTs`, so we can't output a resolved event with
+			// `item.entry.CRTs`. But it is safe to output with `item.entry.CRTs-1`.
 			rowCount += 1
 			if rowCount%defaultAutoResolvedRows == 0 {
-				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.CRTs))
+				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.CRTs-1))
 			}
 		} else {
 			lastSortedFileUpdated = true
