@@ -484,6 +484,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		return nil
 	}
 	newModRevision := p.statusModRevision
+	var tablesToRemove []model.TableID
 	newTaskStatus, err := p.etcdCli.AtomicPutTaskStatus(ctx, p.changefeedID, p.captureInfo.ID,
 		func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
 			// if the task status is not changed and not operation to handle
@@ -499,7 +500,8 @@ func (p *processor) updateInfo(ctx context.Context) error {
 				}
 				return false, backoff.Permanent(model.ErrAdminStopProcessor)
 			}
-			err := p.handleTables(ctx, taskStatus)
+			toRemove, err := p.handleTables(ctx, taskStatus)
+			tablesToRemove = append(tablesToRemove, toRemove...)
 			if err != nil {
 				return false, backoff.Permanent(errors.Trace(err))
 			}
@@ -510,6 +512,9 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		//nolint:errcheck
 		updatePosition()
 		return errors.Trace(err)
+	}
+	for _, tableID := range tablesToRemove {
+		p.removeTable(tableID)
 	}
 	p.statusModRevision = newModRevision
 	p.status = newTaskStatus
@@ -545,7 +550,7 @@ func (p *processor) removeTable(tableID int64) {
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
-func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) error {
+func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) (tablesToRemove []model.TableID, err error) {
 	for tableID, opt := range status.Operation {
 		if opt.Done {
 			continue
@@ -558,12 +563,12 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 					opt.Done = true
 					continue
 				}
-
+				// bug here
 				stopped, checkpointTs := table.safeStop()
 				if stopped {
 					opt.BoundaryTs = checkpointTs
 					if checkpointTs <= p.position.CheckPointTs {
-						p.removeTable(tableID)
+						tablesToRemove = append(tablesToRemove, tableID)
 						opt.Done = true
 					}
 				}
@@ -571,10 +576,10 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 		} else {
 			replicaInfo, exist := status.Tables[tableID]
 			if !exist {
-				return errors.NotFoundf("replicaInfo of table(%d)", tableID)
+				return tablesToRemove, errors.NotFoundf("replicaInfo of table(%d)", tableID)
 			}
 			if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
-				return errors.NotValidf("normal table(%d) and mark table not match ", tableID)
+				return tablesToRemove, errors.NotValidf("normal table(%d) and mark table not match ", tableID)
 			}
 			p.addTable(ctx, tableID, replicaInfo)
 			opt.Done = true
@@ -583,7 +588,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 	if !status.SomeOperationsUnapplied() {
 		status.Operation = nil
 	}
-	return nil
+	return tablesToRemove, nil
 }
 
 // globalStatusWorker read global resolve ts from changefeed level info and forward `tableInputChans` regularly.
