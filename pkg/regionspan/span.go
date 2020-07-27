@@ -68,6 +68,7 @@ func GetTableSpan(tableID int64, enableOldValue bool) Span {
 	recordMarker := byte('r')
 	tablePrefix := tablecodec.GenTablePrefix(tableID)
 	var start, end kv.Key
+	// If old value was enabled, we can ignore index keys.
 	if enableOldValue {
 		start = append(tablePrefix, sep, recordMarker)
 		end = append(tablePrefix, sep, recordMarker+1)

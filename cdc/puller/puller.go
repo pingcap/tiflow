@@ -45,7 +45,6 @@ type Puller interface {
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
 	Output() <-chan *model.RawKVEntry
-	EnableOldValue()
 }
 
 type pullerImpl struct {
@@ -70,6 +69,7 @@ func NewPuller(
 	checkpointTs uint64,
 	spans []regionspan.Span,
 	limitter *BlurResourceLimitter,
+	enableOldValue bool,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
@@ -80,25 +80,22 @@ func NewPuller(
 		comparableSpans[i] = regionspan.ToComparableSpan(spans[i])
 	}
 	p := &pullerImpl{
-		pdCli:        pdCli,
-		credential:   credential,
-		kvStorage:    tikvStorage,
-		checkpointTs: checkpointTs,
-		spans:        comparableSpans,
-		buffer:       makeMemBuffer(limitter),
-		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:    frontier.NewFrontier(checkpointTs, comparableSpans...),
-		resolvedTs:   checkpointTs,
+		pdCli:          pdCli,
+		credential:     credential,
+		kvStorage:      tikvStorage,
+		checkpointTs:   checkpointTs,
+		spans:          comparableSpans,
+		buffer:         makeMemBuffer(limitter),
+		outputCh:       make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
+		tsTracker:      frontier.NewFrontier(checkpointTs, comparableSpans...),
+		resolvedTs:     checkpointTs,
+		enableOldValue: enableOldValue,
 	}
 	return p
 }
 
 func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 	return p.outputCh
-}
-
-func (p *pullerImpl) EnableOldValue() {
-	p.enableOldValue = true
 }
 
 // Run the puller, continually fetch event from TiKV and add event into buffer

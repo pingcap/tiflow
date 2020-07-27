@@ -54,8 +54,8 @@ type baseKVEntry struct {
 
 type rowKVEntry struct {
 	baseKVEntry
-	Row        map[int64]types.Datum
-	ChangedRow map[int64]types.Datum
+	Row    map[int64]types.Datum
+	PreRow map[int64]types.Datum
 }
 
 type indexKVEntry struct {
@@ -298,12 +298,15 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, 
 	return &rowKVEntry{
 		baseKVEntry: base,
 		Row:         row,
-		ChangedRow:  changedRow,
+		PreRow:      changedRow,
 	}, nil
 }
 
 func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*indexKVEntry, error) {
-	// skip set index KV
+	// Skip set index KV.
+	// By default we cannot get the old value of a deleted row, then we must get the value of unique key
+	// or primary key for seeking the deleted row through its index key.
+	// After the old value was enabled, we can skip the index key.
 	if !base.Delete || m.enableOldValue {
 		return nil, nil
 	}
@@ -396,6 +399,7 @@ func datum2Column(tableInfo *TableInfo, datums map[int64]types.Datum) (map[strin
 			column := &model.Column{
 				Type:  col.Tp,
 				Value: getDefaultOrZeroValue(col),
+				Flag:  transColumnFlag(col),
 			}
 			if tableInfo.IsColumnUnique(col.ID) {
 				whereHandle := true
@@ -413,24 +417,25 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 
 	var err error
-	// Decode changed columns.
-	var changedCols map[string]*model.Column
-	if len(row.ChangedRow) != 0 {
-		changedCols, err = datum2Column(tableInfo, row.ChangedRow)
+	// Decode previous columns.
+	var preCols map[string]*model.Column
+	if len(row.PreRow) != 0 {
+		preCols, err = datum2Column(tableInfo, row.PreRow)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
-	// Try to decode columns, if row represents a delete event, columns should be == changed columns
+	// Try to decode columns, if row represents a delete event, columns should be == previous columns
 	var cols map[string]*model.Column
-	if !row.Delete {
+	if row.Delete && m.enableOldValue {
+		// if row is Delete and old value was enabled.
+		cols = preCols
+		preCols = nil
+	} else {
 		cols, err = datum2Column(tableInfo, row.Row)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-	} else {
-		cols = changedCols
-		changedCols = nil
 	}
 	var partitionID int64
 	if tableInfo.GetPartitionInfo() != nil {
@@ -450,11 +455,11 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 			Table:     tableName,
 			Partition: partitionID,
 		},
-		IndieMarkCol:   tableInfo.IndieMarkCol,
-		Delete:         row.Delete,
-		Columns:        cols,
-		ChangedColumns: changedCols,
-		Keys:           genMultipleKeys(tableInfo.TableInfo, cols, quotes.QuoteSchema(schemaName, tableName)),
+		IndieMarkCol: tableInfo.IndieMarkCol,
+		Delete:       row.Delete,
+		Columns:      cols,
+		PreColumns:   preCols,
+		Keys:         genMultipleKeys(tableInfo.TableInfo, cols, quotes.QuoteSchema(schemaName, tableName)),
 	}, nil
 }
 
