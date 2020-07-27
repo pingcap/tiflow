@@ -505,6 +505,8 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			return true, nil
 		})
 	if err != nil {
+		// not need to check error
+		//nolint:errcheck
 		updatePosition()
 		return errors.Trace(err)
 	}
@@ -548,12 +550,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 			continue
 		}
 		if opt.Delete {
-			log.Info("LEOPPRO: delete table", zap.Int64("tableID", tableID))
 			if opt.BoundaryTs <= p.position.CheckPointTs {
-				log.Info("LEOPPRO: P1",
-					zap.Uint64("BoundaryTs", opt.BoundaryTs),
-					zap.Uint64("CheckPointTs", p.position.CheckPointTs),
-					zap.Int64("tableID", tableID))
 				table, exist := p.tables[tableID]
 				if !exist {
 					log.Warn("table which will be deleted is not found", zap.Int64("tableID", tableID))
@@ -563,12 +560,8 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 
 				stopped, checkpointTs := table.safeStop()
 				if stopped {
-					log.Info("LEOPPRO: stopped",
-						zap.Int64("tableID", tableID),
-						zap.Uint64("checkpointTs", checkpointTs))
 					opt.BoundaryTs = checkpointTs
 					if checkpointTs <= p.position.CheckPointTs {
-						log.Info("LEOPPRO: removed", zap.Int64("tableID", tableID), zap.Uint64("checkpointTs", checkpointTs))
 						p.removeTable(tableID)
 						opt.Done = true
 					}
@@ -856,7 +849,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			err := util.IsDirAndWritable(p.changefeed.SortDir)
 			if err != nil {
 				p.errCh <- errors.Annotate(err, "sort dir check")
-				return
+				return nil
 			}
 			sorter = puller.NewFileSorter(p.changefeed.SortDir)
 		default:

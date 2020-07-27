@@ -543,9 +543,8 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 		if err != nil {
 			if permanent, ok := err.(*backoff.PermanentError); ok {
 				return backoff.Permanent(errors.Trace(permanent.Err))
-			} else {
-				return errors.Trace(err)
 			}
+			return errors.Trace(err)
 		}
 		if !updated {
 			return nil
