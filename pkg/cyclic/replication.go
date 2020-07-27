@@ -61,11 +61,11 @@ type Cyclic struct {
 
 // UdpateSourceTableCyclicMark return a DML to update mark table regrad to
 // the source table name, bucket and replicaID.
-func (*Cyclic) UdpateSourceTableCyclicMark(sourceSchema, sourceTable string, bucket, replicaID uint64) string {
+func (*Cyclic) UdpateSourceTableCyclicMark(sourceSchema, sourceTable string, bucket, replicaID uint64, startTs uint64) string {
 	schema, table := mark.GetMarkTableName(sourceSchema, sourceTable)
 	return fmt.Sprintf(
-		`INSERT INTO %s VALUES (%d, %d, 0) ON DUPLICATE KEY UPDATE val = val + 1;`,
-		model.QuoteSchema(schema, table), bucket, replicaID)
+		`INSERT INTO %s VALUES (%d, %d, 0, %d) ON DUPLICATE KEY UPDATE val = val + 1;`,
+		model.QuoteSchema(schema, table), bucket, replicaID, startTs)
 }
 
 // FilterReplicaID return a slice of replica IDs needs to be filtered.

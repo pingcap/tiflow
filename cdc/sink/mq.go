@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -56,7 +57,10 @@ type mqSink struct {
 	statistics *Statistics
 }
 
-func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func newMqSink(
+	ctx context.Context, credential *security.Credential, mqProducer mqProducer.Producer,
+	filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error,
+) (*mqSink, error) {
 	partitionNum := mqProducer.GetPartitionNum()
 	partitionInput := make([]chan struct {
 		row        *model.RowChangedEvent
@@ -82,7 +86,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 		if !ok {
 			return nil, errors.New(`Avro protocol requires parameter "registry"`)
 		}
-		schemaManager, err := codec.NewAvroSchemaManager(ctx, registryURI, "-value")
+		schemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-value")
 		if err != nil {
 			return nil, errors.Annotate(err, "Could not create Avro schema manager")
 		}
@@ -382,7 +386,7 @@ func (k *mqSink) writeToProducer(ctx context.Context, key []byte, value []byte, 
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	config := mqProducer.DefaultKafkaConfig
+	config := mqProducer.NewKafkaConfig()
 
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "kafka" {
@@ -432,6 +436,21 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		replicaConfig.Sink.Protocol = s
 	}
 
+	s = sinkURI.Query().Get("ca")
+	if s != "" {
+		config.Credential.CAPath = s
+	}
+
+	s = sinkURI.Query().Get("cert")
+	if s != "" {
+		config.Credential.CertPath = s
+	}
+
+	s = sinkURI.Query().Get("key")
+	if s != "" {
+		config.Credential.KeyPath = s
+	}
+
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
@@ -439,7 +458,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := newMqSink(ctx, producer, filter, replicaConfig, opts, errCh)
+	sink, err := newMqSink(ctx, config.Credential, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -455,7 +474,10 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
 	}
-	sink, err := newMqSink(ctx, producer, filter, replicaConfig, opts, errCh)
+	// For now, it's a place holder. Avro format have to make connection to Schema Registery,
+	// and it may needs credential.
+	credential := &security.Credential{}
+	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
