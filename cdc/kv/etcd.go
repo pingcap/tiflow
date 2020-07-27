@@ -516,7 +516,7 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 	ctx context.Context,
 	changefeedID string,
 	captureID string,
-	update func(*model.TaskStatus) error,
+	update func(int64, *model.TaskStatus) (updated bool, err error),
 ) (*model.TaskStatus, error) {
 	var status *model.TaskStatus
 	err := retry.Run(100*time.Millisecond, 3, func() error {
@@ -539,9 +539,16 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 		default:
 			return errors.Trace(err)
 		}
-		err = update(status)
+		updated, err := update(modRevision, status)
 		if err != nil {
-			return errors.Trace(err)
+			if permanent, ok := err.(*backoff.PermanentError); ok {
+				return backoff.Permanent(errors.Trace(permanent.Err))
+			} else {
+				return errors.Trace(err)
+			}
+		}
+		if !updated {
+			return nil
 		}
 		value, err := status.Marshal()
 		if err != nil {

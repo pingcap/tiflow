@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
-	"github.com/pingcap/ticdc/cdc/roles/storage"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
@@ -66,8 +65,7 @@ const (
 )
 
 var (
-	fNewPDCli     = pd.NewClientWithContext
-	fNewTsRWriter = createTsRWriter
+	fNewPDCli = pd.NewClientWithContext
 )
 
 type processor struct {
@@ -94,15 +92,15 @@ type processor struct {
 	ddlPullerCancel context.CancelFunc
 	schemaStorage   *entry.SchemaStorage
 
-	tsRWriter storage.ProcessorTsRWriter
-	output    chan *model.PolymorphicEvent
-	mounter   entry.Mounter
+	output  chan *model.PolymorphicEvent
+	mounter entry.Mounter
 
-	stateMu      sync.Mutex
-	status       *model.TaskStatus
-	position     *model.TaskPosition
-	tables       map[int64]*tableInfo
-	markTableIDs map[int64]struct{}
+	stateMu           sync.Mutex
+	status            *model.TaskStatus
+	position          *model.TaskPosition
+	tables            map[int64]*tableInfo
+	markTableIDs      map[int64]struct{}
+	statusModRevision int64
 
 	sinkEmittedResolvedNotifier *notify.Notifier
 	sinkEmittedResolvedReceiver *notify.Receiver
@@ -167,12 +165,6 @@ func newProcessor(
 		return nil, errors.Trace(err)
 	}
 	cdcEtcdCli := kv.NewCDCEtcdClient(etcdCli)
-
-	tsRWriter, err := fNewTsRWriter(cdcEtcdCli, changefeedID, captureInfo.ID)
-	if err != nil {
-		return nil, errors.Annotate(err, "failed to create ts RWriter")
-	}
-
 	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
 
 	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
@@ -208,10 +200,8 @@ func newProcessor(
 		schemaStorage: schemaStorage,
 		errCh:         errCh,
 
-		tsRWriter: tsRWriter,
-		status:    tsRWriter.GetTaskStatus(),
-		position:  &model.TaskPosition{CheckPointTs: checkpointTs},
-		output:    make(chan *model.PolymorphicEvent, defaultOutputChanSize),
+		position: &model.TaskPosition{CheckPointTs: checkpointTs},
+		output:   make(chan *model.PolymorphicEvent, defaultOutputChanSize),
 
 		sinkEmittedResolvedNotifier: sinkEmittedResolvedNotifier,
 		sinkEmittedResolvedReceiver: sinkEmittedResolvedNotifier.NewReceiver(50 * time.Millisecond),
@@ -222,6 +212,11 @@ func newProcessor(
 		tables:       make(map[int64]*tableInfo),
 		markTableIDs: make(map[int64]struct{}),
 	}
+	_, status, err := p.etcdCli.GetTaskStatus(ctx, p.changefeedID, p.captureInfo.ID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	p.status = status
 
 	for tableID, replicaInfo := range p.status.Tables {
 		p.addTable(ctx, tableID, replicaInfo)
@@ -477,51 +472,46 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 func (p *processor) updateInfo(ctx context.Context) error {
 	updatePosition := func() error {
 		//p.position.Count = p.sink.Count()
-		err := p.tsRWriter.WritePosition(ctx, p.position)
+		err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 		if err != nil {
+			log.Error("failed to update position", zap.Error(err))
 			return errors.Trace(err)
 		}
 		log.Debug("update task position", zap.Stringer("position", p.position))
 		return nil
 	}
-	statusChanged, err := p.tsRWriter.UpdateInfo(ctx)
+	newModRevision := p.statusModRevision
+	newTaskStatus, err := p.etcdCli.AtomicPutTaskStatus(ctx, p.changefeedID, p.captureInfo.ID,
+		func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
+			// if the task status is not changed and not operation to handle
+			// we need not to change the task status
+			if p.statusModRevision == modRevision && !taskStatus.SomeOperationsUnapplied() {
+				return false, nil
+			}
+			newModRevision = modRevision
+			if taskStatus.AdminJobType == model.AdminStop || taskStatus.AdminJobType == model.AdminRemove {
+				err := p.stop(ctx)
+				if err != nil {
+					return false, backoff.Permanent(errors.Trace(err))
+				}
+				return false, backoff.Permanent(model.ErrAdminStopProcessor)
+			}
+			err := p.handleTables(ctx, taskStatus)
+			if err != nil {
+				return false, backoff.Permanent(errors.Trace(err))
+			}
+			return true, nil
+		})
 	if err != nil {
+		updatePosition()
 		return errors.Trace(err)
 	}
-	if !statusChanged && !p.tsRWriter.GetTaskStatus().SomeOperationsUnapplied() {
-		return updatePosition()
-	}
-	p.status = p.tsRWriter.GetTaskStatus()
-	if p.status.AdminJobType == model.AdminStop || p.status.AdminJobType == model.AdminRemove {
-		err = p.stop(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		return errors.Trace(model.ErrAdminStopProcessor)
-	}
-	err = p.handleTables(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	p.statusModRevision = newModRevision
+	p.status = newTaskStatus
 	syncTableNumGauge.
 		WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).
 		Set(float64(len(p.status.Tables)))
 	err = updatePosition()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	err = retry.Run(500*time.Millisecond, 5, func() error {
-		err = p.tsRWriter.WriteInfoIntoStorage(ctx)
-		switch errors.Cause(err) {
-		case model.ErrWriteTsConflict:
-			return errors.Trace(err)
-		case nil:
-			log.Info("update task status", zap.Stringer("status", p.status), zap.Stringer("position", p.position))
-			return nil
-		default:
-			return backoff.Permanent(errors.Trace(err))
-		}
-	})
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -550,8 +540,8 @@ func (p *processor) removeTable(tableID int64) {
 }
 
 // handleTables handles table scheduler on this processor, add or remove table puller
-func (p *processor) handleTables(ctx context.Context) error {
-	for tableID, opt := range p.status.Operation {
+func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) error {
+	for tableID, opt := range status.Operation {
 		if opt.Done {
 			continue
 		}
@@ -583,7 +573,7 @@ func (p *processor) handleTables(ctx context.Context) error {
 				}
 			}
 		} else {
-			replicaInfo, exist := p.status.Tables[tableID]
+			replicaInfo, exist := status.Tables[tableID]
 			if !exist {
 				return errors.NotFoundf("replicaInfo of table(%d)", tableID)
 			}
@@ -594,8 +584,8 @@ func (p *processor) handleTables(ctx context.Context) error {
 			opt.Done = true
 		}
 	}
-	if !p.status.SomeOperationsUnapplied() {
-		p.status.Operation = nil
+	if !status.SomeOperationsUnapplied() {
+		status.Operation = nil
 	}
 	return nil
 }
@@ -647,7 +637,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 
 		err := backoff.Retry(func() error {
 			var err error
-			changefeedStatus, statusRev, err = p.tsRWriter.GetChangeFeedStatus(ctx)
+			changefeedStatus, statusRev, err = p.etcdCli.GetChangeFeedStatus(ctx, p.changefeedID)
 			if err != nil {
 				if errors.Cause(err) == context.Canceled {
 					return backoff.Permanent(err)
@@ -810,10 +800,6 @@ func createSchemaStorage(pdEndpoints []string, credential *security.Credential, 
 		return nil, errors.Trace(err)
 	}
 	return entry.NewSchemaStorage(meta, checkpointTs, filter)
-}
-
-func createTsRWriter(cli kv.CDCEtcdClient, changefeedID, captureID string) (storage.ProcessorTsRWriter, error) {
-	return storage.NewProcessorTsEtcdRWriter(cli, changefeedID, captureID)
 }
 
 func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
@@ -1029,7 +1015,7 @@ func runProcessor(
 				Code:    "CDC-processor-1000",
 				Message: err.Error(),
 			}
-			err = processor.tsRWriter.WritePosition(ctx, processor.position)
+			err = processor.etcdCli.PutTaskPosition(ctx, processor.changefeedID, processor.captureInfo.ID, processor.position)
 			if err != nil {
 				log.Warn("upload processor error failed", zap.Error(err))
 			}
