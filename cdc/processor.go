@@ -212,11 +212,12 @@ func newProcessor(
 		tables:       make(map[int64]*tableInfo),
 		markTableIDs: make(map[int64]struct{}),
 	}
-	_, status, err := p.etcdCli.GetTaskStatus(ctx, p.changefeedID, p.captureInfo.ID)
+	modRevision, status, err := p.etcdCli.GetTaskStatus(ctx, p.changefeedID, p.captureInfo.ID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	p.status = status
+	p.statusModRevision = modRevision
 
 	for tableID, replicaInfo := range p.status.Tables {
 		p.addTable(ctx, tableID, replicaInfo)
