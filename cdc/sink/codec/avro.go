@@ -74,7 +74,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		return errors.New("Fatal sink bug. Batch size must be 1")
 	}
 
-	res, err := a.avroEncode(e.Table, e.TableUpdateTs, e.Columns)
+	res, err := a.avroEncode(e.Table, e.TableInfoVersion, e.Columns)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
 		return errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
@@ -146,8 +146,8 @@ func (a *AvroEventBatchEncoder) Size() int {
 	return 1
 }
 
-func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, updateTs uint64, cols map[string]*model.Column) (*avroEncodeResult, error) {
-	avroCodec, registryID, err := a.valueSchemaManager.Lookup(context.Background(), *table, updateTs)
+func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tableVersion uint64, cols map[string]*model.Column) (*avroEncodeResult, error) {
+	avroCodec, registryID, err := a.valueSchemaManager.Lookup(context.Background(), *table, tableVersion)
 	if err != nil {
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: lookup failed")
 	}

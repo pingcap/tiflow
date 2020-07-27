@@ -16,9 +16,11 @@ package puller
 import (
 	"context"
 	"math/rand"
+	"sync"
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
@@ -98,10 +100,12 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 	}
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := es.Run(ctx)
-		c.Assert(err, check.IsNil)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 	for _, tc := range testCases {
 		for _, entry := range tc.input {
@@ -113,19 +117,26 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 			c.Check(e.RawKV, check.DeepEquals, tc.expect[i])
 		}
 	}
+	cancel()
+	wg.Wait()
 }
 
 func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := es.Run(ctx)
-		c.Assert(err, check.IsNil)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 	}()
 
 	maxTs := uint64(1000000)
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for resolvedTs := uint64(1); resolvedTs <= maxTs; resolvedTs += 400 {
 			var opType model.OpType
 			if rand.Intn(2) == 0 {
@@ -162,22 +173,28 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 			break
 		}
 	}
+	cancel()
+	wg.Wait()
 }
 
 func BenchmarkSorter(b *testing.B) {
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err := es.Run(ctx)
-		if err != nil {
-			panic(err)
+		if errors.Cause(err) != context.Canceled {
+			panic(errors.Annotate(err, "unexpected error"))
 		}
 	}()
 
 	maxTs := uint64(10000000)
 	b.ResetTimer()
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for resolvedTs := uint64(1); resolvedTs <= maxTs; resolvedTs += 400 {
 			var opType model.OpType
 			if rand.Intn(2) == 0 {
@@ -205,4 +222,6 @@ func BenchmarkSorter(b *testing.B) {
 			break
 		}
 	}
+	cancel()
+	wg.Wait()
 }

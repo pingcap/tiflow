@@ -29,6 +29,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/httputil"
+	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
 )
 
@@ -39,6 +41,8 @@ type AvroSchemaManager struct {
 	registryURL   string
 	cache         map[string]*schemaCacheEntry
 	subjectSuffix string
+
+	credential *security.Credential
 }
 
 type schemaCacheEntry struct {
@@ -63,15 +67,20 @@ type lookupResponse struct {
 }
 
 // NewAvroSchemaManager creates a new AvroSchemaManager
-func NewAvroSchemaManager(ctx context.Context, registryURL string, subjectSuffix string) (*AvroSchemaManager, error) {
+func NewAvroSchemaManager(
+	ctx context.Context, credential *security.Credential, registryURL string, subjectSuffix string,
+) (*AvroSchemaManager, error) {
 	registryURL = strings.TrimRight(registryURL, "/")
 	// Test connectivity to the Schema Registry
-	// TODO TLS support
-	req, err := http.NewRequest("GET", registryURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", registryURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+	httpCli, err := httputil.NewClient(credential)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	resp, err := httpCli.Do(req)
 
 	if err != nil {
 		return nil, errors.Annotate(err, "Test connection to Schema Registry failed")
@@ -93,6 +102,7 @@ func NewAvroSchemaManager(ctx context.Context, registryURL string, subjectSuffix
 		registryURL:   registryURL,
 		cache:         make(map[string]*schemaCacheEntry, 1),
 		subjectSuffix: subjectSuffix,
+		credential:    credential,
 	}, nil
 }
 
@@ -112,12 +122,12 @@ func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableN
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(tableName)) + "/versions"
 	log.Debug("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
-	req, err := http.NewRequest("POST", uri, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json")
-	resp, err := httpRetry(ctx, req, false)
+	resp, err := httpRetry(ctx, m.credential, req, false)
 	if err != nil {
 		return err
 	}
@@ -177,13 +187,13 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(tableName)) + "/versions/latest"
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
 
-	req, err := http.NewRequest("GET", uri, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
 	if err != nil {
 		return nil, 0, errors.Annotate(err, "Error constructing request for Registry lookup")
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json, application/vnd.schemaregistry+json, application/json")
 
-	resp, err := httpRetry(ctx, req, false)
+	resp, err := httpRetry(ctx, m.credential, req, false)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -238,13 +248,13 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 // Exported for testing.
 func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.TableName) error {
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(tableName))
-	req, err := http.NewRequest("DELETE", uri, nil)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", uri, nil)
 	if err != nil {
 		log.Error("Could not construct request for clearRegistry", zap.String("uri", uri))
 		return err
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json, application/vnd.schemaregistry+json, application/json")
-	resp, err := httpRetry(ctx, req, true)
+	resp, err := httpRetry(ctx, m.credential, req, true)
 	if err != nil {
 		return err
 	}
@@ -263,7 +273,7 @@ func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.T
 	return errors.Errorf("Error when clearing Registry, status = %d", resp.StatusCode)
 }
 
-func httpRetry(ctx context.Context, r *http.Request, allow404 bool) (*http.Response, error) {
+func httpRetry(ctx context.Context, credential *security.Credential, r *http.Request, allow404 bool) (*http.Response, error) {
 	var (
 		err  error
 		resp *http.Response
@@ -271,8 +281,12 @@ func httpRetry(ctx context.Context, r *http.Request, allow404 bool) (*http.Respo
 
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.MaxInterval = time.Second * 30
+	httpCli, err := httputil.NewClient(credential)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	for {
-		resp, err = http.DefaultClient.Do(r.WithContext(ctx))
+		resp, err = httpCli.Do(r)
 
 		if err != nil {
 			log.Warn("HTTP request failed", zap.String("msg", err.Error()))
