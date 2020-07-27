@@ -413,6 +413,9 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			// If we don't output a resovled ts event, the processor will still
 			// cache all events in memory until it receives the resolved ts when
 			// file sorter outputs all events in this rotate round.
+			// The previous event is guaranteed to be sent to output chan, and
+			// `item.entry.CRTs-1` >= `presvious_item.entry.CRTs`, which means
+			// it is safe to output a resolved event with `item.entry.CRTs-1`
 			rowCount += 1
 			if rowCount%defaultAutoResolvedRows == 0 {
 				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.CRTs-1))
