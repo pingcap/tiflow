@@ -183,7 +183,6 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 		testCaseDdl.TableInfo.ColumnInfo[i] = new(model.ColumnInfo)
 		testCaseDdl.TableInfo.ColumnInfo[i].FromTiColumnInfo(v)
 	}
-	testCaseDdl.TableInfo.UpdateTs = 0xbeefbeef
 
 	err := s.encoder.AppendDDLEvent(testCaseDdl)
 	c.Check(err, check.IsNil)

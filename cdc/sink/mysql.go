@@ -556,6 +556,12 @@ func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.Txn) {
 }
 
 func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
+	var (
+		toExecRows []*model.RowChangedEvent
+		replicaID  uint64
+		txnNum     int
+	)
+
 	defer func() {
 		if r := recover(); r != nil {
 			buf := make([]byte, 4096)
@@ -563,12 +569,10 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			buf = buf[:stackSize]
 			err = errors.Errorf("mysql sink concurrent execute panic, stack: %v", string(buf))
 			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stack trace"))
+			w.txnWg.Add(-1 * txnNum)
 		}
 	}()
 
-	var toExecRows []*model.RowChangedEvent
-	var replicaID uint64
-	var txnNum int
 	lastExecTime := time.Now()
 	flushRows := func() error {
 		if len(toExecRows) == 0 {
@@ -579,11 +583,12 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		err := w.execDMLs(ctx, rows, replicaID, w.bucket)
 		if err != nil {
 			w.txnWg.Add(-1 * txnNum)
+			txnNum = 0
 			return err
 		}
 		toExecRows = toExecRows[:0]
-		w.txnWg.Add(-1 * txnNum)
 		w.metricBucketSize.Add(float64(txnNum))
+		w.txnWg.Add(-1 * txnNum)
 		txnNum = 0
 		lastExecTime = time.Now()
 		return nil
@@ -687,8 +692,9 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	}
 	if s.cyclic != nil && len(rows) > 0 {
 		// Write mark table with the current replica ID.
+		row := rows[0]
 		updateMark := s.cyclic.UdpateSourceTableCyclicMark(
-			rows[0].Table.Schema, rows[0].Table.Table, uint64(bucket), replicaID)
+			row.Table.Schema, row.Table.Table, uint64(bucket), replicaID, row.StartTs)
 		sqls = append(sqls, updateMark)
 		values = append(values, nil)
 	}
