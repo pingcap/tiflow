@@ -229,7 +229,7 @@ func (o *Owner) newChangeFeed(
 	tables := make(map[model.TableID]model.TableName)
 	partitions := make(map[model.TableID][]int64)
 	orphanTables := make(map[model.TableID]model.Ts)
-	sinkTableInfo := make([]*model.TableInfo, len(schemaSnap.CloneTables()))
+	sinkTableInfo := make([]*model.SimpleTableInfo, len(schemaSnap.CloneTables()))
 	j := 0
 	for tid, table := range schemaSnap.CloneTables() {
 		j++
@@ -284,7 +284,7 @@ func (o *Owner) newChangeFeed(
 			orphanTables[tid] = checkpointTs
 		}
 
-		sinkTableInfo[j-1] = new(model.TableInfo)
+		sinkTableInfo[j-1] = new(model.SimpleTableInfo)
 		sinkTableInfo[j-1].ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
 
 		for i, colInfo := range tblInfo.Cols() {

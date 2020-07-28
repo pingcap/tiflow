@@ -156,10 +156,11 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 
 	testCaseDdl := &model.DDLEvent{
 		CommitTs: 417318403368288260,
-		Schema:   "test",
-		Table:    "person",
-		Query:    "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
-		Type:     model2.ActionCreateTable,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "test", Table: "person",
+		},
+		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+		Type:  model2.ActionCreateTable,
 	}
 
 	ctx := context.Background()
@@ -175,7 +176,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 	}()
 
 	info := pm.GetTableInfo("test", "person")
-	testCaseDdl.TableInfo = new(model.TableInfo)
+	testCaseDdl.TableInfo = new(model.SimpleTableInfo)
 	testCaseDdl.TableInfo.Schema = "test"
 	testCaseDdl.TableInfo.Table = "person"
 	testCaseDdl.TableInfo.ColumnInfo = make([]*model.ColumnInfo, len(info.Columns))

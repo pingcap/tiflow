@@ -165,8 +165,8 @@ func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChang
 func ddlEventtoMqMessage(e *model.DDLEvent) (*mqMessageKey, *mqMessageDDL) {
 	key := &mqMessageKey{
 		Ts:     e.CommitTs,
-		Schema: e.Schema,
-		Table:  e.Table,
+		Schema: e.TableInfo.Schema,
+		Table:  e.TableInfo.Table,
 		Type:   model.MqMessageTypeDDL,
 	}
 	value := &mqMessageDDL{
@@ -178,11 +178,12 @@ func ddlEventtoMqMessage(e *model.DDLEvent) (*mqMessageKey, *mqMessageDDL) {
 
 func mqMessageToDDLEvent(key *mqMessageKey, value *mqMessageDDL) *model.DDLEvent {
 	e := new(model.DDLEvent)
+	e.TableInfo = new(model.SimpleTableInfo)
 	// TODO: we lost the startTs from kafka message
 	// startTs-based txn filter is out of work
 	e.CommitTs = key.Ts
-	e.Table = key.Table
-	e.Schema = key.Schema
+	e.TableInfo.Table = key.Table
+	e.TableInfo.Schema = key.Schema
 	e.Type = value.Type
 	e.Query = value.Query
 	return e

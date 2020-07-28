@@ -53,28 +53,32 @@ var _ = check.Suite(&batchSuite{
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
 		CommitTs: 1,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table a",
-		Type:     1,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table a",
+		Type:  1,
 	}}, {{
 		CommitTs: 1,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table a",
-		Type:     1,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table a",
+		Type:  1,
 	}, {
 		CommitTs: 2,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table b",
-		Type:     2,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table b",
+		Type:  2,
 	}, {
 		CommitTs: 3,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table c",
-		Type:     3,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table c",
+		Type:  3,
 	}}, {}},
 	resolvedTsCases: [][]uint64{{1}, {1, 2, 3}, {}},
 })
