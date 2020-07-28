@@ -16,8 +16,6 @@ package filter
 import (
 	"testing"
 
-	"github.com/pingcap/parser/mysql"
-
 	"github.com/pingcap/ticdc/pkg/config"
 
 	"github.com/pingcap/check"
@@ -68,24 +66,22 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 		Filter: &config.FilterConfig{
 			IgnoreTxnStartTs: []uint64{1, 3},
 			Rules:            []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
-			IgnoreColumnType: []string{"blob", "bit", "int", "binary"},
 		},
 	})
 	c.Assert(err, check.IsNil)
 	testCases := []struct {
-		schema      string
-		table       string
-		ts          uint64
-		columnTypes []byte
-		ignore      bool
+		schema string
+		table  string
+		ts     uint64
+		ignore bool
 	}{
-		{"sns", "ttta", 1, nil, true},
-		{"ecom", "aabb", 2, nil, false},
-		{"sns", "log", 3, nil, true},
-		{"sns", "log", 4, nil, true},
-		{"ecom", "test", 5, nil, true},
-		{"test", "test", 6, nil, true},
-		{"ecom", "log", 6, nil, false},
+		{"sns", "ttta", 1, true},
+		{"ecom", "aabb", 2, false},
+		{"sns", "log", 3, true},
+		{"sns", "log", 4, true},
+		{"ecom", "test", 5, true},
+		{"test", "test", 6, true},
+		{"ecom", "log", 6, false},
 	}
 
 	for _, tc := range testCases {

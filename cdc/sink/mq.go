@@ -50,7 +50,6 @@ type mqSink struct {
 		row        *model.RowChangedEvent
 		resolvedTs uint64
 	}
-	partitionTxns       []map[model.TableName][]*model.Txn
 	partitionResolvedTs []uint64
 	checkpointTs        uint64
 	resolvedNotifier    *notify.Notifier
@@ -101,19 +100,17 @@ func newMqSink(
 	}
 
 	k := &mqSink{
-		mqProducer: mqProducer,
-		dispatcher: d,
-		newEncoder: newEncoder,
-		filter:     filter,
-		protocol:   protocol,
-
+		mqProducer:          mqProducer,
+		dispatcher:          d,
+		newEncoder:          newEncoder,
+		filter:              filter,
+		protocol:            protocol,
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
-
-		statistics: NewStatistics("MQ", opts),
+		statistics:          NewStatistics("MQ", opts),
 	}
 
 	go func() {
