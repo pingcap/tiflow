@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
 	"net/http"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
@@ -41,6 +43,7 @@ const (
 
 type options struct {
 	pdEndpoints   string
+	credential    *security.Credential
 	addr          string
 	advertiseAddr string
 	gcTTL         int64
@@ -70,6 +73,28 @@ func (o *options) validateAndAdjust() error {
 	if o.gcTTL == 0 {
 		return errors.New("empty GC TTL is not allowed")
 	}
+	var tlsConfig *tls.Config
+	if o.credential != nil {
+		var err error
+		tlsConfig, err = o.credential.ToTLSConfig()
+		if err != nil {
+			return errors.New("invalidate TLS config")
+		}
+		_, err = o.credential.ToGRPCDialOption()
+		if err != nil {
+			return errors.New("invalidate TLS config")
+		}
+	}
+	for _, ep := range strings.Split(o.pdEndpoints, ",") {
+		if tlsConfig != nil {
+			if strings.Index(ep, "http://") == 0 {
+				return errors.New("PD endpoint scheme should be https")
+			}
+		} else if strings.Index(ep, "http://") != 0 {
+			return errors.New("PD endpoint scheme should be http")
+		}
+	}
+
 	return nil
 }
 
@@ -105,6 +130,13 @@ func GCTTL(t int64) ServerOption {
 func Timezone(tz *time.Location) ServerOption {
 	return func(o *options) {
 		o.timezone = tz
+	}
+}
+
+// Credential returns a ServerOption that sets the TLS
+func Credential(credential *security.Credential) ServerOption {
+	return func(o *options) {
+		o.credential = credential
 	}
 }
 
@@ -146,9 +178,14 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 // Run runs the server.
 func (s *Server) Run(ctx context.Context) error {
 	s.pdEndpoints = strings.Split(s.opts.pdEndpoints, ",")
+	grpcTLSOption, err := s.opts.credential.ToGRPCDialOption()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	pdClient, err := pd.NewClientWithContext(
-		ctx, s.pdEndpoints, pd.SecurityOption{},
+		ctx, s.pdEndpoints, s.opts.credential.PDSecurityOption(),
 		pd.WithGRPCDialOptions(
+			grpcTLSOption,
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: backoff.Config{
@@ -168,7 +205,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	err = util.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], errorTiKVIncompatible)
+	err = util.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], s.opts.credential, errorTiKVIncompatible)
 	if err != nil {
 		return err
 	}
@@ -211,7 +248,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			continue
 		}
 		log.Info("campaign owner successfully", zap.String("capture", s.capture.info.ID))
-		owner, err := NewOwner(s.pdClient, s.capture.session, s.opts.gcTTL)
+		owner, err := NewOwner(s.pdClient, s.opts.credential, s.capture.session, s.opts.gcTTL)
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
 			continue
@@ -236,7 +273,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.advertiseAddr)
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.credential, s.opts.advertiseAddr)
 	if err != nil {
 		return err
 	}

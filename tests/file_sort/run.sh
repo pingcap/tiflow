@@ -47,6 +47,14 @@ function run() {
     check_table_exists "file_sort.check2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
+    run_sql "create table file_sort.USERTABLE2 like file_sort.USERTABLE"
+    run_sql "insert into file_sort.USERTABLE2 select * from file_sort.USERTABLE"
+    run_sql "create table file_sort.check3(id int primary key);"
+    check_table_exists "file_sort.USERTABLE2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists "file_sort.check3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
+
+    check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+
     cleanup_process $CDC_BINARY
 }
 

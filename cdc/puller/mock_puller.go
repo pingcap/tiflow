@@ -229,13 +229,12 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 }
 
 // CreatePuller returns a mock puller with the specified start ts and spans
-func (m *MockPullerManager) CreatePuller(startTs uint64, spans []regionspan.Span) Puller {
-	//return &mockPuller{
-	//	spans:   spans,
-	//	pm:      m,
-	//	startTs: startTs,
-	//}
-	return nil
+func (m *MockPullerManager) CreatePuller(startTs uint64, spans []regionspan.ComparableSpan) Puller {
+	return &mockPuller{
+		spans:   spans,
+		pm:      m,
+		startTs: startTs,
+	}
 }
 
 // MustExec delegates to TestKit.MustExec
@@ -250,7 +249,7 @@ func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *entry.Ta
 	m.c.Assert(err, check.IsNil)
 	dbInfo, exist := is.SchemaByTable(tbl.Meta())
 	m.c.Assert(exist, check.IsTrue)
-	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, tbl.Meta())
+	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, 0, tbl.Meta())
 }
 
 func (m *MockPullerManager) postPrewrite(req *kvrpcpb.PrewriteRequest, result []error) {

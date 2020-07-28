@@ -42,6 +42,7 @@ import (
 	tifilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
@@ -158,6 +159,11 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	}
 	err := s.execDDLWithMaxRetries(ctx, ddl, defaultDDLMaxRetryTime)
 	return errors.Trace(err)
+}
+
+// Initialize is no-op for Mysql sink
+func (s *mysqlSink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) error {
+	return nil
 }
 
 func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent, maxRetries uint64) error {
@@ -325,7 +331,7 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 }
 
 // newMySQLSink creates a new MySQL sink using schema storage
-func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, filter *tifilter.Filter, opts map[string]string) (Sink, error) {
+func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL, filter *tifilter.Filter, opts map[string]string) (Sink, error) {
 	var db *sql.DB
 	params := defaultParams
 
@@ -337,68 +343,79 @@ func newMySQLSink(ctx context.Context, sinkURI *url.URL, dsn *dmysql.Config, fil
 	}
 	tz := util.TimezoneFromCtx(ctx)
 
-	var dsnStr string
-	switch {
-	case sinkURI != nil:
-		scheme := strings.ToLower(sinkURI.Scheme)
-		if scheme != "mysql" && scheme != "tidb" {
-			return nil, errors.New("can create mysql sink with unsupported scheme")
-		}
-		s := sinkURI.Query().Get("worker-count")
-		if s != "" {
-			c, err := strconv.Atoi(s)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			if c > 0 {
-				params.workerCount = c
-			}
-		}
-		s = sinkURI.Query().Get("max-txn-row")
-		if s != "" {
-			c, err := strconv.Atoi(s)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			params.maxTxnRow = c
-		}
-		s = sinkURI.Query().Get("tidb-txn-mode")
-		if s != "" {
-			if s == "pessimistic" || s == "optimistic" {
-				params.tidbTxnMode = s
-			} else {
-				log.Warn("invalid tidb-txn-mode, should be pessimistic or optimistic, use optimistic as default")
-			}
-		}
-		// dsn format of the driver:
-		// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
-		username := sinkURI.User.Username()
-		password, _ := sinkURI.User.Password()
-		port := sinkURI.Port()
-		if username == "" {
-			username = "root"
-		}
-		if port == "" {
-			port = "4000"
-		}
-
-		dsnStr = fmt.Sprintf("%s:%s@tcp(%s:%s)/", username, password, sinkURI.Hostname(), port)
-		dsn, err := dmysql.ParseDSN(dsnStr)
+	if sinkURI == nil {
+		return nil, errors.New("fail to open MySQL sink, empty URL")
+	}
+	scheme := strings.ToLower(sinkURI.Scheme)
+	if scheme != "mysql" && scheme != "tidb" {
+		return nil, errors.New("can create mysql sink with unsupported scheme")
+	}
+	s := sinkURI.Query().Get("worker-count")
+	if s != "" {
+		c, err := strconv.Atoi(s)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		dsnStr, err = configureSinkURI(ctx, dsn, tz, params)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	case dsn != nil:
-		var err error
-		dsnStr, err = configureSinkURI(ctx, dsn, tz, nil)
-		if err != nil {
-			return nil, errors.Trace(err)
+		if c > 0 {
+			params.workerCount = c
 		}
 	}
-	db, err := sql.Open("mysql", dsnStr)
+	s = sinkURI.Query().Get("max-txn-row")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		params.maxTxnRow = c
+	}
+	s = sinkURI.Query().Get("tidb-txn-mode")
+	if s != "" {
+		if s == "pessimistic" || s == "optimistic" {
+			params.tidbTxnMode = s
+		} else {
+			log.Warn("invalid tidb-txn-mode, should be pessimistic or optimistic, use optimistic as default")
+		}
+	}
+	var tlsParam string
+	if sinkURI.Query().Get("ssl-ca") != "" {
+		credential := security.Credential{
+			CAPath:   sinkURI.Query().Get("ssl-ca"),
+			CertPath: sinkURI.Query().Get("ssl-cert"),
+			KeyPath:  sinkURI.Query().Get("ssl-key"),
+		}
+		tlsCfg, err := credential.ToTLSConfig()
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to open MySQL connection")
+		}
+		name := "cdc_mysql_tls" + changefeedID
+		err = dmysql.RegisterTLSConfig(name, tlsCfg)
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to open MySQL connection")
+		}
+		tlsParam = "?tls=" + name
+	}
+	// dsn format of the driver:
+	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+	username := sinkURI.User.Username()
+	password, _ := sinkURI.User.Password()
+	port := sinkURI.Port()
+	if username == "" {
+		username = "root"
+	}
+	if port == "" {
+		port = "4000"
+	}
+
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
+	dsn, err := dmysql.ParseDSN(dsnStr)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	dsnStr, err = configureSinkURI(ctx, dsn, tz, params)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	db, err = sql.Open("mysql", dsnStr)
 	if err != nil {
 		return nil, errors.Annotate(err, "Open database connection failed")
 	}
@@ -539,6 +556,12 @@ func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.Txn) {
 }
 
 func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
+	var (
+		toExecRows []*model.RowChangedEvent
+		replicaID  uint64
+		txnNum     int
+	)
+
 	defer func() {
 		if r := recover(); r != nil {
 			buf := make([]byte, 4096)
@@ -546,12 +569,10 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			buf = buf[:stackSize]
 			err = errors.Errorf("mysql sink concurrent execute panic, stack: %v", string(buf))
 			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stack trace"))
+			w.txnWg.Add(-1 * txnNum)
 		}
 	}()
 
-	var toExecRows []*model.RowChangedEvent
-	var replicaID uint64
-	var txnNum int
 	lastExecTime := time.Now()
 	flushRows := func() error {
 		if len(toExecRows) == 0 {
@@ -562,11 +583,12 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		err := w.execDMLs(ctx, rows, replicaID, w.bucket)
 		if err != nil {
 			w.txnWg.Add(-1 * txnNum)
+			txnNum = 0
 			return err
 		}
 		toExecRows = toExecRows[:0]
-		w.txnWg.Add(-1 * txnNum)
 		w.metricBucketSize.Add(float64(txnNum))
+		w.txnWg.Add(-1 * txnNum)
 		txnNum = 0
 		lastExecTime = time.Now()
 		return nil
@@ -670,8 +692,9 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	}
 	if s.cyclic != nil && len(rows) > 0 {
 		// Write mark table with the current replica ID.
+		row := rows[0]
 		updateMark := s.cyclic.UdpateSourceTableCyclicMark(
-			rows[0].Table.Schema, rows[0].Table.Table, uint64(bucket), replicaID)
+			row.Table.Schema, row.Table.Table, uint64(bucket), replicaID, row.StartTs)
 		sqls = append(sqls, updateMark)
 		values = append(values, nil)
 	}

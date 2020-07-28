@@ -1914,7 +1914,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "",
+          "description": "local resolved ts lag of processor",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
@@ -1956,10 +1956,203 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_processor_resolved_ts{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (changefeed)",
+              "expr": "sum(ticdc_processor_resolved_ts_lag{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
+              "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{changefeed}}",
+              "legendFormat": "{{capture}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "processor resolved ts lag",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "s",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "global checkpoint ts lag of processor",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 3
+          },
+          "hiddenSeries": false,
+          "id": 3,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": false,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "dataLinks": []
+          },
+          "paceLength": 10,
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(ticdc_processor_checkpoint_ts_lag{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{capture}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "changefeed checkpoint lag",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "s",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 10
+          },
+          "hiddenSeries": false,
+          "id": 85,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "hideEmpty": false,
+            "hideZero": false,
+            "max": false,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "dataLinks": []
+          },
+          "paceLength": 10,
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(ticdc_processor_resolved_ts{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{capture}}",
               "refId": "A"
             }
           ],
@@ -2010,23 +2203,21 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "now() - resolved ts",
+          "description": "global checkpoint ts of processor",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 3
+            "y": 10
           },
           "hiddenSeries": false,
-          "id": 30,
+          "id": 86,
           "legend": {
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "hideEmpty": false,
-            "hideZero": false,
             "max": false,
             "min": false,
             "rightSide": true,
@@ -2052,18 +2243,25 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "time() * 1000 - sum (ticdc_processor_table_resolved_ts{changefeed=~\"$changefeed\"}) by (table)",
+              "expr": "sum(ticdc_processor_checkpoint_ts{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
+              "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{table}}",
+              "legendFormat": "{{capture}}",
               "refId": "A"
+            },
+            {
+              "expr": "time()*1000",
+              "interval": "",
+              "legendFormat": "",
+              "refId": "B"
             }
           ],
           "thresholds": [],
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "table resolved ts lag",
+          "title": "changefeed checkpoint",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -2079,7 +2277,7 @@
           },
           "yaxes": [
             {
-              "format": "ms",
+              "format": "dateTimeAsIso",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -2112,7 +2310,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 10
+            "y": 17
           },
           "hiddenSeries": false,
           "id": 4,
@@ -2145,10 +2343,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_processor_num_of_tables{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (changefeed)",
+              "expr": "sum(ticdc_processor_num_of_tables{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
               "format": "time_series",
+              "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{changefeed}}",
+              "legendFormat": "{{capture}}",
               "refId": "A"
             }
           ],
@@ -2199,21 +2398,23 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "now() - checkpoint ts",
+          "description": "local resolved ts of processor",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 10
+            "y": 17
           },
           "hiddenSeries": false,
-          "id": 3,
+          "id": 30,
           "legend": {
             "alignAsTable": true,
             "avg": false,
             "current": true,
+            "hideEmpty": false,
+            "hideZero": false,
             "max": false,
             "min": false,
             "rightSide": true,
@@ -2239,10 +2440,11 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "time()*1000 - sum(ticdc_processor_checkpoint_ts{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (changefeed)",
+              "expr": "sum(ticdc_processor_table_resolved_ts{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture,table)",
               "format": "time_series",
+              "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{changefeed}}",
+              "legendFormat": "{{capture}}-{{table}}",
               "refId": "A"
             }
           ],
@@ -2250,7 +2452,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "changefeed checkpoint lag",
+          "title": "table resolved ts",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -2266,7 +2468,7 @@
           },
           "yaxes": [
             {
-              "format": "ms",
+              "format": "dateTimeAsIso",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -2771,7 +2973,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The number of events received from kv client event channel",
+          "description": "DML count that executed to downstream",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
@@ -2784,9 +2986,9 @@
           "id": 34,
           "legend": {
             "alignAsTable": true,
-            "avg": false,
+            "avg": true,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": true,
             "show": true,
@@ -2816,6 +3018,14 @@
               "intervalFactor": 1,
               "legendFormat": "{{capture}}",
               "refId": "A"
+            },
+            {
+              "expr": "sum (rate(ticdc_sink_txn_batch_size_sum{changefeed=~\"$changefeed\"}[1m])) by (changefeed)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -3640,7 +3850,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:241",
               "format": "s",
               "label": null,
               "logBase": 2,
@@ -3649,7 +3858,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:242",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -3738,7 +3946,6 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:860",
               "format": "short",
               "label": null,
               "logBase": 1,
@@ -3747,7 +3954,6 @@
               "show": true
             },
             {
-              "$$hashKey": "object:861",
               "format": "short",
               "label": null,
               "logBase": 1,

@@ -25,6 +25,7 @@ import (
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/security"
 )
 
 type AvroSchemaRegistrySuite struct {
@@ -44,7 +45,7 @@ type mockRegistrySchema struct {
 	ID      int
 }
 
-func (s *AvroSchemaRegistrySuite) SetUpSuite(c *check.C) {
+func startHTTPInterceptForTestingRegistry(c *check.C) {
 	httpmock.Activate()
 
 	registry := mockRegistry{
@@ -140,8 +141,16 @@ func (s *AvroSchemaRegistrySuite) SetUpSuite(c *check.C) {
 
 }
 
-func (s *AvroSchemaRegistrySuite) TearDownSuite(c *check.C) {
+func stopHTTPInterceptForTestingRegistry() {
 	httpmock.DeactivateAndReset()
+}
+
+func (s *AvroSchemaRegistrySuite) SetUpSuite(c *check.C) {
+	startHTTPInterceptForTestingRegistry(c)
+}
+
+func (s *AvroSchemaRegistrySuite) TearDownSuite(c *check.C) {
+	stopHTTPInterceptForTestingRegistry()
 }
 
 func getTestingContext() context.Context {
@@ -157,7 +166,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 		Partition: 0,
 	}
 
-	manager, err := NewAvroSchemaManager(getTestingContext(), "http://127.0.0.1:8081", "-value")
+	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 
 	err = manager.ClearRegistry(getTestingContext(), table)
@@ -219,10 +228,10 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 }
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistryBad(c *check.C) {
-	_, err := NewAvroSchemaManager(getTestingContext(), "http://127.0.0.1:808", "-value")
+	_, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:808", "-value")
 	c.Assert(err, check.NotNil)
 
-	_, err = NewAvroSchemaManager(getTestingContext(), "https://127.0.0.1:8080", "-value")
+	_, err = NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "https://127.0.0.1:8080", "-value")
 	c.Assert(err, check.NotNil)
 }
 
@@ -233,7 +242,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 		Partition: 0,
 	}
 
-	manager, err := NewAvroSchemaManager(getTestingContext(), "http://127.0.0.1:8081", "-value")
+	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 	for i := 0; i < 20; i++ {
 		err = manager.ClearRegistry(getTestingContext(), table)

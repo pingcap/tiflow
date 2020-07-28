@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
 	"go.etcd.io/etcd/clientv3"
@@ -58,6 +59,7 @@ type Owner struct {
 	l sync.RWMutex
 
 	pdEndpoints []string
+	credential  *security.Credential
 	pdClient    pd.Client
 	etcdClient  kv.CDCEtcdClient
 
@@ -76,7 +78,7 @@ type Owner struct {
 const CDCServiceSafePointID = "ticdc"
 
 // NewOwner creates a new Owner instance
-func NewOwner(pdClient pd.Client, sess *concurrency.Session, gcTTL int64) (*Owner, error) {
+func NewOwner(pdClient pd.Client, credential *security.Credential, sess *concurrency.Session, gcTTL int64) (*Owner, error) {
 	cli := kv.NewCDCEtcdClient(sess.Client())
 	endpoints := sess.Client().Endpoints()
 
@@ -84,6 +86,7 @@ func NewOwner(pdClient pd.Client, sess *concurrency.Session, gcTTL int64) (*Owne
 		done:                  make(chan struct{}),
 		session:               sess,
 		pdClient:              pdClient,
+		credential:            credential,
 		changeFeeds:           make(map[model.ChangeFeedID]*changeFeed),
 		failedFeeds:           make(map[model.ChangeFeedID]struct{}),
 		captures:              make(map[model.CaptureID]*model.CaptureInfo),
@@ -171,12 +174,16 @@ func (o *Owner) newChangeFeed(
 	log.Info("Find new changefeed", zap.Reflect("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
-	failpoint.Inject("NewChangefeedError", func() {
+	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
 
+	failpoint.Inject("NewChangefeedRetryError", func() {
+		failpoint.Return(nil, errors.New("failpoint injected retriable error"))
+	})
+
 	// TODO here we create another pb client,we should reuse them
-	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","))
+	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","), o.credential)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +201,14 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 
-	ddlHandler := newDDLHandler(o.pdClient, kvStore, checkpointTs)
+	if info.Engine == model.SortInFile {
+		err = util.IsDirAndWritable(info.SortDir)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs)
 
 	existingTables := make(map[model.TableID]model.Ts)
 	for captureID, taskStatus := range processorsInfos {
@@ -215,7 +229,10 @@ func (o *Owner) newChangeFeed(
 	tables := make(map[model.TableID]model.TableName)
 	partitions := make(map[model.TableID][]int64)
 	orphanTables := make(map[model.TableID]model.Ts)
+	sinkTableInfo := make([]*model.TableInfo, len(schemaSnap.CloneTables()))
+	j := 0
 	for tid, table := range schemaSnap.CloneTables() {
+		j++
 		if filter.ShouldIgnoreTable(table.Schema, table.Table) {
 			continue
 		}
@@ -225,10 +242,6 @@ func (o *Owner) newChangeFeed(
 		}
 
 		tables[tid] = table
-		if ts, ok := existingTables[tid]; ok {
-			log.Debug("ignore known table", zap.Int64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
-			continue
-		}
 		schema, ok := schemaSnap.SchemaByTableID(tid)
 		if !ok {
 			log.Warn("schema not found for table", zap.Int64("tid", tid))
@@ -248,25 +261,41 @@ func (o *Owner) newChangeFeed(
 			log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
 			continue
 		}
+		// `existingTables` are tables dispatched to a processor, however the
+		// capture that this processor belongs to could have crashed or exited.
+		// So we check this before task dispatching, but after the update of
+		// changefeed schema information.
+		if ts, ok := existingTables[tid]; ok {
+			log.Info("ignore known table", zap.Int64("tid", tid), zap.Stringer("table", table), zap.Uint64("ts", ts))
+			continue
+		}
 		if pi := tblInfo.GetPartitionInfo(); pi != nil {
 			delete(partitions, tid)
 			for _, partition := range pi.Definitions {
 				id := partition.ID
+				partitions[tid] = append(partitions[tid], id)
 				if ts, ok := existingTables[id]; ok {
-					log.Debug("ignore known table partition", zap.Int64("tid", tid), zap.Int64("partitionID", id), zap.Stringer("table", table), zap.Uint64("ts", ts))
+					log.Info("ignore known table partition", zap.Int64("tid", tid), zap.Int64("partitionID", id), zap.Stringer("table", table), zap.Uint64("ts", ts))
 					continue
 				}
-				partitions[tid] = append(partitions[tid], partition.ID)
 				orphanTables[id] = checkpointTs
 			}
 		} else {
 			orphanTables[tid] = checkpointTs
 		}
 
+		sinkTableInfo[j-1] = new(model.TableInfo)
+		sinkTableInfo[j-1].ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
+
+		for i, colInfo := range tblInfo.Cols() {
+			sinkTableInfo[j-1].ColumnInfo[i] = new(model.ColumnInfo)
+			sinkTableInfo[j-1].ColumnInfo[i].FromTiColumnInfo(colInfo)
+		}
+
 	}
 	errCh := make(chan error, 1)
 
-	sink, err := sink.NewSink(ctx, info.SinkURI, filter, info.Config, info.Opts, errCh)
+	sink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
@@ -280,6 +309,12 @@ func (o *Owner) newChangeFeed(
 		}
 		cancel()
 	}()
+
+	err = sink.Initialize(ctx, sinkTableInfo)
+	if err != nil {
+		log.Error("error on running owner", zap.Error(err))
+	}
+
 	cf := &changeFeed{
 		info:          info,
 		id:            id,
@@ -573,23 +608,47 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	return nil
 }
 
-func (o *Owner) collectChangefeedInfo(ctx context.Context, cid model.ChangeFeedID) (*changeFeed, *model.ChangeFeedStatus, model.FeedState, error) {
-	cf, ok := o.changeFeeds[cid]
+func (o *Owner) collectChangefeedInfo(ctx context.Context, cid model.ChangeFeedID) (
+	cf *changeFeed,
+	status *model.ChangeFeedStatus,
+	feedState model.FeedState,
+	err error,
+) {
+	var ok bool
+	cf, ok = o.changeFeeds[cid]
 	if ok {
 		return cf, cf.status, cf.info.State, nil
 	}
-	status, _, err := o.etcdClient.GetChangeFeedStatus(ctx, cid)
-	if err != nil {
-		return nil, nil, model.StateNormal, err
+	feedState = model.StateNormal
+
+	var cfInfo *model.ChangeFeedInfo
+	cfInfo, err = o.etcdClient.GetChangeFeedInfo(ctx, cid)
+	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+		return
 	}
-	feedState := model.StateNormal
+
+	status, _, err = o.etcdClient.GetChangeFeedStatus(ctx, cid)
+	if err != nil {
+		if errors.Cause(err) == model.ErrChangeFeedNotExists {
+			// Only changefeed info exists and error field is not nil means
+			// the changefeed has met error, mark it as failed.
+			if cfInfo != nil && cfInfo.Error != nil {
+				feedState = model.StateFailed
+			}
+		}
+		return
+	}
 	switch status.AdminJobType {
+	case model.AdminNone, model.AdminResume:
+		if cfInfo != nil && cfInfo.Error != nil {
+			feedState = model.StateFailed
+		}
 	case model.AdminStop:
 		feedState = model.StateStopped
 	case model.AdminRemove:
 		feedState = model.StateRemoved
 	}
-	return nil, status, feedState, nil
+	return
 }
 
 func (o *Owner) handleAdminJob(ctx context.Context) error {
@@ -605,11 +664,20 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 
 		cf, status, feedState, err := o.collectChangefeedInfo(ctx, job.CfID)
 		if err != nil {
-			if errors.Cause(err) == model.ErrChangeFeedNotExists {
-				log.Warn("invalid admin job, changefeed status not found", zap.String("changefeed", job.CfID))
-				continue
+			if errors.Cause(err) != model.ErrChangeFeedNotExists {
+				return err
 			}
-			return err
+			if feedState == model.StateFailed && job.Type == model.AdminRemove {
+				// changefeed in failed state, but changefeed status has not
+				// been created yet. Try to remove changefeed info only.
+				err := o.etcdClient.DeleteChangeFeedInfo(ctx, job.CfID)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			} else {
+				log.Warn("invalid admin job, changefeed status not found", zap.String("changefeed", job.CfID))
+			}
+			continue
 		}
 		switch job.Type {
 		case model.AdminStop:
@@ -628,7 +696,9 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 
 			cf.info.AdminJobType = model.AdminStop
 			cf.info.Error = job.Error
-			cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
+			if job.Error != nil {
+				cf.info.ErrorHis = append(cf.info.ErrorHis, time.Now().UnixNano()/1e6)
+			}
 			err := o.etcdClient.SaveChangeFeedInfo(ctx, cf.info, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
@@ -650,7 +720,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 					// remove a removed changefeed
 					log.Info("changefeed has been removed, remove command will do nothing")
 					continue
-				case model.StateStopped:
+				case model.StateStopped, model.StateFailed:
 					// remove a paused changefeed
 					status.AdminJobType = model.AdminRemove
 					err = o.etcdClient.PutChangeFeedStatus(ctx, job.CfID, status)
@@ -658,7 +728,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 						return errors.Trace(err)
 					}
 				default:
-					return errors.Errorf("changefeed in abnormal state: %+v", status)
+					return errors.Errorf("changefeed in abnormal state: %s, replication status: %+v", feedState, status)
 				}
 			}
 			// remove changefeed info
@@ -967,7 +1037,7 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 				if err := o.etcdClient.DeleteTaskWorkload(ctx, changeFeedID, captureID); err != nil {
 					return errors.Trace(err)
 				}
-				log.Debug("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
+				log.Info("cleanup stale task", zap.String("captureid", captureID), zap.String("changefeedid", changeFeedID))
 			}
 		}
 	}
