@@ -301,25 +301,25 @@ type CanalEventBatchEncoder struct {
 }
 
 // AppendResolvedEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
+func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore the event is ignored.
-	return nil
+	return EncoderNoOperation, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	// FIXME better way?
 	d.size++
 	d.txnGenerator.Append(e)
-	return nil
+	return EncoderNoOperation, nil
 }
 
 // AppendDDLEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
 	d.size++
 	d.ddls = append(d.ddls, e)
-	return nil
+	return EncoderNeedSyncWrite, nil
 }
 
 //Size implements the EventBatchEncoder interface
@@ -396,7 +396,6 @@ func (d *canalMessageEncoder) appendRowChangedEvent(e *model.RowChangedEvent) er
 	return nil
 }
 
-// AppendDDLEvent implements the EventBatchEncoder interface
 func (d *canalMessageEncoder) appendDDLEvent(e *model.DDLEvent) error {
 	entry, err := d.entryBuilder.FromDdlEvent(e)
 	if err != nil {

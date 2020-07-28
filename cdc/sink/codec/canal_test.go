@@ -102,7 +102,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 		encoder := NewCanalEventBatchEncoder()
 		var mxCommitTs uint64
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(row)
+			_, err := encoder.AppendRowChangedEvent(row)
 			if mxCommitTs < row.CommitTs {
 				mxCommitTs = row.CommitTs
 			}
@@ -130,7 +130,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 	for _, cs := range s.ddlCases {
 		encoder := NewCanalEventBatchEncoder()
 		for _, ddl := range cs {
-			err := encoder.AppendDDLEvent(ddl)
+			_, err := encoder.AppendDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
 		}
 		keys, values := encoder.Build(0)

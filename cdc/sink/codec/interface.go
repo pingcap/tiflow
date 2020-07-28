@@ -17,18 +17,19 @@ import (
 	"strings"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
+
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 // EventBatchEncoder is an abstraction for events encoder
 type EventBatchEncoder interface {
 	// AppendResolvedEvent appends a resolved event into the batch
-	AppendResolvedEvent(ts uint64) error
+	AppendResolvedEvent(ts uint64) (EncoderResult, error)
 	// AppendRowChangedEvent appends a row changed event into the batch
-	AppendRowChangedEvent(e *model.RowChangedEvent) error
+	AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error)
 	// AppendDDLEvent appends a DDL event into the batch
-	AppendDDLEvent(e *model.DDLEvent) error
+	AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error)
 	// Build builds the batch before resolvedTs and return a list of <key value>, it always reset the encoder state based on implementation.
 	Build(resolvedTs uint64) (key [][]byte, value [][]byte)
 	// Size returns the size of the batch(bytes)
@@ -50,6 +51,16 @@ type EventBatchDecoder interface {
 	// NextDDLEvent returns the next DDL event if exists
 	NextDDLEvent() (*model.DDLEvent, error)
 }
+
+// EncoderResult indicates an action request by the encoder to the mqSink
+type EncoderResult uint8
+
+// Enum types of EncoderResult
+const (
+	EncoderNoOperation EncoderResult = iota
+	EncoderNeedAsyncWrite
+	EncoderNeedSyncWrite
+)
 
 // Protocol is the protocol of the mq message
 type Protocol int
