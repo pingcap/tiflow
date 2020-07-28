@@ -283,7 +283,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 	captureIDs := make(map[model.CaptureID]struct{}, len(captures))
 	cleanedTables := make(map[model.TableID]struct{})
 	addedTables := make(map[model.TableID]struct{})
-	updateFuncs := make(map[model.CaptureID][]func(status *model.TaskStatus))
+	updateFuncs := make(map[model.CaptureID][]kv.UpdateTaskStatusFunc)
 	for cid := range captures {
 		captureIDs[cid] = struct{}{}
 	}
@@ -299,8 +299,9 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 
 		id := id
 		targetTs := targetTs
-		updateFuncs[captureID] = append(updateFuncs[captureID], func(status *model.TaskStatus) {
+		updateFuncs[captureID] = append(updateFuncs[captureID], func(_ int64, status *model.TaskStatus) (bool, error) {
 			status.RemoveTable(id, targetTs)
+			return true, nil
 		})
 		cleanedTables[id] = struct{}{}
 	}
@@ -335,20 +336,16 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 			}
 			tableID := tableID
 			op := op
-			updateFuncs[captureID] = append(updateFuncs[captureID], func(status *model.TaskStatus) {
+			updateFuncs[captureID] = append(updateFuncs[captureID], func(_ int64, status *model.TaskStatus) (bool, error) {
 				status.AddTable(tableID, info, op.BoundaryTs)
+				return true, nil
 			})
 			addedTables[tableID] = struct{}{}
 		}
 	}
 
 	for captureID, funcs := range updateFuncs {
-		newStatus, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
-			for _, f := range funcs {
-				f(taskStatus)
-			}
-			return true, nil
-		})
+		newStatus, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, funcs...)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -370,6 +367,7 @@ func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.
 	for captureID, status := range taskStatus {
 		newStatus, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
 			if taskStatus.SomeOperationsUnapplied() {
+				log.Error("unexpected task status, there are operations unapplied in this status", zap.Any("status", taskStatus))
 				return false, errors.Errorf("waiting to processor handle the operation finished time out")
 			}
 			taskStatus.Tables = status.Tables

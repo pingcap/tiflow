@@ -563,7 +563,6 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 					opt.Done = true
 					continue
 				}
-				// bug here
 				stopped, checkpointTs := table.safeStop()
 				if stopped {
 					opt.BoundaryTs = checkpointTs

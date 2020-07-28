@@ -511,12 +511,14 @@ func (c CDCEtcdClient) GetAllTaskWorkloads(ctx context.Context, changefeedID str
 	return workloads, nil
 }
 
+type UpdateTaskStatusFunc func(int64, *model.TaskStatus) (updated bool, err error)
+
 // AtomicPutTaskStatus puts task status into etcd atomically.
 func (c CDCEtcdClient) AtomicPutTaskStatus(
 	ctx context.Context,
 	changefeedID string,
 	captureID string,
-	update func(int64, *model.TaskStatus) (updated bool, err error),
+	updateFuncs ...UpdateTaskStatusFunc,
 ) (*model.TaskStatus, error) {
 	var status *model.TaskStatus
 	err := retry.Run(100*time.Millisecond, 3, func() error {
@@ -539,12 +541,16 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 		default:
 			return errors.Trace(err)
 		}
-		updated, err := update(modRevision, status)
-		if err != nil {
-			if permanent, ok := err.(*backoff.PermanentError); ok {
-				return backoff.Permanent(errors.Trace(permanent.Err))
+		updated := false
+		for _, updateFunc := range updateFuncs {
+			u, err := updateFunc(modRevision, status)
+			if err != nil {
+				if permanent, ok := err.(*backoff.PermanentError); ok {
+					return backoff.Permanent(errors.Trace(permanent.Err))
+				}
+				return errors.Trace(err)
 			}
-			return errors.Trace(err)
+			updated = updated || u
 		}
 		if !updated {
 			return nil
