@@ -127,7 +127,74 @@ Value:
 
 ## Kafka 分区策略
 
-partition 数量不限，各个 partition 之间对等。
+* Row Changed Event 根据一定的分区算法分发至不同的 partition
+* Resolved Event 和 DDL Event 广播至所有的 partition
+
+### Row Changed Event 划分 Partition 算法
+
+#### _tidb_row_id 分发
+
+使用 _tidb_row_id 计算 hash 分发到 partition
+
+使用限制：
+
+* 下游非 RDMS，或下游接受维护 _tidb_row_id
+* 上游表 pk is handle
+		
+#### 基于 uk、pk 分发
+
+使用 pk(not handle) or uk(not null) 的 value 计算 hash 分发到 partition
+
+使用限制：
+
+* 表内只能包含一个 pk or uk
+
+#### 基于 table 分发
+
+使用 schemaID 和 tableID 计算 hash 分发到 partition
+
+注：在当前的实现中，基于 table 分发使用的是 schemaName 与 tableName 的值计算 hash
+
+使用限制：
+
+* 无，但是这种分发方式粒度粗，partition 之间负载不均
+
+#### 基于 ts 分发
+
+使用 commit_ts 取模分发到 partition
+
+使用限制：
+
+* 无法保证行内有序性和表内有序性
+
+#### 冲突检测分发
+
+检测 pk or uk 冲突，将不冲突的 row 写入不同的 partition。发生冲突时向下游写入用于对齐进度的 Event
+
+注：尚未实现这种分发方式
+
+使用限制：
+
+* 只有表中 pk or uk 数量大于 1 才适用这种方式
+* 下游消费端实现复杂
+
+#### 分发方式与一致性保证
+
+| 分发方式          | 行内有序性<sup><a href="#note1">[1]</a></sup> | 表内有序性<sup><a href="#note2">[2]</a></sup> | 表内事务一致性 <sup><a href="#note3">[3]</a></sup> | partition 分配平衡度 |
+| :-------------:  | :------: | :------: | :------: | :------: |
+| _tidb_row_id 分发 | ➖<sup><a href="#note4">[4]</a></sup>       | ✖        | ✖        | 平衡 |
+| 基于 uk、pk 分发   | ➖<sup><a href="#note5">[5]</a></sup>       | ✖        | ✖        | 平衡 |
+| 基于 table 分发    | ✔       | ✔        | ✔        | 不平衡 |
+| 冲突检测分发        | ➖<sup><a href="#note6">[6]</a></sup>       | ✖        | ➖<sup><a href="#note6">[6]</a></sup>        | 较平衡 |
+| 基于 ts 分发       | ✖       | ✖       | ✖        | 平衡 |
+
+1. <a name="note1"></a> 行内有序性指对于某一行产生的一组数据变更事件，一定会被分发到同一个 partition，并且在 partition 内保证时间增序
+1. <a name="note2"></a> 表内有序性指对于某一表内产生的一组数据变更事件，一定会被分发到同一个 partition，并且在 partition 内保证时间增序
+1. <a name="note3"></a> 表内事务一致性指对于某一事务产生的每一表内的一组数据变更事件，一定会被分发到同一个 partition，并且在 partition 内保证时间增序
+1. <a name="note4"></a> 仅当上游表内只有一个主键且主键为 int 类型时，_tidb_row_id 分发满足行内有序性
+1. <a name="note5"></a> 仅当上游表内只有一个主键或唯一索引时，基于 uk、pk 分发满足行内有序性
+1. <a name="note6"></a> 对于冲突检测分发，当未检测到冲突时，消费端可以并发读取 partition 中的数据变更事件，当检测到冲突时，下游需要对齐各个 partition 的消费进度，当未检测到冲突时，冲突检测分发是满足行内有序性和表内事务一致性的。
+
 
 ### Partition 扩容与缩容
 
@@ -209,14 +276,9 @@ CDC 同步模型中，CDC Global CheckpointTS 的意义是所有（CommitTS <= C
 
 * 对于一个 Row Event：
     * Msg Key = (SchemaName，TableName，CommitTS) , Msg Value = Change Event Value。
-    * 根据 (SchemaName，TableName，RowID) 计算 Hash，确定 partition，写入到对应的 partiton。
+    * 根据相应的分区算法计算 Hash，确定 partition，写入到对应的 partition。
 * 对于一个 Processor
     * Processor 需要保证按 CommitTS 递增顺序输出 Row Changed Event。
-
-#### Hash 分片：
-
-根据 (SchemaName，TableName，RowID) 计算 Hash 分片 ，可以保证同一行的 Row Event 一定会分配到同一个 partition。因此 partition 间的数据可以并发执行，互不影响。
-Kafka consumer 可以根据 Msg Key 对 Msg 进行初步过滤（过滤库/表）。
 
 ## Kafka Consumer 逻辑
 
