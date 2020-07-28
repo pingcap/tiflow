@@ -10,8 +10,8 @@ fix-sql-file = "fix.sql"
 
 # tables need to check.
 [[check-tables]]
-    schema = "file_sort"
-    tables = ["~usertable.*"]
+    schema = "changefeed_finish"
+    tables = ["t"]
 
 [[source-db]]
     host = "127.0.0.1"

@@ -493,7 +493,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 				return false, nil
 			}
 			newModRevision = modRevision
-			if taskStatus.AdminJobType == model.AdminStop || taskStatus.AdminJobType == model.AdminRemove {
+			if taskStatus.AdminJobType.IsStopState() {
 				err := p.stop(ctx)
 				if err != nil {
 					return false, backoff.Permanent(errors.Trace(err))

@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/tests/util"
@@ -72,7 +74,7 @@ func runDDLTest(srcs []*sql.DB) {
 		log.S().Infof("runDDLTest take %v", time.Since(start))
 	}()
 
-	for _, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL, modifyColumnDDL} {
+	for _, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL, modifyColumnDDL, addDropIndexDDL} {
 		testName := getFunctionName(ddlFunc)
 		log.S().Info("running ddl test: ", testName)
 
@@ -165,14 +167,35 @@ func truncateDDL(ctx context.Context, db *sql.DB) {
 func dml(ctx context.Context, db *sql.DB, table string, id int) {
 	var err error
 	var i int
-	var success int
-	sql := fmt.Sprintf("insert into test.`%s`(id) values(?)", table)
+	var insertSuccess int
+	var deleteSuccess int
+	insertSQL := fmt.Sprintf("insert into test.`%s`(id1, id2) values(?,?)", table)
+	deleteSQL := fmt.Sprintf("delete from test.`%s` where id1 = ? or id2 = ?", table)
 	for i = 0; ; i++ {
-		_, err = db.Exec(sql, i+id*100000000)
+		_, err = db.Exec(insertSQL, i+id*100000000, i+id*100000000+1)
 		if err == nil {
-			success++
-			if success%100 == 0 {
-				log.S().Info(id, " success: ", success)
+			insertSuccess++
+			if insertSuccess%100 == 0 {
+				log.S().Info(id, " insert success: ", insertSuccess)
+			}
+		}
+		if err != nil && !strings.HasPrefix(err.Error(), "Error 1146:") {
+			log.Fatal("unexpected error when executing sql", zap.Error(err))
+		}
+
+		if i%2 == 0 {
+			result, err := db.Exec(deleteSQL, i+id*100000000, i+id*100000000+1)
+			if err == nil {
+				rows, _ := result.RowsAffected()
+				if rows != 0 {
+					deleteSuccess++
+					if deleteSuccess%100 == 0 {
+						log.S().Info(id, " delete success: ", deleteSuccess)
+					}
+				}
+			}
+			if err != nil && !strings.HasPrefix(err.Error(), "Error 1146:") {
+				log.Fatal("unexpected error when executing sql", zap.Error(err))
 			}
 		}
 
@@ -241,14 +264,52 @@ func modifyColumnDDL(ctx context.Context, db *sql.DB) {
 	}
 }
 
+func addDropIndexDDL(ctx context.Context, db *sql.DB) {
+	testName := getFunctionName(addDropIndexDDL)
+	mustCreateTable(db, testName)
+
+	for value := 1; ; value++ {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		sql := fmt.Sprintf("drop index id1 on test.`%s`;", testName)
+		util.MustExec(db, sql)
+		time.Sleep(time.Millisecond)
+
+		sql = fmt.Sprintf("create unique index `id1` on test.`%s` (id1);", testName)
+		util.MustExec(db, sql)
+		time.Sleep(time.Millisecond)
+
+		sql = fmt.Sprintf("drop index id2 on test.`%s`;", testName)
+		util.MustExec(db, sql)
+		time.Sleep(time.Millisecond)
+
+		sql = fmt.Sprintf("create unique index `id2` on test.`%s` (id2);", testName)
+		util.MustExec(db, sql)
+		time.Sleep(time.Millisecond)
+	}
+}
+
+const createDatabaseSQL = "create database if not exists test"
+const createTableSQL = `
+create table if not exists test.%s
+(
+    id1 int unique key not null,
+    id2 int unique key not null,
+    v1  int default null
+)
+`
+
 func mustCreateTable(db *sql.DB, tableName string) {
-	util.MustExec(db, "create database if not exists test")
-	sql := fmt.Sprintf("create table if not exists test.`%s`(id int primary key, v1 int default null)", tableName)
+	util.MustExec(db, createDatabaseSQL)
+	sql := fmt.Sprintf(createTableSQL, tableName)
 	util.MustExec(db, sql)
 }
 
 func mustCreateTableWithConn(ctx context.Context, conn *sql.Conn, tableName string) {
-	util.MustExecWithConn(ctx, conn, "create database if not exists test")
-	sql := fmt.Sprintf("create table if not exists test.`%s`(id int primary key, v1 int default null)", tableName)
+	util.MustExecWithConn(ctx, conn, createDatabaseSQL)
+	sql := fmt.Sprintf(createTableSQL, tableName)
 	util.MustExecWithConn(ctx, conn, sql)
 }
