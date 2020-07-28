@@ -145,37 +145,37 @@ func (c *changeFeed) dropSchema(schemaID model.SchemaID, targetTs model.Ts) {
 	delete(c.schemas, schemaID)
 }
 
-func (c *changeFeed) addTable(sid model.SchemaID, tid model.TableID, startTs model.Ts, table model.TableName, tblInfo *timodel.TableInfo) {
-	if c.filter.ShouldIgnoreTable(table.Schema, table.Table) {
+func (c *changeFeed) addTable(tblInfo *entry.TableInfo, targetTs model.Ts) {
+	if c.filter.ShouldIgnoreTable(tblInfo.TableName.Schema, tblInfo.TableName.Table) {
 		return
 	}
-	if c.cyclicEnabled && mark.IsMarkTable(table.Schema, table.Table) {
-		return
-	}
-
-	if _, ok := c.tables[tid]; ok {
-		log.Warn("add table already exists", zap.Int64("tableID", tid), zap.Stringer("table", table))
+	if c.cyclicEnabled && mark.IsMarkTable(tblInfo.TableName.Schema, tblInfo.TableName.Table) {
 		return
 	}
 
-	if !entry.WrapTableInfo(sid, table.Schema, tblInfo).IsEligible() {
-		log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
+	if _, ok := c.tables[tblInfo.ID]; ok {
+		log.Warn("add table already exists", zap.Int64("tableID", tblInfo.ID), zap.Stringer("table", tblInfo.TableName))
 		return
 	}
 
-	if _, ok := c.schemas[sid]; !ok {
-		c.schemas[sid] = make(tableIDMap)
+	if !tblInfo.IsEligible() {
+		log.Warn("skip ineligible table", zap.Int64("tid", tblInfo.ID), zap.Stringer("table", tblInfo.TableName))
+		return
 	}
-	c.schemas[sid][tid] = struct{}{}
-	c.tables[tid] = table
+
+	if _, ok := c.schemas[tblInfo.SchemaID]; !ok {
+		c.schemas[tblInfo.SchemaID] = make(tableIDMap)
+	}
+	c.schemas[tblInfo.SchemaID][tblInfo.ID] = struct{}{}
+	c.tables[tblInfo.ID] = tblInfo.TableName
 	if pi := tblInfo.GetPartitionInfo(); pi != nil {
-		delete(c.partitions, tid)
+		delete(c.partitions, tblInfo.ID)
 		for _, partition := range pi.Definitions {
-			c.partitions[tid] = append(c.partitions[tid], partition.ID)
-			c.orphanTables[partition.ID] = startTs
+			c.partitions[tblInfo.ID] = append(c.partitions[tblInfo.ID], partition.ID)
+			c.orphanTables[partition.ID] = targetTs
 		}
 	} else {
-		c.orphanTables[tid] = startTs
+		c.orphanTables[tblInfo.ID] = targetTs
 	}
 }
 
@@ -554,11 +554,11 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			c.dropSchema(schemaID, job.BinlogInfo.FinishedTS)
 		case timodel.ActionCreateTable, timodel.ActionRecoverTable:
 			addID := job.BinlogInfo.TableInfo.ID
-			tableName, exist := c.schema.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
+			table, exist := c.schema.TableByID(addID)
 			if !exist {
 				return errors.NotFoundf("table(%d)", addID)
 			}
-			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName, job.BinlogInfo.TableInfo)
+			c.addTable(table, job.BinlogInfo.FinishedTS)
 		case timodel.ActionDropTable:
 			dropID := job.TableID
 			c.removeTable(schemaID, dropID, job.BinlogInfo.FinishedTS)
@@ -573,12 +573,12 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			dropID := job.TableID
 			c.removeTable(schemaID, dropID, job.BinlogInfo.FinishedTS)
 
-			tableName, exist := c.schema.GetTableNameByID(job.BinlogInfo.TableInfo.ID)
-			if !exist {
-				return errors.NotFoundf("table(%d)", job.BinlogInfo.TableInfo.ID)
-			}
 			addID := job.BinlogInfo.TableInfo.ID
-			c.addTable(schemaID, addID, job.BinlogInfo.FinishedTS, tableName, job.BinlogInfo.TableInfo)
+			table, exist := c.schema.TableByID(addID)
+			if !exist {
+				return errors.NotFoundf("table(%d)", addID)
+			}
+			c.addTable(table, job.BinlogInfo.FinishedTS)
 		case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
 			c.updatePartition(job.BinlogInfo.TableInfo, job.BinlogInfo.FinishedTS)
 		}

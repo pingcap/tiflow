@@ -41,7 +41,7 @@ func init() {
 	cliCmd.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address")
 	cliCmd.PersistentFlags().BoolVarP(&interact, "interact", "i", false, "Run cdc cli with readline")
 	cliCmd.PersistentFlags().StringVar(&cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
-	addSecurityFlags(cliCmd.PersistentFlags())
+	addSecurityFlags(cliCmd.PersistentFlags(), false /* isServer */)
 	rootCmd.AddCommand(cliCmd)
 }
 
@@ -137,6 +137,7 @@ func newCliCommand() *cobra.Command {
 				return errors.Annotate(err, "fail to validate TLS settings")
 			}
 			etcdCli, err := clientv3.New(clientv3.Config{
+				Context:     defaultContext,
 				Endpoints:   []string{cliPdAddr},
 				TLS:         tlsConfig,
 				DialTimeout: 30 * time.Second,

@@ -26,14 +26,16 @@ type Client struct {
 
 // NewClient creates an HTTP client with the given Credential.
 func NewClient(credential *security.Credential) (*Client, error) {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport := http.DefaultTransport
 	if credential != nil {
 		tlsConf, err := credential.ToTLSConfig()
 		if err != nil {
 			return nil, err
 		}
 		if tlsConf != nil {
-			transport.TLSClientConfig = tlsConf
+			httpTrans := http.DefaultTransport.(*http.Transport).Clone()
+			httpTrans.TLSClientConfig = tlsConf
+			transport = httpTrans
 		}
 	}
 	return &Client{

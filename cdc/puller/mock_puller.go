@@ -249,7 +249,7 @@ func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *entry.Ta
 	m.c.Assert(err, check.IsNil)
 	dbInfo, exist := is.SchemaByTable(tbl.Meta())
 	m.c.Assert(exist, check.IsTrue)
-	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, tbl.Meta())
+	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, 0, tbl.Meta())
 }
 
 func (m *MockPullerManager) postPrewrite(req *kvrpcpb.PrewriteRequest, result []error) {
