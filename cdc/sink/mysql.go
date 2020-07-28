@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/filter"
 	tifilter "github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -69,6 +70,10 @@ type mysqlSink struct {
 
 	unresolvedTxnsMu sync.Mutex
 	unresolvedTxns   map[model.TableName][]*model.Txn
+	workers          []*mysqlSinkWorker
+	notifier         *notify.Notifier
+	errCh            chan error
+	cancel           context.CancelFunc
 
 	statistics *Statistics
 
@@ -445,6 +450,7 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 		statistics:                      NewStatistics("mysql", opts),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
+		errCh:                           make(chan error, 1),
 	}
 
 	if val, ok := opts[mark.OptCyclicConfig]; ok {
@@ -461,26 +467,69 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 		}
 	}
 
+	cctx, cancel := context.WithCancel(ctx)
+	sink.cancel = cancel
+	sink.notifier = new(notify.Notifier)
+	sink.createSinkWorkers(cctx, sink.notifier)
+
 	return sink, nil
 }
 
-func (s *mysqlSink) concurrentExec(ctx context.Context, txnsGroup map[model.TableName][]*model.Txn) error {
-	nWorkers := s.params.workerCount
-	workers := make([]*mysqlSinkWorker, nWorkers)
-	errg, ctx := errgroup.WithContext(ctx)
-	for i := 0; i < nWorkers; i++ {
-		i := i
-		workers[i] = newMySQLSinkWorker(s.params.maxTxnRow, i, s.metricBucketSizeCounters[i], s.execDMLs)
-		errg.Go(func() error {
-			return workers[i].run(ctx)
-		})
+func (s *mysqlSink) createSinkWorkers(ctx context.Context, notifier *notify.Notifier) {
+	s.workers = make([]*mysqlSinkWorker, s.params.workerCount)
+	for i := range s.workers {
+		receiver := s.notifier.NewReceiver(time.Millisecond * 50)
+		worker := newMySQLSinkWorker(
+			s.params.maxTxnRow, i, s.metricBucketSizeCounters[i], receiver, s.execDMLs)
+		s.workers[i] = worker
+		go func() {
+			err := worker.run(ctx)
+			if err != nil && errors.Cause(err) != context.Canceled {
+				select {
+				case s.errCh <- err:
+				default:
+				}
+			}
+		}()
 	}
+}
+
+func (s *mysqlSink) notifyAndWaitExec() {
+	s.notifier.Notify()
+	for _, w := range s.workers {
+		w.waitAllTxnsExecuted()
+	}
+}
+
+func (s *mysqlSink) concurrentExec(ctx context.Context, txnsGroup map[model.TableName][]*model.Txn) error {
+	errg, ctx := errgroup.WithContext(ctx)
+	ch := make(chan struct{}, 1)
+	errg.Go(func() error {
+		s.dispatchAndExecTxns(ctx, txnsGroup)
+		ch <- struct{}{}
+		return nil
+	})
+	errg.Go(func() error {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ch:
+			return nil
+		case err := <-s.errCh:
+			return err
+		}
+	})
+	return errg.Wait()
+}
+
+func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model.TableName][]*model.Txn) {
+	nWorkers := s.params.workerCount
 	causality := newCausality()
 	rowsChIdx := 0
 
 	sendFn := func(txn *model.Txn, idx int) {
 		causality.add(txn.Keys, idx)
-		workers[idx].appendTxn(ctx, txn)
+		s.workers[idx].appendTxn(ctx, txn)
 	}
 	resolveConflict := func(txn *model.Txn) {
 		if conflict, idx := causality.detectConflict(txn.Keys); conflict {
@@ -488,9 +537,7 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, txnsGroup map[model.Tabl
 				sendFn(txn, idx)
 				return
 			}
-			for _, w := range workers {
-				w.waitAllTxnsExecuted()
-			}
+			s.notifyAndWaitExec()
 			causality.reset()
 		}
 		sendFn(txn, rowsChIdx)
@@ -504,10 +551,7 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, txnsGroup map[model.Tabl
 			s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
 		}
 	}
-	for _, w := range workers {
-		w.waitAndClose()
-	}
-	return errg.Wait()
+	s.notifyAndWaitExec()
 }
 
 type mysqlSinkWorker struct {
@@ -517,12 +561,14 @@ type mysqlSinkWorker struct {
 	bucket           int
 	execDMLs         func(context.Context, []*model.RowChangedEvent, uint64, int) error
 	metricBucketSize prometheus.Counter
+	receiver         *notify.Receiver
 }
 
 func newMySQLSinkWorker(
 	maxTxnRow int,
 	bucket int,
 	metricBucketSize prometheus.Counter,
+	receiver *notify.Receiver,
 	execDMLs func(context.Context, []*model.RowChangedEvent, uint64, int) error,
 ) *mysqlSinkWorker {
 	return &mysqlSinkWorker{
@@ -531,16 +577,12 @@ func newMySQLSinkWorker(
 		bucket:           bucket,
 		metricBucketSize: metricBucketSize,
 		execDMLs:         execDMLs,
+		receiver:         receiver,
 	}
 }
 
 func (w *mysqlSinkWorker) waitAllTxnsExecuted() {
 	w.txnWg.Wait()
-}
-
-func (w *mysqlSinkWorker) waitAndClose() {
-	w.waitAllTxnsExecuted()
-	close(w.txnCh)
 }
 
 func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.Txn) {
@@ -573,7 +615,6 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		}
 	}()
 
-	lastExecTime := time.Now()
 	flushRows := func() error {
 		if len(toExecRows) == 0 {
 			return nil
@@ -590,12 +631,9 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		w.metricBucketSize.Add(float64(txnNum))
 		w.txnWg.Add(-1 * txnNum)
 		txnNum = 0
-		lastExecTime = time.Now()
 		return nil
 	}
 
-	t := time.NewTicker(50 * time.Millisecond)
-	defer t.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -612,10 +650,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			replicaID = txn.ReplicaID
 			toExecRows = append(toExecRows, txn.Rows...)
 			txnNum++
-		case <-t.C:
-			if time.Since(lastExecTime) < time.Millisecond*100 {
-				continue
-			}
+		case <-w.receiver.C:
 			if err := flushRows(); err != nil {
 				return errors.Trace(err)
 			}
