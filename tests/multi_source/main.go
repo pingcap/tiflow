@@ -164,6 +164,19 @@ func truncateDDL(ctx context.Context, db *sql.DB) {
 	}
 }
 
+func ignoreableError(err error) bool {
+	knownErrorList := []string{
+		"Error 1146:", // table doesn't exist
+		"Error 1049",  // database doesn't exist
+	}
+	for _, e := range knownErrorList {
+		if strings.HasPrefix(err.Error(), e) {
+			return true
+		}
+	}
+	return false
+}
+
 func dml(ctx context.Context, db *sql.DB, table string, id int) {
 	var err error
 	var i int
@@ -179,7 +192,7 @@ func dml(ctx context.Context, db *sql.DB, table string, id int) {
 				log.S().Info(id, " insert success: ", insertSuccess)
 			}
 		}
-		if err != nil && !strings.HasPrefix(err.Error(), "Error 1146:") {
+		if err != nil && !ignoreableError(err) {
 			log.Fatal("unexpected error when executing sql", zap.Error(err))
 		}
 
@@ -194,7 +207,7 @@ func dml(ctx context.Context, db *sql.DB, table string, id int) {
 					}
 				}
 			}
-			if err != nil && !strings.HasPrefix(err.Error(), "Error 1146:") {
+			if err != nil && !ignoreableError(err) {
 				log.Fatal("unexpected error when executing sql", zap.Error(err))
 			}
 		}
