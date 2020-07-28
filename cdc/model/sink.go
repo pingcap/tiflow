@@ -42,7 +42,7 @@ type ColumnFlagType util.Flag
 
 const (
 	// BinaryFlag means col charset is binary
-	BinaryFlag ColumnFlagType = 1 << ColumnFlagType(iota)
+	BinaryFlag ColumnFlagType = uint64(1) << ColumnFlagType(iota)
 	// PrimaryKeyFlag means the column is primary key
 	PrimaryKeyFlag
 	// UniqueKeyFlag means the column is unique key
