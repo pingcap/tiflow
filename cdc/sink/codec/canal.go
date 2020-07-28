@@ -338,7 +338,7 @@ func (d *CanalEventBatchEncoder) Build(resolvedTs uint64) (keys [][]byte, values
 	values = make([][]byte, 0, len(resolvedTxns)+len(d.ddls))
 	for _, txns := range resolvedTxns {
 		for _, txn := range txns {
-			canalMessageEncoder := NewCanalMessageEncoder()
+			canalMessageEncoder := newCanalMessageEncoder()
 			for _, row := range txn.Rows {
 				err := canalMessageEncoder.appendRowChangedEvent(row)
 				if err != nil {
@@ -352,7 +352,7 @@ func (d *CanalEventBatchEncoder) Build(resolvedTs uint64) (keys [][]byte, values
 		}
 	}
 	if len(d.ddls) != 0 {
-		canalMessageEncoder := NewCanalMessageEncoder()
+		canalMessageEncoder := newCanalMessageEncoder()
 		for _, ddl := range d.ddls {
 			err := canalMessageEncoder.appendDDLEvent(ddl)
 			if err != nil {

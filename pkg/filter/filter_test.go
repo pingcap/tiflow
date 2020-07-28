@@ -86,9 +86,6 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 		{"ecom", "test", 5, nil, true},
 		{"test", "test", 6, nil, true},
 		{"ecom", "log", 6, nil, false},
-		{"ecom", "log", 6, []byte{mysql.TypeBit, mysql.TypeTinyBlob}, true},
-		{"ecom", "log", 6, []byte{mysql.TypeJSON, mysql.TypeTinyBlob}, false},
-		{"ecom", "log", 6, []byte{mysql.TypeString}, true},
 	}
 
 	for _, tc := range testCases {
