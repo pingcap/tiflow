@@ -71,7 +71,7 @@ type kafkaSaramaProducer struct {
 	closeCh chan struct{}
 }
 
-func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
+func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
 	msg := &sarama.ProducerMessage{
 		Topic:     k.topic,
 		Key:       sarama.ByteEncoder(key),
@@ -87,25 +87,6 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(ctx context.Context, key []byte, 
 	case k.asyncClient.Input() <- msg:
 	}
 	return nil
-}
-
-func (k *kafkaSaramaProducer) SyncSendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
-	msg := &sarama.ProducerMessage{
-		Topic:     k.topic,
-		Key:       sarama.ByteEncoder(key),
-		Value:     sarama.ByteEncoder(value),
-		Partition: partition,
-	}
-	msg.Metadata = atomic.AddUint64(&k.partitionOffset[partition].sent, 1)
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-k.closeCh:
-		return nil
-	default:
-		_, _, err := k.syncClient.SendMessage(msg)
-		return err
-	}
 }
 
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error {

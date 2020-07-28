@@ -186,38 +186,22 @@ flushLoop:
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-<<<<<<< HEAD
-	switch k.protocol {
-	case codec.ProtocolAvro: // ignore resolved events in avro protocol
-		return nil
-	case codec.ProtocolCanal:
-		return nil
-	}
-=======
->>>>>>> 6297cb92ca3f842d563807603ac79f954185f8db
 	encoder := k.newEncoder()
 	op, err := encoder.AppendResolvedEvent(ts)
 	if err != nil {
 		return errors.Trace(err)
 	}
-<<<<<<< HEAD
-	keys, values := encoder.Build(ts)
-	for i := range keys {
-		err = k.mqProducer.SyncBroadcastMessage(ctx, keys[i], values[i])
-		if err != nil {
-			return errors.Trace(err)
-		}
-=======
 	if op == codec.EncoderNoOperation {
 		return nil
 	}
-	key, value := encoder.Build()
-	err = k.writeToProducer(ctx, key, value, op, -1)
-	if err != nil {
-		return errors.Trace(err)
->>>>>>> 6297cb92ca3f842d563807603ac79f954185f8db
+	keys, values := encoder.Build(ts)
+	for i := range keys {
+		err = k.writeToProducer(ctx, keys[i], values[i], op, -1)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
-	return errors.Trace(err)
+	return nil
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -235,39 +219,24 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-<<<<<<< HEAD
-	if k.protocol != codec.ProtocolAvro {
-		// ddl always does not need resolved ts
-		keys, values := encoder.Build(0)
-		log.Info("emit ddl event", zap.ByteStrings("keys", keys), zap.ByteStrings("values", values))
-		if k.protocol == codec.ProtocolCanal {
-			// see https://github.com/alibaba/canal/blob/master/connector/core/src/main/java/com/alibaba/otter/canal/connector/core/producer/MQMessageUtils.java#L257
-			for i := range keys {
-				err = k.mqProducer.SyncSendMessage(ctx, keys[i], values[i], 0)
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-		} else {
-			for i := range keys {
-				err = k.mqProducer.SyncBroadcastMessage(ctx, keys[i], values[i])
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
-		}
-=======
 	if op == codec.EncoderNoOperation {
 		return nil
 	}
 
-	key, value := encoder.Build()
-	log.Info("emit ddl event", zap.ByteString("key", key), zap.ByteString("value", value))
-	err = k.writeToProducer(ctx, key, value, op, -1)
-	if err != nil {
-		return errors.Trace(err)
->>>>>>> 6297cb92ca3f842d563807603ac79f954185f8db
+	// ddl always does not need resolved ts
+	keys, values := encoder.Build(0)
+	var partition int32 = -1
+	log.Info("emit ddl event", zap.ByteStrings("keys", keys), zap.ByteStrings("values", values))
+	if k.protocol == codec.ProtocolCanal {
+		// see https://github.com/alibaba/canal/blob/master/connector/core/src/main/java/com/alibaba/otter/canal/connector/core/producer/MQMessageUtils.java#L257
+		partition = 0
+	}
+	for i := range keys {
+		err = k.writeToProducer(ctx, keys[i], values[i], op, partition)
+		//err = k.mqProducer.SyncSendMessage(ctx, keys[i], values[i], 0)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 	return nil
 }
@@ -342,36 +311,27 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	batchSize := 0
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
-<<<<<<< HEAD
 	var resolvedTs uint64
-	flushToProducer := func() error {
-=======
 
 	flushToProducer := func(op codec.EncoderResult) error {
->>>>>>> 6297cb92ca3f842d563807603ac79f954185f8db
-		return k.statistics.RecordBatchExecution(func() (int, error) {
-			if batchSize == 0 {
-				return 0, nil
+		if batchSize == 0 {
+			return nil
+		}
+		thisBatchSize := batchSize
+		batchSize = 0
+		if k.protocol == codec.ProtocolCanal {
+			batchSize += thisBatchSize - encoder.Size()
+		}
+		keys, values := encoder.Build(resolvedTs)
+		for i := range keys {
+			err := k.writeToProducer(ctx, keys[i], values[i], op, partition)
+			if err != nil {
+				return errors.Trace(err)
 			}
-			thisBatchSize := batchSize
-			batchSize = 0
-<<<<<<< HEAD
-			if k.protocol == codec.ProtocolCanal {
-				batchSize += thisBatchSize - encoder.Size()
-			}
-			keys, values := encoder.Build(resolvedTs)
-			for i := range keys {
-				err := k.mqProducer.AsyncSendMessage(ctx, keys[i], values[i], partition)
-				if err != nil {
-					return thisBatchSize, errors.Trace(err)
-				}
-			}
-			return thisBatchSize, nil
-=======
-			return thisBatchSize, k.writeToProducer(ctx, key, value, op, partition)
->>>>>>> 6297cb92ca3f842d563807603ac79f954185f8db
-		})
+		}
+		return nil
 	}
+
 	for {
 		var e struct {
 			row        *model.RowChangedEvent
@@ -389,22 +349,13 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		}
 		if e.row == nil {
 			if e.resolvedTs != 0 {
-<<<<<<< HEAD
 				resolvedTs = e.resolvedTs
-				if err := flushToProducer(); err != nil {
-=======
 				if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
->>>>>>> 6297cb92ca3f842d563807603ac79f954185f8db
 					return errors.Trace(err)
 				}
 				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
 				k.resolvedNotifier.Notify()
 			}
-<<<<<<< HEAD
-		} else {
-			err := encoder.AppendRowChangedEvent(e.row)
-			if err != nil {
-=======
 			continue
 		}
 		op, err := encoder.AppendRowChangedEvent(e.row)
@@ -422,17 +373,8 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 
 		if op == codec.EncoderNeedSyncWrite || op == codec.EncoderNeedAsyncWrite {
 			if err := flushToProducer(op); err != nil {
->>>>>>> 6297cb92ca3f842d563807603ac79f954185f8db
 				return errors.Trace(err)
 			}
-			// This is only a temporary fix so that the Avro encoder does not overflow.
-			// Pending further refactoring
-			if encoder.Size() >= batchSizeLimit || (k.protocol == codec.ProtocolAvro && encoder.Size() >= 1) {
-				if err := flushToProducer(); err != nil {
-					return errors.Trace(err)
-				}
-			}
-			batchSize++
 		}
 	}
 }
