@@ -352,7 +352,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 }
 
 func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
-	if row.Delete && !tableInfo.PKIsHandle {
+	if row.Delete && tableInfo.HandleIndexID != HandleIndexPKIsHandle {
 		return nil, nil
 	}
 
@@ -433,9 +433,9 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 
 func setHandleKeyFlag(tableInfo *TableInfo, colValues map[string]*model.Column) error {
 	switch tableInfo.HandleIndexID {
-	case -2:
+	case HandleIndexTableIneligible:
 		log.Fatal("this table is not a eligible", zap.Int64("tableID", tableInfo.ID))
-	case -1:
+	case HandleIndexPKIsHandle:
 		// pk is handle
 		if !tableInfo.PKIsHandle {
 			log.Fatal("the pk of this table is not handle", zap.Int64("tableID", tableInfo.ID))

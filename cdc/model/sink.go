@@ -45,9 +45,9 @@ const (
 	// BinaryFlag means the column charset is binary
 	BinaryFlag ColumnFlagType = 1 << ColumnFlagType(iota)
 	// HandleKeyFlag means the column selected as the handle key
-	HandleKeyFlag ColumnFlagType = 1 << ColumnFlagType(iota)
+	HandleKeyFlag
 	// GeneratedColumnFlag means the column is a generated column
-	GeneratedColumnFlag ColumnFlagType = 1 << ColumnFlagType(iota)
+	GeneratedColumnFlag
 )
 
 //SetIsBinary set BinaryFlag

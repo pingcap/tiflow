@@ -198,6 +198,11 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 	return n
 }
 
+const (
+	HandleIndexPKIsHandle      = -1
+	HandleIndexTableIneligible = -2
+)
+
 // TableInfo provides meta data describing a DB table.
 type TableInfo struct {
 	*timodel.TableInfo
@@ -213,8 +218,8 @@ type TableInfo struct {
 
 	// the mounter will chose this index to output delete events
 	// special value:
-	// -1 : pk is handle
-	// -2 : the table is not eligible
+	// HandleIndexPKIsHandle(-1) : pk is handle
+	// HandleIndexTableIneligible(-2) : the table is not eligible
 	HandleIndexID int64
 
 	// if the table of this row only has one unique index(includes primary key),
@@ -234,7 +239,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *timo
 		indicesOffset:    make(map[int64]int, len(info.Indices)),
 		uniqueColumns:    make(map[int64]struct{}),
 		handleColID:      -1,
-		HandleIndexID:    -2,
+		HandleIndexID:    HandleIndexTableIneligible,
 		rowColInfos:      make([]rowcodec.ColInfo, len(info.Columns)),
 	}
 
@@ -245,7 +250,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *timo
 		isPK := (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == timodel.ExtraHandleID
 		if isPK {
 			ti.handleColID = col.ID
-			ti.HandleIndexID = -1
+			ti.HandleIndexID = HandleIndexPKIsHandle
 			ti.uniqueColumns[col.ID] = struct{}{}
 			uniqueIndexNum++
 		}
@@ -282,7 +287,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *timo
 }
 
 func (ti *TableInfo) findHandleIndex() {
-	if ti.HandleIndexID == -1 {
+	if ti.HandleIndexID == HandleIndexPKIsHandle {
 		// pk is handle
 		return
 	}
