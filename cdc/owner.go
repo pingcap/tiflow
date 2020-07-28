@@ -622,7 +622,7 @@ func (o *Owner) checkClusterHealth(_ context.Context) error {
 	// check whether a changefeed has finished by comparing checkpoint-ts and target-ts
 	for _, cf := range o.changeFeeds {
 		if cf.status.CheckpointTs == cf.info.GetTargetTs() {
-			log.Info("changefeed replication finished", zap.String("changefeed", cf.id), zap.Uint64("ts", cf.status.CheckpointTs))
+			log.Info("changefeed replication finished", zap.String("changefeed", cf.id), zap.Uint64("checkpointTs", cf.status.CheckpointTs))
 			err := o.EnqueueJob(model.AdminJob{
 				CfID: cf.id,
 				Type: model.AdminFinish,
