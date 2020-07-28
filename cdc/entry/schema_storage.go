@@ -199,7 +199,9 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 }
 
 const (
-	HandleIndexPKIsHandle      = -1
+	// HandleIndexPKIsHandle represents the handle index is pk and the pk is handle
+	HandleIndexPKIsHandle = -1
+	// HandleIndexTableIneligible represents the table is ineligible
 	HandleIndexTableIneligible = -2
 )
 
