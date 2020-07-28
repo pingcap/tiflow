@@ -254,7 +254,7 @@ func (h *sortHeap) Pop() interface{} {
 
 const defaultBatchSize = 8 * 1024 * 2014
 
-// readPolymorphicEvent reads a PolymorphicEvent from file reader and also advance reader
+// readPolymorphicEvent reads PolymorphicEvents from file reader and also advance reader
 // TODO: batch read
 func readPolymorphicEvent(rd *bufio.Reader, readBuf *bytes.Reader, batchSize int) ([]*model.PolymorphicEvent, error) {
 	var readSize int
