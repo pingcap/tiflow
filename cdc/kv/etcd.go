@@ -511,6 +511,7 @@ func (c CDCEtcdClient) GetAllTaskWorkloads(ctx context.Context, changefeedID str
 	return workloads, nil
 }
 
+// UpdateTaskStatusFunc is a function that updates the task status
 type UpdateTaskStatusFunc func(int64, *model.TaskStatus) (updated bool, err error)
 
 // AtomicPutTaskStatus puts task status into etcd atomically.
