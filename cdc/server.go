@@ -224,7 +224,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 
-func (s *Server) SetOwner(owner *Owner) {
+func (s *Server) setOwner(owner *Owner) {
 	s.ownerLock.Lock()
 	defer s.ownerLock.Unlock()
 	s.owner = owner
@@ -262,7 +262,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			continue
 		}
 
-		s.SetOwner(owner)
+		s.setOwner(owner)
 		if err := owner.Run(ctx, ownerRunInterval); err != nil {
 			if errors.Cause(err) == context.Canceled {
 				log.Info("owner exited", zap.String("capture", s.capture.info.ID))
@@ -276,7 +276,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			log.Warn("run owner failed", zap.Error(err))
 		}
 		// owner is resigned by API, reset owner and continue the campaign loop
-		s.SetOwner(nil)
+		s.setOwner(nil)
 	}
 }
 

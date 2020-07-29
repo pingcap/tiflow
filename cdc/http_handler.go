@@ -66,9 +66,9 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	s.ownerLock.RLock()
-	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
 		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		s.ownerLock.RUnlock()
 		return
 	}
 	// Resign is a complex process that needs to be synchronized because
@@ -85,7 +85,8 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 	s.owner.Close(req.Context(), func(ctx context.Context) error {
 		return s.capture.Resign(ctx)
 	})
-	s.owner = nil
+	s.ownerLock.RUnlock()
+	s.setOwner(nil)
 	handleOwnerResp(w, nil)
 }
 
