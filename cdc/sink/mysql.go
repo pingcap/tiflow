@@ -58,6 +58,7 @@ const (
 	defaultDMLMaxRetryTime = 8
 	defaultDDLMaxRetryTime = 20
 	defaultTiDBTxnMode     = "optimistic"
+	defaultFlushInterval   = time.Millisecond * 50
 )
 
 type mysqlSink struct {
@@ -73,7 +74,6 @@ type mysqlSink struct {
 	workers          []*mysqlSinkWorker
 	notifier         *notify.Notifier
 	errCh            chan error
-	cancel           context.CancelFunc
 
 	statistics *Statistics
 
@@ -467,10 +467,8 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 		}
 	}
 
-	cctx, cancel := context.WithCancel(ctx)
-	sink.cancel = cancel
 	sink.notifier = new(notify.Notifier)
-	sink.createSinkWorkers(cctx, sink.notifier)
+	sink.createSinkWorkers(ctx, sink.notifier)
 
 	return sink, nil
 }
@@ -478,7 +476,7 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 func (s *mysqlSink) createSinkWorkers(ctx context.Context, notifier *notify.Notifier) {
 	s.workers = make([]*mysqlSinkWorker, s.params.workerCount)
 	for i := range s.workers {
-		receiver := s.notifier.NewReceiver(time.Millisecond * 50)
+		receiver := s.notifier.NewReceiver(defaultFlushInterval)
 		worker := newMySQLSinkWorker(
 			s.params.maxTxnRow, i, s.metricBucketSizeCounters[i], receiver, s.execDMLs)
 		s.workers[i] = worker
