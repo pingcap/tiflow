@@ -546,10 +546,7 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 		for _, updateFunc := range updateFuncs {
 			u, err := updateFunc(modRevision, status)
 			if err != nil {
-				if permanent, ok := err.(*backoff.PermanentError); ok {
-					return backoff.Permanent(errors.Trace(permanent.Err))
-				}
-				return errors.Trace(err)
+				return err
 			}
 			updated = updated || u
 		}
