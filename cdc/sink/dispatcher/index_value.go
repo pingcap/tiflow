@@ -20,16 +20,23 @@ import (
 
 type indexValueDispatcher struct {
 	partitionNum int32
+	hasher       *hash.PositionInertia
+}
+
+func newIndexValueDispatcher(partitionNum int32) *indexValueDispatcher {
+	return &indexValueDispatcher{
+		partitionNum: partitionNum,
+		hasher:       hash.NewPositionInertia(),
+	}
 }
 
 func (r *indexValueDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
-	var h hash.PositionInertia
-	h.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
+	r.hasher.Reset()
+	r.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
 	for name, col := range row.Columns {
 		if col.Flag.IsHandleKey() {
-			h.Write([]byte(name), []byte(model.ColumnValueString(col.Value)))
+			r.hasher.Write([]byte(name), []byte(model.ColumnValueString(col.Value)))
 		}
 	}
-	h ^= h<<4 | h>>4
-	return int32(byte(h) % byte(r.partitionNum))
+	return int32(r.hasher.Sum8() % byte(r.partitionNum))
 }

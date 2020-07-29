@@ -20,12 +20,19 @@ import (
 
 type tableDispatcher struct {
 	partitionNum int32
+	hasher       *hash.PositionInertia
+}
+
+func newTableDispatcher(partitionNum int32) *tableDispatcher {
+	return &tableDispatcher{
+		partitionNum: partitionNum,
+		hasher:       hash.NewPositionInertia(),
+	}
 }
 
 func (t *tableDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
-	var h hash.PositionInertia
+	t.hasher.Reset()
 	// distribute partition by table
-	h.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
-	h ^= h<<4 | h>>4
-	return int32(byte(h) % byte(t.partitionNum))
+	t.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
+	return int32(t.hasher.Sum8() % byte(t.partitionNum))
 }

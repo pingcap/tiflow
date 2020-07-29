@@ -18,11 +18,11 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-type RowIDDispatcherSuite struct{}
+type IndexValueDispatcherSuite struct{}
 
-var _ = check.Suite(&RowIDDispatcherSuite{})
+var _ = check.Suite(&IndexValueDispatcherSuite{})
 
-func (s RowIDDispatcherSuite) TestRowIDDispatcher(c *check.C) {
+func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 	testCases := []struct {
 		row             *model.RowChangedEvent
 		exceptPartition int32
@@ -42,7 +42,7 @@ func (s RowIDDispatcherSuite) TestRowIDDispatcher(c *check.C) {
 					Flag:  0,
 				},
 			},
-		}, exceptPartition: 1},
+		}, exceptPartition: 8},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -58,7 +58,7 @@ func (s RowIDDispatcherSuite) TestRowIDDispatcher(c *check.C) {
 					Flag:  0,
 				},
 			},
-		}, exceptPartition: 11},
+		}, exceptPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -74,7 +74,7 @@ func (s RowIDDispatcherSuite) TestRowIDDispatcher(c *check.C) {
 					Flag:  0,
 				},
 			},
-		}, exceptPartition: 1},
+		}, exceptPartition: 8},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -90,7 +90,7 @@ func (s RowIDDispatcherSuite) TestRowIDDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 5},
+		}, exceptPartition: 9},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -106,7 +106,7 @@ func (s RowIDDispatcherSuite) TestRowIDDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 5},
+		}, exceptPartition: 9},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -138,9 +138,9 @@ func (s RowIDDispatcherSuite) TestRowIDDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 3},
+		}, exceptPartition: 13},
 	}
-	p := &indexValueDispatcher{partitionNum: 16}
+	p := newIndexValueDispatcher(16)
 	for _, tc := range testCases {
 		c.Assert(p.Dispatch(tc.row), check.Equals, tc.exceptPartition)
 	}

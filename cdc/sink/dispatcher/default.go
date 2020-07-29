@@ -19,13 +19,21 @@ import (
 
 type defaultDispatcher struct {
 	partitionNum int32
+	tbd          *tableDispatcher
+	ivd          *indexValueDispatcher
+}
+
+func newDefaultDispatcher(partitionNum int32) *defaultDispatcher {
+	return &defaultDispatcher{
+		partitionNum: partitionNum,
+		tbd:          newTableDispatcher(partitionNum),
+		ivd:          newIndexValueDispatcher(partitionNum),
+	}
 }
 
 func (d *defaultDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	if len(row.IndieMarkCol) == 0 {
-		tbd := tableDispatcher{partitionNum: d.partitionNum}
-		return tbd.Dispatch(row)
+		return d.tbd.Dispatch(row)
 	}
-	ivd := indexValueDispatcher{partitionNum: d.partitionNum}
-	return ivd.Dispatch(row)
+	return d.ivd.Dispatch(row)
 }

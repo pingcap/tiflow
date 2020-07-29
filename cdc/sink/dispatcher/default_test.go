@@ -39,7 +39,7 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 9},
+		}, exceptPartition: 15},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -52,7 +52,7 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 5},
+		}, exceptPartition: 4},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -65,7 +65,7 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 1},
+		}, exceptPartition: 2},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -76,6 +76,25 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				"id": {
 					Value: 1,
 					Flag:  model.HandleKeyFlag,
+				},
+				"a": {
+					Value: 1,
+				},
+			},
+		}, exceptPartition: 4},
+		{row: &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: "test",
+				Table:  "t2",
+			},
+			IndieMarkCol: "id",
+			Columns: map[string]*model.Column{
+				"id": {
+					Value: 2,
+					Flag:  model.HandleKeyFlag,
+				},
+				"a": {
+					Value: 2,
 				},
 			},
 		}, exceptPartition: 15},
@@ -87,11 +106,14 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 			IndieMarkCol: "id",
 			Columns: map[string]*model.Column{
 				"id": {
-					Value: 2,
+					Value: 3,
 					Flag:  model.HandleKeyFlag,
 				},
+				"a": {
+					Value: 3,
+				},
 			},
-		}, exceptPartition: 3},
+		}, exceptPartition: 9},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -103,8 +125,11 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Value: 3,
 					Flag:  model.HandleKeyFlag,
 				},
+				"a": {
+					Value: 4,
+				},
 			},
-		}, exceptPartition: 7},
+		}, exceptPartition: 9},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -115,7 +140,7 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Value: 1,
 				},
 			},
-		}, exceptPartition: 14},
+		}, exceptPartition: 1},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -126,7 +151,7 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Value: 2,
 				},
 			},
-		}, exceptPartition: 14},
+		}, exceptPartition: 1},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -137,9 +162,9 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Value: 3,
 				},
 			},
-		}, exceptPartition: 14},
+		}, exceptPartition: 1},
 	}
-	p := &defaultDispatcher{partitionNum: 16}
+	p := newDefaultDispatcher(16)
 	for _, tc := range testCases {
 		c.Assert(p.Dispatch(tc.row), check.Equals, tc.exceptPartition)
 	}

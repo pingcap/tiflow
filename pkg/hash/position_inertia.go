@@ -13,25 +13,47 @@
 
 package hash
 
-// PositionInertia is a 8-bits hash which is bytes partitions inertia
-type PositionInertia byte
+import (
+	"hash"
+	"hash/crc32"
 
-func (p *PositionInertia) Write(bss ...[]byte) {
-	var blockHash byte
-	var i int
-	for _, bs := range bss {
-		for _, b := range bs {
-			blockHash ^= loopLeftMove(b, i)
-			i += 1
-		}
-	}
-	*p ^= PositionInertia(blockHash)
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+)
+
+const hashMagicNumber = 0x6A
+
+// PositionInertia is a 8-bits hash which is bytes partitions inertia
+type PositionInertia struct {
+	hashValue byte
+	hasher    hash.Hash32
 }
 
-func loopLeftMove(source byte, step int) byte {
-	step %= 8
-	if step < 0 {
-		step += 8
+func NewPositionInertia() *PositionInertia {
+	return &PositionInertia{
+		hashValue: hashMagicNumber,
+		hasher:    crc32.NewIEEE(),
 	}
-	return source>>(8-step) | (source << step)
+}
+
+func (p *PositionInertia) Write(bss ...[]byte) {
+	p.hasher.Reset()
+	for _, bs := range bss {
+		_, err := p.hasher.Write(bs)
+		if err != nil {
+			log.Fatal("failed to write hash", zap.Error(err))
+		}
+	}
+	rawHash := p.hasher.Sum32()
+	rawHash ^= rawHash >> 16
+	rawHash ^= rawHash >> 8
+	p.hashValue ^= byte(rawHash)
+}
+
+func (p *PositionInertia) Sum8() byte {
+	return p.hashValue
+}
+
+func (p *PositionInertia) Reset() {
+	p.hashValue = hashMagicNumber
 }

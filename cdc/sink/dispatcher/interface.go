@@ -103,13 +103,13 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		rule.fromString(ruleConfig.Dispatcher)
 		switch rule {
 		case dispatchRuleRowID, dispatchRuleIndexValue:
-			d = &indexValueDispatcher{partitionNum: partitionNum}
+			d = newIndexValueDispatcher(partitionNum)
 		case dispatchRuleTS:
-			d = &tsDispatcher{partitionNum: partitionNum}
+			d = newTsDispatcher(partitionNum)
 		case dispatchRuleTable:
-			d = &tableDispatcher{partitionNum: partitionNum}
+			d = newTsDispatcher(partitionNum)
 		case dispatchRuleDefault:
-			d = &defaultDispatcher{partitionNum: partitionNum}
+			d = newDefaultDispatcher(partitionNum)
 		}
 		rules = append(rules, struct {
 			Dispatcher
