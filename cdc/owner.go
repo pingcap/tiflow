@@ -296,6 +296,7 @@ func (o *Owner) newChangeFeed(
 		}
 
 		sinkTableInfo[j-1] = new(model.SimpleTableInfo)
+		sinkTableInfo[j-1].TableID = tid
 		sinkTableInfo[j-1].ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
 
 		for i, colInfo := range tblInfo.Cols() {
