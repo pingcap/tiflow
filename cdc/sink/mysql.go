@@ -657,6 +657,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 }
 
 func (s *mysqlSink) Close() error {
+	s.notifier.Close()
 	return s.db.Close()
 }
 
