@@ -21,11 +21,11 @@ import (
 	"go.uber.org/zap"
 )
 
-const hashMagicNumber = 0x6A
+const hashMagicNumber = 0
 
 // PositionInertia is a 8-bits hash which is bytes partitions inertia
 type PositionInertia struct {
-	hashValue byte
+	hashValue uint32
 	hasher    hash.Hash32
 }
 
@@ -45,12 +45,10 @@ func (p *PositionInertia) Write(bss ...[]byte) {
 		}
 	}
 	rawHash := p.hasher.Sum32()
-	rawHash ^= rawHash >> 16
-	rawHash ^= rawHash >> 8
-	p.hashValue ^= byte(rawHash)
+	p.hashValue ^= rawHash
 }
 
-func (p *PositionInertia) Sum8() byte {
+func (p *PositionInertia) Sum32() uint32 {
 	return p.hashValue
 }
 

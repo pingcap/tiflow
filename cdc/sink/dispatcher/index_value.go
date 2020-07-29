@@ -38,5 +38,5 @@ func (r *indexValueDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 			r.hasher.Write([]byte(name), []byte(model.ColumnValueString(col.Value)))
 		}
 	}
-	return int32(r.hasher.Sum8() % byte(r.partitionNum))
+	return int32(r.hasher.Sum32() % uint32(r.partitionNum))
 }

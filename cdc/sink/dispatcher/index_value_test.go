@@ -42,7 +42,7 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 					Flag:  0,
 				},
 			},
-		}, exceptPartition: 8},
+		}, exceptPartition: 2},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -58,7 +58,7 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 					Flag:  0,
 				},
 			},
-		}, exceptPartition: 5},
+		}, exceptPartition: 11},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -74,7 +74,7 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 					Flag:  0,
 				},
 			},
-		}, exceptPartition: 8},
+		}, exceptPartition: 2},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -90,7 +90,7 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 9},
+		}, exceptPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -106,7 +106,7 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 9},
+		}, exceptPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -122,7 +122,7 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 5},
+		}, exceptPartition: 14},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
@@ -138,7 +138,7 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag,
 				},
 			},
-		}, exceptPartition: 13},
+		}, exceptPartition: 2},
 	}
 	p := newIndexValueDispatcher(16)
 	for _, tc := range testCases {
