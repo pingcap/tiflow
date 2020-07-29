@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -204,7 +205,14 @@ func (o *Owner) newChangeFeed(
 	if info.Engine == model.SortInFile {
 		err = util.IsDirAndWritable(info.SortDir)
 		if err != nil {
-			return nil, err
+			if os.IsNotExist(errors.Cause(err)) {
+				err = os.MkdirAll(info.SortDir, 0755)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+			} else {
+				return nil, err
+			}
 		}
 	}
 
@@ -859,6 +867,7 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	ticker := time.NewTicker(tickTime)
 	defer ticker.Stop()
 
+	var err error
 loop:
 	for {
 		select {
@@ -871,7 +880,7 @@ loop:
 		case <-ticker.C:
 		}
 
-		err := o.run(ctx)
+		err = o.run(ctx)
 		if err != nil {
 			if errors.Cause(err) != context.Canceled {
 				log.Error("owner exited with error", zap.Error(err))
@@ -885,7 +894,7 @@ loop:
 		}
 	}
 
-	return nil
+	return err
 }
 
 func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
