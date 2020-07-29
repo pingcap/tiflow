@@ -468,12 +468,12 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 	}
 
 	sink.notifier = new(notify.Notifier)
-	sink.createSinkWorkers(ctx, sink.notifier)
+	sink.createSinkWorkers(ctx)
 
 	return sink, nil
 }
 
-func (s *mysqlSink) createSinkWorkers(ctx context.Context, notifier *notify.Notifier) {
+func (s *mysqlSink) createSinkWorkers(ctx context.Context) {
 	s.workers = make([]*mysqlSinkWorker, s.params.workerCount)
 	for i := range s.workers {
 		receiver := s.notifier.NewReceiver(defaultFlushInterval)
