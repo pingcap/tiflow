@@ -45,3 +45,5 @@ require (
 	google.golang.org/genproto v0.0.0-20200113173426-e1de0a7b01eb // indirect
 	google.golang.org/grpc v1.26.0
 )
+
+replace github.com/pingcap/tidb-tools => github.com/amyangfei/tidb-tools v3.0.0-rc.2.0.20200729132015-0def89dd24bb+incompatible
