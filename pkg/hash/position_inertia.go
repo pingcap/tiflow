@@ -29,6 +29,7 @@ type PositionInertia struct {
 	hasher    hash.Hash32
 }
 
+// NewPositionInertia creates a new position inertia algorithm hash builder
 func NewPositionInertia() *PositionInertia {
 	return &PositionInertia{
 		hashValue: hashMagicNumber,
@@ -36,6 +37,7 @@ func NewPositionInertia() *PositionInertia {
 	}
 }
 
+// Write writes the bytes into the PositionInertia
 func (p *PositionInertia) Write(bss ...[]byte) {
 	p.hasher.Reset()
 	for _, bs := range bss {
@@ -48,10 +50,12 @@ func (p *PositionInertia) Write(bss ...[]byte) {
 	p.hashValue ^= rawHash
 }
 
+// Sum32 returns the 32-bits hash
 func (p *PositionInertia) Sum32() uint32 {
 	return p.hashValue
 }
 
+// Reset resets the PositionInertia
 func (p *PositionInertia) Reset() {
 	p.hashValue = hashMagicNumber
 }
