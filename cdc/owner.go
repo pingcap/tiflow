@@ -75,6 +75,8 @@ type Owner struct {
 
 	// gcTTL is the ttl of cdc gc safepoint ttl.
 	gcTTL int64
+	// whether gc safepoint is set in pd
+	gcSafePointSet bool
 }
 
 // CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
@@ -531,24 +533,32 @@ func (o *Owner) balanceTables(ctx context.Context) error {
 }
 
 func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
-	// if no active changefeeds, we can skip both changefeed status flush and
-	// GC safepoint update, the GC safepoint will keep the old value.
-	if len(o.changeFeeds) == 0 {
+	// no running or stopped changefeed, clear gc safepoint.
+	if len(o.changeFeeds) == 0 && len(o.stoppedFeeds) == 0 {
+		if o.gcSafePointSet {
+			_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, 0, 0)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			o.gcSafePointSet = false
+		}
 		return nil
 	}
-	snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
+
 	minCheckpointTs := uint64(math.MaxUint64)
-	for id, changefeed := range o.changeFeeds {
-		snapshot[id] = changefeed.status
-		if changefeed.status.CheckpointTs < minCheckpointTs {
-			minCheckpointTs = changefeed.status.CheckpointTs
+	if len(o.changeFeeds) > 0 {
+		snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
+		for id, changefeed := range o.changeFeeds {
+			snapshot[id] = changefeed.status
+			if changefeed.status.CheckpointTs < minCheckpointTs {
+				minCheckpointTs = changefeed.status.CheckpointTs
+			}
+		}
+		err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
+		if err != nil {
+			return errors.Trace(err)
 		}
 	}
-	err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	for _, status := range o.stoppedFeeds {
 		if status.CheckpointTs < minCheckpointTs {
 			minCheckpointTs = status.CheckpointTs
@@ -559,6 +569,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		log.Info("failed to update service safe point", zap.Error(err))
 		return errors.Trace(err)
 	}
+	o.gcSafePointSet = true
 	return nil
 }
 

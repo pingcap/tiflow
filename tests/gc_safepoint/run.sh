@@ -16,6 +16,15 @@ function get_safepoint() {
     echo $safe_point
 }
 
+function check_safepoint_cleared() {
+    pd_addr=$1
+    pd_cluster_id=$2
+    query=$(etcdctl get --endpoints=$pd_addr /pd/$pd_cluster_id/gc/safe_point/service/ticdc)
+    if [ ! -z "$query" ]; then
+        echo "gc safepoint is not cleared: $query"
+    fi
+}
+
 function check_safepoint_forward() {
     pd_addr=$1
     pd_cluster_id=$2
@@ -55,6 +64,7 @@ function check_changefeed_state() {
 
 export -f get_safepoint
 export -f check_safepoint_forward
+export -f check_safepoint_cleared
 export -f check_safepoint_equal
 export -f check_changefeed_state
 
@@ -105,6 +115,11 @@ function run() {
     cdc cli changefeed remove --changefeed-id=$changefeed_id --pd=$pd_addr
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "removed"
     ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id
+
+    # remove all changefeeds, the safe_point will be cleared
+    cdc cli changefeed remove --changefeed-id=$changefeed_id2 --pd=$pd_addr
+    ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id2 "removed"
+    ensure $MAX_RETRIES check_safepoint_cleared $pd_addr $pd_cluster_id
 
     cleanup_process $CDC_BINARY
 }
