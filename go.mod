@@ -24,13 +24,13 @@ require (
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
-	github.com/pingcap/failpoint v0.0.0-20200506114213-c17f16071c53
-	github.com/pingcap/kvproto v0.0.0-20200518112156-d4aeb467de29
+	github.com/pingcap/failpoint v0.0.0-20200603062251-b230c36c413c
+	github.com/pingcap/kvproto v0.0.0-20200706115936-1e0910aabe6c
 	github.com/pingcap/log v0.0.0-20200511115504-543df19646ad
-	github.com/pingcap/parser v0.0.0-20200522094936-3b720a0512a6
-	github.com/pingcap/pd/v4 v4.0.0-rc.2.0.20200520083007-2c251bd8f181
-	github.com/pingcap/tidb v1.1.0-beta.0.20200603101356-552e7709de0d
-	github.com/pingcap/tidb-tools v4.0.0-rc.2.0.20200521050818-6dd445d83fe0+incompatible
+	github.com/pingcap/parser v0.0.0-20200729090034-ee2603dd7020
+	github.com/pingcap/pd/v4 v4.0.0-rc.2.0.20200714122454-1a64f969cb3c
+	github.com/pingcap/tidb v1.1.0-beta.0.20200729093508-ccfc9b2ad0dc
+	github.com/pingcap/tidb-tools v4.0.4-0.20200730030322-70c3cd4d0ed6+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
