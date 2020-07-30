@@ -83,7 +83,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(row)
+			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
@@ -108,7 +108,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	for _, cs := range s.ddlCases {
 		encoder := newEncoder()
 		for _, ddl := range cs {
-			err := encoder.AppendDDLEvent(ddl)
+			_, err := encoder.AppendDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
@@ -133,7 +133,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	for _, cs := range s.resolvedTsCases {
 		encoder := newEncoder()
 		for _, ts := range cs {
-			err := encoder.AppendResolvedEvent(ts)
+			_, err := encoder.AppendResolvedEvent(ts)
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
