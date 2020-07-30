@@ -30,7 +30,7 @@ require (
 	github.com/pingcap/parser v0.0.0-20200729090034-ee2603dd7020
 	github.com/pingcap/pd/v4 v4.0.0-rc.2.0.20200714122454-1a64f969cb3c
 	github.com/pingcap/tidb v1.1.0-beta.0.20200729093508-ccfc9b2ad0dc
-	github.com/pingcap/tidb-tools v4.0.1+incompatible
+	github.com/pingcap/tidb-tools v4.0.4-0.20200730030322-70c3cd4d0ed6+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
@@ -45,5 +45,3 @@ require (
 	google.golang.org/genproto v0.0.0-20200113173426-e1de0a7b01eb // indirect
 	google.golang.org/grpc v1.26.0
 )
-
-replace github.com/pingcap/tidb-tools => github.com/amyangfei/tidb-tools v3.0.0-rc.2.0.20200729132015-0def89dd24bb+incompatible
