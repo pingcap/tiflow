@@ -564,7 +564,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			minCheckpointTs = status.CheckpointTs
 		}
 	}
-	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
+	_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 	if err != nil {
 		log.Info("failed to update service safe point", zap.Error(err))
 		return errors.Trace(err)
