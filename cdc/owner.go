@@ -203,16 +203,13 @@ func (o *Owner) newChangeFeed(
 	}
 
 	if info.Engine == model.SortInFile {
+		err = os.MkdirAll(info.SortDir, 0755)
+		if err != nil && err != os.ErrExist {
+			return nil, errors.Trace(err)
+		}
 		err = util.IsDirAndWritable(info.SortDir)
 		if err != nil {
-			if os.IsNotExist(errors.Cause(err)) {
-				err = os.MkdirAll(info.SortDir, 0755)
-				if err != nil {
-					return nil, errors.Trace(err)
-				}
-			} else {
-				return nil, err
-			}
+			return nil, err
 		}
 	}
 
