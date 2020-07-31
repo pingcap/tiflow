@@ -313,7 +313,7 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 	if err != nil && err != sql.ErrNoRows {
 		return "", errors.Annotate(err, "fail to query sink for support of auto-random")
 	}
-	if err == nil && autoRandomInsertEnabled == "off" {
+	if err == nil && (autoRandomInsertEnabled == "off" || autoRandomInsertEnabled == "0") {
 		dsnCfg.Params["allow_auto_random_explicit_insert"] = "1"
 		log.Debug("Set allow_auto_random_explicit_insert to 1")
 	}
