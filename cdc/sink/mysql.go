@@ -640,6 +640,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Debug("show prepareDMLs", zap.Any("rows", rows), zap.Strings("sqls", sqls), zap.Any("values", values))
 	if err := s.execDMLWithMaxRetries(ctx, sqls, values, defaultDMLMaxRetryTime, bucket); err != nil {
 		ts := make([]uint64, 0, len(rows))
 		for _, row := range rows {
