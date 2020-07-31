@@ -204,7 +204,7 @@ func (o *Owner) newChangeFeed(
 
 	if info.Engine == model.SortInFile {
 		err = os.MkdirAll(info.SortDir, 0755)
-		if err != nil && err != os.ErrExist {
+		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		err = util.IsDirAndWritable(info.SortDir)
