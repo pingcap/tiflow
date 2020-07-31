@@ -606,9 +606,16 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		var query string
 		var args []interface{}
 		var err error
-		if row.Delete {
-			query, args, err = prepareDelete(row.Table.Schema, row.Table.Table, row.Columns)
-		} else {
+		// TODO(leoppro): using `UPDATE` instead of `REPLACE` if the old value is enabled
+		if len(row.PreColumns) != 0 {
+			query, args, err = prepareDelete(row.Table.Schema, row.Table.Table, row.PreColumns)
+		}
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
+		sqls = append(sqls, query)
+		values = append(values, args)
+		if len(row.Columns) != 0 {
 			query, args, err = prepareReplace(row.Table.Schema, row.Table.Table, row.Columns)
 		}
 		if err != nil {

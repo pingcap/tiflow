@@ -101,9 +101,6 @@ func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 // Run the puller, continually fetch event from TiKV and add event into buffer
 func (p *pullerImpl) Run(ctx context.Context) error {
 	cli, err := kv.NewCDCClient(ctx, p.pdCli, p.kvStorage, p.credential)
-	if p.enableOldValue {
-		cli.EnableOldValue()
-	}
 	if err != nil {
 		return errors.Annotate(err, "create cdc client failed")
 	}
@@ -119,7 +116,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		span := span
 
 		g.Go(func() error {
-			return cli.EventFeed(ctx, span, checkpointTs, eventCh)
+			return cli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, eventCh)
 		})
 	}
 

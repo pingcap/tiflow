@@ -104,7 +104,7 @@ type RowChangedEvent struct {
 	// IndieMarkCol will be set to the name of the unique index
 	IndieMarkCol string             `json:"indie-mark-col"`
 	Columns      map[string]*Column `json:"columns"`
-	PreColumns   map[string]*Column `json:"changed-columns"`
+	PreColumns   map[string]*Column `json:"pre-columns"`
 	Keys         []string           `json:"keys"`
 }
 

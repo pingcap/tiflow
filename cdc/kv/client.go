@@ -251,8 +251,6 @@ type CDCClient struct {
 
 	regionCache *tikv.RegionCache
 	kvStorage   tikv.Storage
-
-	enableOldValue bool
 }
 
 // NewCDCClient creates a CDCClient instance
@@ -286,11 +284,6 @@ func (c *CDCClient) Close() error {
 	c.regionCache.Close()
 
 	return nil
-}
-
-// EnableOldValue enables to request old value
-func (c *CDCClient) EnableOldValue() {
-	c.enableOldValue = true
 }
 
 func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn, error) {
@@ -337,9 +330,9 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 // provided channel.
 // The `Start` and `End` field in input span must be memcomparable encoded.
 func (c *CDCClient) EventFeed(
-	ctx context.Context, span regionspan.ComparableSpan, ts uint64, eventCh chan<- *model.RegionFeedEvent,
+	ctx context.Context, span regionspan.ComparableSpan, ts uint64, enableOldValue bool, eventCh chan<- *model.RegionFeedEvent,
 ) error {
-	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span, eventCh)
+	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span, enableOldValue, eventCh)
 	return s.eventFeed(ctx, ts)
 }
 
@@ -367,7 +360,8 @@ type eventFeedSession struct {
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
 
-	rangeLock *regionspan.RegionRangeLock
+	rangeLock      *regionspan.RegionRangeLock
+	enableOldValue bool
 
 	// To identify metrics of different eventFeedSession
 	id                string
@@ -386,6 +380,7 @@ func newEventFeedSession(
 	regionCache *tikv.RegionCache,
 	kvStorage tikv.Storage,
 	totalSpan regionspan.ComparableSpan,
+	enableOldValue bool,
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
@@ -399,6 +394,7 @@ func newEventFeedSession(
 		errCh:             make(chan regionErrorInfo, 16),
 		requestRangeCh:    make(chan rangeRequestTask, 16),
 		rangeLock:         regionspan.NewRegionRangeLock(),
+		enableOldValue:    enableOldValue,
 		id:                strconv.FormatUint(allocID(), 10),
 		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
@@ -612,7 +608,7 @@ MainLoop:
 			requestID := allocID()
 
 			extraOp := kvrpcpb.ExtraOp_Noop
-			if s.client.enableOldValue {
+			if s.enableOldValue {
 				extraOp = kvrpcpb.ExtraOp_ReadOldValue
 			}
 

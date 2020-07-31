@@ -287,9 +287,9 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	var changedRow map[int64]types.Datum
+	var preRow map[int64]types.Datum
 	if rawOldValue != nil {
-		changedRow, err = decodeRow(rawOldValue, recordID, tableInfo, m.tz)
+		preRow, err = decodeRow(rawOldValue, recordID, tableInfo, m.tz)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -298,7 +298,7 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, 
 	return &rowKVEntry{
 		baseKVEntry: base,
 		Row:         row,
-		PreRow:      changedRow,
+		PreRow:      preRow,
 	}, nil
 }
 
@@ -367,8 +367,12 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	return job, nil
 }
 
-func datum2Column(tableInfo *TableInfo, datums map[int64]types.Datum) (map[string]*model.Column, error) {
-	cols := make(map[string]*model.Column, len(datums))
+func datum2Column(tableInfo *TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) (map[string]*model.Column, error) {
+	estimateLen := len(datums)
+	if fillWithDefaultValue {
+		estimateLen = len(tableInfo.Columns)
+	}
+	cols := make(map[string]*model.Column, estimateLen)
 	for index, colValue := range datums {
 		colInfo, exist := tableInfo.GetColumnInfo(index)
 		if !exist {
@@ -393,6 +397,9 @@ func datum2Column(tableInfo *TableInfo, datums map[int64]types.Datum) (map[strin
 		}
 		cols[colName] = col
 	}
+	if !fillWithDefaultValue {
+		return cols, nil
+	}
 	for _, col := range tableInfo.Columns {
 		_, ok := cols[col.Name.O]
 		if !ok && tableInfo.IsColWritable(col) {
@@ -412,6 +419,10 @@ func datum2Column(tableInfo *TableInfo, datums map[int64]types.Datum) (map[strin
 }
 
 func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
+	// if m.enableOldValue == true, go into this function
+	// if m.enableNewValue == false and row.Delete == false, go into this function
+	// if m.enableNewValue == false and row.Delete == true and tableInfo.PKIsHandle = true, go into this function
+	// only if m.enableNewValue == false and row.Delete == true and tableInfo.PKIsHandle == false, skip this function
 	if !m.enableOldValue && row.Delete && !tableInfo.PKIsHandle {
 		return nil, nil
 	}
@@ -420,23 +431,25 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	// Decode previous columns.
 	var preCols map[string]*model.Column
 	if len(row.PreRow) != 0 {
-		preCols, err = datum2Column(tableInfo, row.PreRow)
+		// FIXME(leoppro): using pre table info to mounter pre column datum
+		// the pre column and current column in one event may using different table info
+		preCols, err = datum2Column(tableInfo, row.PreRow, true)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
-	// Try to decode columns, if row represents a delete event, columns should be == previous columns
+
 	var cols map[string]*model.Column
-	if row.Delete && m.enableOldValue {
-		// if row is Delete and old value was enabled.
-		cols = preCols
-		preCols = nil
-	} else {
-		cols, err = datum2Column(tableInfo, row.Row)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	disableOldValueAndDelete := !m.enableOldValue && row.Delete
+	cols, err = datum2Column(tableInfo, row.Row, !disableOldValueAndDelete)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
+	if disableOldValueAndDelete {
+		preCols = cols
+		cols = nil
+	}
+
 	var partitionID int64
 	if tableInfo.GetPartitionInfo() != nil {
 		partitionID = row.PhysicalTableID
@@ -458,7 +471,8 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		Delete:       row.Delete,
 		Columns:      cols,
 		PreColumns:   preCols,
-		Keys:         genMultipleKeys(tableInfo.TableInfo, cols, quotes.QuoteSchema(schemaName, tableName)),
+		// FIXME(leoppor): Correctness of conflict detection with old values
+		Keys: genMultipleKeys(tableInfo.TableInfo, cols, quotes.QuoteSchema(schemaName, tableName)),
 	}, nil
 }
 
@@ -483,14 +497,14 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		return nil, errors.Trace(err)
 	}
 
-	cols := make(map[string]*model.Column, len(idx.IndexValue))
+	preCols := make(map[string]*model.Column, len(idx.IndexValue))
 	for i, idxCol := range indexInfo.Columns {
 		value, err := formatColVal(idx.IndexValue[i], tableInfo.Columns[idxCol.Offset].Tp)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		whereHandle := true
-		cols[idxCol.Name.O] = &model.Column{
+		preCols[idxCol.Name.O] = &model.Column{
 			Type:        tableInfo.Columns[idxCol.Offset].Tp,
 			WhereHandle: &whereHandle,
 			Value:       value,
@@ -507,8 +521,8 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		},
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,
-		Columns:      cols,
-		Keys:         genMultipleKeys(tableInfo.TableInfo, cols, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
+		PreColumns:   preCols,
+		Keys:         genMultipleKeys(tableInfo.TableInfo, preCols, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
 	}, nil
 }
 
