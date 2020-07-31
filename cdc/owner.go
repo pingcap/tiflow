@@ -471,7 +471,11 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			if err2 != nil {
 				return err2
 			}
-			return errors.Annotatef(err, "create change feed %s", changeFeedID)
+			// changefeed error has been recorded in etcd, log error here and
+			// don't need to return an error.
+			log.Warn("create changefeed failed, retry later",
+				zap.String("changefeed", changeFeedID), zap.Error(err))
+			continue
 		}
 		o.changeFeeds[changeFeedID] = newCf
 	}
