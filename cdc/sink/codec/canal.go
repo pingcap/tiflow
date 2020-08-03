@@ -219,13 +219,18 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 		}
 		columns = append(columns, c)
 	}
+	var preColumns []*canal.Column
+	for name, column := range e.PreColumns {
+		c, err := b.buildColumn(column, name, !e.Delete)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		preColumns = append(preColumns, c)
+	}
 
 	rowData := &canal.RowData{}
-	if e.Delete {
-		rowData.BeforeColumns = columns
-	} else {
-		rowData.AfterColumns = columns
-	}
+	rowData.BeforeColumns = preColumns
+	rowData.AfterColumns = columns
 	return rowData, nil
 }
 
