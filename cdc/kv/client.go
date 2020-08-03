@@ -1111,7 +1111,7 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Reflect("span", span), zap.Duration("duration", sinceLastEvent))
 			}
-			version, err := s.kvStorage.CurrentVersion()
+			version, err := s.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
 				continue
