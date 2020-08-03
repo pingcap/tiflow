@@ -45,7 +45,7 @@ func (s SwitcherSuite) TestSwitcher(c *check.C) {
 		Table: &model.TableName{
 			Schema: "test", Table: "table1",
 		},
-	}), check.FitsTypeOf, &rowIDDispatcher{})
+	}), check.FitsTypeOf, &indexValueDispatcher{})
 	c.Assert(d.(*dispatcherSwitcher).matchDispatcher(&model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "sbs", Table: "table2",

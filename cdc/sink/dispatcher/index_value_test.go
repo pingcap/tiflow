@@ -18,11 +18,11 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-type TableDispatcherSuite struct{}
+type IndexValueDispatcherSuite struct{}
 
-var _ = check.Suite(&TableDispatcherSuite{})
+var _ = check.Suite(&IndexValueDispatcherSuite{})
 
-func (s TableDispatcherSuite) TestTableDispatcher(c *check.C) {
+func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 	testCases := []struct {
 		row             *model.RowChangedEvent
 		exceptPartition int32
@@ -32,52 +32,115 @@ func (s TableDispatcherSuite) TestTableDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t1",
 			},
-			CommitTs: 1,
-		}, exceptPartition: 15},
+			Columns: map[string]*model.Column{
+				"a": {
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				},
+				"b": {
+					Value: 22,
+					Flag:  0,
+				},
+			},
+		}, exceptPartition: 2},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
-			CommitTs: 2,
-		}, exceptPartition: 15},
+			Columns: map[string]*model.Column{
+				"a": {
+					Value: 22,
+					Flag:  model.HandleKeyFlag,
+				},
+				"b": {
+					Value: 22,
+					Flag:  0,
+				},
+			},
+		}, exceptPartition: 11},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
-			CommitTs: 3,
-		}, exceptPartition: 15},
+			Columns: map[string]*model.Column{
+				"a": {
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				},
+				"b": {
+					Value: 33,
+					Flag:  0,
+				},
+			},
+		}, exceptPartition: 2},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
-			CommitTs: 1,
+			Columns: map[string]*model.Column{
+				"a": {
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				},
+				"b": {
+					Value: 22,
+					Flag:  model.HandleKeyFlag,
+				},
+			},
 		}, exceptPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
-			CommitTs: 2,
+			Columns: map[string]*model.Column{
+				"b": {
+					Value: 22,
+					Flag:  model.HandleKeyFlag,
+				},
+				"a": {
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				},
+			},
 		}, exceptPartition: 5},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
-			CommitTs: 3,
-		}, exceptPartition: 5},
+			Columns: map[string]*model.Column{
+				"a": {
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				},
+				"b": {
+					Value: 0,
+					Flag:  model.HandleKeyFlag,
+				},
+			},
+		}, exceptPartition: 14},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
-				Table:  "t3",
+				Table:  "t2",
 			},
-			CommitTs: 3,
-		}, exceptPartition: 3},
+			Columns: map[string]*model.Column{
+				"a": {
+					Value: 11,
+					Flag:  model.HandleKeyFlag,
+				},
+				"b": {
+					Value: 33,
+					Flag:  model.HandleKeyFlag,
+				},
+			},
+		}, exceptPartition: 2},
 	}
-	p := newTableDispatcher(16)
+	p := newIndexValueDispatcher(16)
 	for _, tc := range testCases {
 		c.Assert(p.Dispatch(tc.row), check.Equals, tc.exceptPartition)
 	}
