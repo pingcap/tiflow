@@ -71,13 +71,6 @@ func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo,
 			return nil, errors.NotFoundf("table %d", job.TableID)
 		}
 		return table, nil
-	case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
-		tableID := job.BinlogInfo.TableInfo.ID
-		table, ok := s.TableByID(tableID)
-		if !ok {
-			return nil, errors.NotFoundf("table %d", job.TableID)
-		}
-		return table, nil
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
