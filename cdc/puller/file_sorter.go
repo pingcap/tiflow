@@ -19,7 +19,6 @@ import (
 	"container/heap"
 	"context"
 	"encoding/binary"
-	"encoding/gob"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -33,9 +32,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
+	`github.com/vmihailenco/msgpack/v5`
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 var (
@@ -189,7 +190,7 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 			continue
 		}
 		dataBuf.Reset()
-		err = gob.NewEncoder(dataBuf).Encode(entry)
+		err = msgpack.NewEncoder(dataBuf).Encode(entry)
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
@@ -277,7 +278,7 @@ func readPolymorphicEvent(rd *bufio.Reader, readBuf *bytes.Reader) (*model.Polym
 
 	readBuf.Reset(data)
 	ev := &model.PolymorphicEvent{}
-	err = gob.NewDecoder(readBuf).Decode(ev)
+	err = msgpack.NewDecoder(readBuf).Decode(ev)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -315,7 +316,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			}
 			ev := &model.PolymorphicEvent{}
 			reader.Reset(data[idx+8 : idx+8+dataLen])
-			err = gob.NewDecoder(reader).Decode(ev)
+			err = msgpack.NewDecoder(reader).Decode(ev)
 
 			if err != nil {
 				return "", errors.Trace(err)
