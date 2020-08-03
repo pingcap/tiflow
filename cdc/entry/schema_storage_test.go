@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	parser_types "github.com/pingcap/parser/types"
 	"github.com/pingcap/ticdc/cdc/kv"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/mockstore/cluster"
@@ -228,8 +229,12 @@ func (*schemaSuite) TestTable(c *C) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 5, TableInfo: tblInfo1, FinishedTS: 127},
 		Query:      "truncate table " + tbName.O,
 	}
+	preTableInfo, err := snap.PreTableInfo(job)
+	c.Assert(err, IsNil)
+	c.Assert(preTableInfo.TableName, Equals, model.TableName{Schema: "Test", Table: "T"})
+	c.Assert(preTableInfo.ID, Equals, int64(2))
 
-	err := snap.handleDDL(job)
+	err = snap.handleDDL(job)
 	c.Assert(err, IsNil)
 
 	_, ok = snap.TableByID(tblInfo1.ID)
@@ -251,6 +256,11 @@ func (*schemaSuite) TestTable(c *C) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 6, FinishedTS: 128},
 		Query:      "drop table " + tbName.O,
 	}
+	preTableInfo, err = snap.PreTableInfo(job)
+	c.Assert(err, IsNil)
+	c.Assert(preTableInfo.TableName, Equals, model.TableName{Schema: "Test", Table: "T"})
+	c.Assert(preTableInfo.ID, Equals, int64(9))
+
 	err = snap.handleDDL(job)
 	c.Assert(err, IsNil)
 
@@ -410,7 +420,7 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *C
 		},
 		PKIsHandle: false,
 	}
-	info := WrapTableInfo(1, "", 0, &t)
+	info := model.WrapTableInfo(1, "", 0, &t)
 	cols := info.GetUniqueKeys()
 	c.Assert(cols, DeepEquals, [][]string{
 		{"id"}, {"name"},
@@ -450,7 +460,7 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
 		},
 		PKIsHandle: true,
 	}
-	info := WrapTableInfo(1, "", 0, &t)
+	info := model.WrapTableInfo(1, "", 0, &t)
 	cols := info.GetUniqueKeys()
 	c.Assert(cols, DeepEquals, [][]string{
 		{"uid"}, {"job"},

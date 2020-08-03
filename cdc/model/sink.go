@@ -19,9 +19,8 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 )
 
 // MqMessageType is the type of message
@@ -205,11 +204,11 @@ type ColumnInfo struct {
 // FromTiColumnInfo populates cdc's ColumnInfo from TiDB's model.ColumnInfo
 func (c *ColumnInfo) FromTiColumnInfo(tiColumnInfo *model.ColumnInfo) {
 	c.Type = tiColumnInfo.Tp
-	c.Name = tiColumnInfo.Name.String()
+	c.Name = tiColumnInfo.Name.O
 }
 
-// TableInfo is the simplified table info passed to the sink
-type TableInfo struct {
+// SimpleTableInfo is the simplified table info passed to the sink
+type SimpleTableInfo struct {
 	// db name
 	Schema string
 	// table name
@@ -219,21 +218,26 @@ type TableInfo struct {
 
 // DDLEvent represents a DDL event
 type DDLEvent struct {
-	StartTs   uint64
-	CommitTs  uint64
-	Schema    string
-	Table     string
-	TableInfo *TableInfo
-	Query     string
-	Type      model.ActionType
+	StartTs      uint64
+	CommitTs     uint64
+	TableInfo    *SimpleTableInfo
+	PreTableInfo *SimpleTableInfo
+	Query        string
+	Type         model.ActionType
 }
 
 // FromJob fills the values of DDLEvent from DDL job
-func (e *DDLEvent) FromJob(job *model.Job) {
+func (e *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
+	e.TableInfo = new(SimpleTableInfo)
+	e.TableInfo.Schema = job.SchemaName
+	e.StartTs = job.StartTS
+	e.CommitTs = job.BinlogInfo.FinishedTS
+	e.Query = job.Query
+	e.Type = job.Type
+
 	if job.BinlogInfo.TableInfo != nil {
-		tableName := job.BinlogInfo.TableInfo.Name.String()
+		tableName := job.BinlogInfo.TableInfo.Name.O
 		tableInfo := job.BinlogInfo.TableInfo
-		e.TableInfo = new(TableInfo)
 		e.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
 
 		for i, colInfo := range tableInfo.Columns {
@@ -241,15 +245,24 @@ func (e *DDLEvent) FromJob(job *model.Job) {
 			e.TableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
 		}
 
-		e.TableInfo.Schema = job.SchemaName
 		e.TableInfo.Table = tableName
-		e.Table = tableName
 	}
-	e.StartTs = job.StartTS
-	e.CommitTs = job.BinlogInfo.FinishedTS
-	e.Query = job.Query
-	e.Schema = job.SchemaName
-	e.Type = job.Type
+	e.fillPreTableInfo(preTableInfo)
+}
+
+func (e *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
+	if preTableInfo == nil {
+		return
+	}
+	e.PreTableInfo = new(SimpleTableInfo)
+	e.PreTableInfo.Schema = preTableInfo.TableName.Schema
+	e.PreTableInfo.Table = preTableInfo.TableName.Table
+
+	e.PreTableInfo.ColumnInfo = make([]*ColumnInfo, len(preTableInfo.Columns))
+	for i, colInfo := range preTableInfo.Columns {
+		e.PreTableInfo.ColumnInfo[i] = new(ColumnInfo)
+		e.PreTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
+	}
 }
 
 // Txn represents a transaction which includes many row events

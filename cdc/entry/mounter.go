@@ -61,7 +61,7 @@ type indexKVEntry struct {
 	IndexValue []types.Datum
 }
 
-func (idx *indexKVEntry) unflatten(tableInfo *TableInfo, tz *time.Location) error {
+func (idx *indexKVEntry) unflatten(tableInfo *model.TableInfo, tz *time.Location) error {
 	if tableInfo.ID != idx.PhysicalTableID {
 		isPartition := false
 		if pi := tableInfo.GetPartitionInfo(); pi != nil {
@@ -270,7 +270,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	return row, err
 }
 
-func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, rawValue []byte, base baseKVEntry) (*rowKVEntry, error) {
+func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, restKey []byte, rawValue []byte, base baseKVEntry) (*rowKVEntry, error) {
 	key, recordID, err := decodeRecordID(restKey)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -351,8 +351,8 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	return job, nil
 }
 
-func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
-	if row.Delete && tableInfo.HandleIndexID != HandleIndexPKIsHandle {
+func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
+	if row.Delete && tableInfo.HandleIndexID != model.HandleIndexPKIsHandle {
 		return nil, nil
 	}
 
@@ -431,11 +431,11 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	return event, nil
 }
 
-func setHandleKeyFlag(tableInfo *TableInfo, colValues map[string]*model.Column) error {
+func setHandleKeyFlag(tableInfo *model.TableInfo, colValues map[string]*model.Column) error {
 	switch tableInfo.HandleIndexID {
-	case HandleIndexTableIneligible:
+	case model.HandleIndexTableIneligible:
 		log.Fatal("this table is not a eligible", zap.Int64("tableID", tableInfo.ID))
-	case HandleIndexPKIsHandle:
+	case model.HandleIndexPKIsHandle:
 		// pk is handle
 		if !tableInfo.PKIsHandle {
 			log.Fatal("the pk of this table is not handle", zap.Int64("tableID", tableInfo.ID))
@@ -459,7 +459,7 @@ func setHandleKeyFlag(tableInfo *TableInfo, colValues map[string]*model.Column) 
 	return nil
 }
 
-func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKVEntry) (*model.RowChangedEvent, error) {
 	// skip set index KV
 	if !idx.Delete {
 		return nil, nil
@@ -567,7 +567,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 	return d.GetValue()
 }
 
-func fetchHandleValue(tableInfo *TableInfo, recordID int64) (pkCoID int64, pkValue *types.Datum, err error) {
+func fetchHandleValue(tableInfo *model.TableInfo, recordID int64) (pkCoID int64, pkValue *types.Datum, err error) {
 	handleColOffset := -1
 	for i, col := range tableInfo.Columns {
 		if mysql.HasPriKeyFlag(col.Flag) {
