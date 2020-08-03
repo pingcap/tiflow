@@ -16,14 +16,15 @@ package sink
 import (
 	"context"
 	"testing"
-
-	"golang.org/x/sync/errgroup"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/notify"
+	"golang.org/x/sync/errgroup"
 )
 
 type MySQLSinkSuite struct{}
@@ -434,24 +435,31 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		}}
 	ctx := context.Background()
 
+	notifier := new(notify.Notifier)
 	for i, tc := range testCases {
+		cctx, cancel := context.WithCancel(ctx)
 		var outputRows [][]*model.RowChangedEvent
 		var outputReplicaIDs []uint64
 		w := newMySQLSinkWorker(tc.maxTxnRow, 1,
 			bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
+			notifier.NewReceiver(-1),
 			func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
 				outputRows = append(outputRows, events)
 				outputReplicaIDs = append(outputReplicaIDs, replicaID)
 				return nil
 			})
-		errg, ctx := errgroup.WithContext(ctx)
+		errg, cctx := errgroup.WithContext(cctx)
 		errg.Go(func() error {
-			return w.run(ctx)
+			return w.run(cctx)
 		})
 		for _, txn := range tc.txns {
-			w.appendTxn(ctx, txn)
+			w.appendTxn(cctx, txn)
 		}
-		w.waitAndClose()
+		// ensure all txns are fetched from txn channel in sink worker
+		time.Sleep(time.Millisecond * 100)
+		notifier.Notify()
+		w.waitAllTxnsExecuted()
+		cancel()
 		c.Assert(errg.Wait(), check.IsNil)
 		c.Assert(outputRows, check.DeepEquals, tc.expectedOutputRows,
 			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputRows), spew.Sdump(tc.expectedOutputRows)))

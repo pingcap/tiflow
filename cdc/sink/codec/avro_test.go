@@ -184,9 +184,9 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 		testCaseDdl.TableInfo.ColumnInfo[i].FromTiColumnInfo(v)
 	}
 
-	err := s.encoder.AppendDDLEvent(testCaseDdl)
+	_, err := s.encoder.AppendDDLEvent(testCaseDdl)
 	c.Check(err, check.IsNil)
 
-	err = s.encoder.AppendRowChangedEvent(testCaseUpdate)
+	_, err = s.encoder.AppendRowChangedEvent(testCaseUpdate)
 	c.Check(err, check.IsNil)
 }
