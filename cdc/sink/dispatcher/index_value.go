@@ -33,7 +33,15 @@ func newIndexValueDispatcher(partitionNum int32) *indexValueDispatcher {
 func (r *indexValueDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	r.hasher.Reset()
 	r.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
-	for name, col := range row.Columns {
+	// FIXME(leoppro): if the row events includes both pre-cols and cols
+	// the dispatch logic here is wrong
+
+	// distribute partition by rowid or unique column value
+	dispatchCols := row.Columns
+	if len(row.Columns) == 0 {
+		dispatchCols = row.PreColumns
+	}
+	for name, col := range dispatchCols {
 		if col.Flag.IsHandleKey() {
 			r.hasher.Write([]byte(name), []byte(model.ColumnValueString(col.Value)))
 		}
