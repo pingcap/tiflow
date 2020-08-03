@@ -395,22 +395,21 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		}
 		cols[colName] = col
 	}
-	if !fillWithDefaultValue {
-		return cols, nil
-	}
-	for _, col := range tableInfo.Columns {
-		_, ok := cols[col.Name.O]
-		if !ok && tableInfo.IsColCDCVisible(col) {
-			column := &model.Column{
-				Type:  col.Tp,
-				Value: getDefaultOrZeroValue(col),
-				Flag:  transColumnFlag(col),
+	if fillWithDefaultValue {
+		for _, col := range tableInfo.Columns {
+			_, ok := cols[col.Name.O]
+			if !ok && tableInfo.IsColCDCVisible(col) {
+				column := &model.Column{
+					Type:  col.Tp,
+					Value: getDefaultOrZeroValue(col),
+					Flag:  transColumnFlag(col),
+				}
+				if tableInfo.IsColumnUnique(col.ID) {
+					whereHandle := true
+					column.WhereHandle = &whereHandle
+				}
+				cols[col.Name.O] = column
 			}
-			if tableInfo.IsColumnUnique(col.ID) {
-				whereHandle := true
-				column.WhereHandle = &whereHandle
-			}
-			cols[col.Name.O] = column
 		}
 	}
 
