@@ -32,7 +32,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	`github.com/vmihailenco/msgpack/v5`
+	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
