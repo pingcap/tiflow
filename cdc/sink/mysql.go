@@ -613,10 +613,10 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 				}
 				for i, query := range sqls {
 					args := values[i]
+					log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 					if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 						return 0, checkTxnErr(errors.Trace(err))
 					}
-					log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 				}
 				if err = tx.Commit(); err != nil {
 					return 0, checkTxnErr(errors.Trace(err))
@@ -677,7 +677,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Debug("show prepareDMLs", zap.Any("rows", rows), zap.Strings("sqls", sqls), zap.Any("values", values))
+	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", sqls), zap.Any("values", values))
 	if err := s.execDMLWithMaxRetries(ctx, sqls, values, defaultDMLMaxRetryTime, bucket); err != nil {
 		ts := make([]uint64, 0, len(rows))
 		for _, row := range rows {
@@ -696,6 +696,9 @@ func prepareReplace(schema, table string, cols map[string]*model.Column) (string
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols))
 	for k, v := range cols {
+		if v.Flag.IsGeneratedColumn() {
+			continue
+		}
 		columnNames = append(columnNames, k)
 		args = append(args, v.Value)
 	}
@@ -733,7 +736,7 @@ func prepareDelete(schema, table string, cols map[string]*model.Column) (string,
 func whereSlice(cols map[string]*model.Column) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for colName, col := range cols {
-		if col.WhereHandle == nil || !*col.WhereHandle {
+		if !col.Flag.IsHandleKey() {
 			continue
 		}
 		colNames = append(colNames, colName)
