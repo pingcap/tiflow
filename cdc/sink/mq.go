@@ -203,7 +203,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table) {
+	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),
@@ -232,7 +232,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 // Initialize registers Avro schemas for all tables
-func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) error {
+func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	if k.protocol == codec.ProtocolAvro && tableInfo != nil {
 		avroEncoder := k.newEncoder().(*codec.AvroEventBatchEncoder)
 		manager := avroEncoder.GetValueSchemaManager()
