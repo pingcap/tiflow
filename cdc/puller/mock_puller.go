@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/entry"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/tidb/domain"
@@ -243,13 +242,13 @@ func (m *MockPullerManager) MustExec(sql string, args ...interface{}) {
 }
 
 // GetTableInfo queries the info schema with the table name and returns the TableInfo
-func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *entry.TableInfo {
+func (m *MockPullerManager) GetTableInfo(schemaName, tableName string) *model.TableInfo {
 	is := m.domain.InfoSchema()
 	tbl, err := is.TableByName(timodel.NewCIStr(schemaName), timodel.NewCIStr(tableName))
 	m.c.Assert(err, check.IsNil)
 	dbInfo, exist := is.SchemaByTable(tbl.Meta())
 	m.c.Assert(exist, check.IsTrue)
-	return entry.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, 0, tbl.Meta())
+	return model.WrapTableInfo(dbInfo.ID, dbInfo.Name.O, 0, tbl.Meta())
 }
 
 func (m *MockPullerManager) postPrewrite(req *kvrpcpb.PrewriteRequest, result []error) {

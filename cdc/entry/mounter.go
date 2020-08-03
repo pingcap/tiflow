@@ -64,7 +64,7 @@ type indexKVEntry struct {
 	IndexValue []types.Datum
 }
 
-func (idx *indexKVEntry) unflatten(tableInfo *TableInfo, tz *time.Location) error {
+func (idx *indexKVEntry) unflatten(tableInfo *model.TableInfo, tz *time.Location) error {
 	if tableInfo.ID != idx.PhysicalTableID {
 		isPartition := false
 		if pi := tableInfo.GetPartitionInfo(); pi != nil {
@@ -275,7 +275,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	return row, err
 }
 
-func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *TableInfo, restKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
+func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, restKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
 	key, recordID, err := decodeRecordID(restKey)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -367,7 +367,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	return job, nil
 }
 
-func datum2Column(tableInfo *TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) (map[string]*model.Column, error) {
+func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) (map[string]*model.Column, error) {
 	estimateLen := len(datums)
 	if fillWithDefaultValue {
 		estimateLen = len(tableInfo.Columns)
@@ -422,7 +422,7 @@ func datum2Column(tableInfo *TableInfo, datums map[int64]types.Datum, fillWithDe
 	return cols, nil
 }
 
-func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
 	// if m.enableOldValue == true, go into this function
 	// if m.enableNewValue == false and row.Delete == false, go into this function
 	// if m.enableNewValue == false and row.Delete == true and tableInfo.PKIsHandle = true, go into this function
@@ -480,7 +480,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}, nil
 }
 
-func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKVEntry) (*model.RowChangedEvent, error) {
 	// skip set index KV
 	if !idx.Delete || m.enableOldValue {
 		return nil, nil
@@ -582,7 +582,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 	return d.GetValue()
 }
 
-func fetchHandleValue(tableInfo *TableInfo, recordID int64) (pkCoID int64, pkValue *types.Datum, err error) {
+func fetchHandleValue(tableInfo *model.TableInfo, recordID int64) (pkCoID int64, pkValue *types.Datum, err error) {
 	handleColOffset := -1
 	for i, col := range tableInfo.Columns {
 		if mysql.HasPriKeyFlag(col.Flag) {
