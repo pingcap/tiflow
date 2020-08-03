@@ -65,8 +65,10 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
 		return
 	}
+	s.ownerLock.RLock()
 	if s.owner == nil {
 		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		s.ownerLock.RUnlock()
 		return
 	}
 	// Resign is a complex process that needs to be synchronized because
@@ -83,7 +85,8 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 	s.owner.Close(req.Context(), func(ctx context.Context) error {
 		return s.capture.Resign(ctx)
 	})
-	s.owner = nil
+	s.ownerLock.RUnlock()
+	s.setOwner(nil)
 	handleOwnerResp(w, nil)
 }
 
@@ -93,6 +96,8 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
+	s.ownerLock.RLock()
+	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
 		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
 	}
@@ -122,6 +127,8 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 		return
 	}
 
+	s.ownerLock.RLock()
+	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
 		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
 	}
@@ -146,6 +153,8 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	s.ownerLock.RLock()
+	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
 		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
 	}
@@ -180,6 +189,8 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
 		return
 	}
+	s.ownerLock.RLock()
+	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
 		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
 	}
