@@ -56,7 +56,7 @@ func (s *SingleSchemaSnapshot) HandleDDL(job *timodel.Job) error {
 	return s.handleDDL(job)
 }
 
-// PreTableInfo returns the table info which with overwrite by the specified job
+// PreTableInfo returns the table info which will be overwritten by the specified job
 func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo, error) {
 	switch job.Type {
 	case timodel.ActionCreateSchema, timodel.ActionModifySchemaCharsetAndCollate, timodel.ActionDropSchema:
