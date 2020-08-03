@@ -14,48 +14,26 @@
 package dispatcher
 
 import (
-	"encoding/json"
-	"hash/crc32"
-
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"go.uber.org/zap"
 )
 
 type defaultDispatcher struct {
 	partitionNum int32
+	tbd          *tableDispatcher
+	ivd          *indexValueDispatcher
+}
+
+func newDefaultDispatcher(partitionNum int32) *defaultDispatcher {
+	return &defaultDispatcher{
+		partitionNum: partitionNum,
+		tbd:          newTableDispatcher(partitionNum),
+		ivd:          newIndexValueDispatcher(partitionNum),
+	}
 }
 
 func (d *defaultDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
-	hash := crc32.NewIEEE()
 	if len(row.IndieMarkCol) == 0 {
-		// distribute partition by table
-		_, err := hash.Write([]byte(row.Table.Schema))
-		if err != nil {
-			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-		}
-		_, err = hash.Write([]byte(row.Table.Table))
-		if err != nil {
-			log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-		}
-		return int32(hash.Sum32() % uint32(d.partitionNum))
+		return d.tbd.Dispatch(row)
 	}
-	// FIXME(leoppro): if the row events includes both pre-cols and cols
-	// the dispatch logic here is wrong
-
-	// distribute partition by rowid or unique column value
-	dispatchCols := row.Columns
-	if len(row.Columns) == 0 {
-		dispatchCols = row.PreColumns
-	}
-	value := dispatchCols[row.IndieMarkCol].Value
-	b, err := json.Marshal(value)
-	if err != nil {
-		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-	}
-	_, err = hash.Write(b)
-	if err != nil {
-		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))
-	}
-	return int32(hash.Sum32() % uint32(d.partitionNum))
+	return d.ivd.Dispatch(row)
 }

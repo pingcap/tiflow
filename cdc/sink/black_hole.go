@@ -44,13 +44,14 @@ func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model
 				zap.Uint64("CommitTs", row.CommitTs),
 				zap.Uint64("checkpointTs", checkpointTs))
 		}
+		log.Debug("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
 	}
 	atomic.AddUint64(&b.accumulated, uint64(len(rows)))
 	return nil
 }
 
 func (b *blackHoleSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
-	log.Info("BlockHoleSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolvedTs))
+	log.Debug("BlockHoleSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolvedTs))
 	err := b.statistics.RecordBatchExecution(func() (int, error) {
 		// TODO: add some random replication latency
 		accumulated := atomic.LoadUint64(&b.accumulated)
@@ -64,12 +65,12 @@ func (b *blackHoleSink) FlushRowChangedEvents(ctx context.Context, resolvedTs ui
 }
 
 func (b *blackHoleSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	log.Info("BlockHoleSink: Checkpoint Event", zap.Uint64("ts", ts))
+	log.Debug("BlockHoleSink: Checkpoint Event", zap.Uint64("ts", ts))
 	return nil
 }
 
 func (b *blackHoleSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	log.Info("BlockHoleSink: DDL Event", zap.Any("ddl", ddl))
+	log.Debug("BlockHoleSink: DDL Event", zap.Any("ddl", ddl))
 	return nil
 }
 
