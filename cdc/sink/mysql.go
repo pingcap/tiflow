@@ -609,20 +609,20 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		// TODO(leoppro): using `UPDATE` instead of `REPLACE` if the old value is enabled
 		if len(row.PreColumns) != 0 {
 			query, args, err = prepareDelete(row.Table.Schema, row.Table.Table, row.PreColumns)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
+			}
+			sqls = append(sqls, query)
+			values = append(values, args)
 		}
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-		sqls = append(sqls, query)
-		values = append(values, args)
 		if len(row.Columns) != 0 {
 			query, args, err = prepareReplace(row.Table.Schema, row.Table.Table, row.Columns)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
+			}
+			sqls = append(sqls, query)
+			values = append(values, args)
 		}
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-		sqls = append(sqls, query)
-		values = append(values, args)
 	}
 	if s.cyclic != nil && len(rows) > 0 {
 		// Write mark table with the current replica ID.
