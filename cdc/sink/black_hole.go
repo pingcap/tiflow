@@ -23,9 +23,9 @@ import (
 )
 
 // newBlackHoleSink creates a block hole sink
-func newBlackHoleSink(opts map[string]string) *blackHoleSink {
+func newBlackHoleSink(ctx context.Context, opts map[string]string) *blackHoleSink {
 	return &blackHoleSink{
-		statistics: NewStatistics("blackhole", opts),
+		statistics: NewStatistics(ctx, "blackhole", opts),
 	}
 }
 
@@ -46,7 +46,9 @@ func (b *blackHoleSink) EmitRowChangedEvents(ctx context.Context, rows ...*model
 		}
 		log.Debug("BlockHoleSink: EmitRowChangedEvents", zap.Any("row", row))
 	}
-	atomic.AddUint64(&b.accumulated, uint64(len(rows)))
+	rowsCount := len(rows)
+	atomic.AddUint64(&b.accumulated, uint64(rowsCount))
+	b.statistics.AddRowsCount(rowsCount)
 	return nil
 }
 

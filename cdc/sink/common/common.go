@@ -39,9 +39,10 @@ func NewUnresolvedTxnCache() *UnresolvedTxnCache {
 }
 
 // Append adds unresolved rows to cache
-func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowChangedEvent) {
+func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowChangedEvent) int {
 	c.unresolvedTxnsMu.Lock()
 	defer c.unresolvedTxnsMu.Unlock()
+	appendRows := 0
 	for _, row := range rows {
 		if filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
@@ -66,7 +67,9 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 			c.unresolvedTxns[key] = txns
 		}
 		txns[len(txns)-1].Append(row)
+		appendRows++
 	}
+	return appendRows
 }
 
 // Resolved returns resolved txns according to resolvedTs
