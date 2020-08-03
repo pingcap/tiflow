@@ -481,7 +481,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 func setHandleKeyFlag(tableInfo *model.TableInfo, colValues map[string]*model.Column) error {
 	switch tableInfo.HandleIndexID {
 	case model.HandleIndexTableIneligible:
-		log.Fatal("this table is not a eligible", zap.Int64("tableID", tableInfo.ID))
+		log.Fatal("this table is not eligible", zap.Int64("tableID", tableInfo.ID))
 	case model.HandleIndexPKIsHandle:
 		// pk is handle
 		if !tableInfo.PKIsHandle {
@@ -511,7 +511,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 	if !idx.Delete || m.enableOldValue {
 		return nil, nil
 	}
-	// skip the index which not handle
+	// skip any index that is not the handle
 	if idx.IndexID != tableInfo.HandleIndexID {
 		return nil, nil
 	}

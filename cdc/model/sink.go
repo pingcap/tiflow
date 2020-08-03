@@ -43,7 +43,7 @@ type ColumnFlagType util.Flag
 const (
 	// BinaryFlag means the column charset is binary
 	BinaryFlag ColumnFlagType = 1 << ColumnFlagType(iota)
-	// HandleKeyFlag means the column selected as the handle key
+	// HandleKeyFlag means the column is selected as the handle key
 	HandleKeyFlag
 	// GeneratedColumnFlag means the column is a generated column
 	GeneratedColumnFlag
@@ -146,13 +146,13 @@ type RowChangedEvent struct {
 type Column struct {
 	Type byte `json:"t"`
 	// WhereHandle is deprecation
-	// WhereHandle is instead by HandleKey in Flag
+	// WhereHandle is replaced by HandleKey in Flag
 	WhereHandle *bool          `json:"h,omitempty"`
 	Flag        ColumnFlagType `json:"f"`
 	Value       interface{}    `json:"v"`
 }
 
-// ColumnValueString returns a string representation of the column value
+// ColumnValueString returns the string representation of the column value
 func ColumnValueString(c interface{}) string {
 	var data string
 	switch v := c.(type) {

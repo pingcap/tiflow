@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	// HandleIndexPKIsHandle represents the handle index is pk and the pk is handle
+	// HandleIndexPKIsHandle represents that the handle index is the pk and the pk is the handle
 	HandleIndexPKIsHandle = -1
-	// HandleIndexTableIneligible represents the table is ineligible
+	// HandleIndexTableIneligible represents that the table is ineligible
 	HandleIndexTableIneligible = -2
 )
 
@@ -41,7 +41,7 @@ type TableInfo struct {
 	// only for new row format decoder
 	handleColID int64
 
-	// the mounter will chose this index to output delete events
+	// the mounter will choose this index to output delete events
 	// special value:
 	// HandleIndexPKIsHandle(-1) : pk is handle
 	// HandleIndexTableIneligible(-2) : the table is not eligible
@@ -167,7 +167,7 @@ func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
 	return ti.handleColID, ti.rowColInfos
 }
 
-// IsColCDCVisible returns is the col is visible for CDC
+// IsColCDCVisible returns whether the col is visible for CDC
 func (ti *TableInfo) IsColCDCVisible(col *model.ColumnInfo) bool {
 	// this column is a virtual generated column
 	if col.IsGenerated() && !col.GeneratedStored {
