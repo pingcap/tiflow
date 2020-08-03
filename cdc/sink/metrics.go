@@ -32,7 +32,7 @@ var (
 			Subsystem: "sink",
 			Name:      "txn_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 18),
+			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
 		}, []string{"capture", "changefeed"})
 	executionErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
