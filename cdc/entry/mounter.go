@@ -378,7 +378,11 @@ func datum2Column(tableInfo *TableInfo, datums map[int64]types.Datum, fillWithDe
 		if !exist {
 			return nil, errors.NotFoundf("column info, colID: %d", index)
 		}
-		if !tableInfo.IsColWritable(colInfo) {
+		// the judge about `fillWithDefaultValue` is tricky
+		// if the `fillWithDefaultValue` is true, the event must be deletion
+		// we should output the generated column in deletion event
+		// this tricky code will be improve after pingcap/ticdc#787 merged
+		if !tableInfo.IsColWritable(colInfo) && fillWithDefaultValue {
 			continue
 		}
 		colName := colInfo.Name.O
