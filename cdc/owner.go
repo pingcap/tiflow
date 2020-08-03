@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -208,6 +209,10 @@ func (o *Owner) newChangeFeed(
 	}
 
 	if info.Engine == model.SortInFile {
+		err = os.MkdirAll(info.SortDir, 0755)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		err = util.IsDirAndWritable(info.SortDir)
 		if err != nil {
 			return nil, err
@@ -235,7 +240,7 @@ func (o *Owner) newChangeFeed(
 	tables := make(map[model.TableID]model.TableName)
 	partitions := make(map[model.TableID][]int64)
 	orphanTables := make(map[model.TableID]model.Ts)
-	sinkTableInfo := make([]*model.TableInfo, len(schemaSnap.CloneTables()))
+	sinkTableInfo := make([]*model.SimpleTableInfo, len(schemaSnap.CloneTables()))
 	j := 0
 	for tid, table := range schemaSnap.CloneTables() {
 		j++
@@ -290,7 +295,7 @@ func (o *Owner) newChangeFeed(
 			orphanTables[tid] = checkpointTs
 		}
 
-		sinkTableInfo[j-1] = new(model.TableInfo)
+		sinkTableInfo[j-1] = new(model.SimpleTableInfo)
 		sinkTableInfo[j-1].ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
 
 		for i, colInfo := range tblInfo.Cols() {
@@ -895,6 +900,7 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	ticker := time.NewTicker(tickTime)
 	defer ticker.Stop()
 
+	var err error
 loop:
 	for {
 		select {
@@ -907,7 +913,7 @@ loop:
 		case <-ticker.C:
 		}
 
-		err := o.run(ctx)
+		err = o.run(ctx)
 		if err != nil {
 			if errors.Cause(err) != context.Canceled {
 				log.Error("owner exited with error", zap.Error(err))
@@ -921,7 +927,7 @@ loop:
 		}
 	}
 
-	return nil
+	return err
 }
 
 func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {

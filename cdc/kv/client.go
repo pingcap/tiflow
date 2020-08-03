@@ -330,9 +330,9 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 // provided channel.
 // The `Start` and `End` field in input span must be memcomparable encoded.
 func (c *CDCClient) EventFeed(
-	ctx context.Context, span regionspan.ComparableSpan, ts uint64, eventCh chan<- *model.RegionFeedEvent,
+	ctx context.Context, span regionspan.ComparableSpan, ts uint64, enableOldValue bool, eventCh chan<- *model.RegionFeedEvent,
 ) error {
-	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span, eventCh)
+	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span, enableOldValue, eventCh)
 	return s.eventFeed(ctx, ts)
 }
 
@@ -360,7 +360,8 @@ type eventFeedSession struct {
 	// The channel to schedule scanning and requesting regions in a specified range.
 	requestRangeCh chan rangeRequestTask
 
-	rangeLock *regionspan.RegionRangeLock
+	rangeLock      *regionspan.RegionRangeLock
+	enableOldValue bool
 
 	// To identify metrics of different eventFeedSession
 	id                string
@@ -379,6 +380,7 @@ func newEventFeedSession(
 	regionCache *tikv.RegionCache,
 	kvStorage tikv.Storage,
 	totalSpan regionspan.ComparableSpan,
+	enableOldValue bool,
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
@@ -392,6 +394,7 @@ func newEventFeedSession(
 		errCh:             make(chan regionErrorInfo, 16),
 		requestRangeCh:    make(chan rangeRequestTask, 16),
 		rangeLock:         regionspan.NewRegionRangeLock(),
+		enableOldValue:    enableOldValue,
 		id:                strconv.FormatUint(allocID(), 10),
 		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues(id, "err"),
@@ -604,6 +607,11 @@ MainLoop:
 
 			requestID := allocID()
 
+			extraOp := kvrpcpb.ExtraOp_Noop
+			if s.enableOldValue {
+				extraOp = kvrpcpb.ExtraOp_ReadOldValue
+			}
+
 			req := &cdcpb.ChangeDataRequest{
 				Header: &cdcpb.Header{
 					ClusterId: s.client.clusterID,
@@ -614,6 +622,7 @@ MainLoop:
 				CheckpointTs: sri.ts,
 				StartKey:     sri.span.Start,
 				EndKey:       sri.span.End,
+				ExtraOp:      extraOp,
 			}
 
 			// The receiver thread need to know the span, which is only known in the sender thread. So create the
@@ -872,7 +881,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		if notLeader := innerErr.GetNotLeader(); notLeader != nil {
 			metricFeedNotLeaderCounter.Inc()
 			// TODO: Handle the case that notleader.GetLeader() is nil.
-			s.regionCache.UpdateLeader(errInfo.verID, notLeader.GetLeader().GetStoreId(), errInfo.rpcCtx.PeerIdx)
+			s.regionCache.UpdateLeader(errInfo.verID, notLeader.GetLeader().GetStoreId(), errInfo.rpcCtx.AccessIdx)
 		} else if innerErr.GetEpochNotMatch() != nil {
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
 			metricFeedEpochNotMatchCounter.Inc()
@@ -1102,7 +1111,7 @@ func (s *eventFeedSession) singleEventFeed(
 				log.Warn("region not receiving event from tikv for too long time",
 					zap.Uint64("regionID", regionID), zap.Reflect("span", span), zap.Duration("duration", sinceLastEvent))
 			}
-			version, err := s.kvStorage.CurrentVersion()
+			version, err := s.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
 				continue
@@ -1363,7 +1372,7 @@ func (s *eventFeedSession) resolveLock(ctx context.Context, regionID uint64, max
 	return nil
 }
 
-func assembleCommitEvent(entry *cdcpb.Event_Row, value []byte) (*model.RegionFeedEvent, error) {
+func assembleCommitEvent(entry *cdcpb.Event_Row, value *pendingValue) (*model.RegionFeedEvent, error) {
 	var opType model.OpType
 	switch entry.GetOpType() {
 	case cdcpb.Event_Row_DELETE:
@@ -1376,11 +1385,12 @@ func assembleCommitEvent(entry *cdcpb.Event_Row, value []byte) (*model.RegionFee
 
 	revent := &model.RegionFeedEvent{
 		Val: &model.RawKVEntry{
-			OpType:  opType,
-			Key:     entry.Key,
-			Value:   value,
-			StartTs: entry.StartTs,
-			CRTs:    entry.CommitTs,
+			OpType:   opType,
+			Key:      entry.Key,
+			Value:    value.value,
+			OldValue: value.oldValue,
+			StartTs:  entry.StartTs,
+			CRTs:     entry.CommitTs,
 		},
 	}
 	return revent, nil

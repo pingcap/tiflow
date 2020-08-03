@@ -289,7 +289,7 @@ func getAvroDataTypeNameMysql(tp byte) (interface{}, error) {
 		return "long", nil
 	case mysql.TypeBit:
 		return "long", nil
-	case mysql.TypeNewDecimal, mysql.TypeDecimal:
+	case mysql.TypeNewDecimal:
 		return "string", nil
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
 		return "int", nil
@@ -364,7 +364,7 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 		return d, string(fullType), nil
 	case mysql.TypeJSON:
 		return col.Value.(tijson.BinaryJSON).String(), "string", nil
-	case mysql.TypeNewDecimal, mysql.TypeDecimal:
+	case mysql.TypeNewDecimal:
 		dec := col.Value.(*types.MyDecimal)
 		if dec == nil {
 			return nil, "null", nil

@@ -52,8 +52,9 @@ type schemaCacheEntry struct {
 }
 
 type registerRequest struct {
-	Schema     string `json:"schema"`
-	SchemaType string `json:"schemaType"`
+	Schema string `json:"schema"`
+	// Commented out for compatibility with Confluent 5.4.x
+	// SchemaType string `json:"schemaType"`
 }
 
 type registerResponse struct {
@@ -112,8 +113,9 @@ var regexRemoveSpaces = regexp.MustCompile(`\s`)
 func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableName, codec *goavro.Codec) error {
 	// The Schema Registry expects the JSON to be without newline characters
 	reqBody := registerRequest{
-		Schema:     regexRemoveSpaces.ReplaceAllString(codec.Schema(), ""),
-		SchemaType: "AVRO",
+		Schema: regexRemoveSpaces.ReplaceAllString(codec.Schema(), ""),
+		// Commented out for compatibility with Confluent 5.4.x
+		// SchemaType: "AVRO",
 	}
 	payload, err := json.Marshal(&reqBody)
 	if err != nil {
@@ -277,15 +279,25 @@ func httpRetry(ctx context.Context, credential *security.Credential, r *http.Req
 	var (
 		err  error
 		resp *http.Response
+		data []byte
 	)
 
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.MaxInterval = time.Second * 30
 	httpCli, err := httputil.NewClient(credential)
+
+	if r.Body != nil {
+		data, err = ioutil.ReadAll(r.Body)
+		_ = r.Body.Close()
+	}
+
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	for {
+		if data != nil {
+			r.Body = ioutil.NopCloser(bytes.NewReader(data))
+		}
 		resp, err = httpCli.Do(r)
 
 		if err != nil {
