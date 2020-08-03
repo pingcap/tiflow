@@ -152,7 +152,7 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			Table:  "person",
 		},
 		Delete: true,
-		Columns: map[string]*model.Column{
+		PreColumns: map[string]*model.Column{
 			"id": {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1},
 		},
 	}
@@ -241,7 +241,7 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 	rowDatas = rc.GetRowDatas()
 	c.Assert(len(rowDatas), check.Equals, 1)
 	columns = rowDatas[0].BeforeColumns
-	c.Assert(len(columns), check.Equals, len(testCaseDelete.Columns))
+	c.Assert(len(columns), check.Equals, len(testCaseDelete.PreColumns))
 	for _, col := range columns {
 		c.Assert(col.GetUpdated(), check.IsFalse)
 		switch col.GetName() {

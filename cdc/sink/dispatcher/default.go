@@ -40,8 +40,15 @@ func (d *defaultDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 		}
 		return int32(hash.Sum32() % uint32(d.partitionNum))
 	}
+	// FIXME(leoppro): if the row events includes both pre-cols and cols
+	// the dispatch logic here is wrong
+
 	// distribute partition by rowid or unique column value
-	value := row.Columns[row.IndieMarkCol].Value
+	dispatchCols := row.Columns
+	if len(row.Columns) == 0 {
+		dispatchCols = row.PreColumns
+	}
+	value := dispatchCols[row.IndieMarkCol].Value
 	b, err := json.Marshal(value)
 	if err != nil {
 		log.Fatal("calculate hash of message key failed, please report a bug", zap.Error(err))

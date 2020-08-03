@@ -25,7 +25,8 @@ import (
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
-	CaseSensitive: true,
+	CaseSensitive:  true,
+	EnableOldValue: false,
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
@@ -48,12 +49,13 @@ var defaultReplicaConfig = &ReplicaConfig{
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	CaseSensitive bool             `toml:"case-sensitive" json:"case-sensitive"`
-	Filter        *FilterConfig    `toml:"filter" json:"filter"`
-	Mounter       *MounterConfig   `toml:"mounter" json:"mounter"`
-	Sink          *SinkConfig      `toml:"sink" json:"sink"`
-	Cyclic        *CyclicConfig    `toml:"cyclic-replication" json:"cyclic-replication"`
-	Scheduler     *SchedulerConfig `toml:"scheduler" json:"scheduler"`
+	CaseSensitive  bool             `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue bool             `toml:"enable-old-value" json:"enable-old-value"`
+	Filter         *FilterConfig    `toml:"filter" json:"filter"`
+	Mounter        *MounterConfig   `toml:"mounter" json:"mounter"`
+	Sink           *SinkConfig      `toml:"sink" json:"sink"`
+	Cyclic         *CyclicConfig    `toml:"cyclic-replication" json:"cyclic-replication"`
+	Scheduler      *SchedulerConfig `toml:"scheduler" json:"scheduler"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
