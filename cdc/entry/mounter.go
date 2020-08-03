@@ -440,12 +440,12 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 	}
 
 	var cols map[string]*model.Column
-	disableOldValueAndDelete := !m.enableOldValue && row.Delete
-	cols, err = datum2Column(tableInfo, row.Row, !disableOldValueAndDelete)
+	oldValueDisabledAndRowIsDelete := !m.enableOldValue && row.Delete
+	cols, err = datum2Column(tableInfo, row.Row, !oldValueDisabledAndRowIsDelete)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if disableOldValueAndDelete {
+	if oldValueDisabledAndRowIsDelete {
 		preCols = cols
 		cols = nil
 	}
