@@ -49,7 +49,7 @@ func init() {
 	serverCmd.Flags().StringVar(&timezone, "tz", "System", "Specify time zone of TiCDC cluster")
 	serverCmd.Flags().Int64Var(&gcTTL, "gc-ttl", cdc.DefaultCDCGCSafePointTTL, "CDC GC safepoint TTL duration, specified in seconds")
 	serverCmd.Flags().StringVar(&logFile, "log-file", "", "log file path")
-	serverCmd.Flags().StringVar(&logLevel, "log-level", "info", "log level (etc: debug|info|warn|error)")
+	serverCmd.Flags().StringVar(&logLevel, "log-level", "debug", "log level (etc: debug|info|warn|error)")
 	addSecurityFlags(serverCmd.Flags(), true /* isServer */)
 }
 

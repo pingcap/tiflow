@@ -31,8 +31,8 @@ const (
 	// number of retries to make of operations
 	maxRetries = 3
 
-	maxBufferKeys = 1024
-	maxFlushSize = 96 << 20
+	maxBufferKeys = 10
+	maxFlushSize = 96
 )
 
 // S3Options contains options for s3 storage
