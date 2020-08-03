@@ -557,6 +557,9 @@ func (s *mysqlSink) Close() error {
 func (s *mysqlSink) execDMLWithMaxRetries(
 	ctx context.Context, sqls []string, values [][]interface{}, maxRetries uint64, bucket int,
 ) error {
+	if len(sqls) != len(values) {
+		log.Fatal("unexpected number of sqls and values", zap.Strings("sqls", sqls), zap.Any("values", values))
+	}
 	checkTxnErr := func(err error) error {
 		if errors.Cause(err) == context.Canceled {
 			return backoff.Permanent(err)

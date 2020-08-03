@@ -472,7 +472,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *TableInfo, row *rowKVEntry) (*m
 		Columns:      cols,
 		PreColumns:   preCols,
 		// FIXME(leoppor): Correctness of conflict detection with old values
-		Keys: genMultipleKeys(tableInfo.TableInfo, cols, quotes.QuoteSchema(schemaName, tableName)),
+		Keys: genMultipleKeys(tableInfo.TableInfo, preCols, cols, quotes.QuoteSchema(schemaName, tableName)),
 	}, nil
 }
 
@@ -522,7 +522,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *TableInfo, idx *indexKVEntry)
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,
 		PreColumns:   preCols,
-		Keys:         genMultipleKeys(tableInfo.TableInfo, preCols, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
+		Keys:         genMultipleKeys(tableInfo.TableInfo, preCols, nil, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
 	}, nil
 }
 
@@ -600,43 +600,55 @@ func fetchHandleValue(tableInfo *TableInfo, recordID int64) (pkCoID int64, pkVal
 	return
 }
 
-func genMultipleKeys(ti *timodel.TableInfo, values map[string]*model.Column, table string) []string {
-	multipleKeys := make([]string, 0, len(ti.Indices)+1)
-	if ti.PKIsHandle {
-		if pk := ti.GetPkColInfo(); pk != nil && !pk.IsGenerated() {
-			cols := []*timodel.ColumnInfo{pk}
-			key := genKeyList(table, cols, values)
-			if len(key) > 0 { // ignore `null` value.
-				multipleKeys = append(multipleKeys, key)
-			} else {
-				log.L().Debug("ignore empty primary key", zap.String("table", table))
-			}
-		}
+func genMultipleKeys(ti *timodel.TableInfo, preCols, cols map[string]*model.Column, table string) []string {
+	estimateLen := len(ti.Indices) + 1
+	if len(preCols) != 0 && len(cols) != 0 {
+		estimateLen *= 2
 	}
-
-	for _, indexCols := range ti.Indices {
-		if !indexCols.Unique {
-			continue
+	multipleKeys := make([]string, 0, estimateLen)
+	buildKeys := func(colValues map[string]*model.Column) {
+		if len(colValues) == 0 {
+			return
 		}
-		cols := getIndexColumns(ti.Columns, indexCols)
-		key := genKeyList(table, cols, values)
-		if len(key) > 0 { // ignore `null` value.
-			noGeneratedColumn := true
-			for _, col := range cols {
-				if col.IsGenerated() {
-					noGeneratedColumn = false
-					break
+		if ti.PKIsHandle {
+			if pk := ti.GetPkColInfo(); pk != nil && !pk.IsGenerated() {
+				cols := []*timodel.ColumnInfo{pk}
+
+				key := genKeyList(table, cols, colValues)
+				if len(key) > 0 { // ignore `null` value.
+					multipleKeys = append(multipleKeys, key)
+				} else {
+					log.L().Debug("ignore empty primary key", zap.String("table", table))
 				}
 			}
-			// If the index contain generated column, we can't use this key to detect conflict with other DML,
-			// Because such as insert can't specified the generated value.
-			if noGeneratedColumn {
-				multipleKeys = append(multipleKeys, key)
+		}
+
+		for _, indexCols := range ti.Indices {
+			if !indexCols.Unique {
+				continue
 			}
-		} else {
-			log.L().Debug("ignore empty index key", zap.String("table", table))
+			cols := getIndexColumns(ti.Columns, indexCols)
+			key := genKeyList(table, cols, colValues)
+			if len(key) > 0 { // ignore `null` value.
+				noGeneratedColumn := true
+				for _, col := range cols {
+					if col.IsGenerated() {
+						noGeneratedColumn = false
+						break
+					}
+				}
+				// If the index contain generated column, we can't use this key to detect conflict with other DML,
+				// Because such as insert can't specified the generated value.
+				if noGeneratedColumn {
+					multipleKeys = append(multipleKeys, key)
+				}
+			} else {
+				log.L().Debug("ignore empty index key", zap.String("table", table))
+			}
 		}
 	}
+	buildKeys(preCols)
+	buildKeys(cols)
 
 	if len(multipleKeys) == 0 {
 		// use table name as key if no key generated (no PK/UK),
