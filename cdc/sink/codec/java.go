@@ -67,7 +67,7 @@ const (
 func MysqlToJavaType(mysqlType byte) JavaSQLType {
 	// see https://github.com/mysql/mysql-connector-j/blob/5.1.49/src/com/mysql/jdbc/MysqlDefs.java
 	switch mysqlType {
-	case mysql.TypeNewDecimal, mysql.TypeDecimal:
+	case mysql.TypeNewDecimal:
 		return JavaSQLTypeDECIMAL
 
 	case mysql.TypeTiny:

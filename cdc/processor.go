@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -853,8 +854,16 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		case model.SortInFile:
 			err := util.IsDirAndWritable(p.changefeed.SortDir)
 			if err != nil {
-				p.errCh <- errors.Annotate(err, "sort dir check")
-				return nil
+				if os.IsNotExist(errors.Cause(err)) {
+					err = os.MkdirAll(p.changefeed.SortDir, 0755)
+					if err != nil {
+						p.errCh <- errors.Annotate(err, "create dir")
+						return nil
+					}
+				} else {
+					p.errCh <- errors.Annotate(err, "sort dir check")
+					return nil
+				}
 			}
 			sorter = puller.NewFileSorter(p.changefeed.SortDir)
 		default:

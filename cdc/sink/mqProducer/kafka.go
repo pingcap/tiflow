@@ -198,6 +198,9 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	if err != nil {
 		return nil, err
 	}
+	if config.PartitionNum < 0 {
+		return nil, errors.NotValidf("partition num %d", config.PartitionNum)
+	}
 	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -223,7 +226,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 		if partitionNum == 0 {
 			partitionNum = topicDetail.NumPartitions
 		} else if partitionNum < topicDetail.NumPartitions {
-			log.Warn("partition number assigned in sink-uri is less than that of topic")
+			log.Warn("partition number assigned in sink-uri is less than that of topic", zap.Int32("topic partition num", topicDetail.NumPartitions))
 		} else if partitionNum > topicDetail.NumPartitions {
 			return nil, errors.Errorf("partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, topicDetail.NumPartitions)
 		}
