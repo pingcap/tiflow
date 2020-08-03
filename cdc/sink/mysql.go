@@ -19,11 +19,9 @@ import (
 	"fmt"
 	"net/url"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -35,6 +33,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
@@ -62,18 +61,16 @@ const (
 )
 
 type mysqlSink struct {
-	db           *sql.DB
-	checkpointTs uint64
-	params       *sinkParams
+	db     *sql.DB
+	params *sinkParams
 
 	filter *filter.Filter
 	cyclic *cyclic.Cyclic
 
-	unresolvedTxnsMu sync.Mutex
-	unresolvedTxns   map[model.TableName][]*model.Txn
-	workers          []*mysqlSinkWorker
-	notifier         *notify.Notifier
-	errCh            chan error
+	txnCache *common.UnresolvedTxnCache
+	workers  []*mysqlSinkWorker
+	notifier *notify.Notifier
+	errCh    chan error
 
 	statistics *Statistics
 
@@ -83,55 +80,14 @@ type mysqlSink struct {
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	s.unresolvedTxnsMu.Lock()
-	defer s.unresolvedTxnsMu.Unlock()
-	for _, row := range rows {
-		if s.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
-			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
-			continue
-		}
-		key := *row.Table
-		txns := s.unresolvedTxns[key]
-		if len(txns) == 0 || txns[len(txns)-1].StartTs != row.StartTs {
-			// fail-fast check
-			if len(txns) != 0 && txns[len(txns)-1].CommitTs > row.CommitTs {
-				log.Fatal("the commitTs of the emit row is less than the received row",
-					zap.Stringer("table", row.Table),
-					zap.Uint64("emit row startTs", row.StartTs),
-					zap.Uint64("emit row commitTs", row.CommitTs),
-					zap.Uint64("last received row startTs", txns[len(txns)-1].StartTs),
-					zap.Uint64("last received row commitTs", txns[len(txns)-1].CommitTs))
-			}
-			txns = append(txns, &model.Txn{
-				StartTs:  row.StartTs,
-				CommitTs: row.CommitTs,
-			})
-			s.unresolvedTxns[key] = txns
-		}
-		txns[len(txns)-1].Append(row)
-	}
+	s.txnCache.Append(s.filter, rows...)
 	return nil
 }
 
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
-	if resolvedTs <= atomic.LoadUint64(&s.checkpointTs) {
-		return nil
-	}
-
-	defer s.statistics.PrintStatus()
-
-	s.unresolvedTxnsMu.Lock()
-	if len(s.unresolvedTxns) == 0 {
-		atomic.StoreUint64(&s.checkpointTs, resolvedTs)
-		s.unresolvedTxnsMu.Unlock()
-		return nil
-	}
-
-	_, resolvedTxnsMap := splitResolvedTxn(resolvedTs, s.unresolvedTxns)
-	s.unresolvedTxnsMu.Unlock()
-
+	resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
 	if len(resolvedTxnsMap) == 0 {
-		atomic.StoreUint64(&s.checkpointTs, resolvedTs)
+		s.txnCache.UpdateCheckpoint(resolvedTs)
 		return nil
 	}
 
@@ -143,7 +99,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	if err := s.concurrentExec(ctx, resolvedTxnsMap); err != nil {
 		return errors.Trace(err)
 	}
-	atomic.StoreUint64(&s.checkpointTs, resolvedTs)
+	s.txnCache.UpdateCheckpoint(resolvedTs)
 	return nil
 }
 
@@ -153,7 +109,7 @@ func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if s.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table) {
+	if s.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),
@@ -167,7 +123,7 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 }
 
 // Initialize is no-op for Mysql sink
-func (s *mysqlSink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) error {
+func (s *mysqlSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	return nil
 }
 
@@ -190,7 +146,7 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 }
 
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
-	shouldSwitchDB := len(ddl.Schema) > 0 && ddl.Type != timodel.ActionCreateSchema
+	shouldSwitchDB := len(ddl.TableInfo.Schema) > 0 && ddl.Type != timodel.ActionCreateSchema
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -198,7 +154,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	if shouldSwitchDB {
-		_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.Schema)+";")
+		_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.Schema)+";")
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.Error(err))
@@ -220,35 +176,6 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
 	return nil
-}
-
-func splitResolvedTxn(
-	resolvedTs uint64, unresolvedTxns map[model.TableName][]*model.Txn,
-) (minTs uint64, resolvedRowsMap map[model.TableName][]*model.Txn) {
-	resolvedRowsMap = make(map[model.TableName][]*model.Txn, len(unresolvedTxns))
-	minTs = resolvedTs
-	for key, txns := range unresolvedTxns {
-		i := sort.Search(len(txns), func(i int) bool {
-			return txns[i].CommitTs > resolvedTs
-		})
-		if i == 0 {
-			continue
-		}
-		var resolvedTxns []*model.Txn
-		if i == len(txns) {
-			resolvedTxns = txns
-			delete(unresolvedTxns, key)
-		} else {
-			resolvedTxns = txns[:i]
-			unresolvedTxns[key] = txns[i:]
-		}
-		resolvedRowsMap[key] = resolvedTxns
-
-		if len(resolvedTxns) > 0 && resolvedTxns[0].CommitTs < minTs {
-			minTs = resolvedTxns[0].CommitTs
-		}
-	}
-	return
 }
 
 // adjustSQLMode adjust sql mode according to sink config.
@@ -313,7 +240,7 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 	if err != nil && err != sql.ErrNoRows {
 		return "", errors.Annotate(err, "fail to query sink for support of auto-random")
 	}
-	if err == nil && autoRandomInsertEnabled == "off" {
+	if err == nil && (autoRandomInsertEnabled == "off" || autoRandomInsertEnabled == "0") {
 		dsnCfg.Params["allow_auto_random_explicit_insert"] = "1"
 		log.Debug("Set allow_auto_random_explicit_insert to 1")
 	}
@@ -444,9 +371,9 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 
 	sink := &mysqlSink{
 		db:                              db,
-		unresolvedTxns:                  make(map[model.TableName][]*model.Txn),
 		params:                          params,
 		filter:                          filter,
+		txnCache:                        common.NewUnresolvedTxnCache(),
 		statistics:                      NewStatistics("mysql", opts),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
@@ -664,6 +591,9 @@ func (s *mysqlSink) Close() error {
 func (s *mysqlSink) execDMLWithMaxRetries(
 	ctx context.Context, sqls []string, values [][]interface{}, maxRetries uint64, bucket int,
 ) error {
+	if len(sqls) != len(values) {
+		log.Fatal("unexpected number of sqls and values", zap.Strings("sqls", sqls), zap.Any("values", values))
+	}
 	checkTxnErr := func(err error) error {
 		if errors.Cause(err) == context.Canceled {
 			return backoff.Permanent(err)
@@ -713,16 +643,23 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		var query string
 		var args []interface{}
 		var err error
-		if row.Delete {
-			query, args, err = prepareDelete(row.Table.Schema, row.Table.Table, row.Columns)
-		} else {
+		// TODO(leoppro): using `UPDATE` instead of `REPLACE` if the old value is enabled
+		if len(row.PreColumns) != 0 {
+			query, args, err = prepareDelete(row.Table.Schema, row.Table.Table, row.PreColumns)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
+			}
+			sqls = append(sqls, query)
+			values = append(values, args)
+		}
+		if len(row.Columns) != 0 {
 			query, args, err = prepareReplace(row.Table.Schema, row.Table.Table, row.Columns)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
+			}
+			sqls = append(sqls, query)
+			values = append(values, args)
 		}
-		if err != nil {
-			return nil, nil, errors.Trace(err)
-		}
-		sqls = append(sqls, query)
-		values = append(values, args)
 	}
 	if s.cyclic != nil && len(rows) > 0 {
 		// Write mark table with the current replica ID.
@@ -740,6 +677,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Debug("show prepareDMLs", zap.Any("rows", rows), zap.Strings("sqls", sqls), zap.Any("values", values))
 	if err := s.execDMLWithMaxRetries(ctx, sqls, values, defaultDMLMaxRetryTime, bucket); err != nil {
 		ts := make([]uint64, 0, len(rows))
 		for _, row := range rows {
