@@ -74,8 +74,9 @@ func (m *mqMessageKey) Decode(data []byte) error {
 }
 
 type mqMessageRow struct {
-	Update map[string]*column `json:"u,omitempty"`
-	Delete map[string]*column `json:"d,omitempty"`
+	Update     map[string]*column `json:"u,omitempty"`
+	PreColumns map[string]*column `json:"p,omitempty"`
+	Delete     map[string]*column `json:"d,omitempty"`
 }
 
 func (m *mqMessageRow) Encode() ([]byte, error) {
@@ -132,9 +133,10 @@ func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow
 	}
 	value := &mqMessageRow{}
 	if e.Delete {
-		value.Delete = e.Columns
+		value.Delete = e.PreColumns
 	} else {
 		value.Update = e.Columns
+		value.PreColumns = e.PreColumns
 	}
 	return key, value
 }
@@ -154,10 +156,11 @@ func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChang
 
 	if len(value.Delete) != 0 {
 		e.Delete = true
-		e.Columns = value.Delete
+		e.PreColumns = value.Delete
 	} else {
 		e.Delete = false
 		e.Columns = value.Update
+		e.PreColumns = value.PreColumns
 	}
 	return e
 }

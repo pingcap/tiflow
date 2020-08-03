@@ -168,11 +168,9 @@ func newProcessor(
 	cdcEtcdCli := kv.NewCDCEtcdClient(etcdCli)
 	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
 
-	// The key in DDL kv pair returned from TiKV is already memcompariable encoded,
-	// so we set `needEncode` to false.
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
-	ddlPuller := puller.NewPuller(pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter)
+	ddlPuller := puller.NewPuller(pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -197,7 +195,7 @@ func newProcessor(
 		session:       session,
 		sink:          sink,
 		ddlPuller:     ddlPuller,
-		mounter:       entry.NewMounter(schemaStorage, changefeed.Config.Mounter.WorkerNum),
+		mounter:       entry.NewMounter(schemaStorage, changefeed.Config.Mounter.WorkerNum, changefeed.Config.EnableOldValue),
 		schemaStorage: schemaStorage,
 		errCh:         errCh,
 
@@ -836,10 +834,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	startPuller := func(tableID model.TableID, pResolvedTs *uint64) puller.EventSorter {
 
 		// start table puller
-		// The key in DML kv pair returned from TiKV is not memcompariable encoded,
-		// so we set `needEncode` to true.
-		span := regionspan.GetTableSpan(tableID)
-		plr := puller.NewPuller(p.pdCli, p.credential, p.kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter)
+		enableOldValue := p.changefeed.Config.EnableOldValue
+		span := regionspan.GetTableSpan(tableID, enableOldValue)
+		plr := puller.NewPuller(p.pdCli, p.credential, p.kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {

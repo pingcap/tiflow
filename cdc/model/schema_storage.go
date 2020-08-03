@@ -21,6 +21,13 @@ import (
 	"github.com/pingcap/tidb/util/rowcodec"
 )
 
+const (
+	// HandleIndexPKIsHandle represents that the handle index is the pk and the pk is the handle
+	HandleIndexPKIsHandle = -1
+	// HandleIndexTableIneligible represents that the table is ineligible
+	HandleIndexTableIneligible = -2
+)
+
 // TableInfo provides meta data describing a DB table.
 type TableInfo struct {
 	*model.TableInfo
@@ -30,7 +37,15 @@ type TableInfo struct {
 	columnsOffset    map[int64]int
 	indicesOffset    map[int64]int
 	uniqueColumns    map[int64]struct{}
-	handleColID      int64
+
+	// only for new row format decoder
+	handleColID int64
+
+	// the mounter will choose this index to output delete events
+	// special value:
+	// HandleIndexPKIsHandle(-1) : pk is handle
+	// HandleIndexTableIneligible(-2) : the table is not eligible
+	HandleIndexID int64
 
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
@@ -49,6 +64,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		indicesOffset:    make(map[int64]int, len(info.Indices)),
 		uniqueColumns:    make(map[int64]struct{}),
 		handleColID:      -1,
+		HandleIndexID:    HandleIndexTableIneligible,
 		rowColInfos:      make([]rowcodec.ColInfo, len(info.Columns)),
 	}
 
@@ -59,6 +75,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		isPK := (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == model.ExtraHandleID
 		if isPK {
 			ti.handleColID = col.ID
+			ti.HandleIndexID = HandleIndexPKIsHandle
 			ti.uniqueColumns[col.ID] = struct{}{}
 			uniqueIndexNum++
 		}
@@ -90,8 +107,37 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 			}
 		}
 	}
-
+	ti.findHandleIndex()
 	return ti
+}
+
+func (ti *TableInfo) findHandleIndex() {
+	if ti.HandleIndexID == HandleIndexPKIsHandle {
+		// pk is handle
+		return
+	}
+	handleIndexOffset := -1
+	for i, idx := range ti.Indices {
+		if !ti.IsIndexUnique(idx) {
+			continue
+		}
+		if idx.Primary {
+			handleIndexOffset = i
+			break
+		}
+		if handleIndexOffset < 0 {
+			handleIndexOffset = i
+		} else {
+			if len(ti.Indices[handleIndexOffset].Columns) > len(ti.Indices[i].Columns) ||
+				(len(ti.Indices[handleIndexOffset].Columns) == len(ti.Indices[i].Columns) &&
+					ti.Indices[handleIndexOffset].ID > ti.Indices[i].ID) {
+				handleIndexOffset = i
+			}
+		}
+	}
+	if handleIndexOffset >= 0 {
+		ti.HandleIndexID = ti.Indices[handleIndexOffset].ID
+	}
 }
 
 // GetColumnInfo returns the column info by ID
@@ -121,9 +167,13 @@ func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
 	return ti.handleColID, ti.rowColInfos
 }
 
-// IsColWritable returns is the col is writeable
-func (ti *TableInfo) IsColWritable(col *model.ColumnInfo) bool {
-	return col.State == model.StatePublic && !col.IsGenerated()
+// IsColCDCVisible returns whether the col is visible for CDC
+func (ti *TableInfo) IsColCDCVisible(col *model.ColumnInfo) bool {
+	// this column is a virtual generated column
+	if col.IsGenerated() && !col.GeneratedStored {
+		return false
+	}
+	return col.State == model.StatePublic
 }
 
 // GetUniqueKeys returns all unique keys of the table as a slice of column names
@@ -180,7 +230,12 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
 	}
 	if indexInfo.Unique {
 		for _, col := range indexInfo.Columns {
-			if !mysql.HasNotNullFlag(ti.Columns[col.Offset].Flag) {
+			colInfo := ti.Columns[col.Offset]
+			if !mysql.HasNotNullFlag(colInfo.Flag) {
+				return false
+			}
+			// this column is a virtual generated column
+			if colInfo.IsGenerated() && !colInfo.GeneratedStored {
 				return false
 			}
 		}

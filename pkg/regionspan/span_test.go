@@ -100,12 +100,19 @@ func (s *spanSuite) TestIntersect(c *check.C) {
 }
 
 func (s *spanSuite) TestGetTableSpan(c *check.C) {
-	span := GetTableSpan(123)
+	span := GetTableSpan(123, false)
 	c.Assert(span.Start, check.Less, span.End)
 	prefix := []byte(tablecodec.GenTablePrefix(123))
 	c.Assert(span.Start, check.Greater, prefix)
 	prefix[len(prefix)-1]++
 	c.Assert(span.End, check.Less, prefix)
+
+	span = GetTableSpan(123, true)
+	c.Assert(span.Start, check.Less, span.End)
+	prefix = []byte(tablecodec.GenTableRecordPrefix(123))
+	c.Assert(span.Start, check.GreaterEqual, prefix)
+	prefix[len(prefix)-1]++
+	c.Assert(span.End, check.LessEqual, prefix)
 }
 
 func (s *spanSuite) TestSpanHack(c *check.C) {
