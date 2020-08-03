@@ -535,7 +535,7 @@ func formatColVal(datum types.Datum, tp byte) (interface{}, error) {
 		return datum.GetMysqlDuration().String(), nil
 	case mysql.TypeJSON:
 		return datum.GetMysqlJSON().String(), nil
-	case mysql.TypeNewDecimal, mysql.TypeDecimal:
+	case mysql.TypeNewDecimal:
 		v := datum.GetMysqlDecimal()
 		if v == nil {
 			return nil, nil
