@@ -160,7 +160,7 @@ func (ti *TableInfo) IsColumnUnique(colID int64) bool {
 	return exist
 }
 
-// ExistTableUniqueColumn returns whether the table has the unique column
+// ExistTableUniqueColumn returns whether the table has a unique column
 func (ti *TableInfo) ExistTableUniqueColumn() bool {
 	return len(ti.uniqueColumns) != 0
 }
