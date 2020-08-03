@@ -15,7 +15,6 @@ package sink
 
 import (
 	"context"
-
 	"net/url"
 	"strconv"
 	"strings"
@@ -187,20 +186,16 @@ flushLoop:
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	switch k.protocol {
-	case codec.ProtocolAvro: // ignore resolved events in avro protocol
-		return nil
-	case codec.ProtocolCanal:
-		return nil
-
-	}
 	encoder := k.newEncoder()
-	err := encoder.AppendResolvedEvent(ts)
+	op, err := encoder.AppendResolvedEvent(ts)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if op == codec.EncoderNoOperation {
+		return nil
+	}
 	key, value := encoder.Build()
-	err = k.mqProducer.SyncBroadcastMessage(ctx, key, value)
+	err = k.writeToProducer(ctx, key, value, op, -1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -218,18 +213,20 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return errors.Trace(model.ErrorDDLEventIgnored)
 	}
 	encoder := k.newEncoder()
-	err := encoder.AppendDDLEvent(ddl)
+	op, err := encoder.AppendDDLEvent(ddl)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	if k.protocol != codec.ProtocolAvro {
-		key, value := encoder.Build()
-		log.Info("emit ddl event", zap.ByteString("key", key), zap.ByteString("value", value))
-		err = k.mqProducer.SyncBroadcastMessage(ctx, key, value)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	if op == codec.EncoderNoOperation {
+		return nil
+	}
+
+	key, value := encoder.Build()
+	log.Info("emit ddl event", zap.ByteString("key", key), zap.ByteString("value", value))
+	err = k.writeToProducer(ctx, key, value, op, -1)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	return nil
 }
@@ -305,7 +302,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
 
-	flushToProducer := func() error {
+	flushToProducer := func(op codec.EncoderResult) error {
 		return k.statistics.RecordBatchExecution(func() (int, error) {
 			if batchSize == 0 {
 				return 0, nil
@@ -314,7 +311,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			encoder = k.newEncoder()
 			thisBatchSize := batchSize
 			batchSize = 0
-			return thisBatchSize, k.mqProducer.SendMessage(ctx, key, value, partition)
+			return thisBatchSize, k.writeToProducer(ctx, key, value, op, partition)
 		})
 	}
 	for {
@@ -326,7 +323,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-tick.C:
-			if err := flushToProducer(); err != nil {
+			if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
 				return errors.Trace(err)
 			}
 			continue
@@ -334,7 +331,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		}
 		if e.row == nil {
 			if e.resolvedTs != 0 {
-				if err := flushToProducer(); err != nil {
+				if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
 					return errors.Trace(err)
 				}
 				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
@@ -342,19 +339,50 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			}
 			continue
 		}
-		err := encoder.AppendRowChangedEvent(e.row)
+		op, err := encoder.AppendRowChangedEvent(e.row)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		batchSize++
-		// This is only a temporary fix so that the Avro encoder does not overflow.
-		// Pending further refactoring
-		if encoder.Size() >= batchSizeLimit || (k.protocol == codec.ProtocolAvro && encoder.Size() >= 1) {
-			if err := flushToProducer(); err != nil {
+
+		if encoder.Size() >= batchSizeLimit {
+			if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
+				return errors.Trace(err)
+			}
+			continue
+		}
+
+		if op == codec.EncoderNeedSyncWrite || op == codec.EncoderNeedAsyncWrite {
+			if err := flushToProducer(op); err != nil {
 				return errors.Trace(err)
 			}
 		}
 	}
+}
+
+func (k *mqSink) writeToProducer(ctx context.Context, key []byte, value []byte, op codec.EncoderResult, partition int32) error {
+	switch op {
+	case codec.EncoderNeedAsyncWrite:
+		if partition >= 0 {
+			return k.mqProducer.SendMessage(ctx, key, value, partition)
+		}
+		return errors.New("Async broadcasts not supported")
+	case codec.EncoderNeedSyncWrite:
+		if partition >= 0 {
+			err := k.mqProducer.SendMessage(ctx, key, value, partition)
+			if err != nil {
+				return err
+			}
+			return k.mqProducer.Flush(ctx)
+		}
+		return k.mqProducer.SyncBroadcastMessage(ctx, key, value)
+	}
+
+	log.Warn("writeToProducer called with no-op",
+		zap.ByteString("key", key),
+		zap.ByteString("value", value),
+		zap.Int32("partition", partition))
+	return nil
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {

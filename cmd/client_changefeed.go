@@ -201,6 +201,9 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		if err := verifyStartTs(ctx, startTs, cdcEtcdCli); err != nil {
 			return nil, err
 		}
+		if err := verifyTargetTs(ctx, startTs, targetTs); err != nil {
+			return nil, err
+		}
 	}
 
 	cfg := config.GetDefaultReplicaConfig()

@@ -201,7 +201,7 @@ func (w *TaskWatcher) parseTaskEvent(ctx context.Context, key, val []byte) (*Tas
 	switch taskStatus.AdminJobType {
 	case model.AdminNone, model.AdminResume:
 		op = TaskOpCreate
-	case model.AdminStop, model.AdminRemove:
+	case model.AdminStop, model.AdminRemove, model.AdminFinish:
 		op = TaskOpDelete
 	}
 	return &TaskEvent{Op: op, Task: task}, nil

@@ -196,11 +196,11 @@ type JSONEventBatchEncoder struct {
 }
 
 // AppendResolvedEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
+func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
 	keyMsg := newResolvedMessage(ts)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -212,19 +212,19 @@ func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 	d.keyBuf.Write(key)
 
 	d.valueBuf.Write(valueLenByte[:])
-	return nil
+	return EncoderNeedSyncWrite, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	keyMsg, valueMsg := rowEventToMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -237,19 +237,19 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 	d.valueBuf.Write(valueLenByte[:])
 	d.valueBuf.Write(value)
-	return nil
+	return EncoderNoOperation, nil
 }
 
 // AppendDDLEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
 	keyMsg, valueMsg := ddlEventtoMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -262,7 +262,7 @@ func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 
 	d.valueBuf.Write(valueLenByte[:])
 	d.valueBuf.Write(value)
-	return nil
+	return EncoderNeedSyncWrite, nil
 }
 
 // Build implements the EventBatchEncoder interface

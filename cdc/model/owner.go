@@ -37,6 +37,7 @@ const (
 	AdminStop
 	AdminResume
 	AdminRemove
+	AdminFinish
 )
 
 // String implements fmt.Stringer interface.
@@ -50,8 +51,19 @@ func (t AdminJobType) String() string {
 		return "resume changefeed"
 	case AdminRemove:
 		return "remove changefeed"
+	case AdminFinish:
+		return "finish changefeed"
 	}
 	return "unknown"
+}
+
+// IsStopState returns whether changefeed is in stop state with give admin job
+func (t AdminJobType) IsStopState() bool {
+	switch t {
+	case AdminStop, AdminRemove, AdminFinish:
+		return true
+	}
+	return false
 }
 
 // TaskPosition records the process information of a capture
