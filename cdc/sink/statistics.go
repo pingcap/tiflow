@@ -39,7 +39,7 @@ func NewStatistics(ctx context.Context, name string, opts map[string]string) *St
 	statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 	statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 
-	// Flush metrics in background for better accurate and efficiency.
+	// Flush metrics in background for better accuracy and efficiency.
 	ticker := time.NewTicker(flushMetricsInterval)
 	metricTotalRows := totalRowsCountGauge.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 	metricTotalFlushedRows := totalFlushedRowsCountGauge.WithLabelValues(statistics.captureAddr, statistics.changefeedID)

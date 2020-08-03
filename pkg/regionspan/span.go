@@ -15,6 +15,8 @@ package regionspan
 
 import (
 	"bytes"
+	"encoding/hex"
+	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -30,11 +32,21 @@ type Span struct {
 	End   []byte
 }
 
+// String returns a string that encodes Span in hex format.
+func (s Span) String() string {
+	return fmt.Sprintf("[%s, %s)", hex.EncodeToString(s.Start), hex.EncodeToString(s.End))
+}
+
 // UpperBoundKey represents the maximum value.
 var UpperBoundKey = []byte{255, 255, 255, 255, 255}
 
 // ComparableSpan represents a arbitrary kv range which is comparable
 type ComparableSpan Span
+
+// String returns a string that encodes ComparableSpan in hex format.
+func (s ComparableSpan) String() string {
+	return Span(s).String()
+}
 
 // Hack will set End as UpperBoundKey if End is Nil.
 func (s ComparableSpan) Hack() ComparableSpan {

@@ -159,7 +159,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// we can make tikv only return the events about the keys in the specified range.
 					comparableKey := regionspan.ToComparableKey(val.Key)
 					if !regionspan.KeyInSpans(comparableKey, p.spans) {
-						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
+						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Stringer("span", p.spans))
 						continue
 					}
 

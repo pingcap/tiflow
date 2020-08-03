@@ -38,8 +38,9 @@ func newMySQLSink4Test(c *check.C) *mysqlSink {
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
 	return &mysqlSink{
-		txnCache: common.NewUnresolvedTxnCache(),
-		filter:   f,
+		txnCache:   common.NewUnresolvedTxnCache(),
+		filter:     f,
+		statistics: NewStatistics(context.TODO(), "test", make(map[string]string)),
 	}
 }
 
