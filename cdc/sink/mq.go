@@ -111,7 +111,7 @@ func newMqSink(
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
 
-		statistics: NewStatistics("MQ", opts),
+		statistics: NewStatistics(ctx, "MQ", opts),
 	}
 
 	go func() {
@@ -127,6 +127,7 @@ func newMqSink(
 }
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	rowsCount := 0
 	for _, row := range rows {
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
@@ -141,7 +142,9 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 			resolvedTs uint64
 		}{row: row}:
 		}
+		rowsCount++
 	}
+	k.statistics.AddRowsCount(rowsCount)
 	return nil
 }
 

@@ -63,7 +63,7 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 	}
 	switch strings.ToLower(sinkURI.Scheme) {
 	case "blackhole":
-		return newBlackHoleSink(opts), nil
+		return newBlackHoleSink(ctx, opts), nil
 	case "mysql", "tidb", "mysql+ssl", "tidb+ssl":
 		return newMySQLSink(ctx, changefeedID, sinkURI, filter, opts)
 	case "kafka":

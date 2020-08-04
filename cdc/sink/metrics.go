@@ -32,7 +32,7 @@ var (
 			Subsystem: "sink",
 			Name:      "txn_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
-			Buckets:   prometheus.ExponentialBuckets(0.0005, 2, 18),
+			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
 		}, []string{"capture", "changefeed"})
 	executionErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -56,6 +56,20 @@ var (
 			Name:      "bucket_size",
 			Help:      "size of the DML bucket",
 		}, []string{"capture", "changefeed", "bucket"})
+	totalRowsCountGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "total_rows_count",
+			Help:      "totla count of rows",
+		}, []string{"capture", "changefeed"})
+	totalFlushedRowsCountGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "total_flushed_rows_count",
+			Help:      "totla count of flushed rows",
+		}, []string{"capture", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -65,4 +79,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(executionErrorCounter)
 	registry.MustRegister(conflictDetectDurationHis)
 	registry.MustRegister(bucketSizeCounter)
+	registry.MustRegister(totalRowsCountGauge)
+	registry.MustRegister(totalFlushedRowsCountGauge)
 }
