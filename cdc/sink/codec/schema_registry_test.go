@@ -14,6 +14,7 @@
 package codec
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io/ioutil"
@@ -25,6 +26,7 @@ import (
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/security"
 )
 
 type AvroSchemaRegistrySuite struct {
@@ -70,7 +72,7 @@ func startHTTPInterceptForTestingRegistry(c *check.C) {
 				return nil, err
 			}
 
-			c.Assert(reqData.SchemaType, check.Equals, "AVRO")
+			// c.Assert(reqData.SchemaType, check.Equals, "AVRO")
 
 			var respData registerResponse
 			registry.mu.Lock()
@@ -138,6 +140,18 @@ func startHTTPInterceptForTestingRegistry(c *check.C) {
 			return httpmock.NewStringResponse(200, ""), nil
 		})
 
+	failCounter := 0
+	httpmock.RegisterResponder("POST", `=~^http://127.0.0.1:8081/may-fail`,
+		func(req *http.Request) (*http.Response, error) {
+			data, _ := ioutil.ReadAll(req.Body)
+			c.Assert(len(data), check.Greater, 0)
+			c.Assert(int64(len(data)), check.Equals, req.ContentLength)
+			if failCounter < 3 {
+				failCounter++
+				return httpmock.NewStringResponse(422, ""), nil
+			}
+			return httpmock.NewStringResponse(200, ""), nil
+		})
 }
 
 func stopHTTPInterceptForTestingRegistry() {
@@ -165,7 +179,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 		Partition: 0,
 	}
 
-	manager, err := NewAvroSchemaManager(getTestingContext(), "http://127.0.0.1:8081", "-value")
+	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 
 	err = manager.ClearRegistry(getTestingContext(), table)
@@ -227,10 +241,10 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 }
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistryBad(c *check.C) {
-	_, err := NewAvroSchemaManager(getTestingContext(), "http://127.0.0.1:808", "-value")
+	_, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:808", "-value")
 	c.Assert(err, check.NotNil)
 
-	_, err = NewAvroSchemaManager(getTestingContext(), "https://127.0.0.1:8080", "-value")
+	_, err = NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "https://127.0.0.1:8080", "-value")
 	c.Assert(err, check.NotNil)
 }
 
@@ -241,7 +255,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 		Partition: 0,
 	}
 
-	manager, err := NewAvroSchemaManager(getTestingContext(), "http://127.0.0.1:8081", "-value")
+	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 	for i := 0; i < 20; i++ {
 		err = manager.ClearRegistry(getTestingContext(), table)
@@ -272,4 +286,17 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 		err = manager.Register(getTestingContext(), table, codec)
 		c.Assert(err, check.IsNil)
 	}
+}
+
+func (s *AvroSchemaRegistrySuite) TestHTTPRetry(c *check.C) {
+	payload := []byte("test")
+	req, err := http.NewRequest("POST", "http://127.0.0.1:8081/may-fail", bytes.NewReader(payload))
+	c.Assert(err, check.IsNil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	resp, err := httpRetry(ctx, nil, req, false)
+	c.Assert(err, check.IsNil)
+	_ = resp.Body.Close()
 }

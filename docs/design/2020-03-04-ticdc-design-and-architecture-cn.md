@@ -137,7 +137,7 @@ Owner 维护全局的同步状态，会对集群的同步进行监控和适当�
 
 # TiCDC open protocol
 
-设计细节：[TiCDC Kafka 同步协议](./2020-02-24-ticdc-mq-protocol-chinese-version.md)
+设计细节：[TiCDC Kafka 同步协议](2020-02-24-ticdc-mq-protocol-cn.md)
 
 # 使用限制
 

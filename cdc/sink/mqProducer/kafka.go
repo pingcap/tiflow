@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
@@ -38,14 +39,19 @@ type KafkaConfig struct {
 	MaxMessageBytes int
 	Compression     string
 	ClientID        string
+	Credential      *security.Credential
+	// TODO support SASL authentication
 }
 
-// DefaultKafkaConfig is the default Kafka configuration
-var DefaultKafkaConfig = KafkaConfig{
-	Version:           "2.4.0",
-	MaxMessageBytes:   512 * 1024 * 1024, // 512M
-	ReplicationFactor: 1,
-	Compression:       "none",
+// NewKafkaConfig returns a default Kafka configuration
+func NewKafkaConfig() KafkaConfig {
+	return KafkaConfig{
+		Version:           "2.4.0",
+		MaxMessageBytes:   512 * 1024 * 1024, // 512M
+		ReplicationFactor: 1,
+		Compression:       "none",
+		Credential:        &security.Credential{},
+	}
 }
 
 type kafkaSaramaProducer struct {
@@ -192,6 +198,9 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	if err != nil {
 		return nil, err
 	}
+	if config.PartitionNum < 0 {
+		return nil, errors.NotValidf("partition num %d", config.PartitionNum)
+	}
 	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -217,7 +226,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 		if partitionNum == 0 {
 			partitionNum = topicDetail.NumPartitions
 		} else if partitionNum < topicDetail.NumPartitions {
-			log.Warn("partition number assigned in sink-uri is less than that of topic")
+			log.Warn("partition number assigned in sink-uri is less than that of topic", zap.Int32("topic partition num", topicDetail.NumPartitions))
 		} else if partitionNum > topicDetail.NumPartitions {
 			return nil, errors.Errorf("partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, topicDetail.NumPartitions)
 		}
@@ -341,6 +350,14 @@ func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error)
 	config.Admin.Retry.Max = 10000
 	config.Admin.Retry.Backoff = 500 * time.Millisecond
 	config.Admin.Timeout = 20 * time.Second
+
+	if c.Credential != nil && len(c.Credential.CAPath) != 0 {
+		config.Net.TLS.Enable = true
+		config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
 
 	return config, err
 }

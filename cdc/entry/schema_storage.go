@@ -15,7 +15,6 @@ package entry
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -25,12 +24,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/retry"
 	timeta "github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -42,8 +39,8 @@ type schemaSnapshot struct {
 	schemaNameToID map[string]int64
 
 	schemas        map[int64]*timodel.DBInfo
-	tables         map[int64]*TableInfo
-	partitionTable map[int64]*TableInfo
+	tables         map[int64]*model.TableInfo
+	partitionTable map[int64]*model.TableInfo
 
 	truncateTableID   map[int64]struct{}
 	ineligibleTableID map[int64]struct{}
@@ -59,6 +56,41 @@ func (s *SingleSchemaSnapshot) HandleDDL(job *timodel.Job) error {
 	return s.handleDDL(job)
 }
 
+// PreTableInfo returns the table info which will be overwritten by the specified job
+func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo, error) {
+	switch job.Type {
+	case timodel.ActionCreateSchema, timodel.ActionModifySchemaCharsetAndCollate, timodel.ActionDropSchema:
+		return nil, nil
+	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
+		// no pre table info
+		return nil, nil
+	case timodel.ActionRenameTable, timodel.ActionDropTable, timodel.ActionDropView, timodel.ActionTruncateTable:
+		// get the table will be dropped
+		table, ok := s.TableByID(job.TableID)
+		if !ok {
+			return nil, errors.NotFoundf("table %d", job.TableID)
+		}
+		return table, nil
+	default:
+		binlogInfo := job.BinlogInfo
+		if binlogInfo == nil {
+			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
+			return nil, nil
+		}
+		tbInfo := binlogInfo.TableInfo
+		if tbInfo == nil {
+			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
+			return nil, nil
+		}
+		tableID := tbInfo.ID
+		table, ok := s.TableByID(tableID)
+		if !ok {
+			return nil, errors.NotFoundf("table %d", job.TableID)
+		}
+		return table, nil
+	}
+}
+
 // NewSingleSchemaSnapshotFromMeta creates a new single schema snapshot from a tidb meta
 func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*SingleSchemaSnapshot, error) {
 	return newSchemaSnapshotFromMeta(meta, currentTs)
@@ -70,8 +102,8 @@ func newEmptySchemaSnapshot() *schemaSnapshot {
 		schemaNameToID: make(map[string]int64),
 
 		schemas:        make(map[int64]*timodel.DBInfo),
-		tables:         make(map[int64]*TableInfo),
-		partitionTable: make(map[int64]*TableInfo),
+		tables:         make(map[int64]*model.TableInfo),
+		partitionTable: make(map[int64]*model.TableInfo),
 
 		truncateTableID:   make(map[int64]struct{}),
 		ineligibleTableID: make(map[int64]struct{}),
@@ -96,7 +128,7 @@ func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*schemaSnap
 		dbinfo.Tables = make([]*timodel.TableInfo, 0, len(tableInfos))
 		for _, tableInfo := range tableInfos {
 			dbinfo.Tables = append(dbinfo.Tables, tableInfo)
-			tableInfo := WrapTableInfo(dbinfo.ID, dbinfo.Name.O, tableInfo)
+			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
 			snap.tables[tableInfo.ID] = tableInfo
 			snap.tableNameToID[model.TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
 			isEligible := tableInfo.IsEligible()
@@ -168,8 +200,8 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 		schemaNameToID: make(map[string]int64, len(s.schemaNameToID)),
 
 		schemas:        make(map[int64]*timodel.DBInfo, len(s.schemas)),
-		tables:         make(map[int64]*TableInfo, len(s.tables)),
-		partitionTable: make(map[int64]*TableInfo, len(s.partitionTable)),
+		tables:         make(map[int64]*model.TableInfo, len(s.tables)),
+		partitionTable: make(map[int64]*model.TableInfo, len(s.partitionTable)),
 
 		truncateTableID:   make(map[int64]struct{}, len(s.truncateTableID)),
 		ineligibleTableID: make(map[int64]struct{}, len(s.ineligibleTableID)),
@@ -198,177 +230,6 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 	return n
 }
 
-// TableInfo provides meta data describing a DB table.
-type TableInfo struct {
-	*timodel.TableInfo
-	SchemaID      int64
-	TableName     model.TableName
-	columnsOffset map[int64]int
-	indicesOffset map[int64]int
-	uniqueColumns map[int64]struct{}
-	handleColID   int64
-
-	// if the table of this row only has one unique index(includes primary key),
-	// IndieMarkCol will be set to the name of the unique index
-	IndieMarkCol string
-	rowColInfos  []rowcodec.ColInfo
-}
-
-// WrapTableInfo creates a TableInfo from a timodel.TableInfo
-func WrapTableInfo(schemaID int64, schemaName string, info *timodel.TableInfo) *TableInfo {
-	ti := &TableInfo{
-		TableInfo:     info,
-		SchemaID:      schemaID,
-		TableName:     model.TableName{Schema: schemaName, Table: info.Name.O},
-		columnsOffset: make(map[int64]int, len(info.Columns)),
-		indicesOffset: make(map[int64]int, len(info.Indices)),
-		uniqueColumns: make(map[int64]struct{}),
-		handleColID:   -1,
-		rowColInfos:   make([]rowcodec.ColInfo, len(info.Columns)),
-	}
-
-	uniqueIndexNum := 0
-
-	for i, col := range ti.Columns {
-		ti.columnsOffset[col.ID] = i
-		isPK := (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == timodel.ExtraHandleID
-		if isPK {
-			ti.handleColID = col.ID
-			ti.uniqueColumns[col.ID] = struct{}{}
-			uniqueIndexNum++
-		}
-		ti.rowColInfos[i] = rowcodec.ColInfo{
-			ID:         col.ID,
-			IsPKHandle: isPK,
-			Ft:         rowcodec.FieldTypeFromModelColumn(col),
-		}
-	}
-
-	for i, idx := range ti.Indices {
-		ti.indicesOffset[idx.ID] = i
-		if ti.IsIndexUnique(idx) {
-			for _, col := range idx.Columns {
-				ti.uniqueColumns[ti.Columns[col.Offset].ID] = struct{}{}
-			}
-		}
-		if idx.Primary || idx.Unique {
-			uniqueIndexNum++
-		}
-	}
-
-	// this table has only one unique column
-	if uniqueIndexNum == 1 && len(ti.uniqueColumns) == 1 {
-		for col := range ti.uniqueColumns {
-			info, _ := ti.GetColumnInfo(col)
-			if !info.IsGenerated() {
-				ti.IndieMarkCol = info.Name.O
-			}
-		}
-	}
-
-	return ti
-}
-
-// GetColumnInfo returns the column info by ID
-func (ti *TableInfo) GetColumnInfo(colID int64) (info *timodel.ColumnInfo, exist bool) {
-	colOffset, exist := ti.columnsOffset[colID]
-	if !exist {
-		return nil, false
-	}
-	return ti.Columns[colOffset], true
-}
-
-func (ti *TableInfo) String() string {
-	return fmt.Sprintf("TableInfo, ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t", ti.ID, ti.TableName, len(ti.Columns), len(ti.Indices), ti.PKIsHandle)
-}
-
-// GetIndexInfo returns the index info by ID
-func (ti *TableInfo) GetIndexInfo(indexID int64) (info *timodel.IndexInfo, exist bool) {
-	indexOffset, exist := ti.indicesOffset[indexID]
-	if !exist {
-		return nil, false
-	}
-	return ti.Indices[indexOffset], true
-}
-
-// GetRowColInfos returns all column infos for rowcodec
-func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
-	return ti.handleColID, ti.rowColInfos
-}
-
-// IsColWritable returns is the col is writeable
-func (ti *TableInfo) IsColWritable(col *timodel.ColumnInfo) bool {
-	return col.State == timodel.StatePublic && !col.IsGenerated()
-}
-
-// GetUniqueKeys returns all unique keys of the table as a slice of column names
-func (ti *TableInfo) GetUniqueKeys() [][]string {
-	var uniqueKeys [][]string
-	if ti.PKIsHandle {
-		for _, col := range ti.Columns {
-			if mysql.HasPriKeyFlag(col.Flag) {
-				// Prepend to make sure the primary key ends up at the front
-				uniqueKeys = [][]string{{col.Name.O}}
-				break
-			}
-		}
-	}
-	for _, idx := range ti.Indices {
-		if ti.IsIndexUnique(idx) {
-			colNames := make([]string, 0, len(idx.Columns))
-			for _, col := range idx.Columns {
-				colNames = append(colNames, col.Name.O)
-			}
-			if idx.Primary {
-				uniqueKeys = append([][]string{colNames}, uniqueKeys...)
-			} else {
-				uniqueKeys = append(uniqueKeys, colNames)
-			}
-		}
-	}
-	return uniqueKeys
-}
-
-// IsColumnUnique returns whether the column is unique
-func (ti *TableInfo) IsColumnUnique(colID int64) bool {
-	_, exist := ti.uniqueColumns[colID]
-	return exist
-}
-
-// ExistTableUniqueColumn returns whether the table has the unique column
-func (ti *TableInfo) ExistTableUniqueColumn() bool {
-	return len(ti.uniqueColumns) != 0
-}
-
-// IsEligible returns whether the table is a eligible table
-func (ti *TableInfo) IsEligible() bool {
-	if ti.IsView() {
-		return true
-	}
-	return ti.ExistTableUniqueColumn()
-}
-
-// IsIndexUnique returns whether the index is unique
-func (ti *TableInfo) IsIndexUnique(indexInfo *timodel.IndexInfo) bool {
-	if indexInfo.Primary {
-		return true
-	}
-	if indexInfo.Unique {
-		for _, col := range indexInfo.Columns {
-			if !mysql.HasNotNullFlag(ti.Columns[col.Offset].Flag) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
-}
-
-// Clone clones the TableInfo
-func (ti *TableInfo) Clone() *TableInfo {
-	return WrapTableInfo(ti.SchemaID, ti.TableName.Schema, ti.TableInfo.Clone())
-}
-
 // GetTableNameByID looks up a TableName with the given table id
 func (s *schemaSnapshot) GetTableNameByID(id int64) (model.TableName, bool) {
 	tableInfo, ok := s.tables[id]
@@ -395,7 +256,7 @@ func (s *schemaSnapshot) GetTableIDByName(schemaName string, tableName string) (
 
 // GetTableByName queries a table by name,
 // the second returned value is false if no table with the specified name is found.
-func (s *schemaSnapshot) GetTableByName(schema, table string) (info *TableInfo, ok bool) {
+func (s *schemaSnapshot) GetTableByName(schema, table string) (info *model.TableInfo, ok bool) {
 	id, ok := s.GetTableIDByName(schema, table)
 	if !ok {
 		return nil, ok
@@ -423,13 +284,13 @@ func (s *schemaSnapshot) SchemaByTableID(tableID int64) (*timodel.DBInfo, bool) 
 }
 
 // TableByID returns the TableInfo by table id
-func (s *schemaSnapshot) TableByID(id int64) (val *TableInfo, ok bool) {
+func (s *schemaSnapshot) TableByID(id int64) (val *model.TableInfo, ok bool) {
 	val, ok = s.tables[id]
 	return
 }
 
 // PhysicalTableByID returns the TableInfo by table id or partition ID.
-func (s *schemaSnapshot) PhysicalTableByID(id int64) (val *TableInfo, ok bool) {
+func (s *schemaSnapshot) PhysicalTableByID(id int64) (val *model.TableInfo, ok bool) {
 	val, ok = s.tables[id]
 	if !ok {
 		val, ok = s.partitionTable[id]
@@ -546,17 +407,12 @@ func (s *schemaSnapshot) dropTable(id int64) error {
 	return nil
 }
 
-func (s *schemaSnapshot) updatePartition(tbl *timodel.TableInfo) error {
+func (s *schemaSnapshot) updatePartition(tbl *model.TableInfo) error {
 	id := tbl.ID
 	table, ok := s.tables[id]
 	if !ok {
 		return errors.NotFoundf("table %d", id)
 	}
-	schema, ok := s.SchemaByTableID(id)
-	if !ok {
-		return errors.NotFoundf("table(%d)'s schema", id)
-	}
-
 	oldPi := table.GetPartitionInfo()
 	if oldPi == nil {
 		return errors.NotFoundf("table %d is not a partition table, truncate partition failed", id)
@@ -570,16 +426,14 @@ func (s *schemaSnapshot) updatePartition(tbl *timodel.TableInfo) error {
 	if newPi == nil {
 		return errors.NotFoundf("table %d is not a partition table, truncate partition failed", id)
 	}
-
-	table = WrapTableInfo(schema.ID, schema.Name.O, tbl.Clone())
-	s.tables[id] = table
+	s.tables[id] = tbl
 	for _, partition := range newPi.Definitions {
 		// update table info.
 		if _, ok := s.partitionTable[partition.ID]; ok {
-			log.Debug("add table partition success", zap.String("name", table.Name.O), zap.Int64("tid", id), zap.Reflect("add partition id", partition.ID))
+			log.Debug("add table partition success", zap.String("name", tbl.Name.O), zap.Int64("tid", id), zap.Reflect("add partition id", partition.ID))
 		}
-		s.partitionTable[partition.ID] = table
-		if !table.ExistTableUniqueColumn() {
+		s.partitionTable[partition.ID] = tbl
+		if !tbl.ExistTableUniqueColumn() {
 			s.ineligibleTableID[partition.ID] = struct{}{}
 		}
 		delete(oldIDs, partition.ID)
@@ -590,18 +444,17 @@ func (s *schemaSnapshot) updatePartition(tbl *timodel.TableInfo) error {
 		s.truncateTableID[pid] = struct{}{}
 		delete(s.partitionTable, pid)
 		delete(s.ineligibleTableID, pid)
-		log.Debug("drop table partition success", zap.String("name", table.Name.O), zap.Int64("tid", id), zap.Reflect("truncated partition id", pid))
+		log.Debug("drop table partition success", zap.String("name", tbl.Name.O), zap.Int64("tid", id), zap.Reflect("truncated partition id", pid))
 	}
 
 	return nil
 }
 
-func (s *schemaSnapshot) createTable(schemaID int64, tbl *timodel.TableInfo) error {
-	schema, ok := s.schemas[schemaID]
+func (s *schemaSnapshot) createTable(table *model.TableInfo) error {
+	schema, ok := s.schemas[table.SchemaID]
 	if !ok {
-		return errors.NotFoundf("table's schema(%d)", schemaID)
+		return errors.NotFoundf("table's schema(%d)", table.SchemaID)
 	}
-	table := WrapTableInfo(schema.ID, schema.Name.O, tbl.Clone())
 	_, ok = s.tables[table.ID]
 	if ok {
 		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
@@ -629,12 +482,11 @@ func (s *schemaSnapshot) createTable(schemaID int64, tbl *timodel.TableInfo) err
 }
 
 // ReplaceTable replace the table by new tableInfo
-func (s *schemaSnapshot) replaceTable(tbl *timodel.TableInfo) error {
-	oldTable, ok := s.tables[tbl.ID]
+func (s *schemaSnapshot) replaceTable(table *model.TableInfo) error {
+	_, ok := s.tables[table.ID]
 	if !ok {
-		return errors.NotFoundf("table %s(%d)", tbl.Name, tbl.ID)
+		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
 	}
-	table := WrapTableInfo(oldTable.SchemaID, oldTable.TableName.Schema, tbl.Clone())
 	s.tables[table.ID] = table
 	if !table.IsEligible() {
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
@@ -653,7 +505,15 @@ func (s *schemaSnapshot) replaceTable(tbl *timodel.TableInfo) error {
 }
 
 func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
+	if err := s.FillSchemaName(job); err != nil {
+		return errors.Trace(err)
+	}
 	log.Debug("handle job: ", zap.String("sql query", job.Query), zap.Stringer("job", job))
+	getWrapTableInfo := func(job *timodel.Job) *model.TableInfo {
+		return model.WrapTableInfo(job.SchemaID, job.SchemaName,
+			job.BinlogInfo.FinishedTS,
+			job.BinlogInfo.TableInfo.Clone())
+	}
 	switch job.Type {
 	case timodel.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
@@ -678,12 +538,12 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 			return errors.Trace(err)
 		}
 		// create table
-		err = s.createTable(job.SchemaID, job.BinlogInfo.TableInfo)
+		err = s.createTable(getWrapTableInfo(job))
 		if err != nil {
 			return errors.Trace(err)
 		}
 	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
-		err := s.createTable(job.SchemaID, job.BinlogInfo.TableInfo)
+		err := s.createTable(getWrapTableInfo(job))
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -700,14 +560,14 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 			return errors.Trace(err)
 		}
 
-		err = s.createTable(job.SchemaID, job.BinlogInfo.TableInfo)
+		err = s.createTable(getWrapTableInfo(job))
 		if err != nil {
 			return errors.Trace(err)
 		}
 
 		s.truncateTableID[job.TableID] = struct{}{}
 	case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
-		err := s.updatePartition(job.BinlogInfo.TableInfo)
+		err := s.updatePartition(getWrapTableInfo(job))
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -722,7 +582,7 @@ func (s *schemaSnapshot) handleDDL(job *timodel.Job) error {
 			log.Warn("ignore a invalid DDL job", zap.Reflect("job", job))
 			return nil
 		}
-		err := s.replaceTable(tbInfo)
+		err := s.replaceTable(getWrapTableInfo(job))
 		if err != nil {
 			return errors.Trace(err)
 		}

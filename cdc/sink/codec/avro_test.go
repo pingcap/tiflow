@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )
@@ -39,7 +40,7 @@ var _ = check.Suite(&avroBatchEncoderSuite{})
 func (s *avroBatchEncoderSuite) SetUpSuite(c *check.C) {
 	startHTTPInterceptForTestingRegistry(c)
 
-	manager, err := NewAvroSchemaManager(context.Background(), "http://127.0.0.1:8081", "-value")
+	manager, err := NewAvroSchemaManager(context.Background(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 
 	s.encoder = &AvroEventBatchEncoder{
@@ -155,10 +156,11 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 
 	testCaseDdl := &model.DDLEvent{
 		CommitTs: 417318403368288260,
-		Schema:   "test",
-		Table:    "person",
-		Query:    "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
-		Type:     model2.ActionCreateTable,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "test", Table: "person",
+		},
+		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+		Type:  model2.ActionCreateTable,
 	}
 
 	ctx := context.Background()
@@ -174,7 +176,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 	}()
 
 	info := pm.GetTableInfo("test", "person")
-	testCaseDdl.TableInfo = new(model.TableInfo)
+	testCaseDdl.TableInfo = new(model.SimpleTableInfo)
 	testCaseDdl.TableInfo.Schema = "test"
 	testCaseDdl.TableInfo.Table = "person"
 	testCaseDdl.TableInfo.ColumnInfo = make([]*model.ColumnInfo, len(info.Columns))
@@ -182,11 +184,10 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 		testCaseDdl.TableInfo.ColumnInfo[i] = new(model.ColumnInfo)
 		testCaseDdl.TableInfo.ColumnInfo[i].FromTiColumnInfo(v)
 	}
-	testCaseDdl.TableInfo.UpdateTs = 0xbeefbeef
 
-	err := s.encoder.AppendDDLEvent(testCaseDdl)
+	_, err := s.encoder.AppendDDLEvent(testCaseDdl)
 	c.Check(err, check.IsNil)
 
-	err = s.encoder.AppendRowChangedEvent(testCaseUpdate)
+	_, err = s.encoder.AppendRowChangedEvent(testCaseUpdate)
 	c.Check(err, check.IsNil)
 }

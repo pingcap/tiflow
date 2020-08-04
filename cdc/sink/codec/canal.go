@@ -16,11 +16,13 @@ package codec
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	parser_types "github.com/pingcap/parser/types"
 	"github.com/pingcap/ticdc/cdc/model"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	"golang.org/x/text/encoding"
@@ -126,6 +128,14 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 // build the Column in the canal RowData
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	sqlType := MysqlToJavaType(c.Type)
+	mysqlType := parser_types.TypeStr(c.Type)
+	if c.Flag.IsBinary() {
+		if parser_types.IsTypeBlob(c.Type) {
+			mysqlType = strings.Replace(mysqlType, "text", "blob", 1)
+		} else if parser_types.IsTypeChar(c.Type) {
+			mysqlType = strings.Replace(mysqlType, "char", "binary", 1)
+		}
+	}
 	// Some special cases handled in canal
 	// see https://github.com/alibaba/canal/blob/d53bfd7ee76f8fe6eb581049d64b07d4fcdd692d/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L733
 	switch c.Type {
@@ -144,10 +154,16 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 	}
 	switch sqlType {
 	case JavaSQLTypeBINARY, JavaSQLTypeVARBINARY, JavaSQLTypeLONGVARBINARY:
-		sqlType = JavaSQLTypeBLOB
+		if c.Flag.IsBinary() {
+			sqlType = JavaSQLTypeBLOB
+		} else {
+			// In jdbc, text type is mapping to JavaSQLTypeVARCHAR
+			// see https://dev.mysql.com/doc/connector-j/5.1/en/connector-j-reference-type-conversions.html
+			sqlType = JavaSQLTypeVARCHAR
+		}
 	}
 
-	isKey := c.WhereHandle != nil && *c.WhereHandle
+	isKey := c.Flag.IsPrimaryKey()
 	isNull := c.Value == nil
 	value := ""
 	if !isNull {
@@ -163,12 +179,19 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		case string:
 			value = v
 		case []byte:
-			decoded, err := b.bytesDecoder.Bytes(v)
-			if err != nil {
-				return nil, errors.Trace(err)
+			// special handle for text and blob
+			// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
+			switch sqlType {
+			case JavaSQLTypeVARCHAR:
+				value = string(v)
+			default:
+				decoded, err := b.bytesDecoder.Bytes(v)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+				value = string(decoded)
+				sqlType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
 			}
-			value = string(decoded)
-			sqlType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
 		default:
 			value = fmt.Sprintf("%v", v)
 		}
@@ -181,6 +204,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		Updated:       updated,
 		IsNullPresent: &canal.Column_IsNull{IsNull: isNull},
 		Value:         value,
+		MysqlType:     mysqlType,
 	}
 	return canalColumn, nil
 }
@@ -195,13 +219,18 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 		}
 		columns = append(columns, c)
 	}
+	var preColumns []*canal.Column
+	for name, column := range e.PreColumns {
+		c, err := b.buildColumn(column, name, !e.Delete)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		preColumns = append(preColumns, c)
+	}
 
 	rowData := &canal.RowData{}
-	if e.Delete {
-		rowData.BeforeColumns = columns
-	} else {
-		rowData.AfterColumns = columns
-	}
+	rowData.BeforeColumns = preColumns
+	rowData.AfterColumns = columns
 	return rowData, nil
 }
 
@@ -236,14 +265,14 @@ func (b *canalEntryBuilder) FromRowEvent(e *model.RowChangedEvent) (*canal.Entry
 // FromDdlEvent builds canal entry from cdc DDLEvent
 func (b *canalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error) {
 	eventType := convertDdlEventType(e)
-	header := b.buildHeader(e.CommitTs, e.Schema, e.Table, eventType, -1)
+	header := b.buildHeader(e.CommitTs, e.TableInfo.Schema, e.TableInfo.Table, eventType, -1)
 	isDdl := isCanalDdl(eventType)
 	rc := &canal.RowChange{
 		EventTypePresent: &canal.RowChange_EventType{EventType: eventType},
 		IsDdlPresent:     &canal.RowChange_IsDdl{IsDdl: isDdl},
 		Sql:              e.Query,
 		RowDatas:         nil,
-		DdlSchemaName:    e.Schema,
+		DdlSchemaName:    e.TableInfo.Schema,
 	}
 	rcBytes, err := proto.Marshal(rc)
 	if err != nil {
@@ -275,38 +304,38 @@ type CanalEventBatchEncoder struct {
 }
 
 // AppendResolvedEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
+func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore the event is ignored.
-	return nil
+	return EncoderNoOperation, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	entry, err := d.entryBuilder.FromRowEvent(e)
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
-	return nil
+	return EncoderNoOperation, nil
 }
 
 // AppendDDLEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
 	entry, err := d.entryBuilder.FromDdlEvent(e)
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
-	return nil
+	return EncoderNeedSyncWrite, nil
 }
 
 // Build implements the EventBatchEncoder interface

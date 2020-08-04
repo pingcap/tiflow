@@ -58,7 +58,7 @@ func (s *Server) startStatusHTTP() error {
 	if s.opts.credential != nil {
 		credential = s.opts.credential
 	}
-	tlsConfig, err := credential.ToTLSConfig()
+	tlsConfig, err := credential.ToTLSConfigWithVerify()
 	if err != nil {
 		log.Error("status server get tls config failed", zap.Error(err))
 		return errors.Trace(err)
@@ -106,6 +106,8 @@ func (s *Server) writeEtcdInfo(ctx context.Context, cli kv.CDCEtcdClient, w io.W
 }
 
 func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
+	s.ownerLock.RLock()
+	defer s.ownerLock.RUnlock()
 	fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
 	s.owner.writeDebugInfo(w)
 
@@ -120,6 +122,8 @@ func (s *Server) handleDebugInfo(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
+	s.ownerLock.RLock()
+	defer s.ownerLock.RUnlock()
 	st := status{
 		Version: util.ReleaseVersion,
 		GitHash: util.GitHash,

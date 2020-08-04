@@ -18,9 +18,10 @@ import (
 	"github.com/pingcap/check"
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"golang.org/x/text/encoding/charmap"
+
 	"github.com/pingcap/ticdc/cdc/model"
 	canal "github.com/pingcap/ticdc/proto/canal"
-	"golang.org/x/text/encoding/charmap"
 )
 
 type canalBatchSuite struct {
@@ -52,28 +53,32 @@ var _ = check.Suite(&canalBatchSuite{
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
 		CommitTs: 1,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table a",
-		Type:     1,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table a",
+		Type:  1,
 	}}, {{
 		CommitTs: 1,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table a",
-		Type:     1,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table a",
+		Type:  1,
 	}, {
 		CommitTs: 2,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table b",
-		Type:     2,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table b",
+		Type:  2,
 	}, {
 		CommitTs: 3,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table c",
-		Type:     3,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table c",
+		Type:  3,
 	}}, {}},
 })
 
@@ -81,7 +86,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 	for _, cs := range s.rowCases {
 		encoder := NewCanalEventBatchEncoder()
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(row)
+			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
@@ -101,7 +106,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 	for _, cs := range s.ddlCases {
 		encoder := NewCanalEventBatchEncoder()
 		for _, ddl := range cs {
-			err := encoder.AppendDDLEvent(ddl)
+			_, err := encoder.AppendDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
@@ -124,7 +129,6 @@ type canalEntrySuite struct{}
 var _ = check.Suite(&canalEntrySuite{})
 
 func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
-	trueVar := true
 	testCaseUpdate := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
@@ -133,10 +137,11 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 		},
 		Delete: false,
 		Columns: map[string]*model.Column{
-			"id":      {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1},
+			"id":      {Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 			"name":    {Type: mysql.TypeVarchar, Value: "Bob"},
 			"tiny":    {Type: mysql.TypeTiny, Value: 255},
 			"comment": {Type: mysql.TypeBlob, Value: []byte("测试")},
+			"blob":    {Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		},
 	}
 	testCaseDelete := &model.RowChangedEvent{
@@ -146,16 +151,17 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			Table:  "person",
 		},
 		Delete: true,
-		Columns: map[string]*model.Column{
-			"id": {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1},
+		PreColumns: map[string]*model.Column{
+			"id": {Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 		},
 	}
 	testCaseDdl := &model.DDLEvent{
 		CommitTs: 417318403368288260,
-		Schema:   "cdc",
-		Table:    "person",
-		Query:    "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
-		Type:     mm.ActionCreateTable,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "cdc", Table: "person",
+		},
+		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+		Type:  mm.ActionCreateTable,
 	}
 	builder := NewCanalEntryBuilder()
 
@@ -187,23 +193,33 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
+			c.Assert(col.GetMysqlType(), check.Equals, "int")
 		case "name":
 			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "Bob")
+			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
 		case "tiny":
 			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeSMALLINT))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "255")
 		case "comment":
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
+			c.Assert(col.GetIsKey(), check.IsFalse)
+			c.Assert(col.GetIsNull(), check.IsFalse)
+			c.Assert(err, check.IsNil)
+			c.Assert(col.GetValue(), check.Equals, "测试")
+			c.Assert(col.GetMysqlType(), check.Equals, "text")
+		case "blob":
 			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBLOB))
 			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			s, err := charmap.ISO8859_1.NewEncoder().String(col.GetValue())
 			c.Assert(err, check.IsNil)
-			c.Assert(s, check.Equals, "测试")
+			c.Assert(s, check.Equals, "测试blob")
+			c.Assert(col.GetMysqlType(), check.Equals, "blob")
 		}
 	}
 
@@ -224,7 +240,7 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 	rowDatas = rc.GetRowDatas()
 	c.Assert(len(rowDatas), check.Equals, 1)
 	columns = rowDatas[0].BeforeColumns
-	c.Assert(len(columns), check.Equals, len(testCaseDelete.Columns))
+	c.Assert(len(columns), check.Equals, len(testCaseDelete.PreColumns))
 	for _, col := range columns {
 		c.Assert(col.GetUpdated(), check.IsFalse)
 		switch col.GetName() {
@@ -233,6 +249,7 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			c.Assert(col.GetIsKey(), check.IsTrue)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "1")
+			c.Assert(col.GetMysqlType(), check.Equals, "int")
 		}
 	}
 
@@ -241,8 +258,8 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
 	header = entry.GetHeader()
-	c.Assert(header.GetSchemaName(), check.Equals, testCaseDdl.Schema)
-	c.Assert(header.GetTableName(), check.Equals, testCaseDdl.Table)
+	c.Assert(header.GetSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
+	c.Assert(header.GetTableName(), check.Equals, testCaseDdl.TableInfo.Table)
 	c.Assert(header.GetEventType(), check.Equals, canal.EventType_CREATE)
 	store = entry.GetStoreValue()
 	c.Assert(store, check.NotNil)
@@ -250,5 +267,5 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 	err = proto.Unmarshal(store, rc)
 	c.Assert(err, check.IsNil)
 	c.Assert(rc.GetIsDdl(), check.IsTrue)
-	c.Assert(rc.GetDdlSchemaName(), check.Equals, testCaseDdl.Schema)
+	c.Assert(rc.GetDdlSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
 }

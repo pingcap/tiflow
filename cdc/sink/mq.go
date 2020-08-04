@@ -15,7 +15,6 @@ package sink
 
 import (
 	"context"
-
 	"net/url"
 	"strconv"
 	"strings"
@@ -33,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -57,7 +57,10 @@ type mqSink struct {
 	statistics *Statistics
 }
 
-func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
+func newMqSink(
+	ctx context.Context, credential *security.Credential, mqProducer mqProducer.Producer,
+	filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error,
+) (*mqSink, error) {
 	partitionNum := mqProducer.GetPartitionNum()
 	partitionInput := make([]chan struct {
 		row        *model.RowChangedEvent
@@ -83,7 +86,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 		if !ok {
 			return nil, errors.New(`Avro protocol requires parameter "registry"`)
 		}
-		schemaManager, err := codec.NewAvroSchemaManager(ctx, registryURI, "-value")
+		schemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-value")
 		if err != nil {
 			return nil, errors.Annotate(err, "Could not create Avro schema manager")
 		}
@@ -108,7 +111,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
 
-		statistics: NewStatistics("MQ", opts),
+		statistics: NewStatistics(ctx, "MQ", opts),
 	}
 
 	go func() {
@@ -124,6 +127,7 @@ func newMqSink(ctx context.Context, mqProducer mqProducer.Producer, filter *filt
 }
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	rowsCount := 0
 	for _, row := range rows {
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
@@ -138,7 +142,9 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 			resolvedTs uint64
 		}{row: row}:
 		}
+		rowsCount++
 	}
+	k.statistics.AddRowsCount(rowsCount)
 	return nil
 }
 
@@ -183,20 +189,16 @@ flushLoop:
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	switch k.protocol {
-	case codec.ProtocolAvro: // ignore resolved events in avro protocol
-		return nil
-	case codec.ProtocolCanal:
-		return nil
-
-	}
 	encoder := k.newEncoder()
-	err := encoder.AppendResolvedEvent(ts)
+	op, err := encoder.AppendResolvedEvent(ts)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if op == codec.EncoderNoOperation {
+		return nil
+	}
 	key, value := encoder.Build()
-	err = k.mqProducer.SyncBroadcastMessage(ctx, key, value)
+	err = k.writeToProducer(ctx, key, value, op, -1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -204,7 +206,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table) {
+	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),
@@ -214,24 +216,26 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return errors.Trace(model.ErrorDDLEventIgnored)
 	}
 	encoder := k.newEncoder()
-	err := encoder.AppendDDLEvent(ddl)
+	op, err := encoder.AppendDDLEvent(ddl)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	if k.protocol != codec.ProtocolAvro {
-		key, value := encoder.Build()
-		log.Info("emit ddl event", zap.ByteString("key", key), zap.ByteString("value", value))
-		err = k.mqProducer.SyncBroadcastMessage(ctx, key, value)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	if op == codec.EncoderNoOperation {
+		return nil
+	}
+
+	key, value := encoder.Build()
+	log.Info("emit ddl event", zap.ByteString("key", key), zap.ByteString("value", value))
+	err = k.writeToProducer(ctx, key, value, op, -1)
+	if err != nil {
+		return errors.Trace(err)
 	}
 	return nil
 }
 
 // Initialize registers Avro schemas for all tables
-func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) error {
+func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	if k.protocol == codec.ProtocolAvro && tableInfo != nil {
 		avroEncoder := k.newEncoder().(*codec.AvroEventBatchEncoder)
 		manager := avroEncoder.GetValueSchemaManager()
@@ -301,7 +305,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
 
-	flushToProducer := func() error {
+	flushToProducer := func(op codec.EncoderResult) error {
 		return k.statistics.RecordBatchExecution(func() (int, error) {
 			if batchSize == 0 {
 				return 0, nil
@@ -310,7 +314,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			encoder = k.newEncoder()
 			thisBatchSize := batchSize
 			batchSize = 0
-			return thisBatchSize, k.mqProducer.SendMessage(ctx, key, value, partition)
+			return thisBatchSize, k.writeToProducer(ctx, key, value, op, partition)
 		})
 	}
 	for {
@@ -322,7 +326,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-tick.C:
-			if err := flushToProducer(); err != nil {
+			if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
 				return errors.Trace(err)
 			}
 			continue
@@ -330,7 +334,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		}
 		if e.row == nil {
 			if e.resolvedTs != 0 {
-				if err := flushToProducer(); err != nil {
+				if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
 					return errors.Trace(err)
 				}
 				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
@@ -338,23 +342,54 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			}
 			continue
 		}
-		err := encoder.AppendRowChangedEvent(e.row)
+		op, err := encoder.AppendRowChangedEvent(e.row)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		batchSize++
-		// This is only a temporary fix so that the Avro encoder does not overflow.
-		// Pending further refactoring
-		if encoder.Size() >= batchSizeLimit || (k.protocol == codec.ProtocolAvro && encoder.Size() >= 1) {
-			if err := flushToProducer(); err != nil {
+
+		if encoder.Size() >= batchSizeLimit {
+			if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
+				return errors.Trace(err)
+			}
+			continue
+		}
+
+		if op == codec.EncoderNeedSyncWrite || op == codec.EncoderNeedAsyncWrite {
+			if err := flushToProducer(op); err != nil {
 				return errors.Trace(err)
 			}
 		}
 	}
 }
 
+func (k *mqSink) writeToProducer(ctx context.Context, key []byte, value []byte, op codec.EncoderResult, partition int32) error {
+	switch op {
+	case codec.EncoderNeedAsyncWrite:
+		if partition >= 0 {
+			return k.mqProducer.SendMessage(ctx, key, value, partition)
+		}
+		return errors.New("Async broadcasts not supported")
+	case codec.EncoderNeedSyncWrite:
+		if partition >= 0 {
+			err := k.mqProducer.SendMessage(ctx, key, value, partition)
+			if err != nil {
+				return err
+			}
+			return k.mqProducer.Flush(ctx)
+		}
+		return k.mqProducer.SyncBroadcastMessage(ctx, key, value)
+	}
+
+	log.Warn("writeToProducer called with no-op",
+		zap.ByteString("key", key),
+		zap.ByteString("value", value),
+		zap.Int32("partition", partition))
+	return nil
+}
+
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	config := mqProducer.DefaultKafkaConfig
+	config := mqProducer.NewKafkaConfig()
 
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "kafka" {
@@ -404,6 +439,21 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 		replicaConfig.Sink.Protocol = s
 	}
 
+	s = sinkURI.Query().Get("ca")
+	if s != "" {
+		config.Credential.CAPath = s
+	}
+
+	s = sinkURI.Query().Get("cert")
+	if s != "" {
+		config.Credential.CertPath = s
+	}
+
+	s = sinkURI.Query().Get("key")
+	if s != "" {
+		config.Credential.KeyPath = s
+	}
+
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
@@ -411,7 +461,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sink, err := newMqSink(ctx, producer, filter, replicaConfig, opts, errCh)
+	sink, err := newMqSink(ctx, config.Credential, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -427,7 +477,10 @@ func newPulsarSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter,
 	if s != "" {
 		replicaConfig.Sink.Protocol = s
 	}
-	sink, err := newMqSink(ctx, producer, filter, replicaConfig, opts, errCh)
+	// For now, it's a place holder. Avro format have to make connection to Schema Registery,
+	// and it may needs credential.
+	credential := &security.Credential{}
+	sink, err := newMqSink(ctx, credential, producer, filter, replicaConfig, opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

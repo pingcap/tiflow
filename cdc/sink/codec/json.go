@@ -74,8 +74,9 @@ func (m *mqMessageKey) Decode(data []byte) error {
 }
 
 type mqMessageRow struct {
-	Update map[string]*column `json:"u,omitempty"`
-	Delete map[string]*column `json:"d,omitempty"`
+	Update     map[string]*column `json:"u,omitempty"`
+	PreColumns map[string]*column `json:"p,omitempty"`
+	Delete     map[string]*column `json:"d,omitempty"`
 }
 
 func (m *mqMessageRow) Encode() ([]byte, error) {
@@ -132,9 +133,10 @@ func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow
 	}
 	value := &mqMessageRow{}
 	if e.Delete {
-		value.Delete = e.Columns
+		value.Delete = e.PreColumns
 	} else {
 		value.Update = e.Columns
+		value.PreColumns = e.PreColumns
 	}
 	return key, value
 }
@@ -154,10 +156,11 @@ func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChang
 
 	if len(value.Delete) != 0 {
 		e.Delete = true
-		e.Columns = value.Delete
+		e.PreColumns = value.Delete
 	} else {
 		e.Delete = false
 		e.Columns = value.Update
+		e.PreColumns = value.PreColumns
 	}
 	return e
 }
@@ -165,8 +168,8 @@ func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChang
 func ddlEventtoMqMessage(e *model.DDLEvent) (*mqMessageKey, *mqMessageDDL) {
 	key := &mqMessageKey{
 		Ts:     e.CommitTs,
-		Schema: e.Schema,
-		Table:  e.Table,
+		Schema: e.TableInfo.Schema,
+		Table:  e.TableInfo.Table,
 		Type:   model.MqMessageTypeDDL,
 	}
 	value := &mqMessageDDL{
@@ -178,11 +181,12 @@ func ddlEventtoMqMessage(e *model.DDLEvent) (*mqMessageKey, *mqMessageDDL) {
 
 func mqMessageToDDLEvent(key *mqMessageKey, value *mqMessageDDL) *model.DDLEvent {
 	e := new(model.DDLEvent)
+	e.TableInfo = new(model.SimpleTableInfo)
 	// TODO: we lost the startTs from kafka message
 	// startTs-based txn filter is out of work
 	e.CommitTs = key.Ts
-	e.Table = key.Table
-	e.Schema = key.Schema
+	e.TableInfo.Table = key.Table
+	e.TableInfo.Schema = key.Schema
 	e.Type = value.Type
 	e.Query = value.Query
 	return e
@@ -195,11 +199,11 @@ type JSONEventBatchEncoder struct {
 }
 
 // AppendResolvedEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
+func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
 	keyMsg := newResolvedMessage(ts)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -211,19 +215,19 @@ func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
 	d.keyBuf.Write(key)
 
 	d.valueBuf.Write(valueLenByte[:])
-	return nil
+	return EncoderNeedSyncWrite, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	keyMsg, valueMsg := rowEventToMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -236,19 +240,19 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 	d.valueBuf.Write(valueLenByte[:])
 	d.valueBuf.Write(value)
-	return nil
+	return EncoderNoOperation, nil
 }
 
 // AppendDDLEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
 	keyMsg, valueMsg := ddlEventtoMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -261,7 +265,7 @@ func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
 
 	d.valueBuf.Write(valueLenByte[:])
 	d.valueBuf.Write(value)
-	return nil
+	return EncoderNeedSyncWrite, nil
 }
 
 // Build implements the EventBatchEncoder interface

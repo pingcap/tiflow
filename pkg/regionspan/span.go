@@ -15,9 +15,12 @@ package regionspan
 
 import (
 	"bytes"
+	"encoding/hex"
+	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
 	"go.uber.org/zap"
@@ -29,11 +32,21 @@ type Span struct {
 	End   []byte
 }
 
+// String returns a string that encodes Span in hex format.
+func (s Span) String() string {
+	return fmt.Sprintf("[%s, %s)", hex.EncodeToString(s.Start), hex.EncodeToString(s.End))
+}
+
 // UpperBoundKey represents the maximum value.
 var UpperBoundKey = []byte{255, 255, 255, 255, 255}
 
 // ComparableSpan represents a arbitrary kv range which is comparable
 type ComparableSpan Span
+
+// String returns a string that encodes ComparableSpan in hex format.
+func (s ComparableSpan) String() string {
+	return Span(s).String()
+}
 
 // Hack will set End as UpperBoundKey if End is Nil.
 func (s ComparableSpan) Hack() ComparableSpan {
@@ -62,11 +75,19 @@ func hackSpan(originStart []byte, originEnd []byte) (start []byte, end []byte) {
 }
 
 // GetTableSpan returns the span to watch for the specified table
-func GetTableSpan(tableID int64) Span {
+func GetTableSpan(tableID int64, exceptIndexSpan bool) Span {
 	sep := byte('_')
+	recordMarker := byte('r')
 	tablePrefix := tablecodec.GenTablePrefix(tableID)
-	start := append(tablePrefix, sep)
-	end := append(tablePrefix, sep+1)
+	var start, end kv.Key
+	// ignore index keys if we don't need them
+	if exceptIndexSpan {
+		start = append(tablePrefix, sep, recordMarker)
+		end = append(tablePrefix, sep, recordMarker+1)
+	} else {
+		start = append(tablePrefix, sep)
+		end = append(tablePrefix, sep+1)
+	}
 	return Span{
 		Start: start,
 		End:   end,

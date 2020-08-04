@@ -201,6 +201,9 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		if err := verifyStartTs(ctx, startTs, cdcEtcdCli); err != nil {
 			return nil, err
 		}
+		if err := verifyTargetTs(ctx, startTs, targetTs); err != nil {
+			return nil, err
+		}
 	}
 
 	cfg := config.GetDefaultReplicaConfig()
@@ -434,11 +437,11 @@ func newStatisticsChangefeedCommand() *cobra.Command {
 				case <-tick.C:
 					now := time.Now()
 					status, _, err := cdcEtcdCli.GetChangeFeedStatus(ctx, changefeedID)
-					if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+					if err != nil {
 						return err
 					}
 					taskPositions, err := cdcEtcdCli.GetAllTaskPositions(ctx, changefeedID)
-					if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+					if err != nil {
 						return err
 					}
 					var count uint64

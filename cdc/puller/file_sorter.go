@@ -19,7 +19,6 @@ import (
 	"container/heap"
 	"context"
 	"encoding/binary"
-	"encoding/gob"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -33,9 +32,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
 var (
@@ -189,7 +190,7 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 			continue
 		}
 		dataBuf.Reset()
-		err = gob.NewEncoder(dataBuf).Encode(entry)
+		err = msgpack.NewEncoder(dataBuf).Encode(entry)
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
@@ -277,7 +278,7 @@ func readPolymorphicEvent(rd *bufio.Reader, readBuf *bytes.Reader) (*model.Polym
 
 	readBuf.Reset(data)
 	ev := &model.PolymorphicEvent{}
-	err = gob.NewDecoder(readBuf).Decode(ev)
+	err = msgpack.NewDecoder(readBuf).Decode(ev)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -315,7 +316,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			}
 			ev := &model.PolymorphicEvent{}
 			reader.Reset(data[idx+8 : idx+8+dataLen])
-			err = gob.NewDecoder(reader).Decode(ev)
+			err = msgpack.NewDecoder(reader).Decode(ev)
 
 			if err != nil {
 				return "", errors.Trace(err)
@@ -413,9 +414,12 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			// If we don't output a resovled ts event, the processor will still
 			// cache all events in memory until it receives the resolved ts when
 			// file sorter outputs all events in this rotate round.
+			// Events after this one could have the same commit ts with
+			// `item.entry.CRTs`, so we can't output a resolved event with
+			// `item.entry.CRTs`. But it is safe to output with `item.entry.CRTs-1`.
 			rowCount += 1
 			if rowCount%defaultAutoResolvedRows == 0 {
-				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.CRTs))
+				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.CRTs-1))
 			}
 		} else {
 			lastSortedFileUpdated = true
