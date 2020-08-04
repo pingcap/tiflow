@@ -60,7 +60,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1592842019456,
+  "iteration": 1596457144174,
   "links": [],
   "panels": [
     {
@@ -2502,7 +2502,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 17
+            "y": 24
           },
           "hiddenSeries": false,
           "id": 32,
@@ -2596,7 +2596,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 17
+            "y": 24
           },
           "hiddenSeries": false,
           "id": 5,
@@ -2690,7 +2690,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 24
+            "y": 31
           },
           "hiddenSeries": false,
           "id": 33,
@@ -2783,7 +2783,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 24
+            "y": 31
           },
           "id": 82,
           "legend": {
@@ -2872,7 +2872,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 31
+            "y": 38
           },
           "hiddenSeries": false,
           "id": 35,
@@ -2980,7 +2980,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 31
+            "y": 38
           },
           "hiddenSeries": false,
           "id": 34,
@@ -3082,7 +3082,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 38
+            "y": 45
           },
           "hiddenSeries": false,
           "id": 37,
@@ -3178,7 +3178,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 38
+            "y": 45
           },
           "hiddenSeries": false,
           "id": 36,
@@ -3287,7 +3287,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 45
+            "y": 52
           },
           "hiddenSeries": false,
           "id": 55,
@@ -3399,7 +3399,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 45
+            "y": 52
           },
           "hiddenSeries": false,
           "id": 38,
@@ -3495,7 +3495,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 52
+            "y": 59
           },
           "hiddenSeries": false,
           "id": 48,
@@ -3591,7 +3591,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 52
+            "y": 59
           },
           "hiddenSeries": false,
           "id": 56,
@@ -3693,7 +3693,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 59
+            "y": 66
           },
           "id": 81,
           "legend": {
@@ -3782,7 +3782,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 59
+            "y": 66
           },
           "hiddenSeries": false,
           "id": 83,
@@ -3884,7 +3884,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 66
+            "y": 73
           },
           "hiddenSeries": false,
           "id": 84,
@@ -3966,6 +3966,178 @@
             "align": false,
             "alignLevel": null
           }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "size of pending flush rows",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 73
+          },
+          "hiddenSeries": false,
+          "id": 88,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "sort": "current",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "dataLinks": []
+          },
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(ticdc_sink_total_rows_count{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture) - sum(ticdc_sink_total_flushed_rows_count{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{capture}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pending flush rows",
+          "tooltip": {
+            "shared": true,
+            "sort": 2,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "cards": {
+            "cardPadding": 0,
+            "cardRound": 0
+          },
+          "color": {
+            "cardColor": "#FF9830",
+            "colorScale": "linear",
+            "colorScheme": "interpolateSpectral",
+            "exponent": 0.5,
+            "min": 0,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 80
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 87,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "sort": "current",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "links": [],
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(ticdc_sink_txn_exec_duration_bucket{capture=~\"$capture\"}[1m])) by (le)",
+              "format": "heatmap",
+              "instant": false,
+              "intervalFactor": 2,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Sink txn execution duration",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "tooltipDecimals": 1,
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": 1,
+            "format": "s",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "upper",
+          "yBucketNumber": null,
+          "yBucketSize": null
         }
       ],
       "title": "Changefeed",
@@ -4882,7 +5054,7 @@
       "type": "row"
     }
   ],
-  "refresh": "5s",
+  "refresh": "1m",
   "schemaVersion": 18,
   "style": "dark",
   "tags": [],
@@ -4957,7 +5129,7 @@
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {
