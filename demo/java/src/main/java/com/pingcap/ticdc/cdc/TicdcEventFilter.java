@@ -19,7 +19,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Check for duplicated messages.
+ * In most cases, the Row Changed Event of a version is sent only once,
+ * but in special situations such as node failure and network partition,
+ * the Row Changed Event of the same version might be sent multiple times.
+ * <p>
+ * This filter class can check duplicated row change events which produced under special situations.
+ * </p>
+ * You can just ignore this class if your application is idempotent or duplicated Row Change Event is acceptable.
  * See: https://docs.pingcap.com/tidb/stable/ticdc-open-protocol#restrictions
  *
  * @NotThreadSafe

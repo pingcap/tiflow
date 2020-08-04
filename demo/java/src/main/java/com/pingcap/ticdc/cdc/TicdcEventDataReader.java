@@ -29,6 +29,32 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+/**
+ * Ticdc open protocol message reader, parse one kafka message into multiple TicdcEventData instances.
+ * <pre>
+ * Example:
+ * TicdcEventFilter filter = new TicdcEventFilter();
+ * for (KafkaMessage kafkaMessage : kafkaMessagesFromTestData) {
+ *     TicdcEventDataReader ticdcEventDataReader = new TicdcEventDataReader(kafkaMessage);
+ *     while (ticdcEventDataReader.hasNext()) {
+ *         TicdcEventData data = ticdcEventDataReader.next();
+ *         if (data.getTicdcEventValue() instanceof TicdcEventRowChange) {
+ *             boolean ok = filter.check(data.getTicdcEventKey().getTbl(), data.getTicdcEventValue().getKafkaPartition(), data.getTicdcEventKey().getTs());
+ *             if (ok) {
+ *                 // deal with row change event
+ *             } else {
+ *                 // ignore duplicated messages
+ *             }
+ *         } else if (data.getTicdcEventValue() instanceof TicdcEventDDL) {
+ *             // deal with ddl event
+ *         } else if (data.getTicdcEventValue() instanceof TicdcEventResolve) {
+ *             filter.resolveEvent(data.getTicdcEventValue().getKafkaPartition(), data.getTicdcEventKey().getTs());
+ *             // deal with resolve event
+ *         }
+ *     }
+ * }
+ * </pre>
+ */
 public class TicdcEventDataReader implements Iterator<TicdcEventData> {
     private DataInputStream keyStream;
     private DataInputStream valueStream;

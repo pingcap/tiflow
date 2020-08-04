@@ -33,16 +33,22 @@ public class TicdcEventDataReaderTest {
     @Test
     public void test() throws IOException {
         List<KafkaMessage> kafkaMessagesFromTestData = getKafkaMessagesFromTestData();
+        TicdcEventFilter filter = new TicdcEventFilter();
         for (KafkaMessage kafkaMessage : kafkaMessagesFromTestData) {
-            TicdcEventDataReader ticdcEventDataReader = new TicdcEventDataReader(kafkaMessage.getKey(),
-                    kafkaMessage.getValue());
+            TicdcEventDataReader ticdcEventDataReader = new TicdcEventDataReader(kafkaMessage);
             while (ticdcEventDataReader.hasNext()) {
                 TicdcEventData data = ticdcEventDataReader.next();
                 if (data.getTicdcEventValue() instanceof TicdcEventRowChange) {
-                    // deal with row change event``
+                    boolean ok = filter.check(data.getTicdcEventKey().getTbl(), data.getTicdcEventValue().getKafkaPartition(), data.getTicdcEventKey().getTs());
+                    if (ok) {
+                        // deal with row change event
+                    } else {
+                        // ignore duplicated messages
+                    }
                 } else if (data.getTicdcEventValue() instanceof TicdcEventDDL) {
                     // deal with ddl event
                 } else if (data.getTicdcEventValue() instanceof TicdcEventResolve) {
+                    filter.resolveEvent(data.getTicdcEventValue().getKafkaPartition(), data.getTicdcEventKey().getTs());
                     // deal with resolve event
                 }
                 System.out.println(JSON.toJSONString(data, true));
