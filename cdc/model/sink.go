@@ -15,6 +15,7 @@ package model
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
@@ -40,8 +41,12 @@ const (
 type ColumnFlagType util.Flag
 
 const (
-	// BinaryFlag means col charset is binary
+	// BinaryFlag means the column charset is binary
 	BinaryFlag ColumnFlagType = 1 << ColumnFlagType(iota)
+	// HandleKeyFlag means the column is selected as the handle key
+	HandleKeyFlag
+	// GeneratedColumnFlag means the column is a generated column
+	GeneratedColumnFlag
 )
 
 //SetIsBinary set BinaryFlag
@@ -57,6 +62,36 @@ func (b *ColumnFlagType) UnsetIsBinary() {
 //IsBinary show whether BinaryFlag is set
 func (b *ColumnFlagType) IsBinary() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(BinaryFlag))
+}
+
+//SetIsHandleKey set HandleKey
+func (b *ColumnFlagType) SetIsHandleKey() {
+	(*util.Flag)(b).Add(util.Flag(HandleKeyFlag))
+}
+
+//UnsetIsHandleKey unset HandleKey
+func (b *ColumnFlagType) UnsetIsHandleKey() {
+	(*util.Flag)(b).Remove(util.Flag(HandleKeyFlag))
+}
+
+//IsHandleKey show whether HandleKey is set
+func (b *ColumnFlagType) IsHandleKey() bool {
+	return (*util.Flag)(b).HasAll(util.Flag(HandleKeyFlag))
+}
+
+//SetIsGeneratedColumn set GeneratedColumn
+func (b *ColumnFlagType) SetIsGeneratedColumn() {
+	(*util.Flag)(b).Add(util.Flag(GeneratedColumnFlag))
+}
+
+//UnsetIsGeneratedColumn unset GeneratedColumn
+func (b *ColumnFlagType) UnsetIsGeneratedColumn() {
+	(*util.Flag)(b).Remove(util.Flag(GeneratedColumnFlag))
+}
+
+//IsGeneratedColumn show whether GeneratedColumn is set
+func (b *ColumnFlagType) IsGeneratedColumn() bool {
+	return (*util.Flag)(b).HasAll(util.Flag(GeneratedColumnFlag))
 }
 
 // TableName represents name of a table, includes table name and schema name.
@@ -109,10 +144,56 @@ type RowChangedEvent struct {
 
 // Column represents a column value in row changed event
 type Column struct {
-	Type        byte           `json:"t"`
+	Type byte `json:"t"`
+	// WhereHandle is deprecation
+	// WhereHandle is replaced by HandleKey in Flag
 	WhereHandle *bool          `json:"h,omitempty"`
 	Flag        ColumnFlagType `json:"f"`
 	Value       interface{}    `json:"v"`
+}
+
+// ColumnValueString returns the string representation of the column value
+func ColumnValueString(c interface{}) string {
+	var data string
+	switch v := c.(type) {
+	case nil:
+		data = "null"
+	case bool:
+		if v {
+			data = "1"
+		} else {
+			data = "0"
+		}
+	case int:
+		data = strconv.FormatInt(int64(v), 10)
+	case int8:
+		data = strconv.FormatInt(int64(v), 10)
+	case int16:
+		data = strconv.FormatInt(int64(v), 10)
+	case int32:
+		data = strconv.FormatInt(int64(v), 10)
+	case int64:
+		data = strconv.FormatInt(int64(v), 10)
+	case uint8:
+		data = strconv.FormatUint(uint64(v), 10)
+	case uint16:
+		data = strconv.FormatUint(uint64(v), 10)
+	case uint32:
+		data = strconv.FormatUint(uint64(v), 10)
+	case uint64:
+		data = strconv.FormatUint(uint64(v), 10)
+	case float32:
+		data = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		data = strconv.FormatFloat(float64(v), 'f', -1, 64)
+	case string:
+		data = v
+	case []byte:
+		data = string(v)
+	default:
+		data = fmt.Sprintf("%v", v)
+	}
+	return data
 }
 
 // ColumnInfo represents the name and type information passed to the sink

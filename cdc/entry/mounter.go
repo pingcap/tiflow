@@ -18,9 +18,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"math/rand"
-	"strconv"
 	"strings"
 	"time"
 
@@ -378,11 +376,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		if !exist {
 			return nil, errors.NotFoundf("column info, colID: %d", index)
 		}
-		// the judge about `fillWithDefaultValue` is tricky
-		// if the `fillWithDefaultValue` is true, the event must be deletion
-		// we should output the generated column in deletion event
-		// this tricky code will be improve after pingcap/ticdc#787 merged
-		if !tableInfo.IsColWritable(colInfo) && fillWithDefaultValue {
+		if !tableInfo.IsColCDCVisible(colInfo) {
 			continue
 		}
 		colName := colInfo.Name.O
@@ -401,23 +395,27 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		}
 		cols[colName] = col
 	}
-	if !fillWithDefaultValue {
-		return cols, nil
-	}
-	for _, col := range tableInfo.Columns {
-		_, ok := cols[col.Name.O]
-		if !ok && tableInfo.IsColWritable(col) {
-			column := &model.Column{
-				Type:  col.Tp,
-				Value: getDefaultOrZeroValue(col),
-				Flag:  transColumnFlag(col),
+	if fillWithDefaultValue {
+		for _, col := range tableInfo.Columns {
+			_, ok := cols[col.Name.O]
+			if !ok && tableInfo.IsColCDCVisible(col) {
+				column := &model.Column{
+					Type:  col.Tp,
+					Value: getDefaultOrZeroValue(col),
+					Flag:  transColumnFlag(col),
+				}
+				if tableInfo.IsColumnUnique(col.ID) {
+					whereHandle := true
+					column.WhereHandle = &whereHandle
+				}
+				cols[col.Name.O] = column
 			}
-			if tableInfo.IsColumnUnique(col.ID) {
-				whereHandle := true
-				column.WhereHandle = &whereHandle
-			}
-			cols[col.Name.O] = column
 		}
+	}
+
+	err := setHandleKeyFlag(tableInfo, cols)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 	return cols, nil
 }
@@ -480,9 +478,41 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	}, nil
 }
 
+func setHandleKeyFlag(tableInfo *model.TableInfo, colValues map[string]*model.Column) error {
+	switch tableInfo.HandleIndexID {
+	case model.HandleIndexTableIneligible:
+		log.Fatal("this table is not eligible", zap.Int64("tableID", tableInfo.ID))
+	case model.HandleIndexPKIsHandle:
+		// pk is handle
+		if !tableInfo.PKIsHandle {
+			log.Fatal("the pk of this table is not handle", zap.Int64("tableID", tableInfo.ID))
+		}
+		for _, colInfo := range tableInfo.Columns {
+			if mysql.HasPriKeyFlag(colInfo.Flag) {
+				colValues[colInfo.Name.O].Flag.SetIsHandleKey()
+				break
+			}
+		}
+	default:
+		handleIndexInfo, exist := tableInfo.GetIndexInfo(tableInfo.HandleIndexID)
+		if !exist {
+			return errors.NotFoundf("handle index info(%d) in table(%d)", tableInfo.HandleIndexID, tableInfo.ID)
+		}
+		for _, colInfo := range handleIndexInfo.Columns {
+			colName := tableInfo.Columns[colInfo.Offset].Name.O
+			colValues[colName].Flag.SetIsHandleKey()
+		}
+	}
+	return nil
+}
+
 func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKVEntry) (*model.RowChangedEvent, error) {
 	// skip set index KV
 	if !idx.Delete || m.enableOldValue {
+		return nil, nil
+	}
+	// skip any index that is not the handle
+	if idx.IndexID != tableInfo.HandleIndexID {
 		return nil, nil
 	}
 
@@ -508,12 +538,14 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 			return nil, errors.Trace(err)
 		}
 		whereHandle := true
-		preCols[idxCol.Name.O] = &model.Column{
+		col := &model.Column{
 			Type:        tableInfo.Columns[idxCol.Offset].Tp,
 			WhereHandle: &whereHandle,
 			Value:       value,
 			Flag:        transColumnFlag(tableInfo.Columns[idxCol.Offset]),
 		}
+		col.Flag.SetIsHandleKey()
+		preCols[idxCol.Name.O] = col
 	}
 	return &model.RowChangedEvent{
 		StartTs:  idx.StartTs,
@@ -664,54 +696,13 @@ func genMultipleKeys(ti *timodel.TableInfo, preCols, cols map[string]*model.Colu
 	return multipleKeys
 }
 
-func columnValue(value interface{}) string {
-	var data string
-	switch v := value.(type) {
-	case nil:
-		data = "null"
-	case bool:
-		if v {
-			data = "1"
-		} else {
-			data = "0"
-		}
-	case int:
-		data = strconv.FormatInt(int64(v), 10)
-	case int8:
-		data = strconv.FormatInt(int64(v), 10)
-	case int16:
-		data = strconv.FormatInt(int64(v), 10)
-	case int32:
-		data = strconv.FormatInt(int64(v), 10)
-	case int64:
-		data = strconv.FormatInt(int64(v), 10)
-	case uint8:
-		data = strconv.FormatUint(uint64(v), 10)
-	case uint16:
-		data = strconv.FormatUint(uint64(v), 10)
-	case uint32:
-		data = strconv.FormatUint(uint64(v), 10)
-	case uint64:
-		data = strconv.FormatUint(uint64(v), 10)
-	case float32:
-		data = strconv.FormatFloat(float64(v), 'f', -1, 32)
-	case float64:
-		data = strconv.FormatFloat(float64(v), 'f', -1, 64)
-	case string:
-		data = v
-	case []byte:
-		data = string(v)
-	default:
-		data = fmt.Sprintf("%v", v)
-	}
-
-	return data
-}
-
 func transColumnFlag(col *timodel.ColumnInfo) model.ColumnFlagType {
 	var flag model.ColumnFlagType
 	if col.Charset == "binary" {
 		flag.SetIsBinary()
+	}
+	if col.IsGenerated() {
+		flag.SetIsGeneratedColumn()
 	}
 	return flag
 }
@@ -724,7 +715,7 @@ func genKeyList(table string, columns []*timodel.ColumnInfo, values map[string]*
 			log.L().Debug("ignore null value", zap.String("column", col.Name.O), zap.String("table", table))
 			continue // ignore `null` value.
 		}
-		buf.WriteString(columnValue(val.Value))
+		buf.WriteString(model.ColumnValueString(val.Value))
 	}
 	if buf.Len() == 0 {
 		log.L().Debug("all value are nil, no key generated", zap.String("table", table))

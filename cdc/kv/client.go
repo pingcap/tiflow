@@ -406,7 +406,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	eventFeedGauge.Inc()
 	defer eventFeedGauge.Dec()
 
-	log.Debug("event feed started", zap.Reflect("span", s.totalSpan), zap.Uint64("ts", ts))
+	log.Debug("event feed started", zap.Stringer("span", s.totalSpan), zap.Uint64("ts", ts))
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -491,7 +491,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 		case regionspan.LockRangeStatusStale:
 			log.Info("request expired",
 				zap.Uint64("regionID", sri.verID.GetID()),
-				zap.Reflect("span", sri.span),
+				zap.Stringer("span", sri.span),
 				zap.Reflect("retrySpans", res.RetryRanges))
 			for _, r := range res.RetryRanges {
 				// This call can be always blocking because if `blocking` is set to false, this will in a new goroutine,
@@ -591,7 +591,7 @@ MainLoop:
 				// The region info is invalid. Retry the span.
 				log.Info("cannot get rpcCtx, retry span",
 					zap.Uint64("regionID", sri.verID.GetID()),
-					zap.Reflect("span", sri.span))
+					zap.Stringer("span", sri.span))
 				err = s.onRegionFail(ctx, regionErrorInfo{
 					singleRegionInfo: sri,
 					err: &rpcCtxUnavailableErr{
@@ -781,7 +781,7 @@ func (s *eventFeedSession) partialRegionFeed(
 
 	log.Info("EventFeed disconnected",
 		zap.Reflect("regionID", state.sri.verID.GetID()),
-		zap.Reflect("span", state.sri.span),
+		zap.Stringer("span", state.sri.span),
 		zap.Uint64("checkpoint", ts),
 		zap.String("error", err.Error()))
 
@@ -829,17 +829,17 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 				for _, region := range regions {
 					if region.GetMeta() == nil {
 						err = errors.New("meta not exists in region")
-						log.Warn("batch load region", zap.Reflect("span", nextSpan), zap.Error(err))
+						log.Warn("batch load region", zap.Stringer("span", nextSpan), zap.Error(err))
 						return err
 					}
 					metas = append(metas, region.GetMeta())
 				}
 				if !regionspan.CheckRegionsLeftCover(metas, nextSpan) {
 					err = errors.Errorf("regions not completely left cover span, span %v regions: %v", nextSpan, metas)
-					log.Warn("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", metas), zap.Error(err))
+					log.Warn("ScanRegions", zap.Stringer("span", nextSpan), zap.Reflect("regions", metas), zap.Error(err))
 					return err
 				}
-				log.Debug("ScanRegions", zap.Reflect("span", nextSpan), zap.Reflect("regions", metas))
+				log.Debug("ScanRegions", zap.Stringer("span", nextSpan), zap.Reflect("regions", metas))
 				return nil
 			})
 
@@ -853,13 +853,13 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			if err != nil {
 				return errors.Trace(err)
 			}
-			log.Debug("get partialSpan", zap.Reflect("span", partialSpan), zap.Uint64("regionID", region.Id))
+			log.Debug("get partialSpan", zap.Stringer("span", partialSpan), zap.Uint64("regionID", region.Id))
 
 			nextSpan.Start = region.EndKey
 
 			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil)
 			s.scheduleRegionRequest(ctx, sri, true)
-			log.Debug("partialSpan scheduled", zap.Reflect("span", partialSpan), zap.Uint64("regionID", region.Id))
+			log.Debug("partialSpan scheduled", zap.Stringer("span", partialSpan), zap.Uint64("regionID", region.Id))
 
 			// return if no more regions
 			if regionspan.EndCompare(nextSpan.Start, span.End) >= 0 {
@@ -1109,9 +1109,9 @@ func (s *eventFeedSession) singleEventFeed(
 			sinceLastEvent := time.Since(lastReceivedEventTime)
 			if sinceLastEvent > time.Second*20 {
 				log.Warn("region not receiving event from tikv for too long time",
-					zap.Uint64("regionID", regionID), zap.Reflect("span", span), zap.Duration("duration", sinceLastEvent))
+					zap.Uint64("regionID", regionID), zap.Stringer("span", span), zap.Duration("duration", sinceLastEvent))
 			}
-			version, err := s.kvStorage.CurrentVersion()
+			version, err := s.kvStorage.(*StorageWithCurVersionCache).GetCachedCurrentVersion()
 			if err != nil {
 				log.Warn("failed to get current version from PD", zap.Error(err))
 				continue
@@ -1120,7 +1120,7 @@ func (s *eventFeedSession) singleEventFeed(
 			sinceLastResolvedTs := currentTimeFromPD.Sub(oracle.GetTimeFromTS(checkpointTs))
 			if sinceLastResolvedTs > time.Second*20 && initialized {
 				log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
-					zap.Uint64("regionID", regionID), zap.Reflect("span", span),
+					zap.Uint64("regionID", regionID), zap.Stringer("span", span),
 					zap.Duration("duration", sinceLastResolvedTs),
 					zap.Uint64("checkpointTs", checkpointTs))
 				maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)

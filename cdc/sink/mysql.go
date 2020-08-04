@@ -80,7 +80,8 @@ type mysqlSink struct {
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	s.txnCache.Append(s.filter, rows...)
+	count := s.txnCache.Append(s.filter, rows...)
+	s.statistics.AddRowsCount(count)
 	return nil
 }
 
@@ -374,7 +375,7 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 		params:                          params,
 		filter:                          filter,
 		txnCache:                        common.NewUnresolvedTxnCache(),
-		statistics:                      NewStatistics("mysql", opts),
+		statistics:                      NewStatistics(ctx, "mysql", opts),
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
 		errCh:                           make(chan error, 1),
@@ -589,10 +590,12 @@ func (s *mysqlSink) Close() error {
 }
 
 func (s *mysqlSink) execDMLWithMaxRetries(
-	ctx context.Context, sqls []string, values [][]interface{}, maxRetries uint64, bucket int,
+	ctx context.Context, dmls *preparedDMLs, maxRetries uint64, bucket int,
 ) error {
-	if len(sqls) != len(values) {
-		log.Fatal("unexpected number of sqls and values", zap.Strings("sqls", sqls), zap.Any("values", values))
+	if len(dmls.sqls) != len(dmls.values) {
+		log.Fatal("unexpected number of sqls and values",
+			zap.Strings("sqls", dmls.sqls),
+			zap.Any("values", dmls.values))
 	}
 	checkTxnErr := func(err error) error {
 		if errors.Cause(err) == context.Canceled {
@@ -611,32 +614,44 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 				if err != nil {
 					return 0, checkTxnErr(errors.Trace(err))
 				}
-				for i, query := range sqls {
-					args := values[i]
+				for i, query := range dmls.sqls {
+					args := dmls.values[i]
+					log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 					if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 						return 0, checkTxnErr(errors.Trace(err))
 					}
-					log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+				}
+				if len(dmls.markSQL) != 0 {
+					log.Debug("exec row", zap.String("sql", dmls.markSQL))
+					if _, err := tx.ExecContext(ctx, dmls.markSQL); err != nil {
+						return 0, checkTxnErr(errors.Trace(err))
+					}
 				}
 				if err = tx.Commit(); err != nil {
 					return 0, checkTxnErr(errors.Trace(err))
 				}
-				return len(sqls), nil
+				return len(dmls.sqls), nil
 			})
 			if err != nil {
 				return errors.Trace(err)
 			}
 			log.Debug("Exec Rows succeeded",
 				zap.String("changefeed", s.params.changefeedID),
-				zap.Int("num of Rows", len(sqls)),
+				zap.Int("num of Rows", len(dmls.sqls)),
 				zap.Int("bucket", bucket))
 			return nil
 		},
 	)
 }
 
+type preparedDMLs struct {
+	sqls    []string
+	values  [][]interface{}
+	markSQL string
+}
+
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
-func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64, bucket int) ([]string, [][]interface{}, error) {
+func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64, bucket int) (*preparedDMLs, error) {
 	sqls := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
 	for _, row := range rows {
@@ -647,7 +662,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		if len(row.PreColumns) != 0 {
 			query, args, err = prepareDelete(row.Table.Schema, row.Table.Table, row.PreColumns)
 			if err != nil {
-				return nil, nil, errors.Trace(err)
+				return nil, errors.Trace(err)
 			}
 			sqls = append(sqls, query)
 			values = append(values, args)
@@ -655,30 +670,33 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		if len(row.Columns) != 0 {
 			query, args, err = prepareReplace(row.Table.Schema, row.Table.Table, row.Columns)
 			if err != nil {
-				return nil, nil, errors.Trace(err)
+				return nil, errors.Trace(err)
 			}
 			sqls = append(sqls, query)
 			values = append(values, args)
 		}
+	}
+	dmls := &preparedDMLs{
+		sqls:   sqls,
+		values: values,
 	}
 	if s.cyclic != nil && len(rows) > 0 {
 		// Write mark table with the current replica ID.
 		row := rows[0]
 		updateMark := s.cyclic.UdpateSourceTableCyclicMark(
 			row.Table.Schema, row.Table.Table, uint64(bucket), replicaID, row.StartTs)
-		sqls = append(sqls, updateMark)
-		values = append(values, nil)
+		dmls.markSQL = updateMark
 	}
-	return sqls, values, nil
+	return dmls, nil
 }
 
 func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, replicaID uint64, bucket int) error {
-	sqls, values, err := s.prepareDMLs(rows, replicaID, bucket)
+	dmls, err := s.prepareDMLs(rows, replicaID, bucket)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Debug("show prepareDMLs", zap.Any("rows", rows), zap.Strings("sqls", sqls), zap.Any("values", values))
-	if err := s.execDMLWithMaxRetries(ctx, sqls, values, defaultDMLMaxRetryTime, bucket); err != nil {
+	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
+	if err := s.execDMLWithMaxRetries(ctx, dmls, defaultDMLMaxRetryTime, bucket); err != nil {
 		ts := make([]uint64, 0, len(rows))
 		for _, row := range rows {
 			if len(ts) == 0 || ts[len(ts)-1] != row.CommitTs {
@@ -696,6 +714,9 @@ func prepareReplace(schema, table string, cols map[string]*model.Column) (string
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols))
 	for k, v := range cols {
+		if v.Flag.IsGeneratedColumn() {
+			continue
+		}
 		columnNames = append(columnNames, k)
 		args = append(args, v.Value)
 	}
@@ -733,7 +754,7 @@ func prepareDelete(schema, table string, cols map[string]*model.Column) (string,
 func whereSlice(cols map[string]*model.Column) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for colName, col := range cols {
-		if col.WhereHandle == nil || !*col.WhereHandle {
+		if !col.Flag.IsHandleKey() {
 			continue
 		}
 		colNames = append(colNames, colName)
