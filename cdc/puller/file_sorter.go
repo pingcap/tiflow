@@ -19,7 +19,6 @@ import (
 	"container/heap"
 	"context"
 	"encoding/binary"
-	"encoding/gob"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -33,6 +32,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -190,7 +190,7 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 			continue
 		}
 		dataBuf.Reset()
-		err = gob.NewEncoder(dataBuf).Encode(entry)
+		err = msgpack.NewEncoder(dataBuf).Encode(entry)
 		if err != nil {
 			return 0, errors.Trace(err)
 		}
@@ -232,7 +232,6 @@ func NewFileSorter(dir string) *FileSorter {
 type sortItem struct {
 	entry     *model.PolymorphicEvent
 	fileIndex int
-	itemIndex int
 }
 
 type sortHeap []*sortItem
@@ -252,53 +251,38 @@ func (h *sortHeap) Pop() interface{} {
 	return x
 }
 
-const defaultBatchSize = 8 * 1024 * 2014
-
-// readPolymorphicEvent reads PolymorphicEvents from file reader and also advance reader
+// readPolymorphicEvent reads a PolymorphicEvent from file reader and also advance reader
 // TODO: batch read
-func readPolymorphicEvent(rd *bufio.Reader, readBuf *bytes.Reader, batchSize int) ([]*model.PolymorphicEvent, error) {
-	var readSize int
+func readPolymorphicEvent(rd *bufio.Reader, readBuf *bytes.Reader) (*model.PolymorphicEvent, error) {
 	var byteLen [8]byte
-	buf := make([]byte, 128)
-	evs := make([]*model.PolymorphicEvent, 0, batchSize/128)
-
-	getBuf := func(dataLen int) []byte {
-		if dataLen > cap(buf) {
-			buf = append(buf, make([]byte, dataLen-cap(buf))...)
+	n, err := io.ReadFull(rd, byteLen[:])
+	if err != nil {
+		if err == io.EOF {
+			return nil, nil
 		}
-		return buf[:dataLen]
+		return nil, errors.Trace(err)
 	}
-	for readSize < batchSize {
-		n, err := io.ReadFull(rd, byteLen[:])
-		if err != nil {
-			if err == io.EOF {
-				return evs, nil
-			}
-			return nil, errors.Trace(err)
-		}
-		if n < 8 {
-			return nil, errors.Errorf("invalid length data %s, read %d bytes", byteLen, n)
-		}
-		dataLen := int(binary.BigEndian.Uint64(byteLen[:]))
-		data := getBuf(dataLen)
-		n, err = io.ReadFull(rd, data)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if n != dataLen {
-			return nil, errors.Errorf("truncated data %s n: %d dataLen: %d", data, n, dataLen)
-		}
-
-		readBuf.Reset(data)
-		ev := &model.PolymorphicEvent{}
-		err = gob.NewDecoder(readBuf).Decode(ev)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		evs = append(evs, ev)
-		readSize += 8 + dataLen
+	if n < 8 {
+		return nil, errors.Errorf("invalid length data %s, read %d bytes", byteLen, n)
 	}
-	return evs, nil
+	dataLen := int(binary.BigEndian.Uint64(byteLen[:]))
+
+	data := make([]byte, dataLen)
+	n, err = io.ReadFull(rd, data)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if n != dataLen {
+		return nil, errors.Errorf("truncated data %s n: %d dataLen: %d", data, n, dataLen)
+	}
+
+	readBuf.Reset(data)
+	ev := &model.PolymorphicEvent{}
+	err = msgpack.NewDecoder(readBuf).Decode(ev)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return ev, nil
 }
 
 func (fs *FileSorter) output(ctx context.Context, entry *model.PolymorphicEvent) {
@@ -332,7 +316,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			}
 			ev := &model.PolymorphicEvent{}
 			reader.Reset(data[idx+8 : idx+8+dataLen])
-			err = gob.NewDecoder(reader).Decode(ev)
+			err = msgpack.NewDecoder(reader).Decode(ev)
 
 			if err != nil {
 				return "", errors.Trace(err)
@@ -403,26 +387,21 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		readers = append(readers, rd)
 	}
 
-
 	// merge data from all sorted files, output events with ts less than resolvedTs,
 	// the rest events will be rewritten into the new lastSortedFile
 	h := &sortHeap{}
 	heap.Init(h)
 	readBuf := new(bytes.Reader)
-	itemLastIdexs := make([]int, len(readers))
 	rowCount := 0
 	for i, fd := range readers {
-		evs, err := readPolymorphicEvent(fd, readBuf, defaultBatchSize)
+		ev, err := readPolymorphicEvent(fd, readBuf)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if len(evs) == 0 {
+		if ev == nil {
 			continue
 		}
-		for j, ev := range evs {
-			heap.Push(h, &sortItem{entry: ev, fileIndex: i, itemIndex:j})
-		}
-		itemLastIdexs[i] = len(evs) - 1
+		heap.Push(h, &sortItem{entry: ev, fileIndex: i})
 	}
 	lastSortedFileUpdated := false
 	newLastSortedFile := randomFileName("last-sorted")
@@ -453,20 +432,15 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 				buffer = buffer[:0]
 			}
 		}
-		if item.itemIndex == itemLastIdexs[item.fileIndex] {
-			evs, err := readPolymorphicEvent(readers[item.fileIndex], readBuf, defaultBatchSize)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			if len(evs) == 0{
-				// all events in this file have been consumed
-				continue
-			}
-			for i, ev := range evs {
-				heap.Push(h, &sortItem{entry: ev, fileIndex: item.fileIndex, itemIndex:itemLastIdexs[item.fileIndex] + 1 + i})
-			}
-			itemLastIdexs[item.fileIndex] += len(evs)
+		ev, err := readPolymorphicEvent(readers[item.fileIndex], readBuf)
+		if err != nil {
+			return errors.Trace(err)
 		}
+		if ev == nil {
+			// all events in this file have been consumed
+			continue
+		}
+		heap.Push(h, &sortItem{entry: ev, fileIndex: item.fileIndex})
 	}
 	if len(buffer) > 0 {
 		_, err := flushEventsToFile(ctx, filepath.Join(fs.dir, newLastSortedFile), buffer)

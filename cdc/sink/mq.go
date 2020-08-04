@@ -110,7 +110,7 @@ func newMqSink(
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
-		statistics:          NewStatistics("MQ", opts),
+		statistics: NewStatistics(ctx, "MQ", opts),
 	}
 
 	go func() {
@@ -126,6 +126,7 @@ func newMqSink(
 }
 
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	rowsCount := 0
 	for _, row := range rows {
 		if k.filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
@@ -141,7 +142,9 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 			resolvedTs uint64
 		}{row: row}:
 		}
+		rowsCount++
 	}
+	k.statistics.AddRowsCount(rowsCount)
 	return nil
 }
 
@@ -205,7 +208,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Schema, ddl.Table) {
+	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),
@@ -242,7 +245,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 }
 
 // Initialize registers Avro schemas for all tables
-func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) error {
+func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	if k.protocol == codec.ProtocolAvro && tableInfo != nil {
 		avroEncoder := k.newEncoder().(*codec.AvroEventBatchEncoder)
 		manager := avroEncoder.GetValueSchemaManager()

@@ -145,7 +145,7 @@ func (c *changeFeed) dropSchema(schemaID model.SchemaID, targetTs model.Ts) {
 	delete(c.schemas, schemaID)
 }
 
-func (c *changeFeed) addTable(tblInfo *entry.TableInfo, targetTs model.Ts) {
+func (c *changeFeed) addTable(tblInfo *model.TableInfo, targetTs model.Ts) {
 	if c.filter.ShouldIgnoreTable(tblInfo.TableName.Schema, tblInfo.TableName.Table) {
 		return
 	}
@@ -621,7 +621,12 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		zap.String("query", todoDDLJob.Query),
 		zap.Uint64("ts", todoDDLJob.BinlogInfo.FinishedTS))
 
-	err := c.schema.HandleDDL(todoDDLJob)
+	ddlEvent := new(model.DDLEvent)
+	preTableInfo, err := c.schema.PreTableInfo(todoDDLJob)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = c.schema.HandleDDL(todoDDLJob)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -630,8 +635,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		return errors.Trace(err)
 	}
 
-	ddlEvent := new(model.DDLEvent)
-	ddlEvent.FromJob(todoDDLJob)
+	ddlEvent.FromJob(todoDDLJob, preTableInfo)
 
 	// Execute DDL Job asynchronously
 	c.ddlState = model.ChangeFeedExecDDL

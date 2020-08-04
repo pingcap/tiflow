@@ -28,6 +28,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 
 	"github.com/pingcap/ticdc/cdc/model"
+	`github.com/pingcap/ticdc/cdc/sink/common`
 	canal "github.com/pingcap/ticdc/proto/canal"
 )
 
@@ -165,7 +166,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		}
 	}
 
-	isKey := c.WhereHandle != nil && *c.WhereHandle
+	isKey := c.Flag.IsPrimaryKey()
 	isNull := c.Value == nil
 	value := ""
 	if !isNull {
@@ -221,13 +222,18 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 		}
 		columns = append(columns, c)
 	}
+	var preColumns []*canal.Column
+	for name, column := range e.PreColumns {
+		c, err := b.buildColumn(column, name, !e.Delete)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		preColumns = append(preColumns, c)
+	}
 
 	rowData := &canal.RowData{}
-	if e.Delete {
-		rowData.BeforeColumns = columns
-	} else {
-		rowData.AfterColumns = columns
-	}
+	rowData.BeforeColumns = preColumns
+	rowData.AfterColumns = columns
 	return rowData, nil
 }
 
@@ -262,14 +268,14 @@ func (b *canalEntryBuilder) FromRowEvent(e *model.RowChangedEvent) (*canal.Entry
 // FromDdlEvent builds canal entry from cdc DDLEvent
 func (b *canalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error) {
 	eventType := convertDdlEventType(e)
-	header := b.buildHeader(e.CommitTs, e.Schema, e.Table, eventType, -1)
+	header := b.buildHeader(e.CommitTs, e.TableInfo.Schema, e.TableInfo.Table, eventType, -1)
 	isDdl := isCanalDdl(eventType)
 	rc := &canal.RowChange{
 		EventTypePresent: &canal.RowChange_EventType{EventType: eventType},
 		IsDdlPresent:     &canal.RowChange_IsDdl{IsDdl: isDdl},
 		Sql:              e.Query,
 		RowDatas:         nil,
-		DdlSchemaName:    e.Schema,
+		DdlSchemaName:    e.TableInfo.Schema,
 	}
 	rcBytes, err := proto.Marshal(rc)
 	if err != nil {
@@ -295,9 +301,9 @@ func NewCanalEntryBuilder() *canalEntryBuilder {
 
 // CanalEventBatchEncoder encodes the events into the byte of a batch into.
 type CanalEventBatchEncoder struct {
-	size         int
-	ddls         []*model.DDLEvent
-	txnGenerator *TxnGenerator
+	size     int
+	ddls     []*model.DDLEvent
+	txnCache *common.UnresolvedTxnCache
 }
 
 // AppendResolvedEvent implements the EventBatchEncoder interface
@@ -311,7 +317,7 @@ func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, 
 func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	// FIXME better way?
 	d.size++
-	d.txnGenerator.Append(e)
+	d.txnCache.Append(e)
 	return EncoderNoOperation, nil
 }
 
@@ -330,7 +336,8 @@ func (d *CanalEventBatchEncoder) Size() int {
 
 // Build implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Build(resolvedTs uint64) (keys [][]byte, values [][]byte) {
-	_, resolvedTxns := d.txnGenerator.SplitResolvedTxns(resolvedTs)
+	resolvedTxns := d.txnCache.Resolved(resolvedTs)
+	defer d.txnCache.UpdateCheckpoint(resolvedTs)
 	if len(d.ddls) != 0 && len(resolvedTxns) != 0 {
 		log.Warn("ddl and dml is encoded both.")
 	}
@@ -371,7 +378,7 @@ func (d *CanalEventBatchEncoder) Build(resolvedTs uint64) (keys [][]byte, values
 // NewCanalEventBatchEncoder creates a new CanalEventBatchEncoder.
 func NewCanalEventBatchEncoder() EventBatchEncoder {
 	encoder := &CanalEventBatchEncoder{
-		txnGenerator: NewTxnGenerator(),
+		txnCache: common.NewUnresolvedTxnCache(),
 	}
 	return encoder
 }
