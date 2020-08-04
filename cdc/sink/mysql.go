@@ -68,11 +68,11 @@ type mysqlSink struct {
 	filter *filter.Filter
 	cyclic *cyclic.Cyclic
 
-	txnCache *common.UnresolvedTxnCache
+	txnCache      *common.UnresolvedTxnCache
 	txnCacheMutex sync.Mutex
-	workers  []*mysqlSinkWorker
-	notifier *notify.Notifier
-	errCh    chan error
+	workers       []*mysqlSinkWorker
+	notifier      *notify.Notifier
+	errCh         chan error
 
 	statistics *Statistics
 

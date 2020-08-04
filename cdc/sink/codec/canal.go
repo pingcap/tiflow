@@ -28,7 +28,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 
 	"github.com/pingcap/ticdc/cdc/model"
-	`github.com/pingcap/ticdc/cdc/sink/common`
+	"github.com/pingcap/ticdc/cdc/sink/common"
 	canal "github.com/pingcap/ticdc/proto/canal"
 )
 

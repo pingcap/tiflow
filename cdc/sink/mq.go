@@ -110,7 +110,7 @@ func newMqSink(
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
-		statistics: NewStatistics(ctx, "MQ", opts),
+		statistics:          NewStatistics(ctx, "MQ", opts),
 	}
 
 	go func() {
