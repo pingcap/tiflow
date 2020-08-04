@@ -20,7 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/logBackup"
+	"github.com/pingcap/ticdc/cdc/sink/cdclog"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 )
@@ -72,9 +72,9 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 	case "pulsar", "pulsar+ssl":
 		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	case "local":
-		return logBackup.NewLocalFileSink(), nil
+		return cdclog.NewLocalFileSink(), nil
 	case "s3":
-		return logBackup.NewS3Sink(ctx, sinkURI)
+		return cdclog.NewS3Sink(ctx, sinkURI)
 	default:
 		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}

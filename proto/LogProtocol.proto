@@ -1,0 +1,64 @@
+syntax = "proto3";
+option optimize_for = SPEED;
+
+enum ColumnFlagType {
+    BinaryFlag = 0;
+}
+
+message TableName {
+	string schema = 1;
+	string table = 2;
+	int64 tableID = 3;
+	int64 partition = 4;
+}
+
+message Column {
+	bytes type = 1;
+	bool whereHandle = 2;
+	oneof columnType_present{
+    	ColumnFlagType flag= 3;
+    }
+	bytes value = 4;
+}
+
+message ColumnInfo {
+	string name = 1;
+	bytes type = 2;
+}
+
+message TableInfo {
+	string schema = 1;
+	string table = 2;
+	int64 tableID = 3;
+	repeated ColumnInfo columnInfo = 4;
+}
+
+message RowChangedEvent {
+	uint64 startTs = 1;
+	uint64 commitTs = 2;
+
+	int64 rowID = 3;
+
+	TableName table = 4;
+
+	bool delete = 5;
+
+	uint64 tableInfoVersion = 6;
+
+	string indieMarkCol = 7;
+	map<string, Column> columns = 8;
+	repeated string keys = 9;
+}
+
+message DDLEvent {
+	uint64 startTs = 1;
+	uint64 commitTs = 2;
+	string schema = 3;
+	string table = 4;
+	TableInfo tableInfo = 5;
+	string query = 6;
+
+	bytes type = 7;
+}
+
+

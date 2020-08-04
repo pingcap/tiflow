@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/util"
+	cdclog "github.com/pingcap/ticdc/proto/cdclog"
 	"go.uber.org/zap"
 )
 
@@ -216,6 +217,29 @@ type RowChangedEvent struct {
 	Keys         []string           `json:"keys"`
 }
 
+// ToProtoBuf translate RowChangedEvent to proto event, this is use for cdc log backup.
+// TODO replace origin RowChangedEvent with proto RowChangedEvent
+func (r *RowChangedEvent) ToProtoBuf() *cdclog.RowChangedEvent {
+	rowChangedEventPb := new(cdclog.RowChangedEvent)
+	rowChangedEventPb.StartTs = r.StartTs
+	rowChangedEventPb.CommitTs = r.CommitTs
+	rowChangedEventPb.RowID = r.RowID
+	rowChangedEventPb.Delete = r.Delete
+	rowChangedEventPb.TableInfoVersion = r.TableInfoVersion
+	rowChangedEventPb.IndieMarkCol = r.IndieMarkCol
+	rowChangedEventPb.Keys = r.Keys
+
+	if r.Table != nil {
+		table := new(cdclog.TableName)
+		table.Schema = r.Table.Schema
+		table.Table = r.Table.Table
+		table.TableID = r.Table.TableID
+		table.Partition = r.Table.Partition
+		rowChangedEventPb.Table = table
+	}
+	return rowChangedEventPb
+}
+
 // Column represents a column value in row changed event
 type Column struct {
 	Type byte `json:"t"`
@@ -301,6 +325,35 @@ type DDLEvent struct {
 	PreTableInfo *SimpleTableInfo
 	Query        string
 	Type         model.ActionType
+}
+
+// ToProtoBuf translate DDLEvent to protobuf, this is use for cdc log backup.
+// TODO replace origin DDLEvent with proto DDLEvent
+func (d *DDLEvent) ToProtoBuf() *cdclog.DDLEvent {
+	ddlEventPb := new(cdclog.DDLEvent)
+	ddlEventPb.StartTs = d.StartTs
+	ddlEventPb.CommitTs = d.CommitTs
+	ddlEventPb.Schema = d.Schema
+	ddlEventPb.Table = d.Table
+
+	if d.TableInfo != nil {
+		tableInfo := new(cdclog.TableInfo)
+		tableInfo.Table = d.TableInfo.Table
+		tableInfo.Schema = d.TableInfo.Schema
+		if d.TableInfo.ColumnInfo != nil {
+			columns := make([]*cdclog.ColumnInfo, 0, len(d.TableInfo.ColumnInfo))
+			for _, c := range d.TableInfo.ColumnInfo {
+				columns = append(columns, &cdclog.ColumnInfo{
+					Name: c.Name,
+					Type: []byte{c.Type},
+				})
+			}
+			tableInfo.ColumnInfo = columns
+		}
+		ddlEventPb.TableInfo = tableInfo
+	}
+	return ddlEventPb
+
 }
 
 // FromJob fills the values of DDLEvent from DDL job

@@ -1,4 +1,4 @@
-package logBackup
+package cdclog
 
 import (
 	"encoding/json"
@@ -8,8 +8,12 @@ import (
 )
 
 const (
-	tablePrefix = "t_"
-	logMetaFile = "log.meta"
+	tablePrefix   = "t_"
+	logMetaFile   = "log.meta"
+	DDLEventsDir  = "ddls"
+	DDLEventsFile = "ddl"
+
+	maxUint64 = ^uint64(0)
 )
 
 type LogMeta struct {
@@ -25,8 +29,8 @@ func makeTableDirectoryName(tableID int64) string {
 	return fmt.Sprintf("%s%d", tablePrefix, tableID)
 }
 
-func makeTableFileName(tableID int64, commmitTS uint64) string {
-	return fmt.Sprintf("%s%d.%d", tablePrefix, tableID, commmitTS)
+func makeTableFileName(tableID int64, commitTS uint64) string {
+	return fmt.Sprintf("%s%d/cdclog.%d", tablePrefix, tableID, commitTS)
 }
 
 func makeLogMetaContent(tableInfos []*model.TableInfo) *LogMeta {
@@ -39,4 +43,8 @@ func makeLogMetaContent(tableInfos []*model.TableInfo) *LogMeta {
 	}
 	meta.names = names
 	return meta
+}
+
+func makeDDLFileName(commitTS uint64) string {
+	return fmt.Sprintf("%s/%s.%d", DDLEventsDir, DDLEventsFile, maxUint64-commitTS)
 }

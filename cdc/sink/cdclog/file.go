@@ -1,4 +1,4 @@
-package logBackup
+package cdclog
 
 import (
 	"context"
