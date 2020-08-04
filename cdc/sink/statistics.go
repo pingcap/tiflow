@@ -51,7 +51,7 @@ func NewStatistics(ctx context.Context, name string, opts map[string]string) *St
 				return
 			case <-ticker.C:
 				metricTotalRows.Set(float64(statistics.totalRows))
-				metricTotalFlushedRows.Set(float64(statistics.totalFlushedRows))
+				metricTotalFlushedRows.Set(float64(atomic.LoadUint64(&statistics.totalFlushedRows)))
 			}
 		}
 	}()
