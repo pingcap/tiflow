@@ -29,7 +29,7 @@ public class TicdcEventFilter {
 
         Long resolveMaxTS = resolveMaxTSMap.get(partition);
         if (rowChangeMaxTS != null) {
-            if (rowChangeTS < resolveMaxTS) {
+            if (rowChangeTS <= resolveMaxTS) {
                 return false;
             }
         }
