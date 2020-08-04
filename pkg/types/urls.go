@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // URLs defines a slice of URLs as a type
@@ -29,22 +30,25 @@ type URLs []url.URL
 func NewURLs(strs []string) (URLs, error) {
 	all := make([]url.URL, len(strs))
 	if len(all) == 0 {
-		return nil, errors.New("no valid URLs given")
+		return nil, cerror.WrapError(cerror.ErrURLFormatInvalid, errors.New("no valid URLs given"))
 	}
 	for i, in := range strs {
 		in = strings.TrimSpace(in)
 		u, err := url.Parse(in)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrURLFormatInvalid, err)
 		}
 		if u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "unix" && u.Scheme != "unixs" {
-			return nil, errors.Errorf("URL scheme must be http, https, unix, or unixs: %s", in)
+			return nil, cerror.WrapError(cerror.ErrURLFormatInvalid,
+				errors.Errorf("URL scheme must be http, https, unix, or unixs: %s", in))
 		}
 		if _, _, err := net.SplitHostPort(u.Host); err != nil {
-			return nil, errors.Errorf(`URL address does not have the form "host:port": %s`, in)
+			return nil, cerror.WrapError(cerror.ErrURLFormatInvalid,
+				errors.Errorf(`URL address does not have the form "host:port": %s`, in))
 		}
 		if u.Path != "" {
-			return nil, errors.Errorf("URL must not contain a path: %s", in)
+			return nil, cerror.WrapError(cerror.ErrURLFormatInvalid,
+				errors.Errorf("URL must not contain a path: %s", in))
 		}
 		all[i] = *u
 	}

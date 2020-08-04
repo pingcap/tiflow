@@ -23,10 +23,10 @@ import (
 	"strings"
 
 	"github.com/coreos/go-semver/semver"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
@@ -39,9 +39,6 @@ var minPDVersion *semver.Version = semver.New("4.0.0-rc.1")
 var MinTiKVVersion *semver.Version = semver.New("4.0.0-rc.1")
 
 var versionHash = regexp.MustCompile("-[0-9]+-g[0-9a-f]{7,}")
-
-// ErrVersionIncompatible is an error for running CDC on an incompatible Cluster.
-var ErrVersionIncompatible = errors.NewNoStackError("version is incompatible")
 
 func removeVAndHash(v string) string {
 	if v == "" {
@@ -65,7 +62,7 @@ func CheckClusterVersion(
 	}
 	httpCli, err := httputil.NewClient(credential)
 	if err != nil {
-		return errors.Annotate(err, "fail to validate TLS settings")
+		return err
 	}
 	// See more: https://github.com/pingcap/pd/blob/v4.0.0-rc.1/server/api/version.go
 	pdVer := struct {
@@ -74,35 +71,37 @@ func CheckClusterVersion(
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodGet, fmt.Sprintf("%s/pd/api/v1/version", pdHTTP), nil)
 	if err != nil {
-		return errors.Annotate(err, "fail to request PD")
+		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
 	resp, err := httpCli.Do(req)
 	if err != nil {
-		return errors.Annotate(err, "fail to request PD")
+		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
 	if resp.StatusCode < 200 && resp.StatusCode >= 300 {
-		return errors.BadRequestf("fail to requet PD %s", resp.Status)
+		arg := fmt.Sprintf("response status: %s", resp.Status)
+		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(arg)
 	}
 	content, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Annotate(err, "fail to request PD")
+		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
 	err = json.Unmarshal(content, &pdVer)
 	if err != nil {
-		return errors.Annotate(err, "fail to request PD")
+		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		return errors.Annotate(err, "fail to request PD")
+		return cerror.WrapError(cerror.ErrCheckClusterVersionFromPD, err)
 	}
 	ver, err := semver.NewVersion(removeVAndHash(pdVer.Version))
 	if err != nil {
-		return err
+		return cerror.WrapError(cerror.ErrNewSemVersion, err)
 	}
 	ord := ver.Compare(*minPDVersion)
 	if ord < 0 {
-		return errors.Annotatef(ErrVersionIncompatible, "PD %s is not supported, require minimal version %s",
+		arg := fmt.Sprintf("PD %s is not supported, require minimal version %s",
 			removeVAndHash(pdVer.Version), minPDVersion)
+		return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 	}
 	return nil
 }
@@ -119,18 +118,19 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 		stores[0], err = client.GetStore(ctx, storeID)
 	}
 	if err != nil {
-		return err
+		return cerror.WrapError(cerror.ErrGetAllStoresFailed, err)
 	}
 
 	for _, s := range stores {
 		ver, err := semver.NewVersion(removeVAndHash(s.Version))
 		if err != nil {
-			return err
+			return cerror.WrapError(cerror.ErrNewSemVersion, err)
 		}
 		ord := ver.Compare(*MinTiKVVersion)
 		if ord < 0 {
-			return errors.Annotatef(ErrVersionIncompatible, "TiKV %s is not supported, require minimal version %s",
+			arg := fmt.Sprintf("TiKV %s is not supported, require minimal version %s",
 				removeVAndHash(s.Version), MinTiKVVersion)
+			return cerror.ErrVersionIncompatible.GenWithStackByArgs(arg)
 		}
 	}
 	return nil
