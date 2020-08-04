@@ -137,7 +137,8 @@ func (t *tableInfo) loadResolvedTs() uint64 {
 // safeStop will stop the table change feed safety
 func (t *tableInfo) safeStop() (stopped bool, checkpointTs model.Ts) {
 	t.sorter.SafeStop()
-	if t.sorter.GetStatus() != model.SorterStatusStopped {
+	status := t.sorter.GetStatus()
+	if status != model.SorterStatusStopped && status != model.SorterStatusFinished {
 		return false, 0
 	}
 	return true, t.sorter.GetMaxResolvedTs()
