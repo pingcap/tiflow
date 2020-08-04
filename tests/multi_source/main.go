@@ -62,8 +62,9 @@ func main() {
 			log.S().Errorf("Failed to close source database: %s\n", err)
 		}
 	}()
+	util.MustExec(sourceDB0, "create database mark;")
 	runDDLTest([]*sql.DB{sourceDB0, sourceDB1})
-	util.MustExec(sourceDB0, "create table test.finish_mark(a int primary key);")
+	util.MustExec(sourceDB0, "create table mark.finish_mark(a int primary key);")
 }
 
 // for every DDL, run the DDL continuously, and one goroutine for one TiDB instance to do some DML op
@@ -76,7 +77,7 @@ func runDDLTest(srcs []*sql.DB) {
 
 	for i, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL, modifyColumnDDL, addDropIndexDDL} {
 		testName := getFunctionName(ddlFunc)
-		log.S().Info("running ddl test: ", i, testName)
+		log.S().Info("running ddl test: ", i, " ", testName)
 
 		var wg sync.WaitGroup
 		ctx, cancel := context.WithTimeout(context.Background(), runTime)
@@ -101,7 +102,7 @@ func runDDLTest(srcs []*sql.DB) {
 		time.Sleep(5 * time.Second)
 		cancel()
 
-		util.MustExec(srcs[0], fmt.Sprintf("create table test.finish_mark_%d(a int primary key);", i))
+		util.MustExec(srcs[0], fmt.Sprintf("create table mark.finish_mark_%d(a int primary key);", i))
 	}
 }
 
