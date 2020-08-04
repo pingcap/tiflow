@@ -29,15 +29,15 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
-public class TicdcEventDataReaderTest {
+public class TicdcEventDecoderTest {
     @Test
     public void test() throws IOException {
         List<KafkaMessage> kafkaMessagesFromTestData = getKafkaMessagesFromTestData();
         TicdcEventFilter filter = new TicdcEventFilter();
         for (KafkaMessage kafkaMessage : kafkaMessagesFromTestData) {
-            TicdcEventDataReader ticdcEventDataReader = new TicdcEventDataReader(kafkaMessage);
-            while (ticdcEventDataReader.hasNext()) {
-                TicdcEventData data = ticdcEventDataReader.next();
+            TicdcEventDecoder ticdcEventDecoder = new TicdcEventDecoder(kafkaMessage);
+            while (ticdcEventDecoder.hasNext()) {
+                TicdcEventData data = ticdcEventDecoder.next();
                 if (data.getTicdcEventValue() instanceof TicdcEventRowChange) {
                     boolean ok = filter.check(data.getTicdcEventKey().getTbl(), data.getTicdcEventValue().getKafkaPartition(), data.getTicdcEventKey().getTs());
                     if (ok) {

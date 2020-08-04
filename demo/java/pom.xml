@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.pingcap.ticdc.cdc</groupId>
-    <artifactId>ticdc-java-sdk</artifactId>
+    <artifactId>ticdc-decoder</artifactId>
     <version>4.0.6-SNAPSHOT</version>
 
     <properties>

@@ -30,14 +30,14 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * Ticdc open protocol message reader, parse one kafka message into multiple TicdcEventData instances.
+ * Ticdc open protocol message decoder, parse one kafka message into multiple TicdcEventData instances.
  * <pre>
  * Example:
  * TicdcEventFilter filter = new TicdcEventFilter();
  * for (KafkaMessage kafkaMessage : kafkaMessagesFromTestData) {
- *     TicdcEventDataReader ticdcEventDataReader = new TicdcEventDataReader(kafkaMessage);
- *     while (ticdcEventDataReader.hasNext()) {
- *         TicdcEventData data = ticdcEventDataReader.next();
+ *     TicdcEventDecoder ticdcEventDecoder = new TicdcEventDecoder(kafkaMessage);
+ *     while (ticdcEventDecoder.hasNext()) {
+ *         TicdcEventData data = ticdcEventDecoder.next();
  *         if (data.getTicdcEventValue() instanceof TicdcEventRowChange) {
  *             boolean ok = filter.check(data.getTicdcEventKey().getTbl(), data.getTicdcEventValue().getKafkaPartition(), data.getTicdcEventKey().getTs());
  *             if (ok) {
@@ -55,7 +55,7 @@ import java.util.List;
  * }
  * </pre>
  */
-public class TicdcEventDataReader implements Iterator<TicdcEventData> {
+public class TicdcEventDecoder implements Iterator<TicdcEventData> {
     private DataInputStream keyStream;
     private DataInputStream valueStream;
     private long version;
@@ -67,11 +67,11 @@ public class TicdcEventDataReader implements Iterator<TicdcEventData> {
     private KafkaMessage kafkaMessage;
 
     // visible for test
-    TicdcEventDataReader(byte[] keyBytes, byte[] valueBytes) {
+    TicdcEventDecoder(byte[] keyBytes, byte[] valueBytes) {
         this(new KafkaMessage(keyBytes, valueBytes));
     }
 
-    public TicdcEventDataReader(KafkaMessage kafkaMessage) {
+    public TicdcEventDecoder(KafkaMessage kafkaMessage) {
         this.kafkaMessage = kafkaMessage;
         keyStream = new DataInputStream(new ByteArrayInputStream(kafkaMessage.getKey()));
         readKeyVersion();
