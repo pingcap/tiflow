@@ -14,6 +14,7 @@
 package sink
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
@@ -23,9 +24,10 @@ import (
 )
 
 const printStatusInterval = 30 * time.Second
+const flushMetricsInterval = 5 * time.Second
 
 // NewStatistics creates a statistics
-func NewStatistics(name string, opts map[string]string) *Statistics {
+func NewStatistics(ctx context.Context, name string, opts map[string]string) *Statistics {
 	statistics := &Statistics{name: name, lastPrintStatusTime: time.Now()}
 	if cid, ok := opts[OptChangefeedID]; ok {
 		statistics.changefeedID = cid
@@ -36,22 +38,46 @@ func NewStatistics(name string, opts map[string]string) *Statistics {
 	statistics.metricExecTxnHis = execTxnHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 	statistics.metricExecBatchHis = execBatchHistogram.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
 	statistics.metricExecErrCnt = executionErrorCounter.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
+
+	// Flush metrics in background for better accuracy and efficiency.
+	ticker := time.NewTicker(flushMetricsInterval)
+	metricTotalRows := totalRowsCountGauge.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
+	metricTotalFlushedRows := totalFlushedRowsCountGauge.WithLabelValues(statistics.captureAddr, statistics.changefeedID)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				metricTotalRows.Set(float64(statistics.totalRows))
+				metricTotalFlushedRows.Set(float64(statistics.totalFlushedRows))
+			}
+		}
+	}()
+
 	return statistics
 }
 
 // Statistics maintains some status and metrics of the Sink
 type Statistics struct {
-	name         string
-	captureAddr  string
-	changefeedID string
-	accumulated  uint64
+	name             string
+	captureAddr      string
+	changefeedID     string
+	totalRows        uint64
+	totalFlushedRows uint64
 
-	lastPrintStatusAccumulated uint64
-	lastPrintStatusTime        time.Time
+	lastPrintStatusTotalRows uint64
+	lastPrintStatusTime      time.Time
 
 	metricExecTxnHis   prometheus.Observer
 	metricExecBatchHis prometheus.Observer
 	metricExecErrCnt   prometheus.Counter
+}
+
+// AddRowsCount records total number of rows needs to flush
+func (b *Statistics) AddRowsCount(count int) {
+	atomic.AddUint64(&b.totalRows, uint64(count))
 }
 
 // RecordBatchExecution records the cost time of batch execution and batch size
@@ -65,7 +91,7 @@ func (b *Statistics) RecordBatchExecution(executer func() (int, error)) error {
 	castTime := time.Since(startTime).Seconds()
 	b.metricExecTxnHis.Observe(castTime)
 	b.metricExecBatchHis.Observe(float64(batchSize))
-	atomic.AddUint64(&b.accumulated, uint64(batchSize))
+	atomic.AddUint64(&b.totalFlushedRows, uint64(batchSize))
 	return nil
 }
 
@@ -75,15 +101,15 @@ func (b *Statistics) PrintStatus() {
 	if since < printStatusInterval {
 		return
 	}
-	accumulated := atomic.LoadUint64(&b.accumulated)
-	count := accumulated - b.lastPrintStatusAccumulated
+	totalRows := atomic.LoadUint64(&b.totalRows)
+	count := totalRows - b.lastPrintStatusTotalRows
 	seconds := since.Seconds()
 	var qps uint64
 	if seconds > 0 {
 		qps = count / uint64(seconds)
 	}
 	b.lastPrintStatusTime = time.Now()
-	b.lastPrintStatusAccumulated = accumulated
+	b.lastPrintStatusTotalRows = totalRows
 	log.Info("sink replication status",
 		zap.String("name", b.name),
 		zap.String("changefeed", b.changefeedID),
