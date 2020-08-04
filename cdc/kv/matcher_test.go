@@ -50,5 +50,5 @@ func (s *MatcherSuite) TestMatcher(c *check.C) {
 	}
 	value2, ok := matcher.matchRow(commitRow2)
 	c.Assert(ok, check.IsTrue)
-	c.Assert(value2, check.BytesEquals, []byte("v2"))
+	c.Assert(value2.value, check.BytesEquals, []byte("v2"))
 }

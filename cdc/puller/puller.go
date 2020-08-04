@@ -48,15 +48,16 @@ type Puller interface {
 }
 
 type pullerImpl struct {
-	pdCli        pd.Client
-	credential   *security.Credential
-	kvStorage    tikv.Storage
-	checkpointTs uint64
-	spans        []regionspan.ComparableSpan
-	buffer       *memBuffer
-	outputCh     chan *model.RawKVEntry
-	tsTracker    frontier.Frontier
-	resolvedTs   uint64
+	pdCli          pd.Client
+	credential     *security.Credential
+	kvStorage      tikv.Storage
+	checkpointTs   uint64
+	spans          []regionspan.ComparableSpan
+	buffer         *memBuffer
+	outputCh       chan *model.RawKVEntry
+	tsTracker      frontier.Frontier
+	resolvedTs     uint64
+	enableOldValue bool
 }
 
 // NewPuller create a new Puller fetch event start from checkpointTs
@@ -68,6 +69,7 @@ func NewPuller(
 	checkpointTs uint64,
 	spans []regionspan.Span,
 	limitter *BlurResourceLimitter,
+	enableOldValue bool,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
@@ -78,15 +80,16 @@ func NewPuller(
 		comparableSpans[i] = regionspan.ToComparableSpan(spans[i])
 	}
 	p := &pullerImpl{
-		pdCli:        pdCli,
-		credential:   credential,
-		kvStorage:    tikvStorage,
-		checkpointTs: checkpointTs,
-		spans:        comparableSpans,
-		buffer:       makeMemBuffer(limitter),
-		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:    frontier.NewFrontier(checkpointTs, comparableSpans...),
-		resolvedTs:   checkpointTs,
+		pdCli:          pdCli,
+		credential:     credential,
+		kvStorage:      tikvStorage,
+		checkpointTs:   checkpointTs,
+		spans:          comparableSpans,
+		buffer:         makeMemBuffer(limitter),
+		outputCh:       make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
+		tsTracker:      frontier.NewFrontier(checkpointTs, comparableSpans...),
+		resolvedTs:     checkpointTs,
+		enableOldValue: enableOldValue,
 	}
 	return p
 }
@@ -113,7 +116,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		span := span
 
 		g.Go(func() error {
-			return cli.EventFeed(ctx, span, checkpointTs, eventCh)
+			return cli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, eventCh)
 		})
 	}
 
@@ -156,7 +159,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// we can make tikv only return the events about the keys in the specified range.
 					comparableKey := regionspan.ToComparableKey(val.Key)
 					if !regionspan.KeyInSpans(comparableKey, p.spans) {
-						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Reflect("span", p.spans))
+						// log.Warn("key not in spans range", zap.Binary("key", val.Key), zap.Stringer("span", p.spans))
 						continue
 					}
 

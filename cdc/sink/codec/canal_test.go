@@ -53,28 +53,32 @@ var _ = check.Suite(&canalBatchSuite{
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
 		CommitTs: 1,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table a",
-		Type:     1,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table a",
+		Type:  1,
 	}}, {{
 		CommitTs: 1,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table a",
-		Type:     1,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table a",
+		Type:  1,
 	}, {
 		CommitTs: 2,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table b",
-		Type:     2,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table b",
+		Type:  2,
 	}, {
 		CommitTs: 3,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table c",
-		Type:     3,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table c",
+		Type:  3,
 	}}, {}},
 })
 
@@ -82,7 +86,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 	for _, cs := range s.rowCases {
 		encoder := NewCanalEventBatchEncoder()
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(row)
+			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
@@ -102,7 +106,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 	for _, cs := range s.ddlCases {
 		encoder := NewCanalEventBatchEncoder()
 		for _, ddl := range cs {
-			err := encoder.AppendDDLEvent(ddl)
+			_, err := encoder.AppendDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
@@ -148,16 +152,17 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			Table:  "person",
 		},
 		Delete: true,
-		Columns: map[string]*model.Column{
+		PreColumns: map[string]*model.Column{
 			"id": {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1},
 		},
 	}
 	testCaseDdl := &model.DDLEvent{
 		CommitTs: 417318403368288260,
-		Schema:   "cdc",
-		Table:    "person",
-		Query:    "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
-		Type:     mm.ActionCreateTable,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "cdc", Table: "person",
+		},
+		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+		Type:  mm.ActionCreateTable,
 	}
 	builder := NewCanalEntryBuilder()
 
@@ -236,7 +241,7 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 	rowDatas = rc.GetRowDatas()
 	c.Assert(len(rowDatas), check.Equals, 1)
 	columns = rowDatas[0].BeforeColumns
-	c.Assert(len(columns), check.Equals, len(testCaseDelete.Columns))
+	c.Assert(len(columns), check.Equals, len(testCaseDelete.PreColumns))
 	for _, col := range columns {
 		c.Assert(col.GetUpdated(), check.IsFalse)
 		switch col.GetName() {
@@ -254,8 +259,8 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
 	header = entry.GetHeader()
-	c.Assert(header.GetSchemaName(), check.Equals, testCaseDdl.Schema)
-	c.Assert(header.GetTableName(), check.Equals, testCaseDdl.Table)
+	c.Assert(header.GetSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
+	c.Assert(header.GetTableName(), check.Equals, testCaseDdl.TableInfo.Table)
 	c.Assert(header.GetEventType(), check.Equals, canal.EventType_CREATE)
 	store = entry.GetStoreValue()
 	c.Assert(store, check.NotNil)
@@ -263,5 +268,5 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 	err = proto.Unmarshal(store, rc)
 	c.Assert(err, check.IsNil)
 	c.Assert(rc.GetIsDdl(), check.IsTrue)
-	c.Assert(rc.GetDdlSchemaName(), check.Equals, testCaseDdl.Schema)
+	c.Assert(rc.GetDdlSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
 }

@@ -21,9 +21,11 @@ var _ = check.Suite(&columnFlagTypeSuite{})
 
 func (s *configSuite) TestSetFlag(c *check.C) {
 	var flag ColumnFlagType
-	c.Assert(flag.IsBinary(), check.IsFalse)
 	flag.SetIsBinary()
+	flag.SetIsGeneratedColumn()
 	c.Assert(flag.IsBinary(), check.IsTrue)
+	c.Assert(flag.IsHandleKey(), check.IsFalse)
+	c.Assert(flag.IsGeneratedColumn(), check.IsTrue)
 	flag.UnsetIsBinary()
 	c.Assert(flag.IsBinary(), check.IsFalse)
 	flag.SetIsMultipleKey()

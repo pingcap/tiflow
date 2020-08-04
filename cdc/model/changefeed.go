@@ -40,10 +40,11 @@ type FeedState string
 
 // All FeedStates
 const (
-	StateNormal  FeedState = "normal"
-	StateFailed  FeedState = "failed"
-	StateStopped FeedState = "stopped"
-	StateRemoved FeedState = "removed"
+	StateNormal   FeedState = "normal"
+	StateFailed   FeedState = "failed"
+	StateStopped  FeedState = "stopped"
+	StateRemoved  FeedState = "removed"
+	StateFinished FeedState = "finished"
 )
 
 const (

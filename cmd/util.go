@@ -205,6 +205,13 @@ func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) er
 	return nil
 }
 
+func verifyTargetTs(ctx context.Context, startTs, targetTs uint64) error {
+	if targetTs > 0 && targetTs <= startTs {
+		return errors.Errorf("target-ts %d must be larger than start-ts: %d", targetTs, startTs)
+	}
+	return nil
+}
+
 func verifyTables(ctx context.Context, credential *security.Credential, cfg *config.ReplicaConfig, startTs uint64) (ineligibleTables, eligibleTables []model.TableName, err error) {
 	kvStore, err := kv.CreateTiStore(cliPdAddr, credential)
 	if err != nil {

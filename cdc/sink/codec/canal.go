@@ -23,11 +23,10 @@ import (
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	parser_types "github.com/pingcap/parser/types"
-	"golang.org/x/text/encoding"
-	"golang.org/x/text/encoding/charmap"
-
 	"github.com/pingcap/ticdc/cdc/model"
 	canal "github.com/pingcap/ticdc/proto/canal"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
 )
 
 // compatible with canal-1.1.4
@@ -220,13 +219,18 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 		}
 		columns = append(columns, c)
 	}
+	var preColumns []*canal.Column
+	for name, column := range e.PreColumns {
+		c, err := b.buildColumn(column, name, !e.Delete)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		preColumns = append(preColumns, c)
+	}
 
 	rowData := &canal.RowData{}
-	if e.Delete {
-		rowData.BeforeColumns = columns
-	} else {
-		rowData.AfterColumns = columns
-	}
+	rowData.BeforeColumns = preColumns
+	rowData.AfterColumns = columns
 	return rowData, nil
 }
 
@@ -261,14 +265,14 @@ func (b *canalEntryBuilder) FromRowEvent(e *model.RowChangedEvent) (*canal.Entry
 // FromDdlEvent builds canal entry from cdc DDLEvent
 func (b *canalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error) {
 	eventType := convertDdlEventType(e)
-	header := b.buildHeader(e.CommitTs, e.Schema, e.Table, eventType, -1)
+	header := b.buildHeader(e.CommitTs, e.TableInfo.Schema, e.TableInfo.Table, eventType, -1)
 	isDdl := isCanalDdl(eventType)
 	rc := &canal.RowChange{
 		EventTypePresent: &canal.RowChange_EventType{EventType: eventType},
 		IsDdlPresent:     &canal.RowChange_IsDdl{IsDdl: isDdl},
 		Sql:              e.Query,
 		RowDatas:         nil,
-		DdlSchemaName:    e.Schema,
+		DdlSchemaName:    e.TableInfo.Schema,
 	}
 	rcBytes, err := proto.Marshal(rc)
 	if err != nil {
@@ -300,38 +304,38 @@ type CanalEventBatchEncoder struct {
 }
 
 // AppendResolvedEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) error {
+func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore the event is ignored.
-	return nil
+	return EncoderNoOperation, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) error {
+func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	entry, err := d.entryBuilder.FromRowEvent(e)
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
-	return nil
+	return EncoderNoOperation, nil
 }
 
 // AppendDDLEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) error {
+func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
 	entry, err := d.entryBuilder.FromDdlEvent(e)
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return errors.Trace(err)
+		return EncoderNoOperation, errors.Trace(err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
-	return nil
+	return EncoderNeedSyncWrite, nil
 }
 
 // Build implements the EventBatchEncoder interface

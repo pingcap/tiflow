@@ -53,28 +53,32 @@ var _ = check.Suite(&batchSuite{
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
 		CommitTs: 1,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table a",
-		Type:     1,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table a",
+		Type:  1,
 	}}, {{
 		CommitTs: 1,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table a",
-		Type:     1,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table a",
+		Type:  1,
 	}, {
 		CommitTs: 2,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table b",
-		Type:     2,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table b",
+		Type:  2,
 	}, {
 		CommitTs: 3,
-		Schema:   "a",
-		Table:    "b",
-		Query:    "create table c",
-		Type:     3,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table c",
+		Type:  3,
 	}}, {}},
 	resolvedTsCases: [][]uint64{{1}, {1, 2, 3}, {}},
 })
@@ -83,7 +87,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(row)
+			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
@@ -108,7 +112,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	for _, cs := range s.ddlCases {
 		encoder := newEncoder()
 		for _, ddl := range cs {
-			err := encoder.AppendDDLEvent(ddl)
+			_, err := encoder.AppendDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
@@ -133,7 +137,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	for _, cs := range s.resolvedTsCases {
 		encoder := newEncoder()
 		for _, ts := range cs {
-			err := encoder.AppendResolvedEvent(ts)
+			_, err := encoder.AppendResolvedEvent(ts)
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
