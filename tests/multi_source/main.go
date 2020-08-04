@@ -75,7 +75,8 @@ func runDDLTest(srcs []*sql.DB) {
 		log.S().Infof("runDDLTest take %v", time.Since(start))
 	}()
 
-	for i, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL, modifyColumnDDL, addDropIndexDDL} {
+	for i, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL,
+		modifyColumnDDL, addDropIndexDDL} {
 		testName := getFunctionName(ddlFunc)
 		log.S().Info("running ddl test: ", i, " ", testName)
 
@@ -146,7 +147,7 @@ func createDropSchemaDDL(ctx context.Context, db *sql.DB) {
 			return
 		default:
 		}
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		util.MustExecWithConn(ctx, conn, "drop database test")
 	}
 }
@@ -163,7 +164,7 @@ func truncateDDL(ctx context.Context, db *sql.DB) {
 		default:
 		}
 		util.MustExec(db, sql)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -235,7 +236,7 @@ func addDropColumnDDL(ctx context.Context, db *sql.DB) {
 		}
 		sql := fmt.Sprintf("alter table test.`%s` drop column v1", testName)
 		util.MustExec(db, sql)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		var notNULL string
 		var defaultValue interface{}
@@ -253,7 +254,7 @@ func addDropColumnDDL(ctx context.Context, db *sql.DB) {
 		}
 		sql = fmt.Sprintf("alter table test.`%s` add column v1 int default ? %s", testName, notNULL)
 		util.MustExec(db, sql, defaultValue)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -276,7 +277,7 @@ func modifyColumnDDL(ctx context.Context, db *sql.DB) {
 			defaultValue = value
 		}
 		util.MustExec(db, sql, defaultValue)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -292,19 +293,19 @@ func addDropIndexDDL(ctx context.Context, db *sql.DB) {
 		}
 		sql := fmt.Sprintf("drop index id1 on test.`%s`;", testName)
 		util.MustExec(db, sql)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		sql = fmt.Sprintf("create unique index `id1` on test.`%s` (id1);", testName)
 		util.MustExec(db, sql)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		sql = fmt.Sprintf("drop index id2 on test.`%s`;", testName)
 		util.MustExec(db, sql)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		sql = fmt.Sprintf("create unique index `id2` on test.`%s` (id2);", testName)
 		util.MustExec(db, sql)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
