@@ -473,6 +473,9 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 }
 
 func (p *processor) updateInfo(ctx context.Context) error {
+	if p.isStopped() {
+		return errors.Trace(model.ErrAdminStopProcessor)
+	}
 	updatePosition := func() error {
 		//p.position.Count = p.sink.Count()
 		err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
@@ -480,7 +483,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			log.Error("failed to update position", zap.Error(err))
 			return errors.Trace(err)
 		}
-		log.Debug("update task position", zap.Stringer("position", p.position), zap.Stack("stack"))
+		log.Debug("update task position", zap.Stringer("position", p.position))
 		return nil
 	}
 	newModRevision := p.statusModRevision
