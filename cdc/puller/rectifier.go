@@ -79,6 +79,9 @@ func (r *Rectifier) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case event := <-r.EventSorter.Output():
+				if event == nil {
+					return nil
+				}
 				if event.CRTs > r.targetTs {
 					output(model.NewResolvedPolymorphicEvent(r.targetTs))
 					atomic.StoreUint64(&r.maxSentResolvedTs, r.targetTs)
