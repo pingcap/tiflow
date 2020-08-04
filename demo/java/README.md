@@ -1,4 +1,4 @@
-### Ticdc java parser demo
+# How to use ticdc-java-sdk
 
 The following code shows how to parse ticdc data([ticdc open protocol](https://docs.pingcap.com/tidb/stable/ticdc-open-protocol)) which consumed from kafka.
 
@@ -28,3 +28,26 @@ The following code shows how to parse ticdc data([ticdc open protocol](https://d
 
 ```
 [See com.pingcap.ticdc.cdc.TicdcEventDataReaderTest.](src/test/java/com/pingcap/ticdc/cdc/TicdcEventDataReaderTest.java).
+
+# How to install
+Prerequisites for building:
+
+* Git
+* Maven (we recommend version 3.2.5)
+* Java 8
+
+```
+git clone git@github.com:pingcap/ticdc.git
+cd ticdc/demo/java
+mvn install
+```
+
+Now ticdc-java-sdk is installed. To add a dependency :
+
+```xml
+<dependency>
+    <groupId>org.pingcap.ticdc.cdc</groupId>
+    <artifactId>ticdc-java-sdk</artifactId>
+    <version>4.0.6-SNAPSHOT</version>
+</dependency>
+``` 
