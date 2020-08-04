@@ -15,8 +15,13 @@ package kv
 
 import (
 	"fmt"
+	"go.uber.org/zap"
+	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/flags"
 	"github.com/pingcap/ticdc/pkg/security"
 	tidbconfig "github.com/pingcap/tidb/config"
@@ -25,6 +30,73 @@ import (
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
 )
+
+const (
+	storageVersionCacheUpdateInterval = time.Second * 2
+)
+
+// StorageWithCurVersionCache adds GetCachedCurrentVersion() to tikv.Storage
+type StorageWithCurVersionCache struct {
+	tikv.Storage
+	cacheKey string
+}
+
+type curVersionCacheEntry struct {
+	ts          model.Ts
+	lastUpdated time.Time
+	mu          sync.Mutex
+}
+
+var (
+	curVersionCache   = make(map[string]*curVersionCacheEntry, 1)
+	curVersionCacheMu sync.Mutex
+)
+
+func newStorageWithCurVersionCache(storage tidbkv.Storage, cacheKey string) tidbkv.Storage {
+	curVersionCacheMu.Lock()
+	defer curVersionCacheMu.Unlock()
+
+	if _, exists := curVersionCache[cacheKey]; !exists {
+		curVersionCache[cacheKey] = &curVersionCacheEntry{
+			ts:          0,
+			lastUpdated: time.Unix(0, 0),
+			mu:          sync.Mutex{},
+		}
+	}
+
+	return &StorageWithCurVersionCache{
+		Storage:  storage.(tikv.Storage),
+		cacheKey: cacheKey,
+	}
+}
+
+// GetCachedCurrentVersion gets the cached version of currentVersion, and update the cache if necessary
+func (s *StorageWithCurVersionCache) GetCachedCurrentVersion() (version tidbkv.Version, err error) {
+	curVersionCacheMu.Lock()
+	entry, exists := curVersionCache[s.cacheKey]
+	curVersionCacheMu.Unlock()
+
+	if !exists {
+		err = errors.New("GetCachedCurrentVersion: cache entry does not exist")
+		log.Warn("GetCachedCurrentVersion: cache entry does not exist", zap.String("cacheKey", s.cacheKey))
+		return
+	}
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+
+	if time.Now().After(entry.lastUpdated.Add(storageVersionCacheUpdateInterval)) {
+		var ver tidbkv.Version
+		ver, err = s.CurrentVersion()
+		if err != nil {
+			return
+		}
+		entry.ts = ver.Ver
+		entry.lastUpdated = time.Now()
+	}
+
+	version.Ver = entry.ts
+	return
+}
 
 // GetSnapshotMeta returns tidb meta information
 func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
@@ -59,5 +131,6 @@ func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage
 		return nil, errors.Trace(err)
 	}
 
+	tiStore = newStorageWithCurVersionCache(tiStore, tiPath)
 	return tiStore, nil
 }

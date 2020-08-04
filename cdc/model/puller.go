@@ -11,14 +11,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dispatcher
+package model
 
-import "github.com/pingcap/ticdc/cdc/model"
+// SorterStatus is the state of the puller sorter
+type SorterStatus = int32
 
-type rowIDDispatcher struct {
-	partitionNum int32
-}
-
-func (r *rowIDDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
-	return int32(uint64(row.RowID) % uint64(r.partitionNum))
-}
+// SorterStatus of the puller sorter
+const (
+	SorterStatusWorking SorterStatus = iota
+	SorterStatusStopping
+	SorterStatusStopped
+	SorterStatusFinished
+)

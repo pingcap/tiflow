@@ -16,14 +16,16 @@ package sink
 import (
 	"context"
 	"testing"
-
-	"golang.org/x/sync/errgroup"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/notify"
+	"golang.org/x/sync/errgroup"
 )
 
 type MySQLSinkSuite struct{}
@@ -36,8 +38,9 @@ func newMySQLSink4Test(c *check.C) *mysqlSink {
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
 	return &mysqlSink{
-		unresolvedTxns: make(map[model.TableName][]*model.Txn),
-		filter:         f,
+		txnCache:   common.NewUnresolvedTxnCache(),
+		filter:     f,
+		statistics: NewStatistics(context.TODO(), "test", make(map[string]string)),
 	}
 }
 
@@ -245,76 +248,7 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 		ms := newMySQLSink4Test(c)
 		err := ms.EmitRowChangedEvents(ctx, tc.input...)
 		c.Assert(err, check.IsNil)
-		c.Assert(ms.unresolvedTxns, check.DeepEquals, tc.expected)
-	}
-}
-
-func (s MySQLSinkSuite) TestSplitResolvedTxn(c *check.C) {
-	testCases := []struct {
-		unresolvedTxns         map[model.TableName][]*model.Txn
-		resolvedTs             uint64
-		expectedResolvedTxns   map[model.TableName][]*model.Txn
-		expectedUnresolvedTxns map[model.TableName][]*model.Txn
-		expectedMinTs          uint64
-	}{{
-		unresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		resolvedTs:           5,
-		expectedResolvedTxns: map[model.TableName][]*model.Txn{},
-		expectedUnresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		expectedMinTs: 5,
-	}, {
-		unresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		resolvedTs: 23,
-		expectedResolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}},
-			{Table: "t2"}: {{CommitTs: 23}},
-		},
-		expectedUnresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		expectedMinTs: 11,
-	}, {
-		unresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		resolvedTs: 30,
-		expectedResolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		expectedUnresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 33}, {CommitTs: 34}},
-		},
-		expectedMinTs: 11,
-	}, {
-		unresolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		resolvedTs: 40,
-		expectedResolvedTxns: map[model.TableName][]*model.Txn{
-			{Table: "t1"}: {{CommitTs: 11}, {CommitTs: 21}, {CommitTs: 21}, {CommitTs: 23}, {CommitTs: 33}, {CommitTs: 34}},
-			{Table: "t2"}: {{CommitTs: 23}, {CommitTs: 24}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 26}, {CommitTs: 29}},
-		},
-		expectedUnresolvedTxns: map[model.TableName][]*model.Txn{},
-		expectedMinTs:          11,
-	}}
-	for _, tc := range testCases {
-		minTs, resolvedTxns := splitResolvedTxn(tc.resolvedTs, tc.unresolvedTxns)
-		c.Assert(minTs, check.Equals, tc.expectedMinTs)
-		c.Assert(resolvedTxns, check.DeepEquals, tc.expectedResolvedTxns)
-		c.Assert(tc.unresolvedTxns, check.DeepEquals, tc.expectedUnresolvedTxns)
+		c.Assert(ms.txnCache.Unresolved(), check.DeepEquals, tc.expected)
 	}
 }
 
@@ -434,24 +368,31 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 		}}
 	ctx := context.Background()
 
+	notifier := new(notify.Notifier)
 	for i, tc := range testCases {
+		cctx, cancel := context.WithCancel(ctx)
 		var outputRows [][]*model.RowChangedEvent
 		var outputReplicaIDs []uint64
 		w := newMySQLSinkWorker(tc.maxTxnRow, 1,
 			bucketSizeCounter.WithLabelValues("capture", "changefeed", "1"),
+			notifier.NewReceiver(-1),
 			func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
 				outputRows = append(outputRows, events)
 				outputReplicaIDs = append(outputReplicaIDs, replicaID)
 				return nil
 			})
-		errg, ctx := errgroup.WithContext(ctx)
+		errg, cctx := errgroup.WithContext(cctx)
 		errg.Go(func() error {
-			return w.run(ctx)
+			return w.run(cctx)
 		})
 		for _, txn := range tc.txns {
-			w.appendTxn(ctx, txn)
+			w.appendTxn(cctx, txn)
 		}
-		w.waitAndClose()
+		// ensure all txns are fetched from txn channel in sink worker
+		time.Sleep(time.Millisecond * 100)
+		notifier.Notify()
+		w.waitAllTxnsExecuted()
+		cancel()
 		c.Assert(errg.Wait(), check.IsNil)
 		c.Assert(outputRows, check.DeepEquals, tc.expectedOutputRows,
 			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputRows), spew.Sdump(tc.expectedOutputRows)))

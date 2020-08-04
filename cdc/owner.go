@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -45,10 +46,13 @@ import (
 
 // Owner manages the cdc cluster
 type Owner struct {
-	done                      chan struct{}
-	session                   *concurrency.Session
-	changeFeeds               map[model.ChangeFeedID]*changeFeed
-	failedFeeds               map[model.ChangeFeedID]struct{}
+	done        chan struct{}
+	session     *concurrency.Session
+	changeFeeds map[model.ChangeFeedID]*changeFeed
+	// failInitFeeds record changefeeds that meet error during initialization
+	failInitFeeds map[model.ChangeFeedID]struct{}
+	// stoppedFeeds record changefeeds that meet running error
+	stoppedFeeds              map[model.ChangeFeedID]*model.ChangeFeedStatus
 	rebalanceTigger           map[model.ChangeFeedID]bool
 	rebalanceForAllChangefeed bool
 	manualScheduleCommand     map[model.ChangeFeedID][]*model.MoveTableJob
@@ -72,6 +76,8 @@ type Owner struct {
 
 	// gcTTL is the ttl of cdc gc safepoint ttl.
 	gcTTL int64
+	// whether gc safepoint is set in pd
+	gcSafePointSet bool
 }
 
 // CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
@@ -88,7 +94,8 @@ func NewOwner(pdClient pd.Client, credential *security.Credential, sess *concurr
 		pdClient:              pdClient,
 		credential:            credential,
 		changeFeeds:           make(map[model.ChangeFeedID]*changeFeed),
-		failedFeeds:           make(map[model.ChangeFeedID]struct{}),
+		failInitFeeds:         make(map[model.ChangeFeedID]struct{}),
+		stoppedFeeds:          make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
 		captures:              make(map[model.CaptureID]*model.CaptureInfo),
 		rebalanceTigger:       make(map[model.ChangeFeedID]bool),
 		manualScheduleCommand: make(map[model.ChangeFeedID][]*model.MoveTableJob),
@@ -202,6 +209,10 @@ func (o *Owner) newChangeFeed(
 	}
 
 	if info.Engine == model.SortInFile {
+		err = os.MkdirAll(info.SortDir, 0755)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		err = util.IsDirAndWritable(info.SortDir)
 		if err != nil {
 			return nil, err
@@ -229,7 +240,7 @@ func (o *Owner) newChangeFeed(
 	tables := make(map[model.TableID]model.TableName)
 	partitions := make(map[model.TableID][]int64)
 	orphanTables := make(map[model.TableID]model.Ts)
-	sinkTableInfo := make([]*model.TableInfo, len(schemaSnap.CloneTables()))
+	sinkTableInfo := make([]*model.SimpleTableInfo, len(schemaSnap.CloneTables()))
 	j := 0
 	for tid, table := range schemaSnap.CloneTables() {
 		j++
@@ -284,7 +295,7 @@ func (o *Owner) newChangeFeed(
 			orphanTables[tid] = checkpointTs
 		}
 
-		sinkTableInfo[j-1] = new(model.TableInfo)
+		sinkTableInfo[j-1] = new(model.SimpleTableInfo)
 		sinkTableInfo[j-1].ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
 
 		for i, colInfo := range tblInfo.Cols() {
@@ -408,16 +419,16 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			return err
 		}
 		if cfInfo.State == model.StateFailed {
-			if _, ok := o.failedFeeds[changeFeedID]; ok {
+			if _, ok := o.failInitFeeds[changeFeedID]; ok {
 				continue
 			}
 			log.Warn("changefeed is not in normal state", zap.String("changefeed", changeFeedID))
-			o.failedFeeds[changeFeedID] = struct{}{}
+			o.failInitFeeds[changeFeedID] = struct{}{}
 			continue
 		}
-		if _, ok := o.failedFeeds[changeFeedID]; ok {
+		if _, ok := o.failInitFeeds[changeFeedID]; ok {
 			log.Info("changefeed recovered from failure", zap.String("changefeed", changeFeedID))
-			delete(o.failedFeeds, changeFeedID)
+			delete(o.failInitFeeds, changeFeedID)
 		}
 		needSave, canInit := cfInfo.CheckErrorHistory()
 		if needSave {
@@ -443,6 +454,11 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			return err
 		}
 		if status != nil && status.AdminJobType.IsStopState() {
+			if status.AdminJobType == model.AdminStop {
+				if _, ok := o.stoppedFeeds[changeFeedID]; !ok {
+					o.stoppedFeeds[changeFeedID] = status
+				}
+			}
 			continue
 		}
 		checkpointTs := cfInfo.GetCheckpointTs(status)
@@ -471,9 +487,14 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			if err2 != nil {
 				return err2
 			}
-			return errors.Annotatef(err, "create change feed %s", changeFeedID)
+			// changefeed error has been recorded in etcd, log error here and
+			// don't need to return an error.
+			log.Warn("create changefeed failed, retry later",
+				zap.String("changefeed", changeFeedID), zap.Error(err))
+			continue
 		}
 		o.changeFeeds[changeFeedID] = newCf
+		delete(o.stoppedFeeds, changeFeedID)
 	}
 	o.adminJobsLock.Lock()
 	for cfID, err := range errorFeeds {
@@ -521,26 +542,43 @@ func (o *Owner) balanceTables(ctx context.Context) error {
 }
 
 func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
-	if len(o.changeFeeds) == 0 {
+	// no running or stopped changefeed, clear gc safepoint.
+	if len(o.changeFeeds) == 0 && len(o.stoppedFeeds) == 0 {
+		if o.gcSafePointSet {
+			_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, 0, 0)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			o.gcSafePointSet = false
+		}
 		return nil
 	}
-	snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
+
 	minCheckpointTs := uint64(math.MaxUint64)
-	for id, changefeed := range o.changeFeeds {
-		snapshot[id] = changefeed.status
-		if changefeed.status.CheckpointTs < minCheckpointTs {
-			minCheckpointTs = changefeed.status.CheckpointTs
+	if len(o.changeFeeds) > 0 {
+		snapshot := make(map[model.ChangeFeedID]*model.ChangeFeedStatus, len(o.changeFeeds))
+		for id, changefeed := range o.changeFeeds {
+			snapshot[id] = changefeed.status
+			if changefeed.status.CheckpointTs < minCheckpointTs {
+				minCheckpointTs = changefeed.status.CheckpointTs
+			}
+		}
+		err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
+		if err != nil {
+			return errors.Trace(err)
 		}
 	}
-	err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
-	if err != nil {
-		return errors.Trace(err)
+	for _, status := range o.stoppedFeeds {
+		if status.CheckpointTs < minCheckpointTs {
+			minCheckpointTs = status.CheckpointTs
+		}
 	}
-	_, err = o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
+	_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 	if err != nil {
 		log.Info("failed to update service safe point", zap.Error(err))
 		return errors.Trace(err)
 	}
+	o.gcSafePointSet = true
 	return nil
 }
 
@@ -583,9 +621,9 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 		return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
 	}
 	for captureID := range cf.taskStatus {
-		newStatus, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(taskStatus *model.TaskStatus) error {
+		newStatus, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
 			taskStatus.AdminJobType = job.Type
-			return nil
+			return true, nil
 		})
 		if err != nil {
 			return errors.Trace(err)
@@ -604,6 +642,12 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
 	err = cf.sink.Close()
 	log.Info("stop changefeed sink", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
+	// Only need to process stoppedFeeds with `AdminStop` command here.
+	// For `AdminResume`, we remove stopped feed in changefeed initialization phase.
+	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
+	if job.Type == model.AdminStop {
+		o.stoppedFeeds[job.CfID] = cf.status
+	}
 	delete(o.changeFeeds, job.CfID)
 	return nil
 }
@@ -750,6 +794,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 					if err != nil {
 						return errors.Trace(err)
 					}
+					delete(o.stoppedFeeds, job.CfID)
 				default:
 					return errors.Errorf("changefeed in abnormal state: %s, replication status: %+v", feedState, status)
 				}
@@ -859,6 +904,7 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	ticker := time.NewTicker(tickTime)
 	defer ticker.Stop()
 
+	var err error
 loop:
 	for {
 		select {
@@ -871,7 +917,7 @@ loop:
 		case <-ticker.C:
 		}
 
-		err := o.run(ctx)
+		err = o.run(ctx)
 		if err != nil {
 			if errors.Cause(err) != context.Canceled {
 				log.Error("owner exited with error", zap.Error(err))
@@ -885,7 +931,7 @@ loop:
 		}
 	}
 
-	return nil
+	return err
 }
 
 func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {

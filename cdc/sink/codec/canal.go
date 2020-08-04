@@ -163,7 +163,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		}
 	}
 
-	isKey := c.WhereHandle != nil && *c.WhereHandle
+	isKey := c.Flag.IsPrimaryKey()
 	isNull := c.Value == nil
 	value := ""
 	if !isNull {
@@ -219,13 +219,18 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 		}
 		columns = append(columns, c)
 	}
+	var preColumns []*canal.Column
+	for name, column := range e.PreColumns {
+		c, err := b.buildColumn(column, name, !e.Delete)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		preColumns = append(preColumns, c)
+	}
 
 	rowData := &canal.RowData{}
-	if e.Delete {
-		rowData.BeforeColumns = columns
-	} else {
-		rowData.AfterColumns = columns
-	}
+	rowData.BeforeColumns = preColumns
+	rowData.AfterColumns = columns
 	return rowData, nil
 }
 
@@ -260,14 +265,14 @@ func (b *canalEntryBuilder) FromRowEvent(e *model.RowChangedEvent) (*canal.Entry
 // FromDdlEvent builds canal entry from cdc DDLEvent
 func (b *canalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error) {
 	eventType := convertDdlEventType(e)
-	header := b.buildHeader(e.CommitTs, e.Schema, e.Table, eventType, -1)
+	header := b.buildHeader(e.CommitTs, e.TableInfo.Schema, e.TableInfo.Table, eventType, -1)
 	isDdl := isCanalDdl(eventType)
 	rc := &canal.RowChange{
 		EventTypePresent: &canal.RowChange_EventType{EventType: eventType},
 		IsDdlPresent:     &canal.RowChange_IsDdl{IsDdl: isDdl},
 		Sql:              e.Query,
 		RowDatas:         nil,
-		DdlSchemaName:    e.Schema,
+		DdlSchemaName:    e.TableInfo.Schema,
 	}
 	rcBytes, err := proto.Marshal(rc)
 	if err != nil {
