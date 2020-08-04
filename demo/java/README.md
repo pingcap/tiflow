@@ -1,6 +1,6 @@
 ### Ticdc java parser demo
 
-The following code shows how to parse ticdc data which consumed from kafka.
+The following code shows how to parse ticdc data([ticdc open protocol](https://docs.pingcap.com/tidb/stable/ticdc-open-protocol)) which consumed from kafka.
 
 ```
  TicdcEventDataReader ticdcEventDataReader = new TicdcEventDataReader(kafkaMessageKey, kafkaMessageValue);
@@ -15,3 +15,4 @@ The following code shows how to parse ticdc data which consumed from kafka.
                 }
             }
 ```
+[See com.pingcap.ticdc.cdc.TicdcEventDataReaderTest.](src/test/java/com/pingcap/ticdc/cdc/TicdcEventDataReaderTest.java).

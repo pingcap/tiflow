@@ -51,7 +51,7 @@ public class TicdcEventDataReaderTest {
     }
 
     /**
-     * Mock Kafka messages
+     * Mock Kafka messages, which usually consumed from kafka.
      */
     private List<KafkaMessage> getKafkaMessagesFromTestData() throws IOException {
         List<KafkaMessage> kafkaMessages = new ArrayList<>();
