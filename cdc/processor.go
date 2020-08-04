@@ -480,7 +480,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			log.Error("failed to update position", zap.Error(err))
 			return errors.Trace(err)
 		}
-		log.Debug("update task position", zap.Stringer("position", p.position))
+		log.Debug("update task position", zap.Stringer("position", p.position), zap.Stack("stack"))
 		return nil
 	}
 	newModRevision := p.statusModRevision
