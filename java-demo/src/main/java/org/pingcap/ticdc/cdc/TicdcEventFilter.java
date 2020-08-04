@@ -21,7 +21,7 @@ public class TicdcEventFilter {
         if (rowChangeMaxTS == null) {
             tableMaxTSMap.put(mapKey, rowChangeMaxTS);
         } else {
-            if (rowChangeTS < rowChangeMaxTS) {
+            if (rowChangeTS <= rowChangeMaxTS) {
                 return false;
             }
             tableMaxTSMap.put(mapKey, rowChangeTS);
