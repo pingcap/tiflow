@@ -112,7 +112,7 @@ func (b *ColumnFlagType) UnsetIsPrimaryKey() {
 	(*util.Flag)(b).Remove(util.Flag(PrimaryKeyFlag))
 }
 
-//PrimaryKeyFlag show whether PrimaryKeyFlag is set
+//IsPrimaryKey show whether PrimaryKeyFlag is set
 func (b *ColumnFlagType) IsPrimaryKey() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(PrimaryKeyFlag))
 }

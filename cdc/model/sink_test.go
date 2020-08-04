@@ -37,8 +37,10 @@ func (s *configSuite) TestSetFlag(c *check.C) {
 
 func (s *configSuite) TestFlagValue(c *check.C) {
 	c.Assert(BinaryFlag, check.Equals, ColumnFlagType(0b1))
-	c.Assert(PrimaryKeyFlag, check.Equals, ColumnFlagType(0b10))
-	c.Assert(UniqueKeyFlag, check.Equals, ColumnFlagType(0b100))
-	c.Assert(MultipleKeyFlag, check.Equals, ColumnFlagType(0b1000))
-	c.Assert(NullableFlag, check.Equals, ColumnFlagType(0b10000))
+	c.Assert(HandleKeyFlag, check.Equals, ColumnFlagType(0b10))
+	c.Assert(GeneratedColumnFlag, check.Equals, ColumnFlagType(0b100))
+	c.Assert(PrimaryKeyFlag, check.Equals, ColumnFlagType(0b1000))
+	c.Assert(UniqueKeyFlag, check.Equals, ColumnFlagType(0b10000))
+	c.Assert(MultipleKeyFlag, check.Equals, ColumnFlagType(0b100000))
+	c.Assert(NullableFlag, check.Equals, ColumnFlagType(0b1000000))
 }
