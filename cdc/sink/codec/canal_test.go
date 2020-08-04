@@ -129,7 +129,6 @@ type canalEntrySuite struct{}
 var _ = check.Suite(&canalEntrySuite{})
 
 func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
-	trueVar := true
 	testCaseUpdate := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
@@ -138,7 +137,7 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 		},
 		Delete: false,
 		Columns: map[string]*model.Column{
-			"id":      {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1},
+			"id":      {Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 			"name":    {Type: mysql.TypeVarchar, Value: "Bob"},
 			"tiny":    {Type: mysql.TypeTiny, Value: 255},
 			"comment": {Type: mysql.TypeBlob, Value: []byte("测试")},
@@ -153,7 +152,7 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 		},
 		Delete: true,
 		PreColumns: map[string]*model.Column{
-			"id": {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1},
+			"id": {Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 		},
 	}
 	testCaseDdl := &model.DDLEvent{

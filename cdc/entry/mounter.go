@@ -704,6 +704,18 @@ func transColumnFlag(col *timodel.ColumnInfo) model.ColumnFlagType {
 	if col.IsGenerated() {
 		flag.SetIsGeneratedColumn()
 	}
+	if mysql.HasPriKeyFlag(col.Flag) {
+		flag.SetIsPrimaryKey()
+	}
+	if mysql.HasUniKeyFlag(col.Flag) {
+		flag.SetIsUniqueKey()
+	}
+	if !mysql.HasNotNullFlag(col.Flag) {
+		flag.SetIsNullable()
+	}
+	if mysql.HasMultipleKeyFlag(col.Flag) {
+		flag.SetIsMultipleKey()
+	}
 	return flag
 }
 
