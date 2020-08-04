@@ -163,7 +163,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		}
 	}
 
-	isKey := c.WhereHandle != nil && *c.WhereHandle
+	isKey := c.Flag.IsPrimaryKey()
 	isNull := c.Value == nil
 	value := ""
 	if !isNull {
