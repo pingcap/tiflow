@@ -21,4 +21,5 @@ const (
 	SorterStatusWorking SorterStatus = iota
 	SorterStatusStopping
 	SorterStatusStopped
+	SorterStatusFinished
 )

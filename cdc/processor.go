@@ -118,7 +118,7 @@ type tableInfo struct {
 	resolvedTs  uint64
 	markTableID int64
 	mResolvedTs uint64
-	sorter      puller.EventSorter
+	sorter      *puller.Rectifier
 	workload    model.WorkloadInfo
 	cancel      context.CancelFunc
 }
@@ -831,7 +831,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	// We temporarily set the value to constant 1
 	table.workload = model.WorkloadInfo{Workload: 1}
 
-	startPuller := func(tableID model.TableID, pResolvedTs *uint64) puller.EventSorter {
+	startPuller := func(tableID model.TableID, pResolvedTs *uint64) *puller.Rectifier {
 
 		// start table puller
 		enableOldValue := p.changefeed.Config.EnableOldValue
@@ -844,10 +844,10 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			}
 		}()
 
-		var sorter puller.EventSorter
+		var sorterImpl puller.EventSorter
 		switch p.changefeed.Engine {
 		case model.SortInMemory:
-			sorter = puller.NewEntrySorter()
+			sorterImpl = puller.NewEntrySorter()
 		case model.SortInFile:
 			err := util.IsDirAndWritable(p.changefeed.SortDir)
 			if err != nil {
@@ -862,11 +862,13 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 					return nil
 				}
 			}
-			sorter = puller.NewFileSorter(p.changefeed.SortDir)
+			sorterImpl = puller.NewFileSorter(p.changefeed.SortDir)
 		default:
 			p.errCh <- errors.Errorf("unknown sort engine %s", p.changefeed.Engine)
 			return nil
 		}
+		sorter := puller.NewRectifier(sorterImpl, p.changefeed.GetTargetTs())
+
 		go func() {
 			err := sorter.Run(ctx)
 			if errors.Cause(err) != context.Canceled {

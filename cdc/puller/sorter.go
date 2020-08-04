@@ -24,8 +24,5 @@ import (
 type EventSorter interface {
 	Run(ctx context.Context) error
 	AddEntry(ctx context.Context, entry *model.PolymorphicEvent)
-	GetStatus() model.SorterStatus
-	GetMaxResolvedTs() model.Ts
-	SafeStop()
 	Output() <-chan *model.PolymorphicEvent
 }
