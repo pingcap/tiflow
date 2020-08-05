@@ -11,7 +11,7 @@ fix-sql-file = "fix.sql"
 # tables need to check.
 [[check-tables]]
     schema = "sink_hang"
-    tables = ["usertable"]
+    tables = ["~t.*"]
 
 [[source-db]]
     host = "127.0.0.1"
