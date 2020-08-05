@@ -17,6 +17,8 @@ import (
 	"context"
 	"sync/atomic"
 
+	"go.uber.org/zap"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"golang.org/x/sync/errgroup"
@@ -64,7 +66,7 @@ func (r *Rectifier) Run(ctx context.Context) error {
 	output := func(event *model.PolymorphicEvent) {
 		select {
 		case <-ctx.Done():
-			log.Warn("")
+			log.Warn("failed to send to output channel", zap.Error(ctx.Err()))
 		case r.outputCh <- event:
 		}
 	}
