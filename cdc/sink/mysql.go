@@ -621,6 +621,9 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 			failpoint.Inject("MySQLSinkTxnRandomError", func() {
 				failpoint.Return(checkTxnErr(errors.Trace(dmysql.ErrInvalidConn)))
 			})
+			failpoint.Inject("MySQLSinkHangLongTime", func() {
+				time.Sleep(time.Hour)
+			})
 			err := s.statistics.RecordBatchExecution(func() (int, error) {
 				tx, err := s.db.BeginTx(ctx, nil)
 				if err != nil {
