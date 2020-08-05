@@ -723,6 +723,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		// calc the min of all resolvedTs in captures
 		for _, position := range c.taskPositions {
 			if minResolvedTs > position.ResolvedTs {
+				log.Info("LEOPPRO cal resolvedts", zap.Any("position", position), zap.Uint64("minResolvedTs", minResolvedTs))
 				minResolvedTs = position.ResolvedTs
 			}
 

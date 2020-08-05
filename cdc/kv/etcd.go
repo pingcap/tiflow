@@ -607,6 +607,7 @@ func (c CDCEtcdClient) PutTaskPosition(
 	captureID string,
 	info *model.TaskPosition,
 ) error {
+	log.Debug("LEOPPRO: PutTaskPosition", zap.String("changefeed", changefeedID), zap.String("capture", captureID), zap.Any("info", info), zap.Stack("stack"))
 	data, err := info.Marshal()
 	if err != nil {
 		return errors.Trace(err)
