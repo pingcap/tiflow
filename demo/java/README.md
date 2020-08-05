@@ -1,4 +1,4 @@
-# How to use ticdc-java-sdk
+# How to use
 
 The following code shows how to parse ticdc data([ticdc open protocol](https://docs.pingcap.com/tidb/stable/ticdc-open-protocol)) which consumed from kafka.
 
