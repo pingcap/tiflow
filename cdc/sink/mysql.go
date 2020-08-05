@@ -706,6 +706,9 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 }
 
 func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+	failpoint.Inject("MySQLSinkExecDMLError", func() {
+		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
+	})
 	dmls, err := s.prepareDMLs(rows, replicaID, bucket)
 	if err != nil {
 		return errors.Trace(err)
