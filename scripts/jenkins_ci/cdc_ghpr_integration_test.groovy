@@ -8,6 +8,7 @@ def common = load script_path
 catchError {
     common.prepare_binaries()
     common.tests("mysql", "${GO_TEST_SLAVE}")
+    common.tests("mysql", "${GO_TEST_SLAVE}")
     common.coverage()
     currentBuild.result = "SUCCESS"
 }

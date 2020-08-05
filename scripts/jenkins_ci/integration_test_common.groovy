@@ -49,8 +49,6 @@ def prepare_binaries() {
                         curl \${pd_url} | tar xz -C ./tmp bin/*
                         curl \${tikv_url} | tar xz -C ./tmp bin/tikv-server
                         mv tmp/bin/* third_bin
-                        curl http://download.pingcap.org/tiflash-nightly-linux-amd64.tar.gz | tar xz -C third_bin
-                        mv third_bin/tiflash-nightly-linux-amd64/* third_bin
                         curl ${FILE_SERVER_URL}/download/builds/pingcap/go-ycsb/test-br/go-ycsb -o third_bin/go-ycsb
                         curl -L https://github.com/etcd-io/etcd/releases/download/v3.4.7/etcd-v3.4.7-linux-amd64.tar.gz | tar xz -C ./tmp
                         mv tmp/etcd-v3.4.7-linux-amd64/etcdctl third_bin
@@ -94,35 +92,6 @@ def prepare_binaries() {
 def tests(sink_type, node_label) {
     stage("Tests") {
         def test_cases = [:]
-
-        test_cases["unit test"] = {
-            node (node_label) {
-                container("golang") {
-                    def ws = pwd()
-                    deleteDir()
-                    println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
-                    println "work space path:\n${ws}"
-                    unstash 'ticdc'
-                    unstash 'ticdc_binaries'
-
-                    dir("go/src/github.com/pingcap/ticdc") {
-                        sh """
-                            rm -rf /tmp/tidb_cdc_test
-                            mkdir -p /tmp/tidb_cdc_test
-                            GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make test
-                            rm -rf cov_dir
-                            mkdir -p cov_dir
-                            ls /tmp/tidb_cdc_test
-                            cp /tmp/tidb_cdc_test/cov*out cov_dir
-                        """
-                        sh """
-                        tail /tmp/tidb_cdc_test/cov*
-                        """
-                    }
-                    stash includes: "go/src/github.com/pingcap/ticdc/cov_dir/**", name: "unit_test", useDefaultExcludes: false
-                }
-            }
-        }
 
         def run_integration_test = { case_name ->
             node (node_label) {
@@ -169,7 +138,34 @@ def tests(sink_type, node_label) {
             }
         }
         find_cases().each{ case_name ->
-            test_cases["integration test ${case_name}"] = {
+            test_cases["integration test 0 ${case_name}"] = {
+                run_integration_test(case_name)
+            }
+            test_cases["integration test 1 ${case_name}"] = {
+                run_integration_test(case_name)
+            }
+            test_cases["integration test 2 ${case_name}"] = {
+                run_integration_test(case_name)
+            }
+            test_cases["integration test 3 ${case_name}"] = {
+                run_integration_test(case_name)
+            }
+            test_cases["integration test 4 ${case_name}"] = {
+                run_integration_test(case_name)
+            }
+            test_cases["integration test 5 ${case_name}"] = {
+                run_integration_test(case_name)
+            }
+            test_cases["integration test 6 ${case_name}"] = {
+                run_integration_test(case_name)
+            }
+            test_cases["integration test 7 ${case_name}"] = {
+                run_integration_test(case_name)
+            }
+            test_cases["integration test 8 ${case_name}"] = {
+                run_integration_test(case_name)
+            }
+            test_cases["integration test 9 ${case_name}"] = {
                 run_integration_test(case_name)
             }
         }
@@ -212,10 +208,7 @@ def coverage() {
 
 def find_cases() {
     dir("go/src/github.com/pingcap/ticdc/tests") {
-        return sh (
-            script: 'find . -maxdepth 2 -mindepth 2 -name \'run.sh\' | awk -F/ \'{print $2}\'',
-            returnStdout: true
-        ).trim().split()
+        return ["availability"]
     }
 }
 
