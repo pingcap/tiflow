@@ -47,9 +47,9 @@ function run() {
     run_sql "CREATE DATABASE sink_hang;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE table sink_hang.t1(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE table sink_hang.t2(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "BEGIN; INSERT INTO sink_hang.t1 VALUES (),(),();INSERT INTO sink_hang.t2 VALUES (),(),();COMMIT" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "BEGIN; INSERT INTO sink_hang.t1 VALUES (),(),(); INSERT INTO sink_hang.t2 VALUES (),(),(); COMMIT" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-    ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "failed"
+    ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "stopped"
     cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "normal"
 
