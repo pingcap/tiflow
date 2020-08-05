@@ -62,8 +62,9 @@ func main() {
 			log.S().Errorf("Failed to close source database: %s\n", err)
 		}
 	}()
+	util.MustExec(sourceDB0, "create database mark;")
 	runDDLTest([]*sql.DB{sourceDB0, sourceDB1})
-	util.MustExec(sourceDB0, "create table test.finish_mark(a int primary key);")
+	util.MustExec(sourceDB0, "create table mark.finish_mark(a int primary key);")
 }
 
 // for every DDL, run the DDL continuously, and one goroutine for one TiDB instance to do some DML op
@@ -74,9 +75,10 @@ func runDDLTest(srcs []*sql.DB) {
 		log.S().Infof("runDDLTest take %v", time.Since(start))
 	}()
 
-	for _, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL, modifyColumnDDL, addDropIndexDDL} {
+	for i, ddlFunc := range []func(context.Context, *sql.DB){createDropSchemaDDL, truncateDDL, addDropColumnDDL,
+		modifyColumnDDL, addDropIndexDDL} {
 		testName := getFunctionName(ddlFunc)
-		log.S().Info("running ddl test: ", testName)
+		log.S().Info("running ddl test: ", i, " ", testName)
 
 		var wg sync.WaitGroup
 		ctx, cancel := context.WithTimeout(context.Background(), runTime)
@@ -100,6 +102,8 @@ func runDDLTest(srcs []*sql.DB) {
 		wg.Wait()
 		time.Sleep(5 * time.Second)
 		cancel()
+
+		util.MustExec(srcs[0], fmt.Sprintf("create table mark.finish_mark_%d(a int primary key);", i))
 	}
 }
 
@@ -143,7 +147,7 @@ func createDropSchemaDDL(ctx context.Context, db *sql.DB) {
 			return
 		default:
 		}
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		util.MustExecWithConn(ctx, conn, "drop database test")
 	}
 }
@@ -160,7 +164,7 @@ func truncateDDL(ctx context.Context, db *sql.DB) {
 		default:
 		}
 		util.MustExec(db, sql)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -232,7 +236,7 @@ func addDropColumnDDL(ctx context.Context, db *sql.DB) {
 		}
 		sql := fmt.Sprintf("alter table test.`%s` drop column v1", testName)
 		util.MustExec(db, sql)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		var notNULL string
 		var defaultValue interface{}
@@ -250,7 +254,7 @@ func addDropColumnDDL(ctx context.Context, db *sql.DB) {
 		}
 		sql = fmt.Sprintf("alter table test.`%s` add column v1 int default ? %s", testName, notNULL)
 		util.MustExec(db, sql, defaultValue)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -273,7 +277,7 @@ func modifyColumnDDL(ctx context.Context, db *sql.DB) {
 			defaultValue = value
 		}
 		util.MustExec(db, sql, defaultValue)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -289,19 +293,19 @@ func addDropIndexDDL(ctx context.Context, db *sql.DB) {
 		}
 		sql := fmt.Sprintf("drop index id1 on test.`%s`;", testName)
 		util.MustExec(db, sql)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		sql = fmt.Sprintf("create unique index `id1` on test.`%s` (id1);", testName)
 		util.MustExec(db, sql)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		sql = fmt.Sprintf("drop index id2 on test.`%s`;", testName)
 		util.MustExec(db, sql)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
 		sql = fmt.Sprintf("create unique index `id2` on test.`%s` (id2);", testName)
 		util.MustExec(db, sql)
-		time.Sleep(time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

@@ -621,9 +621,9 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 		return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
 	}
 	for captureID := range cf.taskStatus {
-		newStatus, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(taskStatus *model.TaskStatus) error {
+		newStatus, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
 			taskStatus.AdminJobType = job.Type
-			return nil
+			return true, nil
 		})
 		if err != nil {
 			return errors.Trace(err)
