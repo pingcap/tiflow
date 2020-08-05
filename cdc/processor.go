@@ -510,7 +510,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			}
 			err = updatePosition()
 			if err != nil {
-				return false, errors.Trace(err)
+				return true, errors.Trace(err)
 			}
 			return true, nil
 		})
