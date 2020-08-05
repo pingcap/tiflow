@@ -420,10 +420,22 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) {
 	}
 }
 
-func (s *mysqlSink) notifyAndWaitExec() {
+func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	s.notifier.Notify()
-	for _, w := range s.workers {
-		w.waitAllTxnsExecuted()
+	done := make(chan struct{}, 1)
+	go func() {
+		for _, w := range s.workers {
+			w.waitAllTxnsExecuted()
+		}
+		done <- struct{}{}
+	}()
+	// This is a hack code to avoid io wait in some routine blocks others to exit.
+	// As the network io wait is blocked in kernel code, the goroutine is in a
+	// D-state that we could not even stop it by cancel the context. So if this
+	// scenario happens, the blocked goroutine will be leak.
+	select {
+	case <-ctx.Done():
+	case <-done:
 	}
 }
 
@@ -463,7 +475,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 				sendFn(txn, idx)
 				return
 			}
-			s.notifyAndWaitExec()
+			s.notifyAndWaitExec(ctx)
 			causality.reset()
 		}
 		sendFn(txn, rowsChIdx)
@@ -477,7 +489,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 			s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
 		}
 	}
-	s.notifyAndWaitExec()
+	s.notifyAndWaitExec(ctx)
 }
 
 type mysqlSinkWorker struct {
