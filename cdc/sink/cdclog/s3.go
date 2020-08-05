@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cdclog
 
 import (
@@ -31,15 +44,17 @@ const (
 	// number of retries to make of operations
 	maxRetries = 3
 
-	maxBufferKeys    = 10
+	maxBufferKeys = 1000
+
 	maxPartFlushSize = 5 << 20 // The minimal multipart upload size is 5Mb.
-	maxDMLFlushSize  = 100 << 20
-	maxDDLFlushSize  = 100
+
+	maxCompletePartSize = 100 << 20
+
+	maxDDLFlushSize = 10 << 20
 
 	defaultBufferChanSize = 1280
 
-	defaultFlushRowChangedEventDuration = 5 * time.Second
-	defaultFlushCheckpointTSDuration    = 1 * time.Second
+	defaultFlushRowChangedEventDuration = 5 * time.Second // TODO make it as a config
 )
 
 // S3Options contains options for s3 storage
@@ -168,19 +183,20 @@ func (tb *tableBuffer) Flush(ctx context.Context, s *s3Sink) error {
 		rowDatas = append(rowDatas, '\n')
 	}
 
-	// TODO remove this line
-	log.Info("[FlushRowChangedEvents[Debug]] flush table buffer",
+	log.Debug("[FlushRowChangedEvents[Debug]] flush table buffer",
 		zap.Int64("table", tb.tableID),
-		zap.Int64("event size", tb.sendEvents),
-		zap.Int64("event size clone", sendEvents),
-		zap.Int("rowDatas", len(rowDatas)),
+		zap.Int64("event size", sendEvents),
+		zap.Int("row data size", len(rowDatas)),
 		zap.Int("upload num", len(hashPart.completeParts)),
-		zap.Int64("byte size", hashPart.byteSize),
+		zap.Int64("upload byte size", hashPart.byteSize),
 		// zap.ByteString("rowDatas", rowDatas),
 	)
 
 	if len(rowDatas) > 0 {
 		if len(rowDatas) > maxPartFlushSize || len(hashPart.completeParts) > 0 {
+			// S3 multi-upload need every chunk(except the last one) is greater than 5Mb
+			// so, if this batch data size is greater than 5Mb or it has uploadPart already
+			// we will use multi-upload this batch data
 			if hashPart.originPartUploadResponse == nil {
 				resp, err := s.createMultipartUpload(newFileName)
 				if err != nil {
@@ -197,8 +213,11 @@ func (tb *tableBuffer) Flush(ctx context.Context, s *s3Sink) error {
 			hashPart.byteSize += int64(len(rowDatas))
 			hashPart.completeParts = append(hashPart.completeParts, completePart)
 
-			if hashPart.byteSize > maxDMLFlushSize || len(rowDatas) <= maxPartFlushSize {
-				log.Info("[FlushRowChangedEvents] complete file", zap.Int64("tableID", tb.tableID),
+			if hashPart.byteSize > maxCompletePartSize || len(rowDatas) <= maxPartFlushSize {
+				// we need do complete when total upload size is greater than 100Mb
+				// or this part data is less than 5Mb to avoid meet EntityTooSmall error
+				log.Info("[FlushRowChangedEvents] complete file",
+					zap.Int64("tableID", tb.tableID),
 					zap.Stringer("resp", hashPart.originPartUploadResponse))
 				_, err := s.completeMultipartUpload(hashPart.originPartUploadResponse, hashPart.completeParts)
 				if err != nil {
@@ -210,7 +229,8 @@ func (tb *tableBuffer) Flush(ctx context.Context, s *s3Sink) error {
 			}
 		} else {
 			// generate normal file because S3 multi-upload need every part at least 5Mb.
-			log.Info("[FlushRowChangedEvents] normal upload file", zap.Int64("tableID", tb.tableID))
+			log.Info("[FlushRowChangedEvents] normal upload file",
+				zap.Int64("tableID", tb.tableID))
 			err := s.putObjectWithKey(ctx, s.prefix+newFileName, rowDatas)
 			if err != nil {
 				return err
@@ -252,7 +272,7 @@ type s3Sink struct {
 	options *S3Options
 	client  *s3.S3
 
-	logMeta *LogMeta
+	logMeta *logMeta
 
 	hashMap      sync.Map
 	tableBuffers []*tableBuffer
@@ -349,17 +369,14 @@ func (s *s3Sink) uploadPart(resp *s3.CreateMultipartUploadOutput, fileBytes []by
 	uploadResult, err := s.client.UploadPart(partInput)
 	if err != nil {
 		return nil, err
-	} else {
-		return &s3.CompletedPart{
-			ETag:       uploadResult.ETag,
-			PartNumber: aws.Int64(int64(partNumber)),
-		}, nil
 	}
+	return &s3.CompletedPart{
+		ETag:       uploadResult.ETag,
+		PartNumber: aws.Int64(int64(partNumber)),
+	}, nil
 }
 
 func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	log.Info("emit row change events", zap.Any("rows", len(rows)))
-
 	shouldFlush := false
 	for _, row := range rows {
 		// dispatch row event by tableID
@@ -384,6 +401,7 @@ func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 			s.tableBuffers[hash].lock.RLock()
 			s.tableBuffers[hash].sendKeys += int64(len(row.Keys))
 			if s.tableBuffers[hash].sendKeys > maxBufferKeys {
+				// trigger flush when a table has maxBufferKeys
 				shouldFlush = true
 			}
 			s.tableBuffers[hash].sendEvents += 1
@@ -393,88 +411,63 @@ func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	if shouldFlush {
 		s.notifyChan <- struct{}{}
 	}
-	log.Info("[EmitRowChange] exit")
+	return nil
+}
+
+func (s *s3Sink) flushTableBuffers(ctx context.Context) error {
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(s.tableBuffers))
+	for _, tb := range s.tableBuffers {
+		wg.Add(1)
+		tbReplica := tb
+		// TODO use a fixed worker pool
+		go func(ctx context.Context, tb *tableBuffer) {
+			defer wg.Done()
+			log.Info("[FlushRowChangedEvents] flush specify row changed event",
+				zap.Int64("table", tb.tableID),
+				zap.Int64("event size", tb.sendEvents))
+			errCh <- tb.Flush(ctx, s)
+		}(ctx, tbReplica)
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
-	log.Info("flush row change events", zap.Uint64("resolvedTs", resolvedTs))
-
 	// we should flush all events before resolvedTs, there are two kind of flush policy
 	// 1. flush row events to a s3 chunk: if the event size is not enough,
 	//    TODO: when cdc crashed, we should repair these chunks to a complete file
 	// 2. flush row events to a complete s3 file: if the event size is enough
 	select {
 	case <-s.notifyChan:
-		var wg sync.WaitGroup
-		errCh := make(chan error, len(s.tableBuffers))
-		for _, tb := range s.tableBuffers {
-			wg.Add(1)
-			tbReplica := tb
-			// TODO use a fixed worker pool
-			go func(ctx context.Context, tb *tableBuffer) {
-				defer wg.Done()
-				log.Info("[FlushRowChangedEvents] flush specify row changed event",
-					zap.Int64("table", tb.tableID),
-					zap.Int64("event size", tb.sendEvents))
-				errCh <- tb.Flush(ctx, s)
-			}(ctx, tbReplica)
-		}
-		wg.Wait()
-		close(errCh)
-		for err := range errCh {
-			if err != nil {
-				return err
-			}
-		}
+		return s.flushTableBuffers(ctx)
+
 	case <-time.After(defaultFlushRowChangedEventDuration):
 		// cannot accumulate enough row events in 10 second
 		// flush all tables' row events to s3
-		// TODO use a fixed worker pool
-		var wg sync.WaitGroup
-		errCh := make(chan error, len(s.tableBuffers))
-		for _, tb := range s.tableBuffers {
-			wg.Add(1)
-			tbReplica := tb
-			go func(ctx context.Context, tb *tableBuffer) {
-				defer wg.Done()
-				log.Info("[FlushRowChangedEvents] flush all row changed events due to timeout",
-					zap.Int64("table", tb.tableID),
-					zap.Int64("event size", tb.sendEvents))
-				errCh <- tb.Flush(ctx, s)
-			}(ctx, tbReplica)
-		}
-		wg.Wait()
-		close(errCh)
-		for err := range errCh {
-			if err != nil {
-				return err
-			}
-		}
+		return s.flushTableBuffers(ctx)
 	}
-	log.Info("[FlushRowChangedEvent] exit")
-	return nil
 }
 
 // EmitCheckpointTs update the global resolved ts in log meta
 // sleep 5 seconds to avoid update too frequently
 func (s *s3Sink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	select {
-	case <-time.After(defaultFlushCheckpointTSDuration):
-		if s.logMeta == nil {
-			s.logMeta = new(LogMeta)
-			log.Info("[EmitCheckpointTs] generate new logMeta when emit checkpoint ts", zap.Uint64("ts", ts))
-		}
-		s.logMeta.globalResolvedTS = ts
-		data, err := s.logMeta.Marshal()
-		if err != nil {
-			return errors.Annotate(err, "marshal meta to json failed")
-		}
-		return s.putObjectWithKey(ctx, s.prefix+logMetaFile, data)
+	if s.logMeta == nil {
+		log.Debug("[EmitCheckpointTs] generate new logMeta when emit checkpoint ts", zap.Uint64("ts", ts))
+		s.logMeta = new(logMeta)
 	}
-
-	log.Info("[EmitCheckpointTs] exit")
-	return nil
+	s.logMeta.GlobalResolvedTS = ts
+	data, err := s.logMeta.Marshal()
+	if err != nil {
+		return errors.Annotate(err, "marshal meta to json failed")
+	}
+	return s.putObjectWithKey(ctx, s.prefix+logMetaFile, data)
 }
 
 // EmitDDLEvent write ddl event to S3 directory, all events split by '\n'
@@ -485,7 +478,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if err != nil {
 		return err
 	}
-	listing, err := s.ListObject(DDLEventsDir, 1)
+	listing, err := s.ListObject(ddlEventsDir, 1)
 	if err != nil {
 		return err
 	}
@@ -495,7 +488,9 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		name = *content.Key
 		size = *content.Size
 		log.Debug("[EmitDDLEvent] list content from s3",
-			zap.String("name", name), zap.Int64("size", size), zap.Any("ddl", ddl))
+			zap.String("name", name),
+			zap.Int64("size", size),
+			zap.Any("ddl", ddl))
 	}
 	var fileData []byte
 	if size == 0 || size > maxDDLFlushSize {
@@ -523,18 +518,17 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		fileData = append(buf[:n], '\n')
 		fileData = append(fileData, data...)
 	}
-	log.Info("[EmitDDLEvent] exit")
 	return s.putObjectWithKey(ctx, name, fileData)
 }
 
-func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.TableInfo) error {
+func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	if tableInfo != nil {
 		for _, table := range tableInfo {
 			if table != nil {
 				err := s.putObjectWithKey(ctx, s.prefix+makeTableDirectoryName(table.TableID), nil)
 				if err != nil {
+					return errors.Annotate(err, "create table directory on s3 failed")
 				}
-				return errors.Annotate(err, "create table directory on s3 failed")
 			}
 		}
 		// update log meta to record the relationship about tableName and tableID
@@ -553,7 +547,8 @@ func (s *s3Sink) Close() error {
 	return nil
 }
 
-func NewS3Sink(ctx context.Context, sinkURI *url.URL) (*s3Sink, error) {
+// NewS3Sink creates new sink support log data to s3 directly
+func NewS3Sink(sinkURI *url.URL) (*s3Sink, error) {
 	if len(sinkURI.Host) == 0 {
 		return nil, errors.Errorf("please specify the bucket for s3 in %s", sinkURI)
 	}
@@ -573,9 +568,6 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL) (*s3Sink, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	v, _ := ses.Config.Credentials.Get()
-	log.Info("sse", zap.String("access key", v.AccessKeyID), zap.String("secret access key", v.SecretAccessKey))
 
 	s3client := s3.New(ses)
 	err = checkBucket(s3client, bucket)

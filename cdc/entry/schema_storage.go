@@ -24,12 +24,13 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/retry"
 	timeta "github.com/pingcap/tidb/meta"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/retry"
 )
 
 // schemaSnapshot stores the source TiDB all schema information
@@ -130,7 +131,7 @@ func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*schemaSnap
 			dbinfo.Tables = append(dbinfo.Tables, tableInfo)
 			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
 			snap.tables[tableInfo.ID] = tableInfo
-			snap.tableNameToID[model.TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O, TableID: tableInfo.ID}] = tableInfo.ID
+			snap.tableNameToID[model.TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
 			isEligible := tableInfo.IsEligible()
 			if !isEligible {
 				snap.ineligibleTableID[tableInfo.ID] = struct{}{}

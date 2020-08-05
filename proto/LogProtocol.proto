@@ -53,12 +53,11 @@ message RowChangedEvent {
 message DDLEvent {
 	uint64 startTs = 1;
 	uint64 commitTs = 2;
-	string schema = 3;
-	string table = 4;
 	TableInfo tableInfo = 5;
-	string query = 6;
+	TableInfo preTableInfo = 6;
+	string query = 7;
 
-	bytes type = 7;
+	bytes type = 8;
 }
 
 

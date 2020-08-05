@@ -167,7 +167,7 @@ func (b *ColumnFlagType) UnsetIsNullable() {
 type TableName struct {
 	Schema    string `toml:"db-name" json:"db-name"`
 	Table     string `toml:"tbl-name" json:"tbl-name"`
-	TableID   int64  `toml:"tbl-id", json:"tbl-id"`
+	TableID   int64  `toml:"tbl-id" json:"tbl-id"`
 	Partition int64  `json:"partition"`
 }
 
@@ -333,8 +333,6 @@ func (d *DDLEvent) ToProtoBuf() *cdclog.DDLEvent {
 	ddlEventPb := new(cdclog.DDLEvent)
 	ddlEventPb.StartTs = d.StartTs
 	ddlEventPb.CommitTs = d.CommitTs
-	ddlEventPb.Schema = d.Schema
-	ddlEventPb.Table = d.Table
 
 	if d.TableInfo != nil {
 		tableInfo := new(cdclog.TableInfo)
@@ -352,46 +350,62 @@ func (d *DDLEvent) ToProtoBuf() *cdclog.DDLEvent {
 		}
 		ddlEventPb.TableInfo = tableInfo
 	}
+	if d.PreTableInfo != nil {
+		preTableInfo := new(cdclog.TableInfo)
+		preTableInfo.Table = d.PreTableInfo.Table
+		preTableInfo.Schema = d.PreTableInfo.Schema
+		if d.PreTableInfo.ColumnInfo != nil {
+			columns := make([]*cdclog.ColumnInfo, 0, len(d.PreTableInfo.ColumnInfo))
+			for _, c := range d.PreTableInfo.ColumnInfo {
+				columns = append(columns, &cdclog.ColumnInfo{
+					Name: c.Name,
+					Type: []byte{c.Type},
+				})
+			}
+			preTableInfo.ColumnInfo = columns
+		}
+		ddlEventPb.PreTableInfo = preTableInfo
+	}
 	return ddlEventPb
 
 }
 
 // FromJob fills the values of DDLEvent from DDL job
-func (e *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
-	e.TableInfo = new(SimpleTableInfo)
-	e.TableInfo.Schema = job.SchemaName
-	e.StartTs = job.StartTS
-	e.CommitTs = job.BinlogInfo.FinishedTS
-	e.Query = job.Query
-	e.Type = job.Type
+func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
+	d.TableInfo = new(SimpleTableInfo)
+	d.TableInfo.Schema = job.SchemaName
+	d.StartTs = job.StartTS
+	d.CommitTs = job.BinlogInfo.FinishedTS
+	d.Query = job.Query
+	d.Type = job.Type
 
 	if job.BinlogInfo.TableInfo != nil {
 		tableName := job.BinlogInfo.TableInfo.Name.O
 		tableInfo := job.BinlogInfo.TableInfo
-		e.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
+		d.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
 
 		for i, colInfo := range tableInfo.Columns {
-			e.TableInfo.ColumnInfo[i] = new(ColumnInfo)
-			e.TableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
+			d.TableInfo.ColumnInfo[i] = new(ColumnInfo)
+			d.TableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
 		}
 
-		e.TableInfo.Table = tableName
+		d.TableInfo.Table = tableName
 	}
-	e.fillPreTableInfo(preTableInfo)
+	d.fillPreTableInfo(preTableInfo)
 }
 
-func (e *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
+func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 	if preTableInfo == nil {
 		return
 	}
-	e.PreTableInfo = new(SimpleTableInfo)
-	e.PreTableInfo.Schema = preTableInfo.TableName.Schema
-	e.PreTableInfo.Table = preTableInfo.TableName.Table
+	d.PreTableInfo = new(SimpleTableInfo)
+	d.PreTableInfo.Schema = preTableInfo.TableName.Schema
+	d.PreTableInfo.Table = preTableInfo.TableName.Table
 
-	e.PreTableInfo.ColumnInfo = make([]*ColumnInfo, len(preTableInfo.Columns))
+	d.PreTableInfo.ColumnInfo = make([]*ColumnInfo, len(preTableInfo.Columns))
 	for i, colInfo := range preTableInfo.Columns {
-		e.PreTableInfo.ColumnInfo[i] = new(ColumnInfo)
-		e.PreTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
+		d.PreTableInfo.ColumnInfo[i] = new(ColumnInfo)
+		d.PreTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
 	}
 }
 
