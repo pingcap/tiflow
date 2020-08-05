@@ -810,14 +810,6 @@ func createSchemaStorage(pdEndpoints []string, credential *security.Credential, 
 }
 
 func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
-	globalResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
-	/*
-		if replicaInfo.StartTs < globalResolvedTs {
-			log.Fatal("cannot add table which of startTs is less than the global resolved, please report a bug",
-				zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo),
-				zap.Uint64("globalResolvedTs", globalResolvedTs))
-		}
-	*/
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
 
@@ -832,6 +824,12 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	if _, ok := p.tables[tableID]; ok {
 		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
 		return
+	}
+	globalResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
+	if replicaInfo.StartTs < globalResolvedTs {
+		log.Fatal("cannot add table which of startTs is less than the global resolved, please report a bug",
+			zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo),
+			zap.Uint64("globalResolvedTs", globalResolvedTs))
 	}
 	log.Debug("Add table", zap.Int64("tableID", tableID),
 		zap.String("name", tableName),
