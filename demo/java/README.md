@@ -45,7 +45,7 @@ Now ticdc-decoder is installed. To add a dependency :
 
 ```xml
 <dependency>
-    <groupId>org.pingcap.ticdc.cdc</groupId>
+    <groupId>com.pingcap.ticdc.cdc</groupId>
     <artifactId>ticdc-decoder</artifactId>
     <version>4.0.6-SNAPSHOT</version>
 </dependency>
