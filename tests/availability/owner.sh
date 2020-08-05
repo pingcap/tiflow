@@ -10,13 +10,13 @@ CDC_BINARY=cdc.test
 MAX_RETRIES=10
 
 function test_owner_ha() {
-    test_kill_owner
-    test_hang_up_owner
-    test_expire_owner
-    test_owner_cleanup_stale_tasks
+#    test_kill_owner
+#    test_hang_up_owner
+#    test_expire_owner
+#    test_owner_cleanup_stale_tasks
     # FIXME: this test case should be owner crashed during task cleanup
     # test_owner_cleanup_stale_tasks
-    test_owner_retryable_error
+#    test_owner_retryable_error
     test_gap_between_watch_capture
 }
 # test_kill_owner starts two captures and kill the owner

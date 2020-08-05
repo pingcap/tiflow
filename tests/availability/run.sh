@@ -33,6 +33,6 @@ function prepare() {
 trap stop_tidb_cluster EXIT
 prepare $*
 test_owner_ha $*
-test_capture_ha $*
-test_processor_ha $*
+#test_capture_ha $*
+#test_processor_ha $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
