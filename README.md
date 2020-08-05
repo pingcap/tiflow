@@ -10,7 +10,7 @@
 
 ## Architecture
 
-![architecture](./docs/media/cdc_architecture.png)
+<img src="docs/media/cdc_architecture.svg?sanitize=true" alt="architecture" width="600"/>
 
 ## Documentation
 
