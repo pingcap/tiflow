@@ -826,11 +826,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		return
 	}
 	globalResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
-	if replicaInfo.StartTs < globalResolvedTs {
-		log.Fatal("cannot add table which of startTs is less than the global resolved, please report a bug",
-			zap.Int64("tableID", tableID), zap.Any("replicaInfo", replicaInfo),
-			zap.Uint64("globalResolvedTs", globalResolvedTs))
-	}
 	log.Debug("Add table", zap.Int64("tableID", tableID),
 		zap.String("name", tableName),
 		zap.Any("replicaInfo", replicaInfo),
