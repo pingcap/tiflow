@@ -12,9 +12,12 @@ services:
       - ./docker/logs:/logs
       - ./docker/config:/config
     command:
-      - /bin/bash
-      - -c
-      - /usr/bin/tail -f /dev/null
+      - /usr/bin/socat
+      - -v
+      - tcp-l:1234,fork
+      - exec:'/bin/cat'
+    ports:
+      - "1234:1234"
     depends_on:
       - "upstream-pd"
       - "schema-registry"

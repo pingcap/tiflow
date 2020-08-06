@@ -1,4 +1,4 @@
-package lib
+package framework
 
 type MqListener func (states interface{}, topic string, key []byte, value []byte) error
 

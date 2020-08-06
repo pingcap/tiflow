@@ -1,4 +1,4 @@
-package lib
+package framework
 
 type CDCProfile struct {
 	PDUri string

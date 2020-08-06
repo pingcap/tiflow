@@ -1,4 +1,4 @@
-package lib
+package framework
 
 import (
 	"os/exec"
