@@ -153,7 +153,7 @@ type tableBuffer struct {
 	}
 }
 
-func (tb *tableBuffer) Flush(ctx context.Context, s *s3Sink) error {
+func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 	tb.lock.Lock()
 	sendEvents := tb.sendEvents
 	hashPart := tb.uploadParts
@@ -389,6 +389,7 @@ func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		if item, ok = s.hashMap.Load(tableID); !ok {
 			// found new tableID
 			s.tableBuffers = append(s.tableBuffers, newTableBuffer(tableID))
+			s.logMeta.Names[tableID] = makeSpecifyTableName(row.Table.Schema, row.Table.Table)
 			hash = len(s.tableBuffers) - 1
 			s.hashMap.Store(tableID, hash)
 		} else {
@@ -426,7 +427,7 @@ func (s *s3Sink) flushTableBuffers(ctx context.Context) error {
 			log.Info("[FlushRowChangedEvents] flush specify row changed event",
 				zap.Int64("table", tb.tableID),
 				zap.Int64("event size", tb.sendEvents))
-			errCh <- tb.Flush(ctx, s)
+			errCh <- tb.flush(ctx, s)
 		}(ctx, tbReplica)
 	}
 	wg.Wait()

@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	defaultDirMode = 0755
+	defaultDirMode  = 0755
 	defaultFileMode = 0644
 
 	maxRowFileSize = 10 << 20 // TODO update
@@ -163,6 +163,7 @@ func (f *fileSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowC
 		if item, ok = f.hashMap.Load(tableID); !ok {
 			// found new tableID
 			f.tableStreams = append(f.tableStreams, newTableStream(tableID))
+			f.logMeta.Names[tableID] = makeSpecifyTableName(row.Table.Schema, row.Table.Table)
 			hash = len(f.tableStreams) - 1
 			f.hashMap.Store(tableID, hash)
 		} else {
@@ -182,10 +183,8 @@ func (f *fileSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowC
 
 func (f *fileSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
 	// TODO update flush policy with size
-	select {
-	case <-time.After(defaultFlushRowChangedEventDuration):
-		f.flushTableStreams()
-	}
+	<-time.After(defaultFlushRowChangedEventDuration)
+	f.flushTableStreams()
 	return nil
 }
 

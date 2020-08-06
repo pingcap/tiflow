@@ -55,13 +55,17 @@ func makeTableFileName(commitTS uint64) string {
 	return fmt.Sprintf("cdclog.%d", commitTS)
 }
 
+func makeSpecifyTableName(schema string, table string) string {
+	return fmt.Sprintf("%s.%s", schema, table)
+}
+
 func makeLogMetaContent(tableInfos []*model.SimpleTableInfo) *logMeta {
 	meta := new(logMeta)
 	names := make(map[int64]string)
 	for _, table := range tableInfos {
 		if table != nil {
 			log.Info("[makeLogMetaContent]", zap.Reflect("table", table))
-			names[table.TableID] = fmt.Sprintf("%s.%s", table.Schema, table.Table)
+			names[table.TableID] = makeSpecifyTableName(table.Schema, table.Table)
 		}
 	}
 	meta.Names = names
