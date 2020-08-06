@@ -420,10 +420,22 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) {
 	}
 }
 
-func (s *mysqlSink) notifyAndWaitExec() {
+func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	s.notifier.Notify()
-	for _, w := range s.workers {
-		w.waitAllTxnsExecuted()
+	done := make(chan struct{})
+	go func() {
+		for _, w := range s.workers {
+			w.waitAllTxnsExecuted()
+		}
+		close(done)
+	}()
+	// This is a hack code to avoid io wait in some routine blocks others to exit.
+	// As the network io wait is blocked in kernel code, the goroutine is in a
+	// D-state that we could not even stop it by cancel the context. So if this
+	// scenario happens, the blocked goroutine will be leak.
+	select {
+	case <-ctx.Done():
+	case <-done:
 	}
 }
 
@@ -463,7 +475,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 				sendFn(txn, idx)
 				return
 			}
-			s.notifyAndWaitExec()
+			s.notifyAndWaitExec(ctx)
 			causality.reset()
 		}
 		sendFn(txn, rowsChIdx)
@@ -477,7 +489,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 			s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
 		}
 	}
-	s.notifyAndWaitExec()
+	s.notifyAndWaitExec(ctx)
 }
 
 type mysqlSinkWorker struct {
@@ -609,6 +621,9 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 			failpoint.Inject("MySQLSinkTxnRandomError", func() {
 				failpoint.Return(checkTxnErr(errors.Trace(dmysql.ErrInvalidConn)))
 			})
+			failpoint.Inject("MySQLSinkHangLongTime", func() {
+				time.Sleep(time.Hour)
+			})
 			err := s.statistics.RecordBatchExecution(func() (int, error) {
 				tx, err := s.db.BeginTx(ctx, nil)
 				if err != nil {
@@ -691,6 +706,9 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 }
 
 func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+	failpoint.Inject("MySQLSinkExecDMLError", func() {
+		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
+	})
 	dmls, err := s.prepareDMLs(rows, replicaID, bucket)
 	if err != nil {
 		return errors.Trace(err)
