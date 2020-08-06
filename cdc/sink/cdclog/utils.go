@@ -17,6 +17,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
@@ -44,8 +47,12 @@ func makeTableDirectoryName(tableID int64) string {
 	return fmt.Sprintf("%s%d", tablePrefix, tableID)
 }
 
-func makeTableFileName(tableID int64, commitTS uint64) string {
-	return fmt.Sprintf("%s%d/cdclog.%d", tablePrefix, tableID, commitTS)
+func makeTableFileObject(tableID int64, commitTS uint64) string {
+	return fmt.Sprintf("%s%d/%s", tablePrefix, tableID, makeTableFileName(commitTS))
+}
+
+func makeTableFileName(commitTS uint64) string {
+	return fmt.Sprintf("cdclog.%d", commitTS)
 }
 
 func makeLogMetaContent(tableInfos []*model.SimpleTableInfo) *logMeta {
@@ -53,6 +60,7 @@ func makeLogMetaContent(tableInfos []*model.SimpleTableInfo) *logMeta {
 	names := make(map[int64]string)
 	for _, table := range tableInfos {
 		if table != nil {
+			log.Info("[makeLogMetaContent]", zap.Reflect("table", table))
 			names[table.TableID] = fmt.Sprintf("%s.%s", table.Schema, table.Table)
 		}
 	}
@@ -60,6 +68,10 @@ func makeLogMetaContent(tableInfos []*model.SimpleTableInfo) *logMeta {
 	return meta
 }
 
+func makeDDLFileObject(commitTS uint64) string {
+	return fmt.Sprintf("%s/%s", ddlEventsDir, makeDDLFileName(commitTS))
+}
+
 func makeDDLFileName(commitTS uint64) string {
-	return fmt.Sprintf("%s/%s.%d", ddlEventsDir, ddlEventsPrefix, maxUint64-commitTS)
+	return fmt.Sprintf("%s.%d", ddlEventsPrefix, maxUint64-commitTS)
 }

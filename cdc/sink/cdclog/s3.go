@@ -172,7 +172,7 @@ func (tb *tableBuffer) Flush(ctx context.Context, s *s3Sink) error {
 		flushedKeys += int64(len(row.Keys))
 		if event == sendEvents-1 {
 			// if last event, we record ts as new rotate file name
-			newFileName = makeTableFileName(row.Table.TableID, row.CommitTs)
+			newFileName = makeTableFileObject(row.Table.TableID, row.CommitTs)
 		}
 
 		data, err := row.ToProtoBuf().Marshal()
@@ -497,7 +497,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		// no ddl file exists or
 		// exists file is oversized. we should generate a new file
 		fileData = data
-		name = s.prefix + makeDDLFileName(ddl.CommitTs)
+		name = s.prefix + makeDDLFileObject(ddl.CommitTs)
 		log.Debug("[EmitDDLEvent] create first or rotate ddl log",
 			zap.String("name", name), zap.Any("ddl", ddl))
 	} else {
