@@ -26,6 +26,11 @@ function check_changefeed_state() {
 export -f check_changefeed_state
 
 function run() {
+    # kafka is not supported yet.
+    if [ "$SINK_TYPE" == "kafka" ]; then
+      return
+    fi
+
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
     start_tidb_cluster --workdir $WORK_DIR
     cd $WORK_DIR
