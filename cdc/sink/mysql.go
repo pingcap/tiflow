@@ -422,12 +422,12 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) {
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	s.notifier.Notify()
-	done := make(chan struct{}, 1)
+	done := make(chan struct{})
 	go func() {
 		for _, w := range s.workers {
 			w.waitAllTxnsExecuted()
 		}
-		done <- struct{}{}
+		close(done)
 	}()
 	// This is a hack code to avoid io wait in some routine blocks others to exit.
 	// As the network io wait is blocked in kernel code, the goroutine is in a
