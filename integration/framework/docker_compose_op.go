@@ -10,9 +10,9 @@ import (
 )
 
 type DockerComposeOperator struct {
-	fileName   string
-	controller string
-	healthChecker func () error
+	fileName      string
+	controller    string
+	healthChecker func() error
 }
 
 func (d *DockerComposeOperator) Setup() {
@@ -43,11 +43,15 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 }
 
 func (d *DockerComposeOperator) TearDown() {
+	log.Info("Start tearing down docker-compose services")
 	cmd := exec.Command("docker-compose", "-f", d.fileName, "down", "-v")
 	runCmdHandleError(cmd)
+	log.Info("Finished tearing down docker-compose services")
 }
 
 func (d *DockerComposeOperator) ExecInController(shellCmd string) ([]byte, error) {
-	cmd := exec.Command("docker", "exec", "-it", d.controller, "sh", "-c", shellCmd)
+	log.Info("Start executing in the controller container", zap.String("shellCmd", shellCmd))
+	cmd := exec.Command("docker", "exec", d.controller, "sh", "-c", shellCmd)
+	defer log.Info("Finished executing in the controller container", zap.String("shellCmd", shellCmd))
 	return cmd.Output()
 }

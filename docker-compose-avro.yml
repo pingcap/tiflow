@@ -361,3 +361,13 @@ services:
         # Now launch Kafka Connect
         sleep infinity &
         /etc/confluent/docker/run
+
+  kafka-connect-healthcheck:
+    image: devshawn/kafka-connect-healthcheck:0.1.0
+    container_name: kafka-connect-healthcheck
+    depends_on:
+      - kafka-connect-01
+    ports:
+      - 18083:18083
+    environment:
+      HEALTHCHECK_CONNECT_URL: 'http://kafka-connect-01:8083'

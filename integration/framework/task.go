@@ -5,3 +5,4 @@ type CDCProfile struct {
 	SinkUri string
 	Opts map[string]string
 }
+

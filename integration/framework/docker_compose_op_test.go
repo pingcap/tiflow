@@ -16,10 +16,5 @@ func TestDockerComposeOperator_SetupTearDown(t *testing.T) {
 		controller: "controller0",
 	}
 	d.Setup()
-
-	bytes, err := d.ExecInController("echo test")
-	assert.NoError(t, err)
-	assert.Equal(t, "test", string(bytes))
-
 	d.TearDown()
 }
