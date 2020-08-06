@@ -477,6 +477,9 @@ func (p *processor) updateInfo(ctx context.Context) error {
 		return errors.Trace(model.ErrAdminStopProcessor)
 	}
 	updatePosition := func() error {
+		failpoint.Inject("ProcessorUpdatePositionDelaying", func() {
+			time.Sleep(1 * time.Second)
+		})
 		//p.position.Count = p.sink.Count()
 		err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 		if err != nil {
@@ -508,6 +511,10 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			if err != nil {
 				return false, backoff.Permanent(errors.Trace(err))
 			}
+			err = updatePosition()
+			if err != nil {
+				return true, errors.Trace(err)
+			}
 			return true, nil
 		})
 	if err != nil {
@@ -524,10 +531,6 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	syncTableNumGauge.
 		WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).
 		Set(float64(len(p.status.Tables)))
-	err = updatePosition()
-	if err != nil {
-		return errors.Trace(err)
-	}
 	return nil
 }
 
@@ -770,8 +773,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			if row.CRTs <= resolvedTs {
 				log.Fatal("The CRTs must be greater than the resolvedTs",
-					zap.Uint64("CRTs", row.CRTs),
-					zap.Uint64("resolvedTs", resolvedTs))
+					zap.String("model", "processor"),
+					zap.Uint64("resolvedTs", resolvedTs),
+					zap.Any("row", row))
 			}
 			err := processRowChangedEvent(row)
 			if err != nil {
@@ -821,7 +825,11 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
 		return
 	}
-	log.Debug("Add table", zap.Int64("tableID", tableID), zap.String("name", tableName), zap.Any("replicaInfo", replicaInfo))
+	globalResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
+	log.Debug("Add table", zap.Int64("tableID", tableID),
+		zap.String("name", tableName),
+		zap.Any("replicaInfo", replicaInfo),
+		zap.Uint64("globalResolvedTs", globalResolvedTs))
 
 	ctx = util.PutTableInfoInCtx(ctx, tableID, tableName)
 	ctx, cancel := context.WithCancel(ctx)
@@ -881,6 +889,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		}()
 		go func() {
 			resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
+			var lastResolvedTs uint64
 			for {
 				select {
 				case <-ctx.Done():
@@ -908,9 +917,20 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 					}
 					if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
 						atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
+						lastResolvedTs = pEvent.CRTs
 						p.localResolvedNotifier.Notify()
 						resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
 						continue
+					}
+					sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
+					if pEvent.CRTs <= sinkResolvedTs || pEvent.CRTs <= lastResolvedTs || pEvent.CRTs < replicaInfo.StartTs {
+						log.Fatal("The CRTs of event is not expected, please report a bug",
+							zap.String("model", "sorter"),
+							zap.Uint64("globalResolvedTs", sinkResolvedTs),
+							zap.Uint64("resolvedTs", lastResolvedTs),
+							zap.Int64("tableID", tableID),
+							zap.Any("replicaInfo", replicaInfo),
+							zap.Any("row", pEvent))
 					}
 					select {
 					case <-ctx.Done():

@@ -4,7 +4,7 @@ TiCDC 是一款通过拉取 TiKV 变更日志实现的 TiDB 增量数据同步�
 
 TiCDC 集群由多个无状态节点构成，通过 PD 内部的 etcd 实现高可用。集群支持创建多个同步任务，向多个不同的下游进行数据同步。TiCDC 的系统架构如下图所示：
 
-![architecture.png](../media/cdc_architecture.png)
+<img src="../media/cdc_architecture.svg?sanitize=true" alt="architecture" width="600"/>
 
 ## 系统组件
 
