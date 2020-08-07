@@ -51,8 +51,6 @@ import (
 )
 
 const (
-	resolveTsInterval = time.Millisecond * 500
-
 	// TODO: processor output chan size, the accumulated data is determined by
 	// the count of sorted data and unmounted data. In current benchmark a single
 	// processor can reach 50k-100k QPS, and accumulated data is around
@@ -107,6 +105,8 @@ type processor struct {
 	sinkEmittedResolvedReceiver *notify.Receiver
 	localResolvedNotifier       *notify.Notifier
 	localResolvedReceiver       *notify.Receiver
+	localCheckpointTsNotifier   *notify.Notifier
+	localCheckpointTsReceiver   *notify.Receiver
 
 	wg    *errgroup.Group
 	errCh chan<- error
@@ -183,6 +183,7 @@ func newProcessor(
 
 	sinkEmittedResolvedNotifier := new(notify.Notifier)
 	localResolvedNotifier := new(notify.Notifier)
+	localCheckpointTsNotifier := new(notify.Notifier)
 	p := &processor{
 		id:            uuid.New().String(),
 		limitter:      limitter,
@@ -208,6 +209,9 @@ func newProcessor(
 
 		localResolvedNotifier: localResolvedNotifier,
 		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
+
+		localCheckpointTsNotifier: localCheckpointTsNotifier,
+		localCheckpointTsReceiver: localCheckpointTsNotifier.NewReceiver(50 * time.Millisecond),
 
 		tables:       make(map[int64]*tableInfo),
 		markTableIDs: make(map[int64]struct{}),
@@ -309,8 +313,6 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
 func (p *processor) positionWorker(ctx context.Context) error {
-	checkpointTsTick := time.NewTicker(resolveTsInterval)
-	lastUpdateInfoTime := time.Now()
 	updateInfo := func() error {
 		t0Update := time.Now()
 		err := retry.Run(500*time.Millisecond, 3, func() error {
@@ -334,13 +336,12 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		if err != nil {
 			return errors.Annotate(err, "failed to update info")
 		}
-		lastUpdateInfoTime = time.Now()
 		return nil
 	}
 
 	defer func() {
-		checkpointTsTick.Stop()
 		p.localResolvedReceiver.Stop()
+		p.localCheckpointTsReceiver.Stop()
 
 		if !p.isStopped() {
 			err := updateInfo()
@@ -356,8 +357,6 @@ func (p *processor) positionWorker(ctx context.Context) error {
 	metricResolvedTsLagGauge := resolvedTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	checkpointTsGauge := checkpointTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	metricCheckpointTsLagGauge := checkpointTsLagGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
-	checkUpdateInfo := time.NewTicker(500 * time.Millisecond)
-	defer checkUpdateInfo.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -388,8 +387,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			if err := updateInfo(); err != nil {
 				return errors.Trace(err)
 			}
-
-		case <-checkpointTsTick.C:
+		case <-p.localCheckpointTsReceiver.C:
 			checkpointTs := atomic.LoadUint64(&p.checkpointTs)
 			phyTs := oracle.ExtractPhysical(checkpointTs)
 			// It is more accurate to get tso from PD, but in most cases we have
@@ -401,13 +399,6 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 			p.position.CheckPointTs = checkpointTs
 			checkpointTsGauge.Set(float64(phyTs))
-			if err := updateInfo(); err != nil {
-				return errors.Trace(err)
-			}
-		case <-checkUpdateInfo.C:
-			if time.Since(lastUpdateInfoTime) < time.Second {
-				continue
-			}
 			if err := updateInfo(); err != nil {
 				return errors.Trace(err)
 			}
@@ -703,6 +694,7 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			atomic.StoreUint64(&p.checkpointTs, minTs)
+			p.localCheckpointTsNotifier.Notify()
 		}
 	}
 }
