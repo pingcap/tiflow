@@ -441,6 +441,8 @@ func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) e
 	//    TODO: when cdc crashed, we should repair these chunks to a complete file
 	// 2. flush row events to a complete s3 file: if the event size is enough
 	select {
+	case <-ctx.Done():
+		return ctx.Err()
 	case <-s.notifyChan:
 		return s.flushTableBuffers(ctx)
 

@@ -71,7 +71,7 @@ type fileSink struct {
 	tableStreams []*tableStream
 }
 
-func (f *fileSink) flushTableStreams() {
+func (f *fileSink) flushTableStreams() error {
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(f.tableStreams))
 	for _, ts := range f.tableStreams {
@@ -139,6 +139,12 @@ func (f *fileSink) flushTableStreams() {
 		}(tsReplica)
 	}
 	wg.Wait()
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (f *fileSink) createDDLFile(commitTs uint64) (*os.File, error) {
@@ -181,24 +187,25 @@ func (f *fileSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowC
 }
 
 func (f *fileSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
+	log.Debug("[FlushRowChangedEvents] enter", zap.Uint64("ts", resolvedTs))
 	// TODO update flush policy with size
-	<-time.After(defaultFlushRowChangedEventDuration)
-	f.flushTableStreams()
-	return nil
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(defaultFlushRowChangedEventDuration):
+		return f.flushTableStreams()
+	}
 }
 
 func (f *fileSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	if f.logMeta == nil {
-		log.Debug("[EmitCheckpointTs] generate new logMeta when emit checkpoint ts", zap.Uint64("ts", ts))
-		f.logMeta = new(logMeta)
-	}
-
+	log.Debug("[EmitCheckpointTs]", zap.Uint64("ts", ts))
 	f.logMeta.GlobalResolvedTS = ts
 	data, err := f.logMeta.Marshal()
 	if err != nil {
 		return errors.Annotate(err, "marshal meta to json failed")
 	}
-	file, err := os.OpenFile(f.logPath.meta, os.O_WRONLY, defaultFileMode)
+	// FIXME: if initialize succeed, O_WRONLY is enough, but sometimes it will failed
+	file, err := os.OpenFile(f.logPath.meta, os.O_CREATE|os.O_WRONLY, defaultFileMode)
 	if err != nil {
 		return err
 	}
