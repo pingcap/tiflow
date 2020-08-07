@@ -17,7 +17,6 @@ import (
 	"context"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"sync"
 	"time"

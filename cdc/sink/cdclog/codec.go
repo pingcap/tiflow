@@ -31,7 +31,9 @@ const headerLength int64 = 16 // 4 + 8 + 4 magic + length + checksum
 
 var crcTable = crc32.MakeTable(crc32.Castagnoli)
 
+// TODO decode Record when use BR apply these logs
 // Record is the format in the log file
+/*
 type Record struct {
 	magic    uint32
 	length   uint64
@@ -46,6 +48,23 @@ func (r *Record) recordLength() int64 {
 func (r *Record) isValid() bool {
 	return crc32.Checksum(r.payload, crcTable) == r.checksum
 }
+
+func (r *Record) readHeader(reader io.Reader) error {
+	err := binary.Read(reader, binary.LittleEndian, &r.magic)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = binary.Read(reader, binary.LittleEndian, &r.length)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = binary.Read(reader, binary.LittleEndian, &r.checksum)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+*/
 
 func encodeRecord(payload []byte) []byte {
 	header := make([]byte, headerLength)
