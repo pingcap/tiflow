@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	parsemodel "github.com/pingcap/parser/model"
+
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
@@ -97,7 +99,7 @@ func (f *fileSink) flushTableStreams() error {
 				rowDatas = append(rowDatas, encodeRecord(data)...)
 			}
 
-			tableDir := path.Join(f.logPath.root, makeTableDirectoryName(ts.tableID))
+			tableDir := filepath.Join(f.logPath.root, makeTableDirectoryName(ts.tableID))
 
 			if ts.rowFile == nil {
 				// create new file to append data
@@ -105,7 +107,7 @@ func (f *fileSink) flushTableStreams() error {
 				if err != nil {
 					errCh <- err
 				}
-				file, err := os.OpenFile(path.Join(tableDir, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
+				file, err := os.OpenFile(filepath.Join(tableDir, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
 				if err != nil {
 					errCh <- err
 				}
@@ -123,7 +125,7 @@ func (f *fileSink) flushTableStreams() error {
 				if err != nil {
 					errCh <- err
 				}
-				file, err := os.OpenFile(path.Join(tableDir, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
+				file, err := os.OpenFile(filepath.Join(tableDir, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
 				if err != nil {
 					errCh <- err
 				}
@@ -151,7 +153,7 @@ func (f *fileSink) flushTableStreams() error {
 
 func (f *fileSink) createDDLFile(commitTs uint64) (*os.File, error) {
 	fileName := makeDDLFileName(commitTs)
-	file, err := os.OpenFile(path.Join(f.logPath.ddl, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
+	file, err := os.OpenFile(filepath.Join(f.logPath.ddl, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
 	if err != nil {
 		log.Error("[EmitDDLEvent] create ddl file failed", zap.Error(err))
 		return nil, err
@@ -271,7 +273,7 @@ func (f *fileSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTabl
 		for _, table := range tableInfo {
 			if table != nil {
 				name := makeTableDirectoryName(table.TableID)
-				err := os.MkdirAll(path.Join(f.logPath.root, name), defaultDirMode)
+				err := os.MkdirAll(filepath.Join(f.logPath.root, name), defaultDirMode)
 				if err != nil {
 					return errors.Annotatef(err, "create table directory for %s on failed", name)
 				}
