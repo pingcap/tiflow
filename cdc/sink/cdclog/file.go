@@ -217,10 +217,10 @@ func (f *fileSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	switch ddl.Type {
 	case parsemodel.ActionCreateTable:
-		f.logMeta.Names[ddl.TableInfo.TableID] = makeSpecifyTableName(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		f.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	case parsemodel.ActionRenameTable:
 		delete(f.logMeta.Names, ddl.PreTableInfo.TableID)
-		f.logMeta.Names[ddl.TableInfo.TableID] = makeSpecifyTableName(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		f.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	}
 	data, err := ddl.ToProtoBuf().Marshal()
 	if err != nil {

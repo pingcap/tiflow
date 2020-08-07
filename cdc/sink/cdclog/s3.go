@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	parsemodel "github.com/pingcap/parser/model"
+	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/cdc/model"
@@ -136,12 +137,11 @@ func (options *S3Options) apply() *aws.Config {
 }
 
 type tableBuffer struct {
-	lock sync.RWMutex
 	// for log
 	tableID    int64
 	dataCh     chan *model.RowChangedEvent
-	sendSize   int64
-	sendEvents int64
+	sendSize   *atomic.Int64
+	sendEvents *atomic.Int64
 
 	uploadParts struct {
 		originPartUploadResponse *s3.CreateMultipartUploadOutput
@@ -151,11 +151,8 @@ type tableBuffer struct {
 }
 
 func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
-	tb.lock.Lock()
-	sendEvents := tb.sendEvents
 	hashPart := tb.uploadParts
-	tb.lock.Unlock()
-
+	sendEvents := tb.sendEvents.Load()
 	if sendEvents == 0 && len(hashPart.completeParts) == 0 {
 		log.Info("nothing to flush", zap.Int64("tableID", tb.tableID))
 		return nil
@@ -234,13 +231,9 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 		}
 	}
 
-	// re-set counter
-	tb.lock.Lock()
+	tb.sendEvents.Sub(sendEvents)
+	tb.sendSize.Sub(flushedSize)
 	tb.uploadParts = hashPart
-	tb.sendEvents -= sendEvents
-	tb.sendSize -= flushedSize
-	tb.lock.Unlock()
-
 	return nil
 }
 
@@ -248,8 +241,8 @@ func newTableBuffer(tableID int64) *tableBuffer {
 	return &tableBuffer{
 		tableID:    tableID,
 		dataCh:     make(chan *model.RowChangedEvent, defaultBufferChanSize),
-		sendSize:   0,
-		sendEvents: 0,
+		sendSize:   atomic.NewInt64(0),
+		sendEvents: atomic.NewInt64(0),
 		uploadParts: struct {
 			originPartUploadResponse *s3.CreateMultipartUploadOutput
 			byteSize                 int64
@@ -394,18 +387,19 @@ func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		case <-ctx.Done():
 			return ctx.Err()
 		case s.tableBuffers[hash].dataCh <- row:
-			s.tableBuffers[hash].lock.RLock()
-			s.tableBuffers[hash].sendSize += row.ApproximateSize
-			if s.tableBuffers[hash].sendSize > maxNotifySize {
+			s.tableBuffers[hash].sendSize.Add(row.ApproximateSize)
+			if s.tableBuffers[hash].sendSize.Load() > maxNotifySize {
 				// trigger flush when a table has maxNotifySize
 				shouldFlush = true
 			}
-			s.tableBuffers[hash].sendEvents += 1
-			s.tableBuffers[hash].lock.RUnlock()
+			s.tableBuffers[hash].sendEvents.Inc()
 		}
 	}
 	if shouldFlush {
-		s.notifyChan <- struct{}{}
+		// should not block here
+		go func() {
+			s.notifyChan <- struct{}{}
+		}()
 	}
 	return nil
 }
@@ -421,7 +415,7 @@ func (s *s3Sink) flushTableBuffers(ctx context.Context) error {
 			defer wg.Done()
 			log.Info("[FlushRowChangedEvents] flush specify row changed event",
 				zap.Int64("table", tb.tableID),
-				zap.Int64("event size", tb.sendEvents))
+				zap.Int64("event size", tb.sendEvents.Load()))
 			errCh <- tb.flush(ctx, s)
 		}(ctx, tbReplica)
 	}
@@ -470,10 +464,10 @@ func (s *s3Sink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	switch ddl.Type {
 	case parsemodel.ActionCreateTable:
-		s.logMeta.Names[ddl.TableInfo.TableID] = makeSpecifyTableName(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		s.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	case parsemodel.ActionRenameTable:
 		delete(s.logMeta.Names, ddl.PreTableInfo.TableID)
-		s.logMeta.Names[ddl.TableInfo.TableID] = makeSpecifyTableName(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		s.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	}
 	data, err := ddl.ToProtoBuf().Marshal()
 	if err != nil {
