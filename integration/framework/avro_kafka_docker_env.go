@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 )
 
 type AvroKafkaDockerEnv struct {
@@ -66,10 +67,14 @@ func (e *AvroKafkaDockerEnv) Reset() {
 	e.Setup()
 }
 
-func (e *AvroKafkaDockerEnv) RunTest(test interface{}) {
-	// TODO
+func (e *AvroKafkaDockerEnv) RunTest(test Task) {
+
 }
 
 func (e *AvroKafkaDockerEnv) SetListener(states interface{}, listener MqListener) {
 	// TODO
+}
+
+func (e *AvroKafkaDockerEnv) initializeCDC(profile *CDCProfile) error {
+
 }

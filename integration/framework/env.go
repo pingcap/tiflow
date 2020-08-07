@@ -6,6 +6,6 @@ type Environment interface {
 	Setup()
 	TearDown()
 	Reset()
-	RunTest(interface{})
+	RunTest(Task)
 	SetListener(states interface{}, listener MqListener)
 }
