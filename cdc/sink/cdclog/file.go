@@ -94,6 +94,7 @@ func (f *fileSink) flushTableStreams() error {
 				data, err := row.ToProtoBuf().Marshal()
 				if err != nil {
 					errCh <- err
+					return
 				}
 				rowDatas = append(rowDatas, encodeRecord(data)...)
 			}
@@ -109,6 +110,7 @@ func (f *fileSink) flushTableStreams() error {
 				file, err := os.OpenFile(filepath.Join(tableDir, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
 				if err != nil {
 					errCh <- err
+					return
 				}
 				ts.rowFile = file
 			}
@@ -116,6 +118,7 @@ func (f *fileSink) flushTableStreams() error {
 			stat, err := ts.rowFile.Stat()
 			if err != nil {
 				errCh <- err
+				return
 			}
 
 			if stat.Size() > maxRowFileSize {
@@ -123,16 +126,19 @@ func (f *fileSink) flushTableStreams() error {
 				err := ts.rowFile.Close()
 				if err != nil {
 					errCh <- err
+					return
 				}
 				file, err := os.OpenFile(filepath.Join(tableDir, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
 				if err != nil {
 					errCh <- err
+					return
 				}
 				ts.rowFile = file
 			}
 			_, err = ts.rowFile.Write(rowDatas)
 			if err != nil {
 				errCh <- err
+				return
 			}
 
 			ts.sendEvents.Sub(flushedEvents)
