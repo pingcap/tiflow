@@ -94,7 +94,7 @@ func (f *fileSink) flushTableStreams() error {
 				if err != nil {
 					errCh <- err
 				}
-				rowDatas = append(rowDatas, append(data, '\n')...)
+				rowDatas = append(rowDatas, encodeRecord(data)...)
 			}
 
 			tableDir := path.Join(f.logPath.root, makeTableDirectoryName(ts.tableID))

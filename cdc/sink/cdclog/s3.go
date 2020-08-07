@@ -173,8 +173,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 		if err != nil {
 			return err
 		}
-		rowDatas = append(rowDatas, data...)
-		rowDatas = append(rowDatas, '\n')
+		rowDatas = append(rowDatas, encodeRecord(data)...)
 	}
 
 	log.Debug("[FlushRowChangedEvents[Debug]] flush table buffer",
