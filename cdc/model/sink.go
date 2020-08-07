@@ -393,6 +393,7 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 		}
 
 		d.TableInfo.Table = tableName
+		d.TableInfo.TableID = job.TableID
 	}
 	d.fillPreTableInfo(preTableInfo)
 }
@@ -404,6 +405,7 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 	d.PreTableInfo = new(SimpleTableInfo)
 	d.PreTableInfo.Schema = preTableInfo.TableName.Schema
 	d.PreTableInfo.Table = preTableInfo.TableName.Table
+	d.PreTableInfo.TableID = preTableInfo.ID
 
 	d.PreTableInfo.ColumnInfo = make([]*ColumnInfo, len(preTableInfo.Columns))
 	for i, colInfo := range preTableInfo.Columns {
