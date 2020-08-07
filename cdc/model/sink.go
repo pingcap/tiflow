@@ -215,6 +215,9 @@ type RowChangedEvent struct {
 	Columns      map[string]*Column `json:"columns"`
 	PreColumns   map[string]*Column `json:"pre-columns"`
 	Keys         []string           `json:"keys"`
+
+	// approximate size of this event, calculate by tikv proto bytes size
+	ApproximateSize int64
 }
 
 // ToProtoBuf translate RowChangedEvent to proto event, this is use for cdc log backup.

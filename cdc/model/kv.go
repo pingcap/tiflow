@@ -72,3 +72,7 @@ func (v *RawKVEntry) String() string {
 	return fmt.Sprintf("OpType: %v, Key: %s, Value: %s, StartTs: %d, CRTs: %d",
 		v.OpType, string(v.Key), string(v.Value), v.StartTs, v.CRTs)
 }
+
+func (v *RawKVEntry) ApproximateSize() int64 {
+	return int64(len(v.Key) + len(v.Value) + len(v.OldValue))
+}

@@ -174,8 +174,7 @@ func (f *fileSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowC
 			return ctx.Err()
 		case f.tableStreams[hash].dataCh <- row:
 			f.tableStreams[hash].sendEvents.Inc()
-			// TODO give a approximate size of this row
-			f.tableStreams[hash].sendSize.Add(int64(len(row.Keys) * 128))
+			f.tableStreams[hash].sendSize.Add(row.ApproximateSize)
 		}
 	}
 	return nil
@@ -309,6 +308,7 @@ func NewLocalFileSink(sinkURI *url.URL) (*fileSink, error) {
 		return nil, err
 	}
 	return &fileSink{
+		logMeta:      newLogMeta(),
 		logPath:      logPath,
 		tableStreams: make([]*tableStream, 0),
 	}, nil

@@ -38,6 +38,12 @@ type logMeta struct {
 	GlobalResolvedTS uint64           `json:"global_resolved_ts"`
 }
 
+func newLogMeta() *logMeta {
+	return &logMeta{
+		Names: make(map[int64]string),
+	}
+}
+
 // Marshal saves logMeta
 func (l *logMeta) Marshal() ([]byte, error) {
 	return json.Marshal(l)

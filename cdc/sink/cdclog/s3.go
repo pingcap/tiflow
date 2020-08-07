@@ -44,16 +44,12 @@ const (
 	// number of retries to make of operations
 	maxRetries = 3
 
-	maxBufferKeys = 1000
+	maxNotifySize       = 15 << 20  // trigger flush if one table has reached 16Mb data size in memory
+	maxPartFlushSize    = 5 << 20   // The minimal multipart upload size is 5Mb.
+	maxCompletePartSize = 100 << 20 // rotate row changed event file if one complete file larger than 100Mb
+	maxDDLFlushSize     = 10 << 20  // rotate ddl event file if one complete file larger than 10Mb
 
-	maxPartFlushSize = 5 << 20 // The minimal multipart upload size is 5Mb.
-
-	maxCompletePartSize = 100 << 20
-
-	maxDDLFlushSize = 10 << 20
-
-	defaultBufferChanSize = 1280
-
+	defaultBufferChanSize               = 20480
 	defaultFlushRowChangedEventDuration = 5 * time.Second // TODO make it as a config
 )
 
@@ -143,7 +139,7 @@ type tableBuffer struct {
 	lock       sync.RWMutex
 	tableID    int64
 	dataCh     chan *model.RowChangedEvent
-	sendKeys   int64
+	sendSize   int64
 	sendEvents int64
 
 	uploadParts struct {
@@ -165,11 +161,11 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 	}
 
 	var newFileName string
-	flushedKeys := int64(0)
+	flushedSize := int64(0)
 	rowDatas := make([]byte, 0)
 	for event := int64(0); event < sendEvents; event++ {
 		row := <-tb.dataCh
-		flushedKeys += int64(len(row.Keys))
+		flushedSize += row.ApproximateSize
 		if event == sendEvents-1 {
 			// if last event, we record ts as new rotate file name
 			newFileName = makeTableFileObject(row.Table.TableID, row.CommitTs)
@@ -229,8 +225,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 			}
 		} else {
 			// generate normal file because S3 multi-upload need every part at least 5Mb.
-			log.Info("[FlushRowChangedEvents] normal upload file",
-				zap.Int64("tableID", tb.tableID))
+			log.Info("[FlushRowChangedEvents] normal upload file", zap.Int64("tableID", tb.tableID))
 			err := s.putObjectWithKey(ctx, s.prefix+newFileName, rowDatas)
 			if err != nil {
 				return err
@@ -242,7 +237,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 	tb.lock.Lock()
 	tb.uploadParts = hashPart
 	tb.sendEvents -= sendEvents
-	tb.sendKeys -= flushedKeys
+	tb.sendSize -= flushedSize
 	tb.lock.Unlock()
 
 	return nil
@@ -252,7 +247,7 @@ func newTableBuffer(tableID int64) *tableBuffer {
 	return &tableBuffer{
 		tableID:    tableID,
 		dataCh:     make(chan *model.RowChangedEvent, defaultBufferChanSize),
-		sendKeys:   0,
+		sendSize:   0,
 		sendEvents: 0,
 		uploadParts: struct {
 			originPartUploadResponse *s3.CreateMultipartUploadOutput
@@ -400,9 +395,9 @@ func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 			return ctx.Err()
 		case s.tableBuffers[hash].dataCh <- row:
 			s.tableBuffers[hash].lock.RLock()
-			s.tableBuffers[hash].sendKeys += int64(len(row.Keys))
-			if s.tableBuffers[hash].sendKeys > maxBufferKeys {
-				// trigger flush when a table has maxBufferKeys
+			s.tableBuffers[hash].sendSize += row.ApproximateSize
+			if s.tableBuffers[hash].sendSize > maxNotifySize {
+				// trigger flush when a table has maxNotifySize
 				shouldFlush = true
 			}
 			s.tableBuffers[hash].sendEvents += 1
@@ -459,10 +454,6 @@ func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) e
 // EmitCheckpointTs update the global resolved ts in log meta
 // sleep 5 seconds to avoid update too frequently
 func (s *s3Sink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
-	if s.logMeta == nil {
-		log.Debug("[EmitCheckpointTs] generate new logMeta when emit checkpoint ts", zap.Uint64("ts", ts))
-		s.logMeta = new(logMeta)
-	}
 	s.logMeta.GlobalResolvedTS = ts
 	data, err := s.logMeta.Marshal()
 	if err != nil {
@@ -516,8 +507,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 				return err
 			}
 		}
-		fileData = append(buf[:n], '\n')
-		fileData = append(fileData, data...)
+		fileData = append(fileData, append(buf[:n], '\n')...)
 	}
 	return s.putObjectWithKey(ctx, name, fileData)
 }
@@ -583,6 +573,7 @@ func NewS3Sink(sinkURI *url.URL) (*s3Sink, error) {
 		prefix:  prefix,
 		options: s3options,
 		client:  s3client,
+		logMeta: newLogMeta(),
 
 		tableBuffers: tableBuffers,
 		notifyChan:   notifyChan,

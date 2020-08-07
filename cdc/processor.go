@@ -1024,6 +1024,11 @@ func runProcessor(
 		cancel()
 		return nil, errors.Trace(err)
 	}
+	err = sink.Initialize(ctx, nil)
+	if err != nil {
+		cancel()
+		return nil, errors.Trace(err)
+	}
 	processor, err := newProcessor(ctx, credential, session, info, sink, changefeedID, captureInfo, checkpointTs, errCh)
 	if err != nil {
 		cancel()
