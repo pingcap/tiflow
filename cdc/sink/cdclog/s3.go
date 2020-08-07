@@ -136,8 +136,8 @@ func (options *S3Options) apply() *aws.Config {
 }
 
 type tableBuffer struct {
+	lock sync.RWMutex
 	// for log
-	lock       sync.RWMutex
 	tableID    int64
 	dataCh     chan *model.RowChangedEvent
 	sendSize   int64

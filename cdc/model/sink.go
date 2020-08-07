@@ -191,7 +191,7 @@ func (t *TableName) GetTable() string {
 	return t.Table
 }
 
-// GetTableID returns table name.
+// GetTableID returns table ID.
 func (t *TableName) GetTableID() int64 {
 	return t.TableID
 }
@@ -239,6 +239,28 @@ func (r *RowChangedEvent) ToProtoBuf() *cdclog.RowChangedEvent {
 		table.TableID = r.Table.TableID
 		table.Partition = r.Table.Partition
 		rowChangedEventPb.Table = table
+	}
+	if len(r.Columns) > 0 {
+		columnsPb := make(map[string]*cdclog.Column)
+		for k, c := range r.Columns {
+			column := new(cdclog.Column)
+			column.Type = []byte{c.Type}
+			column.Flag = uint64(c.Flag)
+			column.Value = []byte(ColumnValueString(c.Value))
+			columnsPb[k] = column
+		}
+		rowChangedEventPb.Columns = columnsPb
+	}
+	if len(r.PreColumns) > 0 {
+		columnsPb := make(map[string]*cdclog.Column)
+		for k, c := range r.PreColumns {
+			column := new(cdclog.Column)
+			column.Type = []byte{c.Type}
+			column.Flag = uint64(c.Flag)
+			column.Value = []byte(ColumnValueString(c.Value))
+			columnsPb[k] = column
+		}
+		rowChangedEventPb.PreColumns = columnsPb
 	}
 	return rowChangedEventPb
 }

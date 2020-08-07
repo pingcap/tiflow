@@ -1,10 +1,6 @@
 syntax = "proto3";
 option optimize_for = SPEED;
 
-enum ColumnFlagType {
-    BinaryFlag = 0;
-}
-
 message TableName {
 	string schema = 1;
 	string table = 2;
@@ -14,11 +10,8 @@ message TableName {
 
 message Column {
 	bytes type = 1;
-	bool whereHandle = 2;
-	oneof columnType_present{
-    	ColumnFlagType flag= 3;
-    }
-	bytes value = 4;
+    uint64 flag= 2;
+	bytes value = 3;
 }
 
 message ColumnInfo {
@@ -47,7 +40,8 @@ message RowChangedEvent {
 
 	string indieMarkCol = 7;
 	map<string, Column> columns = 8;
-	repeated string keys = 9;
+	map<string, Column> preColumns = 9;
+	repeated string keys = 10;
 }
 
 message DDLEvent {
