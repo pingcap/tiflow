@@ -28,6 +28,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	parsemodel "github.com/pingcap/parser/model"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/cdc/model"
@@ -384,7 +385,6 @@ func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 		if item, ok = s.hashMap.Load(tableID); !ok {
 			// found new tableID
 			s.tableBuffers = append(s.tableBuffers, newTableBuffer(tableID))
-			s.logMeta.Names[tableID] = makeSpecifyTableName(row.Table.Schema, row.Table.Table)
 			hash = len(s.tableBuffers) - 1
 			s.hashMap.Store(tableID, hash)
 		} else {
@@ -468,6 +468,13 @@ func (s *s3Sink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 // Because S3 doesn't support append-like write.
 // we choose a hack way to read origin file then write in place.
 func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	switch ddl.Type {
+	case parsemodel.ActionCreateTable:
+		s.logMeta.Names[ddl.TableInfo.TableID] = makeSpecifyTableName(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+	case parsemodel.ActionRenameTable:
+		delete(s.logMeta.Names, ddl.PreTableInfo.TableID)
+		s.logMeta.Names[ddl.TableInfo.TableID] = makeSpecifyTableName(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+	}
 	data, err := ddl.ToProtoBuf().Marshal()
 	if err != nil {
 		return err

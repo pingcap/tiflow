@@ -26,6 +26,7 @@ import (
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 
+	parsemodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
@@ -139,6 +140,7 @@ func (f *fileSink) flushTableStreams() error {
 		}(tsReplica)
 	}
 	wg.Wait()
+	close(errCh)
 	for err := range errCh {
 		if err != nil {
 			return err
@@ -169,7 +171,6 @@ func (f *fileSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowC
 		if item, ok = f.hashMap.Load(tableID); !ok {
 			// found new tableID
 			f.tableStreams = append(f.tableStreams, newTableStream(tableID))
-			f.logMeta.Names[tableID] = makeSpecifyTableName(row.Table.Schema, row.Table.Table)
 			hash = len(f.tableStreams) - 1
 			f.hashMap.Store(tableID, hash)
 		} else {
@@ -214,6 +215,13 @@ func (f *fileSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	switch ddl.Type {
+	case parsemodel.ActionCreateTable:
+		f.logMeta.Names[ddl.TableInfo.TableID] = makeSpecifyTableName(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+	case parsemodel.ActionRenameTable:
+		delete(f.logMeta.Names, ddl.PreTableInfo.TableID)
+		f.logMeta.Names[ddl.TableInfo.TableID] = makeSpecifyTableName(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+	}
 	data, err := ddl.ToProtoBuf().Marshal()
 	if err != nil {
 		return err
