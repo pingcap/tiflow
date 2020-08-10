@@ -94,6 +94,9 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	for i, idx := range ti.Indices {
 		ti.indicesOffset[idx.ID] = i
+		if idx.Unique {
+
+		}
 		if ti.IsIndexUnique(idx) {
 			for _, col := range idx.Columns {
 				ti.uniqueColumns[ti.Columns[col.Offset].ID] = struct{}{}
@@ -230,11 +233,14 @@ func (ti *TableInfo) IsEligible() bool {
 }
 
 // IsIndexUnique returns whether the index is unique
-func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
+func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo, columnNullable bool) bool {
 	if indexInfo.Primary {
 		return true
 	}
 	if indexInfo.Unique {
+		if columnNullable {
+			return true
+		}
 		for _, col := range indexInfo.Columns {
 			colInfo := ti.Columns[col.Offset]
 			if !mysql.HasNotNullFlag(colInfo.Flag) {
