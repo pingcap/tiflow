@@ -389,7 +389,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 			Name:  colName,
 			Type:  colInfo.Tp,
 			Value: colValue,
-			Flag:  transColumnFlag(tableInfo, colInfo),
+			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
 		}
 	}
 	return cols, nil
@@ -490,7 +490,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 			Name:  colInfo.Name.O,
 			Type:  colInfo.Tp,
 			Value: value,
-			Flag:  transColumnFlag(tableInfo, colInfo),
+			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
 		}
 	}
 	return &model.RowChangedEvent{
@@ -641,32 +641,6 @@ func genMultipleKeys(ti *model.TableInfo, preCols, cols []*model.Column, table s
 	}
 
 	return multipleKeys
-}
-
-func transColumnFlag(tableInfo *model.TableInfo, colInfo *timodel.ColumnInfo) model.ColumnFlagType {
-	var flag model.ColumnFlagType
-	if colInfo.Charset == "binary" {
-		flag.SetIsBinary()
-	}
-	if colInfo.IsGenerated() {
-		flag.SetIsGeneratedColumn()
-	}
-	if mysql.HasPriKeyFlag(colInfo.Flag) {
-		flag.SetIsPrimaryKey()
-	}
-	if mysql.HasUniKeyFlag(colInfo.Flag) {
-		flag.SetIsUniqueKey()
-	}
-	if !mysql.HasNotNullFlag(colInfo.Flag) {
-		flag.SetIsNullable()
-	}
-	if mysql.HasMultipleKeyFlag(colInfo.Flag) {
-		flag.SetIsMultipleKey()
-	}
-	if tableInfo.IsHandleColumn(colInfo) {
-		flag.SetIsHandleKey()
-	}
-	return flag
 }
 
 func genKeyList(ti *model.TableInfo, table string, columns []*timodel.ColumnInfo, values []*model.Column) string {

@@ -44,6 +44,8 @@ type TableInfo struct {
 	// It's a mapping from ColumnID to the offset of columns in row changed events.
 	RowColumnsOffset map[int64]int
 
+	ColumnsFlag map[int64]ColumnFlagType
+
 	// only for new row format decoder
 	handleColID int64
 
@@ -71,6 +73,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		indicesOffset:    make(map[int64]int, len(info.Indices)),
 		uniqueColumns:    make(map[int64]struct{}),
 		RowColumnsOffset: make(map[int64]int, len(info.Columns)),
+		ColumnsFlag:      make(map[int64]ColumnFlagType, len(info.Columns)),
 		handleColID:      -1,
 		HandleIndexID:    HandleIndexTableIneligible,
 		rowColInfos:      make([]rowcodec.ColInfo, len(info.Columns)),
@@ -134,6 +137,8 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		}
 	}
 	ti.findHandleIndex()
+	log.Debug("select the handle index", zap.Int64("tableID", ti.ID), zap.Int64("HandleIndexID", ti.HandleIndexID))
+	ti.initColumnsFlag()
 	return ti
 }
 
@@ -163,6 +168,52 @@ func (ti *TableInfo) findHandleIndex() {
 	}
 	if handleIndexOffset >= 0 {
 		ti.HandleIndexID = ti.Indices[handleIndexOffset].ID
+	}
+}
+
+func (ti *TableInfo) initColumnsFlag() {
+	for _, colInfo := range ti.Columns {
+		var flag ColumnFlagType
+		switch {
+		case colInfo.Charset == "binary":
+			flag.SetIsBinary()
+		case colInfo.IsGenerated():
+			flag.SetIsGeneratedColumn()
+		case mysql.HasPriKeyFlag(colInfo.Flag):
+			flag.SetIsPrimaryKey()
+			if ti.HandleIndexID == HandleIndexPKIsHandle {
+				flag.SetIsHandleKey()
+			}
+		case mysql.HasUniKeyFlag(colInfo.Flag):
+			flag.SetIsUniqueKey()
+		case !mysql.HasNotNullFlag(colInfo.Flag):
+			flag.SetIsNullable()
+		case mysql.HasMultipleKeyFlag(colInfo.Flag):
+			flag.SetIsMultipleKey()
+		}
+		ti.ColumnsFlag[colInfo.ID] = flag
+	}
+
+	// In TiDB, Only the first column can be set multiple key,
+	// if unique index has multi columns,
+	// the flag should be MultipleKeyFlag.
+	// See https://dev.mysql.com/doc/refman/5.7/en/show-columns.html
+	// However, that's not what we want, we would like to express here a flag that is as complete as possible.
+	for _, idxInfo := range ti.Indices {
+		for _, idxCol := range idxInfo.Columns {
+			colInfo := ti.Columns[idxCol.Offset]
+			flag := ti.ColumnsFlag[colInfo.ID]
+			switch {
+			case idxInfo.Primary:
+				flag.SetIsPrimaryKey()
+			case idxInfo.Unique:
+				flag.SetIsUniqueKey()
+			case len(idxInfo.Columns) > 1:
+				flag.SetIsMultipleKey()
+			case idxInfo.ID == ti.HandleIndexID && ti.HandleIndexID >= 0:
+				flag.SetIsHandleKey()
+			}
+		}
 	}
 }
 
@@ -269,40 +320,6 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo, allowColumnNullab
 			}
 		}
 		return true
-	}
-	return false
-}
-
-// IsHandleColumn returns whether the column is a handle column
-func (ti *TableInfo) IsHandleColumn(colInfo *model.ColumnInfo) bool {
-	switch ti.HandleIndexID {
-	case HandleIndexTableIneligible:
-		log.Fatal("this table is not eligible", zap.Int64("tableID", ti.ID))
-	case HandleIndexPKIsHandle:
-		// pk is handle
-		if !ti.PKIsHandle {
-			log.Fatal("the pk of this table is not handle", zap.Int64("tableID", ti.ID))
-		}
-		if mysql.HasPriKeyFlag(colInfo.Flag) {
-			return true
-		}
-	default:
-		if !mysql.HasNotNullFlag(colInfo.Flag) {
-			return false
-		}
-		if !mysql.HasPriKeyFlag(colInfo.Flag) && !mysql.HasUniKeyFlag(colInfo.Flag) {
-			return false
-		}
-		handleIndexInfo, exist := ti.GetIndexInfo(ti.HandleIndexID)
-		if !exist {
-			log.Fatal("the handle index info is not exist", zap.Int64("tableID", ti.ID), zap.Int64("handleIndexID", ti.HandleIndexID))
-		}
-		for _, handleColInfo := range handleIndexInfo.Columns {
-			handleColID := ti.Columns[handleColInfo.Offset].ID
-			if colInfo.ID == handleColID {
-				return true
-			}
-		}
 	}
 	return false
 }
