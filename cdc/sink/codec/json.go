@@ -32,7 +32,23 @@ const (
 	BatchVersion1 uint64 = 1
 )
 
-type column = model.Column
+type column struct {
+	Type byte `json:"t"`
+
+	// WhereHandle is deprecation
+	// WhereHandle is replaced by HandleKey in Flag
+	WhereHandle *bool                `json:"h,omitempty"`
+	Flag        model.ColumnFlagType `json:"f"`
+	Value       interface{}          `json:"v"`
+}
+
+func (c *column) FromSinkColumn(col *model.Column) {
+	panic("not implemented")
+}
+
+func (c *column) ToSinkColumn() *model.Column {
+	panic("not implemented")
+}
 
 func formatColumnVal(c *column) {
 	switch c.Type {
@@ -133,7 +149,9 @@ func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow
 	}
 	value := &mqMessageRow{}
 	if e.Delete {
-		value.Delete = e.PreColumns
+		c := new(column)
+		c.FromSinkColumn(e.PreColumns)
+		value.Delete = c
 	} else {
 		value.Update = e.Columns
 		value.PreColumns = e.PreColumns

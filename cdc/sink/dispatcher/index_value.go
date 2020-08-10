@@ -41,9 +41,9 @@ func (r *indexValueDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	if len(row.Columns) == 0 {
 		dispatchCols = row.PreColumns
 	}
-	for name, col := range dispatchCols {
+	for _, col := range dispatchCols {
 		if col.Flag.IsHandleKey() {
-			r.hasher.Write([]byte(name), []byte(model.ColumnValueString(col.Value)))
+			r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value)))
 		}
 	}
 	return int32(r.hasher.Sum32() % uint32(r.partitionNum))

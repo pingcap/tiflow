@@ -16,6 +16,9 @@ package model
 import (
 	"fmt"
 
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -50,6 +53,7 @@ type TableInfo struct {
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
 	IndieMarkCol string
+	IndexColumns [][]int64
 	rowColInfos  []rowcodec.ColInfo
 }
 
@@ -74,9 +78,11 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		ti.columnsOffset[col.ID] = i
 		isPK := (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == model.ExtraHandleID
 		if isPK {
+			// pk is handle
 			ti.handleColID = col.ID
 			ti.HandleIndexID = HandleIndexPKIsHandle
 			ti.uniqueColumns[col.ID] = struct{}{}
+			ti.IndexColumns = append(ti.IndexColumns, []int64{col.ID})
 			uniqueIndexNum++
 		}
 		ti.rowColInfos[i] = rowcodec.ColInfo{
@@ -240,6 +246,39 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
 			}
 		}
 		return true
+	}
+	return false
+}
+
+func (ti *TableInfo) IsHandleColumn(colInfo *model.ColumnInfo) bool {
+	switch ti.HandleIndexID {
+	case HandleIndexTableIneligible:
+		log.Fatal("this table is not eligible", zap.Int64("tableID", ti.ID))
+	case HandleIndexPKIsHandle:
+		// pk is handle
+		if !ti.PKIsHandle {
+			log.Fatal("the pk of this table is not handle", zap.Int64("tableID", ti.ID))
+		}
+		if mysql.HasPriKeyFlag(colInfo.Flag) {
+			return true
+		}
+	default:
+		if !mysql.HasNotNullFlag(colInfo.Flag) {
+			return false
+		}
+		if !mysql.HasPriKeyFlag(colInfo.Flag) && !mysql.HasUniKeyFlag(colInfo.Flag) {
+			return false
+		}
+		handleIndexInfo, exist := ti.GetIndexInfo(ti.HandleIndexID)
+		if !exist {
+			log.Fatal("the handle index info is not exist", zap.Int64("tableID", ti.ID), zap.Int64("handleIndexID", ti.HandleIndexID))
+		}
+		for _, handleColInfo := range handleIndexInfo.Columns {
+			handleColID := ti.Columns[handleColInfo.Offset].ID
+			if colInfo.ID == handleColID {
+				return true
+			}
+		}
 	}
 	return false
 }
