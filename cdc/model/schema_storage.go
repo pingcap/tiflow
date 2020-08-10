@@ -113,7 +113,6 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 			indexColOffset := make([]int, 0, len(idx.Columns))
 			for _, idxCol := range idx.Columns {
 				colInfo := ti.Columns[idxCol.Offset]
-				ti.uniqueColumns[colInfo.ID] = struct{}{}
 				if ti.IsColCDCVisible(colInfo) {
 					indexColOffset = append(indexColOffset, ti.RowColumnsOffset[colInfo.ID])
 				}
