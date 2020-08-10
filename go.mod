@@ -24,6 +24,7 @@ require (
 	github.com/k0kubun/pp v3.0.1+incompatible // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
 	github.com/mattn/go-shellwords v1.0.3
+	github.com/pelletier/go-toml v1.3.0
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011

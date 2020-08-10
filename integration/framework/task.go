@@ -51,6 +51,14 @@ func (c *TaskContext) CreateDB(name string) error {
 	return nil
 }
 
+func (c *TaskContext) SqlHelper() *SqlHelper {
+	return &SqlHelper{
+		upstream:   c.Upstream,
+		downstream: c.Downstream,
+		ctx: c.Ctx,
+	}
+}
+
 func (p *CDCProfile) String() string {
 	builder := strings.Builder{}
 	builder.WriteString("cli changefeed create ")

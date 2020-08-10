@@ -28,6 +28,7 @@ func (d *DockerComposeOperator) Setup() {
 }
 
 func runCmdHandleError(cmd *exec.Cmd) []byte {
+	log.Info("Start executing command", zap.String("cmd", cmd.String()))
 	bytes, err := cmd.Output()
 	if err, ok := err.(*exec.ExitError); ok {
 		log.Info("Running command failed", zap.ByteString("stderr", err.Stderr))
@@ -39,6 +40,8 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 			zap.String("command", cmd.String()),
 			zap.ByteString("output", bytes))
 	}
+
+	log.Info("Finished executing command", zap.String("cmd", cmd.String()))
 	return bytes
 }
 
