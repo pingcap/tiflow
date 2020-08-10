@@ -682,6 +682,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 }
 
 func (p *processor) sinkDriver(ctx context.Context) error {
+	metricFlushDuration := sinkFlushRowChangedDuration.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	for {
 		select {
 		case <-ctx.Done():
@@ -698,11 +699,13 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 			if minTs == 0 {
 				continue
 			}
+			start := time.Now()
 			err := p.sink.FlushRowChangedEvents(ctx, minTs)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			atomic.StoreUint64(&p.checkpointTs, minTs)
+			metricFlushDuration.Observe(float64(time.Since(start).Milliseconds()))
 		}
 	}
 }
