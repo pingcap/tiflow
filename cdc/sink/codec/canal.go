@@ -50,6 +50,9 @@ func convertRowEventType(e *model.RowChangedEvent) canal.EventType {
 	if e.Delete {
 		return canal.EventType_DELETE
 	}
+	if len(e.Columns) != len(e.PreColumns) {
+		return canal.EventType_INSERT
+	}
 	return canal.EventType_UPDATE
 }
 
