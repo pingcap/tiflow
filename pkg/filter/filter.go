@@ -14,12 +14,11 @@
 package filter
 
 import (
-	"strings"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	old_filter "github.com/pingcap/tidb-tools/pkg/filter"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 )
 
@@ -152,11 +151,5 @@ func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bo
 
 // IsSysSchema returns true if the given schema is a system schema
 func IsSysSchema(db string) bool {
-	db = strings.ToUpper(db)
-	for _, schema := range []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "MYSQL", "METRIC_SCHEMA"} {
-		if schema == db {
-			return true
-		}
-	}
-	return false
+	return old_filter.IsSystemSchema(db)
 }
