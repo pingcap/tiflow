@@ -272,7 +272,6 @@ func findTaskStatusWithTable(infos model.ProcessorsInfos, tableID model.TableID)
 			}
 		}
 	}
-
 	return "", nil, false
 }
 
@@ -280,49 +279,35 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 	if len(captures) == 0 {
 		return nil
 	}
-	for _, status := range c.taskStatus {
-		if status.SomeOperationsUnapplied() {
-			return nil
-		}
-	}
 
-	newTaskStatus := make(map[model.CaptureID]*model.TaskStatus, len(captures))
 	captureIDs := make(map[model.CaptureID]struct{}, len(captures))
 	cleanedTables := make(map[model.TableID]struct{})
 	addedTables := make(map[model.TableID]struct{})
+	updateFuncs := make(map[model.CaptureID][]kv.UpdateTaskStatusFunc)
 	for cid := range captures {
 		captureIDs[cid] = struct{}{}
 	}
 	c.scheduler.AlignCapture(captureIDs)
 
 	for id, targetTs := range c.toCleanTables {
-		captureID, taskStatus, ok := findTaskStatusWithTable(c.taskStatus, id)
+		captureID, _, ok := findTaskStatusWithTable(c.taskStatus, id)
 		if !ok {
 			log.Warn("ignore clean table id", zap.Int64("id", id))
 			delete(c.toCleanTables, id)
 			continue
 		}
-		status, exist := newTaskStatus[captureID]
-		if !exist {
-			status = taskStatus.Clone()
-		}
-		status.RemoveTable(id, targetTs)
-		newTaskStatus[captureID] = status
+
+		id := id
+		targetTs := targetTs
+		updateFuncs[captureID] = append(updateFuncs[captureID], func(_ int64, status *model.TaskStatus) (bool, error) {
+			status.RemoveTable(id, targetTs)
+			return true, nil
+		})
 		cleanedTables[id] = struct{}{}
 	}
 
 	operations := c.scheduler.DistributeTables(c.orphanTables)
 	for captureID, operation := range operations {
-		status, exist := newTaskStatus[captureID]
-		if !exist {
-			taskStatus := c.taskStatus[captureID]
-			if taskStatus == nil {
-				status = new(model.TaskStatus)
-			} else {
-				status = taskStatus.Clone()
-			}
-			newTaskStatus[captureID] = status
-		}
 		schemaSnapshot := c.schema
 		for tableID, op := range operation {
 			var orphanMarkTableID model.TableID
@@ -349,14 +334,23 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 				StartTs:     op.BoundaryTs,
 				MarkTableID: orphanMarkTableID,
 			}
-			status.AddTable(tableID, info, op.BoundaryTs)
+			tableID := tableID
+			op := op
+			updateFuncs[captureID] = append(updateFuncs[captureID], func(_ int64, status *model.TaskStatus) (bool, error) {
+				status.AddTable(tableID, info, op.BoundaryTs)
+				return true, nil
+			})
 			addedTables[tableID] = struct{}{}
 		}
 	}
 
-	err := c.updateTaskStatus(ctx, newTaskStatus)
-	if err != nil {
-		return errors.Trace(err)
+	for captureID, funcs := range updateFuncs {
+		newStatus, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, funcs...)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		c.taskStatus[captureID] = newStatus.Clone()
+		log.Info("dispatch table success", zap.String("captureID", captureID), zap.Stringer("status", newStatus))
 	}
 
 	for tableID := range cleanedTables {
@@ -371,13 +365,14 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 
 func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.CaptureID]*model.TaskStatus) error {
 	for captureID, status := range taskStatus {
-		newStatus, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, func(taskStatus *model.TaskStatus) error {
+		newStatus, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
 			if taskStatus.SomeOperationsUnapplied() {
-				return errors.Errorf("waiting to processor handle the operation finished time out")
+				log.Error("unexpected task status, there are operations unapplied in this status", zap.Any("status", taskStatus))
+				return false, errors.Errorf("waiting to processor handle the operation finished time out")
 			}
 			taskStatus.Tables = status.Tables
 			taskStatus.Operation = status.Operation
-			return nil
+			return true, nil
 		})
 		if err != nil {
 			return errors.Trace(err)

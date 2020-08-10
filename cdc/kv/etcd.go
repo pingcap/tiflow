@@ -511,12 +511,15 @@ func (c CDCEtcdClient) GetAllTaskWorkloads(ctx context.Context, changefeedID str
 	return workloads, nil
 }
 
+// UpdateTaskStatusFunc is a function that updates the task status
+type UpdateTaskStatusFunc func(int64, *model.TaskStatus) (updated bool, err error)
+
 // AtomicPutTaskStatus puts task status into etcd atomically.
 func (c CDCEtcdClient) AtomicPutTaskStatus(
 	ctx context.Context,
 	changefeedID string,
 	captureID string,
-	update func(*model.TaskStatus) error,
+	updateFuncs ...UpdateTaskStatusFunc,
 ) (*model.TaskStatus, error) {
 	var status *model.TaskStatus
 	err := retry.Run(100*time.Millisecond, 3, func() error {
@@ -539,9 +542,16 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 		default:
 			return errors.Trace(err)
 		}
-		err = update(status)
-		if err != nil {
-			return errors.Trace(err)
+		updated := false
+		for _, updateFunc := range updateFuncs {
+			u, err := updateFunc(modRevision, status)
+			if err != nil {
+				return err
+			}
+			updated = updated || u
+		}
+		if !updated {
+			return nil
 		}
 		value, err := status.Marshal()
 		if err != nil {
