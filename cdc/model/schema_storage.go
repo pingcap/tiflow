@@ -274,6 +274,7 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo, allowColumnNullab
 	return false
 }
 
+// IsHandleColumn returns whether the column is a handle column
 func (ti *TableInfo) IsHandleColumn(colInfo *model.ColumnInfo) bool {
 	switch ti.HandleIndexID {
 	case HandleIndexTableIneligible:

@@ -45,14 +45,25 @@ type column struct {
 }
 
 func (c *column) FromSinkColumn(col *model.Column) {
-	panic("not implemented")
+	c.Type = col.Type
+	c.Flag = col.Flag
+	c.Value = col.Value
+	if c.Flag.IsHandleKey() {
+		whereHandle := true
+		c.WhereHandle = &whereHandle
+	}
 }
 
-func (c *column) ToSinkColumn() *model.Column {
-	panic("not implemented")
+func (c *column) ToSinkColumn(name string) *model.Column {
+	col := new(model.Column)
+	col.Type = c.Type
+	col.Flag = c.Flag
+	col.Value = c.Value
+	col.Name = name
+	return col
 }
 
-func formatColumnVal(c column) {
+func formatColumnVal(c column) column {
 	switch c.Type {
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob,
 		mysql.TypeLongBlob, mysql.TypeBlob:
@@ -72,6 +83,7 @@ func formatColumnVal(c column) {
 			c.Value = uint64(intNum)
 		}
 	}
+	return c
 }
 
 type mqMessageKey struct {
@@ -108,11 +120,14 @@ func (m *mqMessageRow) Decode(data []byte) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	for _, column := range m.Update {
-		formatColumnVal(column)
+	for colName, column := range m.Update {
+		m.Update[colName] = formatColumnVal(column)
 	}
-	for _, column := range m.Delete {
-		formatColumnVal(column)
+	for colName, column := range m.Delete {
+		m.Delete[colName] = formatColumnVal(column)
+	}
+	for colName, column := range m.PreColumns {
+		m.PreColumns[colName] = formatColumnVal(column)
 	}
 	return nil
 }
@@ -169,15 +184,20 @@ func sinkColumns2JsonColumns(cols []*model.Column) map[string]column {
 		c.FromSinkColumn(col)
 		jsonCols[col.Name] = c
 	}
+	if len(jsonCols) == 0 {
+		return nil
+	}
 	return jsonCols
 }
 
 func jsonColumns2SinkColumns(cols map[string]column) []*model.Column {
 	sinkCols := make([]*model.Column, 0, len(cols))
 	for name, col := range cols {
-		c := col.ToSinkColumn()
-		c.Name = name
+		c := col.ToSinkColumn(name)
 		sinkCols = append(sinkCols, c)
+	}
+	if len(sinkCols) == 0 {
+		return nil
 	}
 	sort.Slice(sinkCols, func(i, j int) bool {
 		return strings.Compare(sinkCols[i].Name, sinkCols[j].Name) > 0
