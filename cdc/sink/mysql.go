@@ -679,16 +679,20 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			sqls = append(sqls, query)
-			values = append(values, args)
+			if query != "" {
+				sqls = append(sqls, query)
+				values = append(values, args)
+			}
 		}
 		if len(row.Columns) != 0 {
 			query, args, err = prepareReplace(row.Table.Schema, row.Table.Table, row.Columns)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			sqls = append(sqls, query)
-			values = append(values, args)
+			if query != "" {
+				sqls = append(sqls, query)
+				values = append(values, args)
+			}
 		}
 	}
 	dmls := &preparedDMLs{
@@ -738,6 +742,9 @@ func prepareReplace(schema, table string, cols []*model.Column) (string, []inter
 		columnNames = append(columnNames, col.Name)
 		args = append(args, col.Value)
 	}
+	if len(args) == 0 {
+		return "", nil, nil
+	}
 
 	colList := "(" + buildColumnList(columnNames) + ")"
 	tblName := quotes.QuoteSchema(schema, table)
@@ -752,6 +759,9 @@ func prepareDelete(schema, table string, cols []*model.Column) (string, []interf
 	builder.WriteString("DELETE FROM " + quotes.QuoteSchema(schema, table) + " WHERE")
 
 	colNames, wargs := whereSlice(cols)
+	if len(wargs) == 0 {
+		return "", nil, nil
+	}
 	args := make([]interface{}, 0, len(wargs))
 	for i := 0; i < len(colNames); i++ {
 		if i > 0 {
