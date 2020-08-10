@@ -705,7 +705,7 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			atomic.StoreUint64(&p.checkpointTs, minTs)
-			metricFlushDuration.Observe(float64(time.Since(start).Milliseconds()))
+			metricFlushDuration.Observe(time.Since(start).Seconds())
 		}
 	}
 }
