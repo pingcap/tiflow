@@ -365,12 +365,8 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	return job, nil
 }
 
-func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]model.Column, error) {
-	estimateLen := len(datums)
-	if fillWithDefaultValue {
-		estimateLen = len(tableInfo.Columns)
-	}
-	cols := make([]model.Column, 0, estimateLen)
+func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, error) {
+	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	for _, colInfo := range tableInfo.Columns {
 		if !tableInfo.IsColCDCVisible(colInfo) {
 			continue
@@ -389,12 +385,12 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		} else {
 			continue
 		}
-		cols = append(cols, model.Column{
+		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:  colName,
 			Type:  colInfo.Tp,
 			Value: colValue,
 			Flag:  transColumnFlag(tableInfo, colInfo),
-		})
+		}
 	}
 	return cols, nil
 }
@@ -410,7 +406,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 
 	var err error
 	// Decode previous columns.
-	var preCols []model.Column
+	var preCols []*model.Column
 	if len(row.PreRow) != 0 {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
@@ -420,7 +416,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		}
 	}
 
-	var cols []model.Column
+	var cols []*model.Column
 	oldValueDisabledAndRowIsDelete := !m.enableOldValue && row.Delete
 	cols, err = datum2Column(tableInfo, row.Row, !oldValueDisabledAndRowIsDelete)
 	if err != nil {
@@ -452,9 +448,9 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		Delete:       row.Delete,
 		Columns:      cols,
 		PreColumns:   preCols,
-		IndexColumns: tableInfo.GetIndexColumns(),
+		IndexColumns: tableInfo.IndexColumnsOffset,
 		// FIXME(leoppor): Correctness of conflict detection with old values
-		Keys: genMultipleKeys(tableInfo.TableInfo, preCols, cols, quotes.QuoteSchema(schemaName, tableName)),
+		Keys: genMultipleKeys(tableInfo, preCols, cols, quotes.QuoteSchema(schemaName, tableName)),
 	}, nil
 }
 
@@ -474,7 +470,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 		return nil, nil
 	}
 
-	if !tableInfo.IsIndexUnique(indexInfo) {
+	if !tableInfo.IsIndexUnique(indexInfo, false) {
 		return nil, nil
 	}
 
@@ -483,19 +479,19 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 		return nil, errors.Trace(err)
 	}
 
-	preCols := make([]model.Column, 0, len(idx.IndexValue))
+	preCols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	for i, idxCol := range indexInfo.Columns {
 		colInfo := tableInfo.Columns[idxCol.Offset]
 		value, err := formatColVal(idx.IndexValue[i], colInfo.Tp)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		preCols = append(preCols, model.Column{
+		preCols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:  colInfo.Name.O,
 			Type:  colInfo.Tp,
 			Value: value,
 			Flag:  transColumnFlag(tableInfo, colInfo),
-		})
+		}
 	}
 	return &model.RowChangedEvent{
 		StartTs:  idx.StartTs,
@@ -508,8 +504,8 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 		IndieMarkCol: tableInfo.IndieMarkCol,
 		Delete:       true,
 		PreColumns:   preCols,
-		IndexColumns: tableInfo.GetIndexColumns(),
-		Keys:         genMultipleKeys(tableInfo.TableInfo, preCols, nil, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
+		IndexColumns: tableInfo.IndexColumnsOffset,
+		Keys:         genMultipleKeys(tableInfo, preCols, nil, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
 	}, nil
 }
 
@@ -587,13 +583,13 @@ func fetchHandleValue(tableInfo *model.TableInfo, recordID int64) (pkCoID int64,
 	return
 }
 
-func genMultipleKeys(ti *timodel.TableInfo, preCols, cols map[string]*model.Column, table string) []string {
+func genMultipleKeys(ti *model.TableInfo, preCols, cols []*model.Column, table string) []string {
 	estimateLen := len(ti.Indices) + 1
 	if len(preCols) != 0 && len(cols) != 0 {
 		estimateLen *= 2
 	}
 	multipleKeys := make([]string, 0, estimateLen)
-	buildKeys := func(colValues map[string]*model.Column) {
+	buildKeys := func(colValues []*model.Column) {
 		if len(colValues) == 0 {
 			return
 		}
@@ -601,7 +597,7 @@ func genMultipleKeys(ti *timodel.TableInfo, preCols, cols map[string]*model.Colu
 			if pk := ti.GetPkColInfo(); pk != nil && !pk.IsGenerated() {
 				cols := []*timodel.ColumnInfo{pk}
 
-				key := genKeyList(table, cols, colValues)
+				key := genKeyList(ti, table, cols, colValues)
 				if len(key) > 0 { // ignore `null` value.
 					multipleKeys = append(multipleKeys, key)
 				} else {
@@ -615,7 +611,7 @@ func genMultipleKeys(ti *timodel.TableInfo, preCols, cols map[string]*model.Colu
 				continue
 			}
 			cols := getIndexColumns(ti.Columns, indexCols)
-			key := genKeyList(table, cols, colValues)
+			key := genKeyList(ti, table, cols, colValues)
 			if len(key) > 0 { // ignore `null` value.
 				noGeneratedColumn := true
 				for _, col := range cols {
@@ -673,11 +669,11 @@ func transColumnFlag(tableInfo *model.TableInfo, colInfo *timodel.ColumnInfo) mo
 	return flag
 }
 
-func genKeyList(table string, columns []*timodel.ColumnInfo, values map[string]*model.Column) string {
+func genKeyList(ti *model.TableInfo, table string, columns []*timodel.ColumnInfo, values []*model.Column) string {
 	var buf strings.Builder
 	for _, col := range columns {
-		val, ok := values[col.Name.O]
-		if !ok || val.Value == nil {
+		val := values[ti.RowColumnsOffset[col.ID]]
+		if val == nil || val.Value == nil {
 			log.L().Debug("ignore null value", zap.String("column", col.Name.O), zap.String("table", table))
 			continue // ignore `null` value.
 		}

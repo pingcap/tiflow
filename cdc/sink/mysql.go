@@ -727,16 +727,16 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	return nil
 }
 
-func prepareReplace(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
+func prepareReplace(schema, table string, cols []*model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols))
-	for k, v := range cols {
-		if v.Flag.IsGeneratedColumn() {
+	for _, col := range cols {
+		if col == nil || col.Flag.IsGeneratedColumn() {
 			continue
 		}
-		columnNames = append(columnNames, k)
-		args = append(args, v.Value)
+		columnNames = append(columnNames, col.Name)
+		args = append(args, col.Value)
 	}
 
 	colList := "(" + buildColumnList(columnNames) + ")"
@@ -747,7 +747,7 @@ func prepareReplace(schema, table string, cols map[string]*model.Column) (string
 	return builder.String(), args, nil
 }
 
-func prepareDelete(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
+func prepareDelete(schema, table string, cols []*model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quotes.QuoteSchema(schema, table) + " WHERE")
 
@@ -769,13 +769,13 @@ func prepareDelete(schema, table string, cols map[string]*model.Column) (string,
 	return sql, args, nil
 }
 
-func whereSlice(cols map[string]*model.Column) (colNames []string, args []interface{}) {
+func whereSlice(cols []*model.Column) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
-	for colName, col := range cols {
-		if !col.Flag.IsHandleKey() {
+	for _, col := range cols {
+		if col == nil || !col.Flag.IsHandleKey() {
 			continue
 		}
-		colNames = append(colNames, colName)
+		colNames = append(colNames, col.Name)
 		args = append(args, col.Value)
 	}
 	return

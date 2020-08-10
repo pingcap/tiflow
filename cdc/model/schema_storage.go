@@ -41,6 +41,9 @@ type TableInfo struct {
 	indicesOffset    map[int64]int
 	uniqueColumns    map[int64]struct{}
 
+	// It's a mapping from ColumnID to the offset of columns in row changed events.
+	RowColumnsOffset map[int64]int
+
 	// only for new row format decoder
 	handleColID int64
 
@@ -52,9 +55,9 @@ type TableInfo struct {
 
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
-	IndieMarkCol string
-	IndexColumns [][]int64
-	rowColInfos  []rowcodec.ColInfo
+	IndieMarkCol       string
+	IndexColumnsOffset [][]int
+	rowColInfos        []rowcodec.ColInfo
 }
 
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
@@ -67,23 +70,30 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		columnsOffset:    make(map[int64]int, len(info.Columns)),
 		indicesOffset:    make(map[int64]int, len(info.Indices)),
 		uniqueColumns:    make(map[int64]struct{}),
+		RowColumnsOffset: make(map[int64]int, len(info.Columns)),
 		handleColID:      -1,
 		HandleIndexID:    HandleIndexTableIneligible,
 		rowColInfos:      make([]rowcodec.ColInfo, len(info.Columns)),
 	}
 
 	uniqueIndexNum := 0
+	rowColumnsCurrentOffset := 0
 
 	for i, col := range ti.Columns {
 		ti.columnsOffset[col.ID] = i
-		isPK := (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == model.ExtraHandleID
-		if isPK {
-			// pk is handle
-			ti.handleColID = col.ID
-			ti.HandleIndexID = HandleIndexPKIsHandle
-			ti.uniqueColumns[col.ID] = struct{}{}
-			ti.IndexColumns = append(ti.IndexColumns, []int64{col.ID})
-			uniqueIndexNum++
+		isPK := false
+		if ti.IsColCDCVisible(col) {
+			ti.RowColumnsOffset[col.ID] = rowColumnsCurrentOffset
+			rowColumnsCurrentOffset++
+			isPK = (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == model.ExtraHandleID
+			if isPK {
+				// pk is handle
+				ti.handleColID = col.ID
+				ti.HandleIndexID = HandleIndexPKIsHandle
+				ti.uniqueColumns[col.ID] = struct{}{}
+				ti.IndexColumnsOffset = append(ti.IndexColumnsOffset, []int{ti.RowColumnsOffset[col.ID]})
+				uniqueIndexNum++
+			}
 		}
 		ti.rowColInfos[i] = rowcodec.ColInfo{
 			ID:         col.ID,
@@ -94,15 +104,23 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	for i, idx := range ti.Indices {
 		ti.indicesOffset[idx.ID] = i
-		if idx.Unique {
-
-		}
-		if ti.IsIndexUnique(idx) {
+		if ti.IsIndexUnique(idx, false) {
 			for _, col := range idx.Columns {
 				ti.uniqueColumns[ti.Columns[col.Offset].ID] = struct{}{}
 			}
 		}
-		if idx.Primary || idx.Unique {
+		if ti.IsIndexUnique(idx, true) {
+			indexColOffset := make([]int, 0, len(idx.Columns))
+			for _, idxCol := range idx.Columns {
+				colInfo := ti.Columns[idxCol.Offset]
+				ti.uniqueColumns[colInfo.ID] = struct{}{}
+				if ti.IsColCDCVisible(colInfo) {
+					indexColOffset = append(indexColOffset, ti.RowColumnsOffset[colInfo.ID])
+				}
+			}
+			if len(indexColOffset) > 0 {
+				ti.IndexColumnsOffset = append(ti.IndexColumnsOffset, indexColOffset)
+			}
 			uniqueIndexNum++
 		}
 	}
@@ -127,7 +145,7 @@ func (ti *TableInfo) findHandleIndex() {
 	}
 	handleIndexOffset := -1
 	for i, idx := range ti.Indices {
-		if !ti.IsIndexUnique(idx) {
+		if !ti.IsIndexUnique(idx, false) {
 			continue
 		}
 		if idx.Primary {
@@ -198,7 +216,7 @@ func (ti *TableInfo) GetUniqueKeys() [][]string {
 		}
 	}
 	for _, idx := range ti.Indices {
-		if ti.IsIndexUnique(idx) {
+		if ti.IsIndexUnique(idx, false) {
 			colNames := make([]string, 0, len(idx.Columns))
 			for _, col := range idx.Columns {
 				colNames = append(colNames, col.Name.O)
@@ -233,12 +251,12 @@ func (ti *TableInfo) IsEligible() bool {
 }
 
 // IsIndexUnique returns whether the index is unique
-func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo, columnNullable bool) bool {
+func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo, allowColumnNullable bool) bool {
 	if indexInfo.Primary {
 		return true
 	}
 	if indexInfo.Unique {
-		if columnNullable {
+		if allowColumnNullable {
 			return true
 		}
 		for _, col := range indexInfo.Columns {
