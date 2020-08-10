@@ -101,7 +101,7 @@ func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, e
 
 // AppendDDLEvent generates new schema and registers it to the Registry
 func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
-	if e.TableInfo == nil {
+	if e.TableInfo == nil || e.TableInfo.Table == "" {
 		log.Info("AppendDDLEvent: no schema generation needed, skip")
 		return EncoderNoOperation, nil
 	}

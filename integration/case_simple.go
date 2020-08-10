@@ -1,9 +1,9 @@
 package main
 
 import (
-	"log"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 	"go.uber.org/zap"
 )
@@ -60,7 +60,7 @@ func (s *Simple) Run(ctx *framework.TaskContext) error {
 		counter ++
 	}
 
-	if counter != 10 {
+	if counter != 100 {
 		log.Fatal("Check failed", zap.Int("counter", counter))
 	}
 

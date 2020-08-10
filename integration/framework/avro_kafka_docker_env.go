@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/pingcap/ticdc/pkg/retry"
 	"io/ioutil"
 	"net/http"
 	"os/exec"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/integralist/go-findroot/find"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/retry"
 	"go.uber.org/zap"
 )
 
@@ -112,12 +112,14 @@ func (e *AvroKafkaDockerEnv) RunTest(task Task) {
 
 	err = task.Prepare(taskCtx)
 	if err != nil {
+		e.TearDown()
 		log.Fatal("RunTest: task preparation failed", zap.String("name", task.Name()), zap.Error(err))
 	}
 
 	log.Info("Start running task", zap.String("name", task.Name()))
 	err = task.Run(taskCtx)
 	if err != nil {
+		e.TearDown()
 		log.Fatal("RunTest: task failed", zap.String("name", task.Name()), zap.Error(err))
 	}
 	log.Info("Finished running task", zap.String("name", task.Name()))

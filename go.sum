@@ -1120,3 +1120,6 @@ sourcegraph.com/sourcegraph/appdash v0.0.0-20180531100431-4c381bd170b4 h1:VO9oZb
 sourcegraph.com/sourcegraph/appdash v0.0.0-20180531100431-4c381bd170b4/go.mod h1:hI742Nqp5OhwiqlzhgfbWU4mW4yO10fP+LoT9WOswdU=
 sourcegraph.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67 h1:e1sMhtVq9AfcEy8AXNb8eSg6gbzfdpYhoNqnPJa+GzI=
 sourcegraph.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67/go.mod h1:L5q+DGLGOQFpo1snNEkLOJT2d1YTW66rWNzatr3He1k=
+upper.io/db.v3 v1.0.1 h1:oWahxQdW+oh7/jn/dIbXqaXMiI0jNdjVza6E93SvJeE=
+upper.io/db.v3 v3.7.1+incompatible h1:GiK/NmDUClH3LrZd54qj5OQsz8brGFv652QXyRXtg2U=
+upper.io/db.v3 v3.7.1+incompatible/go.mod h1:FgTdD24eBjJAbPKsQSiHUNgXjOR4Lub3u1UMHSIh82Y=
