@@ -61,6 +61,8 @@ const (
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 
 	defaultSyncResolvedBatch = 1024
+
+	defaultFlushTaskPositionInterval = 200 * time.Millisecond
 )
 
 var (
@@ -313,10 +315,11 @@ func (p *processor) writeDebugInfo(w io.Writer) {
 // 3, sync TaskStatus between in memory and storage.
 // 4, check admin command in TaskStatus and apply corresponding command
 func (p *processor) positionWorker(ctx context.Context) error {
-	updateInfo := func() error {
+	lastFlushTime := time.Now()
+	retryFlushTaskStatusAndPosition := func() error {
 		t0Update := time.Now()
 		err := retry.Run(500*time.Millisecond, 3, func() error {
-			inErr := p.updateInfo(ctx)
+			inErr := p.flushTaskStatusAndPosition(ctx)
 			if inErr != nil {
 				if errors.Cause(inErr) != context.Canceled {
 					log.Error(
@@ -344,7 +347,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 		p.localCheckpointTsReceiver.Stop()
 
 		if !p.isStopped() {
-			err := updateInfo()
+			err := retryFlushTaskStatusAndPosition()
 			if err != nil && errors.Cause(err) != context.Canceled {
 				log.Warn("failed to update info before exit", zap.Error(err))
 			}
@@ -384,7 +387,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 
 			p.position.ResolvedTs = minResolvedTs
 			resolvedTsGauge.Set(float64(phyTs))
-			if err := updateInfo(); err != nil {
+			if err := retryFlushTaskStatusAndPosition(); err != nil {
 				return errors.Trace(err)
 			}
 		case <-p.localCheckpointTsReceiver.C:
@@ -397,11 +400,16 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			if p.position.CheckPointTs >= checkpointTs {
 				continue
 			}
+			if time.Since(lastFlushTime) < defaultFlushTaskPositionInterval {
+				continue
+			}
+
 			p.position.CheckPointTs = checkpointTs
 			checkpointTsGauge.Set(float64(phyTs))
-			if err := updateInfo(); err != nil {
+			if err := retryFlushTaskStatusAndPosition(); err != nil {
 				return errors.Trace(err)
 			}
+			lastFlushTime = time.Now()
 		}
 	}
 }
@@ -463,33 +471,36 @@ func (p *processor) workloadWorker(ctx context.Context) error {
 	}
 }
 
-func (p *processor) updateInfo(ctx context.Context) error {
+func (p *processor) flushTaskPosition(ctx context.Context) error {
+	failpoint.Inject("ProcessorUpdatePositionDelaying", func() {
+		time.Sleep(1 * time.Second)
+	})
+	//p.position.Count = p.sink.Count()
+	err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
+	if err != nil {
+		log.Error("failed to flush task position", zap.Error(err))
+		return errors.Trace(err)
+	}
+	log.Debug("flushed task position", zap.Stringer("position", p.position))
+	return nil
+}
+
+// First try to synchronize task status from etcd.
+// If local cached task status is outdated (caused by new table scheduling),
+// update it to latest value, and force update task position, since add new
+// tables may cause checkpoint ts fallback in processor.
+func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 	if p.isStopped() {
 		return errors.Trace(model.ErrAdminStopProcessor)
 	}
-	updatePosition := func() error {
-		failpoint.Inject("ProcessorUpdatePositionDelaying", func() {
-			time.Sleep(1 * time.Second)
-		})
-		//p.position.Count = p.sink.Count()
-		err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
-		if err != nil {
-			log.Error("failed to update position", zap.Error(err))
-			return errors.Trace(err)
-		}
-		log.Debug("update task position", zap.Stringer("position", p.position))
-		return nil
-	}
-	newModRevision := p.statusModRevision
 	var tablesToRemove []model.TableID
-	newTaskStatus, err := p.etcdCli.AtomicPutTaskStatus(ctx, p.changefeedID, p.captureInfo.ID,
+	newTaskStatus, newModRevision, err := p.etcdCli.AtomicPutTaskStatus(ctx, p.changefeedID, p.captureInfo.ID,
 		func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
 			// if the task status is not changed and not operation to handle
 			// we need not to change the task status
 			if p.statusModRevision == modRevision && !taskStatus.SomeOperationsUnapplied() {
 				return false, nil
 			}
-			newModRevision = modRevision
 			if taskStatus.AdminJobType.IsStopState() {
 				err := p.stop(ctx)
 				if err != nil {
@@ -502,7 +513,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 			if err != nil {
 				return false, backoff.Permanent(errors.Trace(err))
 			}
-			err = updatePosition()
+			err = p.flushTaskPosition(ctx)
 			if err != nil {
 				return true, errors.Trace(err)
 			}
@@ -511,7 +522,7 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	if err != nil {
 		// not need to check error
 		//nolint:errcheck
-		updatePosition()
+		p.flushTaskPosition(ctx)
 		return errors.Trace(err)
 	}
 	for _, tableID := range tablesToRemove {
@@ -522,7 +533,8 @@ func (p *processor) updateInfo(ctx context.Context) error {
 	syncTableNumGauge.
 		WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).
 		Set(float64(len(p.status.Tables)))
-	return nil
+
+	return p.flushTaskPosition(ctx)
 }
 
 func (p *processor) removeTable(tableID int64) {
