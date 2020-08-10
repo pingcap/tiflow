@@ -381,10 +381,6 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			// deployed NTP service, a little bias is acceptable here.
 			metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 
-			if minResolvedTs == p.position.ResolvedTs {
-				continue
-			}
-
 			p.position.ResolvedTs = minResolvedTs
 			resolvedTsGauge.Set(float64(phyTs))
 			if err := retryFlushTaskStatusAndPosition(); err != nil {
