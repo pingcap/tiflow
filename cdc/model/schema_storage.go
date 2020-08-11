@@ -139,7 +139,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 	}
 	ti.findHandleIndex()
 	ti.initColumnsFlag()
-	log.Debug("warp table info", zap.Any("tableInfo", ti))
+	log.Debug("warp table info", zap.Reflect("tableInfo", ti))
 	return ti
 }
 
@@ -175,21 +175,25 @@ func (ti *TableInfo) findHandleIndex() {
 func (ti *TableInfo) initColumnsFlag() {
 	for _, colInfo := range ti.Columns {
 		var flag ColumnFlagType
-		switch {
-		case colInfo.Charset == "binary":
+		if colInfo.Charset == "binary" {
 			flag.SetIsBinary()
-		case colInfo.IsGenerated():
+		}
+		if colInfo.IsGenerated() {
 			flag.SetIsGeneratedColumn()
-		case mysql.HasPriKeyFlag(colInfo.Flag):
+		}
+		if mysql.HasPriKeyFlag(colInfo.Flag) {
 			flag.SetIsPrimaryKey()
 			if ti.HandleIndexID == HandleIndexPKIsHandle {
 				flag.SetIsHandleKey()
 			}
-		case mysql.HasUniKeyFlag(colInfo.Flag):
+		}
+		if mysql.HasUniKeyFlag(colInfo.Flag) {
 			flag.SetIsUniqueKey()
-		case !mysql.HasNotNullFlag(colInfo.Flag):
+		}
+		if !mysql.HasNotNullFlag(colInfo.Flag) {
 			flag.SetIsNullable()
-		case mysql.HasMultipleKeyFlag(colInfo.Flag):
+		}
+		if mysql.HasMultipleKeyFlag(colInfo.Flag) {
 			flag.SetIsMultipleKey()
 		}
 		ti.ColumnsFlag[colInfo.ID] = flag
@@ -204,16 +208,19 @@ func (ti *TableInfo) initColumnsFlag() {
 		for _, idxCol := range idxInfo.Columns {
 			colInfo := ti.Columns[idxCol.Offset]
 			flag := ti.ColumnsFlag[colInfo.ID]
-			switch {
-			case idxInfo.Primary:
+			if idxInfo.Primary {
 				flag.SetIsPrimaryKey()
-			case idxInfo.Unique:
+			}
+			if idxInfo.Unique {
 				flag.SetIsUniqueKey()
-			case len(idxInfo.Columns) > 1:
+			}
+			if len(idxInfo.Columns) > 1 {
 				flag.SetIsMultipleKey()
-			case idxInfo.ID == ti.HandleIndexID && ti.HandleIndexID >= 0:
+			}
+			if idxInfo.ID == ti.HandleIndexID && ti.HandleIndexID >= 0 {
 				flag.SetIsHandleKey()
 			}
+			ti.ColumnsFlag[colInfo.ID] = flag
 		}
 	}
 }
