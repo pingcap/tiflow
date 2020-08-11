@@ -351,6 +351,11 @@ func (d *CanalEventBatchEncoder) Build() (key []byte, value []byte) {
 	return nil, value
 }
 
+// MixedBuild implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) MixedBuild() []byte {
+	panic("Mixed Build only use for JsonEncoder")
+}
+
 // Size implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Size() int {
 	// TODO: avoid marshaling the messages every time for calculating the size of the packet

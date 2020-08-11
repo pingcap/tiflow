@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/util"
-	cdclog "github.com/pingcap/ticdc/proto/cdclog"
 	"go.uber.org/zap"
 )
 
@@ -220,51 +219,6 @@ type RowChangedEvent struct {
 	ApproximateSize int64
 }
 
-// ToProtoBuf translate RowChangedEvent to proto event, this is use for cdc log backup.
-// TODO replace origin RowChangedEvent with proto RowChangedEvent
-func (r *RowChangedEvent) ToProtoBuf() *cdclog.RowChangedEvent {
-	rowChangedEventPb := new(cdclog.RowChangedEvent)
-	rowChangedEventPb.StartTs = r.StartTs
-	rowChangedEventPb.CommitTs = r.CommitTs
-	rowChangedEventPb.RowID = r.RowID
-	rowChangedEventPb.Delete = r.Delete
-	rowChangedEventPb.TableInfoVersion = r.TableInfoVersion
-	rowChangedEventPb.IndieMarkCol = r.IndieMarkCol
-	rowChangedEventPb.Keys = r.Keys
-
-	if r.Table != nil {
-		table := new(cdclog.TableName)
-		table.Schema = r.Table.Schema
-		table.Table = r.Table.Table
-		table.TableID = r.Table.TableID
-		table.Partition = r.Table.Partition
-		rowChangedEventPb.Table = table
-	}
-	if len(r.Columns) > 0 {
-		columnsPb := make(map[string]*cdclog.Column)
-		for k, c := range r.Columns {
-			column := new(cdclog.Column)
-			column.Type = []byte{c.Type}
-			column.Flag = uint64(c.Flag)
-			column.Value = []byte(ColumnValueString(c.Value))
-			columnsPb[k] = column
-		}
-		rowChangedEventPb.Columns = columnsPb
-	}
-	if len(r.PreColumns) > 0 {
-		columnsPb := make(map[string]*cdclog.Column)
-		for k, c := range r.PreColumns {
-			column := new(cdclog.Column)
-			column.Type = []byte{c.Type}
-			column.Flag = uint64(c.Flag)
-			column.Value = []byte(ColumnValueString(c.Value))
-			columnsPb[k] = column
-		}
-		rowChangedEventPb.PreColumns = columnsPb
-	}
-	return rowChangedEventPb
-}
-
 // Column represents a column value in row changed event
 type Column struct {
 	Type byte `json:"t"`
@@ -350,49 +304,6 @@ type DDLEvent struct {
 	PreTableInfo *SimpleTableInfo
 	Query        string
 	Type         model.ActionType
-}
-
-// ToProtoBuf translate DDLEvent to protobuf, this is use for cdc log backup.
-// TODO replace origin DDLEvent with proto DDLEvent
-func (d *DDLEvent) ToProtoBuf() *cdclog.DDLEvent {
-	ddlEventPb := new(cdclog.DDLEvent)
-	ddlEventPb.StartTs = d.StartTs
-	ddlEventPb.CommitTs = d.CommitTs
-
-	if d.TableInfo != nil {
-		tableInfo := new(cdclog.TableInfo)
-		tableInfo.Table = d.TableInfo.Table
-		tableInfo.Schema = d.TableInfo.Schema
-		if d.TableInfo.ColumnInfo != nil {
-			columns := make([]*cdclog.ColumnInfo, 0, len(d.TableInfo.ColumnInfo))
-			for _, c := range d.TableInfo.ColumnInfo {
-				columns = append(columns, &cdclog.ColumnInfo{
-					Name: c.Name,
-					Type: []byte{c.Type},
-				})
-			}
-			tableInfo.ColumnInfo = columns
-		}
-		ddlEventPb.TableInfo = tableInfo
-	}
-	if d.PreTableInfo != nil {
-		preTableInfo := new(cdclog.TableInfo)
-		preTableInfo.Table = d.PreTableInfo.Table
-		preTableInfo.Schema = d.PreTableInfo.Schema
-		if d.PreTableInfo.ColumnInfo != nil {
-			columns := make([]*cdclog.ColumnInfo, 0, len(d.PreTableInfo.ColumnInfo))
-			for _, c := range d.PreTableInfo.ColumnInfo {
-				columns = append(columns, &cdclog.ColumnInfo{
-					Name: c.Name,
-					Type: []byte{c.Type},
-				})
-			}
-			preTableInfo.ColumnInfo = columns
-		}
-		ddlEventPb.PreTableInfo = preTableInfo
-	}
-	return ddlEventPb
-
 }
 
 // FromJob fills the values of DDLEvent from DDL job

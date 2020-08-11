@@ -30,6 +30,7 @@ import (
 	parsemodel "github.com/pingcap/parser/model"
 
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 )
 
 const (
@@ -69,6 +70,7 @@ type fileSink struct {
 	logPath *logPath
 
 	ddlFile *os.File
+	encoder func() codec.EventBatchEncoder
 
 	hashMap      sync.Map
 	tableStreams []*tableStream
@@ -83,19 +85,27 @@ func (f *fileSink) flushTableStreams(ctx context.Context) error {
 			var fileName string
 			flushedEvents := tsReplica.sendEvents.Load()
 			flushedSize := tsReplica.sendSize.Load()
-			rowDatas := make([]byte, 0, flushedSize)
+			encoder := f.encoder()
 			for event := int64(0); event < flushedEvents; event++ {
 				row := <-tsReplica.dataCh
 				if event == flushedEvents-1 {
 					// the last event
 					fileName = makeTableFileName(row.CommitTs)
 				}
-				data, err := row.ToProtoBuf().Marshal()
+				_, err := encoder.AppendRowChangedEvent(row)
 				if err != nil {
 					return err
 				}
-				rowDatas = append(rowDatas, encodeRecord(data)...)
 			}
+			rowDatas := encoder.MixedBuild()
+
+			log.Debug("[flushTableStreams] build cdc log data",
+				zap.Int64("table id", tsReplica.tableID),
+				zap.Int64("flushed size", flushedSize),
+				zap.Int64("flushed event", flushedEvents),
+				zap.Int("encode size", len(rowDatas)),
+				zap.String("file name", fileName),
+			)
 
 			tableDir := filepath.Join(f.logPath.root, makeTableDirectoryName(tsReplica.tableID))
 
@@ -215,10 +225,12 @@ func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		delete(f.logMeta.Names, ddl.PreTableInfo.TableID)
 		f.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	}
-	data, err := ddl.ToProtoBuf().Marshal()
+	encoder := f.encoder()
+	_, err := encoder.AppendDDLEvent(ddl)
 	if err != nil {
 		return err
 	}
+	data := encoder.MixedBuild()
 
 	if f.ddlFile == nil {
 		// create file stream
@@ -237,6 +249,7 @@ func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	log.Debug("[EmitDDLEvent] current file stats",
 		zap.String("name", stat.Name()),
 		zap.Int64("size", stat.Size()),
+		zap.Int("data size", len(data)),
 	)
 
 	if stat.Size() > maxDDLFlushSize {
@@ -252,7 +265,7 @@ func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		f.ddlFile = file
 	}
 
-	_, err = f.ddlFile.Write(append(data, '\n'))
+	_, err = f.ddlFile.Write(data)
 	if err != nil {
 		return err
 	}
@@ -316,8 +329,10 @@ func NewLocalFileSink(sinkURI *url.URL) (*fileSink, error) {
 		return nil, err
 	}
 	return &fileSink{
-		logMeta:      newLogMeta(),
-		logPath:      logPath,
+		logMeta: newLogMeta(),
+		logPath: logPath,
+		encoder: codec.NewJSONEventBatchEncoder,
+
 		tableStreams: make([]*tableStream, 0),
 	}, nil
 }

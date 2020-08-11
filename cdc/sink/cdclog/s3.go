@@ -34,6 +34,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
 )
 
 const (
@@ -161,7 +162,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 
 	var newFileName string
 	flushedSize := int64(0)
-	rowDatas := make([]byte, 0)
+	encoder := s.encoder()
 	for event := int64(0); event < sendEvents; event++ {
 		row := <-tb.dataCh
 		flushedSize += row.ApproximateSize
@@ -169,14 +170,12 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 			// if last event, we record ts as new rotate file name
 			newFileName = makeTableFileObject(row.Table.TableID, row.CommitTs)
 		}
-
-		data, err := row.ToProtoBuf().Marshal()
+		_, err := encoder.AppendRowChangedEvent(row)
 		if err != nil {
 			return err
 		}
-		rowDatas = append(rowDatas, encodeRecord(data)...)
 	}
-
+	rowDatas := encoder.MixedBuild()
 	log.Debug("[FlushRowChangedEvents[Debug]] flush table buffer",
 		zap.Int64("table", tb.tableID),
 		zap.Int64("event size", sendEvents),
@@ -262,6 +261,7 @@ type s3Sink struct {
 	client  *s3.S3
 
 	logMeta *logMeta
+	encoder func() codec.EventBatchEncoder
 
 	hashMap      sync.Map
 	tableBuffers []*tableBuffer
@@ -460,10 +460,13 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		delete(s.logMeta.Names, ddl.PreTableInfo.TableID)
 		s.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 	}
-	data, err := ddl.ToProtoBuf().Marshal()
+	encoder := s.encoder()
+	_, err := encoder.AppendDDLEvent(ddl)
 	if err != nil {
 		return err
 	}
+	data := encoder.MixedBuild()
+
 	listing, err := s.ListObject(ddlEventsDir, 1)
 	if err != nil {
 		return err
@@ -501,7 +504,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 				return err
 			}
 		}
-		fileData = append(fileData, append(buf[:n], '\n')...)
+		fileData = append(fileData, buf[:n]...)
 	}
 	return s.putObjectWithKey(ctx, name, fileData)
 }
@@ -568,6 +571,7 @@ func NewS3Sink(sinkURI *url.URL) (*s3Sink, error) {
 		options: s3options,
 		client:  s3client,
 		logMeta: newLogMeta(),
+		encoder: codec.NewJSONEventBatchEncoder,
 
 		tableBuffers: tableBuffers,
 		notifyChan:   notifyChan,

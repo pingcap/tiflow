@@ -7,5 +7,3 @@ echo "generate canal protocol code..."
 
 protoc --gofast_out=./canal EntryProtocol.proto
 protoc --gofast_out=./canal CanalProtocol.proto
-
-protoc --gofast_out=./cdclog LogProtocol.proto
