@@ -45,11 +45,13 @@ def prepare_binaries() {
                         tikv_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
                         pd_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
                         minio_url="${FILE_SERVER_URL}/download/minio.tar.gz"
+                        s3cmd_url="${FILE_SERVER_URL}/download/s3cmd-2.1.0.tar.gz"
 
                         curl \${tidb_url} | tar xz -C ./tmp bin/tidb-server
                         curl \${pd_url} | tar xz -C ./tmp bin/*
                         curl \${tikv_url} | tar xz -C ./tmp bin/tikv-server
                         curl \${minio_url} | tar xz -C ./tmp minio
+                        curl \${s3cmd_url} | tar xz -C ./tmp s3cmd-2.1.0/s3cmd
                         mv tmp/bin/* third_bin
                         curl http://download.pingcap.org/tiflash-nightly-linux-amd64.tar.gz | tar xz -C third_bin
                         mv third_bin/tiflash-nightly-linux-amd64/* third_bin

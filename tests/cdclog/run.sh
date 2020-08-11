@@ -33,7 +33,7 @@ stop_minio() {
 }
 trap stop_minio EXIT
 
-s3cmd --access_key=$MINIO_ACCESS_KEY --secret_key=$MINIO_SECRET_KEY --host=$S3_ENDPOINT --host-bucket=$S3_ENDPOINT --no-ssl mb s3://logBucket
+bin/s3cmd --access_key=$MINIO_ACCESS_KEY --secret_key=$MINIO_SECRET_KEY --host=$S3_ENDPOINT --host-bucket=$S3_ENDPOINT --no-ssl mb s3://logBucket
 
 function prepare() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
