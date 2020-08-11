@@ -31,6 +31,7 @@ import (
 	parsemodel "github.com/pingcap/parser/model"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/ticdc/cdc/model"
 )
@@ -396,36 +397,27 @@ func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	}
 	if shouldFlush {
 		// should not block here
-		go func() {
-			s.notifyChan <- struct{}{}
-		}()
+		select {
+		case s.notifyChan <- struct{}{}:
+		default:
+		}
 	}
 	return nil
 }
 
 func (s *s3Sink) flushTableBuffers(ctx context.Context) error {
-	var wg sync.WaitGroup
-	errCh := make(chan error, len(s.tableBuffers))
+	// TODO use a fixed worker pool
+	eg, ectx := errgroup.WithContext(ctx)
 	for _, tb := range s.tableBuffers {
-		wg.Add(1)
 		tbReplica := tb
-		// TODO use a fixed worker pool
-		go func(ctx context.Context, tb *tableBuffer) {
-			defer wg.Done()
+		eg.Go(func() error {
 			log.Info("[FlushRowChangedEvents] flush specify row changed event",
-				zap.Int64("table", tb.tableID),
-				zap.Int64("event size", tb.sendEvents.Load()))
-			errCh <- tb.flush(ctx, s)
-		}(ctx, tbReplica)
+				zap.Int64("table", tbReplica.tableID),
+				zap.Int64("event size", tbReplica.sendEvents.Load()))
+			return tbReplica.flush(ectx, s)
+		})
 	}
-	wg.Wait()
-	close(errCh)
-	for err := range errCh {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return eg.Wait()
 }
 
 func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
@@ -583,7 +575,7 @@ func NewS3Sink(sinkURI *url.URL) (*s3Sink, error) {
 }
 
 // checkBucket checks if a path exists
-var checkBucket = func(svc *s3.S3, bucket string) error {
+func checkBucket(svc *s3.S3, bucket string) error {
 	input := &s3.HeadBucketInput{
 		Bucket: aws.String(bucket),
 	}

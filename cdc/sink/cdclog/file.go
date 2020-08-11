@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	parsemodel "github.com/pingcap/parser/model"
 
@@ -73,87 +74,72 @@ type fileSink struct {
 	tableStreams []*tableStream
 }
 
-func (f *fileSink) flushTableStreams() error {
-	var wg sync.WaitGroup
-	errCh := make(chan error, len(f.tableStreams))
+func (f *fileSink) flushTableStreams(ctx context.Context) error {
+	// TODO use a fixed worker pool
+	eg, _ := errgroup.WithContext(ctx)
 	for _, ts := range f.tableStreams {
 		tsReplica := ts
-		wg.Add(1)
-		go func(ts *tableStream) {
-			defer wg.Done()
+		eg.Go(func() error {
 			var fileName string
-			flushedEvents := ts.sendEvents.Load()
-			flushedSize := ts.sendSize.Load()
+			flushedEvents := tsReplica.sendEvents.Load()
+			flushedSize := tsReplica.sendSize.Load()
 			rowDatas := make([]byte, 0, flushedSize)
 			for event := int64(0); event < flushedEvents; event++ {
-				row := <-ts.dataCh
+				row := <-tsReplica.dataCh
 				if event == flushedEvents-1 {
 					// the last event
 					fileName = makeTableFileName(row.CommitTs)
 				}
 				data, err := row.ToProtoBuf().Marshal()
 				if err != nil {
-					errCh <- err
-					return
+					return err
 				}
 				rowDatas = append(rowDatas, encodeRecord(data)...)
 			}
 
-			tableDir := filepath.Join(f.logPath.root, makeTableDirectoryName(ts.tableID))
+			tableDir := filepath.Join(f.logPath.root, makeTableDirectoryName(tsReplica.tableID))
 
-			if ts.rowFile == nil {
+			if tsReplica.rowFile == nil {
 				// create new file to append data
 				err := os.MkdirAll(tableDir, defaultDirMode)
 				if err != nil {
-					errCh <- err
+					return err
 				}
 				file, err := os.OpenFile(filepath.Join(tableDir, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
 				if err != nil {
-					errCh <- err
-					return
+					return err
 				}
-				ts.rowFile = file
+				tsReplica.rowFile = file
 			}
 
-			stat, err := ts.rowFile.Stat()
+			stat, err := tsReplica.rowFile.Stat()
 			if err != nil {
-				errCh <- err
-				return
+				return err
 			}
 
 			if stat.Size() > maxRowFileSize {
 				// rotate file
-				err := ts.rowFile.Close()
+				err := tsReplica.rowFile.Close()
 				if err != nil {
-					errCh <- err
-					return
+					return err
 				}
 				file, err := os.OpenFile(filepath.Join(tableDir, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
 				if err != nil {
-					errCh <- err
-					return
+					return err
 				}
-				ts.rowFile = file
+				tsReplica.rowFile = file
 			}
-			_, err = ts.rowFile.Write(rowDatas)
+			_, err = tsReplica.rowFile.Write(rowDatas)
 			if err != nil {
-				errCh <- err
-				return
+				return err
 			}
 
-			ts.sendEvents.Sub(flushedEvents)
-			ts.sendSize.Sub(flushedSize)
-
-		}(tsReplica)
+			tsReplica.sendEvents.Sub(flushedEvents)
+			tsReplica.sendSize.Sub(flushedSize)
+			return nil
+		})
 	}
-	wg.Wait()
-	close(errCh)
-	for err := range errCh {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return eg.Wait()
 }
 
 func (f *fileSink) createDDLFile(commitTs uint64) (*os.File, error) {
@@ -201,7 +187,7 @@ func (f *fileSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64)
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(defaultFlushRowChangedEventDuration):
-		return f.flushTableStreams()
+		return f.flushTableStreams(ctx)
 	}
 }
 
