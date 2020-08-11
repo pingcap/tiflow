@@ -123,7 +123,7 @@ type SyncSqlRequest struct {
 func (r *SyncSqlRequest) Send() Awaitable {
 	err := r.insert(r.helper.ctx)
 	if err != nil {
-
+		return &errorCheckableAndAwaitable{errors.AddStack(err)}
 	}
 	return r.getAwaitableSqlRowContainer()
 }
@@ -168,6 +168,9 @@ func (s *sqlRequest) read(ctx context.Context) (map[string]interface{}, error) {
 	}
 	defer rows.Close()
 
+	if !rows.Next() {
+		return nil, nil
+	}
 	return rowsToMap(rows)
 }
 
@@ -214,10 +217,6 @@ func rowsToMap(rows *sql.Rows) (map[string]interface{}, error) {
 	colDataPtrs := make([]interface{}, len(colNames))
 	for i := range colData {
 		colDataPtrs[i] = &colData[i]
-	}
-
-	if !rows.Next() {
-		return nil, nil
 	}
 
 	err = rows.Scan(colDataPtrs...)

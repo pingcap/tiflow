@@ -11,6 +11,7 @@ func main() {
 	env := framework.NewAvroKafkaDockerEnv()
 	env.Setup()
 	//env.RunTest(NewSimple())
-	env.RunTest(NewHelperCase())
+	//env.RunTest(NewHelperCase())
+	env.RunTest(NewAlterCase())
 	env.TearDown()
 }

@@ -3,14 +3,16 @@ package framework
 import (
 	"context"
 	"fmt"
+	"github.com/jmoiron/sqlx"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
-	//"upper.io/db.v3/lib/sqlbuilder"
+	"reflect"
+	"strings"
 )
 
 const (
-	selectQueryMaxBatchSize = 1024
+	selectQueryMaxBatchSize = 256
 )
 
 type sqlAllAwaiter struct {
@@ -21,6 +23,10 @@ type sqlAllAwaiter struct {
 }
 
 func All(helper *SqlHelper, awaitables []Awaitable) Awaitable {
+	if _, ok := awaitables[0].(sqlRowContainer); !ok {
+		return awaitables[0]
+	}
+
 	ret := &sqlAllAwaiter{
 		helper:          helper,
 		data:            make(map[interface{}]map[string]interface{}, len(awaitables)),
@@ -29,9 +35,12 @@ func All(helper *SqlHelper, awaitables []Awaitable) Awaitable {
 	}
 
 	for _, row := range awaitables {
-		row := row.(sqlRowContainer)
-		key := row.getData()[row.getTable().uniqueIndex]
-		value := row.getData()
+		rowContainer, ok := row.(sqlRowContainer)
+		if !ok {
+			return row
+		}
+		key := rowContainer.getData()[rowContainer.getTable().uniqueIndex]
+		value := rowContainer.getData()
 		ret.data[key] = value
 	}
 
@@ -42,29 +51,28 @@ func All(helper *SqlHelper, awaitables []Awaitable) Awaitable {
 }
 
 func (s *sqlAllAwaiter) poll(ctx context.Context) (bool, error) {
-	//db, err := sqlbuilder.New("mysql", s.helper.downstream)
-	//if err != nil {
-	//	return false, errors.AddStack(err)
-	//}
+	db:= sqlx.NewDb(s.helper.downstream, "mysql")
 
 	batchSize := 0
 	counter := 0
 	indexValues := make([]interface{}, 0)
+	s.retrievedValues = make([]map[string]interface{}, 0)
 	for k, _ := range s.data {
 		indexValues = append(indexValues, k)
 		batchSize++
 		counter++
 		if batchSize >= selectQueryMaxBatchSize || counter == len(s.data) {
 			log.Debug("Selecting", zap.String("table", s.table.tableName), zap.Any("keys", indexValues))
-			//query :=  db.SelectFrom(s.table.tableName).
-			//	Where("? IN ?", s.table.uniqueIndex, indexValues)
-			rows, err := s.helper.downstream.Query("select from test where id = ?", indexValues)
-			/*
-			log.Debug("Query", zap.String("query", query.String()))
-			rows, err := query.QueryContext(s.helper.ctx)
-			*/
-
+			query, args, err := sqlx.In("select * from `" + s.table.tableName + "` where "+s.table.uniqueIndex+" in (?)", indexValues)
 			if err != nil {
+				return false, errors.AddStack(err)
+			}
+			query = db.Rebind(query)
+			rows, err := db.QueryContext(ctx, query, args...)
+			if err != nil {
+				if strings.Contains(err.Error(), "Error 1146") {
+					return false, nil
+				}
 				return false, errors.AddStack(err)
 			}
 
@@ -76,6 +84,7 @@ func (s *sqlAllAwaiter) poll(ctx context.Context) (bool, error) {
 				s.retrievedValues = append(s.retrievedValues, m)
 			}
 			batchSize = 0
+			indexValues = make([]interface{}, 0)
 		}
 	}
 
@@ -90,8 +99,16 @@ func (s *sqlAllAwaiter) poll(ctx context.Context) (bool, error) {
 
 func (s *sqlAllAwaiter) Check() error {
 	for _, row := range s.retrievedValues {
-		expected := s.data[row[s.table.uniqueIndex]]
-		if !compareMaps(row, s.data[row[s.table.uniqueIndex]]) {
+		key := row[s.table.uniqueIndex]
+		switch key.(type) {
+		case int, int8, int16, int32, int64:
+			key = int(reflect.ValueOf(key).Int())
+		case uint, uint8, uint16, uint32, uint64:
+			key = uint(reflect.ValueOf(key).Uint())
+		default:
+		}
+		expected := s.data[key]
+		if !compareMaps(row, expected) {
 			log.Warn(
 				"Check failed",
 				zap.String("expected", fmt.Sprintf("%v", expected)),
