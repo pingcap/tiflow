@@ -44,10 +44,12 @@ def prepare_binaries() {
                         tidb_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
                         tikv_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
                         pd_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
+                        minio_url="${FILE_SERVER_URL}/download/minio.tar.gz"
 
                         curl \${tidb_url} | tar xz -C ./tmp bin/tidb-server
                         curl \${pd_url} | tar xz -C ./tmp bin/*
                         curl \${tikv_url} | tar xz -C ./tmp bin/tikv-server
+                        curl \${minio_url} | tar xz -C ./tmp bin/minio
                         mv tmp/bin/* third_bin
                         curl http://download.pingcap.org/tiflash-nightly-linux-amd64.tar.gz | tar xz -C third_bin
                         mv third_bin/tiflash-nightly-linux-amd64/* third_bin
@@ -58,6 +60,7 @@ def prepare_binaries() {
                         mv tmp/tidb-tools-v2.1.6-linux-amd64/bin/* third_bin
                         curl -L https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 -o jq
                         mv jq third_bin
+                        yum install -y s3cmd
                         chmod a+x third_bin/*
                         rm -rf tmp
                     """
