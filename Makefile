@@ -86,6 +86,7 @@ check_third_party_binary:
 	@which bin/jq
 
 integration_test_build: check_failpoint_ctl
+	./scripts/fix_lib_zstd.sh
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -c -cover -covemode=atomic \
 		-coverpkg=github.com/pingcap/ticdc/... \
