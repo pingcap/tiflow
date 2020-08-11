@@ -12,9 +12,6 @@ require (
 	github.com/coreos/go-semver v0.3.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
-	github.com/go-openapi/spec v0.19.9 // indirect
-	github.com/go-openapi/swag v0.19.9 // indirect
-	github.com/go-playground/overalls v0.0.0-20191218162659-7df9f728c018 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/protobuf v1.3.4
 	github.com/google/btree v1.0.0
@@ -22,16 +19,11 @@ require (
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/jarcoal/httpmock v1.0.5
-	github.com/juju/testing v0.0.0-20200608005635-e4eedbc6f7aa // indirect
-	github.com/kevinburke/go-bindata v3.21.0+incompatible // indirect
 	github.com/linkedin/goavro/v2 v2.9.7
-	github.com/mailru/easyjson v0.7.3 // indirect
 	github.com/mattn/go-colorable v0.1.7 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-shellwords v1.0.3
-	github.com/ngaut/unistore v0.0.0-20200630072006-0c4035925f69 // indirect
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
-	github.com/pingcap-incubator/tidb-dashboard v0.0.0-20200807020752-01f0abe88e93 // indirect
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
@@ -44,13 +36,10 @@ require (
 	github.com/pingcap/tipb v0.0.0-20200618092958-4fad48b4c8c3 // indirect
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
-	github.com/sergi/go-diff v1.1.0 // indirect
+	github.com/shurcooL/vfsgen v0.0.0-20181202132449-6a9ea43bcacd // indirect
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.5.1
-	github.com/swaggo/swag v1.6.7 // indirect
-	github.com/twmb/murmur3 v1.1.3 // indirect
-	github.com/urfave/cli/v2 v2.2.0 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	go.etcd.io/bbolt v1.3.5 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200425165423-262c93980547
