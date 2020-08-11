@@ -68,7 +68,6 @@ def prepare_binaries() {
                         mv tmp/tidb-tools-v2.1.6-linux-amd64/bin/* third_bin
                         curl -L https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 -o jq
                         mv jq third_bin
-                        yum install -y s3cmd
                         chmod a+x third_bin/*
                         rm -rf tmp
                     """
