@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/log"
+
 	"go.uber.org/zap"
 
 	"github.com/pingcap/parser/model"
@@ -137,8 +138,8 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		}
 	}
 	ti.findHandleIndex()
-	log.Debug("select the handle index", zap.Int64("tableID", ti.ID), zap.Int64("HandleIndexID", ti.HandleIndexID))
 	ti.initColumnsFlag()
+	log.Debug("warp table info", zap.Any("tableInfo", ti))
 	return ti
 }
 
