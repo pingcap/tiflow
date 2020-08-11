@@ -31,7 +31,15 @@ def prepare_binaries() {
         def prepares = [:]
 
         prepares["download third binaries"] = {
-            node ("${GO_TEST_SLAVE}") {
+           podTemplate(
+                        label: "br_test_go1130", idleMinutes: 50,
+                        nodeSelector: 'role_type=slave',
+                        containers: [containerTemplate(
+                                name: 'golang', alwaysPullImage: false, image: 'hub.pingcap.net/jenkins/centos7_golang_s3-1.13:cached', ttyEnabled: true,
+                                resourceRequestCpu: '2000m', resourceRequestMemory: '4Gi',
+                                command: 'cat'
+                        )],
+                    ) {
                 deleteDir()
                 container("golang") {
                     def tidb_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tidb/${TIDB_BRANCH}/sha1").trim()
