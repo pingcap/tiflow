@@ -42,7 +42,7 @@ type TableInfo struct {
 	indicesOffset    map[int64]int
 	uniqueColumns    map[int64]struct{}
 
-	// It's a mapping from ColumnID to the offset of columns in row changed events.
+	// It's a mapping from ColumnID to the offset of the columns in row changed events.
 	RowColumnsOffset map[int64]int
 
 	ColumnsFlag map[int64]ColumnFlagType
@@ -139,7 +139,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 	}
 	ti.findHandleIndex()
 	ti.initColumnsFlag()
-	log.Debug("warp table info", zap.Reflect("tableInfo", ti))
+	log.Debug("warpped table info", zap.Reflect("tableInfo", ti))
 	return ti
 }
 
@@ -199,11 +199,13 @@ func (ti *TableInfo) initColumnsFlag() {
 		ti.ColumnsFlag[colInfo.ID] = flag
 	}
 
-	// In TiDB, Only the first column can be set multiple key,
-	// if unique index has multi columns,
-	// the flag should be MultipleKeyFlag.
-	// See https://dev.mysql.com/doc/refman/5.7/en/show-columns.html
-	// However, that's not what we want, we would like to express here a flag that is as complete as possible.
+	// In TiDB, just as in MySQL, only the first column of an index can be marked as "multiple key" or "unique key",
+	// and only the first column of a unique index may be marked as "unique key".
+	// See https://dev.mysql.com/doc/refman/5.7/en/show-columns.html.
+	// Yet if an index has multiple columns, we would like to easily determine that all those columns are indexed,
+	// which is crucial for the completeness of the information we pass to the downstream.
+	// Therefore, instead of using the MySql standard,
+	// we made our own decision to mark all columns in an index with the appropriate flag(s).
 	for _, idxInfo := range ti.Indices {
 		for _, idxCol := range idxInfo.Columns {
 			colInfo := ti.Columns[idxCol.Offset]
