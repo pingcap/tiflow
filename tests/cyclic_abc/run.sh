@@ -106,6 +106,7 @@ function run() {
     run_cdc_cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/" \
         --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
+        --changefeed-id "tls-changefeed" \
         --ca=$TLS_DIR/ca.pem \
         --cert=$TLS_DIR/client.pem \
         --key=$TLS_DIR/client-key.pem \
@@ -162,6 +163,20 @@ function run() {
         echo "must not connect successfully"
         exit 1
     fi
+
+    # Check cli TLS
+    run_cdc_cli changefeed list \
+        --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
+        --ca=$TLS_DIR/ca.pem \
+        --cert=$TLS_DIR/client.pem \
+        --key=$TLS_DIR/client-key.pem
+
+    run_cdc_cli changefeed query \
+        --changefeed-id "tls-changefeed" \
+        --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
+        --ca=$TLS_DIR/ca.pem \
+        --cert=$TLS_DIR/client.pem \
+        --key=$TLS_DIR/client-key.pem
 
     cleanup_process $CDC_BINARY
 }
