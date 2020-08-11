@@ -345,7 +345,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 	}
 
 	for captureID, funcs := range updateFuncs {
-		newStatus, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, funcs...)
+		newStatus, _, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, funcs...)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -365,7 +365,7 @@ func (c *changeFeed) balanceOrphanTables(ctx context.Context, captures map[model
 
 func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.CaptureID]*model.TaskStatus) error {
 	for captureID, status := range taskStatus {
-		newStatus, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
+		newStatus, _, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
 			if taskStatus.SomeOperationsUnapplied() {
 				log.Error("unexpected task status, there are operations unapplied in this status", zap.Any("status", taskStatus))
 				return false, errors.Errorf("waiting to processor handle the operation finished time out")
