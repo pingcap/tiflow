@@ -50,8 +50,9 @@ def prepare_binaries() {
                         curl \${tidb_url} | tar xz -C ./tmp bin/tidb-server
                         curl \${pd_url} | tar xz -C ./tmp bin/*
                         curl \${tikv_url} | tar xz -C ./tmp bin/tikv-server
-                        curl \${minio_url} | tar xz -C ./tmp minio
+                        curl \${minio_url} | tar xz -C ./tmp/bin minio
                         curl \${s3cmd_url} | tar xz -C ./tmp s3cmd-2.1.0/s3cmd
+                        mv tmp/s3cmd-2.1.0/s3cmd tmp/bin/s3cmd
                         mv tmp/bin/* third_bin
                         curl http://download.pingcap.org/tiflash-nightly-linux-amd64.tar.gz | tar xz -C third_bin
                         mv third_bin/tiflash-nightly-linux-amd64/* third_bin
