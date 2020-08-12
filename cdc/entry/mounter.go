@@ -496,6 +496,10 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
 		}
 	}
+	var partitionID int64
+	if tableInfo.GetPartitionInfo() != nil {
+		partitionID = idx.PhysicalTableID
+	}
 	return &model.RowChangedEvent{
 		StartTs:  idx.StartTs,
 		CommitTs: idx.CRTs,
@@ -503,6 +507,8 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 		Table: &model.TableName{
 			Schema: tableInfo.TableName.Schema,
 			Table:  tableInfo.TableName.Table,
+			TableID: idx.PhysicalTableID,
+			Partition: partitionID,
 		},
 		IndieMarkCol:    tableInfo.IndieMarkCol,
 		Delete:          true,
