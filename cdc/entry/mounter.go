@@ -505,9 +505,9 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 		CommitTs: idx.CRTs,
 		RowID:    idx.RecordID,
 		Table: &model.TableName{
-			Schema: tableInfo.TableName.Schema,
-			Table:  tableInfo.TableName.Table,
-			TableID: idx.PhysicalTableID,
+			Schema:    tableInfo.TableName.Schema,
+			Table:     tableInfo.TableName.Table,
+			TableID:   idx.PhysicalTableID,
 			Partition: partitionID,
 		},
 		IndieMarkCol:    tableInfo.IndieMarkCol,
