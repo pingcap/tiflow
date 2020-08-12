@@ -39,12 +39,12 @@ func (d *defaultDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	}
 	uniqueKeysNum := 0
 	for _, col := range row.PreColumns {
-		if col.Flag.IsPrimaryKey() || col.Flag.IsUniqueKey() {
+		if col.Flag.IsPrimaryKey() || col.Flag.IsUniqueKey() || col.Flag.IsHandleKey() {
 			uniqueKeysNum++
 		}
 	}
 	for _, col := range row.Columns {
-		if col.Flag.IsPrimaryKey() || col.Flag.IsUniqueKey() {
+		if col.Flag.IsPrimaryKey() || col.Flag.IsUniqueKey() || col.Flag.IsHandleKey() {
 			uniqueKeysNum++
 		}
 	}
