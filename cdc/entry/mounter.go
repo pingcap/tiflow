@@ -470,7 +470,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 		return nil, nil
 	}
 
-	if !tableInfo.IsIndexUnique(indexInfo, false) {
+	if !tableInfo.IsIndexUnique(indexInfo) {
 		return nil, nil
 	}
 

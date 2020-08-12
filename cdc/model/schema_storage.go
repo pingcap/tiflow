@@ -108,12 +108,12 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	for i, idx := range ti.Indices {
 		ti.indicesOffset[idx.ID] = i
-		if ti.IsIndexUnique(idx, false) {
+		if ti.IsIndexUnique(idx) {
 			for _, col := range idx.Columns {
 				ti.uniqueColumns[ti.Columns[col.Offset].ID] = struct{}{}
 			}
 		}
-		if ti.IsIndexUnique(idx, true) {
+		if idx.Primary || idx.Unique {
 			indexColOffset := make([]int, 0, len(idx.Columns))
 			for _, idxCol := range idx.Columns {
 				colInfo := ti.Columns[idxCol.Offset]
@@ -150,7 +150,7 @@ func (ti *TableInfo) findHandleIndex() {
 	}
 	handleIndexOffset := -1
 	for i, idx := range ti.Indices {
-		if !ti.IsIndexUnique(idx, false) {
+		if !ti.IsIndexUnique(idx) {
 			continue
 		}
 		if idx.Primary {
@@ -276,7 +276,7 @@ func (ti *TableInfo) GetUniqueKeys() [][]string {
 		}
 	}
 	for _, idx := range ti.Indices {
-		if ti.IsIndexUnique(idx, false) {
+		if ti.IsIndexUnique(idx) {
 			colNames := make([]string, 0, len(idx.Columns))
 			for _, col := range idx.Columns {
 				colNames = append(colNames, col.Name.O)
@@ -311,14 +311,11 @@ func (ti *TableInfo) IsEligible() bool {
 }
 
 // IsIndexUnique returns whether the index is unique
-func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo, allowColumnNullable bool) bool {
+func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
 	if indexInfo.Primary {
 		return true
 	}
 	if indexInfo.Unique {
-		if allowColumnNullable {
-			return true
-		}
 		for _, col := range indexInfo.Columns {
 			colInfo := ti.Columns[col.Offset]
 			if !mysql.HasNotNullFlag(colInfo.Flag) {
