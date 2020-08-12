@@ -405,6 +405,14 @@ func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	return nil
 }
 
+func (s *s3Sink) flushLogMeta(ctx context.Context) error {
+	data, err := s.logMeta.Marshal()
+	if err != nil {
+		return errors.Annotate(err, "marshal meta to json failed")
+	}
+	return s.putObjectWithKey(ctx, s.prefix+logMetaFile, data)
+}
+
 func (s *s3Sink) flushTableBuffers(ctx context.Context) error {
 	// TODO use a fixed worker pool
 	eg, ectx := errgroup.WithContext(ctx)
@@ -442,11 +450,7 @@ func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) e
 // sleep 5 seconds to avoid update too frequently
 func (s *s3Sink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	s.logMeta.GlobalResolvedTS = ts
-	data, err := s.logMeta.Marshal()
-	if err != nil {
-		return errors.Annotate(err, "marshal meta to json failed")
-	}
-	return s.putObjectWithKey(ctx, s.prefix+logMetaFile, data)
+	return s.flushLogMeta(ctx)
 }
 
 // EmitDDLEvent write ddl event to S3 directory, all events split by '\n'
@@ -456,9 +460,17 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	switch ddl.Type {
 	case parsemodel.ActionCreateTable:
 		s.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		err := s.flushLogMeta(ctx)
+		if err != nil {
+			return err
+		}
 	case parsemodel.ActionRenameTable:
 		delete(s.logMeta.Names, ddl.PreTableInfo.TableID)
 		s.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		err := s.flushLogMeta(ctx)
+		if err != nil {
+			return err
+		}
 	}
 	encoder := s.encoder()
 	_, err := encoder.AppendDDLEvent(ddl)
