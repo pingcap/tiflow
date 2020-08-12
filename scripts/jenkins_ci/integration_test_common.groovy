@@ -31,14 +31,7 @@ def prepare_binaries() {
         def prepares = [:]
 
         prepares["download third binaries"] = {
-            podTemplate(label: "br_test_go1130", idleMinutes: 50,
-                      nodeSelector: 'role_type=slave',
-                      containers: [containerTemplate(
-                      name: 'golang', alwaysPullImage: false, image: 'hub.pingcap.net/jenkins/centos7_golang_s3-1.13:cached', ttyEnabled: true,
-                      resourceRequestCpu: '2000m', resourceRequestMemory: '4Gi',
-                      command: 'cat'
-                      )],
-            ) {
+            node ("${GO_TEST_SLAVE}") {
                 deleteDir()
                 container("golang") {
                     println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
@@ -59,6 +52,9 @@ def prepare_binaries() {
                         curl \${pd_url} | tar xz -C ./tmp bin/*
                         curl \${tikv_url} | tar xz -C ./tmp bin/tikv-server
                         curl \${minio_url} | tar xz -C ./tmp/bin minio
+                        curl \${s3cmd_url} | tar xz -C ./tmp/ s3cmd-2.1.0/*
+                        mv tmp/s3cmd-2.1.0/* tmp/bin
+                        yum install -y python-dateutil
                         mv tmp/bin/* third_bin
                         curl http://download.pingcap.org/tiflash-nightly-linux-amd64.tar.gz | tar xz -C third_bin
                         mv third_bin/tiflash-nightly-linux-amd64/* third_bin
