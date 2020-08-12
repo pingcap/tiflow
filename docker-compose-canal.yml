@@ -313,7 +313,7 @@ services:
       KAFKA_SERVER: kafka:9092
       ZOOKEEPER_SERVER: zookeeper:2181
       DB_NAME: testdb
-      DOWNSTREAM_DB_HOST: downsteream-tidb
+      DOWNSTREAM_DB_HOST: downstream-tidb
       DOWNSTREAM_DB_PORT: 4000
       UPSTREAM_DB_HOST: upstream-tidb
       UPSTREAM_DB_PORT: 4000
