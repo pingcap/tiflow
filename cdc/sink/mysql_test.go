@@ -40,10 +40,13 @@ var _ = check.Suite(&MySQLSinkSuite{})
 func newMySQLSink4Test(c *check.C) *mysqlSink {
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
+	params := defaultParams
+	params.batchReplaceEnabled = false
 	return &mysqlSink{
 		txnCache:   common.NewUnresolvedTxnCache(),
 		filter:     f,
 		statistics: NewStatistics(context.TODO(), "test", make(map[string]string)),
+		params:     params,
 	}
 }
 
@@ -434,8 +437,9 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
 			},
 		},
 		expected: &preparedDMLs{
-			sqls:   []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
-			values: [][]interface{}{{1, 1}},
+			sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
+			values:   [][]interface{}{{1, 1}},
+			rowCount: 1,
 		},
 	}}
 	ms := newMySQLSink4Test(c)

@@ -718,8 +718,6 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 				replaces = make(map[string][][]interface{})
 			}
 			query, args = prepareDelete(quoteTable, row.PreColumns)
-			sqls = append(sqls, query)
-			values = append(values, args)
 			if query != "" {
 				sqls = append(sqls, query)
 				values = append(values, args)
