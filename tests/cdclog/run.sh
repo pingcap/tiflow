@@ -32,9 +32,15 @@ stop_minio() {
     kill -2 $MINIO_PID
 }
 
+stop() {
+    stop_minio
+    stop_tidb_cluster
+}
+
 s3cmd --access_key=$MINIO_ACCESS_KEY --secret_key=$MINIO_SECRET_KEY --host=$S3_ENDPOINT --host-bucket=$S3_ENDPOINT --no-ssl mb s3://logbucket
 
 function prepare() {
+    stop_tidb_cluster
     start_tidb_cluster --workdir $WORK_DIR
 
     cd $WORK_DIR
@@ -55,24 +61,27 @@ function cdclog_test() {
   run_sql "create table $TEST_NAME.t1 (c0 int primary key, payload varchar(1024));"
   run_sql "create table $TEST_NAME.t2 (c0 int primary key, payload varchar(1024));"
 
+  # wait for ddl synced
+  sleep 8
+
   run_sql "insert into $TEST_NAME.t1 values (1, 'a')"
   # because flush row changed events interval is 5 second
-  # so sleep 6 second will generate two files
-  sleep 6
+  # so sleep 8 second will generate two files
+  sleep 8
   run_sql "insert into $TEST_NAME.t1 values (2, 'b')"
 
   # wait for log synced
-  sleep 5
+  sleep 8
 
   DATA_DIR="$WORK_DIR/s3/logbucket/test"
   # retrieve table id by log meta
   table_id=$(cat $DATA_DIR/log.meta | jq| grep t1 | awk -F '"' '{print $2}')
-  file_count=$(ls -ahl $DATA_DIR/t_$table_id | wc -l)
+  file_count=$(ls -ahl $DATA_DIR/t_$table_id | grep cdclog | wc -l)
   if [[ ! "$file_count" -eq "2" ]]; then
       echo "$TEST_NAME failed, expect 2 row changed files, obtain $file_count"
       exit 1
   fi
-  ddl_file_count=$(ls -ahl $DATA_DIR/ddl | wc -l)
+  ddl_file_count=$(ls -ahl $DATA_DIR/ddls | grep ddl | wc -l)
   if [[ ! "$ddl_file_count" -eq "1" ]]; then
       echo "$TEST_NAME failed, expect 1 ddl file, obtain $ddl_file_count"
       exit 1
@@ -80,8 +89,7 @@ function cdclog_test() {
   cleanup_process $CDC_BINARY
 }
 
-trap stop_tidb_cluster EXIT
-trap stop_minio EXIT
+trap stop EXIT
 prepare $*
 cdclog_test $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
