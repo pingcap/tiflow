@@ -18,21 +18,37 @@ import (
 )
 
 type defaultDispatcher struct {
-	partitionNum int32
-	tbd          *tableDispatcher
-	ivd          *indexValueDispatcher
+	partitionNum   int32
+	tbd            *tableDispatcher
+	ivd            *indexValueDispatcher
+	enableOldValue bool
 }
 
-func newDefaultDispatcher(partitionNum int32) *defaultDispatcher {
+func newDefaultDispatcher(partitionNum int32, enableOldValue bool) *defaultDispatcher {
 	return &defaultDispatcher{
-		partitionNum: partitionNum,
-		tbd:          newTableDispatcher(partitionNum),
-		ivd:          newIndexValueDispatcher(partitionNum),
+		partitionNum:   partitionNum,
+		tbd:            newTableDispatcher(partitionNum),
+		ivd:            newIndexValueDispatcher(partitionNum),
+		enableOldValue: enableOldValue,
 	}
 }
 
 func (d *defaultDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
-	if len(row.IndieMarkCol) == 0 {
+	if d.enableOldValue {
+		return d.tbd.Dispatch(row)
+	}
+	uniqueKeysNum := 0
+	for _, col := range row.PreColumns {
+		if col.Flag.IsPrimaryKey() || col.Flag.IsUniqueKey() {
+			uniqueKeysNum++
+		}
+	}
+	for _, col := range row.Columns {
+		if col.Flag.IsPrimaryKey() || col.Flag.IsUniqueKey() {
+			uniqueKeysNum++
+		}
+	}
+	if uniqueKeysNum > 1 {
 		return d.tbd.Dispatch(row)
 	}
 	return d.ivd.Dispatch(row)
