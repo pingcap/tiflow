@@ -1,6 +1,5 @@
 #!/bin/bash
 echo $0
-#POSITIONAL=()
 KAFKA_SERVER=${KAFKA_SERVER:-localhost:9092}
 ZOOKEEPER_SERVER=${ZOOKEEPER_SERVER:-localhost:2181}
 DB_NAME=${DB_NAME:-testdb}
@@ -8,55 +7,6 @@ DOWNSTREAM_DB_HOST=${DOWNSTREAM_DB_HOST:-localhost}
 DOWNSTREAM_DB_PORT=${DOWNSTREAM_DB_PORT:-4000}
 UPSTREAM_DB_HOST=${UPSTREAM_DB_HOST:-localhost}
 UPSTREAM_DB_PORT=${UPSTREAM_DB_PORT:-4000}
-
-#while [[ $# -gt 0 ]]
-#do
-#key="$1"
-#
-#case $key in
-#    --zookeeper-server)
-#    ZOOKEEPER_SERVER="$2"
-#    shift # past argument
-#    shift # past value
-#    ;;
-#    --kafka-server)
-#    KAFKA_SERVER="$2"
-#    shift # past argument
-#    shift # past value
-#    ;;
-#    --db-name)
-#    DB_NAME="$2"
-#    shift # past argument
-#    shift # past value
-#    ;;
-#    --downstream-db-host)
-#    DOWNSTREAM_DB_HOST=$2
-#    shift # past argument
-#    shift # past value
-#    ;;
-#    --downstream-db-port)
-#    DOWNSTREAM_DB_PORT=$2
-#    shift # past argument
-#    shift # past value
-#    ;;
-#    --upstream-db-host)
-#    UPSTREAM_DB_HOST=$2
-#    shift # past argument
-#    shift # past value
-#    ;;
-#    --upstream-db-port)
-#    UPSTREAM_DB_PORT=$2
-#    shift # past argument
-#    shift # past value
-#    ;;
-#    *)    # unknown option
-#    POSITIONAL+=("$1") # save it in an array for later
-#    shift # past argument
-#    ;;
-#esac
-#done
-#
-#set -- "${POSITIONAL[@]}"
 
 echo "zookeeper server ${ZOOKEEPER_SERVER}"
 echo "kafka server ${KAFKA_SERVER}"
@@ -66,27 +16,27 @@ echo "upstream db port ${UPSTREAM_DB_PORT}"
 echo "downstream db host ${DOWNSTREAM_DB_HOST}"
 echo "downstream db port ${DOWNSTREAM_DB_PORT}"
 
-echo "Verifying Upstream TiDB is started..."
-i=0
-while ! mysql -uroot -h${UPSTREAM_DB_HOST} -P${UPSTREAM_DB_PORT}  -e 'select * from mysql.tidb;'; do
-    i=$((i + 1))
-    if [ "$i" -gt 60 ]; then
-        echo 'Failed to start upstream TiDB'
-        exit 2
-    fi
-    sleep 2
-done
-
-echo "Verifying Downstream TiDB is started..."
-i=0
-while ! mysql -uroot -h${DOWNSTREAM_DB_HOST} -P${DOWNSTREAM_DB_PORT}  -e 'select * from mysql.tidb;'; do
-    i=$((i + 1))
-    if [ "$i" -gt 60 ]; then
-        echo 'Failed to start downstream TiDB'
-        exit 1
-    fi
-    sleep 2
-done
+#echo "Verifying Upstream TiDB is started..."
+#i=0
+#while ! mysql -uroot -h${UPSTREAM_DB_HOST} -P${UPSTREAM_DB_PORT}  -e 'select * from mysql.tidb;'; do
+#    i=$((i + 1))
+#    if [ "$i" -gt 60 ]; then
+#        echo 'Failed to start upstream TiDB'
+#        exit 2
+#    fi
+#    sleep 2
+#done
+#
+#echo "Verifying Downstream TiDB is started..."
+#i=0
+#while ! mysql -uroot -h${DOWNSTREAM_DB_HOST} -P${DOWNSTREAM_DB_PORT}  -e 'select * from mysql.tidb;'; do
+#    i=$((i + 1))
+#    if [ "$i" -gt 60 ]; then
+#        echo 'Failed to start downstream TiDB'
+#        exit 1
+#    fi
+#    sleep 2
+#done
 sql="drop database if exists ${DB_NAME}; create database ${DB_NAME};"
 echo "[$(date)] Executing SQL: ${sql}"
 mysql -uroot -h ${UPSTREAM_DB_HOST} -P ${UPSTREAM_DB_PORT}  -E -e "${sql}"
