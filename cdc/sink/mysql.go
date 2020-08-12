@@ -149,6 +149,15 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	shouldSwitchDB := len(ddl.TableInfo.Schema) > 0 && ddl.Type != timodel.ActionCreateSchema
 
+	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
+		select {
+		case <-ctx.Done():
+			failpoint.Return(ctx.Err())
+		case <-time.After(time.Hour):
+		}
+		failpoint.Return(nil)
+	})
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Trace(err)
@@ -420,10 +429,22 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) {
 	}
 }
 
-func (s *mysqlSink) notifyAndWaitExec() {
+func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	s.notifier.Notify()
-	for _, w := range s.workers {
-		w.waitAllTxnsExecuted()
+	done := make(chan struct{})
+	go func() {
+		for _, w := range s.workers {
+			w.waitAllTxnsExecuted()
+		}
+		close(done)
+	}()
+	// This is a hack code to avoid io wait in some routine blocks others to exit.
+	// As the network io wait is blocked in kernel code, the goroutine is in a
+	// D-state that we could not even stop it by cancel the context. So if this
+	// scenario happens, the blocked goroutine will be leak.
+	select {
+	case <-ctx.Done():
+	case <-done:
 	}
 }
 
@@ -463,7 +484,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 				sendFn(txn, idx)
 				return
 			}
-			s.notifyAndWaitExec()
+			s.notifyAndWaitExec(ctx)
 			causality.reset()
 		}
 		sendFn(txn, rowsChIdx)
@@ -477,7 +498,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 			s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
 		}
 	}
-	s.notifyAndWaitExec()
+	s.notifyAndWaitExec(ctx)
 }
 
 type mysqlSinkWorker struct {
@@ -609,6 +630,9 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 			failpoint.Inject("MySQLSinkTxnRandomError", func() {
 				failpoint.Return(checkTxnErr(errors.Trace(dmysql.ErrInvalidConn)))
 			})
+			failpoint.Inject("MySQLSinkHangLongTime", func() {
+				time.Sleep(time.Hour)
+			})
 			err := s.statistics.RecordBatchExecution(func() (int, error) {
 				tx, err := s.db.BeginTx(ctx, nil)
 				if err != nil {
@@ -664,16 +688,20 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			sqls = append(sqls, query)
-			values = append(values, args)
+			if query != "" {
+				sqls = append(sqls, query)
+				values = append(values, args)
+			}
 		}
 		if len(row.Columns) != 0 {
 			query, args, err = prepareReplace(row.Table.Schema, row.Table.Table, row.Columns)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			sqls = append(sqls, query)
-			values = append(values, args)
+			if query != "" {
+				sqls = append(sqls, query)
+				values = append(values, args)
+			}
 		}
 	}
 	dmls := &preparedDMLs{
@@ -691,6 +719,9 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 }
 
 func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+	failpoint.Inject("MySQLSinkExecDMLError", func() {
+		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
+	})
 	dmls, err := s.prepareDMLs(rows, replicaID, bucket)
 	if err != nil {
 		return errors.Trace(err)
@@ -709,16 +740,19 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	return nil
 }
 
-func prepareReplace(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
+func prepareReplace(schema, table string, cols []*model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols))
-	for k, v := range cols {
-		if v.Flag.IsGeneratedColumn() {
+	for _, col := range cols {
+		if col == nil || col.Flag.IsGeneratedColumn() {
 			continue
 		}
-		columnNames = append(columnNames, k)
-		args = append(args, v.Value)
+		columnNames = append(columnNames, col.Name)
+		args = append(args, col.Value)
+	}
+	if len(args) == 0 {
+		return "", nil, nil
 	}
 
 	colList := "(" + buildColumnList(columnNames) + ")"
@@ -729,11 +763,14 @@ func prepareReplace(schema, table string, cols map[string]*model.Column) (string
 	return builder.String(), args, nil
 }
 
-func prepareDelete(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
+func prepareDelete(schema, table string, cols []*model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
-	builder.WriteString("DELETE FROM " + quotes.QuoteSchema(schema, table) + " WHERE")
+	builder.WriteString("DELETE FROM " + quotes.QuoteSchema(schema, table) + " WHERE ")
 
 	colNames, wargs := whereSlice(cols)
+	if len(wargs) == 0 {
+		return "", nil, nil
+	}
 	args := make([]interface{}, 0, len(wargs))
 	for i := 0; i < len(colNames); i++ {
 		if i > 0 {
@@ -751,13 +788,13 @@ func prepareDelete(schema, table string, cols map[string]*model.Column) (string,
 	return sql, args, nil
 }
 
-func whereSlice(cols map[string]*model.Column) (colNames []string, args []interface{}) {
+func whereSlice(cols []*model.Column) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
-	for colName, col := range cols {
-		if !col.Flag.IsHandleKey() {
+	for _, col := range cols {
+		if col == nil || !col.Flag.IsHandleKey() {
 			continue
 		}
-		colNames = append(colNames, colName)
+		colNames = append(colNames, col.Name)
 		args = append(args, col.Value)
 	}
 	return

@@ -511,14 +511,18 @@ func (c CDCEtcdClient) GetAllTaskWorkloads(ctx context.Context, changefeedID str
 	return workloads, nil
 }
 
+// UpdateTaskStatusFunc is a function that updates the task status
+type UpdateTaskStatusFunc func(int64, *model.TaskStatus) (updated bool, err error)
+
 // AtomicPutTaskStatus puts task status into etcd atomically.
 func (c CDCEtcdClient) AtomicPutTaskStatus(
 	ctx context.Context,
 	changefeedID string,
 	captureID string,
-	update func(*model.TaskStatus) error,
-) (*model.TaskStatus, error) {
+	updateFuncs ...UpdateTaskStatusFunc,
+) (*model.TaskStatus, int64, error) {
 	var status *model.TaskStatus
+	var newModRevision int64
 	err := retry.Run(100*time.Millisecond, 3, func() error {
 		select {
 		case <-ctx.Done():
@@ -539,9 +543,16 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 		default:
 			return errors.Trace(err)
 		}
-		err = update(status)
-		if err != nil {
-			return errors.Trace(err)
+		updated := false
+		for _, updateFunc := range updateFuncs {
+			u, err := updateFunc(modRevision, status)
+			if err != nil {
+				return err
+			}
+			updated = updated || u
+		}
+		if !updated {
+			return nil
 		}
 		value, err := status.Marshal()
 		if err != nil {
@@ -560,12 +571,13 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 			log.Info("outdated table infos, ignore update taskStatus")
 			return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
 		}
+		newModRevision = resp.Header.GetRevision()
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, newModRevision, errors.Trace(err)
 	}
-	return status, nil
+	return status, newModRevision, nil
 }
 
 // GetTaskPosition queries task process from etcd, returns

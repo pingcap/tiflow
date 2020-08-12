@@ -33,8 +33,9 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Table:  "t1",
 			},
 			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 1,
 					Flag:  model.HandleKeyFlag,
 				},
@@ -46,8 +47,9 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Table:  "t1",
 			},
 			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 2,
 					Flag:  model.HandleKeyFlag,
 				},
@@ -59,8 +61,9 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Table:  "t1",
 			},
 			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 3,
 					Flag:  model.HandleKeyFlag,
 				},
@@ -72,12 +75,13 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Table:  "t2",
 			},
 			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 1,
 					Flag:  model.HandleKeyFlag,
-				},
-				"a": {
+				}, {
+					Name:  "a",
 					Value: 1,
 				},
 			},
@@ -88,12 +92,13 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Table:  "t2",
 			},
 			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 2,
 					Flag:  model.HandleKeyFlag,
-				},
-				"a": {
+				}, {
+					Name:  "a",
 					Value: 2,
 				},
 			},
@@ -104,12 +109,13 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Table:  "t2",
 			},
 			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 3,
 					Flag:  model.HandleKeyFlag,
-				},
-				"a": {
+				}, {
+					Name:  "a",
 					Value: 3,
 				},
 			},
@@ -120,12 +126,13 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Table:  "t2",
 			},
 			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 3,
 					Flag:  model.HandleKeyFlag,
-				},
-				"a": {
+				}, {
+					Name:  "a",
 					Value: 4,
 				},
 			},
@@ -135,8 +142,9 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t3",
 			},
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 1,
 				},
 			},
@@ -146,8 +154,9 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t3",
 			},
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 2,
 				},
 			},
@@ -157,8 +166,9 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t3",
 			},
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 3,
 				},
 			},
