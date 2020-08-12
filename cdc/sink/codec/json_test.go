@@ -33,23 +33,23 @@ var _ = check.Suite(&batchSuite{
 	rowCases: [][]*model.RowChangedEvent{{{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}}, {{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}, {
 		CommitTs: 2,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
 		CommitTs: 3,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
 		CommitTs: 4,
 		Table:    &model.TableName{Schema: "a", Table: "c", Partition: 6},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "cc"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
 		CommitTs: 1,
@@ -169,7 +169,7 @@ var _ = check.Suite(&columnSuite{})
 type columnSuite struct{}
 
 func (s *columnSuite) TestFormatCol(c *check.C) {
-	row := &mqMessageRow{Update: map[string]*column{"test": {
+	row := &mqMessageRow{Update: map[string]column{"test": {
 		Type:  mysql.TypeString,
 		Value: "测",
 	}}}
@@ -180,7 +180,7 @@ func (s *columnSuite) TestFormatCol(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(row2, check.DeepEquals, row)
 
-	row = &mqMessageRow{Update: map[string]*column{"test": {
+	row = &mqMessageRow{Update: map[string]column{"test": {
 		Type:  mysql.TypeBlob,
 		Value: []byte("测"),
 	}}}

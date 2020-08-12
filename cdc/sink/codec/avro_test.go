@@ -80,13 +80,13 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	err = s.encoder.valueSchemaManager.Register(context.Background(), table, avroCodec)
 	c.Assert(err, check.IsNil)
 
-	r, err := s.encoder.avroEncode(&table, 1, map[string]*model.Column{
-		"id":      {Value: int32(1), Type: mysql.TypeLong},
-		"myint":   {Value: int32(2), Type: mysql.TypeLong},
-		"mybool":  {Value: uint8(1), Type: mysql.TypeTiny},
-		"myfloat": {Value: float32(3.14), Type: mysql.TypeFloat},
-		"mybytes": {Value: []byte("Hello World"), Type: mysql.TypeBlob},
-		"ts":      {Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
+	r, err := s.encoder.avroEncode(&table, 1, []*model.Column{
+		{Name: "id", Value: int32(1), Type: mysql.TypeLong},
+		{Name: "myint", Value: int32(2), Type: mysql.TypeLong},
+		{Name: "mybool", Value: uint8(1), Type: mysql.TypeTiny},
+		{Name: "myfloat", Value: float32(3.14), Type: mysql.TypeFloat},
+		{Name: "mybytes", Value: []byte("Hello World"), Type: mysql.TypeBlob},
+		{Name: "ts", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
 	})
 	c.Assert(err, check.IsNil)
 
@@ -138,7 +138,6 @@ func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 }
 
 func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
-	trueVar := true
 	testCaseUpdate := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
@@ -146,11 +145,11 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 			Table:  "person",
 		},
 		Delete: false,
-		Columns: map[string]*model.Column{
-			"id":      {Type: mysql.TypeLong, WhereHandle: &trueVar, Value: 1},
-			"name":    {Type: mysql.TypeVarchar, Value: "Bob"},
-			"tiny":    {Type: mysql.TypeTiny, Value: uint8(255)},
-			"comment": {Type: mysql.TypeBlob, Value: []byte("测试")},
+		Columns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
+			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
+			{Name: "tiny", Type: mysql.TypeTiny, Value: uint8(255)},
+			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		},
 	}
 

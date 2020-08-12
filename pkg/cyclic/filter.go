@@ -22,11 +22,16 @@ import (
 
 // ExtractReplicaID extracts replica ID from the given mark row.
 func ExtractReplicaID(markRow *model.RowChangedEvent) uint64 {
-	val, ok := markRow.Columns[mark.CyclicReplicaIDCol]
-	if !ok {
-		panic("bad mark table, " + mark.CyclicReplicaIDCol + " not found")
+	for _, c := range markRow.Columns {
+		if c == nil {
+			continue
+		}
+		if c.Name == mark.CyclicReplicaIDCol {
+			return c.Value.(uint64)
+		}
 	}
-	return val.Value.(uint64)
+	log.Fatal("bad mark table, " + mark.CyclicReplicaIDCol + " not found")
+	return 0
 }
 
 // TxnMap maps start ts to txn may cross multiple tables.
