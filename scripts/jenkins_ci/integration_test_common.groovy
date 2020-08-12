@@ -54,7 +54,6 @@ def prepare_binaries() {
                         curl \${minio_url} | tar xz -C ./tmp/bin minio
                         curl \${s3cmd_url} | tar xz -C ./tmp/ s3cmd-2.1.0/*
                         mv tmp/s3cmd-2.1.0/* tmp/bin
-                        yum install -y python-dateutil
                         mv tmp/bin/* third_bin
                         curl http://download.pingcap.org/tiflash-nightly-linux-amd64.tar.gz | tar xz -C third_bin
                         mv third_bin/tiflash-nightly-linux-amd64/* third_bin
@@ -147,6 +146,7 @@ def tests(sink_type, node_label) {
                         sh "mv ${ws}/third_bin/* ./bin/"
                         try {
                             sh """
+                                yum install -y python-dateutil
                                 rm -rf /tmp/tidb_cdc_test
                                 mkdir -p /tmp/tidb_cdc_test
                                 GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make integration_test_${sink_type} CASE=${case_name}
