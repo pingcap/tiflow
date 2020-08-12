@@ -149,6 +149,15 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	shouldSwitchDB := len(ddl.TableInfo.Schema) > 0 && ddl.Type != timodel.ActionCreateSchema
 
+	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
+		select {
+		case <-ctx.Done():
+			failpoint.Return(ctx.Err())
+		case <-time.After(time.Hour):
+		}
+		failpoint.Return(nil)
+	})
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Trace(err)
