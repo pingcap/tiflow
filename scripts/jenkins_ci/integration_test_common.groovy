@@ -46,14 +46,11 @@ def prepare_binaries() {
                         tikv_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
                         pd_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
                         minio_url="${FILE_SERVER_URL}/download/minio.tar.gz"
-                        s3cmd_url="${FILE_SERVER_URL}/download/s3cmd-2.1.0.tar.gz"
 
                         curl \${tidb_url} | tar xz -C ./tmp bin/tidb-server
                         curl \${pd_url} | tar xz -C ./tmp bin/*
                         curl \${tikv_url} | tar xz -C ./tmp bin/tikv-server
                         curl \${minio_url} | tar xz -C ./tmp/bin minio
-                        curl \${s3cmd_url} | tar xz -C ./tmp/ s3cmd-2.1.0/*
-                        mv tmp/s3cmd-2.1.0/* tmp/bin
                         mv tmp/bin/* third_bin
                         curl http://download.pingcap.org/tiflash-nightly-linux-amd64.tar.gz | tar xz -C third_bin
                         mv third_bin/tiflash-nightly-linux-amd64/* third_bin
@@ -146,7 +143,7 @@ def tests(sink_type, node_label) {
                         sh "mv ${ws}/third_bin/* ./bin/"
                         try {
                             sh """
-                                yum install -y python-dateutil
+                                sudo pip install s3cmd
                                 rm -rf /tmp/tidb_cdc_test
                                 mkdir -p /tmp/tidb_cdc_test
                                 GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make integration_test_${sink_type} CASE=${case_name}
