@@ -165,7 +165,7 @@ func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow
 		Type:      model.MqMessageTypeRow,
 	}
 	value := &mqMessageRow{}
-	if e.Delete {
+	if e.IsDelete() {
 		value.Delete = sinkColumns2JsonColumns(e.PreColumns)
 	} else {
 		value.Update = sinkColumns2JsonColumns(e.Columns)
@@ -219,10 +219,8 @@ func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChang
 	}
 
 	if len(value.Delete) != 0 {
-		e.Delete = true
 		e.PreColumns = jsonColumns2SinkColumns(value.Delete)
 	} else {
-		e.Delete = false
 		e.Columns = jsonColumns2SinkColumns(value.Update)
 		e.PreColumns = jsonColumns2SinkColumns(value.PreColumns)
 	}
