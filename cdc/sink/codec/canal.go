@@ -212,16 +212,22 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 // build the RowData of a canal entry
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
 	var columns []*canal.Column
-	for name, column := range e.Columns {
-		c, err := b.buildColumn(column, name, !e.Delete)
+	for _, column := range e.Columns {
+		if e == nil {
+			continue
+		}
+		c, err := b.buildColumn(column, column.Name, !e.Delete)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		columns = append(columns, c)
 	}
 	var preColumns []*canal.Column
-	for name, column := range e.PreColumns {
-		c, err := b.buildColumn(column, name, !e.Delete)
+	for _, column := range e.PreColumns {
+		if e == nil {
+			continue
+		}
+		c, err := b.buildColumn(column, column.Name, !e.Delete)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

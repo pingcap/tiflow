@@ -51,7 +51,7 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 				{Schema: "tidb_cdc"} /* cyclic.SchemaName */ : {
 					{
 						StartTs: 1,
-						Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}}},
+						Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
 					},
 				},
 			},
@@ -64,7 +64,7 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 				{Schema: "tidb_cdc"}: {
 					{
 						StartTs: 1,
-						Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}}},
+						Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
 					},
 				},
 			},
@@ -77,19 +77,19 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 				{Schema: "tidb_cdc", Table: "1"}: {
 					{
 						StartTs: 1,
-						Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}}},
+						Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
 					},
 				},
 				{Schema: "tidb_cdc", Table: "2"}: {
 					{
 						StartTs: 2,
-						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}}},
+						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
 					},
 				},
 				{Schema: "tidb_cdc", Table: "3"}: {
 					{
 						StartTs: 3,
-						Rows:    []*model.RowChangedEvent{{StartTs: 3, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}}},
+						Rows:    []*model.RowChangedEvent{{StartTs: 3, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
 					},
 				},
 			},
@@ -104,7 +104,7 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 				{Schema: "tidb_cdc", Table: "1"}: {
 					{
 						StartTs: 1,
-						Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}}},
+						Rows:    []*model.RowChangedEvent{{StartTs: 1, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
 					},
 				},
 			},
@@ -124,11 +124,11 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 				{Schema: "tidb_cdc", Table: "1"}: {
 					{
 						StartTs: 2,
-						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}}},
+						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
 					},
 					{
 						StartTs: 3,
-						Rows:    []*model.RowChangedEvent{{StartTs: 3, Columns: map[string]*model.Column{rID: {Value: uint64(11)}}}},
+						Rows:    []*model.RowChangedEvent{{StartTs: 3, Columns: []*model.Column{{Name: rID, Value: uint64(11)}}}},
 					},
 				},
 			},
@@ -151,11 +151,11 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 				{Schema: "tidb_cdc", Table: "1"}: {
 					{
 						StartTs: 2,
-						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}}},
+						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
 					},
 					{
 						StartTs: 3,
-						Rows:    []*model.RowChangedEvent{{StartTs: 3, Columns: map[string]*model.Column{rID: {Value: uint64(11)}}}},
+						Rows:    []*model.RowChangedEvent{{StartTs: 3, Columns: []*model.Column{{Name: rID, Value: uint64(11)}}}},
 					},
 				},
 			},
@@ -175,11 +175,11 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 					// Duplicate mark table changes.
 					{
 						StartTs: 2,
-						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}}},
+						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
 					},
 					{
 						StartTs: 2,
-						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: map[string]*model.Column{rID: {Value: uint64(10)}}}},
+						Rows:    []*model.RowChangedEvent{{StartTs: 2, Columns: []*model.Column{{Name: rID, Value: uint64(10)}}}},
 					},
 				},
 			},

@@ -32,12 +32,13 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t1",
 			},
-			Columns: map[string]*model.Column{
-				"a": {
+			Columns: []*model.Column{
+				{
+					Name:  "a",
 					Value: 11,
 					Flag:  model.HandleKeyFlag,
-				},
-				"b": {
+				}, {
+					Name:  "b",
 					Value: 22,
 					Flag:  0,
 				},
@@ -48,12 +49,13 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t1",
 			},
-			Columns: map[string]*model.Column{
-				"a": {
+			Columns: []*model.Column{
+				{
+					Name:  "a",
 					Value: 22,
 					Flag:  model.HandleKeyFlag,
-				},
-				"b": {
+				}, {
+					Name:  "b",
 					Value: 22,
 					Flag:  0,
 				},
@@ -64,12 +66,13 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t1",
 			},
-			Columns: map[string]*model.Column{
-				"a": {
+			Columns: []*model.Column{
+				{
+					Name:  "a",
 					Value: 11,
 					Flag:  model.HandleKeyFlag,
-				},
-				"b": {
+				}, {
+					Name:  "b",
 					Value: 33,
 					Flag:  0,
 				},
@@ -80,12 +83,13 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t2",
 			},
-			Columns: map[string]*model.Column{
-				"a": {
+			Columns: []*model.Column{
+				{
+					Name:  "a",
 					Value: 11,
 					Flag:  model.HandleKeyFlag,
-				},
-				"b": {
+				}, {
+					Name:  "b",
 					Value: 22,
 					Flag:  model.HandleKeyFlag,
 				},
@@ -96,12 +100,13 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t2",
 			},
-			Columns: map[string]*model.Column{
-				"b": {
+			Columns: []*model.Column{
+				{
+					Name:  "b",
 					Value: 22,
 					Flag:  model.HandleKeyFlag,
-				},
-				"a": {
+				}, {
+					Name:  "a",
 					Value: 11,
 					Flag:  model.HandleKeyFlag,
 				},
@@ -112,12 +117,13 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t2",
 			},
-			Columns: map[string]*model.Column{
-				"a": {
+			Columns: []*model.Column{
+				{
+					Name:  "a",
 					Value: 11,
 					Flag:  model.HandleKeyFlag,
-				},
-				"b": {
+				}, {
+					Name:  "b",
 					Value: 0,
 					Flag:  model.HandleKeyFlag,
 				},
@@ -128,12 +134,13 @@ func (s IndexValueDispatcherSuite) TestIndexValueDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t2",
 			},
-			Columns: map[string]*model.Column{
-				"a": {
+			Columns: []*model.Column{
+				{
+					Name:  "a",
 					Value: 11,
 					Flag:  model.HandleKeyFlag,
-				},
-				"b": {
+				}, {
+					Name:  "b",
 					Value: 33,
 					Flag:  model.HandleKeyFlag,
 				},
