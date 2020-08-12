@@ -214,6 +214,7 @@ type RowChangedEvent struct {
 	Keys []string `json:"keys"`
 }
 
+// IsDelete returns true if the row is a delete event
 func (r *RowChangedEvent) IsDelete() bool {
 	return len(r.PreColumns) != 0 && len(r.Columns) == 0
 }

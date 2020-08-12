@@ -416,7 +416,6 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
 				StartTs:  418658114257813514,
 				CommitTs: 418658114257813515,
 				Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-				Delete:   true,
 				PreColumns: []*model.Column{nil, {
 					Name:  "a1",
 					Type:  mysql.TypeLong,
