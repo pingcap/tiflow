@@ -215,12 +215,12 @@ type RowChangedEvent struct {
 	IndieMarkCol string    `json:"indie-mark-col"`
 	Columns      []*Column `json:"columns"`
 	PreColumns   []*Column `json:"pre-columns"`
+	IndexColumns [][]int
 	// TODO: remove it
 	Keys []string `json:"keys"`
 
 	// approximate size of this event, calculate by tikv proto bytes size
 	ApproximateSize int64
-	IndexColumns    [][]int
 }
 
 // Column represents a column value in row changed event

@@ -93,9 +93,9 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 				break
 			}
 			c.Assert(tp, check.Equals, model.MqMessageTypeRow)
-			ddl, err := decoder.NextRowChangedEvent()
+			row, err := decoder.NextRowChangedEvent()
 			c.Assert(err, check.IsNil)
-			c.Assert(ddl, check.DeepEquals, cs[index])
+			c.Assert(row, check.DeepEquals, cs[index])
 			index++
 		}
 	}
@@ -123,9 +123,9 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 				break
 			}
 			c.Assert(tp, check.Equals, model.MqMessageTypeResolved)
-			ddl, err := decoder.NextResolvedEvent()
+			ts, err := decoder.NextResolvedEvent()
 			c.Assert(err, check.IsNil)
-			c.Assert(ddl, check.DeepEquals, cs[index])
+			c.Assert(ts, check.DeepEquals, cs[index])
 			index++
 		}
 	}

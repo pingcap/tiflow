@@ -75,7 +75,7 @@ function cdclog_test() {
 
   DATA_DIR="$WORK_DIR/s3/logbucket/test"
   # retrieve table id by log meta
-  table_id=$(cat $DATA_DIR/log.meta | jq| grep t1 | awk -F '"' '{print $2}')
+  table_id=$(cat $DATA_DIR/log.meta | jq | grep t1 | awk -F '"' '{print $2}')
   file_count=$(ls -ahl $DATA_DIR/t_$table_id | grep cdclog | wc -l)
   if [[ ! "$file_count" -eq "2" ]]; then
       echo "$TEST_NAME failed, expect 2 row changed files, obtain $file_count"
