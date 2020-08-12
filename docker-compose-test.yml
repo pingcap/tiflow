@@ -1,0 +1,9 @@
+---
+version: '2.1'
+
+services:
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    restart: on-failure

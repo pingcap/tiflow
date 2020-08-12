@@ -7,4 +7,4 @@ RUN tar xf canal.adapter-1.1.5-SNAPSHOT.tar.gz
 COPY . .
 RUN ls ./
 
-CMD ["./start.sh"]
+ENTRYPOINT ["./start.sh"]

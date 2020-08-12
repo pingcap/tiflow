@@ -1,12 +1,96 @@
 #!/bin/bash
-db_name="testdb"
-sql="drop database ${db_name}; create database ${db_name};"
-host=127.0.0.1
-upstream_port=5000
-downstream_port=4000
+echo $0
+#POSITIONAL=()
+KAFKA_SERVER=${KAFKA_SERVER:-localhost:9092}
+ZOOKEEPER_SERVER=${ZOOKEEPER_SERVER:-localhost:2181}
+DB_NAME=${DB_NAME:-testdb}
+DOWNSTREAM_DB_HOST=${DOWNSTREAM_DB_HOST:-localhost}
+DOWNSTREAM_DB_PORT=${DOWNSTREAM_DB_PORT:-4000}
+UPSTREAM_DB_HOST=${UPSTREAM_DB_HOST:-localhost}
+UPSTREAM_DB_PORT=${UPSTREAM_DB_PORT:-4000}
+
+#while [[ $# -gt 0 ]]
+#do
+#key="$1"
+#
+#case $key in
+#    --zookeeper-server)
+#    ZOOKEEPER_SERVER="$2"
+#    shift # past argument
+#    shift # past value
+#    ;;
+#    --kafka-server)
+#    KAFKA_SERVER="$2"
+#    shift # past argument
+#    shift # past value
+#    ;;
+#    --db-name)
+#    DB_NAME="$2"
+#    shift # past argument
+#    shift # past value
+#    ;;
+#    --downstream-db-host)
+#    DOWNSTREAM_DB_HOST=$2
+#    shift # past argument
+#    shift # past value
+#    ;;
+#    --downstream-db-port)
+#    DOWNSTREAM_DB_PORT=$2
+#    shift # past argument
+#    shift # past value
+#    ;;
+#    --upstream-db-host)
+#    UPSTREAM_DB_HOST=$2
+#    shift # past argument
+#    shift # past value
+#    ;;
+#    --upstream-db-port)
+#    UPSTREAM_DB_PORT=$2
+#    shift # past argument
+#    shift # past value
+#    ;;
+#    *)    # unknown option
+#    POSITIONAL+=("$1") # save it in an array for later
+#    shift # past argument
+#    ;;
+#esac
+#done
+#
+#set -- "${POSITIONAL[@]}"
+
+echo "zookeeper server ${ZOOKEEPER_SERVER}"
+echo "kafka server ${KAFKA_SERVER}"
+echo "db name ${DB_NAME}"
+echo "upstream db host ${UPSTREAM_DB_HOST}"
+echo "upstream db port ${UPSTREAM_DB_PORT}"
+echo "downstream db host ${DOWNSTREAM_DB_HOST}"
+echo "downstream db port ${DOWNSTREAM_DB_PORT}"
+
+echo "Verifying Upstream TiDB is started..."
+i=0
+while ! mysql -uroot -h${UPSTREAM_DB_HOST} -P${UPSTREAM_DB_PORT}  -e 'select * from mysql.tidb;'; do
+    i=$((i + 1))
+    if [ "$i" -gt 60 ]; then
+        echo 'Failed to start upstream TiDB'
+        exit 2
+    fi
+    sleep 2
+done
+
+echo "Verifying Downstream TiDB is started..."
+i=0
+while ! mysql -uroot -h${DOWNSTREAM_DB_HOST} -P${DOWNSTREAM_DB_PORT}  -e 'select * from mysql.tidb;'; do
+    i=$((i + 1))
+    if [ "$i" -gt 60 ]; then
+        echo 'Failed to start downstream TiDB'
+        exit 1
+    fi
+    sleep 2
+done
+sql="drop database if exists ${DB_NAME}; create database ${DB_NAME};"
 echo "[$(date)] Executing SQL: ${sql}"
-mysql -uroot -h${host} -P${upstream_port} --default-character-set utf8mb4 -E -e "${sql}"
-mysql -uroot -h${host} -P${downstream_port} --default-character-set utf8mb4 -E -e "${sql}"
+mysql -uroot -h ${UPSTREAM_DB_HOST} -P ${UPSTREAM_DB_PORT}  -E -e "${sql}"
+mysql -uroot -h ${DOWNSTREAM_DB_HOST} -P ${DOWNSTREAM_DB_PORT}   -E -e "${sql}" --protocol=tcp
 
 WORK_DIR=$(pwd)
 cat - >"${WORK_DIR}/conf/application.yml" <<EOF
@@ -20,9 +104,9 @@ spring:
 
 canal.conf:
   mode: kafka #rocketMQ
-#  canalServerHost: 127.0.0.1:11111
-  zookeeperHosts: slave1:2181
-  mqServers: 127.0.0.1:9092 #or rocketmq
+#  canalServerHost: localhost:11111
+  zookeeperHosts: ${ZOOKEEPER_SERVER}
+  mqServers: ${KAFKA_SERVER} #or rocketmq
   flatMessage: false
   batchSize: 500
   syncBatchSize: 1000
@@ -35,20 +119,19 @@ canal.conf:
   vhost:
 #  srcDataSources:
 #    defaultDS:
-#      url: jdbc:mysql://127.0.0.1:3306/mytest?useUnicode=true
+#      url: jdbc:mysql://localhost:3306/mytest?useUnicode=true
 #      username: root
 #      password: 121212
   canalAdapters:
-  - instance: ${db_name} # canal instance Name or mq topic name
+  - instance: ${DB_NAME} # canal instance Name or mq topic name
     groups:
     - groupId: g1
       outerAdapters:
-      - name: logger
       - name: rdb
         key: mysql1
         properties:
           jdbc.driverClassName: com.mysql.jdbc.Driver
-          jdbc.url: jdbc:mysql://127.0.0.1:5000/${db_name}
+          jdbc.url: jdbc:mysql://${DOWNSTREAM_DB_HOST}:${DOWNSTREAM_DB_PORT}/${DB_NAME}
           jdbc.username: root
           jdbc.password:
 EOF
@@ -56,15 +139,15 @@ EOF
 cat - >"$WORK_DIR/conf/rdb/mytest_user.yml" <<EOF
 # Mirror schema synchronize config
 dataSourceKey: defaultDS
-destination: ${db_name}
+destination: ${DB_NAME}
 groupId: g1
 outerAdapterKey: mysql1
 concurrent: true
 dbMapping:
   mirrorDb: true
-  database: ${db_name}
+  database: ${DB_NAME}
 EOF
-mkdir ./logs/adapter
+
 bash ./bin/startup.sh
 
 while true; do

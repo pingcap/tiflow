@@ -39,7 +39,7 @@ sub_help() {
 sub_init() {
 
   sudo docker exec -it ticdc_controller_1 sh -c "
-  /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb\" --config=\"./script/canal/changefeed.toml\"
+  /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb\" --config=\".config.toml\"
   "
 }
 
@@ -49,7 +49,7 @@ sub_up() {
 
 sub_down() {
   sudo docker-compose -f ../../docker-compose-canal.yml down
-  sudo rm -r ../../../docker/log ../../../docker/data
+  sudo rm -r ../../docker/log ../../docker/data
 }
 
 subcommand=$1

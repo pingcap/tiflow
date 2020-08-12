@@ -120,39 +120,39 @@ services:
       - "upstream-pd"
     restart: on-failure
 
-  upstream-tikv1:
-    image: pingcap/tikv:nightly
-    volumes:
-      - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
-      - ./docker/logs:/logs
-    command:
-      - --addr=0.0.0.0:20160
-      - --advertise-addr=upstream-tikv1:20160
-      - --data-dir=/data/upstream-tikv1
-      - --pd=upstream-pd:2379
-      - --config=/tikv.toml
-      - --log-file=/logs/upstream-tikv1.log
-    depends_on:
-      - "upstream-pd"
-    restart: on-failure
-
-  upstream-tikv2:
-    image: pingcap/tikv:nightly
-    volumes:
-      - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
-      - ./docker/logs:/logs
-    command:
-      - --addr=0.0.0.0:20160
-      - --advertise-addr=upstream-tikv2:20160
-      - --data-dir=/data/upstream-tikv2
-      - --pd=upstream-pd:2379
-      - --config=/tikv.toml
-      - --log-file=/logs/upstream-tikv2.log
-    depends_on:
-      - "upstream-pd"
-    restart: on-failure
+#  upstream-tikv1:
+#    image: pingcap/tikv:nightly
+#    volumes:
+#      - ./docker/config/tikv.toml:/tikv.toml:ro
+#      - ./docker/data:/data
+#      - ./docker/logs:/logs
+#    command:
+#      - --addr=0.0.0.0:20160
+#      - --advertise-addr=upstream-tikv1:20160
+#      - --data-dir=/data/upstream-tikv1
+#      - --pd=upstream-pd:2379
+#      - --config=/tikv.toml
+#      - --log-file=/logs/upstream-tikv1.log
+#    depends_on:
+#      - "upstream-pd"
+#    restart: on-failure
+#
+#  upstream-tikv2:
+#    image: pingcap/tikv:nightly
+#    volumes:
+#      - ./docker/config/tikv.toml:/tikv.toml:ro
+#      - ./docker/data:/data
+#      - ./docker/logs:/logs
+#    command:
+#      - --addr=0.0.0.0:20160
+#      - --advertise-addr=upstream-tikv2:20160
+#      - --data-dir=/data/upstream-tikv2
+#      - --pd=upstream-pd:2379
+#      - --config=/tikv.toml
+#      - --log-file=/logs/upstream-tikv2.log
+#    depends_on:
+#      - "upstream-pd"
+#    restart: on-failure
 
   upstream-tidb:
     image: pingcap/tidb:nightly
@@ -170,8 +170,8 @@ services:
       - --advertise-address=upstream-tidb
     depends_on:
       - "upstream-tikv0"
-      - "upstream-tikv1"
-      - "upstream-tikv2"
+#      - "upstream-tikv1"
+#      - "upstream-tikv2"
     restart: on-failure
 
   downstream-pd:
@@ -211,44 +211,44 @@ services:
       - "downstream-pd"
     restart: on-failure
 
-  downstream-tikv1:
-    image: pingcap/tikv:nightly
-    volumes:
-      - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
-      - ./docker/logs:/logs
-    command:
-      - --addr=0.0.0.0:20160
-      - --advertise-addr=downstream-tikv1:20160
-      - --data-dir=/data/downstream-tikv1
-      - --pd=downstream-pd:2379
-      - --config=/tikv.toml
-      - --log-file=/logs/downstream-tikv1.log
-    depends_on:
-      - "downstream-pd"
-    restart: on-failure
-
-  downstream-tikv2:
-    image: pingcap/tikv:nightly
-    volumes:
-      - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
-      - ./docker/logs:/logs
-    command:
-      - --addr=0.0.0.0:20160
-      - --advertise-addr=downstream-tikv2:20160
-      - --data-dir=/data/downstream-tikv2
-      - --pd=downstream-pd:2379
-      - --config=/tikv.toml
-      - --log-file=/logs/downstream-tikv2.log
-    depends_on:
-      - "downstream-pd"
-    restart: on-failure
+#  downstream-tikv1:
+#    image: pingcap/tikv:nightly
+#    volumes:
+#      - ./docker/config/tikv.toml:/tikv.toml:ro
+#      - ./docker/data:/data
+#      - ./docker/logs:/logs
+#    command:
+#      - --addr=0.0.0.0:20160
+#      - --advertise-addr=downstream-tikv1:20160
+#      - --data-dir=/data/downstream-tikv1
+#      - --pd=downstream-pd:2379
+#      - --config=/tikv.toml
+#      - --log-file=/logs/downstream-tikv1.log
+#    depends_on:
+#      - "downstream-pd"
+#    restart: on-failure
+#
+#  downstream-tikv2:
+#    image: pingcap/tikv:nightly
+#    volumes:
+#      - ./docker/config/tikv.toml:/tikv.toml:ro
+#      - ./docker/data:/data
+#      - ./docker/logs:/logs
+#    command:
+#      - --addr=0.0.0.0:20160
+#      - --advertise-addr=downstream-tikv2:20160
+#      - --data-dir=/data/downstream-tikv2
+#      - --pd=downstream-pd:2379
+#      - --config=/tikv.toml
+#      - --log-file=/logs/downstream-tikv2.log
+#    depends_on:
+#      - "downstream-pd"
+#    restart: on-failure
 
   downstream-tidb:
     image: pingcap/tidb:nightly
     ports:
-      - "5000:5000"
+      - "5000:4000"
       - "20080:10080"
     volumes:
       - ./docker/config/tidb.toml:/tidb.toml:ro
@@ -261,8 +261,8 @@ services:
       - --advertise-address=downstream-tidb
     depends_on:
       - "downstream-tikv0"
-      - "downstream-tikv1"
-      - "downstream-tikv2"
+#      - "downstream-tikv1"
+#      - "downstream-tikv2"
     restart: on-failure
 
 # The rest of the file is adapted from https://github.com/confluentinc/demo-scene/blob/master/connect-jdbc/docker-compose.yml
@@ -309,8 +309,17 @@ services:
       - ./docker/logs:/logs/adapter
       - ./docker/config:/conf
       - ./docker/config:/conf/rdb
+    environment:
+      KAFKA_SERVER: kafka:9092
+      ZOOKEEPER_SERVER: zookeeper:2181
+      DB_NAME: testdb
+      DOWNSTREAM_DB_HOST: downsteream-tidb
+      DOWNSTREAM_DB_PORT: 4000
+      UPSTREAM_DB_HOST: upstream-tidb
+      UPSTREAM_DB_PORT: 4000
     depends_on:
       - "zookeeper"
       - "kafka"
+      - "upstream-tidb"
       - "downstream-tidb"
     restart: on-failure
