@@ -33,23 +33,23 @@ var _ = check.Suite(&canalBatchSuite{
 	rowCases: [][]*model.RowChangedEvent{{{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}}, {{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}, {
 		CommitTs: 2,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
 		CommitTs: 3,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
 		CommitTs: 4,
 		Table:    &model.TableName{Schema: "a", Table: "c", Partition: 6},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "cc"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
 		CommitTs: 1,
@@ -136,12 +136,12 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			Table:  "person",
 		},
 		Delete: false,
-		Columns: map[string]*model.Column{
-			"id":      {Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
-			"name":    {Type: mysql.TypeVarchar, Value: "Bob"},
-			"tiny":    {Type: mysql.TypeTiny, Value: 255},
-			"comment": {Type: mysql.TypeBlob, Value: []byte("测试")},
-			"blob":    {Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		Columns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
+			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
+			{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
+			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+			{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		},
 	}
 	testCaseDelete := &model.RowChangedEvent{
@@ -151,8 +151,8 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			Table:  "person",
 		},
 		Delete: true,
-		PreColumns: map[string]*model.Column{
-			"id": {Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
+		PreColumns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 		},
 	}
 	testCaseDdl := &model.DDLEvent{

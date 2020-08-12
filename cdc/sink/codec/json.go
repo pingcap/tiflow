@@ -18,6 +18,8 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"sort"
+	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -32,9 +34,36 @@ const (
 	BatchVersion1 uint64 = 1
 )
 
-type column = model.Column
+type column struct {
+	Type byte `json:"t"`
 
-func formatColumnVal(c *column) {
+	// WhereHandle is deprecation
+	// WhereHandle is replaced by HandleKey in Flag
+	WhereHandle *bool                `json:"h,omitempty"`
+	Flag        model.ColumnFlagType `json:"f"`
+	Value       interface{}          `json:"v"`
+}
+
+func (c *column) FromSinkColumn(col *model.Column) {
+	c.Type = col.Type
+	c.Flag = col.Flag
+	c.Value = col.Value
+	if c.Flag.IsHandleKey() {
+		whereHandle := true
+		c.WhereHandle = &whereHandle
+	}
+}
+
+func (c *column) ToSinkColumn(name string) *model.Column {
+	col := new(model.Column)
+	col.Type = c.Type
+	col.Flag = c.Flag
+	col.Value = c.Value
+	col.Name = name
+	return col
+}
+
+func formatColumnVal(c column) column {
 	switch c.Type {
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob,
 		mysql.TypeLongBlob, mysql.TypeBlob:
@@ -54,6 +83,7 @@ func formatColumnVal(c *column) {
 			c.Value = uint64(intNum)
 		}
 	}
+	return c
 }
 
 type mqMessageKey struct {
@@ -74,9 +104,9 @@ func (m *mqMessageKey) Decode(data []byte) error {
 }
 
 type mqMessageRow struct {
-	Update     map[string]*column `json:"u,omitempty"`
-	PreColumns map[string]*column `json:"p,omitempty"`
-	Delete     map[string]*column `json:"d,omitempty"`
+	Update     map[string]column `json:"u,omitempty"`
+	PreColumns map[string]column `json:"p,omitempty"`
+	Delete     map[string]column `json:"d,omitempty"`
 }
 
 func (m *mqMessageRow) Encode() ([]byte, error) {
@@ -90,11 +120,14 @@ func (m *mqMessageRow) Decode(data []byte) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	for _, column := range m.Update {
-		formatColumnVal(column)
+	for colName, column := range m.Update {
+		m.Update[colName] = formatColumnVal(column)
 	}
-	for _, column := range m.Delete {
-		formatColumnVal(column)
+	for colName, column := range m.Delete {
+		m.Delete[colName] = formatColumnVal(column)
+	}
+	for colName, column := range m.PreColumns {
+		m.PreColumns[colName] = formatColumnVal(column)
 	}
 	return nil
 }
@@ -133,12 +166,43 @@ func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow
 	}
 	value := &mqMessageRow{}
 	if e.Delete {
-		value.Delete = e.PreColumns
+		value.Delete = sinkColumns2JsonColumns(e.PreColumns)
 	} else {
-		value.Update = e.Columns
-		value.PreColumns = e.PreColumns
+		value.Update = sinkColumns2JsonColumns(e.Columns)
+		value.PreColumns = sinkColumns2JsonColumns(e.PreColumns)
 	}
 	return key, value
+}
+
+func sinkColumns2JsonColumns(cols []*model.Column) map[string]column {
+	jsonCols := make(map[string]column, len(cols))
+	for _, col := range cols {
+		if col == nil {
+			continue
+		}
+		c := column{}
+		c.FromSinkColumn(col)
+		jsonCols[col.Name] = c
+	}
+	if len(jsonCols) == 0 {
+		return nil
+	}
+	return jsonCols
+}
+
+func jsonColumns2SinkColumns(cols map[string]column) []*model.Column {
+	sinkCols := make([]*model.Column, 0, len(cols))
+	for name, col := range cols {
+		c := col.ToSinkColumn(name)
+		sinkCols = append(sinkCols, c)
+	}
+	if len(sinkCols) == 0 {
+		return nil
+	}
+	sort.Slice(sinkCols, func(i, j int) bool {
+		return strings.Compare(sinkCols[i].Name, sinkCols[j].Name) > 0
+	})
+	return sinkCols
 }
 
 func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChangedEvent {
@@ -156,11 +220,11 @@ func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChang
 
 	if len(value.Delete) != 0 {
 		e.Delete = true
-		e.PreColumns = value.Delete
+		e.PreColumns = jsonColumns2SinkColumns(value.Delete)
 	} else {
 		e.Delete = false
-		e.Columns = value.Update
-		e.PreColumns = value.PreColumns
+		e.Columns = jsonColumns2SinkColumns(value.Update)
+		e.PreColumns = jsonColumns2SinkColumns(value.PreColumns)
 	}
 	return e
 }
