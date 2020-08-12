@@ -21,7 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -236,6 +235,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 // Initialize registers Avro schemas for all tables
 func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
+	/*
 	if k.protocol == codec.ProtocolAvro && tableInfo != nil {
 		avroEncoder := k.newEncoder().(*codec.AvroEventBatchEncoder)
 		manager := avroEncoder.GetValueSchemaManager()
@@ -273,6 +273,7 @@ func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 			}
 		}
 	}
+	*/
 	return nil
 }
 

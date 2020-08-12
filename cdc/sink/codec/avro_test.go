@@ -77,7 +77,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 		Partition: 0,
 	}
 
-	err = s.encoder.valueSchemaManager.Register(context.Background(), table, avroCodec)
+	_, err = s.encoder.valueSchemaManager.Register(context.Background(), table, avroCodec)
 	c.Assert(err, check.IsNil)
 
 	r, err := s.encoder.avroEncode(&table, 1, []*model.Column{

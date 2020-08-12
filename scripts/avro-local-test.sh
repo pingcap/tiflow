@@ -49,7 +49,7 @@ sub_up() {
 
 sub_down() {
   sudo docker-compose -f ../docker-compose-avro.yml down
-  sudo rm -r ../docker/log ../docker/data
+  sudo rm -r ../docker/logs ../docker/data
 }
 
 subcommand=$1

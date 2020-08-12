@@ -1,4 +1,4 @@
- // Copyright 2020 PingCAP, Inc.
+// Copyright 2020 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -110,7 +110,7 @@ func NewAvroSchemaManager(
 var regexRemoveSpaces = regexp.MustCompile(`\s`)
 
 // Register the latest schema for a table to the Registry, by passing in a Codec
-func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableName, codec *goavro.Codec) error {
+func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableName, codec *goavro.Codec) (int, error) {
 	// The Schema Registry expects the JSON to be without newline characters
 	reqBody := registerRequest{
 		Schema: regexRemoveSpaces.ReplaceAllString(codec.Schema(), ""),
@@ -119,25 +119,25 @@ func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableN
 	}
 	payload, err := json.Marshal(&reqBody)
 	if err != nil {
-		return errors.Annotate(err, "Could not marshal request to the Registry")
+		return 0, errors.Annotate(err, "Could not marshal request to the Registry")
 	}
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(tableName)) + "/versions"
 	log.Debug("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json")
 	resp, err := httpRetry(ctx, m.credential, req, false)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Annotate(err, "Failed to read response from Registry")
+		return 0, errors.Annotate(err, "Failed to read response from Registry")
 	}
 
 	if resp.StatusCode != 200 {
@@ -146,18 +146,18 @@ func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableN
 			zap.String("uri", uri),
 			zap.ByteString("requestBody", payload),
 			zap.ByteString("responseBody", body))
-		return errors.New("Failed to register schema to the Registry, HTTP error")
+		return 0, errors.New("Failed to register schema to the Registry, HTTP error")
 	}
 
 	var jsonResp registerResponse
 	err = json.Unmarshal(body, &jsonResp)
 
 	if err != nil {
-		return errors.Annotate(err, "Failed to parse result from Registry")
+		return 0, errors.Annotate(err, "Failed to parse result from Registry")
 	}
 
 	if jsonResp.ID == 0 {
-		return errors.Errorf("Illegal schema ID returned from Registry %d", jsonResp.ID)
+		return 0, errors.Errorf("Illegal schema ID returned from Registry %d", jsonResp.ID)
 	}
 
 	log.Info("Registered schema successfully",
@@ -165,7 +165,7 @@ func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableN
 		zap.String("uri", uri),
 		zap.ByteString("body", body))
 
-	return nil
+	return jsonResp.ID, nil
 }
 
 // Lookup the latest schema and the Registry designated ID for that schema.
@@ -195,7 +195,7 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json, application/vnd.schemaregistry+json, application/json")
 
-	resp, err := httpRetry(ctx, m.credential, req, false)
+	resp, err := httpRetry(ctx, m.credential, req, true)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -244,6 +244,51 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 		zap.String("schema", cacheEntry.codec.Schema()))
 
 	return cacheEntry.codec, cacheEntry.registryID, nil
+}
+
+type SchemaGenerator func () (string, error)
+
+func (m *AvroSchemaManager) GetCachedOrRegister(ctx context.Context, tableName model.TableName, tiSchemaID uint64, schemaGen SchemaGenerator) (*goavro.Codec, int, error) {
+	key := m.tableNameToSchemaSubject(tableName)
+	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
+		log.Info("Avro schema GetCachedOrRegister cache hit",
+			zap.String("key", key),
+			zap.Uint64("tiSchemaID", tiSchemaID),
+			zap.Int("registryID", entry.registryID))
+		return entry.codec, entry.registryID, nil
+	}
+
+	log.Info("Avro schema lookup cache miss",
+		zap.String("key", key),
+		zap.Uint64("tiSchemaID", tiSchemaID))
+
+	schema, err := schemaGen()
+	if err != nil {
+		return nil, 0, errors.Annotate(err, "GetCachedOrRegister: SchemaGen failed")
+	}
+
+	codec, err := goavro.NewCodec(schema)
+	if err != nil {
+		return nil, 0, errors.Annotate(err, "GetCachedOrRegister: Could not make goavro codec")
+	}
+
+	id, err := m.Register(ctx, tableName, codec)
+	if err != nil {
+		return nil, 0, errors.Annotate(err, "GetCachedOrRegister: Could not register schema")
+	}
+
+	cacheEntry := new(schemaCacheEntry)
+	cacheEntry.codec = codec
+	cacheEntry.registryID = id
+	cacheEntry.tiSchemaID = tiSchemaID
+	m.cache[m.tableNameToSchemaSubject(tableName)] = cacheEntry
+
+	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
+		zap.Uint64("tiSchemaID", cacheEntry.tiSchemaID),
+		zap.Int("registryID", cacheEntry.registryID),
+		zap.String("schema", cacheEntry.codec.Schema()))
+
+	return codec, id, nil
 }
 
 // ClearRegistry clears the Registry subject for the given table. Should be idempotent.
