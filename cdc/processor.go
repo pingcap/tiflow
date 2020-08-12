@@ -471,6 +471,9 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 	failpoint.Inject("ProcessorUpdatePositionDelaying", func() {
 		time.Sleep(1 * time.Second)
 	})
+	if p.isStopped() {
+		return errors.Trace(model.ErrAdminStopProcessor)
+	}
 	//p.position.Count = p.sink.Count()
 	err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 	if err != nil {
