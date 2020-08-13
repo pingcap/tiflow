@@ -31,6 +31,11 @@ type Credential struct {
 	CertAllowedCN []string `toml:"cert-allowed-cn" json:"cert-allowed-cn"`
 }
 
+// IsTLSEnabled checks whether TLS is enabled or not.
+func (s *Credential) IsTLSEnabled() bool {
+	return len(s.CAPath) != 0
+}
+
 // PDSecurityOption creates a new pd SecurityOption from Security
 func (s *Credential) PDSecurityOption() pd.SecurityOption {
 	return pd.SecurityOption{
