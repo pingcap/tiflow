@@ -78,6 +78,20 @@ type fileSink struct {
 	tableStreams []*tableStream
 }
 
+func (f *fileSink) flushLogMeta(ctx context.Context) error {
+	data, err := f.logMeta.Marshal()
+	if err != nil {
+		return errors.Annotate(err, "marshal meta to json failed")
+	}
+	// FIXME: if initialize succeed, O_WRONLY is enough, but sometimes it will failed
+	file, err := os.OpenFile(f.logPath.meta, os.O_CREATE|os.O_WRONLY, defaultFileMode)
+	if err != nil {
+		return err
+	}
+	_, err = file.Write(data)
+	return err
+}
+
 func (f *fileSink) flushTableStreams(ctx context.Context) error {
 	// TODO use a fixed worker pool
 	eg, _ := errgroup.WithContext(ctx)
@@ -212,26 +226,24 @@ func (f *fileSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64)
 func (f *fileSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	log.Debug("[EmitCheckpointTs]", zap.Uint64("ts", ts))
 	f.logMeta.GlobalResolvedTS = ts
-	data, err := f.logMeta.Marshal()
-	if err != nil {
-		return errors.Annotate(err, "marshal meta to json failed")
-	}
-	// FIXME: if initialize succeed, O_WRONLY is enough, but sometimes it will failed
-	file, err := os.OpenFile(f.logPath.meta, os.O_CREATE|os.O_WRONLY, defaultFileMode)
-	if err != nil {
-		return err
-	}
-	_, err = file.Write(data)
-	return err
+	return f.flushLogMeta(ctx)
 }
 
 func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	switch ddl.Type {
 	case parsemodel.ActionCreateTable:
 		f.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		err := f.flushLogMeta(ctx)
+		if err != nil {
+			return err
+		}
 	case parsemodel.ActionRenameTable:
 		delete(f.logMeta.Names, ddl.PreTableInfo.TableID)
 		f.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		err := f.flushLogMeta(ctx)
+		if err != nil {
+			return err
+		}
 	}
 	encoder := f.encoder()
 	_, err := encoder.AppendDDLEvent(ddl)
