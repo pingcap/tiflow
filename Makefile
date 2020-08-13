@@ -24,7 +24,7 @@ endif
 ARCH  := "`uname -s`"
 LINUX := "Linux"
 MAC   := "Darwin"
-PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests'
+PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor')
