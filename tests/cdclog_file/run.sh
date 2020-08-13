@@ -39,7 +39,7 @@ function cdclog_test() {
   run_sql "insert into $TEST_NAME.t1 values (2, 'b')"
 
   # wait for log synced
-  sleep 8
+  sleep 10
 
   DATA_DIR="$WORK_DIR/test"
   # retrieve table id by log meta
