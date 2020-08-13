@@ -40,11 +40,15 @@ var _ = check.Suite(&avroBatchEncoderSuite{})
 func (s *avroBatchEncoderSuite) SetUpSuite(c *check.C) {
 	startHTTPInterceptForTestingRegistry(c)
 
-	manager, err := NewAvroSchemaManager(context.Background(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
+	keyManager, err := NewAvroSchemaManager(context.Background(), &security.Credential{}, "http://127.0.0.1:8081", "-key")
+	c.Assert(err, check.IsNil)
+
+	valueManager, err := NewAvroSchemaManager(context.Background(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 
 	s.encoder = &AvroEventBatchEncoder{
-		valueSchemaManager: manager,
+		valueSchemaManager: valueManager,
+		keySchemaManager:   keyManager,
 		keyBuf:             nil,
 		valueBuf:           nil,
 	}
@@ -76,7 +80,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 		Table:  "test1",
 	}
 
-	r, err := s.encoder.avroEncode(&table, 1, []*model.Column{
+	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, []*model.Column{
 		{Name: "id", Value: 1, Type: mysql.TypeLong},
 		{Name: "myint", Value: 2, Type: mysql.TypeLong},
 		{Name: "mybool", Value: uint8(1), Type: mysql.TypeTiny},

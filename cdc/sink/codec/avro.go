@@ -36,7 +36,7 @@ import (
 // AvroEventBatchEncoder converts the events to binary Avro data
 type AvroEventBatchEncoder struct {
 	// TODO use Avro for Kafka keys
-	// keySchemaManager   *AvroSchemaManager
+	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
 	keyBuf             []byte
 	valueBuf           []byte
@@ -51,6 +51,7 @@ type avroEncodeResult struct {
 func NewAvroEventBatchEncoder() EventBatchEncoder {
 	return &AvroEventBatchEncoder{
 		valueSchemaManager: nil,
+		keySchemaManager:   nil,
 		keyBuf:             nil,
 		valueBuf:           nil,
 	}
@@ -66,14 +67,49 @@ func (a *AvroEventBatchEncoder) GetValueSchemaManager() *AvroSchemaManager {
 	return a.valueSchemaManager
 }
 
+// SetKeySchemaManager sets the value schema manager for an Avro encoder
+func (a *AvroEventBatchEncoder) SetKeySchemaManager(manager *AvroSchemaManager) {
+	a.keySchemaManager = manager
+}
+
+// GetKeySchemaManager gets the value schema manager for an Avro encoder
+func (a *AvroEventBatchEncoder) GetKeySchemaManager() *AvroSchemaManager {
+	return a.keySchemaManager
+}
+
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
 func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	if a.keyBuf != nil || a.valueBuf != nil {
 		return EncoderNoOperation, errors.New("Fatal sink bug. Batch size must be 1")
 	}
+	if !e.IsDelete() {
+		res, err := avroEncode(e.Table, a.valueSchemaManager, e.TableInfoVersion, e.Columns)
+		if err != nil {
+			log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
+			return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
+		}
 
-	res, err := a.avroEncode(e.Table, e.TableInfoVersion, e.Columns)
+		evlp, err := res.toEnvelope()
+		if err != nil {
+			log.Warn("AppendRowChangedEvent: could not construct Avro envelope", zap.String("table", e.Table.String()))
+			return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
+		}
+
+		a.valueBuf = evlp
+	} else {
+		a.valueBuf = nil
+	}
+
+
+	pkeyCols := make([]*model.Column, 0)
+	for _, col := range e.Columns {
+		if col.Flag.IsHandleKey() {
+			pkeyCols = append(pkeyCols, col)
+		}
+	}
+
+	res, err := avroEncode(e.Table, a.keySchemaManager, e.TableInfoVersion, pkeyCols)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
 		return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not encode to Avro")
@@ -85,9 +121,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
 	}
 
-	a.valueBuf = evlp
-	// TODO use primary key(s) as kafka key
-	a.keyBuf = []byte(strconv.FormatInt(e.RowID, 10))
+	a.keyBuf = evlp
 
 	return EncoderNeedAsyncWrite, nil
 }
@@ -98,7 +132,7 @@ func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, e
 	return EncoderNoOperation, nil
 }
 
-// AppendDDLEvent generates new schema and registers it to the Registry
+// AppendDDLEvent is no-op now
 func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
 	return EncoderNoOperation, nil
 }
@@ -125,7 +159,7 @@ func (a *AvroEventBatchEncoder) Size() int {
 	return 1
 }
 
-func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tableVersion uint64, cols []*model.Column) (*avroEncodeResult, error) {
+func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column) (*avroEncodeResult, error) {
 	schemaGen := func() (string, error) {
 		schema, err := ColumnInfoToAvroSchema(table.Table, extractColumnInfos(cols))
 		if err != nil {
@@ -135,7 +169,7 @@ func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tableVersion 
 	}
 
 	// TODO pass ctx from the upper function. Need to modify the EventBatchEncoder interface.
-	avroCodec, registryID, err := a.valueSchemaManager.GetCachedOrRegister(context.Background(), *table, tableVersion, schemaGen)
+	avroCodec, registryID, err := manager.GetCachedOrRegister(context.Background(), *table, tableVersion, schemaGen)
 	if err != nil {
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: get-or-register failed")
 	}

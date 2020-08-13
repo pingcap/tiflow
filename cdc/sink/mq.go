@@ -85,14 +85,19 @@ func newMqSink(
 		if !ok {
 			return nil, errors.New(`Avro protocol requires parameter "registry"`)
 		}
-		schemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-value")
+		keySchemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-key")
 		if err != nil {
-			return nil, errors.Annotate(err, "Could not create Avro schema manager")
+			return nil, errors.Annotate(err, "Could not create Avro schema manager for message keys")
+		}
+		valueSchemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-value")
+		if err != nil {
+			return nil, errors.Annotate(err, "Could not create Avro schema manager for message values")
 		}
 		newEncoder1 := newEncoder
 		newEncoder = func() codec.EventBatchEncoder {
 			avroEncoder := newEncoder1().(*codec.AvroEventBatchEncoder)
-			avroEncoder.SetValueSchemaManager(schemaManager)
+			avroEncoder.SetKeySchemaManager(keySchemaManager)
+			avroEncoder.SetValueSchemaManager(valueSchemaManager)
 			return avroEncoder
 		}
 	}

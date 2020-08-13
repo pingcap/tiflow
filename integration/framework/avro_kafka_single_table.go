@@ -74,6 +74,9 @@ func (a *AvroSingleTableTask) Prepare(taskContext *TaskContext) error {
 		"connection.url": "jdbc:mysql://root@downstream-tidb:4000/testdb",
 		"connection.ds.pool.size": 5,
 		"table.name.format": "%s",
+		"insert.mode": "upsert",
+		"delete.enabled": true,
+		"pk.mode": "record_key",
 		"auto.create": true,
 		"auto.evolve": true
 	  }
