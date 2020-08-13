@@ -49,4 +49,4 @@ require (
 	google.golang.org/grpc v1.26.0
 )
 
-replace github.com/pingcap/kvproto => github.com/5kbpers/kvproto v0.0.0-20200813074607-24f838ce08eb
+replace github.com/pingcap/kvproto => github.com/5kbpers/kvproto v0.0.0-20200814034558-4debdbd21409
