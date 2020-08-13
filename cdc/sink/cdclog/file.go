@@ -37,6 +37,8 @@ const (
 	defaultDirMode  = 0755
 	defaultFileMode = 0644
 
+	defaultFileName = "cdclog"
+
 	maxRowFileSize = 10 << 20 // TODO update
 )
 
@@ -115,7 +117,7 @@ func (f *fileSink) flushTableStreams(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
-				file, err := os.OpenFile(filepath.Join(tableDir, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
+				file, err := os.OpenFile(filepath.Join(tableDir, defaultFileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
 				if err != nil {
 					return err
 				}
@@ -133,7 +135,13 @@ func (f *fileSink) flushTableStreams(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
-				file, err := os.OpenFile(filepath.Join(tableDir, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
+				oldPath := filepath.Join(tableDir, defaultFileName)
+				newPath := filepath.Join(tableDir, fileName)
+				err = os.Rename(oldPath, newPath)
+				if err != nil {
+					return err
+				}
+				file, err := os.OpenFile(filepath.Join(tableDir, defaultFileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
 				if err != nil {
 					return err
 				}
