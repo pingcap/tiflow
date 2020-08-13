@@ -149,6 +149,15 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	shouldSwitchDB := len(ddl.TableInfo.Schema) > 0 && ddl.Type != timodel.ActionCreateSchema
 
+	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
+		select {
+		case <-ctx.Done():
+			failpoint.Return(ctx.Err())
+		case <-time.After(time.Hour):
+		}
+		failpoint.Return(nil)
+	})
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Trace(err)
@@ -679,16 +688,20 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			sqls = append(sqls, query)
-			values = append(values, args)
+			if query != "" {
+				sqls = append(sqls, query)
+				values = append(values, args)
+			}
 		}
 		if len(row.Columns) != 0 {
 			query, args, err = prepareReplace(row.Table.Schema, row.Table.Table, row.Columns)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			sqls = append(sqls, query)
-			values = append(values, args)
+			if query != "" {
+				sqls = append(sqls, query)
+				values = append(values, args)
+			}
 		}
 	}
 	dmls := &preparedDMLs{
@@ -727,16 +740,19 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	return nil
 }
 
-func prepareReplace(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
+func prepareReplace(schema, table string, cols []*model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols))
-	for k, v := range cols {
-		if v.Flag.IsGeneratedColumn() {
+	for _, col := range cols {
+		if col == nil || col.Flag.IsGeneratedColumn() {
 			continue
 		}
-		columnNames = append(columnNames, k)
-		args = append(args, v.Value)
+		columnNames = append(columnNames, col.Name)
+		args = append(args, col.Value)
+	}
+	if len(args) == 0 {
+		return "", nil, nil
 	}
 
 	colList := "(" + buildColumnList(columnNames) + ")"
@@ -747,11 +763,14 @@ func prepareReplace(schema, table string, cols map[string]*model.Column) (string
 	return builder.String(), args, nil
 }
 
-func prepareDelete(schema, table string, cols map[string]*model.Column) (string, []interface{}, error) {
+func prepareDelete(schema, table string, cols []*model.Column) (string, []interface{}, error) {
 	var builder strings.Builder
-	builder.WriteString("DELETE FROM " + quotes.QuoteSchema(schema, table) + " WHERE")
+	builder.WriteString("DELETE FROM " + quotes.QuoteSchema(schema, table) + " WHERE ")
 
 	colNames, wargs := whereSlice(cols)
+	if len(wargs) == 0 {
+		return "", nil, nil
+	}
 	args := make([]interface{}, 0, len(wargs))
 	for i := 0; i < len(colNames); i++ {
 		if i > 0 {
@@ -769,13 +788,13 @@ func prepareDelete(schema, table string, cols map[string]*model.Column) (string,
 	return sql, args, nil
 }
 
-func whereSlice(cols map[string]*model.Column) (colNames []string, args []interface{}) {
+func whereSlice(cols []*model.Column) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
-	for colName, col := range cols {
-		if !col.Flag.IsHandleKey() {
+	for _, col := range cols {
+		if col == nil || !col.Flag.IsHandleKey() {
 			continue
 		}
-		colNames = append(colNames, colName)
+		colNames = append(colNames, col.Name)
 		args = append(args, col.Value)
 	}
 	return

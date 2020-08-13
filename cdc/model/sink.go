@@ -198,26 +198,33 @@ type RowChangedEvent struct {
 
 	Table *TableName `json:"table"`
 
-	Delete bool `json:"delete"`
-
 	TableInfoVersion uint64 `json:"table-info-version,omitempty"`
 
+	// TODO: remove it
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
-	IndieMarkCol string             `json:"indie-mark-col"`
-	Columns      map[string]*Column `json:"columns"`
-	PreColumns   map[string]*Column `json:"pre-columns"`
-	Keys         []string           `json:"keys"`
+	IndieMarkCol string `json:"indie-mark-col"`
+
+	Columns    []*Column `json:"columns"`
+	PreColumns []*Column `json:"pre-columns"`
+
+	IndexColumns [][]int
+
+	// TODO: remove it
+	Keys []string `json:"keys"`
+}
+
+// IsDelete returns true if the row is a delete event
+func (r *RowChangedEvent) IsDelete() bool {
+	return len(r.PreColumns) != 0 && len(r.Columns) == 0
 }
 
 // Column represents a column value in row changed event
 type Column struct {
-	Type byte `json:"t"`
-	// WhereHandle is deprecation
-	// WhereHandle is replaced by HandleKey in Flag
-	WhereHandle *bool          `json:"h,omitempty"`
-	Flag        ColumnFlagType `json:"f"`
-	Value       interface{}    `json:"v"`
+	Name  string         `json:"name"`
+	Type  byte           `json:"type"`
+	Flag  ColumnFlagType `json:"flag"`
+	Value interface{}    `json:"value"`
 }
 
 // ColumnValueString returns the string representation of the column value

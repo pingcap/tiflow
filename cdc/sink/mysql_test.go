@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/parser/mysql"
+
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -398,6 +400,47 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputRows), spew.Sdump(tc.expectedOutputRows)))
 		c.Assert(outputReplicaIDs, check.DeepEquals, tc.exportedOutputReplicaIDs,
 			check.Commentf("case %v, %s, %s", i, spew.Sdump(outputReplicaIDs), spew.Sdump(tc.exportedOutputReplicaIDs)))
+	}
+}
+
+func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
+	testCases := []struct {
+		input    []*model.RowChangedEvent
+		expected *preparedDMLs
+	}{{
+		input:    []*model.RowChangedEvent{},
+		expected: &preparedDMLs{sqls: []string{}, values: [][]interface{}{}},
+	}, {
+		input: []*model.RowChangedEvent{
+			{
+				StartTs:  418658114257813514,
+				CommitTs: 418658114257813515,
+				Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+				PreColumns: []*model.Column{nil, {
+					Name:  "a1",
+					Type:  mysql.TypeLong,
+					Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				}, {
+					Name:  "a3",
+					Type:  mysql.TypeLong,
+					Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+					Value: 1,
+				}},
+				IndexColumns: [][]int{{1, 2}},
+				Keys:         []string{"11`common_1`.`uk_without_pk`"},
+			},
+		},
+		expected: &preparedDMLs{
+			sqls:   []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
+			values: [][]interface{}{{1, 1}},
+		},
+	}}
+	ms := newMySQLSink4Test(c)
+	for i, tc := range testCases {
+		dmls, err := ms.prepareDMLs(tc.input, 0, 0)
+		c.Assert(err, check.IsNil)
+		c.Assert(dmls, check.DeepEquals, tc.expected, check.Commentf("%d", i))
 	}
 }
 
