@@ -84,7 +84,6 @@ func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					Delete:   true,
 					PreColumns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -101,7 +100,6 @@ func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					Delete:   true,
 					PreColumns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -128,7 +126,6 @@ func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					Delete:   true,
 					PreColumns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -145,7 +142,6 @@ func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					Delete:   true,
 					PreColumns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -174,7 +170,6 @@ func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					Delete:   true,
 					PreColumns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -191,7 +186,6 @@ func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					Delete:   true,
 					PreColumns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,

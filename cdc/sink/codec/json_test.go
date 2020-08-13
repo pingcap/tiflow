@@ -84,16 +84,7 @@ var _ = check.Suite(&batchSuite{
 })
 
 func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
-	for _, cs := range s.rowCases {
-		encoder := newEncoder()
-		for _, row := range cs {
-			_, err := encoder.AppendRowChangedEvent(row)
-			c.Assert(err, check.IsNil)
-		}
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
-		c.Assert(err, check.IsNil)
+	checkRowDecoder := func(decoder EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -108,17 +99,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			index++
 		}
 	}
-
-	for _, cs := range s.ddlCases {
-		encoder := newEncoder()
-		for _, ddl := range cs {
-			_, err := encoder.AppendDDLEvent(ddl)
-			c.Assert(err, check.IsNil)
-		}
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
-		c.Assert(err, check.IsNil)
+	checkDDLDecoder := func(decoder EventBatchDecoder, cs []*model.DDLEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -133,17 +114,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			index++
 		}
 	}
-
-	for _, cs := range s.resolvedTsCases {
-		encoder := newEncoder()
-		for _, ts := range cs {
-			_, err := encoder.AppendResolvedEvent(ts)
-			c.Assert(err, check.IsNil)
-		}
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
-		c.Assert(err, check.IsNil)
+	checkTSDecoder := func(decoder EventBatchDecoder, cs []uint64) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -157,6 +128,69 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(ts, check.DeepEquals, cs[index])
 			index++
 		}
+	}
+
+	for _, cs := range s.rowCases {
+		encoder := newEncoder()
+		for _, row := range cs {
+			_, err := encoder.AppendRowChangedEvent(row)
+			c.Assert(err, check.IsNil)
+		}
+		// test mixed decode
+		mixed := encoder.MixedBuild()
+		c.Assert(len(mixed), check.Equals, encoder.Size())
+		mixedDecoder, err := newDecoder(mixed, nil)
+		c.Assert(err, check.IsNil)
+		checkRowDecoder(mixedDecoder, cs)
+		// test normal decode
+		key, value := encoder.Build()
+		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
+		decoder, err := newDecoder(key, value)
+		c.Assert(err, check.IsNil)
+		checkRowDecoder(decoder, cs)
+	}
+
+	for _, cs := range s.ddlCases {
+		encoder := newEncoder()
+		for _, ddl := range cs {
+			_, err := encoder.AppendDDLEvent(ddl)
+			c.Assert(err, check.IsNil)
+		}
+		// test mixed encode
+		mixed := encoder.MixedBuild()
+		c.Assert(len(mixed), check.Equals, encoder.Size())
+		mixedDecoder, err := newDecoder(mixed, nil)
+		c.Assert(err, check.IsNil)
+		checkDDLDecoder(mixedDecoder, cs)
+
+		// test normal encode
+		key, value := encoder.Build()
+		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
+		decoder, err := newDecoder(key, value)
+		c.Assert(err, check.IsNil)
+		checkDDLDecoder(decoder, cs)
+	}
+
+	for _, cs := range s.resolvedTsCases {
+		encoder := newEncoder()
+		for _, ts := range cs {
+			_, err := encoder.AppendResolvedEvent(ts)
+			c.Assert(err, check.IsNil)
+		}
+
+		// test mixed encode
+		mixed := encoder.MixedBuild()
+		c.Assert(len(mixed), check.Equals, encoder.Size())
+		mixedDecoder, err := newDecoder(mixed, nil)
+		c.Assert(err, check.IsNil)
+		checkTSDecoder(mixedDecoder, cs)
+
+		// test normal encode
+		key, value := encoder.Build()
+		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
+		decoder, err := newDecoder(key, value)
+		c.Assert(err, check.IsNil)
+		checkTSDecoder(decoder, cs)
 	}
 }
 

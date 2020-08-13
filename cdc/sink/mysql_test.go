@@ -49,83 +49,85 @@ func newMySQLSink4Test(c *check.C) *mysqlSink {
 func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 	testCases := []struct {
 		input    []*model.RowChangedEvent
-		expected map[model.TableName][]*model.SingleTableTxn
+		expected map[model.TableID][]*model.SingleTableTxn
 	}{{
 		input:    []*model.RowChangedEvent{},
-		expected: map[model.TableName][]*model.SingleTableTxn{},
+		expected: map[model.TableID][]*model.SingleTableTxn{},
 	}, {
 		input: []*model.RowChangedEvent{
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 		},
-		expected: map[model.TableName][]*model.SingleTableTxn{
-			{Schema: "s1", Table: "t1"}: {
+		expected: map[model.TableID][]*model.SingleTableTxn{
+			1: {
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  1,
 					CommitTs: 2,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						},
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						},
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  3,
 					CommitTs: 4,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						},
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						},
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
 				},
 			},
@@ -135,96 +137,102 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  5,
 				CommitTs: 6,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t2"},
+				Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t2"},
+				Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			},
 			{
 				StartTs:  5,
 				CommitTs: 6,
-				Table:    &model.TableName{Schema: "s1", Table: "t2"},
+				Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			},
 		},
-		expected: map[model.TableName][]*model.SingleTableTxn{
-			{Schema: "s1", Table: "t1"}: {
+		expected: map[model.TableID][]*model.SingleTableTxn{
+			1: {
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  1,
 					CommitTs: 2,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  3,
 					CommitTs: 4,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  5,
 					CommitTs: 6,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  5,
 							CommitTs: 6,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
 				},
 			},
-			{Schema: "s1", Table: "t2"}: {
+			2: {
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 					StartTs:  1,
 					CommitTs: 2,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t2"},
+							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 						}},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 					StartTs:  3,
 					CommitTs: 4,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t2"},
+							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 						}},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 					StartTs:  5,
 					CommitTs: 6,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  5,
 							CommitTs: 6,
-							Table:    &model.TableName{Schema: "s1", Table: "t2"},
+							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 						}},
 				},
 			},
@@ -402,7 +410,6 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
 				StartTs:  418658114257813514,
 				CommitTs: 418658114257813515,
 				Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-				Delete:   true,
 				PreColumns: []*model.Column{nil, {
 					Name:  "a1",
 					Type:  mysql.TypeLong,

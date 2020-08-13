@@ -190,6 +190,11 @@ func (t *TableName) GetTable() string {
 	return t.Table
 }
 
+// GetTableID returns table ID.
+func (t *TableName) GetTableID() int64 {
+	return t.TableID
+}
+
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
 	StartTs  uint64 `json:"start-ts"`
@@ -199,20 +204,23 @@ type RowChangedEvent struct {
 
 	Table *TableName `json:"table"`
 
-	// TODO: remove it
-	Delete bool `json:"delete"`
-
 	TableInfoVersion uint64 `json:"table-info-version,omitempty"`
 
 	// TODO: remove it
 	// if the table of this row only has one unique index(includes primary key),
 	// IndieMarkCol will be set to the name of the unique index
-	IndieMarkCol string `json:"indie-mark-col"`
-
-	Columns    []*Column `json:"columns"`
-	PreColumns []*Column `json:"pre-columns"`
-
+	IndieMarkCol string    `json:"indie-mark-col"`
+	Columns      []*Column `json:"columns"`
+	PreColumns   []*Column `json:"pre-columns"`
 	IndexColumns [][]int
+
+	// approximate size of this event, calculate by tikv proto bytes size
+	ApproximateSize int64
+}
+
+// IsDelete returns true if the row is a delete event
+func (r *RowChangedEvent) IsDelete() bool {
+	return len(r.PreColumns) != 0 && len(r.Columns) == 0
 }
 
 // Column represents a column value in row changed event
@@ -284,7 +292,9 @@ type SimpleTableInfo struct {
 	// db name
 	Schema string
 	// table name
-	Table      string
+	Table string
+	// table ID
+	TableID    int64
 	ColumnInfo []*ColumnInfo
 }
 
@@ -299,41 +309,43 @@ type DDLEvent struct {
 }
 
 // FromJob fills the values of DDLEvent from DDL job
-func (e *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
-	e.TableInfo = new(SimpleTableInfo)
-	e.TableInfo.Schema = job.SchemaName
-	e.StartTs = job.StartTS
-	e.CommitTs = job.BinlogInfo.FinishedTS
-	e.Query = job.Query
-	e.Type = job.Type
+func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
+	d.TableInfo = new(SimpleTableInfo)
+	d.TableInfo.Schema = job.SchemaName
+	d.StartTs = job.StartTS
+	d.CommitTs = job.BinlogInfo.FinishedTS
+	d.Query = job.Query
+	d.Type = job.Type
 
 	if job.BinlogInfo.TableInfo != nil {
 		tableName := job.BinlogInfo.TableInfo.Name.O
 		tableInfo := job.BinlogInfo.TableInfo
-		e.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
+		d.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
 
 		for i, colInfo := range tableInfo.Columns {
-			e.TableInfo.ColumnInfo[i] = new(ColumnInfo)
-			e.TableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
+			d.TableInfo.ColumnInfo[i] = new(ColumnInfo)
+			d.TableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
 		}
 
-		e.TableInfo.Table = tableName
+		d.TableInfo.Table = tableName
+		d.TableInfo.TableID = job.TableID
 	}
-	e.fillPreTableInfo(preTableInfo)
+	d.fillPreTableInfo(preTableInfo)
 }
 
-func (e *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
+func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 	if preTableInfo == nil {
 		return
 	}
-	e.PreTableInfo = new(SimpleTableInfo)
-	e.PreTableInfo.Schema = preTableInfo.TableName.Schema
-	e.PreTableInfo.Table = preTableInfo.TableName.Table
+	d.PreTableInfo = new(SimpleTableInfo)
+	d.PreTableInfo.Schema = preTableInfo.TableName.Schema
+	d.PreTableInfo.Table = preTableInfo.TableName.Table
+	d.PreTableInfo.TableID = preTableInfo.ID
 
-	e.PreTableInfo.ColumnInfo = make([]*ColumnInfo, len(preTableInfo.Columns))
+	d.PreTableInfo.ColumnInfo = make([]*ColumnInfo, len(preTableInfo.Columns))
 	for i, colInfo := range preTableInfo.Columns {
-		e.PreTableInfo.ColumnInfo[i] = new(ColumnInfo)
-		e.PreTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
+		d.PreTableInfo.ColumnInfo[i] = new(ColumnInfo)
+		d.PreTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
 	}
 }
 

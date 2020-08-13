@@ -143,7 +143,6 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 			Schema: "test",
 			Table:  "person",
 		},
-		Delete: false,
 		Columns: []*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},

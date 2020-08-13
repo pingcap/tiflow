@@ -88,7 +88,7 @@ func FilterAndReduceTxns(txnsMap map[model.TableID][]*model.SingleTableTxn, filt
 		}
 	}
 	for table, txns := range txnsMap {
-		if !mark.IsMarkTable(txns[0].Table.Schema, txns[0].Table.Table) {
+		if mark.IsMarkTable(txns[0].Table.Schema, txns[0].Table.Table) {
 			delete(txnsMap, table)
 			continue
 		}

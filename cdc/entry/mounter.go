@@ -251,7 +251,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			if rowKV == nil {
 				return nil, nil
 			}
-			return m.mountRowKVEntry(tableInfo, rowKV)
+			return m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateSize())
 		case bytes.HasPrefix(key, indexPrefix):
 			indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
@@ -260,7 +260,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			if indexKV == nil {
 				return nil, nil
 			}
-			return m.mountIndexKVEntry(tableInfo, indexKV)
+			return m.mountIndexKVEntry(tableInfo, indexKV, raw.ApproximateSize())
 		}
 		return nil, nil
 	}()
@@ -393,7 +393,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 	return cols, nil
 }
 
-func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
 	// if m.enableOldValue == true, go into this function
 	// if m.enableNewValue == false and row.Delete == false, go into this function
 	// if m.enableNewValue == false and row.Delete == true and tableInfo.PKIsHandle = true, go into this function
@@ -438,15 +438,15 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 			TableID:        row.PhysicalTableID,
 			PartitionTable: tableInfo.GetPartitionInfo() != nil,
 		},
-		IndieMarkCol: tableInfo.IndieMarkCol,
-		Delete:       row.Delete,
-		Columns:      cols,
-		PreColumns:   preCols,
-		IndexColumns: tableInfo.IndexColumnsOffset,
+		IndieMarkCol:    tableInfo.IndieMarkCol,
+		Columns:         cols,
+		PreColumns:      preCols,
+		IndexColumns:    tableInfo.IndexColumnsOffset,
+		ApproximateSize: dataSize,
 	}, nil
 }
 
-func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
 	// skip set index KV
 	if !idx.Delete || m.enableOldValue {
 		return nil, nil
@@ -495,10 +495,10 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 			TableID:        idx.PhysicalTableID,
 			PartitionTable: tableInfo.GetPartitionInfo() != nil,
 		},
-		IndieMarkCol: tableInfo.IndieMarkCol,
-		Delete:       true,
-		PreColumns:   preCols,
-		IndexColumns: tableInfo.IndexColumnsOffset,
+		IndieMarkCol:    tableInfo.IndieMarkCol,
+		PreColumns:      preCols,
+		IndexColumns:    tableInfo.IndexColumnsOffset,
+		ApproximateSize: dataSize,
 	}, nil
 }
 
