@@ -368,7 +368,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	for _, colInfo := range tableInfo.Columns {
-		if !tableInfo.IsColCDCVisible(colInfo) {
+		if !model.IsColCDCVisible(colInfo) {
 			continue
 		}
 		colName := colInfo.Name.O
