@@ -41,7 +41,7 @@ function check_cdclog() {
   if [[ ! "$ddl_file_count" -eq "1" ]]; then
       echo "$TEST_NAME failed, expect 1 ddl file, obtain $ddl_file_count"
       return
-
+  fi
   success=1
 }
 

@@ -81,8 +81,8 @@ function cdclog_test() {
 
   run_sql "insert into $TEST_NAME.t1 values (1, 'a')"
   # because flush row changed events interval is 5 second
-  # so sleep 10 second will generate two files
-  sleep 10
+  # so sleep 20 second will generate two files
+  sleep 20
   run_sql "insert into $TEST_NAME.t1 values (2, 'b')"
 
   i=0
