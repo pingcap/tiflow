@@ -55,6 +55,7 @@ function prepare() {
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
 }
 
+success=0
 function check_cdclog() {
   DATA_DIR="$WORK_DIR/s3/logbucket/test"
   # retrieve table id by log meta
@@ -62,14 +63,14 @@ function check_cdclog() {
   file_count=$(ls -ahl $DATA_DIR/t_$table_id | grep cdclog | wc -l)
   if [[ ! "$file_count" -eq "2" ]]; then
       echo "$TEST_NAME failed, expect 2 row changed files, obtain $file_count"
-      return 1
+      return
   fi
   ddl_file_count=$(ls -ahl $DATA_DIR/ddls | grep ddl | wc -l)
   if [[ ! "$ddl_file_count" -eq "1" ]]; then
       echo "$TEST_NAME failed, expect 1 ddl file, obtain $ddl_file_count"
-      return 1
+      return
   fi
-  reutrn 0
+  success=1
 }
 
 function cdclog_test() {
@@ -88,8 +89,7 @@ function cdclog_test() {
   while [ $i -lt 30 ]
   do
     check_cdclog
-    ret=$?
-    if [ "$ret" == 0 ]; then
+    if [ "$success" == 1 ]; then
         echo "check log successfully"
         break
     fi
