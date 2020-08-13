@@ -7,6 +7,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.3.3 // indirect
 	github.com/Shopify/sarama v1.26.1
 	github.com/apache/pulsar-client-go v0.1.1
+	github.com/aws/aws-sdk-go v1.30.24
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/coreos/go-semver v0.3.0
@@ -36,6 +37,7 @@ require (
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.5.1
+	github.com/uber-go/atomic v1.3.2
 	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200425165423-262c93980547
 	go.uber.org/zap v1.15.0

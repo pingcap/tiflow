@@ -135,7 +135,6 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			Schema: "cdc",
 			Table:  "person",
 		},
-		Delete: false,
 		Columns: []*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
@@ -150,7 +149,6 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			Schema: "cdc",
 			Table:  "person",
 		},
-		Delete: true,
 		PreColumns: []*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 		},

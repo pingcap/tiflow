@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -36,6 +35,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
@@ -133,13 +133,21 @@ func getOwnerCapture(ctx context.Context) (*capture, error) {
 	return nil, errors.NotFoundf("owner")
 }
 
-func applyAdminChangefeed(ctx context.Context, job model.AdminJob) error {
+func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *security.Credential) error {
 	owner, err := getOwnerCapture(ctx)
 	if err != nil {
 		return err
 	}
-	addr := fmt.Sprintf("http://%s/capture/owner/admin", owner.AdvertiseAddr)
-	resp, err := http.PostForm(addr, url.Values(map[string][]string{
+	scheme := "http"
+	if credential.IsTLSEnabled() {
+		scheme = "https"
+	}
+	addr := fmt.Sprintf("%s://%s/capture/owner/admin", scheme, owner.AdvertiseAddr)
+	cli, err := httputil.NewClient(credential)
+	if err != nil {
+		return err
+	}
+	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
 		cdc.APIOpVarAdminJob:     {fmt.Sprint(int(job.Type))},
 		cdc.APIOpVarChangefeedID: {job.CfID},
 	}))
@@ -156,13 +164,23 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob) error {
 	return nil
 }
 
-func applyOwnerChangefeedQuery(ctx context.Context, cid model.ChangeFeedID) (string, error) {
+func applyOwnerChangefeedQuery(
+	ctx context.Context, cid model.ChangeFeedID, credential *security.Credential,
+) (string, error) {
 	owner, err := getOwnerCapture(ctx)
 	if err != nil {
 		return "", err
 	}
-	addr := fmt.Sprintf("http://%s/capture/owner/changefeed/query", owner.AdvertiseAddr)
-	resp, err := http.PostForm(addr, url.Values(map[string][]string{
+	scheme := "http"
+	if credential.IsTLSEnabled() {
+		scheme = "https"
+	}
+	addr := fmt.Sprintf("%s://%s/capture/owner/changefeed/query", scheme, owner.AdvertiseAddr)
+	cli, err := httputil.NewClient(credential)
+	if err != nil {
+		return "", err
+	}
+	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
 		cdc.APIOpVarChangefeedID: {cid},
 	}))
 	if err != nil {
