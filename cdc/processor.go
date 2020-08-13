@@ -471,6 +471,9 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 	failpoint.Inject("ProcessorUpdatePositionDelaying", func() {
 		time.Sleep(1 * time.Second)
 	})
+	if p.isStopped() {
+		return errors.Trace(model.ErrAdminStopProcessor)
+	}
 	//p.position.Count = p.sink.Count()
 	err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
 	if err != nil {
@@ -681,6 +684,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 }
 
 func (p *processor) sinkDriver(ctx context.Context) error {
+	metricFlushDuration := sinkFlushRowChangedDuration.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr)
 	for {
 		select {
 		case <-ctx.Done():
@@ -697,11 +701,13 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 			if minTs == 0 {
 				continue
 			}
+			start := time.Now()
 			err := p.sink.FlushRowChangedEvents(ctx, minTs)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			atomic.StoreUint64(&p.checkpointTs, minTs)
+			metricFlushDuration.Observe(time.Since(start).Seconds())
 			p.localCheckpointTsNotifier.Notify()
 		}
 	}

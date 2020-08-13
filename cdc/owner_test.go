@@ -578,7 +578,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 						Name:       timodel.NewCIStr("t1"),
 						PKIsHandle: true,
 						Columns: []*timodel.ColumnInfo{
-							{ID: 1, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}},
+							{ID: 1, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}, State: timodel.StatePublic},
 						},
 					},
 				},
@@ -600,7 +600,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 						Name:       timodel.NewCIStr("t2"),
 						PKIsHandle: true,
 						Columns: []*timodel.ColumnInfo{
-							{ID: 1, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}},
+							{ID: 1, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}, State: timodel.StatePublic},
 						},
 					},
 				},
@@ -642,7 +642,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 						Name:       timodel.NewCIStr("t1"),
 						PKIsHandle: true,
 						Columns: []*timodel.ColumnInfo{
-							{ID: 1, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}},
+							{ID: 1, FieldType: types.FieldType{Flag: mysql.PriKeyFlag}, State: timodel.StatePublic},
 						},
 					},
 				},

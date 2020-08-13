@@ -138,6 +138,11 @@ func (a *AvroEventBatchEncoder) Build() (key []byte, value []byte) {
 	return k, v
 }
 
+// MixedBuild implements the EventBatchEncoder interface
+func (a *AvroEventBatchEncoder) MixedBuild() []byte {
+	panic("Mixed Build only use for JsonEncoder")
+}
+
 // Size is always 0 or 1
 func (a *AvroEventBatchEncoder) Size() int {
 	if a.valueBuf == nil {
@@ -146,7 +151,7 @@ func (a *AvroEventBatchEncoder) Size() int {
 	return 1
 }
 
-func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tableVersion uint64, cols map[string]*model.Column) (*avroEncodeResult, error) {
+func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tableVersion uint64, cols []*model.Column) (*avroEncodeResult, error) {
 	avroCodec, registryID, err := a.valueSchemaManager.Lookup(context.Background(), *table, tableVersion)
 	if err != nil {
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: lookup failed")
@@ -222,9 +227,12 @@ func ColumnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string
 	return string(str), nil
 }
 
-func rowToAvroNativeData(cols map[string]*model.Column) (interface{}, error) {
+func rowToAvroNativeData(cols []*model.Column) (interface{}, error) {
 	ret := make(map[string]interface{}, len(cols))
-	for key, col := range cols {
+	for _, col := range cols {
+		if col == nil {
+			continue
+		}
 		data, str, err := columnToAvroNativeData(col)
 		if err != nil {
 			return nil, err
@@ -232,7 +240,7 @@ func rowToAvroNativeData(cols map[string]*model.Column) (interface{}, error) {
 
 		union := make(map[string]interface{}, 1)
 		union[str] = data
-		ret[key] = union
+		ret[col.Name] = union
 	}
 	return ret, nil
 }
