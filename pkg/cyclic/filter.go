@@ -63,10 +63,10 @@ func (m MarkMap) shouldFilterTxn(startTs uint64, filterReplicaIDs []uint64, repl
 // FilterAndReduceTxns filters duplicate txns bases on filterReplicaIDs and
 // if the mark table dml is exist in the txn, this functiong will set the replicaID by mark table dml
 // if the mark table dml is not exist, this function will set the replicaID by config
-func FilterAndReduceTxns(txnsMap map[model.TableName][]*model.Txn, filterReplicaIDs []uint64, replicaID uint64) {
+func FilterAndReduceTxns(txnsMap map[model.TableID][]*model.SingleTableTxn, filterReplicaIDs []uint64, replicaID uint64) {
 	markMap := make(MarkMap)
-	for table, txns := range txnsMap {
-		if !mark.IsMarkTable(table.Schema, table.Table) {
+	for _, txns := range txnsMap {
+		if !mark.IsMarkTable(txns[0].Table.Schema, txns[0].Table.Table) {
 			continue
 		}
 		for _, txn := range txns {
@@ -88,11 +88,11 @@ func FilterAndReduceTxns(txnsMap map[model.TableName][]*model.Txn, filterReplica
 		}
 	}
 	for table, txns := range txnsMap {
-		if mark.IsMarkTable(table.Schema, table.Table) {
+		if !mark.IsMarkTable(txns[0].Table.Schema, txns[0].Table.Table) {
 			delete(txnsMap, table)
 			continue
 		}
-		filteredTxns := make([]*model.Txn, 0, len(txns))
+		filteredTxns := make([]*model.SingleTableTxn, 0, len(txns))
 		for _, txn := range txns {
 			// Check if we should skip this event
 			markRow, needSkip := markMap.shouldFilterTxn(txn.StartTs, filterReplicaIDs, replicaID)

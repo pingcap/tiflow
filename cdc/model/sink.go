@@ -337,22 +337,23 @@ func (e *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 	}
 }
 
-// Txn represents a transaction which includes many row events
-type Txn struct {
+// SingleTableTxn represents a transaction which includes many row events in a single table
+type SingleTableTxn struct {
+	Table     *TableName
 	StartTs   uint64
 	CommitTs  uint64
 	Rows      []*RowChangedEvent
 	ReplicaID uint64
 }
 
-// Append adds a row changed event into Txn
-func (t *Txn) Append(row *RowChangedEvent) {
-	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs {
+// Append adds a row changed event into SingleTableTxn
+func (t *SingleTableTxn) Append(row *RowChangedEvent) {
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.TableID {
 		log.Fatal("unexpected row change event",
 			zap.Uint64("startTs of txn", t.StartTs),
 			zap.Uint64("commitTs of txn", t.CommitTs),
-			zap.Uint64("startTs of row", row.StartTs),
-			zap.Uint64("commitTs of row", row.CommitTs))
+			zap.Any("table of txn", t.Table),
+			zap.Any("row", row))
 	}
 	t.Rows = append(t.Rows, row)
 }

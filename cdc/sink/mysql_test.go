@@ -49,10 +49,10 @@ func newMySQLSink4Test(c *check.C) *mysqlSink {
 func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 	testCases := []struct {
 		input    []*model.RowChangedEvent
-		expected map[model.TableName][]*model.Txn
+		expected map[model.TableName][]*model.SingleTableTxn
 	}{{
 		input:    []*model.RowChangedEvent{},
-		expected: map[model.TableName][]*model.Txn{},
+		expected: map[model.TableName][]*model.SingleTableTxn{},
 	}, {
 		input: []*model.RowChangedEvent{
 			{
@@ -86,7 +86,7 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 				Table:    &model.TableName{Schema: "s1", Table: "t1"},
 			},
 		},
-		expected: map[model.TableName][]*model.Txn{
+		expected: map[model.TableName][]*model.SingleTableTxn{
 			{Schema: "s1", Table: "t1"}: {
 				{
 					StartTs:  1,
@@ -163,7 +163,7 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 				Table:    &model.TableName{Schema: "s1", Table: "t2"},
 			},
 		},
-		expected: map[model.TableName][]*model.Txn{
+		expected: map[model.TableName][]*model.SingleTableTxn{
 			{Schema: "s1", Table: "t1"}: {
 				{
 					StartTs:  1,
@@ -242,16 +242,16 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 
 func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 	testCases := []struct {
-		txns                     []*model.Txn
+		txns                     []*model.SingleTableTxn
 		expectedOutputRows       [][]*model.RowChangedEvent
 		exportedOutputReplicaIDs []uint64
 		maxTxnRow                int
 	}{
 		{
-			txns:      []*model.Txn{},
+			txns:      []*model.SingleTableTxn{},
 			maxTxnRow: 4,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
@@ -262,7 +262,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			exportedOutputReplicaIDs: []uint64{1},
 			maxTxnRow:                2,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
@@ -275,7 +275,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			exportedOutputReplicaIDs: []uint64{1},
 			maxTxnRow:                2,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}},
@@ -299,7 +299,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			exportedOutputReplicaIDs: []uint64{1, 1},
 			maxTxnRow:                4,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
@@ -324,7 +324,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			exportedOutputReplicaIDs: []uint64{1, 2, 3},
 			maxTxnRow:                4,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
@@ -464,7 +464,7 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
    		db: db,
    	}
 
-   	t := model.Txn{
+   	t := model.SingleTableTxn{
    		DDL: &model.DDL{
    			Database: "test",
    			Table:    "user",
@@ -497,7 +497,7 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
    		db: db,
    	}
 
-   	t := model.Txn{
+   	t := model.SingleTableTxn{
    		DDL: &model.DDL{
    			Database: "test",
    			Table:    "user",
@@ -570,7 +570,7 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
    		infoGetter: &helper,
    	}
 
-   	t := model.Txn{
+   	t := model.SingleTableTxn{
    		DMLs: []*model.DML{
    			{
    				Database: "test",
@@ -610,7 +610,7 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
    		infoGetter: &helper,
    	}
 
-   	t := model.Txn{
+   	t := model.SingleTableTxn{
    		DMLs: []*model.DML{
    			{
    				Database: "test",

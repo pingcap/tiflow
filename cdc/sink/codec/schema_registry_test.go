@@ -174,9 +174,8 @@ func getTestingContext() context.Context {
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 	table := model.TableName{
-		Schema:    "testdb",
-		Table:     "test1",
-		Partition: 0,
+		Schema: "testdb",
+		Table:  "test1",
 	}
 
 	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
@@ -250,9 +249,8 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryBad(c *check.C) {
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 	table := model.TableName{
-		Schema:    "testdb",
-		Table:     "test1",
-		Partition: 0,
+		Schema: "testdb",
+		Table:  "test1",
 	}
 
 	manager, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:8081", "-value")

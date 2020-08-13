@@ -48,7 +48,7 @@ var _ = check.Suite(&canalBatchSuite{
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
 		CommitTs: 4,
-		Table:    &model.TableName{Schema: "a", Table: "c", Partition: 6},
+		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, PartitionTable: true},
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{

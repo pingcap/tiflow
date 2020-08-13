@@ -70,7 +70,7 @@ func (c *causality) detectConflict(keys [][]byte) (bool, int) {
 	return firstIdx != -1, firstIdx
 }
 
-func genTxnKeys(txn *model.Txn) [][]byte {
+func genTxnKeys(txn *model.SingleTableTxn) [][]byte {
 	if len(txn.Rows) == 0 {
 		return nil
 	}

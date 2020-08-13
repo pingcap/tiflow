@@ -448,7 +448,7 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	}
 }
 
-func (s *mysqlSink) concurrentExec(ctx context.Context, txnsGroup map[model.TableName][]*model.Txn) error {
+func (s *mysqlSink) concurrentExec(ctx context.Context, txnsGroup map[model.TableID][]*model.SingleTableTxn) error {
 	errg, ctx := errgroup.WithContext(ctx)
 	ch := make(chan struct{}, 1)
 	errg.Go(func() error {
@@ -469,16 +469,16 @@ func (s *mysqlSink) concurrentExec(ctx context.Context, txnsGroup map[model.Tabl
 	return errg.Wait()
 }
 
-func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model.TableName][]*model.Txn) {
+func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model.TableID][]*model.SingleTableTxn) {
 	nWorkers := s.params.workerCount
 	causality := newCausality()
 	rowsChIdx := 0
 
-	sendFn := func(txn *model.Txn, keys [][]byte, idx int) {
+	sendFn := func(txn *model.SingleTableTxn, keys [][]byte, idx int) {
 		causality.add(keys, idx)
 		s.workers[idx].appendTxn(ctx, txn)
 	}
-	resolveConflict := func(txn *model.Txn) {
+	resolveConflict := func(txn *model.SingleTableTxn) {
 		keys := genTxnKeys(txn)
 		if conflict, idx := causality.detectConflict(keys); conflict {
 			if idx >= 0 {
@@ -503,7 +503,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 }
 
 type mysqlSinkWorker struct {
-	txnCh            chan *model.Txn
+	txnCh            chan *model.SingleTableTxn
 	txnWg            sync.WaitGroup
 	maxTxnRow        int
 	bucket           int
@@ -520,7 +520,7 @@ func newMySQLSinkWorker(
 	execDMLs func(context.Context, []*model.RowChangedEvent, uint64, int) error,
 ) *mysqlSinkWorker {
 	return &mysqlSinkWorker{
-		txnCh:            make(chan *model.Txn, 1024),
+		txnCh:            make(chan *model.SingleTableTxn, 1024),
 		maxTxnRow:        maxTxnRow,
 		bucket:           bucket,
 		metricBucketSize: metricBucketSize,
@@ -533,7 +533,7 @@ func (w *mysqlSinkWorker) waitAllTxnsExecuted() {
 	w.txnWg.Wait()
 }
 
-func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.Txn) {
+func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.SingleTableTxn) {
 	if txn == nil {
 		return
 	}

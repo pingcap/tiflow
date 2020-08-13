@@ -72,13 +72,13 @@ func (s *testCausalitySuite) TestCausality(c *check.C) {
 
 func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 	testCases := []struct {
-		txn      *model.Txn
+		txn      *model.SingleTableTxn
 		expected [][]byte
 	}{{
-		txn:      &model.Txn{},
+		txn:      &model.SingleTableTxn{},
 		expected: nil,
 	}, {
-		txn: &model.Txn{
+		txn: &model.SingleTableTxn{
 			Rows: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813514,
@@ -122,7 +122,7 @@ func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 			{'1', 0x0, '2', '1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
 		},
 	}, {
-		txn: &model.Txn{
+		txn: &model.SingleTableTxn{
 			Rows: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813514,
@@ -168,7 +168,7 @@ func (s *testCausalitySuite) TestGenKeys(c *check.C) {
 			{'1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
 		},
 	}, {
-		txn: &model.Txn{
+		txn: &model.SingleTableTxn{
 			Rows: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813514,

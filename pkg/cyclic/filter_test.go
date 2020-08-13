@@ -31,23 +31,23 @@ func TestCyclic(t *testing.T) { check.TestingT(t) }
 func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 	rID := mark.CyclicReplicaIDCol
 	testCases := []struct {
-		input     map[model.TableName][]*model.Txn
-		output    map[model.TableName][]*model.Txn
+		input     map[model.TableName][]*model.SingleTableTxn
+		output    map[model.TableName][]*model.SingleTableTxn
 		filterID  []uint64
 		replicaID uint64
 	}{
 		{
-			input:     map[model.TableName][]*model.Txn{},
-			output:    map[model.TableName][]*model.Txn{},
+			input:     map[model.TableName][]*model.SingleTableTxn{},
+			output:    map[model.TableName][]*model.SingleTableTxn{},
 			filterID:  []uint64{},
 			replicaID: 0,
 		}, {
-			input:     map[model.TableName][]*model.Txn{{Table: "a"}: {{StartTs: 1}}},
-			output:    map[model.TableName][]*model.Txn{{Table: "a"}: {{StartTs: 1, ReplicaID: 1}}},
+			input:     map[model.TableName][]*model.SingleTableTxn{{Table: "a"}: {{StartTs: 1}}},
+			output:    map[model.TableName][]*model.SingleTableTxn{{Table: "a"}: {{StartTs: 1, ReplicaID: 1}}},
 			filterID:  []uint64{},
 			replicaID: 1,
 		}, {
-			input: map[model.TableName][]*model.Txn{
+			input: map[model.TableName][]*model.SingleTableTxn{
 				{Schema: "tidb_cdc"} /* cyclic.SchemaName */ : {
 					{
 						StartTs: 1,
@@ -55,11 +55,11 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 					},
 				},
 			},
-			output:    map[model.TableName][]*model.Txn{},
+			output:    map[model.TableName][]*model.SingleTableTxn{},
 			filterID:  []uint64{},
 			replicaID: 1,
 		}, {
-			input: map[model.TableName][]*model.Txn{
+			input: map[model.TableName][]*model.SingleTableTxn{
 				{Table: "a"}: {{StartTs: 1}},
 				{Schema: "tidb_cdc"}: {
 					{
@@ -68,11 +68,11 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 					},
 				},
 			},
-			output:    map[model.TableName][]*model.Txn{},
+			output:    map[model.TableName][]*model.SingleTableTxn{},
 			filterID:  []uint64{10},
 			replicaID: 1,
 		}, {
-			input: map[model.TableName][]*model.Txn{
+			input: map[model.TableName][]*model.SingleTableTxn{
 				{Table: "a"}: {{StartTs: 1}},
 				{Schema: "tidb_cdc", Table: "1"}: {
 					{
@@ -93,11 +93,11 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 					},
 				},
 			},
-			output:    map[model.TableName][]*model.Txn{},
+			output:    map[model.TableName][]*model.SingleTableTxn{},
 			filterID:  []uint64{10},
 			replicaID: 1,
 		}, {
-			input: map[model.TableName][]*model.Txn{
+			input: map[model.TableName][]*model.SingleTableTxn{
 				{Table: "a"}:    {{StartTs: 1}},
 				{Table: "b2"}:   {{StartTs: 2}},
 				{Table: "b2_1"}: {{StartTs: 2}},
@@ -108,14 +108,14 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 					},
 				},
 			},
-			output: map[model.TableName][]*model.Txn{
+			output: map[model.TableName][]*model.SingleTableTxn{
 				{Table: "b2"}:   {{StartTs: 2, ReplicaID: 1}},
 				{Table: "b2_1"}: {{StartTs: 2, ReplicaID: 1}},
 			},
 			filterID:  []uint64{10},
 			replicaID: 1,
 		}, {
-			input: map[model.TableName][]*model.Txn{
+			input: map[model.TableName][]*model.SingleTableTxn{
 				{Table: "a"}:    {{StartTs: 1}},
 				{Table: "b2"}:   {{StartTs: 2}},
 				{Table: "b2_1"}: {{StartTs: 2}},
@@ -132,7 +132,7 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 					},
 				},
 			},
-			output: map[model.TableName][]*model.Txn{
+			output: map[model.TableName][]*model.SingleTableTxn{
 				{Table: "a"}:    {{StartTs: 1, ReplicaID: 1}},
 				{Table: "b3"}:   {{StartTs: 3, ReplicaID: 11}},
 				{Table: "b3_1"}: {{StartTs: 3, ReplicaID: 11}},
@@ -140,7 +140,7 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 			filterID:  []uint64{10}, // 10 -> 2, filter start ts 2
 			replicaID: 1,
 		}, {
-			input: map[model.TableName][]*model.Txn{
+			input: map[model.TableName][]*model.SingleTableTxn{
 				{Table: "b2"}: {{StartTs: 2, CommitTs: 2}},
 				{Table: "b3"}: {
 					{StartTs: 2, CommitTs: 2},
@@ -159,7 +159,7 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 					},
 				},
 			},
-			output: map[model.TableName][]*model.Txn{
+			output: map[model.TableName][]*model.SingleTableTxn{
 				{Table: "b3"}: {
 					{StartTs: 3, CommitTs: 3, ReplicaID: 11},
 					{StartTs: 3, CommitTs: 3, ReplicaID: 11},
@@ -169,7 +169,7 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 			filterID:  []uint64{10}, // 10 -> 2, filter start ts 2
 			replicaID: 1,
 		}, {
-			input: map[model.TableName][]*model.Txn{
+			input: map[model.TableName][]*model.SingleTableTxn{
 				{Table: "b2"}: {{StartTs: 2}},
 				{Schema: "tidb_cdc", Table: "1"}: {
 					// Duplicate mark table changes.
@@ -183,7 +183,7 @@ func (s *markSuit) TestFilterAndReduceTxns(c *check.C) {
 					},
 				},
 			},
-			output:    map[model.TableName][]*model.Txn{},
+			output:    map[model.TableName][]*model.SingleTableTxn{},
 			filterID:  []uint64{10}, // 10 -> 2, filter start ts 2
 			replicaID: 1,
 		},
