@@ -82,7 +82,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 	for i, col := range ti.Columns {
 		ti.columnsOffset[col.ID] = i
 		isPK := false
-		if ti.IsColCDCVisible(col) {
+		if IsColCDCVisible(col) {
 			ti.RowColumnsOffset[col.ID] = rowColumnsCurrentOffset
 			rowColumnsCurrentOffset++
 			isPK = (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == model.ExtraHandleID
@@ -112,7 +112,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 			indexColOffset := make([]int, 0, len(idx.Columns))
 			for _, idxCol := range idx.Columns {
 				colInfo := ti.Columns[idxCol.Offset]
-				if ti.IsColCDCVisible(colInfo) {
+				if IsColCDCVisible(colInfo) {
 					indexColOffset = append(indexColOffset, ti.RowColumnsOffset[colInfo.ID])
 				}
 			}
@@ -240,7 +240,7 @@ func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
 }
 
 // IsColCDCVisible returns whether the col is visible for CDC
-func (ti *TableInfo) IsColCDCVisible(col *model.ColumnInfo) bool {
+func IsColCDCVisible(col *model.ColumnInfo) bool {
 	// this column is a virtual generated column
 	if col.IsGenerated() && !col.GeneratedStored {
 		return false

@@ -15,13 +15,14 @@ package sink
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"testing"
 	"time"
 
-	"github.com/pingcap/parser/mysql"
-
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
@@ -39,10 +40,13 @@ var _ = check.Suite(&MySQLSinkSuite{})
 func newMySQLSink4Test(c *check.C) *mysqlSink {
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
+	params := defaultParams
+	params.batchReplaceEnabled = false
 	return &mysqlSink{
 		txnCache:   common.NewUnresolvedTxnCache(),
 		filter:     f,
 		statistics: NewStatistics(context.TODO(), "test", make(map[string]string)),
+		params:     params,
 	}
 }
 
@@ -432,15 +436,171 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
 			},
 		},
 		expected: &preparedDMLs{
-			sqls:   []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
-			values: [][]interface{}{{1, 1}},
+			sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
+			values:   [][]interface{}{{1, 1}},
+			rowCount: 1,
 		},
 	}}
 	ms := newMySQLSink4Test(c)
 	for i, tc := range testCases {
-		dmls, err := ms.prepareDMLs(tc.input, 0, 0)
-		c.Assert(err, check.IsNil)
+		dmls := ms.prepareDMLs(tc.input, 0, 0)
 		c.Assert(dmls, check.DeepEquals, tc.expected, check.Commentf("%d", i))
+	}
+}
+
+func (s MySQLSinkSuite) TestMapReplace(c *check.C) {
+	testCases := []struct {
+		quoteTable    string
+		cols          []*model.Column
+		expectedQuery string
+		expectedArgs  []interface{}
+	}{
+		{
+			quoteTable: "`test`.`t1`",
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Value: "varchar"},
+				{Name: "c", Type: mysql.TypeLong, Value: 1, Flag: model.GeneratedColumnFlag},
+				{Name: "d", Type: mysql.TypeTiny, Value: uint8(255)},
+			},
+			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`d`) VALUES ",
+			expectedArgs:  []interface{}{1, "varchar", uint8(255)},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Value: "varchar"},
+				{Name: "c", Type: mysql.TypeLong, Value: 1},
+				{Name: "d", Type: mysql.TypeTiny, Value: uint8(255)},
+			},
+			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`c`,`d`) VALUES ",
+			expectedArgs:  []interface{}{1, "varchar", 1, uint8(255)},
+		},
+	}
+	for _, tc := range testCases {
+		// multiple times to verify the stability of column sequence in query string
+		for i := 0; i < 10; i++ {
+			query, args := prepareReplace(tc.quoteTable, tc.cols, false)
+			c.Assert(query, check.Equals, tc.expectedQuery)
+			c.Assert(args, check.DeepEquals, tc.expectedArgs)
+		}
+	}
+}
+
+type sqlArgs [][]interface{}
+
+func (a sqlArgs) Len() int           { return len(a) }
+func (a sqlArgs) Less(i, j int) bool { return fmt.Sprintf("%s", a[i]) < fmt.Sprintf("%s", a[j]) }
+func (a sqlArgs) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+
+func (s MySQLSinkSuite) TestReduceReplace(c *check.C) {
+	testCases := []struct {
+		replaces   map[string][][]interface{}
+		batchSize  int
+		sort       bool
+		expectSQLs []string
+		expectArgs [][]interface{}
+	}{
+		{
+			replaces: map[string][][]interface{}{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES ": {
+					[]interface{}{1, "1"},
+					[]interface{}{2, "2"},
+					[]interface{}{3, "3"},
+				},
+			},
+			batchSize: 1,
+			sort:      false,
+			expectSQLs: []string{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)",
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)",
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)",
+			},
+			expectArgs: [][]interface{}{
+				{1, "1"},
+				{2, "2"},
+				{3, "3"},
+			},
+		},
+		{
+			replaces: map[string][][]interface{}{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES ": {
+					[]interface{}{1, "1"},
+					[]interface{}{2, "2"},
+					[]interface{}{3, "3"},
+					[]interface{}{4, "3"},
+					[]interface{}{5, "5"},
+				},
+			},
+			batchSize: 3,
+			sort:      false,
+			expectSQLs: []string{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?),(?,?)",
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?)",
+			},
+			expectArgs: [][]interface{}{
+				{1, "1", 2, "2", 3, "3"},
+				{4, "3", 5, "5"},
+			},
+		},
+		{
+			replaces: map[string][][]interface{}{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES ": {
+					[]interface{}{1, "1"},
+					[]interface{}{2, "2"},
+					[]interface{}{3, "3"},
+					[]interface{}{4, "3"},
+					[]interface{}{5, "5"},
+				},
+			},
+			batchSize: 10,
+			sort:      false,
+			expectSQLs: []string{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?),(?,?),(?,?),(?,?)",
+			},
+			expectArgs: [][]interface{}{
+				{1, "1", 2, "2", 3, "3", 4, "3", 5, "5"},
+			},
+		},
+		{
+			replaces: map[string][][]interface{}{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES ": {
+					[]interface{}{1, "1"},
+					[]interface{}{2, "2"},
+					[]interface{}{3, "3"},
+					[]interface{}{4, "3"},
+					[]interface{}{5, "5"},
+					[]interface{}{6, "6"},
+				},
+				"REPLACE INTO `test`.`t2`(`a`,`b`) VALUES ": {
+					[]interface{}{7, ""},
+					[]interface{}{8, ""},
+					[]interface{}{9, ""},
+				},
+			},
+			batchSize: 3,
+			sort:      true,
+			expectSQLs: []string{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?),(?,?)",
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?),(?,?)",
+				"REPLACE INTO `test`.`t2`(`a`,`b`) VALUES (?,?),(?,?),(?,?)",
+			},
+			expectArgs: [][]interface{}{
+				{1, "1", 2, "2", 3, "3"},
+				{4, "3", 5, "5", 6, "6"},
+				{7, "", 8, "", 9, ""},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		sqls, args := reduceReplace(tc.replaces, tc.batchSize)
+		if tc.sort {
+			sort.Strings(sqls)
+			sort.Sort(sqlArgs(args))
+		}
+		c.Assert(sqls, check.DeepEquals, tc.expectSQLs)
+		c.Assert(args, check.DeepEquals, tc.expectArgs)
 	}
 }
 

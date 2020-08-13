@@ -253,7 +253,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			if rowKV == nil {
 				return nil, nil
 			}
-			return m.mountRowKVEntry(tableInfo, rowKV)
+			return m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateSize())
 		case bytes.HasPrefix(key, indexPrefix):
 			indexKV, err := m.unmarshalIndexKVEntry(key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
@@ -262,7 +262,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 			if indexKV == nil {
 				return nil, nil
 			}
-			return m.mountIndexKVEntry(tableInfo, indexKV)
+			return m.mountIndexKVEntry(tableInfo, indexKV, raw.ApproximateSize())
 		}
 		return nil, nil
 	}()
@@ -368,7 +368,7 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	for _, colInfo := range tableInfo.Columns {
-		if !tableInfo.IsColCDCVisible(colInfo) {
+		if !model.IsColCDCVisible(colInfo) {
 			continue
 		}
 		colName := colInfo.Name.O
@@ -395,7 +395,7 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 	return cols, nil
 }
 
-func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
 	// if m.enableOldValue == true, go into this function
 	// if m.enableNewValue == false and row.Delete == false, go into this function
 	// if m.enableNewValue == false and row.Delete == true and tableInfo.PKIsHandle = true, go into this function
@@ -442,6 +442,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		Table: &model.TableName{
 			Schema:    schemaName,
 			Table:     tableName,
+			TableID:   row.PhysicalTableID,
 			Partition: partitionID,
 		},
 		Columns:      cols,
@@ -449,10 +450,12 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		IndexColumns: tableInfo.IndexColumnsOffset,
 		// FIXME(leoppor): Correctness of conflict detection with old values
 		Keys: genMultipleKeys(tableInfo, preCols, cols, quotes.QuoteSchema(schemaName, tableName)),
+
+		ApproximateSize: dataSize,
 	}, nil
 }
 
-func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
 	// skip set index KV
 	if !idx.Delete || m.enableOldValue {
 		return nil, nil
@@ -491,17 +494,24 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
 		}
 	}
+	var partitionID int64
+	if tableInfo.GetPartitionInfo() != nil {
+		partitionID = idx.PhysicalTableID
+	}
 	return &model.RowChangedEvent{
 		StartTs:  idx.StartTs,
 		CommitTs: idx.CRTs,
 		RowID:    idx.RecordID,
 		Table: &model.TableName{
-			Schema: tableInfo.TableName.Schema,
-			Table:  tableInfo.TableName.Table,
+			Schema:    tableInfo.TableName.Schema,
+			Table:     tableInfo.TableName.Table,
+			TableID:   idx.PhysicalTableID,
+			Partition: partitionID,
 		},
-		PreColumns:   preCols,
-		IndexColumns: tableInfo.IndexColumnsOffset,
-		Keys:         genMultipleKeys(tableInfo, preCols, nil, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
+		PreColumns:      preCols,
+		IndexColumns:    tableInfo.IndexColumnsOffset,
+		Keys:            genMultipleKeys(tableInfo, preCols, nil, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
+		ApproximateSize: dataSize,
 	}, nil
 }
 
