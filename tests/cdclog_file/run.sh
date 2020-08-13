@@ -71,7 +71,7 @@ function cdclog_test() {
         echo "check log successfully"
         break
     fi
-    ((i++))
+    i=$(( $i + 1 ))
     echo "check log failed $i-th time, retry later"
     sleep 2
   done
