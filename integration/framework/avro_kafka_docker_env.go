@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package framework
 
 import (
@@ -17,20 +30,22 @@ import (
 )
 
 const (
-	healthCheckUri = "http://127.0.0.1:18083"
-	dockerComposeFilePath = "/docker-compose-avro.yml"
+	healthCheckURI          = "http://127.0.0.1:18083"
+	dockerComposeFilePath   = "/docker-compose-avro.yml"
 	controllerContainerName = "ticdc_controller_1"
-	upstreamDSN = "root@tcp(127.0.0.1:4000)/"
-	downstreamDSN = "root@tcp(127.0.0.1:5000)/"
+	upstreamDSN             = "root@tcp(127.0.0.1:4000)/"
+	downstreamDSN           = "root@tcp(127.0.0.1:5000)/"
 )
 
+// AvroKafkaDockerEnv represents the docker-compose service defined in docker-compose-avro.yml
 type AvroKafkaDockerEnv struct {
-	DockerComposeOperator
+	dockerComposeOperator
 }
 
+// NewAvroKafkaDockerEnv creates a new AvroKafkaDockerEnv
 func NewAvroKafkaDockerEnv() *AvroKafkaDockerEnv {
 	healthChecker := func() error {
-		resp, err := http.Get(healthCheckUri)
+		resp, err := http.Get(healthCheckURI)
 		if err != nil {
 			return err
 		}
@@ -68,18 +83,20 @@ func NewAvroKafkaDockerEnv() *AvroKafkaDockerEnv {
 		log.Fatal("Could not find git repo root", zap.Error(err))
 	}
 
-	return &AvroKafkaDockerEnv{DockerComposeOperator{
+	return &AvroKafkaDockerEnv{dockerComposeOperator{
 		fileName:      st.Path + dockerComposeFilePath,
 		controller:    controllerContainerName,
 		healthChecker: healthChecker,
 	}}
 }
 
+// Reset implements Environment
 func (e *AvroKafkaDockerEnv) Reset() {
 	e.TearDown()
 	e.Setup()
 }
 
+// RunTest implements Environment
 func (e *AvroKafkaDockerEnv) RunTest(task Task) {
 	cmdLine := "/cdc " + task.GetCDCProfile().String()
 	bytes, err := e.ExecInController(cmdLine)
@@ -104,7 +121,7 @@ func (e *AvroKafkaDockerEnv) RunTest(task Task) {
 		Upstream:   upstream,
 		Downstream: downstream,
 		env:        e,
-		waitForReady: func () error {
+		waitForReady: func() error {
 			return retry.Run(time.Second, 120, e.healthChecker)
 		},
 		Ctx: context.Background(),
@@ -125,6 +142,7 @@ func (e *AvroKafkaDockerEnv) RunTest(task Task) {
 	log.Info("Finished running task", zap.String("name", task.Name()))
 }
 
+// SetListener implements Environment. Currently unfinished, will be used to monitor Kafka output
 func (e *AvroKafkaDockerEnv) SetListener(states interface{}, listener MqListener) {
 	// TODO
 }

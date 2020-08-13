@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package framework
 
 import (
@@ -9,13 +22,14 @@ import (
 	"go.uber.org/zap"
 )
 
-type DockerComposeOperator struct {
+type dockerComposeOperator struct {
 	fileName      string
 	controller    string
 	healthChecker func() error
 }
 
-func (d *DockerComposeOperator) Setup() {
+// Setup brings up a docker-compose service
+func (d *dockerComposeOperator) Setup() {
 	cmd := exec.Command("docker-compose", "-f", d.fileName, "up", "--detach")
 	runCmdHandleError(cmd)
 
@@ -45,14 +59,16 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 	return bytes
 }
 
-func (d *DockerComposeOperator) TearDown() {
+// TearDown terminates a docker-compose service and remove all volumes
+func (d *dockerComposeOperator) TearDown() {
 	log.Info("Start tearing down docker-compose services")
 	cmd := exec.Command("docker-compose", "-f", d.fileName, "down", "-v")
 	runCmdHandleError(cmd)
 	log.Info("Finished tearing down docker-compose services")
 }
 
-func (d *DockerComposeOperator) ExecInController(shellCmd string) ([]byte, error) {
+// ExecInController provides a way to execute commands inside a container in the service
+func (d *dockerComposeOperator) ExecInController(shellCmd string) ([]byte, error) {
 	log.Info("Start executing in the controller container", zap.String("shellCmd", shellCmd))
 	cmd := exec.Command("docker", "exec", d.controller, "sh", "-c", shellCmd)
 	defer log.Info("Finished executing in the controller container", zap.String("shellCmd", shellCmd))

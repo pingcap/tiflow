@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package framework
 
 import (
@@ -10,23 +23,27 @@ import (
 	"go.uber.org/zap/zapcore"
 	"strings"
 	"upper.io/db.v3/lib/sqlbuilder"
+	// imported for side effects
 	_ "upper.io/db.v3/mysql"
 )
 
-type SqlHelper struct {
+// SQLHelper provides basic utilities for manipulating data
+type SQLHelper struct {
 	upstream   *sql.DB
 	downstream *sql.DB
-	ctx context.Context
+	ctx        context.Context
 }
 
+// Table represents the handle of a table in the upstream
 type Table struct {
-	err error
-	tableName string
+	err         error
+	tableName   string
 	uniqueIndex string
-	helper *SqlHelper
+	helper      *SQLHelper
 }
 
-func (h *SqlHelper) GetTable(tableName string) *Table {
+// GetTable returns the handle of the given table
+func (h *SQLHelper) GetTable(tableName string) *Table {
 	db, err := sqlbuilder.New("mysql", h.upstream)
 	if err != nil {
 		return &Table{err: errors.AddStack(err)}
@@ -40,11 +57,12 @@ func (h *SqlHelper) GetTable(tableName string) *Table {
 	return &Table{tableName: tableName, uniqueIndex: idxCol, helper: h}
 }
 
-func (t *Table) Insert(rowData map[string]interface{}) Sender {
+// Insert returns a Sendable object that represents an Insert clause
+func (t *Table) Insert(rowData map[string]interface{}) Sendable {
 	if t.err != nil {
 		return &errorSender{errors.AddStack(t.err)}
 	}
-	
+
 	basicReq := sqlRequest{
 		tableName:   t.tableName,
 		data:        rowData,
@@ -53,7 +71,7 @@ func (t *Table) Insert(rowData map[string]interface{}) Sender {
 		helper:      t.helper,
 	}
 
-	return &SyncSqlRequest{basicReq}
+	return &syncSQLRequest{basicReq}
 }
 
 type sqlRowContainer interface {
@@ -61,20 +79,21 @@ type sqlRowContainer interface {
 	getTable() *Table
 }
 
-type awaitableSqlRowContainer struct {
+type awaitableSQLRowContainer struct {
 	Awaitable
 	sqlRowContainer
 }
 
 type sqlRequest struct {
-	tableName   string
+	tableName string
 	// cols        []string
 	data        map[string]interface{}
 	result      map[string]interface{}
 	uniqueIndex string
-	helper      *SqlHelper
+	helper      *SQLHelper
 }
 
+// MarshalLogObjects helps printing the sqlRequest
 func (s *sqlRequest) MarshalLogObject(encoder zapcore.ObjectEncoder) error {
 	encoder.AddString("upstream", fmt.Sprintf("%#v", s.data))
 	encoder.AddString("downstream", fmt.Sprintf("%#v", s.result))
@@ -94,9 +113,9 @@ func (s *sqlRequest) getTable() *Table {
 	}
 }
 
-func (s *sqlRequest) getAwaitableSqlRowContainer() *awaitableSqlRowContainer {
-	return &awaitableSqlRowContainer{
-		Awaitable:       &basicAwaitable{
+func (s *sqlRequest) getAwaitableSQLRowContainer() *awaitableSQLRowContainer {
+	return &awaitableSQLRowContainer{
+		Awaitable: &basicAwaitable{
 			pollableAndCheckable: s,
 			timeout:              0,
 		},
@@ -104,7 +123,8 @@ func (s *sqlRequest) getAwaitableSqlRowContainer() *awaitableSqlRowContainer {
 	}
 }
 
-type Sender interface {
+// Sendable is a sendable request to the upstream
+type Sendable interface {
 	Send() Awaitable
 }
 
@@ -112,25 +132,28 @@ type errorSender struct {
 	err error
 }
 
+// Send implements sender
 func (s *errorSender) Send() Awaitable {
 	return &errorCheckableAndAwaitable{s.err}
 }
 
-type SyncSqlRequest struct {
+type syncSQLRequest struct {
 	sqlRequest
 }
 
-func (r *SyncSqlRequest) Send() Awaitable {
+func (r *syncSQLRequest) Send() Awaitable {
 	err := r.insert(r.helper.ctx)
 	if err != nil {
 		return &errorCheckableAndAwaitable{errors.AddStack(err)}
 	}
-	return r.getAwaitableSqlRowContainer()
+	return r.getAwaitableSQLRowContainer()
 }
 
-type AsyncSqlRequest struct {
+/*
+type asyncSQLRequest struct {
 	sqlRequest
 }
+*/
 
 func (s *sqlRequest) insert(ctx context.Context) error {
 	db, err := sqlbuilder.New("mysql", s.helper.upstream)
@@ -174,6 +197,7 @@ func (s *sqlRequest) read(ctx context.Context) (map[string]interface{}, error) {
 	return rowsToMap(rows)
 }
 
+//nolint:unused
 func (s *sqlRequest) getBasicAwaitable() basicAwaitable {
 	return basicAwaitable{
 		pollableAndCheckable: s,
@@ -206,7 +230,6 @@ func (s *sqlRequest) Check() error {
 	return errors.New("Check failed")
 }
 
-
 func rowsToMap(rows *sql.Rows) (map[string]interface{}, error) {
 	colNames, err := rows.Columns()
 	if err != nil {
@@ -232,7 +255,7 @@ func rowsToMap(rows *sql.Rows) (map[string]interface{}, error) {
 }
 
 func getUniqueIndexColumn(ctx context.Context, db sqlbuilder.Database, dbName string, tableName string) (string, error) {
-	row, err := db.QueryRowContext(ctx, "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = ? " +
+	row, err := db.QueryRowContext(ctx, "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = ? "+
 		"AND TABLE_NAME = ? AND NON_UNIQUE = 0",
 		dbName, tableName)
 	if err != nil {

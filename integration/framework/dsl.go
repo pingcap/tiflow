@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package framework
 
 import (
@@ -14,11 +27,13 @@ const (
 	waitMaxPollInterval = time.Second * 10
 )
 
+// Awaitable represents the handle of an SQL operation that can be waited on
 type Awaitable interface {
 	SetTimeOut(duration time.Duration) Awaitable
 	Wait() Checkable
 }
 
+// Checkable represents the handle of an SQL operation whose correctness can be checked
 type Checkable interface {
 	Check() error
 }
@@ -36,14 +51,17 @@ type errorCheckableAndAwaitable struct {
 	error
 }
 
+// Check implements Checkable
 func (e *errorCheckableAndAwaitable) Check() error {
 	return e.error
 }
 
+// Wait implements Awaitable
 func (e *errorCheckableAndAwaitable) Wait() Checkable {
 	return e
 }
 
+// SetTimeOut implements Awaitable
 func (e *errorCheckableAndAwaitable) SetTimeOut(duration time.Duration) Awaitable {
 	return e
 }
@@ -53,11 +71,13 @@ type basicAwaitable struct {
 	timeout time.Duration
 }
 
+// SetTimeOut implements Awaitable
 func (b *basicAwaitable) SetTimeOut(duration time.Duration) Awaitable {
 	b.timeout = duration
 	return b
 }
 
+// Wait implements Awaitable
 func (b *basicAwaitable) Wait() Checkable {
 	var (
 		ctx    context.Context

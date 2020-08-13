@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package framework
 
 import (
@@ -16,13 +29,14 @@ const (
 )
 
 type sqlAllAwaiter struct {
-	helper          *SqlHelper
+	helper          *SQLHelper
 	data            map[interface{}]map[string]interface{}
 	retrievedValues []map[string]interface{}
 	table           *Table
 }
 
-func All(helper *SqlHelper, awaitables []Awaitable) Awaitable {
+// All joins a slice of Awaitable sql requests. The request must be to the same table.
+func All(helper *SQLHelper, awaitables []Awaitable) Awaitable {
 	if _, ok := awaitables[0].(sqlRowContainer); !ok {
 		return awaitables[0]
 	}
@@ -51,19 +65,19 @@ func All(helper *SqlHelper, awaitables []Awaitable) Awaitable {
 }
 
 func (s *sqlAllAwaiter) poll(ctx context.Context) (bool, error) {
-	db:= sqlx.NewDb(s.helper.downstream, "mysql")
+	db := sqlx.NewDb(s.helper.downstream, "mysql")
 
 	batchSize := 0
 	counter := 0
 	indexValues := make([]interface{}, 0)
 	s.retrievedValues = make([]map[string]interface{}, 0)
-	for k, _ := range s.data {
+	for k := range s.data {
 		indexValues = append(indexValues, k)
 		batchSize++
 		counter++
 		if batchSize >= selectQueryMaxBatchSize || counter == len(s.data) {
 			log.Debug("Selecting", zap.String("table", s.table.tableName), zap.Any("keys", indexValues))
-			query, args, err := sqlx.In("select distinct * from `" + s.table.tableName + "` where "+s.table.uniqueIndex+" in (?)", indexValues)
+			query, args, err := sqlx.In("select distinct * from `"+s.table.tableName+"` where "+s.table.uniqueIndex+" in (?)", indexValues)
 			if err != nil {
 				return false, errors.AddStack(err)
 			}

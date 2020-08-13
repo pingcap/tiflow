@@ -236,43 +236,43 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 // Initialize registers Avro schemas for all tables
 func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	/*
-	if k.protocol == codec.ProtocolAvro && tableInfo != nil {
-		avroEncoder := k.newEncoder().(*codec.AvroEventBatchEncoder)
-		manager := avroEncoder.GetValueSchemaManager()
-		if manager == nil {
-			return errors.New("No schema manager in Avro encoder, probably bug")
+		if k.protocol == codec.ProtocolAvro && tableInfo != nil {
+			avroEncoder := k.newEncoder().(*codec.AvroEventBatchEncoder)
+			manager := avroEncoder.GetValueSchemaManager()
+			if manager == nil {
+				return errors.New("No schema manager in Avro encoder, probably bug")
+			}
+
+			for _, info := range tableInfo {
+				if info == nil {
+					continue
+				}
+
+				if k.filter.ShouldIgnoreTable(info.Schema, info.Table) {
+					log.Info("Skip creating schema for table", zap.String("table-name", info.Table))
+					continue
+				}
+
+				str, err := codec.ColumnInfoToAvroSchema(info.Table, info.ColumnInfo)
+				if err != nil {
+					return errors.Annotate(err, "Error in Initialize")
+				}
+
+				avroCodec, err := goavro.NewCodec(str)
+				if err != nil {
+					return errors.Annotate(err, "Initialize failed: could not verify schema, probably bug")
+				}
+
+				err = manager.Register(context.Background(), model.TableName{
+					Schema: info.Schema,
+					Table:  info.Table,
+				}, avroCodec)
+
+				if err != nil {
+					return errors.Annotate(err, "Initialize failed: could not register schema")
+				}
+			}
 		}
-
-		for _, info := range tableInfo {
-			if info == nil {
-				continue
-			}
-
-			if k.filter.ShouldIgnoreTable(info.Schema, info.Table) {
-				log.Info("Skip creating schema for table", zap.String("table-name", info.Table))
-				continue
-			}
-
-			str, err := codec.ColumnInfoToAvroSchema(info.Table, info.ColumnInfo)
-			if err != nil {
-				return errors.Annotate(err, "Error in Initialize")
-			}
-
-			avroCodec, err := goavro.NewCodec(str)
-			if err != nil {
-				return errors.Annotate(err, "Initialize failed: could not verify schema, probably bug")
-			}
-
-			err = manager.Register(context.Background(), model.TableName{
-				Schema: info.Schema,
-				Table:  info.Table,
-			}, avroCodec)
-
-			if err != nil {
-				return errors.Annotate(err, "Initialize failed: could not register schema")
-			}
-		}
-	}
 	*/
 	return nil
 }

@@ -246,8 +246,12 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 	return cacheEntry.codec, cacheEntry.registryID, nil
 }
 
-type SchemaGenerator func () (string, error)
+// SchemaGenerator represents a function that returns an Avro schema in JSON.
+// Used for lazy evaluation
+type SchemaGenerator func() (string, error)
 
+// GetCachedOrRegister checks if the suitable Avro schema has been cached.
+// If not, a new schema is generated, registered and cached.
 func (m *AvroSchemaManager) GetCachedOrRegister(ctx context.Context, tableName model.TableName, tiSchemaID uint64, schemaGen SchemaGenerator) (*goavro.Codec, int, error) {
 	key := m.tableNameToSchemaSubject(tableName)
 	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
