@@ -97,6 +97,14 @@ var (
 			Name:      "exit_with_error_count",
 			Help:      "counter for processor exits with error",
 		}, []string{"changefeed", "capture"})
+	sinkFlushRowChangedDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "processor",
+			Name:      "flush_event_duration_seconds",
+			Help:      "Bucketed histogram of processing time (s) of flushing events in processor",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 30),
+		}, []string{"changefeed", "capture"})
 )
 
 // initProcessorMetrics registers all metrics used in processor
@@ -112,4 +120,5 @@ func initProcessorMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(tableOutputChanSizeGauge)
 	registry.MustRegister(waitEventPrepareDuration)
 	registry.MustRegister(processorErrorCounter)
+	registry.MustRegister(sinkFlushRowChangedDuration)
 }
