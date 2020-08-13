@@ -993,65 +993,91 @@ func (s *eventFeedSession) receiveFromStream(
 		}
 
 		for _, event := range cevent.Events {
-			state, ok := regionStates[event.RegionId]
-			// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
-			// is allocated while holding the range lock. Therefore the requestID is always incrementing. If a region
-			// is receiving messages with different requestID, only the messages with the larges requestID is valid.
-			isNewSubscription := !ok
-			if ok {
-				if state.requestID < event.RequestId {
-					log.Debug("region state entry will be replaced because received message of newer requestID",
-						zap.Uint64("regionID", event.RegionId),
-						zap.Uint64("oldRequestID", state.requestID),
-						zap.Uint64("requestID", event.RequestId),
-						zap.String("addr", addr))
-					isNewSubscription = true
-				} else if state.requestID > event.RequestId {
-					log.Warn("drop event due to event belongs to a stale request",
-						zap.Uint64("regionID", event.RegionId),
-						zap.Uint64("requestID", event.RequestId),
-						zap.Uint64("currRequestID", state.requestID),
-						zap.String("addr", addr))
-					continue
+			if len(event.Regions) > 0 {
+				for _, regionID := range event.Regions {
+					event.RegionId = regionID
+					err = s.sendRegionEvent(ctx, g, event, regionStates, pendingRegions, addr)
+					if err != nil {
+						return err
+					}
 				}
-			}
-
-			if isNewSubscription {
-				// It's the first response for this region. If the region is newly connected, the region info should
-				// have been put in `pendingRegions`. So here we load the region info from `pendingRegions` and start
-				// a new goroutine to handle messages from this region.
-				// Firstly load the region info.
-				state, ok = pendingRegions.take(event.RequestId)
-				if !ok {
-					log.Error("received an event but neither pending region nor running region was found",
-						zap.Uint64("regionID", event.RegionId),
-						zap.Uint64("requestID", event.RequestId),
-						zap.String("addr", addr))
-					return errors.Errorf("received event regionID %v, requestID %v from %v but neither pending "+
-						"region nor running region was found", event.RegionId, event.RequestId, addr)
+			} else {
+				err = s.sendRegionEvent(ctx, g, event, regionStates, pendingRegions, addr)
+				if err != nil {
+					return err
 				}
-
-				// Then spawn the goroutine to process messages of this region.
-				regionStates[event.RegionId] = state
-
-				g.Go(func() error {
-					return s.partialRegionFeed(ctx, state)
-				})
-			} else if state.isStopped() {
-				log.Warn("drop event due to region feed stopped",
-					zap.Uint64("regionID", event.RegionId),
-					zap.Uint64("requestID", event.RequestId),
-					zap.String("addr", addr))
-				continue
-			}
-
-			select {
-			case state.regionEventCh <- event:
-			case <-ctx.Done():
-				return ctx.Err()
 			}
 		}
 	}
+}
+
+func (s *eventFeedSession) sendRegionEvent(
+	ctx context.Context,
+	g *errgroup.Group,
+	event *cdcpb.Event,
+	regionStates map[uint64]*regionFeedState,
+	pendingRegions *syncRegionFeedStateMap,
+	addr string,
+) error {
+	state, ok := regionStates[event.RegionId]
+	// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
+	// is allocated while holding the range lock. Therefore the requestID is always incrementing. If a region
+	// is receiving messages with different requestID, only the messages with the larges requestID is valid.
+	isNewSubscription := !ok
+	if ok {
+		if state.requestID < event.RequestId {
+			log.Debug("region state entry will be replaced because received message of newer requestID",
+				zap.Uint64("regionID", event.RegionId),
+				zap.Uint64("oldRequestID", state.requestID),
+				zap.Uint64("requestID", event.RequestId),
+				zap.String("addr", addr))
+			isNewSubscription = true
+		} else if state.requestID > event.RequestId {
+			log.Warn("drop event due to event belongs to a stale request",
+				zap.Uint64("regionID", event.RegionId),
+				zap.Uint64("requestID", event.RequestId),
+				zap.Uint64("currRequestID", state.requestID),
+				zap.String("addr", addr))
+			return nil
+		}
+	}
+
+	if isNewSubscription {
+		// It's the first response for this region. If the region is newly connected, the region info should
+		// have been put in `pendingRegions`. So here we load the region info from `pendingRegions` and start
+		// a new goroutine to handle messages from this region.
+		// Firstly load the region info.
+		state, ok = pendingRegions.take(event.RequestId)
+		if !ok {
+			log.Error("received an event but neither pending region nor running region was found",
+				zap.Uint64("regionID", event.RegionId),
+				zap.Uint64("requestID", event.RequestId),
+				zap.String("addr", addr))
+			return errors.Errorf("received event regionID %v, requestID %v from %v but neither pending "+
+				"region nor running region was found", event.RegionId, event.RequestId, addr)
+		}
+
+		// Then spawn the goroutine to process messages of this region.
+		regionStates[event.RegionId] = state
+
+		g.Go(func() error {
+			return s.partialRegionFeed(ctx, state)
+		})
+	} else if state.isStopped() {
+		log.Warn("drop event due to region feed stopped",
+			zap.Uint64("regionID", event.RegionId),
+			zap.Uint64("requestID", event.RequestId),
+			zap.String("addr", addr))
+		return nil
+	}
+
+	select {
+	case state.regionEventCh <- event:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	return nil
 }
 
 // singleEventFeed handles events of a single EventFeed stream.
