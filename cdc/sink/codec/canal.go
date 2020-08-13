@@ -44,7 +44,7 @@ func convertToCanalTs(commitTs uint64) int64 {
 
 // get the canal EventType according to the RowChangedEvent
 func convertRowEventType(e *model.RowChangedEvent) canal.EventType {
-	if e.Delete {
+	if e.IsDelete() {
 		return canal.EventType_DELETE
 	}
 	return canal.EventType_UPDATE
@@ -216,7 +216,7 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 		if e == nil {
 			continue
 		}
-		c, err := b.buildColumn(column, column.Name, !e.Delete)
+		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -227,7 +227,7 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 		if e == nil {
 			continue
 		}
-		c, err := b.buildColumn(column, column.Name, !e.Delete)
+		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
