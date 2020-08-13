@@ -186,7 +186,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	_, _, err = manager.Lookup(getTestingContext(), table, 1)
-	c.Assert(err, check.ErrorMatches, `.*cancelled.*`)
+	c.Assert(err, check.ErrorMatches, `.*not\sfound.*`)
 
 	codec, err := goavro.NewCodec(`{
        "type": "record",
