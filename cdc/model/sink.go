@@ -164,9 +164,10 @@ func (b *ColumnFlagType) UnsetIsNullable() {
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema    string `toml:"db-name" json:"db-name"`
-	Table     string `toml:"tbl-name" json:"tbl-name"`
-	Partition int64  `json:"partition"`
+	Schema         string `toml:"db-name" json:"db-name"`
+	Table          string `toml:"tbl-name" json:"tbl-name"`
+	TableID        int64  `toml:"tbl-id" json:"tbl-id"`
+	PartitionTable bool   `toml:"partition-table" json:"partition-table"`
 }
 
 // String implements fmt.Stringer interface.
@@ -212,9 +213,6 @@ type RowChangedEvent struct {
 	PreColumns []*Column `json:"pre-columns"`
 
 	IndexColumns [][]int
-
-	// TODO: remove it
-	Keys []string `json:"keys"`
 }
 
 // Column represents a column value in row changed event
@@ -344,7 +342,6 @@ type Txn struct {
 	StartTs   uint64
 	CommitTs  uint64
 	Rows      []*RowChangedEvent
-	Keys      []string
 	ReplicaID uint64
 }
 
@@ -358,11 +355,4 @@ func (t *Txn) Append(row *RowChangedEvent) {
 			zap.Uint64("commitTs of row", row.CommitTs))
 	}
 	t.Rows = append(t.Rows, row)
-	if len(row.Keys) == 0 {
-		if len(t.Keys) == 0 {
-			t.Keys = []string{QuoteSchema(row.Table.Schema, row.Table.Table)}
-		}
-	} else {
-		t.Keys = append(t.Keys, row.Keys...)
-	}
 }

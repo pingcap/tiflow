@@ -474,20 +474,21 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 	causality := newCausality()
 	rowsChIdx := 0
 
-	sendFn := func(txn *model.Txn, idx int) {
-		causality.add(txn.Keys, idx)
+	sendFn := func(txn *model.Txn, keys [][]byte, idx int) {
+		causality.add(keys, idx)
 		s.workers[idx].appendTxn(ctx, txn)
 	}
 	resolveConflict := func(txn *model.Txn) {
-		if conflict, idx := causality.detectConflict(txn.Keys); conflict {
+		keys := genTxnKeys(txn)
+		if conflict, idx := causality.detectConflict(keys); conflict {
 			if idx >= 0 {
-				sendFn(txn, idx)
+				sendFn(txn, keys, idx)
 				return
 			}
 			s.notifyAndWaitExec(ctx)
 			causality.reset()
 		}
-		sendFn(txn, rowsChIdx)
+		sendFn(txn, keys, rowsChIdx)
 		rowsChIdx++
 		rowsChIdx = rowsChIdx % nWorkers
 	}

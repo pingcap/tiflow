@@ -59,19 +59,16 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 				StartTs:  1,
 				CommitTs: 2,
 				Table:    &model.TableName{Schema: "s1", Table: "t1"},
-				Keys:     []string{"a", "b"},
 			},
 			{
 				StartTs:  1,
 				CommitTs: 2,
 				Table:    &model.TableName{Schema: "s1", Table: "t1"},
-				Keys:     []string{"b", "c"},
 			},
 			{
 				StartTs:  1,
 				CommitTs: 2,
 				Table:    &model.TableName{Schema: "s1", Table: "t1"},
-				Keys:     []string{"a", "b"},
 			},
 			{
 				StartTs:  3,
@@ -99,21 +96,17 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							StartTs:  1,
 							CommitTs: 2,
 							Table:    &model.TableName{Schema: "s1", Table: "t1"},
-							Keys:     []string{"a", "b"},
 						},
 						{
 							StartTs:  1,
 							CommitTs: 2,
 							Table:    &model.TableName{Schema: "s1", Table: "t1"},
-							Keys:     []string{"b", "c"},
 						},
 						{
 							StartTs:  1,
 							CommitTs: 2,
 							Table:    &model.TableName{Schema: "s1", Table: "t1"},
-							Keys:     []string{"a", "b"},
 						}},
-					Keys: []string{"a", "b", "b", "c", "a", "b"},
 				},
 				{
 					StartTs:  3,
@@ -134,7 +127,6 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							CommitTs: 4,
 							Table:    &model.TableName{Schema: "s1", Table: "t1"},
 						}},
-					Keys: []string{"`s1`.`t1`"},
 				},
 			},
 		},
@@ -182,7 +174,6 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							CommitTs: 2,
 							Table:    &model.TableName{Schema: "s1", Table: "t1"},
 						}},
-					Keys: []string{"`s1`.`t1`"},
 				},
 				{
 					StartTs:  3,
@@ -193,7 +184,6 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							CommitTs: 4,
 							Table:    &model.TableName{Schema: "s1", Table: "t1"},
 						}},
-					Keys: []string{"`s1`.`t1`"},
 				},
 				{
 					StartTs:  5,
@@ -204,7 +194,6 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							CommitTs: 6,
 							Table:    &model.TableName{Schema: "s1", Table: "t1"},
 						}},
-					Keys: []string{"`s1`.`t1`"},
 				},
 			},
 			{Schema: "s1", Table: "t2"}: {
@@ -217,7 +206,6 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							CommitTs: 2,
 							Table:    &model.TableName{Schema: "s1", Table: "t2"},
 						}},
-					Keys: []string{"`s1`.`t2`"},
 				},
 				{
 					StartTs:  3,
@@ -228,7 +216,6 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							CommitTs: 4,
 							Table:    &model.TableName{Schema: "s1", Table: "t2"},
 						}},
-					Keys: []string{"`s1`.`t2`"},
 				},
 				{
 					StartTs:  5,
@@ -239,7 +226,6 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 							CommitTs: 6,
 							Table:    &model.TableName{Schema: "s1", Table: "t2"},
 						}},
-					Keys: []string{"`s1`.`t2`"},
 				},
 			},
 		},
@@ -429,7 +415,6 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
 					Value: 1,
 				}},
 				IndexColumns: [][]int{{1, 2}},
-				Keys:         []string{"11`common_1`.`uk_without_pk`"},
 			},
 		},
 		expected: &preparedDMLs{
