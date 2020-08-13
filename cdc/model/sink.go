@@ -198,9 +198,6 @@ type RowChangedEvent struct {
 
 	Table *TableName `json:"table"`
 
-	// TODO: remove it
-	Delete bool `json:"delete"`
-
 	TableInfoVersion uint64 `json:"table-info-version,omitempty"`
 
 	// TODO: remove it
@@ -215,6 +212,11 @@ type RowChangedEvent struct {
 
 	// TODO: remove it
 	Keys []string `json:"keys"`
+}
+
+// IsDelete returns true if the row is a delete event
+func (r *RowChangedEvent) IsDelete() bool {
+	return len(r.PreColumns) != 0 && len(r.Columns) == 0
 }
 
 // Column represents a column value in row changed event
