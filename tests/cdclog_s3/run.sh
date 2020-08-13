@@ -59,11 +59,20 @@ success=0
 function check_cdclog() {
   DATA_DIR="$WORK_DIR/s3/logbucket/test"
   # retrieve table id by log meta
+  if [ ! -f $DATA_DIR/log.meta ]; then
+    return
+  fi
   table_id=$(cat $DATA_DIR/log.meta | jq | grep t1 | awk -F '"' '{print $2}')
+  if [ ! -d $DATA_DIR/t_$table_id ]; then
+    return
+  fi
   file_count=$(ls -ahl $DATA_DIR/t_$table_id | grep cdclog | wc -l)
   if [[ ! "$file_count" -eq "2" ]]; then
       echo "$TEST_NAME failed, expect 2 row changed files, obtain $file_count"
       return
+  fi
+  if [ ! -d $DATA_DIR/ddls ]; then
+    return
   fi
   ddl_file_count=$(ls -ahl $DATA_DIR/ddls | grep ddl | wc -l)
   if [[ ! "$ddl_file_count" -eq "1" ]]; then
