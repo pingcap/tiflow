@@ -10,7 +10,7 @@ SINK_TYPE=$1
 
 CDC_COUNT=3
 DB_COUNT=4
-MAX_RETRIES=10
+MAX_RETRIES=20
 
 function check_changefeed_state() {
     pd_addr=$1
