@@ -57,7 +57,8 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/genproto v0.0.0-20200113173426-e1de0a7b01eb // indirect
 	google.golang.org/grpc v1.26.0
-	upper.io/db.v3 v3.7.1+incompatible
+	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	gopkg.in/yaml.v2 v2.3.0 // indirect
 	honnef.co/go/tools v0.0.1-2020.1.5 // indirect
+	upper.io/db.v3 v3.7.1+incompatible
 )
