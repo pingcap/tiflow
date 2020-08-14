@@ -360,6 +360,9 @@ func NewS3Sink(sinkURI *url.URL) (*s3Sink, error) {
 	if err := options.S3.Apply(s3); err != nil {
 		return nil, err
 	}
+	// we should set this to true, since br set it by default in parseBackend
+	s3.ForcePathStyle = true
+
 	s3storage, err := storage.NewS3Storage(s3, false)
 	if err != nil {
 		return nil, err
