@@ -301,14 +301,13 @@ services:
       CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
 
   canal-adapter:
-    image: canal-adpater:latest
+    image: canal-adapter:latest
     build:
         context: .
         dockerfile: ./scripts/canal/docker/Dockerfile
     volumes:
-      - ./docker/logs:/logs/adapter
-      - ./docker/config:/conf
-      - ./docker/config:/conf/rdb
+      - ./docker/logs:/root/logs
+      - ./docker/config/canal:/root/conf
     environment:
       KAFKA_SERVER: kafka:9092
       ZOOKEEPER_SERVER: zookeeper:2181
