@@ -769,6 +769,9 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 
 func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, replicaID uint64, bucket int) error {
 	failpoint.Inject("MySQLSinkExecDMLError", func() {
+		// Add a delay to ensure the sink worker with `MySQLSinkHangLongTime`
+		// failpoint injected is executed first.
+		time.Sleep(time.Second * 2)
 		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
 	})
 	dmls := s.prepareDMLs(rows, replicaID, bucket)
