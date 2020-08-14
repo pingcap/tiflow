@@ -22,6 +22,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func newUnsafeCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:    "unsafe",
+		Short:  "Unsafe commands",
+		Hidden: true,
+	}
+	command.AddCommand(
+		newMetadataCommand(),
+	)
+	return command
+}
+
 func newMetadataCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "meta",
