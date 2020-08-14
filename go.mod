@@ -51,4 +51,4 @@ require (
 	google.golang.org/grpc v1.26.0
 )
 
-replace github.com/pingcap/br => github.com/3pointer/br v0.0.0-20200813072228-f23355df99fd
+replace github.com/pingcap/br => github.com/3pointer/br v0.0.0-20200814072551-d2e93b5f05f4

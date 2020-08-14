@@ -50,7 +50,7 @@ function prepare() {
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-    SINK_URI="s3://logbucket/test?s3.endpoint=http://$S3_ENDPOINT/"
+    SINK_URI="s3://logbucket/test?endpoint=http://$S3_ENDPOINT/"
 
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
 }

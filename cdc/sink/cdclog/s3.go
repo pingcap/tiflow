@@ -20,7 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/backup"
@@ -52,16 +51,16 @@ type tableBuffer struct {
 	sendEvents *atomic.Int64
 
 	uploadParts struct {
-		originPartUploadResponse *s3.CreateMultipartUploadOutput
-		byteSize                 int64
-		completeParts            []*s3.CompletedPart
+		uploader  storage.Uploader
+		uploadNum int
+		byteSize  int64
 	}
 }
 
 func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 	hashPart := tb.uploadParts
 	sendEvents := tb.sendEvents.Load()
-	if sendEvents == 0 && len(hashPart.completeParts) == 0 {
+	if sendEvents == 0 && hashPart.uploadNum == 0 {
 		log.Info("nothing to flush", zap.Int64("tableID", tb.tableID))
 		return nil
 	}
@@ -86,45 +85,43 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 		zap.Int64("table", tb.tableID),
 		zap.Int64("event size", sendEvents),
 		zap.Int("row data size", len(rowDatas)),
-		zap.Int("upload num", len(hashPart.completeParts)),
+		zap.Int("upload num", hashPart.uploadNum),
 		zap.Int64("upload byte size", hashPart.byteSize),
 		// zap.ByteString("rowDatas", rowDatas),
 	)
 
 	if len(rowDatas) > 0 {
-		if len(rowDatas) > maxPartFlushSize || len(hashPart.completeParts) > 0 {
+		if len(rowDatas) > maxPartFlushSize || hashPart.uploadNum > 0 {
 			// S3 multi-upload need every chunk(except the last one) is greater than 5Mb
 			// so, if this batch data size is greater than 5Mb or it has uploadPart already
 			// we will use multi-upload this batch data
-			if hashPart.originPartUploadResponse == nil {
-				resp, err := s.storage.CreateMultipartUpload(ctx, newFileName)
+			if hashPart.uploader == nil {
+				uploader, err := s.storage.CreateUploader(ctx, newFileName)
 				if err != nil {
 					return err
 				}
-				hashPart.originPartUploadResponse = resp
+				hashPart.uploader = uploader
 			}
 
-			completePart, err := s.storage.UploadPart(ctx, hashPart.originPartUploadResponse, rowDatas, len(tb.uploadParts.completeParts))
+			err := hashPart.uploader.UploadPart(ctx, rowDatas, hashPart.uploadNum)
 			if err != nil {
 				return err
 			}
 
 			hashPart.byteSize += int64(len(rowDatas))
-			hashPart.completeParts = append(hashPart.completeParts, completePart)
+			hashPart.uploadNum++
 
 			if hashPart.byteSize > maxCompletePartSize || len(rowDatas) <= maxPartFlushSize {
 				// we need do complete when total upload size is greater than 100Mb
 				// or this part data is less than 5Mb to avoid meet EntityTooSmall error
-				log.Info("[FlushRowChangedEvents] complete file",
-					zap.Int64("tableID", tb.tableID),
-					zap.Stringer("resp", hashPart.originPartUploadResponse))
-				_, err := s.storage.CompleteMultipartUpload(ctx, hashPart.originPartUploadResponse, hashPart.completeParts)
+				log.Info("[FlushRowChangedEvents] complete file", zap.Int64("tableID", tb.tableID))
+				err = hashPart.uploader.CompleteUpload(ctx)
 				if err != nil {
 					return err
 				}
 				hashPart.byteSize = 0
-				hashPart.completeParts = hashPart.completeParts[:0]
-				hashPart.originPartUploadResponse = nil
+				hashPart.uploadNum = 0
+				hashPart.uploader = nil
 			}
 		} else {
 			// generate normal file because S3 multi-upload need every part at least 5Mb.
@@ -149,17 +146,20 @@ func newTableBuffer(tableID int64) *tableBuffer {
 		sendSize:   atomic.NewInt64(0),
 		sendEvents: atomic.NewInt64(0),
 		uploadParts: struct {
-			originPartUploadResponse *s3.CreateMultipartUploadOutput
-			byteSize                 int64
-			completeParts            []*s3.CompletedPart
-		}{originPartUploadResponse: nil,
-			byteSize:      0,
-			completeParts: make([]*s3.CompletedPart, 0, 128),
+			uploader  storage.Uploader
+			uploadNum int
+			byteSize  int64
+		}{
+			uploader:  nil,
+			uploadNum: 0,
+			byteSize:  0,
 		},
 	}
 }
 
 type s3Sink struct {
+	prefix string
+
 	storage *storage.S3Storage
 
 	logMeta *logMeta
@@ -284,24 +284,23 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 	data := encoder.MixedBuild()
 
-	listing, err := s.storage.ListObject(ctx, ddlEventsDir, 1)
+	var (
+		name     string
+		size     int64
+		fileData []byte
+	)
+	err = s.storage.WalkDir(ctx, ddlEventsDir, 1, func(key string, fileSize int64) error {
+		log.Debug("[EmitDDLEvent] list content from s3",
+			zap.String("key", key),
+			zap.Int64("size", size),
+			zap.Any("ddl", ddl))
+		name = strings.ReplaceAll(key, s.prefix, "")
+		size = fileSize
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	var name string
-	size := int64(0)
-	listPrefix := *listing.Prefix
-	for _, content := range listing.Contents {
-		name = strings.ReplaceAll(*content.Key, listPrefix, "")
-		size = *content.Size
-		log.Debug("[EmitDDLEvent] list content from s3",
-			zap.String("key", *content.Key),
-			zap.String("name", name),
-			zap.String("prefix", listPrefix),
-			zap.Int64("size", size),
-			zap.Any("ddl", ddl))
-	}
-	var fileData []byte
 	if size == 0 || size > maxDDLFlushSize {
 		// no ddl file exists or
 		// exists file is oversized. we should generate a new file
@@ -371,6 +370,7 @@ func NewS3Sink(sinkURI *url.URL) (*s3Sink, error) {
 	notifyChan := make(chan struct{})
 	tableBuffers := make([]*tableBuffer, 0)
 	return &s3Sink{
+		prefix:  prefix,
 		storage: s3storage,
 		logMeta: newLogMeta(),
 		encoder: codec.NewJSONEventBatchEncoder,
