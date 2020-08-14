@@ -67,14 +67,16 @@ done
 
 echo "[$(date)] <<<<<< START cdc server in $TEST_NAME case >>>>>>"
 cd $workdir
+
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 pid=$(ps -C run_cdc_server -o pid=|tr -d '[:space:]')
-# Uncomment to turn on grpc versbose log.
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+pid=$(ps -e | grep -m1 run_cdc_server | awk '{print $1}'|tr -d '[:space:]')
+else
+    echo "unkonwn system" && false
+fi
+
 # GRPC_GO_LOG_VERBOSITY_LEVEL=99 GRPC_GO_LOG_SEVERITY_LEVEL=debug \
-$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
-    --log-file $workdir/cdc$logsuffix.log \
-    --log-level $log_level \
-    $tls \
-    $certcn \
-    $addr \
-    $pd_addr &>> $workdir/stdout$log_suffix.log &
+# Uncomment to turn on grpc versbose log.
+$binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server --log-file $workdir/cdc$logsuffix.log --log-level $log_level $tls $addr $pd_addr >> $workdir/stdout$log_suffix.log 2>&1 &
 cd $pwd

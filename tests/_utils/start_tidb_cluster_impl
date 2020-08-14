@@ -189,7 +189,9 @@ while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character
 done
 
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+run_sql "update mysql.tidb set variable_value='false' where variable_name='tikv_gc_enable';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+run_sql "update mysql.tidb set variable_value='false' where variable_name='tikv_gc_enable';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 cat - >"$OUT_DIR/tiflash-config.toml" <<EOF
 tmp_path = "${OUT_DIR}/tiflash/tmp"
@@ -270,20 +272,20 @@ max-open-files = 1000
 block-cache-size = "1GB"
 EOF
 
-echo "Starting Upstream TiFlash..."
-mkdir -p ${OUT_DIR}/tiflash/ && cp $CUR/tiflash-users.toml ${OUT_DIR}/tiflash/users.toml
-tiflash server --config-file "$OUT_DIR/tiflash-config.toml" &
-
-echo "Verifying Upsteam TiFlash is started..."
-# Make sure TiFlash is started.
-while ! curl -o /dev/null -sf http://127.0.0.1:17000/metrics 1>/dev/null 2>&1; do
-    i=$((i + 1))
-    if [ "$i" -gt 10 ]; then
-        cat ${OUT_DIR}/tiflash/log/proxy.log
-        cat ${OUT_DIR}/tiflash/log/server.log
-        cat ${OUT_DIR}/tiflash/log/error.log
-        echo 'Failed to start TiFlash'
-        exit 1
-    fi
-    sleep 2
-done
+#echo "Starting Upstream TiFlash..."
+#mkdir -p ${OUT_DIR}/tiflash/ && cp $CUR/tiflash-users.toml ${OUT_DIR}/tiflash/users.toml
+#tiflash server --config-file "$OUT_DIR/tiflash-config.toml" &
+#
+#echo "Verifying Upsteam TiFlash is started..."
+## Make sure TiFlash is started.
+#while ! curl -o /dev/null -sf http://127.0.0.1:17000/metrics 1>/dev/null 2>&1; do
+#    i=$((i + 1))
+#    if [ "$i" -gt 10 ]; then
+#        cat ${OUT_DIR}/tiflash/log/proxy.log
+#        cat ${OUT_DIR}/tiflash/log/server.log
+#        cat ${OUT_DIR}/tiflash/log/error.log
+#        echo 'Failed to start TiFlash'
+#        exit 1
+#    fi
+#    sleep 2
+#done
