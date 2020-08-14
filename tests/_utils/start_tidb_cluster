@@ -9,7 +9,7 @@ set -e
 OUT_DIR=
 tidb_config=
 retry_times=3
-multiple_upstream_pd=
+multiple_upstream_pd="false"
 
 while [[ ${1} ]]; do
     case "${1}" in

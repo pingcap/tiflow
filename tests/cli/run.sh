@@ -69,8 +69,6 @@ function run() {
     check_changefeed_count http://${UP_PD_HOST_3}:${UP_PD_PORT_3} 1
     check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1},http://${UP_PD_HOST_2}:${UP_PD_PORT_2},http://${UP_PD_HOST_3}:${UP_PD_PORT_3} 1
 
-    exit 0
-
     # Make sure changefeed can not be created if the name is already exists.
     exists=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="$uuid" 2>&1 | grep -oE 'already exists')
     if [[ -z $exists ]]; then

@@ -50,32 +50,28 @@ enable-placement-rules = true
 EOF
 
 echo "Starting Upstream PD..."
+pd_count=1
 if [[ "$multiple_upstream_pd" == "true" ]]; then
-    for idx in $(seq 1 3); do
-        host="UP_PD_HOST_$idx"
-        port="UP_PD_PORT_$idx"
-        peer_port="UP_PD_PEER_PORT_$idx"
-        pd-server \
-            --advertise-client-urls http://${!host}:${!port} \
-            --client-urls http://0.0.0.0:${!port} \
-            --advertise-peer-urls http://${!host}:${!peer_port} \
-            --peer-urls http://0.0.0.0:${!peer_port} \
-            --config "$OUT_DIR/pd-config.toml" \
-            --log-file "$OUT_DIR/pd$idx.log" \
-            --data-dir "$OUT_DIR/pd$idx" \
-            --name="pd$idx" \
-            --initial-cluster="pd1=http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1},pd2=http://${UP_PD_HOST_2}:${UP_PD_PEER_PORT_2},pd3=http://${UP_PD_HOST_3}:${UP_PD_PEER_PORT_3}" &
-    done
+    pd_count=3
+    initial_cluster="pd1=http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1},pd2=http://${UP_PD_HOST_2}:${UP_PD_PEER_PORT_2},pd3=http://${UP_PD_HOST_3}:${UP_PD_PEER_PORT_3}"
 else
-    pd-server \
-        --advertise-client-urls http://${UP_PD_HOST_1}:${UP_PD_PORT_1} \
-        --client-urls http://0.0.0.0:${UP_PD_PORT_1} \
-        --advertise-peer-urls http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1} \
-        --peer-urls http://0.0.0.0:${UP_PD_PEER_PORT_1} \
-        --config "$OUT_DIR/pd-config.toml" \
-        --log-file "$OUT_DIR/pd.log" \
-        --data-dir "$OUT_DIR/pd" &
+    initial_cluster="pd1=http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1}"
 fi
+for idx in $(seq 1 $pd_count); do
+    host="UP_PD_HOST_$idx"
+    port="UP_PD_PORT_$idx"
+    peer_port="UP_PD_PEER_PORT_$idx"
+    pd-server \
+        --advertise-client-urls http://${!host}:${!port} \
+        --client-urls http://0.0.0.0:${!port} \
+        --advertise-peer-urls http://${!host}:${!peer_port} \
+        --peer-urls http://0.0.0.0:${!peer_port} \
+        --config "$OUT_DIR/pd-config.toml" \
+        --log-file "$OUT_DIR/pd$idx.log" \
+        --data-dir "$OUT_DIR/pd$idx" \
+        --name="pd$idx" \
+        --initial-cluster=${initial_cluster} &
+done
 
 echo "Starting Downstream PD..."
 pd-server \
@@ -88,10 +84,6 @@ pd-server \
     --data-dir "$OUT_DIR/down_pd" &
 
 # wait until PD is online...
-pd_count=1
-if [[ "$multiple_upstream_pd" == "true" ]]; then
-    pd_count=3
-fi
 for idx in $(seq 1 $pd_count); do
     host="UP_PD_HOST_$idx"
     port="UP_PD_PORT_$idx"
