@@ -102,6 +102,17 @@ RECOVER TABLE recover_and_insert;
 -- make sure we can insert data after recovery
 INSERT INTO recover_and_insert(id, a) VALUES(2, -3);
 
+-- column null test
+
+CREATE TABLE `column_is_null` (
+  `id` int(11) NOT NULL,
+  `t` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
+
+INSERT INTO `column_is_null`(id) VALUES (1),(2);
+UPDATE `column_is_null` SET t = NULL WHERE id = 1;
+
 -- mark finish table
 
 CREATE TABLE finish_mark(a int primary key);
