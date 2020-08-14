@@ -15,7 +15,7 @@ package util
 
 import (
 	"context"
-	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/pingcap/check"
@@ -34,7 +34,7 @@ type logSuite struct{}
 var _ = check.Suite(&logSuite{})
 
 func (s *logSuite) TestInitLogger(c *check.C) {
-	f := path.Join(c.MkDir(), "test")
+	f := filepath.Join(c.MkDir(), "test")
 	cfg := &Config{
 		Level: "warning",
 		File:  f,
