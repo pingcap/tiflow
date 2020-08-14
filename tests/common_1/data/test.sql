@@ -108,7 +108,7 @@ CREATE TABLE `column_is_null` (
   `id` int(11) NOT NULL,
   `t` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 INSERT INTO `column_is_null`(id) VALUES (1),(2);
 UPDATE `column_is_null` SET t = NULL WHERE id = 1;
