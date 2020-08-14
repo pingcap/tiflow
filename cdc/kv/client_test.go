@@ -43,9 +43,7 @@ type clientSuite struct {
 var _ = check.Suite(&clientSuite{})
 
 func (s *clientSuite) TestNewClose(c *check.C) {
-	mvccStore, err := mocktikv.NewMVCCLevelDB("")
-	c.Assert(err, check.IsNil)
-	cluster := mocktikv.NewCluster(mvccStore)
+	cluster := mocktikv.NewCluster()
 	pdCli := mocktikv.NewPDClient(cluster)
 
 	cli, err := NewCDCClient(context.Background(), pdCli, nil, &security.Credential{})
@@ -134,7 +132,9 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 		wg.Wait()
 	}()
 
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	cluster := mocktikv.NewCluster()
+	mvccStore := mocktikv.MustNewMVCCStore()
+	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, version: util.MinTiKVVersion.String()}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -198,7 +198,9 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 
 // TODO enable the test
 func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
-	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
+	cluster := mocktikv.NewCluster()
+	mvccStore := mocktikv.MustNewMVCCStore()
+	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, version: "v2.1.0" /* CDC is not compatible with 2.1.0 */}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
