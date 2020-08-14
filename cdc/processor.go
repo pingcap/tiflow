@@ -322,7 +322,11 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			inErr := p.flushTaskStatusAndPosition(ctx)
 			if inErr != nil {
 				if errors.Cause(inErr) != context.Canceled {
-					log.Error(
+					logError := log.Error
+					if errors.Cause(inErr) == model.ErrAdminStopProcessor {
+						logError = log.Warn
+					}
+					logError(
 						"update info failed",
 						zap.String("changefeed", p.changefeedID), zap.Error(inErr),
 					)
