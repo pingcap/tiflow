@@ -706,13 +706,19 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 				continue
 			}
 			start := time.Now()
+
 			err := p.sink.FlushRowChangedEvents(ctx, minTs)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			atomic.StoreUint64(&p.checkpointTs, minTs)
-			metricFlushDuration.Observe(time.Since(start).Seconds())
 			p.localCheckpointTsNotifier.Notify()
+
+			dur := time.Since(start)
+			metricFlushDuration.Observe(dur.Seconds())
+			if dur > 3*time.Second {
+				log.Warn("flush row changed events too slow", zap.Duration("duration", dur))
+			}
 		}
 	}
 }
