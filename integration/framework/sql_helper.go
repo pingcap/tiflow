@@ -84,13 +84,20 @@ type awaitableSQLRowContainer struct {
 	sqlRowContainer
 }
 
+type sqlRequestType int32
+const (
+	sqlRequestTypeInsert sqlRequestType = iota
+	sqlRequestTypeUpdate
+	sqlRequestTypeDelete
+)
+
 type sqlRequest struct {
 	tableName string
-	// cols        []string
 	data        map[string]interface{}
 	result      map[string]interface{}
 	uniqueIndex string
 	helper      *SQLHelper
+	requestType sqlRequestType
 }
 
 // MarshalLogObjects helps printing the sqlRequest

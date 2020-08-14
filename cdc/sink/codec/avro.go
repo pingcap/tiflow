@@ -35,7 +35,6 @@ import (
 
 // AvroEventBatchEncoder converts the events to binary Avro data
 type AvroEventBatchEncoder struct {
-	// TODO use Avro for Kafka keys
 	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
 	keyBuf             []byte
@@ -101,7 +100,6 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		a.valueBuf = nil
 	}
 
-
 	pkeyCols := make([]*model.Column, 0)
 	for _, col := range e.Columns {
 		if col.Flag.IsHandleKey() {
@@ -161,7 +159,7 @@ func (a *AvroEventBatchEncoder) Size() int {
 
 func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column) (*avroEncodeResult, error) {
 	schemaGen := func() (string, error) {
-		schema, err := ColumnInfoToAvroSchema(table.Table, extractColumnInfos(cols))
+		schema, err := ColumnInfoToAvroSchema(table.Table, cols)
 		if err != nil {
 			return "", errors.Annotate(err, "AvroEventBatchEncoder: generating schema failed")
 		}
@@ -190,29 +188,10 @@ func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion
 	}, nil
 }
 
-func extractColumnInfos(cols []*model.Column) []*model.ColumnInfo {
-	ret := make([]*model.ColumnInfo, 0)
-	for _, info := range cols {
-		columnInfo := &model.ColumnInfo{
-			Name: info.Name,
-			Type: info.Type,
-		}
-		ret = append(ret, columnInfo)
-	}
-	return ret
-}
-
 type avroSchemaTop struct {
-	Tp     string            `json:"type"`
-	Name   string            `json:"name"`
-	Fields []avroSchemaField `json:"fields"`
-}
-
-type avroSchemaField struct {
-	Name string `json:"name"`
-	// Tp can be a string or an avroLogicalType
-	Tp           []interface{} `json:"type"`
-	DefaultValue interface{}   `json:"default"`
+	Tp     string                   `json:"type"`
+	Name   string                   `json:"name"`
+	Fields []map[string]interface{} `json:"fields"`
 }
 
 type logicalType string
@@ -228,7 +207,7 @@ const (
 )
 
 // ColumnInfoToAvroSchema generates the Avro schema JSON for the corresponding columns
-func ColumnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string, error) {
+func ColumnInfoToAvroSchema(name string, columnInfo []*model.Column) (string, error) {
 	top := avroSchemaTop{
 		Tp:     "record",
 		Name:   name + "_" + strconv.FormatInt(rand.Int63(), 10),
@@ -240,16 +219,20 @@ func ColumnInfoToAvroSchema(name string, columnInfo []*model.ColumnInfo) (string
 		if err != nil {
 			return "", err
 		}
-
-		field := avroSchemaField{
-			Name:         col.Name,
-			Tp:           []interface{}{"null", avroType},
-			DefaultValue: nil,
+		field := make(map[string]interface{}, 0)
+		field["name"] = col.Name
+		if col.Flag.IsHandleKey() {
+			field["type"] = avroType
+		} else {
+			field["type"] = []interface{}{"null", avroType}
+			field["default"] = nil
 		}
+
 		top.Fields = append(top.Fields, field)
 	}
 
 	str, err := json.Marshal(&top)
+	log.Info("Avro Schema JSON generated", zap.ByteString("schema", str))
 	if err != nil {
 		return "", errors.Annotate(err, "ColumnInfoToAvroSchema: failed to generate json")
 	}
@@ -267,6 +250,10 @@ func rowToAvroNativeData(cols []*model.Column) (interface{}, error) {
 			return nil, err
 		}
 
+		if col.Flag.IsHandleKey() {
+			ret[col.Name] = data
+			continue
+		}
 		union := make(map[string]interface{}, 1)
 		union[str] = data
 		ret[col.Name] = union
