@@ -141,6 +141,11 @@ func (a *AvroEventBatchEncoder) Build() (key []byte, value []byte) {
 	return k, v
 }
 
+// MixedBuild implements the EventBatchEncoder interface
+func (a *AvroEventBatchEncoder) MixedBuild() []byte {
+	panic("Mixed Build only use for JsonEncoder")
+}
+
 // Size is always 0 or 1
 func (a *AvroEventBatchEncoder) Size() int {
 	if a.valueBuf == nil {

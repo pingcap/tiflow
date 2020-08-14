@@ -84,6 +84,7 @@ check_third_party_binary:
 	@which bin/go-ycsb
 	@which bin/etcdctl
 	@which bin/jq
+	@which bin/minio
 
 integration_test_build: check_failpoint_ctl
 	./scripts/fix_lib_zstd.sh

@@ -67,7 +67,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 					CfID: changefeedID,
 					Type: model.AdminStop,
 				}
-				return applyAdminChangefeed(ctx, job)
+				return applyAdminChangefeed(ctx, job, getCredential())
 			},
 		},
 		{
@@ -79,7 +79,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 					CfID: changefeedID,
 					Type: model.AdminResume,
 				}
-				return applyAdminChangefeed(ctx, job)
+				return applyAdminChangefeed(ctx, job, getCredential())
 			},
 		},
 		{
@@ -91,7 +91,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 					CfID: changefeedID,
 					Type: model.AdminRemove,
 				}
-				return applyAdminChangefeed(ctx, job)
+				return applyAdminChangefeed(ctx, job, getCredential())
 			},
 		},
 	}
@@ -116,7 +116,7 @@ func newListChangefeedCommand() *cobra.Command {
 			cfs := make([]*changefeedCommonInfo, 0, len(raw))
 			for id := range raw {
 				cfci := &changefeedCommonInfo{ID: id}
-				resp, err := applyOwnerChangefeedQuery(ctx, id)
+				resp, err := applyOwnerChangefeedQuery(ctx, id, getCredential())
 				if err != nil {
 					// if no capture is available, the query will fail, just add a warning here
 					log.Warn("query changefeed info failed", zap.String("error", err.Error()))
@@ -144,7 +144,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 			ctx := defaultContext
 
 			if simplified {
-				resp, err := applyOwnerChangefeedQuery(ctx, changefeedID)
+				resp, err := applyOwnerChangefeedQuery(ctx, changefeedID, getCredential())
 				if err != nil {
 					return err
 				}
