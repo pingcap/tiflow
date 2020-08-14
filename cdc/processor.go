@@ -702,7 +702,7 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 			} else {
 				minTs = globalResolvedTs
 			}
-			if minTs == 0 {
+			if minTs == 0 || atomic.LoadUint64(&p.checkpointTs) == minTs {
 				continue
 			}
 			start := time.Now()
