@@ -50,11 +50,11 @@ enable-placement-rules = true
 EOF
 
 echo "Starting Upstream PD..."
-pd_count=1
 if [[ "$multiple_upstream_pd" == "true" ]]; then
     pd_count=3
     initial_cluster="pd1=http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1},pd2=http://${UP_PD_HOST_2}:${UP_PD_PEER_PORT_2},pd3=http://${UP_PD_HOST_3}:${UP_PD_PEER_PORT_3}"
 else
+    pd_count=1
     initial_cluster="pd1=http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1}"
 fi
 for idx in $(seq 1 $pd_count); do
