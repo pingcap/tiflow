@@ -9,6 +9,7 @@ set -e
 OUT_DIR=
 tidb_config=
 retry_times=3
+multiple_upstream_pd=
 
 while [[ ${1} ]]; do
     case "${1}" in
@@ -22,6 +23,10 @@ while [[ ${1} ]]; do
             ;;
         --retry)
             retry_times=${2}
+            shift
+            ;;
+        --multiple-upstream-pd)
+            multiple_upstream_pd=${2}
             shift
             ;;
         *)
@@ -45,9 +50,9 @@ do
     echo "The ${i} times to try to start tidb cluster..."
 
     if [[ "$tidb_config" != "" ]]; then
-        start_tidb_cluster_impl --workdir ${OUT_DIR} --tidb-config ${tidb_config}
+        start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --tidb-config ${tidb_config}
     else
-        start_tidb_cluster_impl --workdir ${OUT_DIR}
+        start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd}
     fi
 
     if [ $? -eq 0 ]; then
