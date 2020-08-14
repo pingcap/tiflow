@@ -16,12 +16,11 @@ package framework
 import (
 	"context"
 	"database/sql"
-	"go.uber.org/zap"
 	"strings"
 
-	// imported for side effects
-	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/mysql" // imported for side effects
 	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 // Task represents a single test case

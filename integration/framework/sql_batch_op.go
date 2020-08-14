@@ -16,12 +16,13 @@ package framework
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"strings"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
-	"reflect"
-	"strings"
 )
 
 const (

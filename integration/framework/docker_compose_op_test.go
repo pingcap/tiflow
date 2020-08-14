@@ -14,9 +14,10 @@
 package framework
 
 import (
+	"testing"
+
 	"github.com/integralist/go-findroot/find"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestDockerComposeOperator_SetupTearDown(t *testing.T) {

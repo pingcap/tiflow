@@ -15,9 +15,10 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/integration/framework"
-	"math/rand"
 )
 
 type alterCase struct {

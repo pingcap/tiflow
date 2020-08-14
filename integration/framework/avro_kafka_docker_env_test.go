@@ -14,10 +14,10 @@
 package framework
 
 import (
-	"github.com/pingcap/log"
 	"os/exec"
 	"testing"
 
+	"github.com/pingcap/log"
 	"github.com/stretchr/testify/require"
 )
 

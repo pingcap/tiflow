@@ -17,11 +17,12 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
-	"io/ioutil"
-	"net/http"
 )
 
 // AvroSingleTableTask provides a basic implementation for an Avro test case

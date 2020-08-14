@@ -17,14 +17,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"strings"
 	"upper.io/db.v3/lib/sqlbuilder"
-	// imported for side effects
-	_ "upper.io/db.v3/mysql"
+	_ "upper.io/db.v3/mysql" // imported for side effects
 )
 
 // SQLHelper provides basic utilities for manipulating data
