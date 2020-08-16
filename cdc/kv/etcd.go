@@ -120,6 +120,17 @@ func (c CDCEtcdClient) ClearAllCDCInfo(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
+// RevokeAllLeases revokes all leases passed from parameter
+func (c CDCEtcdClient) RevokeAllLeases(ctx context.Context, leases map[string]int64) error {
+	for _, lease := range leases {
+		_, err := c.Client.Revoke(ctx, clientv3.LeaseID(lease))
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 // GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
 func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (int64, map[string]*mvccpb.KeyValue, error) {
 	key := GetEtcdKeyChangeFeedList()
@@ -196,6 +207,25 @@ func (c CDCEtcdClient) GetCaptures(ctx context.Context) (int64, []*model.Capture
 		infos = append(infos, info)
 	}
 	return revision, infos, nil
+}
+
+// GetCaptureLeases returns a map mapping from capture ID to its lease
+func (c CDCEtcdClient) GetCaptureLeases(ctx context.Context) (map[string]int64, error) {
+	key := CaptureInfoKeyPrefix
+
+	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	leases := make(map[string]int64, resp.Count)
+	for _, kv := range resp.Kvs {
+		captureID, err := model.ExtractKeySuffix(string(kv.Key))
+		if err != nil {
+			return nil, err
+		}
+		leases[captureID] = kv.Lease
+	}
+	return leases, nil
 }
 
 // CreateChangefeedInfo creates a change feed info into etcd and fails if it is already exists.
