@@ -18,14 +18,14 @@ import (
 )
 
 // WrapError generates a new error based on given `*errors.Error`, wraps the err
-// as parameter via the `GenWithStackByArgs`
-// The message format of `*errors.Error` must be `format message: %s`
-// In this way the Error() string of returned error will keep the RFC format
-// In the future if the error lib provides a native error wrap way, we could just
-// change this function to the new API.
+// as cause error.
+// We still keep this wrapper since the error message could be different between
+// `GenWithStackByArgs` and `GenWithStackByCause`.
+// TODO: After the API of rfc errors is stable, we can remove this filter and
+// use these APIs directly in code.
 func WrapError(rfcError *errors.Error, err error) error {
 	if err == nil {
 		return nil
 	}
-	return rfcError.GenWithStackByArgs(err)
+	return rfcError.Wrap(err).GenWithStackByCause()
 }

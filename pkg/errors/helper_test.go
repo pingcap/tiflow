@@ -38,7 +38,7 @@ func (s *helperSuite) TestWrapError(c *check.C) {
 			expected string
 		}{
 			{nil, true, ""},
-			{err, false, "[CDC:model:ErrDecodeFailed] decode failed: test"},
+			{err, false, "[CDC:ErrDecodeFailed] test"},
 		}
 	)
 	for _, tc := range testCases {
