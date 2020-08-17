@@ -152,7 +152,6 @@ func (a *AvroEventBatchEncoder) Size() int {
 }
 
 func (a *AvroEventBatchEncoder) reset() {
-	a.valueSchemaManager = nil
 	a.keyBuf = nil
 	a.valueBuf = nil
 }

@@ -50,7 +50,7 @@ func convertRowEventType(e *model.RowChangedEvent) canal.EventType {
 	if e.IsDelete() {
 		return canal.EventType_DELETE
 	}
-	if len(e.Columns) != len(e.PreColumns) {
+	if len(e.PreColumns) == 0 {
 		return canal.EventType_INSERT
 	}
 	return canal.EventType_UPDATE
@@ -221,7 +221,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
 	var columns []*canal.Column
 	for _, column := range e.Columns {
-		if e == nil {
+		if column == nil {
 			continue
 		}
 		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
@@ -232,7 +232,7 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 	}
 	var preColumns []*canal.Column
 	for _, column := range e.PreColumns {
-		if e == nil {
+		if column == nil {
 			continue
 		}
 		c, err := b.buildColumn(column, column.Name, !e.IsDelete())

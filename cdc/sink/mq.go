@@ -99,6 +99,9 @@ func newMqSink(
 			return avroEncoder
 		}
 	case codec.ProtocolCanal:
+		if !config.EnableOldValue {
+			return nil, errors.Errorf("enable-old-value must turn on when sink type is canal")
+		}
 		var forceHkPk bool
 		forceHKeyToPKey, ok := opts["force-handle-key-pkey"]
 		if !ok || forceHKeyToPKey == "false" {
