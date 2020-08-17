@@ -286,7 +286,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 	for i := 0; i < 20; i++ {
 		id1, err := manager.Register(getTestingContext(), table, codec)
 		c.Assert(err, check.IsNil)
-		c.Assert(id, check.IsTrue, id == 0 || id == id1)
+		c.Assert(id == 0 || id == id1, check.IsTrue)
 		id = id1
 	}
 }
