@@ -87,19 +87,18 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 			ignoreTxnStartTs: []uint64{1, 3},
 			rules:            []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
 		},
-		// this cases will be skipped before the https://github.com/pingcap/tidb-tools/pull/382 merged
-		//{cases: []struct {
-		//	schema string
-		//	table  string
-		//	ts     uint64
-		//	ignore bool
-		//}{{"S", "D1", 1, true},
-		//	{"S", "Da", 1, false},
-		//	{"S", "Db", 1, false},
-		//	{"S", "Daa", 1, false}},
-		//	ignoreTxnStartTs: []uint64{},
-		//	rules:            []string{"*.*", "!S.D[!a-d]"},
-		//},
+		{cases: []struct {
+			schema string
+			table  string
+			ts     uint64
+			ignore bool
+		}{{"S", "D1", 1, true},
+			{"S", "Da", 1, false},
+			{"S", "Db", 1, false},
+			{"S", "Daa", 1, false}},
+			ignoreTxnStartTs: []uint64{},
+			rules:            []string{"*.*", "!S.D[!a-d]"},
+		},
 	}
 
 	for _, ftc := range testCases {
