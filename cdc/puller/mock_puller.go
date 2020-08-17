@@ -28,7 +28,6 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/mockstore/cluster"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/util/testkit"
 	"go.uber.org/zap"
@@ -106,7 +105,6 @@ func (l *mvccListener) registerPostRollback(fn func(keys [][]byte, startTs uint6
 
 // MockPullerManager keeps track of transactions for mock pullers
 type MockPullerManager struct {
-	cluster   cluster.Cluster
 	mvccStore mocktikv.MVCCStore
 	store     tidbkv.Storage
 	domain    *domain.Domain
@@ -198,12 +196,7 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	mvccListener := newMVCCListener(mocktikv.MustNewMVCCStore())
 
 	m.mvccStore = mvccListener
-	store, err := mockstore.NewMockStore(
-		mockstore.WithClusterInspector(func(c cluster.Cluster) {
-			mockstore.BootstrapWithSingleStore(c)
-			m.cluster = c
-		}),
-	)
+	store, err := mockstore.NewMockTikvStore()
 	if err != nil {
 		log.Fatal("create mock puller failed", zap.Error(err))
 	}

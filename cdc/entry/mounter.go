@@ -516,7 +516,9 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 }
 
 func formatColVal(datum types.Datum, tp byte) (interface{}, error) {
-
+	if datum.IsNull() {
+		return nil, nil
+	}
 	switch tp {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
 		return datum.GetMysqlTime().String(), nil
