@@ -27,6 +27,7 @@
 
 ProgName=$(basename $0)
 cd "$(dirname "$0")"
+sql="drop database if exists testdb; create database testdb;"
 sub_help() {
     echo "Usage: $ProgName <subcommand> [options]\n"
     echo "Subcommands:"
@@ -41,6 +42,8 @@ sub_init() {
   sudo docker exec -it ticdc_controller_1 sh -c "
   /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb\" --config=\"/config/config.toml\"
   "
+  mysql -uroot -h 127.0.0.1 -P 5000 -e "${sql}"
+  mysql -uroot -h 127.0.0.1 -P 4000 -e "${sql}"
 }
 
 sub_up() {

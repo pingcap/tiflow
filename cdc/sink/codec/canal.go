@@ -99,7 +99,8 @@ func isCanalDdl(t canal.EventType) bool {
 		canal.EventType_DINDEX,
 		canal.EventType_ALTER,
 		canal.EventType_ERASE,
-		canal.EventType_TRUNCATE:
+		canal.EventType_TRUNCATE,
+		canal.EventType_QUERY:
 		return true
 	}
 	return false
@@ -168,8 +169,8 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 			sqlType = JavaSQLTypeVARCHAR
 		}
 	}
-
-	isKey := c.Flag.IsPrimaryKey()
+	// alibaba canal server does not support the delete operation of table which does not hava primary key, we can use handle key to hack it.
+	isKey := c.Flag.IsPrimaryKey() || c.Flag.IsHandleKey()
 	isNull := c.Value == nil
 	value := ""
 	if !isNull {
@@ -318,7 +319,6 @@ func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, 
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	// FIXME better way?
 	d.size++
 	d.txnCache.Append(e)
 	return EncoderNoOperation, nil
