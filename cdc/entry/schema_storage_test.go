@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/mockstore/cluster"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/testkit"
 )
@@ -647,11 +646,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 }
 
 func (t *schemaSuite) TestCreateSnapFromMeta(c *C) {
-	store, err := mockstore.NewMockStore(
-		mockstore.WithClusterInspector(func(c cluster.Cluster) {
-			mockstore.BootstrapWithSingleStore(c)
-		}),
-	)
+	store, err := mockstore.NewMockTikvStore()
 	c.Assert(err, IsNil)
 
 	session.SetSchemaLease(0)
