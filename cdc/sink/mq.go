@@ -100,7 +100,7 @@ func newMqSink(
 		}
 	case codec.ProtocolCanal:
 		if !config.EnableOldValue {
-			return nil, errors.Errorf("enable-old-value must turn on when sink type is canal")
+			return nil, errors.New("enable-old-value must turn on when sink type is canal")
 		}
 		var forceHkPk bool
 		forceHKeyToPKey, ok := opts["force-handle-key-pkey"]

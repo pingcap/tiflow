@@ -347,8 +347,12 @@ func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResul
 
 //Size implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Size() int {
-	d.size++
 	return d.size
+}
+
+// MixedBuild implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) MixedBuild() []byte {
+	panic("Mixed Build only use for JsonEncoder")
 }
 
 // Build implements the EventBatchEncoder interface
@@ -444,11 +448,6 @@ func (d *canalMessageEncoder) build() (key []byte, value []byte) {
 		panic(err)
 	}
 	return nil, value
-}
-
-// MixedBuild implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) MixedBuild() []byte {
-	panic("Mixed Build only use for JsonEncoder")
 }
 
 // refreshPacketBody() marshals the messages to the packet body
