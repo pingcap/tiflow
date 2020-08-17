@@ -132,7 +132,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			index++
 		}
 	}
-
+	var encoderSize int
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
 		for _, row := range cs {
@@ -140,14 +140,16 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(err, check.IsNil)
 		}
 		// test mixed decode
+		encoderSize = encoder.Size()
 		mixed := encoder.MixedBuild()
-		c.Assert(len(mixed), check.Equals, encoder.Size())
+		c.Assert(len(mixed), check.Equals, encoderSize)
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
 		checkRowDecoder(mixedDecoder, cs)
 		// test normal decode
+		encoderSize = encoder.Size()
 		keys, values := encoder.Build(0)
-		c.Assert(len(keys[0])+len(values[0]), check.Equals, encoder.Size())
+		c.Assert(len(keys[0])+len(values[0]), check.Equals, encoderSize)
 		decoder, err := newDecoder(keys[0], values[0])
 		c.Assert(err, check.IsNil)
 		checkRowDecoder(decoder, cs)
@@ -160,15 +162,17 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(err, check.IsNil)
 		}
 		// test mixed encode
+		encoderSize = encoder.Size()
 		mixed := encoder.MixedBuild()
-		c.Assert(len(mixed), check.Equals, encoder.Size())
+		c.Assert(len(mixed), check.Equals, encoderSize)
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
 		checkDDLDecoder(mixedDecoder, cs)
 
 		// test normal encode
+		encoderSize = encoder.Size()
 		keys, values := encoder.Build(0)
-		c.Assert(len(keys[0])+len(values[0]), check.Equals, encoder.Size())
+		c.Assert(len(keys[0])+len(values[0]), check.Equals, encoderSize)
 		decoder, err := newDecoder(keys[0], values[0])
 		c.Assert(err, check.IsNil)
 		checkDDLDecoder(decoder, cs)
@@ -182,15 +186,17 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		}
 
 		// test mixed encode
+		encoderSize = encoder.Size()
 		mixed := encoder.MixedBuild()
-		c.Assert(len(mixed), check.Equals, encoder.Size())
+		c.Assert(len(mixed), check.Equals, encoderSize)
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
 		checkTSDecoder(mixedDecoder, cs)
 
 		// test normal encode
+		encoderSize = encoder.Size()
 		keys, values := encoder.Build(0)
-		c.Assert(len(keys[0])+len(values[0]), check.Equals, encoder.Size())
+		c.Assert(len(keys[0])+len(values[0]), check.Equals, encoderSize)
 		decoder, err := newDecoder(keys[0], values[0])
 		c.Assert(err, check.IsNil)
 		checkTSDecoder(decoder, cs)
