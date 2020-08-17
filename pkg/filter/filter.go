@@ -14,19 +14,19 @@
 package filter
 
 import (
-	"strings"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+
+	filterV1 "github.com/pingcap/tidb-tools/pkg/filter"
+	filterV2 "github.com/pingcap/tidb-tools/pkg/table-filter"
 )
 
 // Filter is a event filter implementation
 type Filter struct {
-	filter           filter.Filter
+	filter           filterV2.Filter
 	ignoreTxnStartTs []uint64
 	ddlAllowlist     []model.ActionType
 	isCyclicEnabled  bool
@@ -34,22 +34,22 @@ type Filter struct {
 
 // NewFilter creates a filter
 func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
-	var f filter.Filter
+	var f filterV2.Filter
 	var err error
 	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
-		f, err = filter.ParseMySQLReplicationRules(cfg.Filter.MySQLReplicationRules)
+		f, err = filterV2.ParseMySQLReplicationRules(cfg.Filter.MySQLReplicationRules)
 	} else {
 		rules := cfg.Filter.Rules
 		if len(rules) == 0 {
 			rules = []string{"*.*"}
 		}
-		f, err = filter.Parse(rules)
+		f, err = filterV2.Parse(rules)
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	if !cfg.CaseSensitive {
-		f = filter.CaseInsensitive(f)
+		f = filterV2.CaseInsensitive(f)
 	}
 
 	return &Filter{
@@ -154,11 +154,5 @@ func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bo
 
 // IsSysSchema returns true if the given schema is a system schema
 func IsSysSchema(db string) bool {
-	db = strings.ToUpper(db)
-	for _, schema := range []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "MYSQL", "METRIC_SCHEMA"} {
-		if schema == db {
-			return true
-		}
-	}
-	return false
+	return filterV1.IsSystemSchema(db)
 }

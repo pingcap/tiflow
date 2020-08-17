@@ -32,11 +32,11 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t1",
 			},
-			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 1,
-					Flag:  model.HandleKeyFlag,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
 				},
 			},
 		}, exceptPartition: 11},
@@ -45,11 +45,11 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t1",
 			},
-			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 2,
-					Flag:  model.HandleKeyFlag,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
 				},
 			},
 		}, exceptPartition: 1},
@@ -58,11 +58,11 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t1",
 			},
-			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 3,
-					Flag:  model.HandleKeyFlag,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
 				},
 			},
 		}, exceptPartition: 7},
@@ -71,13 +71,13 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t2",
 			},
-			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 1,
-					Flag:  model.HandleKeyFlag,
-				},
-				"a": {
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+				}, {
+					Name:  "a",
 					Value: 1,
 				},
 			},
@@ -87,13 +87,13 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t2",
 			},
-			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 2,
-					Flag:  model.HandleKeyFlag,
-				},
-				"a": {
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+				}, {
+					Name:  "a",
 					Value: 2,
 				},
 			},
@@ -103,13 +103,13 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t2",
 			},
-			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 3,
-					Flag:  model.HandleKeyFlag,
-				},
-				"a": {
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+				}, {
+					Name:  "a",
 					Value: 3,
 				},
 			},
@@ -119,13 +119,13 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t2",
 			},
-			IndieMarkCol: "id",
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 3,
-					Flag:  model.HandleKeyFlag,
-				},
-				"a": {
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+				}, {
+					Name:  "a",
 					Value: 4,
 				},
 			},
@@ -135,8 +135,9 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t3",
 			},
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 1,
 				},
 			},
@@ -146,8 +147,9 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t3",
 			},
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 2,
 				},
 			},
@@ -157,14 +159,15 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				Schema: "test",
 				Table:  "t3",
 			},
-			Columns: map[string]*model.Column{
-				"id": {
+			Columns: []*model.Column{
+				{
+					Name:  "id",
 					Value: 3,
 				},
 			},
 		}, exceptPartition: 3},
 	}
-	p := newDefaultDispatcher(16)
+	p := newDefaultDispatcher(16, false)
 	for _, tc := range testCases {
 		c.Assert(p.Dispatch(tc.row), check.Equals, tc.exceptPartition)
 	}

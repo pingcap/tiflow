@@ -34,7 +34,7 @@ func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
 	c.Assert(filter.ShouldIgnoreTable("information_schema", ""), check.IsTrue)
 	c.Assert(filter.ShouldIgnoreTable("information_schema", "statistics"), check.IsTrue)
 	c.Assert(filter.ShouldIgnoreTable("performance_schema", ""), check.IsTrue)
-	c.Assert(filter.ShouldIgnoreTable("metric_schema", "query_duration"), check.IsTrue)
+	c.Assert(filter.ShouldIgnoreTable("metric_schema", "query_duration"), check.IsFalse)
 	c.Assert(filter.ShouldIgnoreTable("sns", "user"), check.IsFalse)
 	c.Assert(filter.ShouldIgnoreTable("tidb_cdc", "repl_mark_a_a"), check.IsFalse)
 }

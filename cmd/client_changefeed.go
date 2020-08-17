@@ -67,7 +67,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 					CfID: changefeedID,
 					Type: model.AdminStop,
 				}
-				return applyAdminChangefeed(ctx, job)
+				return applyAdminChangefeed(ctx, job, getCredential())
 			},
 		},
 		{
@@ -79,7 +79,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 					CfID: changefeedID,
 					Type: model.AdminResume,
 				}
-				return applyAdminChangefeed(ctx, job)
+				return applyAdminChangefeed(ctx, job, getCredential())
 			},
 		},
 		{
@@ -91,7 +91,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 					CfID: changefeedID,
 					Type: model.AdminRemove,
 				}
-				return applyAdminChangefeed(ctx, job)
+				return applyAdminChangefeed(ctx, job, getCredential())
 			},
 		},
 	}
@@ -116,7 +116,7 @@ func newListChangefeedCommand() *cobra.Command {
 			cfs := make([]*changefeedCommonInfo, 0, len(raw))
 			for id := range raw {
 				cfci := &changefeedCommonInfo{ID: id}
-				resp, err := applyOwnerChangefeedQuery(ctx, id)
+				resp, err := applyOwnerChangefeedQuery(ctx, id, getCredential())
 				if err != nil {
 					// if no capture is available, the query will fail, just add a warning here
 					log.Warn("query changefeed info failed", zap.String("error", err.Error()))
@@ -144,7 +144,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 			ctx := defaultContext
 
 			if simplified {
-				resp, err := applyOwnerChangefeedQuery(ctx, changefeedID)
+				resp, err := applyOwnerChangefeedQuery(ctx, changefeedID, getCredential())
 				if err != nil {
 					return err
 				}
@@ -227,6 +227,17 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			FilterReplicaID: filter,
 			SyncDDL:         cyclicSyncDDL,
 			// TODO(neil) enable ID bucket.
+		}
+	}
+
+	for _, rules := range cfg.Sink.DispatchRules {
+		switch strings.ToLower(rules.Dispatcher) {
+		case "rowid", "index-value":
+			if cfg.EnableOldValue {
+				cmd.Printf("[WARN] This index-value distribution mode "+
+					"does not guarantee row-level orderliness when "+
+					"switching on the old value, so please use caution! dispatch-rules: %#v", rules)
+			}
 		}
 	}
 	info := &model.ChangeFeedInfo{

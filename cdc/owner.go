@@ -296,6 +296,7 @@ func (o *Owner) newChangeFeed(
 		}
 
 		sinkTableInfo[j-1] = new(model.SimpleTableInfo)
+		sinkTableInfo[j-1].TableID = tid
 		sinkTableInfo[j-1].ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
 
 		for i, colInfo := range tblInfo.Cols() {
@@ -621,7 +622,7 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 		return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
 	}
 	for captureID := range cf.taskStatus {
-		newStatus, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
+		newStatus, _, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
 			taskStatus.AdminJobType = job.Type
 			return true, nil
 		})

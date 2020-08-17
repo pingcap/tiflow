@@ -27,8 +27,12 @@ kill -9 $(lsof -i tcp:${UP_TIDB_STATUS} -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:${UP_TIDB_OTHER_STATUS} -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:${DOWN_TIDB_PORT} -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:${DOWN_TIDB_STATUS} -t 2>/dev/null) &>/dev/null || true
-kill -9 $(lsof -i tcp:${UP_PD_PORT} -t 2>/dev/null) &>/dev/null || true
-kill -9 $(lsof -i tcp:${UP_PD_PEER_PORT} -t 2>/dev/null) &>/dev/null || true
+kill -9 $(lsof -i tcp:${UP_PD_PORT_1} -t 2>/dev/null) &>/dev/null || true
+kill -9 $(lsof -i tcp:${UP_PD_PEER_PORT_1} -t 2>/dev/null) &>/dev/null || true
+kill -9 $(lsof -i tcp:${UP_PD_PORT_2} -t 2>/dev/null) &>/dev/null || true
+kill -9 $(lsof -i tcp:${UP_PD_PEER_PORT_2} -t 2>/dev/null) &>/dev/null || true
+kill -9 $(lsof -i tcp:${UP_PD_PORT_3} -t 2>/dev/null) &>/dev/null || true
+kill -9 $(lsof -i tcp:${UP_PD_PEER_PORT_3} -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:${DOWN_PD_PORT} -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:${DOWN_PD_PEER_PORT} -t 2>/dev/null) &>/dev/null || true
 kill -9 $(lsof -i tcp:${UP_TIKV_PORT_1} -t 2>/dev/null) &>/dev/null || true

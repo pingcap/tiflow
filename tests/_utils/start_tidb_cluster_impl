@@ -2,11 +2,13 @@
 
 # --workdir: work directory
 # --tidb-config: path to tidb config file
+# --multiple-upstream-pd: whether to deploy multiple pd severs in upstream
 
 set -e
 
 OUT_DIR=
 tidb_config=
+multiple_upstream_pd=
 
 while [[ ${1} ]]; do
     case "${1}" in
@@ -16,6 +18,10 @@ while [[ ${1} ]]; do
             ;;
         --tidb-config)
             tidb_config=${2}
+            shift
+            ;;
+        --multiple-upstream-pd)
+            multiple_upstream_pd=${2}
             shift
             ;;
         *)
@@ -44,14 +50,28 @@ enable-placement-rules = true
 EOF
 
 echo "Starting Upstream PD..."
-pd-server \
-    --advertise-client-urls http://${UP_PD_HOST}:${UP_PD_PORT} \
-    --client-urls http://0.0.0.0:${UP_PD_PORT} \
-    --advertise-peer-urls http://${UP_PD_HOST}:${UP_PD_PEER_PORT} \
-    --peer-urls http://0.0.0.0:${UP_PD_PEER_PORT} \
-    --config "$OUT_DIR/pd-config.toml" \
-    --log-file "$OUT_DIR/pd.log" \
-    --data-dir "$OUT_DIR/pd" &
+if [[ "$multiple_upstream_pd" == "true" ]]; then
+    pd_count=3
+    initial_cluster="pd1=http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1},pd2=http://${UP_PD_HOST_2}:${UP_PD_PEER_PORT_2},pd3=http://${UP_PD_HOST_3}:${UP_PD_PEER_PORT_3}"
+else
+    pd_count=1
+    initial_cluster="pd1=http://${UP_PD_HOST_1}:${UP_PD_PEER_PORT_1}"
+fi
+for idx in $(seq 1 $pd_count); do
+    host="UP_PD_HOST_$idx"
+    port="UP_PD_PORT_$idx"
+    peer_port="UP_PD_PEER_PORT_$idx"
+    pd-server \
+        --advertise-client-urls http://${!host}:${!port} \
+        --client-urls http://0.0.0.0:${!port} \
+        --advertise-peer-urls http://${!host}:${!peer_port} \
+        --peer-urls http://0.0.0.0:${!peer_port} \
+        --config "$OUT_DIR/pd-config.toml" \
+        --log-file "$OUT_DIR/pd$idx.log" \
+        --data-dir "$OUT_DIR/pd$idx" \
+        --name="pd$idx" \
+        --initial-cluster=${initial_cluster} &
+done
 
 echo "Starting Downstream PD..."
 pd-server \
@@ -64,15 +84,20 @@ pd-server \
     --data-dir "$OUT_DIR/down_pd" &
 
 # wait until PD is online...
-while ! curl -o /dev/null -sf http://${UP_PD_HOST}:${UP_PD_PORT}/pd/api/v1/version; do
-    sleep 1
+for idx in $(seq 1 $pd_count); do
+    host="UP_PD_HOST_$idx"
+    port="UP_PD_PORT_$idx"
+
+    while ! curl -o /dev/null -sf http://${!host}:${!port}/pd/api/v1/version; do
+        sleep 1
+    done
+
+    while [ -z "$(curl http://${!host}:${!port}/pd/health 2> /dev/null | grep 'health' | grep 'true')" ]; do
+        sleep 1
+    done
 done
 
 while ! curl -o /dev/null -sf http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/version; do
-    sleep 1
-done
-
-while [ -z "$(curl http://${UP_PD_HOST}:${UP_PD_PORT}/pd/health 2> /dev/null | grep 'health' | grep 'true')" ]; do
     sleep 1
 done
 
@@ -109,7 +134,7 @@ for idx in $(seq 1 3); do
     port="UP_TIKV_PORT_$idx"
     status_port="UP_TIKV_STATUS_PORT_$idx"
     tikv-server \
-        --pd ${UP_PD_HOST}:${UP_PD_PORT} \
+        --pd ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
         -A ${!host}:${!port} \
         --status-addr ${!host}:${!status_port} \
         --log-file "$OUT_DIR/tikv$idx.log" \
@@ -135,7 +160,7 @@ tidb-server \
     -P ${UP_TIDB_PORT} \
     -config "$OUT_DIR/tidb-config.toml" \
     --store tikv \
-    --path ${UP_PD_HOST}:${UP_PD_PORT} \
+    --path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
     --status=${UP_TIDB_STATUS} \
     --log-file "$OUT_DIR/tidb.log" &
 
@@ -143,7 +168,7 @@ tidb-server \
     -P ${UP_TIDB_OTHER_PORT} \
     -config "$OUT_DIR/tidb-config.toml" \
     --store tikv \
-    --path ${UP_PD_HOST}:${UP_PD_PORT} \
+    --path ${UP_PD_HOST_1}:${UP_PD_PORT_1} \
     --status=${UP_TIDB_OTHER_STATUS} \
     --log-file "$OUT_DIR/tidb_other.log" &
 
@@ -235,7 +260,7 @@ runAsDaemon = true
 
 [raft]
 kvstore_path = "${OUT_DIR}/tiflash/kvstore"
-pd_addr = "${UP_PD_HOST}:${UP_PD_PORT}"
+pd_addr = "${UP_PD_HOST_1}:${UP_PD_PORT_1}"
 ignore_databases = "system,default"
 storage_engine = "tmt"
 EOF

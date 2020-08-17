@@ -37,27 +37,27 @@ var _ = check.Suite(&canalBatchSuite{
 	rowCases: [][]*model.RowChangedEvent{{{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}}, {{
 		StartTs:  0,
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}, {
 		StartTs:  2,
 		CommitTs: 3,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
 		StartTs:  2,
 		CommitTs: 3,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
 		StartTs:  2,
 		CommitTs: 3,
 		Table:    &model.TableName{Schema: "a", Table: "c", Partition: 6},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "cc"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 	}}, {}},
 	rowCaseExpectValues: []rowCaseExpect{
 		{
@@ -179,13 +179,12 @@ func testInsert(c *check.C) {
 			Schema: "cdc",
 			Table:  "person",
 		},
-		Delete: false,
-		Columns: map[string]*model.Column{
-			"id":      {Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
-			"name":    {Type: mysql.TypeVarchar, Value: "Bob"},
-			"tiny":    {Type: mysql.TypeTiny, Value: 255},
-			"comment": {Type: mysql.TypeBlob, Value: []byte("测试")},
-			"blob":    {Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		Columns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
+			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
+			{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
+			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+			{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		},
 	}
 
@@ -256,14 +255,13 @@ func testUpdate(c *check.C) {
 			Schema: "cdc",
 			Table:  "person",
 		},
-		Delete: false,
-		Columns: map[string]*model.Column{
-			"id":   {Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
-			"name": {Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag, Value: "Bob"},
+		Columns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
+			{Name: "name", Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag, Value: "Bob"},
 		},
-		PreColumns: map[string]*model.Column{
-			"id":   {Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 2},
-			"name": {Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag, Value: "Nancy"},
+		PreColumns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 2},
+			{Name: "name", Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag, Value: "Nancy"},
 		},
 	}
 	builder := NewCanalEntryBuilder(true)
@@ -334,9 +332,8 @@ func testDelete(c *check.C) {
 			Schema: "cdc",
 			Table:  "person",
 		},
-		Delete: true,
-		PreColumns: map[string]*model.Column{
-			"id": {Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
+		PreColumns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 		},
 	}
 

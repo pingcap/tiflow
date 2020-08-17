@@ -32,6 +32,9 @@ type EventBatchEncoder interface {
 	AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error)
 	// Build builds the batch before resolvedTs and return a list of <key value>, it always reset the encoder state based on implementation.
 	Build(resolvedTs uint64) (key [][]byte, value [][]byte)
+	// MixedBuild builds the batch and returns the bytes of mixed keys and values.
+	// This is used for cdc log, to merge key and value into one byte slice
+	MixedBuild() []byte
 	// Size returns the size of the batch(bytes)
 	Size() int
 }
