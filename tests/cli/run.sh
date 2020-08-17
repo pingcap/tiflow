@@ -10,7 +10,7 @@ TLS_DIR=$( cd $CUR/../_certificates && pwd )
 function check_changefeed_state() {
     changefeedid=$1
     expected=$2
-    output=$(cdc cli changefeed query --simple --changefeed-id $changefeedid --pd=http://$UP_PD_HOST:$UP_PD_PORT 2>&1)
+    output=$(cdc cli changefeed query --simple --changefeed-id $changefeedid --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1 2>&1)
     state=$(echo $output | grep -oE "\"state\": \"[a-z]+\""|tr -d '" '|awk -F':' '{print $(NF)}')
     if [ "$state" != "$expected" ]; then
         echo "unexpected state $output, expected $expected"
@@ -18,15 +18,26 @@ function check_changefeed_state() {
     fi
 }
 
+function check_changefeed_count() {
+    pd_addr=$1
+    expected=$2
+    feed_count=$(cdc cli changefeed list --pd=$pd_addr|jq '.|length')
+    if [[ "$feed_count" != "$expected" ]]; then
+        echo "[$(date)] <<<<< unexpect changefeed count! expect ${expected} got ${feed_count} >>>>>"
+        exit 1
+    fi
+    echo "changefeed count ${feed_count} check pass, pd_addr: $pd_addr"
+}
+
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-    start_tidb_cluster --workdir $WORK_DIR
+    start_tidb_cluster --workdir $WORK_DIR --multiple-upstream-pd true
 
     cd $WORK_DIR
 
     # record tso before we create tables to skip the system table DDLs
-    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
     run_sql "CREATE table test.simple(id int primary key, val int);"
     run_sql "CREATE table test.\`simple-dash\`(id int primary key, val int);"
 
@@ -52,6 +63,11 @@ function run() {
     check_table_exists tidb_cdc."\`repl_mark_test_simple-dash\`" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
     check_changefeed_state $uuid "normal"
+
+    check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1} 1
+    check_changefeed_count http://${UP_PD_HOST_2}:${UP_PD_PORT_2} 1
+    check_changefeed_count http://${UP_PD_HOST_3}:${UP_PD_PORT_3} 1
+    check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1},http://${UP_PD_HOST_2}:${UP_PD_PORT_2},http://${UP_PD_HOST_3}:${UP_PD_PORT_3} 1
 
     # Make sure changefeed can not be created if the name is already exists.
     exists=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="$uuid" 2>&1 | grep -oE 'already exists')
