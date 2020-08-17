@@ -44,15 +44,30 @@ func newDeleteMetaCommand() *cobra.Command {
 				return err
 			}
 			ctx := defaultContext
-			err := cdcEtcdCli.ClearAllCDCInfo(ctx)
+
+			leases, err := cdcEtcdCli.GetCaptureLeases(ctx)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			_, err = pdCli.UpdateServiceGCSafePoint(ctx, cdc.CDCServiceSafePointID, 0, 0)
-			if err == nil {
-				cmd.Println("all metadata truncated in PD!")
+
+			err = cdcEtcdCli.ClearAllCDCInfo(ctx)
+			if err != nil {
+				return errors.Trace(err)
 			}
-			return errors.Trace(err)
+
+			err = cdcEtcdCli.RevokeAllLeases(ctx, leases)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			_, err = pdCli.UpdateServiceGCSafePoint(ctx, cdc.CDCServiceSafePointID, 0, 0)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			cmd.Println("all metadata truncated in PD!")
+
+			return nil
 		},
 	}
 	return command
