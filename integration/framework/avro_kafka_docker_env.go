@@ -43,7 +43,7 @@ type AvroKafkaDockerEnv struct {
 }
 
 // NewAvroKafkaDockerEnv creates a new AvroKafkaDockerEnv
-func NewAvroKafkaDockerEnv() *AvroKafkaDockerEnv {
+func NewAvroKafkaDockerEnv(dockerComposeFile string) *AvroKafkaDockerEnv {
 	healthChecker := func() error {
 		resp, err := http.Get(healthCheckURI)
 		if err != nil {
@@ -78,13 +78,19 @@ func NewAvroKafkaDockerEnv() *AvroKafkaDockerEnv {
 		return nil
 	}
 
-	st, err := find.Repo()
-	if err != nil {
-		log.Fatal("Could not find git repo root", zap.Error(err))
+	var file string
+	if dockerComposeFile == "" {
+		st, err := find.Repo()
+		if err != nil {
+			log.Fatal("Could not find git repo root", zap.Error(err))
+		}
+		file = st.Path + dockerComposeFilePath
+	} else {
+		file = dockerComposeFile
 	}
 
 	return &AvroKafkaDockerEnv{dockerComposeOperator{
-		fileName:      st.Path + dockerComposeFilePath,
+		fileName:      file,
 		controller:    controllerContainerName,
 		healthChecker: healthChecker,
 	}}

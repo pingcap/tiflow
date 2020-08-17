@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	waitMaxPollInterval = time.Second * 10
+	waitMaxPollInterval = time.Second * 5
 )
 
 // Awaitable represents the handle of an SQL operation that can be waited on
@@ -90,9 +90,7 @@ func (b *basicAwaitable) Wait() Checkable {
 	}
 	defer cancel()
 
-	backoff := backoff2.NewExponentialBackOff()
-	backoff.MaxInterval = waitMaxPollInterval
-
+	backoff := backoff2.NewConstantBackOff(waitMaxPollInterval)
 	for {
 		select {
 		case <-ctx.Done():
@@ -111,6 +109,9 @@ func (b *basicAwaitable) Wait() Checkable {
 		}
 
 		interval := backoff.NextBackOff()
+		if interval == backoff2.Stop {
+			return &errorCheckableAndAwaitable{errors.New("Maximum retry interval reached")}
+		}
 		log.Debug("Wait(): pollable returned false, backing off", zap.Duration("interval", interval))
 
 		ch := time.After(interval)

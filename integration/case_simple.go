@@ -14,71 +14,48 @@
 package main
 
 import (
-	"time"
-
-	"github.com/pingcap/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/integration/framework"
-	"go.uber.org/zap"
 )
 
 //nolint:unused
-type simple struct {
+type simpleCase struct {
 	framework.AvroSingleTableTask
 }
 
-/*
-func newSimple() *simple {
-	simple := new(simple)
-	simple.AvroSingleTableTask.TableName = "test"
-	return simple
-}
-*/
-
-func (s *simple) Name() string {
-	return "simple"
+func newSimpleCase() *simpleCase {
+	simpleCase := new(simpleCase)
+	simpleCase.AvroSingleTableTask.TableName = "test"
+	return simpleCase
 }
 
-func (s *simple) Run(ctx *framework.TaskContext) error {
+func (s *simpleCase) Name() string {
+	return "Simple"
+}
+
+func (s *simpleCase) Run(ctx *framework.TaskContext) error {
 	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key, value int)")
 	if err != nil {
 		return err
 	}
 
-	for i := 0; i < 100; i++ {
-		_, err := ctx.Upstream.ExecContext(ctx.Ctx, "insert into test (id, value) values (?, ?)", i, i*10)
-		if err != nil {
-			return err
-		}
-	}
-
-	time.Sleep(10 * time.Second)
-	rows, err := ctx.Downstream.QueryContext(ctx.Ctx, "select * from test")
+	table := ctx.SQLHelper().GetTable("test")
+	err = table.Insert(map[string]interface{}{
+		"id":    0,
+		"value": 0,
+	}).Send().Wait().Check()
 	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	counter := 0
-	for rows.Next() {
-		var (
-			id    int
-			value int
-		)
-
-		err := rows.Scan(&id, &value)
-		if err != nil {
-			return err
-		}
-
-		if value != id*10 {
-			log.Fatal("Check failed", zap.Int("id", id), zap.Int("value", value))
-		}
-		counter++
+		return errors.AddStack(err)
 	}
 
-	if counter != 100 {
-		log.Fatal("Check failed", zap.Int("counter", counter))
+	reqs := make([]framework.Awaitable, 0)
+	for i := 1; i < 1000; i++ {
+		req := table.Insert(map[string]interface{}{
+			"id":    i,
+			"value": i,
+		}).Send()
+		reqs = append(reqs, req)
 	}
 
-	return nil
+	return framework.All(ctx.SQLHelper(), reqs).Wait().Check()
 }

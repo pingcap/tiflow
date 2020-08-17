@@ -14,17 +14,30 @@
 package main
 
 import (
+	"flag"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 	"go.uber.org/zap/zapcore"
 )
 
 func main() {
+	dockerComposeFile := flag.String("docker-compose-file", "", "the path of the Docker-compose yml file")
+
+	testCases := []framework.Task{
+		newSimpleCase(),
+		newAlterCase(),
+	}
+
 	log.SetLevel(zapcore.DebugLevel)
-	env := framework.NewAvroKafkaDockerEnv()
+	env := framework.NewAvroKafkaDockerEnv(*dockerComposeFile)
 	env.Setup()
-	//env.RunTest(newSimple())
-	//env.RunTest(newHelperCase())
-	env.RunTest(newAlterCase())
+
+	for i := range testCases {
+		env.RunTest(testCases[i])
+		if i < len(testCases)-1 {
+			env.Reset()
+		}
+	}
+
 	env.TearDown()
 }

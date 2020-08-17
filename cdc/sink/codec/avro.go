@@ -73,8 +73,6 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		return EncoderNoOperation, errors.New("Fatal sink bug. Batch size must be 1")
 	}
 
-	log.Info("avroEncode", zap.Reflect("e", e))
-
 	res, err := a.avroEncode(e.Table, e.TableInfoVersion, e.Columns)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))
@@ -102,33 +100,6 @@ func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, e
 
 // AppendDDLEvent generates new schema and registers it to the Registry
 func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
-	/*
-		if e.TableInfo == nil || e.TableInfo.Table == "" {
-			log.Info("AppendDDLEvent: no schema generation needed, skip")
-			return EncoderNoOperation, nil
-		}
-
-		schemaStr, err := ColumnInfoToAvroSchema(e.TableInfo.Table, e.TableInfo.ColumnInfo)
-		if err != nil {
-			return EncoderNoOperation, errors.Annotate(err, "AppendDDLEvent failed")
-		}
-		log.Info("AppendDDLEvent: new schema generated", zap.String("schema_str", schemaStr))
-
-		avroCodec, err := goavro.NewCodec(schemaStr)
-		if err != nil {
-			return EncoderNoOperation, errors.Annotate(err, "AppendDDLEvent failed: could not verify schema, probably bug")
-		}
-
-		err = a.valueSchemaManager.Register(context.Background(), model.TableName{
-			Schema: e.TableInfo.Schema,
-			Table:  e.TableInfo.Table,
-		}, avroCodec)
-
-		if err != nil {
-			return EncoderNoOperation, errors.Annotate(err, "AppendDDLEvent failed: could not register schema")
-		}
-	*/
-
 	return EncoderNoOperation, nil
 }
 

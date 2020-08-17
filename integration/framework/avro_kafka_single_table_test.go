@@ -25,7 +25,7 @@ type emptyAvroSingleTableTask struct {
 }
 
 func TestAvroSingleTableTest_Prepare(t *testing.T) {
-	env := NewAvroKafkaDockerEnv()
+	env := NewAvroKafkaDockerEnv("")
 	require.NotNil(t, env)
 
 	env.Setup()

@@ -110,6 +110,7 @@ func NewAvroSchemaManager(
 var regexRemoveSpaces = regexp.MustCompile(`\s`)
 
 // Register the latest schema for a table to the Registry, by passing in a Codec
+// Returns the Schema's ID and err
 func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableName, codec *goavro.Codec) (int, error) {
 	// The Schema Registry expects the JSON to be without newline characters
 	reqBody := registerRequest{

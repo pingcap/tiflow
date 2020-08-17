@@ -22,7 +22,7 @@ import (
 )
 
 func TestAvroKafkaDockerEnv_Basic(t *testing.T) {
-	env := NewAvroKafkaDockerEnv()
+	env := NewAvroKafkaDockerEnv("")
 	require.NotNil(t, env)
 
 	env.Setup()
@@ -76,7 +76,7 @@ func (t *dummyTask) Run(taskContext *TaskContext) error {
 }
 
 func TestAvroKafkaDockerEnv_RunTest(t *testing.T) {
-	env := NewAvroKafkaDockerEnv()
+	env := NewAvroKafkaDockerEnv("")
 	require.NotNil(t, env)
 
 	env.Setup()
