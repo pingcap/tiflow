@@ -21,11 +21,6 @@ canal.conf:
   username:
   password:
   vhost:
-#  srcDataSources:
-#    defaultDS:
-#      url: jdbc:mysql://localhost:3306/mytest?useUnicode=true
-#      username: root
-#      password: 121212
   canalAdapters:
   - instance: testdb # canal instance Name or mq topic name
     groups:

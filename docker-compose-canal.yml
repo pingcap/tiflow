@@ -314,8 +314,6 @@ services:
       DB_NAME: testdb
       DOWNSTREAM_DB_HOST: downstream-tidb
       DOWNSTREAM_DB_PORT: 4000
-      UPSTREAM_DB_HOST: upstream-tidb
-      UPSTREAM_DB_PORT: 4000
     depends_on:
       - "zookeeper"
       - "kafka"

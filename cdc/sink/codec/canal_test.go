@@ -166,7 +166,14 @@ type canalEntrySuite struct{}
 var _ = check.Suite(&canalEntrySuite{})
 
 func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
-	testCaseUpdate := &model.RowChangedEvent{
+	testInsert(c)
+	testUpdate(c)
+	testDelete(c)
+	testDdl(c)
+}
+
+func testInsert(c *check.C) {
+	testCaseInsert := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "cdc",
@@ -181,37 +188,17 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			"blob":    {Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		},
 	}
-	testCaseDelete := &model.RowChangedEvent{
-		CommitTs: 417318403368288260,
-		Table: &model.TableName{
-			Schema: "cdc",
-			Table:  "person",
-		},
-		Delete: true,
-		PreColumns: map[string]*model.Column{
-			"id": {Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
-		},
-	}
-	testCaseDdl := &model.DDLEvent{
-		CommitTs: 417318403368288260,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "cdc", Table: "person",
-		},
-		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
-		Type:  mm.ActionCreateTable,
-	}
-	builder := NewCanalEntryBuilder()
 
-	// test update
-	entry, err := builder.FromRowEvent(testCaseUpdate)
+	builder := NewCanalEntryBuilder(false)
+	entry, err := builder.FromRowEvent(testCaseInsert)
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
 	header := entry.GetHeader()
 	c.Assert(header.GetExecuteTime(), check.Equals, int64(1591943372224))
 	c.Assert(header.GetSourceType(), check.Equals, canal.Type_MYSQL)
-	c.Assert(header.GetSchemaName(), check.Equals, testCaseUpdate.Table.Schema)
-	c.Assert(header.GetTableName(), check.Equals, testCaseUpdate.Table.Table)
-	c.Assert(header.GetEventType(), check.Equals, canal.EventType_UPDATE)
+	c.Assert(header.GetSchemaName(), check.Equals, testCaseInsert.Table.Schema)
+	c.Assert(header.GetTableName(), check.Equals, testCaseInsert.Table.Table)
+	c.Assert(header.GetEventType(), check.Equals, canal.EventType_INSERT)
 	store := entry.GetStoreValue()
 	c.Assert(store, check.NotNil)
 	rc := &canal.RowChange{}
@@ -220,8 +207,9 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 	c.Assert(rc.GetIsDdl(), check.IsFalse)
 	rowDatas := rc.GetRowDatas()
 	c.Assert(len(rowDatas), check.Equals, 1)
+
 	columns := rowDatas[0].AfterColumns
-	c.Assert(len(columns), check.Equals, len(testCaseUpdate.Columns))
+	c.Assert(len(columns), check.Equals, len(testCaseInsert.Columns))
 	for _, col := range columns {
 		c.Assert(col.GetUpdated(), check.IsTrue)
 		switch col.GetName() {
@@ -259,24 +247,117 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			c.Assert(col.GetMysqlType(), check.Equals, "blob")
 		}
 	}
+}
 
-	// test delete
-	entry, err = builder.FromRowEvent(testCaseDelete)
+func testUpdate(c *check.C) {
+	testCaseUpdate := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "cdc",
+			Table:  "person",
+		},
+		Delete: false,
+		Columns: map[string]*model.Column{
+			"id":   {Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
+			"name": {Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag, Value: "Bob"},
+		},
+		PreColumns: map[string]*model.Column{
+			"id":   {Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 2},
+			"name": {Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag, Value: "Nancy"},
+		},
+	}
+	builder := NewCanalEntryBuilder(true)
+	entry, err := builder.FromRowEvent(testCaseUpdate)
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
-	header = entry.GetHeader()
-	c.Assert(header.GetSchemaName(), check.Equals, testCaseDelete.Table.Schema)
-	c.Assert(header.GetTableName(), check.Equals, testCaseDelete.Table.Table)
-	c.Assert(header.GetEventType(), check.Equals, canal.EventType_DELETE)
-	store = entry.GetStoreValue()
+
+	header := entry.GetHeader()
+	c.Assert(header.GetExecuteTime(), check.Equals, int64(1591943372224))
+	c.Assert(header.GetSourceType(), check.Equals, canal.Type_MYSQL)
+	c.Assert(header.GetSchemaName(), check.Equals, testCaseUpdate.Table.Schema)
+	c.Assert(header.GetTableName(), check.Equals, testCaseUpdate.Table.Table)
+	c.Assert(header.GetEventType(), check.Equals, canal.EventType_UPDATE)
+	store := entry.GetStoreValue()
 	c.Assert(store, check.NotNil)
-	rc = &canal.RowChange{}
+	rc := &canal.RowChange{}
 	err = proto.Unmarshal(store, rc)
 	c.Assert(err, check.IsNil)
 	c.Assert(rc.GetIsDdl(), check.IsFalse)
-	rowDatas = rc.GetRowDatas()
+	rowDatas := rc.GetRowDatas()
 	c.Assert(len(rowDatas), check.Equals, 1)
-	columns = rowDatas[0].BeforeColumns
+
+	beforeColumns := rowDatas[0].BeforeColumns
+	c.Assert(len(beforeColumns), check.Equals, len(testCaseUpdate.PreColumns))
+	for _, col := range beforeColumns {
+		c.Assert(col.GetUpdated(), check.IsTrue)
+		switch col.GetName() {
+		case "id":
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
+			c.Assert(col.GetIsKey(), check.IsTrue)
+			c.Assert(col.GetIsNull(), check.IsFalse)
+			c.Assert(col.GetValue(), check.Equals, "2")
+			c.Assert(col.GetMysqlType(), check.Equals, "int")
+		case "name":
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
+			c.Assert(col.GetIsKey(), check.IsTrue)
+			c.Assert(col.GetIsNull(), check.IsFalse)
+			c.Assert(col.GetValue(), check.Equals, "Nancy")
+			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
+		}
+	}
+
+	afterColumns := rowDatas[0].AfterColumns
+	c.Assert(len(afterColumns), check.Equals, len(testCaseUpdate.Columns))
+	for _, col := range afterColumns {
+		c.Assert(col.GetUpdated(), check.IsTrue)
+		switch col.GetName() {
+		case "id":
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
+			c.Assert(col.GetIsKey(), check.IsTrue)
+			c.Assert(col.GetIsNull(), check.IsFalse)
+			c.Assert(col.GetValue(), check.Equals, "1")
+			c.Assert(col.GetMysqlType(), check.Equals, "int")
+		case "name":
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
+			c.Assert(col.GetIsKey(), check.IsTrue)
+			c.Assert(col.GetIsNull(), check.IsFalse)
+			c.Assert(col.GetValue(), check.Equals, "Bob")
+			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
+		}
+	}
+}
+
+func testDelete(c *check.C) {
+	testCaseDelete := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "cdc",
+			Table:  "person",
+		},
+		Delete: true,
+		PreColumns: map[string]*model.Column{
+			"id": {Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
+		},
+	}
+
+	builder := NewCanalEntryBuilder(false)
+	entry, err := builder.FromRowEvent(testCaseDelete)
+	c.Assert(err, check.IsNil)
+	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
+	header := entry.GetHeader()
+	c.Assert(header.GetSchemaName(), check.Equals, testCaseDelete.Table.Schema)
+	c.Assert(header.GetTableName(), check.Equals, testCaseDelete.Table.Table)
+	c.Assert(header.GetEventType(), check.Equals, canal.EventType_DELETE)
+	store := entry.GetStoreValue()
+	c.Assert(store, check.NotNil)
+	rc := &canal.RowChange{}
+	err = proto.Unmarshal(store, rc)
+	c.Assert(err, check.IsNil)
+	c.Assert(rc.GetIsDdl(), check.IsFalse)
+	rowDatas := rc.GetRowDatas()
+	c.Assert(len(rowDatas), check.Equals, 1)
+
+	columns := rowDatas[0].BeforeColumns
 	c.Assert(len(columns), check.Equals, len(testCaseDelete.PreColumns))
 	for _, col := range columns {
 		c.Assert(col.GetUpdated(), check.IsFalse)
@@ -289,18 +370,28 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			c.Assert(col.GetMysqlType(), check.Equals, "int")
 		}
 	}
+}
 
-	// test ddl
-	entry, err = builder.FromDdlEvent(testCaseDdl)
+func testDdl(c *check.C) {
+	testCaseDdl := &model.DDLEvent{
+		CommitTs: 417318403368288260,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "cdc", Table: "person",
+		},
+		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
+		Type:  mm.ActionCreateTable,
+	}
+	builder := NewCanalEntryBuilder(false)
+	entry, err := builder.FromDdlEvent(testCaseDdl)
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
-	header = entry.GetHeader()
+	header := entry.GetHeader()
 	c.Assert(header.GetSchemaName(), check.Equals, testCaseDdl.TableInfo.Schema)
 	c.Assert(header.GetTableName(), check.Equals, testCaseDdl.TableInfo.Table)
 	c.Assert(header.GetEventType(), check.Equals, canal.EventType_CREATE)
-	store = entry.GetStoreValue()
+	store := entry.GetStoreValue()
 	c.Assert(store, check.NotNil)
-	rc = &canal.RowChange{}
+	rc := &canal.RowChange{}
 	err = proto.Unmarshal(store, rc)
 	c.Assert(err, check.IsNil)
 	c.Assert(rc.GetIsDdl(), check.IsTrue)

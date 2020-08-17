@@ -107,6 +107,7 @@ func isCanalDdl(t canal.EventType) bool {
 }
 
 type canalEntryBuilder struct {
+	forceHkPk    bool
 	bytesDecoder *encoding.Decoder // default charset is ISO-8859-1
 }
 
@@ -169,8 +170,8 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 			sqlType = JavaSQLTypeVARCHAR
 		}
 	}
-	// alibaba canal server does not support the delete operation of table which does not hava primary key, we can use handle key to hack it.
-	isKey := c.Flag.IsPrimaryKey() || c.Flag.IsHandleKey()
+	// alibaba canal server does not support the delete operation of table which does not have primary key, we can use handle key to hack it.
+	isKey := c.Flag.IsPrimaryKey() || (b.forceHkPk && c.Flag.IsHandleKey())
 	isNull := c.Value == nil
 	value := ""
 	if !isNull {
@@ -296,18 +297,25 @@ func (b *canalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error
 }
 
 // NewCanalEntryBuilder creates a new canalEntryBuilder
-func NewCanalEntryBuilder() *canalEntryBuilder {
+func NewCanalEntryBuilder(forceHkPk bool) *canalEntryBuilder {
 	d := charmap.ISO8859_1.NewDecoder()
 	return &canalEntryBuilder{
 		bytesDecoder: d,
+		forceHkPk:    forceHkPk,
 	}
 }
 
 // CanalEventBatchEncoder encodes the events into the byte of a batch into.
 type CanalEventBatchEncoder struct {
-	size     int
-	ddls     []*model.DDLEvent
-	txnCache *common.UnresolvedTxnCache
+	forceHkPk bool
+	size               int
+	ddls               []*model.DDLEvent
+	txnCache           *common.UnresolvedTxnCache
+}
+
+// SetForceHandleKeyPKey set forceHandleKeyPKey, then handle key will be regarded as primary key
+func (d *CanalEventBatchEncoder) SetForceHandleKeyPKey(forceHkPk bool) {
+	d.forceHkPk = forceHkPk
 }
 
 // AppendResolvedEvent implements the EventBatchEncoder interface
@@ -348,7 +356,7 @@ func (d *CanalEventBatchEncoder) Build(resolvedTs uint64) (keys [][]byte, values
 	values = make([][]byte, 0, len(resolvedTxns)+len(d.ddls))
 	for _, txns := range resolvedTxns {
 		for _, txn := range txns {
-			canalMessageEncoder := newCanalMessageEncoder()
+			canalMessageEncoder := newCanalMessageEncoder(d.forceHkPk)
 			for _, row := range txn.Rows {
 				err := canalMessageEncoder.appendRowChangedEvent(row)
 				if err != nil {
@@ -362,7 +370,7 @@ func (d *CanalEventBatchEncoder) Build(resolvedTs uint64) (keys [][]byte, values
 		}
 	}
 	if len(d.ddls) != 0 {
-		canalMessageEncoder := newCanalMessageEncoder()
+		canalMessageEncoder := newCanalMessageEncoder(d.forceHkPk)
 		for _, ddl := range d.ddls {
 			err := canalMessageEncoder.appendDDLEvent(ddl)
 			if err != nil {
@@ -444,7 +452,7 @@ func (d *canalMessageEncoder) refreshPacketBody() error {
 	return err
 }
 
-func newCanalMessageEncoder() *canalMessageEncoder {
+func newCanalMessageEncoder(forceHkPK bool) *canalMessageEncoder {
 	p := &canal.Packet{
 		VersionPresent: &canal.Packet_Version{
 			Version: CanalPacketVersion,
@@ -455,7 +463,7 @@ func newCanalMessageEncoder() *canalMessageEncoder {
 	encoder := &canalMessageEncoder{
 		messages:     &canal.Messages{},
 		packet:       p,
-		entryBuilder: NewCanalEntryBuilder(),
+		entryBuilder: NewCanalEntryBuilder(forceHkPK),
 	}
 	return encoder
 }

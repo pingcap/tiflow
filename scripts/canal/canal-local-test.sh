@@ -26,8 +26,42 @@
 #
 
 ProgName=$(basename $0)
+UPSTREAM_DB_HOST=127.0.0.1
+UPSTREAM_DB_PORT=4000
+DOWNSTREAM_DB_HOST=127.0.0.1
+DOWNSTREAM_DB_PORT=5000
+DB_NAME=testdb
 cd "$(dirname "$0")"
-sql="drop database if exists testdb; create database testdb;"
+
+prepare_db() {
+  echo "Verifying Upstream TiDB is started..."
+  i=0
+  while ! mysql -uroot -h${UPSTREAM_DB_HOST} -P${UPSTREAM_DB_PORT}  -e 'select * from mysql.tidb;'; do
+      i=$((i + 1))
+      if [ "$i" -gt 60 ]; then
+          echo 'Failed to start upstream TiDB'
+          exit 2
+      fi
+      sleep 2
+  done
+
+  echo "Verifying Downstream TiDB is started..."
+  i=0
+  while ! mysql -uroot -h${DOWNSTREAM_DB_HOST} -P${DOWNSTREAM_DB_PORT}  -e 'select * from mysql.tidb;'; do
+      i=$((i + 1))
+      if [ "$i" -gt 60 ]; then
+          echo 'Failed to start downstream TiDB'
+          exit 1
+      fi
+      sleep 2
+  done
+  sql="drop database if exists ${DB_NAME}; create database ${DB_NAME};"
+  echo "[$(date)] Executing SQL: ${sql}"
+  mysql -uroot -h ${UPSTREAM_DB_HOST} -P ${UPSTREAM_DB_PORT}  -E -e "${sql}"
+  mysql -uroot -h ${DOWNSTREAM_DB_HOST} -P ${DOWNSTREAM_DB_PORT}  -E -e "${sql}" --protocol=tcp
+}
+
+
 sub_help() {
     echo "Usage: $ProgName <subcommand> [options]\n"
     echo "Subcommands:"
@@ -38,12 +72,10 @@ sub_help() {
 }
 
 sub_init() {
-
+  prepare_db
   sudo docker exec -it ticdc_controller_1 sh -c "
-  /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb\" --config=\"/config/config.toml\"
+  /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb\" --config=\"/config/config.toml\" --opts \"force-handle-key-pkey=true\"
   "
-  mysql -uroot -h 127.0.0.1 -P 5000 -e "${sql}"
-  mysql -uroot -h 127.0.0.1 -P 4000 -e "${sql}"
 }
 
 sub_up() {

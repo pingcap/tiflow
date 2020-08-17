@@ -82,7 +82,8 @@ func newMqSink(
 	protocol.FromString(config.Sink.Protocol)
 
 	newEncoder := codec.NewEventBatchEncoder(protocol)
-	if protocol == codec.ProtocolAvro {
+	switch protocol {
+	case codec.ProtocolAvro:
 		registryURI, ok := opts["registry"]
 		if !ok {
 			return nil, errors.New(`Avro protocol requires parameter "registry"`)
@@ -96,6 +97,20 @@ func newMqSink(
 			avroEncoder := newEncoder1().(*codec.AvroEventBatchEncoder)
 			avroEncoder.SetValueSchemaManager(schemaManager)
 			return avroEncoder
+		}
+	case codec.ProtocolCanal:
+		var forceHkPk bool
+		forceHKeyToPKey, ok := opts["force-handle-key-pkey"]
+		if !ok || forceHKeyToPKey == "false"{
+			forceHkPk = false
+		}else if forceHKeyToPKey == "true" {
+			forceHkPk = true
+		}
+		newEncoder1 := newEncoder
+		newEncoder = func() codec.EventBatchEncoder {
+			canalEncoder := newEncoder1().(*codec.CanalEventBatchEncoder)
+			canalEncoder.SetForceHandleKeyPKey(forceHkPk)
+			return canalEncoder
 		}
 	}
 

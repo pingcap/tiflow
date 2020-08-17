@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	`fmt`
 	"math/rand"
 	"strings"
 	"time"
@@ -423,13 +422,12 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 
 func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry) (*model.RowChangedEvent, error) {
 	// if m.enableOldValue == true, go into this function
-	// if m.disableOldValue == false and row.Delete == false, go into this function
-	// if m.disableOldValue == false and row.Delete == true and tableInfo.PKIsHandle = true, go into this function
-	// only if m.disableOldValue == false and row.Delete == true and tableInfo.PKIsHandle == false, skip this function
+	// if m.enableOldValue == false and row.Delete == false, go into this function
+	// if m.enableOldValue == false and row.Delete == true and tableInfo.PKIsHandle = true, go into this function
+	// only if m.enableOldValue == false and row.Delete == true and tableInfo.PKIsHandle == false, skip this function
 	if !m.enableOldValue && row.Delete && !tableInfo.PKIsHandle {
 		return nil, nil
 	}
-	log.Info("[qinggniq] raw kv", zap.String("Row", fmt.Sprintf("%v", row.Row)), zap.String("PreRow", fmt.Sprintf("%v", row.PreRow)), zap.Bool("enable old value", m.enableOldValue))
 	var err error
 	// Decode previous columns.
 	var preCols map[string]*model.Column

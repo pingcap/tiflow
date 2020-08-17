@@ -5,44 +5,11 @@ ZOOKEEPER_SERVER=${ZOOKEEPER_SERVER:-localhost:2181}
 DB_NAME=${DB_NAME:-testdb}
 DOWNSTREAM_DB_HOST=${DOWNSTREAM_DB_HOST:-localhost}
 DOWNSTREAM_DB_PORT=${DOWNSTREAM_DB_PORT:-4000}
-UPSTREAM_DB_HOST=${UPSTREAM_DB_HOST:-localhost}
-UPSTREAM_DB_PORT=${UPSTREAM_DB_PORT:-4000}
-
 echo "zookeeper server ${ZOOKEEPER_SERVER}"
 echo "kafka server ${KAFKA_SERVER}"
 echo "db name ${DB_NAME}"
-echo "upstream db host ${UPSTREAM_DB_HOST}"
-echo "upstream db port ${UPSTREAM_DB_PORT}"
 echo "downstream db host ${DOWNSTREAM_DB_HOST}"
 echo "downstream db port ${DOWNSTREAM_DB_PORT}"
-
-echo "Verifying Upstream TiDB is started..."
-i=0
-while ! mysql -uroot -h${UPSTREAM_DB_HOST} -P${UPSTREAM_DB_PORT}  -e 'select * from mysql.tidb;'; do
-    i=$((i + 1))
-    if [ "$i" -gt 60 ]; then
-        echo 'Failed to start upstream TiDB'
-        exit 2
-    fi
-    sleep 2
-done
-
-echo "Verifying Downstream TiDB is started..."
-i=0
-while ! mysql -uroot -h${DOWNSTREAM_DB_HOST} -P${DOWNSTREAM_DB_PORT}  -e 'select * from mysql.tidb;'; do
-    i=$((i + 1))
-    if [ "$i" -gt 60 ]; then
-        echo 'Failed to start downstream TiDB'
-        exit 1
-    fi
-    sleep 2
-done
-
-sql="drop database if exists ${DB_NAME}; create database ${DB_NAME};"
-echo "[$(date)] Executing SQL: ${sql}"
-mysql -uroot -h ${UPSTREAM_DB_HOST} -P ${UPSTREAM_DB_PORT}  -E -e "${sql}"
-mysql -uroot -h ${DOWNSTREAM_DB_HOST} -P ${DOWNSTREAM_DB_PORT}   -E -e "${sql}" --protocol=tcp
-
 
 WORK_DIR=$(pwd)
 cat - >"${WORK_DIR}/conf/application.yml" <<EOF
