@@ -5,9 +5,6 @@
 # Specify whether the schema name and table name in this configuration file are case sensitive
 # This configuration will affect both filter and sink related configurations, the default is true
 case-sensitive = true
-# 是否允许输出行更改之前字段的值，可用于区分insert和update
-# Specify whether output the old value of columns in row changes.
-enable-old-value = false
 
 [filter]
 # 忽略哪些 StartTs 的事务
@@ -35,7 +32,7 @@ dispatchers = [
 	{matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
 ]
 # 对于 MQ 类的 Sink，可以指定消息的协议格式
-# 协议目前支持 default, canal, avro 两种，default 为 ticdc-open-protocol
+# 协议目前支持 default, avro, canal 三种，default 为 ticdc-open-protocol
 # For MQ Sinks, you can configure the protocol of the messages sending to MQ
 # Currently the protocol support default and canal
 protocol = "default"
