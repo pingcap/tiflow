@@ -21,9 +21,10 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/store/tikv/oracle"
+
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 // SortEngine is the sorter engine

@@ -19,7 +19,8 @@
 2. The following programs must be installed:
 
     * `mysql` (the MySQL cli client, currently [mysql client 8.0 is not supported](https://github.com/pingcap/tidb/issues/14021))
-
+    * `bash` # version >= 4.0.0
+    * `zookeepr & kafka` (if you want to run kafka test)
 3. The user used to execute the tests must have permission to create the folder /tmp/tidb_cdc_test. All test artifacts will be written into this folder.
 
 

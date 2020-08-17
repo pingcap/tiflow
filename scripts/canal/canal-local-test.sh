@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This is a script designed for testing Avro support for Kafka sink.
+# This is a script designed for testing canal support for Kafka sink.
 # The data flow is (upstream TiDB) ==> (TiCDC) =canal=> (kafka) =canal=> (canal consumer/adapter) =sql=> (downstream TiDB)
-# Developers should run "canal-local-test.sh up" first, wait for a while, run "avro-local-test.sh init", and only
+# Developers should run "canal-local-test.sh up" first, wait for a while, run "canal-local-test.sh init", and only
 # then will the data flow be established.
 #
 # Upstream mysql://127.0.0.1:4000
@@ -31,6 +31,7 @@ UPSTREAM_DB_PORT=4000
 DOWNSTREAM_DB_HOST=127.0.0.1
 DOWNSTREAM_DB_PORT=5000
 DB_NAME=testdb
+TOPIC_NAME=${DB_NAME}
 cd "$(dirname "$0")"
 
 prepare_db() {
@@ -58,14 +59,14 @@ prepare_db() {
   sql="drop database if exists ${DB_NAME}; create database ${DB_NAME};"
   echo "[$(date)] Executing SQL: ${sql}"
   mysql -uroot -h ${UPSTREAM_DB_HOST} -P ${UPSTREAM_DB_PORT}  -E -e "${sql}"
-  mysql -uroot -h ${DOWNSTREAM_DB_HOST} -P ${DOWNSTREAM_DB_PORT}  -E -e "${sql}" --protocol=tcp
+  mysql -uroot -h ${DOWNSTREAM_DB_HOST} -P ${DOWNSTREAM_DB_PORT}  -E -e "${sql}"
 }
 
 
 sub_help() {
     echo "Usage: $ProgName <subcommand> [options]\n"
     echo "Subcommands:"
-    echo "    init    Create changefeed and Kafka Connector"
+    echo "    init    Prepare database and Create changefeed"
     echo "    up      Bring up the containers"
     echo "    down    Pause the containers"
     echo ""
@@ -74,7 +75,7 @@ sub_help() {
 sub_init() {
   prepare_db
   sudo docker exec -it ticdc_controller_1 sh -c "
-  /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb\" --config=\"/config/config.toml\" --opts \"force-handle-key-pkey=true\"
+  /cdc cli changefeed create --pd=\"http://upstream-pd:2379\" --sink-uri=\"kafka://kafka:9092/testdb\" --config=\"/config/canal-test-config.toml\" --opts \"force-handle-key-pkey=true\"
   "
 }
 

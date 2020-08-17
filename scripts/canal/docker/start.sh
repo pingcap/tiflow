@@ -1,5 +1,9 @@
 #!/bin/sh
-echo $0
+
+# This script file uses enviroment variable to create config of canal adapter. The format of config file `application.yml`
+# is only suitable for canal adapter release version 1.15, if you want build from lastest master branch, please rewrite the
+# config file from canal/client-adapter/launcher/src/main/bin/conf/application.yml
+
 KAFKA_SERVER=${KAFKA_SERVER:-localhost:9092}
 ZOOKEEPER_SERVER=${ZOOKEEPER_SERVER:-localhost:2181}
 DB_NAME=${DB_NAME:-testdb}
@@ -23,7 +27,6 @@ spring:
 
 canal.conf:
   mode: kafka #rocketMQ
-#  canalServerHost: localhost:11111
   zookeeperHosts: ${ZOOKEEPER_SERVER}
   mqServers: ${KAFKA_SERVER} #or rocketmq
   flatMessage: false
@@ -36,11 +39,6 @@ canal.conf:
   username:
   password:
   vhost:
-#  srcDataSources:
-#    defaultDS:
-#      url: jdbc:mysql://localhost:3306/mytest?useUnicode=true
-#      username: root
-#      password: 121212
   canalAdapters:
   - instance: ${DB_NAME} # canal instance Name or mq topic name
     groups:
