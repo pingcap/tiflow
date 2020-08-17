@@ -37,24 +37,7 @@ func (d *defaultDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	if d.enableOldValue {
 		return d.tbd.Dispatch(row)
 	}
-	uniqueKeysNum := 0
-	for _, col := range row.PreColumns {
-		if col == nil {
-			continue
-		}
-		if col.Flag.IsPrimaryKey() || col.Flag.IsUniqueKey() || col.Flag.IsHandleKey() {
-			uniqueKeysNum++
-		}
-	}
-	for _, col := range row.Columns {
-		if col == nil {
-			continue
-		}
-		if col.Flag.IsPrimaryKey() || col.Flag.IsUniqueKey() || col.Flag.IsHandleKey() {
-			uniqueKeysNum++
-		}
-	}
-	if uniqueKeysNum > 1 {
+	if len(row.IndexColumns) > 1 {
 		return d.tbd.Dispatch(row)
 	}
 	return d.ivd.Dispatch(row)
