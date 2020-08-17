@@ -308,9 +308,9 @@ func NewCanalEntryBuilder(forceHkPk bool) *canalEntryBuilder {
 // CanalEventBatchEncoder encodes the events into the byte of a batch into.
 type CanalEventBatchEncoder struct {
 	forceHkPk bool
-	size               int
-	ddls               []*model.DDLEvent
-	txnCache           *common.UnresolvedTxnCache
+	size      int
+	ddls      []*model.DDLEvent
+	txnCache  *common.UnresolvedTxnCache
 }
 
 // SetForceHandleKeyPKey set forceHandleKeyPKey, then handle key will be regarded as primary key

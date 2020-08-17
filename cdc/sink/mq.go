@@ -101,9 +101,9 @@ func newMqSink(
 	case codec.ProtocolCanal:
 		var forceHkPk bool
 		forceHKeyToPKey, ok := opts["force-handle-key-pkey"]
-		if !ok || forceHKeyToPKey == "false"{
+		if !ok || forceHKeyToPKey == "false" {
 			forceHkPk = false
-		}else if forceHKeyToPKey == "true" {
+		} else if forceHKeyToPKey == "true" {
 			forceHkPk = true
 		}
 		newEncoder1 := newEncoder
