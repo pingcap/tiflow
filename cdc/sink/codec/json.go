@@ -155,7 +155,7 @@ func newResolvedMessage(ts uint64) *mqMessageKey {
 
 func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow) {
 	var partition *int64
-	if e.Table.PartitionTable {
+	if e.Table.IsPartition {
 		partition = &e.Table.TableID
 	}
 	key := &mqMessageKey{
@@ -218,7 +218,7 @@ func mqMessageToRowEvent(key *mqMessageKey, value *mqMessageRow) *model.RowChang
 	// TODO: we lost the tableID from kafka message
 	if key.Partition != nil {
 		e.Table.TableID = *key.Partition
-		e.Table.PartitionTable = true
+		e.Table.IsPartition = true
 	}
 
 	if len(value.Delete) != 0 {

@@ -164,10 +164,10 @@ func (b *ColumnFlagType) UnsetIsNullable() {
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema         string `toml:"db-name" json:"db-name"`
-	Table          string `toml:"tbl-name" json:"tbl-name"`
-	TableID        int64  `toml:"tbl-id" json:"tbl-id"`
-	PartitionTable bool   `toml:"partition-table" json:"partition-table"`
+	Schema      string `toml:"db-name" json:"db-name"`
+	Table       string `toml:"tbl-name" json:"tbl-name"`
+	TableID     int64  `toml:"tbl-id" json:"tbl-"`
+	IsPartition bool   `toml:"is-partition" json:"is-partition"`
 }
 
 // String implements fmt.Stringer interface.
