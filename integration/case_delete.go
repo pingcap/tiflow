@@ -26,7 +26,6 @@ func newDeleteCase() *deleteCase {
 	return deleteCase
 }
 
-
 func (c *deleteCase) Name() string {
 	return "Delete"
 }
@@ -36,7 +35,6 @@ func (c *deleteCase) Run(ctx *framework.TaskContext) error {
 	if err != nil {
 		return err
 	}
-
 
 	return nil
 }

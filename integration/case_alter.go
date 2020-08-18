@@ -26,13 +26,11 @@ type alterCase struct {
 	framework.AvroSingleTableTask
 }
 
-/*
 func newAlterCase() *alterCase {
 	alterCase := new(alterCase)
 	alterCase.AvroSingleTableTask.TableName = "test"
 	return alterCase
 }
-*/
 
 func (c *alterCase) Name() string {
 	return "Alter"

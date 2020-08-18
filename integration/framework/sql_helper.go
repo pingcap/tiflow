@@ -85,6 +85,7 @@ type awaitableSQLRowContainer struct {
 }
 
 type sqlRequestType int32
+
 const (
 	sqlRequestTypeInsert sqlRequestType = iota
 	sqlRequestTypeUpdate
@@ -92,7 +93,7 @@ const (
 )
 
 type sqlRequest struct {
-	tableName string
+	tableName   string
 	data        map[string]interface{}
 	result      map[string]interface{}
 	uniqueIndex string

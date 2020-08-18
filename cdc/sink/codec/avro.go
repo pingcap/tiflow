@@ -219,7 +219,7 @@ func ColumnInfoToAvroSchema(name string, columnInfo []*model.Column) (string, er
 		if err != nil {
 			return "", err
 		}
-		field := make(map[string]interface{}, 0)
+		field := make(map[string]interface{})
 		field["name"] = col.Name
 		if col.Flag.IsHandleKey() {
 			field["type"] = avroType
