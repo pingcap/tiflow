@@ -39,6 +39,7 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		}, exceptPartition: 11},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -52,6 +53,7 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		}, exceptPartition: 1},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -65,6 +67,7 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		}, exceptPartition: 7},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -81,6 +84,7 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Value: 1,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		}, exceptPartition: 1},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -97,6 +101,7 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Value: 2,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		}, exceptPartition: 11},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -113,6 +118,7 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Value: 3,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		}, exceptPartition: 13},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -129,6 +135,7 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 					Value: 4,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		}, exceptPartition: 13},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -139,8 +146,15 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				{
 					Name:  "id",
 					Value: 1,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+				},
+				{
+					Name:  "a",
+					Value: 2,
+					Flag:  model.UniqueKeyFlag,
 				},
 			},
+			IndexColumns: [][]int{{0}, {1}},
 		}, exceptPartition: 3},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -151,8 +165,14 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				{
 					Name:  "id",
 					Value: 2,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+				}, {
+					Name:  "a",
+					Value: 3,
+					Flag:  model.UniqueKeyFlag,
 				},
 			},
+			IndexColumns: [][]int{{0}, {1}},
 		}, exceptPartition: 3},
 		{row: &model.RowChangedEvent{
 			Table: &model.TableName{
@@ -163,8 +183,14 @@ func (s DefaultDispatcherSuite) TestDefaultDispatcher(c *check.C) {
 				{
 					Name:  "id",
 					Value: 3,
+					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+				}, {
+					Name:  "a",
+					Value: 4,
+					Flag:  model.UniqueKeyFlag,
 				},
 			},
+			IndexColumns: [][]int{{0}, {1}},
 		}, exceptPartition: 3},
 	}
 	p := newDefaultDispatcher(16, false)
