@@ -206,10 +206,6 @@ type RowChangedEvent struct {
 
 	TableInfoVersion uint64 `json:"table-info-version,omitempty"`
 
-	// TODO: remove it
-	// if the table of this row only has one unique index(includes primary key),
-	// IndieMarkCol will be set to the name of the unique index
-	IndieMarkCol string    `json:"indie-mark-col"`
 	Columns      []*Column `json:"columns"`
 	PreColumns   []*Column `json:"pre-columns"`
 	IndexColumns [][]int

@@ -229,6 +229,17 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			// TODO(neil) enable ID bucket.
 		}
 	}
+
+	for _, rules := range cfg.Sink.DispatchRules {
+		switch strings.ToLower(rules.Dispatcher) {
+		case "rowid", "index-value":
+			if cfg.EnableOldValue {
+				cmd.Printf("[WARN] This index-value distribution mode "+
+					"does not guarantee row-level orderliness when "+
+					"switching on the old value, so please use caution! dispatch-rules: %#v", rules)
+			}
+		}
+	}
 	info := &model.ChangeFeedInfo{
 		SinkURI:    sinkURI,
 		Opts:       make(map[string]string),
