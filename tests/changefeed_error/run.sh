@@ -53,7 +53,7 @@ function run() {
 
     cd $WORK_DIR
 
-    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
     run_sql "CREATE DATABASE changefeed_error;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=changefeed_error
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/NewChangefeedNoRetryError=1*return(true)'
@@ -70,10 +70,10 @@ function run() {
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
 
-    ensure $MAX_RETRIES check_changefeed_mark_failed http://${UP_PD_HOST}:${UP_PD_PORT} ${changefeedid} "\[tikv:9006\]GC life time is shorter than transaction duration.*"
-    changefeed_info=$(ETCDCTL_API=3 etcdctl --endpoints=${UP_PD_HOST}:${UP_PD_PORT} get /tidb/cdc/changefeed/info/${changefeedid}|tail -n 1)
+    ensure $MAX_RETRIES check_changefeed_mark_failed http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "\[tikv:9006\]GC life time is shorter than transaction duration.*"
+    changefeed_info=$(ETCDCTL_API=3 etcdctl --endpoints=${UP_PD_HOST_1}:${UP_PD_PORT_1} get /tidb/cdc/changefeed/info/${changefeedid}|tail -n 1)
     new_info=$(echo $changefeed_info|sed 's/"state":"failed"/"state":"normal"/g')
-    ETCDCTL_API=3 etcdctl --endpoints=${UP_PD_HOST}:${UP_PD_PORT} put /tidb/cdc/changefeed/info/${changefeedid} "$new_info"
+    ETCDCTL_API=3 etcdctl --endpoints=${UP_PD_HOST_1}:${UP_PD_PORT_1} put /tidb/cdc/changefeed/info/${changefeedid} "$new_info"
 
     check_table_exists "changefeed_error.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
@@ -83,12 +83,12 @@ function run() {
 
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/NewChangefeedRetryError=return(true)'
     kill $capture_pid
-    ensure $MAX_RETRIES check_no_capture http://${UP_PD_HOST}:${UP_PD_PORT}
+    ensure $MAX_RETRIES check_no_capture http://${UP_PD_HOST_1}:${UP_PD_PORT_1}
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-    ensure $MAX_RETRIES check_changefeed_mark_failed http://${UP_PD_HOST}:${UP_PD_PORT} ${changefeedid} "failpoint injected retriable error"
+    ensure $MAX_RETRIES check_changefeed_mark_failed http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "failpoint injected retriable error"
 
     cdc cli changefeed remove -c $changefeedid
-    ensure $MAX_RETRIES check_no_changefeed ${UP_PD_HOST}:${UP_PD_PORT}
+    ensure $MAX_RETRIES check_no_changefeed ${UP_PD_HOST_1}:${UP_PD_PORT_1}
 
     export GO_FAILPOINTS=''
     cleanup_process $CDC_BINARY

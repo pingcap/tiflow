@@ -32,17 +32,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/pingcap/ticdc/cdc/model"
 )
 
 var (
 	defaultSorterBufferSize        = 1000
 	defaultAutoResolvedRows        = 1000
-	defaultInitFileCount           = 10
+	defaultInitFileCount           = 3
 	defaultFileSizeLimit    uint64 = 1 << 31 // 2GB per file at most
 )
 
@@ -108,12 +107,23 @@ func (cache *fileCache) increase(idx, size int) {
 	}
 }
 
-func (cache *fileCache) gc() {
-	// TODO: control gc running time, in case of the delete operation of
-	// some large files blocks sorting
+func (cache *fileCache) gc(maxRunDuration time.Duration) {
 	cache.fileLock.Lock()
-	defer cache.fileLock.Unlock()
-	for _, f := range cache.toRemoveFiles {
+	index := 0
+	defer func() {
+		cache.toRemoveFiles = cache.toRemoveFiles[index:len(cache.toRemoveFiles)]
+		cache.fileLock.Unlock()
+	}()
+	start := time.Now()
+	for i, f := range cache.toRemoveFiles {
+		duration := time.Since(start)
+		if duration > maxRunDuration {
+			log.Warn("gc runs execeeds max run duration",
+				zap.Duration("duration", duration),
+				zap.Duration("maxRunDuration", maxRunDuration),
+			)
+			return
+		}
 		fpath := filepath.Join(cache.dir, f)
 		if _, err := os.Stat(fpath); err == nil {
 			err2 := os.Remove(fpath)
@@ -121,8 +131,8 @@ func (cache *fileCache) gc() {
 				log.Warn("remove file failed", zap.Error(err2))
 			}
 		}
+		index = i + 1
 	}
-	cache.toRemoveFiles = cache.toRemoveFiles[:0]
 }
 
 // prepareSorting checks whether the file cache can start a new sorting round
@@ -531,9 +541,10 @@ func (fs *FileSorter) gcRemovedFiles(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
+			fs.cache.gc(time.Second * 3)
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			fs.cache.gc()
+			fs.cache.gc(time.Second * 10)
 		}
 	}
 }
