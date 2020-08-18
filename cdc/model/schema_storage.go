@@ -56,9 +56,6 @@ type TableInfo struct {
 	// HandleIndexTableIneligible(-2) : the table is not eligible
 	HandleIndexID int64
 
-	// if the table of this row only has one unique index(includes primary key),
-	// IndieMarkCol will be set to the name of the unique index
-	IndieMarkCol       string
 	IndexColumnsOffset [][]int
 	rowColInfos        []rowcodec.ColInfo
 }
@@ -80,7 +77,6 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		rowColInfos:      make([]rowcodec.ColInfo, len(info.Columns)),
 	}
 
-	uniqueIndexNum := 0
 	rowColumnsCurrentOffset := 0
 
 	for i, col := range ti.Columns {
@@ -96,13 +92,17 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 				ti.HandleIndexID = HandleIndexPKIsHandle
 				ti.uniqueColumns[col.ID] = struct{}{}
 				ti.IndexColumnsOffset = append(ti.IndexColumnsOffset, []int{ti.RowColumnsOffset[col.ID]})
-				uniqueIndexNum++
 			}
 		}
 		ti.rowColInfos[i] = rowcodec.ColInfo{
 			ID:         col.ID,
 			IsPKHandle: isPK,
-			Ft:         rowcodec.FieldTypeFromModelColumn(col),
+			Tp:         int32(col.Tp),
+			Flag:       int32(col.Flag),
+			Flen:       col.Flen,
+			Decimal:    col.Decimal,
+			Elems:      col.Elems,
+			Collate:    col.Collate,
 		}
 	}
 
@@ -124,19 +124,9 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 			if len(indexColOffset) > 0 {
 				ti.IndexColumnsOffset = append(ti.IndexColumnsOffset, indexColOffset)
 			}
-			uniqueIndexNum++
 		}
 	}
 
-	// this table has only one unique column
-	if uniqueIndexNum == 1 && len(ti.uniqueColumns) == 1 {
-		for col := range ti.uniqueColumns {
-			info, _ := ti.GetColumnInfo(col)
-			if !info.IsGenerated() {
-				ti.IndieMarkCol = info.Name.O
-			}
-		}
-	}
 	ti.findHandleIndex()
 	ti.initColumnsFlag()
 	log.Debug("warpped table info", zap.Reflect("tableInfo", ti))
