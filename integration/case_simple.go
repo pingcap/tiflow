@@ -62,5 +62,21 @@ func (s *simpleCase) Run(ctx *framework.TaskContext) error {
 	}
 
 	// Wait on SQL requests in batch and check the correctness
-	return framework.All(ctx.SQLHelper(), reqs).Wait().Check()
+	err = framework.All(ctx.SQLHelper(), reqs).Wait().Check()
+	if err != nil {
+		return err
+	}
+
+	err = table.Upsert(map[string]interface{}{
+		"id": 0,
+		"value": 1,
+	}).Send().Wait().Check()
+	if err != nil {
+		return err
+	}
+
+	err = table.Delete(map[string]interface{}{
+		"id": 0,
+	}).Send().Wait().Check()
+	return err
 }

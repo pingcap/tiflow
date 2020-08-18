@@ -24,8 +24,9 @@ func main() {
 	dockerComposeFile := flag.String("docker-compose-file", "", "the path of the Docker-compose yml file")
 
 	testCases := []framework.Task{
-		newSimpleCase(),
-		newAlterCase(),
+		//newSimpleCase(),
+		//newAlterCase(),
+		newDeleteCase(),
 	}
 
 	log.SetLevel(zapcore.DebugLevel)

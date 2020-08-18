@@ -17,6 +17,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/jmoiron/sqlx"
+	"github.com/pingcap/ticdc/pkg/quotes"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -57,21 +59,49 @@ func (h *SQLHelper) GetTable(tableName string) *Table {
 	return &Table{tableName: tableName, uniqueIndex: idxCol, helper: h}
 }
 
-// Insert returns a Sendable object that represents an Insert clause
-func (t *Table) Insert(rowData map[string]interface{}) Sendable {
+func (t *Table) makeSQLRequest(requestType sqlRequestType, rowData map[string]interface{}) (*sqlRequest, error) {
 	if t.err != nil {
-		return &errorSender{errors.AddStack(t.err)}
+		return nil, t.err
 	}
 
-	basicReq := sqlRequest{
+	return &sqlRequest{
 		tableName:   t.tableName,
 		data:        rowData,
 		result:      nil,
 		uniqueIndex: t.uniqueIndex,
 		helper:      t.helper,
+		requestType: requestType,
+	}, nil
+}
+
+// Insert returns a Sendable object that represents an Insert clause
+func (t *Table) Insert(rowData map[string]interface{}) Sendable {
+	basicReq, err := t.makeSQLRequest(sqlRequestTypeInsert, rowData)
+	if err != nil {
+		return &errorSender{err: err}
 	}
 
-	return &syncSQLRequest{basicReq}
+	return &syncSQLRequest{*basicReq}
+}
+
+// Upsert returns a Sendable object that represents a Replace Into clause
+func (t *Table) Upsert(rowData map[string]interface{}) Sendable {
+	basicReq, err := t.makeSQLRequest(sqlRequestTypeUpsert, rowData)
+	if err != nil {
+		return &errorSender{err: err}
+	}
+
+	return &syncSQLRequest{*basicReq}
+}
+
+// Delete returns a Sendable object that represents a Delete from clause
+func (t *Table) Delete(rowData map[string]interface{}) Sendable {
+	basicReq, err := t.makeSQLRequest(sqlRequestTypeDelete, rowData)
+	if err != nil {
+		return &errorSender{err: err}
+	}
+
+	return &syncSQLRequest{*basicReq}
 }
 
 type sqlRowContainer interface {
@@ -88,7 +118,7 @@ type sqlRequestType int32
 
 const (
 	sqlRequestTypeInsert sqlRequestType = iota
-	sqlRequestTypeUpdate
+	sqlRequestTypeUpsert
 	sqlRequestTypeDelete
 )
 
@@ -150,7 +180,16 @@ type syncSQLRequest struct {
 }
 
 func (r *syncSQLRequest) Send() Awaitable {
-	err := r.insert(r.helper.ctx)
+	var err error
+	switch r.requestType {
+	case sqlRequestTypeInsert:
+		err = r.insert(r.helper.ctx)
+	case sqlRequestTypeUpsert:
+		err = r.upsert(r.helper.ctx)
+	case sqlRequestTypeDelete:
+		err = r.delete(r.helper.ctx)
+	}
+
 	if err != nil {
 		return &errorCheckableAndAwaitable{errors.AddStack(err)}
 	}
@@ -183,6 +222,49 @@ func (s *sqlRequest) insert(ctx context.Context) error {
 		return errors.AddStack(err)
 	}
 
+	s.requestType = sqlRequestTypeInsert
+	return nil
+}
+
+func (s *sqlRequest) upsert(ctx context.Context) error {
+	db := sqlx.NewDb(s.helper.upstream, "mysql")
+
+	keys := make([]string, len(s.data))
+	values := make([]interface{}, len(s.data))
+	i := 0
+	for k, v := range s.data {
+		keys[i] = k
+		values[i] = v
+		i++
+	}
+
+	query, args, err := sqlx.In("replace into `" + s.tableName + "` " + makeColumnTuple(keys) +" values (?)", values)
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
+	query = db.Rebind(query)
+	_, err = s.helper.upstream.ExecContext(ctx, query, args...)
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
+	s.requestType = sqlRequestTypeUpsert
+	return nil
+}
+
+func (s *sqlRequest) delete(ctx context.Context) error {
+	db, err := sqlbuilder.New("mysql", s.helper.downstream)
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
+	_, err = db.DeleteFrom(s.tableName).Where(quotes.QuoteName(s.uniqueIndex) + " = ?", s.data[s.uniqueIndex]).ExecContext(ctx)
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
+	s.requestType = sqlRequestTypeDelete
 	return nil
 }
 
@@ -223,10 +305,30 @@ func (s *sqlRequest) poll(ctx context.Context) (bool, error) {
 		return false, errors.AddStack(err)
 	}
 	s.result = res
+
+	switch s.requestType {
+	case sqlRequestTypeInsert:
+		return true, nil
+	case sqlRequestTypeUpsert:
+		if compareMaps(s.data, res) {
+			return true, nil
+		}
+		log.Debug("Upserted row does not match the expected")
+		return false, nil
+	case sqlRequestTypeDelete:
+		if res == nil {
+			return true, nil
+		}
+		log.Debug("Delete not successful yet", zap.Reflect(s.uniqueIndex, s.data[s.uniqueIndex]))
+		return false, nil
+	}
 	return true, nil
 }
 
 func (s *sqlRequest) Check() error {
+	if s.requestType == sqlRequestTypeUpsert || s.requestType == sqlRequestTypeDelete {
+		return nil
+	}
 	// TODO better comparator
 	if s.result == nil {
 		return errors.New("Check: nil result")
@@ -287,4 +389,12 @@ func compareMaps(m1 map[string]interface{}, m2 map[string]interface{}) bool {
 	str1 := fmt.Sprintf("%v", m1)
 	str2 := fmt.Sprintf("%v", m2)
 	return str1 == str2
+}
+
+func makeColumnTuple(colNames []string) string {
+	colNamesQuoted := make([]string, len(colNames))
+	for i := range colNames {
+		colNamesQuoted[i] = quotes.QuoteName(colNames[i])
+	}
+	return "(" + strings.Join(colNamesQuoted, ",") + ")"
 }

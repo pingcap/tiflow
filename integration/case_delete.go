@@ -13,7 +13,12 @@
 
 package main
 
-import "github.com/pingcap/ticdc/integration/framework"
+import (
+	"errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/integration/framework"
+	"go.uber.org/zap"
+)
 
 //nolint:unused
 type deleteCase struct {
@@ -31,9 +36,47 @@ func (c *deleteCase) Name() string {
 }
 
 func (c *deleteCase) Run(ctx *framework.TaskContext) error {
-	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key)")
+	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key, value int)")
 	if err != nil {
 		return err
+	}
+
+	table := ctx.SQLHelper().GetTable("test")
+
+	// To wait on a batch of SQL requests, create a slice of Awaitables
+	reqs := make([]framework.Awaitable, 0)
+	for i := 0; i < 1000; i++ {
+		// Only send, do not wait
+		req := table.Insert(map[string]interface{}{
+			"id":    i,
+			"value": i,
+		}).Send()
+		reqs = append(reqs, req)
+	}
+
+	err = framework.All(ctx.SQLHelper(), reqs).Wait().Check()
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < 1000; i++ {
+		err := table.Delete(map[string]interface{}{
+			"id": i,
+		}).Send().Wait().Check()
+		if err != nil {
+			return err
+		}
+	}
+
+	count := 0
+	err = ctx.Downstream.QueryRowContext(ctx.Ctx, "select count(*) from test").Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count != 0 {
+		log.Warn("table is not empty", zap.Int("count", count))
+		return errors.New("table is not empty")
 	}
 
 	return nil
