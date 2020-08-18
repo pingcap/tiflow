@@ -96,7 +96,9 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 
 	if s.cyclic != nil {
 		// Filter rows if it is origined from downstream.
-		cyclic.FilterAndReduceTxns(resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
+		skippedRowCount := cyclic.FilterAndReduceTxns(
+			resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
+		s.statistics.SubRowsCount(skippedRowCount)
 	}
 
 	if err := s.concurrentExec(ctx, resolvedTxnsMap); err != nil {
@@ -761,7 +763,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		updateMark := s.cyclic.UdpateSourceTableCyclicMark(
 			row.Table.Schema, row.Table.Table, uint64(bucket), replicaID, row.StartTs)
 		dmls.markSQL = updateMark
-		rowCount++
+		// rowCount is used in statistics, and for simplicity,
+		// we do not count mark table rows in rowCount.
 	}
 	dmls.rowCount = rowCount
 	return dmls
