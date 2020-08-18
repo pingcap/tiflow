@@ -206,7 +206,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
+	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Type, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),
