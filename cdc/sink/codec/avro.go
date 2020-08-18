@@ -134,6 +134,7 @@ func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tableVersion 
 		return schema, nil
 	}
 
+	// TODO pass ctx from the upper function. Need to modify the EventBatchEncoder interface.
 	avroCodec, registryID, err := a.valueSchemaManager.GetCachedOrRegister(context.Background(), *table, tableVersion, schemaGen)
 	if err != nil {
 		return nil, errors.Annotate(err, "AvroEventBatchEncoder: get-or-register failed")
