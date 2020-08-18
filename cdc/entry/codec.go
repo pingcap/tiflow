@@ -261,7 +261,7 @@ func decodeRowV1(b []byte, recordID int64, tableInfo *model.TableInfo, tz *time.
 func decodeRowV2(data []byte, recordID int64, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	handleColID, reqCols := tableInfo.GetRowColInfos()
 	decoder := rowcodec.NewDatumMapDecoder(reqCols, handleColID, tz)
-	return decoder.DecodeToDatumMap(data, handleColID, nil)
+	return decoder.DecodeToDatumMap(data, recordID, nil)
 }
 
 // unflatten converts a raw datum to a column datum.
