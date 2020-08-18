@@ -34,6 +34,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const syncInterval = time.Minute * 10 //同步间隔为10分钟 todo 需要参数化
+
 type tableIDMap = map[model.TableID]struct{}
 
 // OwnerDDLHandler defines the ddl handler for Owner
@@ -77,14 +79,16 @@ type changeFeed struct {
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
 
-	schema        *entry.SingleSchemaSnapshot
-	ddlState      model.ChangeFeedDDLState
-	targetTs      uint64
-	taskStatus    model.ProcessorsInfos
-	taskPositions map[model.CaptureID]*model.TaskPosition
-	filter        *filter.Filter
-	sink          sink.Sink
-	scheduler     scheduler.Scheduler
+	schema           *entry.SingleSchemaSnapshot
+	ddlState         model.ChangeFeedDDLState
+	targetTs         uint64
+	updateResolvedTs bool
+	startTimer       chan bool
+	taskStatus       model.ProcessorsInfos
+	taskPositions    map[model.CaptureID]*model.TaskPosition
+	filter           *filter.Filter
+	sink             sink.Sink
+	scheduler        scheduler.Scheduler
 
 	cyclicEnabled bool
 
@@ -711,6 +715,18 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		}
 	}
 
+	if c.status.ResolvedTs == c.status.CheckpointTs || c.status.ResolvedTs == 0 {
+		log.Debug("achive the sync point", zap.Uint64("ResolvedTs", c.status.ResolvedTs))
+		//c.syncPointTs = c.targetTs //恢复syncPointTs，使得ResoledTs可以继续推进
+		c.updateResolvedTs = true
+
+		//todo 实现向下游同步记录同步点
+	}
+
+	/*if minResolvedTs > c.syncPointTs {
+		minResolvedTs = c.syncPointTs
+	}*/
+
 	if len(c.taskPositions) < len(c.taskStatus) {
 		log.Debug("skip update resolved ts",
 			zap.Int("taskPositions", len(c.taskPositions)),
@@ -802,9 +818,15 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	var tsUpdated bool
 
-	if minResolvedTs > c.status.ResolvedTs {
+	if c.updateResolvedTs && minResolvedTs > c.status.ResolvedTs {
+		prevResolvedTs := c.status.ResolvedTs
 		c.status.ResolvedTs = minResolvedTs
 		tsUpdated = true
+		if prevResolvedTs == c.status.CheckpointTs || prevResolvedTs == 0 {
+			//到达sync point
+			//todo 需要重新开始启动计时
+			c.startTimer <- true
+		}
 	}
 
 	if minCheckpointTs > c.status.CheckpointTs {
@@ -844,4 +866,18 @@ func (c *changeFeed) pullDDLJob() error {
 		c.ddlJobHistory = append(c.ddlJobHistory, ddl)
 	}
 	return nil
+}
+
+// startSyncPeriod start a timer for every changefeed to create sync point by time
+func (c *changeFeed) startSyncPeriod() {
+	//c.startTimer <- true
+	go func() {
+		for {
+			select {
+			case <-c.startTimer:
+				time.Sleep(syncInterval)
+				c.updateResolvedTs = false
+			}
+		}
+	}()
 }

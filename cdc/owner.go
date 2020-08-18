@@ -344,6 +344,8 @@ func (o *Owner) newChangeFeed(
 		ddlState:          model.ChangeFeedSyncDML,
 		ddlExecutedTs:     checkpointTs,
 		targetTs:          info.GetTargetTs(),
+		updateResolvedTs:  true,
+		startTimer:        make(chan bool),
 		taskStatus:        processorsInfos,
 		taskPositions:     taskPositions,
 		etcdCli:           o.etcdClient,
@@ -494,6 +496,8 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			continue
 		}
 		o.changeFeeds[changeFeedID] = newCf
+		//start SyncPeriod for create the sync point
+		newCf.startSyncPeriod()
 		delete(o.stoppedFeeds, changeFeedID)
 	}
 	o.adminJobsLock.Lock()
