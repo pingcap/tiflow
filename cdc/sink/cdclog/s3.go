@@ -103,7 +103,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 				hashPart.uploader = uploader
 			}
 
-			err := hashPart.uploader.UploadPart(ctx, rowDatas, hashPart.uploadNum)
+			err := hashPart.uploader.UploadPart(ctx, rowDatas)
 			if err != nil {
 				return err
 			}
