@@ -259,9 +259,9 @@ func decodeRowV1(b []byte, recordID int64, tableInfo *model.TableInfo, tz *time.
 // Ref: https://github.com/pingcap/tidb/pull/12634
 //      https://github.com/pingcap/tidb/blob/master/docs/design/2018-07-19-row-format.md
 func decodeRowV2(data []byte, recordID int64, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
-	_, reqCols := tableInfo.GetRowColInfos()
-	decoder := rowcodec.NewDatumMapDecoder(reqCols, tz)
-	return decoder.DecodeToDatumMap(data, nil)
+	handleColID, reqCols := tableInfo.GetRowColInfos()
+	decoder := rowcodec.NewDatumMapDecoder(reqCols, handleColID, tz)
+	return decoder.DecodeToDatumMap(data, handleColID, nil)
 }
 
 // unflatten converts a raw datum to a column datum.

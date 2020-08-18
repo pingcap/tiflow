@@ -322,7 +322,11 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			inErr := p.flushTaskStatusAndPosition(ctx)
 			if inErr != nil {
 				if errors.Cause(inErr) != context.Canceled {
-					log.Error(
+					logError := log.Error
+					if errors.Cause(inErr) == model.ErrAdminStopProcessor {
+						logError = log.Warn
+					}
+					logError(
 						"update info failed",
 						zap.String("changefeed", p.changefeedID), zap.Error(inErr),
 					)
@@ -698,17 +702,23 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 			} else {
 				minTs = globalResolvedTs
 			}
-			if minTs == 0 {
+			if minTs == 0 || atomic.LoadUint64(&p.checkpointTs) == minTs {
 				continue
 			}
 			start := time.Now()
+
 			err := p.sink.FlushRowChangedEvents(ctx, minTs)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			atomic.StoreUint64(&p.checkpointTs, minTs)
-			metricFlushDuration.Observe(time.Since(start).Seconds())
 			p.localCheckpointTsNotifier.Notify()
+
+			dur := time.Since(start)
+			metricFlushDuration.Observe(dur.Seconds())
+			if dur > 3*time.Second {
+				log.Warn("flush row changed events too slow", zap.Duration("duration", dur))
+			}
 		}
 	}
 }

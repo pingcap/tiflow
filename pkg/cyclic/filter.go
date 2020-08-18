@@ -63,7 +63,9 @@ func (m MarkMap) shouldFilterTxn(startTs uint64, filterReplicaIDs []uint64, repl
 // FilterAndReduceTxns filters duplicate txns bases on filterReplicaIDs and
 // if the mark table dml is exist in the txn, this functiong will set the replicaID by mark table dml
 // if the mark table dml is not exist, this function will set the replicaID by config
-func FilterAndReduceTxns(txnsMap map[model.TableName][]*model.Txn, filterReplicaIDs []uint64, replicaID uint64) {
+func FilterAndReduceTxns(
+	txnsMap map[model.TableName][]*model.Txn, filterReplicaIDs []uint64, replicaID uint64,
+) (skippedRowCount int) {
 	markMap := make(MarkMap)
 	for table, txns := range txnsMap {
 		if !mark.IsMarkTable(table.Schema, table.Table) {
@@ -90,6 +92,10 @@ func FilterAndReduceTxns(txnsMap map[model.TableName][]*model.Txn, filterReplica
 	for table, txns := range txnsMap {
 		if mark.IsMarkTable(table.Schema, table.Table) {
 			delete(txnsMap, table)
+			for i := range txns {
+				// For simplicity, we do not count mark table rows in statistics.
+				skippedRowCount += len(txns[i].Rows)
+			}
 			continue
 		}
 		filteredTxns := make([]*model.Txn, 0, len(txns))
@@ -99,6 +105,7 @@ func FilterAndReduceTxns(txnsMap map[model.TableName][]*model.Txn, filterReplica
 			if needSkip {
 				// Found cyclic mark, skip this event as it originly created from
 				// downstream.
+				skippedRowCount += len(txn.Rows)
 				continue
 			}
 			txn.ReplicaID = replicaID
@@ -113,4 +120,5 @@ func FilterAndReduceTxns(txnsMap map[model.TableName][]*model.Txn, filterReplica
 			txnsMap[table] = filteredTxns
 		}
 	}
+	return
 }
