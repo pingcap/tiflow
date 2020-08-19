@@ -203,7 +203,7 @@ type avroLogicalType struct {
 
 const (
 	timestampMillis logicalType = "timestamp-millis"
-	timeMicros      logicalType = "time-micros"
+	timeMicros      logicalType = "time-millis"
 )
 
 // ColumnInfoToAvroSchema generates the Avro schema JSON for the corresponding columns
@@ -279,10 +279,6 @@ func getAvroDataTypeName(v interface{}) (string, error) {
 		return "null", nil
 	case string:
 		return "string", nil
-	case time.Duration:
-		return "long", nil
-	case time.Time:
-		return "long", nil
 	default:
 		log.Warn("getAvroDataTypeName: unknown type")
 		return "", errors.New("unknown type for Avro")
@@ -302,9 +298,9 @@ func getAvroDataTypeNameMysql(tp byte) (interface{}, error) {
 			Type:        "long",
 			LogicalType: timestampMillis,
 		}, nil
-	case mysql.TypeDuration: //duration should read fsp from column meta data
+	case mysql.TypeDuration:
 		return avroLogicalType{
-			Type:        "long",
+			Type:        "int",
 			LogicalType: timeMicros,
 		}, nil
 	case mysql.TypeEnum:
@@ -390,7 +386,7 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 		fracInt = int64(float64(fracInt) * math.Pow10(6-fsp))
 
 		d := types.NewDuration(hours, minutes, seconds, int(fracInt), int8(fsp)).Duration
-		const fullType = "long." + timeMicros
+		const fullType = "int." + timeMicros
 		return d, string(fullType), nil
 	case mysql.TypeYear:
 		return col.Value.(int64), "long", nil

@@ -41,7 +41,7 @@ type SQLHelper struct {
 type Table struct {
 	err         error
 	tableName   string
-	uniqueIndex string
+	uniqueIndex []string
 	helper      *SQLHelper
 }
 
@@ -107,6 +107,7 @@ func (t *Table) Delete(rowData map[string]interface{}) Sendable {
 
 type sqlRowContainer interface {
 	getData() map[string]interface{}
+	getComparableKey() string
 	getTable() *Table
 }
 
@@ -127,7 +128,7 @@ type sqlRequest struct {
 	tableName   string
 	data        map[string]interface{}
 	result      map[string]interface{}
-	uniqueIndex string
+	uniqueIndex []string
 	helper      *SQLHelper
 	requestType sqlRequestType
 	hasReadBack uint32
@@ -138,6 +139,43 @@ func (s *sqlRequest) MarshalLogObject(encoder zapcore.ObjectEncoder) error {
 	encoder.AddString("upstream", fmt.Sprintf("%#v", s.data))
 	encoder.AddString("downstream", fmt.Sprintf("%#v", s.result))
 	return nil
+}
+
+func (s *sqlRequest) getPrimaryKeyTuple() string {
+	return makeColumnTuple(s.uniqueIndex)
+}
+
+func (s *sqlRequest) getWhereCondition() []interface{} {
+	builder := strings.Builder{}
+	args := make([]interface{}, 1, len(s.uniqueIndex)+1)
+	builder.WriteString(s.getPrimaryKeyTuple() + " = (")
+	for i, col := range s.uniqueIndex {
+		builder.WriteString("?")
+		if i != len(s.uniqueIndex)-1 {
+			builder.WriteString(",")
+		}
+
+		args = append(args, s.data[col])
+	}
+	builder.WriteString(")")
+	args[0] = builder.String()
+	return args
+}
+
+func (s *sqlRequest) getComparableKey() string {
+	if len(s.uniqueIndex) == 1 {
+		return s.uniqueIndex[0]
+	}
+
+	ret := make(map[string]interface{})
+	for k, v := range s.data {
+		for _, col := range s.uniqueIndex {
+			if k == col {
+				ret[k] = v
+			}
+		}
+	}
+	return fmt.Sprintf("%v", ret)
 }
 
 func (s *sqlRequest) getData() map[string]interface{} {
@@ -200,7 +238,9 @@ func (r *syncSQLRequest) Send() Awaitable {
 			return
 		}
 
-		rows, err := db.SelectFrom(r.tableName).Where(r.uniqueIndex+" = ?", r.data[r.uniqueIndex]).QueryContext(r.helper.ctx)
+		cond := r.getWhereCondition()
+
+		rows, err := db.SelectFrom(r.tableName).Where(cond).QueryContext(r.helper.ctx)
 		if err != nil {
 			log.Warn("ReadBack:", zap.Error(err))
 			return
@@ -219,8 +259,6 @@ func (r *syncSQLRequest) Send() Awaitable {
 
 		atomic.StoreUint32(&r.hasReadBack, 1)
 	}()
-
-
 
 	if err != nil {
 		return &errorCheckableAndAwaitable{errors.AddStack(err)}
@@ -270,7 +308,7 @@ func (s *sqlRequest) upsert(ctx context.Context) error {
 		i++
 	}
 
-	query, args, err := sqlx.In("replace into `" + s.tableName + "` " + makeColumnTuple(keys) +" values (?)", values)
+	query, args, err := sqlx.In("replace into `"+s.tableName+"` "+makeColumnTuple(keys)+" values (?)", values)
 	if err != nil {
 		return errors.AddStack(err)
 	}
@@ -291,7 +329,7 @@ func (s *sqlRequest) delete(ctx context.Context) error {
 		return errors.AddStack(err)
 	}
 
-	_, err = db.DeleteFrom(s.tableName).Where(quotes.QuoteName(s.uniqueIndex) + " = ?", s.data[s.uniqueIndex]).ExecContext(ctx)
+	_, err = db.DeleteFrom(s.tableName).Where(s.getWhereCondition()).ExecContext(ctx)
 	if err != nil {
 		return errors.AddStack(err)
 	}
@@ -306,7 +344,7 @@ func (s *sqlRequest) read(ctx context.Context) (map[string]interface{}, error) {
 		return nil, errors.AddStack(err)
 	}
 
-	rows, err := db.SelectFrom(s.tableName).Where(s.uniqueIndex+" = ?", s.data[s.uniqueIndex]).QueryContext(ctx)
+	rows, err := db.SelectFrom(s.tableName).Where(s.getWhereCondition()).QueryContext(ctx)
 	if err != nil {
 		return nil, errors.AddStack(err)
 
@@ -332,7 +370,6 @@ func (s *sqlRequest) poll(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 	res, err := s.read(ctx)
-
 	if err != nil {
 		if strings.Contains(err.Error(), "Error 1146") {
 			return false, nil
@@ -343,8 +380,14 @@ func (s *sqlRequest) poll(ctx context.Context) (bool, error) {
 
 	switch s.requestType {
 	case sqlRequestTypeInsert:
+		if res == nil {
+			return false, nil
+		}
 		return true, nil
 	case sqlRequestTypeUpsert:
+		if res == nil {
+			return false, nil
+		}
 		if compareMaps(s.data, res) {
 			return true, nil
 		}
@@ -354,7 +397,7 @@ func (s *sqlRequest) poll(ctx context.Context) (bool, error) {
 		if res == nil {
 			return true, nil
 		}
-		log.Debug("Delete not successful yet", zap.Reflect(s.uniqueIndex, s.data[s.uniqueIndex]))
+		log.Debug("Delete not successful yet", zap.Reflect("where condition", s.getWhereCondition()))
 		return false, nil
 	}
 	return true, nil
@@ -399,21 +442,24 @@ func rowsToMap(rows *sql.Rows) (map[string]interface{}, error) {
 	return ret, nil
 }
 
-func getUniqueIndexColumn(ctx context.Context, db sqlbuilder.Database, dbName string, tableName string) (string, error) {
-	row, err := db.QueryRowContext(ctx, "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = ? "+
-		"AND TABLE_NAME = ? AND NON_UNIQUE = 0",
-		dbName, tableName)
+func getUniqueIndexColumn(ctx context.Context, db sqlbuilder.Database, dbName string, tableName string) ([]string, error) {
+	row, err := db.QueryRowContext(ctx, `
+		SELECT GROUP_CONCAT(COLUMN_NAME SEPARATOR ' ') FROM INFORMATION_SCHEMA.STATISTICS
+		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+		GROUP BY INDEX_NAME 
+		ORDER BY FIELD(INDEX_NAME,'PRIMARY') DESC
+	`, dbName, tableName)
 	if err != nil {
-		return "", errors.AddStack(err)
+		return nil, errors.AddStack(err)
 	}
 
 	colName := ""
 	err = row.Scan(&colName)
 	if err != nil {
-		return "", errors.AddStack(err)
+		return nil, errors.AddStack(err)
 	}
 
-	return colName, nil
+	return strings.Split(colName, " "), nil
 }
 
 func compareMaps(m1 map[string]interface{}, m2 map[string]interface{}) bool {
