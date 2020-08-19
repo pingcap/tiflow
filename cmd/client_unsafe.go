@@ -35,25 +35,6 @@ func newUnsafeCommand() *cobra.Command {
 	return command
 }
 
-func newDeleteServiceGcSafepointCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "delete-service-gc-safepoint",
-		Short: "Delete CDC service GC safepoint in PD, confirm that you know what this command will do and use it at your own risk",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := confirmMetaDelete(cmd); err != nil {
-				return err
-			}
-			ctx := defaultContext
-			_, err := pdCli.UpdateServiceGCSafePoint(ctx, cdc.CDCServiceSafePointID, 0, 0)
-			if err == nil {
-				cmd.Println("CDC service GC safepoint truncated in PD!")
-			}
-			return errors.Trace(err)
-		},
-	}
-	return command
-}
-
 func newResetCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "reset",
@@ -70,6 +51,25 @@ func newResetCommand() *cobra.Command {
 			_, err = pdCli.UpdateServiceGCSafePoint(ctx, cdc.CDCServiceSafePointID, 0, 0)
 			if err == nil {
 				cmd.Println("reset and all metadata truncated in PD!")
+			}
+			return errors.Trace(err)
+		},
+	}
+	return command
+}
+
+func newDeleteServiceGcSafepointCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "delete-service-gc-safepoint",
+		Short: "Delete CDC service GC safepoint in PD, confirm that you know what this command will do and use it at your own risk",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := confirmMetaDelete(cmd); err != nil {
+				return err
+			}
+			ctx := defaultContext
+			_, err := pdCli.UpdateServiceGCSafePoint(ctx, cdc.CDCServiceSafePointID, 0, 0)
+			if err == nil {
+				cmd.Println("CDC service GC safepoint truncated in PD!")
 			}
 			return errors.Trace(err)
 		},
