@@ -357,8 +357,12 @@ func (d *CanalEventBatchEncoder) MixedBuild() []byte {
 }
 
 // UpdateResolvedTs implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) UpdateResolvedTs(ts uint64) {
+func (d *CanalEventBatchEncoder) UpdateResolvedTs(ts uint64) (EncoderResult, error) {
+	if ts < d.resolvedTs {
+		return EncoderNoOperation, nil
+	}
 	d.resolvedTs = ts
+	return EncoderNeedAsyncWrite, nil
 }
 
 // Build implements the EventBatchEncoder interface

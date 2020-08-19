@@ -301,7 +301,13 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		if batchSize == 0 {
 			return nil
 		}
-		encoder.UpdateResolvedTs(resolvedTs)
+		op1, err := encoder.UpdateResolvedTs(resolvedTs)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if op1 == codec.EncoderNoOperation {
+			return nil
+		}
 		keys, values := encoder.Build()
 		for i := range keys {
 			err := k.writeToProducer(ctx, keys[i], values[i], op, partition)
@@ -356,7 +362,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			continue
 		}
 
-		if op == codec.EncoderNeedSyncWrite || op == codec.EncoderNeedAsyncWrite {
+		if op != codec.EncoderNoOperation {
 			if err := flushToProducer(op); err != nil {
 				return errors.Trace(err)
 			}

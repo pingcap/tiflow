@@ -332,8 +332,9 @@ func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult
 }
 
 // UpdateResolvedTs implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) UpdateResolvedTs(ts uint64) {
-	// Json encoder does not need
+func (d *JSONEventBatchEncoder) UpdateResolvedTs(ts uint64) (EncoderResult, error) {
+	// nothing for now
+	return EncoderNeedAsyncWrite, nil
 }
 
 // Build implements the EventBatchEncoder interface

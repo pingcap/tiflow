@@ -31,7 +31,7 @@ type EventBatchEncoder interface {
 	// AppendDDLEvent appends a DDL event into the batch
 	AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error)
 	// UpdateResolvedTs help encoder use resolved ts to split row change event from resolved and unresolved
-	UpdateResolvedTs(ts uint64)
+	UpdateResolvedTs(ts uint64) (EncoderResult, error)
 	// Build return a list of <key value>, it always reset the encoder state based on implementation.
 	Build() (keys [][]byte, values [][]byte)
 	// MixedBuild builds the batch and returns the bytes of mixed keys and values.

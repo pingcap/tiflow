@@ -105,8 +105,9 @@ func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult
 }
 
 // UpdateResolvedTs implements the EventBatchEncoder interface
-func (a *AvroEventBatchEncoder) UpdateResolvedTs(ts uint64) {
+func (a *AvroEventBatchEncoder) UpdateResolvedTs(ts uint64) (EncoderResult, error) {
 	// nothing for now
+	return EncoderNeedAsyncWrite, nil
 }
 
 // Build a MQ message

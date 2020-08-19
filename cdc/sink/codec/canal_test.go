@@ -112,7 +112,7 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 			}
 			c.Assert(err, check.IsNil)
 		}
-		encoder.UpdateResolvedTs(mxCommitTs)
+		_, _ = encoder.UpdateResolvedTs(mxCommitTs)
 		keys, values := encoder.Build()
 		for _, key := range keys {
 			c.Assert(key, check.IsNil)
