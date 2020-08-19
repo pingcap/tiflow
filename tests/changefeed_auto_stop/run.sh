@@ -34,7 +34,7 @@ function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
     start_tidb_cluster --workdir $WORK_DIR
     cd $WORK_DIR
-    start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    start_ts=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
     for i in $(seq $DB_COUNT); do
         db="changefeed_auto_stop_$i"
@@ -42,9 +42,9 @@ function run() {
         go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=$db
     done
 
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "1" --addr "127.0.0.1:8301" --pd "http://${UP_PD_HOST}:${UP_PD_PORT}"
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "1" --addr "127.0.0.1:8301" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/ProcessorSyncResolvedError=1*return(true);github.com/pingcap/ticdc/cdc/ProcessorUpdatePositionDelaying=return(true)'
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "2" --addr "127.0.0.1:8302" --pd "http://${UP_PD_HOST}:${UP_PD_PORT}"
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix "2" --addr "127.0.0.1:8302" --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
     export GO_FAILPOINTS=''
 
     TOPIC_NAME="ticdc-changefeed-auto-stop-test-$RANDOM"
@@ -52,14 +52,14 @@ function run() {
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
         *) SINK_URI="mysql://root@127.0.0.1:3306/";;
     esac
-    changefeedid=$(cdc cli changefeed create --pd="http://${UP_PD_HOST}:${UP_PD_PORT}" --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
+    changefeedid=$(cdc cli changefeed create --pd="http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" --start-ts=$start_ts --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
 
-    ensure 10 check_changefeed_is_stopped ${UP_PD_HOST}:${UP_PD_PORT} ${changefeedid}
+    ensure 10 check_changefeed_is_stopped ${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid}
 
-    cdc cli changefeed resume --changefeed-id=${changefeedid} --pd="http://${UP_PD_HOST}:${UP_PD_PORT}"
+    cdc cli changefeed resume --changefeed-id=${changefeedid} --pd="http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
     for i in $(seq $DB_COUNT); do
         check_table_exists "changefeed_auto_stop_$i.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     done

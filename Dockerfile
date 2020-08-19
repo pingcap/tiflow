@@ -5,7 +5,7 @@ COPY . .
 RUN make
 
 FROM alpine:3.12
-RUN apk add --no-cache tzdata bash curl
+RUN apk add --no-cache tzdata bash curl socat
 COPY --from=builder /go/src/github.com/pingcap/ticdc/bin/cdc /cdc
 EXPOSE 8300
 CMD [ "/cdc" ]

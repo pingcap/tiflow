@@ -18,8 +18,8 @@ function run() {
 
     cd $WORK_DIR
 
-    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
-    run_sql "CREATE DATABASE file_sort;"
+    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
+    run_sql "CREATE DATABASE file_sort;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=file_sort
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "info"
 
@@ -37,21 +37,27 @@ function run() {
 
     # Add a check table to reduce check time, or if we check data with sync diff
     # directly, there maybe a lot of diff data at first because of the incremental scan
-    run_sql "CREATE table file_sort.check1(id int primary key);"
+    run_sql "CREATE table file_sort.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_table_exists "file_sort.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_table_exists "file_sort.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
-    go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=file_sort
-    run_sql "CREATE table file_sort.check2(id int primary key);"
+    run_sql "truncate table file_sort.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+    run_sql "CREATE table file_sort.check2(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_table_exists "file_sort.check2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
-    run_sql "create table file_sort.USERTABLE2 like file_sort.USERTABLE"
-    run_sql "insert into file_sort.USERTABLE2 select * from file_sort.USERTABLE"
-    run_sql "create table file_sort.check3(id int primary key);"
-    check_table_exists "file_sort.USERTABLE2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=file_sort
+    run_sql "CREATE table file_sort.check3(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_table_exists "file_sort.check3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
+    check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+
+    run_sql "create table file_sort.USERTABLE2 like file_sort.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "insert into file_sort.USERTABLE2 select * from file_sort.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "create table file_sort.check4(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    check_table_exists "file_sort.USERTABLE2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists "file_sort.check4" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
 
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 

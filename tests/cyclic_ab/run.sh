@@ -43,13 +43,13 @@ function run() {
     } done
 
     # record tso after we create tables to not block on waiting mark tables DDLs.
-    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
     run_cdc_server \
         --workdir $WORK_DIR \
         --binary $CDC_BINARY \
         --logsuffix "_${TEST_NAME}_upsteam" \
-        --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
+        --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
         --addr "127.0.0.1:8300"
 
     run_cdc_server \
@@ -62,7 +62,7 @@ function run() {
     # Echo y to ignore ineligible tables
     echo "y" | run_cdc_cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
-        --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
+        --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
         --cyclic-replica-id 1 \
         --cyclic-filter-replica-ids 2 \
         --cyclic-sync-ddl true
