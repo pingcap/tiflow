@@ -28,6 +28,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pingcap/ticdc/pkg/quotes"
+
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/security"
 
@@ -281,7 +283,8 @@ type Consumer struct {
 	}
 	sinksMu sync.Mutex
 
-	ddlSink sink.Sink
+	ddlSink              sink.Sink
+	fakeTableIDGenerator *fakeTableIDGenerator
 
 	globalResolvedTs uint64
 }
@@ -303,6 +306,9 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		return nil, errors.Trace(err)
 	}
 	c := new(Consumer)
+	c.fakeTableIDGenerator = &fakeTableIDGenerator{
+		tableIDs: make(map[string]int64),
+	}
 	c.sinks = make([]*struct {
 		sink.Sink
 		resolvedTs uint64
@@ -399,6 +405,12 @@ ClaimMessages:
 				// FIXME: hack to set start-ts in row changed event, as start-ts
 				// is not contained in TiCDC open protocol
 				row.StartTs = row.CommitTs
+				var partitionID int64
+				if row.Table.IsPartition {
+					partitionID = row.Table.TableID
+				}
+				row.Table.TableID =
+					c.fakeTableIDGenerator.generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
 				err = sink.EmitRowChangedEvents(ctx, row)
 				if err != nil {
 					log.Fatal("emit row changed event failed", zap.Error(err))
@@ -539,4 +551,25 @@ func (c *Consumer) Run(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 	}
+}
+
+type fakeTableIDGenerator struct {
+	tableIDs       map[string]int64
+	currentTableID int64
+	mu             sync.Mutex
+}
+
+func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partition int64) int64 {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	key := quotes.QuoteSchema(schema, table)
+	if partition != 0 {
+		key = fmt.Sprintf("%s.`%d`", key, partition)
+	}
+	if tableID, ok := g.tableIDs[key]; ok {
+		return tableID
+	}
+	g.currentTableID++
+	g.tableIDs[key] = g.currentTableID
+	return g.currentTableID
 }
