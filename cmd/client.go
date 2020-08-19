@@ -199,7 +199,7 @@ func newCliCommand() *cobra.Command {
 		newCaptureCommand(),
 		newChangefeedCommand(),
 		newProcessorCommand(),
-		newMetadataCommand(),
+		newUnsafeCommand(),
 		newTsoCommand(),
 	)
 
