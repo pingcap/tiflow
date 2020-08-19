@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"math/rand"
 	"strconv"
 	"time"
 
@@ -97,6 +96,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 		a.valueBuf = evlp
 	} else {
+		log.Info("Delete event encountered!")
 		a.valueBuf = nil
 	}
 
@@ -210,7 +210,7 @@ const (
 func ColumnInfoToAvroSchema(name string, columnInfo []*model.Column) (string, error) {
 	top := avroSchemaTop{
 		Tp:     "record",
-		Name:   name + "_" + strconv.FormatInt(rand.Int63(), 10),
+		Name:   name,
 		Fields: nil,
 	}
 
@@ -316,7 +316,7 @@ func getAvroDataTypeNameMysql(tp byte) (interface{}, error) {
 	case mysql.TypeNewDecimal:
 		return "string", nil
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
-		return "int", nil
+		return "long", nil
 	case mysql.TypeLong, mysql.TypeLonglong:
 		return "long", nil
 	case mysql.TypeNull:
@@ -325,13 +325,19 @@ func getAvroDataTypeNameMysql(tp byte) (interface{}, error) {
 		return "string", nil
 	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		return "bytes", nil
+	case mysql.TypeYear:
+		return "long", nil
 	default:
+		log.Fatal("Unknown MySql type", zap.Reflect("mysql-type", tp))
 		return "", errors.New("Unknown Mysql type")
 	}
 }
 
 func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 	if v, ok := col.Value.(int); ok {
+		col.Value = int64(v)
+	}
+	if v, ok := col.Value.(uint64); ok {
 		col.Value = int64(v)
 	}
 
@@ -386,22 +392,20 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 		d := types.NewDuration(hours, minutes, seconds, int(fracInt), int8(fsp)).Duration
 		const fullType = "long." + timeMicros
 		return d, string(fullType), nil
+	case mysql.TypeYear:
+		return col.Value.(int64), "long", nil
 	case mysql.TypeJSON:
 		return col.Value.(tijson.BinaryJSON).String(), "string", nil
 	case mysql.TypeNewDecimal:
-		dec := col.Value.(*types.MyDecimal)
-		if dec == nil {
-			return nil, "null", nil
-		}
-		return dec.String(), "string", nil
+		return col.Value.(string), "string", nil
 	case mysql.TypeEnum:
-		return col.Value.(types.Enum).Value, "long", nil
+		return col.Value.(int64), "long", nil
 	case mysql.TypeSet:
-		return col.Value.(types.Set).Value, "long", nil
+		return col.Value.(int64), "long", nil
 	case mysql.TypeBit:
-		return col.Value.(uint64), "long", nil
+		return col.Value.(int64), "long", nil
 	case mysql.TypeTiny:
-		return int32(col.Value.(uint8)), "int", nil
+		return int32(col.Value.(int64)), "long", nil
 	default:
 		avroType, err := getAvroDataTypeName(col.Value)
 		if err != nil {

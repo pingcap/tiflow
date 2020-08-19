@@ -31,7 +31,7 @@ const (
 
 type sqlAllAwaiter struct {
 	helper          *SQLHelper
-	data            map[interface{}]map[string]interface{}
+	data            map[interface{}]sqlRowContainer
 	retrievedValues []map[string]interface{}
 	table           *Table
 }
@@ -44,7 +44,7 @@ func All(helper *SQLHelper, awaitables []Awaitable) Awaitable {
 
 	ret := &sqlAllAwaiter{
 		helper:          helper,
-		data:            make(map[interface{}]map[string]interface{}, len(awaitables)),
+		data:            make(map[interface{}]sqlRowContainer, len(awaitables)),
 		retrievedValues: make([]map[string]interface{}, 0),
 		table:           awaitables[0].(sqlRowContainer).getTable(),
 	}
@@ -55,8 +55,7 @@ func All(helper *SQLHelper, awaitables []Awaitable) Awaitable {
 			return row
 		}
 		key := rowContainer.getData()[rowContainer.getTable().uniqueIndex]
-		value := rowContainer.getData()
-		ret.data[key] = value
+		ret.data[key] = rowContainer
 	}
 
 	return &basicAwaitable{
@@ -124,7 +123,7 @@ func (s *sqlAllAwaiter) Check() error {
 		default:
 		}
 		expected := s.data[key]
-		if !compareMaps(row, expected) {
+		if !compareMaps(row, expected.getData()) {
 			log.Warn(
 				"Check failed",
 				zap.String("expected", fmt.Sprintf("%v", expected)),

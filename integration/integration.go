@@ -26,7 +26,8 @@ func main() {
 	testCases := []framework.Task{
 		//newSimpleCase(),
 		//newAlterCase(),
-		newDeleteCase(),
+		//newDeleteCase(),
+		newManyTypesCase(),
 	}
 
 	log.SetLevel(zapcore.DebugLevel)

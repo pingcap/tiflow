@@ -20,6 +20,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/pingcap/ticdc/pkg/quotes"
 	"strings"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -129,6 +130,7 @@ type sqlRequest struct {
 	uniqueIndex string
 	helper      *SQLHelper
 	requestType sqlRequestType
+	hasReadBack uint32
 }
 
 // MarshalLogObjects helps printing the sqlRequest
@@ -180,6 +182,7 @@ type syncSQLRequest struct {
 }
 
 func (r *syncSQLRequest) Send() Awaitable {
+	atomic.StoreUint32(&r.hasReadBack, 0)
 	var err error
 	switch r.requestType {
 	case sqlRequestTypeInsert:
@@ -189,6 +192,35 @@ func (r *syncSQLRequest) Send() Awaitable {
 	case sqlRequestTypeDelete:
 		err = r.delete(r.helper.ctx)
 	}
+
+	go func() {
+		db, err := sqlbuilder.New("mysql", r.helper.upstream)
+		if err != nil {
+			log.Warn("ReadBack:", zap.Error(err))
+			return
+		}
+
+		rows, err := db.SelectFrom(r.tableName).Where(r.uniqueIndex+" = ?", r.data[r.uniqueIndex]).QueryContext(r.helper.ctx)
+		if err != nil {
+			log.Warn("ReadBack:", zap.Error(err))
+			return
+		}
+		defer rows.Close()
+
+		if !rows.Next() {
+			log.Warn("ReadBack:", zap.Error(err))
+			return
+		}
+		r.data, err = rowsToMap(rows)
+		if err != nil {
+			log.Warn("ReadBack", zap.Error(err))
+			return
+		}
+
+		atomic.StoreUint32(&r.hasReadBack, 1)
+	}()
+
+
 
 	if err != nil {
 		return &errorCheckableAndAwaitable{errors.AddStack(err)}
@@ -296,6 +328,9 @@ func (s *sqlRequest) getBasicAwaitable() basicAwaitable {
 }
 
 func (s *sqlRequest) poll(ctx context.Context) (bool, error) {
+	if atomic.LoadUint32(&s.hasReadBack) == 0 {
+		return false, nil
+	}
 	res, err := s.read(ctx)
 
 	if err != nil {
