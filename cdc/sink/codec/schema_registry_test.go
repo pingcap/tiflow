@@ -185,7 +185,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	_, _, err = manager.Lookup(getTestingContext(), table, 1)
-	c.Assert(err, check.ErrorMatches, `.*cancelled.*`)
+	c.Assert(err, check.ErrorMatches, `.*not\sfound.*`)
 
 	codec, err := goavro.NewCodec(`{
        "type": "record",
@@ -200,7 +200,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
      }`)
 	c.Assert(err, check.IsNil)
 
-	err = manager.Register(getTestingContext(), table, codec)
+	_, err = manager.Register(getTestingContext(), table, codec)
 	c.Assert(err, check.IsNil)
 
 	var id int
@@ -230,7 +230,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
           ]
      }`)
 	c.Assert(err, check.IsNil)
-	err = manager.Register(getTestingContext(), table, codec)
+	_, err = manager.Register(getTestingContext(), table, codec)
 	c.Assert(err, check.IsNil)
 
 	codec2, id2, err := manager.Lookup(getTestingContext(), table, 999)
@@ -280,9 +280,12 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
      }`)
 	c.Assert(err, check.IsNil)
 
+	id := 0
 	for i := 0; i < 20; i++ {
-		err = manager.Register(getTestingContext(), table, codec)
+		id1, err := manager.Register(getTestingContext(), table, codec)
 		c.Assert(err, check.IsNil)
+		c.Assert(id == 0 || id == id1, check.IsTrue)
+		id = id1
 	}
 }
 

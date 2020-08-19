@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
@@ -101,31 +100,6 @@ func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, e
 
 // AppendDDLEvent generates new schema and registers it to the Registry
 func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
-	if e.TableInfo == nil {
-		log.Info("AppendDDLEvent: no schema generation needed, skip")
-		return EncoderNoOperation, nil
-	}
-
-	schemaStr, err := ColumnInfoToAvroSchema(e.TableInfo.Table, e.TableInfo.ColumnInfo)
-	if err != nil {
-		return EncoderNoOperation, errors.Annotate(err, "AppendDDLEvent failed")
-	}
-	log.Info("AppendDDLEvent: new schema generated", zap.String("schema_str", schemaStr))
-
-	avroCodec, err := goavro.NewCodec(schemaStr)
-	if err != nil {
-		return EncoderNoOperation, errors.Annotate(err, "AppendDDLEvent failed: could not verify schema, probably bug")
-	}
-
-	err = a.valueSchemaManager.Register(context.Background(), model.TableName{
-		Schema: e.TableInfo.Schema,
-		Table:  e.TableInfo.Table,
-	}, avroCodec)
-
-	if err != nil {
-		return EncoderNoOperation, errors.Annotate(err, "AppendDDLEvent failed: could not register schema")
-	}
-
 	return EncoderNoOperation, nil
 }
 
@@ -152,9 +126,18 @@ func (a *AvroEventBatchEncoder) Size() int {
 }
 
 func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tableVersion uint64, cols []*model.Column) (*avroEncodeResult, error) {
-	avroCodec, registryID, err := a.valueSchemaManager.Lookup(context.Background(), *table, tableVersion)
+	schemaGen := func() (string, error) {
+		schema, err := ColumnInfoToAvroSchema(table.Table, extractColumnInfos(cols))
+		if err != nil {
+			return "", errors.Annotate(err, "AvroEventBatchEncoder: generating schema failed")
+		}
+		return schema, nil
+	}
+
+	// TODO pass ctx from the upper function. Need to modify the EventBatchEncoder interface.
+	avroCodec, registryID, err := a.valueSchemaManager.GetCachedOrRegister(context.Background(), *table, tableVersion, schemaGen)
 	if err != nil {
-		return nil, errors.Annotate(err, "AvroEventBatchEncoder: lookup failed")
+		return nil, errors.Annotate(err, "AvroEventBatchEncoder: get-or-register failed")
 	}
 
 	native, err := rowToAvroNativeData(cols)
@@ -171,6 +154,18 @@ func (a *AvroEventBatchEncoder) avroEncode(table *model.TableName, tableVersion 
 		data:       bin,
 		registryID: registryID,
 	}, nil
+}
+
+func extractColumnInfos(cols []*model.Column) []*model.ColumnInfo {
+	ret := make([]*model.ColumnInfo, 0)
+	for _, info := range cols {
+		columnInfo := &model.ColumnInfo{
+			Name: info.Name,
+			Type: info.Type,
+		}
+		ret = append(ret, columnInfo)
+	}
+	return ret
 }
 
 type avroSchemaTop struct {

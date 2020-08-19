@@ -76,12 +76,9 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 		Table:  "test1",
 	}
 
-	err = s.encoder.valueSchemaManager.Register(context.Background(), table, avroCodec)
-	c.Assert(err, check.IsNil)
-
 	r, err := s.encoder.avroEncode(&table, 1, []*model.Column{
-		{Name: "id", Value: int32(1), Type: mysql.TypeLong},
-		{Name: "myint", Value: int32(2), Type: mysql.TypeLong},
+		{Name: "id", Value: 1, Type: mysql.TypeLong},
+		{Name: "myint", Value: 2, Type: mysql.TypeLong},
 		{Name: "mybool", Value: uint8(1), Type: mysql.TypeTiny},
 		{Name: "myfloat", Value: float32(3.14), Type: mysql.TypeFloat},
 		{Name: "mybytes", Value: []byte("Hello World"), Type: mysql.TypeBlob},
