@@ -62,31 +62,57 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 }
 
 func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
-	filter, err := NewFilter(&config.ReplicaConfig{
-		Filter: &config.FilterConfig{
-			IgnoreTxnStartTs: []uint64{1, 3},
-			Rules:            []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
-		},
-	})
-	c.Assert(err, check.IsNil)
 	testCases := []struct {
-		schema string
-		table  string
-		ts     uint64
-		ignore bool
+		cases []struct {
+			schema string
+			table  string
+			ts     uint64
+			ignore bool
+		}
+		ignoreTxnStartTs []uint64
+		rules            []string
 	}{
-		{"sns", "ttta", 1, true},
-		{"ecom", "aabb", 2, false},
-		{"sns", "log", 3, true},
-		{"sns", "log", 4, true},
-		{"ecom", "test", 5, true},
-		{"test", "test", 6, true},
-		{"ecom", "log", 6, false},
+		{cases: []struct {
+			schema string
+			table  string
+			ts     uint64
+			ignore bool
+		}{{"sns", "ttta", 1, true},
+			{"ecom", "aabb", 2, false},
+			{"sns", "log", 3, true},
+			{"sns", "log", 4, true},
+			{"ecom", "test", 5, true},
+			{"test", "test", 6, true},
+			{"ecom", "log", 6, false}},
+			ignoreTxnStartTs: []uint64{1, 3},
+			rules:            []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
+		},
+		{cases: []struct {
+			schema string
+			table  string
+			ts     uint64
+			ignore bool
+		}{{"S", "D1", 1, true},
+			{"S", "Da", 1, false},
+			{"S", "Db", 1, false},
+			{"S", "Daa", 1, false}},
+			ignoreTxnStartTs: []uint64{},
+			rules:            []string{"*.*", "!S.D[!a-d]"},
+		},
 	}
 
-	for _, tc := range testCases {
-		c.Assert(filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
-		c.Assert(filter.ShouldIgnoreDDLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
+	for _, ftc := range testCases {
+		filter, err := NewFilter(&config.ReplicaConfig{
+			Filter: &config.FilterConfig{
+				IgnoreTxnStartTs: ftc.ignoreTxnStartTs,
+				Rules:            ftc.rules,
+			},
+		})
+		c.Assert(err, check.IsNil)
+		for _, tc := range ftc.cases {
+			c.Assert(filter.ShouldIgnoreDMLEvent(tc.ts, tc.schema, tc.table), check.Equals, tc.ignore)
+			c.Assert(filter.ShouldIgnoreDDLEvent(tc.ts, model.ActionCreateTable, tc.schema, tc.table), check.Equals, tc.ignore)
+		}
 	}
 }
 
@@ -101,4 +127,53 @@ func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
 	c.Assert(filter.ShouldDiscardDDL(model.ActionDropSchema), check.IsFalse)
 	c.Assert(filter.ShouldDiscardDDL(model.ActionAddForeignKey), check.IsFalse)
 	c.Assert(filter.ShouldDiscardDDL(model.ActionCreateSequence), check.IsTrue)
+}
+
+func (s *filterSuite) TestShouldIgnoreDDL(c *check.C) {
+	testCases := []struct {
+		cases []struct {
+			schema  string
+			table   string
+			ddlType model.ActionType
+			ignore  bool
+		}
+		rules []string
+	}{{cases: []struct {
+		schema  string
+		table   string
+		ddlType model.ActionType
+		ignore  bool
+	}{{"sns", "", model.ActionCreateSchema, false},
+		{"sns", "", model.ActionDropSchema, false},
+		{"sns", "", model.ActionModifySchemaCharsetAndCollate, false},
+		{"ecom", "", model.ActionCreateSchema, false},
+		{"ecom", "aa", model.ActionCreateTable, false},
+		{"ecom", "", model.ActionCreateSchema, false},
+		{"test", "", model.ActionCreateSchema, true}},
+		rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
+	}, {cases: []struct {
+		schema  string
+		table   string
+		ddlType model.ActionType
+		ignore  bool
+	}{{"sns", "", model.ActionCreateSchema, false},
+		{"sns", "", model.ActionDropSchema, false},
+		{"sns", "", model.ActionModifySchemaCharsetAndCollate, false},
+		{"sns", "aa", model.ActionCreateTable, true},
+		{"sns", "C1", model.ActionCreateTable, false},
+		{"sns", "", model.ActionCreateTable, true}},
+		rules: []string{"sns.C1"},
+	}}
+	for _, ftc := range testCases {
+		filter, err := NewFilter(&config.ReplicaConfig{
+			Filter: &config.FilterConfig{
+				IgnoreTxnStartTs: []uint64{},
+				Rules:            ftc.rules,
+			},
+		})
+		c.Assert(err, check.IsNil)
+		for _, tc := range ftc.cases {
+			c.Assert(filter.ShouldIgnoreDDLEvent(1, tc.ddlType, tc.schema, tc.table), check.Equals, tc.ignore, check.Commentf("%#v", tc))
+		}
+	}
 }
