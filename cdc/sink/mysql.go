@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	`sync/atomic`
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -65,9 +65,9 @@ const (
 )
 
 type mysqlSink struct {
-	db     *sql.DB
+	db           *sql.DB
 	checkpointTs uint64
-	params *sinkParams
+	params       *sinkParams
 
 	filter *filter.Filter
 	cyclic *cyclic.Cyclic
@@ -114,7 +114,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
 	s.txnCacheMutex.Unlock()
 
-	if len(resolvedTxnsMap) == 0{
+	if len(resolvedTxnsMap) == 0 {
 		atomic.StoreUint64(&s.checkpointTs, resolvedTs)
 		return nil
 	}

@@ -348,7 +348,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		}
 		if k.protocol == codec.ProtocolCanal {
 			batchSize = encoder.Size()
-		}else{
+		} else {
 			batchSize = 0
 		}
 		return nil

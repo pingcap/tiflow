@@ -603,4 +603,3 @@ func (s MySQLSinkSuite) TestReduceReplace(c *check.C) {
 		c.Assert(args, check.DeepEquals, tc.expectArgs)
 	}
 }
-

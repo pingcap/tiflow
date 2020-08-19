@@ -336,7 +336,6 @@ func (d *JSONEventBatchEncoder) UpdateResolvedTs(ts uint64) {
 	// Json encoder does not need
 }
 
-
 // Build implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) Build() (keys [][]byte, values [][]byte) {
 	defer d.reset()
