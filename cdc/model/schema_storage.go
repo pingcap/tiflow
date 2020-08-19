@@ -102,7 +102,12 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		ti.rowColInfos[i] = rowcodec.ColInfo{
 			ID:         col.ID,
 			IsPKHandle: isPK,
-			Ft:         rowcodec.FieldTypeFromModelColumn(col),
+			Tp:         int32(col.Tp),
+			Flag:       int32(col.Flag),
+			Flen:       col.Flen,
+			Decimal:    col.Decimal,
+			Elems:      col.Elems,
+			Collate:    col.Collate,
 		}
 	}
 
