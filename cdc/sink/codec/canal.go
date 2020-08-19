@@ -313,10 +313,11 @@ func NewCanalEntryBuilder(forceHkPk bool) *canalEntryBuilder {
 
 // CanalEventBatchEncoder encodes the events into the byte of a batch into.
 type CanalEventBatchEncoder struct {
-	forceHkPk bool
-	size      int
-	ddls      []*model.DDLEvent
-	txnCache  *common.UnresolvedTxnCache
+	forceHkPk  bool
+	size       int
+	resolvedTs uint64
+	ddls       []*model.DDLEvent
+	txnCache   *common.UnresolvedTxnCache
 }
 
 // SetForceHandleKeyPKey set forceHandleKeyPKey, then handle key will be regarded as primary key
@@ -355,10 +356,14 @@ func (d *CanalEventBatchEncoder) MixedBuild() []byte {
 	panic("Mixed Build only use for JsonEncoder")
 }
 
+// UpdateResolvedTs implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) UpdateResolvedTs(ts uint64) {
+	d.resolvedTs = ts
+}
+
 // Build implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) Build(resolvedTs uint64) (keys [][]byte, values [][]byte) {
-	resolvedTxns := d.txnCache.Resolved(resolvedTs)
-	defer d.txnCache.UpdateCheckpoint(resolvedTs)
+func (d *CanalEventBatchEncoder) Build() (keys [][]byte, values [][]byte) {
+	resolvedTxns := d.txnCache.Resolved(d.resolvedTs)
 	if len(d.ddls) != 0 && len(resolvedTxns) != 0 {
 		log.Warn("ddl and dml is encoded both.")
 	}

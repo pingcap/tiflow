@@ -215,7 +215,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	if op == codec.EncoderNoOperation {
 		return nil
 	}
-	keys, values := encoder.Build(ts)
+	keys, values := encoder.Build()
 	for i := range keys {
 		err = k.writeToProducer(ctx, keys[i], values[i], op, -1)
 		if err != nil {
@@ -245,7 +245,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	// ddl always does not need resolved ts
-	keys, values := encoder.Build(0)
+	keys, values := encoder.Build()
 	var partition int32 = -1
 	log.Info("emit ddl event", zap.ByteStrings("keys", keys), zap.ByteStrings("values", values))
 	if k.protocol == codec.ProtocolCanal {
@@ -338,17 +338,18 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		if batchSize == 0 {
 			return nil
 		}
-		thisBatchSize := batchSize
-		batchSize = 0
-		if k.protocol == codec.ProtocolCanal {
-			batchSize += thisBatchSize - encoder.Size()
-		}
-		keys, values := encoder.Build(resolvedTs)
+		encoder.UpdateResolvedTs(resolvedTs)
+		keys, values := encoder.Build()
 		for i := range keys {
 			err := k.writeToProducer(ctx, keys[i], values[i], op, partition)
 			if err != nil {
 				return errors.Trace(err)
 			}
+		}
+		if k.protocol == codec.ProtocolCanal {
+			batchSize = encoder.Size()
+		}else{
+			batchSize = 0
 		}
 		return nil
 	}

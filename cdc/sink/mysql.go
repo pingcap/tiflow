@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	`sync/atomic`
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -65,6 +66,7 @@ const (
 
 type mysqlSink struct {
 	db     *sql.DB
+	checkpointTs uint64
 	params *sinkParams
 
 	filter *filter.Filter
@@ -100,10 +102,20 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 }
 
 func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
-
+	if resolvedTs <= atomic.LoadUint64(&s.checkpointTs) {
+		return nil
+	}
+	s.txnCacheMutex.Lock()
+	if len(s.txnCache.Unresolved()) == 0 {
+		atomic.StoreUint64(&s.checkpointTs, resolvedTs)
+		s.txnCacheMutex.Unlock()
+		return nil
+	}
 	resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
-	if len(resolvedTxnsMap) == 0 {
-		s.txnCache.UpdateCheckpoint(resolvedTs)
+	s.txnCacheMutex.Unlock()
+
+	if len(resolvedTxnsMap) == 0{
+		atomic.StoreUint64(&s.checkpointTs, resolvedTs)
 		return nil
 	}
 
@@ -115,7 +127,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 	if err := s.concurrentExec(ctx, resolvedTxnsMap); err != nil {
 		return errors.Trace(err)
 	}
-	s.txnCache.UpdateCheckpoint(resolvedTs)
+	atomic.StoreUint64(&s.checkpointTs, resolvedTs)
 	return nil
 }
 

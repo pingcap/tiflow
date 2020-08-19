@@ -30,8 +30,10 @@ type EventBatchEncoder interface {
 	AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error)
 	// AppendDDLEvent appends a DDL event into the batch
 	AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error)
-	// Build builds the batch before resolvedTs and return a list of <key value>, it always reset the encoder state based on implementation.
-	Build(resolvedTs uint64) (key [][]byte, value [][]byte)
+	// UpdateResolvedTs help encoder use resolved ts to split row change event from resolved and unresolved
+	UpdateResolvedTs(ts uint64)
+	// Build return a list of <key value>, it always reset the encoder state based on implementation.
+	Build() (keys [][]byte, values [][]byte)
 	// MixedBuild builds the batch and returns the bytes of mixed keys and values.
 	// This is used for cdc log, to merge key and value into one byte slice
 	MixedBuild() []byte
