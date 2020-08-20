@@ -15,14 +15,17 @@ package cdc
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"math"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -326,6 +329,72 @@ func (o *Owner) newChangeFeed(
 		log.Error("error on running owner", zap.Error(err))
 	}
 
+	//TODO 后期需要打包一下
+	var syncDB *sql.DB
+	// parse sinkURI as a URI
+	sinkURI, err := url.Parse(info.SinkURI)
+	if err != nil {
+		return nil, errors.Annotatef(err, "parse sinkURI failed")
+	}
+	if sinkURI == nil {
+		return nil, errors.New("fail to open MySQL sink, empty URL")
+	}
+	scheme := strings.ToLower(sinkURI.Scheme)
+	if scheme != "mysql" && scheme != "tidb" {
+		return nil, errors.New("can create mysql sink with unsupported scheme")
+	}
+	var tlsParam string
+	if sinkURI.Query().Get("ssl-ca") != "" {
+		credential := security.Credential{
+			CAPath:   sinkURI.Query().Get("ssl-ca"),
+			CertPath: sinkURI.Query().Get("ssl-cert"),
+			KeyPath:  sinkURI.Query().Get("ssl-key"),
+		}
+		tlsCfg, err := credential.ToTLSConfig()
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to open MySQL connection")
+		}
+		name := "cdc_mysql_tls" + "syncpoint" + id
+		err = dmysql.RegisterTLSConfig(name, tlsCfg)
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to open MySQL connection")
+		}
+		tlsParam = "?tls=" + name
+	}
+
+	// dsn format of the driver:
+	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+	username := sinkURI.User.Username()
+	password, _ := sinkURI.User.Password()
+	port := sinkURI.Port()
+	if username == "" {
+		username = "root"
+	}
+	if port == "" {
+		port = "4000"
+	}
+
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
+	dsn, err := dmysql.ParseDSN(dsnStr)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	dsnStr, err = configureSinkURI(ctx, dsn, util.TimezoneFromCtx(ctx))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	syncDB, err = sql.Open("mysql", dsnStr)
+	if err != nil {
+		return nil, errors.Annotate(err, "Open database connection failed")
+	}
+	err = syncDB.PingContext(ctx)
+	if err != nil {
+		return nil, errors.Annotatef(err, "fail to open MySQL connection")
+	}
+
+	log.Info("Start mysql syncpoint sink")
+	//需要打包 end
+
 	cf := &changeFeed{
 		info:          info,
 		id:            id,
@@ -346,6 +415,7 @@ func (o *Owner) newChangeFeed(
 		targetTs:          info.GetTargetTs(),
 		updateResolvedTs:  true,
 		startTimer:        make(chan bool),
+		syncDB:            syncDB,
 		taskStatus:        processorsInfos,
 		taskPositions:     taskPositions,
 		etcdCli:           o.etcdClient,
@@ -496,6 +566,8 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			continue
 		}
 		o.changeFeeds[changeFeedID] = newCf
+		//create the sync table
+		newCf.createSynctable()
 		//start SyncPeriod for create the sync point
 		newCf.startSyncPeriod()
 		delete(o.stoppedFeeds, changeFeedID)
@@ -1254,4 +1326,49 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
+	if dsnCfg.Params == nil {
+		dsnCfg.Params = make(map[string]string, 1)
+	}
+	dsnCfg.DBName = ""
+	dsnCfg.InterpolateParams = true
+	dsnCfg.MultiStatements = true
+	dsnCfg.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+
+	testDB, err := sql.Open("mysql", dsnCfg.FormatDSN())
+	if err != nil {
+		return "", errors.Annotate(err, "fail to open MySQL connection when configuring sink")
+	}
+	defer testDB.Close()
+	log.Debug("Opened connection to configure some tidb special parameters")
+
+	var variableName string
+	var autoRandomInsertEnabled string
+	queryStr := "show session variables like 'allow_auto_random_explicit_insert';"
+	err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &autoRandomInsertEnabled)
+	if err != nil && err != sql.ErrNoRows {
+		return "", errors.Annotate(err, "fail to query sink for support of auto-random")
+	}
+	if err == nil && (autoRandomInsertEnabled == "off" || autoRandomInsertEnabled == "0") {
+		dsnCfg.Params["allow_auto_random_explicit_insert"] = "1"
+		log.Debug("Set allow_auto_random_explicit_insert to 1")
+	}
+
+	var txnMode string
+	queryStr = "show session variables like 'tidb_txn_mode';"
+	err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &txnMode)
+	if err != nil && err != sql.ErrNoRows {
+		return "", errors.Annotate(err, "fail to query sink for txn mode")
+	}
+	/*if err == nil {
+		dsnCfg.Params["tidb_txn_mode"] = params.tidbTxnMode
+	}*/
+
+	dsnClone := dsnCfg.Clone()
+	dsnClone.Passwd = "******"
+	log.Info("sink uri is configured", zap.String("format dsn", dsnClone.FormatDSN()))
+
+	return dsnCfg.FormatDSN(), nil
 }

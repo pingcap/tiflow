@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math"
 	"time"
@@ -84,6 +85,7 @@ type changeFeed struct {
 	targetTs         uint64
 	updateResolvedTs bool
 	startTimer       chan bool
+	syncDB           *sql.DB
 	taskStatus       model.ProcessorsInfos
 	taskPositions    map[model.CaptureID]*model.TaskPosition
 	filter           *filter.Filter
@@ -721,6 +723,55 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		c.updateResolvedTs = true
 
 		//todo 实现向下游同步记录同步点
+		//rows := make([]*model.RowChangedEvent, 0, defaultSyncResolvedBatch)
+		//row := new(model.RowChangedEvent)
+		/*row := &model.RowChangedEvent{
+			StartTs:          0, //好像没问题
+			CommitTs:         c.status.CheckpointTs,
+			RowID:            0, //注意设置一下 好像没问题
+			TableInfoVersion: 0, // 不懂 好像没问题
+			Table: &model.TableName{
+				Schema:    "TiCDC",
+				Table:     "syncpoint",
+				Partition: 0, //不懂 好像没问题
+			},
+			IndieMarkCol: "master-ts", //待定
+			Delete:       false,
+			Columns:      make([]*model.Column, 1), //待定
+			PreColumns:   nil,                      //待定
+			IndexColumns: nil,                      //待定
+			// FIXME(leoppor): Correctness of conflict detection with old values
+			//Keys: genMultipleKeys(tableInfo, preCols, cols, quotes.QuoteSchema(schemaName, tableName)),
+			Keys: "test",
+		}
+		row.Columns = append(row.Columns, &model.Column{Name: "master-ts", Type: mysql.TypeVarchar, Flag: model.PrimaryKeyFlag, Value: c.status.CheckpointTs})
+		row.Columns = append(row.Columns, &model.Column{Name: "slave-ts", Type: mysql.TypeVarchar, Flag: model.NullableFlag, Value: "select @@tidb_current_ts"})
+		rows = append(rows, row)
+		/*row.StartTs = 0 //todo 不知道怎么设置
+		row.CommitTs = c.status.CheckpointTs
+		row.RowID = 0 //todo 不知道怎么设置
+		row.Table = new(model.TableName)
+		row.Table.Schema = "TiCDC"
+		row.Table.Table = "syncpoint"
+		row.Table.Partition = 0 */
+		//c.sink.FlushRowChangedEvents(ctx, c.status.CheckpointTs)
+		/*c.sink.EmitRowChangedEvents(ctx, rows...)
+		c.sink.FlushRowChangedEvents(ctx, c.status.CheckpointTs)*/
+		tx, err := c.syncDB.BeginTx(ctx, nil)
+		if err != nil {
+			log.Info("sync table: begin Tx fail")
+			return err
+		}
+		row, err := tx.Query("select @@tidb_current_ts")
+		if err != nil {
+			log.Info("sync table: get tidb_current_ts err")
+			return err
+		}
+		var slaveTs string
+		row.Scan(&slaveTs)
+		tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, slaveTs)
+		tx.Commit() //TODO 处理错误
+
 	}
 
 	/*if minResolvedTs > c.syncPointTs {
@@ -880,4 +931,13 @@ func (c *changeFeed) startSyncPeriod() {
 			}
 		}
 	}()
+}
+
+//createSynctable create a sync table to record the
+func (c *changeFeed) createSynctable() {
+	database := "TiCDC"
+	c.syncDB.Exec("CREATE DATABASE IF NOT EXISTS " + database)
+	c.syncDB.Exec("USE " + database)
+	c.syncDB.Exec("CREATE TABLE  IF NOT EXISTS syncpoint ( master_ts varchar(18),slave_ts varchar(18),PRIMARY KEY ( `master_ts` ) )")
+	// todo err 处理
 }
