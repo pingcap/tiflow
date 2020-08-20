@@ -59,10 +59,16 @@ func (c *deleteCase) Run(ctx *framework.TaskContext) error {
 		return err
 	}
 
+	deletes := make([]framework.Awaitable, 0, 1000)
 	for i := 0; i < 1000; i++ {
-		err := table.Delete(map[string]interface{}{
+		req := table.Delete(map[string]interface{}{
 			"id": i,
-		}).Send().Wait().Check()
+		}).Send()
+		deletes = append(deletes, req)
+	}
+
+	for _, req := range deletes {
+		err := req.Wait().Check()
 		if err != nil {
 			return err
 		}

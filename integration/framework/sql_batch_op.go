@@ -78,7 +78,7 @@ func (s *sqlAllAwaiter) poll(ctx context.Context) (bool, error) {
 		counter++
 		if batchSize >= selectQueryMaxBatchSize || counter == len(s.data) {
 			log.Debug("Selecting", zap.String("table", s.table.tableName), zap.Any("keys", indexValues))
-			query, args, err := sqlx.In("select distinct * from `"+s.table.tableName+"` where "+v.getTable().uniqueIndex[0]+" in (?)", indexValues)
+			query, args, err := sqlx.In("select distinct * from "+s.table.tableName+" where "+v.getTable().uniqueIndex[0]+" in (?)", indexValues)
 			if err != nil {
 				return false, errors.AddStack(err)
 			}
@@ -86,7 +86,7 @@ func (s *sqlAllAwaiter) poll(ctx context.Context) (bool, error) {
 			rows, err := db.QueryContext(ctx, query, args...)
 			if err != nil {
 				if strings.Contains(err.Error(), "Error 1146") {
-					log.Info("table does not exist, will try again", zap.Error(err))
+					log.Info("table does not exist, will try again", zap.Error(err), zap.String("query", query))
 					return false, nil
 				}
 				return false, errors.AddStack(err)
