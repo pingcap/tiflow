@@ -480,11 +480,11 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 	}
 	//p.position.Count = p.sink.Count()
 	err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
-	if err != nil && errors.Cause(err) != context.Canceled {
+	if err == nil {
+		log.Debug("flushed task position", zap.Stringer("position", p.position))
+	} else if errors.Cause(err) != context.Canceled {
 		log.Error("failed to flush task position", zap.Error(err))
 		return errors.Trace(err)
-	} else {
-		log.Debug("flushed task position", zap.Stringer("position", p.position))
 	}
 	return nil
 }
