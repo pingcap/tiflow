@@ -242,6 +242,32 @@ func (a *connArray) Close() {
 	}
 }
 
+type regionEventFeedLimiters struct {
+	sync.Mutex
+	// TODO replace with a LRU cache.
+	limiters map[uint64]*rate.Limiter
+}
+
+var defaultRegionEventFeedLimiters *regionEventFeedLimiters = &regionEventFeedLimiters{
+	limiters: make(map[uint64]*rate.Limiter),
+}
+
+func (rl *regionEventFeedLimiters) getLimiter(regionID uint64) *rate.Limiter {
+	var limiter *rate.Limiter
+	var ok bool
+
+	rl.Lock()
+	limiter, ok = rl.limiters[regionID]
+	if !ok {
+		// In most cases, region replica count is 3.
+		replicaCount := 3
+		limiter = rate.NewLimiter(rate.Every(100*time.Millisecond), replicaCount)
+		rl.limiters[regionID] = limiter
+	}
+	rl.Unlock()
+	return limiter
+}
+
 // CDCClient to get events from TiKV
 type CDCClient struct {
 	pd         pd.Client
@@ -256,6 +282,8 @@ type CDCClient struct {
 
 	regionCache *tikv.RegionCache
 	kvStorage   tikv.Storage
+
+	regionLimiters *regionEventFeedLimiters
 }
 
 // NewCDCClient creates a CDCClient instance
@@ -275,6 +303,7 @@ func NewCDCClient(ctx context.Context, pd pd.Client, kvStorage tikv.Storage, cre
 		}{
 			conns: make(map[string]*connArray),
 		},
+		regionLimiters: defaultRegionEventFeedLimiters,
 	}
 	return
 }
@@ -304,6 +333,10 @@ func (c *CDCClient) getConn(ctx context.Context, addr string) (*grpc.ClientConn,
 	}
 	c.mu.conns[addr] = ca
 	return ca.Get(), nil
+}
+
+func (c *CDCClient) getRegionLimiter(regionID uint64) *rate.Limiter {
+	return c.regionLimiters.getLimiter(regionID)
 }
 
 func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream cdcpb.ChangeData_EventFeedClient, err error) {
@@ -617,11 +650,12 @@ MainLoop:
 				extraOp = kvrpcpb.ExtraOp_ReadOldValue
 			}
 
+			regionID := rpcCtx.Meta.GetId()
 			req := &cdcpb.ChangeDataRequest{
 				Header: &cdcpb.Header{
 					ClusterId: s.client.clusterID,
 				},
-				RegionId:     rpcCtx.Meta.GetId(),
+				RegionId:     regionID,
 				RequestId:    requestID,
 				RegionEpoch:  rpcCtx.Meta.RegionEpoch,
 				CheckpointTs: sri.ts,
@@ -676,8 +710,9 @@ MainLoop:
 				}
 				streams[rpcCtx.Addr] = stream
 
+				limiter := s.client.getRegionLimiter(regionID)
 				g.Go(func() error {
-					return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions)
+					return s.receiveFromStream(ctx, g, rpcCtx.Addr, getStoreID(rpcCtx), stream, pendingRegions, limiter)
 				})
 			}
 
@@ -750,6 +785,7 @@ func needReloadRegion(failStoreIDs map[uint64]struct{}, rpcCtx *tikv.RPCContext)
 func (s *eventFeedSession) partialRegionFeed(
 	ctx context.Context,
 	state *regionFeedState,
+	limiter *rate.Limiter,
 ) error {
 	receiver := state.regionEventCh
 	defer func() {
@@ -767,12 +803,6 @@ func (s *eventFeedSession) partialRegionFeed(
 	}()
 
 	ts := state.sri.ts
-	rl := rate.NewLimiter(0.1, 5)
-
-	if !rl.Allow() {
-		return errors.New("partialRegionFeed exceeds rate limit")
-	}
-
 	maxTs, err := s.singleEventFeed(ctx, state.sri.verID.GetID(), state.sri.span, state.sri.ts, receiver)
 	log.Debug("singleEventFeed quit")
 
@@ -784,8 +814,9 @@ func (s *eventFeedSession) partialRegionFeed(
 		ts = maxTs
 	}
 
+	regionID := state.sri.verID.GetID()
 	log.Info("EventFeed disconnected",
-		zap.Reflect("regionID", state.sri.verID.GetID()),
+		zap.Reflect("regionID", regionID),
 		zap.Stringer("span", state.sri.span),
 		zap.Uint64("checkpoint", ts),
 		zap.String("error", err.Error()))
@@ -794,6 +825,22 @@ func (s *eventFeedSession) partialRegionFeed(
 
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
 	state.markStopped()
+
+	now := time.Now()
+	delay := limiter.ReserveN(now, 1).Delay()
+	if delay != 0 {
+		log.Info("EventFeed retry rate limited",
+			zap.Duration("delay", delay), zap.Reflect("regionID", regionID))
+		t := time.NewTimer(delay)
+		defer t.Stop()
+		select {
+		case <-t.C:
+			// We can proceed.
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
 	return s.onRegionFail(ctx, regionErrorInfo{
 		singleRegionInfo: state.sri,
 		err:              err,
@@ -935,6 +982,7 @@ func (s *eventFeedSession) receiveFromStream(
 	storeID uint64,
 	stream cdcpb.ChangeData_EventFeedClient,
 	pendingRegions *syncRegionFeedStateMap,
+	limiter *rate.Limiter,
 ) error {
 	// Cancel the pending regions if the stream failed. Otherwise it will remain unhandled in the pendingRegions list
 	// however not registered in the new reconnected stream.
@@ -998,7 +1046,7 @@ func (s *eventFeedSession) receiveFromStream(
 		}
 
 		for _, event := range cevent.Events {
-			err = s.sendRegionChangeEvent(ctx, g, event, regionStates, pendingRegions, addr)
+			err = s.sendRegionChangeEvent(ctx, g, event, regionStates, pendingRegions, addr, limiter)
 			if err != nil {
 				return err
 			}
@@ -1020,6 +1068,7 @@ func (s *eventFeedSession) sendRegionChangeEvent(
 	regionStates map[uint64]*regionFeedState,
 	pendingRegions *syncRegionFeedStateMap,
 	addr string,
+	limiter *rate.Limiter,
 ) error {
 	state, ok := regionStates[event.RegionId]
 	// Every region's range is locked before sending requests and unlocked after exiting, and the requestID
@@ -1063,7 +1112,7 @@ func (s *eventFeedSession) sendRegionChangeEvent(
 		regionStates[event.RegionId] = state
 
 		g.Go(func() error {
-			return s.partialRegionFeed(ctx, state)
+			return s.partialRegionFeed(ctx, state, limiter)
 		})
 	} else if state.isStopped() {
 		log.Warn("drop event due to region feed stopped",

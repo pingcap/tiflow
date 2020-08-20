@@ -21,7 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -206,7 +205,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
+	if k.filter.ShouldIgnoreDDLEvent(ddl.StartTs, ddl.Type, ddl.TableInfo.Schema, ddl.TableInfo.Table) {
 		log.Info(
 			"DDL event ignored",
 			zap.String("query", ddl.Query),
@@ -236,43 +235,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 
 // Initialize registers Avro schemas for all tables
 func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
-	if k.protocol == codec.ProtocolAvro && tableInfo != nil {
-		avroEncoder := k.newEncoder().(*codec.AvroEventBatchEncoder)
-		manager := avroEncoder.GetValueSchemaManager()
-		if manager == nil {
-			return errors.New("No schema manager in Avro encoder, probably bug")
-		}
-
-		for _, info := range tableInfo {
-			if info == nil {
-				continue
-			}
-
-			if k.filter.ShouldIgnoreTable(info.Schema, info.Table) {
-				log.Info("Skip creating schema for table", zap.String("table-name", info.Table))
-				continue
-			}
-
-			str, err := codec.ColumnInfoToAvroSchema(info.Table, info.ColumnInfo)
-			if err != nil {
-				return errors.Annotate(err, "Error in Initialize")
-			}
-
-			avroCodec, err := goavro.NewCodec(str)
-			if err != nil {
-				return errors.Annotate(err, "Initialize failed: could not verify schema, probably bug")
-			}
-
-			err = manager.Register(context.Background(), model.TableName{
-				Schema: info.Schema,
-				Table:  info.Table,
-			}, avroCodec)
-
-			if err != nil {
-				return errors.Annotate(err, "Initialize failed: could not register schema")
-			}
-		}
-	}
+	// No longer need it for now
 	return nil
 }
 

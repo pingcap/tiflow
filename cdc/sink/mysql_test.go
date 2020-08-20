@@ -53,92 +53,86 @@ func newMySQLSink4Test(c *check.C) *mysqlSink {
 func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 	testCases := []struct {
 		input    []*model.RowChangedEvent
-		expected map[model.TableName][]*model.Txn
+		expected map[model.TableID][]*model.SingleTableTxn
 	}{{
 		input:    []*model.RowChangedEvent{},
-		expected: map[model.TableName][]*model.Txn{},
+		expected: map[model.TableID][]*model.SingleTableTxn{},
 	}, {
 		input: []*model.RowChangedEvent{
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
-				Keys:     []string{"a", "b"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
-				Keys:     []string{"b", "c"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
-				Keys:     []string{"a", "b"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 		},
-		expected: map[model.TableName][]*model.Txn{
-			{Schema: "s1", Table: "t1"}: {
+		expected: map[model.TableID][]*model.SingleTableTxn{
+			1: {
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  1,
 					CommitTs: 2,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
-							Keys:     []string{"a", "b"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						},
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
-							Keys:     []string{"b", "c"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						},
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
-							Keys:     []string{"a", "b"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
-					Keys: []string{"a", "b", "b", "c", "a", "b"},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  3,
 					CommitTs: 4,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						},
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						},
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
-					Keys: []string{"`s1`.`t1`"},
 				},
 			},
 		},
@@ -147,103 +141,103 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  5,
 				CommitTs: 6,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t2"},
+				Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t2"},
+				Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			},
 			{
 				StartTs:  5,
 				CommitTs: 6,
-				Table:    &model.TableName{Schema: "s1", Table: "t2"},
+				Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			},
 		},
-		expected: map[model.TableName][]*model.Txn{
-			{Schema: "s1", Table: "t1"}: {
+		expected: map[model.TableID][]*model.SingleTableTxn{
+			1: {
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  1,
 					CommitTs: 2,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
-					Keys: []string{"`s1`.`t1`"},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  3,
 					CommitTs: 4,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
-					Keys: []string{"`s1`.`t1`"},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  5,
 					CommitTs: 6,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  5,
 							CommitTs: 6,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
-					Keys: []string{"`s1`.`t1`"},
 				},
 			},
-			{Schema: "s1", Table: "t2"}: {
+			2: {
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 					StartTs:  1,
 					CommitTs: 2,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t2"},
+							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 						}},
-					Keys: []string{"`s1`.`t2`"},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 					StartTs:  3,
 					CommitTs: 4,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t2"},
+							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 						}},
-					Keys: []string{"`s1`.`t2`"},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 					StartTs:  5,
 					CommitTs: 6,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  5,
 							CommitTs: 6,
-							Table:    &model.TableName{Schema: "s1", Table: "t2"},
+							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 						}},
-					Keys: []string{"`s1`.`t2`"},
 				},
 			},
 		},
@@ -260,16 +254,16 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 
 func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 	testCases := []struct {
-		txns                     []*model.Txn
+		txns                     []*model.SingleTableTxn
 		expectedOutputRows       [][]*model.RowChangedEvent
 		exportedOutputReplicaIDs []uint64
 		maxTxnRow                int
 	}{
 		{
-			txns:      []*model.Txn{},
+			txns:      []*model.SingleTableTxn{},
 			maxTxnRow: 4,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
@@ -280,7 +274,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			exportedOutputReplicaIDs: []uint64{1},
 			maxTxnRow:                2,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
@@ -293,7 +287,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			exportedOutputReplicaIDs: []uint64{1},
 			maxTxnRow:                2,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}},
@@ -317,7 +311,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			exportedOutputReplicaIDs: []uint64{1, 1},
 			maxTxnRow:                4,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
@@ -342,7 +336,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			exportedOutputReplicaIDs: []uint64{1, 2, 3},
 			maxTxnRow:                4,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
@@ -432,7 +426,6 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
 					Value: 1,
 				}},
 				IndexColumns: [][]int{{1, 2}},
-				Keys:         []string{"11`common_1`.`uk_without_pk`"},
 			},
 		},
 		expected: &preparedDMLs{
@@ -638,7 +631,7 @@ func (s MySQLSinkSuite) TestReduceReplace(c *check.C) {
    		db: db,
    	}
 
-   	t := model.Txn{
+   	t := model.SingleTableTxn{
    		DDL: &model.DDL{
    			Database: "test",
    			Table:    "user",
@@ -671,7 +664,7 @@ func (s MySQLSinkSuite) TestReduceReplace(c *check.C) {
    		db: db,
    	}
 
-   	t := model.Txn{
+   	t := model.SingleTableTxn{
    		DDL: &model.DDL{
    			Database: "test",
    			Table:    "user",
@@ -744,7 +737,7 @@ func (s MySQLSinkSuite) TestReduceReplace(c *check.C) {
    		infoGetter: &helper,
    	}
 
-   	t := model.Txn{
+   	t := model.SingleTableTxn{
    		DMLs: []*model.DML{
    			{
    				Database: "test",
@@ -784,7 +777,7 @@ func (s MySQLSinkSuite) TestReduceReplace(c *check.C) {
    		infoGetter: &helper,
    	}
 
-   	t := model.Txn{
+   	t := model.SingleTableTxn{
    		DMLs: []*model.DML{
    			{
    				Database: "test",
