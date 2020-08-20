@@ -428,21 +428,21 @@ func (s *s3Sink) flushTableBuffers(ctx context.Context) error {
 	return eg.Wait()
 }
 
-func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
+func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	// we should flush all events before resolvedTs, there are two kind of flush policy
 	// 1. flush row events to a s3 chunk: if the event size is not enough,
 	//    TODO: when cdc crashed, we should repair these chunks to a complete file
 	// 2. flush row events to a complete s3 file: if the event size is enough
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return 0, ctx.Err()
 	case <-s.notifyChan:
-		return s.flushTableBuffers(ctx)
+		return resolvedTs, s.flushTableBuffers(ctx)
 
 	case <-time.After(defaultFlushRowChangedEventDuration):
 		// cannot accumulate enough row events in 10 second
 		// flush all tables' row events to s3
-		return s.flushTableBuffers(ctx)
+		return resolvedTs, s.flushTableBuffers(ctx)
 	}
 }
 
