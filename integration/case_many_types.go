@@ -14,9 +14,10 @@
 package main
 
 import (
-	"github.com/pingcap/ticdc/integration/framework"
 	"math"
 	"time"
+
+	"github.com/pingcap/ticdc/integration/framework"
 )
 
 //nolint:unused

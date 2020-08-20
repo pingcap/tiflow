@@ -203,7 +203,7 @@ type avroLogicalType struct {
 
 const (
 	timestampMillis logicalType = "timestamp-millis"
-	timeMicros      logicalType = "time-millis"
+	timeMillis      logicalType = "time-millis"
 )
 
 // ColumnInfoToAvroSchema generates the Avro schema JSON for the corresponding columns
@@ -232,7 +232,7 @@ func ColumnInfoToAvroSchema(name string, columnInfo []*model.Column) (string, er
 	}
 
 	str, err := json.Marshal(&top)
-	log.Info("Avro Schema JSON generated", zap.ByteString("schema", str))
+	log.Debug("Avro Schema JSON generated", zap.ByteString("schema", str))
 	if err != nil {
 		return "", errors.Annotate(err, "ColumnInfoToAvroSchema: failed to generate json")
 	}
@@ -301,7 +301,7 @@ func getAvroDataTypeNameMysql(tp byte) (interface{}, error) {
 	case mysql.TypeDuration:
 		return avroLogicalType{
 			Type:        "int",
-			LogicalType: timeMicros,
+			LogicalType: timeMillis,
 		}, nil
 	case mysql.TypeEnum:
 		return "long", nil
@@ -386,7 +386,7 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 		fracInt = int64(float64(fracInt) * math.Pow10(6-fsp))
 
 		d := types.NewDuration(hours, minutes, seconds, int(fracInt), int8(fsp)).Duration
-		const fullType = "int." + timeMicros
+		const fullType = "int." + timeMillis
 		return d, string(fullType), nil
 	case mysql.TypeYear:
 		return col.Value.(int64), "long", nil

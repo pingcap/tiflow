@@ -785,10 +785,8 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				resolvedTs = row.CRTs
 				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.CRTs)
 				p.sinkEmittedResolvedNotifier.Notify()
-				log.Info("Resolved Event", zap.Reflect("RawKV", row.RawKV))
 				continue
 			}
-			log.Info("Row Event", zap.Reflect("RawKV", row.RawKV))
 			if row.CRTs <= resolvedTs {
 				log.Fatal("The CRTs must be greater than the resolvedTs",
 					zap.String("model", "processor"),

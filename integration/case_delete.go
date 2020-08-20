@@ -15,6 +15,7 @@ package main
 
 import (
 	"errors"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 	"go.uber.org/zap"
