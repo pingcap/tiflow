@@ -10,7 +10,6 @@ require (
 	github.com/aws/aws-sdk-go v1.30.24
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
-	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/coreos/go-semver v0.3.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
@@ -33,7 +32,7 @@ require (
 	github.com/pingcap/log v0.0.0-20200511115504-543df19646ad
 	github.com/pingcap/parser v0.0.0-20200803072748-fdf66528323d
 	github.com/pingcap/pd/v4 v4.0.5-0.20200817114353-e465cafe8a91
-	github.com/pingcap/tidb v1.1.0-beta.0.20200811072253-3948c7ba7b5d
+	github.com/pingcap/tidb v1.1.0-beta.0.20200820092836-c5b7658b0896
 	github.com/pingcap/tidb-tools v4.0.5-0.20200817064459-ba61a7376547+incompatible
 	github.com/pingcap/tipb v0.0.0-20200618092958-4fad48b4c8c3 // indirect
 	github.com/prometheus/client_golang v1.5.1
@@ -42,7 +41,6 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.5.1
 	github.com/uber-go/atomic v1.3.2
-	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
 	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	go.etcd.io/bbolt v1.3.5 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200425165423-262c93980547
@@ -57,5 +55,3 @@ require (
 )
 
 replace github.com/pingcap/kvproto => github.com/5kbpers/kvproto v0.0.0-20200819064041-54036e6bb647
-
-replace github.com/pingcap/tidb => github.com/overvenus/tidb v0.0.0-20200820071402-a4cdbf3da607
