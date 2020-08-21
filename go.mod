@@ -28,9 +28,11 @@ require (
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20200729012136-4e113ddee29e
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
+	github.com/pingcap/gofail v0.0.0-20181217135706-6a951c1e42c3 // indirect
 	github.com/pingcap/kvproto v0.0.0-20200818080353-7aaed8998596
 	github.com/pingcap/log v0.0.0-20200511115504-543df19646ad
 	github.com/pingcap/parser v0.0.0-20200803072748-fdf66528323d
+	github.com/pingcap/pd v2.1.19+incompatible // indirect
 	github.com/pingcap/pd/v4 v4.0.5-0.20200817114353-e465cafe8a91
 	github.com/pingcap/tidb v1.1.0-beta.0.20200820092836-c5b7658b0896
 	github.com/pingcap/tidb-tools v4.0.5-0.20200820092506-34ea90c93237+incompatible
