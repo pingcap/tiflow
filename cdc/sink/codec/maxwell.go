@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -72,6 +73,7 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 	for k, v := range e.Columns {
 		value.Data[k] = v.Value
 	}
+	fmt.Print(e.PreColumns)
 	for k, v := range e.PreColumns {
 		value.Old[k] = v.Value
 	}
@@ -109,19 +111,21 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 }
 
 type Column struct {
-	Type         byte   `json:"type"`
-	Name         string `json:"name"`
+	Type string `json:"type"`
+	Name string `json:"name"`
+	//Do not mark the unique key temporarily
 	Signed       bool   `json:"signed,omitempty"`
 	ColumnLength int    `json:"column-length,omitempty"`
 	Charset      string `json:"charset,omitempty"`
 }
 
 type TableStruct struct {
-	Database   string    `json:"database"`
-	Charset    string    `json:"charset,omitempty"`
-	Table      string    `json:"table"`
-	Columns    []*Column `json:"columns"`
-	PrimaryKey []string  `json:"primary-key"`
+	Database string    `json:"database"`
+	Charset  string    `json:"charset,omitempty"`
+	Table    string    `json:"table"`
+	Columns  []*Column `json:"columns"`
+	//Do not output whether it is a primary key temporarily
+	PrimaryKey []string `json:"primary-key"`
 }
 
 //maxwell alter table message
@@ -154,20 +158,32 @@ func ddlEventtoMaxwellMessage(e *model.DDLEvent) (*mqMessageKey, *DdlMaxwellMess
 		Def:      TableStruct{},
 		Sql:      e.Query,
 	}
-	value.Old.Database = e.PreTableInfo.Schema
-	value.Old.Table = e.PreTableInfo.Table
-	for _, v := range e.PreTableInfo.ColumnInfo {
-		value.Old.Columns = append(value.Old.Columns, &Column{
-			Name: v.Name,
-			Type: v.Type,
-		})
+	if e.PreTableInfo != nil {
+		value.Old.Database = e.PreTableInfo.Schema
+		value.Old.Table = e.PreTableInfo.Table
+		for _, v := range e.PreTableInfo.ColumnInfo {
+			maxwellcolumntype, _ := columnToMaxwellType(v.Type)
+			value.Old.Columns = append(value.Old.Columns, &Column{
+				Name: v.Name,
+				Type: maxwellcolumntype,
+			})
+		}
 	}
+
 	value.Def.Database = e.TableInfo.Schema
 	value.Def.Table = e.TableInfo.Table
 	for _, v := range e.TableInfo.ColumnInfo {
+		maxwellcolumntype, err := columnToMaxwellType(v.Type)
+		if err != nil {
+			value.Old.Columns = append(value.Old.Columns, &Column{
+				Name: v.Name,
+				Type: err.Error(),
+			})
+
+		}
 		value.Def.Columns = append(value.Def.Columns, &Column{
 			Name: v.Name,
-			Type: v.Type,
+			Type: maxwellcolumntype,
 		})
 	}
 	return key, value
@@ -312,10 +328,28 @@ func (b *MaxwellEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent
 
 // NextDDLEvent implements the EventBatchDecoder interface
 func (b *MaxwellEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
-	return nil, nil
+	if b.nextKey == nil {
+		if err := b.decodeNextKey(); err != nil {
+			return nil, err
+		}
+	}
+	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
+	if b.nextKey.Type != model.MqMessageTypeDDL {
+		return nil, errors.NotFoundf("not found ddl event message")
+	}
+	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
+	value := b.valueBytes[8 : valueLen+8]
+	b.valueBytes = b.valueBytes[valueLen+8:]
+	ddlMsg := new(mqMessageDDL)
+	if err := ddlMsg.Decode(value); err != nil {
+		return nil, errors.Trace(err)
+	}
+	ddlEvent := mqMessageToDDLEvent(b.nextKey, ddlMsg)
+	b.nextKey = nil
+	return ddlEvent, nil
 }
 
-// NewJSONEventBatchDecoder creates a new JSONEventBatchDecoder.
+// NewMaxwellEventBatchDecoder creates a new JSONEventBatchDecoder.
 func NewMaxwellEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, error) {
 	version := binary.BigEndian.Uint64(key[:8])
 	key = key[8:]
@@ -326,4 +360,58 @@ func NewMaxwellEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, e
 		keyBytes:   key,
 		valueBytes: value,
 	}, nil
+}
+
+//Convert column type code to maxwell column type
+func columnToMaxwellType(columnType byte) (string, error) {
+	switch columnType {
+	case 1:
+		return "int", nil
+	case 2:
+		return "int", nil
+	case 9:
+		return "int", nil
+	case 3:
+		return "int", nil
+	case 8:
+		return "bigint", nil
+	case 249:
+		return "string", nil
+	case 252:
+		return "string", nil
+	case 250:
+		return "string", nil
+	case 251:
+		return "string", nil
+	case 254:
+		return "string", nil
+	case 15:
+		return "string", nil
+	case 10:
+		return "date", nil
+	case 12:
+		return "datetime", nil
+	case 7:
+		return "datetime", nil
+	case 11:
+		return "time", nil
+	case 13:
+		return "year", nil
+	case 247:
+		return "enum", nil
+	case 248:
+		return "set", nil
+	case 16:
+		return "bit", nil
+	case 245:
+		return "json", nil
+	case 4:
+		return "float", nil
+	case 5:
+		return "float", nil
+	case 246:
+		return "decimal", nil
+	default:
+		return "", errors.Errorf("unsupported column type - %v", columnType)
+	}
 }

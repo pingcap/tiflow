@@ -20,7 +20,7 @@ import (
 
 type maxwellbatchSuite struct {
 	rowCases [][]*model.RowChangedEvent
-	//ddlCases        [][]*model.DDLEvent
+	ddlCases [][]*model.DDLEvent
 	//resolvedTsCases [][]uint64
 }
 
@@ -46,13 +46,42 @@ var _ = check.Suite(&maxwellbatchSuite{
 		Table:    &model.TableName{Schema: "a", Table: "c", Partition: 6},
 		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "cc"}},
 	}}, {}},
+	ddlCases: [][]*model.DDLEvent{{{
+		CommitTs: 1,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table a",
+		Type:  1,
+	}}, {{
+		CommitTs: 1,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table a",
+		Type:  1,
+	}, {
+		CommitTs: 2,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table b",
+		Type:  2,
+	}, {
+		CommitTs: 3,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "a", Table: "b",
+		},
+		Query: "create table c",
+		Type:  3,
+	}}, {}},
 })
 
 func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(row)
+			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
 		key, value := encoder.Build()
@@ -70,6 +99,31 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 			row, err := decoder.NextRowChangedEvent()
 			c.Assert(err, check.IsNil)
 			c.Assert(row, check.DeepEquals, cs[index])
+			index++
+		}
+	}
+
+	for _, cs := range s.ddlCases {
+		encoder := newEncoder()
+		for _, ddl := range cs {
+			_, err := encoder.AppendDDLEvent(ddl)
+			c.Assert(err, check.IsNil)
+		}
+		key, value := encoder.Build()
+		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
+		decoder, err := newDecoder(key, value)
+		c.Assert(err, check.IsNil)
+		index := 0
+		for {
+			tp, hasNext, err := decoder.HasNext()
+			c.Assert(err, check.IsNil)
+			if !hasNext {
+				break
+			}
+			c.Assert(tp, check.Equals, model.MqMessageTypeDDL)
+			ddl, err := decoder.NextDDLEvent()
+			c.Assert(err, check.IsNil)
+			c.Assert(ddl, check.DeepEquals, cs[index])
 			index++
 		}
 	}
