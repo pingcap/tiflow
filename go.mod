@@ -7,9 +7,9 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.3.3 // indirect
 	github.com/Shopify/sarama v1.26.1
 	github.com/apache/pulsar-client-go v0.1.1
-	github.com/aws/aws-sdk-go v1.30.24
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
+	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/coreos/go-semver v0.3.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
@@ -25,10 +25,11 @@ require (
 	github.com/linkedin/goavro/v2 v2.9.7
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
+	github.com/pingcap/br v0.0.0-20200805095214-09dcc7534821
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
-	github.com/pingcap/kvproto v0.0.0-20200818080353-7aaed8998596
+	github.com/pingcap/kvproto v0.0.0-20200821061039-7771f65e7756
 	github.com/pingcap/log v0.0.0-20200511115504-543df19646ad
 	github.com/pingcap/parser v0.0.0-20200803072748-fdf66528323d
 	github.com/pingcap/pd/v4 v4.0.5-0.20200817114353-e465cafe8a91
@@ -41,6 +42,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.5.1
 	github.com/uber-go/atomic v1.3.2
+	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
 	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	go.etcd.io/bbolt v1.3.5 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200425165423-262c93980547
@@ -54,4 +56,6 @@ require (
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
-replace github.com/pingcap/kvproto => github.com/5kbpers/kvproto v0.0.0-20200819064041-54036e6bb647
+replace github.com/pingcap/br => github.com/3pointer/br v0.0.0-20200817122845-968a9b5582e8
+
+replace github.com/pingcap/pd => github.com/tikv/pd v1.1.0-beta.0.20200820113821-0ef1e1c0ad6d

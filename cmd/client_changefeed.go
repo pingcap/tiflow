@@ -90,6 +90,9 @@ func newAdminChangefeedCommand() []*cobra.Command {
 				job := model.AdminJob{
 					CfID: changefeedID,
 					Type: model.AdminRemove,
+					Opts: &model.AdminJobOption{
+						ForceRemove: optForceRemove,
+					},
 				}
 				return applyAdminChangefeed(ctx, job, getCredential())
 			},
@@ -99,6 +102,9 @@ func newAdminChangefeedCommand() []*cobra.Command {
 	for _, cmd := range cmds {
 		cmd.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 		_ = cmd.MarkPersistentFlagRequired("changefeed-id")
+		if cmd.Use == "remove" {
+			cmd.PersistentFlags().BoolVarP(&optForceRemove, "force", "f", false, "remove all information of the changefeed")
+		}
 	}
 	return cmds
 }
