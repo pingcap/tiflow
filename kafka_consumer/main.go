@@ -516,7 +516,8 @@ func (c *Consumer) Run(ctx context.Context) error {
 				sink.Sink
 				resolvedTs uint64
 			}) error {
-				return sink.FlushRowChangedEvents(ctx, todoDDL.CommitTs)
+				_, err := sink.FlushRowChangedEvents(ctx, todoDDL.CommitTs)
+				return err
 			})
 			if err != nil {
 				return errors.Trace(err)
@@ -545,7 +546,8 @@ func (c *Consumer) Run(ctx context.Context) error {
 			sink.Sink
 			resolvedTs uint64
 		}) error {
-			return sink.FlushRowChangedEvents(ctx, globalResolvedTs)
+			_, err := sink.FlushRowChangedEvents(ctx, todoDDL.CommitTs)
+			return err
 		})
 		if err != nil {
 			return errors.Trace(err)
