@@ -29,7 +29,7 @@ require (
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20190809092503-95897b64e011
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
-	github.com/pingcap/kvproto v0.0.0-20200821061039-7771f65e7756
+	github.com/pingcap/kvproto v0.0.0-20200821062356-15dc121d6c4d
 	github.com/pingcap/log v0.0.0-20200511115504-543df19646ad
 	github.com/pingcap/parser v0.0.0-20200803072748-fdf66528323d
 	github.com/pingcap/pd/v4 v4.0.5-0.20200817114353-e465cafe8a91
@@ -41,6 +41,7 @@ require (
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.5.1
+	github.com/tikv/pd v1.1.0-beta.0.20200821075321-0d566cbde39f // indirect
 	github.com/uber-go/atomic v1.3.2
 	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
 	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
@@ -58,4 +59,4 @@ require (
 
 replace github.com/pingcap/br => github.com/3pointer/br v0.0.0-20200817122845-968a9b5582e8
 
-replace github.com/pingcap/pd => github.com/tikv/pd v1.1.0-beta.0.20200820113821-0ef1e1c0ad6d
+replace github.com/pingcap/pd/v4 => github.com/tikv/pd v1.1.0-beta.0.20200821075321-0d566cbde39f
