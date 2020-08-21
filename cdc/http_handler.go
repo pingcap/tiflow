@@ -33,6 +33,8 @@ const (
 	APIOpVarTargetCaptureID = "target-cp-id"
 	// APIOpVarTableID is the key of table ID in HTTP API
 	APIOpVarTableID = "table-id"
+	// APIOpForceRemoveChangefeed is used when remove a changefeed
+	APIOpForceRemoveChangefeed = "force-remove"
 )
 
 type commonResp struct {
@@ -113,9 +115,20 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		writeError(w, http.StatusBadRequest, errors.Errorf("invalid admin job type: %s", typeStr))
 		return
 	}
+	opts := &model.AdminJobOption{}
+	if forceRemoveStr := req.Form.Get(APIOpForceRemoveChangefeed); forceRemoveStr != "" {
+		forceRemoveOpt, err := strconv.ParseBool(forceRemoveStr)
+		if err != nil {
+			writeError(w, http.StatusBadRequest,
+				errors.Errorf("invalid force remove option: %s", forceRemoveStr))
+			return
+		}
+		opts.ForceRemove = forceRemoveOpt
+	}
 	job := model.AdminJob{
 		CfID: req.Form.Get(APIOpVarChangefeedID),
 		Type: model.AdminJobType(typ),
+		Opts: opts,
 	}
 	err = s.owner.EnqueueJob(job)
 	handleOwnerResp(w, err)

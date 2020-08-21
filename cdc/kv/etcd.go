@@ -120,6 +120,17 @@ func (c CDCEtcdClient) ClearAllCDCInfo(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
+// RevokeAllLeases revokes all leases passed from parameter
+func (c CDCEtcdClient) RevokeAllLeases(ctx context.Context, leases map[string]int64) error {
+	for _, lease := range leases {
+		_, err := c.Client.Revoke(ctx, clientv3.LeaseID(lease))
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 // GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
 func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (int64, map[string]*mvccpb.KeyValue, error) {
 	key := GetEtcdKeyChangeFeedList()
@@ -198,20 +209,41 @@ func (c CDCEtcdClient) GetCaptures(ctx context.Context) (int64, []*model.Capture
 	return revision, infos, nil
 }
 
+// GetCaptureLeases returns a map mapping from capture ID to its lease
+func (c CDCEtcdClient) GetCaptureLeases(ctx context.Context) (map[string]int64, error) {
+	key := CaptureInfoKeyPrefix
+
+	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	leases := make(map[string]int64, resp.Count)
+	for _, kv := range resp.Kvs {
+		captureID, err := model.ExtractKeySuffix(string(kv.Key))
+		if err != nil {
+			return nil, err
+		}
+		leases[captureID] = kv.Lease
+	}
+	return leases, nil
+}
+
 // CreateChangefeedInfo creates a change feed info into etcd and fails if it is already exists.
 func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.ChangeFeedInfo, changeFeedID string) error {
 	if err := model.ValidateChangefeedID(changeFeedID); err != nil {
 		return err
 	}
-	key := GetEtcdKeyChangeFeedInfo(changeFeedID)
+	infoKey := GetEtcdKeyChangeFeedInfo(changeFeedID)
+	jobKey := GetEtcdKeyJob(changeFeedID)
 	value, err := info.Marshal()
 	if err != nil {
 		return errors.Trace(err)
 	}
 	resp, err := c.Client.Txn(ctx).If(
-		clientv3.Compare(clientv3.ModRevision(key), "=", 0),
+		clientv3.Compare(clientv3.ModRevision(infoKey), "=", 0),
+		clientv3.Compare(clientv3.ModRevision(jobKey), "=", 0),
 	).Then(
-		clientv3.OpPut(key, value),
+		clientv3.OpPut(infoKey, value),
 	).Commit()
 	if err != nil {
 		return errors.Trace(err)
@@ -219,7 +251,7 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.Cha
 	if !resp.Succeeded {
 		log.Warn("changefeed already exists, ignore create changefeed",
 			zap.String("changefeedid", changeFeedID))
-		return errors.Annotatef(model.ErrChangeFeedAlreadyExists, "key: %s", key)
+		return errors.Trace(model.ErrChangeFeedAlreadyExists)
 	}
 	return errors.Trace(err)
 }
@@ -520,8 +552,9 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 	changefeedID string,
 	captureID string,
 	updateFuncs ...UpdateTaskStatusFunc,
-) (*model.TaskStatus, error) {
+) (*model.TaskStatus, int64, error) {
 	var status *model.TaskStatus
+	var newModRevision int64
 	err := retry.Run(100*time.Millisecond, 3, func() error {
 		select {
 		case <-ctx.Done():
@@ -570,12 +603,13 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 			log.Info("outdated table infos, ignore update taskStatus")
 			return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
 		}
+		newModRevision = resp.Header.GetRevision()
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, newModRevision, errors.Trace(err)
 	}
-	return status, nil
+	return status, newModRevision, nil
 }
 
 // GetTaskPosition queries task process from etcd, returns
@@ -625,6 +659,16 @@ func (c CDCEtcdClient) PutTaskPosition(
 // DeleteTaskPosition remove task position from etcd
 func (c CDCEtcdClient) DeleteTaskPosition(ctx context.Context, changefeedID string, captureID string) error {
 	key := GetEtcdKeyTaskPosition(changefeedID, captureID)
+	_, err := c.Client.Delete(ctx, key)
+	return errors.Trace(err)
+}
+
+// RemoveChangeFeedStatus removes changefeed job status from etcd
+func (c CDCEtcdClient) RemoveChangeFeedStatus(
+	ctx context.Context,
+	changefeedID string,
+) error {
+	key := GetEtcdKeyJob(changefeedID)
 	_, err := c.Client.Delete(ctx, key)
 	return errors.Trace(err)
 }

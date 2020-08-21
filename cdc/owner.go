@@ -296,6 +296,7 @@ func (o *Owner) newChangeFeed(
 		}
 
 		sinkTableInfo[j-1] = new(model.SimpleTableInfo)
+		sinkTableInfo[j-1].TableID = tid
 		sinkTableInfo[j-1].ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
 
 		for i, colInfo := range tblInfo.Cols() {
@@ -621,7 +622,7 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 		return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
 	}
 	for captureID := range cf.taskStatus {
-		newStatus, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
+		newStatus, _, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
 			taskStatus.AdminJobType = job.Type
 			return true, nil
 		})
@@ -785,7 +786,14 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				switch feedState {
 				case model.StateRemoved, model.StateFinished:
 					// remove a removed or finished changefeed
-					log.Info("changefeed has been removed or finished, remove command will do nothing")
+					if job.Opts != nil && job.Opts.ForceRemove {
+						err := o.etcdClient.RemoveChangeFeedStatus(ctx, job.CfID)
+						if err != nil {
+							return errors.Trace(err)
+						}
+					} else {
+						log.Info("changefeed has been removed or finished, remove command will do nothing")
+					}
 					continue
 				case model.StateStopped, model.StateFailed:
 					// remove a paused or failed changefeed
@@ -804,10 +812,18 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			// set ttl to changefeed status
-			err = o.etcdClient.SetChangeFeedStatusTTL(ctx, job.CfID, 24*3600 /*24 hours*/)
-			if err != nil {
-				return errors.Trace(err)
+			if job.Opts != nil && job.Opts.ForceRemove {
+				// if `ForceRemove` is enabled, remove all information related to this changefeed
+				err := o.etcdClient.RemoveChangeFeedStatus(ctx, job.CfID)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			} else {
+				// set ttl to changefeed status
+				err = o.etcdClient.SetChangeFeedStatusTTL(ctx, job.CfID, 24*3600 /*24 hours*/)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 		case model.AdminResume:
 			// resume changefeed must read checkpoint from ChangeFeedStatus
