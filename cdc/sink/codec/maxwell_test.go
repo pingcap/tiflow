@@ -21,7 +21,6 @@ import (
 type maxwellbatchSuite struct {
 	rowCases [][]*model.RowChangedEvent
 	ddlCases [][]*model.DDLEvent
-	//resolvedTsCases [][]uint64
 }
 
 var _ = check.Suite(&maxwellbatchSuite{
