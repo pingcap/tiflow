@@ -50,6 +50,8 @@ type tableBuffer struct {
 	sendSize   *atomic.Int64
 	sendEvents *atomic.Int64
 
+	encoder codec.EventBatchEncoder
+
 	uploadParts struct {
 		uploader  storage.Uploader
 		uploadNum int
@@ -65,9 +67,13 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 		return nil
 	}
 
+	if tb.encoder == nil {
+		// create encoder for each file
+		tb.encoder = s.encoder()
+	}
+
 	var newFileName string
 	flushedSize := int64(0)
-	encoder := s.encoder()
 	for event := int64(0); event < sendEvents; event++ {
 		row := <-tb.dataCh
 		flushedSize += row.ApproximateSize
@@ -75,12 +81,12 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 			// if last event, we record ts as new rotate file name
 			newFileName = makeTableFileObject(row.Table.TableID, row.CommitTs)
 		}
-		_, err := encoder.AppendRowChangedEvent(row)
+		_, err := tb.encoder.AppendRowChangedEvent(row)
 		if err != nil {
 			return err
 		}
 	}
-	rowDatas := encoder.MixedBuild()
+	rowDatas := tb.encoder.MixedBuild()
 	log.Debug("[FlushRowChangedEvents[Debug]] flush table buffer",
 		zap.Int64("table", tb.tableID),
 		zap.Int64("event size", sendEvents),
@@ -122,6 +128,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 				hashPart.byteSize = 0
 				hashPart.uploadNum = 0
 				hashPart.uploader = nil
+				tb.encoder = nil
 			}
 		} else {
 			// generate normal file because S3 multi-upload need every part at least 5Mb.
@@ -130,6 +137,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 			if err != nil {
 				return err
 			}
+			tb.encoder = nil
 		}
 	}
 
@@ -165,6 +173,8 @@ type s3Sink struct {
 	logMeta *logMeta
 	encoder func() codec.EventBatchEncoder
 
+	// hold encoder for ddl event log
+	ddlEncoder   codec.EventBatchEncoder
 	hashMap      sync.Map
 	tableBuffers []*tableBuffer
 	notifyChan   chan struct{}
@@ -277,12 +287,14 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			return err
 		}
 	}
-	encoder := s.encoder()
-	_, err := encoder.AppendDDLEvent(ddl)
+	if s.ddlEncoder == nil {
+		s.ddlEncoder = s.encoder()
+	}
+	_, err := s.ddlEncoder.AppendDDLEvent(ddl)
 	if err != nil {
 		return err
 	}
-	data := encoder.MixedBuild()
+	data := s.ddlEncoder.MixedBuild()
 
 	var (
 		name     string
@@ -308,6 +320,8 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		name = makeDDLFileObject(ddl.CommitTs)
 		log.Debug("[EmitDDLEvent] create first or rotate ddl log",
 			zap.String("name", name), zap.Any("ddl", ddl))
+		// reset ddl encoder for new file
+		s.ddlEncoder = nil
 	} else {
 		// hack way: append data to old file
 		log.Debug("[EmitDDLEvent] append ddl to origin log",

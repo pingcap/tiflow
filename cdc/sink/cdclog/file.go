@@ -52,6 +52,8 @@ type tableStream struct {
 	dataCh  chan *model.RowChangedEvent
 	rowFile *os.File
 
+	encoder codec.EventBatchEncoder
+
 	tableID    int64
 	sendEvents *atomic.Int64
 	sendSize   *atomic.Int64
@@ -74,6 +76,7 @@ type fileSink struct {
 	ddlFile *os.File
 	encoder func() codec.EventBatchEncoder
 
+	ddlEncoder   codec.EventBatchEncoder
 	hashMap      sync.Map
 	tableStreams []*tableStream
 }
@@ -101,19 +104,22 @@ func (f *fileSink) flushTableStreams(ctx context.Context) error {
 			var fileName string
 			flushedEvents := tsReplica.sendEvents.Load()
 			flushedSize := tsReplica.sendSize.Load()
-			encoder := f.encoder()
+			if tsReplica.encoder == nil {
+				// create encoder for each file
+				tsReplica.encoder = f.encoder()
+			}
 			for event := int64(0); event < flushedEvents; event++ {
 				row := <-tsReplica.dataCh
 				if event == flushedEvents-1 {
 					// the last event
 					fileName = makeTableFileName(row.CommitTs)
 				}
-				_, err := encoder.AppendRowChangedEvent(row)
+				_, err := tsReplica.encoder.AppendRowChangedEvent(row)
 				if err != nil {
 					return err
 				}
 			}
-			rowDatas := encoder.MixedBuild()
+			rowDatas := tsReplica.encoder.MixedBuild()
 
 			log.Debug("[flushTableStreams] build cdc log data",
 				zap.Int64("table id", tsReplica.tableID),
@@ -160,6 +166,7 @@ func (f *fileSink) flushTableStreams(ctx context.Context) error {
 					return err
 				}
 				tsReplica.rowFile = file
+				tsReplica.encoder = nil
 			}
 			_, err = tsReplica.rowFile.Write(rowDatas)
 			if err != nil {
@@ -245,12 +252,15 @@ func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 			return err
 		}
 	}
-	encoder := f.encoder()
-	_, err := encoder.AppendDDLEvent(ddl)
+	if f.ddlEncoder == nil {
+		// create ddl encoder once for each ddl log file
+		f.ddlEncoder = f.encoder()
+	}
+	_, err := f.ddlEncoder.AppendDDLEvent(ddl)
 	if err != nil {
 		return err
 	}
-	data := encoder.MixedBuild()
+	data := f.ddlEncoder.MixedBuild()
 
 	if f.ddlFile == nil {
 		// create file stream
@@ -283,6 +293,8 @@ func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 			return err
 		}
 		f.ddlFile = file
+		// reset ddl encoder for new file
+		f.ddlEncoder = nil
 	}
 
 	_, err = f.ddlFile.Write(data)
