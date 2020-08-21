@@ -15,7 +15,7 @@ function get_safepoint() {
     retry_time=10
     while [ $i -lt $retry_time ]; do
         query=$(timeout 5s pd-ctl service-gc-safepoint --pd=$pd_addr||echo "")
-        echo "$query"
+        echo "query:$query"
         if [[ -z "$query" ]]; then
             echo "query service-gc-safepoint timeout, retry later"
             ((i++))
@@ -26,7 +26,7 @@ function get_safepoint() {
 
     if [ $i -ge $retry_time ]; then
         echo "query service-gc-safepoint failed"
-        exit
+        exit 1
     fi
     echo $(echo $query|jq '.service_gc_safe_points []|select(.service_id=="ticdc")|.safe_point')
 }
