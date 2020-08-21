@@ -12,14 +12,14 @@ MAX_RETRIES=5
 function get_safepoint() {
     pd_addr=$1
     pd_cluster_id=$2
-    safe_point=$(etcdctl get --endpoints=$pd_addr /pd/$pd_cluster_id/gc/safe_point/service/ticdc|grep -oE "SafePoint\":[0-9]+"|grep -oE "[0-9]+")
+    safe_point=$(pd-ctl service-gc-safepoint --pd=$pd_addr|jq '.service_gc_safe_points []|select(.service_id=="ticdc")|.safe_point')
     echo $safe_point
 }
 
 function check_safepoint_cleared() {
     pd_addr=$1
     pd_cluster_id=$2
-    query=$(etcdctl get --endpoints=$pd_addr /pd/$pd_cluster_id/gc/safe_point/service/ticdc)
+    query=$(pd-ctl service-gc-safepoint --pd=$pd_addr|jq '.service_gc_safe_points []|select(.service_id=="ticdc")')
     if [ ! -z "$query" ]; then
         echo "gc safepoint is not cleared: $query"
     fi
