@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -73,6 +74,14 @@ func formatColumnVal(c column) column {
 			c.Value, err = base64.StdEncoding.DecodeString(s)
 			if err != nil {
 				log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+			}
+		}
+	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString:
+		if c.Flag.IsBinary() {
+			if s, ok := c.Value.(string); ok {
+				b := make([]byte, 0)
+				b = strconv.AppendQuoteToASCII(b, s)
+				c.Value = b
 			}
 		}
 	case mysql.TypeBit:
