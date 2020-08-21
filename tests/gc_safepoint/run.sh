@@ -12,9 +12,9 @@ MAX_RETRIES=5
 function get_safepoint() {
     pd_addr=$1
     i=0
-    retry_time=5
+    retry_time=10
     while [ $i -lt $retry_time ]; do
-        query=$(timeout 5s pd-ctl service-gc-safepoint --pd=$pd_addr)
+        query=$(timeout 5s pd-ctl service-gc-safepoint --pd=$pd_addr||echo "")
         echo "$query"
         if [[ -z "$query" ]]; then
             echo "query service-gc-safepoint timeout, retry later"
