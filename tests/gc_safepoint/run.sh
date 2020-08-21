@@ -86,6 +86,8 @@ function run() {
     run_sql "INSERT INTO gc_safepoint.simple VALUES (),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
+    sleep 2
+
     ensure $MAX_RETRIES check_safepoint_forward $pd_addr
 
     # after the changefeed is paused, the safe_point will be not updated
