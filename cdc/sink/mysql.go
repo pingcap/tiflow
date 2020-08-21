@@ -25,8 +25,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/tidb/store/tikv/oracle"
-
 	"github.com/cenkalti/backoff"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
@@ -110,8 +108,6 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 			checkpointTs = workerCheckpointTs
 		}
 	}
-	cktime := oracle.GetTimeFromTS(checkpointTs)
-	log.Info("checkpoint in sink", zap.Uint64("checkpoint", checkpointTs), zap.Time("time", cktime))
 	return checkpointTs, nil
 }
 
@@ -624,7 +620,6 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			return err
 		}
 		atomic.StoreUint64(&w.checkpointTs, lastCommitTs)
-		log.Info("update checkpoint in sink worker", zap.Int("worker-num", w.bucket), zap.Uint64("checkpoint", lastCommitTs))
 		toExecRows = toExecRows[:0]
 		w.metricBucketSize.Add(float64(txnNum))
 		w.txnWg.Add(-1 * txnNum)
@@ -707,7 +702,6 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 				if err = tx.Commit(); err != nil {
 					return 0, checkTxnErr(errors.Trace(err))
 				}
-				time.Sleep(time.Second * 3)
 				return dmls.rowCount, nil
 			})
 			if err != nil {
