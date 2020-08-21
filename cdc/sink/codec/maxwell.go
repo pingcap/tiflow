@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -73,11 +72,12 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 	for k, v := range e.Columns {
 		value.Data[k] = v.Value
 	}
-	fmt.Print(e.PreColumns)
 	for k, v := range e.PreColumns {
 		value.Old[k] = v.Value
 	}
-	if e.Delete {
+	if e.PreColumns == nil {
+		value.Type = "insert"
+	} else if e.Delete {
 		value.Type = "delete"
 	} else {
 		value.Type = "update"
