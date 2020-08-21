@@ -11,14 +11,12 @@ MAX_RETRIES=5
 
 function get_safepoint() {
     pd_addr=$1
-    pd_cluster_id=$2
     safe_point=$(pd-ctl service-gc-safepoint --pd=$pd_addr|jq '.service_gc_safe_points []|select(.service_id=="ticdc")|.safe_point')
     echo $safe_point
 }
 
 function check_safepoint_cleared() {
     pd_addr=$1
-    pd_cluster_id=$2
     query=$(pd-ctl service-gc-safepoint --pd=$pd_addr|jq '.service_gc_safe_points []|select(.service_id=="ticdc")')
     if [ ! -z "$query" ]; then
         echo "gc safepoint is not cleared: $query"
@@ -27,10 +25,9 @@ function check_safepoint_cleared() {
 
 function check_safepoint_forward() {
     pd_addr=$1
-    pd_cluster_id=$2
-    safe_point1=$(get_safepoint $pd_addr $pd_cluster_id)
+    safe_point1=$(get_safepoint $pd_addr)
     sleep 1
-    safe_point2=$(get_safepoint $pd_addr $pd_cluster_id)
+    safe_point2=$(get_safepoint $pd_addr)
     if [[ "$safe_point1" == "$safe_point2" ]]; then
         echo "safepoint $safe_point1 is not forward"
         exit 1
@@ -39,11 +36,10 @@ function check_safepoint_forward() {
 
 function check_safepoint_equal() {
     pd_addr=$1
-    pd_cluster_id=$2
-    safe_point1=$(get_safepoint $pd_addr $pd_cluster_id)
+    safe_point1=$(get_safepoint $pd_addr)
     for i in $(seq 1 3); do
         sleep 1
-        safe_point2=$(get_safepoint $pd_addr $pd_cluster_id)
+        safe_point2=$(get_safepoint $pd_addr)
         if [[ "$safe_point1" != "$safe_point2" ]]; then
             echo "safepoint is unexpected forward: $safe_point1 -> $safe_point2"
             exit 1
@@ -90,18 +86,17 @@ function run() {
     run_sql "INSERT INTO gc_safepoint.simple VALUES (),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
-    pd_cluster_id=$(curl -s $pd_addr/pd/api/v1/cluster|grep -oE "id\":\s[0-9]+"|grep -oE "[0-9]+")
-    ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id
+    ensure $MAX_RETRIES check_safepoint_forward $pd_addr
 
     # after the changefeed is paused, the safe_point will be not updated
     cdc cli changefeed pause --changefeed-id=$changefeed_id --pd=$pd_addr
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "stopped"
-    ensure $MAX_RETRIES check_safepoint_equal $pd_addr $pd_cluster_id
+    ensure $MAX_RETRIES check_safepoint_equal $pd_addr
 
     # resume changefeed will recover the safe_point forward
     cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "normal"
-    ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id
+    ensure $MAX_RETRIES check_safepoint_forward $pd_addr
 
     cdc cli changefeed pause --changefeed-id=$changefeed_id --pd=$pd_addr
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "stopped"
@@ -109,17 +104,17 @@ function run() {
     # the safe_point still does not forward
     changefeed_id2=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1|tail -n2|head -n1|awk '{print $2}')
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id2 "normal"
-    ensure $MAX_RETRIES check_safepoint_equal $pd_addr $pd_cluster_id
+    ensure $MAX_RETRIES check_safepoint_equal $pd_addr
 
     # remove paused changefeed, the safe_point forward will recover
     cdc cli changefeed remove --changefeed-id=$changefeed_id --pd=$pd_addr
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "removed"
-    ensure $MAX_RETRIES check_safepoint_forward $pd_addr $pd_cluster_id
+    ensure $MAX_RETRIES check_safepoint_forward $pd_addr
 
     # remove all changefeeds, the safe_point will be cleared
     cdc cli changefeed remove --changefeed-id=$changefeed_id2 --pd=$pd_addr
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id2 "removed"
-    ensure $MAX_RETRIES check_safepoint_cleared $pd_addr $pd_cluster_id
+    ensure $MAX_RETRIES check_safepoint_cleared $pd_addr
 
     cleanup_process $CDC_BINARY
 }
