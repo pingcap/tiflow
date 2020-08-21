@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/tidb/store/tikv/oracle"
+
 	"github.com/cenkalti/backoff"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
@@ -108,7 +110,8 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 			checkpointTs = workerCheckpointTs
 		}
 	}
-	log.Info("checkpoint in sink", zap.Uint64("checkpoint", checkpointTs))
+	cktime := oracle.GetTimeFromTS(checkpointTs)
+	log.Info("checkpoint in sink", zap.Uint64("checkpoint", checkpointTs), zap.Time("time", cktime))
 	return checkpointTs, nil
 }
 
@@ -535,13 +538,13 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 		rowsChIdx++
 		rowsChIdx = rowsChIdx % nWorkers
 	}
-	for _, txns := range txnsGroup {
-		for _, txn := range txns {
-			startTime := time.Now()
-			resolveConflict(txn)
-			s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
-		}
-	}
+	h := newTxnsHeap(txnsGroup)
+	h.iter(func(txn *model.SingleTableTxn) bool {
+		startTime := time.Now()
+		resolveConflict(txn)
+		s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
+		return true
+	})
 	s.notifyAndWaitExec(ctx)
 }
 

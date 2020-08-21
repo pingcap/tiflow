@@ -406,6 +406,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 
 			p.position.CheckPointTs = checkpointTs
 			checkpointTsGauge.Set(float64(phyTs))
+			log.Info("update checkpoint in processor", zap.Uint64("checkpoint", checkpointTs), zap.Time("time", oracle.GetTimeFromTS(checkpointTs)))
 			if err := retryFlushTaskStatusAndPosition(); err != nil {
 				return errors.Trace(err)
 			}
