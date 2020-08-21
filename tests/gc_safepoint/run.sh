@@ -11,7 +11,22 @@ MAX_RETRIES=5
 
 function get_safepoint() {
     pd_addr=$1
-    safe_point=$(pd-ctl service-gc-safepoint --pd=$pd_addr|jq '.service_gc_safe_points []|select(.service_id=="ticdc")|.safe_point')
+    i=0
+    retry_time=5
+    while [ $i -lt $retry_time ]; do
+        safe_point=$(timeout 5s pd-ctl service-gc-safepoint --pd=$pd_addr|jq '.service_gc_safe_points []|select(.service_id=="ticdc")|.safe_point')
+        if [[ -z "$safe_point" ]]; then
+            echo "query service-gc-safepoint timeout, retry later"
+            ((i++))
+        else
+            break
+        fi
+    done
+
+    if [ $i -ge $check_time ]; then
+        echo "query service-gc-safepoint failed"
+        exit
+    fi
     echo $safe_point
 }
 
@@ -85,8 +100,6 @@ function run() {
     run_sql "CREATE table gc_safepoint.simple(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "INSERT INTO gc_safepoint.simple VALUES (),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
-
-    sleep 2
 
     ensure $MAX_RETRIES check_safepoint_forward $pd_addr
 
