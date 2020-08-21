@@ -14,18 +14,17 @@
 package filter
 
 import (
-	"strings"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
-	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
+	filterV1 "github.com/pingcap/tidb-tools/pkg/filter"
+	filterV2 "github.com/pingcap/tidb-tools/pkg/table-filter"
 )
 
 // Filter is a event filter implementation
 type Filter struct {
-	filter           filter.Filter
+	filter           filterV2.Filter
 	ignoreTxnStartTs []uint64
 	ddlAllowlist     []model.ActionType
 	isCyclicEnabled  bool
@@ -33,22 +32,22 @@ type Filter struct {
 
 // NewFilter creates a filter
 func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
-	var f filter.Filter
+	var f filterV2.Filter
 	var err error
 	if len(cfg.Filter.Rules) == 0 && cfg.Filter.MySQLReplicationRules != nil {
-		f, err = filter.ParseMySQLReplicationRules(cfg.Filter.MySQLReplicationRules)
+		f, err = filterV2.ParseMySQLReplicationRules(cfg.Filter.MySQLReplicationRules)
 	} else {
 		rules := cfg.Filter.Rules
 		if len(rules) == 0 {
 			rules = []string{"*.*"}
 		}
-		f, err = filter.Parse(rules)
+		f, err = filterV2.Parse(rules)
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	if !cfg.CaseSensitive {
-		f = filter.CaseInsensitive(f)
+		f = filterV2.CaseInsensitive(f)
 	}
 	return &Filter{
 		filter:           f,
@@ -88,8 +87,16 @@ func (f *Filter) ShouldIgnoreDMLEvent(ts uint64, schema, table string) bool {
 
 // ShouldIgnoreDDLEvent removes DDLs that's not wanted by this change feed.
 // CDC only supports filtering by database/table now.
-func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, schema, table string) bool {
-	return f.shouldIgnoreStartTs(ts) || f.ShouldIgnoreTable(schema, table)
+func (f *Filter) ShouldIgnoreDDLEvent(ts uint64, ddlType model.ActionType, schema, table string) bool {
+	var shouldIgnoreTableOrSchema bool
+	switch ddlType {
+	case model.ActionCreateSchema, model.ActionDropSchema,
+		model.ActionModifySchemaCharsetAndCollate:
+		shouldIgnoreTableOrSchema = !f.filter.MatchSchema(schema)
+	default:
+		shouldIgnoreTableOrSchema = f.ShouldIgnoreTable(schema, table)
+	}
+	return f.shouldIgnoreStartTs(ts) || shouldIgnoreTableOrSchema
 }
 
 // ShouldDiscardDDL returns true if this DDL should be discarded
@@ -152,11 +159,5 @@ func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bo
 
 // IsSysSchema returns true if the given schema is a system schema
 func IsSysSchema(db string) bool {
-	db = strings.ToUpper(db)
-	for _, schema := range []string{"INFORMATION_SCHEMA", "PERFORMANCE_SCHEMA", "MYSQL", "METRIC_SCHEMA"} {
-		if schema == db {
-			return true
-		}
-	}
-	return false
+	return filterV1.IsSystemSchema(db)
 }

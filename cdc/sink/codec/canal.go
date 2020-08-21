@@ -44,7 +44,7 @@ func convertToCanalTs(commitTs uint64) int64 {
 
 // get the canal EventType according to the RowChangedEvent
 func convertRowEventType(e *model.RowChangedEvent) canal.EventType {
-	if e.Delete {
+	if e.IsDelete() {
 		return canal.EventType_DELETE
 	}
 	return canal.EventType_UPDATE
@@ -212,16 +212,22 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 // build the RowData of a canal entry
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
 	var columns []*canal.Column
-	for name, column := range e.Columns {
-		c, err := b.buildColumn(column, name, !e.Delete)
+	for _, column := range e.Columns {
+		if e == nil {
+			continue
+		}
+		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		columns = append(columns, c)
 	}
 	var preColumns []*canal.Column
-	for name, column := range e.PreColumns {
-		c, err := b.buildColumn(column, name, !e.Delete)
+	for _, column := range e.PreColumns {
+		if e == nil {
+			continue
+		}
+		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -349,6 +355,11 @@ func (d *CanalEventBatchEncoder) Build() (key []byte, value []byte) {
 		panic(err)
 	}
 	return nil, value
+}
+
+// MixedBuild implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) MixedBuild() []byte {
+	panic("Mixed Build only use for JsonEncoder")
 }
 
 // Size implements the EventBatchEncoder interface

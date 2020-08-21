@@ -24,7 +24,7 @@ endif
 ARCH  := "`uname -s`"
 LINUX := "Linux"
 MAC   := "Darwin"
-PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests'
+PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor')
@@ -84,8 +84,10 @@ check_third_party_binary:
 	@which bin/go-ycsb
 	@which bin/etcdctl
 	@which bin/jq
+	@which bin/minio
 
 integration_test_build: check_failpoint_ctl
+	./scripts/fix_lib_zstd.sh
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -c -cover -covemode=atomic \
 		-coverpkg=github.com/pingcap/ticdc/... \

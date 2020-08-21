@@ -17,18 +17,19 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
 	"time"
-
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -253,6 +254,23 @@ func (s *etcdSuite) TestPutAllChangeFeedStatus(c *check.C) {
 	}
 }
 
+func (s *etcdSuite) TestRemoveChangeFeedStatus(c *check.C) {
+	ctx := context.Background()
+	changefeedID := "test-remove-changefeed-status"
+	status := &model.ChangeFeedStatus{
+		ResolvedTs: 1,
+	}
+	err := s.client.PutChangeFeedStatus(ctx, changefeedID, status)
+	c.Assert(err, check.IsNil)
+	status, _, err = s.client.GetChangeFeedStatus(ctx, changefeedID)
+	c.Assert(err, check.IsNil)
+	c.Assert(status, check.DeepEquals, status)
+	err = s.client.RemoveChangeFeedStatus(ctx, changefeedID)
+	c.Assert(err, check.IsNil)
+	_, _, err = s.client.GetChangeFeedStatus(ctx, changefeedID)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
+}
+
 func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
 	ctx := context.Background()
 	err := s.client.PutChangeFeedStatus(ctx, "test1", &model.ChangeFeedStatus{
@@ -353,4 +371,53 @@ func (s *etcdSuite) TestCreateChangefeed(c *check.C) {
 
 	err = s.client.CreateChangefeedInfo(ctx, detail, "test-id")
 	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedAlreadyExists)
+}
+
+type Captures []*model.CaptureInfo
+
+func (c Captures) Len() int           { return len(c) }
+func (c Captures) Less(i, j int) bool { return c[i].ID < c[j].ID }
+func (c Captures) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
+
+func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
+	ctx := context.Background()
+	testCases := []*model.CaptureInfo{
+		{
+			ID:            "a3f41a6a-3c31-44f4-aa27-344c1b8cd658",
+			AdvertiseAddr: "127.0.0.1:8301",
+		},
+		{
+			ID:            "cdb041d9-ccdd-480d-9975-e97d7adb1185",
+			AdvertiseAddr: "127.0.0.1:8302",
+		},
+		{
+			ID:            "e05e5d34-96ea-44af-812d-ca72aa19e1e5",
+			AdvertiseAddr: "127.0.0.1:8303",
+		},
+	}
+	leases := make(map[string]int64)
+
+	for _, cinfo := range testCases {
+		sess, err := concurrency.NewSession(s.client.Client, concurrency.WithTTL(10))
+		c.Assert(err, check.IsNil)
+		err = s.client.PutCaptureInfo(ctx, cinfo, sess.Lease())
+		c.Assert(err, check.IsNil)
+		leases[cinfo.ID] = int64(sess.Lease())
+	}
+
+	_, captures, err := s.client.GetCaptures(ctx)
+	c.Assert(err, check.IsNil)
+	c.Assert(captures, check.HasLen, len(testCases))
+	sort.Sort(Captures(captures))
+	c.Assert(captures, check.DeepEquals, testCases)
+
+	queryLeases, err := s.client.GetCaptureLeases(ctx)
+	c.Assert(err, check.IsNil)
+	c.Check(queryLeases, check.DeepEquals, leases)
+
+	err = s.client.RevokeAllLeases(ctx, leases)
+	c.Assert(err, check.IsNil)
+	queryLeases, err = s.client.GetCaptureLeases(ctx)
+	c.Assert(err, check.IsNil)
+	c.Check(queryLeases, check.DeepEquals, map[string]int64{})
 }

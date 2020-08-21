@@ -38,7 +38,7 @@ import (
 
 func init() {
 	cliCmd := newCliCommand()
-	cliCmd.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address")
+	cliCmd.PersistentFlags().StringVar(&cliPdAddr, "pd", "http://127.0.0.1:2379", "PD address, use ',' to separate multiple PDs")
 	cliCmd.PersistentFlags().BoolVarP(&interact, "interact", "i", false, "Run cdc cli with readline")
 	cliCmd.PersistentFlags().StringVar(&cliLogLevel, "log-level", "warn", "log level (etc: debug|info|warn|error)")
 	addSecurityFlags(cliCmd.PersistentFlags(), false /* isServer */)
@@ -71,6 +71,8 @@ var (
 	changefeedID string
 	captureID    string
 	interval     uint
+
+	optForceRemove bool
 
 	defaultContext context.Context
 )
@@ -136,9 +138,11 @@ func newCliCommand() *cobra.Command {
 			if err != nil {
 				return errors.Annotate(err, "fail to validate TLS settings")
 			}
+
+			pdEndpoints := strings.Split(cliPdAddr, ",")
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Context:     defaultContext,
-				Endpoints:   []string{cliPdAddr},
+				Endpoints:   pdEndpoints,
 				TLS:         tlsConfig,
 				DialTimeout: 30 * time.Second,
 				DialOptions: []grpc.DialOption{
@@ -161,7 +165,7 @@ func newCliCommand() *cobra.Command {
 			}
 			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
 			pdCli, err = pd.NewClientWithContext(
-				defaultContext, []string{cliPdAddr}, credential.PDSecurityOption(),
+				defaultContext, pdEndpoints, credential.PDSecurityOption(),
 				pd.WithGRPCDialOptions(
 					grpcTLSOption,
 					grpc.WithBlock(),
@@ -180,7 +184,7 @@ func newCliCommand() *cobra.Command {
 			}
 			ctx := defaultContext
 			errorTiKVIncompatible := true // Error if TiKV is incompatible.
-			err = util.CheckClusterVersion(ctx, pdCli, cliPdAddr, credential, errorTiKVIncompatible)
+			err = util.CheckClusterVersion(ctx, pdCli, pdEndpoints[0], credential, errorTiKVIncompatible)
 			if err != nil {
 				return err
 			}
@@ -197,7 +201,7 @@ func newCliCommand() *cobra.Command {
 		newCaptureCommand(),
 		newChangefeedCommand(),
 		newProcessorCommand(),
-		newMetadataCommand(),
+		newUnsafeCommand(),
 		newTsoCommand(),
 	)
 

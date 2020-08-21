@@ -10,7 +10,7 @@ SINK_TYPE=$1
 
 CDC_COUNT=3
 DB_COUNT=4
-MAX_RETRIES=10
+MAX_RETRIES=20
 
 function check_changefeed_state() {
     pd_addr=$1
@@ -35,7 +35,7 @@ function run() {
     start_tidb_cluster --workdir $WORK_DIR
     cd $WORK_DIR
 
-    pd_addr="http://$UP_PD_HOST:$UP_PD_PORT"
+    pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
     TOPIC_NAME="ticdc-sink-hang-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;

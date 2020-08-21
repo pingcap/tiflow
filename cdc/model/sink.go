@@ -164,9 +164,10 @@ func (b *ColumnFlagType) UnsetIsNullable() {
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema    string `toml:"db-name" json:"db-name"`
-	Table     string `toml:"tbl-name" json:"tbl-name"`
-	Partition int64  `json:"partition"`
+	Schema      string `toml:"db-name" json:"db-name"`
+	Table       string `toml:"tbl-name" json:"tbl-name"`
+	TableID     int64  `toml:"tbl-id" json:"tbl-"`
+	IsPartition bool   `toml:"is-partition" json:"is-partition"`
 }
 
 // String implements fmt.Stringer interface.
@@ -189,6 +190,11 @@ func (t *TableName) GetTable() string {
 	return t.Table
 }
 
+// GetTableID returns table ID.
+func (t *TableName) GetTableID() int64 {
+	return t.TableID
+}
+
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
 	StartTs  uint64 `json:"start-ts"`
@@ -198,26 +204,27 @@ type RowChangedEvent struct {
 
 	Table *TableName `json:"table"`
 
-	Delete bool `json:"delete"`
-
 	TableInfoVersion uint64 `json:"table-info-version,omitempty"`
 
-	// if the table of this row only has one unique index(includes primary key),
-	// IndieMarkCol will be set to the name of the unique index
-	IndieMarkCol string             `json:"indie-mark-col"`
-	Columns      map[string]*Column `json:"columns"`
-	PreColumns   map[string]*Column `json:"pre-columns"`
-	Keys         []string           `json:"keys"`
+	Columns      []*Column `json:"columns"`
+	PreColumns   []*Column `json:"pre-columns"`
+	IndexColumns [][]int
+
+	// approximate size of this event, calculate by tikv proto bytes size
+	ApproximateSize int64
+}
+
+// IsDelete returns true if the row is a delete event
+func (r *RowChangedEvent) IsDelete() bool {
+	return len(r.PreColumns) != 0 && len(r.Columns) == 0
 }
 
 // Column represents a column value in row changed event
 type Column struct {
-	Type byte `json:"t"`
-	// WhereHandle is deprecation
-	// WhereHandle is replaced by HandleKey in Flag
-	WhereHandle *bool          `json:"h,omitempty"`
-	Flag        ColumnFlagType `json:"f"`
-	Value       interface{}    `json:"v"`
+	Name  string         `json:"name"`
+	Type  byte           `json:"type"`
+	Flag  ColumnFlagType `json:"flag"`
+	Value interface{}    `json:"value"`
 }
 
 // ColumnValueString returns the string representation of the column value
@@ -281,7 +288,9 @@ type SimpleTableInfo struct {
 	// db name
 	Schema string
 	// table name
-	Table      string
+	Table string
+	// table ID
+	TableID    int64
 	ColumnInfo []*ColumnInfo
 }
 
@@ -296,68 +305,63 @@ type DDLEvent struct {
 }
 
 // FromJob fills the values of DDLEvent from DDL job
-func (e *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
-	e.TableInfo = new(SimpleTableInfo)
-	e.TableInfo.Schema = job.SchemaName
-	e.StartTs = job.StartTS
-	e.CommitTs = job.BinlogInfo.FinishedTS
-	e.Query = job.Query
-	e.Type = job.Type
+func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
+	d.TableInfo = new(SimpleTableInfo)
+	d.TableInfo.Schema = job.SchemaName
+	d.StartTs = job.StartTS
+	d.CommitTs = job.BinlogInfo.FinishedTS
+	d.Query = job.Query
+	d.Type = job.Type
 
 	if job.BinlogInfo.TableInfo != nil {
 		tableName := job.BinlogInfo.TableInfo.Name.O
 		tableInfo := job.BinlogInfo.TableInfo
-		e.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
+		d.TableInfo.ColumnInfo = make([]*ColumnInfo, len(tableInfo.Columns))
 
 		for i, colInfo := range tableInfo.Columns {
-			e.TableInfo.ColumnInfo[i] = new(ColumnInfo)
-			e.TableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
+			d.TableInfo.ColumnInfo[i] = new(ColumnInfo)
+			d.TableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
 		}
 
-		e.TableInfo.Table = tableName
+		d.TableInfo.Table = tableName
+		d.TableInfo.TableID = job.TableID
 	}
-	e.fillPreTableInfo(preTableInfo)
+	d.fillPreTableInfo(preTableInfo)
 }
 
-func (e *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
+func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 	if preTableInfo == nil {
 		return
 	}
-	e.PreTableInfo = new(SimpleTableInfo)
-	e.PreTableInfo.Schema = preTableInfo.TableName.Schema
-	e.PreTableInfo.Table = preTableInfo.TableName.Table
+	d.PreTableInfo = new(SimpleTableInfo)
+	d.PreTableInfo.Schema = preTableInfo.TableName.Schema
+	d.PreTableInfo.Table = preTableInfo.TableName.Table
+	d.PreTableInfo.TableID = preTableInfo.ID
 
-	e.PreTableInfo.ColumnInfo = make([]*ColumnInfo, len(preTableInfo.Columns))
+	d.PreTableInfo.ColumnInfo = make([]*ColumnInfo, len(preTableInfo.Columns))
 	for i, colInfo := range preTableInfo.Columns {
-		e.PreTableInfo.ColumnInfo[i] = new(ColumnInfo)
-		e.PreTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
+		d.PreTableInfo.ColumnInfo[i] = new(ColumnInfo)
+		d.PreTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
 	}
 }
 
-// Txn represents a transaction which includes many row events
-type Txn struct {
+// SingleTableTxn represents a transaction which includes many row events in a single table
+type SingleTableTxn struct {
+	Table     *TableName
 	StartTs   uint64
 	CommitTs  uint64
 	Rows      []*RowChangedEvent
-	Keys      []string
 	ReplicaID uint64
 }
 
-// Append adds a row changed event into Txn
-func (t *Txn) Append(row *RowChangedEvent) {
-	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs {
+// Append adds a row changed event into SingleTableTxn
+func (t *SingleTableTxn) Append(row *RowChangedEvent) {
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.TableID {
 		log.Fatal("unexpected row change event",
 			zap.Uint64("startTs of txn", t.StartTs),
 			zap.Uint64("commitTs of txn", t.CommitTs),
-			zap.Uint64("startTs of row", row.StartTs),
-			zap.Uint64("commitTs of row", row.CommitTs))
+			zap.Any("table of txn", t.Table),
+			zap.Any("row", row))
 	}
 	t.Rows = append(t.Rows, row)
-	if len(row.Keys) == 0 {
-		if len(t.Keys) == 0 {
-			t.Keys = []string{QuoteSchema(row.Table.Schema, row.Table.Table)}
-		}
-	} else {
-		t.Keys = append(t.Keys, row.Keys...)
-	}
 }
