@@ -18,6 +18,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -78,11 +79,17 @@ func formatColumnVal(c column) column {
 		}
 	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString:
 		if c.Flag.IsBinary() {
+			log.Info("binary column o",
+				zap.Any("col", c.Value),
+				zap.String("type", fmt.Sprintf("%T", c.Value)))
 			if s, ok := c.Value.(string); ok {
 				b := make([]byte, 0)
 				b = strconv.AppendQuoteToASCII(b, s)
 				c.Value = b
 			}
+			log.Info("binary column p",
+				zap.Any("col", c.Value),
+				zap.String("type", fmt.Sprintf("%T", c.Value)))
 		}
 	case mysql.TypeBit:
 		if s, ok := c.Value.(json.Number); ok {
