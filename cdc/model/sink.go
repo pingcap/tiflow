@@ -356,11 +356,6 @@ type SingleTableTxn struct {
 
 // Append adds a row changed event into SingleTableTxn
 func (t *SingleTableTxn) Append(row *RowChangedEvent) {
-	if row == nil {
-		panic("row is nil")
-	}
-	log.Info("[qinggniq] append before", zap.String("content", fmt.Sprintf("%v", row)))
-
 	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.TableID {
 		log.Fatal("unexpected row change event",
 			zap.Uint64("startTs of txn", t.StartTs),
