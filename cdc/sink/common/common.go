@@ -24,7 +24,7 @@ import (
 
 // UnresolvedTxnCache caches unresolved txns, not thread safe
 type UnresolvedTxnCache struct {
-	unresolvedTxns   map[model.TableID][]*model.SingleTableTxn
+	unresolvedTxns map[model.TableID][]*model.SingleTableTxn
 }
 
 // NewUnresolvedTxnCache returns a new UnresolvedTxnCache
