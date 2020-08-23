@@ -355,8 +355,8 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	config := mqProducer.NewKafkaConfig()
 
 	scheme := strings.ToLower(sinkURI.Scheme)
-	if scheme != "kafka" {
-		return nil, errors.New("can not create MQ sink with unsupported scheme")
+	if scheme != "kafka" && scheme != "kafka+ssl" {
+		return nil, errors.Errorf("can't create MQ sink with unsupported scheme: %s", scheme)
 	}
 	s := sinkURI.Query().Get("partition-num")
 	if s != "" {
