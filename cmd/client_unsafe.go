@@ -22,23 +22,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newMetadataCommand() *cobra.Command {
+func newUnsafeCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "meta",
-		Short: "Manage metadata stored in PD",
+		Use:    "unsafe",
+		Hidden: true,
 	}
 	command.AddCommand(
-		newDeleteMetaCommand(),
-		newDeleteGCTTLCommand(),
+		newDeleteServiceGcSafepointCommand(),
+		newResetCommand(),
 	)
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to confirm executing meta command")
 	return command
 }
 
-func newDeleteMetaCommand() *cobra.Command {
+func newResetCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "delete",
-		Short: "Delete all meta data in etcd, confirm that you know what this command will do and use it at your own risk",
+		Use:   "reset",
+		Short: "Reset the status of the TiCDC cluster, delete all meta data in etcd, confirm that you know what this command will do and use it at your own risk",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := confirmMetaDelete(cmd); err != nil {
 				return err
@@ -65,7 +65,7 @@ func newDeleteMetaCommand() *cobra.Command {
 				return errors.Trace(err)
 			}
 
-			cmd.Println("all metadata truncated in PD!")
+			cmd.Println("reset and all metadata truncated in PD!")
 
 			return nil
 		},
@@ -73,10 +73,10 @@ func newDeleteMetaCommand() *cobra.Command {
 	return command
 }
 
-func newDeleteGCTTLCommand() *cobra.Command {
+func newDeleteServiceGcSafepointCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "delete-gc-ttl",
-		Short: "Delete CDC GC TTL in PD, confirm that you know what this command will do and use it at your own risk",
+		Use:   "delete-service-gc-safepoint",
+		Short: "Delete CDC service GC safepoint in PD, confirm that you know what this command will do and use it at your own risk",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := confirmMetaDelete(cmd); err != nil {
 				return err
@@ -84,7 +84,7 @@ func newDeleteGCTTLCommand() *cobra.Command {
 			ctx := defaultContext
 			_, err := pdCli.UpdateServiceGCSafePoint(ctx, cdc.CDCServiceSafePointID, 0, 0)
 			if err == nil {
-				cmd.Println("CDC GC TTL truncated in PD!")
+				cmd.Println("CDC service GC safepoint truncated in PD!")
 			}
 			return errors.Trace(err)
 		},

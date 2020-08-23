@@ -72,9 +72,8 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	table := model.TableName{
-		Schema:    "testdb",
-		Table:     "test1",
-		Partition: 0,
+		Schema: "testdb",
+		Table:  "test1",
 	}
 
 	r, err := s.encoder.avroEncode(&table, 1, []*model.Column{

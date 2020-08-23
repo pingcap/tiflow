@@ -19,7 +19,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -32,7 +31,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/util"
 )
 
@@ -426,11 +424,6 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		cols = nil
 	}
 
-	var partitionID int64
-	if tableInfo.GetPartitionInfo() != nil {
-		partitionID = row.PhysicalTableID
-	}
-
 	schemaName := tableInfo.TableName.Schema
 	tableName := tableInfo.TableName.Table
 	return &model.RowChangedEvent{
@@ -439,17 +432,14 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 		RowID:            row.RecordID,
 		TableInfoVersion: tableInfo.TableInfoVersion,
 		Table: &model.TableName{
-			Schema:    schemaName,
-			Table:     tableName,
-			TableID:   row.PhysicalTableID,
-			Partition: partitionID,
+			Schema:      schemaName,
+			Table:       tableName,
+			TableID:     row.PhysicalTableID,
+			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
-		Columns:      cols,
-		PreColumns:   preCols,
-		IndexColumns: tableInfo.IndexColumnsOffset,
-		// FIXME(leoppor): Correctness of conflict detection with old values
-		Keys: genMultipleKeys(tableInfo, preCols, cols, quotes.QuoteSchema(schemaName, tableName)),
-
+		Columns:         cols,
+		PreColumns:      preCols,
+		IndexColumns:    tableInfo.IndexColumnsOffset,
 		ApproximateSize: dataSize,
 	}, nil
 }
@@ -493,23 +483,18 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
 		}
 	}
-	var partitionID int64
-	if tableInfo.GetPartitionInfo() != nil {
-		partitionID = idx.PhysicalTableID
-	}
 	return &model.RowChangedEvent{
 		StartTs:  idx.StartTs,
 		CommitTs: idx.CRTs,
 		RowID:    idx.RecordID,
 		Table: &model.TableName{
-			Schema:    tableInfo.TableName.Schema,
-			Table:     tableInfo.TableName.Table,
-			TableID:   idx.PhysicalTableID,
-			Partition: partitionID,
+			Schema:      tableInfo.TableName.Schema,
+			Table:       tableInfo.TableName.Table,
+			TableID:     idx.PhysicalTableID,
+			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
 		PreColumns:      preCols,
 		IndexColumns:    tableInfo.IndexColumnsOffset,
-		Keys:            genMultipleKeys(tableInfo, preCols, nil, quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table)),
 		ApproximateSize: dataSize,
 	}, nil
 }
@@ -588,91 +573,4 @@ func fetchHandleValue(tableInfo *model.TableInfo, recordID int64) (pkCoID int64,
 		pkValue.SetInt64(recordID)
 	}
 	return
-}
-
-func genMultipleKeys(ti *model.TableInfo, preCols, cols []*model.Column, table string) []string {
-	estimateLen := len(ti.Indices) + 1
-	if len(preCols) != 0 && len(cols) != 0 {
-		estimateLen *= 2
-	}
-	multipleKeys := make([]string, 0, estimateLen)
-	buildKeys := func(colValues []*model.Column) {
-		if len(colValues) == 0 {
-			return
-		}
-		if ti.PKIsHandle {
-			if pk := ti.GetPkColInfo(); pk != nil && !pk.IsGenerated() {
-				cols := []*timodel.ColumnInfo{pk}
-
-				key := genKeyList(ti, table, cols, colValues)
-				if len(key) > 0 { // ignore `null` value.
-					multipleKeys = append(multipleKeys, key)
-				} else {
-					log.L().Debug("ignore empty primary key", zap.String("table", table))
-				}
-			}
-		}
-
-		for _, indexCols := range ti.Indices {
-			if !indexCols.Unique {
-				continue
-			}
-			cols := getIndexColumns(ti.Columns, indexCols)
-			key := genKeyList(ti, table, cols, colValues)
-			if len(key) > 0 { // ignore `null` value.
-				noGeneratedColumn := true
-				for _, col := range cols {
-					if col.IsGenerated() {
-						noGeneratedColumn = false
-						break
-					}
-				}
-				// If the index contain generated column, we can't use this key to detect conflict with other DML,
-				// Because such as insert can't specified the generated value.
-				if noGeneratedColumn {
-					multipleKeys = append(multipleKeys, key)
-				}
-			} else {
-				log.L().Debug("ignore empty index key", zap.String("table", table))
-			}
-		}
-	}
-	buildKeys(preCols)
-	buildKeys(cols)
-
-	if len(multipleKeys) == 0 {
-		// use table name as key if no key generated (no PK/UK),
-		// no concurrence for rows in the same table.
-		log.L().Debug("use table name as the key", zap.String("table", table))
-		multipleKeys = append(multipleKeys, table)
-	}
-
-	return multipleKeys
-}
-
-func genKeyList(ti *model.TableInfo, table string, columns []*timodel.ColumnInfo, values []*model.Column) string {
-	var buf strings.Builder
-	for _, col := range columns {
-		val := values[ti.RowColumnsOffset[col.ID]]
-		if val == nil || val.Value == nil {
-			log.L().Debug("ignore null value", zap.String("column", col.Name.O), zap.String("table", table))
-			continue // ignore `null` value.
-		}
-		buf.WriteString(model.ColumnValueString(val.Value))
-	}
-	if buf.Len() == 0 {
-		log.L().Debug("all value are nil, no key generated", zap.String("table", table))
-		return "" // all values are `null`.
-	}
-
-	buf.WriteString(table)
-	return buf.String()
-}
-
-func getIndexColumns(columns []*timodel.ColumnInfo, indexColumns *timodel.IndexInfo) []*timodel.ColumnInfo {
-	cols := make([]*timodel.ColumnInfo, 0, len(indexColumns.Columns))
-	for _, column := range indexColumns.Columns {
-		cols = append(cols, columns[column.Offset])
-	}
-	return cols
 }

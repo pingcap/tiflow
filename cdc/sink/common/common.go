@@ -24,19 +24,19 @@ import (
 
 // UnresolvedTxnCache caches unresolved txns, not thread safe
 type UnresolvedTxnCache struct {
-	unresolvedTxns map[model.TableName][]*model.Txn
+	unresolvedTxns   map[model.TableID][]*model.SingleTableTxn
 }
 
 // NewUnresolvedTxnCache returns a new UnresolvedTxnCache
 func NewUnresolvedTxnCache() *UnresolvedTxnCache {
 	return &UnresolvedTxnCache{
-		unresolvedTxns: make(map[model.TableName][]*model.Txn),
+		unresolvedTxns: make(map[model.TableID][]*model.SingleTableTxn),
 	}
 }
 
 // Append adds unresolved rows to cache
 func (c *UnresolvedTxnCache) Append(row *model.RowChangedEvent) {
-	key := *row.Table
+	key := row.Table.TableID
 	txns := c.unresolvedTxns[key]
 	if len(txns) == 0 || txns[len(txns)-1].StartTs != row.StartTs {
 		// fail-fast check
@@ -48,9 +48,10 @@ func (c *UnresolvedTxnCache) Append(row *model.RowChangedEvent) {
 				zap.Uint64("last received row startTs", txns[len(txns)-1].StartTs),
 				zap.Uint64("last received row commitTs", txns[len(txns)-1].CommitTs))
 		}
-		txns = append(txns, &model.Txn{
+		txns = append(txns, &model.SingleTableTxn{
 			StartTs:  row.StartTs,
 			CommitTs: row.CommitTs,
+			Table:    row.Table,
 		})
 		c.unresolvedTxns[key] = txns
 	}
@@ -58,7 +59,7 @@ func (c *UnresolvedTxnCache) Append(row *model.RowChangedEvent) {
 }
 
 // Resolved returns resolved txns according to resolvedTs
-func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableName][]*model.Txn {
+func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*model.SingleTableTxn {
 	if len(c.unresolvedTxns) == 0 {
 		return nil
 	}
@@ -67,31 +68,31 @@ func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableName][]*
 }
 
 // Unresolved returns unresolved txns
-func (c *UnresolvedTxnCache) Unresolved() map[model.TableName][]*model.Txn {
+func (c *UnresolvedTxnCache) Unresolved() map[model.TableID][]*model.SingleTableTxn {
 	return c.unresolvedTxns
 }
 
 func splitResolvedTxn(
-	resolvedTs uint64, unresolvedTxns map[model.TableName][]*model.Txn,
-) (minTs uint64, resolvedRowsMap map[model.TableName][]*model.Txn) {
-	resolvedRowsMap = make(map[model.TableName][]*model.Txn, len(unresolvedTxns))
+	resolvedTs uint64, unresolvedTxns map[model.TableID][]*model.SingleTableTxn,
+) (minTs uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
+	resolvedRowsMap = make(map[model.TableID][]*model.SingleTableTxn, len(unresolvedTxns))
 	minTs = resolvedTs
-	for key, txns := range unresolvedTxns {
+	for tableID, txns := range unresolvedTxns {
 		i := sort.Search(len(txns), func(i int) bool {
 			return txns[i].CommitTs > resolvedTs
 		})
 		if i == 0 {
 			continue
 		}
-		var resolvedTxns []*model.Txn
+		var resolvedTxns []*model.SingleTableTxn
 		if i == len(txns) {
 			resolvedTxns = txns
-			delete(unresolvedTxns, key)
+			delete(unresolvedTxns, tableID)
 		} else {
 			resolvedTxns = txns[:i]
-			unresolvedTxns[key] = txns[i:]
+			unresolvedTxns[tableID] = txns[i:]
 		}
-		resolvedRowsMap[key] = resolvedTxns
+		resolvedRowsMap[tableID] = resolvedTxns
 
 		if len(resolvedTxns) > 0 && resolvedTxns[0].CommitTs < minTs {
 			minTs = resolvedTxns[0].CommitTs

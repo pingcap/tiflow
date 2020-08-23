@@ -164,10 +164,10 @@ func (b *ColumnFlagType) UnsetIsNullable() {
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema    string `toml:"db-name" json:"db-name"`
-	Table     string `toml:"tbl-name" json:"tbl-name"`
-	TableID   int64  `toml:"tbl-id" json:"tbl-id"`
-	Partition int64  `json:"partition"`
+	Schema      string `toml:"db-name" json:"db-name"`
+	Table       string `toml:"tbl-name" json:"tbl-name"`
+	TableID     int64  `toml:"tbl-id" json:"tbl-"`
+	IsPartition bool   `toml:"is-partition" json:"is-partition"`
 }
 
 // String implements fmt.Stringer interface.
@@ -209,8 +209,6 @@ type RowChangedEvent struct {
 	Columns      []*Column `json:"columns"`
 	PreColumns   []*Column `json:"pre-columns"`
 	IndexColumns [][]int
-	// TODO: remove it
-	Keys []string `json:"keys"`
 
 	// approximate size of this event, calculate by tikv proto bytes size
 	ApproximateSize int64
@@ -347,30 +345,29 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 	}
 }
 
-// Txn represents a transaction which includes many row events
-type Txn struct {
+// SingleTableTxn represents a transaction which includes many row events in a single table
+type SingleTableTxn struct {
+	Table     *TableName
 	StartTs   uint64
 	CommitTs  uint64
 	Rows      []*RowChangedEvent
-	Keys      []string
 	ReplicaID uint64
 }
 
-// Append adds a row changed event into Txn
-func (t *Txn) Append(row *RowChangedEvent) {
-	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs {
+// Append adds a row changed event into SingleTableTxn
+func (t *SingleTableTxn) Append(row *RowChangedEvent) {
+	if row == nil {
+		panic("row is nil")
+	}
+	log.Info("[qinggniq] append before", zap.String("content", fmt.Sprintf("%v", row)))
+
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.TableID {
 		log.Fatal("unexpected row change event",
 			zap.Uint64("startTs of txn", t.StartTs),
 			zap.Uint64("commitTs of txn", t.CommitTs),
-			zap.Uint64("startTs of row", row.StartTs),
-			zap.Uint64("commitTs of row", row.CommitTs))
+			zap.Any("table of txn", t.Table),
+			zap.Any("row", row))
 	}
+	log.Info("[qinggniq] append")
 	t.Rows = append(t.Rows, row)
-	if len(row.Keys) == 0 {
-		if len(t.Keys) == 0 {
-			t.Keys = []string{QuoteSchema(row.Table.Schema, row.Table.Table)}
-		}
-	} else {
-		t.Keys = append(t.Keys, row.Keys...)
-	}
 }

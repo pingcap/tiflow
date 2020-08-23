@@ -56,7 +56,7 @@ var _ = check.Suite(&canalBatchSuite{
 	}, {
 		StartTs:  2,
 		CommitTs: 3,
-		Table:    &model.TableName{Schema: "a", Table: "c", Partition: 6},
+		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 	}}, {}},
 	rowCaseExpectValues: []rowCaseExpect{

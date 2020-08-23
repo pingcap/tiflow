@@ -72,6 +72,8 @@ var (
 	captureID    string
 	interval     uint
 
+	optForceRemove bool
+
 	defaultContext context.Context
 )
 
@@ -199,7 +201,7 @@ func newCliCommand() *cobra.Command {
 		newCaptureCommand(),
 		newChangefeedCommand(),
 		newProcessorCommand(),
-		newMetadataCommand(),
+		newUnsafeCommand(),
 		newTsoCommand(),
 	)
 
