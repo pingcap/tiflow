@@ -274,6 +274,23 @@ func (s etcdSuite) TestGetAllChangeFeedStatus(c *check.C) {
 	c.Assert(statuses, check.DeepEquals, changefeeds)
 }
 
+func (s *etcdSuite) TestRemoveChangeFeedStatus(c *check.C) {
+	ctx := context.Background()
+	changefeedID := "test-remove-changefeed-status"
+	status := &model.ChangeFeedStatus{
+		ResolvedTs: 1,
+	}
+	err := s.client.PutChangeFeedStatus(ctx, changefeedID, status)
+	c.Assert(err, check.IsNil)
+	status, _, err = s.client.GetChangeFeedStatus(ctx, changefeedID)
+	c.Assert(err, check.IsNil)
+	c.Assert(status, check.DeepEquals, status)
+	err = s.client.RemoveChangeFeedStatus(ctx, changefeedID)
+	c.Assert(err, check.IsNil)
+	_, _, err = s.client.GetChangeFeedStatus(ctx, changefeedID)
+	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
+}
+
 func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
 	ctx := context.Background()
 	err := s.client.PutChangeFeedStatus(ctx, "test1", &model.ChangeFeedStatus{

@@ -73,6 +73,8 @@ var (
 	captureID    string
 	interval     uint
 
+	optForceRemove bool
+
 	defaultContext context.Context
 )
 
