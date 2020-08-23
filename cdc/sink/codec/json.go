@@ -333,12 +333,18 @@ func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult
 
 // UpdateResolvedTs implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) UpdateResolvedTs(ts uint64) (EncoderResult, error) {
+	if d.Size() == 0 {
+		return EncoderNoOperation, nil
+	}
 	// nothing for now
 	return EncoderNeedAsyncWrite, nil
 }
 
 // Build implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) Build() (keys [][]byte, values [][]byte) {
+	if d.Size() == 0 {
+		return nil, nil
+	}
 	defer d.reset()
 	keys = append(keys, d.keyBuf.Bytes())
 	values = append(values, d.valueBuf.Bytes())

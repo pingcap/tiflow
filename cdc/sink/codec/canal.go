@@ -358,7 +358,7 @@ func (d *CanalEventBatchEncoder) MixedBuild() []byte {
 
 // UpdateResolvedTs implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) UpdateResolvedTs(ts uint64) (EncoderResult, error) {
-	if ts < d.resolvedTs {
+	if ts <= d.resolvedTs || d.Size() == 0 {
 		return EncoderNoOperation, nil
 	}
 	d.resolvedTs = ts
@@ -368,6 +368,9 @@ func (d *CanalEventBatchEncoder) UpdateResolvedTs(ts uint64) (EncoderResult, err
 // Build implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Build() (keys [][]byte, values [][]byte) {
 	resolvedTxns := d.txnCache.Resolved(d.resolvedTs)
+	if d.Size() == 0 {
+		return nil, nil
+	}
 	if len(d.ddls) != 0 && len(resolvedTxns) != 0 {
 		log.Warn("ddl and dml is encoded both.")
 	}

@@ -99,7 +99,7 @@ func newMqSink(
 		}
 	case codec.ProtocolCanal:
 		if !config.EnableOldValue {
-			return nil, errors.New("enable-old-value must turn on when sink type is canal")
+			return nil, errors.New("enable-old-value must be turned on when sink type is canal")
 		}
 		var forceHkPk bool
 		forceHKeyToPKey, ok := opts["force-handle-key-pkey"]
@@ -243,7 +243,6 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	}
 
-	// ddl always does not need resolved ts
 	keys, values := encoder.Build()
 	var partition int32 = -1
 	log.Info("emit ddl event", zap.ByteStrings("keys", keys), zap.ByteStrings("values", values))
@@ -253,7 +252,6 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	}
 	for i := range keys {
 		err = k.writeToProducer(ctx, keys[i], values[i], op, partition)
-		//err = k.mqProducer.SyncSendMessage(ctx, keys[i], values[i], 0)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -292,20 +290,15 @@ const batchSizeLimit = 4 * 1024 * 1024 // 4MB
 func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	input := k.partitionInput[partition]
 	encoder := k.newEncoder()
-	batchSize := 0
+	eventCount := 0
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
-	var resolvedTs uint64
 
 	flushToProducer := func(op codec.EncoderResult) error {
-		if batchSize == 0 {
+		if op == codec.EncoderNoOperation {
 			return nil
 		}
-		op1, err := encoder.UpdateResolvedTs(resolvedTs)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if op1 == codec.EncoderNoOperation {
+		if eventCount == 0 {
 			return nil
 		}
 		keys, values := encoder.Build()
@@ -315,10 +308,9 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 				return errors.Trace(err)
 			}
 		}
+		eventCount = 0
 		if k.protocol == codec.ProtocolCanal {
-			batchSize = encoder.Size()
-		} else {
-			batchSize = 0
+			eventCount = encoder.Size()
 		}
 		return nil
 	}
@@ -340,8 +332,11 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		}
 		if e.row == nil {
 			if e.resolvedTs != 0 {
-				resolvedTs = e.resolvedTs
-				if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
+				op, err := encoder.UpdateResolvedTs(e.resolvedTs)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				if err := flushToProducer(op); err != nil {
 					return errors.Trace(err)
 				}
 				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
@@ -350,22 +345,17 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			continue
 		}
 		op, err := encoder.AppendRowChangedEvent(e.row)
+		eventCount++
 		if err != nil {
 			return errors.Trace(err)
 		}
-		batchSize++
 
 		if encoder.Size() >= batchSizeLimit {
-			if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
-				return errors.Trace(err)
-			}
-			continue
+			op = codec.EncoderNeedAsyncWrite
 		}
 
-		if op != codec.EncoderNoOperation {
-			if err := flushToProducer(op); err != nil {
-				return errors.Trace(err)
-			}
+		if err := flushToProducer(op); err != nil {
+			return errors.Trace(err)
 		}
 	}
 }

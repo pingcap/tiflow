@@ -106,12 +106,18 @@ func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult
 
 // UpdateResolvedTs implements the EventBatchEncoder interface
 func (a *AvroEventBatchEncoder) UpdateResolvedTs(ts uint64) (EncoderResult, error) {
+	if a.Size() == 0 {
+		return EncoderNoOperation, nil
+	}
 	// nothing for now
 	return EncoderNeedAsyncWrite, nil
 }
 
 // Build a MQ message
 func (a *AvroEventBatchEncoder) Build() (keys [][]byte, values [][]byte) {
+	if a.Size() == 0 {
+		return nil, nil
+	}
 	defer a.reset()
 	keys = append(keys, a.keyBuf)
 	values = append(values, a.valueBuf)
