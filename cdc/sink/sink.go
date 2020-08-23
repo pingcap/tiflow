@@ -67,7 +67,7 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 		return newBlackHoleSink(ctx, opts), nil
 	case "mysql", "tidb", "mysql+ssl", "tidb+ssl":
 		return newMySQLSink(ctx, changefeedID, sinkURI, filter, opts)
-	case "kafka":
+	case "kafka", "kafka+ssl":
 		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh)
 	case "pulsar", "pulsar+ssl":
 		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
