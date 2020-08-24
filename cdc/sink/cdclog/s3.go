@@ -71,9 +71,11 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 		return nil
 	}
 
+	firstCreated := false
 	if tb.encoder == nil {
 		// create encoder for each file
 		tb.encoder = s.encoder()
+		firstCreated = true
 	}
 
 	var newFileName string
@@ -90,7 +92,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 			return err
 		}
 	}
-	rowDatas := tb.encoder.MixedBuild()
+	rowDatas := tb.encoder.MixedBuild(firstCreated)
 	// reset encoder buf for next round append
 	defer tb.encoder.Reset()
 
@@ -297,14 +299,16 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			return err
 		}
 	}
+	firstCreated := false
 	if s.ddlEncoder == nil {
 		s.ddlEncoder = s.encoder()
+		firstCreated = true
 	}
 	_, err := s.ddlEncoder.AppendDDLEvent(ddl)
 	if err != nil {
 		return err
 	}
-	data := s.ddlEncoder.MixedBuild()
+	data := s.ddlEncoder.MixedBuild(firstCreated)
 	// reset encoder buf for next round append
 	defer s.ddlEncoder.Reset()
 

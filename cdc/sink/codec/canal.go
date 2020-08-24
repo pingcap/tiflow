@@ -358,7 +358,7 @@ func (d *CanalEventBatchEncoder) Build() (key []byte, value []byte) {
 }
 
 // MixedBuild implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) MixedBuild() []byte {
+func (d *CanalEventBatchEncoder) MixedBuild(withVersion bool) []byte {
 	panic("Mixed Build only use for JsonEncoder")
 }
 
