@@ -1003,6 +1003,10 @@ func (s *eventFeedSession) receiveFromStream(
 		}
 	}()
 
+	captureAddr := util.CaptureAddrFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	metricSendEventBatchResolvedSize := batchResolvedEventSize.WithLabelValues(captureAddr, changefeedID)
+
 	// Each region has it's own goroutine to handle its messages. `regionStates` stores states of these regions.
 	regionStates := make(map[uint64]*regionFeedState)
 
@@ -1053,6 +1057,7 @@ func (s *eventFeedSession) receiveFromStream(
 		}
 
 		if cevent.ResolvedTs != nil {
+			metricSendEventBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
 			err = s.sendResolvedTs(ctx, g, cevent.ResolvedTs, regionStates, pendingRegions, addr)
 			if err != nil {
 				return err
@@ -1184,7 +1189,7 @@ func (s *eventFeedSession) singleEventFeed(
 	metricPullEventCommitCounter := pullEventCounter.WithLabelValues(cdcpb.Event_COMMIT.String(), captureAddr, changefeedID)
 	metricPullEventPrewriteCounter := pullEventCounter.WithLabelValues(cdcpb.Event_PREWRITE.String(), captureAddr, changefeedID)
 	metricPullEventRollbackCounter := pullEventCounter.WithLabelValues(cdcpb.Event_ROLLBACK.String(), captureAddr, changefeedID)
-	metricSendEventResolvedCounter := sendEventCounter.WithLabelValues("native resolved", captureAddr, changefeedID)
+	metricSendEventResolvedCounter := sendEventCounter.WithLabelValues("native-resolved", captureAddr, changefeedID)
 	metricSendEventCommitCounter := sendEventCounter.WithLabelValues("commit", captureAddr, changefeedID)
 	metricSendEventCommittedCounter := sendEventCounter.WithLabelValues("committed", captureAddr, changefeedID)
 
