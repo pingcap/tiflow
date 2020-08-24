@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -87,11 +86,7 @@ func formatColumnVal(c column) column {
 					zap.Any("col", []byte(s)),
 					zap.Any("collen", len([]byte(s))),
 					zap.String("type", fmt.Sprintf("%T", c.Value)))
-				b, err := strconv.Unquote("\"" + s + "\"")
-				if err != nil {
-					log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
-				}
-				c.Value = []byte(b)
+				c.Value = []byte(s)
 			}
 			log.Info("binary column p",
 				zap.Any("col", c.Value),
