@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
-	"github.com/pingcap/ticdc/cdc/sink/mqProducer"
+	"github.com/pingcap/ticdc/cdc/sink/mq_producer"
 	"github.com/pingcap/ticdc/cdc/sink/pulsar"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -37,7 +37,7 @@ import (
 )
 
 type mqSink struct {
-	mqProducer mqProducer.Producer
+	mqProducer mq_producer.Producer
 	dispatcher dispatcher.Dispatcher
 	newEncoder func() codec.EventBatchEncoder
 	filter     *filter.Filter
@@ -57,7 +57,7 @@ type mqSink struct {
 }
 
 func newMqSink(
-	ctx context.Context, credential *security.Credential, mqProducer mqProducer.Producer,
+	ctx context.Context, credential *security.Credential, mqProducer mq_producer.Producer,
 	filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error,
 ) (*mqSink, error) {
 	partitionNum := mqProducer.GetPartitionNum()
@@ -352,7 +352,7 @@ func (k *mqSink) writeToProducer(ctx context.Context, key []byte, value []byte, 
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	config := mqProducer.NewKafkaConfig()
+	config := mq_producer.NewKafkaConfig()
 
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "kafka" {
@@ -420,7 +420,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-	producer, err := mqProducer.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
+	producer, err := mq_producer.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
