@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -49,7 +50,17 @@ type column struct {
 func (c *column) FromSinkColumn(col *model.Column) {
 	c.Type = col.Type
 	c.Flag = col.Flag
-	c.Value = col.Value
+	switch col.Type {
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		str := string(col.Value.([]byte))
+		if c.Flag.IsBinary() {
+			str = strconv.Quote(str)
+			str = str[1 : len(str)-1]
+		}
+		c.Value = str
+	default:
+		c.Value = col.Value
+	}
 	if c.Flag.IsHandleKey() {
 		whereHandle := true
 		c.WhereHandle = &whereHandle
