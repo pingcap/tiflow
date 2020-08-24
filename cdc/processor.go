@@ -939,6 +939,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
 						continue
 					}
+					failpoint.Inject("verySlowProcessor", func() {
+						time.Sleep(5 * time.Second)
+					})
 					sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
 					if pEvent.CRTs <= sinkResolvedTs || pEvent.CRTs <= lastResolvedTs || pEvent.CRTs < replicaInfo.StartTs {
 						log.Fatal("The CRTs of event is not expected, please report a bug",
