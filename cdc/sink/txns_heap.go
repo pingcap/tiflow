@@ -45,9 +45,8 @@ func (h *innerTxnsHeap) Pop() interface{} {
 }
 
 type txnsHeap struct {
-	inner          *innerTxnsHeap
-	txnsGroup      [][]*model.SingleTableTxn
-	txnsGroupIndex []int
+	inner     *innerTxnsHeap
+	txnsGroup [][]*model.SingleTableTxn
 }
 
 func newTxnsHeap(txnsMap map[model.TableID][]*model.SingleTableTxn) *txnsHeap {
@@ -64,19 +63,17 @@ func newTxnsHeap(txnsMap map[model.TableID][]*model.SingleTableTxn) *txnsHeap {
 		entry := innerHeapEntry{ts: txns[0].CommitTs, bucket: bucket}
 		heap.Push(&inner, entry)
 	}
-	return &txnsHeap{inner: &inner, txnsGroup: txnsGroup, txnsGroupIndex: make([]int, len(txnsGroup))}
+	return &txnsHeap{inner: &inner, txnsGroup: txnsGroup}
 }
 
-func (h *txnsHeap) iter(fn func(txn *model.SingleTableTxn) bool) {
+func (h *txnsHeap) iter(fn func(txn *model.SingleTableTxn)) {
 	for {
 		if h.inner.Len() == 0 {
 			break
 		}
 		minEntry := heap.Pop(h.inner).(innerHeapEntry)
 		bucket := minEntry.bucket
-		if !fn(h.txnsGroup[bucket][0]) {
-			break
-		}
+		fn(h.txnsGroup[bucket][0])
 		h.txnsGroup[bucket] = h.txnsGroup[bucket][1:]
 		if len(h.txnsGroup[bucket]) > 0 {
 			heap.Push(h.inner, innerHeapEntry{

@@ -535,11 +535,10 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 		rowsChIdx = rowsChIdx % nWorkers
 	}
 	h := newTxnsHeap(txnsGroup)
-	h.iter(func(txn *model.SingleTableTxn) bool {
+	h.iter(func(txn *model.SingleTableTxn) {
 		startTime := time.Now()
 		resolveConflict(txn)
 		s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
-		return true
 	})
 	s.notifyAndWaitExec(ctx)
 }

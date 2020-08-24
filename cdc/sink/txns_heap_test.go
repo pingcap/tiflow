@@ -48,10 +48,9 @@ func (s TxnsHeapSuite) TestTxnsHeap(c *check.C) {
 	for _, tc := range testCases {
 		h := newTxnsHeap(tc.txnsMap)
 		i := 0
-		h.iter(func(txn *model.SingleTableTxn) bool {
+		h.iter(func(txn *model.SingleTableTxn) {
 			c.Assert(txn, check.DeepEquals, tc.expected[i])
 			i++
-			return true
 		})
 	}
 }
