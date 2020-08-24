@@ -59,6 +59,9 @@ func (c *column) FromSinkColumn(col *model.Column) {
 	}
 	switch col.Type {
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		if s, ok := col.Value.(string); ok {
+			log.Info("show col "+s, zap.Any("c", c))
+		}
 		str := string(col.Value.([]byte))
 		if c.Flag.IsBinary() {
 			str = strconv.Quote(str)
