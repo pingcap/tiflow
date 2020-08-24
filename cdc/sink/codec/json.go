@@ -83,6 +83,10 @@ func formatColumnVal(c column) column {
 				zap.Any("col", c.Value),
 				zap.String("type", fmt.Sprintf("%T", c.Value)))
 			if s, ok := c.Value.(string); ok {
+				log.Info("binary column o11",
+					zap.Any("col", []byte(s)),
+					zap.Any("collen", len([]byte(s))),
+					zap.String("type", fmt.Sprintf("%T", c.Value)))
 				b, err := strconv.Unquote("\"" + s + "\"")
 				if err != nil {
 					log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
