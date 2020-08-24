@@ -39,7 +39,7 @@ const (
 	defaultPullerOutputChanSize = 128000
 )
 
-// Puller pull data from tikv and push changes into a buffer
+// Puller pull data from tikv and push changes into a buffer.
 type Puller interface {
 	// Run the puller, continually fetch event from TiKV and add event into buffer
 	Run(ctx context.Context) error

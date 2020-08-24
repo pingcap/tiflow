@@ -59,6 +59,10 @@ type tableBuffer struct {
 	}
 }
 
+func (tb *tableBuffer) IsEmpty() bool {
+	return tb.sendEvents.Load() == 0 && tb.uploadParts.uploadNum == 0
+}
+
 func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 	hashPart := tb.uploadParts
 	sendEvents := tb.sendEvents.Load()
@@ -232,6 +236,9 @@ func (s *s3Sink) flushTableBuffers(ctx context.Context) error {
 	// TODO use a fixed worker pool
 	eg, ectx := errgroup.WithContext(ctx)
 	for _, tb := range s.tableBuffers {
+		if tb.IsEmpty() {
+			continue
+		}
 		tbReplica := tb
 		eg.Go(func() error {
 			log.Info("[FlushRowChangedEvents] flush specify row changed event",
