@@ -180,7 +180,6 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Info("LEOPPRO show dml", zap.Any("pEvent", pEvent), zap.Any("row", rowEvent))
 		pEvent.Row = rowEvent
 		pEvent.RawKV.Key = nil
 		pEvent.RawKV.Value = nil
@@ -430,11 +429,6 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 			return nil, errors.Trace(err)
 		}
 	}
-	log.Info("LEOPPRO show raw dd",
-		zap.Any("row", row),
-		zap.Any("cols", cols),
-		zap.Any("preCols", preCols),
-	)
 
 	schemaName := tableInfo.TableName.Schema
 	tableName := tableInfo.TableName.Table

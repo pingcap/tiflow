@@ -1265,7 +1265,6 @@ func (s *eventFeedSession) singleEventFeed(
 						return checkpointTs, errors.Trace(ctx.Err())
 					}
 				case cdcpb.Event_PREWRITE:
-					log.Info("LEOPPRO show pre-write", zap.Any("entry", entry))
 					metricPullEventPrewriteCounter.Inc()
 					matcher.putPrewriteRow(entry)
 				case cdcpb.Event_COMMIT:
