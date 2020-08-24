@@ -50,6 +50,14 @@ type column struct {
 func (c *column) FromSinkColumn(col *model.Column) {
 	c.Type = col.Type
 	c.Flag = col.Flag
+	if c.Flag.IsHandleKey() {
+		whereHandle := true
+		c.WhereHandle = &whereHandle
+	}
+	if col.Value == nil {
+		c.Value = nil
+		return
+	}
 	switch col.Type {
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 		str := string(col.Value.([]byte))
@@ -60,10 +68,6 @@ func (c *column) FromSinkColumn(col *model.Column) {
 		c.Value = str
 	default:
 		c.Value = col.Value
-	}
-	if c.Flag.IsHandleKey() {
-		whereHandle := true
-		c.WhereHandle = &whereHandle
 	}
 }
 
