@@ -178,7 +178,7 @@ func (o *Owner) newChangeFeed(
 	taskPositions map[string]*model.TaskPosition,
 	info *model.ChangeFeedInfo,
 	checkpointTs uint64) (*changeFeed, error) {
-	log.Info("Find new changefeed", zap.Reflect("info", info),
+	log.Info("Find new changefeed", zap.Stringer("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
