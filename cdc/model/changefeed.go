@@ -21,9 +21,11 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.uber.org/zap"
 )
 
 // SortEngine is the sorter engine
@@ -89,6 +91,28 @@ func ValidateChangefeedID(changefeedID string) error {
 		return errors.New(`bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task"`)
 	}
 	return nil
+}
+
+// String implements fmt.Stringer interface, but hide some sensitive information
+func (info *ChangeFeedInfo) String() (str string) {
+	var err error
+	str, err = info.Marshal()
+	if err != nil {
+		log.Error("failed to marshal changefeed info", zap.Error(err))
+		return
+	}
+	clone := new(ChangeFeedInfo)
+	err = clone.Unmarshal([]byte(str))
+	if err != nil {
+		log.Error("failed to unmarshal changefeed info", zap.Error(err))
+		return
+	}
+	clone.SinkURI = "***"
+	str, err = clone.Marshal()
+	if err != nil {
+		log.Error("failed to marshal changefeed info", zap.Error(err))
+	}
+	return
 }
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
