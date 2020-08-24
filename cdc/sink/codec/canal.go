@@ -372,6 +372,11 @@ func (d *CanalEventBatchEncoder) Size() int {
 	return proto.Size(d.packet)
 }
 
+// Reset implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) Reset() {
+	panic("Reset only used for JsonEncoder")
+}
+
 // refreshPacketBody() marshals the messages to the packet body
 func (d *CanalEventBatchEncoder) refreshPacketBody() error {
 	oldSize := len(d.packet.Body)

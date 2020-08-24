@@ -373,6 +373,12 @@ func (d *JSONEventBatchEncoder) Size() int {
 	return d.keyBuf.Len() + d.valueBuf.Len()
 }
 
+// Reset implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) Reset() {
+	d.keyBuf.Reset()
+	d.valueBuf.Reset()
+}
+
 // NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.
 func NewJSONEventBatchEncoder() EventBatchEncoder {
 	batch := &JSONEventBatchEncoder{

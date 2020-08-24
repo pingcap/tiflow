@@ -117,6 +117,11 @@ func (a *AvroEventBatchEncoder) MixedBuild() []byte {
 	panic("Mixed Build only use for JsonEncoder")
 }
 
+// Reset implements the EventBatchEncoder interface
+func (a *AvroEventBatchEncoder) Reset() {
+	panic("Reset only used for JsonEncoder")
+}
+
 // Size is always 0 or 1
 func (a *AvroEventBatchEncoder) Size() int {
 	if a.valueBuf == nil {

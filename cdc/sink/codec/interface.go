@@ -36,6 +36,8 @@ type EventBatchEncoder interface {
 	MixedBuild() []byte
 	// Size returns the size of the batch(bytes)
 	Size() int
+	// Reset reset the kv buffer
+	Reset()
 }
 
 // EventBatchDecoder is an abstraction for events decoder

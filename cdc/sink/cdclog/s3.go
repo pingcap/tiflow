@@ -91,6 +91,9 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 		}
 	}
 	rowDatas := tb.encoder.MixedBuild()
+	// reset encoder buf for next round append
+	defer tb.encoder.Reset()
+
 	log.Debug("[FlushRowChangedEvents[Debug]] flush table buffer",
 		zap.Int64("table", tb.tableID),
 		zap.Int64("event size", sendEvents),
@@ -302,6 +305,8 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return err
 	}
 	data := s.ddlEncoder.MixedBuild()
+	// reset encoder buf for next round append
+	defer s.ddlEncoder.Reset()
 
 	var (
 		name     string
@@ -333,7 +338,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		// hack way: append data to old file
 		log.Debug("[EmitDDLEvent] append ddl to origin log",
 			zap.String("name", name), zap.Any("ddl", ddl))
-		data, err := s.storage.Read(ctx, name)
+		fileData, err = s.storage.Read(ctx, name)
 		if err != nil {
 			return err
 		}
