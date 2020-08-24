@@ -137,7 +137,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(err, check.IsNil)
 		}
 		// test mixed decode
-		mixed := encoder.MixedBuild(false)
+		mixed := encoder.MixedBuild(true)
 		c.Assert(len(mixed), check.Equals, encoder.Size())
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
@@ -157,7 +157,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(err, check.IsNil)
 		}
 		// test mixed encode
-		mixed := encoder.MixedBuild(false)
+		mixed := encoder.MixedBuild(true)
 		c.Assert(len(mixed), check.Equals, encoder.Size())
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
@@ -179,7 +179,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		}
 
 		// test mixed encode
-		mixed := encoder.MixedBuild(false)
+		mixed := encoder.MixedBuild(true)
 		c.Assert(len(mixed), check.Equals, encoder.Size())
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
