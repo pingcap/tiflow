@@ -18,7 +18,6 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -75,8 +74,26 @@ func (c *column) ToSinkColumn(name string) *model.Column {
 	col := new(model.Column)
 	col.Type = c.Type
 	col.Flag = c.Flag
-	col.Value = c.Value
 	col.Name = name
+	col.Value = c.Value
+	if c.Value == nil {
+		col.Value = nil
+		return col
+	}
+	switch col.Type {
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		str := col.Value.(string)
+		var err error
+		if c.Flag.IsBinary() {
+			str, err = strconv.Unquote("\"" + str + "\"")
+			if err != nil {
+				log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+			}
+		}
+		col.Value = []byte(str)
+	default:
+		col.Value = c.Value
+	}
 	return col
 }
 
@@ -90,22 +107,6 @@ func formatColumnVal(c column) column {
 			if err != nil {
 				log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
-		}
-	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString:
-		if c.Flag.IsBinary() {
-			log.Info("binary column o",
-				zap.Any("col", c.Value),
-				zap.String("type", fmt.Sprintf("%T", c.Value)))
-			if s, ok := c.Value.(string); ok {
-				log.Info("binary column o11",
-					zap.Any("col", []byte(s)),
-					zap.Any("collen", len([]byte(s))),
-					zap.String("type", fmt.Sprintf("%T", c.Value)))
-				c.Value = []byte(s)
-			}
-			log.Info("binary column p",
-				zap.Any("col", c.Value),
-				zap.String("type", fmt.Sprintf("%T", c.Value)))
 		}
 	case mysql.TypeBit:
 		if s, ok := c.Value.(json.Number); ok {
