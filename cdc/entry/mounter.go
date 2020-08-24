@@ -291,6 +291,14 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, restKey []
 			return nil, errors.Trace(err)
 		}
 	}
+	if base.Delete && !m.enableOldValue && tableInfo.PKIsHandle {
+		id, pkValue, err := fetchHandleValue(tableInfo, recordID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		preRow = map[int64]types.Datum{id: *pkValue}
+	}
+
 	base.RecordID = recordID
 	return &rowKVEntry{
 		baseKVEntry: base,
@@ -409,25 +417,21 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	if len(row.PreRow) != 0 {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, err = datum2Column(tableInfo, row.PreRow, true)
+		preCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
 
 	var cols []*model.Column
-	oldValueDisabledAndRowIsDelete := !m.enableOldValue && row.Delete
-	cols, err = datum2Column(tableInfo, row.Row, !oldValueDisabledAndRowIsDelete)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if row.Delete {
-		preCols = cols
-		cols = nil
+	if !row.Delete {
+		cols, err = datum2Column(tableInfo, row.Row, true)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 	log.Info("LEOPPRO show raw dd",
 		zap.Any("row", row),
-		zap.Bool("oldValueDisabledAndRowIsDelete", oldValueDisabledAndRowIsDelete),
 		zap.Any("cols", cols),
 		zap.Any("preCols", preCols),
 	)

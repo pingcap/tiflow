@@ -1242,11 +1242,12 @@ func (s *eventFeedSession) singleEventFeed(
 
 					revent := &model.RegionFeedEvent{
 						Val: &model.RawKVEntry{
-							OpType:  opType,
-							Key:     entry.Key,
-							Value:   entry.GetValue(),
-							StartTs: entry.StartTs,
-							CRTs:    entry.CommitTs,
+							OpType:   opType,
+							Key:      entry.Key,
+							Value:    entry.GetValue(),
+							OldValue: entry.GetOldValue(),
+							StartTs:  entry.StartTs,
+							CRTs:     entry.CommitTs,
 						},
 					}
 
@@ -1264,6 +1265,7 @@ func (s *eventFeedSession) singleEventFeed(
 						return checkpointTs, errors.Trace(ctx.Err())
 					}
 				case cdcpb.Event_PREWRITE:
+					log.Info("LEOPPRO show pre-write", zap.Any("entry", entry))
 					metricPullEventPrewriteCounter.Inc()
 					matcher.putPrewriteRow(entry)
 				case cdcpb.Event_COMMIT:
