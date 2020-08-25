@@ -180,6 +180,14 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		for _, col := range rowEvent.Columns {
+			switch col.Type {
+			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+				if s, ok := col.Value.(string); ok {
+					log.Info("LEOPPRO show col "+s, zap.Any("rowEvent", rowEvent))
+				}
+			}
+		}
 		pEvent.Row = rowEvent
 		pEvent.RawKV.Key = nil
 		pEvent.RawKV.Value = nil
