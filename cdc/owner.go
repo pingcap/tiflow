@@ -76,12 +76,16 @@ type Owner struct {
 
 	// gcTTL is the ttl of cdc gc safepoint ttl.
 	gcTTL int64
-	// whether gc safepoint is set in pd
-	gcSafePointSet bool
+	// last update gc safepoint time. zero time means has not updated or cleared
+	gcSafepointLastUpdate time.Time
 }
 
-// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
-const CDCServiceSafePointID = "ticdc"
+const (
+	// CDCServiceSafePointID is the ID of CDC service in pd.UpdateServiceGCSafePoint.
+	CDCServiceSafePointID = "ticdc"
+	// GCSafepointUpdateInterval is the minimual interval that CDC can update gc safepoint
+	GCSafepointUpdateInterval = time.Duration(2 * time.Second)
+)
 
 // NewOwner creates a new Owner instance
 func NewOwner(pdClient pd.Client, credential *security.Credential, sess *concurrency.Session, gcTTL int64) (*Owner, error) {
@@ -178,7 +182,7 @@ func (o *Owner) newChangeFeed(
 	taskPositions map[string]*model.TaskPosition,
 	info *model.ChangeFeedInfo,
 	checkpointTs uint64) (*changeFeed, error) {
-	log.Info("Find new changefeed", zap.Reflect("info", info),
+	log.Info("Find new changefeed", zap.Stringer("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
@@ -545,12 +549,12 @@ func (o *Owner) balanceTables(ctx context.Context) error {
 func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	// no running or stopped changefeed, clear gc safepoint.
 	if len(o.changeFeeds) == 0 && len(o.stoppedFeeds) == 0 {
-		if o.gcSafePointSet {
+		if !o.gcSafepointLastUpdate.IsZero() {
 			_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, 0, 0)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			o.gcSafePointSet = false
+			o.gcSafepointLastUpdate = *new(time.Time)
 		}
 		return nil
 	}
@@ -574,12 +578,14 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 			minCheckpointTs = status.CheckpointTs
 		}
 	}
-	_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
-	if err != nil {
-		log.Info("failed to update service safe point", zap.Error(err))
-		return errors.Trace(err)
+	if time.Since(o.gcSafepointLastUpdate) > GCSafepointUpdateInterval {
+		_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
+		if err != nil {
+			log.Info("failed to update service safe point", zap.Error(err))
+			return errors.Trace(err)
+		}
+		o.gcSafepointLastUpdate = time.Now()
 	}
-	o.gcSafePointSet = true
 	return nil
 }
 
@@ -786,7 +792,14 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 				switch feedState {
 				case model.StateRemoved, model.StateFinished:
 					// remove a removed or finished changefeed
-					log.Info("changefeed has been removed or finished, remove command will do nothing")
+					if job.Opts != nil && job.Opts.ForceRemove {
+						err := o.etcdClient.RemoveChangeFeedStatus(ctx, job.CfID)
+						if err != nil {
+							return errors.Trace(err)
+						}
+					} else {
+						log.Info("changefeed has been removed or finished, remove command will do nothing")
+					}
 					continue
 				case model.StateStopped, model.StateFailed:
 					// remove a paused or failed changefeed
@@ -805,10 +818,18 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			// set ttl to changefeed status
-			err = o.etcdClient.SetChangeFeedStatusTTL(ctx, job.CfID, 24*3600 /*24 hours*/)
-			if err != nil {
-				return errors.Trace(err)
+			if job.Opts != nil && job.Opts.ForceRemove {
+				// if `ForceRemove` is enabled, remove all information related to this changefeed
+				err := o.etcdClient.RemoveChangeFeedStatus(ctx, job.CfID)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			} else {
+				// set ttl to changefeed status
+				err = o.etcdClient.SetChangeFeedStatusTTL(ctx, job.CfID, 24*3600 /*24 hours*/)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 		case model.AdminResume:
 			// resume changefeed must read checkpoint from ChangeFeedStatus

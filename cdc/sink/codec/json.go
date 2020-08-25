@@ -92,6 +92,7 @@ type mqMessageKey struct {
 	Ts        uint64              `json:"ts"`
 	Schema    string              `json:"scm,omitempty"`
 	Table     string              `json:"tbl,omitempty"`
+	RowID     int64               `json:"rid,omitempty"`
 	Partition *int64              `json:"ptn,omitempty"`
 	Type      model.MqMessageType `json:"t"`
 }
@@ -162,6 +163,7 @@ func rowEventToMqMessage(e *model.RowChangedEvent) (*mqMessageKey, *mqMessageRow
 		Ts:        e.CommitTs,
 		Schema:    e.Table.Schema,
 		Table:     e.Table.Table,
+		RowID:     e.RowID,
 		Partition: partition,
 		Type:      model.MqMessageTypeRow,
 	}
