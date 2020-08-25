@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -180,19 +179,6 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 		rowEvent, err := m.unmarshalAndMountRowChanged(ctx, pEvent.RawKV)
 		if err != nil {
 			return errors.Trace(err)
-		}
-		if rowEvent != nil {
-			for i, col := range rowEvent.Columns {
-				switch col.Type {
-				case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-					if s, ok := col.Value.(string); ok {
-						log.Info("LEOPPRO show col "+s,
-							zap.Any("rowEvent", rowEvent),
-							zap.Int("index", i),
-							zap.String("type", fmt.Sprintf("%T", col.Value)))
-					}
-				}
-			}
 		}
 		pEvent.Row = rowEvent
 		pEvent.RawKV.Key = nil

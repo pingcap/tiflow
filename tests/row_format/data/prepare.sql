@@ -147,11 +147,11 @@ values ();
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (1, 2, 3, 4, 5);
 
-# insert max value
+-- insert max value
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (127, 32767, 8388607, 2147483647, 9223372036854775807);
 
-# insert max value
+-- insert max value
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (-128, -32768, -8388608, -2147483648, -9223372036854775808);
 
@@ -194,11 +194,11 @@ values ();
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (1, 2, 3, 4, 5);
 
-# insert max value
+-- insert max value
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (127, 32767, 8388607, 2147483647, 9223372036854775807);
 
-# insert max value
+-- insert max value
 insert into tp_int(c_tinyint, c_smallint, c_mediumint, c_int, c_bigint)
 values (-128, -32768, -8388608, -2147483648, -9223372036854775808);
 

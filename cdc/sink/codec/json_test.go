@@ -226,7 +226,7 @@ func (s *columnSuite) TestFormatCol(c *check.C) {
 	c.Assert(row2, check.DeepEquals, row)
 }
 
-func (s *columnSuite) TestFormatCol1(c *check.C) {
+func (s *columnSuite) TestVarBinaryCol(c *check.C) {
 	col := &model.Column{
 		Name:  "test",
 		Type:  mysql.TypeString,
