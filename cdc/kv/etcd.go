@@ -173,6 +173,29 @@ func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context, id string) erro
 	return errors.Trace(err)
 }
 
+// GetAllChangeFeedStatus queries all changefeed job status
+func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (map[string]*model.ChangeFeedStatus, error) {
+	key := JobKeyPrefix
+	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	statuses := make(map[string]*model.ChangeFeedStatus, resp.Count)
+	for _, rawKv := range resp.Kvs {
+		changefeedID, err := model.ExtractKeySuffix(string(rawKv.Key))
+		if err != nil {
+			return nil, err
+		}
+		status := &model.ChangeFeedStatus{}
+		err = status.Unmarshal(rawKv.Value)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		statuses[changefeedID] = status
+	}
+	return statuses, nil
+}
+
 // GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
 func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, int64, error) {
 	key := GetEtcdKeyJob(id)
