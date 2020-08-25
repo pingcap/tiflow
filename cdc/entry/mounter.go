@@ -500,6 +500,8 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 	}, nil
 }
 
+var emptyBytes = make([]byte, 0)
+
 func formatColVal(datum types.Datum, tp byte) (interface{}, error) {
 	if datum.IsNull() {
 		return nil, nil
@@ -525,7 +527,11 @@ func formatColVal(datum types.Datum, tp byte) (interface{}, error) {
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
 		return datum.GetBinaryLiteral().ToInt(nil)
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-		return datum.GetBytes(), nil
+		b := datum.GetBytes()
+		if b == nil {
+			b = emptyBytes
+		}
+		return b, nil
 	default:
 		return datum.GetValue(), nil
 	}
