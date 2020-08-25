@@ -50,8 +50,12 @@ type baseKVEntry struct {
 
 type rowKVEntry struct {
 	baseKVEntry
-	Row         map[int64]types.Datum
-	PreRow      map[int64]types.Datum
+	Row    map[int64]types.Datum
+	PreRow map[int64]types.Datum
+
+	// In some cases, row data may exist but not contain any Datum,
+	// use this RowExist/PreRowExist variable to distinguish between row data that does not exist
+	// or row data that does not contain any Datum.
 	RowExist    bool
 	PreRowExist bool
 }
