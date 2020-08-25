@@ -47,7 +47,7 @@ func (m *matcher) putPrewriteRow(row *cdcpb.Event_Row) {
 	key := newMatchKey(row)
 	value := row.GetValue()
 	oldvalue := row.GetOldValue()
-	// tikv may send a prewrite event with empty value
+	// tikv may send a prewrite event with empty value (txn heartbeat)
 	// here we need to avoid the invalid prewrite event overwrite the value
 	if _, exist := m.unmatchedValue[key]; exist && len(value) == 0 {
 		return
