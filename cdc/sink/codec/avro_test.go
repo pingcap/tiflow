@@ -81,9 +81,9 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	}
 
 	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, []*model.Column{
-		{Name: "id", Value: 1, Type: mysql.TypeLong},
-		{Name: "myint", Value: 2, Type: mysql.TypeLong},
-		{Name: "mybool", Value: uint64(1), Type: mysql.TypeTiny},
+		{Name: "id", Value: int64(1), Type: mysql.TypeLong},
+		{Name: "myint", Value: int64(2), Type: mysql.TypeLong},
+		{Name: "mybool", Value: int64(1), Type: mysql.TypeTiny},
 		{Name: "myfloat", Value: float32(3.14), Type: mysql.TypeFloat},
 		{Name: "mybytes", Value: []byte("Hello World"), Type: mysql.TypeBlob},
 		{Name: "ts", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
@@ -145,9 +145,9 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 			Table:  "person",
 		},
 		Columns: []*model.Column{
-			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
+			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: int64(1)},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
-			{Name: "tiny", Type: mysql.TypeTiny, Value: uint64(255)},
+			{Name: "tiny", Type: mysql.TypeTiny, Value: int64(255)},
 			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		},
 	}
