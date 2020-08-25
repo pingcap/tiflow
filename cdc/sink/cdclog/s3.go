@@ -336,8 +336,10 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		name = makeDDLFileObject(ddl.CommitTs)
 		log.Debug("[EmitDDLEvent] create first or rotate ddl log",
 			zap.String("name", name), zap.Any("ddl", ddl))
-		// reset ddl encoder for new file
-		s.ddlEncoder = nil
+		if size > maxDDLFlushSize {
+			// reset ddl encoder for new file
+			s.ddlEncoder = nil
+		}
 	} else {
 		// hack way: append data to old file
 		log.Debug("[EmitDDLEvent] append ddl to origin log",
