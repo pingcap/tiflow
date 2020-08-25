@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"time"
 
@@ -198,11 +199,14 @@ type logicalType string
 type avroLogicalType struct {
 	Type        string      `json:"type"`
 	LogicalType logicalType `json:"logicalType"`
+	Precision   interface{} `json:"precision,omitempty"`
+	Scale       interface{} `json:"scale,omitempty"`
 }
 
 const (
 	timestampMillis logicalType = "timestamp-millis"
 	timeMillis      logicalType = "time-millis"
+	decimalType     logicalType = "decimal"
 )
 
 // ColumnInfoToAvroSchema generates the Avro schema JSON for the corresponding columns
@@ -214,7 +218,7 @@ func ColumnInfoToAvroSchema(name string, columnInfo []*model.Column) (string, er
 	}
 
 	for _, col := range columnInfo {
-		avroType, err := getAvroDataTypeNameMysql(col.Type)
+		avroType, err := getAvroDataTypeFromColumn(col)
 		if err != nil {
 			return "", err
 		}
@@ -260,7 +264,7 @@ func rowToAvroNativeData(cols []*model.Column) (interface{}, error) {
 	return ret, nil
 }
 
-func getAvroDataTypeName(v interface{}) (string, error) {
+func getAvroDataTypeFallback(v interface{}) (string, error) {
 	switch v.(type) {
 	case bool:
 		return "boolean", nil
@@ -279,13 +283,21 @@ func getAvroDataTypeName(v interface{}) (string, error) {
 	case string:
 		return "string", nil
 	default:
-		log.Warn("getAvroDataTypeName: unknown type")
+		log.Warn("getAvroDataTypeFallback: unknown type")
 		return "", errors.New("unknown type for Avro")
 	}
 }
 
-func getAvroDataTypeNameMysql(tp byte) (interface{}, error) {
-	switch tp {
+var unsignedLongAvroType = avroLogicalType{
+	Type:        "bytes",
+	LogicalType: decimalType,
+	Precision:   8,
+	Scale:       0,
+}
+
+func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
+
+	switch col.Type {
 	case mysql.TypeFloat:
 		return "float", nil
 	case mysql.TypeDouble:
@@ -303,16 +315,24 @@ func getAvroDataTypeNameMysql(tp byte) (interface{}, error) {
 			LogicalType: timeMillis,
 		}, nil
 	case mysql.TypeEnum:
-		return "long", nil
+		return unsignedLongAvroType, nil
 	case mysql.TypeSet:
-		return "long", nil
+		return unsignedLongAvroType, nil
 	case mysql.TypeBit:
-		return "long", nil
+		return unsignedLongAvroType, nil
 	case mysql.TypeNewDecimal:
 		return "string", nil
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
-		return "long", nil
-	case mysql.TypeLong, mysql.TypeLonglong:
+		return "int", nil
+	case mysql.TypeLong:
+		if col.Flag.IsUnsigned() {
+			return "long", nil
+		}
+		return "int", nil
+	case mysql.TypeLonglong:
+		if col.Flag.IsUnsigned() {
+			return unsignedLongAvroType, nil
+		}
 		return "long", nil
 	case mysql.TypeNull:
 		return "null", nil
@@ -323,21 +343,25 @@ func getAvroDataTypeNameMysql(tp byte) (interface{}, error) {
 	case mysql.TypeYear:
 		return "long", nil
 	default:
-		log.Fatal("Unknown MySql type", zap.Reflect("mysql-type", tp))
+		log.Fatal("Unknown MySql type", zap.Reflect("mysql-type", col.Type))
 		return "", errors.New("Unknown Mysql type")
 	}
 }
 
 func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
-	if v, ok := col.Value.(int); ok {
-		col.Value = int64(v)
-	}
-	if v, ok := col.Value.(uint64); ok {
-		col.Value = int64(v)
-	}
-
 	if col.Value == nil {
 		return nil, "null", nil
+	}
+
+	handleUnsignedInt64 := func() (interface{}, string, error) {
+		var retVal interface{}
+		switch v := col.Value.(type) {
+		case uint64:
+			retVal = big.NewRat(0, 1).SetUint64(v)
+		case int64:
+			retVal = big.NewRat(0, 1).SetInt64(v)
+		}
+		return retVal, string("bytes." + decimalType), nil
 	}
 
 	switch col.Type {
@@ -394,15 +418,25 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 	case mysql.TypeNewDecimal:
 		return col.Value.(string), "string", nil
 	case mysql.TypeEnum:
-		return col.Value.(int64), "long", nil
+		return handleUnsignedInt64()
 	case mysql.TypeSet:
-		return col.Value.(int64), "long", nil
+		return handleUnsignedInt64()
 	case mysql.TypeBit:
+		return handleUnsignedInt64()
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
+		return int32(col.Value.(int64)), "int", nil
+	case mysql.TypeLong:
+		if col.Flag.IsUnsigned() {
+			return int64(col.Value.(uint64)), "long", nil
+		}
+		return col.Value.(int64), "int", nil
+	case mysql.TypeLonglong:
+		if col.Flag.IsUnsigned() {
+			return handleUnsignedInt64()
+		}
 		return col.Value.(int64), "long", nil
-	case mysql.TypeTiny:
-		return int32(col.Value.(int64)), "long", nil
 	default:
-		avroType, err := getAvroDataTypeName(col.Value)
+		avroType, err := getAvroDataTypeFallback(col.Value)
 		if err != nil {
 			return nil, "", err
 		}
