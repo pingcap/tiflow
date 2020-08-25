@@ -307,6 +307,7 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, restKey []
 			return nil, errors.Trace(err)
 		}
 		preRow = map[int64]types.Datum{id: *pkValue}
+		preRowExist = true
 	}
 
 	base.RecordID = recordID
