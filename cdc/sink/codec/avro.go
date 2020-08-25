@@ -96,7 +96,6 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 		a.valueBuf = evlp
 	} else {
-		log.Info("Delete event encountered!")
 		a.valueBuf = nil
 	}
 
@@ -232,10 +231,10 @@ func ColumnInfoToAvroSchema(name string, columnInfo []*model.Column) (string, er
 	}
 
 	str, err := json.Marshal(&top)
-	log.Debug("Avro Schema JSON generated", zap.ByteString("schema", str))
 	if err != nil {
 		return "", errors.Annotate(err, "ColumnInfoToAvroSchema: failed to generate json")
 	}
+	log.Debug("Avro Schema JSON generated", zap.ByteString("schema", str))
 	return string(str), nil
 }
 
