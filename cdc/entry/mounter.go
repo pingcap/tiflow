@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -181,11 +182,14 @@ func (m *mounterImpl) codecWorker(ctx context.Context, index int) error {
 			return errors.Trace(err)
 		}
 		if rowEvent != nil {
-			for _, col := range rowEvent.Columns {
+			for i, col := range rowEvent.Columns {
 				switch col.Type {
 				case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 					if s, ok := col.Value.(string); ok {
-						log.Info("LEOPPRO show col "+s, zap.Any("rowEvent", rowEvent))
+						log.Info("LEOPPRO show col "+s,
+							zap.Any("rowEvent", rowEvent),
+							zap.Int("index", i),
+							zap.String("type", fmt.Sprintf("%T", col.Value)))
 					}
 				}
 			}
@@ -560,12 +564,14 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 		d := types.NewDatum(col.GetDefaultValue())
 		return d.GetValue()
 	}
-
-	if col.Tp == mysql.TypeEnum {
+	switch col.Tp {
+	case mysql.TypeEnum:
 		// For enum type, if no default value and not null is set,
 		// the default value is the first element of the enum list
 		d := types.NewDatum(col.FieldType.Elems[0])
 		return d.GetValue()
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		return emptyBytes
 	}
 
 	d := table.GetZeroValue(col)
