@@ -220,7 +220,7 @@ func newProcessor(
 		tables:       make(map[int64]*tableInfo),
 		markTableIDs: make(map[int64]struct{}),
 
-		opDoneCh: make(chan int64),
+		opDoneCh: make(chan int64, 256),
 	}
 	modRevision, status, err := p.etcdCli.GetTaskStatus(ctx, p.changefeedID, p.captureInfo.ID)
 	if err != nil {
@@ -607,6 +607,9 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case tableID := <-p.opDoneCh:
+			log.Debug("Operation done signal received",
+				zap.Int64("tableID", tableID),
+				zap.Reflect("operation", status.Operation[tableID]))
 			status.Operation[tableID].Done = true
 		default:
 			goto done
@@ -642,7 +645,10 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		if lastResolvedTs < changefeedStatus.ResolvedTs {
 			lastResolvedTs = changefeedStatus.ResolvedTs
 			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
-			if lastResolvedTs > atomic.LoadUint64(&p.localResolvedTs) {
+			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
+			if lastResolvedTs > localResolvedTs {
+				log.Warn("globalResolvedTs too large", zap.Uint64("globalResolvedTs", lastResolvedTs),
+					zap.Uint64("localResolvedTs", localResolvedTs))
 				// we do not issue resolved events if globalResolvedTs > localResolvedTs.
 				return nil
 			}
@@ -960,7 +966,13 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						p.localResolvedNotifier.Notify()
 						resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
 
-						if !opDone && atomic.LoadUint64(&p.localResolvedTs) >= atomic.LoadUint64(&p.globalResolvedTs) {
+						localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
+						globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+						if !opDone && localResolvedTs >= globalResolvedTs {
+							log.Debug("localResolvedTs >= globalResolvedTs, sending operation done signal",
+								zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
+								zap.Int64("tableID", tableID))
+
 							opDone = true
 							select {
 							case <-ctx.Done():
