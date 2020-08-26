@@ -254,6 +254,26 @@ func (s *etcdSuite) TestPutAllChangeFeedStatus(c *check.C) {
 	}
 }
 
+func (s etcdSuite) TestGetAllChangeFeedStatus(c *check.C) {
+	var (
+		changefeeds = map[model.ChangeFeedID]*model.ChangeFeedStatus{
+			"cf1": {
+				ResolvedTs:   100,
+				CheckpointTs: 90,
+			},
+			"cf2": {
+				ResolvedTs:   100,
+				CheckpointTs: 70,
+			},
+		}
+	)
+	err := s.client.PutAllChangeFeedStatus(context.Background(), changefeeds)
+	c.Assert(err, check.IsNil)
+	statuses, err := s.client.GetAllChangeFeedStatus(context.Background())
+	c.Assert(err, check.IsNil)
+	c.Assert(statuses, check.DeepEquals, changefeeds)
+}
+
 func (s *etcdSuite) TestRemoveChangeFeedStatus(c *check.C) {
 	ctx := context.Background()
 	changefeedID := "test-remove-changefeed-status"

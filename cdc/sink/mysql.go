@@ -62,6 +62,15 @@ const (
 	defaultBatchReplaceSize    = 20
 )
 
+var (
+	validSchemes = map[string]bool{
+		"mysql":     true,
+		"mysql+ssl": true,
+		"tidb":      true,
+		"tidb+ssl":  true,
+	}
+)
+
 type mysqlSink struct {
 	db     *sql.DB
 	params *sinkParams
@@ -297,8 +306,8 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 		return nil, errors.New("fail to open MySQL sink, empty URL")
 	}
 	scheme := strings.ToLower(sinkURI.Scheme)
-	if scheme != "mysql" && scheme != "tidb" {
-		return nil, errors.New("can create mysql sink with unsupported scheme")
+	if _, ok := validSchemes[scheme]; !ok {
+		return nil, errors.Errorf("can't create mysql sink with unsupported scheme: %s", scheme)
 	}
 	s := sinkURI.Query().Get("worker-count")
 	if s != "" {

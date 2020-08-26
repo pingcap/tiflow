@@ -126,7 +126,7 @@ tidy:
 check: check-copyright fmt lint check-static tidy
 
 coverage:
-	GO111MODULE=off go get github.com/zhouqiang-cl/gocovmerge
+	GO111MODULE=off go get github.com/wadey/gocovmerge
 	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
 	grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
