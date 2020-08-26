@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -48,10 +49,24 @@ type column struct {
 func (c *column) FromSinkColumn(col *model.Column) {
 	c.Type = col.Type
 	c.Flag = col.Flag
-	c.Value = col.Value
 	if c.Flag.IsHandleKey() {
 		whereHandle := true
 		c.WhereHandle = &whereHandle
+	}
+	if col.Value == nil {
+		c.Value = nil
+		return
+	}
+	switch col.Type {
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		str := string(col.Value.([]byte))
+		if c.Flag.IsBinary() {
+			str = strconv.Quote(str)
+			str = str[1 : len(str)-1]
+		}
+		c.Value = str
+	default:
+		c.Value = col.Value
 	}
 }
 
@@ -59,8 +74,25 @@ func (c *column) ToSinkColumn(name string) *model.Column {
 	col := new(model.Column)
 	col.Type = c.Type
 	col.Flag = c.Flag
-	col.Value = c.Value
 	col.Name = name
+	col.Value = c.Value
+	if c.Value == nil {
+		return col
+	}
+	switch col.Type {
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		str := col.Value.(string)
+		var err error
+		if c.Flag.IsBinary() {
+			str, err = strconv.Unquote("\"" + str + "\"")
+			if err != nil {
+				log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+			}
+		}
+		col.Value = []byte(str)
+	default:
+		col.Value = c.Value
+	}
 	return col
 }
 

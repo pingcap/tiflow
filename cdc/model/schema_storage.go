@@ -186,6 +186,9 @@ func (ti *TableInfo) initColumnsFlag() {
 		if mysql.HasMultipleKeyFlag(colInfo.Flag) {
 			flag.SetIsMultipleKey()
 		}
+		if mysql.HasUnsignedFlag(colInfo.Flag) {
+			flag.SetIsUnsigned()
+		}
 		ti.ColumnsFlag[colInfo.ID] = flag
 	}
 

@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/ticdc/integration/framework"
 )
 
+//nolint:unused
 type alterCase struct {
 	framework.AvroSingleTableTask
 }
