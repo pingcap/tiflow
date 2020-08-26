@@ -838,7 +838,7 @@ func (c *changeFeed) pullDDLJob() error {
 	c.ddlResolvedTs = ddlResolvedTs
 	for _, ddl := range ddlJobs {
 		if c.filter.ShouldDiscardDDL(ddl.Type) {
-			log.Info("discard the ddl job", zap.Int64("jobID", ddl.ID), zap.Any("query", ddl))
+			log.Info("discard the ddl job", zap.Int64("jobID", ddl.ID), zap.String("query", ddl.Query))
 			continue
 		}
 		c.ddlJobHistory = append(c.ddlJobHistory, ddl)
