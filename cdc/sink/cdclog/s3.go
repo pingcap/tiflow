@@ -94,7 +94,11 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 	}
 	rowDatas := tb.encoder.MixedBuild(firstCreated)
 	// reset encoder buf for next round append
-	defer tb.encoder.Reset()
+	defer func() {
+		if tb.encoder != nil {
+			tb.encoder.Reset()
+		}
+	}()
 
 	log.Debug("[FlushRowChangedEvents[Debug]] flush table buffer",
 		zap.Int64("table", tb.tableID),

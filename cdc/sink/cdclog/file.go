@@ -122,6 +122,11 @@ func (f *fileSink) flushTableStreams(ctx context.Context) error {
 				}
 			}
 			rowDatas := tsReplica.encoder.MixedBuild(firstCreated)
+			defer func() {
+				if tsReplica.encoder != nil {
+					tsReplica.encoder.Reset()
+				}
+			}()
 
 			log.Debug("[flushTableStreams] build cdc log data",
 				zap.Int64("table id", tsReplica.tableID),
@@ -265,6 +270,12 @@ func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		return err
 	}
 	data := f.ddlEncoder.MixedBuild(firstCreated)
+
+	defer func() {
+		if f.ddlEncoder != nil {
+			f.ddlEncoder.Reset()
+		}
+	}()
 
 	if f.ddlFile == nil {
 		// create file stream
