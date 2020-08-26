@@ -225,3 +225,24 @@ func (s *columnSuite) TestFormatCol(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(row2, check.DeepEquals, row)
 }
+
+func (s *columnSuite) TestVarBinaryCol(c *check.C) {
+	col := &model.Column{
+		Name:  "test",
+		Type:  mysql.TypeString,
+		Flag:  model.BinaryFlag,
+		Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+	}
+	jsonCol := column{}
+	jsonCol.FromSinkColumn(col)
+	row := &mqMessageRow{Update: map[string]column{"test": jsonCol}}
+	rowEncode, err := row.Encode()
+	c.Assert(err, check.IsNil)
+	row2 := new(mqMessageRow)
+	err = row2.Decode(rowEncode)
+	c.Assert(err, check.IsNil)
+	c.Assert(row2, check.DeepEquals, row)
+	jsonCol2 := row2.Update["test"]
+	col2 := jsonCol2.ToSinkColumn("test")
+	c.Assert(col2, check.DeepEquals, col)
+}

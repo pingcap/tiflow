@@ -18,9 +18,12 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/quotes"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"upper.io/db.v3/lib/sqlbuilder"
@@ -38,7 +41,7 @@ type SQLHelper struct {
 type Table struct {
 	err         error
 	tableName   string
-	uniqueIndex string
+	uniqueIndex []string
 	helper      *SQLHelper
 }
 
@@ -57,25 +60,54 @@ func (h *SQLHelper) GetTable(tableName string) *Table {
 	return &Table{tableName: tableName, uniqueIndex: idxCol, helper: h}
 }
 
-// Insert returns a Sendable object that represents an Insert clause
-func (t *Table) Insert(rowData map[string]interface{}) Sendable {
+func (t *Table) makeSQLRequest(requestType sqlRequestType, rowData map[string]interface{}) (*sqlRequest, error) {
 	if t.err != nil {
-		return &errorSender{errors.AddStack(t.err)}
+		return nil, t.err
 	}
 
-	basicReq := sqlRequest{
+	return &sqlRequest{
 		tableName:   t.tableName,
 		data:        rowData,
 		result:      nil,
 		uniqueIndex: t.uniqueIndex,
 		helper:      t.helper,
+		requestType: requestType,
+	}, nil
+}
+
+// Insert returns a Sendable object that represents an Insert clause
+func (t *Table) Insert(rowData map[string]interface{}) Sendable {
+	basicReq, err := t.makeSQLRequest(sqlRequestTypeInsert, rowData)
+	if err != nil {
+		return &errorSender{err: err}
 	}
 
-	return &syncSQLRequest{basicReq}
+	return &syncSQLRequest{*basicReq}
+}
+
+// Upsert returns a Sendable object that represents a Replace Into clause
+func (t *Table) Upsert(rowData map[string]interface{}) Sendable {
+	basicReq, err := t.makeSQLRequest(sqlRequestTypeUpsert, rowData)
+	if err != nil {
+		return &errorSender{err: err}
+	}
+
+	return &syncSQLRequest{*basicReq}
+}
+
+// Delete returns a Sendable object that represents a Delete from clause
+func (t *Table) Delete(rowData map[string]interface{}) Sendable {
+	basicReq, err := t.makeSQLRequest(sqlRequestTypeDelete, rowData)
+	if err != nil {
+		return &errorSender{err: err}
+	}
+
+	return &syncSQLRequest{*basicReq}
 }
 
 type sqlRowContainer interface {
 	getData() map[string]interface{}
+	getComparableKey() string
 	getTable() *Table
 }
 
@@ -84,13 +116,22 @@ type awaitableSQLRowContainer struct {
 	sqlRowContainer
 }
 
+type sqlRequestType int32
+
+const (
+	sqlRequestTypeInsert sqlRequestType = iota
+	sqlRequestTypeUpsert
+	sqlRequestTypeDelete
+)
+
 type sqlRequest struct {
-	tableName string
-	// cols        []string
+	tableName   string
 	data        map[string]interface{}
 	result      map[string]interface{}
-	uniqueIndex string
+	uniqueIndex []string
 	helper      *SQLHelper
+	requestType sqlRequestType
+	hasReadBack uint32
 }
 
 // MarshalLogObjects helps printing the sqlRequest
@@ -98,6 +139,43 @@ func (s *sqlRequest) MarshalLogObject(encoder zapcore.ObjectEncoder) error {
 	encoder.AddString("upstream", fmt.Sprintf("%#v", s.data))
 	encoder.AddString("downstream", fmt.Sprintf("%#v", s.result))
 	return nil
+}
+
+func (s *sqlRequest) getPrimaryKeyTuple() string {
+	return makeColumnTuple(s.uniqueIndex)
+}
+
+func (s *sqlRequest) getWhereCondition() []interface{} {
+	builder := strings.Builder{}
+	args := make([]interface{}, 1, len(s.uniqueIndex)+1)
+	builder.WriteString(s.getPrimaryKeyTuple() + " = (")
+	for i, col := range s.uniqueIndex {
+		builder.WriteString("?")
+		if i != len(s.uniqueIndex)-1 {
+			builder.WriteString(",")
+		}
+
+		args = append(args, s.data[col])
+	}
+	builder.WriteString(")")
+	args[0] = builder.String()
+	return args
+}
+
+func (s *sqlRequest) getComparableKey() string {
+	if len(s.uniqueIndex) == 1 {
+		return s.uniqueIndex[0]
+	}
+
+	ret := make(map[string]interface{})
+	for k, v := range s.data {
+		for _, col := range s.uniqueIndex {
+			if k == col {
+				ret[k] = v
+			}
+		}
+	}
+	return fmt.Sprintf("%v", ret)
 }
 
 func (s *sqlRequest) getData() map[string]interface{} {
@@ -142,7 +220,46 @@ type syncSQLRequest struct {
 }
 
 func (r *syncSQLRequest) Send() Awaitable {
-	err := r.insert(r.helper.ctx)
+	atomic.StoreUint32(&r.hasReadBack, 0)
+	var err error
+	switch r.requestType {
+	case sqlRequestTypeInsert:
+		err = r.insert(r.helper.ctx)
+	case sqlRequestTypeUpsert:
+		err = r.upsert(r.helper.ctx)
+	case sqlRequestTypeDelete:
+		err = r.delete(r.helper.ctx)
+	}
+
+	go func() {
+		db, err := sqlbuilder.New("mysql", r.helper.upstream)
+		if err != nil {
+			log.Warn("ReadBack:", zap.Error(err))
+			return
+		}
+
+		cond := r.getWhereCondition()
+
+		rows, err := db.SelectFrom(r.tableName).Where(cond).QueryContext(r.helper.ctx)
+		if err != nil {
+			log.Warn("ReadBack:", zap.Error(err))
+			return
+		}
+		defer rows.Close()
+
+		if !rows.Next() {
+			log.Warn("ReadBack:", zap.Error(err))
+			return
+		}
+		r.data, err = rowsToMap(rows)
+		if err != nil {
+			log.Warn("ReadBack", zap.Error(err))
+			return
+		}
+
+		atomic.StoreUint32(&r.hasReadBack, 1)
+	}()
+
 	if err != nil {
 		return &errorCheckableAndAwaitable{errors.AddStack(err)}
 	}
@@ -175,6 +292,49 @@ func (s *sqlRequest) insert(ctx context.Context) error {
 		return errors.AddStack(err)
 	}
 
+	s.requestType = sqlRequestTypeInsert
+	return nil
+}
+
+func (s *sqlRequest) upsert(ctx context.Context) error {
+	db := sqlx.NewDb(s.helper.upstream, "mysql")
+
+	keys := make([]string, len(s.data))
+	values := make([]interface{}, len(s.data))
+	i := 0
+	for k, v := range s.data {
+		keys[i] = k
+		values[i] = v
+		i++
+	}
+
+	query, args, err := sqlx.In("replace into `"+s.tableName+"` "+makeColumnTuple(keys)+" values (?)", values)
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
+	query = db.Rebind(query)
+	_, err = s.helper.upstream.ExecContext(ctx, query, args...)
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
+	s.requestType = sqlRequestTypeUpsert
+	return nil
+}
+
+func (s *sqlRequest) delete(ctx context.Context) error {
+	db, err := sqlbuilder.New("mysql", s.helper.downstream)
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
+	_, err = db.DeleteFrom(s.tableName).Where(s.getWhereCondition()).ExecContext(ctx)
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
+	s.requestType = sqlRequestTypeDelete
 	return nil
 }
 
@@ -184,7 +344,7 @@ func (s *sqlRequest) read(ctx context.Context) (map[string]interface{}, error) {
 		return nil, errors.AddStack(err)
 	}
 
-	rows, err := db.SelectFrom(s.tableName).Where(s.uniqueIndex+" = ?", s.data[s.uniqueIndex]).QueryContext(ctx)
+	rows, err := db.SelectFrom(s.tableName).Where(s.getWhereCondition()).QueryContext(ctx)
 	if err != nil {
 		return nil, errors.AddStack(err)
 
@@ -206,8 +366,10 @@ func (s *sqlRequest) getBasicAwaitable() basicAwaitable {
 }
 
 func (s *sqlRequest) poll(ctx context.Context) (bool, error) {
+	if atomic.LoadUint32(&s.hasReadBack) == 0 {
+		return false, nil
+	}
 	res, err := s.read(ctx)
-
 	if err != nil {
 		if strings.Contains(err.Error(), "Error 1146") {
 			return false, nil
@@ -215,10 +377,36 @@ func (s *sqlRequest) poll(ctx context.Context) (bool, error) {
 		return false, errors.AddStack(err)
 	}
 	s.result = res
+
+	switch s.requestType {
+	case sqlRequestTypeInsert:
+		if res == nil {
+			return false, nil
+		}
+		return true, nil
+	case sqlRequestTypeUpsert:
+		if res == nil {
+			return false, nil
+		}
+		if compareMaps(s.data, res) {
+			return true, nil
+		}
+		log.Debug("Upserted row does not match the expected")
+		return false, nil
+	case sqlRequestTypeDelete:
+		if res == nil {
+			return true, nil
+		}
+		log.Debug("Delete not successful yet", zap.Reflect("where condition", s.getWhereCondition()))
+		return false, nil
+	}
 	return true, nil
 }
 
 func (s *sqlRequest) Check() error {
+	if s.requestType == sqlRequestTypeUpsert || s.requestType == sqlRequestTypeDelete {
+		return nil
+	}
 	// TODO better comparator
 	if s.result == nil {
 		return errors.New("Check: nil result")
@@ -254,21 +442,24 @@ func rowsToMap(rows *sql.Rows) (map[string]interface{}, error) {
 	return ret, nil
 }
 
-func getUniqueIndexColumn(ctx context.Context, db sqlbuilder.Database, dbName string, tableName string) (string, error) {
-	row, err := db.QueryRowContext(ctx, "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = ? "+
-		"AND TABLE_NAME = ? AND NON_UNIQUE = 0",
-		dbName, tableName)
+func getUniqueIndexColumn(ctx context.Context, db sqlbuilder.Database, dbName string, tableName string) ([]string, error) {
+	row, err := db.QueryRowContext(ctx, `
+		SELECT GROUP_CONCAT(COLUMN_NAME SEPARATOR ' ') FROM INFORMATION_SCHEMA.STATISTICS
+		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+		GROUP BY INDEX_NAME 
+		ORDER BY FIELD(INDEX_NAME,'PRIMARY') DESC
+	`, dbName, tableName)
 	if err != nil {
-		return "", errors.AddStack(err)
+		return nil, errors.AddStack(err)
 	}
 
 	colName := ""
 	err = row.Scan(&colName)
 	if err != nil {
-		return "", errors.AddStack(err)
+		return nil, errors.AddStack(err)
 	}
 
-	return colName, nil
+	return strings.Split(colName, " "), nil
 }
 
 func compareMaps(m1 map[string]interface{}, m2 map[string]interface{}) bool {
@@ -279,4 +470,12 @@ func compareMaps(m1 map[string]interface{}, m2 map[string]interface{}) bool {
 	str1 := fmt.Sprintf("%v", m1)
 	str2 := fmt.Sprintf("%v", m2)
 	return str1 == str2
+}
+
+func makeColumnTuple(colNames []string) string {
+	colNamesQuoted := make([]string, len(colNames))
+	for i := range colNames {
+		colNamesQuoted[i] = quotes.QuoteName(colNames[i])
+	}
+	return "(" + strings.Join(colNamesQuoted, ",") + ")"
 }

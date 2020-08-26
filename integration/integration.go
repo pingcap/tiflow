@@ -25,7 +25,11 @@ func main() {
 
 	testCases := []framework.Task{
 		newSimpleCase(),
-		newAlterCase(),
+		newDeleteCase(),
+		newManyTypesCase(),
+		newUnsignedCase(),
+		newCompositePKeyCase(),
+		newAlterCase(), // this case is slow, so put it last
 	}
 
 	log.SetLevel(zapcore.DebugLevel)

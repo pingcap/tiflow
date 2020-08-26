@@ -2,6 +2,7 @@ FROM golang:1.14-alpine as builder
 RUN apk add --no-cache git make bash
 WORKDIR /go/src/github.com/pingcap/ticdc
 COPY . .
+ENV CDC_ENABLE_VENDOR=1
 RUN make
 
 FROM alpine:3.12
