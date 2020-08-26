@@ -14,7 +14,11 @@ TEST_DIR := /tmp/tidb_cdc_test
 SHELL	 := /usr/bin/env bash
 
 GO       := GO111MODULE=on go
-GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
+ifeq (${CDC_ENABLE_VENDOR}, 1)
+GOVENDORFLAG := -mod=vendor
+endif
+
+GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 ifeq ($(GOVERSION114), 1)
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race -gcflags=all=-d=checkptr=0
 else

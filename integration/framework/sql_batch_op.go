@@ -31,12 +31,13 @@ const (
 
 type sqlAllAwaiter struct {
 	helper          *SQLHelper
-	data            map[interface{}]map[string]interface{}
+	data            map[interface{}]sqlRowContainer
 	retrievedValues []map[string]interface{}
 	table           *Table
 }
 
 // All joins a slice of Awaitable sql requests. The request must be to the same table.
+// TODO does not support composite primary key for now!
 func All(helper *SQLHelper, awaitables []Awaitable) Awaitable {
 	if _, ok := awaitables[0].(sqlRowContainer); !ok {
 		return awaitables[0]
@@ -44,7 +45,7 @@ func All(helper *SQLHelper, awaitables []Awaitable) Awaitable {
 
 	ret := &sqlAllAwaiter{
 		helper:          helper,
-		data:            make(map[interface{}]map[string]interface{}, len(awaitables)),
+		data:            make(map[interface{}]sqlRowContainer, len(awaitables)),
 		retrievedValues: make([]map[string]interface{}, 0),
 		table:           awaitables[0].(sqlRowContainer).getTable(),
 	}
@@ -54,9 +55,8 @@ func All(helper *SQLHelper, awaitables []Awaitable) Awaitable {
 		if !ok {
 			return row
 		}
-		key := rowContainer.getData()[rowContainer.getTable().uniqueIndex]
-		value := rowContainer.getData()
-		ret.data[key] = value
+		key := rowContainer.getData()[rowContainer.getTable().uniqueIndex[0]]
+		ret.data[normalizeKeys(key)] = rowContainer
 	}
 
 	return &basicAwaitable{
@@ -72,13 +72,13 @@ func (s *sqlAllAwaiter) poll(ctx context.Context) (bool, error) {
 	counter := 0
 	indexValues := make([]interface{}, 0)
 	s.retrievedValues = make([]map[string]interface{}, 0)
-	for k := range s.data {
+	for k, v := range s.data {
 		indexValues = append(indexValues, k)
 		batchSize++
 		counter++
 		if batchSize >= selectQueryMaxBatchSize || counter == len(s.data) {
 			log.Debug("Selecting", zap.String("table", s.table.tableName), zap.Any("keys", indexValues))
-			query, args, err := sqlx.In("select distinct * from `"+s.table.tableName+"` where "+s.table.uniqueIndex+" in (?)", indexValues)
+			query, args, err := sqlx.In("select distinct * from "+s.table.tableName+" where "+v.getTable().uniqueIndex[0]+" in (?)", indexValues)
 			if err != nil {
 				return false, errors.AddStack(err)
 			}
@@ -86,7 +86,7 @@ func (s *sqlAllAwaiter) poll(ctx context.Context) (bool, error) {
 			rows, err := db.QueryContext(ctx, query, args...)
 			if err != nil {
 				if strings.Contains(err.Error(), "Error 1146") {
-					log.Info("table does not exist, will try again", zap.Error(err))
+					log.Info("table does not exist, will try again", zap.Error(err), zap.String("query", query))
 					return false, nil
 				}
 				return false, errors.AddStack(err)
@@ -115,16 +115,9 @@ func (s *sqlAllAwaiter) poll(ctx context.Context) (bool, error) {
 
 func (s *sqlAllAwaiter) Check() error {
 	for _, row := range s.retrievedValues {
-		key := row[s.table.uniqueIndex]
-		switch key.(type) {
-		case int, int8, int16, int32, int64:
-			key = int(reflect.ValueOf(key).Int())
-		case uint, uint8, uint16, uint32, uint64:
-			key = uint(reflect.ValueOf(key).Uint())
-		default:
-		}
-		expected := s.data[key]
-		if !compareMaps(row, expected) {
+		key := row[s.table.uniqueIndex[0]]
+		expected := s.data[normalizeKeys(key)]
+		if !compareMaps(row, expected.getData()) {
 			log.Warn(
 				"Check failed",
 				zap.String("expected", fmt.Sprintf("%v", expected)),
@@ -134,4 +127,15 @@ func (s *sqlAllAwaiter) Check() error {
 		}
 	}
 	return nil
+}
+
+func normalizeKeys(key interface{}) interface{} {
+	switch key.(type) {
+	case int, int8, int16, int32, int64:
+		return reflect.ValueOf(key).Int()
+	case uint, uint8, uint16, uint32, uint64:
+		return reflect.ValueOf(key).Uint()
+	default:
+		return key
+	}
 }
