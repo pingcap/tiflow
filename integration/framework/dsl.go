@@ -90,7 +90,8 @@ func (b *basicAwaitable) Wait() Checkable {
 	}
 	defer cancel()
 
-	backoff := backoff2.NewConstantBackOff(waitMaxPollInterval)
+	backoff := backoff2.NewExponentialBackOff()
+	backoff.MaxInterval = waitMaxPollInterval
 	for {
 		select {
 		case <-ctx.Done():
