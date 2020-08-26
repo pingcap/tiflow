@@ -47,8 +47,8 @@ func (d *MaxwellEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult
 }
 func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwellMessage) {
 	var partition *int64
-	if e.Table.Partition != 0 {
-		partition = &e.Table.Partition
+	if e.Table.IsPartition {
+		partition = &e.Table.TableID
 	}
 	key := &mqMessageKey{
 		Ts:        e.CommitTs,
@@ -69,18 +69,25 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 		Data:     make(map[string]interface{}),
 		Old:      make(map[string]interface{}),
 	}
-	for k, v := range e.Columns {
-		value.Data[k] = v.Value
-	}
-	for k, v := range e.PreColumns {
-		value.Old[k] = v.Value
-	}
+
 	if e.PreColumns == nil {
 		value.Type = "insert"
-	} else if e.Delete {
+		for _, v := range e.Columns {
+			value.Data[v.Name] = v.Value
+		}
+	} else if e.IsDelete() {
 		value.Type = "delete"
+		for _, v := range e.PreColumns {
+			value.Old[v.Name] = v.Value
+		}
 	} else {
 		value.Type = "update"
+		for _, v := range e.Columns {
+			value.Data[v.Name] = v.Value
+		}
+		for _, v := range e.PreColumns {
+			value.Old[v.Name] = v.Value
+		}
 	}
 	return key, value
 }
@@ -218,6 +225,34 @@ func (d *MaxwellEventBatchEncoder) Build() (key []byte, value []byte) {
 	return d.keyBuf.Bytes(), d.valueBuf.Bytes()
 }
 
+// MixedBuild implements the EventBatchEncoder interface
+func (d *MaxwellEventBatchEncoder) MixedBuild() []byte {
+	keyBytes := d.keyBuf.Bytes()
+	valueBytes := d.valueBuf.Bytes()
+	mixedBytes := make([]byte, len(keyBytes)+len(valueBytes))
+	copy(mixedBytes[:8], keyBytes[:8])
+	index := uint64(8)    // skip version
+	keyIndex := uint64(8) // skip version
+	valueIndex := uint64(0)
+	for {
+		if keyIndex >= uint64(len(keyBytes)) {
+			break
+		}
+		keyLen := binary.BigEndian.Uint64(keyBytes[keyIndex : keyIndex+8])
+		offset := keyLen + 8
+		copy(mixedBytes[index:index+offset], keyBytes[keyIndex:keyIndex+offset])
+		keyIndex += offset
+		index += offset
+
+		valueLen := binary.BigEndian.Uint64(valueBytes[valueIndex : valueIndex+8])
+		offset = valueLen + 8
+		copy(mixedBytes[index:index+offset], valueBytes[valueIndex:valueIndex+offset])
+		valueIndex += offset
+		index += offset
+	}
+	return mixedBytes
+}
+
 // Size implements the EventBatchEncoder interface
 func (d *MaxwellEventBatchEncoder) Size() int {
 	return d.keyBuf.Len() + d.valueBuf.Len()
@@ -279,18 +314,17 @@ func maxwellMessageToRowEvent(key *mqMessageKey, value *maxwellMessage) *model.R
 		Table:  key.Table,
 	}
 	if key.Partition != nil {
-		e.Table.Partition = *key.Partition
+		e.Table.TableID = *key.Partition
+		e.Table.IsPartition = true
 	}
 
 	if value.Type == "delete" {
-		e.Delete = true
-		for k, v := range e.Columns {
-			v.Value = value.Data[k]
+		for _, v := range e.Columns {
+			v.Value = value.Data[v.Name]
 		}
 	} else {
-		e.Delete = false
-		for k, v := range e.Columns {
-			v.Value = value.Data[k]
+		for _, v := range e.Columns {
+			v.Value = value.Data[v.Name]
 		}
 	}
 	return e
