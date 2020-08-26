@@ -52,6 +52,12 @@ type rowKVEntry struct {
 	baseKVEntry
 	Row    map[int64]types.Datum
 	PreRow map[int64]types.Datum
+
+	// In some cases, row data may exist but not contain any Datum,
+	// use this RowExist/PreRowExist variable to distinguish between row data that does not exist
+	// or row data that does not contain any Datum.
+	RowExist    bool
+	PreRowExist bool
 }
 
 type indexKVEntry struct {
@@ -279,22 +285,42 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, restKey []
 	if len(key) != 0 {
 		return nil, errors.New("invalid record key")
 	}
-	row, err := decodeRow(rawValue, recordID, tableInfo, m.tz)
+	decodeRow := func(rawColValue []byte) (map[int64]types.Datum, bool, error) {
+		if len(rawColValue) == 0 {
+			return nil, false, nil
+		}
+		row, err := decodeRow(rawColValue, recordID, tableInfo, m.tz)
+		if err != nil {
+			return nil, false, errors.Trace(err)
+		}
+		return row, true, nil
+	}
+
+	row, rowExist, err := decodeRow(rawValue)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	var preRow map[int64]types.Datum
-	if rawOldValue != nil {
-		preRow, err = decodeRow(rawOldValue, recordID, tableInfo, m.tz)
+	preRow, preRowExist, err := decodeRow(rawOldValue)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if base.Delete && !m.enableOldValue && tableInfo.PKIsHandle {
+		id, pkValue, err := fetchHandleValue(tableInfo, recordID)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		preRow = map[int64]types.Datum{id: *pkValue}
+		preRowExist = true
 	}
+
 	base.RecordID = recordID
 	return &rowKVEntry{
 		baseKVEntry: base,
 		Row:         row,
 		PreRow:      preRow,
+		RowExist:    rowExist,
+		PreRowExist: preRowExist,
 	}, nil
 }
 
@@ -405,24 +431,21 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	var err error
 	// Decode previous columns.
 	var preCols []*model.Column
-	if len(row.PreRow) != 0 {
+	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, err = datum2Column(tableInfo, row.PreRow, true)
+		preCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
 
 	var cols []*model.Column
-	oldValueDisabledAndRowIsDelete := !m.enableOldValue && row.Delete
-	cols, err = datum2Column(tableInfo, row.Row, !oldValueDisabledAndRowIsDelete)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if oldValueDisabledAndRowIsDelete {
-		preCols = cols
-		cols = nil
+	if row.RowExist {
+		cols, err = datum2Column(tableInfo, row.Row, true)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	schemaName := tableInfo.TableName.Schema

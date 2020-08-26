@@ -119,8 +119,21 @@ func newListChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cfs := make([]*changefeedCommonInfo, 0, len(raw))
+			changefeedIDs := make(map[string]struct{}, len(raw))
 			for id := range raw {
+				changefeedIDs[id] = struct{}{}
+			}
+			if changefeedListAll {
+				statuses, err := cdcEtcdCli.GetAllChangeFeedStatus(ctx)
+				if err != nil {
+					return err
+				}
+				for cid := range statuses {
+					changefeedIDs[cid] = struct{}{}
+				}
+			}
+			cfs := make([]*changefeedCommonInfo, 0, len(changefeedIDs))
+			for id := range changefeedIDs {
 				cfci := &changefeedCommonInfo{ID: id}
 				resp, err := applyOwnerChangefeedQuery(ctx, id, getCredential())
 				if err != nil {
@@ -139,6 +152,7 @@ func newListChangefeedCommand() *cobra.Command {
 			return jsonPrint(cmd, cfs)
 		},
 	}
+	command.PersistentFlags().BoolVarP(&changefeedListAll, "all", "a", false, "List all replication tasks(including removed and finished)")
 	return command
 }
 
