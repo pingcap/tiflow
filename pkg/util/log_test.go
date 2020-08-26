@@ -33,7 +33,7 @@ type logSuite struct{}
 
 var _ = check.Suite(&logSuite{})
 
-func (s *logSuite) TestInitLogger(c *check.C) {
+func (s *logSuite) TestInitLoggerAndSetLogLevel(c *check.C) {
 	f := filepath.Join(c.MkDir(), "test")
 	cfg := &Config{
 		Level: "warning",
@@ -43,6 +43,11 @@ func (s *logSuite) TestInitLogger(c *check.C) {
 	err := InitLogger(cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(log.GetLevel(), check.Equals, zapcore.WarnLevel)
+	err = SetLogLevel("info")
+	c.Assert(err, check.IsNil)
+	c.Assert(log.GetLevel(), check.Equals, zapcore.InfoLevel)
+	err = SetLogLevel("badlevel")
+	c.Assert(err, check.NotNil)
 }
 
 func (s *logSuite) TestZapErrorFilter(c *check.C) {

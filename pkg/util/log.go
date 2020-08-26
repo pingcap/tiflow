@@ -69,7 +69,7 @@ func (cfg *Config) Adjust() {
 // SetLogLevel changes TiCDC log level dynamically.
 func SetLogLevel(level string) error {
 	oldLevel := log.GetLevel()
-	if strings.ToLower(oldLevel.String()) == strings.ToLower(level) {
+	if strings.EqualFold(oldLevel.String(), level) {
 		return nil
 	}
 	var lv zapcore.Level
