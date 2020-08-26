@@ -185,13 +185,6 @@ func decodeMetaKey(ek []byte) (meta, error) {
 // decodeRow decodes a byte slice into datums with a existing row map.
 func decodeRow(b []byte, recordID int64, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	if len(b) == 0 {
-		if tableInfo.PKIsHandle {
-			id, pkValue, err := fetchHandleValue(tableInfo, recordID)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			return map[int64]types.Datum{id: *pkValue}, nil
-		}
 		return map[int64]types.Datum{}, nil
 	}
 	if rowcodec.IsNewFormat(b) {
