@@ -406,7 +406,7 @@ func newUpdateChangefeedCommand() *cobra.Command {
 			info.Error = old.Error
 
 			resp, err := applyOwnerChangefeedQuery(ctx, changefeedID, getCredential())
-			// if not cdc owner, allow user to update changefeed config
+			// if no cdc owner exists, allow user to update changefeed config
 			if err != nil && errors.Cause(err) != errOwnerNotFound {
 				return err
 			}
