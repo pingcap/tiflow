@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
@@ -126,8 +128,10 @@ EOF
     fi
     check_changefeed_state $uuid "removed"
 
+    set +e
     # Make sure changefeed can not be created if a removed changefeed with the same name exists
     create_log=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="$uuid" 2>&1)
+    set -e
     exists=$(echo $create_log | grep -oE 'already exists')
     if [[ -z $exists ]]; then
         echo "[$(date)] <<<<< unexpect output got ${create_log} >>>>>"
@@ -153,9 +157,15 @@ EOF
         run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai"
     fi
 
-    # Smoke test meta delete-gc-ttl and delete
-    echo "y" | run_cdc_cli meta delete-gc-ttl
-    run_cdc_cli meta delete --no-confirm
+    # Smoke test unsafe commands
+    echo "y" | run_cdc_cli unsafe delete-service-gc-safepoint
+    run_cdc_cli unsafe reset --no-confirm
+
+    # Smoke test change log level
+    curl -X POST -d '"warn"' http://127.0.0.1:8300/admin/log
+    sleep 3
+    # make sure TiCDC does not panic
+    check_changefeed_state $uuid "normal"
 
     cleanup_process $CDC_BINARY
 }

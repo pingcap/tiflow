@@ -15,13 +15,18 @@ package cdc
 
 import (
 	"context"
+	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.uber.org/zap"
 )
 
 const (
@@ -243,4 +248,28 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
 	}
 	writeData(w, resp)
+}
+
+func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
+	var level string
+	data, err := ioutil.ReadAll(r.Body)
+	r.Body.Close()
+	if err != nil {
+		writeInternalServerError(w, err)
+		return
+	}
+	err = json.Unmarshal(data, &level)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid log level: %s", err))
+		return
+	}
+
+	err = util.SetLogLevel(level)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errors.Errorf("fail to change log level: %s", err))
+		return
+	}
+	log.Warn("log level changed", zap.String("level", level))
+
+	writeData(w, struct{}{})
 }
