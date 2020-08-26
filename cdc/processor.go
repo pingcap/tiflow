@@ -984,6 +984,11 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 							}
 						}
 
+						if !opDone {
+							log.Debug("addTable not done", zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
+								zap.Int64("tableID", tableID))
+						}
+
 						continue
 					}
 					sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
