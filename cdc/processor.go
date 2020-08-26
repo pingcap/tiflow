@@ -961,6 +961,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						continue
 					}
 					if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
+						log.Debug("OpTypeResolved", zap.Uint64("CRTs", pEvent.CRTs))
 						atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
 						lastResolvedTs = pEvent.CRTs
 						p.localResolvedNotifier.Notify()
