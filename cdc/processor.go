@@ -87,6 +87,7 @@ type processor struct {
 
 	sinkEmittedResolvedTs uint64
 	globalResolvedTs      uint64
+	localResolvedTs       uint64
 	checkpointTs          uint64
 
 	ddlPuller       puller.Puller
@@ -110,8 +111,9 @@ type processor struct {
 	localCheckpointTsNotifier   *notify.Notifier
 	localCheckpointTsReceiver   *notify.Receiver
 
-	wg    *errgroup.Group
-	errCh chan<- error
+	wg       *errgroup.Group
+	errCh    chan<- error
+	opDoneCh chan int64
 }
 
 type tableInfo struct {
@@ -217,6 +219,8 @@ func newProcessor(
 
 		tables:       make(map[int64]*tableInfo),
 		markTableIDs: make(map[int64]struct{}),
+
+		opDoneCh: make(chan int64),
 	}
 	modRevision, status, err := p.etcdCli.GetTaskStatus(ctx, p.changefeedID, p.captureInfo.ID)
 	if err != nil {
@@ -377,6 +381,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				if ts < minResolvedTs {
 					minResolvedTs = ts
 				}
+				atomic.StoreUint64(&p.localResolvedTs, minResolvedTs)
 			}
 			p.stateMu.Unlock()
 
@@ -594,9 +599,20 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 				return tablesToRemove, errors.NotValidf("normal table(%d) and mark table not match ", tableID)
 			}
 			p.addTable(ctx, tableID, replicaInfo)
-			opt.Done = true
 		}
 	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case tableID := <-p.opDoneCh:
+			status.Operation[tableID].Done = true
+		default:
+			goto done
+		}
+	}
+done:
 	if !status.SomeOperationsUnapplied() {
 		status.Operation = nil
 	}
@@ -626,6 +642,10 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		if lastResolvedTs < changefeedStatus.ResolvedTs {
 			lastResolvedTs = changefeedStatus.ResolvedTs
 			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
+			if lastResolvedTs > atomic.LoadUint64(&p.localResolvedTs) {
+				// we do not issue resolved events if globalResolvedTs > localResolvedTs.
+				return nil
+			}
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -745,6 +765,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			rows = append(rows, ev.Row)
 		}
+		failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {})
 		err := p.sink.EmitRowChangedEvents(ctx, rows...)
 		if err != nil {
 			return errors.Trace(err)
@@ -905,6 +926,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			}
 		}()
 		go func() {
+			opDone := false
 			resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
 			var lastResolvedTs uint64
 			for {
@@ -937,6 +959,19 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						lastResolvedTs = pEvent.CRTs
 						p.localResolvedNotifier.Notify()
 						resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
+
+						if !opDone && atomic.LoadUint64(&p.localResolvedTs) >= atomic.LoadUint64(&p.globalResolvedTs) {
+							opDone = true
+							select {
+							case <-ctx.Done():
+								if errors.Cause(ctx.Err()) != context.Canceled {
+									p.errCh <- ctx.Err()
+								}
+								return
+							case p.opDoneCh <- tableID:
+							}
+						}
+
 						continue
 					}
 					sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
