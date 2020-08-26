@@ -381,9 +381,9 @@ func (p *processor) positionWorker(ctx context.Context) error {
 				if ts < minResolvedTs {
 					minResolvedTs = ts
 				}
-				atomic.StoreUint64(&p.localResolvedTs, minResolvedTs)
 			}
 			p.stateMu.Unlock()
+			atomic.StoreUint64(&p.localResolvedTs, minResolvedTs)
 
 			phyTs := oracle.ExtractPhysical(minResolvedTs)
 			// It is more accurate to get tso from PD, but in most cases we have
