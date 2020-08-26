@@ -523,6 +523,8 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 	}, nil
 }
 
+var emptyBytes = make([]byte, 0)
+
 func formatColVal(datum types.Datum, tp byte) (interface{}, error) {
 	if datum.IsNull() {
 		return nil, nil
@@ -547,6 +549,12 @@ func formatColVal(datum types.Datum, tp byte) (interface{}, error) {
 	case mysql.TypeBit:
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
 		return datum.GetBinaryLiteral().ToInt(nil)
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		b := datum.GetBytes()
+		if b == nil {
+			b = emptyBytes
+		}
+		return b, nil
 	default:
 		return datum.GetValue(), nil
 	}
@@ -565,12 +573,14 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 		d := types.NewDatum(col.GetDefaultValue())
 		return d.GetValue()
 	}
-
-	if col.Tp == mysql.TypeEnum {
+	switch col.Tp {
+	case mysql.TypeEnum:
 		// For enum type, if no default value and not null is set,
 		// the default value is the first element of the enum list
 		d := types.NewDatum(col.FieldType.Elems[0])
 		return d.GetValue()
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		return emptyBytes
 	}
 
 	d := table.GetZeroValue(col)
