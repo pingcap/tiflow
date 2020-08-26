@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
+	model2 "github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
@@ -159,12 +160,15 @@ func ddlEventtoMaxwellMessage(e *model.DDLEvent) (*mqMessageKey, *DdlMaxwellMess
 	value := &DdlMaxwellMessage{
 		Ts:       e.CommitTs,
 		Database: e.TableInfo.Schema,
-		Type:     e.Type.String(),
+		Type:     "table-create",
 		Table:    e.TableInfo.Table,
 		Old:      TableStruct{},
 		Def:      TableStruct{},
 		Sql:      e.Query,
 	}
+
+	value.Type = ddlToMaxwellType(e.Type)
+
 	if e.PreTableInfo != nil {
 		value.Old.Database = e.PreTableInfo.Schema
 		value.Old.Table = e.PreTableInfo.Table
@@ -396,36 +400,46 @@ func NewMaxwellEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, e
 	}, nil
 }
 
+//ddl typecode from parser/model/ddl.go
+func ddlToMaxwellType(ddlType model2.ActionType) string {
+	if ddlType >= 5 && ddlType <= 20 {
+		return "table-alter"
+	}
+	switch ddlType {
+	case 3:
+		return "table-create"
+	case 4:
+		return "table-drop"
+	case 22, 23, 27, 28, 29, 33, 37, 38, 41, 42:
+		return "table-alter"
+	case 1:
+		return "database-create"
+	case 2:
+		return "database-drop"
+	case 26:
+		return "database-alter"
+	default:
+		return ddlType.String()
+	}
+}
+
 //Convert column type code to maxwell column type
 func columnToMaxwellType(columnType byte) (string, error) {
 	switch columnType {
-	case 1:
+	// tinyint,smallint,mediumint,int
+	case 1, 2, 3, 9:
 		return "int", nil
-	case 2:
-		return "int", nil
-	case 9:
-		return "int", nil
-	case 3:
-		return "int", nil
+	// bigint
 	case 8:
 		return "bigint", nil
-	case 249:
+	// tinytext,text,mediumtext,longtext,varchar,char
+	case 249, 252, 250, 251, 254, 15:
 		return "string", nil
-	case 252:
-		return "string", nil
-	case 250:
-		return "string", nil
-	case 251:
-		return "string", nil
-	case 254:
-		return "string", nil
-	case 15:
-		return "string", nil
+	// date
 	case 10:
 		return "date", nil
-	case 12:
-		return "datetime", nil
-	case 7:
+	// datetime,timestamp
+	case 7, 12:
 		return "datetime", nil
 	case 11:
 		return "time", nil
@@ -439,9 +453,8 @@ func columnToMaxwellType(columnType byte) (string, error) {
 		return "bit", nil
 	case 245:
 		return "json", nil
-	case 4:
-		return "float", nil
-	case 5:
+	// float,double
+	case 4, 5:
 		return "float", nil
 	case 246:
 		return "decimal", nil
