@@ -77,7 +77,6 @@ func (c *column) ToSinkColumn(name string) *model.Column {
 	col.Name = name
 	col.Value = c.Value
 	if c.Value == nil {
-		col.Value = nil
 		return col
 	}
 	switch col.Type {
