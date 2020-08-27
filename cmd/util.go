@@ -16,6 +16,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	liberrors "errors"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -50,6 +51,10 @@ var (
 	certPath      string
 	keyPath       string
 	allowedCertCN string
+)
+
+var (
+	errOwnerNotFound = liberrors.New("owner not found")
 )
 
 func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
@@ -130,7 +135,7 @@ func getOwnerCapture(ctx context.Context) (*capture, error) {
 			return c, nil
 		}
 	}
-	return nil, errors.NotFoundf("owner")
+	return nil, errors.Trace(errOwnerNotFound)
 }
 
 func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *security.Credential) error {
@@ -147,9 +152,14 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *s
 	if err != nil {
 		return err
 	}
+	forceRemoveOpt := "false"
+	if job.Opts != nil && job.Opts.ForceRemove {
+		forceRemoveOpt = "true"
+	}
 	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
-		cdc.APIOpVarAdminJob:     {fmt.Sprint(int(job.Type))},
-		cdc.APIOpVarChangefeedID: {job.CfID},
+		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
+		cdc.APIOpVarChangefeedID:       {job.CfID},
+		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
 	}))
 	if err != nil {
 		return err

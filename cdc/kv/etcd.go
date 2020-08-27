@@ -173,6 +173,29 @@ func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context, id string) erro
 	return errors.Trace(err)
 }
 
+// GetAllChangeFeedStatus queries all changefeed job status
+func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (map[string]*model.ChangeFeedStatus, error) {
+	key := JobKeyPrefix
+	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	statuses := make(map[string]*model.ChangeFeedStatus, resp.Count)
+	for _, rawKv := range resp.Kvs {
+		changefeedID, err := model.ExtractKeySuffix(string(rawKv.Key))
+		if err != nil {
+			return nil, err
+		}
+		status := &model.ChangeFeedStatus{}
+		err = status.Unmarshal(rawKv.Value)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		statuses[changefeedID] = status
+	}
+	return statuses, nil
+}
+
 // GetChangeFeedStatus queries the checkpointTs and resovledTs of a given changefeed
 func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, int64, error) {
 	key := GetEtcdKeyJob(id)
@@ -233,15 +256,17 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.Cha
 	if err := model.ValidateChangefeedID(changeFeedID); err != nil {
 		return err
 	}
-	key := GetEtcdKeyChangeFeedInfo(changeFeedID)
+	infoKey := GetEtcdKeyChangeFeedInfo(changeFeedID)
+	jobKey := GetEtcdKeyJob(changeFeedID)
 	value, err := info.Marshal()
 	if err != nil {
 		return errors.Trace(err)
 	}
 	resp, err := c.Client.Txn(ctx).If(
-		clientv3.Compare(clientv3.ModRevision(key), "=", 0),
+		clientv3.Compare(clientv3.ModRevision(infoKey), "=", 0),
+		clientv3.Compare(clientv3.ModRevision(jobKey), "=", 0),
 	).Then(
-		clientv3.OpPut(key, value),
+		clientv3.OpPut(infoKey, value),
 	).Commit()
 	if err != nil {
 		return errors.Trace(err)
@@ -249,7 +274,7 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.Cha
 	if !resp.Succeeded {
 		log.Warn("changefeed already exists, ignore create changefeed",
 			zap.String("changefeedid", changeFeedID))
-		return errors.Annotatef(model.ErrChangeFeedAlreadyExists, "key: %s", key)
+		return errors.Trace(model.ErrChangeFeedAlreadyExists)
 	}
 	return errors.Trace(err)
 }
@@ -657,6 +682,16 @@ func (c CDCEtcdClient) PutTaskPosition(
 // DeleteTaskPosition remove task position from etcd
 func (c CDCEtcdClient) DeleteTaskPosition(ctx context.Context, changefeedID string, captureID string) error {
 	key := GetEtcdKeyTaskPosition(changefeedID, captureID)
+	_, err := c.Client.Delete(ctx, key)
+	return errors.Trace(err)
+}
+
+// RemoveChangeFeedStatus removes changefeed job status from etcd
+func (c CDCEtcdClient) RemoveChangeFeedStatus(
+	ctx context.Context,
+	changefeedID string,
+) error {
+	key := GetEtcdKeyJob(changefeedID)
 	_, err := c.Client.Delete(ctx, key)
 	return errors.Trace(err)
 }

@@ -76,6 +76,17 @@ function run() {
         exit 1
     fi
 
+    # Update changefeed failed because changefeed is running
+cat - >"$WORK_DIR/changefeed.toml" <<EOF
+case-sensitive = false
+[mounter]
+worker-num = 4
+EOF
+    update_result=$(cdc cli changefeed update --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid)
+    if [[ ! $update_result == *"can only update changefeed config when it is stopped"* ]]; then
+        echo "update changefeed config should fail when changefeed is running, got $update_result"
+    fi
+
     # Pause changefeed
     run_cdc_cli changefeed --changefeed-id $uuid pause && sleep 3
     jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
@@ -86,11 +97,6 @@ function run() {
     check_changefeed_state $uuid "stopped"
 
     # Update changefeed
-cat - >"$WORK_DIR/changefeed.toml" <<EOF
-case-sensitive = false
-[mounter]
-worker-num = 4
-EOF
     run_cdc_cli changefeed update --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
     changefeed_info=$(run_cdc_cli changefeed query --changefeed-id $uuid 2>&1)
     if [[ ! $changefeed_info == *"\"case-sensitive\": false"* ]]; then
@@ -125,6 +131,19 @@ EOF
         exit 1
     fi
     check_changefeed_state $uuid "removed"
+
+    # Make sure changefeed can not be created if a removed changefeed with the same name exists
+    create_log=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="$uuid" 2>&1)
+    exists=$(echo $create_log | grep -oE 'already exists')
+    if [[ -z $exists ]]; then
+        echo "[$(date)] <<<<< unexpect output got ${create_log} >>>>>"
+        exit 1
+    fi
+
+    # force remove the changefeed, and re create a new one with the same name
+    run_cdc_cli changefeed --changefeed-id $uuid remove --force && sleep 3
+    run_cdc_cli changefeed create --sink-uri="$SINK_URI" --tz="Asia/Shanghai" -c="$uuid" && sleep 3
+    check_changefeed_state $uuid "normal"
 
     # Make sure bad sink url fails at creating changefeed.
     badsink=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://badsink" 2>&1 | grep -oE 'fail')
