@@ -75,7 +75,7 @@ func SetLogLevel(level string) error {
 	var lv zapcore.Level
 	err := lv.UnmarshalText([]byte(level))
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	log.SetLevel(lv)
 	return nil
