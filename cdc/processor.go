@@ -582,6 +582,8 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 					continue
 				}
 				stopped, checkpointTs := table.safeStop()
+				log.Debug("safeStop table", zap.Int64("tableID", tableID),
+					zap.Bool("stopped", stopped), zap.Uint64("checkpointTs", checkpointTs))
 				if stopped {
 					opt.BoundaryTs = checkpointTs
 					if checkpointTs <= p.position.CheckPointTs {
