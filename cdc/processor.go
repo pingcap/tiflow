@@ -934,6 +934,34 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		go func() {
 			opDone := false
 			resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
+			checkDoneTicker := time.NewTicker(1 * time.Second)
+			checkDone := func() {
+				localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
+				globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+				if !opDone && localResolvedTs >= globalResolvedTs {
+					log.Debug("localResolvedTs >= globalResolvedTs, sending operation done signal",
+						zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
+						zap.Int64("tableID", tableID))
+
+					opDone = true
+					checkDoneTicker.Stop()
+					select {
+					case <-ctx.Done():
+						if errors.Cause(ctx.Err()) != context.Canceled {
+							p.errCh <- ctx.Err()
+						}
+						return
+					case p.opDoneCh <- tableID:
+					}
+				}
+				if !opDone {
+					log.Debug("addTable not done",
+						zap.Uint64("localResolvedTs", localResolvedTs),
+						zap.Uint64("globalResolvedTs", globalResolvedTs),
+						zap.Int64("tableID", tableID))
+				}
+			}
+
 			var lastResolvedTs uint64
 			for {
 				select {
@@ -966,30 +994,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						lastResolvedTs = pEvent.CRTs
 						p.localResolvedNotifier.Notify()
 						resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
-
-						localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
-						globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-						if !opDone && localResolvedTs >= globalResolvedTs {
-							log.Debug("localResolvedTs >= globalResolvedTs, sending operation done signal",
-								zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
-								zap.Int64("tableID", tableID))
-
-							opDone = true
-							select {
-							case <-ctx.Done():
-								if errors.Cause(ctx.Err()) != context.Canceled {
-									p.errCh <- ctx.Err()
-								}
-								return
-							case p.opDoneCh <- tableID:
-							}
-						}
-
 						if !opDone {
-							log.Debug("addTable not done", zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
-								zap.Int64("tableID", tableID))
+							checkDone()
 						}
-
 						continue
 					}
 					sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
@@ -1010,13 +1017,15 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						return
 					case p.output <- pEvent:
 					}
+				case <-checkDoneTicker.C:
+					if opDone {
+						checkDone()
+					}
 				}
 			}
 		}()
 		return sorter
 	}
-
-	table.sorter = startPuller(tableID, &table.resolvedTs)
 
 	if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID != 0 {
 		mTableID := replicaInfo.MarkTableID
@@ -1037,6 +1046,9 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	if p.position.ResolvedTs > replicaInfo.StartTs {
 		p.position.ResolvedTs = replicaInfo.StartTs
 	}
+
+	table.sorter = startPuller(tableID, &table.resolvedTs)
+
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
 }
 
