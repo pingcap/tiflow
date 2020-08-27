@@ -410,6 +410,8 @@ func newUpdateChangefeedCommand() *cobra.Command {
 			if err != nil && errors.Cause(err) != errOwnerNotFound {
 				return err
 			}
+			// Note that the correctness of the logic here depends on the return value of `/capture/owner/changefeed/query` interface.
+			// TODO: Using error codes instead of string containing judgments
 			if err == nil && !strings.Contains(resp, `"state": "stopped"`) {
 				return errors.Errorf("can only update changefeed config when it is stopped\nstatus: %s", resp)
 			}
