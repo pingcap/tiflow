@@ -125,6 +125,7 @@ type tableInfo struct {
 	sorter      *puller.Rectifier
 	workload    model.WorkloadInfo
 	cancel      context.CancelFunc
+	isDying     uint32
 }
 
 func (t *tableInfo) loadResolvedTs() uint64 {
@@ -140,6 +141,7 @@ func (t *tableInfo) loadResolvedTs() uint64 {
 
 // safeStop will stop the table change feed safety
 func (t *tableInfo) safeStop() (stopped bool, checkpointTs model.Ts) {
+	atomic.StoreUint32(&t.isDying, 1)
 	t.sorter.SafeStop()
 	status := t.sorter.GetStatus()
 	if status != model.SorterStatusStopped && status != model.SorterStatusFinished {
@@ -872,9 +874,14 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		tableName = strconv.Itoa(int(tableID))
 	}
 
-	if _, ok := p.tables[tableID]; ok {
-		log.Warn("Ignore existing table", zap.Int64("ID", tableID))
-		return
+	if table, ok := p.tables[tableID]; ok {
+		if atomic.SwapUint32(&table.isDying, 0) == 1 {
+			log.Warn("The same table exists but is dying. Cancel it and continue.", zap.Int64("ID", tableID))
+			table.cancel()
+		} else {
+			log.Warn("Ignore existing table", zap.Int64("ID", tableID))
+			return
+		}
 	}
 	globalResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
 	log.Debug("Add table", zap.Int64("tableID", tableID),
