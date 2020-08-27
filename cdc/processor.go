@@ -560,6 +560,9 @@ func (p *processor) removeTable(tableID int64) {
 		return
 	}
 
+	if atomic.SwapUint32(&table.isDying, 0) == 0 {
+		return
+	}
 	table.cancel()
 	delete(p.tables, tableID)
 	if table.markTableID != 0 {
@@ -635,12 +638,15 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 	log.Info("Global status worker started")
 
 	var (
-		changefeedStatus *model.ChangeFeedStatus
-		statusRev        int64
-		lastCheckPointTs uint64
-		lastResolvedTs   uint64
-		watchKey         = kv.GetEtcdKeyJob(p.changefeedID)
+		changefeedStatus         *model.ChangeFeedStatus
+		statusRev                int64
+		lastCheckPointTs         uint64
+		lastResolvedTs           uint64
+		watchKey                 = kv.GetEtcdKeyJob(p.changefeedID)
+		globalResolvedTsNotifier = new(notify.Notifier)
+		globalResolvedTsReceiver = globalResolvedTsNotifier.NewReceiver(1 * time.Second)
 	)
+
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) error {
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
@@ -654,21 +660,33 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			lastResolvedTs = changefeedStatus.ResolvedTs
 			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
 			log.Debug("Update globalResolvedTs", zap.Uint64("globalResolvedTs", lastResolvedTs))
-			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
-			if lastResolvedTs > localResolvedTs {
-				log.Warn("globalResolvedTs too large", zap.Uint64("globalResolvedTs", lastResolvedTs),
-					zap.Uint64("localResolvedTs", localResolvedTs))
-				// we do not issue resolved events if globalResolvedTs > localResolvedTs.
-				return nil
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case p.output <- model.NewResolvedPolymorphicEvent(lastResolvedTs):
-			}
+			globalResolvedTsNotifier.Notify()
 		}
 		return nil
 	}
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-globalResolvedTsReceiver.C:
+				globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+				localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
+				if globalResolvedTs > localResolvedTs {
+					log.Warn("globalResolvedTs too large", zap.Uint64("globalResolvedTs", globalResolvedTs),
+						zap.Uint64("localResolvedTs", localResolvedTs))
+					// we do not issue resolved events if globalResolvedTs > localResolvedTs.
+					continue
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case p.output <- model.NewResolvedPolymorphicEvent(lastResolvedTs):
+				}
+			}
+		}
+	}()
 
 	retryCfg := backoff.WithMaxRetries(
 		backoff.WithContext(
@@ -1003,7 +1021,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						continue
 					}
 					if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
-						log.Debug("OpTypeResolved", zap.Uint64("CRTs", pEvent.CRTs))
 						atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
 						lastResolvedTs = pEvent.CRTs
 						p.localResolvedNotifier.Notify()
