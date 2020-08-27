@@ -610,6 +610,9 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 			log.Debug("Operation done signal received",
 				zap.Int64("tableID", tableID),
 				zap.Reflect("operation", status.Operation[tableID]))
+			if status.Operation[tableID] == nil {
+				log.Debug("TableID does not exist, probably a mark table, ignore", zap.Int64("tableID", tableID))
+			}
 			status.Operation[tableID].Done = true
 		default:
 			goto done
@@ -1032,10 +1035,10 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		// we should to make sure a mark table is only listened once.
 		if _, exist := p.markTableIDs[mTableID]; !exist {
 			p.markTableIDs[mTableID] = struct{}{}
-			startPuller(mTableID, &table.mResolvedTs)
-
 			table.markTableID = mTableID
 			table.mResolvedTs = replicaInfo.StartTs
+
+			startPuller(mTableID, &table.mResolvedTs)
 		}
 	}
 
