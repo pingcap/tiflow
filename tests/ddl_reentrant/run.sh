@@ -28,13 +28,13 @@ ddls=("create database ddl_reentrant" false
       "drop view ddl_reentrant.t3_view" false
       "alter table ddl_reentrant.t3 default character set utf8mb4 default collate utf8mb4_unicode_ci" true
       "alter schema ddl_reentrant default character set utf8mb4 default collate utf8mb4_unicode_ci" true
+      "alter table ddl_reentrant.t2 add column c1 int, add column c2 int, add column c3 int" false
+      "alter table ddl_reentrant.t2 drop column c1, drop column c2, drop column c3" false
       "alter table ddl_reentrant.t2 drop primary key" false
       "alter table ddl_reentrant.t2 add primary key pk(id)" false
       "drop table ddl_reentrant.t2" false
       "recover table ddl_reentrant.t2" false
       "drop database ddl_reentrant" false
-      "alter table ddl_reentrant.t1 add column c1 int, add column c2 int, add column c3 int" false
-      "alter table ddl_reentrant.t1 drop column c1, drop column c2, drop column c3" false
 )
 
 changefeedid=""
