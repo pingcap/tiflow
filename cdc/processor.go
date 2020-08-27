@@ -1022,7 +1022,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 					case p.output <- pEvent:
 					}
 				case <-checkDoneTicker.C:
-					if opDone {
+					if !opDone {
 						checkDone()
 					}
 				}
