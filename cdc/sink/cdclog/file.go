@@ -226,14 +226,14 @@ func (f *fileSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowC
 	return nil
 }
 
-func (f *fileSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
+func (f *fileSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	log.Debug("[FlushRowChangedEvents] enter", zap.Uint64("ts", resolvedTs))
 	// TODO update flush policy with size
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return 0, ctx.Err()
 	case <-time.After(defaultFlushRowChangedEventDuration):
-		return f.flushTableStreams(ctx)
+		return resolvedTs, f.flushTableStreams(ctx)
 	}
 }
 
