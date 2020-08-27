@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"
@@ -264,7 +264,7 @@ func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = util.SetLogLevel(level)
+	err = logutil.SetLogLevel(level)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, errors.Errorf("fail to change log level: %s", err))
 		return

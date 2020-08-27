@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
 	pd "github.com/pingcap/pd/v4/client"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/tests/util"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -102,7 +103,7 @@ func finishMark(sourceDB *sql.DB) error {
 	return nil
 }
 
-func addLock(ctx context.Context, cfg *util.Config) error {
+func addLock(ctx context.Context, cfg *logutil.Config) error {
 	http.DefaultClient.Timeout = 10 * time.Second
 
 	tableID, err := getTableID(cfg.SourceDBCfg[0].Host, "test", "t1")

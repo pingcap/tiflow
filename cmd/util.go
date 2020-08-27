@@ -36,8 +36,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/httputil"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -76,9 +76,9 @@ func getCredential() *security.Credential {
 }
 
 // initCmd initializes the logger, the default context and returns its cancel function.
-func initCmd(cmd *cobra.Command, logCfg *util.Config) context.CancelFunc {
+func initCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
 	// Init log.
-	err := util.InitLogger(logCfg)
+	err := logutil.InitLogger(logCfg)
 	if err != nil {
 		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
 		os.Exit(1)
