@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -106,12 +107,12 @@ func GetEtcdKeyJob(changeFeedID string) string {
 
 // CDCEtcdClient is a wrap of etcd client
 type CDCEtcdClient struct {
-	Client *clientv3.Client
+	Client *etcd.Client
 }
 
 //NewCDCEtcdClient returns a new CDCEtcdClient
 func NewCDCEtcdClient(cli *clientv3.Client) CDCEtcdClient {
-	return CDCEtcdClient{Client: cli}
+	return CDCEtcdClient{Client: etcd.Wrap(cli)}
 }
 
 // ClearAllCDCInfo delete all keys created by CDC
@@ -614,7 +615,7 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 			return errors.Trace(err)
 		}
 
-		resp, err := c.Client.KV.Txn(ctx).If(writeCmp).Then(
+		resp, err := c.Client.Txn(ctx).If(writeCmp).Then(
 			clientv3.OpPut(key, value),
 		).Commit()
 
@@ -740,7 +741,7 @@ func (c CDCEtcdClient) SetChangeFeedStatusTTL(
 // PutAllChangeFeedStatus puts ChangeFeedStatus of each changefeed into etcd
 func (c CDCEtcdClient) PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
 	var (
-		txn = c.Client.KV.Txn(ctx)
+		txn = c.Client.Txn(ctx)
 		ops = make([]clientv3.Op, 0, embed.DefaultMaxTxnOps)
 	)
 	for changefeedID, info := range infos {
@@ -755,7 +756,7 @@ func (c CDCEtcdClient) PutAllChangeFeedStatus(ctx context.Context, infos map[mod
 			if err != nil {
 				return errors.Trace(err)
 			}
-			txn = c.Client.KV.Txn(ctx)
+			txn = c.Client.Txn(ctx)
 			ops = ops[:0]
 		}
 	}
