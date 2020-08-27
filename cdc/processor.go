@@ -651,6 +651,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		if lastResolvedTs < changefeedStatus.ResolvedTs {
 			lastResolvedTs = changefeedStatus.ResolvedTs
 			atomic.StoreUint64(&p.globalResolvedTs, lastResolvedTs)
+			log.Debug("Update globalResolvedTs", zap.Uint64("globalResolvedTs", lastResolvedTs))
 			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
 			if lastResolvedTs > localResolvedTs {
 				log.Warn("globalResolvedTs too large", zap.Uint64("globalResolvedTs", lastResolvedTs),
