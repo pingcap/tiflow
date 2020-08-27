@@ -151,7 +151,9 @@ func (f *Filter) shouldDiscardByBuiltInDDLAllowlist(ddlType model.ActionType) bo
 		model.ActionRecoverTable,
 		model.ActionModifySchemaCharsetAndCollate,
 		model.ActionAddPrimaryKey,
-		model.ActionDropPrimaryKey:
+		model.ActionDropPrimaryKey,
+		model.ActionAddColumns,
+		model.ActionDropColumns:
 		return false
 	}
 	return true
