@@ -27,23 +27,23 @@ var _ = check.Suite(&maxwellbatchSuite{
 	rowCases: [][]*model.RowChangedEvent{{{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}}, {{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}, {
 		CommitTs: 2,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
 		CommitTs: 3,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "bb"}},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
 		CommitTs: 4,
-		Table:    &model.TableName{Schema: "a", Table: "c", Partition: 6},
-		Columns:  map[string]*model.Column{"col1": {Type: 1, Value: "cc"}},
+		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
 		CommitTs: 1,
@@ -97,7 +97,7 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 			c.Assert(tp, check.Equals, model.MqMessageTypeRow)
 			row, err := decoder.NextRowChangedEvent()
 			c.Assert(err, check.IsNil)
-			c.Assert(row, check.DeepEquals, cs[index])
+			c.Assert(row, check.DeepEquals, cs[index], check.Commentf("index %d", index))
 			index++
 		}
 	}
