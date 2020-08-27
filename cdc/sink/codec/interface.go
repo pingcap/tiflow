@@ -33,9 +33,13 @@ type EventBatchEncoder interface {
 	Build() (key []byte, value []byte)
 	// MixedBuild builds the batch and returns the bytes of mixed keys and values.
 	// This is used for cdc log, to merge key and value into one byte slice
-	MixedBuild() []byte
+	// when first create file, we should set withVersion to true, to tell us that
+	// the first 8 byte represents the encoder version
+	MixedBuild(withVersion bool) []byte
 	// Size returns the size of the batch(bytes)
 	Size() int
+	// Reset reset the kv buffer
+	Reset()
 }
 
 // EventBatchDecoder is an abstraction for events decoder
