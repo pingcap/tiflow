@@ -16,6 +16,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	liberrors "errors"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -50,6 +51,10 @@ var (
 	certPath      string
 	keyPath       string
 	allowedCertCN string
+)
+
+var (
+	errOwnerNotFound = liberrors.New("owner not found")
 )
 
 func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
@@ -130,7 +135,7 @@ func getOwnerCapture(ctx context.Context) (*capture, error) {
 			return c, nil
 		}
 	}
-	return nil, errors.NotFoundf("owner")
+	return nil, errors.Trace(errOwnerNotFound)
 }
 
 func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *security.Credential) error {
