@@ -153,15 +153,15 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	return nil
 }
 
-func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
+func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	if resolvedTs <= k.checkpointTs {
-		return nil
+		return k.checkpointTs, nil
 	}
 
 	for i := 0; i < int(k.partitionNum); i++ {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return 0, ctx.Err()
 		case k.partitionInput[i] <- struct {
 			row        *model.RowChangedEvent
 			resolvedTs uint64
@@ -174,7 +174,7 @@ flushLoop:
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return 0, ctx.Err()
 		case <-k.resolvedReceiver.C:
 			for i := 0; i < int(k.partitionNum); i++ {
 				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
@@ -186,11 +186,11 @@ flushLoop:
 	}
 	err := k.mqProducer.Flush(ctx)
 	if err != nil {
-		return errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
 	k.checkpointTs = resolvedTs
 	k.statistics.PrintStatus()
-	return nil
+	return k.checkpointTs, nil
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
