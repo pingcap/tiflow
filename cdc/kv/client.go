@@ -1339,12 +1339,12 @@ func (s *eventFeedSession) singleEventFeed(
 
 						revent := &model.RegionFeedEvent{
 							Val: &model.RawKVEntry{
-								OpType:  opType,
-								Key:     entry.Key,
-								Value:   entry.GetValue(),
+								OpType:   opType,
+								Key:      entry.Key,
+								Value:    entry.GetValue(),
 								OldValue: entry.GetOldValue(),
-								StartTs: entry.StartTs,
-								CRTs:    entry.CommitTs,
+								StartTs:  entry.StartTs,
+								CRTs:     entry.CommitTs,
 							},
 						}
 

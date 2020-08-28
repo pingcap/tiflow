@@ -39,7 +39,6 @@ require (
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.5.1
-	github.com/tikv/pd v1.1.0-beta.0.20200821075321-0d566cbde39f // indirect
 	github.com/uber-go/atomic v1.3.2
 	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200425165423-262c93980547
@@ -52,5 +51,3 @@ require (
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
-
-replace github.com/pingcap/pd/v4 => github.com/tikv/pd v1.1.0-beta.0.20200821075321-0d566cbde39f
