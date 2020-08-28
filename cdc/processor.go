@@ -125,7 +125,10 @@ type tableInfo struct {
 	sorter      *puller.Rectifier
 	workload    model.WorkloadInfo
 	cancel      context.CancelFunc
-	isDying     uint32
+	// isDying shows that the table is being removed.
+	// In the case the same table is added back before safe removal is finished,
+	// this flag is used to tell whether it's safe to kill the table.
+	isDying uint32
 }
 
 func (t *tableInfo) loadResolvedTs() uint64 {
