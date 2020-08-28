@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package codec
 
 import (
@@ -10,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
+// MaxwellEventBatchEncoder is a maxwell format encoder implementation
 type MaxwellEventBatchEncoder struct {
 	keyBuf   *bytes.Buffer
 	valueBuf *bytes.Buffer
@@ -28,14 +42,17 @@ type maxwellMessage struct {
 	Old      map[string]interface{} `json:"old,omitempty"`
 }
 
+// Encode encodes the message to bytes
 func (m *maxwellMessage) Encode() ([]byte, error) {
 	return json.Marshal(m)
 }
 
+// Decode decodes the message from bytes
 func (m *maxwellMessage) Decode(data []byte) error {
 	return json.Unmarshal(data, m)
 }
 
+// Encode encodes the message to bytes
 func (m *DdlMaxwellMessage) Encode() ([]byte, error) {
 	return json.Marshal(m)
 }
@@ -118,6 +135,7 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 	return EncoderNoOperation, nil
 }
 
+// Column represents a column in maxwell
 type Column struct {
 	Type string `json:"type"`
 	Name string `json:"name"`
@@ -127,6 +145,7 @@ type Column struct {
 	Charset      string `json:"charset,omitempty"`
 }
 
+// TableStruct represents a table structure includes some table info
 type TableStruct struct {
 	Database string    `json:"database"`
 	Charset  string    `json:"charset,omitempty"`
@@ -136,9 +155,9 @@ type TableStruct struct {
 	PrimaryKey []string `json:"primary-key"`
 }
 
-//maxwell alter table message
-//Old for table old schema
-//Def for table after ddl schema
+// DdlMaxwellMessage represents a DDL maxwell message
+// Old for table old schema
+// Def for table after ddl schema
 type DdlMaxwellMessage struct {
 	Type     string      `json:"type"`
 	Database string      `json:"database"`
@@ -146,7 +165,7 @@ type DdlMaxwellMessage struct {
 	Old      TableStruct `json:"old,omitempty"`
 	Def      TableStruct `json:"def,omitempty"`
 	Ts       uint64      `json:"ts"`
-	Sql      string      `json:"sql"`
+	SQL      string      `json:"sql"`
 	Position string      `json:"position,omitempty"`
 }
 
@@ -164,7 +183,7 @@ func ddlEventtoMaxwellMessage(e *model.DDLEvent) (*mqMessageKey, *DdlMaxwellMess
 		Table:    e.TableInfo.Table,
 		Old:      TableStruct{},
 		Def:      TableStruct{},
-		Sql:      e.Query,
+		SQL:      e.Query,
 	}
 
 	value.Type = ddlToMaxwellType(e.Type)
@@ -230,31 +249,14 @@ func (d *MaxwellEventBatchEncoder) Build() (key []byte, value []byte) {
 }
 
 // MixedBuild implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) MixedBuild() []byte {
-	keyBytes := d.keyBuf.Bytes()
-	valueBytes := d.valueBuf.Bytes()
-	mixedBytes := make([]byte, len(keyBytes)+len(valueBytes))
-	copy(mixedBytes[:8], keyBytes[:8])
-	index := uint64(8)    // skip version
-	keyIndex := uint64(8) // skip version
-	valueIndex := uint64(0)
-	for {
-		if keyIndex >= uint64(len(keyBytes)) {
-			break
-		}
-		keyLen := binary.BigEndian.Uint64(keyBytes[keyIndex : keyIndex+8])
-		offset := keyLen + 8
-		copy(mixedBytes[index:index+offset], keyBytes[keyIndex:keyIndex+offset])
-		keyIndex += offset
-		index += offset
+func (d *MaxwellEventBatchEncoder) MixedBuild(withVersion bool) []byte {
+	return nil
+}
 
-		valueLen := binary.BigEndian.Uint64(valueBytes[valueIndex : valueIndex+8])
-		offset = valueLen + 8
-		copy(mixedBytes[index:index+offset], valueBytes[valueIndex:valueIndex+offset])
-		valueIndex += offset
-		index += offset
-	}
-	return mixedBytes
+// Reset implements the EventBatchEncoder interface
+func (d *MaxwellEventBatchEncoder) Reset() {
+	d.keyBuf.Reset()
+	d.valueBuf.Reset()
 }
 
 // Size implements the EventBatchEncoder interface

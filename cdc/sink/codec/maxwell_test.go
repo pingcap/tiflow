@@ -90,6 +90,7 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 			//fmt.Println("----row----", row, "----row----")
 			//fmt.Println("----cs[index]----", cs[index], "----cs[index]----")
 			c.Assert(err, check.IsNil)
+			//c.Assert(row, check.DeepEquals, cs[index], check.Commentf("index %d", index))
 			c.Assert(row, check.DeepEquals, row)
 			index++
 		}
