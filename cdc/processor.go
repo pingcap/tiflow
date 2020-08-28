@@ -1002,7 +1002,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				}
 			}
 
-
 			for {
 				select {
 				case <-ctx.Done():
