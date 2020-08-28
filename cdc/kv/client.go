@@ -1342,6 +1342,7 @@ func (s *eventFeedSession) singleEventFeed(
 								OpType:  opType,
 								Key:     entry.Key,
 								Value:   entry.GetValue(),
+								OldValue: entry.GetOldValue(),
 								StartTs: entry.StartTs,
 								CRTs:    entry.CommitTs,
 							},

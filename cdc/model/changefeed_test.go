@@ -207,3 +207,12 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 	c.Assert(needSave, check.IsFalse)
 	c.Assert(canInit, check.IsFalse)
 }
+
+func (s *changefeedSuite) TestChangefeedInfoStringer(c *check.C) {
+	info := &ChangeFeedInfo{
+		SinkURI: "blackhole://",
+		StartTs: 418881574869139457,
+	}
+	str := info.String()
+	c.Check(str, check.Matches, ".*sink-uri\":\"\\*\\*\\*\".*")
+}

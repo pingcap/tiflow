@@ -480,11 +480,12 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 	}
 	//p.position.Count = p.sink.Count()
 	err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
-	if err != nil {
+	if err == nil {
+		log.Debug("flushed task position", zap.Stringer("position", p.position))
+	} else if errors.Cause(err) != context.Canceled {
 		log.Error("failed to flush task position", zap.Error(err))
 		return errors.Trace(err)
 	}
-	log.Debug("flushed task position", zap.Stringer("position", p.position))
 	return nil
 }
 
@@ -707,12 +708,14 @@ func (p *processor) sinkDriver(ctx context.Context) error {
 			}
 			start := time.Now()
 
-			err := p.sink.FlushRowChangedEvents(ctx, minTs)
+			checkpointTs, err := p.sink.FlushRowChangedEvents(ctx, minTs)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			atomic.StoreUint64(&p.checkpointTs, minTs)
-			p.localCheckpointTsNotifier.Notify()
+			if checkpointTs != 0 {
+				atomic.StoreUint64(&p.checkpointTs, checkpointTs)
+				p.localCheckpointTsNotifier.Notify()
+			}
 
 			dur := time.Since(start)
 			metricFlushDuration.Observe(dur.Seconds())

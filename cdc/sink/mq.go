@@ -26,8 +26,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
-	"github.com/pingcap/ticdc/cdc/sink/mqProducer"
-	"github.com/pingcap/ticdc/cdc/sink/pulsar"
+	"github.com/pingcap/ticdc/cdc/sink/producer"
+	"github.com/pingcap/ticdc/cdc/sink/producer/kafka"
+	"github.com/pingcap/ticdc/cdc/sink/producer/pulsar"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
@@ -37,7 +38,7 @@ import (
 )
 
 type mqSink struct {
-	mqProducer mqProducer.Producer
+	mqProducer producer.Producer
 	dispatcher dispatcher.Dispatcher
 	newEncoder func() codec.EventBatchEncoder
 	filter     *filter.Filter
@@ -57,7 +58,7 @@ type mqSink struct {
 }
 
 func newMqSink(
-	ctx context.Context, credential *security.Credential, mqProducer mqProducer.Producer,
+	ctx context.Context, credential *security.Credential, mqProducer producer.Producer,
 	filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error,
 ) (*mqSink, error) {
 	partitionNum := mqProducer.GetPartitionNum()
@@ -85,14 +86,19 @@ func newMqSink(
 		if !ok {
 			return nil, errors.New(`Avro protocol requires parameter "registry"`)
 		}
-		schemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-value")
+		keySchemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-key")
 		if err != nil {
-			return nil, errors.Annotate(err, "Could not create Avro schema manager")
+			return nil, errors.Annotate(err, "Could not create Avro schema manager for message keys")
+		}
+		valueSchemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-value")
+		if err != nil {
+			return nil, errors.Annotate(err, "Could not create Avro schema manager for message values")
 		}
 		newEncoder1 := newEncoder
 		newEncoder = func() codec.EventBatchEncoder {
 			avroEncoder := newEncoder1().(*codec.AvroEventBatchEncoder)
-			avroEncoder.SetValueSchemaManager(schemaManager)
+			avroEncoder.SetKeySchemaManager(keySchemaManager)
+			avroEncoder.SetValueSchemaManager(valueSchemaManager)
 			return avroEncoder
 		}
 	}
@@ -147,15 +153,15 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	return nil
 }
 
-func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
+func (k *mqSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	if resolvedTs <= k.checkpointTs {
-		return nil
+		return k.checkpointTs, nil
 	}
 
 	for i := 0; i < int(k.partitionNum); i++ {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return 0, ctx.Err()
 		case k.partitionInput[i] <- struct {
 			row        *model.RowChangedEvent
 			resolvedTs uint64
@@ -168,7 +174,7 @@ flushLoop:
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return 0, ctx.Err()
 		case <-k.resolvedReceiver.C:
 			for i := 0; i < int(k.partitionNum); i++ {
 				if resolvedTs > atomic.LoadUint64(&k.partitionResolvedTs[i]) {
@@ -180,11 +186,11 @@ flushLoop:
 	}
 	err := k.mqProducer.Flush(ctx)
 	if err != nil {
-		return errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
 	k.checkpointTs = resolvedTs
 	k.statistics.PrintStatus()
-	return nil
+	return k.checkpointTs, nil
 }
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -352,11 +358,11 @@ func (k *mqSink) writeToProducer(ctx context.Context, key []byte, value []byte, 
 }
 
 func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Filter, replicaConfig *config.ReplicaConfig, opts map[string]string, errCh chan error) (*mqSink, error) {
-	config := mqProducer.NewKafkaConfig()
+	config := kafka.NewKafkaConfig()
 
 	scheme := strings.ToLower(sinkURI.Scheme)
-	if scheme != "kafka" {
-		return nil, errors.New("can not create MQ sink with unsupported scheme")
+	if scheme != "kafka" && scheme != "kafka+ssl" {
+		return nil, errors.Errorf("can't create MQ sink with unsupported scheme: %s", scheme)
 	}
 	s := sinkURI.Query().Get("partition-num")
 	if s != "" {
@@ -420,7 +426,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
 		return r == '/'
 	})
-	producer, err := mqProducer.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
+	producer, err := kafka.NewKafkaSaramaProducer(ctx, sinkURI.Host, topic, config, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
