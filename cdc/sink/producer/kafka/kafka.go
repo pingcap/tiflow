@@ -198,7 +198,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 	if err != nil {
 		return nil, err
 	}
-	if config.PartitionNum < 0 {
+	if config.PartitionNum <= 0 {
 		return nil, errors.NotValidf("partition num %d", config.PartitionNum)
 	}
 	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)

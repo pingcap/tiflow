@@ -76,6 +76,17 @@ function run() {
         exit 1
     fi
 
+    # Update changefeed failed because changefeed is running
+cat - >"$WORK_DIR/changefeed.toml" <<EOF
+case-sensitive = false
+[mounter]
+worker-num = 4
+EOF
+    update_result=$(cdc cli changefeed update --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid)
+    if [[ ! $update_result == *"can only update changefeed config when it is stopped"* ]]; then
+        echo "update changefeed config should fail when changefeed is running, got $update_result"
+    fi
+
     # Pause changefeed
     run_cdc_cli changefeed --changefeed-id $uuid pause && sleep 3
     jobtype=$(run_cdc_cli changefeed --changefeed-id $uuid query 2>&1 | grep 'admin-job-type' | grep -oE '[0-9]' | head -1)
@@ -86,11 +97,6 @@ function run() {
     check_changefeed_state $uuid "stopped"
 
     # Update changefeed
-cat - >"$WORK_DIR/changefeed.toml" <<EOF
-case-sensitive = false
-[mounter]
-worker-num = 4
-EOF
     run_cdc_cli changefeed update --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
     changefeed_info=$(run_cdc_cli changefeed query --changefeed-id $uuid 2>&1)
     if [[ ! $changefeed_info == *"\"case-sensitive\": false"* ]]; then

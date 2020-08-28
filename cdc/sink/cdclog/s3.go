@@ -50,11 +50,17 @@ type tableBuffer struct {
 	sendSize   *atomic.Int64
 	sendEvents *atomic.Int64
 
+	encoder codec.EventBatchEncoder
+
 	uploadParts struct {
 		uploader  storage.Uploader
 		uploadNum int
 		byteSize  int64
 	}
+}
+
+func (tb *tableBuffer) IsEmpty() bool {
+	return tb.sendEvents.Load() == 0 && tb.uploadParts.uploadNum == 0
 }
 
 func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
@@ -65,9 +71,15 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 		return nil
 	}
 
+	firstCreated := false
+	if tb.encoder == nil {
+		// create encoder for each file
+		tb.encoder = s.encoder()
+		firstCreated = true
+	}
+
 	var newFileName string
 	flushedSize := int64(0)
-	encoder := s.encoder()
 	for event := int64(0); event < sendEvents; event++ {
 		row := <-tb.dataCh
 		flushedSize += row.ApproximateSize
@@ -75,12 +87,19 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 			// if last event, we record ts as new rotate file name
 			newFileName = makeTableFileObject(row.Table.TableID, row.CommitTs)
 		}
-		_, err := encoder.AppendRowChangedEvent(row)
+		_, err := tb.encoder.AppendRowChangedEvent(row)
 		if err != nil {
 			return err
 		}
 	}
-	rowDatas := encoder.MixedBuild()
+	rowDatas := tb.encoder.MixedBuild(firstCreated)
+	// reset encoder buf for next round append
+	defer func() {
+		if tb.encoder != nil {
+			tb.encoder.Reset()
+		}
+	}()
+
 	log.Debug("[FlushRowChangedEvents[Debug]] flush table buffer",
 		zap.Int64("table", tb.tableID),
 		zap.Int64("event size", sendEvents),
@@ -122,6 +141,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 				hashPart.byteSize = 0
 				hashPart.uploadNum = 0
 				hashPart.uploader = nil
+				tb.encoder = nil
 			}
 		} else {
 			// generate normal file because S3 multi-upload need every part at least 5Mb.
@@ -130,6 +150,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 			if err != nil {
 				return err
 			}
+			tb.encoder = nil
 		}
 	}
 
@@ -165,6 +186,8 @@ type s3Sink struct {
 	logMeta *logMeta
 	encoder func() codec.EventBatchEncoder
 
+	// hold encoder for ddl event log
+	ddlEncoder   codec.EventBatchEncoder
 	hashMap      sync.Map
 	tableBuffers []*tableBuffer
 	notifyChan   chan struct{}
@@ -222,6 +245,9 @@ func (s *s3Sink) flushTableBuffers(ctx context.Context) error {
 	// TODO use a fixed worker pool
 	eg, ectx := errgroup.WithContext(ctx)
 	for _, tb := range s.tableBuffers {
+		if tb.IsEmpty() {
+			continue
+		}
 		tbReplica := tb
 		eg.Go(func() error {
 			log.Info("[FlushRowChangedEvents] flush specify row changed event",
@@ -233,21 +259,21 @@ func (s *s3Sink) flushTableBuffers(ctx context.Context) error {
 	return eg.Wait()
 }
 
-func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
+func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	// we should flush all events before resolvedTs, there are two kind of flush policy
 	// 1. flush row events to a s3 chunk: if the event size is not enough,
 	//    TODO: when cdc crashed, we should repair these chunks to a complete file
 	// 2. flush row events to a complete s3 file: if the event size is enough
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return 0, ctx.Err()
 	case <-s.notifyChan:
-		return s.flushTableBuffers(ctx)
+		return resolvedTs, s.flushTableBuffers(ctx)
 
 	case <-time.After(defaultFlushRowChangedEventDuration):
 		// cannot accumulate enough row events in 10 second
 		// flush all tables' row events to s3
-		return s.flushTableBuffers(ctx)
+		return resolvedTs, s.flushTableBuffers(ctx)
 	}
 }
 
@@ -277,12 +303,18 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			return err
 		}
 	}
-	encoder := s.encoder()
-	_, err := encoder.AppendDDLEvent(ddl)
+	firstCreated := false
+	if s.ddlEncoder == nil {
+		s.ddlEncoder = s.encoder()
+		firstCreated = true
+	}
+	_, err := s.ddlEncoder.AppendDDLEvent(ddl)
 	if err != nil {
 		return err
 	}
-	data := encoder.MixedBuild()
+	data := s.ddlEncoder.MixedBuild(firstCreated)
+	// reset encoder buf for next round append
+	defer s.ddlEncoder.Reset()
 
 	var (
 		name     string
@@ -308,11 +340,15 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		name = makeDDLFileObject(ddl.CommitTs)
 		log.Debug("[EmitDDLEvent] create first or rotate ddl log",
 			zap.String("name", name), zap.Any("ddl", ddl))
+		if size > maxDDLFlushSize {
+			// reset ddl encoder for new file
+			s.ddlEncoder = nil
+		}
 	} else {
 		// hack way: append data to old file
 		log.Debug("[EmitDDLEvent] append ddl to origin log",
 			zap.String("name", name), zap.Any("ddl", ddl))
-		data, err := s.storage.Read(ctx, name)
+		fileData, err = s.storage.Read(ctx, name)
 		if err != nil {
 			return err
 		}
