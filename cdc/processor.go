@@ -968,6 +968,8 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				p.errCh <- err
 			}
 		}()
+
+		var lastResolvedTs uint64
 		go func() {
 			opDone := false
 			resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
@@ -975,7 +977,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			checkDone := func() {
 				localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
 				globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-				if !opDone && localResolvedTs >= globalResolvedTs {
+				if !opDone && lastResolvedTs >= localResolvedTs && localResolvedTs >= globalResolvedTs {
 					log.Debug("localResolvedTs >= globalResolvedTs, sending operation done signal",
 						zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Int64("tableID", tableID))
@@ -993,13 +995,14 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				}
 				if !opDone {
 					log.Debug("addTable not done",
+						zap.Uint64("tableResolvedTs", lastResolvedTs),
 						zap.Uint64("localResolvedTs", localResolvedTs),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Int64("tableID", tableID))
 				}
 			}
 
-			var lastResolvedTs uint64
+
 			for {
 				select {
 				case <-ctx.Done():
