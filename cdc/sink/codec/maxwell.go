@@ -20,10 +20,10 @@ type maxwellMessage struct {
 	Table    string                 `json:"table"`
 	Type     string                 `json:"type"`
 	Ts       uint64                 `json:"ts"`
-	Xid      int                    `json:"xid"`
-	Xoffset  int                    `json:"xoffset"`
-	Position string                 `json:"position"`
-	Gtid     string                 `json:"gtid"`
+	Xid      int                    `json:"xid,omitempty"`
+	Xoffset  int                    `json:"xoffset,omitempty"`
+	Position string                 `json:"position,omitempty"`
+	Gtid     string                 `json:"gtid,omitempty"`
 	Data     map[string]interface{} `json:"data"`
 	Old      map[string]interface{} `json:"old,omitempty"`
 }
@@ -38,6 +38,10 @@ func (m *maxwellMessage) Decode(data []byte) error {
 
 func (m *DdlMaxwellMessage) Encode() ([]byte, error) {
 	return json.Marshal(m)
+}
+
+func (m *DdlMaxwellMessage) Decode(data []byte) error {
+	return json.Unmarshal(data, m)
 }
 
 // AppendResolvedEvent implements the EventBatchEncoder interface
@@ -63,10 +67,6 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 		Database: e.Table.Schema,
 		Table:    e.Table.Table,
 		Type:     "update",
-		Xid:      1,
-		Xoffset:  1,
-		Position: "",
-		Gtid:     "",
 		Data:     make(map[string]interface{}),
 		Old:      make(map[string]interface{}),
 	}
@@ -310,9 +310,10 @@ func (b *MaxwellEventBatchDecoder) HasNext() (model.MqMessageType, bool, error) 
 	return b.nextKey.Type, true, nil
 }
 
+// decode
 func maxwellMessageToRowEvent(key *mqMessageKey, value *maxwellMessage) *model.RowChangedEvent {
 	e := new(model.RowChangedEvent)
-	e.CommitTs = key.Ts
+	e.CommitTs = value.Ts
 	e.Table = &model.TableName{
 		Schema: key.Schema,
 		Table:  key.Table,
@@ -321,16 +322,17 @@ func maxwellMessageToRowEvent(key *mqMessageKey, value *maxwellMessage) *model.R
 		e.Table.TableID = *key.Partition
 		e.Table.IsPartition = true
 	}
+	if value.Old == nil {
+		for k, v := range value.Data {
+			for _, n := range e.Columns {
+				n.Name = k
+				n.Value = v
+				n.Type = 3
 
-	if value.Type == "delete" {
-		for _, v := range e.Columns {
-			v.Value = value.Data[v.Name]
-		}
-	} else {
-		for _, v := range e.Columns {
-			v.Value = value.Data[v.Name]
+			}
 		}
 	}
+
 	return e
 }
 
@@ -359,6 +361,7 @@ func (b *MaxwellEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent
 	if err := rowMsg.Decode(value); err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	rowEvent := maxwellMessageToRowEvent(b.nextKey, rowMsg)
 	b.nextKey = nil
 	return rowEvent, nil
