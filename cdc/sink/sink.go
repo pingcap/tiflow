@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/cdclog"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 )
@@ -44,7 +45,7 @@ type Sink interface {
 
 	// FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
 	// TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
-	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error
+	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error)
 
 	// EmitCheckpointTs sends CheckpointTs to Sink
 	// TiCDC guarantees that all Events **in the cluster** which of commitTs less than or equal `checkpointTs` are sent to downstream successfully.
@@ -66,10 +67,14 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 		return newBlackHoleSink(ctx, opts), nil
 	case "mysql", "tidb", "mysql+ssl", "tidb+ssl":
 		return newMySQLSink(ctx, changefeedID, sinkURI, filter, opts)
-	case "kafka":
+	case "kafka", "kafka+ssl":
 		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh)
 	case "pulsar", "pulsar+ssl":
 		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
+	case "local":
+		return cdclog.NewLocalFileSink(sinkURI)
+	case "s3":
+		return cdclog.NewS3Sink(sinkURI)
 	default:
 		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}

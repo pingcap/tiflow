@@ -67,7 +67,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 					CfID: changefeedID,
 					Type: model.AdminStop,
 				}
-				return applyAdminChangefeed(ctx, job)
+				return applyAdminChangefeed(ctx, job, getCredential())
 			},
 		},
 		{
@@ -79,7 +79,7 @@ func newAdminChangefeedCommand() []*cobra.Command {
 					CfID: changefeedID,
 					Type: model.AdminResume,
 				}
-				return applyAdminChangefeed(ctx, job)
+				return applyAdminChangefeed(ctx, job, getCredential())
 			},
 		},
 		{
@@ -90,8 +90,11 @@ func newAdminChangefeedCommand() []*cobra.Command {
 				job := model.AdminJob{
 					CfID: changefeedID,
 					Type: model.AdminRemove,
+					Opts: &model.AdminJobOption{
+						ForceRemove: optForceRemove,
+					},
 				}
-				return applyAdminChangefeed(ctx, job)
+				return applyAdminChangefeed(ctx, job, getCredential())
 			},
 		},
 	}
@@ -99,6 +102,9 @@ func newAdminChangefeedCommand() []*cobra.Command {
 	for _, cmd := range cmds {
 		cmd.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 		_ = cmd.MarkPersistentFlagRequired("changefeed-id")
+		if cmd.Use == "remove" {
+			cmd.PersistentFlags().BoolVarP(&optForceRemove, "force", "f", false, "remove all information of the changefeed")
+		}
 	}
 	return cmds
 }
@@ -113,10 +119,23 @@ func newListChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cfs := make([]*changefeedCommonInfo, 0, len(raw))
+			changefeedIDs := make(map[string]struct{}, len(raw))
 			for id := range raw {
+				changefeedIDs[id] = struct{}{}
+			}
+			if changefeedListAll {
+				statuses, err := cdcEtcdCli.GetAllChangeFeedStatus(ctx)
+				if err != nil {
+					return err
+				}
+				for cid := range statuses {
+					changefeedIDs[cid] = struct{}{}
+				}
+			}
+			cfs := make([]*changefeedCommonInfo, 0, len(changefeedIDs))
+			for id := range changefeedIDs {
 				cfci := &changefeedCommonInfo{ID: id}
-				resp, err := applyOwnerChangefeedQuery(ctx, id)
+				resp, err := applyOwnerChangefeedQuery(ctx, id, getCredential())
 				if err != nil {
 					// if no capture is available, the query will fail, just add a warning here
 					log.Warn("query changefeed info failed", zap.String("error", err.Error()))
@@ -133,6 +152,7 @@ func newListChangefeedCommand() *cobra.Command {
 			return jsonPrint(cmd, cfs)
 		},
 	}
+	command.PersistentFlags().BoolVarP(&changefeedListAll, "all", "a", false, "List all replication tasks(including removed and finished)")
 	return command
 }
 
@@ -144,7 +164,7 @@ func newQueryChangefeedCommand() *cobra.Command {
 			ctx := defaultContext
 
 			if simplified {
-				resp, err := applyOwnerChangefeedQuery(ctx, changefeedID)
+				resp, err := applyOwnerChangefeedQuery(ctx, changefeedID, getCredential())
 				if err != nil {
 					return err
 				}
@@ -227,6 +247,17 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			FilterReplicaID: filter,
 			SyncDDL:         cyclicSyncDDL,
 			// TODO(neil) enable ID bucket.
+		}
+	}
+
+	for _, rules := range cfg.Sink.DispatchRules {
+		switch strings.ToLower(rules.Dispatcher) {
+		case "rowid", "index-value":
+			if cfg.EnableOldValue {
+				cmd.Printf("[WARN] This index-value distribution mode "+
+					"does not guarantee row-level orderliness when "+
+					"switching on the old value, so please use caution! dispatch-rules: %#v", rules)
+			}
 		}
 	}
 	info := &model.ChangeFeedInfo{
@@ -370,6 +401,20 @@ func newUpdateChangefeedCommand() *cobra.Command {
 			// Fix some fields that can't be updated.
 			info.CreateTime = old.CreateTime
 			info.AdminJobType = old.AdminJobType
+			info.StartTs = old.StartTs
+			info.ErrorHis = old.ErrorHis
+			info.Error = old.Error
+
+			resp, err := applyOwnerChangefeedQuery(ctx, changefeedID, getCredential())
+			// if no cdc owner exists, allow user to update changefeed config
+			if err != nil && errors.Cause(err) != errOwnerNotFound {
+				return err
+			}
+			// Note that the correctness of the logic here depends on the return value of `/capture/owner/changefeed/query` interface.
+			// TODO: Using error codes instead of string containing judgments
+			if err == nil && !strings.Contains(resp, `"state": "stopped"`) {
+				return errors.Errorf("can only update changefeed config when it is stopped\nstatus: %s", resp)
+			}
 
 			changelog, err := diff.Diff(old, info)
 			if err != nil {

@@ -22,7 +22,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -186,13 +185,6 @@ func decodeMetaKey(ek []byte) (meta, error) {
 // decodeRow decodes a byte slice into datums with a existing row map.
 func decodeRow(b []byte, recordID int64, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	if len(b) == 0 {
-		if tableInfo.PKIsHandle {
-			id, pkValue, err := fetchHandleValue(tableInfo, recordID)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			return map[int64]types.Datum{id: *pkValue}, nil
-		}
 		return map[int64]types.Datum{}, nil
 	}
 	if rowcodec.IsNewFormat(b) {
@@ -261,8 +253,8 @@ func decodeRowV1(b []byte, recordID int64, tableInfo *model.TableInfo, tz *time.
 //      https://github.com/pingcap/tidb/blob/master/docs/design/2018-07-19-row-format.md
 func decodeRowV2(data []byte, recordID int64, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	handleColID, reqCols := tableInfo.GetRowColInfos()
-	decoder := rowcodec.NewDatumMapDecoder(reqCols, []int64{handleColID}, tz)
-	return decoder.DecodeToDatumMap(data, kv.IntHandle(recordID), nil)
+	decoder := rowcodec.NewDatumMapDecoder(reqCols, handleColID, tz)
+	return decoder.DecodeToDatumMap(data, recordID, nil)
 }
 
 // unflatten converts a raw datum to a column datum.

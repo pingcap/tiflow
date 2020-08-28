@@ -12,9 +12,12 @@ services:
       - ./docker/logs:/logs
       - ./docker/config:/config
     command:
-      - /bin/bash
-      - -c
-      - /usr/bin/tail -f /dev/null
+      - /usr/bin/socat
+      - -v
+      - tcp-l:1234,fork
+      - exec:'/bin/cat'
+    ports:
+      - "1234:1234"
     depends_on:
       - "upstream-pd"
       - "schema-registry"
@@ -31,7 +34,7 @@ services:
       context: .
       dockerfile: ./Dockerfile
     volumes:
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     entrypoint: "/cdc server"
     command:
@@ -51,7 +54,7 @@ services:
       context: .
       dockerfile: ./Dockerfile
     volumes:
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     entrypoint: "/cdc server"
     command:
@@ -71,7 +74,7 @@ services:
       context: .
       dockerfile: ./Dockerfile
     volumes:
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     entrypoint: "/cdc server"
     command:
@@ -91,7 +94,7 @@ services:
       - "2379:2379"
     volumes:
       - ./docker/config/pd.toml:/pd.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --name=upstream-pd
@@ -109,7 +112,7 @@ services:
     image: pingcap/tikv:nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160
@@ -143,7 +146,7 @@ services:
     image: pingcap/tikv:nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160
@@ -182,7 +185,7 @@ services:
       - "3379:2379"
     volumes:
       - ./docker/config/pd.toml:/pd.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --name=downstream-pd
@@ -200,7 +203,7 @@ services:
     image: pingcap/tikv:nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160
@@ -217,7 +220,7 @@ services:
     image: pingcap/tikv:nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160
@@ -234,7 +237,7 @@ services:
     image: pingcap/tikv:nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160
@@ -333,7 +336,8 @@ services:
       CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
       CONNECT_OFFSET_STORAGE_TOPIC: docker-connect-offsets
       CONNECT_STATUS_STORAGE_TOPIC: docker-connect-status
-      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_KEY_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
       CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
       CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
@@ -358,3 +362,13 @@ services:
         # Now launch Kafka Connect
         sleep infinity &
         /etc/confluent/docker/run
+
+  kafka-connect-healthcheck:
+    image: devshawn/kafka-connect-healthcheck:0.1.0
+    container_name: kafka-connect-healthcheck
+    depends_on:
+      - kafka-connect-01
+    ports:
+      - 18083:18083
+    environment:
+      HEALTHCHECK_CONNECT_URL: 'http://kafka-connect-01:8083'
