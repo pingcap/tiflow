@@ -60,7 +60,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1597641819763,
+  "iteration": 1598595527328,
   "links": [],
   "panels": [
     {
@@ -2705,7 +2705,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 71
+            "y": 3
           },
           "id": 60,
           "legend": {
@@ -2798,7 +2798,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 71
+            "y": 3
           },
           "id": 62,
           "legend": {
@@ -2896,7 +2896,7 @@
             "h": 8,
             "w": 7,
             "x": 0,
-            "y": 79
+            "y": 11
           },
           "hideTimeOverride": true,
           "id": 64,
@@ -2978,7 +2978,7 @@
             "h": 8,
             "w": 5,
             "x": 7,
-            "y": 79
+            "y": 11
           },
           "hideTimeOverride": true,
           "id": 66,
@@ -3036,7 +3036,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 79
+            "y": 11
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -3105,7 +3105,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 87
+            "y": 19
           },
           "id": 70,
           "legend": {
@@ -3200,7 +3200,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 87
+            "y": 19
           },
           "id": 72,
           "legend": {
@@ -3298,7 +3298,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 95
+            "y": 27
           },
           "id": 74,
           "legend": {
@@ -3415,7 +3415,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 95
+            "y": 27
           },
           "id": 76,
           "legend": {
@@ -3514,7 +3514,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 103
+            "y": 35
           },
           "id": 78,
           "legend": {
@@ -3623,7 +3623,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 2
+            "y": 4
           },
           "hiddenSeries": false,
           "id": 15,
@@ -3716,7 +3716,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 2
+            "y": 4
           },
           "hiddenSeries": false,
           "id": 28,
@@ -3811,7 +3811,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 9
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 17,
@@ -3903,7 +3903,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 9
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 29,
@@ -3998,7 +3998,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 16
+            "y": 18
           },
           "hiddenSeries": false,
           "id": 31,
@@ -4027,17 +4027,29 @@
           "pointradius": 2,
           "points": false,
           "renderer": "flot",
-          "seriesOverrides": [],
+          "seriesOverrides": [
+            {
+              "alias": "/.*batch-resolved/",
+              "yaxis": 2
+            }
+          ],
           "spaceLength": 10,
           "stack": false,
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(rate(ticdc_kvclient_send_event_count{changefeed=~\"$changefeed\"}[1m])) by (instance, type)",
+              "expr": "sum(rate(ticdc_kvclient_send_event_count{changefeed=~\"$changefeed\"}[1m])) by (capture, type)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{instance}}-{{type}}",
+              "legendFormat": "{{capture}}-{{type}}",
               "refId": "A"
+            },
+            {
+              "expr": "sum(rate(ticdc_kvclient_batch_resolved_event_size_count{changefeed=~\"$changefeed\",capture=~\"$capture\"}[1m])) by (capture, table)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "{{capture}}-batch-resolved",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -4082,99 +4094,80 @@
           }
         },
         {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
+          "cards": {
+            "cardPadding": 0,
+            "cardRound": 0
+          },
+          "color": {
+            "cardColor": "#FF9830",
+            "colorScale": "linear",
+            "colorScheme": "interpolateSpectral",
+            "exponent": 0.5,
+            "min": 0,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Puller event channel size",
-          "fill": 1,
-          "fillGradient": 0,
+          "description": "",
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 16
+            "y": 18
           },
-          "hiddenSeries": false,
-          "id": 40,
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 97,
           "legend": {
             "alignAsTable": true,
             "avg": false,
             "current": true,
-            "hideEmpty": false,
             "max": true,
             "min": false,
             "rightSide": true,
             "show": true,
+            "sort": "current",
+            "sortDesc": true,
             "total": false,
             "values": true
           },
-          "lines": true,
-          "linewidth": 1,
           "links": [],
-          "nullPointMode": "null",
-          "options": {
-            "dataLinks": []
-          },
-          "paceLength": 10,
-          "percentage": false,
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
+          "reverseYBuckets": false,
           "targets": [
             {
-              "expr": "sum(ticdc_puller_event_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture, table)",
-              "format": "time_series",
-              "intervalFactor": 1,
-              "legendFormat": "{{capture}}",
+              "expr": "sum(rate(ticdc_kvclient_batch_resolved_event_size_bucket{instance=~\"$tikv_instance\"}[1m])) by (le)",
+              "format": "heatmap",
+              "instant": false,
+              "intervalFactor": 2,
+              "legendFormat": "{{le}}",
               "refId": "A"
             }
           ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "puller event chan size",
+          "title": "batch resolved count",
           "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
             "show": true,
-            "values": []
+            "showHistogram": true
           },
-          "yaxes": [
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
+          "tooltipDecimals": 1,
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": 1,
+            "format": "none",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "upper",
+          "yBucketNumber": null,
+          "yBucketSize": null
         },
         {
           "aliasColors": {},
@@ -4189,7 +4182,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 23
+            "y": 25
           },
           "hiddenSeries": false,
           "id": 43,
@@ -4277,17 +4270,17 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Puller in memory buffer size",
+          "description": "Puller event channel size",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 23
+            "y": 25
           },
           "hiddenSeries": false,
-          "id": 50,
+          "id": 40,
           "legend": {
             "alignAsTable": true,
             "avg": false,
@@ -4318,10 +4311,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_puller_mem_buffer_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture, table)",
+              "expr": "sum(ticdc_puller_event_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture, table)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}} - {{table}}",
+              "legendFormat": "{{capture}}",
               "refId": "A"
             }
           ],
@@ -4329,7 +4322,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "puller mem buffer size",
+          "title": "puller event chan size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -4379,7 +4372,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 30
+            "y": 32
           },
           "hiddenSeries": false,
           "id": 52,
@@ -4467,17 +4460,17 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Puller entry sorter unsoreted items size",
+          "description": "Puller in memory buffer size",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 30
+            "y": 32
           },
           "hiddenSeries": false,
-          "id": 51,
+          "id": 50,
           "legend": {
             "alignAsTable": true,
             "avg": false,
@@ -4508,10 +4501,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_puller_entry_sorter_unsorted_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture, table)",
+              "expr": "sum(ticdc_puller_mem_buffer_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture, table)",
               "format": "time_series",
               "intervalFactor": 1,
-              "legendFormat": "{{capture}}-{{table}}",
+              "legendFormat": "{{capture}} - {{table}}",
               "refId": "A"
             }
           ],
@@ -4519,7 +4512,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "entry sorter unsorted size",
+          "title": "puller mem buffer size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -4569,7 +4562,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 37
+            "y": 39
           },
           "hiddenSeries": false,
           "id": 42,
@@ -4657,17 +4650,17 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Puller entry sorter output channel size",
+          "description": "Puller entry sorter unsoreted items size",
           "fill": 1,
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 37
+            "y": 39
           },
           "hiddenSeries": false,
-          "id": 41,
+          "id": 51,
           "legend": {
             "alignAsTable": true,
             "avg": false,
@@ -4698,7 +4691,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(ticdc_puller_entry_sorter_output_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture, table)",
+              "expr": "sum(ticdc_puller_entry_sorter_unsorted_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture, table)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{capture}}-{{table}}",
@@ -4709,7 +4702,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "entry sorter output chan size",
+          "title": "entry sorter unsorted size",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -4759,7 +4752,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 44
+            "y": 46
           },
           "hiddenSeries": false,
           "id": 53,
@@ -4855,6 +4848,101 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Puller entry sorter output channel size",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 46
+          },
+          "hiddenSeries": false,
+          "id": 41,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "hideEmpty": false,
+            "max": true,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "dataLinks": []
+          },
+          "paceLength": 10,
+          "percentage": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(ticdc_puller_entry_sorter_output_chan_size{changefeed=~\"$changefeed\",capture=~\"$capture\"}) by (capture, table)",
+              "format": "time_series",
+              "intervalFactor": 1,
+              "legendFormat": "{{capture}}-{{table}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "entry sorter output chan size",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Bucketed histogram of processing time (s) of merge in entry sorter.",
           "fill": 1,
           "fillGradient": 0,
@@ -4862,7 +4950,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 44
+            "y": 53
           },
           "hiddenSeries": false,
           "id": 54,
@@ -4970,13 +5058,13 @@
         "datasource": "${DS_TEST-CLUSTER}",
         "definition": "label_values(ticdc_processor_resolved_ts, changefeed)",
         "hide": 0,
-        "includeAll": true,
+        "includeAll": false,
         "label": "Changefeed",
         "multi": false,
         "name": "changefeed",
         "options": [],
         "query": "label_values(ticdc_processor_resolved_ts, changefeed)",
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 0,
@@ -4998,7 +5086,7 @@
         "name": "capture",
         "options": [],
         "query": "label_values(ticdc_processor_resolved_ts, capture)",
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 0,
@@ -5020,7 +5108,7 @@
         "name": "tikv_instance",
         "options": [],
         "query": "label_values(tikv_engine_size_bytes, instance)",
-        "refresh": 1,
+        "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
         "sort": 1,
@@ -5064,5 +5152,5 @@
   "timezone": "browser",
   "title": "Test-Cluster-CDC",
   "uid": "YiGL8hBZ1",
-  "version": 7
+  "version": 8
 }
