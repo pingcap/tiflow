@@ -1201,9 +1201,9 @@ func (s *eventFeedSession) singleEventFeed(
 	lastReceivedEventTime := time.Now()
 	startFeedTime := time.Now()
 	checkpointTs := startTs
-	handleResolvedTs := func(resolvedTs uint64) error {
+	handleResolvedTs := func(resolvedTs uint64) {
 		if !initialized {
-			return nil
+			return
 		}
 		if resolvedTs < checkpointTs {
 			log.Debug("The resolvedTs is fallen back in kvclient",
@@ -1211,7 +1211,7 @@ func (s *eventFeedSession) singleEventFeed(
 				zap.Uint64("resolvedTs", resolvedTs),
 				zap.Uint64("lastResolvedTs", checkpointTs),
 				zap.Uint64("regionID", regionID))
-			return nil
+			return
 		}
 		// emit a checkpointTs
 		revent := &model.RegionFeedEvent{
@@ -1221,15 +1221,10 @@ func (s *eventFeedSession) singleEventFeed(
 			},
 		}
 		checkpointTs = resolvedTs
-
-		select {
-		case s.eventCh <- revent:
-			metricSendEventResolvedCounter.Inc()
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		}
-		return nil
+		s.eventCh <- revent
+		metricSendEventResolvedCounter.Inc()
 	}
+
 	select {
 	case s.eventCh <- &model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpan{
@@ -1390,12 +1385,8 @@ func (s *eventFeedSession) singleEventFeed(
 							return checkpointTs, errors.Trace(err)
 						}
 
-						select {
-						case s.eventCh <- revent:
-							metricSendEventCommitCounter.Inc()
-						case <-ctx.Done():
-							return checkpointTs, errors.Trace(ctx.Err())
-						}
+						s.eventCh <- revent
+						metricSendEventCommitCounter.Inc()
 					case cdcpb.Event_ROLLBACK:
 						metricPullEventRollbackCounter.Inc()
 						matcher.rollbackRow(entry)
@@ -1406,18 +1397,13 @@ func (s *eventFeedSession) singleEventFeed(
 			case *cdcpb.Event_Error:
 				return checkpointTs, errors.Trace(&eventError{err: x.Error})
 			case *cdcpb.Event_ResolvedTs:
-				if err := handleResolvedTs(x.ResolvedTs); err != nil {
-					return checkpointTs, err
-				}
+				handleResolvedTs(x.ResolvedTs)
 			}
 		}
 
 		if event.resolvedTs != nil {
-			if err := handleResolvedTs(event.resolvedTs.Ts); err != nil {
-				return checkpointTs, err
-			}
+			handleResolvedTs(event.resolvedTs.Ts)
 		}
-
 	}
 }
 
