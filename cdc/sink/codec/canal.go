@@ -351,8 +351,13 @@ func (d *CanalEventBatchEncoder) Size() int {
 	return d.size
 }
 
+// Reset implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) Reset() {
+	panic("Reset only used for JsonEncoder")
+}
+
 // MixedBuild implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) MixedBuild() []byte {
+func (d *CanalEventBatchEncoder) MixedBuild(withVersion bool) []byte {
 	panic("Mixed Build only use for JsonEncoder")
 }
 

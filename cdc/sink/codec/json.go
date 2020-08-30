@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -48,10 +49,24 @@ type column struct {
 func (c *column) FromSinkColumn(col *model.Column) {
 	c.Type = col.Type
 	c.Flag = col.Flag
-	c.Value = col.Value
 	if c.Flag.IsHandleKey() {
 		whereHandle := true
 		c.WhereHandle = &whereHandle
+	}
+	if col.Value == nil {
+		c.Value = nil
+		return
+	}
+	switch col.Type {
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		str := string(col.Value.([]byte))
+		if c.Flag.IsBinary() {
+			str = strconv.Quote(str)
+			str = str[1 : len(str)-1]
+		}
+		c.Value = str
+	default:
+		c.Value = col.Value
 	}
 }
 
@@ -59,8 +74,25 @@ func (c *column) ToSinkColumn(name string) *model.Column {
 	col := new(model.Column)
 	col.Type = c.Type
 	col.Flag = c.Flag
-	col.Value = c.Value
 	col.Name = name
+	col.Value = c.Value
+	if c.Value == nil {
+		return col
+	}
+	switch col.Type {
+	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
+		str := col.Value.(string)
+		var err error
+		if c.Flag.IsBinary() {
+			str, err = strconv.Unquote("\"" + str + "\"")
+			if err != nil {
+				log.Fatal("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+			}
+		}
+		col.Value = []byte(str)
+	default:
+		col.Value = c.Value
+	}
 	return col
 }
 
@@ -361,14 +393,23 @@ func (d *JSONEventBatchEncoder) reset() {
 }
 
 // MixedBuild implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) MixedBuild() []byte {
+func (d *JSONEventBatchEncoder) MixedBuild(withVersion bool) []byte {
 	keyBytes := d.keyBuf.Bytes()
 	valueBytes := d.valueBuf.Bytes()
 	mixedBytes := make([]byte, len(keyBytes)+len(valueBytes))
-	copy(mixedBytes[:8], keyBytes[:8])
-	index := uint64(8)    // skip version
-	keyIndex := uint64(8) // skip version
+
+	index := uint64(0)
+	keyIndex := uint64(0)
 	valueIndex := uint64(0)
+
+	if withVersion {
+		// the first 8 bytes is the version, we should copy directly
+		// then skip 8 bytes for next round key value parse
+		copy(mixedBytes[:8], keyBytes[:8])
+		index = uint64(8)    // skip version
+		keyIndex = uint64(8) // skip version
+	}
+
 	for {
 		if keyIndex >= uint64(len(keyBytes)) {
 			break
@@ -391,6 +432,12 @@ func (d *JSONEventBatchEncoder) MixedBuild() []byte {
 // Size implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) Size() int {
 	return d.keyBuf.Len() + d.valueBuf.Len()
+}
+
+// Reset implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) Reset() {
+	d.keyBuf.Reset()
+	d.valueBuf.Reset()
 }
 
 // NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.

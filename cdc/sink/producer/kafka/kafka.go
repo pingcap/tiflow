@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mqProducer
+package kafka
 
 import (
 	"context"
@@ -31,8 +31,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 )
 
-// KafkaConfig stores the Kafka configuration
-type KafkaConfig struct {
+// Config stores the Kafka configuration
+type Config struct {
 	PartitionNum      int32
 	ReplicationFactor int16
 
@@ -45,8 +45,8 @@ type KafkaConfig struct {
 }
 
 // NewKafkaConfig returns a default Kafka configuration
-func NewKafkaConfig() KafkaConfig {
-	return KafkaConfig{
+func NewKafkaConfig() Config {
+	return Config{
 		Version:           "2.4.0",
 		MaxMessageBytes:   512 * 1024 * 1024, // 512M
 		ReplicationFactor: 1,
@@ -193,13 +193,13 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 }
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config KafkaConfig, errCh chan error) (*kafkaSaramaProducer, error) {
+func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
 	cfg, err := newSaramaConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}
-	if config.PartitionNum < 0 {
+	if config.PartitionNum <= 0 {
 		return nil, errors.NotValidf("partition num %d", config.PartitionNum)
 	}
 	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
@@ -299,7 +299,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 }
 
 // NewSaramaConfig return the default config and set the according version and metrics
-func newSaramaConfig(ctx context.Context, c KafkaConfig) (*sarama.Config, error) {
+func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
 	version, err := sarama.ParseKafkaVersion(c.Version)

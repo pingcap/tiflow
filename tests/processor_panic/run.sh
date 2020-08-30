@@ -21,12 +21,13 @@ function prepare() {
     run_sql "CREATE table test.simple1(id int primary key, val int);"
     run_sql "CREATE table test.simple2(id int primary key, val int);"
 
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/processorPanic=1*return(true)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
     TOPIC_NAME="ticdc-simple-test-$RANDOM"
     case $SINK_TYPE in
-        kafka) SINK_URI="kafka+ssl://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-client-id=cdc_test_simple";;
-        *) SINK_URI="mysql+ssl://root@127.0.0.1:3306/";;
+        kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&kafka-client-id=cdc_test_simple";;
+        *) SINK_URI="mysql://root@127.0.0.1:3306/";;
     esac
     run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
     if [ "$SINK_TYPE" == "kafka" ]; then
