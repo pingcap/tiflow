@@ -132,6 +132,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			index++
 		}
 	}
+
 	var encoderSize int
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
@@ -139,14 +140,15 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
-		// test mixed decode
 
+		// test mixed decode
 		encoderSize = encoder.Size()
 		mixed := encoder.MixedBuild(true)
-		c.Assert(len(mixed), check.Equals, encoder.Size())
+		c.Assert(len(mixed), check.Equals, encoderSize)
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
 		checkRowDecoder(mixedDecoder, cs)
+
 		// test normal decode
 		encoderSize = encoder.Size()
 		keys, values := encoder.Build()
@@ -165,7 +167,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		// test mixed encode
 		encoderSize = encoder.Size()
 		mixed := encoder.MixedBuild(true)
-		c.Assert(len(mixed), check.Equals, encoder.Size())
+		c.Assert(len(mixed), check.Equals, encoderSize)
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
 		checkDDLDecoder(mixedDecoder, cs)
@@ -189,7 +191,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		// test mixed encode
 		encoderSize = encoder.Size()
 		mixed := encoder.MixedBuild(true)
-		c.Assert(len(mixed), check.Equals, encoder.Size())
+		c.Assert(len(mixed), check.Equals, encoderSize)
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
 		checkTSDecoder(mixedDecoder, cs)
