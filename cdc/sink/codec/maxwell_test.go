@@ -28,23 +28,7 @@ var _ = check.Suite(&maxwellbatchSuite{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns:  []*model.Column{{Name: "col1", Type: 3, Value: 10}},
-	}}, {{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 3, Value: 10}},
-	}, {
-		CommitTs: 2,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 3, Value: 10}},
-	}, {
-		CommitTs: 3,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 3, Value: 10}},
-	}, {
-		CommitTs: 4,
-		Table:    &model.TableName{Schema: "a", Table: "c"},
-		Columns:  []*model.Column{{Name: "col1", Type: 3, Value: 10}},
-	}}, {}},
+	}}},
 	ddlCases: [][]*model.DDLEvent{{{
 		CommitTs: 1,
 		TableInfo: &model.SimpleTableInfo{
@@ -52,28 +36,7 @@ var _ = check.Suite(&maxwellbatchSuite{
 		},
 		Query: "create table a",
 		Type:  1,
-	}}, {{
-		CommitTs: 1,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table a",
-		Type:  1,
-	}, {
-		CommitTs: 2,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table b",
-		Type:  2,
-	}, {
-		CommitTs: 3,
-		TableInfo: &model.SimpleTableInfo{
-			Schema: "a", Table: "b",
-		},
-		Query: "create table c",
-		Type:  3,
-	}}, {}},
+	}}},
 })
 
 func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
@@ -87,11 +50,8 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 			}
 			c.Assert(tp, check.Equals, model.MqMessageTypeRow)
 			row, err := decoder.NextRowChangedEvent()
-			//fmt.Println("----row----", row, "----row----")
-			//fmt.Println("----cs[index]----", cs[index], "----cs[index]----")
 			c.Assert(err, check.IsNil)
-			//c.Assert(row, check.DeepEquals, cs[index], check.Commentf("index %d", index))
-			c.Assert(row, check.DeepEquals, row)
+			c.Assert(row, check.DeepEquals, cs[index], check.Commentf("index %d", index))
 			index++
 		}
 	}
@@ -106,7 +66,7 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 			c.Assert(tp, check.Equals, model.MqMessageTypeDDL)
 			ddl, err := decoder.NextDDLEvent()
 			c.Assert(err, check.IsNil)
-			c.Assert(ddl, check.DeepEquals, ddl)
+			c.Assert(ddl, check.DeepEquals, cs[index])
 			index++
 		}
 	}
@@ -121,8 +81,6 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 		key, value := encoder.Build()
 		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
 		decoder, err := newDecoder(key, value)
-		//fmt.Println("----decoder----", decoder, "----decoder----")
-		//fmt.Println("----cs----", &cs, "----cs----")
 		c.Assert(err, check.IsNil)
 		checkRowDecoder(decoder, cs)
 	}

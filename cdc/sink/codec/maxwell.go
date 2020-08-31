@@ -57,6 +57,7 @@ func (m *DdlMaxwellMessage) Encode() ([]byte, error) {
 	return json.Marshal(m)
 }
 
+// Decode the message from bytes
 func (m *DdlMaxwellMessage) Decode(data []byte) error {
 	return json.Unmarshal(data, m)
 }
@@ -290,7 +291,7 @@ func (b *MaxwellEventBatchDecoder) decodeNextKey() error {
 }
 
 func (b *MaxwellEventBatchDecoder) hasNext() bool {
-	return len(b.keyBytes) > 0 && len(b.valueBytes) > 0
+	return false
 }
 
 // MaxwellEventBatchDecoder decodes the byte of a batch into the original messages.
