@@ -37,8 +37,8 @@ function run() {
 
     pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
     TOPIC_NAME="ticdc-kafka-sink-error-resume-test-$RANDOM"
-    SINK_URI="kafka://kafka01:9092/$TOPIC_NAME?partition-num=4"
-    run_kafka_consumer $WORK_DIR "kafka://kafka01:9092/$TOPIC_NAME?partition-num=4"
+    SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
+    run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
 
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/sink/producer/kafka/KafkaSinkAsyncSendError=4*return(true)'
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
