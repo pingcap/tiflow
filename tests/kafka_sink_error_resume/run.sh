@@ -47,18 +47,22 @@ function run() {
     run_sql "CREATE DATABASE kafka_sink_error_resume;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE table kafka_sink_error_resume.t1(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "CREATE table kafka_sink_error_resume.t2(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "INSERT INTO kafka_sink_error_resume.t1 VALUES (),(),();"
-    run_sql "INSERT INTO kafka_sink_error_resume.t2 VALUES (),(),();"
-    run_sql "UPDATE kafka_sink_error_resume.t1 SET val = 100;"
+    run_sql "INSERT INTO kafka_sink_error_resume.t1 VALUES ();"
 
-    for i in $(seq 1 3); do
+    for i in $(seq 1 4); do
         ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "stopped"
         cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
+        sleep 5
     done
     ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "normal"
 
     check_table_exists "kafka_sink_error_resume.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_table_exists "kafka_sink_error_resume.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+
+    run_sql "INSERT INTO kafka_sink_error_resume.t1 VALUES (),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "INSERT INTO kafka_sink_error_resume.t2 VALUES (),();" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "UPDATE kafka_sink_error_resume.t2 SET val = 100;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     export GO_FAILPOINTS=''
