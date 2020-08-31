@@ -23,6 +23,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -67,6 +68,8 @@ type kafkaSaramaProducer struct {
 	flushedNotifier *notify.Notifier
 	flushedReceiver *notify.Receiver
 
+	failpointCh chan error
+
 	closeCh chan struct{}
 }
 
@@ -78,6 +81,15 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 		Partition: partition,
 	}
 	msg.Metadata = atomic.AddUint64(&k.partitionOffset[partition].sent, 1)
+
+	failpoint.Inject("KafkaSinkAsyncSendError", func() {
+		// simulate sending message to intput channel successfully but flushing
+		// message to Kafka meets error
+		log.Info("failpoint error injected")
+		k.failpointCh <- errors.New("kafka sink injected error")
+		failpoint.Return(nil)
+	})
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -124,18 +136,29 @@ func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 		return nil
 	}
 
+	// checkAllPartitionFlushed checks whether data in each partition is flushed
+	checkAllPartitionFlushed := func() bool {
+		for i, target := range targetOffsets {
+			if target > atomic.LoadUint64(&k.partitionOffset[i].flushed) {
+				return false
+			}
+		}
+		return true
+	}
+
 flushLoop:
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-k.closeCh:
-			return nil
+			if checkAllPartitionFlushed() {
+				return nil
+			}
+			return errors.New("flush not finished before producer close")
 		case <-k.flushedReceiver.C:
-			for i, target := range targetOffsets {
-				if target > atomic.LoadUint64(&k.partitionOffset[i].flushed) {
-					continue flushLoop
-				}
+			if !checkAllPartitionFlushed() {
+				continue flushLoop
 			}
 			return nil
 		}
@@ -178,6 +201,9 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			return ctx.Err()
 		case <-k.closeCh:
 			return nil
+		case err := <-k.failpointCh:
+			log.Warn("receive from failpoint chan", zap.Error(err))
+			return err
 		case msg := <-k.asyncClient.Successes():
 			if msg == nil || msg.Metadata == nil {
 				continue
@@ -262,6 +288,7 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 		flushedNotifier: notifier,
 		flushedReceiver: notifier.NewReceiver(50 * time.Millisecond),
 		closeCh:         make(chan struct{}),
+		failpointCh:     make(chan error, 1),
 	}
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
