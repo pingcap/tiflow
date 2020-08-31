@@ -309,11 +309,17 @@ type CanalEventBatchEncoder struct {
 	entryBuilder *canalEntryBuilder
 }
 
-// AppendResolvedEvent implements the EventBatchEncoder interface
+// AppendResolvedEvent appends a resolved event to the encoder
+// TODO TXN support
 func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
+	return EncoderNoOperation, nil
+}
+
+// EncodeCheckpointEvent implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore the event is ignored.
-	return EncoderNoOperation, nil
+	return nil, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
@@ -330,31 +336,60 @@ func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent)
 	return EncoderNoOperation, nil
 }
 
-// AppendDDLEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
+// EncodeDDLEvent implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
 	entry, err := d.entryBuilder.FromDdlEvent(e)
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
-	d.messages.Messages = append(d.messages.Messages, b)
-	return EncoderNeedSyncWrite, nil
+
+	messages := new(canal.Messages)
+	messages.Messages = append(messages.Messages, b)
+	b, err = messages.Marshal()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	packet := &canal.Packet{
+		VersionPresent: &canal.Packet_Version{
+			Version: CanalPacketVersion,
+		},
+		Type: canal.PacketType_MESSAGES,
+	}
+	packet.Body = b
+	b, err = packet.Marshal()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &MQMessage{
+		Key:   nil,
+		Value: b,
+		Ts:    e.CommitTs,
+	}, nil
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) Build() (key []byte, value []byte) {
+func (d *CanalEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 	err := d.refreshPacketBody()
 	if err != nil {
 		panic(err)
 	}
-	value, err = proto.Marshal(d.packet)
+	value, err := proto.Marshal(d.packet)
 	if err != nil {
 		panic(err)
 	}
-	return nil, value
+	ret := &MQMessage{
+		Key:   nil,
+		Value: value,
+		Ts:    0,
+	}
+	d.messages.Reset()
+	return []*MQMessage{ret}
 }
 
 // MixedBuild implements the EventBatchEncoder interface

@@ -143,39 +143,43 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		c.Assert(err, check.IsNil)
 		checkRowDecoder(mixedDecoder, cs)
 		// test normal decode
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
+		size := encoder.Size()
+		res := encoder.Build()
+		c.Assert(res, check.HasLen, 1)
+		c.Assert(len(res[0].Key)+len(res[0].Value), check.Equals, size)
+		decoder, err := newDecoder(res[0].Key, res[0].Value)
 		c.Assert(err, check.IsNil)
 		checkRowDecoder(decoder, cs)
 	}
 
 	for _, cs := range s.ddlCases {
 		encoder := newEncoder()
-		for _, ddl := range cs {
-			_, err := encoder.AppendDDLEvent(ddl)
+		for i, ddl := range cs {
+			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
+			c.Assert(msg, check.NotNil)
+			decoder, err := newDecoder(msg.Key, msg.Value)
+			c.Assert(err, check.IsNil)
+			checkDDLDecoder(decoder, cs[i:i+1])
 		}
+
 		// test mixed encode
 		mixed := encoder.MixedBuild(true)
 		c.Assert(len(mixed), check.Equals, encoder.Size())
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
 		checkDDLDecoder(mixedDecoder, cs)
-
-		// test normal encode
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
-		c.Assert(err, check.IsNil)
-		checkDDLDecoder(decoder, cs)
 	}
 
 	for _, cs := range s.resolvedTsCases {
 		encoder := newEncoder()
-		for _, ts := range cs {
-			_, err := encoder.AppendResolvedEvent(ts)
+		for i, ts := range cs {
+			msg, err := encoder.EncodeCheckpointEvent(ts)
 			c.Assert(err, check.IsNil)
+			c.Assert(msg, check.NotNil)
+			decoder, err := newDecoder(msg.Key, msg.Value)
+			c.Assert(err, check.IsNil)
+			checkTSDecoder(decoder, cs[i:i+1])
 		}
 
 		// test mixed encode
@@ -184,18 +188,15 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
 		checkTSDecoder(mixedDecoder, cs)
-
-		// test normal encode
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
-		c.Assert(err, check.IsNil)
-		checkTSDecoder(decoder, cs)
 	}
 }
 
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
-	s.testBatchCodec(c, NewJSONEventBatchEncoder, NewJSONEventBatchDecoder)
+	s.testBatchCodec(c, func() EventBatchEncoder {
+		encoder := NewJSONEventBatchEncoder()
+		encoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
+		return encoder
+	}, NewJSONEventBatchDecoder)
 }
 
 var _ = check.Suite(&columnSuite{})
