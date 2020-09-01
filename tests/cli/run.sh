@@ -84,7 +84,9 @@ case-sensitive = false
 [mounter]
 worker-num = 4
 EOF
+    set +e
     update_result=$(cdc cli changefeed update --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid)
+    set -e
     if [[ ! $update_result == *"can only update changefeed config when it is stopped"* ]]; then
         echo "update changefeed config should fail when changefeed is running, got $update_result"
     fi
