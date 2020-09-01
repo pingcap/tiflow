@@ -83,7 +83,8 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 		return ctx.Err()
 	case <-k.closeCh:
 		return nil
-	case k.asyncClient.Input() <- msg:
+	default:
+		k.asyncClient.Input() <- msg
 	}
 	return nil
 }
@@ -146,20 +147,29 @@ func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
 	return k.partitionNum
 }
 
-func (k *kafkaSaramaProducer) Close() error {
+// stop closes the closeCh to signal other routines to exit
+func (k *kafkaSaramaProducer) stop() {
 	select {
 	case <-k.closeCh:
-		return nil
+		return
 	default:
 		close(k.closeCh)
 	}
+}
+
+// Close implements the Producer interface
+func (k *kafkaSaramaProducer) Close() error {
+	k.stop()
+	// In fact close sarama sync client doesn't return any error.
+	// But close async client returns error if error channel is not empty, we
+	// don't populate this error to the upper caller, just add a log here.
 	err1 := k.syncClient.Close()
 	err2 := k.asyncClient.Close()
 	if err1 != nil {
-		return err1
+		log.Error("close sync client with error", zap.Error(err1))
 	}
 	if err2 != nil {
-		return err2
+		log.Error("close async client with error", zap.Error(err2))
 	}
 	return nil
 }
@@ -167,10 +177,7 @@ func (k *kafkaSaramaProducer) Close() error {
 func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 	defer func() {
 		k.flushedReceiver.Stop()
-		err := k.Close()
-		if err != nil {
-			log.Error("close kafkaSaramaProducer with error", zap.Error(err))
-		}
+		k.stop()
 	}()
 	for {
 		select {
