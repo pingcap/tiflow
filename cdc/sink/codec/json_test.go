@@ -143,13 +143,15 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		c.Assert(err, check.IsNil)
 		checkRowDecoder(mixedDecoder, cs)
 		// test normal decode
-		size := encoder.Size()
-		res := encoder.Build()
-		c.Assert(res, check.HasLen, 1)
-		c.Assert(len(res[0].Key)+len(res[0].Value), check.Equals, size)
-		decoder, err := newDecoder(res[0].Key, res[0].Value)
-		c.Assert(err, check.IsNil)
-		checkRowDecoder(decoder, cs)
+		if len(cs) > 0 {
+			size := encoder.Size()
+			res := encoder.Build()
+			c.Assert(res, check.HasLen, 1)
+			c.Assert(len(res[0].Key)+len(res[0].Value), check.Equals, size)
+			decoder, err := newDecoder(res[0].Key, res[0].Value)
+			c.Assert(err, check.IsNil)
+			checkRowDecoder(decoder, cs)
+		}
 	}
 
 	for _, cs := range s.ddlCases {
