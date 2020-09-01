@@ -169,6 +169,7 @@ type TableReplicaInfo struct {
 	MarkTableID TableID `json:"mark-table-id"`
 }
 
+// Clone clones a TableReplicaInfo
 func (i *TableReplicaInfo) Clone() *TableReplicaInfo {
 	if i == nil {
 		return nil
