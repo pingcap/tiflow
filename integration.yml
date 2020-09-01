@@ -1,0 +1,56 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Kafka-integration
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the master branch
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  Avro-integration:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+      
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.14.0'
+
+      - name: Cache Vendor
+        id: cache-vendor
+        uses: actions/cache@v2
+        with:
+          path: vendor
+          key: ${{ runner.os }}-vendor-${{ hashFiles('go.mod') }}
+
+      - name: Update Vendor
+        run: go mod vendor
+      
+      - name: Build Integration Framework
+        run: |
+          cd $GITHUB_WORKSPACE/integration
+          go build
+      
+      - name: Run Integration Framework
+        timeout-minutes: 120
+        continue-on-error: true
+        run: |
+          cd $GITHUB_WORKSPACE/integration
+          ./integration 
+      
+      - uses: actions/upload-artifact@v2
+        with:
+          name: logs
+          path: $GITHUB_WORKSPACE/docker/logs/*
+        
+      - name: Clean Up
+        run: |
+          $GITHUB_WORKSPACE/scripts/avro-local-test.sh down
