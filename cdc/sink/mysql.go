@@ -271,6 +271,11 @@ type sinkParams struct {
 	batchReplaceSize    int
 }
 
+func (s *sinkParams) Clone() *sinkParams {
+	clone := *s
+	return &clone
+}
+
 var defaultParams = &sinkParams{
 	workerCount:         defaultWorkerCount,
 	maxTxnRow:           defaultMaxTxnRow,
@@ -327,7 +332,7 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 // newMySQLSink creates a new MySQL sink using schema storage
 func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL, filter *tifilter.Filter, opts map[string]string) (Sink, error) {
 	var db *sql.DB
-	params := defaultParams
+	params := defaultParams.Clone()
 
 	if cid, ok := opts[OptChangefeedID]; ok {
 		params.changefeedID = cid
