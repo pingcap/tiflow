@@ -69,7 +69,7 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 	}
 	s.ownerLock.RLock()
 	if s.owner == nil {
-		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		s.ownerLock.RUnlock()
 		return
 	}
@@ -101,7 +101,7 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
-		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
 
@@ -144,7 +144,7 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
-		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
 
@@ -171,7 +171,7 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
-		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
 
@@ -208,7 +208,7 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
-		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		return
 	}
 

@@ -123,5 +123,6 @@ func testRequestNonOwnerFailed(c *check.C, uri string) {
 	data, err := ioutil.ReadAll(resp.Body)
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
-	c.Assert(string(data), check.Equals, concurrency.ErrElectionNoLeader.Error())
+	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
+	c.Assert(string(data), check.Equals, concurrency.ErrElectionNotLeader.Error())
 }
