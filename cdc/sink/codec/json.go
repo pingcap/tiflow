@@ -415,6 +415,10 @@ func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, e
 
 // Build implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
+	if d.keyBuf.Len() == 0 {
+		return nil
+	}
+
 	ret := &MQMessage{
 		Key:   d.keyBuf.Bytes(),
 		Value: d.valueBuf.Bytes(),
@@ -424,6 +428,9 @@ func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 	if !d.supportMixedBuild {
 		d.keyBuf.Reset()
 		d.valueBuf.Reset()
+		var versionByte [8]byte
+		binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+		d.keyBuf.Write(versionByte[:])
 	}
 	return []*MQMessage{ret}
 }
