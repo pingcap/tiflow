@@ -191,6 +191,8 @@ while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} --default-character-set
     fi
     sleep 2
 done
+# TODO: remove this after TiCDC supports TiDB clustered index
+mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} --default-character-set utf8mb4 -e 'set @@global.tidb_enable_clustered_index=0'
 
 i=0
 while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_OTHER_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
@@ -201,6 +203,8 @@ while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_OTHER_PORT} --default-charact
     fi
     sleep 2
 done
+# TODO: remove this after TiCDC supports TiDB clustered index
+mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_OTHER_PORT} --default-character-set utf8mb4 -e 'set @@global.tidb_enable_clustered_index=0'
 
 echo "Verifying Downstream TiDB is started..."
 i=0
