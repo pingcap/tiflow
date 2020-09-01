@@ -762,14 +762,15 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			log.Info("sync table: begin Tx fail")
 			return err
 		}
-		row, err := tx.Query("select @@tidb_current_ts")
+		/*row, err := tx.Query("select @@tidb_current_ts")
 		if err != nil {
 			log.Info("sync table: get tidb_current_ts err")
 			return err
 		}
 		var slaveTs string
 		row.Scan(&slaveTs)
-		tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, slaveTs)
+		tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, slaveTs)*/
+		tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, 0)
 		tx.Commit() //TODO 处理错误
 
 	}
@@ -870,14 +871,14 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	var tsUpdated bool
 
 	if c.updateResolvedTs && minResolvedTs > c.status.ResolvedTs {
-		prevResolvedTs := c.status.ResolvedTs
+		//prevResolvedTs := c.status.ResolvedTs
 		c.status.ResolvedTs = minResolvedTs
 		tsUpdated = true
-		if prevResolvedTs == c.status.CheckpointTs || prevResolvedTs == 0 {
+		/*if prevResolvedTs == c.status.CheckpointTs || prevResolvedTs == 0 {
 			//到达sync point
 			//todo 需要重新开始启动计时
 			c.startTimer <- true
-		}
+		}*/
 	}
 
 	if minCheckpointTs > c.status.CheckpointTs {
@@ -924,11 +925,11 @@ func (c *changeFeed) startSyncPeriod() {
 	//c.startTimer <- true
 	go func() {
 		for {
-			select {
-			case <-c.startTimer:
-				time.Sleep(syncInterval)
-				c.updateResolvedTs = false
-			}
+			//select {
+			//case <-c.startTimer:
+			time.Sleep(syncInterval)
+			c.updateResolvedTs = false
+			//}
 		}
 	}()
 }
