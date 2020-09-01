@@ -15,6 +15,8 @@ package codec
 
 import (
 	"fmt"
+	"go.uber.org/zap"
+	"log"
 	"strconv"
 	"strings"
 
@@ -370,14 +372,14 @@ func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, 
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) Build() (mqMessages []*MQMessage) {
+func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 	err := d.refreshPacketBody()
 	if err != nil {
-		panic(err)
+		log.Fatal("Error when generating Canal packet", zap.Error(err))
 	}
 	value, err := proto.Marshal(d.packet)
 	if err != nil {
-		panic(err)
+		log.Fatal("Error when serializing Canal packet", zap.Error(err))
 	}
 	ret := NewMQMessage(nil, value, 0)
 	d.messages.Reset()
