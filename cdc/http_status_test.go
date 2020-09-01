@@ -17,9 +17,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/pingcap/check"
+	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
 type httpStatusSuite struct{}
@@ -63,6 +65,10 @@ func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
 
 	testPprof(c)
 	testReisgnOwner(c)
+	testHandleChangefeedAdmin(c)
+	testHandleRebalance(c)
+	testHandleMoveTable(c)
+	testHandleChangefeedQuery(c)
 }
 
 func testPprof(c *check.C) {
@@ -76,8 +82,46 @@ func testPprof(c *check.C) {
 
 func testReisgnOwner(c *check.C) {
 	uri := fmt.Sprintf("http://%s/capture/owner/resign", testingServerOptions.advertiseAddr)
+	testHTTPPostOnly(c, uri)
+	testRequestNonOwnerFailed(c, uri)
+}
+
+func testHandleChangefeedAdmin(c *check.C) {
+	uri := fmt.Sprintf("http://%s/capture/owner/admin", testingServerOptions.advertiseAddr)
+	testHTTPPostOnly(c, uri)
+	testRequestNonOwnerFailed(c, uri)
+}
+
+func testHandleRebalance(c *check.C) {
+	uri := fmt.Sprintf("http://%s/capture/owner/rebalance_trigger", testingServerOptions.advertiseAddr)
+	testHTTPPostOnly(c, uri)
+	testRequestNonOwnerFailed(c, uri)
+}
+
+func testHandleMoveTable(c *check.C) {
+	uri := fmt.Sprintf("http://%s/capture/owner/move_table", testingServerOptions.advertiseAddr)
+	testHTTPPostOnly(c, uri)
+	testRequestNonOwnerFailed(c, uri)
+}
+
+func testHandleChangefeedQuery(c *check.C) {
+	uri := fmt.Sprintf("http://%s/capture/owner/changefeed/query", testingServerOptions.advertiseAddr)
+	testHTTPPostOnly(c, uri)
+	testRequestNonOwnerFailed(c, uri)
+}
+
+func testHTTPPostOnly(c *check.C, uri string) {
 	resp, err := http.Get(uri)
 	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
+}
+
+func testRequestNonOwnerFailed(c *check.C, uri string) {
+	resp, err := http.PostForm(uri, url.Values{})
+	c.Assert(err, check.IsNil)
+	data, err := ioutil.ReadAll(resp.Body)
+	c.Assert(err, check.IsNil)
+	defer resp.Body.Close()
+	c.Assert(string(data), check.Equals, concurrency.ErrElectionNoLeader.Error())
 }
