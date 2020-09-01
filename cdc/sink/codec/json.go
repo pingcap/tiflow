@@ -337,11 +337,7 @@ func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, er
 		d.valueBuf.Write(valueLenByte[:])
 	}
 
-	ret := &MQMessage{
-		Key:   keyBuf.Bytes(),
-		Value: valueBuf.Bytes(),
-		Ts:    ts,
-	}
+	ret := NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), ts)
 	return ret, nil
 }
 
@@ -405,11 +401,7 @@ func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, e
 		d.valueBuf.Write(value)
 	}
 
-	ret := &MQMessage{
-		Key:   keyBuf.Bytes(),
-		Value: valueBuf.Bytes(),
-		Ts:    e.CommitTs,
-	}
+	ret := NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), e.CommitTs)
 	return ret, nil
 }
 
@@ -419,11 +411,7 @@ func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 		return nil
 	}
 
-	ret := &MQMessage{
-		Key:   d.keyBuf.Bytes(),
-		Value: d.valueBuf.Bytes(),
-		Ts:    0,
-	}
+	ret := NewMQMessage(d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0)
 
 	if !d.supportMixedBuild {
 		d.keyBuf.Reset()

@@ -77,11 +77,7 @@ func (a *AvroEventBatchEncoder) GetKeySchemaManager() *AvroSchemaManager {
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
 func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	mqMessage := &MQMessage{
-		Key:   nil,
-		Value: nil,
-		Ts:    e.CommitTs,
-	}
+	mqMessage := NewMQMessage(nil, nil, e.CommitTs)
 
 	if !e.IsDelete() {
 		res, err := avroEncode(e.Table, a.valueSchemaManager, e.TableInfoVersion, e.Columns)

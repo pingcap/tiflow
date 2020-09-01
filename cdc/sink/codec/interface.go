@@ -54,6 +54,28 @@ type MQMessage struct {
 	Ts    uint64 // reserved for possible output sorting
 }
 
+// NewMQMessage should be used when creating a MQMessage struct.
+// It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
+func NewMQMessage(key []byte, value []byte, ts uint64) *MQMessage {
+	ret := &MQMessage{
+		Key:   nil,
+		Value: nil,
+		Ts:    ts,
+	}
+
+	if key != nil {
+		ret.Key = make([]byte, len(key))
+		copy(ret.Key, key)
+	}
+
+	if value != nil {
+		ret.Value = make([]byte, len(value))
+		copy(ret.Value, value)
+	}
+
+	return ret
+}
+
 // EventBatchDecoder is an abstraction for events decoder
 // this interface is only for testing now
 type EventBatchDecoder interface {

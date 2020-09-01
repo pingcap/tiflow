@@ -366,11 +366,7 @@ func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, 
 		return nil, errors.Trace(err)
 	}
 
-	return &MQMessage{
-		Key:   nil,
-		Value: b,
-		Ts:    e.CommitTs,
-	}, nil
+	return NewMQMessage(nil, b, e.CommitTs), nil
 }
 
 // Build implements the EventBatchEncoder interface
@@ -383,11 +379,7 @@ func (d *CanalEventBatchEncoder) Build() (mqMessages []*MQMessage) {
 	if err != nil {
 		panic(err)
 	}
-	ret := &MQMessage{
-		Key:   nil,
-		Value: value,
-		Ts:    0,
-	}
+	ret := NewMQMessage(nil, value, 0)
 	d.messages.Reset()
 	return []*MQMessage{ret}
 }
