@@ -717,7 +717,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		}
 	}
 
-	if c.status.ResolvedTs == c.status.CheckpointTs || c.status.ResolvedTs == 0 {
+	if (c.status.ResolvedTs == c.status.CheckpointTs && (c.updateResolvedTs == false || c.status.ResolvedTs == c.ddlResolvedTs)) || c.status.ResolvedTs == 0 {
 		log.Debug("achive the sync point", zap.Uint64("ResolvedTs", c.status.ResolvedTs))
 		//c.syncPointTs = c.targetTs //恢复syncPointTs，使得ResoledTs可以继续推进
 		c.updateResolvedTs = true
@@ -762,17 +762,17 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			log.Info("sync table: begin Tx fail")
 			return err
 		}
-		/*row, err := tx.Query("select @@tidb_current_ts")
+		row := tx.QueryRow("select @@tidb_current_ts")
+		var slaveTs string
+		err = row.Scan(&slaveTs)
 		if err != nil {
 			log.Info("sync table: get tidb_current_ts err")
+			tx.Rollback()
 			return err
 		}
-		var slaveTs string
-		row.Scan(&slaveTs)
-		tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, slaveTs)*/
-		tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, 0)
+		tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, slaveTs)
+		//tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, 0)
 		tx.Commit() //TODO 处理错误
-
 	}
 
 	/*if minResolvedTs > c.syncPointTs {
