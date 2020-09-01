@@ -407,7 +407,7 @@ func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, e
 
 // Build implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
-	if d.keyBuf.Len() == 0 {
+	if d.valueBuf.Len() == 0 {
 		return nil
 	}
 
