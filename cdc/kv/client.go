@@ -726,7 +726,12 @@ MainLoop:
 				})
 			}
 
-			log.Info("start new request", zap.Reflect("request", req), zap.String("addr", rpcCtx.Addr))
+			logReq := log.Debug
+			if s.isPullerInit.IsInitialized() {
+				logReq = log.Info
+			}
+			logReq("start new request", zap.Reflect("request", req), zap.String("addr", rpcCtx.Addr))
+
 			err = stream.Send(req)
 
 			// If Send error, the receiver should have received error too or will receive error soon. So we doesn't need
