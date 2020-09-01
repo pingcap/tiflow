@@ -37,15 +37,15 @@ jobs:
 
       - name: Run Integration Framework
         timeout-minutes: 45
-        continue-on-error: true
         run: |
           cd $GITHUB_WORKSPACE/integration
           ./integration
 
       - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
         with:
           name: logs
-          path: $GITHUB_WORKSPACE/docker/logs/*
+          path: ${{ github.workspace }}/docker/logs/*
 
       - name: Clean Up
         run: |
