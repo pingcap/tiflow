@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -ex
+set -e
 
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
@@ -72,7 +72,9 @@ function run() {
     check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1},http://${UP_PD_HOST_2}:${UP_PD_PORT_2},http://${UP_PD_HOST_3}:${UP_PD_PORT_3} 1
 
     # Make sure changefeed can not be created if the name is already exists.
+    set +e
     exists=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="$uuid" 2>&1 | grep -oE 'already exists')
+    set -e
     if [[ -z $exists ]]; then
         echo "[$(date)] <<<<< unexpect output got ${exists} >>>>>"
         exit 1
