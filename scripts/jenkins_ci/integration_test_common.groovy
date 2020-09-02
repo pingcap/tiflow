@@ -135,9 +135,13 @@ def tests(sink_type, node_label) {
                     deleteDir()
                     println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
                     println "work space path:\n${ws}"
-                    unstash 'ticdc'
-                    unstash 'third_binaries'
-                    unstash 'ticdc_binaries'
+                    try {
+                        unstash 'ticdc'
+                        unstash 'third_binaries'
+                        unstash 'ticdc_binaries'
+                    } catch (Exception e) {
+                        throw e;
+                    }
 
                     dir("go/src/github.com/pingcap/ticdc") {
                         sh "mv ${ws}/third_bin/* ./bin/"
