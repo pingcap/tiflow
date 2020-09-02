@@ -288,7 +288,7 @@ func (s *etcdSuite) TestRemoveChangeFeedStatus(c *check.C) {
 	err = s.client.RemoveChangeFeedStatus(ctx, changefeedID)
 	c.Assert(err, check.IsNil)
 	_, _, err = s.client.GetChangeFeedStatus(ctx, changefeedID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
+	c.Assert(cerror.ErrChangeFeedNotExists.Equal(err), check.IsTrue)
 }
 
 func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
