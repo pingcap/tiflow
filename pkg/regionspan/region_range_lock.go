@@ -182,7 +182,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			version:  version,
 		})
 
-		log.Debug("range locked", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
+		log.Info("range locked", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)))
 
 		return LockRangeResult{
@@ -209,7 +209,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		retryRanges := make([]ComparableSpan, 0)
 		currentRangeStartKey := startKey
 
-		log.Debug("tryLockRange stale", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
+		log.Info("tryLockRange stale", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("allOverlapping", overlapStr)) //DEBUG
 
 		for _, r := range overlappingRanges {
@@ -237,7 +237,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 
 	}
 
-	log.Debug("lock range blocked", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
+	log.Info("lock range blocked", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 		zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("blockedBy", overlapStr)) //DEBUG
 
 	return LockRangeResult{
@@ -298,7 +298,7 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, c
 		panic("impossible (entry just get from BTree disappeared)")
 	}
 	l.rangeCheckpointTs.Set(startKey, endKey, checkpointTs)
-	log.Debug("unlocked range", zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
+	log.Info("unlocked range", zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
 		zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)))
 }
 
