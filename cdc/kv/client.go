@@ -1136,6 +1136,7 @@ func (s *eventFeedSession) singleEventFeed(
 	checkpointTs := startTs
 	select {
 	case s.eventCh <- &model.RegionFeedEvent{
+		RegionID: regionID,
 		Resolved: &model.ResolvedSpan{
 			Span:       span,
 			ResolvedTs: startTs,
@@ -1216,7 +1217,8 @@ func (s *eventFeedSession) singleEventFeed(
 								zap.Uint64("ts", cacheEntry.GetStartTs()))
 							continue
 						}
-						revent, err := assembleCommitEvent(cacheEntry, value)
+
+						revent, err := assembleCommitEvent(regionID, entry, value)
 						if err != nil {
 							return checkpointTs, errors.Trace(err)
 						}
@@ -1241,6 +1243,7 @@ func (s *eventFeedSession) singleEventFeed(
 					}
 
 					revent := &model.RegionFeedEvent{
+						RegionID: regionID,
 						Val: &model.RawKVEntry{
 							OpType:   opType,
 							Key:      entry.Key,
@@ -1248,6 +1251,7 @@ func (s *eventFeedSession) singleEventFeed(
 							OldValue: entry.GetOldValue(),
 							StartTs:  entry.StartTs,
 							CRTs:     entry.CommitTs,
+							RegionID: regionID,
 						},
 					}
 
@@ -1288,7 +1292,7 @@ func (s *eventFeedSession) singleEventFeed(
 								entry.GetKey(), entry.GetStartTs())
 					}
 
-					revent, err := assembleCommitEvent(entry, value)
+					revent, err := assembleCommitEvent(regionID, entry, value)
 					if err != nil {
 						return checkpointTs, errors.Trace(err)
 					}
@@ -1322,6 +1326,7 @@ func (s *eventFeedSession) singleEventFeed(
 			}
 			// emit a checkpointTs
 			revent := &model.RegionFeedEvent{
+				RegionID: regionID,
 				Resolved: &model.ResolvedSpan{
 					Span:       span,
 					ResolvedTs: x.ResolvedTs,
@@ -1421,7 +1426,7 @@ func (s *eventFeedSession) resolveLock(ctx context.Context, regionID uint64, max
 	return nil
 }
 
-func assembleCommitEvent(entry *cdcpb.Event_Row, value *pendingValue) (*model.RegionFeedEvent, error) {
+func assembleCommitEvent(regionID uint64, entry *cdcpb.Event_Row, value *pendingValue) (*model.RegionFeedEvent, error) {
 	var opType model.OpType
 	switch entry.GetOpType() {
 	case cdcpb.Event_Row_DELETE:
@@ -1433,6 +1438,7 @@ func assembleCommitEvent(entry *cdcpb.Event_Row, value *pendingValue) (*model.Re
 	}
 
 	revent := &model.RegionFeedEvent{
+		RegionID: regionID,
 		Val: &model.RawKVEntry{
 			OpType:   opType,
 			Key:      entry.Key,
@@ -1440,6 +1446,7 @@ func assembleCommitEvent(entry *cdcpb.Event_Row, value *pendingValue) (*model.Re
 			OldValue: value.oldValue,
 			StartTs:  entry.StartTs,
 			CRTs:     entry.CommitTs,
+			RegionID: regionID,
 		},
 	}
 	return revent, nil
