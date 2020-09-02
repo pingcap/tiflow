@@ -19,10 +19,8 @@ import (
 
 // WrapError generates a new error based on given `*errors.Error`, wraps the err
 // as cause error.
-// We still keep this wrapper since the error message could be different between
-// `GenWithStackByArgs` and `GenWithStackByCause`.
-// TODO: After the API of rfc errors is stable, we can remove this filter and
-// use these APIs directly in code.
+// If given `err` is nil, returns a nil error, which a the different behavior
+// against `Wrap` function in pingcap/errors.
 func WrapError(rfcError *errors.Error, err error) error {
 	if err == nil {
 		return nil
