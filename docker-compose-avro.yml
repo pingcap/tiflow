@@ -109,7 +109,7 @@ services:
       - --data-dir=/data/upstream-pd
       - --config=/pd.toml
       - --log-file=/logs/upstream-pd.log
-      - --log-level=debug
+      - -L=debug
     restart: on-failure
 
   upstream-tikv0:
@@ -180,7 +180,7 @@ services:
       - --config=/tidb.toml
       - --log-file=/logs/upstream-tidb.log
       - --advertise-address=upstream-tidb
-      - --log-level=debug
+      - -L=debug
     depends_on:
       - "upstream-tikv0"
       - "upstream-tikv1"
@@ -205,7 +205,7 @@ services:
       - --data-dir=/data/downstream-pd
       - --config=/pd.toml
       - --log-file=/logs/downstream-pd.log
-      - --log-level=debug
+      - -L=debug
     restart: on-failure
 
   downstream-tikv0:
@@ -276,7 +276,7 @@ services:
       - --config=/tidb.toml
       - --log-file=/logs/downstream-tidb.log
       - --advertise-address=downstream-tidb
-      - --log-level=debug
+      - -L=debug
     depends_on:
       - "downstream-tikv0"
       - "downstream-tikv1"
