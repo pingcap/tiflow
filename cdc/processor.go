@@ -1041,8 +1041,8 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						continue
 					}
 					sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
-					if pEvent.CRTs <= sinkResolvedTs || pEvent.CRTs <= lastResolvedTs || pEvent.CRTs < replicaInfo.StartTs {
-						log.Warn("The CRTs of event is not expected, please report a bug",
+					if pEvent.CRTs <= lastResolvedTs || pEvent.CRTs < replicaInfo.StartTs {
+						log.Fatal("The CRTs of event is not expected, please report a bug",
 							zap.String("model", "sorter"),
 							zap.Uint64("globalResolvedTs", sinkResolvedTs),
 							zap.Uint64("resolvedTs", lastResolvedTs),
