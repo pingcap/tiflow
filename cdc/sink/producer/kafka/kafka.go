@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -55,6 +56,10 @@ func NewKafkaConfig() Config {
 }
 
 type kafkaSaramaProducer struct {
+	// clientLock is used to protect concurrent access of asyncClient and syncClient.
+	// Since we don't close these two clients (which have a input chan) from the
+	// sender routine, data race or send on closed chan could happen.
+	clientLock   sync.RWMutex
 	asyncClient  sarama.AsyncProducer
 	syncClient   sarama.SyncProducer
 	topic        string
@@ -72,6 +77,8 @@ type kafkaSaramaProducer struct {
 }
 
 func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
+	k.clientLock.RLock()
+	defer k.clientLock.RUnlock()
 	msg := &sarama.ProducerMessage{
 		Topic:     k.topic,
 		Key:       sarama.ByteEncoder(key),
@@ -91,6 +98,8 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 }
 
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error {
+	k.clientLock.RLock()
+	defer k.clientLock.RUnlock()
 	msgs := make([]*sarama.ProducerMessage, k.partitionNum)
 	for i := 0; i < int(k.partitionNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
@@ -150,6 +159,8 @@ func (k *kafkaSaramaProducer) GetPartitionNum() int32 {
 
 // stop closes the closeCh to signal other routines to exit
 func (k *kafkaSaramaProducer) stop() {
+	k.clientLock.Lock()
+	defer k.clientLock.Unlock()
 	select {
 	case <-k.closeCh:
 		return
