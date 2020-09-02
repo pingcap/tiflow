@@ -68,6 +68,7 @@ type kafkaSaramaProducer struct {
 	flushedReceiver *notify.Receiver
 
 	closeCh chan struct{}
+	closed  int32
 }
 
 func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error {
@@ -159,6 +160,10 @@ func (k *kafkaSaramaProducer) stop() {
 
 // Close implements the Producer interface
 func (k *kafkaSaramaProducer) Close() error {
+	// close sarama client multiple times will cause panic
+	if atomic.LoadInt32(&k.closed) == 1 {
+		return nil
+	}
 	k.stop()
 	// In fact close sarama sync client doesn't return any error.
 	// But close async client returns error if error channel is not empty, we
@@ -171,6 +176,7 @@ func (k *kafkaSaramaProducer) Close() error {
 	if err2 != nil {
 		log.Error("close async client with error", zap.Error(err2))
 	}
+	atomic.StoreInt32(&k.closed, 1)
 	return nil
 }
 
