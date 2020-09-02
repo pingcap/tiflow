@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	model2 "github.com/pingcap/parser/model"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
@@ -84,7 +85,6 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 		Ts:       e.CommitTs,
 		Database: e.Table.Schema,
 		Table:    e.Table.Table,
-		Type:     "update",
 		Data:     make(map[string]interface{}),
 		Old:      make(map[string]interface{}),
 	}
@@ -408,21 +408,21 @@ func NewMaxwellEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, e
 
 //ddl typecode from parser/model/ddl.go
 func ddlToMaxwellType(ddlType model2.ActionType) string {
-	if ddlType >= 5 && ddlType <= 20 {
+	if ddlType >= model2.ActionAddColumn && ddlType <= model2.ActionDropTablePartition {
 		return "table-alter"
 	}
 	switch ddlType {
-	case 3:
+	case model2.ActionCreateTable:
 		return "table-create"
-	case 4:
+	case model2.ActionDropTable:
 		return "table-drop"
 	case 22, 23, 27, 28, 29, 33, 37, 38, 41, 42:
 		return "table-alter"
-	case 1:
+	case model2.ActionCreateSchema:
 		return "database-create"
-	case 2:
+	case model2.ActionDropSchema:
 		return "database-drop"
-	case 26:
+	case model2.ActionModifySchemaCharsetAndCollate:
 		return "database-alter"
 	default:
 		return ddlType.String()
@@ -432,37 +432,31 @@ func ddlToMaxwellType(ddlType model2.ActionType) string {
 //Convert column type code to maxwell column type
 func columnToMaxwellType(columnType byte) (string, error) {
 	switch columnType {
-	// tinyint,smallint,mediumint,int
-	case 1, 2, 3, 9:
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24:
 		return "int", nil
-	// bigint
-	case 8:
+	case mysql.TypeLonglong:
 		return "bigint", nil
-	// tinytext,text,mediumtext,longtext,varchar,char
-	case 249, 252, 250, 251, 254, 15:
+	case mysql.TypeTinyBlob, mysql.TypeBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeString, mysql.TypeVarchar:
 		return "string", nil
-	// date
-	case 10:
+	case mysql.TypeDate:
 		return "date", nil
-	// datetime,timestamp
-	case 7, 12:
+	case mysql.TypeTimestamp, mysql.TypeDatetime:
 		return "datetime", nil
-	case 11:
+	case mysql.TypeDuration:
 		return "time", nil
-	case 13:
+	case mysql.TypeYear:
 		return "year", nil
-	case 247:
+	case mysql.TypeEnum:
 		return "enum", nil
-	case 248:
+	case mysql.TypeSet:
 		return "set", nil
-	case 16:
+	case mysql.TypeBit:
 		return "bit", nil
-	case 245:
+	case mysql.TypeJSON:
 		return "json", nil
-	// float,double
-	case 4, 5:
+	case mysql.TypeFloat, mysql.TypeDouble:
 		return "float", nil
-	case 246:
+	case mysql.TypeNewDecimal:
 		return "decimal", nil
 	default:
 		return "", errors.Errorf("unsupported column type - %v", columnType)
