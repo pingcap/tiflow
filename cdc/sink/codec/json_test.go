@@ -132,13 +132,19 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
+		mixedEncoder := newEncoder()
+		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for _, row := range cs {
 			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
+
+			op, err := mixedEncoder.AppendRowChangedEvent(row)
+			c.Assert(op, check.Equals, EncoderNoOperation)
+			c.Assert(err, check.IsNil)
 		}
 		// test mixed decode
-		mixed := encoder.MixedBuild(true)
-		c.Assert(len(mixed), check.Equals, encoder.Size())
+		mixed := mixedEncoder.MixedBuild(true)
+		c.Assert(len(mixed), check.Equals, mixedEncoder.Size())
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
 		checkRowDecoder(mixedDecoder, cs)
@@ -156,6 +162,8 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 
 	for _, cs := range s.ddlCases {
 		encoder := newEncoder()
+		mixedEncoder := newEncoder()
+		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
@@ -163,11 +171,15 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			decoder, err := newDecoder(msg.Key, msg.Value)
 			c.Assert(err, check.IsNil)
 			checkDDLDecoder(decoder, cs[i:i+1])
+
+			msg, err = mixedEncoder.EncodeDDLEvent(ddl)
+			c.Assert(msg, check.IsNil)
+			c.Assert(err, check.IsNil)
 		}
 
 		// test mixed encode
-		mixed := encoder.MixedBuild(true)
-		c.Assert(len(mixed), check.Equals, encoder.Size())
+		mixed := mixedEncoder.MixedBuild(true)
+		c.Assert(len(mixed), check.Equals, mixedEncoder.Size())
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
 		checkDDLDecoder(mixedDecoder, cs)
@@ -175,6 +187,8 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 
 	for _, cs := range s.resolvedTsCases {
 		encoder := newEncoder()
+		mixedEncoder := newEncoder()
+		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
 			c.Assert(err, check.IsNil)
@@ -182,11 +196,15 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			decoder, err := newDecoder(msg.Key, msg.Value)
 			c.Assert(err, check.IsNil)
 			checkTSDecoder(decoder, cs[i:i+1])
+
+			msg, err = mixedEncoder.EncodeCheckpointEvent(ts)
+			c.Assert(msg, check.IsNil)
+			c.Assert(err, check.IsNil)
 		}
 
 		// test mixed encode
-		mixed := encoder.MixedBuild(true)
-		c.Assert(len(mixed), check.Equals, encoder.Size())
+		mixed := mixedEncoder.MixedBuild(true)
+		c.Assert(len(mixed), check.Equals, mixedEncoder.Size())
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
 		checkTSDecoder(mixedDecoder, cs)
@@ -196,7 +214,6 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
 	s.testBatchCodec(c, func() EventBatchEncoder {
 		encoder := NewJSONEventBatchEncoder()
-		encoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		return encoder
 	}, NewJSONEventBatchDecoder)
 }
