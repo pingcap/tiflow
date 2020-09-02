@@ -112,7 +112,7 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		case dispatchRuleTS:
 			d = newTsDispatcher(partitionNum)
 		case dispatchRuleTable:
-			d = newTsDispatcher(partitionNum)
+			d = newTableDispatcher(partitionNum)
 		case dispatchRuleDefault:
 			d = newDefaultDispatcher(partitionNum, cfg.EnableOldValue)
 		}
