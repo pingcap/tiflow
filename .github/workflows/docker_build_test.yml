@@ -5,6 +5,9 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  pull_request_review_comment:
+    types: [created]
+
 
 jobs:
 
@@ -13,6 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+    - name: Dump GitHub context
+      env:
+        GITHUB_CONTEXT: ${{ toJson(github.event) }}
+      run: echo "$GITHUB_CONTEXT"
+      
     - name: Check out code into the Go module directory
       uses: actions/checkout@v2
       with:
