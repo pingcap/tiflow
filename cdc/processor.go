@@ -686,7 +686,8 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
 					return
-				case p.output <- model.NewResolvedPolymorphicEvent(lastResolvedTs):
+				case p.output <- model.NewResolvedPolymorphicEvent(0, lastResolvedTs):
+					// regionID = 0 means the event is produced by TiCDC
 				}
 			}
 		}
