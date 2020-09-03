@@ -24,13 +24,13 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/retry"
 	timeta "github.com/pingcap/tidb/meta"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/retry"
 )
 
 // schemaSnapshot stores the source TiDB all schema information
@@ -640,7 +640,7 @@ func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 	}
 	resolvedTs := atomic.LoadUint64(&s.resolvedTs)
 	if ts > resolvedTs {
-		return nil, errors.Annotatef(model.ErrUnresolved, "can not found schema snapshot, the specified ts(%d) is more than resolvedTs(%d)", ts, resolvedTs)
+		return nil, cerror.ErrUnresolved.GenWithStack("can not found schema snapshot, the specified ts(%d) is more than resolvedTs(%d)", ts, resolvedTs)
 	}
 	s.snapsMu.RLock()
 	defer s.snapsMu.RUnlock()
@@ -665,7 +665,7 @@ func (s *SchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnap
 			}
 			var err error
 			snap, err = s.getSnapshot(ts)
-			if errors.Cause(err) != model.ErrUnresolved {
+			if cerror.ErrUnresolved.NotEqual(err) {
 				return backoff.Permanent(err)
 			}
 			return err
