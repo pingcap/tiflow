@@ -109,11 +109,11 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 		// zap.ByteString("rowDatas", rowDatas),
 	)
 
-	if len(rowDatas) > 0 {
-		if len(rowDatas) > maxPartFlushSize || hashPart.uploadNum > 0 {
-			// S3 multi-upload need every chunk(except the last one) is greater than 5Mb
-			// so, if this batch data size is greater than 5Mb or it has uploadPart already
-			// we will use multi-upload this batch data
+	if len(rowDatas) > maxPartFlushSize || hashPart.uploadNum > 0 {
+		// S3 multi-upload need every chunk(except the last one) is greater than 5Mb
+		// so, if this batch data size is greater than 5Mb or it has uploadPart already
+		// we will use multi-upload this batch data
+		if len(rowDatas) > 0 {
 			if hashPart.uploader == nil {
 				uploader, err := s.storage.CreateUploader(ctx, newFileName)
 				if err != nil {
@@ -129,29 +129,29 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 
 			hashPart.byteSize += int64(len(rowDatas))
 			hashPart.uploadNum++
+		}
 
-			if hashPart.byteSize > maxCompletePartSize || len(rowDatas) <= maxPartFlushSize {
-				// we need do complete when total upload size is greater than 100Mb
-				// or this part data is less than 5Mb to avoid meet EntityTooSmall error
-				log.Info("[FlushRowChangedEvents] complete file", zap.Int64("tableID", tb.tableID))
-				err = hashPart.uploader.CompleteUpload(ctx)
-				if err != nil {
-					return err
-				}
-				hashPart.byteSize = 0
-				hashPart.uploadNum = 0
-				hashPart.uploader = nil
-				tb.encoder = nil
-			}
-		} else {
-			// generate normal file because S3 multi-upload need every part at least 5Mb.
-			log.Info("[FlushRowChangedEvents] normal upload file", zap.Int64("tableID", tb.tableID))
-			err := s.storage.Write(ctx, newFileName, rowDatas)
+		if hashPart.byteSize > maxCompletePartSize || len(rowDatas) <= maxPartFlushSize {
+			// we need do complete when total upload size is greater than 100Mb
+			// or this part data is less than 5Mb to avoid meet EntityTooSmall error
+			log.Info("[FlushRowChangedEvents] complete file", zap.Int64("tableID", tb.tableID))
+			err := hashPart.uploader.CompleteUpload(ctx)
 			if err != nil {
 				return err
 			}
+			hashPart.byteSize = 0
+			hashPart.uploadNum = 0
+			hashPart.uploader = nil
 			tb.encoder = nil
 		}
+	} else {
+		// generate normal file because S3 multi-upload need every part at least 5Mb.
+		log.Info("[FlushRowChangedEvents] normal upload file", zap.Int64("tableID", tb.tableID))
+		err := s.storage.Write(ctx, newFileName, rowDatas)
+		if err != nil {
+			return err
+		}
+		tb.encoder = nil
 	}
 
 	tb.sendEvents.Sub(sendEvents)

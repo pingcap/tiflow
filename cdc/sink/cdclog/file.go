@@ -203,6 +203,7 @@ func (f *fileSink) createDDLFile(commitTs uint64) (*os.File, error) {
 }
 
 func (f *fileSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	log.Debug("[EmitRowChangedEvents] enter", zap.Any("rows", rows))
 	for _, row := range rows {
 		// dispatch row event by tableID
 		tableID := row.Table.GetTableID()
