@@ -199,9 +199,9 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	overlappingRanges := l.getOverlappedEntries(startKey, endKey, regionID)
+	overlappingEntries := l.getOverlappedEntries(startKey, endKey, regionID)
 
-	if len(overlappingRanges) == 0 {
+	if len(overlappingEntries) == 0 {
 		checkpointTs := l.rangeCheckpointTs.GetMin(startKey, endKey)
 		newEntry := &rangeLockEntry{
 			startKey: startKey,
@@ -223,13 +223,13 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 
 	// Format overlapping ranges for printing log
 	var overlapStr []string
-	for _, r := range overlappingRanges {
+	for _, r := range overlappingEntries {
 		overlapStr = append(overlapStr, fmt.Sprintf("regionID: %v, ver: %v, start: %v, end: %v",
 			r.regionID, r.version, hex.EncodeToString(r.startKey), hex.EncodeToString(r.endKey))) //DEBUG
 	}
 
 	isStale := false
-	for _, r := range overlappingRanges {
+	for _, r := range overlappingEntries {
 		if r.version >= version {
 			isStale = true
 			break
@@ -242,7 +242,14 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		log.Info("tryLockRange stale", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("allOverlapping", overlapStr)) //DEBUG
 
-		for _, r := range overlappingRanges {
+		for _, r := range overlappingEntries {
+			// Ignore the totally-disjointed range which may be added to the list because of
+			// searching by regionID.
+			if bytes.Compare(r.endKey, startKey) <= 0 || bytes.Compare(endKey, r.startKey) <= 0 {
+				continue
+			}
+			// The rest should come from range searching and is sorted in increasing order, and they
+			// must intersect with the current given range.
 			if bytes.Compare(currentRangeStartKey, r.startKey) < 0 {
 				retryRanges = append(retryRanges, ComparableSpan{Start: currentRangeStartKey, End: r.startKey})
 			}
@@ -260,7 +267,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 
 	var signalChs []<-chan interface{}
 
-	for _, r := range overlappingRanges {
+	for _, r := range overlappingEntries {
 		ch := make(chan interface{}, 1)
 		signalChs = append(signalChs, ch)
 		r.waiters = append(r.waiters, ch)

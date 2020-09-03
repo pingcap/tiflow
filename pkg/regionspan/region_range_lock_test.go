@@ -15,6 +15,7 @@ package regionspan
 
 import (
 	"math"
+	"time"
 
 	"github.com/pingcap/check"
 )
@@ -58,7 +59,7 @@ func mustLockRangeWait(c *check.C, l *RegionRangeLock, startKey, endKey string, 
 }
 
 func unlockRange(l *RegionRangeLock, startKey, endKey string, regionID, version uint64, checkpointTs uint64) {
-	l.UnlockRange([]byte(startKey), []byte(endKey), version, regionID, checkpointTs)
+	l.UnlockRange([]byte(startKey), []byte(endKey), regionID, version, checkpointTs)
 }
 
 func (s *regionRangeLockSuit) TestRegionRangeLock(c *check.C) {
@@ -79,7 +80,7 @@ func (s *regionRangeLockSuit) TestRegionRangeLock(c *check.C) {
 func (s *regionRangeLockSuit) TestRegionRangeLockStale(c *check.C) {
 	l := NewRegionRangeLock()
 	mustLockRangeSuccess(c, l, "c", "g", 1, 10, math.MaxUint64)
-	mustLockRangeSuccess(c, l, "j", "n", 1, 8, math.MaxUint64)
+	mustLockRangeSuccess(c, l, "j", "n", 2, 8, math.MaxUint64)
 
 	mustLockRangeStale(c, l, "c", "g", 1, 10)
 	mustLockRangeStale(c, l, "c", "i", 1, 9, "g", "i")
@@ -87,12 +88,45 @@ func (s *regionRangeLockSuit) TestRegionRangeLockStale(c *check.C) {
 	mustLockRangeStale(c, l, "a", "e", 1, 9, "a", "c")
 	mustLockRangeStale(c, l, "e", "h", 1, 9, "g", "h")
 	mustLockRangeStale(c, l, "e", "k", 1, 9, "g", "j")
-	mustLockRangeSuccess(c, l, "g", "j", 1, 1, math.MaxUint64)
-	unlockRange(l, "g", "j", 1, 1, 2)
+	mustLockRangeSuccess(c, l, "g", "j", 3, 1, math.MaxUint64)
+	unlockRange(l, "g", "j", 3, 1, 2)
 	unlockRange(l, "c", "g", 1, 10, 5)
-	unlockRange(l, "j", "n", 1, 8, 8)
+	unlockRange(l, "j", "n", 2, 8, 8)
 	mustLockRangeSuccess(c, l, "a", "z", 1, 11, 2)
 	unlockRange(l, "a", "z", 1, 11, 2)
+}
+
+func (s *regionRangeLockSuit) TestRegionRangeLockLockingRegionID(c *check.C) {
+	l := NewRegionRangeLock()
+	mustLockRangeSuccess(c, l, "c", "d", 1, 10, math.MaxUint64)
+
+	mustLockRangeStale(c, l, "e", "f", 1, 5, "e", "f")
+	mustLockRangeStale(c, l, "e", "f", 1, 10, "e", "f")
+	wait := mustLockRangeWait(c, l, "e", "f", 1, 11)
+	unlockRange(l, "c", "d", 1, 10, 10)
+	mustSuccess(c, wait(), math.MaxUint64)
+	// Now ["e", "f") is locked by region 1 at version 11 and ts 11.
+
+	mustLockRangeSuccess(c, l, "g", "h", 2, 10, math.MaxUint64)
+	wait = mustLockRangeWait(c, l, "g", "h", 1, 12)
+	ch := make(chan LockRangeResult, 1)
+	go func() {
+		ch <- wait()
+	}()
+	unlockRange(l, "g", "h", 2, 10, 20)
+	// Locking should still be blocked because the regionID 1 is still locked.
+	select {
+	case <-ch:
+		c.Fatalf("locking finished unexpectedly")
+	case <-time.After(time.Millisecond * 50):
+	}
+
+	unlockRange(l, "e", "f", 1, 11, 11)
+	res := <-ch
+	// CheckpointTS calculation should still be based on range and do not consider the regionID. So
+	// the result's checkpointTs should be 20 from of range ["g", "h"), instead of 11 from min(11, 20).
+	mustSuccess(c, res, 20)
+	unlockRange(l, "g", "h", 1, 12, 30)
 }
 
 func (s *regionRangeLockSuit) TestRangeTsMap(c *check.C) {
