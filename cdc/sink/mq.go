@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink/producer/kafka"
 	"github.com/pingcap/ticdc/cdc/sink/producer/pulsar"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -215,7 +216,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
 		)
-		return errors.Trace(model.ErrorDDLEventIgnored)
+		return cerror.ErrorDDLEventIgnored.GenWithStackByArgs()
 	}
 	encoder := k.newEncoder()
 	op, err := encoder.AppendDDLEvent(ddl)

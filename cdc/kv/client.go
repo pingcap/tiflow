@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -693,7 +694,7 @@ MainLoop:
 						zap.Uint64("requestID", requestID),
 						zap.Uint64("storeID", storeID),
 						zap.String("error", err.Error()))
-					if errors.Cause(err) == util.ErrVersionIncompatible {
+					if cerror.ErrVersionIncompatible.Equal(err) {
 						// It often occurs on rolling update. Sleep 20s to reduce logs.
 						time.Sleep(20 * time.Second)
 					}
