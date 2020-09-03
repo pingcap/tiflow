@@ -111,7 +111,7 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 		for _, entry := range tc.input {
 			es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
 		}
-		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(tc.resolvedTs))
+		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
 		for i := 0; i < len(tc.expect); i++ {
 			e := <-es.Output()
 			c.Check(e.RawKV, check.DeepEquals, tc.expect[i])
@@ -151,9 +151,9 @@ func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
 				}
 				es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
 			}
-			es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(resolvedTs))
+			es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, resolvedTs))
 		}
-		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(maxTs))
+		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, maxTs))
 	}()
 	var lastTs uint64
 	var resolvedTs uint64
@@ -209,9 +209,9 @@ func BenchmarkSorter(b *testing.B) {
 				}
 				es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
 			}
-			es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(resolvedTs))
+			es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, resolvedTs))
 		}
-		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(maxTs))
+		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, maxTs))
 	}()
 	var resolvedTs uint64
 	for entry := range es.Output() {
