@@ -717,9 +717,11 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		}
 	}
 
-	if (c.status.ResolvedTs == c.status.CheckpointTs && (c.updateResolvedTs == false || c.status.ResolvedTs == c.ddlResolvedTs)) || c.status.ResolvedTs == 0 {
+	//if (c.status.ResolvedTs == c.status.CheckpointTs && (c.updateResolvedTs == false || c.status.ResolvedTs == c.ddlResolvedTs)) || c.status.ResolvedTs == 0 {
+	if (c.status.ResolvedTs == c.status.CheckpointTs && c.updateResolvedTs == false) || c.status.ResolvedTs == 0 {
 		log.Debug("achive the sync point", zap.Uint64("ResolvedTs", c.status.ResolvedTs))
 		//c.syncPointTs = c.targetTs //恢复syncPointTs，使得ResoledTs可以继续推进
+		log.Info("achive the sync point", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs))
 		c.updateResolvedTs = true
 
 		//todo 实现向下游同步记录同步点
