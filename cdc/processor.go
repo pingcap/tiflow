@@ -804,6 +804,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			rows = append(rows, ev.Row)
 		}
 		failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
+			log.Info("Prepare to panic for ProcessorSyncResolvedPreEmit")
 			time.Sleep(10 * time.Second)
 			panic("ProcessorSyncResolvedPreEmit")
 		})
