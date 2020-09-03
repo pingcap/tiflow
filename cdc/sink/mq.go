@@ -204,9 +204,6 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	}
 	key, value := encoder.Build()
 	err = k.writeToProducer(ctx, key, value, op, -1)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	return errors.Trace(err)
 }
 
