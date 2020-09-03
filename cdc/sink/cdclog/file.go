@@ -104,6 +104,10 @@ func (f *fileSink) flushTableStreams(ctx context.Context) error {
 			var fileName string
 			flushedEvents := tsReplica.sendEvents.Load()
 			flushedSize := tsReplica.sendSize.Load()
+			if flushedEvents == 0 {
+				log.Info("[flushTableStreams] no events to flush")
+				return nil
+			}
 			firstCreated := false
 			if tsReplica.encoder == nil {
 				// create encoder for each file
