@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -646,9 +647,9 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	}
 	// TODO Closing the resource should not be here
 	err = cf.ddlHandler.Close()
-	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
+	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), logutil.ZapErrorFilter(err, context.Canceled))
 	err = cf.sink.Close()
-	log.Info("stop changefeed sink", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
+	log.Info("stop changefeed sink", zap.String("changefeed id", job.CfID), logutil.ZapErrorFilter(err, context.Canceled))
 	// Only need to process stoppedFeeds with `AdminStop` command here.
 	// For `AdminResume`, we remove stopped feed in changefeed initialization phase.
 	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
