@@ -19,10 +19,10 @@ function prepare() {
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
     export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/ProcessorSyncResolvedPreEmit=1*return(true)'
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --restart true
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix 1 --restart true
 
     export GO_FAILPOINTS=''
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix 2
 
     TOPIC_NAME="ticdc-processor-panic-test-$RANDOM"
     case $SINK_TYPE in
