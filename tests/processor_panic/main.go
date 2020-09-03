@@ -56,8 +56,8 @@ func main() {
 
 	errg := new(errgroup.Group)
 	for i := 0; i < numTables; i++ {
+		tableName := fmt.Sprintf("test_table_%d", i)
 		errg.Go(func() error {
-			tableName := fmt.Sprintf("test_table_%d", i)
 			err := createTable(sourceDB, tableName)
 			if err != nil {
 				return errors.Trace(err)
