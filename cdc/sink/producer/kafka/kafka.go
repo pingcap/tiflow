@@ -194,11 +194,13 @@ func (k *kafkaSaramaProducer) stop() {
 
 // Close implements the Producer interface
 func (k *kafkaSaramaProducer) Close() error {
+	k.stop()
+	k.clientLock.Lock()
+	defer k.clientLock.Unlock()
 	// close sarama client multiple times will cause panic
 	if atomic.LoadInt32(&k.closed) == 1 {
 		return nil
 	}
-	k.stop()
 	// In fact close sarama sync client doesn't return any error.
 	// But close async client returns error if error channel is not empty, we
 	// don't populate this error to the upper caller, just add a log here.
