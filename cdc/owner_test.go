@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/types"
@@ -28,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -89,7 +89,7 @@ func (h *handlerForPrueDMLTest) PullDDL() (resolvedTs uint64, ddl []*model.DDL, 
 	return uint64(math.MaxUint64), nil, nil
 }
 
-func (h *handlerForPrueDMLTest) ExecDDL(context.Context, string, map[string]string, model.Txn) error {
+func (h *handlerForPrueDMLTest) ExecDDL(context.Context, string, map[string]string, model.SingleTableTxn) error {
 	panic("unreachable")
 }
 
@@ -117,7 +117,7 @@ func (h *handlerForPrueDMLTest) GetChangeFeeds(ctx context.Context) (int64, map[
 
 func (h *handlerForPrueDMLTest) GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
 	if changefeedID != "test_change_feed" {
-		return nil, model.ErrTaskStatusNotExists
+		return nil, cerror.ErrTaskStatusNotExists.GenWithStackByArgs("test_change_feed)
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -130,7 +130,7 @@ func (h *handlerForPrueDMLTest) GetAllTaskStatus(ctx context.Context, changefeed
 
 func (h *handlerForPrueDMLTest) GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error) {
 	if changefeedID != "test_change_feed" {
-		return nil, model.ErrTaskStatusNotExists
+		return nil, cerror.ErrTaskStatusNotExists.GenWithStackByArgs("test_change_feed)
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -146,7 +146,7 @@ func (h *handlerForPrueDMLTest) GetAllTaskPositions(ctx context.Context, changef
 }
 
 func (h *handlerForPrueDMLTest) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error) {
-	return nil, model.ErrChangeFeedNotExists
+	return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(id)
 }
 
 func (h *handlerForPrueDMLTest) PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
@@ -240,7 +240,7 @@ func (h *handlerForDDLTest) PullDDL() (resolvedTs uint64, jobs []*model.DDL, err
 	return h.ddlResolvedTs[h.ddlIndex], []*model.DDL{h.ddls[h.ddlIndex]}, nil
 }
 
-func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, _ map[string]string, txn model.Txn) error {
+func (h *handlerForDDLTest) ExecDDL(ctx context.Context, sinkURI string, _ map[string]string, txn model.SingleTableTxn) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.ddlExpectIndex++
@@ -271,7 +271,7 @@ func (h *handlerForDDLTest) GetChangeFeeds(ctx context.Context) (int64, map[stri
 
 func (h *handlerForDDLTest) GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
 	if changefeedID != "test_change_feed" {
-		return nil, model.ErrTaskStatusNotExists
+		return nil, cerror.ErrTaskStatusNotExists.GenWithStackByArgs("test_change_feed")
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -286,7 +286,7 @@ func (h *handlerForDDLTest) GetAllTaskStatus(ctx context.Context, changefeedID s
 
 func (h *handlerForDDLTest) GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error) {
 	if changefeedID != "test_change_feed" {
-		return nil, model.ErrTaskStatusNotExists
+		return nil, cerror.ErrTaskStatusNotExists.GenWithStackByArgs("test_change_feed")
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -306,7 +306,7 @@ func (h *handlerForDDLTest) GetAllTaskPositions(ctx context.Context, changefeedI
 }
 
 func (h *handlerForDDLTest) GetChangeFeedStatus(ctx context.Context, id string) (*model.ChangeFeedStatus, error) {
-	return nil, model.ErrChangeFeedNotExists
+	return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(id)
 }
 
 func (h *handlerForDDLTest) PutAllChangeFeedStatus(ctx context.Context, infos map[model.ChangeFeedID]*model.ChangeFeedStatus) error {
@@ -531,7 +531,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(len(owner.changeFeeds), check.Equals, 0)
 	// check changefeed info is deleted
 	_, err = owner.etcdClient.GetChangeFeedInfo(ctx, cfID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
+	c.Assert(cerror.ErrChangeFeedNotExists.Equal(err), check.IsTrue)
 	// check processor is set admin job
 	for cid := range sampleCF.taskPositions {
 		_, subInfo, err := owner.etcdClient.GetTaskStatus(ctx, cfID, cid)

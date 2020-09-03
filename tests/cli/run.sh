@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 CUR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
@@ -70,10 +72,25 @@ function run() {
     check_changefeed_count http://${UP_PD_HOST_1}:${UP_PD_PORT_1},http://${UP_PD_HOST_2}:${UP_PD_PORT_2},http://${UP_PD_HOST_3}:${UP_PD_PORT_3} 1
 
     # Make sure changefeed can not be created if the name is already exists.
+    set +e
     exists=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="$uuid" 2>&1 | grep -oE 'already exists')
+    set -e
     if [[ -z $exists ]]; then
         echo "[$(date)] <<<<< unexpect output got ${exists} >>>>>"
         exit 1
+    fi
+
+    # Update changefeed failed because changefeed is running
+cat - >"$WORK_DIR/changefeed.toml" <<EOF
+case-sensitive = false
+[mounter]
+worker-num = 4
+EOF
+    set +e
+    update_result=$(cdc cli changefeed update --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid)
+    set -e
+    if [[ ! $update_result == *"can only update changefeed config when it is stopped"* ]]; then
+        echo "update changefeed config should fail when changefeed is running, got $update_result"
     fi
 
     # Pause changefeed
@@ -86,11 +103,6 @@ function run() {
     check_changefeed_state $uuid "stopped"
 
     # Update changefeed
-cat - >"$WORK_DIR/changefeed.toml" <<EOF
-case-sensitive = false
-[mounter]
-worker-num = 4
-EOF
     run_cdc_cli changefeed update --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai" --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
     changefeed_info=$(run_cdc_cli changefeed query --changefeed-id $uuid 2>&1)
     if [[ ! $changefeed_info == *"\"case-sensitive\": false"* ]]; then
@@ -126,6 +138,21 @@ EOF
     fi
     check_changefeed_state $uuid "removed"
 
+    set +e
+    # Make sure changefeed can not be created if a removed changefeed with the same name exists
+    create_log=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="$uuid" 2>&1)
+    set -e
+    exists=$(echo $create_log | grep -oE 'already exists')
+    if [[ -z $exists ]]; then
+        echo "[$(date)] <<<<< unexpect output got ${create_log} >>>>>"
+        exit 1
+    fi
+
+    # force remove the changefeed, and re create a new one with the same name
+    run_cdc_cli changefeed --changefeed-id $uuid remove --force && sleep 3
+    run_cdc_cli changefeed create --sink-uri="$SINK_URI" --tz="Asia/Shanghai" -c="$uuid" && sleep 3
+    check_changefeed_state $uuid "normal"
+
     # Make sure bad sink url fails at creating changefeed.
     badsink=$(run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://badsink" 2>&1 | grep -oE 'fail')
     if [[ -z $badsink ]]; then
@@ -140,9 +167,15 @@ EOF
         run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --tz="Asia/Shanghai"
     fi
 
-    # Smoke test meta delete-gc-ttl and delete
-    echo "y" | run_cdc_cli meta delete-gc-ttl
-    run_cdc_cli meta delete --no-confirm
+    # Smoke test unsafe commands
+    echo "y" | run_cdc_cli unsafe delete-service-gc-safepoint
+    run_cdc_cli unsafe reset --no-confirm
+
+    # Smoke test change log level
+    curl -X POST -d '"warn"' http://127.0.0.1:8300/admin/log
+    sleep 3
+    # make sure TiCDC does not panic
+    check_changefeed_state $uuid "normal"
 
     cleanup_process $CDC_BINARY
 }

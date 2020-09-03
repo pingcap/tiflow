@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -90,6 +91,9 @@ func newAdminChangefeedCommand() []*cobra.Command {
 				job := model.AdminJob{
 					CfID: changefeedID,
 					Type: model.AdminRemove,
+					Opts: &model.AdminJobOption{
+						ForceRemove: optForceRemove,
+					},
 				}
 				return applyAdminChangefeed(ctx, job, getCredential())
 			},
@@ -99,6 +103,9 @@ func newAdminChangefeedCommand() []*cobra.Command {
 	for _, cmd := range cmds {
 		cmd.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 		_ = cmd.MarkPersistentFlagRequired("changefeed-id")
+		if cmd.Use == "remove" {
+			cmd.PersistentFlags().BoolVarP(&optForceRemove, "force", "f", false, "remove all information of the changefeed")
+		}
 	}
 	return cmds
 }
@@ -113,8 +120,21 @@ func newListChangefeedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cfs := make([]*changefeedCommonInfo, 0, len(raw))
+			changefeedIDs := make(map[string]struct{}, len(raw))
 			for id := range raw {
+				changefeedIDs[id] = struct{}{}
+			}
+			if changefeedListAll {
+				statuses, err := cdcEtcdCli.GetAllChangeFeedStatus(ctx)
+				if err != nil {
+					return err
+				}
+				for cid := range statuses {
+					changefeedIDs[cid] = struct{}{}
+				}
+			}
+			cfs := make([]*changefeedCommonInfo, 0, len(changefeedIDs))
+			for id := range changefeedIDs {
 				cfci := &changefeedCommonInfo{ID: id}
 				resp, err := applyOwnerChangefeedQuery(ctx, id, getCredential())
 				if err != nil {
@@ -133,6 +153,7 @@ func newListChangefeedCommand() *cobra.Command {
 			return jsonPrint(cmd, cfs)
 		},
 	}
+	command.PersistentFlags().BoolVarP(&changefeedListAll, "all", "a", false, "List all replication tasks(including removed and finished)")
 	return command
 }
 
@@ -153,15 +174,15 @@ func newQueryChangefeedCommand() *cobra.Command {
 			}
 
 			info, err := cdcEtcdCli.GetChangeFeedInfo(ctx, changefeedID)
-			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
 			}
 			status, _, err := cdcEtcdCli.GetChangeFeedStatus(ctx, changefeedID)
-			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
 			}
 			taskPositions, err := cdcEtcdCli.GetAllTaskPositions(ctx, changefeedID)
-			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
 			}
 			var count uint64
@@ -381,6 +402,20 @@ func newUpdateChangefeedCommand() *cobra.Command {
 			// Fix some fields that can't be updated.
 			info.CreateTime = old.CreateTime
 			info.AdminJobType = old.AdminJobType
+			info.StartTs = old.StartTs
+			info.ErrorHis = old.ErrorHis
+			info.Error = old.Error
+
+			resp, err := applyOwnerChangefeedQuery(ctx, changefeedID, getCredential())
+			// if no cdc owner exists, allow user to update changefeed config
+			if err != nil && errors.Cause(err) != errOwnerNotFound {
+				return err
+			}
+			// Note that the correctness of the logic here depends on the return value of `/capture/owner/changefeed/query` interface.
+			// TODO: Using error codes instead of string containing judgments
+			if err == nil && !strings.Contains(resp, `"state": "stopped"`) {
+				return errors.Errorf("can only update changefeed config when it is stopped\nstatus: %s", resp)
+			}
 
 			changelog, err := diff.Diff(old, info)
 			if err != nil {

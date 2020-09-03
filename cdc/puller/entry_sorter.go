@@ -138,7 +138,8 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 
 				resEvents := make([]*model.PolymorphicEvent, len(resolvedTsGroup))
 				for i, rts := range resolvedTsGroup {
-					resEvents[i] = model.NewResolvedPolymorphicEvent(rts)
+					// regionID = 0 means the event is produced by TiCDC
+					resEvents[i] = model.NewResolvedPolymorphicEvent(0, rts)
 				}
 				toSort = append(toSort, resEvents...)
 				startTime := time.Now()

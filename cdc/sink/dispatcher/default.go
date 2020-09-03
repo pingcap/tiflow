@@ -37,7 +37,7 @@ func (d *defaultDispatcher) Dispatch(row *model.RowChangedEvent) int32 {
 	if d.enableOldValue {
 		return d.tbd.Dispatch(row)
 	}
-	if len(row.IndexColumns) > 1 {
+	if len(row.IndexColumns) != 1 {
 		return d.tbd.Dispatch(row)
 	}
 	return d.ivd.Dispatch(row)

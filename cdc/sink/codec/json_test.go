@@ -48,7 +48,7 @@ var _ = check.Suite(&batchSuite{
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
 		CommitTs: 4,
-		Table:    &model.TableName{Schema: "a", Table: "c", Partition: 6},
+		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
@@ -137,7 +137,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(err, check.IsNil)
 		}
 		// test mixed decode
-		mixed := encoder.MixedBuild()
+		mixed := encoder.MixedBuild(true)
 		c.Assert(len(mixed), check.Equals, encoder.Size())
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
@@ -157,7 +157,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			c.Assert(err, check.IsNil)
 		}
 		// test mixed encode
-		mixed := encoder.MixedBuild()
+		mixed := encoder.MixedBuild(true)
 		c.Assert(len(mixed), check.Equals, encoder.Size())
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
@@ -179,7 +179,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		}
 
 		// test mixed encode
-		mixed := encoder.MixedBuild()
+		mixed := encoder.MixedBuild(true)
 		c.Assert(len(mixed), check.Equals, encoder.Size())
 		mixedDecoder, err := newDecoder(mixed, nil)
 		c.Assert(err, check.IsNil)
@@ -224,4 +224,25 @@ func (s *columnSuite) TestFormatCol(c *check.C) {
 	err = row2.Decode(rowEncode)
 	c.Assert(err, check.IsNil)
 	c.Assert(row2, check.DeepEquals, row)
+}
+
+func (s *columnSuite) TestVarBinaryCol(c *check.C) {
+	col := &model.Column{
+		Name:  "test",
+		Type:  mysql.TypeString,
+		Flag:  model.BinaryFlag,
+		Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+	}
+	jsonCol := column{}
+	jsonCol.FromSinkColumn(col)
+	row := &mqMessageRow{Update: map[string]column{"test": jsonCol}}
+	rowEncode, err := row.Encode()
+	c.Assert(err, check.IsNil)
+	row2 := new(mqMessageRow)
+	err = row2.Decode(rowEncode)
+	c.Assert(err, check.IsNil)
+	c.Assert(row2, check.DeepEquals, row)
+	jsonCol2 := row2.Update["test"]
+	col2 := jsonCol2.ToSinkColumn("test")
+	c.Assert(col2, check.DeepEquals, col)
 }

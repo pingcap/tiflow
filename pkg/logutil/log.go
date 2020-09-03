@@ -11,12 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package logutil
 
 import (
 	"bytes"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
@@ -63,6 +64,21 @@ func (cfg *Config) Adjust() {
 	if cfg.FileMaxDays == 0 {
 		cfg.FileMaxDays = defaultLogMaxDays
 	}
+}
+
+// SetLogLevel changes TiCDC log level dynamically.
+func SetLogLevel(level string) error {
+	oldLevel := log.GetLevel()
+	if strings.EqualFold(oldLevel.String(), level) {
+		return nil
+	}
+	var lv zapcore.Level
+	err := lv.UnmarshalText([]byte(level))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.SetLevel(lv)
+	return nil
 }
 
 // InitLogger initializes logger

@@ -5,10 +5,11 @@ package com_alibaba_otter_canal_protocol
 
 import (
 	fmt "fmt"
-	proto "github.com/golang/protobuf/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
+
+	proto "github.com/golang/protobuf/proto"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -3271,7 +3272,7 @@ func (m *RowChange) Unmarshal(dAtA []byte) error {
 			m.IsDdlPresent = &RowChange_IsDdl{b}
 		case 11:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Sql", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SQL", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {

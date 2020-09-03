@@ -14,19 +14,15 @@
 package cdclog
 
 import (
-	"bytes"
 	"context"
-	"io"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/kvproto/pkg/backup"
 	"github.com/pingcap/log"
 	parsemodel "github.com/pingcap/parser/model"
 	"github.com/uber-go/atomic"
@@ -38,16 +34,6 @@ import (
 )
 
 const (
-	s3EndpointOption     = "s3.endpoint"
-	s3RegionOption       = "s3.region"
-	s3StorageClassOption = "s3.storage-class"
-	s3SseOption          = "s3.sse"
-	s3SseKmsKeyIDOption  = "s3.sse-kms-key-id"
-	s3ACLOption          = "s3.acl"
-	s3ProviderOption     = "s3.provider"
-	// number of retries to make of operations
-	maxRetries = 3
-
 	maxNotifySize       = 15 << 20  // trigger flush if one table has reached 16Mb data size in memory
 	maxPartFlushSize    = 5 << 20   // The minimal multipart upload size is 5Mb.
 	maxCompletePartSize = 100 << 20 // rotate row changed event file if one complete file larger than 100Mb
@@ -57,87 +43,6 @@ const (
 	defaultFlushRowChangedEventDuration = 5 * time.Second // TODO make it as a config
 )
 
-// S3Options contains options for s3 storage
-type S3Options struct {
-	Endpoint              string `json:"endpoint" toml:"endpoint"`
-	Region                string `json:"region" toml:"region"`
-	StorageClass          string `json:"storage-class" toml:"storage-class"`
-	Sse                   string `json:"sse" toml:"sse"`
-	SseKmsKeyID           string `json:"sse-kms-key-id" toml:"sse-kms-key-id"`
-	ACL                   string `json:"acl" toml:"acl"`
-	AccessKey             string `json:"access-key" toml:"access-key"`
-	SecretAccessKey       string `json:"secret-access-key" toml:"secret-access-key"`
-	Provider              string `json:"provider" toml:"provider"`
-	ForcePathStyle        bool   `json:"force-path-style" toml:"force-path-style"`
-	UseAccelerateEndpoint bool   `json:"use-accelerate-endpoint" toml:"use-accelerate-endpoint"`
-}
-
-func (options *S3Options) extractFromQuery(sinkURI *url.URL) *S3Options {
-	options.Endpoint = sinkURI.Query().Get(s3EndpointOption)
-	options.Region = sinkURI.Query().Get(s3RegionOption)
-	options.Sse = sinkURI.Query().Get(s3SseOption)
-	options.SseKmsKeyID = sinkURI.Query().Get(s3SseKmsKeyIDOption)
-	options.ACL = sinkURI.Query().Get(s3ACLOption)
-	options.StorageClass = sinkURI.Query().Get(s3StorageClassOption)
-	options.ForcePathStyle = true
-	options.Provider = sinkURI.Query().Get(s3ProviderOption)
-	// TODO remove this access key, use env variable instead
-	options.SecretAccessKey = sinkURI.Query().Get("secret-access-key")
-	options.AccessKey = sinkURI.Query().Get("access-key")
-	return options
-}
-
-func (options *S3Options) adjust() error {
-	if len(options.Region) == 0 {
-		options.Region = "us-east-1"
-	}
-	if len(options.Endpoint) != 0 {
-		u, err := url.Parse(options.Endpoint)
-		if err != nil {
-			return err
-		}
-		if len(u.Scheme) == 0 {
-			return errors.New("scheme not found in endpoint")
-		}
-		if len(u.Host) == 0 {
-			return errors.New("host not found in endpoint")
-		}
-	}
-	// In some cases, we need to set ForcePathStyle to false.
-	// Refer to: https://rclone.org/s3/#s3-force-path-style
-	if options.Provider == "alibaba" || options.Provider == "netease" ||
-		options.UseAccelerateEndpoint {
-		options.ForcePathStyle = false
-	}
-	if len(options.AccessKey) == 0 && len(options.SecretAccessKey) != 0 {
-		return errors.New("access_key not found")
-	}
-	if len(options.AccessKey) != 0 && len(options.SecretAccessKey) == 0 {
-		return errors.New("secret_access_key not found")
-	}
-
-	return nil
-}
-
-func (options *S3Options) apply() *aws.Config {
-	awsConfig := aws.NewConfig().
-		WithMaxRetries(maxRetries).
-		WithS3ForcePathStyle(options.ForcePathStyle).
-		WithRegion(options.Region)
-
-	if len(options.Endpoint) != 0 {
-		awsConfig.WithEndpoint(options.Endpoint)
-	}
-	var cred *credentials.Credentials
-	if len(options.AccessKey) != 0 && len(options.SecretAccessKey) != 0 {
-		cred = credentials.NewStaticCredentials(options.AccessKey, options.SecretAccessKey, "")
-	}
-	if cred != nil {
-		awsConfig.WithCredentials(cred)
-	}
-	return awsConfig
-}
-
 type tableBuffer struct {
 	// for log
 	tableID    int64
@@ -145,24 +50,36 @@ type tableBuffer struct {
 	sendSize   *atomic.Int64
 	sendEvents *atomic.Int64
 
+	encoder codec.EventBatchEncoder
+
 	uploadParts struct {
-		originPartUploadResponse *s3.CreateMultipartUploadOutput
-		byteSize                 int64
-		completeParts            []*s3.CompletedPart
+		uploader  storage.Uploader
+		uploadNum int
+		byteSize  int64
 	}
+}
+
+func (tb *tableBuffer) IsEmpty() bool {
+	return tb.sendEvents.Load() == 0 && tb.uploadParts.uploadNum == 0
 }
 
 func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 	hashPart := tb.uploadParts
 	sendEvents := tb.sendEvents.Load()
-	if sendEvents == 0 && len(hashPart.completeParts) == 0 {
+	if sendEvents == 0 && hashPart.uploadNum == 0 {
 		log.Info("nothing to flush", zap.Int64("tableID", tb.tableID))
 		return nil
 	}
 
+	firstCreated := false
+	if tb.encoder == nil {
+		// create encoder for each file
+		tb.encoder = s.encoder()
+		firstCreated = true
+	}
+
 	var newFileName string
 	flushedSize := int64(0)
-	encoder := s.encoder()
 	for event := int64(0); event < sendEvents; event++ {
 		row := <-tb.dataCh
 		flushedSize += row.ApproximateSize
@@ -170,63 +87,70 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 			// if last event, we record ts as new rotate file name
 			newFileName = makeTableFileObject(row.Table.TableID, row.CommitTs)
 		}
-		_, err := encoder.AppendRowChangedEvent(row)
+		_, err := tb.encoder.AppendRowChangedEvent(row)
 		if err != nil {
 			return err
 		}
 	}
-	rowDatas := encoder.MixedBuild()
+	rowDatas := tb.encoder.MixedBuild(firstCreated)
+	// reset encoder buf for next round append
+	defer func() {
+		if tb.encoder != nil {
+			tb.encoder.Reset()
+		}
+	}()
+
 	log.Debug("[FlushRowChangedEvents[Debug]] flush table buffer",
 		zap.Int64("table", tb.tableID),
 		zap.Int64("event size", sendEvents),
 		zap.Int("row data size", len(rowDatas)),
-		zap.Int("upload num", len(hashPart.completeParts)),
+		zap.Int("upload num", hashPart.uploadNum),
 		zap.Int64("upload byte size", hashPart.byteSize),
 		// zap.ByteString("rowDatas", rowDatas),
 	)
 
 	if len(rowDatas) > 0 {
-		if len(rowDatas) > maxPartFlushSize || len(hashPart.completeParts) > 0 {
+		if len(rowDatas) > maxPartFlushSize || hashPart.uploadNum > 0 {
 			// S3 multi-upload need every chunk(except the last one) is greater than 5Mb
 			// so, if this batch data size is greater than 5Mb or it has uploadPart already
 			// we will use multi-upload this batch data
-			if hashPart.originPartUploadResponse == nil {
-				resp, err := s.createMultipartUpload(newFileName)
+			if hashPart.uploader == nil {
+				uploader, err := s.storage.CreateUploader(ctx, newFileName)
 				if err != nil {
 					return err
 				}
-				hashPart.originPartUploadResponse = resp
+				hashPart.uploader = uploader
 			}
 
-			completePart, err := s.uploadPart(hashPart.originPartUploadResponse, rowDatas, len(tb.uploadParts.completeParts))
+			err := hashPart.uploader.UploadPart(ctx, rowDatas)
 			if err != nil {
 				return err
 			}
 
 			hashPart.byteSize += int64(len(rowDatas))
-			hashPart.completeParts = append(hashPart.completeParts, completePart)
+			hashPart.uploadNum++
 
 			if hashPart.byteSize > maxCompletePartSize || len(rowDatas) <= maxPartFlushSize {
 				// we need do complete when total upload size is greater than 100Mb
 				// or this part data is less than 5Mb to avoid meet EntityTooSmall error
-				log.Info("[FlushRowChangedEvents] complete file",
-					zap.Int64("tableID", tb.tableID),
-					zap.Stringer("resp", hashPart.originPartUploadResponse))
-				_, err := s.completeMultipartUpload(hashPart.originPartUploadResponse, hashPart.completeParts)
+				log.Info("[FlushRowChangedEvents] complete file", zap.Int64("tableID", tb.tableID))
+				err = hashPart.uploader.CompleteUpload(ctx)
 				if err != nil {
 					return err
 				}
 				hashPart.byteSize = 0
-				hashPart.completeParts = hashPart.completeParts[:0]
-				hashPart.originPartUploadResponse = nil
+				hashPart.uploadNum = 0
+				hashPart.uploader = nil
+				tb.encoder = nil
 			}
 		} else {
 			// generate normal file because S3 multi-upload need every part at least 5Mb.
 			log.Info("[FlushRowChangedEvents] normal upload file", zap.Int64("tableID", tb.tableID))
-			err := s.putObjectWithKey(ctx, s.prefix+newFileName, rowDatas)
+			err := s.storage.Write(ctx, newFileName, rowDatas)
 			if err != nil {
 				return err
 			}
+			tb.encoder = nil
 		}
 	}
 
@@ -243,126 +167,30 @@ func newTableBuffer(tableID int64) *tableBuffer {
 		sendSize:   atomic.NewInt64(0),
 		sendEvents: atomic.NewInt64(0),
 		uploadParts: struct {
-			originPartUploadResponse *s3.CreateMultipartUploadOutput
-			byteSize                 int64
-			completeParts            []*s3.CompletedPart
-		}{originPartUploadResponse: nil,
-			byteSize:      0,
-			completeParts: make([]*s3.CompletedPart, 0, 128),
+			uploader  storage.Uploader
+			uploadNum int
+			byteSize  int64
+		}{
+			uploader:  nil,
+			uploadNum: 0,
+			byteSize:  0,
 		},
 	}
 }
 
 type s3Sink struct {
-	bucket string
 	prefix string
 
-	options *S3Options
-	client  *s3.S3
+	storage *storage.S3Storage
 
 	logMeta *logMeta
 	encoder func() codec.EventBatchEncoder
 
+	// hold encoder for ddl event log
+	ddlEncoder   codec.EventBatchEncoder
 	hashMap      sync.Map
 	tableBuffers []*tableBuffer
 	notifyChan   chan struct{}
-}
-
-func (s *s3Sink) HeadObject(name string) (*s3.HeadObjectOutput, error) {
-	input := &s3.HeadObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(name),
-	}
-	return s.client.HeadObject(input)
-}
-
-func (s *s3Sink) ListObject(name string, maxKeys int64) (*s3.ListObjectsV2Output, error) {
-	input := &s3.ListObjectsV2Input{
-		Bucket:  aws.String(s.bucket),
-		Prefix:  aws.String(s.prefix + name),
-		MaxKeys: aws.Int64(maxKeys),
-	}
-	return s.client.ListObjectsV2(input)
-}
-
-func (s *s3Sink) putObjectWithKey(ctx context.Context, key string, data []byte) error {
-	input := &s3.PutObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(key),
-	}
-	if len(data) != 0 {
-		input.Body = aws.ReadSeekCloser(bytes.NewReader(data))
-	}
-	if len(s.options.ACL) != 0 {
-		input = input.SetACL(s.options.ACL)
-	}
-	if len(s.options.Sse) != 0 {
-		input = input.SetServerSideEncryption(s.options.Sse)
-	}
-	if len(s.options.SseKmsKeyID) != 0 {
-		input = input.SetSSEKMSKeyId(s.options.SseKmsKeyID)
-	}
-	if len(s.options.StorageClass) != 0 {
-		input = input.SetStorageClass(s.options.StorageClass)
-	}
-
-	_, err := s.client.PutObjectWithContext(ctx, input)
-	if err != nil {
-		return err
-	}
-	hInput := &s3.HeadObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(key),
-	}
-	return s.client.WaitUntilObjectExistsWithContext(ctx, hInput)
-}
-
-func (s *s3Sink) getObjectWithKey(ctx context.Context, key string) (*s3.GetObjectOutput, error) {
-	input := &s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(key),
-	}
-	return s.client.GetObjectWithContext(ctx, input)
-}
-
-func (s *s3Sink) createMultipartUpload(name string) (*s3.CreateMultipartUploadOutput, error) {
-	input := &s3.CreateMultipartUploadInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(s.prefix + name),
-	}
-	return s.client.CreateMultipartUpload(input)
-}
-
-func (s *s3Sink) completeMultipartUpload(resp *s3.CreateMultipartUploadOutput, completedParts []*s3.CompletedPart) (*s3.CompleteMultipartUploadOutput, error) {
-	completeInput := &s3.CompleteMultipartUploadInput{
-		Bucket:   resp.Bucket,
-		Key:      resp.Key,
-		UploadId: resp.UploadId,
-		MultipartUpload: &s3.CompletedMultipartUpload{
-			Parts: completedParts,
-		},
-	}
-	return s.client.CompleteMultipartUpload(completeInput)
-}
-
-func (s *s3Sink) uploadPart(resp *s3.CreateMultipartUploadOutput, fileBytes []byte, partNumber int) (*s3.CompletedPart, error) {
-	partInput := &s3.UploadPartInput{
-		Body:          bytes.NewReader(fileBytes),
-		Bucket:        resp.Bucket,
-		Key:           resp.Key,
-		PartNumber:    aws.Int64(int64(partNumber)),
-		UploadId:      resp.UploadId,
-		ContentLength: aws.Int64(int64(len(fileBytes))),
-	}
-
-	uploadResult, err := s.client.UploadPart(partInput)
-	if err != nil {
-		return nil, err
-	}
-	return &s3.CompletedPart{
-		ETag:       uploadResult.ETag,
-		PartNumber: aws.Int64(int64(partNumber)),
-	}, nil
 }
 
 func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -410,13 +238,16 @@ func (s *s3Sink) flushLogMeta(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotate(err, "marshal meta to json failed")
 	}
-	return s.putObjectWithKey(ctx, s.prefix+logMetaFile, data)
+	return s.storage.Write(ctx, logMetaFile, data)
 }
 
 func (s *s3Sink) flushTableBuffers(ctx context.Context) error {
 	// TODO use a fixed worker pool
 	eg, ectx := errgroup.WithContext(ctx)
 	for _, tb := range s.tableBuffers {
+		if tb.IsEmpty() {
+			continue
+		}
 		tbReplica := tb
 		eg.Go(func() error {
 			log.Info("[FlushRowChangedEvents] flush specify row changed event",
@@ -428,21 +259,21 @@ func (s *s3Sink) flushTableBuffers(ctx context.Context) error {
 	return eg.Wait()
 }
 
-func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
+func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	// we should flush all events before resolvedTs, there are two kind of flush policy
 	// 1. flush row events to a s3 chunk: if the event size is not enough,
 	//    TODO: when cdc crashed, we should repair these chunks to a complete file
 	// 2. flush row events to a complete s3 file: if the event size is enough
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return 0, ctx.Err()
 	case <-s.notifyChan:
-		return s.flushTableBuffers(ctx)
+		return resolvedTs, s.flushTableBuffers(ctx)
 
 	case <-time.After(defaultFlushRowChangedEventDuration):
 		// cannot accumulate enough row events in 10 second
 		// flush all tables' row events to s3
-		return s.flushTableBuffers(ctx)
+		return resolvedTs, s.flushTableBuffers(ctx)
 	}
 }
 
@@ -472,60 +303,65 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			return err
 		}
 	}
-	encoder := s.encoder()
-	_, err := encoder.AppendDDLEvent(ddl)
+	firstCreated := false
+	if s.ddlEncoder == nil {
+		s.ddlEncoder = s.encoder()
+		firstCreated = true
+	}
+	_, err := s.ddlEncoder.AppendDDLEvent(ddl)
 	if err != nil {
 		return err
 	}
-	data := encoder.MixedBuild()
+	data := s.ddlEncoder.MixedBuild(firstCreated)
+	// reset encoder buf for next round append
+	defer s.ddlEncoder.Reset()
 
-	listing, err := s.ListObject(ddlEventsDir, 1)
-	if err != nil {
-		return err
-	}
-	var name string
-	size := int64(0)
-	for _, content := range listing.Contents {
-		name = *content.Key
-		size = *content.Size
+	var (
+		name     string
+		size     int64
+		fileData []byte
+	)
+	err = s.storage.WalkDir(ctx, ddlEventsDir, 1, func(key string, fileSize int64) error {
 		log.Debug("[EmitDDLEvent] list content from s3",
-			zap.String("name", name),
+			zap.String("key", key),
 			zap.Int64("size", size),
 			zap.Any("ddl", ddl))
+		name = strings.ReplaceAll(key, s.prefix, "")
+		size = fileSize
+		return nil
+	})
+	if err != nil {
+		return err
 	}
-	var fileData []byte
 	if size == 0 || size > maxDDLFlushSize {
 		// no ddl file exists or
 		// exists file is oversized. we should generate a new file
 		fileData = data
-		name = s.prefix + makeDDLFileObject(ddl.CommitTs)
+		name = makeDDLFileObject(ddl.CommitTs)
 		log.Debug("[EmitDDLEvent] create first or rotate ddl log",
 			zap.String("name", name), zap.Any("ddl", ddl))
+		if size > maxDDLFlushSize {
+			// reset ddl encoder for new file
+			s.ddlEncoder = nil
+		}
 	} else {
 		// hack way: append data to old file
 		log.Debug("[EmitDDLEvent] append ddl to origin log",
 			zap.String("name", name), zap.Any("ddl", ddl))
-		obj, err := s.getObjectWithKey(ctx, name)
+		fileData, err = s.storage.Read(ctx, name)
 		if err != nil {
 			return err
 		}
-		buf := make([]byte, maxDDLFlushSize)
-		n, err := obj.Body.Read(buf)
-		if err != nil {
-			if err != io.EOF {
-				return err
-			}
-		}
-		fileData = append(fileData, buf[:n]...)
+		fileData = append(fileData, data...)
 	}
-	return s.putObjectWithKey(ctx, name, fileData)
+	return s.storage.Write(ctx, name, fileData)
 }
 
 func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableInfo) error {
 	if tableInfo != nil {
 		for _, table := range tableInfo {
 			if table != nil {
-				err := s.putObjectWithKey(ctx, s.prefix+makeTableDirectoryName(table.TableID), nil)
+				err := s.storage.Write(ctx, makeTableDirectoryName(table.TableID), nil)
 				if err != nil {
 					return errors.Annotate(err, "create table directory on s3 failed")
 				}
@@ -538,7 +374,7 @@ func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 		if err != nil {
 			return errors.Annotate(err, "marshal meta to json failed")
 		}
-		return s.putObjectWithKey(ctx, s.prefix+logMetaFile, data)
+		return s.storage.Write(ctx, logMetaFile, data)
 	}
 	return nil
 }
@@ -552,49 +388,30 @@ func NewS3Sink(sinkURI *url.URL) (*s3Sink, error) {
 	if len(sinkURI.Host) == 0 {
 		return nil, errors.Errorf("please specify the bucket for s3 in %s", sinkURI)
 	}
-	bucket := sinkURI.Host
 	prefix := strings.Trim(sinkURI.Path, "/")
-	prefix += "/"
-	s3options := new(S3Options)
-	err := s3options.
-		extractFromQuery(sinkURI).
-		adjust()
-	if err != nil {
-		return nil, errors.Annotatef(err, "parse s3 config failed with %s", sinkURI)
-	}
-	awsConfig := s3options.apply()
-	awsSessionOpts := session.Options{Config: *awsConfig}
-	ses, err := session.NewSessionWithOptions(awsSessionOpts)
-	if err != nil {
+	s3 := &backup.S3{Bucket: sinkURI.Host, Prefix: prefix}
+	options := &storage.BackendOptions{}
+	storage.ExtractQueryParameters(sinkURI, &options.S3)
+	if err := options.S3.Apply(s3); err != nil {
 		return nil, err
 	}
+	// we should set this to true, since br set it by default in parseBackend
+	s3.ForcePathStyle = true
 
-	s3client := s3.New(ses)
-	err = checkBucket(s3client, bucket)
+	s3storage, err := storage.NewS3Storage(s3, false)
 	if err != nil {
-		return nil, errors.Errorf("bucket %s is not accessible: %v", bucket, err)
+		return nil, err
 	}
 
 	notifyChan := make(chan struct{})
 	tableBuffers := make([]*tableBuffer, 0)
 	return &s3Sink{
-		bucket:  bucket,
 		prefix:  prefix,
-		options: s3options,
-		client:  s3client,
+		storage: s3storage,
 		logMeta: newLogMeta(),
 		encoder: codec.NewJSONEventBatchEncoder,
 
 		tableBuffers: tableBuffers,
 		notifyChan:   notifyChan,
 	}, nil
-}
-
-// checkBucket checks if a path exists
-func checkBucket(svc *s3.S3, bucket string) error {
-	input := &s3.HeadBucketInput{
-		Bucket: aws.String(bucket),
-	}
-	_, err := svc.HeadBucket(input)
-	return err
 }

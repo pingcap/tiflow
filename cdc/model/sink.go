@@ -55,119 +55,136 @@ const (
 	MultipleKeyFlag
 	// NullableFlag means the column is nullable
 	NullableFlag
+	// UnsignedFlag means the column stores an unsigned integer
+	UnsignedFlag
 )
 
-//SetIsBinary set BinaryFlag
+//SetIsBinary sets BinaryFlag
 func (b *ColumnFlagType) SetIsBinary() {
 	(*util.Flag)(b).Add(util.Flag(BinaryFlag))
 }
 
-//UnsetIsBinary unset BinaryFlag
+//UnsetIsBinary unsets BinaryFlag
 func (b *ColumnFlagType) UnsetIsBinary() {
 	(*util.Flag)(b).Remove(util.Flag(BinaryFlag))
 }
 
-//IsBinary show whether BinaryFlag is set
+//IsBinary shows whether BinaryFlag is set
 func (b *ColumnFlagType) IsBinary() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(BinaryFlag))
 }
 
-//SetIsHandleKey set HandleKey
+//SetIsHandleKey sets HandleKey
 func (b *ColumnFlagType) SetIsHandleKey() {
 	(*util.Flag)(b).Add(util.Flag(HandleKeyFlag))
 }
 
-//UnsetIsHandleKey unset HandleKey
+//UnsetIsHandleKey unsets HandleKey
 func (b *ColumnFlagType) UnsetIsHandleKey() {
 	(*util.Flag)(b).Remove(util.Flag(HandleKeyFlag))
 }
 
-//IsHandleKey show whether HandleKey is set
+//IsHandleKey shows whether HandleKey is set
 func (b *ColumnFlagType) IsHandleKey() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(HandleKeyFlag))
 }
 
-//SetIsGeneratedColumn set GeneratedColumn
+//SetIsGeneratedColumn sets GeneratedColumn
 func (b *ColumnFlagType) SetIsGeneratedColumn() {
 	(*util.Flag)(b).Add(util.Flag(GeneratedColumnFlag))
 }
 
-//UnsetIsGeneratedColumn unset GeneratedColumn
+//UnsetIsGeneratedColumn unsets GeneratedColumn
 func (b *ColumnFlagType) UnsetIsGeneratedColumn() {
 	(*util.Flag)(b).Remove(util.Flag(GeneratedColumnFlag))
 }
 
-//IsGeneratedColumn show whether GeneratedColumn is set
+//IsGeneratedColumn shows whether GeneratedColumn is set
 func (b *ColumnFlagType) IsGeneratedColumn() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(GeneratedColumnFlag))
 }
 
-//SetIsPrimaryKey set PrimaryKeyFlag
+//SetIsPrimaryKey sets PrimaryKeyFlag
 func (b *ColumnFlagType) SetIsPrimaryKey() {
 	(*util.Flag)(b).Add(util.Flag(PrimaryKeyFlag))
 }
 
-//UnsetIsPrimaryKey unset PrimaryKeyFlag
+//UnsetIsPrimaryKey unsets PrimaryKeyFlag
 func (b *ColumnFlagType) UnsetIsPrimaryKey() {
 	(*util.Flag)(b).Remove(util.Flag(PrimaryKeyFlag))
 }
 
-//IsPrimaryKey show whether PrimaryKeyFlag is set
+//IsPrimaryKey shows whether PrimaryKeyFlag is set
 func (b *ColumnFlagType) IsPrimaryKey() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(PrimaryKeyFlag))
 }
 
-//SetIsUniqueKey set UniqueKeyFlag
+//SetIsUniqueKey sets UniqueKeyFlag
 func (b *ColumnFlagType) SetIsUniqueKey() {
 	(*util.Flag)(b).Add(util.Flag(UniqueKeyFlag))
 }
 
-//UnsetIsUniqueKey unset UniqueKeyFlag
+//UnsetIsUniqueKey unsets UniqueKeyFlag
 func (b *ColumnFlagType) UnsetIsUniqueKey() {
 	(*util.Flag)(b).Remove(util.Flag(UniqueKeyFlag))
 }
 
-//IsUniqueKey show whether UniqueKeyFlag is set
+//IsUniqueKey shows whether UniqueKeyFlag is set
 func (b *ColumnFlagType) IsUniqueKey() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(UniqueKeyFlag))
 }
 
-//IsMultipleKey show whether MultipleKeyFlag is set
+//IsMultipleKey shows whether MultipleKeyFlag is set
 func (b *ColumnFlagType) IsMultipleKey() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(MultipleKeyFlag))
 }
 
-//SetIsMultipleKey set MultipleKeyFlag
+//SetIsMultipleKey sets MultipleKeyFlag
 func (b *ColumnFlagType) SetIsMultipleKey() {
 	(*util.Flag)(b).Add(util.Flag(MultipleKeyFlag))
 }
 
-//UnsetIsMultipleKey unset MultipleKeyFlag
+//UnsetIsMultipleKey unsets MultipleKeyFlag
 func (b *ColumnFlagType) UnsetIsMultipleKey() {
 	(*util.Flag)(b).Remove(util.Flag(MultipleKeyFlag))
 }
 
-//IsNullable show whether NullableFlag is set
+//IsNullable shows whether NullableFlag is set
 func (b *ColumnFlagType) IsNullable() bool {
 	return (*util.Flag)(b).HasAll(util.Flag(NullableFlag))
 }
 
-//SetIsNullable set NullableFlag
+//SetIsNullable sets NullableFlag
 func (b *ColumnFlagType) SetIsNullable() {
 	(*util.Flag)(b).Add(util.Flag(NullableFlag))
 }
 
-//UnsetIsNullable unset NullableFlag
+//UnsetIsNullable unsets NullableFlag
 func (b *ColumnFlagType) UnsetIsNullable() {
 	(*util.Flag)(b).Remove(util.Flag(NullableFlag))
 }
 
+//IsUnsigned shows whether UnsignedFlag is set
+func (b *ColumnFlagType) IsUnsigned() bool {
+	return (*util.Flag)(b).HasAll(util.Flag(UnsignedFlag))
+}
+
+//SetIsUnsigned sets UnsignedFlag
+func (b *ColumnFlagType) SetIsUnsigned() {
+	(*util.Flag)(b).Add(util.Flag(UnsignedFlag))
+}
+
+//UnsetIsUnsigned unsets UnsignedFlag
+func (b *ColumnFlagType) UnsetIsUnsigned() {
+	(*util.Flag)(b).Remove(util.Flag(UnsignedFlag))
+}
+
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema    string `toml:"db-name" json:"db-name"`
-	Table     string `toml:"tbl-name" json:"tbl-name"`
-	TableID   int64  `toml:"tbl-id" json:"tbl-id"`
-	Partition int64  `json:"partition"`
+	Schema      string `toml:"db-name" json:"db-name"`
+	Table       string `toml:"tbl-name" json:"tbl-name"`
+	TableID     int64  `toml:"tbl-id" json:"tbl-"`
+	IsPartition bool   `toml:"is-partition" json:"is-partition"`
 }
 
 // String implements fmt.Stringer interface.
@@ -209,8 +226,6 @@ type RowChangedEvent struct {
 	Columns      []*Column `json:"columns"`
 	PreColumns   []*Column `json:"pre-columns"`
 	IndexColumns [][]int
-	// TODO: remove it
-	Keys []string `json:"keys"`
 
 	// approximate size of this event, calculate by tikv proto bytes size
 	ApproximateSize int64
@@ -347,30 +362,23 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 	}
 }
 
-// Txn represents a transaction which includes many row events
-type Txn struct {
+// SingleTableTxn represents a transaction which includes many row events in a single table
+type SingleTableTxn struct {
+	Table     *TableName
 	StartTs   uint64
 	CommitTs  uint64
 	Rows      []*RowChangedEvent
-	Keys      []string
 	ReplicaID uint64
 }
 
-// Append adds a row changed event into Txn
-func (t *Txn) Append(row *RowChangedEvent) {
-	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs {
+// Append adds a row changed event into SingleTableTxn
+func (t *SingleTableTxn) Append(row *RowChangedEvent) {
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.TableID {
 		log.Fatal("unexpected row change event",
 			zap.Uint64("startTs of txn", t.StartTs),
 			zap.Uint64("commitTs of txn", t.CommitTs),
-			zap.Uint64("startTs of row", row.StartTs),
-			zap.Uint64("commitTs of row", row.CommitTs))
+			zap.Any("table of txn", t.Table),
+			zap.Any("row", row))
 	}
 	t.Rows = append(t.Rows, row)
-	if len(row.Keys) == 0 {
-		if len(t.Keys) == 0 {
-			t.Keys = []string{QuoteSchema(row.Table.Schema, row.Table.Table)}
-		}
-	} else {
-		t.Keys = append(t.Keys, row.Keys...)
-	}
 }

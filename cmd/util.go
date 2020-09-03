@@ -16,6 +16,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	liberrors "errors"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -36,8 +37,8 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/httputil"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -50,6 +51,10 @@ var (
 	certPath      string
 	keyPath       string
 	allowedCertCN string
+)
+
+var (
+	errOwnerNotFound = liberrors.New("owner not found")
 )
 
 func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
@@ -76,9 +81,9 @@ func getCredential() *security.Credential {
 }
 
 // initCmd initializes the logger, the default context and returns its cancel function.
-func initCmd(cmd *cobra.Command, logCfg *util.Config) context.CancelFunc {
+func initCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
 	// Init log.
-	err := util.InitLogger(logCfg)
+	err := logutil.InitLogger(logCfg)
 	if err != nil {
 		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
 		os.Exit(1)
@@ -130,7 +135,7 @@ func getOwnerCapture(ctx context.Context) (*capture, error) {
 			return c, nil
 		}
 	}
-	return nil, errors.NotFoundf("owner")
+	return nil, errors.Trace(errOwnerNotFound)
 }
 
 func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *security.Credential) error {
@@ -147,9 +152,14 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *s
 	if err != nil {
 		return err
 	}
+	forceRemoveOpt := "false"
+	if job.Opts != nil && job.Opts.ForceRemove {
+		forceRemoveOpt = "true"
+	}
 	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
-		cdc.APIOpVarAdminJob:     {fmt.Sprint(int(job.Type))},
-		cdc.APIOpVarChangefeedID: {job.CfID},
+		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
+		cdc.APIOpVarChangefeedID:       {job.CfID},
+		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
 	}))
 	if err != nil {
 		return err
