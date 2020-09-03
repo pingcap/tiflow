@@ -525,7 +525,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // CAUTION: Note that this should only be called in a context that the region has locked it's range.
 func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, blocking bool) error {
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
-	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetVer(), errorInfo.ts)
+	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
 	if blocking {
 		select {
 		case s.errCh <- errorInfo:
@@ -893,9 +893,8 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 			return
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			metricFeedDuplicateRequestCounter.Inc()
-			log.Error("tikv reported duplicated request to the same region, which is not expected",
-				zap.Uint64("regionID", duplicatedRequest.RegionId))
-			return
+			panic(fmt.Sprintf("tikv reported duplicated request to the same region, which is not expected. regionID: %v",
+				duplicatedRequest.RegionId))
 		} else {
 			metricFeedUnknownErrorCounter.Inc()
 			log.Warn("receive empty or unknown error msg", zap.Stringer("error", innerErr))
