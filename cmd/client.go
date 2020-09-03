@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/spf13/cobra"
 	"go.etcd.io/etcd/clientv3"
@@ -121,7 +122,7 @@ func newCliCommand() *cobra.Command {
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			initCmd(cmd, &util.Config{Level: cliLogLevel})
+			initCmd(cmd, &logutil.Config{Level: cliLogLevel})
 
 			credential := getCredential()
 			tlsConfig, err := credential.ToTLSConfig()
