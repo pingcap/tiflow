@@ -22,6 +22,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
@@ -76,13 +77,15 @@ type TableName interface {
 func CreateMarkTables(ctx context.Context, upstreamDSN string, upstreamCred *security.Credential, tables ...TableName) error {
 	tlsCfg, err := upstreamCred.ToTLSConfig()
 	if err != nil {
-		return errors.Annotate(err, "fail to open upstream TiDB connection")
+		return cerror.WrapError(cerror.ErrCreateMarkTableFailed,
+			errors.Annotate(err, "fail to open upstream TiDB connection"))
 	}
 	if tlsCfg != nil {
 		tlsName := "cli-marktable"
 		err = mysql.RegisterTLSConfig(tlsName, tlsCfg)
 		if err != nil {
-			return errors.Annotate(err, "fail to open upstream TiDB connection")
+			return cerror.WrapError(cerror.ErrCreateMarkTableFailed,
+				errors.Annotate(err, "fail to open upstream TiDB connection"))
 		}
 		if strings.Contains(upstreamDSN, "?") && strings.Contains(upstreamDSN, "=") {
 			upstreamDSN += ("&tls=" + tlsName)
@@ -92,11 +95,13 @@ func CreateMarkTables(ctx context.Context, upstreamDSN string, upstreamCred *sec
 	}
 	db, err := sql.Open("mysql", upstreamDSN)
 	if err != nil {
-		return errors.Annotate(err, "Open upsteam database connection failed")
+		return cerror.WrapError(cerror.ErrCreateMarkTableFailed,
+			errors.Annotate(err, "Open upsteam database connection failed"))
 	}
 	err = db.PingContext(ctx)
 	if err != nil {
-		return errors.Annotate(err, "fail to open upstream TiDB connection")
+		return cerror.WrapError(cerror.ErrCreateMarkTableFailed,
+			errors.Annotate(err, "fail to open upstream TiDB connection"))
 	}
 
 	userTableCount := 0
@@ -108,7 +113,8 @@ func CreateMarkTables(ctx context.Context, upstreamDSN string, upstreamCred *sec
 		schema, table := GetMarkTableName(name.GetSchema(), name.GetTable())
 		_, err = db.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", schema))
 		if err != nil {
-			return errors.Annotate(err, "fail to create mark database")
+			return cerror.WrapError(cerror.ErrCreateMarkTableFailed,
+				errors.Annotate(err, "fail to create mark database"))
 		}
 		_, err = db.ExecContext(ctx, fmt.Sprintf(
 			`CREATE TABLE IF NOT EXISTS %s
@@ -120,7 +126,8 @@ func CreateMarkTables(ctx context.Context, upstreamDSN string, upstreamCred *sec
 				PRIMARY KEY (bucket, %s)
 			);`, quotes.QuoteSchema(schema, table), CyclicReplicaIDCol, CyclicReplicaIDCol))
 		if err != nil {
-			return errors.Annotatef(err, "fail to create mark table %s", table)
+			return cerror.WrapError(cerror.ErrCreateMarkTableFailed,
+				errors.Annotatef(err, "fail to create mark table %s", table))
 		}
 	}
 	log.Info("create upstream mark done", zap.Int("count", userTableCount))

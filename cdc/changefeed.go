@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
@@ -660,13 +661,13 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		// If DDL executing failed, pause the changefeed and print log, rather
 		// than return an error and break the running of this owner.
 		if err != nil {
-			if errors.Cause(err) != model.ErrorDDLEventIgnored {
+			if cerror.ErrorDDLEventIgnored.NotEqual(err) {
 				c.ddlState = model.ChangeFeedDDLExecuteFailed
 				log.Error("Execute DDL failed",
 					zap.String("ChangeFeedID", c.id),
 					zap.Error(err),
 					zap.Reflect("ddlJob", todoDDLJob))
-				return errors.Trace(model.ErrExecDDLFailed)
+				return cerror.ErrExecDDLFailed.GenWithStackByArgs()
 			}
 		} else {
 			executed = true
