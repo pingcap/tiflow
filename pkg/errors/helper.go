@@ -11,11 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package errors
 
-// RunningError represents some running error from cdc components, such as processor.
-type RunningError struct {
-	Addr    string `json:"addr"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
+import (
+	"github.com/pingcap/errors"
+)
+
+// WrapError generates a new error based on given `*errors.Error`, wraps the err
+// as cause error.
+// If given `err` is nil, returns a nil error, which a the different behavior
+// against `Wrap` function in pingcap/errors.
+func WrapError(rfcError *errors.Error, err error) error {
+	if err == nil {
+		return nil
+	}
+	return rfcError.Wrap(err).GenWithStackByCause()
 }
