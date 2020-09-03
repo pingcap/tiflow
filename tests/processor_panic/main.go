@@ -79,7 +79,7 @@ func main() {
 }
 
 func createTable(db *sql.DB, tableName string) error {
-	_, err := db.Exec("CREATE table " + quotes.QuoteName(tableName) + " (int id primary key, int v1, int v2)")
+	_, err := db.Exec("CREATE table " + quotes.QuoteName(tableName) + " (id int primary key, v1 int, v2 int)")
 	if err != nil {
 		return errors.Trace(err)
 	}
