@@ -18,10 +18,9 @@ function prepare() {
     # record tso before we create tables to skip the system table DDLs
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
-    GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/ProcessorSyncResolvedPreEmit=return(true)' \
-      run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix 1 --addr 127.0.0.1:8300 --restart true
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix 1 --addr 127.0.0.1:8300 --restart true \
+                   --failpoint github.com/pingcap/ticdc/cdc/ProcessorSyncResolvedPreEmit=return(true)
 
-    export GO_FAILPOINTS=''
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix 2 --addr 127.0.0.1:8301
 
     TOPIC_NAME="ticdc-processor-panic-test-$RANDOM"

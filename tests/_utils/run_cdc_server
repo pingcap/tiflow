@@ -20,6 +20,7 @@ pd_addr=
 pwd=$pwd
 log_level=debug
 restart=
+failpoint=
 
 while [[ ${1} ]]; do
     case "${1}" in
@@ -59,6 +60,10 @@ while [[ ${1} ]]; do
             restart=${2}
             shift
             ;;
+        --failpoint)
+            failpoint=${2}
+            shift
+            ;;
         *)
             echo "Unknown parameter: ${1}" >&2
             exit 1
@@ -78,7 +83,7 @@ pid=$(ps -C run_cdc_server -o pid=|tr -d '[:space:]')
 
 if [[ "$restart" == "true" ]]; then
   while true; do
-      $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
+      GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
         --log-file $workdir/cdc$logsuffix.log \
         --log-level $log_level \
         $tls \
@@ -91,7 +96,7 @@ if [[ "$restart" == "true" ]]; then
       sleep 1
   done &
 else
-  $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
+  GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
     --log-file $workdir/cdc$logsuffix.log \
     --log-level $log_level \
     $tls \
