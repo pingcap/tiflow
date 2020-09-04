@@ -812,7 +812,8 @@ func (s *eventFeedSession) partialRegionFeed(
 
 	regionID := state.sri.verID.GetID()
 	log.Info("EventFeed disconnected",
-		zap.Reflect("regionID", regionID),
+		zap.Uint64("regionID", regionID),
+		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", state.sri.span),
 		zap.Uint64("checkpoint", ts),
 		zap.String("error", err.Error()))
@@ -941,8 +942,8 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 			return
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			metricFeedDuplicateRequestCounter.Inc()
-			panic(fmt.Sprintf("tikv reported duplicated request to the same region, which is not expected. regionID: %v",
-				duplicatedRequest.RegionId))
+			log.Fatal("tikv reported duplicated request to the same region, which is not expected",
+				zap.Uint64("regionID", duplicatedRequest.RegionId))
 		} else {
 			metricFeedUnknownErrorCounter.Inc()
 			log.Warn("receive empty or unknown error msg", zap.Stringer("error", innerErr))
