@@ -377,7 +377,6 @@ func (s *s3Sink) Close() error {
 func (s *s3Sink) run(ctx context.Context) error {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
-	eg, ectx := errgroup.WithContext(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -385,6 +384,7 @@ func (s *s3Sink) run(ctx context.Context) error {
 			return ctx.Err()
 		case needFlushBuffers := <-s.notifyChan:
 			// try specify buffers
+			eg, ectx := errgroup.WithContext(ctx)
 			for _, tb := range needFlushBuffers {
 				tbReplica := tb
 				eg.Go(func() error {
@@ -403,6 +403,7 @@ func (s *s3Sink) run(ctx context.Context) error {
 		case <-ticker.C:
 			// try all tableBuffers
 			tableBuffers := s.tableBuffers
+			eg, ectx := errgroup.WithContext(ctx)
 			for _, tb := range tableBuffers {
 				tbReplica := tb
 				if tb.shouldFlush() {
