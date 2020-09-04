@@ -28,14 +28,24 @@ ddls=("create database ddl_reentrant" false
       "drop view ddl_reentrant.t3_view" false
       "alter table ddl_reentrant.t3 default character set utf8mb4 default collate utf8mb4_unicode_ci" true
       "alter schema ddl_reentrant default character set utf8mb4 default collate utf8mb4_unicode_ci" true
-      "alter table ddl_reentrant.t2 add column c1 int, add column c2 int, add column c3 int" false
-      "alter table ddl_reentrant.t2 drop column c1, drop column c2, drop column c3" false
-      "alter table ddl_reentrant.t2 drop primary key" false
-      "alter table ddl_reentrant.t2 add primary key pk(id)" false
-      "drop table ddl_reentrant.t2" false
-      "recover table ddl_reentrant.t2" false
-      "drop database ddl_reentrant" false
 )
+
+function complete_ddls() {
+    tidb_build_branch=$(mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -e \
+        "select tidb_version()\G"|grep "Git Branch"|awk -F: '{print $(NF)}'|tr -d " ")
+    if [[ "$tidb_build_branch" == "release-4.0" ]] || [[ $tidb_build_branch =~ .*tags/v4.0.* ]]; then
+        echo "skip some DDLs in tidb v4.0.x"
+    else
+        # DDLs that are supportted since 5.0
+        ddls+=( "alter table ddl_reentrant.t2 add column c1 int, add column c2 int, add column c3 int" false )
+        ddls+=( "alter table ddl_reentrant.t2 drop column c1, drop column c2, drop column c3" false )
+    fi
+    ddls+=( "alter table ddl_reentrant.t2 drop primary key" false )
+    ddls+=( "alter table ddl_reentrant.t2 add primary key pk(id)" false )
+    ddls+=( "drop table ddl_reentrant.t2" false )
+    ddls+=( "recover table ddl_reentrant.t2" false )
+    ddls+=( "drop database ddl_reentrant" false )
+}
 
 changefeedid=""
 SINK_URI="mysql://root@127.0.0.1:3306/"
@@ -106,6 +116,8 @@ function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
     start_tidb_cluster --workdir $WORK_DIR --tidb-config $CUR/conf/tidb_config.toml
+
+    complete_ddls
 
     cd $WORK_DIR
 

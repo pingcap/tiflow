@@ -31,7 +31,7 @@ type PolymorphicEvent struct {
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
 func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 	if rawKV.OpType == OpTypeResolved {
-		return NewResolvedPolymorphicEvent(rawKV.CRTs)
+		return NewResolvedPolymorphicEvent(rawKV.RegionID, rawKV.CRTs)
 	}
 	return &PolymorphicEvent{
 		StartTs:  rawKV.StartTs,
@@ -42,13 +42,18 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 }
 
 // NewResolvedPolymorphicEvent creates a new PolymorphicEvent with the resolved ts
-func NewResolvedPolymorphicEvent(resolvedTs uint64) *PolymorphicEvent {
+func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
 		CRTs:     resolvedTs,
-		RawKV:    &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved},
+		RawKV:    &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
 		Row:      nil,
 		finished: nil,
 	}
+}
+
+// RegionID returns the region ID where the event comes from.
+func (e *PolymorphicEvent) RegionID() uint64 {
+	return e.RawKV.RegionID
 }
 
 // PrepareFinished marks the prepare process is finished

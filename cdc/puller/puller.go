@@ -217,7 +217,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					continue
 				}
 				lastResolvedTs = resolvedTs
-				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved})
+				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
 				if err != nil {
 					return errors.Trace(err)
 				}
