@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/log"
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -693,7 +694,7 @@ MainLoop:
 						zap.Uint64("requestID", requestID),
 						zap.Uint64("storeID", storeID),
 						zap.String("error", err.Error()))
-					if errors.Cause(err) == util.ErrVersionIncompatible {
+					if cerror.ErrVersionIncompatible.Equal(err) {
 						// It often occurs on rolling update. Sleep 20s to reduce logs.
 						time.Sleep(20 * time.Second)
 					}
@@ -1136,6 +1137,7 @@ func (s *eventFeedSession) singleEventFeed(
 	checkpointTs := startTs
 	select {
 	case s.eventCh <- &model.RegionFeedEvent{
+		RegionID: regionID,
 		Resolved: &model.ResolvedSpan{
 			Span:       span,
 			ResolvedTs: startTs,
@@ -1216,7 +1218,8 @@ func (s *eventFeedSession) singleEventFeed(
 								zap.Uint64("ts", cacheEntry.GetStartTs()))
 							continue
 						}
-						revent, err := assembleCommitEvent(cacheEntry, value)
+
+						revent, err := assembleCommitEvent(regionID, cacheEntry, value)
 						if err != nil {
 							return checkpointTs, errors.Trace(err)
 						}
@@ -1237,10 +1240,11 @@ func (s *eventFeedSession) singleEventFeed(
 					case cdcpb.Event_Row_PUT:
 						opType = model.OpTypePut
 					default:
-						return checkpointTs, errors.Errorf("unknown tp: %v", entry.GetOpType())
+						return checkpointTs, errors.Errorf("unknown tp: %v, entry: %v", entry.GetOpType(), entry)
 					}
 
 					revent := &model.RegionFeedEvent{
+						RegionID: regionID,
 						Val: &model.RawKVEntry{
 							OpType:   opType,
 							Key:      entry.Key,
@@ -1248,6 +1252,7 @@ func (s *eventFeedSession) singleEventFeed(
 							OldValue: entry.GetOldValue(),
 							StartTs:  entry.StartTs,
 							CRTs:     entry.CommitTs,
+							RegionID: regionID,
 						},
 					}
 
@@ -1288,7 +1293,7 @@ func (s *eventFeedSession) singleEventFeed(
 								entry.GetKey(), entry.GetStartTs())
 					}
 
-					revent, err := assembleCommitEvent(entry, value)
+					revent, err := assembleCommitEvent(regionID, entry, value)
 					if err != nil {
 						return checkpointTs, errors.Trace(err)
 					}
@@ -1322,6 +1327,7 @@ func (s *eventFeedSession) singleEventFeed(
 			}
 			// emit a checkpointTs
 			revent := &model.RegionFeedEvent{
+				RegionID: regionID,
 				Resolved: &model.ResolvedSpan{
 					Span:       span,
 					ResolvedTs: x.ResolvedTs,
@@ -1421,7 +1427,7 @@ func (s *eventFeedSession) resolveLock(ctx context.Context, regionID uint64, max
 	return nil
 }
 
-func assembleCommitEvent(entry *cdcpb.Event_Row, value *pendingValue) (*model.RegionFeedEvent, error) {
+func assembleCommitEvent(regionID uint64, entry *cdcpb.Event_Row, value *pendingValue) (*model.RegionFeedEvent, error) {
 	var opType model.OpType
 	switch entry.GetOpType() {
 	case cdcpb.Event_Row_DELETE:
@@ -1429,10 +1435,11 @@ func assembleCommitEvent(entry *cdcpb.Event_Row, value *pendingValue) (*model.Re
 	case cdcpb.Event_Row_PUT:
 		opType = model.OpTypePut
 	default:
-		return nil, errors.Errorf("unknow tp: %v", entry.GetOpType())
+		return nil, errors.Errorf("unknown tp: %v, entry: %v", entry.GetOpType(), entry)
 	}
 
 	revent := &model.RegionFeedEvent{
+		RegionID: regionID,
 		Val: &model.RawKVEntry{
 			OpType:   opType,
 			Key:      entry.Key,
@@ -1440,6 +1447,7 @@ func assembleCommitEvent(entry *cdcpb.Event_Row, value *pendingValue) (*model.Re
 			OldValue: value.oldValue,
 			StartTs:  entry.StartTs,
 			CRTs:     entry.CommitTs,
+			RegionID: regionID,
 		},
 	}
 	return revent, nil

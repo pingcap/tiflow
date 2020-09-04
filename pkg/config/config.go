@@ -17,10 +17,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pingcap/ticdc/pkg/config/outdated"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/pkg/config/outdated"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -62,7 +62,7 @@ type replicaConfig struct {
 func (c *ReplicaConfig) Marshal() (string, error) {
 	cfg, err := json.Marshal(c)
 	if err != nil {
-		return "", errors.Annotatef(err, "Unmarshal data: %v", c)
+		return "", cerror.WrapError(cerror.ErrEncodeFailed, errors.Annotatef(err, "Unmarshal data: %v", c))
 	}
 	return string(cfg), nil
 }
@@ -79,12 +79,12 @@ func (c *ReplicaConfig) UnmarshalJSON(data []byte) error {
 	r := (*replicaConfig)(c)
 	err := json.Unmarshal(data, &r)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrDecodeFailed, err)
 	}
 	v1 := outdated.ReplicaConfigV1{}
 	err = v1.Unmarshal(data)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrDecodeFailed, err)
 	}
 	r.fillFromV1(&v1)
 	return nil
@@ -94,12 +94,14 @@ func (c *ReplicaConfig) UnmarshalJSON(data []byte) error {
 func (c *ReplicaConfig) Clone() *ReplicaConfig {
 	str, err := c.Marshal()
 	if err != nil {
-		log.Fatal("failed to marshal replica config", zap.Error(err))
+		log.Fatal("failed to marshal replica config",
+			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))
 	}
 	clone := new(ReplicaConfig)
 	err = clone.Unmarshal([]byte(str))
 	if err != nil {
-		log.Fatal("failed to marshal replica config", zap.Error(err))
+		log.Fatal("failed to unmarshal replica config",
+			zap.Error(cerror.WrapError(cerror.ErrDecodeFailed, err)))
 	}
 	return clone
 }

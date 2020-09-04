@@ -28,11 +28,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/quotes"
-
-	"github.com/pingcap/ticdc/pkg/config"
-	"github.com/pingcap/ticdc/pkg/security"
-
 	"github.com/Shopify/sarama"
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
@@ -40,7 +35,11 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
+	"github.com/pingcap/ticdc/pkg/config"
 	cdcfilter "github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/logutil"
+	"github.com/pingcap/ticdc/pkg/quotes"
+	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
@@ -75,7 +74,7 @@ func init() {
 
 	flag.Parse()
 
-	err := util.InitLogger(&util.Config{
+	err := logutil.InitLogger(&logutil.Config{
 		Level: logLevel,
 		File:  logPath,
 	})

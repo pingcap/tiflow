@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/pingcap/errors"
@@ -195,7 +196,7 @@ func (s *sqlRequest) getAwaitableSQLRowContainer() *awaitableSQLRowContainer {
 	return &awaitableSQLRowContainer{
 		Awaitable: &basicAwaitable{
 			pollableAndCheckable: s,
-			timeout:              0,
+			timeout:              30 * time.Second,
 		},
 		sqlRowContainer: s,
 	}

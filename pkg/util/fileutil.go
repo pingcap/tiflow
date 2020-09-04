@@ -19,16 +19,17 @@ import (
 	"path/filepath"
 
 	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // IsDirAndWritable checks a given path is directory and writable
 func IsDirAndWritable(path string) error {
 	st, err := os.Stat(path)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrCheckDirWritable, err)
 	}
 	if !st.IsDir() {
-		return errors.Errorf("%s is not a directory", path)
+		return cerror.WrapError(cerror.ErrCheckDirWritable, errors.Errorf("%s is not a directory", path))
 	}
 	return IsDirWritable(path)
 
@@ -38,7 +39,7 @@ func IsDirAndWritable(path string) error {
 func IsDirWritable(dir string) error {
 	f := filepath.Join(dir, ".writable.test")
 	if err := ioutil.WriteFile(f, []byte(""), 0600); err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrCheckDirWritable, err)
 	}
-	return errors.Trace(os.Remove(f))
+	return cerror.WrapError(cerror.ErrCheckDirWritable, os.Remove(f))
 }
