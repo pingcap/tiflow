@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
@@ -135,6 +136,12 @@ func mustGetValue(t require.TestingT, eventCh <-chan *model.RegionFeedEvent, val
 	}
 }
 
+type mockPullerInit struct{}
+
+func (*mockPullerInit) IsInitialized() bool {
+	return true
+}
+
 // TestSplit try split on every region, and test can get value event from
 // every region after split.
 func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
@@ -148,8 +155,10 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 
 	startTS := mustGetTimestamp(t, storage)
 
+	lockresolver := txnutil.NewLockerResolver(storage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
 	go func() {
-		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -234,9 +243,10 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 	defer cancel()
 
 	startTS := mustGetTimestamp(t, storage)
-
+	lockresolver := txnutil.NewLockerResolver(storage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
 	go func() {
-		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, checker.eventCh)
+		err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, checker.eventCh)
 		require.Equal(t, err, context.Canceled)
 	}()
 
@@ -258,7 +268,7 @@ func TestGetKVSimple(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		if i == 1 {
 			checker = newEventChecker(t)
 			go func() {
-				err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, checker.eventCh)
+				err := cli.EventFeed(ctx, regionspan.ComparableSpan{Start: nil, End: nil}, startTS, false, lockresolver, isPullInit, checker.eventCh)
 				require.Equal(t, err, context.Canceled)
 			}()
 		}
