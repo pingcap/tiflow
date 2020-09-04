@@ -78,9 +78,11 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 			c.Assert(err, check.IsNil)
 		}
 		// test normal decode
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
+		size := encoder.Size()
+		messages := encoder.Build()
+		c.Assert(messages, check.HasLen, 1)
+		c.Assert(len(messages[0].Key)+len(messages[0].Value), check.Equals, size)
+		decoder, err := newDecoder(messages[0].Key, messages[0].Value)
 		c.Assert(err, check.IsNil)
 		checkRowDecoder(decoder, cs)
 	}
@@ -88,16 +90,15 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 	for _, cs := range s.ddlCases {
 		encoder := newEncoder()
 		for _, ddl := range cs {
-			_, err := encoder.AppendDDLEvent(ddl)
+			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
+			c.Assert(msg, check.NotNil)
+
+			decoder, err := newDecoder(msg.Key, msg.Value)
+			c.Assert(err, check.IsNil)
+			checkDDLDecoder(decoder, cs)
 		}
 
-		// test normal encode
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
-		c.Assert(err, check.IsNil)
-		checkDDLDecoder(decoder, cs)
 	}
 }
 
