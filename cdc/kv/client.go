@@ -366,7 +366,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 func (c *CDCClient) EventFeed(
 	ctx context.Context, span regionspan.ComparableSpan, ts uint64, enableOldValue bool, eventCh chan<- *model.RegionFeedEvent,
 ) error {
-	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span, enableOldValue, eventCh)
+	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span, enableOldValue, ts, eventCh)
 	return s.eventFeed(ctx, ts)
 }
 
@@ -415,6 +415,7 @@ func newEventFeedSession(
 	kvStorage tikv.Storage,
 	totalSpan regionspan.ComparableSpan,
 	enableOldValue bool,
+	startTs uint64,
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
@@ -427,7 +428,7 @@ func newEventFeedSession(
 		regionCh:          make(chan singleRegionInfo, 16),
 		errCh:             make(chan regionErrorInfo, 16),
 		requestRangeCh:    make(chan rangeRequestTask, 16),
-		rangeLock:         regionspan.NewRegionRangeLock(),
+		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
 		enableOldValue:    enableOldValue,
 		id:                strconv.FormatUint(allocID(), 10),
 		regionChSizeGauge: clientChannelSize.WithLabelValues(id, "region"),
@@ -513,9 +514,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	handleResult := func(res regionspan.LockRangeResult) {
 		switch res.Status {
 		case regionspan.LockRangeStatusSuccess:
-			if sri.ts > res.CheckpointTs {
-				sri.ts = res.CheckpointTs
-			}
+			sri.ts = res.CheckpointTs
 			select {
 			case s.regionCh <- sri:
 				s.regionChSizeGauge.Inc()
