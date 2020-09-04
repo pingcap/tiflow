@@ -89,8 +89,8 @@ if [[ "$restart" == "true" ]]; then
         $tls \
         $certcn \
         $addr \
-        $pd_addr &>> $workdir/stdout$log_suffix.log
-      if [ $? -ne 2 ]; then
+        $pd_addr &>> $workdir/stdout$logsuffix.log
+      if [ $? -eq 143 ]; then
         break
       fi
       sleep 1
