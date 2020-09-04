@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/pingcap/errors"
@@ -61,7 +62,7 @@ func All(helper *SQLHelper, awaitables []Awaitable) Awaitable {
 
 	return &basicAwaitable{
 		pollableAndCheckable: ret,
-		timeout:              0,
+		timeout:              120 * time.Second,
 	}
 }
 
