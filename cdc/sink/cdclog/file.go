@@ -70,6 +70,10 @@ func (ts *tableStream) dataChan() chan *model.RowChangedEvent {
 	return ts.dataCh
 }
 
+func (ts *tableStream) TableID() int64 {
+	return ts.tableID
+}
+
 func (ts *tableStream) Events() *atomic.Int64 {
 	return ts.sendEvents
 }
@@ -335,8 +339,6 @@ func (f *fileSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTabl
 }
 
 func (f *fileSink) Close() error {
-	close(f.notifyChan)
-	close(f.notifyWaitChan)
 	return nil
 }
 

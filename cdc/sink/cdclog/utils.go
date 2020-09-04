@@ -41,9 +41,11 @@ const (
 )
 
 type logUnit interface {
-	dataChan() chan *model.RowChangedEvent
+	TableID() int64
 	Events() *atomic.Int64
 	Size() *atomic.Int64
+
+	dataChan() chan *model.RowChangedEvent
 
 	isEmpty() bool
 	shouldFlush() bool
@@ -101,7 +103,7 @@ func (l *logSink) startFlush(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("file sink stopped")
+			log.Info("[startFlush] log sink stopped")
 			return ctx.Err()
 		case needFlushedUnits := <-l.notifyChan:
 			// try specify buffers
@@ -109,7 +111,11 @@ func (l *logSink) startFlush(ctx context.Context) error {
 			for _, u := range needFlushedUnits {
 				uReplica := u
 				eg.Go(func() error {
-					log.Info("Flush asynchronously to storage by caller")
+					log.Info("start Flush asynchronously to storage by caller",
+						zap.Int64("table id", u.TableID()),
+						zap.Int64("size", u.Size().Load()),
+						zap.Int64("event count", u.Events().Load()),
+					)
 					return uReplica.flush(ectx, l)
 				})
 			}
@@ -126,7 +132,11 @@ func (l *logSink) startFlush(ctx context.Context) error {
 				uReplica := u
 				if u.shouldFlush() {
 					eg.Go(func() error {
-						log.Info("Flush asynchronously to storage")
+						log.Info("start Flush asynchronously to storage",
+							zap.Int64("table id", u.TableID()),
+							zap.Int64("size", u.Size().Load()),
+							zap.Int64("event count", u.Events().Load()),
+						)
 						return uReplica.flush(ectx, l)
 					})
 				}

@@ -60,6 +60,10 @@ func (tb *tableBuffer) dataChan() chan *model.RowChangedEvent {
 	return tb.dataCh
 }
 
+func (tb *tableBuffer) TableID() int64 {
+	return tb.tableID
+}
+
 func (tb *tableBuffer) Events() *atomic.Int64 {
 	return tb.sendEvents
 }
@@ -327,8 +331,6 @@ func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 }
 
 func (s *s3Sink) Close() error {
-	close(s.notifyChan)
-	close(s.notifyWaitChan)
 	return nil
 }
 
