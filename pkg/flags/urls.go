@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/types"
 )
 
@@ -93,16 +94,20 @@ func ParseHostPortAddr(s string) ([]string, error) {
 
 		u, err := url.Parse(str)
 		if err != nil {
-			return nil, errors.Errorf("parse url %s failed %v", str, err)
+			return nil, cerror.WrapError(cerror.ErrURLFormatInvalid,
+				errors.Errorf("parse url %s failed %v", str, err))
 		}
 		if u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "unix" && u.Scheme != "unixs" {
-			return nil, errors.Errorf("URL scheme must be http, https, unix, or unixs: %s", str)
+			return nil, cerror.WrapError(cerror.ErrURLFormatInvalid,
+				errors.Errorf("URL scheme must be http, https, unix, or unixs: %s", str))
 		}
 		if _, _, err := net.SplitHostPort(u.Host); err != nil {
-			return nil, errors.Errorf(`URL address does not have the form "host:port": %s`, str)
+			return nil, cerror.WrapError(cerror.ErrURLFormatInvalid,
+				errors.Errorf(`URL address does not have the form "host:port": %s`, str))
 		}
 		if u.Path != "" {
-			return nil, errors.Errorf("URL must not contain a path: %s", str)
+			return nil, cerror.WrapError(cerror.ErrURLFormatInvalid,
+				errors.Errorf("URL must not contain a path: %s", str))
 		}
 		addrs = append(addrs, u.String())
 	}

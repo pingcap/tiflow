@@ -214,9 +214,9 @@ while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character
 done
 
 # TODO: remove this after TiCDC supports TiDB clustered index
-run_sql "set @@global.tidb_enable_clustered_index=0" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-run_sql "set @@global.tidb_enable_clustered_index=0" ${UP_TIDB_HOST} ${UP_TIDB_OTHER_PORT}
-run_sql "set @@global.tidb_enable_clustered_index=0" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+run_sql "select tidb_version();set @@global.tidb_enable_clustered_index=0;" ${UP_TIDB_HOST} ${UP_TIDB_PORT} || echo "tidb_enable_clustered_index not supports"
+run_sql "select tidb_version();set @@global.tidb_enable_clustered_index=0;" ${UP_TIDB_HOST} ${UP_TIDB_OTHER_PORT} || echo "tidb_enable_clustered_index not supports"
+run_sql "select tidb_version();set @@global.tidb_enable_clustered_index=0;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} || echo "tidb_enable_clustered_index not supports"
 # TiDB global variables cache 2 seconds
 sleep 2
 
