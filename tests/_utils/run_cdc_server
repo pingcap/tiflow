@@ -20,7 +20,7 @@ pd_addr=
 pwd=$pwd
 log_level=debug
 restart=
-failpoint=
+failpoint=$GO_FAILPOINTS
 
 while [[ ${1} ]]; do
     case "${1}" in
