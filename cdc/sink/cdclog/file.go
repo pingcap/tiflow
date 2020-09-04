@@ -19,15 +19,12 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	parsemodel "github.com/pingcap/parser/model"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
-
-	parsemodel "github.com/pingcap/parser/model"
 
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
@@ -59,7 +56,7 @@ type tableStream struct {
 	sendSize   *atomic.Int64
 }
 
-func newTableStream(tableID int64) *tableStream {
+func newTableStream(tableID int64) logUnit {
 	return &tableStream{
 		tableID: tableID,
 		dataCh:  make(chan *model.RowChangedEvent, defaultBufferChanSize),
@@ -67,6 +64,18 @@ func newTableStream(tableID int64) *tableStream {
 		sendEvents: atomic.NewInt64(0),
 		sendSize:   atomic.NewInt64(0),
 	}
+}
+
+func (ts *tableStream) dataChan() chan *model.RowChangedEvent {
+	return ts.dataCh
+}
+
+func (ts *tableStream) Events() *atomic.Int64 {
+	return ts.sendEvents
+}
+
+func (ts *tableStream) Size() *atomic.Int64 {
+	return ts.sendSize
 }
 
 func (ts *tableStream) isEmpty() bool {
@@ -77,7 +86,7 @@ func (ts *tableStream) shouldFlush() bool {
 	return ts.sendSize.Load() > maxPartFlushSize
 }
 
-func (ts *tableStream) flush(f *fileSink) error {
+func (ts *tableStream) flush(ctx context.Context, sink *logSink) error {
 	var fileName string
 	flushedEvents := ts.sendEvents.Load()
 	flushedSize := ts.sendSize.Load()
@@ -88,7 +97,7 @@ func (ts *tableStream) flush(f *fileSink) error {
 	firstCreated := false
 	if ts.encoder == nil {
 		// create encoder for each file
-		ts.encoder = f.encoder()
+		ts.encoder = sink.encoder()
 		firstCreated = true
 	}
 	for event := int64(0); event < flushedEvents; event++ {
@@ -117,7 +126,7 @@ func (ts *tableStream) flush(f *fileSink) error {
 		zap.String("file name", fileName),
 	)
 
-	tableDir := filepath.Join(f.logPath.root, makeTableDirectoryName(ts.tableID))
+	tableDir := filepath.Join(sink.root(), makeTableDirectoryName(ts.tableID))
 
 	if ts.rowFile == nil {
 		// create new file to append data
@@ -166,18 +175,15 @@ func (ts *tableStream) flush(f *fileSink) error {
 }
 
 type fileSink struct {
+	*logSink
+
 	logMeta *logMeta
 	logPath *logPath
 
 	ddlFile *os.File
-	encoder func() codec.EventBatchEncoder
 
-	ddlEncoder   codec.EventBatchEncoder
-	hashMap      sync.Map
-	tableStreams []*tableStream
-
-	notifyChan     chan []*tableStream
-	notifyWaitChan chan struct{}
+	ddlEncoder codec.EventBatchEncoder
+	hashMap    sync.Map
 }
 
 func (f *fileSink) flushLogMeta() error {
@@ -205,64 +211,12 @@ func (f *fileSink) createDDLFile(commitTs uint64) (*os.File, error) {
 }
 
 func (f *fileSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	log.Debug("[EmitRowChangedEvents] enter", zap.Any("rows", rows))
-	for _, row := range rows {
-		// dispatch row event by tableID
-		tableID := row.Table.GetTableID()
-		var (
-			ok   bool
-			item interface{}
-			hash int
-		)
-		if item, ok = f.hashMap.Load(tableID); !ok {
-			// found new tableID
-			f.tableStreams = append(f.tableStreams, newTableStream(tableID))
-			hash = len(f.tableStreams) - 1
-			f.hashMap.Store(tableID, hash)
-		} else {
-			hash = item.(int)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case f.tableStreams[hash].dataCh <- row:
-			f.tableStreams[hash].sendEvents.Inc()
-			f.tableStreams[hash].sendSize.Add(row.ApproximateSize)
-		}
-	}
-	return nil
+	return f.emitRowChangedEvents(ctx, newTableStream, rows...)
 }
 
 func (f *fileSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
 	log.Debug("[FlushRowChangedEvents] enter", zap.Uint64("ts", resolvedTs))
-	// TODO update flush policy with size
-	select {
-	case <-ctx.Done():
-		return 0, ctx.Err()
-
-	default:
-		tableStreams := f.tableStreams
-		needFlushedStreams := make([]*tableStream, 0, len(tableStreams))
-		for _, ts := range tableStreams {
-			if !ts.isEmpty() {
-				needFlushedStreams = append(needFlushedStreams, ts)
-			}
-		}
-		if len(needFlushedStreams) > 0 {
-			select {
-			case <-ctx.Done():
-				return 0, ctx.Err()
-
-			case <-time.After(defaultFlushRowChangedEventDuration):
-				// cannot accumulate enough row events in 5 second
-				// call flushed worker to flush
-				f.notifyChan <- needFlushedStreams
-				// wait flush worker finished
-				<-f.notifyWaitChan
-			}
-		}
-	}
-	return resolvedTs, nil
+	return f.flushRowChangedEvents(ctx, resolvedTs)
 }
 
 func (f *fileSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -386,56 +340,6 @@ func (f *fileSink) Close() error {
 	return nil
 }
 
-func (f *fileSink) run(ctx context.Context) error {
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("file sink stopped")
-			return ctx.Err()
-		case needFlushedStreams := <-f.notifyChan:
-			// try specify buffers
-			eg, _ := errgroup.WithContext(ctx)
-			for _, ts := range needFlushedStreams {
-				tsReplica := ts
-				eg.Go(func() error {
-					log.Info("Flush asynchronously to s3 storage by caller",
-						zap.Int64("table", tsReplica.tableID),
-						zap.Int64("event count", tsReplica.sendEvents.Load()),
-						zap.Int64("event size", tsReplica.sendSize.Load()))
-					return tsReplica.flush(f)
-				})
-			}
-			if err := eg.Wait(); err != nil {
-				return err
-			}
-			// tell flush goroutine this time flush finished
-			f.notifyWaitChan <- struct{}{}
-
-		case <-ticker.C:
-			// try all tableBuffers
-			tableStreams := f.tableStreams
-			eg, _ := errgroup.WithContext(ctx)
-			for _, ts := range tableStreams {
-				tsReplica := ts
-				if ts.shouldFlush() {
-					eg.Go(func() error {
-						log.Info("Flush asynchronously to s3 storage",
-							zap.Int64("table", tsReplica.tableID),
-							zap.Int64("event count", tsReplica.sendEvents.Load()),
-							zap.Int64("event size", tsReplica.sendSize.Load()))
-						return tsReplica.flush(f)
-					})
-				}
-			}
-			if err := eg.Wait(); err != nil {
-				return err
-			}
-		}
-	}
-}
-
 // NewLocalFileSink support log data to file.
 func NewLocalFileSink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*fileSink, error) {
 	log.Info("[NewLocalFileSink]",
@@ -455,23 +359,16 @@ func NewLocalFileSink(ctx context.Context, sinkURI *url.URL, errCh chan error) (
 			zap.Error(err))
 		return nil, err
 	}
+
 	f := &fileSink{
 		logMeta: newLogMeta(),
 		logPath: logPath,
-		encoder: func() codec.EventBatchEncoder {
-			ret := codec.NewJSONEventBatchEncoder()
-			ret.(*codec.JSONEventBatchEncoder).SetMixedBuildSupport(true)
-			return ret
-		},
-
-		notifyChan:     make(chan []*tableStream),
-		notifyWaitChan: make(chan struct{}),
-		tableStreams:   make([]*tableStream, 0),
+		logSink: newLogSink(logPath.root, nil),
 	}
 
 	// important! we should flush asynchronously in another goroutine
 	go func() {
-		if err := f.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+		if err := f.startFlush(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
 				return

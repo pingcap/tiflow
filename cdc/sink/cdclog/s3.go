@@ -17,7 +17,6 @@ import (
 	"context"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pingcap/br/pkg/storage"
@@ -27,7 +26,6 @@ import (
 	parsemodel "github.com/pingcap/parser/model"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
@@ -58,6 +56,18 @@ type tableBuffer struct {
 	}
 }
 
+func (tb *tableBuffer) dataChan() chan *model.RowChangedEvent {
+	return tb.dataCh
+}
+
+func (tb *tableBuffer) Events() *atomic.Int64 {
+	return tb.sendEvents
+}
+
+func (tb *tableBuffer) Size() *atomic.Int64 {
+	return tb.sendSize
+}
+
 func (tb *tableBuffer) isEmpty() bool {
 	return tb.sendEvents.Load() == 0 && tb.uploadParts.uploadNum == 0
 }
@@ -66,7 +76,7 @@ func (tb *tableBuffer) shouldFlush() bool {
 	return tb.sendSize.Load() > maxPartFlushSize
 }
 
-func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
+func (tb *tableBuffer) flush(ctx context.Context, sink *logSink) error {
 	hashPart := tb.uploadParts
 	sendEvents := tb.sendEvents.Load()
 	if sendEvents == 0 && hashPart.uploadNum == 0 {
@@ -77,7 +87,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 	firstCreated := false
 	if tb.encoder == nil {
 		// create encoder for each file
-		tb.encoder = s.encoder()
+		tb.encoder = sink.encoder()
 		firstCreated = true
 	}
 
@@ -118,7 +128,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 		// we will use multi-upload this batch data
 		if len(rowDatas) > 0 {
 			if hashPart.uploader == nil {
-				uploader, err := s.storage.CreateUploader(ctx, newFileName)
+				uploader, err := sink.storage().CreateUploader(ctx, newFileName)
 				if err != nil {
 					return err
 				}
@@ -150,7 +160,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 	} else {
 		// generate normal file because S3 multi-upload need every part at least 5Mb.
 		log.Info("[FlushRowChangedEvents] normal upload file", zap.Int64("tableID", tb.tableID))
-		err := s.storage.Write(ctx, newFileName, rowDatas)
+		err := sink.storage().Write(ctx, newFileName, rowDatas)
 		if err != nil {
 			return err
 		}
@@ -163,7 +173,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 	return nil
 }
 
-func newTableBuffer(tableID int64) *tableBuffer {
+func newTableBuffer(tableID int64) logUnit {
 	return &tableBuffer{
 		tableID:    tableID,
 		dataCh:     make(chan *model.RowChangedEvent, defaultBufferChanSize),
@@ -182,47 +192,20 @@ func newTableBuffer(tableID int64) *tableBuffer {
 }
 
 type s3Sink struct {
+	*logSink
+
 	prefix string
 
 	storage *storage.S3Storage
 
 	logMeta *logMeta
-	encoder func() codec.EventBatchEncoder
 
 	// hold encoder for ddl event log
-	ddlEncoder     codec.EventBatchEncoder
-	hashMap        sync.Map
-	tableBuffers   []*tableBuffer
-	notifyChan     chan []*tableBuffer
-	notifyWaitChan chan struct{}
+	ddlEncoder codec.EventBatchEncoder
 }
 
 func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
-	for _, row := range rows {
-		// dispatch row event by tableID
-		tableID := row.Table.GetTableID()
-		var (
-			ok   bool
-			item interface{}
-			hash int
-		)
-		if item, ok = s.hashMap.Load(tableID); !ok {
-			// found new tableID
-			s.tableBuffers = append(s.tableBuffers, newTableBuffer(tableID))
-			hash = len(s.tableBuffers) - 1
-			s.hashMap.Store(tableID, hash)
-		} else {
-			hash = item.(int)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case s.tableBuffers[hash].dataCh <- row:
-			s.tableBuffers[hash].sendSize.Add(row.ApproximateSize)
-			s.tableBuffers[hash].sendEvents.Inc()
-		}
-	}
-	return nil
+	return s.emitRowChangedEvents(ctx, newTableBuffer, rows...)
 }
 
 func (s *s3Sink) flushLogMeta(ctx context.Context) error {
@@ -238,34 +221,7 @@ func (s *s3Sink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (
 	// 1. flush row events to a s3 chunk: if the event size is not enough,
 	//    TODO: when cdc crashed, we should repair these chunks to a complete file
 	// 2. flush row events to a complete s3 file: if the event size is enough
-	select {
-	case <-ctx.Done():
-		return 0, ctx.Err()
-
-	default:
-		tableBuffers := s.tableBuffers
-		needFlushBuffers := make([]*tableBuffer, 0, len(tableBuffers))
-		for _, tb := range tableBuffers {
-			if !tb.isEmpty() {
-				needFlushBuffers = append(needFlushBuffers, tb)
-			}
-		}
-		if len(needFlushBuffers) > 0 {
-			select {
-			case <-ctx.Done():
-				return 0, ctx.Err()
-
-			case <-time.After(defaultFlushRowChangedEventDuration):
-				// cannot accumulate enough row events in 5 second
-				// flush all needed tables' row events to s3
-				// call flushed worker to flush
-				s.notifyChan <- needFlushBuffers
-				// wait flush worker finished
-				<-s.notifyWaitChan
-			}
-		}
-		return resolvedTs, nil
-	}
+	return s.flushRowChangedEvents(ctx, resolvedTs)
 }
 
 // EmitCheckpointTs update the global resolved ts in log meta
@@ -376,55 +332,6 @@ func (s *s3Sink) Close() error {
 	return nil
 }
 
-func (s *s3Sink) run(ctx context.Context) error {
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("s3sink stopped")
-			return ctx.Err()
-		case needFlushedBuffers := <-s.notifyChan:
-			// try specify buffers
-			eg, ectx := errgroup.WithContext(ctx)
-			for _, tb := range needFlushedBuffers {
-				tbReplica := tb
-				eg.Go(func() error {
-					log.Info("Flush asynchronously to s3 storage by caller",
-						zap.Int64("table", tbReplica.tableID),
-						zap.Int64("event count", tbReplica.sendEvents.Load()),
-						zap.Int64("event size", tbReplica.sendSize.Load()))
-					return tbReplica.flush(ectx, s)
-				})
-			}
-			if err := eg.Wait(); err != nil {
-				return err
-			}
-			s.notifyWaitChan <- struct{}{}
-
-		case <-ticker.C:
-			// try all tableBuffers
-			tableBuffers := s.tableBuffers
-			eg, ectx := errgroup.WithContext(ctx)
-			for _, tb := range tableBuffers {
-				tbReplica := tb
-				if tb.shouldFlush() {
-					eg.Go(func() error {
-						log.Info("Flush asynchronously to s3 storage",
-							zap.Int64("table", tbReplica.tableID),
-							zap.Int64("event count", tbReplica.sendEvents.Load()),
-							zap.Int64("event size", tbReplica.sendSize.Load()))
-						return tbReplica.flush(ectx, s)
-					})
-				}
-			}
-			if err := eg.Wait(); err != nil {
-				return err
-			}
-		}
-	}
-}
-
 // NewS3Sink creates new sink support log data to s3 directly
 func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink, error) {
 	if len(sinkURI.Host) == 0 {
@@ -449,20 +356,12 @@ func NewS3Sink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*s3Sink
 		prefix:  prefix,
 		storage: s3storage,
 		logMeta: newLogMeta(),
-		encoder: func() codec.EventBatchEncoder {
-			ret := codec.NewJSONEventBatchEncoder()
-			ret.(*codec.JSONEventBatchEncoder).SetMixedBuildSupport(true)
-			return ret
-		},
-
-		tableBuffers:   make([]*tableBuffer, 0),
-		notifyChan:     make(chan []*tableBuffer),
-		notifyWaitChan: make(chan struct{}),
+		logSink: newLogSink("", s3storage),
 	}
 
 	// important! we should flush asynchronously in another goroutine
 	go func() {
-		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+		if err := s.startFlush(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
 				return
