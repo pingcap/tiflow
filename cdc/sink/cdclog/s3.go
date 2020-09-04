@@ -308,7 +308,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		s.ddlEncoder = s.encoder()
 		firstCreated = true
 	}
-	_, err := s.ddlEncoder.AppendDDLEvent(ddl)
+	_, err := s.ddlEncoder.EncodeDDLEvent(ddl)
 	if err != nil {
 		return err
 	}
@@ -409,7 +409,11 @@ func NewS3Sink(sinkURI *url.URL) (*s3Sink, error) {
 		prefix:  prefix,
 		storage: s3storage,
 		logMeta: newLogMeta(),
-		encoder: codec.NewJSONEventBatchEncoder,
+		encoder: func() codec.EventBatchEncoder {
+			ret := codec.NewJSONEventBatchEncoder()
+			ret.(*codec.JSONEventBatchEncoder).SetMixedBuildSupport(true)
+			return ret
+		},
 
 		tableBuffers: tableBuffers,
 		notifyChan:   notifyChan,

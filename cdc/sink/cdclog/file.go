@@ -265,7 +265,7 @@ func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		f.ddlEncoder = f.encoder()
 		firstCreated = true
 	}
-	_, err := f.ddlEncoder.AppendDDLEvent(ddl)
+	_, err := f.ddlEncoder.EncodeDDLEvent(ddl)
 	if err != nil {
 		return err
 	}
@@ -378,7 +378,11 @@ func NewLocalFileSink(sinkURI *url.URL) (*fileSink, error) {
 	return &fileSink{
 		logMeta: newLogMeta(),
 		logPath: logPath,
-		encoder: codec.NewJSONEventBatchEncoder,
+		encoder: func() codec.EventBatchEncoder {
+			ret := codec.NewJSONEventBatchEncoder()
+			ret.(*codec.JSONEventBatchEncoder).SetMixedBuildSupport(true)
+			return ret
+		},
 
 		tableStreams: make([]*tableStream, 0),
 	}, nil
