@@ -371,6 +371,8 @@ func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 }
 
 func (s *s3Sink) Close() error {
+	close(s.notifyChan)
+	close(s.notifyWaitChan)
 	return nil
 }
 
@@ -382,10 +384,10 @@ func (s *s3Sink) run(ctx context.Context) error {
 		case <-ctx.Done():
 			log.Info("s3sink stopped")
 			return ctx.Err()
-		case needFlushBuffers := <-s.notifyChan:
+		case needFlushedBuffers := <-s.notifyChan:
 			// try specify buffers
 			eg, ectx := errgroup.WithContext(ctx)
-			for _, tb := range needFlushBuffers {
+			for _, tb := range needFlushedBuffers {
 				tbReplica := tb
 				eg.Go(func() error {
 					log.Info("Flush asynchronously to s3 storage by caller",

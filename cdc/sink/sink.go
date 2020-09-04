@@ -72,7 +72,7 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 	case "pulsar", "pulsar+ssl":
 		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	case "local":
-		return cdclog.NewLocalFileSink(sinkURI)
+		return cdclog.NewLocalFileSink(ctx, sinkURI, errCh)
 	case "s3":
 		return cdclog.NewS3Sink(ctx, sinkURI, errCh)
 	default:

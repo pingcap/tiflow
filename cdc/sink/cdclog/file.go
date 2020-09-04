@@ -69,6 +69,102 @@ func newTableStream(tableID int64) *tableStream {
 	}
 }
 
+func (ts *tableStream) isEmpty() bool {
+	return ts.sendEvents.Load() == 0
+}
+
+func (ts *tableStream) shouldFlush() bool {
+	return ts.sendSize.Load() > maxPartFlushSize
+}
+
+func (ts *tableStream) flush(f *fileSink) error {
+	var fileName string
+	flushedEvents := ts.sendEvents.Load()
+	flushedSize := ts.sendSize.Load()
+	if flushedEvents == 0 {
+		log.Info("[flushTableStreams] no events to flush")
+		return nil
+	}
+	firstCreated := false
+	if ts.encoder == nil {
+		// create encoder for each file
+		ts.encoder = f.encoder()
+		firstCreated = true
+	}
+	for event := int64(0); event < flushedEvents; event++ {
+		row := <-ts.dataCh
+		if event == flushedEvents-1 {
+			// the last event
+			fileName = makeTableFileName(row.CommitTs)
+		}
+		_, err := ts.encoder.AppendRowChangedEvent(row)
+		if err != nil {
+			return err
+		}
+	}
+	rowDatas := ts.encoder.MixedBuild(firstCreated)
+	defer func() {
+		if ts.encoder != nil {
+			ts.encoder.Reset()
+		}
+	}()
+
+	log.Debug("[flushTableStreams] build cdc log data",
+		zap.Int64("table id", ts.tableID),
+		zap.Int64("flushed size", flushedSize),
+		zap.Int64("flushed event", flushedEvents),
+		zap.Int("encode size", len(rowDatas)),
+		zap.String("file name", fileName),
+	)
+
+	tableDir := filepath.Join(f.logPath.root, makeTableDirectoryName(ts.tableID))
+
+	if ts.rowFile == nil {
+		// create new file to append data
+		err := os.MkdirAll(tableDir, defaultDirMode)
+		if err != nil {
+			return err
+		}
+		file, err := os.OpenFile(filepath.Join(tableDir, defaultFileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
+		if err != nil {
+			return err
+		}
+		ts.rowFile = file
+	}
+
+	stat, err := ts.rowFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	if stat.Size() > maxRowFileSize {
+		// rotate file
+		err := ts.rowFile.Close()
+		if err != nil {
+			return err
+		}
+		oldPath := filepath.Join(tableDir, defaultFileName)
+		newPath := filepath.Join(tableDir, fileName)
+		err = os.Rename(oldPath, newPath)
+		if err != nil {
+			return err
+		}
+		file, err := os.OpenFile(filepath.Join(tableDir, defaultFileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
+		if err != nil {
+			return err
+		}
+		ts.rowFile = file
+		ts.encoder = nil
+	}
+	_, err = ts.rowFile.Write(rowDatas)
+	if err != nil {
+		return err
+	}
+	ts.sendEvents.Sub(flushedEvents)
+	ts.sendSize.Sub(flushedSize)
+	return nil
+}
+
 type fileSink struct {
 	logMeta *logMeta
 	logPath *logPath
@@ -79,9 +175,12 @@ type fileSink struct {
 	ddlEncoder   codec.EventBatchEncoder
 	hashMap      sync.Map
 	tableStreams []*tableStream
+
+	notifyChan     chan []*tableStream
+	notifyWaitChan chan struct{}
 }
 
-func (f *fileSink) flushLogMeta(ctx context.Context) error {
+func (f *fileSink) flushLogMeta() error {
 	data, err := f.logMeta.Marshal()
 	if err != nil {
 		return errors.Annotate(err, "marshal meta to json failed")
@@ -93,103 +192,6 @@ func (f *fileSink) flushLogMeta(ctx context.Context) error {
 	}
 	_, err = file.Write(data)
 	return err
-}
-
-func (f *fileSink) flushTableStreams(ctx context.Context) error {
-	// TODO use a fixed worker pool
-	eg, _ := errgroup.WithContext(ctx)
-	for _, ts := range f.tableStreams {
-		tsReplica := ts
-		eg.Go(func() error {
-			var fileName string
-			flushedEvents := tsReplica.sendEvents.Load()
-			flushedSize := tsReplica.sendSize.Load()
-			if flushedEvents == 0 {
-				log.Info("[flushTableStreams] no events to flush")
-				return nil
-			}
-			firstCreated := false
-			if tsReplica.encoder == nil {
-				// create encoder for each file
-				tsReplica.encoder = f.encoder()
-				firstCreated = true
-			}
-			for event := int64(0); event < flushedEvents; event++ {
-				row := <-tsReplica.dataCh
-				if event == flushedEvents-1 {
-					// the last event
-					fileName = makeTableFileName(row.CommitTs)
-				}
-				_, err := tsReplica.encoder.AppendRowChangedEvent(row)
-				if err != nil {
-					return err
-				}
-			}
-			rowDatas := tsReplica.encoder.MixedBuild(firstCreated)
-			defer func() {
-				if tsReplica.encoder != nil {
-					tsReplica.encoder.Reset()
-				}
-			}()
-
-			log.Debug("[flushTableStreams] build cdc log data",
-				zap.Int64("table id", tsReplica.tableID),
-				zap.Int64("flushed size", flushedSize),
-				zap.Int64("flushed event", flushedEvents),
-				zap.Int("encode size", len(rowDatas)),
-				zap.String("file name", fileName),
-			)
-
-			tableDir := filepath.Join(f.logPath.root, makeTableDirectoryName(tsReplica.tableID))
-
-			if tsReplica.rowFile == nil {
-				// create new file to append data
-				err := os.MkdirAll(tableDir, defaultDirMode)
-				if err != nil {
-					return err
-				}
-				file, err := os.OpenFile(filepath.Join(tableDir, defaultFileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
-				if err != nil {
-					return err
-				}
-				tsReplica.rowFile = file
-			}
-
-			stat, err := tsReplica.rowFile.Stat()
-			if err != nil {
-				return err
-			}
-
-			if stat.Size() > maxRowFileSize {
-				// rotate file
-				err := tsReplica.rowFile.Close()
-				if err != nil {
-					return err
-				}
-				oldPath := filepath.Join(tableDir, defaultFileName)
-				newPath := filepath.Join(tableDir, fileName)
-				err = os.Rename(oldPath, newPath)
-				if err != nil {
-					return err
-				}
-				file, err := os.OpenFile(filepath.Join(tableDir, defaultFileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
-				if err != nil {
-					return err
-				}
-				tsReplica.rowFile = file
-				tsReplica.encoder = nil
-			}
-			_, err = tsReplica.rowFile.Write(rowDatas)
-			if err != nil {
-				return err
-			}
-
-			tsReplica.sendEvents.Sub(flushedEvents)
-			tsReplica.sendSize.Sub(flushedSize)
-			return nil
-		})
-	}
-	return eg.Wait()
 }
 
 func (f *fileSink) createDDLFile(commitTs uint64) (*os.File, error) {
@@ -237,29 +239,50 @@ func (f *fileSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64)
 	select {
 	case <-ctx.Done():
 		return 0, ctx.Err()
-	case <-time.After(defaultFlushRowChangedEventDuration):
-		return resolvedTs, f.flushTableStreams(ctx)
+
+	default:
+		tableStreams := f.tableStreams
+		needFlushedStreams := make([]*tableStream, 0, len(tableStreams))
+		for _, ts := range tableStreams {
+			if !ts.isEmpty() {
+				needFlushedStreams = append(needFlushedStreams, ts)
+			}
+		}
+		if len(needFlushedStreams) > 0 {
+			select {
+			case <-ctx.Done():
+				return 0, ctx.Err()
+
+			case <-time.After(defaultFlushRowChangedEventDuration):
+				// cannot accumulate enough row events in 5 second
+				// call flushed worker to flush
+				f.notifyChan <- needFlushedStreams
+				// wait flush worker finished
+				<-f.notifyWaitChan
+			}
+		}
 	}
+	return resolvedTs, nil
 }
 
 func (f *fileSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	log.Debug("[EmitCheckpointTs]", zap.Uint64("ts", ts))
 	f.logMeta.GlobalResolvedTS = ts
-	return f.flushLogMeta(ctx)
+	return f.flushLogMeta()
 }
 
 func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	switch ddl.Type {
 	case parsemodel.ActionCreateTable:
 		f.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
-		err := f.flushLogMeta(ctx)
+		err := f.flushLogMeta()
 		if err != nil {
 			return err
 		}
 	case parsemodel.ActionRenameTable:
 		delete(f.logMeta.Names, ddl.PreTableInfo.TableID)
 		f.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
-		err := f.flushLogMeta(ctx)
+		err := f.flushLogMeta()
 		if err != nil {
 			return err
 		}
@@ -358,11 +381,63 @@ func (f *fileSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTabl
 }
 
 func (f *fileSink) Close() error {
+	close(f.notifyChan)
+	close(f.notifyWaitChan)
 	return nil
 }
 
+func (f *fileSink) run(ctx context.Context) error {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			log.Info("file sink stopped")
+			return ctx.Err()
+		case needFlushedStreams := <-f.notifyChan:
+			// try specify buffers
+			eg, _ := errgroup.WithContext(ctx)
+			for _, ts := range needFlushedStreams {
+				tsReplica := ts
+				eg.Go(func() error {
+					log.Info("Flush asynchronously to s3 storage by caller",
+						zap.Int64("table", tsReplica.tableID),
+						zap.Int64("event count", tsReplica.sendEvents.Load()),
+						zap.Int64("event size", tsReplica.sendSize.Load()))
+					return tsReplica.flush(f)
+				})
+			}
+			if err := eg.Wait(); err != nil {
+				return err
+			}
+			// tell flush goroutine this time flush finished
+			f.notifyWaitChan <- struct{}{}
+
+		case <-ticker.C:
+			// try all tableBuffers
+			tableStreams := f.tableStreams
+			eg, _ := errgroup.WithContext(ctx)
+			for _, ts := range tableStreams {
+				tsReplica := ts
+				if ts.shouldFlush() {
+					eg.Go(func() error {
+						log.Info("Flush asynchronously to s3 storage",
+							zap.Int64("table", tsReplica.tableID),
+							zap.Int64("event count", tsReplica.sendEvents.Load()),
+							zap.Int64("event size", tsReplica.sendSize.Load()))
+						return tsReplica.flush(f)
+					})
+				}
+			}
+			if err := eg.Wait(); err != nil {
+				return err
+			}
+		}
+	}
+}
+
 // NewLocalFileSink support log data to file.
-func NewLocalFileSink(sinkURI *url.URL) (*fileSink, error) {
+func NewLocalFileSink(ctx context.Context, sinkURI *url.URL, errCh chan error) (*fileSink, error) {
 	log.Info("[NewLocalFileSink]",
 		zap.String("host", sinkURI.Host),
 		zap.String("path", sinkURI.Path),
@@ -380,7 +455,7 @@ func NewLocalFileSink(sinkURI *url.URL) (*fileSink, error) {
 			zap.Error(err))
 		return nil, err
 	}
-	return &fileSink{
+	f := &fileSink{
 		logMeta: newLogMeta(),
 		logPath: logPath,
 		encoder: func() codec.EventBatchEncoder {
@@ -389,6 +464,20 @@ func NewLocalFileSink(sinkURI *url.URL) (*fileSink, error) {
 			return ret
 		},
 
-		tableStreams: make([]*tableStream, 0),
-	}, nil
+		notifyChan:     make(chan []*tableStream),
+		notifyWaitChan: make(chan struct{}),
+		tableStreams:   make([]*tableStream, 0),
+	}
+
+	// important! we should flush asynchronously in another goroutine
+	go func() {
+		if err := f.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+			select {
+			case <-ctx.Done():
+				return
+			case errCh <- err:
+			}
+		}
+	}()
+	return f, nil
 }
