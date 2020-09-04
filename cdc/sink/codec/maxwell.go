@@ -63,12 +63,18 @@ func (m *DdlMaxwellMessage) Decode(data []byte) error {
 	return json.Unmarshal(data, m)
 }
 
-// AppendResolvedEvent implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
+// EncodeCheckpointEvent implements the EventBatchEncoder interface
+func (d *MaxwellEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	// For maxwell now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore the event is ignored.
+	return nil, nil
+}
+
+// AppendResolvedEvent implements the EventBatchEncoder interface
+func (d *MaxwellEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
 	return EncoderNoOperation, nil
 }
+
 func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwellMessage) {
 	var partition *int64
 	if e.Table.IsPartition {
@@ -220,33 +226,40 @@ func ddlEventtoMaxwellMessage(e *model.DDLEvent) (*mqMessageKey, *DdlMaxwellMess
 	return key, value
 }
 
-// AppendDDLEvent implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
+// EncodeDDLEvent implements the EventBatchEncoder interface
+func (d *MaxwellEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
 	keyMsg, valueMsg := ddlEventtoMaxwellMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	var keyLenByte [8]byte
 	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	d.keyBuf.Write(keyLenByte[:])
-	d.keyBuf.Write(key)
+	keyBuf := new(bytes.Buffer)
+	var versionByte [8]byte
+	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+	keyBuf.Write(versionByte[:])
+	keyBuf.Write(keyLenByte[:])
+	keyBuf.Write(key)
 
-	d.valueBuf.Write(valueLenByte[:])
-	d.valueBuf.Write(value)
-	return EncoderNeedSyncWrite, nil
+	valueBuf := new(bytes.Buffer)
+	valueBuf.Write(valueLenByte[:])
+	valueBuf.Write(value)
+	return NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), e.CommitTs), nil
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *MaxwellEventBatchEncoder) Build() (key []byte, value []byte) {
-	return d.keyBuf.Bytes(), d.valueBuf.Bytes()
+func (d *MaxwellEventBatchEncoder) Build() []*MQMessage {
+	ret := NewMQMessage(d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0)
+	d.Reset()
+	return []*MQMessage{ret}
 }
 
 // MixedBuild implements the EventBatchEncoder interface
@@ -258,6 +271,9 @@ func (d *MaxwellEventBatchEncoder) MixedBuild(withVersion bool) []byte {
 func (d *MaxwellEventBatchEncoder) Reset() {
 	d.keyBuf.Reset()
 	d.valueBuf.Reset()
+	var versionByte [8]byte
+	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+	d.keyBuf.Write(versionByte[:])
 }
 
 // Size implements the EventBatchEncoder interface
@@ -271,9 +287,7 @@ func NewMaxwellEventBatchEncoder() EventBatchEncoder {
 		keyBuf:   &bytes.Buffer{},
 		valueBuf: &bytes.Buffer{},
 	}
-	var versionByte [8]byte
-	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
-	batch.keyBuf.Write(versionByte[:])
+	batch.Reset()
 	return batch
 }
 

@@ -1243,7 +1243,7 @@ func (s *eventFeedSession) singleEventFeed(
 							continue
 						}
 
-						revent, err := assembleCommitEvent(regionID, entry, value)
+						revent, err := assembleCommitEvent(regionID, cacheEntry, value)
 						if err != nil {
 							return lastResolvedTs, errors.Trace(err)
 						}
@@ -1264,7 +1264,7 @@ func (s *eventFeedSession) singleEventFeed(
 					case cdcpb.Event_Row_PUT:
 						opType = model.OpTypePut
 					default:
-						return lastResolvedTs, errors.Errorf("unknown tp: %v", entry.GetOpType())
+						return lastResolvedTs, errors.Errorf("unknown tp: %v, entry: %v", entry.GetOpType(), entry)
 					}
 
 					revent := &model.RegionFeedEvent{

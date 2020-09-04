@@ -49,8 +49,7 @@ func (s *avroBatchEncoderSuite) SetUpSuite(c *check.C) {
 	s.encoder = &AvroEventBatchEncoder{
 		valueSchemaManager: valueManager,
 		keySchemaManager:   keyManager,
-		keyBuf:             nil,
-		valueBuf:           nil,
+		resultBuf:          make([]*MQMessage, 0, 4096),
 	}
 }
 
@@ -183,7 +182,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 		testCaseDdl.TableInfo.ColumnInfo[i].FromTiColumnInfo(v)
 	}
 
-	_, err := s.encoder.AppendDDLEvent(testCaseDdl)
+	_, err := s.encoder.EncodeDDLEvent(testCaseDdl)
 	c.Check(err, check.IsNil)
 
 	_, err = s.encoder.AppendRowChangedEvent(testCaseUpdate)
