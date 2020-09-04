@@ -23,23 +23,57 @@ import (
 
 // EventBatchEncoder is an abstraction for events encoder
 type EventBatchEncoder interface {
-	// AppendResolvedEvent appends a resolved event into the batch
-	AppendResolvedEvent(ts uint64) (EncoderResult, error)
+	// EncodeCheckpointEvent appends a checkpoint event into the batch.
+	// This event will be broadcast to all partitions to signal a global checkpoint.
+	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
 	// AppendRowChangedEvent appends a row changed event into the batch
 	AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error)
-	// AppendDDLEvent appends a DDL event into the batch
-	AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error)
+	// AppendResolvedEvent appends a resolved event into the batch.
+	// This event is used to tell the encoder that no event prior to ts will be sent.
+	AppendResolvedEvent(ts uint64) (EncoderResult, error)
+	// EncodeDDLEvent appends a DDL event into the batch
+	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
 	// Build builds the batch and returns the bytes of key and value.
-	Build() (key []byte, value []byte)
+	Build() []*MQMessage
 	// MixedBuild builds the batch and returns the bytes of mixed keys and values.
 	// This is used for cdc log, to merge key and value into one byte slice
 	// when first create file, we should set withVersion to true, to tell us that
 	// the first 8 byte represents the encoder version
+	// TODO decouple it out
 	MixedBuild(withVersion bool) []byte
 	// Size returns the size of the batch(bytes)
 	Size() int
 	// Reset reset the kv buffer
 	Reset()
+}
+
+// MQMessage represents an MQ message to the mqSink
+type MQMessage struct {
+	Key   []byte
+	Value []byte
+	Ts    uint64 // reserved for possible output sorting
+}
+
+// NewMQMessage should be used when creating a MQMessage struct.
+// It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
+func NewMQMessage(key []byte, value []byte, ts uint64) *MQMessage {
+	ret := &MQMessage{
+		Key:   nil,
+		Value: nil,
+		Ts:    ts,
+	}
+
+	if key != nil {
+		ret.Key = make([]byte, len(key))
+		copy(ret.Key, key)
+	}
+
+	if value != nil {
+		ret.Value = make([]byte, len(value))
+		copy(ret.Value, value)
+	}
+
+	return ret
 }
 
 // EventBatchDecoder is an abstraction for events decoder
