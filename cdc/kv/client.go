@@ -1378,7 +1378,7 @@ func assembleCommitEvent(regionID uint64, entry *cdcpb.Event_Row, value *pending
 	case cdcpb.Event_Row_PUT:
 		opType = model.OpTypePut
 	default:
-		return nil, errors.Errorf("unknow tp: %v", entry.GetOpType())
+		return nil, errors.Errorf("unknow tp: %v, %v", entry.GetOpType(), entry)
 	}
 
 	revent := &model.RegionFeedEvent{

@@ -230,9 +230,16 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					// resolved ts is initialized.
 					atomic.StoreInt64(&p.initialized, 1)
 					initialized = true
+
+					spans := make([]string, 0, len(p.spans))
+					for i := range p.spans {
+						spans = append(spans, p.spans[i].String())
+					}
 					log.Info("puller is initialized",
 						zap.Duration("duration", time.Since(start)),
 						zap.String("changefeedid", changefeedID),
+						zap.Int64("tableID", tableID),
+						zap.Strings("spans", spans),
 						zap.Uint64("resolvedTs", resolvedTs))
 				}
 				if !initialized || resolvedTs == lastResolvedTs {
