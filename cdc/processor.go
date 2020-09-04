@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/cdc/sink"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/regionspan"
@@ -332,7 +333,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			if inErr != nil {
 				if errors.Cause(inErr) != context.Canceled {
 					logError := log.Error
-					if errors.Cause(inErr) == model.ErrAdminStopProcessor {
+					if cerror.ErrAdminStopProcessor.Equal(inErr) {
 						logError = log.Warn
 					}
 					logError(
@@ -340,8 +341,8 @@ func (p *processor) positionWorker(ctx context.Context) error {
 						zap.String("changefeed", p.changefeedID), zap.Error(inErr),
 					)
 				}
-				if p.isStopped() || errors.Cause(inErr) == model.ErrAdminStopProcessor {
-					return backoff.Permanent(errors.Trace(model.ErrAdminStopProcessor))
+				if p.isStopped() || cerror.ErrAdminStopProcessor.Equal(inErr) {
+					return backoff.Permanent(cerror.ErrAdminStopProcessor.FastGenByArgs())
 				}
 			}
 			return inErr
@@ -486,7 +487,7 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 		time.Sleep(1 * time.Second)
 	})
 	if p.isStopped() {
-		return errors.Trace(model.ErrAdminStopProcessor)
+		return cerror.ErrAdminStopProcessor.FastGenByArgs()
 	}
 	//p.position.Count = p.sink.Count()
 	err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
@@ -505,7 +506,7 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 // tables may cause checkpoint ts fallback in processor.
 func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 	if p.isStopped() {
-		return errors.Trace(model.ErrAdminStopProcessor)
+		return cerror.ErrAdminStopProcessor.FastGenByArgs()
 	}
 	var tablesToRemove []model.TableID
 	newTaskStatus, newModRevision, err := p.etcdCli.AtomicPutTaskStatus(ctx, p.changefeedID, p.captureInfo.ID,
@@ -520,7 +521,7 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 				if err != nil {
 					return false, backoff.Permanent(errors.Trace(err))
 				}
-				return false, backoff.Permanent(model.ErrAdminStopProcessor)
+				return false, backoff.Permanent(cerror.ErrAdminStopProcessor.FastGenByArgs())
 			}
 			toRemove, err := p.handleTables(ctx, taskStatus)
 			tablesToRemove = append(tablesToRemove, toRemove...)
@@ -685,7 +686,8 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
 					return
-				case p.output <- model.NewResolvedPolymorphicEvent(lastResolvedTs):
+				case p.output <- model.NewResolvedPolymorphicEvent(0, lastResolvedTs):
+					// regionID = 0 means the event is produced by TiCDC
 				}
 			}
 		}
@@ -1162,7 +1164,7 @@ func runProcessor(
 	go func() {
 		err := <-errCh
 		cause := errors.Cause(err)
-		if cause != nil && cause != context.Canceled && cause != model.ErrAdminStopProcessor {
+		if cause != nil && cause != context.Canceled && cerror.ErrAdminStopProcessor.NotEqual(cause) {
 			processorErrorCounter.WithLabelValues(changefeedID, captureInfo.AdvertiseAddr).Inc()
 			log.Error("error on running processor",
 				zap.String("captureid", captureInfo.ID),
@@ -1171,10 +1173,13 @@ func runProcessor(
 				zap.String("processorid", processor.id),
 				zap.Error(err))
 			// record error information in etcd
-			// TODO: design error codes for TiCDC
+			code := "CDC:server:ErrProcessorUnknown"
+			if terror, ok := err.(*errors.Error); ok {
+				code = string(terror.RFCCode())
+			}
 			processor.position.Error = &model.RunningError{
 				Addr:    captureInfo.AdvertiseAddr,
-				Code:    "CDC-processor-1000",
+				Code:    code,
 				Message: err.Error(),
 			}
 			err = processor.etcdCli.PutTaskPosition(ctx, processor.changefeedID, processor.captureInfo.ID, processor.position)
