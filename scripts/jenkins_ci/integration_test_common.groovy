@@ -1,8 +1,8 @@
 def prepare_binaries() {
     stage('Prepare Binaries') {
-        def TIDB_BRANCH = "master"
-        def TIKV_BRANCH = "master"
-        def PD_BRANCH = "master"
+        def TIDB_BRANCH = params.getOrDefault("release_test__tidb_commit", "master")
+        def TIKV_BRANCH = params.getOrDefault("release_test__tikv_commit", "master")
+        def PD_BRANCH = params.getOrDefault("release_test__pd_commit", "master")
 
         // parse tidb branch
         def m1 = ghprbCommentBody =~ /tidb\s*=\s*([^\s\\]+)(\s|\\|$)/
