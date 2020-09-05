@@ -83,6 +83,7 @@ type changeFeed struct {
 	schema           *entry.SingleSchemaSnapshot
 	ddlState         model.ChangeFeedDDLState
 	targetTs         uint64
+	ddlTs            uint64
 	updateResolvedTs bool
 	startTimer       chan bool
 	syncDB           *sql.DB
@@ -721,65 +722,16 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if (c.status.ResolvedTs == c.status.CheckpointTs && c.updateResolvedTs == false) || c.status.ResolvedTs == 0 {
 		log.Debug("achive the sync point", zap.Uint64("ResolvedTs", c.status.ResolvedTs))
 		//c.syncPointTs = c.targetTs //恢复syncPointTs，使得ResoledTs可以继续推进
-		log.Info("achive the sync point", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs))
+		log.Info("achive the sync point with timer", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
 		c.updateResolvedTs = true
-
-		//todo 实现向下游同步记录同步点
-		//rows := make([]*model.RowChangedEvent, 0, defaultSyncResolvedBatch)
-		//row := new(model.RowChangedEvent)
-		/*row := &model.RowChangedEvent{
-			StartTs:          0, //好像没问题
-			CommitTs:         c.status.CheckpointTs,
-			RowID:            0, //注意设置一下 好像没问题
-			TableInfoVersion: 0, // 不懂 好像没问题
-			Table: &model.TableName{
-				Schema:    "TiCDC",
-				Table:     "syncpoint",
-				Partition: 0, //不懂 好像没问题
-			},
-			IndieMarkCol: "master-ts", //待定
-			Delete:       false,
-			Columns:      make([]*model.Column, 1), //待定
-			PreColumns:   nil,                      //待定
-			IndexColumns: nil,                      //待定
-			// FIXME(leoppor): Correctness of conflict detection with old values
-			//Keys: genMultipleKeys(tableInfo, preCols, cols, quotes.QuoteSchema(schemaName, tableName)),
-			Keys: "test",
-		}
-		row.Columns = append(row.Columns, &model.Column{Name: "master-ts", Type: mysql.TypeVarchar, Flag: model.PrimaryKeyFlag, Value: c.status.CheckpointTs})
-		row.Columns = append(row.Columns, &model.Column{Name: "slave-ts", Type: mysql.TypeVarchar, Flag: model.NullableFlag, Value: "select @@tidb_current_ts"})
-		rows = append(rows, row)
-		/*row.StartTs = 0 //todo 不知道怎么设置
-		row.CommitTs = c.status.CheckpointTs
-		row.RowID = 0 //todo 不知道怎么设置
-		row.Table = new(model.TableName)
-		row.Table.Schema = "TiCDC"
-		row.Table.Table = "syncpoint"
-		row.Table.Partition = 0 */
-		//c.sink.FlushRowChangedEvents(ctx, c.status.CheckpointTs)
-		/*c.sink.EmitRowChangedEvents(ctx, rows...)
-		c.sink.FlushRowChangedEvents(ctx, c.status.CheckpointTs)*/
-		tx, err := c.syncDB.BeginTx(ctx, nil)
-		if err != nil {
-			log.Info("sync table: begin Tx fail")
-			return err
-		}
-		row := tx.QueryRow("select @@tidb_current_ts")
-		var slaveTs string
-		err = row.Scan(&slaveTs)
-		if err != nil {
-			log.Info("sync table: get tidb_current_ts err")
-			tx.Rollback()
-			return err
-		}
-		tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, slaveTs)
-		//tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, 0)
-		tx.Commit() //TODO 处理错误
+		c.sinkSyncpoint(ctx)
 	}
 
-	/*if minResolvedTs > c.syncPointTs {
-		minResolvedTs = c.syncPointTs
-	}*/
+	if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs {
+		log.Info("achive the sync point with ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
+		c.sinkSyncpoint(ctx)
+		c.ddlTs = 0
+	}
 
 	if len(c.taskPositions) < len(c.taskStatus) {
 		log.Debug("skip update resolved ts",
@@ -851,6 +803,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 		if minResolvedTs > c.ddlResolvedTs {
 			minResolvedTs = c.ddlResolvedTs
+			//c.ddlTs = c.ddlResolvedTs
 		}
 	}
 
@@ -862,6 +815,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if len(c.ddlJobHistory) > 0 && minResolvedTs >= c.ddlJobHistory[0].BinlogInfo.FinishedTS {
 		minResolvedTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedWaitToExecDDL
+		c.ddlTs = minResolvedTs
 	}
 
 	// if downstream sink is the MQ sink, the MQ sink do not promise that checkpoint is less than globalResolvedTs
@@ -943,4 +897,25 @@ func (c *changeFeed) createSynctable() {
 	c.syncDB.Exec("USE " + database)
 	c.syncDB.Exec("CREATE TABLE  IF NOT EXISTS syncpoint ( master_ts varchar(18),slave_ts varchar(18),PRIMARY KEY ( `master_ts` ) )")
 	// todo err 处理
+}
+
+//sinkSyncpoint record the syncpoint(a map with ts) in downstream db
+func (c *changeFeed) sinkSyncpoint(ctx context.Context) error {
+	tx, err := c.syncDB.BeginTx(ctx, nil)
+	if err != nil {
+		log.Info("sync table: begin Tx fail")
+		return err
+	}
+	row := tx.QueryRow("select @@tidb_current_ts")
+	var slaveTs string
+	err = row.Scan(&slaveTs)
+	if err != nil {
+		log.Info("sync table: get tidb_current_ts err")
+		tx.Rollback()
+		return err
+	}
+	tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, slaveTs)
+	//tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, 0)
+	tx.Commit() //TODO 处理错误
+	return nil
 }

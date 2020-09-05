@@ -413,6 +413,7 @@ func (o *Owner) newChangeFeed(
 		ddlState:          model.ChangeFeedSyncDML,
 		ddlExecutedTs:     checkpointTs,
 		targetTs:          info.GetTargetTs(),
+		ddlTs:             0,
 		updateResolvedTs:  true,
 		startTimer:        make(chan bool),
 		syncDB:            syncDB,
