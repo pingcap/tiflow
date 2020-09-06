@@ -101,7 +101,7 @@ var (
 	ErrMaxwellEncodeFailed       = errors.Normalize("maxwell encode failed", errors.RFCCodeText("CDC:ErrMaxwellEncodeFailed"))
 	ErrMaxwellDecodeFailed       = errors.Normalize("maxwell decode failed", errors.RFCCodeText("CDC:ErrMaxwellDecodeFailed"))
 	ErrMaxwellInvalidData        = errors.Normalize("maxwell invalid data", errors.RFCCodeText("CDC:ErrMaxwellInvalidData"))
-	ErrJsonCodecInvalidData      = errors.Normalize("json codec invalid data", errors.RFCCodeText("CDC:ErrJsonCodecInvalidData"))
+	ErrJSONCodecInvalidData      = errors.Normalize("json codec invalid data", errors.RFCCodeText("CDC:ErrJSONCodecInvalidData"))
 	ErrCanalDecodeFailed         = errors.Normalize("canal decode failed", errors.RFCCodeText("CDC:ErrCanalDecodeFailed"))
 	ErrCanalEncodeFailed         = errors.Normalize("canal encode failed", errors.RFCCodeText("CDC:ErrCanalEncodeFailed"))
 

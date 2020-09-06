@@ -520,7 +520,7 @@ func (b *JSONEventBatchMixedDecoder) NextResolvedEvent() (uint64, error) {
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeResolved {
-		return 0, cerror.ErrJsonCodecInvalidData.GenWithStack("not found resolved event message")
+		return 0, cerror.ErrJSONCodecInvalidData.GenWithStack("not found resolved event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	b.mixedBytes = b.mixedBytes[valueLen+8:]
@@ -538,7 +538,7 @@ func (b *JSONEventBatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEve
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeRow {
-		return nil, cerror.ErrJsonCodecInvalidData.GenWithStack("not found row event message")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found row event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	value := b.mixedBytes[8 : valueLen+8]
@@ -561,7 +561,7 @@ func (b *JSONEventBatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeDDL {
-		return nil, cerror.ErrJsonCodecInvalidData.GenWithStack("not found ddl event message")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found ddl event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	value := b.mixedBytes[8 : valueLen+8]
@@ -621,7 +621,7 @@ func (b *JSONEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeResolved {
-		return 0, cerror.ErrJsonCodecInvalidData.GenWithStack("not found resolved event message")
+		return 0, cerror.ErrJSONCodecInvalidData.GenWithStack("not found resolved event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	b.valueBytes = b.valueBytes[valueLen+8:]
@@ -639,7 +639,7 @@ func (b *JSONEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, e
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeRow {
-		return nil, cerror.ErrJsonCodecInvalidData.GenWithStack("not found row event message")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found row event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
@@ -662,7 +662,7 @@ func (b *JSONEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeDDL {
-		return nil, cerror.ErrJsonCodecInvalidData.GenWithStack("not found ddl event message")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found ddl event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
@@ -698,7 +698,7 @@ func NewJSONEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, erro
 	version := binary.BigEndian.Uint64(key[:8])
 	key = key[8:]
 	if version != BatchVersion1 {
-		return nil, cerror.ErrJsonCodecInvalidData.GenWithStack("unexpected key format version")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("unexpected key format version")
 	}
 	// if only decode one byte slice, we choose MixedDecoder
 	if len(key) > 0 && len(value) == 0 {
