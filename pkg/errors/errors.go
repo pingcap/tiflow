@@ -98,6 +98,12 @@ var (
 	ErrAvroEncodeFailed          = errors.Normalize("encode to avro native data", errors.RFCCodeText("CDC:ErrAvroEncodeFailed"))
 	ErrAvroEncodeToBinary        = errors.Normalize("encode to binray from native", errors.RFCCodeText("CDC:ErrAvroEncodeToBinary"))
 	ErrAvroSchemaAPIError        = errors.Normalize("schema manager API error", errors.RFCCodeText("CDC:ErrAvroSchemaAPIError"))
+	ErrMaxwellEncodeFailed       = errors.Normalize("maxwell encode failed", errors.RFCCodeText("CDC:ErrMaxwellEncodeFailed"))
+	ErrMaxwellDecodeFailed       = errors.Normalize("maxwell decode failed", errors.RFCCodeText("CDC:ErrMaxwellDecodeFailed"))
+	ErrMaxwellInvalidData        = errors.Normalize("maxwell invalid data", errors.RFCCodeText("CDC:ErrMaxwellInvalidData"))
+	ErrJsonCodecInvalidData      = errors.Normalize("json codec invalid data", errors.RFCCodeText("CDC:ErrJsonCodecInvalidData"))
+	ErrCanalDecodeFailed         = errors.Normalize("canal decode failed", errors.RFCCodeText("CDC:ErrCanalDecodeFailed"))
+	ErrCanalEncodeFailed         = errors.Normalize("canal encode failed", errors.RFCCodeText("CDC:ErrCanalEncodeFailed"))
 
 	// utilities related errors
 	ErrToTLSConfigFailed         = errors.Normalize("generate tls config failed", errors.RFCCodeText("CDC:ErrToTLSConfigFailed"))
