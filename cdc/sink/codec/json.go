@@ -293,16 +293,27 @@ func mqMessageToDDLEvent(key *mqMessageKey, value *mqMessageDDL) *model.DDLEvent
 
 // JSONEventBatchEncoder encodes the events into the byte of a batch into.
 type JSONEventBatchEncoder struct {
-	keyBuf   *bytes.Buffer
-	valueBuf *bytes.Buffer
+	keyBuf            *bytes.Buffer
+	valueBuf          *bytes.Buffer
+	supportMixedBuild bool // TODO decouple this out
 }
 
-// AppendResolvedEvent implements the EventBatchEncoder interface
+// SetMixedBuildSupport is used by CDC Log
+func (d *JSONEventBatchEncoder) SetMixedBuildSupport(enabled bool) {
+	d.supportMixedBuild = enabled
+}
+
+// AppendResolvedEvent is no-op
 func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
+	return EncoderNoOperation, nil
+}
+
+// EncodeCheckpointEvent implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	keyMsg := newResolvedMessage(ts)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -310,11 +321,25 @@ func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, e
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], 0)
 
-	d.keyBuf.Write(keyLenByte[:])
-	d.keyBuf.Write(key)
+	if d.supportMixedBuild {
+		d.keyBuf.Write(keyLenByte[:])
+		d.keyBuf.Write(key)
+		d.valueBuf.Write(valueLenByte[:])
+		return nil, nil
+	}
 
-	d.valueBuf.Write(valueLenByte[:])
-	return EncoderNeedSyncWrite, nil
+	keyBuf := new(bytes.Buffer)
+	var versionByte [8]byte
+	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+	keyBuf.Write(versionByte[:])
+	keyBuf.Write(keyLenByte[:])
+	keyBuf.Write(key)
+
+	valueBuf := new(bytes.Buffer)
+	valueBuf.Write(valueLenByte[:])
+
+	ret := NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), ts)
+	return ret, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
@@ -342,16 +367,16 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	return EncoderNoOperation, nil
 }
 
-// AppendDDLEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
+// EncodeDDLEvent implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
 	keyMsg, valueMsg := ddlEventtoMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -359,12 +384,27 @@ func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	d.keyBuf.Write(keyLenByte[:])
-	d.keyBuf.Write(key)
+	if d.supportMixedBuild {
+		d.keyBuf.Write(keyLenByte[:])
+		d.keyBuf.Write(key)
+		d.valueBuf.Write(valueLenByte[:])
+		d.valueBuf.Write(value)
+		return nil, nil
+	}
 
-	d.valueBuf.Write(valueLenByte[:])
-	d.valueBuf.Write(value)
-	return EncoderNeedSyncWrite, nil
+	keyBuf := new(bytes.Buffer)
+	var versionByte [8]byte
+	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+	keyBuf.Write(versionByte[:])
+	keyBuf.Write(keyLenByte[:])
+	keyBuf.Write(key)
+
+	valueBuf := new(bytes.Buffer)
+	valueBuf.Write(valueLenByte[:])
+	valueBuf.Write(value)
+
+	ret := NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), e.CommitTs)
+	return ret, nil
 }
 
 // UpdateResolvedTs implements the EventBatchEncoder interface
@@ -377,23 +417,29 @@ func (d *JSONEventBatchEncoder) UpdateResolvedTs(ts uint64) (EncoderResult, erro
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) Build() (keys [][]byte, values [][]byte) {
-	if d.Size() == 0 {
-		return nil, nil
+func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
+	if d.valueBuf.Len() == 0 {
+		return nil
 	}
-	defer d.reset()
-	keys = append(keys, d.keyBuf.Bytes())
-	values = append(values, d.valueBuf.Bytes())
-	return
-}
 
-func (d *JSONEventBatchEncoder) reset() {
-	d.keyBuf.Reset()
-	d.valueBuf.Reset()
+	ret := NewMQMessage(d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0)
+
+	if !d.supportMixedBuild {
+		d.keyBuf.Reset()
+		d.valueBuf.Reset()
+		var versionByte [8]byte
+		binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+		d.keyBuf.Write(versionByte[:])
+	}
+	return []*MQMessage{ret}
 }
 
 // MixedBuild implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) MixedBuild(withVersion bool) []byte {
+	if !d.supportMixedBuild {
+		log.Fatal("mixedBuildSupport not enabled!")
+		return nil
+	}
 	keyBytes := d.keyBuf.Bytes()
 	valueBytes := d.valueBuf.Bytes()
 	mixedBytes := make([]byte, len(keyBytes)+len(valueBytes))

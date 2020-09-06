@@ -14,7 +14,6 @@
 package filter
 
 import (
-	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 
 	"github.com/pingcap/ticdc/pkg/config"
@@ -22,6 +21,8 @@ import (
 
 	filterV1 "github.com/pingcap/tidb-tools/pkg/filter"
 	filterV2 "github.com/pingcap/tidb-tools/pkg/table-filter"
+
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // Filter is a event filter implementation
@@ -46,7 +47,7 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 		f, err = filterV2.Parse(rules)
 	}
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 	}
 	if !cfg.CaseSensitive {
 		f = filterV2.CaseInsensitive(f)

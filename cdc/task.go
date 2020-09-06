@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
@@ -174,7 +175,7 @@ func (w *TaskWatcher) parseTask(ctx context.Context,
 		return nil, err
 	}
 	status, _, err := w.capture.etcdClient.GetChangeFeedStatus(ctx, changeFeedID)
-	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
 	checkpointTs := cf.GetCheckpointTs(status)

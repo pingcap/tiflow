@@ -24,25 +24,57 @@ import (
 
 // EventBatchEncoder is an abstraction for events encoder
 type EventBatchEncoder interface {
-	// AppendResolvedEvent appends a resolved event into the batch
-	AppendResolvedEvent(ts uint64) (EncoderResult, error)
+	// EncodeCheckpointEvent appends a checkpoint event into the batch.
+	// This event will be broadcast to all partitions to signal a global checkpoint.
+	EncodeCheckpointEvent(ts uint64) (*MQMessage, error)
 	// AppendRowChangedEvent appends a row changed event into the batch
 	AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error)
-	// AppendDDLEvent appends a DDL event into the batch
-	AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error)
-	// UpdateResolvedTs help encoder use resolved ts to split row change event from resolved and unresolved
-	UpdateResolvedTs(ts uint64) (EncoderResult, error)
-	// Build return a list of <key value>, it always reset the encoder state based on implementation.
-	Build() (keys [][]byte, values [][]byte)
-	// MixedBuild builds the batch and returns the bytes of mixed keys and values.
-	// This is used for cdc log, to merge key and value into one byte slice
-	// when first create file, we should set withVersion to true, to tell us that
-	// the first 8 byte represents the encoder version
+	// AppendResolvedEvent appends a resolved event into the batch.
+	// This event is used to tell the encoder that no event prior to ts will be sent.
+	AppendResolvedEvent(ts uint64) (EncoderResult, error)
+	// EncodeDDLEvent appends a DDL event into the batch
+	EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error)
+	// Build builds the batch and returns the bytes of key and value.
+	Build() []*MQMessage
+	//	// MixedBuild builds the batch and returns the bytes of mixed keys and values.
+	//	// This is used for cdc log, to merge key and value into one byte slice
+	//	// when first create file, we should set withVersion to true, to tell us that
+	//	// the first 8 byte represents the encoder version
+	//	// TODO decouple it out
 	MixedBuild(withVersion bool) []byte
 	// Size returns the size of the batch(bytes)
 	Size() int
 	// Reset reset the kv buffer
 	Reset()
+}
+
+// MQMessage represents an MQ message to the mqSink
+type MQMessage struct {
+	Key   []byte
+	Value []byte
+	Ts    uint64 // reserved for possible output sorting
+}
+
+// NewMQMessage should be used when creating a MQMessage struct.
+// It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
+func NewMQMessage(key []byte, value []byte, ts uint64) *MQMessage {
+	ret := &MQMessage{
+		Key:   nil,
+		Value: nil,
+		Ts:    ts,
+	}
+
+	if key != nil {
+		ret.Key = make([]byte, len(key))
+		copy(ret.Key, key)
+	}
+
+	if value != nil {
+		ret.Value = make([]byte, len(value))
+		copy(ret.Value, value)
+	}
+
+	return ret
 }
 
 // EventBatchDecoder is an abstraction for events decoder
@@ -79,6 +111,7 @@ const (
 	ProtocolDefault Protocol = iota
 	ProtocolCanal
 	ProtocolAvro
+	ProtocolMaxwell
 )
 
 // FromString converts the protocol from string to Protocol enum type
@@ -90,6 +123,8 @@ func (p *Protocol) FromString(protocol string) {
 		*p = ProtocolCanal
 	case "avro":
 		*p = ProtocolAvro
+	case "maxwell":
+		*p = ProtocolMaxwell
 	default:
 		*p = ProtocolDefault
 		log.Warn("can't support codec protocol, using default protocol", zap.String("protocol", protocol))
@@ -105,6 +140,8 @@ func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
 		return NewCanalEventBatchEncoder
 	case ProtocolAvro:
 		return NewAvroEventBatchEncoder
+	case ProtocolMaxwell:
+		return NewMaxwellEventBatchEncoder
 	default:
 		log.Warn("unknown codec protocol value of EventBatchEncoder", zap.Int("protocol_value", int(p)))
 		return NewJSONEventBatchEncoder

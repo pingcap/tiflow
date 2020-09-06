@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -173,15 +174,15 @@ func newQueryChangefeedCommand() *cobra.Command {
 			}
 
 			info, err := cdcEtcdCli.GetChangeFeedInfo(ctx, changefeedID)
-			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
 			}
 			status, _, err := cdcEtcdCli.GetChangeFeedStatus(ctx, changefeedID)
-			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
 			}
 			taskPositions, err := cdcEtcdCli.GetAllTaskPositions(ctx, changefeedID)
-			if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+			if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
 			}
 			var count uint64

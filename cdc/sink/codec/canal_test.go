@@ -25,7 +25,8 @@ import (
 )
 
 type rowCaseExpect struct {
-	txnNumber int
+	txnNumber    int
+	rowNumPerTxn []int
 }
 type canalBatchSuite struct {
 	rowCases            [][]*model.RowChangedEvent
@@ -61,13 +62,16 @@ var _ = check.Suite(&canalBatchSuite{
 	}}, {}},
 	rowCaseExpectValues: []rowCaseExpect{
 		{
-			txnNumber: 1,
+			txnNumber:    1,
+			rowNumPerTxn: []int{1},
 		},
 		{
-			txnNumber: 3,
+			txnNumber:    3,
+			rowNumPerTxn: []int{1, 2, 1},
 		},
 		{
-			txnNumber: 0,
+			txnNumber:    0,
+			rowNumPerTxn: nil,
 		},
 	},
 	ddlCases: [][]*model.DDLEvent{{{
@@ -112,53 +116,44 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 			}
 			c.Assert(err, check.IsNil)
 		}
-		_, _ = encoder.UpdateResolvedTs(mxCommitTs)
-		keys, values := encoder.Build()
-		for _, key := range keys {
-			c.Assert(key, check.IsNil)
+		_, _ = encoder.AppendResolvedEvent(mxCommitTs)
+		size := encoder.Size()
+		res := encoder.Build()
+		c.Assert(res, check.HasLen, s.rowCaseExpectValues[i].txnNumber)
+		for _, message := range res {
+			c.Assert(message.Key, check.IsNil)
 		}
-		c.Assert(len(values), check.Equals, s.rowCaseExpectValues[i].txnNumber)
-		messageLen := 0
-		for _, value := range values {
+		c.Assert(len(cs), check.Equals, size)
+		for j := range res {
 			packet := &canal.Packet{}
-			err := proto.Unmarshal(value, packet)
+			err := proto.Unmarshal(res[j].Value, packet)
 			c.Assert(err, check.IsNil)
 			c.Assert(packet.GetType(), check.Equals, canal.PacketType_MESSAGES)
 			messages := &canal.Messages{}
 			err = proto.Unmarshal(packet.GetBody(), messages)
 			c.Assert(err, check.IsNil)
-			messageLen += len(messages.GetMessages())
+			c.Assert(len(messages.GetMessages()), check.Equals, s.rowCaseExpectValues[i].rowNumPerTxn[j])
 		}
-		c.Assert(messageLen, check.Equals, len(cs))
 	}
 
 	for _, cs := range s.ddlCases {
 		encoder := NewCanalEventBatchEncoder()
 		for _, ddl := range cs {
-			_, err := encoder.AppendDDLEvent(ddl)
+			msg, err := encoder.EncodeDDLEvent(ddl)
 			c.Assert(err, check.IsNil)
-		}
-		keys, values := encoder.Build()
-		for _, key := range keys {
-			c.Assert(key, check.IsNil)
-		}
-		keysLen := 0
-		if len(cs) != 0 {
-			keysLen++
-		}
-		messageLen := 0
-		c.Assert(len(keys), check.Equals, keysLen)
-		for _, value := range values {
+			c.Assert(msg, check.NotNil)
+			c.Assert(msg.Key, check.IsNil)
+
 			packet := &canal.Packet{}
-			err := proto.Unmarshal(value, packet)
+			err = proto.Unmarshal(msg.Value, packet)
 			c.Assert(err, check.IsNil)
 			c.Assert(packet.GetType(), check.Equals, canal.PacketType_MESSAGES)
 			messages := &canal.Messages{}
 			err = proto.Unmarshal(packet.GetBody(), messages)
 			c.Assert(err, check.IsNil)
-			messageLen += len(messages.GetMessages())
+			c.Assert(len(messages.GetMessages()), check.Equals, 1)
+			c.Assert(err, check.IsNil)
 		}
-		c.Assert(messageLen, check.Equals, len(cs))
 	}
 }
 

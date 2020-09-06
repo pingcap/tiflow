@@ -1,0 +1,9 @@
+# Mirror schema synchronize config
+dataSourceKey: defaultDS
+destination: testdb
+groupId: g1
+outerAdapterKey: mysql1
+concurrent: true
+dbMapping:
+  mirrorDb: true
+  database: testdb

@@ -380,6 +380,5 @@ func (t *SingleTableTxn) Append(row *RowChangedEvent) {
 			zap.Any("table of txn", t.Table),
 			zap.Any("row", row))
 	}
-	log.Info("[qinggniq] append")
 	t.Rows = append(t.Rows, row)
 }

@@ -85,7 +85,7 @@ func (r *Rectifier) Run(ctx context.Context) error {
 					return nil
 				}
 				if event.CRTs > r.targetTs {
-					output(model.NewResolvedPolymorphicEvent(r.targetTs))
+					output(model.NewResolvedPolymorphicEvent(event.RegionID(), r.targetTs))
 					atomic.StoreUint64(&r.maxSentResolvedTs, r.targetTs)
 					atomic.StoreInt32(&r.status, model.SorterStatusFinished)
 					return nil

@@ -38,8 +38,7 @@ import (
 type AvroEventBatchEncoder struct {
 	keySchemaManager   *AvroSchemaManager
 	valueSchemaManager *AvroSchemaManager
-	keyBuf             []byte
-	valueBuf           []byte
+	resultBuf          []*MQMessage
 }
 
 type avroEncodeResult struct {
@@ -52,8 +51,7 @@ func NewAvroEventBatchEncoder() EventBatchEncoder {
 	return &AvroEventBatchEncoder{
 		valueSchemaManager: nil,
 		keySchemaManager:   nil,
-		keyBuf:             nil,
-		valueBuf:           nil,
+		resultBuf:          make([]*MQMessage, 0, 4096),
 	}
 }
 
@@ -80,9 +78,8 @@ func (a *AvroEventBatchEncoder) GetKeySchemaManager() *AvroSchemaManager {
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
 func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	if a.keyBuf != nil || a.valueBuf != nil {
-		return EncoderNoOperation, errors.New("Fatal sink bug. Batch size must be 1")
-	}
+	mqMessage := NewMQMessage(nil, nil, e.CommitTs)
+
 	if !e.IsDelete() {
 		res, err := avroEncode(e.Table, a.valueSchemaManager, e.TableInfoVersion, e.Columns)
 		if err != nil {
@@ -96,9 +93,9 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 			return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
 		}
 
-		a.valueBuf = evlp
+		mqMessage.Value = evlp
 	} else {
-		a.valueBuf = nil
+		mqMessage.Value = nil
 	}
 
 	pkeyCols := make([]*model.Column, 0)
@@ -120,20 +117,20 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		return EncoderNoOperation, errors.Annotate(err, "AppendRowChangedEvent could not construct Avro envelope")
 	}
 
-	a.keyBuf = evlp
+	mqMessage.Key = evlp
+	a.resultBuf = append(a.resultBuf, mqMessage)
 
 	return EncoderNeedAsyncWrite, nil
 }
 
-// AppendResolvedEvent is no-op for now
+// AppendResolvedEvent is no-op for Avro
 func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	// nothing for now
 	return EncoderNoOperation, nil
 }
 
-// AppendDDLEvent is no-op now
-func (a *AvroEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
-	return EncoderNoOperation, nil
+// EncodeCheckpointEvent is no-op for now
+func (a *AvroEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
+	return nil, nil
 }
 
 // UpdateResolvedTs implements the EventBatchEncoder interface
@@ -145,15 +142,16 @@ func (a *AvroEventBatchEncoder) UpdateResolvedTs(ts uint64) (EncoderResult, erro
 	return EncoderNeedAsyncWrite, nil
 }
 
-// Build a MQ message
-func (a *AvroEventBatchEncoder) Build() (keys [][]byte, values [][]byte) {
-	if a.Size() == 0 {
-		return nil, nil
-	}
-	defer a.reset()
-	keys = append(keys, a.keyBuf)
-	values = append(values, a.valueBuf)
-	return
+// EncodeDDLEvent is no-op now
+func (a *AvroEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
+	return nil, nil
+}
+
+// Build MQ Messages
+func (a *AvroEventBatchEncoder) Build() (mqMessages []*MQMessage) {
+	old := a.resultBuf
+	a.resultBuf = nil
+	return old
 }
 
 // MixedBuild implements the EventBatchEncoder interface
@@ -166,17 +164,17 @@ func (a *AvroEventBatchEncoder) Reset() {
 	panic("Reset only used for JsonEncoder")
 }
 
-// Size is always 0 or 1
+// Size is the current size of resultBuf
 func (a *AvroEventBatchEncoder) Size() int {
-	if a.valueBuf == nil {
+	if a.resultBuf == nil {
 		return 0
 	}
-	return 1
-}
-
-func (a *AvroEventBatchEncoder) reset() {
-	a.keyBuf = nil
-	a.valueBuf = nil
+	sum := 0
+	for _, msg := range a.resultBuf {
+		sum += len(msg.Key)
+		sum += len(msg.Value)
+	}
+	return sum
 }
 
 func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column) (*avroEncodeResult, error) {
@@ -318,7 +316,7 @@ var unsignedLongAvroType = avroLogicalType{
 }
 
 func getAvroDataTypeFromColumn(col *model.Column) (interface{}, error) {
-
+	log.Info("DEBUG: getAvroDataTypeFromColumn", zap.Reflect("col", col))
 	switch col.Type {
 	case mysql.TypeFloat:
 		return "float", nil
@@ -433,6 +431,24 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 		d := types.NewDuration(hours, minutes, seconds, int(fracInt), int8(fsp)).Duration
 		const fullType = "int." + timeMillis
 		return d, string(fullType), nil
+	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString:
+		if col.Flag.IsBinary() {
+			switch val := col.Value.(type) {
+			case string:
+				return []byte(val), "bytes", nil
+			case []byte:
+				return val, "bytes", nil
+			}
+		} else {
+			switch val := col.Value.(type) {
+			case string:
+				return val, "string", nil
+			case []byte:
+				return string(val), "string", nil
+			}
+		}
+		log.Fatal("Avro could not process text-like type", zap.Reflect("col", col))
+		return nil, "", errors.New("Unknown datum type")
 	case mysql.TypeYear:
 		return col.Value.(int64), "long", nil
 	case mysql.TypeJSON:
