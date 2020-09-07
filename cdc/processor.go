@@ -805,7 +805,11 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			rows = append(rows, ev.Row)
 		}
-		failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {})
+		failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
+			log.Info("Prepare to panic for ProcessorSyncResolvedPreEmit")
+			time.Sleep(10 * time.Second)
+			panic("ProcessorSyncResolvedPreEmit")
+		})
 		err := p.sink.EmitRowChangedEvents(ctx, rows...)
 		if err != nil {
 			return errors.Trace(err)
@@ -1040,7 +1044,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 						continue
 					}
 					sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
-					if pEvent.CRTs <= sinkResolvedTs || pEvent.CRTs <= lastResolvedTs || pEvent.CRTs < replicaInfo.StartTs {
+					if pEvent.CRTs <= lastResolvedTs || pEvent.CRTs < replicaInfo.StartTs {
 						log.Fatal("The CRTs of event is not expected, please report a bug",
 							zap.String("model", "sorter"),
 							zap.Uint64("globalResolvedTs", sinkResolvedTs),
@@ -1087,6 +1091,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		p.position.ResolvedTs = replicaInfo.StartTs
 	}
 
+	atomic.StoreUint64(&p.localResolvedTs, p.position.ResolvedTs)
 	table.sorter = startPuller(tableID, &table.resolvedTs)
 
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
