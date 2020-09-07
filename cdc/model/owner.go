@@ -283,7 +283,7 @@ func (ts *TaskStatus) Clone() *TaskStatus {
 	clone := *ts
 	tables := make(map[TableID]*TableReplicaInfo, len(ts.Tables))
 	for tableID, table := range ts.Tables {
-		tables[tableID] = &(*table)
+		tables[tableID] = table
 	}
 	clone.Tables = tables
 	operation := make(map[TableID]*TableOperation, len(ts.Operation))
