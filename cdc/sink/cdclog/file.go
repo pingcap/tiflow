@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -187,7 +186,6 @@ type fileSink struct {
 	ddlFile *os.File
 
 	ddlEncoder codec.EventBatchEncoder
-	hashMap    sync.Map
 }
 
 func (f *fileSink) flushLogMeta() error {

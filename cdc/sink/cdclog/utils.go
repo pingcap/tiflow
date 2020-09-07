@@ -93,10 +93,6 @@ func (l *logSink) root() string {
 	return l.rootPath
 }
 
-func (l *logSink) encoderFn() func() codec.EventBatchEncoder {
-	return l.encoder
-}
-
 func (l *logSink) startFlush(ctx context.Context) error {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
