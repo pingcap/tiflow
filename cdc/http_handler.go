@@ -70,7 +70,7 @@ func handleOwnerResp(w http.ResponseWriter, err error) {
 
 func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
-		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
+		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
 	s.ownerLock.RLock()
@@ -100,7 +100,7 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 
 func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
-		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
+		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
 
@@ -119,7 +119,7 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 	typeStr := req.Form.Get(APIOpVarAdminJob)
 	typ, err := strconv.ParseInt(typeStr, 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errors.Errorf("invalid admin job type: %s", typeStr))
+		writeError(w, http.StatusBadRequest, cerror.ErrAPIInvalidParam.GenWithStack("invalid admin job type: %s", typeStr))
 		return
 	}
 	opts := &model.AdminJobOption{}
@@ -127,7 +127,7 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 		forceRemoveOpt, err := strconv.ParseBool(forceRemoveStr)
 		if err != nil {
 			writeError(w, http.StatusBadRequest,
-				errors.Errorf("invalid force remove option: %s", forceRemoveStr))
+				cerror.ErrAPIInvalidParam.GenWithStack("invalid force remove option: %s", forceRemoveStr))
 			return
 		}
 		opts.ForceRemove = forceRemoveOpt
@@ -143,7 +143,7 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 
 func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
-		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
+		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
 
@@ -161,7 +161,8 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
+		writeError(w, http.StatusBadRequest,
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
 	s.owner.TriggerRebalance(changefeedID)
@@ -170,7 +171,7 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 
 func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
-		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
+		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
 
@@ -183,23 +184,26 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 
 	err := req.ParseForm()
 	if err != nil {
-		writeInternalServerError(w, err)
+		writeInternalServerError(w, cerror.WrapError(cerror.ErrInternalServerError, err))
 		return
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
+		writeError(w, http.StatusBadRequest,
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
 	to := req.Form.Get(APIOpVarTargetCaptureID)
 	if err := model.ValidateChangefeedID(to); err != nil {
-		writeError(w, http.StatusBadRequest, errors.Errorf("invalid target capture id: %s", to))
+		writeError(w, http.StatusBadRequest,
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid target capture id: %s", to))
 		return
 	}
 	tableIDStr := req.Form.Get(APIOpVarTableID)
 	tableID, err := strconv.ParseInt(tableIDStr, 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errors.Errorf("invalid tableID: %s", tableIDStr))
+		writeError(w, http.StatusBadRequest,
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid tableID: %s", tableIDStr))
 		return
 	}
 	s.owner.ManualSchedule(changefeedID, to, tableID)
@@ -208,7 +212,7 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 
 func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
-		writeError(w, http.StatusBadRequest, errors.New("this api only supports POST method"))
+		writeError(w, http.StatusBadRequest, cerror.ErrSupportPostOnly.GenWithStackByArgs())
 		return
 	}
 	s.ownerLock.RLock()
@@ -225,7 +229,8 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 	}
 	changefeedID := req.Form.Get(APIOpVarChangefeedID)
 	if err := model.ValidateChangefeedID(changefeedID); err != nil {
-		writeError(w, http.StatusBadRequest, errors.Errorf("invalid changefeed id: %s", changefeedID))
+		writeError(w, http.StatusBadRequest,
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", changefeedID))
 		return
 	}
 	cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
@@ -265,13 +270,15 @@ func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
 	}
 	err = json.Unmarshal(data, &level)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errors.Errorf("invalid log level: %s", err))
+		writeError(w, http.StatusBadRequest,
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid log level: %s", err))
 		return
 	}
 
 	err = logutil.SetLogLevel(level)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errors.Errorf("fail to change log level: %s", err))
+		writeError(w, http.StatusBadRequest,
+			cerror.ErrAPIInvalidParam.GenWithStack("fail to change log level: %s", err))
 		return
 	}
 	log.Warn("log level changed", zap.String("level", level))

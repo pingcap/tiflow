@@ -217,11 +217,11 @@ func (o *Owner) newChangeFeed(
 	if info.Engine == model.SortInFile {
 		err = os.MkdirAll(info.SortDir, 0755)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
 		}
 		err = util.IsDirAndWritable(info.SortDir)
 		if err != nil {
-			return nil, err
+			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
 		}
 	}
 
@@ -553,7 +553,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		if !o.gcSafepointLastUpdate.IsZero() {
 			_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, 0, 0)
 			if err != nil {
-				return errors.Trace(err)
+				return cerror.WrapError(cerror.ErrOwnerUpdateGCSafepoint, err)
 			}
 			o.gcSafepointLastUpdate = *new(time.Time)
 		}
@@ -583,7 +583,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 		if err != nil {
 			log.Info("failed to update service safe point", zap.Error(err))
-			return errors.Trace(err)
+			return cerror.WrapError(cerror.ErrOwnerUpdateGCSafepoint, err)
 		}
 		o.gcSafepointLastUpdate = time.Now()
 	}
@@ -624,7 +624,7 @@ func (o *Owner) handleDDL(ctx context.Context) error {
 func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	cf, ok := o.changeFeeds[job.CfID]
 	if !ok {
-		return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
+		return cerror.ErrOwnerChangefeedNotFound.GenWithStackByArgs(job.CfID)
 	}
 	for captureID := range cf.taskStatus {
 		newStatus, _, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
@@ -809,7 +809,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 					}
 					delete(o.stoppedFeeds, job.CfID)
 				default:
-					return errors.Errorf("changefeed in abnormal state: %s, replication status: %+v", feedState, status)
+					return cerror.ErrChangefeedAbnormalState.GenWithStackByArgs(feedState, status)
 				}
 			}
 			// remove changefeed info
@@ -1029,7 +1029,7 @@ func (o *Owner) EnqueueJob(job model.AdminJob) error {
 	switch job.Type {
 	case model.AdminResume, model.AdminRemove, model.AdminStop, model.AdminFinish:
 	default:
-		return errors.Errorf("invalid admin job type: %d", job.Type)
+		return cerror.ErrInvalidAdminJobType.GenWithStackByArgs(job.Type)
 	}
 	o.adminJobsLock.Lock()
 	o.adminJobs = append(o.adminJobs, job)
@@ -1184,7 +1184,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 			err = mvcc.ErrCompacted
 		})
 		if err != nil {
-			return errors.Trace(resp.Err())
+			return cerror.WrapError(cerror.ErrOwnerEtcdWatch, resp.Err())
 		}
 		for _, ev := range resp.Events {
 			c := &model.CaptureInfo{}
