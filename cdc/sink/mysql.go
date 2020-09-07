@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff"
@@ -37,6 +38,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	tifilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
@@ -48,7 +50,6 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -78,10 +79,13 @@ type mysqlSink struct {
 	filter *filter.Filter
 	cyclic *cyclic.Cyclic
 
-	txnCache *common.UnresolvedTxnCache
-	workers  []*mysqlSinkWorker
-	notifier *notify.Notifier
-	errCh    chan error
+	txnCache   *common.UnresolvedTxnCache
+	workers    []*mysqlSinkWorker
+	resolvedTs uint64
+
+	execWaitNotifier *notify.Notifier
+	resolvedNotifier *notify.Notifier
+	errCh            chan error
 
 	statistics *Statistics
 
@@ -96,25 +100,57 @@ func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.Row
 	return nil
 }
 
-func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error {
-	resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
-	if len(resolvedTxnsMap) == 0 {
+func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+	atomic.StoreUint64(&s.resolvedTs, resolvedTs)
+	s.resolvedNotifier.Notify()
+
+	// check and throw error
+	select {
+	case err := <-s.errCh:
+		return 0, err
+	default:
+	}
+
+	checkpointTs := resolvedTs
+	for _, worker := range s.workers {
+		workerCheckpointTs := atomic.LoadUint64(&worker.checkpointTs)
+		if workerCheckpointTs < checkpointTs {
+			checkpointTs = workerCheckpointTs
+		}
+	}
+	return checkpointTs, nil
+}
+
+func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
+	receiver := s.resolvedNotifier.NewReceiver(50 * time.Millisecond)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-receiver.C:
+		}
+		resolvedTs := atomic.LoadUint64(&s.resolvedTs)
+		resolvedTxnsMap := s.txnCache.Resolved(resolvedTs)
+		if len(resolvedTxnsMap) == 0 {
+			for _, worker := range s.workers {
+				atomic.StoreUint64(&worker.checkpointTs, resolvedTs)
+			}
+			s.txnCache.UpdateCheckpoint(resolvedTs)
+			continue
+		}
+
+		if s.cyclic != nil {
+			// Filter rows if it is origined from downstream.
+			skippedRowCount := cyclic.FilterAndReduceTxns(
+				resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
+			s.statistics.SubRowsCount(skippedRowCount)
+		}
+		s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+		for _, worker := range s.workers {
+			atomic.StoreUint64(&worker.checkpointTs, resolvedTs)
+		}
 		s.txnCache.UpdateCheckpoint(resolvedTs)
-		return nil
 	}
-
-	if s.cyclic != nil {
-		// Filter rows if it is origined from downstream.
-		skippedRowCount := cyclic.FilterAndReduceTxns(
-			resolvedTxnsMap, s.cyclic.FilterReplicaID(), s.cyclic.ReplicaID())
-		s.statistics.SubRowsCount(skippedRowCount)
-	}
-
-	if err := s.concurrentExec(ctx, resolvedTxnsMap); err != nil {
-		return errors.Trace(err)
-	}
-	s.txnCache.UpdateCheckpoint(resolvedTs)
-	return nil
 }
 
 func (s *mysqlSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
@@ -130,7 +166,7 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
 		)
-		return errors.Trace(model.ErrorDDLEventIgnored)
+		return cerror.ErrorDDLEventIgnored.GenWithStackByArgs()
 	}
 	err := s.execDDLWithMaxRetries(ctx, ddl, defaultDDLMaxRetryTime)
 	return errors.Trace(err)
@@ -236,6 +272,11 @@ type sinkParams struct {
 	batchReplaceSize    int
 }
 
+func (s *sinkParams) Clone() *sinkParams {
+	clone := *s
+	return &clone
+}
+
 var defaultParams = &sinkParams{
 	workerCount:         defaultWorkerCount,
 	maxTxnRow:           defaultMaxTxnRow,
@@ -292,7 +333,7 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 // newMySQLSink creates a new MySQL sink using schema storage
 func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL, filter *tifilter.Filter, opts map[string]string) (Sink, error) {
 	var db *sql.DB
-	params := defaultParams
+	params := defaultParams.Clone()
 
 	if cid, ok := opts[OptChangefeedID]; ok {
 		params.changefeedID = cid
@@ -438,8 +479,11 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 		}
 	}
 
-	sink.notifier = new(notify.Notifier)
+	sink.execWaitNotifier = new(notify.Notifier)
+	sink.resolvedNotifier = new(notify.Notifier)
 	sink.createSinkWorkers(ctx)
+
+	go sink.flushRowChangedEvents(ctx)
 
 	return sink, nil
 }
@@ -447,7 +491,7 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 func (s *mysqlSink) createSinkWorkers(ctx context.Context) {
 	s.workers = make([]*mysqlSinkWorker, s.params.workerCount)
 	for i := range s.workers {
-		receiver := s.notifier.NewReceiver(defaultFlushInterval)
+		receiver := s.execWaitNotifier.NewReceiver(defaultFlushInterval)
 		worker := newMySQLSinkWorker(
 			s.params.maxTxnRow, i, s.metricBucketSizeCounters[i], receiver, s.execDMLs)
 		s.workers[i] = worker
@@ -464,7 +508,7 @@ func (s *mysqlSink) createSinkWorkers(ctx context.Context) {
 }
 
 func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
-	s.notifier.Notify()
+	s.execWaitNotifier.Notify()
 	done := make(chan struct{})
 	go func() {
 		for _, w := range s.workers {
@@ -480,27 +524,6 @@ func (s *mysqlSink) notifyAndWaitExec(ctx context.Context) {
 	case <-ctx.Done():
 	case <-done:
 	}
-}
-
-func (s *mysqlSink) concurrentExec(ctx context.Context, txnsGroup map[model.TableID][]*model.SingleTableTxn) error {
-	errg, ctx := errgroup.WithContext(ctx)
-	ch := make(chan struct{}, 1)
-	errg.Go(func() error {
-		s.dispatchAndExecTxns(ctx, txnsGroup)
-		ch <- struct{}{}
-		return nil
-	})
-	errg.Go(func() error {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-ch:
-			return nil
-		case err := <-s.errCh:
-			return err
-		}
-	})
-	return errg.Wait()
 }
 
 func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model.TableID][]*model.SingleTableTxn) {
@@ -526,13 +549,12 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 		rowsChIdx++
 		rowsChIdx = rowsChIdx % nWorkers
 	}
-	for _, txns := range txnsGroup {
-		for _, txn := range txns {
-			startTime := time.Now()
-			resolveConflict(txn)
-			s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
-		}
-	}
+	h := newTxnsHeap(txnsGroup)
+	h.iter(func(txn *model.SingleTableTxn) {
+		startTime := time.Now()
+		resolveConflict(txn)
+		s.metricConflictDetectDurationHis.Observe(time.Since(startTime).Seconds())
+	})
 	s.notifyAndWaitExec(ctx)
 }
 
@@ -544,6 +566,7 @@ type mysqlSinkWorker struct {
 	execDMLs         func(context.Context, []*model.RowChangedEvent, uint64, int) error
 	metricBucketSize prometheus.Counter
 	receiver         *notify.Receiver
+	checkpointTs     uint64
 }
 
 func newMySQLSinkWorker(
@@ -581,9 +604,10 @@ func (w *mysqlSinkWorker) appendTxn(ctx context.Context, txn *model.SingleTableT
 
 func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	var (
-		toExecRows []*model.RowChangedEvent
-		replicaID  uint64
-		txnNum     int
+		toExecRows   []*model.RowChangedEvent
+		replicaID    uint64
+		txnNum       int
+		lastCommitTs uint64
 	)
 
 	defer func() {
@@ -609,6 +633,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			txnNum = 0
 			return err
 		}
+		atomic.StoreUint64(&w.checkpointTs, lastCommitTs)
 		toExecRows = toExecRows[:0]
 		w.metricBucketSize.Add(float64(txnNum))
 		w.txnWg.Add(-1 * txnNum)
@@ -631,6 +656,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			}
 			replicaID = txn.ReplicaID
 			toExecRows = append(toExecRows, txn.Rows...)
+			lastCommitTs = txn.CommitTs
 			txnNum++
 		case <-w.receiver.C:
 			if err := flushRows(); err != nil {
@@ -641,7 +667,8 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 }
 
 func (s *mysqlSink) Close() error {
-	s.notifier.Close()
+	s.execWaitNotifier.Close()
+	s.resolvedNotifier.Close()
 	return s.db.Close()
 }
 

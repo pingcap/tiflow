@@ -16,8 +16,8 @@ package security
 import (
 	"crypto/tls"
 
-	"github.com/pingcap/errors"
 	pd "github.com/pingcap/pd/v4/client"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb-tools/pkg/utils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -49,18 +49,20 @@ func (s *Credential) PDSecurityOption() pd.SecurityOption {
 func (s *Credential) ToGRPCDialOption() (grpc.DialOption, error) {
 	tlsCfg, err := s.ToTLSConfig()
 	if err != nil || tlsCfg == nil {
-		return grpc.WithInsecure(), errors.Trace(err)
+		return grpc.WithInsecure(), err
 	}
 	return grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)), nil
 }
 
 // ToTLSConfig generates tls's config from *Security
 func (s *Credential) ToTLSConfig() (*tls.Config, error) {
-	return utils.ToTLSConfig(s.CAPath, s.CertPath, s.KeyPath)
+	cfg, err := utils.ToTLSConfig(s.CAPath, s.CertPath, s.KeyPath)
+	return cfg, cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
 }
 
 // ToTLSConfigWithVerify generates tls's config from *Security and requires
 // verifing remote cert common name.
 func (s *Credential) ToTLSConfigWithVerify() (*tls.Config, error) {
-	return utils.ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, s.CertAllowedCN)
+	cfg, err := utils.ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, s.CertAllowedCN)
+	return cfg, cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
 }

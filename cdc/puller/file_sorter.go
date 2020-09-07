@@ -429,7 +429,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 			// `item.entry.CRTs`. But it is safe to output with `item.entry.CRTs-1`.
 			rowCount += 1
 			if rowCount%defaultAutoResolvedRows == 0 {
-				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.CRTs-1))
+				fs.output(ctx, model.NewResolvedPolymorphicEvent(item.entry.RegionID(), item.entry.CRTs-1))
 			}
 		} else {
 			lastSortedFileUpdated = true
@@ -463,7 +463,8 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 	}
 
 	fs.cache.finishSorting(newLastSortedFile, toRemoveFiles)
-	fs.output(ctx, model.NewResolvedPolymorphicEvent(resolvedTs))
+	// regionID = 0 means the event is produced by TiCDC
+	fs.output(ctx, model.NewResolvedPolymorphicEvent(0, resolvedTs))
 
 	return nil
 }

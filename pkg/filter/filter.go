@@ -14,10 +14,10 @@
 package filter
 
 import (
-	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	filterV1 "github.com/pingcap/tidb-tools/pkg/filter"
 	filterV2 "github.com/pingcap/tidb-tools/pkg/table-filter"
 )
@@ -44,7 +44,7 @@ func NewFilter(cfg *config.ReplicaConfig) (*Filter, error) {
 		f, err = filterV2.Parse(rules)
 	}
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 	}
 	if !cfg.CaseSensitive {
 		f = filterV2.CaseInsensitive(f)

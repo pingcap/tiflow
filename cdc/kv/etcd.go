@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"go.etcd.io/etcd/clientv3"
@@ -160,7 +161,7 @@ func (c CDCEtcdClient) GetChangeFeedInfo(ctx context.Context, id string) (*model
 		return nil, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return nil, errors.Annotatef(model.ErrChangeFeedNotExists, "query detail id %s", id)
+		return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(key)
 	}
 	detail := &model.ChangeFeedInfo{}
 	err = detail.Unmarshal(resp.Kvs[0].Value)
@@ -205,7 +206,7 @@ func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string) (*mod
 		return nil, 0, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return nil, 0, errors.Annotatef(model.ErrChangeFeedNotExists, "query status id %s", id)
+		return nil, 0, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(key)
 	}
 	info := &model.ChangeFeedStatus{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
@@ -275,7 +276,7 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.Cha
 	if !resp.Succeeded {
 		log.Warn("changefeed already exists, ignore create changefeed",
 			zap.String("changefeedid", changeFeedID))
-		return errors.Trace(model.ErrChangeFeedAlreadyExists)
+		return cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(changeFeedID)
 	}
 	return errors.Trace(err)
 }
@@ -316,7 +317,7 @@ func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID str
 		info := &model.TaskPosition{}
 		err = info.Unmarshal(rawKv.Value)
 		if err != nil {
-			return nil, errors.Annotate(model.ErrDecodeFailed, "failed to unmarshal task position")
+			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("failed to unmarshal task position: %s", err)
 		}
 		positions[captureID] = info
 	}
@@ -402,7 +403,7 @@ func (c CDCEtcdClient) GetAllTaskStatus(ctx context.Context, changefeedID string
 		info := &model.TaskStatus{}
 		err = info.Unmarshal(rawKv.Value)
 		if err != nil {
-			return nil, errors.Annotate(model.ErrDecodeFailed, "failed to unmarshal task status")
+			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("failed to unmarshal task status: %s", err)
 		}
 		info.ModRevision = rawKv.ModRevision
 		pinfo[captureID] = info
@@ -453,7 +454,7 @@ func (c CDCEtcdClient) GetTaskStatus(
 		return 0, nil, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return 0, nil, errors.Annotatef(model.ErrTaskStatusNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
+		return 0, nil, cerror.ErrTaskStatusNotExists.GenWithStackByArgs(key)
 	}
 	info := &model.TaskStatus{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
@@ -560,7 +561,7 @@ func (c CDCEtcdClient) GetAllTaskWorkloads(ctx context.Context, changefeedID str
 		info := &model.TaskWorkload{}
 		err = info.Unmarshal(rawKv.Value)
 		if err != nil {
-			return nil, errors.Annotate(model.ErrDecodeFailed, "failed to unmarshal task workload")
+			return nil, cerror.ErrDecodeFailed.GenWithStackByArgs("failed to unmarshal task workload: %s", err)
 		}
 		workloads[captureID] = info
 	}
@@ -590,14 +591,14 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 		modRevision, status, err = c.GetTaskStatus(ctx, changefeedID, captureID)
 		key := GetEtcdKeyTaskStatus(changefeedID, captureID)
 		var writeCmp clientv3.Cmp
-		switch errors.Cause(err) {
-		case model.ErrTaskStatusNotExists:
+		if err != nil {
+			if cerror.ErrTaskStatusNotExists.NotEqual(err) {
+				return errors.Trace(err)
+			}
 			status = new(model.TaskStatus)
 			writeCmp = clientv3.Compare(clientv3.ModRevision(key), "=", 0)
-		case nil:
+		} else {
 			writeCmp = clientv3.Compare(clientv3.ModRevision(key), "=", modRevision)
-		default:
-			return errors.Trace(err)
 		}
 		updated := false
 		for _, updateFunc := range updateFuncs {
@@ -625,7 +626,7 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 
 		if !resp.Succeeded {
 			log.Info("outdated table infos, ignore update taskStatus")
-			return errors.Annotatef(model.ErrWriteTsConflict, "key: %s", key)
+			return cerror.ErrWriteTsConflict.GenWithStackByArgs(key)
 		}
 		newModRevision = resp.Header.GetRevision()
 		return nil
@@ -651,7 +652,7 @@ func (c CDCEtcdClient) GetTaskPosition(
 		return 0, nil, errors.Trace(err)
 	}
 	if resp.Count == 0 {
-		return 0, nil, errors.Annotatef(model.ErrTaskPositionNotExists, "changefeed: %s, capture: %s", changefeedID, captureID)
+		return 0, nil, cerror.ErrTaskPositionNotExists.GenWithStackByArgs(key)
 	}
 	info := &model.TaskPosition{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
@@ -810,7 +811,7 @@ func (c CDCEtcdClient) GetCaptureInfo(ctx context.Context, id string) (info *mod
 	}
 
 	if len(resp.Kvs) == 0 {
-		return nil, model.ErrCaptureNotExist
+		return nil, cerror.ErrCaptureNotExist.GenWithStackByArgs(key)
 	}
 
 	info = new(model.CaptureInfo)

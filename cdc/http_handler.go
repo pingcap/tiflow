@@ -15,13 +15,19 @@ package cdc
 
 import (
 	"context"
+	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.uber.org/zap"
 )
 
 const (
@@ -69,7 +75,7 @@ func (s *Server) handleResignOwner(w http.ResponseWriter, req *http.Request) {
 	}
 	s.ownerLock.RLock()
 	if s.owner == nil {
-		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
 		s.ownerLock.RUnlock()
 		return
 	}
@@ -101,7 +107,8 @@ func (s *Server) handleChangefeedAdmin(w http.ResponseWriter, req *http.Request)
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
-		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
 	}
 
 	err := req.ParseForm()
@@ -143,7 +150,8 @@ func (s *Server) handleRebalanceTrigger(w http.ResponseWriter, req *http.Request
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
-		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
 	}
 
 	err := req.ParseForm()
@@ -169,7 +177,8 @@ func (s *Server) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
-		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
 	}
 
 	err := req.ParseForm()
@@ -205,7 +214,8 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	if s.owner == nil {
-		handleOwnerResp(w, concurrency.ErrElectionNoLeader)
+		handleOwnerResp(w, concurrency.ErrElectionNotLeader)
+		return
 	}
 
 	err := req.ParseForm()
@@ -219,12 +229,12 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		return
 	}
 	cf, status, feedState, err := s.owner.collectChangefeedInfo(req.Context(), changefeedID)
-	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		writeInternalServerError(w, err)
 		return
 	}
 	feedInfo, err := s.owner.etcdClient.GetChangeFeedInfo(req.Context(), changefeedID)
-	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		writeInternalServerError(w, err)
 		return
 	}
@@ -243,4 +253,28 @@ func (s *Server) handleChangefeedQuery(w http.ResponseWriter, req *http.Request)
 		resp.Checkpoint = tm.Format("2006-01-02 15:04:05.000")
 	}
 	writeData(w, resp)
+}
+
+func handleAdminLogLevel(w http.ResponseWriter, r *http.Request) {
+	var level string
+	data, err := ioutil.ReadAll(r.Body)
+	r.Body.Close()
+	if err != nil {
+		writeInternalServerError(w, err)
+		return
+	}
+	err = json.Unmarshal(data, &level)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errors.Errorf("invalid log level: %s", err))
+		return
+	}
+
+	err = logutil.SetLogLevel(level)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, errors.Errorf("fail to change log level: %s", err))
+		return
+	}
+	log.Warn("log level changed", zap.String("level", level))
+
+	writeData(w, struct{}{})
 }

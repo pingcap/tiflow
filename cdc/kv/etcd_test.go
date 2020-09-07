@@ -21,9 +21,9 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.etcd.io/etcd/clientv3"
@@ -124,7 +124,7 @@ func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 	err = s.client.ClearAllCDCInfo(context.Background())
 	c.Assert(err, check.IsNil)
 	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskStatusNotExists)
+	c.Assert(cerror.ErrTaskStatusNotExists.Equal(err), check.IsTrue)
 }
 
 func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
@@ -143,7 +143,7 @@ func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
 	err = s.client.DeleteTaskStatus(ctx, feedID, captureID)
 	c.Assert(err, check.IsNil)
 	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskStatusNotExists)
+	c.Assert(cerror.ErrTaskStatusNotExists.Equal(err), check.IsTrue)
 }
 
 func (s *etcdSuite) TestGetPutTaskPosition(c *check.C) {
@@ -166,7 +166,7 @@ func (s *etcdSuite) TestGetPutTaskPosition(c *check.C) {
 	err = s.client.ClearAllCDCInfo(ctx)
 	c.Assert(err, check.IsNil)
 	_, _, err = s.client.GetTaskStatus(ctx, feedID, captureID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskStatusNotExists)
+	c.Assert(cerror.ErrTaskStatusNotExists.Equal(err), check.IsTrue)
 }
 
 func (s *etcdSuite) TestDeleteTaskPosition(c *check.C) {
@@ -184,7 +184,7 @@ func (s *etcdSuite) TestDeleteTaskPosition(c *check.C) {
 	err = s.client.DeleteTaskPosition(ctx, feedID, captureID)
 	c.Assert(err, check.IsNil)
 	_, _, err = s.client.GetTaskPosition(ctx, feedID, captureID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrTaskPositionNotExists)
+	c.Assert(cerror.ErrTaskPositionNotExists.Equal(err), check.IsTrue)
 }
 
 func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
@@ -205,7 +205,7 @@ func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	_, err = s.client.GetChangeFeedInfo(ctx, cfID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
+	c.Assert(cerror.ErrChangeFeedNotExists.Equal(err), check.IsTrue)
 }
 
 func (s *etcdSuite) TestPutAllChangeFeedStatus(c *check.C) {
@@ -288,7 +288,7 @@ func (s *etcdSuite) TestRemoveChangeFeedStatus(c *check.C) {
 	err = s.client.RemoveChangeFeedStatus(ctx, changefeedID)
 	c.Assert(err, check.IsNil)
 	_, _, err = s.client.GetChangeFeedStatus(ctx, changefeedID)
-	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedNotExists)
+	c.Assert(cerror.ErrChangeFeedNotExists.Equal(err), check.IsTrue)
 }
 
 func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
@@ -312,15 +312,13 @@ func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
 	for i := 0; i < 50; i++ {
 		_, _, err = s.client.GetChangeFeedStatus(ctx, "test1")
 		log.Warn("nil", zap.Error(err))
-		switch errors.Cause(err) {
-		case model.ErrChangeFeedNotExists:
-			return
-		case nil:
-			time.Sleep(100 * time.Millisecond)
-			continue
-		default:
+		if err != nil {
+			if cerror.ErrChangeFeedNotExists.Equal(err) {
+				return
+			}
 			c.Fatal("got unexpected error", err)
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
 	c.Fatal("the change feed status is still exists after 5 seconds")
 }
@@ -390,7 +388,7 @@ func (s *etcdSuite) TestCreateChangefeed(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	err = s.client.CreateChangefeedInfo(ctx, detail, "test-id")
-	c.Assert(errors.Cause(err), check.Equals, model.ErrChangeFeedAlreadyExists)
+	c.Assert(cerror.ErrChangeFeedAlreadyExists.Equal(err), check.IsTrue)
 }
 
 type Captures []*model.CaptureInfo

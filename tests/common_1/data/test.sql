@@ -172,35 +172,3 @@ VALUES (1),
 UPDATE `column_is_null`
 SET t = NULL
 WHERE id = 1;
-
--- test add and drop columns
-
-CREATE TABLE `add_and_drop_columns`
-(
-    `id` int(11) NOT NULL PRIMARY KEY
-);
-
-insert into `add_and_drop_columns` (id)
-values (1);
-
-alter table `add_and_drop_columns`
-    add col1 int null,
-    add col2 int null,
-    add col3 int null;
-
-insert into `add_and_drop_columns` (id, col1, col2, col3)
-values (2, 3, 4, 5);
-
-alter table `add_and_drop_columns`
-    drop col1,
-    drop col2;
-
-insert into `add_and_drop_columns` (id, col3)
-values (3, 4);
-
--- mark finish table
-
-CREATE TABLE finish_mark
-(
-    a int primary key
-);
