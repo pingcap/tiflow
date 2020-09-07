@@ -111,7 +111,7 @@ fmt:
 	@echo "gofmt (simplify)"
 	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 
-lint:tools/bin/revive
+lint: tools/bin/revive
 	@echo "linting"
 	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
 
@@ -144,20 +144,18 @@ else
 endif
 
 check-static: tools/bin/golangci-lint
-	$(GO) mod vendor
-	tools/bin/golangci-lint \
-		run ./... # $$($(PACKAGE_DIRECTORIES))
+	tools/bin/golangci-lint run --timeout 10m0s
 
 clean:
 	go clean -i ./...
 	rm -rf *.out
 
 tools/bin/revive: tools/check/go.mod
-	cd tools/check; \
+	cd tools/check; test -e ../bin/revive || \
 	$(GO) build -o ../bin/revive github.com/mgechev/revive
 
 tools/bin/golangci-lint: tools/check/go.mod
-	cd tools/check; \
+	cd tools/check; test -e ../bin/golangci-lint || \
 	$(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 
 failpoint-enable:

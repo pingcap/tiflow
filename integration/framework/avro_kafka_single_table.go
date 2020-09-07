@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -63,6 +64,7 @@ func (a *AvroSingleTableTask) Prepare(taskContext *TaskContext) error {
 	if err != nil {
 		return err
 	}
+	taskContext.Downstream.SetConnMaxLifetime(5 * time.Second)
 
 	// TODO better way to generate JSON
 	connectorConfigFmt := `{
