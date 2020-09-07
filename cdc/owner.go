@@ -329,71 +329,10 @@ func (o *Owner) newChangeFeed(
 		log.Error("error on running owner", zap.Error(err))
 	}
 
-	//TODO 后期需要打包一下
-	var syncDB *sql.DB
-	// parse sinkURI as a URI
-	sinkURI, err := url.Parse(info.SinkURI)
+	syncDB, err := o.createSyncpointSink(ctx, info, id)
 	if err != nil {
-		return nil, errors.Annotatef(err, "parse sinkURI failed")
+		log.Error("error on running owner", zap.Error(err))
 	}
-	if sinkURI == nil {
-		return nil, errors.New("fail to open MySQL sink, empty URL")
-	}
-	scheme := strings.ToLower(sinkURI.Scheme)
-	if scheme != "mysql" && scheme != "tidb" {
-		return nil, errors.New("can create mysql sink with unsupported scheme")
-	}
-	var tlsParam string
-	if sinkURI.Query().Get("ssl-ca") != "" {
-		credential := security.Credential{
-			CAPath:   sinkURI.Query().Get("ssl-ca"),
-			CertPath: sinkURI.Query().Get("ssl-cert"),
-			KeyPath:  sinkURI.Query().Get("ssl-key"),
-		}
-		tlsCfg, err := credential.ToTLSConfig()
-		if err != nil {
-			return nil, errors.Annotate(err, "fail to open MySQL connection")
-		}
-		name := "cdc_mysql_tls" + "syncpoint" + id
-		err = dmysql.RegisterTLSConfig(name, tlsCfg)
-		if err != nil {
-			return nil, errors.Annotate(err, "fail to open MySQL connection")
-		}
-		tlsParam = "?tls=" + name
-	}
-
-	// dsn format of the driver:
-	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
-	username := sinkURI.User.Username()
-	password, _ := sinkURI.User.Password()
-	port := sinkURI.Port()
-	if username == "" {
-		username = "root"
-	}
-	if port == "" {
-		port = "4000"
-	}
-
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
-	dsn, err := dmysql.ParseDSN(dsnStr)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	dsnStr, err = configureSinkURI(ctx, dsn, util.TimezoneFromCtx(ctx))
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	syncDB, err = sql.Open("mysql", dsnStr)
-	if err != nil {
-		return nil, errors.Annotate(err, "Open database connection failed")
-	}
-	err = syncDB.PingContext(ctx)
-	if err != nil {
-		return nil, errors.Annotatef(err, "fail to open MySQL connection")
-	}
-
-	log.Info("Start mysql syncpoint sink")
-	//需要打包 end
 
 	cf := &changeFeed{
 		info:          info,
@@ -1329,7 +1268,7 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 	}()
 }
 
-func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
+func (o *Owner) configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
@@ -1372,4 +1311,73 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 	log.Info("sink uri is configured", zap.String("format dsn", dsnClone.FormatDSN()))
 
 	return dsnCfg.FormatDSN(), nil
+}
+
+//createSyncpointSink create a sink to record the syncpoint map in downstream DB for every changefeed
+func (o *Owner) createSyncpointSink(ctx context.Context, info *model.ChangeFeedInfo, id string) (*sql.DB, error) {
+	var syncDB *sql.DB
+	// parse sinkURI as a URI
+	sinkURI, err := url.Parse(info.SinkURI)
+	if err != nil {
+		return nil, errors.Annotatef(err, "parse sinkURI failed")
+	}
+	if sinkURI == nil {
+		return nil, errors.New("fail to open MySQL sink, empty URL")
+	}
+	scheme := strings.ToLower(sinkURI.Scheme)
+	if scheme != "mysql" && scheme != "tidb" {
+		return nil, errors.New("can create mysql sink with unsupported scheme")
+	}
+	var tlsParam string
+	if sinkURI.Query().Get("ssl-ca") != "" {
+		credential := security.Credential{
+			CAPath:   sinkURI.Query().Get("ssl-ca"),
+			CertPath: sinkURI.Query().Get("ssl-cert"),
+			KeyPath:  sinkURI.Query().Get("ssl-key"),
+		}
+		tlsCfg, err := credential.ToTLSConfig()
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to open MySQL connection")
+		}
+		name := "cdc_mysql_tls" + "syncpoint" + id
+		err = dmysql.RegisterTLSConfig(name, tlsCfg)
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to open MySQL connection")
+		}
+		tlsParam = "?tls=" + name
+	}
+
+	// dsn format of the driver:
+	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+	username := sinkURI.User.Username()
+	password, _ := sinkURI.User.Password()
+	port := sinkURI.Port()
+	if username == "" {
+		username = "root"
+	}
+	if port == "" {
+		port = "4000"
+	}
+
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
+	dsn, err := dmysql.ParseDSN(dsnStr)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	dsnStr, err = o.configureSinkURI(ctx, dsn, util.TimezoneFromCtx(ctx))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	syncDB, err = sql.Open("mysql", dsnStr)
+	if err != nil {
+		return nil, errors.Annotate(err, "Open database connection failed")
+	}
+	err = syncDB.PingContext(ctx)
+	if err != nil {
+		return nil, errors.Annotatef(err, "fail to open MySQL connection")
+	}
+
+	log.Info("Start mysql syncpoint sink")
+
+	return syncDB, nil
 }
