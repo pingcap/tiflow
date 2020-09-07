@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller/frontier"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
@@ -45,6 +46,7 @@ type Puller interface {
 	Run(ctx context.Context) error
 	GetResolvedTs() uint64
 	Output() <-chan *model.RawKVEntry
+	IsInitialized() bool
 }
 
 type pullerImpl struct {
@@ -57,6 +59,7 @@ type pullerImpl struct {
 	outputCh       chan *model.RawKVEntry
 	tsTracker      frontier.Frontier
 	resolvedTs     uint64
+	initialized    int64
 	enableOldValue bool
 }
 
@@ -79,6 +82,10 @@ func NewPuller(
 	for i := range spans {
 		comparableSpans[i] = regionspan.ToComparableSpan(spans[i])
 	}
+	// To make puller level resolved ts initialization distinguishable, we set
+	// the initial ts for frontier to 0. Once the puller level resolved ts
+	// initialized, the ts should advance to a non-zero value.
+	tsTracker := frontier.NewFrontier(0, comparableSpans...)
 	p := &pullerImpl{
 		pdCli:          pdCli,
 		credential:     credential,
@@ -87,8 +94,9 @@ func NewPuller(
 		spans:          comparableSpans,
 		buffer:         makeMemBuffer(limitter),
 		outputCh:       make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		tsTracker:      frontier.NewFrontier(checkpointTs, comparableSpans...),
+		tsTracker:      tsTracker,
 		resolvedTs:     checkpointTs,
+		initialized:    0,
 		enableOldValue: enableOldValue,
 	}
 	return p
@@ -112,11 +120,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	checkpointTs := p.checkpointTs
 	eventCh := make(chan *model.RegionFeedEvent, defaultPullerEventChanSize)
 
+	lockresolver := txnutil.NewLockerResolver(p.kvStorage)
 	for _, span := range p.spans {
 		span := span
 
 		g.Go(func() error {
-			return cli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, eventCh)
+			return cli.EventFeed(ctx, span, checkpointTs, p.enableOldValue, lockresolver, p, eventCh)
 		})
 	}
 
@@ -178,6 +187,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		}
 	})
 
+	lastResolvedTs := p.checkpointTs
 	g.Go(func() error {
 		output := func(raw *model.RawKVEntry) error {
 			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
@@ -194,7 +204,9 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			}
 			return nil
 		}
-		var lastResolvedTs uint64
+
+		start := time.Now()
+		initialized := false
 		for {
 			e, err := p.buffer.Get(ctx)
 			if err != nil {
@@ -213,11 +225,28 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				// Forward is called in a single thread
 				p.tsTracker.Forward(e.Resolved.Span, e.Resolved.ResolvedTs)
 				resolvedTs := p.tsTracker.Frontier()
-				if resolvedTs == lastResolvedTs {
+				if resolvedTs > 0 && !initialized {
+					// Advancing to a non-zero value means the puller level
+					// resolved ts is initialized.
+					atomic.StoreInt64(&p.initialized, 1)
+					initialized = true
+
+					spans := make([]string, 0, len(p.spans))
+					for i := range p.spans {
+						spans = append(spans, p.spans[i].String())
+					}
+					log.Info("puller is initialized",
+						zap.Duration("duration", time.Since(start)),
+						zap.String("changefeedid", changefeedID),
+						zap.Int64("tableID", tableID),
+						zap.Strings("spans", spans),
+						zap.Uint64("resolvedTs", resolvedTs))
+				}
+				if !initialized || resolvedTs == lastResolvedTs {
 					continue
 				}
 				lastResolvedTs = resolvedTs
-				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved})
+				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -230,4 +259,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 func (p *pullerImpl) GetResolvedTs() uint64 {
 	return atomic.LoadUint64(&p.resolvedTs)
+}
+
+func (p *pullerImpl) IsInitialized() bool {
+	return atomic.LoadInt64(&p.initialized) > 0
 }

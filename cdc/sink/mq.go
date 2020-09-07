@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink/producer/kafka"
 	"github.com/pingcap/ticdc/cdc/sink/producer/pulsar"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
@@ -195,15 +196,14 @@ flushLoop:
 
 func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 	encoder := k.newEncoder()
-	op, err := encoder.AppendResolvedEvent(ts)
+	msg, err := encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if op == codec.EncoderNoOperation {
+	if msg == nil {
 		return nil
 	}
-	key, value := encoder.Build()
-	err = k.writeToProducer(ctx, key, value, op, -1)
+	err = k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedSyncWrite, -1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -218,21 +218,19 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
 		)
-		return errors.Trace(model.ErrorDDLEventIgnored)
+		return cerror.ErrorDDLEventIgnored.GenWithStackByArgs()
 	}
 	encoder := k.newEncoder()
-	op, err := encoder.AppendDDLEvent(ddl)
+	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	if op == codec.EncoderNoOperation {
+	if msg == nil {
 		return nil
 	}
-
-	key, value := encoder.Build()
-	log.Info("emit ddl event", zap.ByteString("key", key), zap.ByteString("value", value))
-	err = k.writeToProducer(ctx, key, value, op, -1)
+	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
+	err = k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedSyncWrite, -1)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -270,20 +268,32 @@ const batchSizeLimit = 4 * 1024 * 1024 // 4MB
 func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	input := k.partitionInput[partition]
 	encoder := k.newEncoder()
-	batchSize := 0
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
 
 	flushToProducer := func(op codec.EncoderResult) error {
 		return k.statistics.RecordBatchExecution(func() (int, error) {
-			if batchSize == 0 {
+			messages := encoder.Build()
+			thisBatchSize := len(messages)
+			if thisBatchSize == 0 {
 				return 0, nil
 			}
-			key, value := encoder.Build()
-			encoder = k.newEncoder()
-			thisBatchSize := batchSize
-			batchSize = 0
-			return thisBatchSize, k.writeToProducer(ctx, key, value, op, partition)
+
+			for _, msg := range messages {
+				err := k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedAsyncWrite, partition)
+				if err != nil {
+					return 0, err
+				}
+			}
+
+			if op == codec.EncoderNeedSyncWrite {
+				err := k.mqProducer.Flush(ctx)
+				if err != nil {
+					return 0, err
+				}
+			}
+			log.Debug("MQSink flushed", zap.Int("thisBatchSize", thisBatchSize))
+			return thisBatchSize, nil
 		})
 	}
 	for {
@@ -315,16 +325,12 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		batchSize++
 
 		if encoder.Size() >= batchSizeLimit {
-			if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
-				return errors.Trace(err)
-			}
-			continue
+			op = codec.EncoderNeedAsyncWrite
 		}
 
-		if op == codec.EncoderNeedSyncWrite || op == codec.EncoderNeedAsyncWrite {
+		if encoder.Size() >= batchSizeLimit || op != codec.EncoderNoOperation {
 			if err := flushToProducer(op); err != nil {
 				return errors.Trace(err)
 			}

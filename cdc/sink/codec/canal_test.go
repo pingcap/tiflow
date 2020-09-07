@@ -89,12 +89,14 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 			_, err := encoder.AppendRowChangedEvent(row)
 			c.Assert(err, check.IsNil)
 		}
-		key, value := encoder.Build()
-		c.Assert(key, check.IsNil)
-		c.Assert(len(value), check.Equals, encoder.Size())
+		size := encoder.Size()
+		res := encoder.Build()
+		c.Assert(res, check.HasLen, 1)
+		c.Assert(res[0].Key, check.IsNil)
+		c.Assert(len(res[0].Value), check.Equals, size)
 
 		packet := &canal.Packet{}
-		err := proto.Unmarshal(value, packet)
+		err := proto.Unmarshal(res[0].Value, packet)
 		c.Assert(err, check.IsNil)
 		c.Assert(packet.GetType(), check.Equals, canal.PacketType_MESSAGES)
 		messages := &canal.Messages{}
@@ -106,21 +108,21 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 	for _, cs := range s.ddlCases {
 		encoder := NewCanalEventBatchEncoder()
 		for _, ddl := range cs {
-			_, err := encoder.AppendDDLEvent(ddl)
+			msg, err := encoder.EncodeDDLEvent(ddl)
+			c.Assert(err, check.IsNil)
+			c.Assert(msg, check.NotNil)
+			c.Assert(msg.Key, check.IsNil)
+
+			packet := &canal.Packet{}
+			err = proto.Unmarshal(msg.Value, packet)
+			c.Assert(err, check.IsNil)
+			c.Assert(packet.GetType(), check.Equals, canal.PacketType_MESSAGES)
+			messages := &canal.Messages{}
+			err = proto.Unmarshal(packet.GetBody(), messages)
+			c.Assert(err, check.IsNil)
+			c.Assert(len(messages.GetMessages()), check.Equals, 1)
 			c.Assert(err, check.IsNil)
 		}
-		key, value := encoder.Build()
-		c.Assert(key, check.IsNil)
-		c.Assert(len(value), check.Equals, encoder.Size())
-
-		packet := &canal.Packet{}
-		err := proto.Unmarshal(value, packet)
-		c.Assert(err, check.IsNil)
-		c.Assert(packet.GetType(), check.Equals, canal.PacketType_MESSAGES)
-		messages := &canal.Messages{}
-		err = proto.Unmarshal(packet.GetBody(), messages)
-		c.Assert(err, check.IsNil)
-		c.Assert(len(messages.GetMessages()), check.Equals, len(cs))
 	}
 }
 

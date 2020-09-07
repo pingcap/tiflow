@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -54,7 +55,7 @@ func init() {
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
-	cancel := initCmd(cmd, &util.Config{
+	cancel := initCmd(cmd, &logutil.Config{
 		File:  logFile,
 		Level: logLevel,
 	})

@@ -32,7 +32,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -371,16 +373,15 @@ func (o *Owner) checkAndCleanTasksInfo(ctx context.Context) error {
 	cleaned := false
 	for changefeedID := range details {
 		_, err := o.cfRWriter.GetAllTaskStatus(ctx, changefeedID)
-		switch errors.Cause(err) {
-		case model.ErrDecodeFailed:
+		if err != nil {
+			if cerror.ErrDecodeFailed.NotEqual(err) {
+				return errors.Trace(err)
+			}
 			err := o.cfRWriter.RemoveAllTaskStatus(ctx, changefeedID)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			cleaned = true
-		case nil:
-		default:
-			return errors.Trace(err)
 		}
 	}
 	if cleaned {
@@ -455,7 +456,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 
 		status, _, err := o.cfRWriter.GetChangeFeedStatus(ctx, changeFeedID)
-		if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+		if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 			return err
 		}
 		if status != nil && status.AdminJobType.IsStopState() {
@@ -603,10 +604,10 @@ func (o *Owner) calcResolvedTs(ctx context.Context) error {
 func (o *Owner) handleDDL(ctx context.Context) error {
 	for _, cf := range o.changeFeeds {
 		err := cf.handleDDL(ctx, o.captures)
-		switch errors.Cause(err) {
-		case nil:
-			continue
-		case model.ErrExecDDLFailed:
+		if err != nil {
+			if cerror.ErrExecDDLFailed.NotEqual(err) {
+				return errors.Trace(err)
+			}
 			err = o.EnqueueJob(model.AdminJob{
 				CfID: cf.id,
 				Type: model.AdminStop,
@@ -614,8 +615,6 @@ func (o *Owner) handleDDL(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-		default:
-			return errors.Trace(err)
 		}
 	}
 	return nil
@@ -646,9 +645,9 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	}
 	// TODO Closing the resource should not be here
 	err = cf.ddlHandler.Close()
-	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
+	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), logutil.ZapErrorFilter(err, context.Canceled))
 	err = cf.sink.Close()
-	log.Info("stop changefeed sink", zap.String("changefeed id", job.CfID), util.ZapErrorFilter(err, context.Canceled))
+	log.Info("stop changefeed sink", zap.String("changefeed id", job.CfID), logutil.ZapErrorFilter(err, context.Canceled))
 	// Only need to process stoppedFeeds with `AdminStop` command here.
 	// For `AdminResume`, we remove stopped feed in changefeed initialization phase.
 	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
@@ -674,13 +673,13 @@ func (o *Owner) collectChangefeedInfo(ctx context.Context, cid model.ChangeFeedI
 
 	var cfInfo *model.ChangeFeedInfo
 	cfInfo, err = o.etcdClient.GetChangeFeedInfo(ctx, cid)
-	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return
 	}
 
 	status, _, err = o.etcdClient.GetChangeFeedStatus(ctx, cid)
 	if err != nil {
-		if errors.Cause(err) == model.ErrChangeFeedNotExists {
+		if cerror.ErrChangeFeedNotExists.Equal(err) {
 			// Only changefeed info exists and error field is not nil means
 			// the changefeed has met error, mark it as failed.
 			if cfInfo != nil && cfInfo.Error != nil {
@@ -735,7 +734,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 
 		cf, status, feedState, err := o.collectChangefeedInfo(ctx, job.CfID)
 		if err != nil {
-			if errors.Cause(err) != model.ErrChangeFeedNotExists {
+			if cerror.ErrChangeFeedNotExists.NotEqual(err) {
 				return err
 			}
 			if feedState == model.StateFailed && job.Type == model.AdminRemove {
@@ -833,7 +832,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			}
 		case model.AdminResume:
 			// resume changefeed must read checkpoint from ChangeFeedStatus
-			if errors.Cause(err) == model.ErrChangeFeedNotExists {
+			if cerror.ErrChangeFeedNotExists.Equal(err) {
 				log.Warn("invalid admin job, changefeed not found", zap.String("changefeed", job.CfID))
 				continue
 			}
