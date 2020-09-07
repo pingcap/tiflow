@@ -27,6 +27,7 @@ import (
 	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -207,7 +208,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// To not block CDC server startup, we need to warn instead of error
 	// when TiKV is incompatible.
 	errorTiKVIncompatible := false
-	err = util.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], s.opts.credential, errorTiKVIncompatible)
+	err = version.CheckClusterVersion(ctx, s.pdClient, s.pdEndpoints[0], s.opts.credential, errorTiKVIncompatible)
 	if err != nil {
 		return err
 	}

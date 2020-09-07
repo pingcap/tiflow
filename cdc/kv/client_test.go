@@ -30,7 +30,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/pingcap/tidb/store/mockstore/mocktikv"
 	"github.com/pingcap/tidb/store/tikv"
 	"google.golang.org/grpc"
@@ -137,7 +137,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	mvccStore := mocktikv.MustNewMVCCStore()
 	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
 	c.Assert(err, check.IsNil)
-	pdClient = &mockPDClient{Client: pdClient, version: util.MinTiKVVersion.String()}
+	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
 

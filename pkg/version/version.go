@@ -11,11 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package version
 
 import (
 	"fmt"
 
+	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 )
@@ -28,6 +29,17 @@ var (
 	GitBranch      = "None"
 	GoVersion      = "None"
 )
+
+// ReleaseSemver returns a valid Semantic Versions or an empty if the
+// ReleaseVersion is not set at compile time.
+func ReleaseSemver() string {
+	s := removeVAndHash(ReleaseVersion)
+	v, err := semver.NewVersion(s)
+	if err != nil {
+		return ""
+	}
+	return v.String()
+}
 
 // LogVersionInfo prints the CDC version information.
 func LogVersionInfo() {

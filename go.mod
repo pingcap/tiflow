@@ -51,3 +51,5 @@ require (
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
+
+replace github.com/pingcap/kvproto => github.com/overvenus/kvproto v0.0.0-20200907154012-5333fc954be0

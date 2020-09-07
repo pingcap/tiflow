@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.etcd.io/etcd/clientv3"
@@ -127,8 +127,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	st := status{
-		Version: util.ReleaseVersion,
-		GitHash: util.GitHash,
+		Version: version.ReleaseVersion,
+		GitHash: version.GitHash,
 		Pid:     os.Getpid(),
 	}
 	if s.capture != nil {

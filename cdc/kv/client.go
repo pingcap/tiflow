@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/txnutil"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
@@ -341,7 +342,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 			log.Info("get connection to store failed, retry later", zap.String("addr", addr), zap.Error(err))
 			return errors.Trace(err)
 		}
-		err = util.CheckStoreVersion(ctx, c.pd, storeID)
+		err = version.CheckStoreVersion(ctx, c.pd, storeID)
 		if err != nil {
 			log.Error("check tikv version failed", zap.Error(err), zap.Uint64("storeID", storeID))
 			return errors.Trace(err)
@@ -665,7 +666,8 @@ MainLoop:
 			regionID := rpcCtx.Meta.GetId()
 			req := &cdcpb.ChangeDataRequest{
 				Header: &cdcpb.Header{
-					ClusterId: s.client.clusterID,
+					ClusterId:    s.client.clusterID,
+					TicdcVersion: version.ReleaseSemver(),
 				},
 				RegionId:     regionID,
 				RequestId:    requestID,
