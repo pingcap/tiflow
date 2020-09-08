@@ -15,6 +15,7 @@ package sink
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sort"
 	"strings"
@@ -646,6 +647,28 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 	for _, param := range expectedParams {
 		c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
 	}
+}
+
+func (s MySQLSinkSuite) TestCheckTiDBVariable(c *check.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, check.IsNil)
+	columns := []string{"Variable_name", "Value"}
+
+	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+	)
+	val, err := checkTiDBVariable(context.TODO(), db, "allow_auto_random_explicit_insert", "1")
+	c.Assert(err, check.IsNil)
+	c.Assert(val, check.Equals, "1")
+
+	mock.ExpectQuery("show session variables like 'no_exist_variable';").WillReturnError(sql.ErrNoRows)
+	val, err = checkTiDBVariable(context.TODO(), db, "no_exist_variable", "0")
+	c.Assert(err, check.IsNil)
+	c.Assert(val, check.Equals, "")
+
+	mock.ExpectQuery("show session variables like 'version';").WillReturnError(sql.ErrConnDone)
+	_, err = checkTiDBVariable(context.TODO(), db, "version", "5.7.25-TiDB-v4.0.0")
+	c.Assert(err, check.ErrorMatches, ".*"+sql.ErrConnDone.Error())
 }
 
 /*

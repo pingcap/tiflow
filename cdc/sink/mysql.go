@@ -291,34 +291,25 @@ var defaultParams = &sinkParams{
 	writeTimeout:        defaultWriteTimeout,
 }
 
-func checkAutoRandom(ctx context.Context, db *sql.DB) (string, error) {
-	var variableName string
-	var autoRandomInsertEnabled string
-	queryStr := "show session variables like 'allow_auto_random_explicit_insert';"
-	err := db.QueryRowContext(ctx, queryStr).Scan(&variableName, &autoRandomInsertEnabled)
+func checkTiDBVariable(
+	ctx context.Context,
+	db *sql.DB,
+	variableName string,
+	defaultValue string,
+) (string, error) {
+	var name string
+	var value string
+	querySQL := fmt.Sprintf("show session variables like '%s';", variableName)
+	err := db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
 	if err != nil && err != sql.ErrNoRows {
-		return "", errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLQueryError, err), "fail to query sink for support of auto-random")
-	}
-	if err == nil && (autoRandomInsertEnabled == "off" || autoRandomInsertEnabled == "0") {
-		return "1", nil
-	}
-	return "", nil
-}
-
-func checkTiDBTxnMode(ctx context.Context, db *sql.DB, mode string) (string, error) {
-	var variableName string
-	var txnMode string
-	queryStr := "show session variables like 'tidb_txn_mode';"
-	err := db.QueryRowContext(ctx, queryStr).Scan(&variableName, &txnMode)
-	if err != nil && err != sql.ErrNoRows {
-		return "", errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLQueryError, err), "fail to query sink for txn mode")
+		errMsg := "fail to query session variable " + variableName
+		return "", errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), errMsg)
 	}
 	if err == nil {
-		return mode, nil
+		return defaultValue, nil
 	}
 	return "", nil
+
 }
 
 func configureSinkURI(
@@ -338,18 +329,21 @@ func configureSinkURI(
 	dsnCfg.Params["readTimeout"] = params.readTimeout
 	dsnCfg.Params["writeTimeout"] = params.writeTimeout
 
-	autoRandom, err := checkAutoRandom(ctx, testDB)
+	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
 	if err != nil {
 		return "", err
 	}
-	dsnCfg.Params["allow_auto_random_explicit_insert"] = autoRandom
-	log.Debug("Set allow_auto_random_explicit_insert", zap.String("val", autoRandom))
+	if autoRandom != "" {
+		dsnCfg.Params["allow_auto_random_explicit_insert"] = autoRandom
+	}
 
-	txnMode, err := checkTiDBTxnMode(ctx, testDB, params.tidbTxnMode)
+	txnMode, err := checkTiDBVariable(ctx, testDB, "tidb_txn_mode", params.tidbTxnMode)
 	if err != nil {
 		return "", err
 	}
-	dsnCfg.Params["tidb_txn_mode"] = txnMode
+	if txnMode != "" {
+		dsnCfg.Params["tidb_txn_mode"] = txnMode
+	}
 
 	dsnClone := dsnCfg.Clone()
 	dsnClone.Passwd = "******"
