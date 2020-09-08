@@ -62,7 +62,7 @@ func unlockRange(l *RegionRangeLock, startKey, endKey string, version uint64, ch
 }
 
 func (s *regionRangeLockSuit) TestRegionRangeLock(c *check.C) {
-	l := NewRegionRangeLock()
+	l := NewRegionRangeLock([]byte("a"), []byte("h"), math.MaxUint64)
 	mustLockRangeSuccess(c, l, "a", "e", 1, math.MaxUint64)
 	unlockRange(l, "a", "e", 1, 100)
 
@@ -77,7 +77,7 @@ func (s *regionRangeLockSuit) TestRegionRangeLock(c *check.C) {
 }
 
 func (s *regionRangeLockSuit) TestRegionRangeLockStale(c *check.C) {
-	l := NewRegionRangeLock()
+	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64)
 	mustLockRangeSuccess(c, l, "c", "g", 10, math.MaxUint64)
 	mustLockRangeSuccess(c, l, "j", "n", 8, math.MaxUint64)
 
@@ -96,7 +96,7 @@ func (s *regionRangeLockSuit) TestRegionRangeLockStale(c *check.C) {
 }
 
 func (s *regionRangeLockSuit) TestRangeTsMap(c *check.C) {
-	m := NewRangeTsMap()
+	m := NewRangeTsMap([]byte("a"), []byte("z"), math.MaxUint64)
 
 	mustGetMin := func(startKey, endKey string, expectedTs uint64) {
 		ts := m.GetMin([]byte(startKey), []byte(endKey))
