@@ -6,6 +6,7 @@ killall -w -s 9 tidb-server || true
 killall -w -s 9 cdc || true
 killall -w -s 9 cdc.test || true
 killall -w -s 9 tiflash || true
+killall -w -s 9 flash_cluster_manager || true
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
