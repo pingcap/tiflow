@@ -61,6 +61,8 @@ const (
 	defaultFlushInterval       = time.Millisecond * 50
 	defaultBatchReplaceEnabled = true
 	defaultBatchReplaceSize    = 20
+	defaultReadTimeout         = "2m"
+	defaultWriteTimeout        = "2m"
 )
 
 var (
@@ -270,6 +272,8 @@ type sinkParams struct {
 	captureAddr         string
 	batchReplaceEnabled bool
 	batchReplaceSize    int
+	readTimeout         string
+	writeTimeout        string
 }
 
 func (s *sinkParams) Clone() *sinkParams {
@@ -283,9 +287,47 @@ var defaultParams = &sinkParams{
 	tidbTxnMode:         defaultTiDBTxnMode,
 	batchReplaceEnabled: defaultBatchReplaceEnabled,
 	batchReplaceSize:    defaultBatchReplaceSize,
+	readTimeout:         defaultReadTimeout,
+	writeTimeout:        defaultWriteTimeout,
 }
 
-func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location, params *sinkParams) (string, error) {
+func checkAutoRandom(ctx context.Context, db *sql.DB) (string, error) {
+	var variableName string
+	var autoRandomInsertEnabled string
+	queryStr := "show session variables like 'allow_auto_random_explicit_insert';"
+	err := db.QueryRowContext(ctx, queryStr).Scan(&variableName, &autoRandomInsertEnabled)
+	if err != nil && err != sql.ErrNoRows {
+		return "", errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLQueryError, err), "fail to query sink for support of auto-random")
+	}
+	if err == nil && (autoRandomInsertEnabled == "off" || autoRandomInsertEnabled == "0") {
+		return "1", nil
+	}
+	return "", nil
+}
+
+func checkTiDBTxnMode(ctx context.Context, db *sql.DB, mode string) (string, error) {
+	var variableName string
+	var txnMode string
+	queryStr := "show session variables like 'tidb_txn_mode';"
+	err := db.QueryRowContext(ctx, queryStr).Scan(&variableName, &txnMode)
+	if err != nil && err != sql.ErrNoRows {
+		return "", errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLQueryError, err), "fail to query sink for txn mode")
+	}
+	if err == nil {
+		return mode, nil
+	}
+	return "", nil
+}
+
+func configureSinkURI(
+	ctx context.Context,
+	dsnCfg *dmysql.Config,
+	tz *time.Location,
+	params *sinkParams,
+	testDB *sql.DB,
+) (string, error) {
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
@@ -293,38 +335,21 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 	dsnCfg.InterpolateParams = true
 	dsnCfg.MultiStatements = true
 	dsnCfg.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	dsnCfg.Params["readTimeout"] = params.readTimeout
+	dsnCfg.Params["writeTimeout"] = params.writeTimeout
 
-	testDB, err := sql.Open("mysql", dsnCfg.FormatDSN())
+	autoRandom, err := checkAutoRandom(ctx, testDB)
 	if err != nil {
-		return "", errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection when configuring sink")
+		return "", err
 	}
-	defer testDB.Close()
-	log.Debug("Opened connection to configure some tidb special parameters")
+	dsnCfg.Params["allow_auto_random_explicit_insert"] = autoRandom
+	log.Debug("Set allow_auto_random_explicit_insert", zap.String("val", autoRandom))
 
-	var variableName string
-	var autoRandomInsertEnabled string
-	queryStr := "show session variables like 'allow_auto_random_explicit_insert';"
-	err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &autoRandomInsertEnabled)
-	if err != nil && err != sql.ErrNoRows {
-		return "", errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLQueryError, err), "fail to query sink for support of auto-random")
+	txnMode, err := checkTiDBTxnMode(ctx, testDB, params.tidbTxnMode)
+	if err != nil {
+		return "", err
 	}
-	if err == nil && (autoRandomInsertEnabled == "off" || autoRandomInsertEnabled == "0") {
-		dsnCfg.Params["allow_auto_random_explicit_insert"] = "1"
-		log.Debug("Set allow_auto_random_explicit_insert to 1")
-	}
-
-	var txnMode string
-	queryStr = "show session variables like 'tidb_txn_mode';"
-	err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &txnMode)
-	if err != nil && err != sql.ErrNoRows {
-		return "", errors.Annotate(
-			cerror.WrapError(cerror.ErrMySQLQueryError, err), "fail to query sink for txn mode")
-	}
-	if err == nil {
-		dsnCfg.Params["tidb_txn_mode"] = params.tidbTxnMode
-	}
+	dsnCfg.Params["tidb_txn_mode"] = txnMode
 
 	dsnClone := dsnCfg.Clone()
 	dsnClone.Passwd = "******"
@@ -432,7 +457,20 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}
-	dsnStr, err = configureSinkURI(ctx, dsn, tz, params)
+
+	// create test db used for parameter detection
+	if dsn.Params == nil {
+		dsn.Params = make(map[string]string, 1)
+	}
+	dsn.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	testDB, err := sql.Open("mysql", dsn.FormatDSN())
+	if err != nil {
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection when configuring sink")
+	}
+	defer testDB.Close()
+
+	dsnStr, err = configureSinkURI(ctx, dsn, tz, params, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
