@@ -35,7 +35,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const syncInterval = time.Minute * 10 //同步间隔为10分钟 todo 需要参数化
+const syncInterval = time.Minute * 10 //Interval for set syncpoint, todo: parameterization
 
 type tableIDMap = map[model.TableID]struct{}
 
@@ -719,7 +719,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	}
 
 	//if (c.status.ResolvedTs == c.status.CheckpointTs && (c.updateResolvedTs == false || c.status.ResolvedTs == c.ddlResolvedTs)) || c.status.ResolvedTs == 0 {
-	if (c.status.ResolvedTs == c.status.CheckpointTs && c.updateResolvedTs == false) || c.status.ResolvedTs == 0 {
+	if (c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs) || c.status.ResolvedTs == 0 {
 		log.Debug("achive the sync point", zap.Uint64("ResolvedTs", c.status.ResolvedTs))
 		//c.syncPointTs = c.targetTs //恢复syncPointTs，使得ResoledTs可以继续推进
 		log.Info("achive the sync point with timer", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
@@ -877,17 +877,18 @@ func (c *changeFeed) pullDDLJob() error {
 }
 
 // startSyncPeriod start a timer for every changefeed to create sync point by time
-func (c *changeFeed) startSyncPeriod() {
-	//c.startTimer <- true
-	go func() {
+func (c *changeFeed) startSyncPeriod(ctx context.Context) {
+	go func(ctx context.Context) {
+		ticker := time.NewTicker(syncInterval)
 		for {
-			//select {
-			//case <-c.startTimer:
-			time.Sleep(syncInterval)
-			c.updateResolvedTs = false
-			//}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				c.updateResolvedTs = false
+			}
 		}
-	}()
+	}(ctx)
 }
 
 //createSynctable create a sync table to record the
@@ -895,7 +896,7 @@ func (c *changeFeed) createSynctable() {
 	database := "TiCDC"
 	c.syncDB.Exec("CREATE DATABASE IF NOT EXISTS " + database)
 	c.syncDB.Exec("USE " + database)
-	c.syncDB.Exec("CREATE TABLE  IF NOT EXISTS syncpoint ( master_ts varchar(18),slave_ts varchar(18),PRIMARY KEY ( `master_ts` ) )")
+	c.syncDB.Exec("CREATE TABLE  IF NOT EXISTS syncpoint (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `primary_ts` ) )")
 	// todo err 处理
 }
 
@@ -914,7 +915,7 @@ func (c *changeFeed) sinkSyncpoint(ctx context.Context) error {
 		tx.Rollback()
 		return err
 	}
-	tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, slaveTs)
+	tx.Exec("insert into TiCDC.syncpoint(cf, primary_ts, secondary_ts) VALUES (?,?,?)", c.id, c.status.CheckpointTs, slaveTs)
 	//tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, 0)
 	tx.Commit() //TODO 处理错误
 	return nil

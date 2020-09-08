@@ -842,3 +842,79 @@ func buildColumnList(names []string) string {
 
 	return b.String()
 }
+
+//NewSyncpointSinklink create a sink to record the syncpoint map in downstream DB for every changefeed
+func NewSyncpointSinklink(ctx context.Context, info *model.ChangeFeedInfo, id string) (*sql.DB, error) {
+	var syncDB *sql.DB
+	// parse sinkURI as a URI
+	sinkURI, err := url.Parse(info.SinkURI)
+	if err != nil {
+		return nil, errors.Annotatef(err, "parse sinkURI failed")
+	}
+	//todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
+	scheme := strings.ToLower(sinkURI.Scheme)
+	if scheme != "mysql" && scheme != "tidb" {
+		return nil, errors.New("can create mysql sink with unsupported scheme")
+	}
+	params := defaultParams
+	s := sinkURI.Query().Get("tidb-txn-mode")
+	if s != "" {
+		if s == "pessimistic" || s == "optimistic" {
+			params.tidbTxnMode = s
+		} else {
+			log.Warn("invalid tidb-txn-mode, should be pessimistic or optimistic, use optimistic as default")
+		}
+	}
+	var tlsParam string
+	if sinkURI.Query().Get("ssl-ca") != "" {
+		credential := security.Credential{
+			CAPath:   sinkURI.Query().Get("ssl-ca"),
+			CertPath: sinkURI.Query().Get("ssl-cert"),
+			KeyPath:  sinkURI.Query().Get("ssl-key"),
+		}
+		tlsCfg, err := credential.ToTLSConfig()
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to open MySQL connection")
+		}
+		name := "cdc_mysql_tls" + "syncpoint" + id
+		err = dmysql.RegisterTLSConfig(name, tlsCfg)
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to open MySQL connection")
+		}
+		tlsParam = "?tls=" + name
+	}
+
+	// dsn format of the driver:
+	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+	username := sinkURI.User.Username()
+	password, _ := sinkURI.User.Password()
+	port := sinkURI.Port()
+	if username == "" {
+		username = "root"
+	}
+	if port == "" {
+		port = "4000"
+	}
+
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
+	dsn, err := dmysql.ParseDSN(dsnStr)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	dsnStr, err = configureSinkURI(ctx, dsn, util.TimezoneFromCtx(ctx), params)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	syncDB, err = sql.Open("mysql", dsnStr)
+	if err != nil {
+		return nil, errors.Annotate(err, "Open database connection failed")
+	}
+	err = syncDB.PingContext(ctx)
+	if err != nil {
+		return nil, errors.Annotatef(err, "fail to open MySQL connection")
+	}
+
+	log.Info("Start mysql syncpoint sink")
+
+	return syncDB, nil
+}
