@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	parser_types "github.com/pingcap/parser/types"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -189,7 +190,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 			default:
 				decoded, err := b.bytesDecoder.Bytes(v)
 				if err != nil {
-					return nil, errors.Trace(err)
+					return nil, cerror.WrapError(cerror.ErrCanalDecodeFailed, err)
 				}
 				value = string(decoded)
 				sqlType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
@@ -258,7 +259,7 @@ func (b *canalEntryBuilder) FromRowEvent(e *model.RowChangedEvent) (*canal.Entry
 	}
 	rcBytes, err := proto.Marshal(rc)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	// build entry
@@ -284,7 +285,7 @@ func (b *canalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error
 	}
 	rcBytes, err := proto.Marshal(rc)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	// build entry
@@ -332,7 +333,7 @@ func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return EncoderNoOperation, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
 	return EncoderNoOperation, nil
@@ -346,14 +347,14 @@ func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, 
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	messages := new(canal.Messages)
 	messages.Messages = append(messages.Messages, b)
 	b, err = messages.Marshal()
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	packet := &canal.Packet{
@@ -365,7 +366,7 @@ func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, 
 	packet.Body = b
 	b, err = packet.Marshal()
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	return NewMQMessage(nil, b, e.CommitTs), nil
