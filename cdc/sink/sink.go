@@ -18,10 +18,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/cdclog"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 )
 
@@ -60,7 +60,7 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return nil, errors.Annotatef(err, "parse sinkURI failed")
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 	switch strings.ToLower(sinkURI.Scheme) {
 	case "blackhole":
@@ -76,6 +76,6 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 	case "s3":
 		return cdclog.NewS3Sink(sinkURI)
 	default:
-		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
+		return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}
 }

@@ -25,13 +25,13 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
 )
 
 const (
@@ -78,12 +78,12 @@ func (idx *indexKVEntry) unflatten(tableInfo *model.TableInfo, tz *time.Location
 			}
 		}
 		if !isPartition {
-			return errors.New("wrong table info in unflatten")
+			return cerror.ErrWrongTableInfo.GenWithStackByArgs(tableInfo.ID, idx.PhysicalTableID)
 		}
 	}
 	index, exist := tableInfo.GetIndexInfo(idx.IndexID)
 	if !exist {
-		return errors.NotFoundf("index info, indexID: %d", idx.IndexID)
+		return cerror.ErrIndexKeyTableNotFound.GenWithStackByArgs(idx.IndexID)
 	}
 	if !isDistinct(index, idx.IndexValue) {
 		idx.RecordID = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
@@ -223,7 +223,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	}
 	key, physicalTableID, err := decodeTableID(raw.Key)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 	baseInfo := baseKVEntry{
 		StartTs:         raw.StartTs,
@@ -246,7 +246,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 				return nil, nil
 			}
-			return nil, errors.NotFoundf("table in schema storage, id: %d", physicalTableID)
+			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
 		switch {
 		case bytes.HasPrefix(key, recordPrefix):
@@ -283,7 +283,7 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, restKey []
 		return nil, errors.Trace(err)
 	}
 	if len(key) != 0 {
-		return nil, errors.New("invalid record key")
+		return nil, cerror.ErrInvalidRecordKey.GenWithStackByArgs(key)
 	}
 	decodeRow := func(rawColValue []byte) (map[int64]types.Datum, bool, error) {
 		if len(rawColValue) == 0 {
@@ -596,7 +596,7 @@ func fetchHandleValue(tableInfo *model.TableInfo, recordID int64) (pkCoID int64,
 		}
 	}
 	if handleColOffset == -1 {
-		return -1, nil, errors.New("can't find handle column, please check if the pk is handle")
+		return -1, nil, cerror.ErrFetchHandleValue.GenWithStackByArgs()
 	}
 	handleCol := tableInfo.Columns[handleColOffset]
 	pkCoID = handleCol.ID

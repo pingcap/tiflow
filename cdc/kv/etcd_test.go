@@ -382,7 +382,7 @@ func (s *etcdSuite) TestCreateChangefeed(c *check.C) {
 	}
 
 	err := s.client.CreateChangefeedInfo(ctx, detail, "bad.id👻")
-	c.Assert(err, check.ErrorMatches, "bad changefeed id.*")
+	c.Assert(err, check.ErrorMatches, ".*bad changefeed id.*")
 
 	err = s.client.CreateChangefeedInfo(ctx, detail, "test-id")
 	c.Assert(err, check.IsNil)

@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/vmihailenco/msgpack/v5"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -202,7 +203,7 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 		dataBuf.Reset()
 		err = msgpack.NewEncoder(dataBuf).Encode(entry)
 		if err != nil {
-			return 0, errors.Trace(err)
+			return 0, cerror.WrapError(cerror.ErrFileSorterEncode, err)
 		}
 		binary.BigEndian.PutUint64(dataLen[:], uint64(dataBuf.Len()))
 		buf.Write(dataLen[:])
@@ -213,16 +214,16 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 	}
 	f, err := os.OpenFile(fullpath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.WrapError(cerror.ErrFileSorterOpenFile, err)
 	}
 	w := bufio.NewWriter(f)
 	_, err = w.Write(buf.Bytes())
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.WrapError(cerror.ErrFileSorterWriteFile, err)
 	}
 	err = w.Flush()
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.WrapError(cerror.ErrFileSorterWriteFile, err)
 	}
 	return buf.Len(), nil
 }
@@ -270,27 +271,27 @@ func readPolymorphicEvent(rd *bufio.Reader, readBuf *bytes.Reader) (*model.Polym
 		if err == io.EOF {
 			return nil, nil
 		}
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrFileSorterWriteFile, err)
 	}
 	if n < 8 {
-		return nil, errors.Errorf("invalid length data %s, read %d bytes", byteLen, n)
+		return nil, cerror.ErrFileSorterInvalidData.GenWithStack("invalid length data %s, read %d bytes", byteLen, n)
 	}
 	dataLen := int(binary.BigEndian.Uint64(byteLen[:]))
 
 	data := make([]byte, dataLen)
 	n, err = io.ReadFull(rd, data)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrFileSorterReadFile, err)
 	}
 	if n != dataLen {
-		return nil, errors.Errorf("truncated data %s n: %d dataLen: %d", data, n, dataLen)
+		return nil, cerror.ErrFileSorterInvalidData.GenWithStack("truncated data %s n: %d dataLen: %d", data, n, dataLen)
 	}
 
 	readBuf.Reset(data)
 	ev := &model.PolymorphicEvent{}
 	err = msgpack.NewDecoder(readBuf).Decode(ev)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrFileSorterDecode, err)
 	}
 	return ev, nil
 }
@@ -314,7 +315,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		}
 		data, err := ioutil.ReadFile(fpath)
 		if err != nil {
-			return "", errors.Trace(err)
+			return "", cerror.WrapError(cerror.ErrFileSorterReadFile, err)
 		}
 		evs := make([]*model.PolymorphicEvent, 0)
 		idx := 0
@@ -322,14 +323,13 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		for idx < len(data) {
 			dataLen := int(binary.BigEndian.Uint64(data[idx : idx+8]))
 			if idx+8+dataLen > len(data) {
-				return "", errors.New("unsorted file unexpected truncated")
+				return "", cerror.ErrFileSorterInvalidData.GenWithStack("unsorted file unexpected truncated")
 			}
 			ev := &model.PolymorphicEvent{}
 			reader.Reset(data[idx+8 : idx+8+dataLen])
 			err = msgpack.NewDecoder(reader).Decode(ev)
-
 			if err != nil {
-				return "", errors.Trace(err)
+				return "", cerror.WrapError(cerror.ErrFileSorterDecode, err)
 			}
 			evs = append(evs, ev)
 			idx = idx + 8 + dataLen
@@ -391,7 +391,7 @@ func (fs *FileSorter) rotate(ctx context.Context, resolvedTs uint64) error {
 		toRemoveFiles = append(toRemoveFiles, fs.cache.lastSortedFile)
 		fd, err := os.Open(filepath.Join(fs.dir, fs.cache.lastSortedFile))
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.WrapError(cerror.ErrFileSorterOpenFile, err)
 		}
 		rd := bufio.NewReader(fd)
 		readers = append(readers, rd)

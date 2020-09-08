@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cenkalti/backoff"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -119,7 +118,7 @@ func NewCDCEtcdClient(cli *clientv3.Client) CDCEtcdClient {
 // ClearAllCDCInfo delete all keys created by CDC
 func (c CDCEtcdClient) ClearAllCDCInfo(ctx context.Context) error {
 	_, err := c.Client.Delete(ctx, EtcdKeyBase, clientv3.WithPrefix())
-	return errors.Trace(err)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // RevokeAllLeases revokes all leases passed from parameter
@@ -127,7 +126,7 @@ func (c CDCEtcdClient) RevokeAllLeases(ctx context.Context, leases map[string]in
 	for _, lease := range leases {
 		_, err := c.Client.Revoke(ctx, clientv3.LeaseID(lease))
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 		}
 	}
 	return nil
@@ -139,7 +138,7 @@ func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (int64, map[string]*m
 
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
-		return 0, nil, errors.Trace(err)
+		return 0, nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	revision := resp.Header.Revision
 	details := make(map[string]*mvccpb.KeyValue, resp.Count)
@@ -158,7 +157,7 @@ func (c CDCEtcdClient) GetChangeFeedInfo(ctx context.Context, id string) (*model
 	key := GetEtcdKeyChangeFeedInfo(id)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	if resp.Count == 0 {
 		return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(key)
@@ -172,7 +171,7 @@ func (c CDCEtcdClient) GetChangeFeedInfo(ctx context.Context, id string) (*model
 func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context, id string) error {
 	key := GetEtcdKeyChangeFeedInfo(id)
 	_, err := c.Client.Delete(ctx, key)
-	return errors.Trace(err)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // GetAllChangeFeedStatus queries all changefeed job status
@@ -180,7 +179,7 @@ func (c CDCEtcdClient) GetAllChangeFeedStatus(ctx context.Context) (map[string]*
 	key := JobKeyPrefix
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	statuses := make(map[string]*model.ChangeFeedStatus, resp.Count)
 	for _, rawKv := range resp.Kvs {
@@ -203,7 +202,7 @@ func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context, id string) (*mod
 	key := GetEtcdKeyJob(id)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
-		return nil, 0, errors.Trace(err)
+		return nil, 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	if resp.Count == 0 {
 		return nil, 0, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(key)
@@ -219,7 +218,7 @@ func (c CDCEtcdClient) GetCaptures(ctx context.Context) (int64, []*model.Capture
 
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
-		return 0, nil, errors.Trace(err)
+		return 0, nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	revision := resp.Header.Revision
 	infos := make([]*model.CaptureInfo, 0, resp.Count)
@@ -240,7 +239,7 @@ func (c CDCEtcdClient) GetCaptureLeases(ctx context.Context) (map[string]int64, 
 
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	leases := make(map[string]int64, resp.Count)
 	for _, kv := range resp.Kvs {
@@ -271,7 +270,7 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context, info *model.Cha
 		clientv3.OpPut(infoKey, value),
 	).Commit()
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	if !resp.Succeeded {
 		log.Warn("changefeed already exists, ignore create changefeed",
@@ -290,7 +289,7 @@ func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context, info *model.Chang
 		return errors.Trace(err)
 	}
 	_, err = c.Client.Put(ctx, key, value)
-	return errors.Trace(err)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // GetAllTaskPositions queries all task positions of a changefeed, and returns a map
@@ -298,7 +297,7 @@ func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context, info *model.Chang
 func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID string) (map[string]*model.TaskPosition, error) {
 	resp, err := c.Client.Get(ctx, TaskPositionKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	positions := make(map[string]*model.TaskPosition, resp.Count)
 	for _, rawKv := range resp.Kvs {
@@ -328,7 +327,7 @@ func (c CDCEtcdClient) GetAllTaskPositions(ctx context.Context, changefeedID str
 func (c CDCEtcdClient) RemoveAllTaskPositions(ctx context.Context, changefeedID string) error {
 	resp, err := c.Client.Get(ctx, TaskPositionKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	for _, rawKv := range resp.Kvs {
 		changeFeed, err := model.ExtractKeySuffix(string(rawKv.Key))
@@ -346,7 +345,7 @@ func (c CDCEtcdClient) RemoveAllTaskPositions(ctx context.Context, changefeedID 
 		key := GetEtcdKeyTaskPosition(changefeedID, captureID)
 		_, err = c.Client.Delete(ctx, key)
 		if err != nil {
-			return err
+			return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 		}
 	}
 	return nil
@@ -357,7 +356,7 @@ func (c CDCEtcdClient) RemoveAllTaskPositions(ctx context.Context, changefeedID 
 func (c CDCEtcdClient) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
 	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	infos := make([]*model.ProcInfoSnap, 0, resp.Count)
 	for _, rawKv := range resp.Kvs {
@@ -384,7 +383,7 @@ func (c CDCEtcdClient) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap
 func (c CDCEtcdClient) GetAllTaskStatus(ctx context.Context, changefeedID string) (model.ProcessorsInfos, error) {
 	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	pinfo := make(map[string]*model.TaskStatus, resp.Count)
 	for _, rawKv := range resp.Kvs {
@@ -415,7 +414,7 @@ func (c CDCEtcdClient) GetAllTaskStatus(ctx context.Context, changefeedID string
 func (c CDCEtcdClient) RemoveAllTaskStatus(ctx context.Context, changefeedID string) error {
 	resp, err := c.Client.Get(ctx, TaskStatusKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	for _, rawKv := range resp.Kvs {
 		changeFeed, err := model.ExtractKeySuffix(string(rawKv.Key))
@@ -433,7 +432,7 @@ func (c CDCEtcdClient) RemoveAllTaskStatus(ctx context.Context, changefeedID str
 		key := GetEtcdKeyTaskStatus(changefeedID, captureID)
 		_, err = c.Client.Delete(ctx, key)
 		if err != nil {
-			return err
+			return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 		}
 	}
 	return nil
@@ -451,7 +450,7 @@ func (c CDCEtcdClient) GetTaskStatus(
 	key := GetEtcdKeyTaskStatus(changefeedID, captureID)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
-		return 0, nil, errors.Trace(err)
+		return 0, nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	if resp.Count == 0 {
 		return 0, nil, cerror.ErrTaskStatusNotExists.GenWithStackByArgs(key)
@@ -477,7 +476,7 @@ func (c CDCEtcdClient) PutTaskStatus(
 
 	_, err = c.Client.Put(ctx, key, data)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 
 	return nil
@@ -494,7 +493,7 @@ func (c CDCEtcdClient) GetTaskWorkload(
 	key := GetEtcdKeyTaskWorkload(changefeedID, captureID)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	if resp.Count == 0 {
 		return make(model.TaskWorkload), nil
@@ -520,7 +519,7 @@ func (c CDCEtcdClient) PutTaskWorkload(
 
 	_, err = c.Client.Put(ctx, key, data)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 
 	return nil
@@ -534,7 +533,7 @@ func (c CDCEtcdClient) DeleteTaskWorkload(
 ) error {
 	key := GetEtcdKeyTaskWorkload(changefeedID, captureID)
 	_, err := c.Client.Delete(ctx, key)
-	return errors.Trace(err)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // GetAllTaskWorkloads queries all task workloads of a changefeed, and returns a map
@@ -542,7 +541,7 @@ func (c CDCEtcdClient) DeleteTaskWorkload(
 func (c CDCEtcdClient) GetAllTaskWorkloads(ctx context.Context, changefeedID string) (map[string]*model.TaskWorkload, error) {
 	resp, err := c.Client.Get(ctx, TaskWorkloadKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	workloads := make(map[string]*model.TaskWorkload, resp.Count)
 	for _, rawKv := range resp.Kvs {
@@ -583,7 +582,7 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 	err := retry.Run(100*time.Millisecond, 3, func() error {
 		select {
 		case <-ctx.Done():
-			return backoff.Permanent(ctx.Err())
+			return errors.Trace(ctx.Err())
 		default:
 		}
 		var modRevision int64
@@ -621,7 +620,7 @@ func (c CDCEtcdClient) AtomicPutTaskStatus(
 		).Commit()
 
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 		}
 
 		if !resp.Succeeded {
@@ -649,7 +648,7 @@ func (c CDCEtcdClient) GetTaskPosition(
 	key := GetEtcdKeyTaskPosition(changefeedID, captureID)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
-		return 0, nil, errors.Trace(err)
+		return 0, nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	if resp.Count == 0 {
 		return 0, nil, cerror.ErrTaskPositionNotExists.GenWithStackByArgs(key)
@@ -675,7 +674,7 @@ func (c CDCEtcdClient) PutTaskPosition(
 
 	_, err = c.Client.Put(ctx, key, data)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 
 	return nil
@@ -685,7 +684,7 @@ func (c CDCEtcdClient) PutTaskPosition(
 func (c CDCEtcdClient) DeleteTaskPosition(ctx context.Context, changefeedID string, captureID string) error {
 	key := GetEtcdKeyTaskPosition(changefeedID, captureID)
 	_, err := c.Client.Delete(ctx, key)
-	return errors.Trace(err)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // RemoveChangeFeedStatus removes changefeed job status from etcd
@@ -695,7 +694,7 @@ func (c CDCEtcdClient) RemoveChangeFeedStatus(
 ) error {
 	key := GetEtcdKeyJob(changefeedID)
 	_, err := c.Client.Delete(ctx, key)
-	return errors.Trace(err)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // PutChangeFeedStatus puts changefeed synchronization status into etcd
@@ -710,7 +709,7 @@ func (c CDCEtcdClient) PutChangeFeedStatus(
 		return errors.Trace(err)
 	}
 	_, err = c.Client.Put(ctx, key, value)
-	return errors.Trace(err)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // SetChangeFeedStatusTTL sets the TTL of changefeed synchronization status
@@ -722,7 +721,7 @@ func (c CDCEtcdClient) SetChangeFeedStatusTTL(
 	key := GetEtcdKeyJob(changefeedID)
 	leaseResp, err := c.Client.Grant(ctx, ttl)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	status, _, err := c.GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
@@ -733,10 +732,7 @@ func (c CDCEtcdClient) SetChangeFeedStatusTTL(
 		return errors.Trace(err)
 	}
 	_, err = c.Client.Put(ctx, key, statusStr, clientv3.WithLease(leaseResp.ID))
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return errors.Trace(err)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // PutAllChangeFeedStatus puts ChangeFeedStatus of each changefeed into etcd
@@ -755,7 +751,7 @@ func (c CDCEtcdClient) PutAllChangeFeedStatus(ctx context.Context, infos map[mod
 		if uint(len(ops)) >= embed.DefaultMaxTxnOps {
 			_, err = txn.Then(ops...).Commit()
 			if err != nil {
-				return errors.Trace(err)
+				return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 			}
 			txn = c.Client.Txn(ctx)
 			ops = ops[:0]
@@ -764,7 +760,7 @@ func (c CDCEtcdClient) PutAllChangeFeedStatus(ctx context.Context, infos map[mod
 	if len(ops) > 0 {
 		_, err := txn.Then(ops...).Commit()
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 		}
 	}
 	return nil
@@ -778,7 +774,7 @@ func (c CDCEtcdClient) DeleteTaskStatus(
 ) error {
 	key := GetEtcdKeyTaskStatus(cfID, captureID)
 	_, err := c.Client.Delete(ctx, key)
-	return errors.Trace(err)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // PutCaptureInfo put capture info into etcd.
@@ -790,14 +786,14 @@ func (c CDCEtcdClient) PutCaptureInfo(ctx context.Context, info *model.CaptureIn
 
 	key := GetEtcdKeyCaptureInfo(info.ID)
 	_, err = c.Client.Put(ctx, key, string(data), clientv3.WithLease(leaseID))
-	return errors.Trace(err)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // DeleteCaptureInfo delete capture info from etcd.
 func (c CDCEtcdClient) DeleteCaptureInfo(ctx context.Context, id string) error {
 	key := GetEtcdKeyCaptureInfo(id)
 	_, err := c.Client.Delete(ctx, key)
-	return errors.Trace(err)
+	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
 // GetCaptureInfo get capture info from etcd.
@@ -807,7 +803,7 @@ func (c CDCEtcdClient) GetCaptureInfo(ctx context.Context, id string) (info *mod
 
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 
 	if len(resp.Kvs) == 0 {
@@ -827,7 +823,7 @@ func (c CDCEtcdClient) GetCaptureInfo(ctx context.Context, id string) (info *mod
 func (c CDCEtcdClient) GetOwnerID(ctx context.Context, key string) (string, error) {
 	resp, err := c.Client.Get(ctx, key, clientv3.WithFirstCreate()...)
 	if err != nil {
-		return "", errors.Trace(err)
+		return "", cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	if len(resp.Kvs) == 0 {
 		return "", concurrency.ErrElectionNoLeader
