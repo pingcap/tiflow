@@ -661,7 +661,7 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		// If DDL executing failed, pause the changefeed and print log, rather
 		// than return an error and break the running of this owner.
 		if err != nil {
-			if cerror.ErrorDDLEventIgnored.NotEqual(err) {
+			if cerror.ErrDDLEventIgnored.NotEqual(err) {
 				c.ddlState = model.ChangeFeedDDLExecuteFailed
 				log.Error("Execute DDL failed",
 					zap.String("ChangeFeedID", c.id),
