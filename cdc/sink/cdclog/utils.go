@@ -49,7 +49,7 @@ type logUnit interface {
 
 	isEmpty() bool
 	shouldFlush() bool
-
+	// flush data to storage.
 	flush(ctx context.Context, sink *logSink) error
 }
 

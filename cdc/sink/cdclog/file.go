@@ -144,6 +144,11 @@ func (ts *tableStream) flush(ctx context.Context, sink *logSink) error {
 		ts.rowFile = file
 	}
 
+	_, err := ts.rowFile.Write(rowDatas)
+	if err != nil {
+		return err
+	}
+
 	stat, err := ts.rowFile.Stat()
 	if err != nil {
 		return err
@@ -168,10 +173,7 @@ func (ts *tableStream) flush(ctx context.Context, sink *logSink) error {
 		ts.rowFile = file
 		ts.encoder = nil
 	}
-	_, err = ts.rowFile.Write(rowDatas)
-	if err != nil {
-		return err
-	}
+
 	ts.sendEvents.Sub(flushedEvents)
 	ts.sendSize.Sub(flushedSize)
 	return nil
