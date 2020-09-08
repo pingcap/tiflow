@@ -124,6 +124,15 @@ func (e *rangeLockEntry) Less(than btree.Item) bool {
 	return bytes.Compare(e.startKey, than.(*rangeLockEntry).startKey) < 0
 }
 
+func (e *rangeLockEntry) String() string {
+	return fmt.Sprintf("region %v [%v, %v), version %v, %d waiters",
+		e.regionID,
+		hex.EncodeToString(e.startKey),
+		hex.EncodeToString(e.endKey),
+		e.version,
+		len(e.waiters))
+}
+
 var currentID uint64 = 0
 
 func allocID() uint64 {
@@ -138,6 +147,7 @@ type RegionRangeLock struct {
 	mu                sync.Mutex
 	rangeCheckpointTs *RangeTsMap
 	rangeLock         *btree.BTree
+	regionIDLock      map[uint64]*rangeLockEntry
 	// ID to identify different RegionRangeLock instances, so logs of different instances can be distinguished.
 	id uint64
 }
@@ -147,24 +157,42 @@ func NewRegionRangeLock(startKey, endKey []byte, startTs uint64) *RegionRangeLoc
 	return &RegionRangeLock{
 		rangeCheckpointTs: NewRangeTsMap(startKey, endKey, startTs),
 		rangeLock:         btree.New(16),
+		regionIDLock:      make(map[uint64]*rangeLockEntry),
 		id:                allocID(),
 	}
 }
 
-func (l *RegionRangeLock) getOverlappedEntries(startKey, endKey []byte) []*rangeLockEntry {
+func (l *RegionRangeLock) getOverlappedEntries(startKey, endKey []byte, regionID uint64) []*rangeLockEntry {
+	regionIDFound := false
+
 	overlappingRanges := make([]*rangeLockEntry, 0)
 	l.rangeLock.DescendLessOrEqual(rangeLockEntryWithKey(startKey), func(i btree.Item) bool {
 		entry := i.(*rangeLockEntry)
 		if bytes.Compare(entry.startKey, startKey) < 0 &&
 			bytes.Compare(startKey, entry.endKey) < 0 {
 			overlappingRanges = append(overlappingRanges, entry)
+			if entry.regionID == regionID {
+				regionIDFound = true
+			}
 		}
 		return false
 	})
 	l.rangeLock.AscendRange(rangeLockEntryWithKey(startKey), rangeLockEntryWithKey(endKey), func(i btree.Item) bool {
-		overlappingRanges = append(overlappingRanges, i.(*rangeLockEntry))
+		entry := i.(*rangeLockEntry)
+		overlappingRanges = append(overlappingRanges, entry)
+		if entry.regionID == regionID {
+			regionIDFound = true
+		}
 		return true
 	})
+
+	// The entry with the same regionID should also be checked.
+	if !regionIDFound {
+		entry, ok := l.regionIDLock[regionID]
+		if ok {
+			overlappingRanges = append(overlappingRanges, entry)
+		}
+	}
 
 	return overlappingRanges
 }
@@ -173,16 +201,18 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	overlappingRanges := l.getOverlappedEntries(startKey, endKey)
+	overlappingEntries := l.getOverlappedEntries(startKey, endKey, regionID)
 
-	if len(overlappingRanges) == 0 {
+	if len(overlappingEntries) == 0 {
 		checkpointTs := l.rangeCheckpointTs.GetMin(startKey, endKey)
-		l.rangeLock.ReplaceOrInsert(&rangeLockEntry{
+		newEntry := &rangeLockEntry{
 			startKey: startKey,
 			endKey:   endKey,
 			regionID: regionID,
 			version:  version,
-		})
+		}
+		l.rangeLock.ReplaceOrInsert(newEntry)
+		l.regionIDLock[regionID] = newEntry
 
 		log.Info("range locked", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)),
@@ -196,13 +226,13 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 
 	// Format overlapping ranges for printing log
 	var overlapStr []string
-	for _, r := range overlappingRanges {
+	for _, r := range overlappingEntries {
 		overlapStr = append(overlapStr, fmt.Sprintf("regionID: %v, ver: %v, start: %v, end: %v",
 			r.regionID, r.version, hex.EncodeToString(r.startKey), hex.EncodeToString(r.endKey))) //DEBUG
 	}
 
 	isStale := false
-	for _, r := range overlappingRanges {
+	for _, r := range overlappingEntries {
 		if r.version >= version {
 			isStale = true
 			break
@@ -215,7 +245,14 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		log.Info("tryLockRange stale", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)), zap.Strings("allOverlapping", overlapStr)) //DEBUG
 
-		for _, r := range overlappingRanges {
+		for _, r := range overlappingEntries {
+			// Ignore the totally-disjointed range which may be added to the list because of
+			// searching by regionID.
+			if bytes.Compare(r.endKey, startKey) <= 0 || bytes.Compare(endKey, r.startKey) <= 0 {
+				continue
+			}
+			// The rest should come from range searching and is sorted in increasing order, and they
+			// must intersect with the current given range.
 			if bytes.Compare(currentRangeStartKey, r.startKey) < 0 {
 				retryRanges = append(retryRanges, ComparableSpan{Start: currentRangeStartKey, End: r.startKey})
 			}
@@ -233,7 +270,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 
 	var signalChs []<-chan interface{}
 
-	for _, r := range overlappingRanges {
+	for _, r := range overlappingEntries {
 		ch := make(chan interface{}, 1)
 		signalChs = append(signalChs, ch)
 		r.waiters = append(r.waiters, ch)
@@ -274,22 +311,46 @@ func (l *RegionRangeLock) LockRange(startKey, endKey []byte, regionID, version u
 }
 
 // UnlockRange unlocks a range and update checkpointTs of the range to specivied value.
-func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, checkpointTs uint64) {
+func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version uint64, checkpointTs uint64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	item := l.rangeLock.Get(rangeLockEntryWithKey(startKey))
 
 	if item == nil {
-		panic(fmt.Sprintf("unlocking a not locked range: [%v, %v), version %v",
-			hex.EncodeToString(startKey), hex.EncodeToString(endKey), version))
+		log.Fatal("unlocking a not locked range",
+			zap.Uint64("regionID", regionID),
+			zap.String("startKey", hex.EncodeToString(startKey)),
+			zap.String("endKey", hex.EncodeToString(endKey)),
+			zap.Uint64("version", version),
+			zap.Uint64("checkpointTs", checkpointTs))
 	}
 
 	entry := item.(*rangeLockEntry)
+	if entry.regionID != regionID {
+		log.Fatal("unlocked a range but regionID mismatch",
+			zap.Uint64("expectedRegionID", regionID),
+			zap.Uint64("foundRegionID", entry.regionID),
+			zap.String("startKey", hex.EncodeToString(startKey)),
+			zap.String("endKey", hex.EncodeToString(endKey)))
+	}
+	if entry != l.regionIDLock[regionID] {
+		log.Fatal("range lock and region id lock mismatch when trying to unlock",
+			zap.Uint64("unlockingRegionID", regionID),
+			zap.String("rangeLockEntry", entry.String()),
+			zap.String("regionIDLockEntry", l.regionIDLock[regionID].String()))
+	}
+	delete(l.regionIDLock, regionID)
+
 	if entry.version != version || !bytes.Equal(entry.endKey, endKey) {
-		panic(fmt.Sprintf("unlocking region not match the locked region. "+
+		log.Fatal("unlocking region doesn't match the locked region. "+
 			"Locked: [%v, %v), version %v; Unlocking: [%v, %v), %v",
-			entry.startKey, entry.endKey, entry.version, startKey, endKey, version))
+			zap.Uint64("regionID", regionID),
+			zap.String("startKey", hex.EncodeToString(startKey)),
+			zap.String("endKey", hex.EncodeToString(endKey)),
+			zap.Uint64("version", version),
+			zap.Uint64("checkpointTs", checkpointTs),
+			zap.String("foundLockEntry", entry.String()))
 	}
 
 	for _, ch := range entry.waiters {
@@ -298,7 +359,7 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, c
 
 	i := l.rangeLock.Delete(entry)
 	if i == nil {
-		panic("impossible (entry just get from BTree disappeared)")
+		panic("unreachable")
 	}
 	l.rangeCheckpointTs.Set(startKey, endKey, checkpointTs)
 	log.Info("unlocked range", zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
