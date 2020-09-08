@@ -40,7 +40,7 @@ var _ = check.Suite(&MySQLSinkSuite{})
 func newMySQLSink4Test(c *check.C) *mysqlSink {
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
-	params := defaultParams
+	params := defaultParams.Clone()
 	params.batchReplaceEnabled = false
 	return &mysqlSink{
 		txnCache:   common.NewUnresolvedTxnCache(),
@@ -595,6 +595,28 @@ func (s MySQLSinkSuite) TestReduceReplace(c *check.C) {
 		c.Assert(sqls, check.DeepEquals, tc.expectSQLs)
 		c.Assert(args, check.DeepEquals, tc.expectArgs)
 	}
+}
+func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
+	param1 := defaultParams.Clone()
+	param2 := param1.Clone()
+	param2.changefeedID = "123"
+	param2.batchReplaceEnabled = false
+	param2.maxTxnRow = 1
+	c.Assert(param1, check.DeepEquals, &sinkParams{
+		workerCount:         defaultWorkerCount,
+		maxTxnRow:           defaultMaxTxnRow,
+		tidbTxnMode:         defaultTiDBTxnMode,
+		batchReplaceEnabled: defaultBatchReplaceEnabled,
+		batchReplaceSize:    defaultBatchReplaceSize,
+	})
+	c.Assert(param2, check.DeepEquals, &sinkParams{
+		changefeedID:        "123",
+		workerCount:         defaultWorkerCount,
+		maxTxnRow:           1,
+		tidbTxnMode:         defaultTiDBTxnMode,
+		batchReplaceEnabled: false,
+		batchReplaceSize:    defaultBatchReplaceSize,
+	})
 }
 
 /*

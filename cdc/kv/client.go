@@ -375,7 +375,9 @@ func (c *CDCClient) EventFeed(
 	isPullerInit PullerInitialization,
 	eventCh chan<- *model.RegionFeedEvent,
 ) error {
-	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span, lockResolver, isPullerInit, enableOldValue, eventCh)
+	s := newEventFeedSession(c, c.regionCache, c.kvStorage, span,
+		lockResolver, isPullerInit,
+		enableOldValue, ts, eventCh)
 	return s.eventFeed(ctx, ts)
 }
 
@@ -429,6 +431,7 @@ func newEventFeedSession(
 	lockResolver txnutil.LockResolver,
 	isPullerInit PullerInitialization,
 	enableOldValue bool,
+	startTs uint64,
 	eventCh chan<- *model.RegionFeedEvent,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
@@ -441,7 +444,7 @@ func newEventFeedSession(
 		regionCh:          make(chan singleRegionInfo, 16),
 		errCh:             make(chan regionErrorInfo, 16),
 		requestRangeCh:    make(chan rangeRequestTask, 16),
-		rangeLock:         regionspan.NewRegionRangeLock(),
+		rangeLock:         regionspan.NewRegionRangeLock(totalSpan.Start, totalSpan.End, startTs),
 		enableOldValue:    enableOldValue,
 		lockResolver:      lockResolver,
 		isPullerInit:      isPullerInit,
@@ -529,9 +532,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	handleResult := func(res regionspan.LockRangeResult) {
 		switch res.Status {
 		case regionspan.LockRangeStatusSuccess:
-			if sri.ts > res.CheckpointTs {
-				sri.ts = res.CheckpointTs
-			}
+			sri.ts = res.CheckpointTs
 			select {
 			case s.regionCh <- sri:
 				s.regionChSizeGauge.Inc()
