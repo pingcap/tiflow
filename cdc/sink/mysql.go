@@ -291,12 +291,7 @@ var defaultParams = &sinkParams{
 	writeTimeout:        defaultWriteTimeout,
 }
 
-func checkTiDBVariable(
-	ctx context.Context,
-	db *sql.DB,
-	variableName string,
-	defaultValue string,
-) (string, error) {
+func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (string, error) {
 	var name string
 	var value string
 	querySQL := fmt.Sprintf("show session variables like '%s';", variableName)
@@ -305,11 +300,12 @@ func checkTiDBVariable(
 		errMsg := "fail to query session variable " + variableName
 		return "", errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), errMsg)
 	}
+	// session variable works, use given default value
 	if err == nil {
 		return defaultValue, nil
 	}
+	// session variable not exists, return "" to ignore it
 	return "", nil
-
 }
 
 func configureSinkURI(
