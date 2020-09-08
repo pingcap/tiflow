@@ -74,9 +74,9 @@ var (
 )
 
 type mysqlSink struct {
-	db     *sql.DB
-	params *sinkParams
-	checkpointTs     uint64
+	db           *sql.DB
+	params       *sinkParams
+	checkpointTs uint64
 
 	filter *filter.Filter
 	cyclic *cyclic.Cyclic
@@ -185,11 +185,11 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	return errors.Trace(err)
 }
 
-func (s *mysqlSink)  UpdateCheckpoint(checkpointTs uint64) {
+func (s *mysqlSink) UpdateCheckpoint(checkpointTs uint64) {
 	atomic.StoreUint64(&s.checkpointTs, checkpointTs)
 }
 
-func (s *mysqlSink) Resolved(resolvedTs uint64)  map[model.TableID][]*model.SingleTableTxn {
+func (s *mysqlSink) Resolved(resolvedTs uint64) map[model.TableID][]*model.SingleTableTxn {
 	s.txnMutex.Lock()
 	defer s.txnMutex.Unlock()
 	return s.txnCache.Resolved(resolvedTs)

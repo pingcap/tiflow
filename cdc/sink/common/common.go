@@ -77,7 +77,6 @@ func (c *UnresolvedTxnCache) Unresolved() map[model.TableID][]*model.SingleTable
 	return c.unresolvedTxns
 }
 
-
 func splitResolvedTxn(
 	resolvedTs uint64, unresolvedTxns map[model.TableID][]*model.SingleTableTxn,
 ) (minTs uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
