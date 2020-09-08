@@ -22,6 +22,7 @@ import (
 	model2 "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // MaxwellEventBatchEncoder is a maxwell format encoder implementation
@@ -45,22 +46,24 @@ type maxwellMessage struct {
 
 // Encode encodes the message to bytes
 func (m *maxwellMessage) Encode() ([]byte, error) {
-	return json.Marshal(m)
+	data, err := json.Marshal(m)
+	return data, cerror.WrapError(cerror.ErrMaxwellEncodeFailed, err)
 }
 
 // Decode decodes the message from bytes
 func (m *maxwellMessage) Decode(data []byte) error {
-	return json.Unmarshal(data, m)
+	return cerror.WrapError(cerror.ErrMaxwellDecodeFailed, json.Unmarshal(data, m))
 }
 
 // Encode encodes the message to bytes
 func (m *DdlMaxwellMessage) Encode() ([]byte, error) {
-	return json.Marshal(m)
+	data, err := json.Marshal(m)
+	return data, cerror.WrapError(cerror.ErrMaxwellEncodeFailed, err)
 }
 
 // Decode the message from bytes
 func (m *DdlMaxwellMessage) Decode(data []byte) error {
-	return json.Unmarshal(data, m)
+	return cerror.WrapError(cerror.ErrMaxwellDecodeFailed, json.Unmarshal(data, m))
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
@@ -369,7 +372,7 @@ func (b *MaxwellEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeRow {
-		return nil, errors.NotFoundf("not found row event message")
+		return nil, cerror.ErrMaxwellInvalidData.GenWithStack("row event message not found")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
@@ -393,7 +396,7 @@ func (b *MaxwellEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeDDL {
-		return nil, errors.NotFoundf("not found ddl event message")
+		return nil, cerror.ErrMaxwellInvalidData.GenWithStack("ddl event message not found")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
@@ -412,7 +415,7 @@ func NewMaxwellEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, e
 	version := binary.BigEndian.Uint64(key[:8])
 	key = key[8:]
 	if version != BatchVersion1 {
-		return nil, errors.New("unexpected key format version")
+		return nil, cerror.ErrMaxwellInvalidData.GenWithStack("unexpected key format version")
 	}
 	return &MaxwellEventBatchDecoder{
 		keyBytes:   key,
@@ -473,6 +476,6 @@ func columnToMaxwellType(columnType byte) (string, error) {
 	case mysql.TypeNewDecimal:
 		return "decimal", nil
 	default:
-		return "", errors.Errorf("unsupported column type - %v", columnType)
+		return "", cerror.ErrMaxwellInvalidData.GenWithStack("unsupported column type - %v", columnType)
 	}
 }

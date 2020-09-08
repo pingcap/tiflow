@@ -69,7 +69,7 @@ func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo,
 		// get the table will be dropped
 		table, ok := s.TableByID(job.TableID)
 		if !ok {
-			return nil, errors.NotFoundf("table %d", job.TableID)
+			return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(job.TableID)
 		}
 		return table, nil
 	default:
@@ -86,7 +86,7 @@ func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo,
 		tableID := tbInfo.ID
 		table, ok := s.TableByID(tableID)
 		if !ok {
-			return nil, errors.NotFoundf("table %d", job.TableID)
+			return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(job.TableID)
 		}
 		return table, nil
 	}
@@ -115,7 +115,7 @@ func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*schemaSnap
 	snap := newEmptySchemaSnapshot()
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 	}
 	for _, dbinfo := range dbinfos {
 		snap.schemas[dbinfo.ID] = dbinfo
@@ -124,7 +124,7 @@ func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*schemaSnap
 	for schemaID, dbinfo := range snap.schemas {
 		tableInfos, err := meta.ListTables(schemaID)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 		}
 		dbinfo.Tables = make([]*timodel.TableInfo, 0, len(tableInfos))
 		for _, tableInfo := range tableInfos {
@@ -320,7 +320,7 @@ func (s *schemaSnapshot) FillSchemaName(job *timodel.Job) error {
 	}
 	dbInfo, exist := s.SchemaByID(job.SchemaID)
 	if !exist {
-		return errors.NotFoundf("schema %d not found", job.SchemaID)
+		return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(job.SchemaID)
 	}
 	job.SchemaName = dbInfo.Name.O
 	return nil
@@ -329,7 +329,7 @@ func (s *schemaSnapshot) FillSchemaName(job *timodel.Job) error {
 func (s *schemaSnapshot) dropSchema(id int64) error {
 	schema, ok := s.schemas[id]
 	if !ok {
-		return errors.NotFoundf("schema %d", id)
+		return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(id)
 	}
 
 	for _, table := range schema.Tables {
@@ -356,7 +356,7 @@ func (s *schemaSnapshot) dropSchema(id int64) error {
 
 func (s *schemaSnapshot) createSchema(db *timodel.DBInfo) error {
 	if _, ok := s.schemas[db.ID]; ok {
-		return errors.AlreadyExistsf("schema %s(%d)", db.Name, db.ID)
+		return cerror.ErrSnapshotSchemaExists.GenWithStackByArgs(db.Name, db.ID)
 	}
 
 	s.schemas[db.ID] = db.Clone()
@@ -368,7 +368,7 @@ func (s *schemaSnapshot) createSchema(db *timodel.DBInfo) error {
 
 func (s *schemaSnapshot) replaceSchema(db *timodel.DBInfo) error {
 	if _, ok := s.schemas[db.ID]; !ok {
-		return errors.NotFoundf("schema %s(%d)", db.Name, db.ID)
+		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("schema %s(%d) not found", db.Name, db.ID)
 	}
 	s.schemas[db.ID] = db.Clone()
 	s.schemaNameToID[db.Name.O] = db.ID
@@ -378,11 +378,11 @@ func (s *schemaSnapshot) replaceSchema(db *timodel.DBInfo) error {
 func (s *schemaSnapshot) dropTable(id int64) error {
 	table, ok := s.tables[id]
 	if !ok {
-		return errors.NotFoundf("table %d", id)
+		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(id)
 	}
 	schema, ok := s.SchemaByTableID(id)
 	if !ok {
-		return errors.NotFoundf("table(%d)'s schema", id)
+		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table(%d)'s schema", id)
 	}
 
 	for i := range schema.Tables {
@@ -412,11 +412,11 @@ func (s *schemaSnapshot) updatePartition(tbl *model.TableInfo) error {
 	id := tbl.ID
 	table, ok := s.tables[id]
 	if !ok {
-		return errors.NotFoundf("table %d", id)
+		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(id)
 	}
 	oldPi := table.GetPartitionInfo()
 	if oldPi == nil {
-		return errors.NotFoundf("table %d is not a partition table, truncate partition failed", id)
+		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %d is not a partition table", id)
 	}
 	oldIDs := make(map[int64]struct{}, len(oldPi.Definitions))
 	for _, p := range oldPi.Definitions {
@@ -425,7 +425,7 @@ func (s *schemaSnapshot) updatePartition(tbl *model.TableInfo) error {
 
 	newPi := tbl.GetPartitionInfo()
 	if newPi == nil {
-		return errors.NotFoundf("table %d is not a partition table, truncate partition failed", id)
+		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %d is not a partition table", id)
 	}
 	s.tables[id] = tbl
 	for _, partition := range newPi.Definitions {
@@ -454,11 +454,11 @@ func (s *schemaSnapshot) updatePartition(tbl *model.TableInfo) error {
 func (s *schemaSnapshot) createTable(table *model.TableInfo) error {
 	schema, ok := s.schemas[table.SchemaID]
 	if !ok {
-		return errors.NotFoundf("table's schema(%d)", table.SchemaID)
+		return cerror.ErrSnapshotSchemaNotFound.GenWithStack("table's schema(%d)", table.SchemaID)
 	}
 	_, ok = s.tables[table.ID]
 	if ok {
-		return errors.AlreadyExistsf("table %s.%s", schema.Name, table.Name)
+		return cerror.ErrSnapshotTableExists.GenWithStackByArgs(schema.Name, table.Name)
 	}
 
 	schema.Tables = append(schema.Tables, table.TableInfo)
@@ -486,7 +486,7 @@ func (s *schemaSnapshot) createTable(table *model.TableInfo) error {
 func (s *schemaSnapshot) replaceTable(table *model.TableInfo) error {
 	_, ok := s.tables[table.ID]
 	if !ok {
-		return errors.NotFoundf("table %s(%d)", table.Name, table.ID)
+		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %s(%d)", table.Name, table.ID)
 	}
 	s.tables[table.ID] = table
 	if !table.IsEligible() {
@@ -636,11 +636,11 @@ func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter) 
 func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 	gcTs := atomic.LoadUint64(&s.gcTs)
 	if ts < gcTs {
-		return nil, errors.Errorf("can not found schema snapshot, the specified ts(%d) is less than gcTS(%d)", ts, gcTs)
+		return nil, cerror.ErrSchemaStorageGCed.GenWithStackByArgs(ts, gcTs)
 	}
 	resolvedTs := atomic.LoadUint64(&s.resolvedTs)
 	if ts > resolvedTs {
-		return nil, cerror.ErrUnresolved.GenWithStack("can not found schema snapshot, the specified ts(%d) is more than resolvedTs(%d)", ts, resolvedTs)
+		return nil, cerror.ErrSchemaStorageUnresolved.GenWithStackByArgs(ts, resolvedTs)
 	}
 	s.snapsMu.RLock()
 	defer s.snapsMu.RUnlock()
@@ -648,7 +648,7 @@ func (s *SchemaStorage) getSnapshot(ts uint64) (*schemaSnapshot, error) {
 		return s.snaps[i].currentTs > ts
 	})
 	if i <= 0 {
-		return nil, errors.Errorf("can not found schema snapshot, ts: %d", ts)
+		return nil, cerror.ErrSchemaSnapshotNotFound.GenWithStackByArgs(ts)
 	}
 	return s.snaps[i-1], nil
 }
@@ -660,19 +660,19 @@ func (s *SchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schemaSnap
 		func() error {
 			select {
 			case <-ctx.Done():
-				return backoff.Permanent(errors.Trace(ctx.Err()))
+				return errors.Trace(ctx.Err())
 			default:
 			}
 			var err error
 			snap, err = s.getSnapshot(ts)
-			if cerror.ErrUnresolved.NotEqual(err) {
+			if cerror.ErrSchemaStorageUnresolved.NotEqual(err) {
 				return backoff.Permanent(err)
 			}
 			return err
 		})
-	switch err.(type) {
+	switch e := err.(type) {
 	case *backoff.PermanentError:
-		return nil, errors.Annotate(err, "timeout")
+		return nil, e.Err
 	default:
 		return snap, err
 	}
