@@ -169,6 +169,15 @@ type TableReplicaInfo struct {
 	MarkTableID TableID `json:"mark-table-id"`
 }
 
+// Clone clones a TableReplicaInfo
+func (i *TableReplicaInfo) Clone() *TableReplicaInfo {
+	if i == nil {
+		return nil
+	}
+	clone := *i
+	return &clone
+}
+
 // TaskStatus records the task information of a capture
 type TaskStatus struct {
 	// Table information list, containing tables that processor should process, updated by ownrer, processor is read only.
@@ -283,12 +292,12 @@ func (ts *TaskStatus) Clone() *TaskStatus {
 	clone := *ts
 	tables := make(map[TableID]*TableReplicaInfo, len(ts.Tables))
 	for tableID, table := range ts.Tables {
-		tables[tableID] = table
+		tables[tableID] = table.Clone()
 	}
 	clone.Tables = tables
 	operation := make(map[TableID]*TableOperation, len(ts.Operation))
 	for tableID, opt := range ts.Operation {
-		operation[tableID] = opt
+		operation[tableID] = opt.Clone()
 	}
 	clone.Operation = operation
 	return &clone
