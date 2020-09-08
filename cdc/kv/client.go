@@ -489,7 +489,10 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				return ctx.Err()
 			case errInfo := <-s.errCh:
 				s.errChSizeGauge.Dec()
-				s.handleError(ctx, errInfo, true)
+				err := s.handleError(ctx, errInfo, true)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	})
@@ -944,7 +947,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 // info will be sent to `regionCh`.
 // CAUTION: Note that this should only be invoked in a context that the region is not locked, otherwise use onRegionFail
 // instead.
-func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorInfo, blocking bool) {
+func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorInfo, blocking bool) error {
 	err := errInfo.err
 	switch eerr := errors.Cause(err).(type) {
 	case *eventError:
@@ -957,16 +960,21 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
 			metricFeedEpochNotMatchCounter.Inc()
 			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts, blocking)
-			return
+			return nil
 		} else if innerErr.GetRegionNotFound() != nil {
 			metricFeedRegionNotFoundCounter.Inc()
 			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts, blocking)
-			return
+			return nil
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			metricFeedDuplicateRequestCounter.Inc()
 			log.Error("tikv reported duplicated request to the same region, which is not expected",
 				zap.Uint64("regionID", duplicatedRequest.RegionId))
-			return
+			return nil
+		} else if compatibility := innerErr.GetCompatibility(); compatibility != nil {
+			log.Error("tikv reported compatibility error, which is not expected",
+				zap.Uint64("regionID", duplicatedRequest.RegionId),
+				zap.Stringer("error", compatibility))
+			return cerror.ErrVersionIncompatible.GenWithStackByArgs(compatibility)
 		} else {
 			metricFeedUnknownErrorCounter.Inc()
 			log.Warn("receive empty or unknown error msg", zap.Stringer("error", innerErr))
@@ -974,7 +982,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 	case *rpcCtxUnavailableErr:
 		metricFeedRPCCtxUnavailable.Inc()
 		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.ts, blocking)
-		return
+		return nil
 	default:
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		if errInfo.rpcCtx.Meta != nil {
@@ -983,6 +991,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 	}
 
 	s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo, blocking)
+	return nil
 }
 
 func (s *eventFeedSession) getRPCContextForRegion(ctx context.Context, id tikv.RegionVerID) (*tikv.RPCContext, error) {

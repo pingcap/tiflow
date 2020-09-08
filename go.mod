@@ -52,4 +52,4 @@ require (
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
-replace github.com/pingcap/kvproto => github.com/overvenus/kvproto v0.0.0-20200907154012-5333fc954be0
+replace github.com/pingcap/kvproto => github.com/overvenus/kvproto v0.0.0-20200908073509-3d47f2ce4793
