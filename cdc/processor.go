@@ -805,7 +805,11 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			}
 			rows = append(rows, ev.Row)
 		}
-		failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {})
+		failpoint.Inject("ProcessorSyncResolvedPreEmit", func() {
+			log.Info("Prepare to panic for ProcessorSyncResolvedPreEmit")
+			time.Sleep(10 * time.Second)
+			panic("ProcessorSyncResolvedPreEmit")
+		})
 		err := p.sink.EmitRowChangedEvents(ctx, rows...)
 		if err != nil {
 			return errors.Trace(err)
@@ -892,10 +896,15 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	defer p.stateMu.Unlock()
 
 	var tableName string
-	if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
-		tableName = name.QuoteString()
-	} else {
-		log.Warn("failed to get table name, fallback to use table id", zap.Int64("table-id", tableID))
+	err := retry.Run(time.Millisecond*5, 3, func() error {
+		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
+			tableName = name.QuoteString()
+			return nil
+		}
+		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
+	})
+	if err != nil {
+		log.Warn("get table name for metric", zap.Error(err))
 		tableName = strconv.Itoa(int(tableID))
 	}
 
@@ -971,99 +980,14 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			}
 		}()
 
-		var lastResolvedTs uint64
 		go func() {
-			opDone := false
-			resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, table.name)
-			checkDoneTicker := time.NewTicker(1 * time.Second)
-			checkDone := func() {
-				localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
-				globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
-				if !opDone && lastResolvedTs >= localResolvedTs && localResolvedTs >= globalResolvedTs {
-					log.Debug("localResolvedTs >= globalResolvedTs, sending operation done signal",
-						zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
-						zap.Int64("tableID", tableID))
-
-					opDone = true
-					checkDoneTicker.Stop()
-					select {
-					case <-ctx.Done():
-						if errors.Cause(ctx.Err()) != context.Canceled {
-							p.errCh <- ctx.Err()
-						}
-						return
-					case p.opDoneCh <- tableID:
-					}
-				}
-				if !opDone {
-					log.Debug("addTable not done",
-						zap.Uint64("tableResolvedTs", lastResolvedTs),
-						zap.Uint64("localResolvedTs", localResolvedTs),
-						zap.Uint64("globalResolvedTs", globalResolvedTs),
-						zap.Int64("tableID", tableID))
-				}
-			}
-
-			for {
-				select {
-				case <-ctx.Done():
-					if errors.Cause(ctx.Err()) != context.Canceled {
-						p.errCh <- ctx.Err()
-					}
-					return
-				case rawKV := <-plr.Output():
-					if rawKV == nil {
-						continue
-					}
-					pEvent := model.NewPolymorphicEvent(rawKV)
-					sorter.AddEntry(ctx, pEvent)
-					select {
-					case <-ctx.Done():
-						if errors.Cause(ctx.Err()) != context.Canceled {
-							p.errCh <- ctx.Err()
-						}
-						return
-					case p.mounter.Input() <- pEvent:
-					}
-				case pEvent := <-sorter.Output():
-					if pEvent == nil {
-						continue
-					}
-					if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
-						atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
-						lastResolvedTs = pEvent.CRTs
-						p.localResolvedNotifier.Notify()
-						resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
-						if !opDone {
-							checkDone()
-						}
-						continue
-					}
-					sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
-					if pEvent.CRTs <= sinkResolvedTs || pEvent.CRTs <= lastResolvedTs || pEvent.CRTs < replicaInfo.StartTs {
-						log.Fatal("The CRTs of event is not expected, please report a bug",
-							zap.String("model", "sorter"),
-							zap.Uint64("globalResolvedTs", sinkResolvedTs),
-							zap.Uint64("resolvedTs", lastResolvedTs),
-							zap.Int64("tableID", tableID),
-							zap.Any("replicaInfo", replicaInfo),
-							zap.Any("row", pEvent))
-					}
-					select {
-					case <-ctx.Done():
-						if errors.Cause(ctx.Err()) != context.Canceled {
-							p.errCh <- ctx.Err()
-						}
-						return
-					case p.output <- pEvent:
-					}
-				case <-checkDoneTicker.C:
-					if !opDone {
-						checkDone()
-					}
-				}
-			}
+			p.pullerConsume(ctx, plr, sorter)
 		}()
+
+		go func() {
+			p.sorterConsume(ctx, tableID, tableName, sorter, pResolvedTs, replicaInfo)
+		}()
+
 		return sorter
 	}
 
@@ -1087,9 +1011,131 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		p.position.ResolvedTs = replicaInfo.StartTs
 	}
 
+	atomic.StoreUint64(&p.localResolvedTs, p.position.ResolvedTs)
 	table.sorter = startPuller(tableID, &table.resolvedTs)
 
 	syncTableNumGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).Inc()
+}
+
+// sorterConsume receives sorted PolymorphicEvent from sorter of each table and
+// sends to processor's output chan
+func (p *processor) sorterConsume(
+	ctx context.Context,
+	tableID int64,
+	tableName string,
+	sorter *puller.Rectifier,
+	pResolvedTs *uint64,
+	replicaInfo *model.TableReplicaInfo,
+) {
+	var lastResolvedTs uint64
+	opDone := false
+	resolvedTsGauge := tableResolvedTsGauge.WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr, tableName)
+	checkDoneTicker := time.NewTicker(1 * time.Second)
+	checkDone := func() {
+		localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
+		globalResolvedTs := atomic.LoadUint64(&p.globalResolvedTs)
+		if !opDone && lastResolvedTs >= localResolvedTs && localResolvedTs >= globalResolvedTs {
+			log.Debug("localResolvedTs >= globalResolvedTs, sending operation done signal",
+				zap.Uint64("localResolvedTs", localResolvedTs), zap.Uint64("globalResolvedTs", globalResolvedTs),
+				zap.Int64("tableID", tableID))
+
+			opDone = true
+			checkDoneTicker.Stop()
+			select {
+			case <-ctx.Done():
+				if errors.Cause(ctx.Err()) != context.Canceled {
+					p.errCh <- ctx.Err()
+				}
+				return
+			case p.opDoneCh <- tableID:
+			}
+		}
+		if !opDone {
+			log.Debug("addTable not done",
+				zap.Uint64("tableResolvedTs", lastResolvedTs),
+				zap.Uint64("localResolvedTs", localResolvedTs),
+				zap.Uint64("globalResolvedTs", globalResolvedTs),
+				zap.Int64("tableID", tableID))
+		}
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			if errors.Cause(ctx.Err()) != context.Canceled {
+				p.errCh <- ctx.Err()
+			}
+			return
+		case pEvent := <-sorter.Output():
+			if pEvent == nil {
+				continue
+			}
+			if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
+				atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
+				lastResolvedTs = pEvent.CRTs
+				p.localResolvedNotifier.Notify()
+				resolvedTsGauge.Set(float64(oracle.ExtractPhysical(pEvent.CRTs)))
+				if !opDone {
+					checkDone()
+				}
+				continue
+			}
+			sinkResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
+			if pEvent.CRTs <= lastResolvedTs || pEvent.CRTs < replicaInfo.StartTs {
+				log.Fatal("The CRTs of event is not expected, please report a bug",
+					zap.String("model", "sorter"),
+					zap.Uint64("globalResolvedTs", sinkResolvedTs),
+					zap.Uint64("resolvedTs", lastResolvedTs),
+					zap.Int64("tableID", tableID),
+					zap.Any("replicaInfo", replicaInfo),
+					zap.Any("row", pEvent))
+			}
+			select {
+			case <-ctx.Done():
+				if errors.Cause(ctx.Err()) != context.Canceled {
+					p.errCh <- ctx.Err()
+				}
+				return
+			case p.output <- pEvent:
+			}
+		case <-checkDoneTicker.C:
+			if !opDone {
+				checkDone()
+			}
+		}
+	}
+}
+
+// pullerConsume receives RawKVEntry from a given puller and sends to sorter
+// for data sorting and mounter for data encode
+func (p *processor) pullerConsume(
+	ctx context.Context,
+	plr puller.Puller,
+	sorter *puller.Rectifier,
+) {
+	for {
+		select {
+		case <-ctx.Done():
+			if errors.Cause(ctx.Err()) != context.Canceled {
+				p.errCh <- ctx.Err()
+			}
+			return
+		case rawKV := <-plr.Output():
+			if rawKV == nil {
+				continue
+			}
+			pEvent := model.NewPolymorphicEvent(rawKV)
+			sorter.AddEntry(ctx, pEvent)
+			select {
+			case <-ctx.Done():
+				if errors.Cause(ctx.Err()) != context.Canceled {
+					p.errCh <- ctx.Err()
+				}
+				return
+			case p.mounter.Input() <- pEvent:
+			}
+		}
+	}
 }
 
 func (p *processor) stop(ctx context.Context) error {
