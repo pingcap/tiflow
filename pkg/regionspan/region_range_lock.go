@@ -318,27 +318,39 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version
 	item := l.rangeLock.Get(rangeLockEntryWithKey(startKey))
 
 	if item == nil {
-		panic(fmt.Sprintf("unlocking a not locked range: [%v, %v), version %v",
-			hex.EncodeToString(startKey), hex.EncodeToString(endKey), version))
+		log.Fatal("unlocking a not locked range",
+			zap.Uint64("regionID", regionID),
+			zap.String("startKey", hex.EncodeToString(startKey)),
+			zap.String("endKey", hex.EncodeToString(endKey)),
+			zap.Uint64("version", version),
+			zap.Uint64("checkpointTs", checkpointTs))
 	}
 
 	entry := item.(*rangeLockEntry)
 	if entry.regionID != regionID {
-		panic(fmt.Sprintf("unlocked a range but regionID mismatch. expected: %v, found: %v",
-			regionID, entry.regionID))
+		log.Fatal("unlocked a range but regionID mismatch",
+			zap.Uint64("expectedRegionID", regionID),
+			zap.Uint64("foundRegionID", entry.regionID),
+			zap.String("startKey", hex.EncodeToString(startKey)),
+			zap.String("endKey", hex.EncodeToString(endKey)))
 	}
 	if entry != l.regionIDLock[regionID] {
-		panic(fmt.Sprintf("range lock and region id lock mismatch when trying to unlock region %v"+
-			"entry in range lock: %s; "+
-			"entry in region id lock: %s",
-			regionID, entry.String(), l.regionIDLock[regionID].String()))
+		log.Fatal("range lock and region id lock mismatch when trying to unlock",
+			zap.Uint64("unlockingRegionID", regionID),
+			zap.String("rangeLockEntry", entry.String()),
+			zap.String("regionIDLockEntry", l.regionIDLock[regionID].String()))
 	}
 	delete(l.regionIDLock, regionID)
 
 	if entry.version != version || !bytes.Equal(entry.endKey, endKey) {
-		panic(fmt.Sprintf("unlocking region not match the locked region. "+
+		log.Fatal("unlocking region doesn't match the locked region. "+
 			"Locked: [%v, %v), version %v; Unlocking: [%v, %v), %v",
-			entry.startKey, entry.endKey, entry.version, startKey, endKey, version))
+			zap.Uint64("regionID", regionID),
+			zap.String("startKey", hex.EncodeToString(startKey)),
+			zap.String("endKey", hex.EncodeToString(endKey)),
+			zap.Uint64("version", version),
+			zap.Uint64("checkpointTs", checkpointTs),
+			zap.String("foundLockEntry", entry.String()))
 	}
 
 	for _, ch := range entry.waiters {
@@ -347,7 +359,7 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version
 
 	i := l.rangeLock.Delete(entry)
 	if i == nil {
-		panic("impossible (entry just get from BTree disappeared)")
+		panic("unreachable")
 	}
 	l.rangeCheckpointTs.Set(startKey, endKey, checkpointTs)
 	log.Info("unlocked range", zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
