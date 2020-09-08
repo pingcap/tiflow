@@ -19,27 +19,28 @@ import (
 	"strconv"
 
 	"github.com/apache/pulsar-client-go/pulsar"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // NewProducer create a pulsar producer.
 func NewProducer(u *url.URL, errCh chan error) (*Producer, error) {
 	opt, err := parseSinkOptions(u)
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
 	}
 	client, err := pulsar.NewClient(*opt.clientOptions)
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
 	}
 	producer, err := client.CreateProducer(*opt.producerOptions)
 	if err != nil {
 		client.Close()
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
 	}
 	partitions, err := client.TopicPartitions(opt.producerOptions.Topic)
 	if err != nil {
 		client.Close()
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
 	}
 	return &Producer{
 		errCh:      errCh,
@@ -72,7 +73,7 @@ func (p *Producer) SendMessage(ctx context.Context, key []byte, value []byte, pa
 func (p *Producer) errors(_ pulsar.MessageID, _ *pulsar.ProducerMessage, err error) {
 	if err != nil {
 		select {
-		case p.errCh <- err:
+		case p.errCh <- cerror.WrapError(cerror.ErrPulsarSendMessage, err):
 		default:
 		}
 	}
@@ -87,7 +88,7 @@ func (p *Producer) SyncBroadcastMessage(ctx context.Context, key []byte, value [
 			Properties: map[string]string{route: strconv.Itoa(i)},
 		})
 		if err != nil {
-			return err
+			return cerror.WrapError(cerror.ErrPulsarSendMessage, p.producer.Flush())
 		}
 	}
 	return nil
@@ -95,7 +96,7 @@ func (p *Producer) SyncBroadcastMessage(ctx context.Context, key []byte, value [
 
 // Flush flush all in memory msgs to server.
 func (p *Producer) Flush(_ context.Context) error {
-	return p.producer.Flush()
+	return cerror.WrapError(cerror.ErrPulsarSendMessage, p.producer.Flush())
 }
 
 // GetPartitionNum got current topic's partitions size.
@@ -107,7 +108,7 @@ func (p *Producer) GetPartitionNum() int32 {
 func (p *Producer) Close() error {
 	err := p.producer.Flush()
 	if err != nil {
-		return err
+		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 	p.producer.Close()
 	p.client.Close()

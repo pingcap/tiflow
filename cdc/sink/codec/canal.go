@@ -15,6 +15,7 @@ package codec
 
 import (
 	"fmt"
+	"github.com/pingcap/ticdc/cdc/sink/common"
 	"strconv"
 	"strings"
 
@@ -26,12 +27,12 @@ import (
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	parser_types "github.com/pingcap/parser/types"
-	"golang.org/x/text/encoding"
-	"golang.org/x/text/encoding/charmap"
 
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/common"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
 )
 
 // compatible with canal-1.1.4
@@ -197,7 +198,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 			default:
 				decoded, err := b.bytesDecoder.Bytes(v)
 				if err != nil {
-					return nil, errors.Trace(err)
+					return nil, cerror.WrapError(cerror.ErrCanalDecodeFailed, err)
 				}
 				value = string(decoded)
 				sqlType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
@@ -266,7 +267,7 @@ func (b *canalEntryBuilder) FromRowEvent(e *model.RowChangedEvent) (*canal.Entry
 	}
 	rcBytes, err := proto.Marshal(rc)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	// build entry
@@ -292,7 +293,7 @@ func (b *canalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error
 	}
 	rcBytes, err := proto.Marshal(rc)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	// build entry
@@ -419,7 +420,7 @@ func (d *canalMessageEncoder) appendRowChangedEvent(e *model.RowChangedEvent) er
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
 	return nil
@@ -429,11 +430,11 @@ func (d *canalMessageEncoder) appendRowChangedEvent(e *model.RowChangedEvent) er
 func (d *canalMessageEncoder) encodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
 	entry, err := d.entryBuilder.FromDdlEvent(e)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
 	return d.build(), nil

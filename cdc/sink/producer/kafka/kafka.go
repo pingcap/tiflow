@@ -16,6 +16,7 @@ package kafka
 import (
 	"context"
 	"fmt"
+	"go.uber.org/zap"
 	"regexp"
 	"strings"
 	"sync"
@@ -26,8 +27,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
 
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -126,7 +127,8 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(ctx context.Context, key []by
 	case <-k.closeCh:
 		return nil
 	default:
-		return errors.Trace(k.syncClient.SendMessages(msgs))
+		err := k.syncClient.SendMessages(msgs)
+		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
 
@@ -167,7 +169,7 @@ flushLoop:
 			if checkAllPartitionFlushed() {
 				return nil
 			}
-			return errors.New("flush not finished before producer close")
+			return cerror.ErrKafkaFlushUnfished.GenWithStackByArgs()
 		case <-k.flushedReceiver.C:
 			if !checkAllPartitionFlushed() {
 				continue flushLoop
@@ -239,7 +241,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
 			k.flushedNotifier.Notify()
 		case err := <-k.asyncClient.Errors():
-			return errors.Annotate(err, "write kafka error")
+			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
 		}
 	}
 }
@@ -252,25 +254,25 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 		return nil, err
 	}
 	if config.PartitionNum < 0 {
-		return nil, errors.NotValidf("partition num %d", config.PartitionNum)
+		return nil, cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(config.PartitionNum)
 	}
 	asyncClient, err := sarama.NewAsyncProducer(strings.Split(address, ","), cfg)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	syncClient, err := sarama.NewSyncProducer(strings.Split(address, ","), cfg)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
 	// get partition number or create topic automatically
 	admin, err := sarama.NewClusterAdmin(strings.Split(address, ","), cfg)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	topics, err := admin.ListTopics()
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	partitionNum := config.PartitionNum
 	topicDetail, exist := topics[topic]
@@ -281,7 +283,8 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 		} else if partitionNum < topicDetail.NumPartitions {
 			log.Warn("partition number assigned in sink-uri is less than that of topic", zap.Int32("topic partition num", topicDetail.NumPartitions))
 		} else if partitionNum > topicDetail.NumPartitions {
-			return nil, errors.Errorf("partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, topicDetail.NumPartitions)
+			return nil, cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
+				"partition number(%d) assigned in sink-uri is more than that of topic(%d)", partitionNum, topicDetail.NumPartitions)
 		}
 	} else {
 		if partitionNum == 0 {
@@ -294,13 +297,13 @@ func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, c
 			ReplicationFactor: config.ReplicationFactor,
 		}, false)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
 	}
 
 	err = admin.Close()
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	notifier := new(notify.Notifier)
 	k := &kafkaSaramaProducer{
@@ -346,7 +349,7 @@ func kafkaClientID(role, captureAddr, changefeedID, configuredClientID string) (
 		clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
 	}
 	if !validClienID.MatchString(clientID) {
-		return "", errors.Errorf("invalid kafka client ID '%s'", clientID)
+		return "", cerror.ErrKafkaInvalidClientID.GenWithStackByArgs(clientID)
 	}
 	return
 }
@@ -357,7 +360,7 @@ func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
 
 	version, err := sarama.ParseKafkaVersion(c.Version)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
 	}
 	var role string
 	if util.IsOwnerFromCtx(ctx) {

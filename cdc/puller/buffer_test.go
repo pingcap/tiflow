@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 )
 
@@ -111,7 +112,7 @@ func (bs *memBufferSuite) TestMemBuffer(c *check.C) {
 		entries = append(entries, entry)
 	}
 
-	c.Assert(err, check.Equals, ErrReachLimit)
+	c.Assert(cerror.ErrBufferReachLimit.Equal(err), check.IsTrue)
 	num := float64(bf.mu.entries.Len())
 	nearNum := 1024.0
 	c.Assert(num >= nearNum*0.9, check.IsTrue)

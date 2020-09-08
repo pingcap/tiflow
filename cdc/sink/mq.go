@@ -87,15 +87,19 @@ func newMqSink(
 	case codec.ProtocolAvro:
 		registryURI, ok := opts["registry"]
 		if !ok {
-			return nil, errors.New(`Avro protocol requires parameter "registry"`)
+			return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
 		}
 		keySchemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-key")
 		if err != nil {
-			return nil, errors.Annotate(err, "Could not create Avro schema manager for message keys")
+			return nil, errors.Annotate(
+				cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
+				"Could not create Avro schema manager for message keys")
 		}
 		valueSchemaManager, err := codec.NewAvroSchemaManager(ctx, credential, registryURI, "-value")
 		if err != nil {
-			return nil, errors.Annotate(err, "Could not create Avro schema manager for message values")
+			return nil, errors.Annotate(
+				cerror.WrapError(cerror.ErrPrepareAvroFailed, err),
+				"Could not create Avro schema manager for message values")
 		}
 		newEncoder1 := newEncoder
 		newEncoder = func() codec.EventBatchEncoder {
@@ -222,10 +226,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 		return nil
 	}
 	err = k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedSyncWrite, -1)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	return errors.Trace(err)
 }
 
 func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -236,7 +237,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
 		)
-		return cerror.ErrorDDLEventIgnored.GenWithStackByArgs()
+		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
 	encoder := k.newEncoder()
 	msg, err := encoder.EncodeDDLEvent(ddl)
@@ -253,11 +254,9 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		partition = 0
 	}
 	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
+
 	err = k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedSyncWrite, partition)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	return errors.Trace(err)
 }
 
 // Initialize registers Avro schemas for all tables
@@ -268,10 +267,7 @@ func (k *mqSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 
 func (k *mqSink) Close() error {
 	err := k.mqProducer.Close()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	return nil
+	return errors.Trace(err)
 }
 
 func (k *mqSink) run(ctx context.Context) error {
@@ -377,7 +373,7 @@ func (k *mqSink) writeToProducer(ctx context.Context, key []byte, value []byte, 
 		if partition >= 0 {
 			return k.mqProducer.SendMessage(ctx, key, value, partition)
 		}
-		return errors.New("Async broadcasts not supported")
+		return cerror.ErrAsyncBroadcaseNotSupport.GenWithStackByArgs()
 	case codec.EncoderNeedSyncWrite:
 		if partition >= 0 {
 			err := k.mqProducer.SendMessage(ctx, key, value, partition)
@@ -401,13 +397,13 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "kafka" && scheme != "kafka+ssl" {
-		return nil, errors.Errorf("can't create MQ sink with unsupported scheme: %s", scheme)
+		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("can't create MQ sink with unsupported scheme: %s", scheme)
 	}
 	s := sinkURI.Query().Get("partition-num")
 	if s != "" {
 		c, err := strconv.Atoi(s)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 		config.PartitionNum = int32(c)
 	}
@@ -416,7 +412,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if s != "" {
 		c, err := strconv.Atoi(s)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 		config.ReplicationFactor = int16(c)
 	}
@@ -430,7 +426,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 	if s != "" {
 		c, err := strconv.Atoi(s)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 		config.MaxMessageBytes = c
 	}

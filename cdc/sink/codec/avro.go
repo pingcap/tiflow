@@ -27,11 +27,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/types"
 	tijson "github.com/pingcap/tidb/types/json"
 	"go.uber.org/zap"
-
-	"github.com/pingcap/ticdc/cdc/model"
 )
 
 // AvroEventBatchEncoder converts the events to binary Avro data
@@ -199,7 +199,8 @@ func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion
 
 	bin, err := avroCodec.BinaryFromNative(nil, native)
 	if err != nil {
-		return nil, errors.Annotate(err, "AvroEventBatchEncoder: converting to Avro binary failed")
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrAvroEncodeToBinary, err), "AvroEventBatchEncoder: converting to Avro binary failed")
 	}
 
 	return &avroEncodeResult{
@@ -256,7 +257,7 @@ func ColumnInfoToAvroSchema(name string, columnInfo []*model.Column) (string, er
 
 	str, err := json.Marshal(&top)
 	if err != nil {
-		return "", errors.Annotate(err, "ColumnInfoToAvroSchema: failed to generate json")
+		return "", cerror.WrapError(cerror.ErrAvroMarshalFailed, err)
 	}
 	log.Debug("Avro Schema JSON generated", zap.ByteString("schema", str))
 	return string(str), nil
@@ -285,7 +286,7 @@ func rowToAvroNativeData(cols []*model.Column) (interface{}, error) {
 }
 
 func getAvroDataTypeFallback(v interface{}) (string, error) {
-	switch v.(type) {
+	switch tp := v.(type) {
 	case bool:
 		return "boolean", nil
 	case []byte:
@@ -304,7 +305,7 @@ func getAvroDataTypeFallback(v interface{}) (string, error) {
 		return "string", nil
 	default:
 		log.Warn("getAvroDataTypeFallback: unknown type")
-		return "", errors.New("unknown type for Avro")
+		return "", cerror.ErrAvroUnknownType.GenWithStackByArgs(tp)
 	}
 }
 
@@ -400,7 +401,7 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 
 		t, err = time.Parse(types.TimeFSPFormat, str)
 		if err != nil {
-			return nil, "", err
+			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
 		return t, string(fullType), nil
 	case mysql.TypeDuration:
@@ -417,7 +418,7 @@ func columnToAvroNativeData(col *model.Column) (interface{}, string, error) {
 			frac = "0"
 
 			if err != nil {
-				return nil, "", err
+				return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 			}
 		}
 
@@ -490,7 +491,7 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	for _, v := range data {
 		err := binary.Write(buf, binary.BigEndian, v)
 		if err != nil {
-			return nil, errors.Annotate(err, "converting Avro data to envelope failed")
+			return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
 		}
 	}
 	return buf.Bytes(), nil
