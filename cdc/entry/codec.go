@@ -15,13 +15,11 @@ package entry
 
 import (
 	"bytes"
-	"fmt"
 	"time"
 
-	"github.com/pingcap/ticdc/cdc/model"
-
-	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -97,59 +95,59 @@ func (d other) getType() MetaType {
 
 func decodeTableID(key []byte) (rest []byte, tableID int64, err error) {
 	if len(key) < prefixTableIDLen || !bytes.HasPrefix(key, tablePrefix) {
-		return nil, 0, errors.Errorf("invalid record key - %q", key)
+		return nil, 0, cerror.ErrInvalidRecordKey.GenWithStackByArgs(key)
 	}
 	key = key[tablePrefixLen:]
 	rest, tableID, err = codec.DecodeInt(key)
 	if err != nil {
-		return nil, 0, errors.Trace(err)
+		return nil, 0, cerror.WrapError(cerror.ErrCodecDecode, err)
 	}
 	return
 }
 
 func decodeRecordID(key []byte) (rest []byte, recordID int64, err error) {
 	if len(key) < prefixRecordIDLen || !bytes.HasPrefix(key, recordPrefix) {
-		return nil, 0, errors.Errorf("invalid record key - %q", key)
+		return nil, 0, cerror.ErrInvalidRecordKey.GenWithStackByArgs(key)
 	}
 	key = key[recordPrefixLen:]
 	rest, recordID, err = codec.DecodeInt(key)
 	if err != nil {
-		return nil, 0, errors.Trace(err)
+		return nil, 0, cerror.WrapError(cerror.ErrCodecDecode, err)
 	}
 	return
 }
 
 func decodeIndexKey(key []byte) (indexID int64, indexValue []types.Datum, err error) {
 	if len(key) < prefixIndexLen || !bytes.HasPrefix(key, indexPrefix) {
-		return 0, nil, errors.Errorf("invalid record key - %q", key)
+		return 0, nil, cerror.ErrInvalidRecordKey.GenWithStackByArgs(key)
 	}
 	key = key[indexPrefixLen:]
 	key, indexID, err = codec.DecodeInt(key)
 	if err != nil {
-		return 0, nil, errors.Trace(err)
+		return 0, nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 	}
 	indexValue, err = codec.Decode(key, 2)
 	if err != nil {
-		return 0, nil, errors.Trace(err)
+		return 0, nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 	}
 	return
 }
 
 func decodeMetaKey(ek []byte) (meta, error) {
 	if !bytes.HasPrefix(ek, metaPrefix) {
-		return nil, errors.New("invalid encoded hash data key prefix")
+		return nil, cerror.ErrInvalidRecordKey.GenWithStackByArgs(ek)
 	}
 
 	ek = ek[metaPrefixLen:]
 	ek, rawKey, err := codec.DecodeBytes(ek, nil)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 	}
 	key := string(rawKey)
 
 	ek, rawTp, err := codec.DecodeUint(ek)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 	}
 	switch MetaType(rawTp) {
 	case HashData:
@@ -157,7 +155,7 @@ func decodeMetaKey(ek []byte) (meta, error) {
 			var field []byte
 			_, field, err = codec.DecodeBytes(ek, nil)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 			}
 			return metaHashData{key: key, field: field}, nil
 		}
@@ -172,14 +170,14 @@ func decodeMetaKey(ek []byte) (meta, error) {
 		var index int64
 		_, index, err = codec.DecodeInt(ek)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 		}
 		return metaListData{key: key, index: index}, nil
 	// TODO decode other key
 	default:
 		return other{tp: MetaType(rawTp)}, nil
 	}
-	return nil, fmt.Errorf("unknown meta type %v", rawTp)
+	return nil, cerror.ErrUnknownMetaType.GenWithStackByArgs(rawTp)
 }
 
 // decodeRow decodes a byte slice into datums with a existing row map.
@@ -206,22 +204,22 @@ func decodeRowV1(b []byte, recordID int64, tableInfo *model.TableInfo, tz *time.
 		// Get col id.
 		data, b, err = codec.CutOne(b)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 		}
 		_, cid, err := codec.DecodeOne(data)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 		}
 		id := cid.GetInt64()
 
 		// Get col value.
 		data, b, err = codec.CutOne(b)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 		}
 		_, v, err := codec.DecodeOne(data)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 		}
 
 		// unflatten value
@@ -233,7 +231,7 @@ func decodeRowV1(b []byte, recordID int64, tableInfo *model.TableInfo, tz *time.
 		fieldType := &colInfo.FieldType
 		datum, err := unflatten(v, fieldType, tz)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrCodecDecode, err)
 		}
 		row[id] = datum
 	}
@@ -241,7 +239,7 @@ func decodeRowV1(b []byte, recordID int64, tableInfo *model.TableInfo, tz *time.
 	if tableInfo.PKIsHandle {
 		id, pkValue, err := fetchHandleValue(tableInfo, recordID)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, err
 		}
 		row[id] = *pkValue
 	}
@@ -254,7 +252,11 @@ func decodeRowV1(b []byte, recordID int64, tableInfo *model.TableInfo, tz *time.
 func decodeRowV2(data []byte, recordID int64, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	handleColID, reqCols := tableInfo.GetRowColInfos()
 	decoder := rowcodec.NewDatumMapDecoder(reqCols, handleColID, tz)
-	return decoder.DecodeToDatumMap(data, recordID, nil)
+	datums, err := decoder.DecodeToDatumMap(data, recordID, nil)
+	if err != nil {
+		return datums, cerror.WrapError(cerror.ErrDecodeRowToDatum, err)
+	}
+	return datums, nil
 }
 
 // unflatten converts a raw datum to a column datum.
@@ -277,12 +279,12 @@ func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (type
 		var err error
 		err = t.FromPackedUint(datum.GetUint64())
 		if err != nil {
-			return datum, errors.Trace(err)
+			return datum, cerror.WrapError(cerror.ErrDatumUnflatten, err)
 		}
 		if ft.Tp == mysql.TypeTimestamp && !t.IsZero() {
 			err = t.ConvertTimeZone(time.UTC, loc)
 			if err != nil {
-				return datum, errors.Trace(err)
+				return datum, cerror.WrapError(cerror.ErrDatumUnflatten, err)
 			}
 		}
 		datum.SetUint64(0)
@@ -303,7 +305,7 @@ func unflatten(datum types.Datum, ft *types.FieldType, loc *time.Location) (type
 	case mysql.TypeSet:
 		set, err := types.ParseSetValue(ft.Elems, datum.GetUint64())
 		if err != nil {
-			return datum, errors.Trace(err)
+			return datum, cerror.WrapError(cerror.ErrDatumUnflatten, err)
 		}
 		datum.SetMysqlSet(set, ft.Collate)
 		return datum, nil
