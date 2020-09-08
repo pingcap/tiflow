@@ -343,10 +343,13 @@ func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent)
 
 // AppendResolvedEvent appends a resolved event to the encoder
 func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	if ts <= d.resolvedTs || d.Size() == 0 {
+	if ts <= d.resolvedTs {
 		return EncoderNoOperation, nil
 	}
 	d.resolvedTs = ts
+	if d.Size() == 0 {
+		return EncoderNoOperation, nil
+	}
 	return EncoderNeedAsyncWrite, nil
 }
 
@@ -361,7 +364,6 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 	if d.Size() == 0 {
 		return nil
 	}
-
 	resolvedTxns := d.txnCache.Resolved(d.resolvedTs)
 	if len(resolvedTxns) == 0 {
 		return nil

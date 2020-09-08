@@ -77,10 +77,7 @@ func (c *UnresolvedTxnCache) Unresolved() map[model.TableID][]*model.SingleTable
 	return c.unresolvedTxns
 }
 
-// UpdateCheckpoint updates the checkpoint ts
-func (c *UnresolvedTxnCache) UpdateCheckpoint(checkpointTs uint64) {
-	atomic.StoreUint64(&c.checkpointTs, checkpointTs)
-}
+
 func splitResolvedTxn(
 	resolvedTs uint64, unresolvedTxns map[model.TableID][]*model.SingleTableTxn,
 ) (minTs uint64, resolvedRowsMap map[model.TableID][]*model.SingleTableTxn) {
