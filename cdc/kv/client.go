@@ -213,7 +213,7 @@ func (a *connArray) Init(ctx context.Context) error {
 
 		if err != nil {
 			a.Close()
-			return errors.Trace(err)
+			return cerror.WrapError(cerror.ErrGRPCDialFailed, err)
 		}
 		a.v[i] = conn
 	}
@@ -349,8 +349,9 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		client := cdcpb.NewChangeDataClient(conn)
 		stream, err = client.EventFeed(ctx)
 		if err != nil {
+			err = cerror.WrapError(cerror.ErrTiKVEventFeed, err)
 			log.Info("establish stream to store failed, retry later", zap.String("addr", addr), zap.Error(err))
-			return errors.Trace(err)
+			return err
 		}
 		log.Debug("created stream to store", zap.String("addr", addr))
 		return nil
@@ -893,19 +894,19 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 				regions, err = s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
 				scanRegionsDuration.WithLabelValues(captureAddr).Observe(time.Since(scanT0).Seconds())
 				if err != nil {
-					return errors.Trace(err)
+					return cerror.WrapError(cerror.ErrPDBatchLoadRegions, err)
 				}
 				metas := make([]*metapb.Region, 0, len(regions))
 				for _, region := range regions {
 					if region.GetMeta() == nil {
-						err = errors.New("meta not exists in region")
+						err = cerror.ErrMetaNotInRegion.GenWithStackByArgs()
 						log.Warn("batch load region", zap.Stringer("span", nextSpan), zap.Error(err))
 						return err
 					}
 					metas = append(metas, region.GetMeta())
 				}
 				if !regionspan.CheckRegionsLeftCover(metas, nextSpan) {
-					err = errors.Errorf("regions not completely left cover span, span %v regions: %v", nextSpan, metas)
+					err = cerror.ErrRegionsNotCoverSpan.GenWithStackByArgs(nextSpan, metas)
 					log.Warn("ScanRegions", zap.Stringer("span", nextSpan), zap.Reflect("regions", metas), zap.Error(err))
 					return err
 				}
@@ -987,7 +988,7 @@ func (s *eventFeedSession) getRPCContextForRegion(ctx context.Context, id tikv.R
 	bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 	rpcCtx, err := s.regionCache.GetTiKVRPCContext(bo, id, tidbkv.ReplicaReadLeader, 0)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrGetTiKVRPCContext, err)
 	}
 	return rpcCtx, nil
 }
@@ -1011,7 +1012,7 @@ func (s *eventFeedSession) receiveFromStream(
 		for _, state := range remainingRegions {
 			err := s.onRegionFail(ctx, regionErrorInfo{
 				singleRegionInfo: state.sri,
-				err:              errors.New("pending region cancelled due to stream disconnecting"),
+				err:              cerror.ErrPendingRegionCancel.GenWithStackByArgs(),
 			}, false)
 			if err != nil {
 				// The only possible is that the ctx is cancelled. Simply return.
@@ -1097,8 +1098,7 @@ func (s *eventFeedSession) receiveFromStream(
 						zap.Uint64("regionID", event.RegionId),
 						zap.Uint64("requestID", event.RequestId),
 						zap.String("addr", addr))
-					return errors.Errorf("received event regionID %v, requestID %v from %v but neither pending "+
-						"region nor running region was found", event.RegionId, event.RequestId, addr)
+					return cerror.ErrNoPendingRegion.GenWithStackByArgs(event.RegionId, event.RequestId, addr)
 				}
 
 				// Then spawn the goroutine to process messages of this region.
@@ -1215,7 +1215,7 @@ func (s *eventFeedSession) singleEventFeed(
 
 		if event == nil {
 			log.Debug("singleEventFeed closed by error")
-			return lastResolvedTs, errors.New("single event feed aborted")
+			return lastResolvedTs, cerror.ErrEventFeedAborted.GenWithStackByArgs()
 		}
 		lastReceivedEventTime = time.Now()
 
@@ -1265,7 +1265,7 @@ func (s *eventFeedSession) singleEventFeed(
 					case cdcpb.Event_Row_PUT:
 						opType = model.OpTypePut
 					default:
-						return lastResolvedTs, errors.Errorf("unknown tp: %v, entry: %v", entry.GetOpType(), entry)
+						return lastResolvedTs, cerror.ErrUnknownKVEventType.GenWithStackByArgs(entry.GetOpType(), entry)
 					}
 
 					revent := &model.RegionFeedEvent{
@@ -1313,9 +1313,7 @@ func (s *eventFeedSession) singleEventFeed(
 							matcher.cacheCommitRow(entry)
 							continue
 						}
-						return lastResolvedTs,
-							errors.Errorf("prewrite not match, key: %b, start-ts: %d",
-								entry.GetKey(), entry.GetStartTs())
+						return lastResolvedTs, cerror.ErrPrewriteNotMatch.GenWithStackByArgs(entry.GetKey(), entry.GetStartTs())
 					}
 
 					revent, err := assembleCommitEvent(regionID, entry, value)
@@ -1337,7 +1335,7 @@ func (s *eventFeedSession) singleEventFeed(
 		case *cdcpb.Event_Admin_:
 			log.Info("receive admin event", zap.Stringer("event", event))
 		case *cdcpb.Event_Error:
-			return lastResolvedTs, errors.Trace(&eventError{err: x.Error})
+			return lastResolvedTs, cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error})
 		case *cdcpb.Event_ResolvedTs:
 			if !initialized {
 				continue
@@ -1367,7 +1365,6 @@ func (s *eventFeedSession) singleEventFeed(
 				return lastResolvedTs, errors.Trace(ctx.Err())
 			}
 		}
-
 	}
 }
 
@@ -1379,7 +1376,7 @@ func assembleCommitEvent(regionID uint64, entry *cdcpb.Event_Row, value *pending
 	case cdcpb.Event_Row_PUT:
 		opType = model.OpTypePut
 	default:
-		return nil, errors.Errorf("unknown tp: %v, entry: %v", entry.GetOpType(), entry)
+		return nil, cerror.ErrUnknownKVEventType.GenWithStackByArgs(entry.GetOpType(), entry)
 	}
 
 	revent := &model.RegionFeedEvent{

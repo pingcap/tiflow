@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/flags"
 	"github.com/pingcap/ticdc/pkg/security"
 	tidbconfig "github.com/pingcap/tidb/config"
@@ -77,7 +78,7 @@ func (s *StorageWithCurVersionCache) GetCachedCurrentVersion() (version tidbkv.V
 	curVersionCacheMu.Unlock()
 
 	if !exists {
-		err = errors.New("GetCachedCurrentVersion: cache entry does not exist")
+		err = cerror.ErrCachedTSONotExists.GenWithStackByArgs()
 		log.Warn("GetCachedCurrentVersion: cache entry does not exist", zap.String("cacheKey", s.cacheKey))
 		return
 	}
@@ -102,7 +103,7 @@ func (s *StorageWithCurVersionCache) GetCachedCurrentVersion() (version tidbkv.V
 func GetSnapshotMeta(tiStore tidbkv.Storage, ts uint64) (*meta.Meta, error) {
 	snapshot, err := tiStore.GetSnapshot(tidbkv.NewVersion(ts))
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrGetStoreSnapshot, err)
 	}
 	return meta.NewSnapshotMeta(snapshot), nil
 }
@@ -128,7 +129,7 @@ func CreateTiStore(urls string, credential *security.Credential) (tidbkv.Storage
 	tiPath := fmt.Sprintf("tikv://%s?disableGC=true", urlv.HostString())
 	tiStore, err := store.New(tiPath)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrNewStore, err)
 	}
 
 	tiStore = newStorageWithCurVersionCache(tiStore, tiPath)
