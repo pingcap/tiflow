@@ -40,11 +40,11 @@ FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/
 FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
 RELEASE_VERSION ?= $(shell git describe --tags --dirty="-dev")
-LDFLAGS += -X "$(CDC_PKG)/pkg/util.ReleaseVersion=$(RELEASE_VERSION)"
-LDFLAGS += -X "$(CDC_PKG)/pkg/util.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
-LDFLAGS += -X "$(CDC_PKG)/pkg/util.GitHash=$(shell git rev-parse HEAD)"
-LDFLAGS += -X "$(CDC_PKG)/pkg/util.GitBranch=$(shell git rev-parse --abbrev-ref HEAD)"
-LDFLAGS += -X "$(CDC_PKG)/pkg/util.GoVersion=$(shell go version)"
+LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
+LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
+LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitHash=$(shell git rev-parse HEAD)"
+LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitBranch=$(shell git rev-parse --abbrev-ref HEAD)"
+LDFLAGS += -X "$(CDC_PKG)/pkg/version.GoVersion=$(shell go version)"
 
 default: build buildsucc
 
