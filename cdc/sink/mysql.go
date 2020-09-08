@@ -190,6 +190,9 @@ func (s *mysqlSink) UpdateCheckpoint(checkpointTs uint64) {
 }
 
 func (s *mysqlSink) Resolved(resolvedTs uint64) map[model.TableID][]*model.SingleTableTxn {
+	if resolvedTs <= atomic.LoadUint64(&s.checkpointTs) {
+		return nil
+	}
 	s.txnMutex.Lock()
 	defer s.txnMutex.Unlock()
 	return s.txnCache.Resolved(resolvedTs)
