@@ -42,8 +42,10 @@ func (c *Client) Unwrap() *clientv3.Client {
 func retryRPC(rpcName string, etcdRPC func() error) error {
 	// By default, PD etcd sets [3s, 6s) for election timeout.
 	// Some rpc could fail due to etcd errors, like "proposal dropped".
-	// 6.59s = \sum_{n=0}^{4} 0.5*1.5^n
-	return retry.Run(500*time.Millisecond, 4+1, // +1 for the inital request.
+	// Retry at least two election timeout to handle the case that two PDs restarted
+	// (the first election maybe failed).
+	// 16s = \sum_{n=0}^{6} 0.5*1.5^n
+	return retry.Run(500*time.Millisecond, 7+1, // +1 for the inital request.
 		func() error {
 			err := etcdRPC()
 			if err != nil && errors.Cause(err) != context.Canceled {
