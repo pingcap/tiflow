@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"math"
 	"math/rand"
 	"time"
 
@@ -555,6 +556,13 @@ func formatColVal(datum types.Datum, tp byte) (interface{}, error) {
 			b = emptyBytes
 		}
 		return b, nil
+	case mysql.TypeFloat, mysql.TypeDouble:
+		v := datum.GetFloat64()
+		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
+			v = 0
+			log.Warn("the value is invalid in column", zap.Float64("value", v))
+		}
+		return v, nil
 	default:
 		return datum.GetValue(), nil
 	}
