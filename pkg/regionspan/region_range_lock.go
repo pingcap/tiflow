@@ -50,10 +50,12 @@ type RangeTsMap struct {
 }
 
 // NewRangeTsMap creates a RangeTsMap.
-func NewRangeTsMap() *RangeTsMap {
-	return &RangeTsMap{
+func NewRangeTsMap(startKey, endKey []byte, startTs uint64) *RangeTsMap {
+	m := &RangeTsMap{
 		m: btree.New(16),
 	}
+	m.Set(startKey, endKey, startTs)
+	return m
 }
 
 // Set sets the corresponding ts of the given range to the specified value.
@@ -141,9 +143,9 @@ type RegionRangeLock struct {
 }
 
 // NewRegionRangeLock creates a new RegionRangeLock.
-func NewRegionRangeLock() *RegionRangeLock {
+func NewRegionRangeLock(startKey, endKey []byte, startTs uint64) *RegionRangeLock {
 	return &RegionRangeLock{
-		rangeCheckpointTs: NewRangeTsMap(),
+		rangeCheckpointTs: NewRangeTsMap(startKey, endKey, startTs),
 		rangeLock:         btree.New(16),
 		id:                allocID(),
 	}
@@ -183,7 +185,8 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		})
 
 		log.Info("range locked", zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
-			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)))
+			zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)),
+			zap.Uint64("checkpointTs", checkpointTs))
 
 		return LockRangeResult{
 			Status:       LockRangeStatusSuccess,
@@ -299,7 +302,8 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, version uint64, c
 	}
 	l.rangeCheckpointTs.Set(startKey, endKey, checkpointTs)
 	log.Info("unlocked range", zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
-		zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)))
+		zap.String("startKey", hex.EncodeToString(startKey)), zap.String("endKey", hex.EncodeToString(endKey)),
+		zap.Uint64("checkpointTs", checkpointTs))
 }
 
 const (
