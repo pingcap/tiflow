@@ -416,7 +416,7 @@ func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
 	leases := make(map[string]int64)
 
 	for _, cinfo := range testCases {
-		sess, err := concurrency.NewSession(s.client.Client, concurrency.WithTTL(10))
+		sess, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(10))
 		c.Assert(err, check.IsNil)
 		err = s.client.PutCaptureInfo(ctx, cinfo, sess.Lease())
 		c.Assert(err, check.IsNil)
