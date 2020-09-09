@@ -23,7 +23,6 @@ require (
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/linkedin/goavro/v2 v2.9.7
 	github.com/mattn/go-shellwords v1.0.3
-	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/br v0.0.0-20200907090854-8a4cd9e0abd1
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20200902104258-eba4f1d8f6de
