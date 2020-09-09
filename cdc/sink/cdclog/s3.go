@@ -321,7 +321,11 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		size     int64
 		fileData []byte
 	)
-	err = s.storage.WalkDir(ctx, ddlEventsDir, 1, func(key string, fileSize int64) error {
+	opt := &storage.WalkOption{
+		SubDir:    ddlEventsDir,
+		ListCount: 1,
+	}
+	err = s.storage.WalkDir(ctx, opt, func(key string, fileSize int64) error {
 		log.Debug("[EmitDDLEvent] list content from s3",
 			zap.String("key", key),
 			zap.Int64("size", size),
