@@ -369,7 +369,7 @@ func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.
 		newStatus, _, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
 			if taskStatus.SomeOperationsUnapplied() {
 				log.Error("unexpected task status, there are operations unapplied in this status", zap.Any("status", taskStatus))
-				return false, errors.Errorf("waiting to processor handle the operation finished time out")
+				return false, cerror.ErrWaitHandleOperationTimeout.GenWithStackByArgs()
 			}
 			taskStatus.Tables = status.Tables
 			taskStatus.Operation = status.Operation
@@ -552,7 +552,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			addID := job.BinlogInfo.TableInfo.ID
 			table, exist := c.schema.TableByID(addID)
 			if !exist {
-				return errors.NotFoundf("table(%d)", addID)
+				return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(addID)
 			}
 			c.addTable(table, job.BinlogInfo.FinishedTS)
 		case timodel.ActionDropTable:
@@ -561,7 +561,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 		case timodel.ActionRenameTable:
 			tableName, exist := c.schema.GetTableNameByID(job.TableID)
 			if !exist {
-				return errors.NotFoundf("table(%d)", job.TableID)
+				return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(job.TableID)
 			}
 			// no id change just update name
 			c.tables[job.TableID] = tableName
@@ -572,7 +572,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			addID := job.BinlogInfo.TableInfo.ID
 			table, exist := c.schema.TableByID(addID)
 			if !exist {
-				return errors.NotFoundf("table(%d)", addID)
+				return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(addID)
 			}
 			c.addTable(table, job.BinlogInfo.FinishedTS)
 		case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
