@@ -16,7 +16,6 @@ package cdc
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -167,7 +166,7 @@ restart:
 func (w *TaskWatcher) parseTask(ctx context.Context,
 	key, val []byte) (*Task, error) {
 	if len(key) <= len(w.cfg.Prefix) {
-		return nil, errors.New("invalid task key: " + string(key))
+		return nil, cerror.ErrInvalidTaskKey.GenWithStackByArgs(string(key))
 	}
 	changeFeedID := string(key[len(w.cfg.Prefix)+1:])
 	cf, err := w.capture.etcdClient.GetChangeFeedInfo(ctx, changeFeedID)
