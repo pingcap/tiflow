@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/pd/v4/pkg/tempurl"
+	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/embed"
 )
 
