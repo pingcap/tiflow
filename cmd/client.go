@@ -165,7 +165,7 @@ func newCliCommand() *cobra.Command {
 				// PD embeds an etcd server.
 				return errors.Annotate(err, "fail to open PD etcd client")
 			}
-			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
+			cdcEtcdCli = kv.NewCDCEtcdClient(defaultContext, etcdCli)
 			pdCli, err = pd.NewClientWithContext(
 				defaultContext, pdEndpoints, credential.PDSecurityOption(),
 				pd.WithGRPCDialOptions(
