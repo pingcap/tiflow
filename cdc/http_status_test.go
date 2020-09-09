@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
@@ -113,8 +114,11 @@ func testHandleChangefeedQuery(c *check.C) {
 func testHTTPPostOnly(c *check.C, uri string) {
 	resp, err := http.Get(uri)
 	c.Assert(err, check.IsNil)
+	data, err := ioutil.ReadAll(resp.Body)
+	c.Assert(err, check.IsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, check.Equals, http.StatusBadRequest)
+	c.Assert(string(data), check.Equals, cerror.ErrSupportPostOnly.Error())
 }
 
 func testRequestNonOwnerFailed(c *check.C, uri string) {

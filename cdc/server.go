@@ -24,6 +24,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/ticdc/pkg/version"
@@ -54,10 +55,10 @@ type options struct {
 
 func (o *options) validateAndAdjust() error {
 	if o.pdEndpoints == "" {
-		return errors.New("empty PD address")
+		return cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
 	}
 	if o.addr == "" {
-		return errors.New("empty address")
+		return cerror.ErrInvalidServerOption.GenWithStack("empty address")
 	}
 	if o.advertiseAddr == "" {
 		o.advertiseAddr = o.addr
@@ -67,33 +68,33 @@ func (o *options) validateAndAdjust() error {
 		ip := net.ParseIP(o.advertiseAddr[:idx])
 		// Skip nil as it could be a domain name.
 		if ip != nil && ip.IsUnspecified() {
-			return errors.New("advertise address must be specified as a valid IP")
+			return cerror.ErrInvalidServerOption.GenWithStack("advertise address must be specified as a valid IP")
 		}
 	} else {
-		return errors.New("advertise address or address does not contain a port")
+		return cerror.ErrInvalidServerOption.GenWithStack("advertise address or address does not contain a port")
 	}
 	if o.gcTTL == 0 {
-		return errors.New("empty GC TTL is not allowed")
+		return cerror.ErrInvalidServerOption.GenWithStack("empty GC TTL is not allowed")
 	}
 	var tlsConfig *tls.Config
 	if o.credential != nil {
 		var err error
 		tlsConfig, err = o.credential.ToTLSConfig()
 		if err != nil {
-			return errors.New("invalidate TLS config")
+			return errors.Annotate(err, "invalidate TLS config")
 		}
 		_, err = o.credential.ToGRPCDialOption()
 		if err != nil {
-			return errors.New("invalidate TLS config")
+			return errors.Annotate(err, "invalidate TLS config")
 		}
 	}
 	for _, ep := range strings.Split(o.pdEndpoints, ",") {
 		if tlsConfig != nil {
 			if strings.Index(ep, "http://") == 0 {
-				return errors.New("PD endpoint scheme should be https")
+				return cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be https")
 			}
 		} else if strings.Index(ep, "http://") != 0 {
-			return errors.New("PD endpoint scheme should be http")
+			return cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be http")
 		}
 	}
 
@@ -201,7 +202,7 @@ func (s *Server) Run(ctx context.Context) error {
 			}),
 		))
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
 	}
 	s.pdClient = pdClient
 
@@ -218,7 +219,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	// When a capture suicided, restart it
 	for {
-		if err := s.run(ctx); errors.Cause(err) != ErrSuicide {
+		if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(err) {
 			return err
 		}
 		log.Info("server recovered", zap.String("capture", s.capture.info.ID))
