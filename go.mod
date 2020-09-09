@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/DATA-DOG/go-sqlmock v1.3.3 // indirect
+	github.com/DATA-DOG/go-sqlmock v1.3.3
 	github.com/Shopify/sarama v1.26.1
 	github.com/apache/pulsar-client-go v0.1.1
 	github.com/cenkalti/backoff v2.2.1+incompatible
