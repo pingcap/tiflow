@@ -23,26 +23,25 @@ require (
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/linkedin/goavro/v2 v2.9.7
 	github.com/mattn/go-shellwords v1.0.3
-	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
-	github.com/pingcap/br v0.0.0-20200821071758-97ac20a3f6b0
+	github.com/pingcap/br v0.0.0-20200907090854-8a4cd9e0abd1
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20200902104258-eba4f1d8f6de
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
 	github.com/pingcap/kvproto v0.0.0-20200818080353-7aaed8998596
-	github.com/pingcap/log v0.0.0-20200511115504-543df19646ad
-	github.com/pingcap/parser v0.0.0-20200803072748-fdf66528323d
-	github.com/pingcap/pd/v4 v4.0.5-0.20200817114353-e465cafe8a91
-	github.com/pingcap/tidb v1.1.0-beta.0.20200820092836-c5b7658b0896
-	github.com/pingcap/tidb-tools v4.0.5-0.20200817064459-ba61a7376547+incompatible
+	github.com/pingcap/log v0.0.0-20200828042413-fce0951f1463
+	github.com/pingcap/parser v0.0.0-20200908132759-b65348b6244c
+	github.com/pingcap/tidb v1.1.0-beta.0.20200909035633-125258bcbd6c
+	github.com/pingcap/tidb-tools v4.0.6-0.20200909062246-98d05bb77362+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.5.1
+	github.com/tikv/pd v1.1.0-beta.0.20200907080620-6830f5bb92a2
 	github.com/uber-go/atomic v1.3.2
 	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200425165423-262c93980547
-	go.uber.org/zap v1.15.0
+	go.uber.org/zap v1.16.0
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 	golang.org/x/text v0.3.3
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0

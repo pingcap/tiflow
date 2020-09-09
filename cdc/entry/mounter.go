@@ -18,6 +18,8 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
+	"math"
 	"math/rand"
 	"time"
 
@@ -400,9 +402,13 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		var colValue interface{}
 		if exist {
 			var err error
-			colValue, err = formatColVal(colDatums, colInfo.Tp)
+			var warn string
+			colValue, warn, err = formatColVal(colDatums, colInfo.Tp)
 			if err != nil {
 				return nil, errors.Trace(err)
+			}
+			if warn != "" {
+				log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
 			}
 		} else if fillWithDefaultValue {
 			colValue = getDefaultOrZeroValue(colInfo)
@@ -495,9 +501,12 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 	preCols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	for i, idxCol := range indexInfo.Columns {
 		colInfo := tableInfo.Columns[idxCol.Offset]
-		value, err := formatColVal(idx.IndexValue[i], colInfo.Tp)
+		value, warn, err := formatColVal(idx.IndexValue[i], colInfo.Tp)
 		if err != nil {
 			return nil, errors.Trace(err)
+		}
+		if warn != "" {
+			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
 		}
 		preCols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:  colInfo.Name.O,
@@ -524,38 +533,46 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 
 var emptyBytes = make([]byte, 0)
 
-func formatColVal(datum types.Datum, tp byte) (interface{}, error) {
+func formatColVal(datum types.Datum, tp byte) (value interface{}, warn string, err error) {
 	if datum.IsNull() {
-		return nil, nil
+		return nil, "", nil
 	}
 	switch tp {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
-		return datum.GetMysqlTime().String(), nil
+		return datum.GetMysqlTime().String(), "", nil
 	case mysql.TypeDuration:
-		return datum.GetMysqlDuration().String(), nil
+		return datum.GetMysqlDuration().String(), "", nil
 	case mysql.TypeJSON:
-		return datum.GetMysqlJSON().String(), nil
+		return datum.GetMysqlJSON().String(), "", nil
 	case mysql.TypeNewDecimal:
 		v := datum.GetMysqlDecimal()
 		if v == nil {
-			return nil, nil
+			return nil, "", nil
 		}
-		return v.String(), nil
+		return v.String(), "", nil
 	case mysql.TypeEnum:
-		return datum.GetMysqlEnum().Value, nil
+		return datum.GetMysqlEnum().Value, "", nil
 	case mysql.TypeSet:
-		return datum.GetMysqlSet().Value, nil
+		return datum.GetMysqlSet().Value, "", nil
 	case mysql.TypeBit:
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
-		return datum.GetBinaryLiteral().ToInt(nil)
+		v, err := datum.GetBinaryLiteral().ToInt(nil)
+		return v, "", err
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 		b := datum.GetBytes()
 		if b == nil {
 			b = emptyBytes
 		}
-		return b, nil
+		return b, "", nil
+	case mysql.TypeFloat, mysql.TypeDouble:
+		v := datum.GetFloat64()
+		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
+			warn = fmt.Sprintf("the value is invalid in column: %f", v)
+			v = 0
+		}
+		return v, warn, nil
 	default:
-		return datum.GetValue(), nil
+		return datum.GetValue(), "", nil
 	}
 }
 

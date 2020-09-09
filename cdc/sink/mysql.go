@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	tddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/prometheus/client_golang/prometheus"
@@ -982,13 +981,13 @@ func isIgnorableDDLError(err error) bool {
 	}
 }
 
-func getSQLErrCode(err error) (terror.ErrCode, bool) {
+func getSQLErrCode(err error) (errors.ErrCode, bool) {
 	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
 	if !ok {
 		return -1, false
 	}
 
-	return terror.ErrCode(mysqlErr.Number), true
+	return errors.ErrCode(mysqlErr.Number), true
 }
 
 func buildColumnList(names []string) string {
