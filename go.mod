@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/DATA-DOG/go-sqlmock v1.3.3 // indirect
+	github.com/DATA-DOG/go-sqlmock v1.3.3
 	github.com/Shopify/sarama v1.26.1
 	github.com/apache/pulsar-client-go v0.1.1
 	github.com/cenkalti/backoff v2.2.1+incompatible
@@ -30,7 +30,7 @@ require (
 	github.com/pingcap/kvproto v0.0.0-20200818080353-7aaed8998596
 	github.com/pingcap/log v0.0.0-20200828042413-fce0951f1463
 	github.com/pingcap/parser v0.0.0-20200908132759-b65348b6244c
-	github.com/pingcap/tidb v1.1.0-beta.0.20200909035633-125258bcbd6c
+	github.com/pingcap/tidb v1.1.0-beta.0.20200909081327-88f98fc3b1d4
 	github.com/pingcap/tidb-tools v4.0.6-0.20200909062246-98d05bb77362+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
