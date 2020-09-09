@@ -22,11 +22,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	parsemodel "github.com/pingcap/parser/model"
-	"github.com/uber-go/atomic"
-	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/uber-go/atomic"
+	"go.uber.org/zap"
 )
 
 const (
@@ -193,15 +194,15 @@ type fileSink struct {
 func (f *fileSink) flushLogMeta() error {
 	data, err := f.logMeta.Marshal()
 	if err != nil {
-		return errors.Annotate(err, "marshal meta to json failed")
+		return cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
 	// FIXME: if initialize succeed, O_WRONLY is enough, but sometimes it will failed
 	file, err := os.OpenFile(f.logPath.meta, os.O_CREATE|os.O_WRONLY, defaultFileMode)
 	if err != nil {
-		return err
+		return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 	}
 	_, err = file.Write(data)
-	return err
+	return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 }
 
 func (f *fileSink) createDDLFile(commitTs uint64) (*os.File, error) {
@@ -209,9 +210,9 @@ func (f *fileSink) createDDLFile(commitTs uint64) (*os.File, error) {
 	file, err := os.OpenFile(filepath.Join(f.logPath.ddl, fileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultFileMode)
 	if err != nil {
 		log.Error("[EmitDDLEvent] create ddl file failed", zap.Error(err))
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 	}
-	return file, err
+	return file, nil
 }
 
 func (f *fileSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -274,7 +275,7 @@ func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 
 	stat, err := f.ddlFile.Stat()
 	if err != nil {
-		return err
+		return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 	}
 
 	log.Debug("[EmitDDLEvent] current file stats",
@@ -287,7 +288,7 @@ func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		// rotate file
 		err = f.ddlFile.Close()
 		if err != nil {
-			return err
+			return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 		}
 		file, err := f.createDDLFile(ddl.CommitTs)
 		if err != nil {
@@ -300,7 +301,7 @@ func (f *fileSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 
 	_, err = f.ddlFile.Write(data)
 	if err != nil {
-		return err
+		return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 	}
 	return nil
 }
@@ -312,7 +313,7 @@ func (f *fileSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTabl
 				name := makeTableDirectoryName(table.TableID)
 				err := os.MkdirAll(filepath.Join(f.logPath.root, name), defaultDirMode)
 				if err != nil {
-					return errors.Annotatef(err, "create table directory for %s on failed", name)
+					return cerror.WrapError(cerror.ErrFileSinkCreateDir, err)
 				}
 			}
 		}
@@ -320,19 +321,19 @@ func (f *fileSink) Initialize(ctx context.Context, tableInfo []*model.SimpleTabl
 		f.logMeta = makeLogMetaContent(tableInfo)
 		data, err := f.logMeta.Marshal()
 		if err != nil {
-			return errors.Annotate(err, "marshal meta to json failed")
+			return cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}
 		filePath := f.logPath.meta
 		if _, err := os.Stat(filePath); !os.IsNotExist(err) {
-			return errors.Annotate(err, "meta file already exists, please change the path of this sink")
+			return cerror.WrapError(cerror.ErrFileSinkMetaAlreadyExists, err)
 		}
 		file, err := os.Create(filePath)
 		if err != nil {
-			return err
+			return cerror.WrapError(cerror.ErrFileSinkCreateDir, err)
 		}
 		_, err = file.Write(data)
 		if err != nil {
-			return err
+			return cerror.WrapError(cerror.ErrFileSinkFileOp, err)
 		}
 	}
 	return nil
@@ -359,7 +360,7 @@ func NewLocalFileSink(ctx context.Context, sinkURI *url.URL, errCh chan error) (
 		log.Error("create ddl path failed",
 			zap.String("ddl path", logPath.ddl),
 			zap.Error(err))
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrFileSinkCreateDir, err)
 	}
 
 	f := &fileSink{

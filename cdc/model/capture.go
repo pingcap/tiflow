@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // CaptureInfo store in etcd.
@@ -29,7 +30,7 @@ type CaptureInfo struct {
 func (c *CaptureInfo) Marshal() ([]byte, error) {
 	data, err := json.Marshal(c)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
 
 	return data, nil
@@ -38,5 +39,6 @@ func (c *CaptureInfo) Marshal() ([]byte, error) {
 // Unmarshal from binary data.
 func (c *CaptureInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, c)
-	return errors.Annotatef(err, "Unmarshal data: %v", data)
+	return errors.Annotatef(cerror.WrapError(cerror.ErrUnmarshalFailed, err),
+		"unmarshal data: %v", data)
 }
