@@ -25,12 +25,12 @@ import (
 	"github.com/pingcap/kvproto/pkg/backup"
 	"github.com/pingcap/log"
 	parsemodel "github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
 )
 
 const (
@@ -117,14 +117,14 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 			if hashPart.uploader == nil {
 				uploader, err := s.storage.CreateUploader(ctx, newFileName)
 				if err != nil {
-					return err
+					return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 				}
 				hashPart.uploader = uploader
 			}
 
 			err := hashPart.uploader.UploadPart(ctx, rowDatas)
 			if err != nil {
-				return err
+				return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 			}
 
 			hashPart.byteSize += int64(len(rowDatas))
@@ -136,7 +136,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 				log.Info("[FlushRowChangedEvents] complete file", zap.Int64("tableID", tb.tableID))
 				err = hashPart.uploader.CompleteUpload(ctx)
 				if err != nil {
-					return err
+					return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 				}
 				hashPart.byteSize = 0
 				hashPart.uploadNum = 0
@@ -148,7 +148,7 @@ func (tb *tableBuffer) flush(ctx context.Context, s *s3Sink) error {
 			log.Info("[FlushRowChangedEvents] normal upload file", zap.Int64("tableID", tb.tableID))
 			err := s.storage.Write(ctx, newFileName, rowDatas)
 			if err != nil {
-				return err
+				return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 			}
 			tb.encoder = nil
 		}
@@ -236,9 +236,9 @@ func (s *s3Sink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 func (s *s3Sink) flushLogMeta(ctx context.Context) error {
 	data, err := s.logMeta.Marshal()
 	if err != nil {
-		return errors.Annotate(err, "marshal meta to json failed")
+		return cerror.WrapError(cerror.ErrMarshalFailed, err)
 	}
-	return s.storage.Write(ctx, logMetaFile, data)
+	return cerror.WrapError(cerror.ErrS3SinkWriteStorage, s.storage.Write(ctx, logMetaFile, data))
 }
 
 func (s *s3Sink) flushTableBuffers(ctx context.Context) error {
@@ -308,7 +308,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		s.ddlEncoder = s.encoder()
 		firstCreated = true
 	}
-	_, err := s.ddlEncoder.AppendDDLEvent(ddl)
+	_, err := s.ddlEncoder.EncodeDDLEvent(ddl)
 	if err != nil {
 		return err
 	}
@@ -321,7 +321,11 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		size     int64
 		fileData []byte
 	)
-	err = s.storage.WalkDir(ctx, ddlEventsDir, 1, func(key string, fileSize int64) error {
+	opt := &storage.WalkOption{
+		SubDir:    ddlEventsDir,
+		ListCount: 1,
+	}
+	err = s.storage.WalkDir(ctx, opt, func(key string, fileSize int64) error {
 		log.Debug("[EmitDDLEvent] list content from s3",
 			zap.String("key", key),
 			zap.Int64("size", size),
@@ -331,7 +335,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 	}
 	if size == 0 || size > maxDDLFlushSize {
 		// no ddl file exists or
@@ -350,7 +354,7 @@ func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 			zap.String("name", name), zap.Any("ddl", ddl))
 		fileData, err = s.storage.Read(ctx, name)
 		if err != nil {
-			return err
+			return cerror.WrapError(cerror.ErrS3SinkStorageAPI, err)
 		}
 		fileData = append(fileData, data...)
 	}
@@ -363,7 +367,9 @@ func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 			if table != nil {
 				err := s.storage.Write(ctx, makeTableDirectoryName(table.TableID), nil)
 				if err != nil {
-					return errors.Annotate(err, "create table directory on s3 failed")
+					return errors.Annotate(
+						cerror.WrapError(cerror.ErrS3SinkStorageAPI, err),
+						"create table directory on s3 failed")
 				}
 			}
 		}
@@ -372,7 +378,7 @@ func (s *s3Sink) Initialize(ctx context.Context, tableInfo []*model.SimpleTableI
 
 		data, err := s.logMeta.Marshal()
 		if err != nil {
-			return errors.Annotate(err, "marshal meta to json failed")
+			return cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}
 		return s.storage.Write(ctx, logMetaFile, data)
 	}
@@ -393,14 +399,14 @@ func NewS3Sink(sinkURI *url.URL) (*s3Sink, error) {
 	options := &storage.BackendOptions{}
 	storage.ExtractQueryParameters(sinkURI, &options.S3)
 	if err := options.S3.Apply(s3); err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrS3SinkInitialzie, err)
 	}
 	// we should set this to true, since br set it by default in parseBackend
 	s3.ForcePathStyle = true
 
 	s3storage, err := storage.NewS3Storage(s3, false)
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrS3SinkInitialzie, err)
 	}
 
 	notifyChan := make(chan struct{})
@@ -409,7 +415,11 @@ func NewS3Sink(sinkURI *url.URL) (*s3Sink, error) {
 		prefix:  prefix,
 		storage: s3storage,
 		logMeta: newLogMeta(),
-		encoder: codec.NewJSONEventBatchEncoder,
+		encoder: func() codec.EventBatchEncoder {
+			ret := codec.NewJSONEventBatchEncoder()
+			ret.(*codec.JSONEventBatchEncoder).SetMixedBuildSupport(true)
+			return ret
+		},
 
 		tableBuffers: tableBuffers,
 		notifyChan:   notifyChan,

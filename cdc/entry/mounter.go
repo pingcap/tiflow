@@ -18,6 +18,8 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
+	"math"
 	"math/rand"
 	"time"
 
@@ -25,13 +27,13 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/pkg/util"
 )
 
 const (
@@ -78,12 +80,12 @@ func (idx *indexKVEntry) unflatten(tableInfo *model.TableInfo, tz *time.Location
 			}
 		}
 		if !isPartition {
-			return errors.New("wrong table info in unflatten")
+			return cerror.ErrWrongTableInfo.GenWithStackByArgs(tableInfo.ID, idx.PhysicalTableID)
 		}
 	}
 	index, exist := tableInfo.GetIndexInfo(idx.IndexID)
 	if !exist {
-		return errors.NotFoundf("index info, indexID: %d", idx.IndexID)
+		return cerror.ErrIndexKeyTableNotFound.GenWithStackByArgs(idx.IndexID)
 	}
 	if !isDistinct(index, idx.IndexValue) {
 		idx.RecordID = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
@@ -223,7 +225,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	}
 	key, physicalTableID, err := decodeTableID(raw.Key)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 	baseInfo := baseKVEntry{
 		StartTs:         raw.StartTs,
@@ -246,7 +248,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 				return nil, nil
 			}
-			return nil, errors.NotFoundf("table in schema storage, id: %d", physicalTableID)
+			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
 		switch {
 		case bytes.HasPrefix(key, recordPrefix):
@@ -283,7 +285,7 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, restKey []
 		return nil, errors.Trace(err)
 	}
 	if len(key) != 0 {
-		return nil, errors.New("invalid record key")
+		return nil, cerror.ErrInvalidRecordKey.GenWithStackByArgs(key)
 	}
 	decodeRow := func(rawColValue []byte) (map[int64]types.Datum, bool, error) {
 		if len(rawColValue) == 0 {
@@ -400,9 +402,13 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		var colValue interface{}
 		if exist {
 			var err error
-			colValue, err = formatColVal(colDatums, colInfo.Tp)
+			var warn string
+			colValue, warn, err = formatColVal(colDatums, colInfo.Tp)
 			if err != nil {
 				return nil, errors.Trace(err)
+			}
+			if warn != "" {
+				log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
 			}
 		} else if fillWithDefaultValue {
 			colValue = getDefaultOrZeroValue(colInfo)
@@ -496,9 +502,12 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 	preCols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	for i, idxCol := range indexInfo.Columns {
 		colInfo := tableInfo.Columns[idxCol.Offset]
-		value, err := formatColVal(idx.IndexValue[i], colInfo.Tp)
+		value, warn, err := formatColVal(idx.IndexValue[i], colInfo.Tp)
 		if err != nil {
 			return nil, errors.Trace(err)
+		}
+		if warn != "" {
+			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
 		}
 		preCols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
 			Name:  colInfo.Name.O,
@@ -525,38 +534,46 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 
 var emptyBytes = make([]byte, 0)
 
-func formatColVal(datum types.Datum, tp byte) (interface{}, error) {
+func formatColVal(datum types.Datum, tp byte) (value interface{}, warn string, err error) {
 	if datum.IsNull() {
-		return nil, nil
+		return nil, "", nil
 	}
 	switch tp {
 	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeNewDate, mysql.TypeTimestamp:
-		return datum.GetMysqlTime().String(), nil
+		return datum.GetMysqlTime().String(), "", nil
 	case mysql.TypeDuration:
-		return datum.GetMysqlDuration().String(), nil
+		return datum.GetMysqlDuration().String(), "", nil
 	case mysql.TypeJSON:
-		return datum.GetMysqlJSON().String(), nil
+		return datum.GetMysqlJSON().String(), "", nil
 	case mysql.TypeNewDecimal:
 		v := datum.GetMysqlDecimal()
 		if v == nil {
-			return nil, nil
+			return nil, "", nil
 		}
-		return v.String(), nil
+		return v.String(), "", nil
 	case mysql.TypeEnum:
-		return datum.GetMysqlEnum().Value, nil
+		return datum.GetMysqlEnum().Value, "", nil
 	case mysql.TypeSet:
-		return datum.GetMysqlSet().Value, nil
+		return datum.GetMysqlSet().Value, "", nil
 	case mysql.TypeBit:
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
-		return datum.GetBinaryLiteral().ToInt(nil)
+		v, err := datum.GetBinaryLiteral().ToInt(nil)
+		return v, "", err
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 		b := datum.GetBytes()
 		if b == nil {
 			b = emptyBytes
 		}
-		return b, nil
+		return b, "", nil
+	case mysql.TypeFloat, mysql.TypeDouble:
+		v := datum.GetFloat64()
+		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
+			warn = fmt.Sprintf("the value is invalid in column: %f", v)
+			v = 0
+		}
+		return v, warn, nil
 	default:
-		return datum.GetValue(), nil
+		return datum.GetValue(), "", nil
 	}
 }
 
@@ -596,7 +613,7 @@ func fetchHandleValue(tableInfo *model.TableInfo, recordID int64) (pkCoID int64,
 		}
 	}
 	if handleColOffset == -1 {
-		return -1, nil, errors.New("can't find handle column, please check if the pk is handle")
+		return -1, nil, cerror.ErrFetchHandleValue.GenWithStackByArgs()
 	}
 	handleCol := tableInfo.Columns[handleColOffset]
 	pkCoID = handleCol.ID

@@ -23,15 +23,15 @@ var _ = check.Suite(&serverOptionSuite{})
 
 func (s *serverOptionSuite) TestNewServer(c *check.C) {
 	svr, err := NewServer()
-	c.Assert(err, check.ErrorMatches, "empty PD address")
+	c.Assert(err, check.ErrorMatches, ".*empty PD address")
 	c.Assert(svr, check.IsNil)
 
 	svr, err = NewServer(PDEndpoints("http://pd"))
-	c.Assert(err, check.ErrorMatches, "empty address")
+	c.Assert(err, check.ErrorMatches, ".*empty address")
 	c.Assert(svr, check.IsNil)
 
 	svr, err = NewServer(PDEndpoints("http://pd"), Address("cdc:1234"))
-	c.Assert(err, check.ErrorMatches, "empty GC TTL is not allowed")
+	c.Assert(err, check.ErrorMatches, ".*empty GC TTL is not allowed")
 	c.Assert(svr, check.IsNil)
 
 	svr, err = NewServer(PDEndpoints("http://pd"), Address("cdc:1234"), GCTTL(DefaultCDCGCSafePointTTL))

@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/cdc/model"
@@ -130,11 +131,12 @@ type mqMessageKey struct {
 }
 
 func (m *mqMessageKey) Encode() ([]byte, error) {
-	return json.Marshal(m)
+	data, err := json.Marshal(m)
+	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 func (m *mqMessageKey) Decode(data []byte) error {
-	return json.Unmarshal(data, m)
+	return cerror.WrapError(cerror.ErrUnmarshalFailed, json.Unmarshal(data, m))
 }
 
 type mqMessageRow struct {
@@ -144,7 +146,8 @@ type mqMessageRow struct {
 }
 
 func (m *mqMessageRow) Encode() ([]byte, error) {
-	return json.Marshal(m)
+	data, err := json.Marshal(m)
+	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 func (m *mqMessageRow) Decode(data []byte) error {
@@ -152,7 +155,7 @@ func (m *mqMessageRow) Decode(data []byte) error {
 	decoder.UseNumber()
 	err := decoder.Decode(m)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 	}
 	for colName, column := range m.Update {
 		m.Update[colName] = formatColumnVal(column)
@@ -172,11 +175,12 @@ type mqMessageDDL struct {
 }
 
 func (m *mqMessageDDL) Encode() ([]byte, error) {
-	return json.Marshal(m)
+	data, err := json.Marshal(m)
+	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 func (m *mqMessageDDL) Decode(data []byte) error {
-	return json.Unmarshal(data, m)
+	return cerror.WrapError(cerror.ErrUnmarshalFailed, json.Unmarshal(data, m))
 }
 
 func newResolvedMessage(ts uint64) *mqMessageKey {
@@ -293,16 +297,27 @@ func mqMessageToDDLEvent(key *mqMessageKey, value *mqMessageDDL) *model.DDLEvent
 
 // JSONEventBatchEncoder encodes the events into the byte of a batch into.
 type JSONEventBatchEncoder struct {
-	keyBuf   *bytes.Buffer
-	valueBuf *bytes.Buffer
+	keyBuf            *bytes.Buffer
+	valueBuf          *bytes.Buffer
+	supportMixedBuild bool // TODO decouple this out
 }
 
-// AppendResolvedEvent implements the EventBatchEncoder interface
+// SetMixedBuildSupport is used by CDC Log
+func (d *JSONEventBatchEncoder) SetMixedBuildSupport(enabled bool) {
+	d.supportMixedBuild = enabled
+}
+
+// AppendResolvedEvent is no-op
 func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
+	return EncoderNoOperation, nil
+}
+
+// EncodeCheckpointEvent implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	keyMsg := newResolvedMessage(ts)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -310,11 +325,25 @@ func (d *JSONEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, e
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], 0)
 
-	d.keyBuf.Write(keyLenByte[:])
-	d.keyBuf.Write(key)
+	if d.supportMixedBuild {
+		d.keyBuf.Write(keyLenByte[:])
+		d.keyBuf.Write(key)
+		d.valueBuf.Write(valueLenByte[:])
+		return nil, nil
+	}
 
-	d.valueBuf.Write(valueLenByte[:])
-	return EncoderNeedSyncWrite, nil
+	keyBuf := new(bytes.Buffer)
+	var versionByte [8]byte
+	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+	keyBuf.Write(versionByte[:])
+	keyBuf.Write(keyLenByte[:])
+	keyBuf.Write(key)
+
+	valueBuf := new(bytes.Buffer)
+	valueBuf.Write(valueLenByte[:])
+
+	ret := NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), ts)
+	return ret, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
@@ -342,16 +371,16 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	return EncoderNoOperation, nil
 }
 
-// AppendDDLEvent implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
+// EncodeDDLEvent implements the EventBatchEncoder interface
+func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
 	keyMsg, valueMsg := ddlEventtoMqMessage(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	value, err := valueMsg.Encode()
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	var keyLenByte [8]byte
@@ -359,21 +388,53 @@ func (d *JSONEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	d.keyBuf.Write(keyLenByte[:])
-	d.keyBuf.Write(key)
+	if d.supportMixedBuild {
+		d.keyBuf.Write(keyLenByte[:])
+		d.keyBuf.Write(key)
+		d.valueBuf.Write(valueLenByte[:])
+		d.valueBuf.Write(value)
+		return nil, nil
+	}
 
-	d.valueBuf.Write(valueLenByte[:])
-	d.valueBuf.Write(value)
-	return EncoderNeedSyncWrite, nil
+	keyBuf := new(bytes.Buffer)
+	var versionByte [8]byte
+	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+	keyBuf.Write(versionByte[:])
+	keyBuf.Write(keyLenByte[:])
+	keyBuf.Write(key)
+
+	valueBuf := new(bytes.Buffer)
+	valueBuf.Write(valueLenByte[:])
+	valueBuf.Write(value)
+
+	ret := NewMQMessage(keyBuf.Bytes(), valueBuf.Bytes(), e.CommitTs)
+	return ret, nil
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *JSONEventBatchEncoder) Build() (key []byte, value []byte) {
-	return d.keyBuf.Bytes(), d.valueBuf.Bytes()
+func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
+	if d.valueBuf.Len() == 0 {
+		return nil
+	}
+
+	ret := NewMQMessage(d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0)
+
+	if !d.supportMixedBuild {
+		d.keyBuf.Reset()
+		d.valueBuf.Reset()
+		var versionByte [8]byte
+		binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+		d.keyBuf.Write(versionByte[:])
+	}
+	return []*MQMessage{ret}
 }
 
 // MixedBuild implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) MixedBuild(withVersion bool) []byte {
+	if !d.supportMixedBuild {
+		log.Fatal("mixedBuildSupport not enabled!")
+		return nil
+	}
 	keyBytes := d.keyBuf.Bytes()
 	valueBytes := d.valueBuf.Bytes()
 	mixedBytes := make([]byte, len(keyBytes)+len(valueBytes))
@@ -459,7 +520,7 @@ func (b *JSONEventBatchMixedDecoder) NextResolvedEvent() (uint64, error) {
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeResolved {
-		return 0, errors.NotFoundf("not found resolved event message")
+		return 0, cerror.ErrJSONCodecInvalidData.GenWithStack("not found resolved event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	b.mixedBytes = b.mixedBytes[valueLen+8:]
@@ -477,7 +538,7 @@ func (b *JSONEventBatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEve
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeRow {
-		return nil, errors.NotFoundf("not found row event message")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found row event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	value := b.mixedBytes[8 : valueLen+8]
@@ -500,7 +561,7 @@ func (b *JSONEventBatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeDDL {
-		return nil, errors.NotFoundf("not found ddl event message")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found ddl event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	value := b.mixedBytes[8 : valueLen+8]
@@ -560,7 +621,7 @@ func (b *JSONEventBatchDecoder) NextResolvedEvent() (uint64, error) {
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeResolved {
-		return 0, errors.NotFoundf("not found resolved event message")
+		return 0, cerror.ErrJSONCodecInvalidData.GenWithStack("not found resolved event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	b.valueBytes = b.valueBytes[valueLen+8:]
@@ -578,7 +639,7 @@ func (b *JSONEventBatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, e
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeRow {
-		return nil, errors.NotFoundf("not found row event message")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found row event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
@@ -601,7 +662,7 @@ func (b *JSONEventBatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MqMessageTypeDDL {
-		return nil, errors.NotFoundf("not found ddl event message")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("not found ddl event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
@@ -637,7 +698,7 @@ func NewJSONEventBatchDecoder(key []byte, value []byte) (EventBatchDecoder, erro
 	version := binary.BigEndian.Uint64(key[:8])
 	key = key[8:]
 	if version != BatchVersion1 {
-		return nil, errors.New("unexpected key format version")
+		return nil, cerror.ErrJSONCodecInvalidData.GenWithStack("unexpected key format version")
 	}
 	// if only decode one byte slice, we choose MixedDecoder
 	if len(key) > 0 && len(value) == 0 {

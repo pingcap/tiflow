@@ -32,12 +32,12 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	tifilter "github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
@@ -60,6 +60,8 @@ const (
 	defaultFlushInterval       = time.Millisecond * 50
 	defaultBatchReplaceEnabled = true
 	defaultBatchReplaceSize    = 20
+	defaultReadTimeout         = "2m"
+	defaultWriteTimeout        = "2m"
 )
 
 var (
@@ -165,7 +167,7 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 			zap.Uint64("startTs", ddl.StartTs),
 			zap.Uint64("commitTs", ddl.CommitTs),
 		)
-		return errors.Trace(model.ErrorDDLEventIgnored)
+		return cerror.ErrDDLEventIgnored.GenWithStackByArgs()
 	}
 	err := s.execDDLWithMaxRetries(ctx, ddl, defaultDDLMaxRetryTime)
 	return errors.Trace(err)
@@ -208,7 +210,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 
 	if shouldSwitchDB {
@@ -217,7 +219,7 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.Error(err))
 			}
-			return errors.Trace(err)
+			return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 		}
 	}
 
@@ -225,11 +227,11 @@ func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(err))
 		}
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 
 	log.Info("Exec DDL succeeded", zap.String("sql", ddl.Query))
@@ -247,16 +249,16 @@ func (s *mysqlSink) adjustSQLMode(ctx context.Context) error {
 	row := s.db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
 	err := row.Scan(&oldMode)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
 
 	newMode = cyclic.RelaxSQLMode(oldMode)
 	rows, err := s.db.QueryContext(ctx, fmt.Sprintf("SET sql_mode = '%s';", newMode))
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
 	err = rows.Close()
-	return errors.Trace(err)
+	return cerror.WrapError(cerror.ErrMySQLQueryError, err)
 }
 
 var _ Sink = &mysqlSink{}
@@ -269,6 +271,13 @@ type sinkParams struct {
 	captureAddr         string
 	batchReplaceEnabled bool
 	batchReplaceSize    int
+	readTimeout         string
+	writeTimeout        string
+}
+
+func (s *sinkParams) Clone() *sinkParams {
+	clone := *s
+	return &clone
 }
 
 var defaultParams = &sinkParams{
@@ -277,9 +286,34 @@ var defaultParams = &sinkParams{
 	tidbTxnMode:         defaultTiDBTxnMode,
 	batchReplaceEnabled: defaultBatchReplaceEnabled,
 	batchReplaceSize:    defaultBatchReplaceSize,
+	readTimeout:         defaultReadTimeout,
+	writeTimeout:        defaultWriteTimeout,
 }
 
-func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location, params *sinkParams) (string, error) {
+func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (string, error) {
+	var name string
+	var value string
+	querySQL := fmt.Sprintf("show session variables like '%s';", variableName)
+	err := db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
+	if err != nil && err != sql.ErrNoRows {
+		errMsg := "fail to query session variable " + variableName
+		return "", errors.Annotate(cerror.WrapError(cerror.ErrMySQLQueryError, err), errMsg)
+	}
+	// session variable works, use given default value
+	if err == nil {
+		return defaultValue, nil
+	}
+	// session variable not exists, return "" to ignore it
+	return "", nil
+}
+
+func configureSinkURI(
+	ctx context.Context,
+	dsnCfg *dmysql.Config,
+	tz *time.Location,
+	params *sinkParams,
+	testDB *sql.DB,
+) (string, error) {
 	if dsnCfg.Params == nil {
 		dsnCfg.Params = make(map[string]string, 1)
 	}
@@ -287,34 +321,23 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 	dsnCfg.InterpolateParams = true
 	dsnCfg.MultiStatements = true
 	dsnCfg.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	dsnCfg.Params["readTimeout"] = params.readTimeout
+	dsnCfg.Params["writeTimeout"] = params.writeTimeout
 
-	testDB, err := sql.Open("mysql", dsnCfg.FormatDSN())
+	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
 	if err != nil {
-		return "", errors.Annotate(err, "fail to open MySQL connection when configuring sink")
+		return "", err
 	}
-	defer testDB.Close()
-	log.Debug("Opened connection to configure some tidb special parameters")
-
-	var variableName string
-	var autoRandomInsertEnabled string
-	queryStr := "show session variables like 'allow_auto_random_explicit_insert';"
-	err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &autoRandomInsertEnabled)
-	if err != nil && err != sql.ErrNoRows {
-		return "", errors.Annotate(err, "fail to query sink for support of auto-random")
-	}
-	if err == nil && (autoRandomInsertEnabled == "off" || autoRandomInsertEnabled == "0") {
-		dsnCfg.Params["allow_auto_random_explicit_insert"] = "1"
-		log.Debug("Set allow_auto_random_explicit_insert to 1")
+	if autoRandom != "" {
+		dsnCfg.Params["allow_auto_random_explicit_insert"] = autoRandom
 	}
 
-	var txnMode string
-	queryStr = "show session variables like 'tidb_txn_mode';"
-	err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &txnMode)
-	if err != nil && err != sql.ErrNoRows {
-		return "", errors.Annotate(err, "fail to query sink for txn mode")
+	txnMode, err := checkTiDBVariable(ctx, testDB, "tidb_txn_mode", params.tidbTxnMode)
+	if err != nil {
+		return "", err
 	}
-	if err == nil {
-		dsnCfg.Params["tidb_txn_mode"] = params.tidbTxnMode
+	if txnMode != "" {
+		dsnCfg.Params["tidb_txn_mode"] = txnMode
 	}
 
 	dsnClone := dsnCfg.Clone()
@@ -327,7 +350,7 @@ func configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Locat
 // newMySQLSink creates a new MySQL sink using schema storage
 func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL, filter *tifilter.Filter, opts map[string]string) (Sink, error) {
 	var db *sql.DB
-	params := defaultParams
+	params := defaultParams.Clone()
 
 	if cid, ok := opts[OptChangefeedID]; ok {
 		params.changefeedID = cid
@@ -338,17 +361,17 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 	tz := util.TimezoneFromCtx(ctx)
 
 	if sinkURI == nil {
-		return nil, errors.New("fail to open MySQL sink, empty URL")
+		return nil, cerror.ErrMySQLConnectionError.GenWithStack("fail to open MySQL sink, empty URL")
 	}
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if _, ok := validSchemes[scheme]; !ok {
-		return nil, errors.Errorf("can't create mysql sink with unsupported scheme: %s", scheme)
+		return nil, cerror.ErrMySQLConnectionError.GenWithStack("can't create mysql sink with unsupported scheme: %s", scheme)
 	}
 	s := sinkURI.Query().Get("worker-count")
 	if s != "" {
 		c, err := strconv.Atoi(s)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
 		if c > 0 {
 			params.workerCount = c
@@ -358,7 +381,7 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 	if s != "" {
 		c, err := strconv.Atoi(s)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
 		params.maxTxnRow = c
 	}
@@ -384,7 +407,8 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 		name := "cdc_mysql_tls" + changefeedID
 		err = dmysql.RegisterTLSConfig(name, tlsCfg)
 		if err != nil {
-			return nil, errors.Annotate(err, "fail to open MySQL connection")
+			return nil, errors.Annotate(
+				cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
 		}
 		tlsParam = "?tls=" + name
 	}
@@ -393,14 +417,14 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 	if s != "" {
 		enable, err := strconv.ParseBool(s)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
 		params.batchReplaceEnabled = enable
 	}
 	if params.batchReplaceEnabled && sinkURI.Query().Get("batch-replace-size") != "" {
 		size, err := strconv.Atoi(sinkURI.Query().Get("batch-replace-size"))
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
 		params.batchReplaceSize = size
 	}
@@ -420,19 +444,34 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}
-	dsnStr, err = configureSinkURI(ctx, dsn, tz, params)
+
+	// create test db used for parameter detection
+	if dsn.Params == nil {
+		dsn.Params = make(map[string]string, 1)
+	}
+	dsn.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	testDB, err := sql.Open("mysql", dsn.FormatDSN())
+	if err != nil {
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection when configuring sink")
+	}
+	defer testDB.Close()
+
+	dsnStr, err = configureSinkURI(ctx, dsn, tz, params, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	db, err = sql.Open("mysql", dsnStr)
 	if err != nil {
-		return nil, errors.Annotate(err, "Open database connection failed")
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "Open database connection failed")
 	}
 	err = db.PingContext(ctx)
 	if err != nil {
-		return nil, errors.Annotatef(err, "fail to open MySQL connection")
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
 	}
 
 	log.Info("Start mysql sink")
@@ -463,7 +502,7 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 		cfg := new(config.CyclicConfig)
 		err := cfg.Unmarshal([]byte(val))
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
 		sink.cyclic = cyclic.NewCyclic(cfg)
 
@@ -609,7 +648,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 			buf := make([]byte, 4096)
 			stackSize := runtime.Stack(buf, false)
 			buf = buf[:stackSize]
-			err = errors.Errorf("mysql sink concurrent execute panic, stack: %v", string(buf))
+			err = cerror.ErrMySQLWorkerPanic.GenWithStack("mysql sink concurrent execute panic, stack: %v", string(buf))
 			log.Error("mysql sink worker panic", zap.Reflect("r", r), zap.Stack("stack trace"))
 			w.txnWg.Add(-1 * txnNum)
 		}
@@ -663,7 +702,8 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 func (s *mysqlSink) Close() error {
 	s.execWaitNotifier.Close()
 	s.resolvedNotifier.Close()
-	return s.db.Close()
+	err := s.db.Close()
+	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }
 
 func (s *mysqlSink) execDMLWithMaxRetries(
@@ -692,23 +732,23 @@ func (s *mysqlSink) execDMLWithMaxRetries(
 			err := s.statistics.RecordBatchExecution(func() (int, error) {
 				tx, err := s.db.BeginTx(ctx, nil)
 				if err != nil {
-					return 0, checkTxnErr(errors.Trace(err))
+					return 0, checkTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
 				}
 				for i, query := range dmls.sqls {
 					args := dmls.values[i]
 					log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
 					if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-						return 0, checkTxnErr(errors.Trace(err))
+						return 0, checkTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
 					}
 				}
 				if len(dmls.markSQL) != 0 {
 					log.Debug("exec row", zap.String("sql", dmls.markSQL))
 					if _, err := tx.ExecContext(ctx, dmls.markSQL); err != nil {
-						return 0, checkTxnErr(errors.Trace(err))
+						return 0, checkTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
 					}
 				}
 				if err = tx.Commit(); err != nil {
-					return 0, checkTxnErr(errors.Trace(err))
+					return 0, checkTxnErr(cerror.WrapError(cerror.ErrMySQLTxnError, err))
 				}
 				return dmls.rowCount, nil
 			})
@@ -943,13 +983,13 @@ func isIgnorableDDLError(err error) bool {
 	}
 }
 
-func getSQLErrCode(err error) (terror.ErrCode, bool) {
+func getSQLErrCode(err error) (errors.ErrCode, bool) {
 	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
 	if !ok {
 		return -1, false
 	}
 
-	return terror.ErrCode(mysqlErr.Number), true
+	return errors.ErrCode(mysqlErr.Number), true
 }
 
 func buildColumnList(names []string) string {

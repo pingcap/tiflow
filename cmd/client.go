@@ -25,12 +25,13 @@ import (
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
-	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/spf13/cobra"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -121,7 +122,7 @@ func newCliCommand() *cobra.Command {
 		Use:   "cli",
 		Short: "Manage replication task and TiCDC cluster",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			initCmd(cmd, &util.Config{Level: cliLogLevel})
+			initCmd(cmd, &logutil.Config{Level: cliLogLevel})
 
 			credential := getCredential()
 			tlsConfig, err := credential.ToTLSConfig()
@@ -164,7 +165,7 @@ func newCliCommand() *cobra.Command {
 				// PD embeds an etcd server.
 				return errors.Annotate(err, "fail to open PD etcd client")
 			}
-			cdcEtcdCli = kv.NewCDCEtcdClient(etcdCli)
+			cdcEtcdCli = kv.NewCDCEtcdClient(defaultContext, etcdCli)
 			pdCli, err = pd.NewClientWithContext(
 				defaultContext, pdEndpoints, credential.PDSecurityOption(),
 				pd.WithGRPCDialOptions(
