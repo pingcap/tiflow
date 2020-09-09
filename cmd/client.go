@@ -25,7 +25,7 @@ import (
 	_ "github.com/go-sql-driver/mysql" // mysql driver
 	"github.com/mattn/go-shellwords"
 	"github.com/pingcap/errors"
-	pd "github.com/pingcap/pd/v4/client"
+	pd "github.com/tikv/pd/client"
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
