@@ -18,9 +18,9 @@ import (
 	"os"
 	"strings"
 
-	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/spf13/cobra"
+	pd "github.com/tikv/pd/client"
 )
 
 var (

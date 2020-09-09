@@ -23,8 +23,8 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
-	pd "github.com/pingcap/pd/v4/client"
-	"github.com/pingcap/pd/v4/pkg/tempurl"
+	pd "github.com/tikv/pd/client"
+	"github.com/tikv/pd/pkg/tempurl"
 )
 
 type checkSuite struct{}

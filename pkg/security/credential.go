@@ -16,9 +16,9 @@ package security
 import (
 	"crypto/tls"
 
-	pd "github.com/pingcap/pd/v4/client"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb-tools/pkg/utils"
+	pd "github.com/tikv/pd/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
