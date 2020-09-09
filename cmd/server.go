@@ -56,7 +56,7 @@ func init() {
 	serverCmd.Flags().StringVar(&logFile, "log-file", "", "log file path")
 	serverCmd.Flags().StringVar(&logLevel, "log-level", "info", "log level (etc: debug|info|warn|error)")
 	serverCmd.Flags().DurationVar(&ownerFlushInterval, "owner-flush-interval", time.Millisecond*200, "owner flushes changefeed status interval")
-	serverCmd.Flags().DurationVar(&processorFlushInterval, "processor-flush-interval", time.Millisecond*200, "processor flushes task status interval")
+	serverCmd.Flags().DurationVar(&processorFlushInterval, "processor-flush-interval", time.Millisecond*100, "processor flushes task status interval")
 	addSecurityFlags(serverCmd.Flags(), true /* isServer */)
 }
 

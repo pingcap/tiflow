@@ -396,11 +396,13 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			// It is more accurate to get tso from PD, but in most cases we have
 			// deployed NTP service, a little bias is acceptable here.
 			metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
-
-			p.position.ResolvedTs = minResolvedTs
 			resolvedTsGauge.Set(float64(phyTs))
-			if err := retryFlushTaskStatusAndPosition(); err != nil {
-				return errors.Trace(err)
+
+			if p.position.ResolvedTs < minResolvedTs {
+				p.position.ResolvedTs = minResolvedTs
+				if err := retryFlushTaskStatusAndPosition(); err != nil {
+					return errors.Trace(err)
+				}
 			}
 		case <-p.localCheckpointTsReceiver.C:
 			checkpointTs := atomic.LoadUint64(&p.checkpointTs)
