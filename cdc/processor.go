@@ -411,9 +411,6 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			// deployed NTP service, a little bias is acceptable here.
 			metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 
-			if p.position.CheckPointTs >= checkpointTs {
-				continue
-			}
 			if time.Since(lastFlushTime) < p.flushCheckpointInterval {
 				continue
 			}
