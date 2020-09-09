@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
@@ -40,6 +39,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -576,7 +576,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // CAUTION: Note that this should only be called in a context that the region has locked it's range.
 func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, blocking bool) error {
 	log.Debug("region failed", zap.Uint64("regionID", errorInfo.verID.GetID()), zap.Error(errorInfo.err))
-	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetVer(), errorInfo.ts)
+	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End, errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.ts)
 	if blocking {
 		select {
 		case s.errCh <- errorInfo:
@@ -834,7 +834,8 @@ func (s *eventFeedSession) partialRegionFeed(
 
 	regionID := state.sri.verID.GetID()
 	log.Info("EventFeed disconnected",
-		zap.Reflect("regionID", regionID),
+		zap.Uint64("regionID", regionID),
+		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", state.sri.span),
 		zap.Uint64("checkpoint", ts),
 		zap.String("error", err.Error()))
@@ -963,9 +964,8 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 			return
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			metricFeedDuplicateRequestCounter.Inc()
-			log.Error("tikv reported duplicated request to the same region, which is not expected",
+			log.Fatal("tikv reported duplicated request to the same region, which is not expected",
 				zap.Uint64("regionID", duplicatedRequest.RegionId))
-			return
 		} else {
 			metricFeedUnknownErrorCounter.Inc()
 			log.Warn("receive empty or unknown error msg", zap.Stringer("error", innerErr))
