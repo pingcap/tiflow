@@ -28,7 +28,7 @@ require (
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20200902104258-eba4f1d8f6de
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
-	github.com/pingcap/kvproto v0.0.0-20200818080353-7aaed8998596
+	github.com/pingcap/kvproto v0.0.0-20200909045102-2ac90648531b
 	github.com/pingcap/log v0.0.0-20200511115504-543df19646ad
 	github.com/pingcap/parser v0.0.0-20200803072748-fdf66528323d
 	github.com/pingcap/pd/v4 v4.0.5-0.20200817114353-e465cafe8a91
@@ -51,5 +51,3 @@ require (
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
-
-replace github.com/pingcap/kvproto => github.com/overvenus/kvproto v0.0.0-20200908073509-3d47f2ce4793
