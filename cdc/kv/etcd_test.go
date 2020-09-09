@@ -54,7 +54,7 @@ func (s *etcdSuite) SetUpTest(c *check.C) {
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	s.client = NewCDCEtcdClient(client)
+	s.client = NewCDCEtcdClient(context.TODO(), client)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
