@@ -49,7 +49,7 @@ func (s *taskSuite) SetUpTest(c *check.C) {
 
 	// Create a task watcher
 	capture := &Capture{
-		etcdClient: kv.NewCDCEtcdClient(client),
+		etcdClient: kv.NewCDCEtcdClient(context.TODO(), client),
 		processors: make(map[string]*processor),
 		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
@@ -75,7 +75,7 @@ func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
 	// initialize the PD service witch does not support to
 	// be embeded.
 	capture := &Capture{
-		etcdClient: kv.NewCDCEtcdClient(s.c),
+		etcdClient: kv.NewCDCEtcdClient(context.TODO(), s.c),
 		processors: make(map[string]*processor),
 		info:       &model.CaptureInfo{ID: "task-suite-capture", AdvertiseAddr: "task-suite-addr"},
 	}
@@ -87,7 +87,7 @@ func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
 }
 
 func (s *taskSuite) setupFeedInfo(c *check.C, changeFeedID string) {
-	client := kv.NewCDCEtcdClient(s.c)
+	client := kv.NewCDCEtcdClient(context.TODO(), s.c)
 	// Create the change feed
 	c.Assert(client.SaveChangeFeedInfo(s.c.Ctx(), &model.ChangeFeedInfo{
 		SinkURI:    "mysql://fake",
@@ -152,7 +152,7 @@ func (s *taskSuite) TestWatch(c *check.C) {
 	s.setupFeedInfo(c, "changefeed-1")
 	defer s.teardownFeedInfo(c, "changefeed-1")
 
-	client := kv.NewCDCEtcdClient(s.c)
+	client := kv.NewCDCEtcdClient(context.TODO(), s.c)
 	// Watch with a canceled context
 	failedCtx, cancel := context.WithCancel(context.Background())
 	cancel()

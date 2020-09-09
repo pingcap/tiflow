@@ -62,8 +62,6 @@ const (
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 
 	defaultSyncResolvedBatch = 1024
-
-	defaultFlushTaskPositionInterval = 200 * time.Millisecond
 )
 
 var (
@@ -86,10 +84,11 @@ type processor struct {
 
 	sink sink.Sink
 
-	sinkEmittedResolvedTs uint64
-	globalResolvedTs      uint64
-	localResolvedTs       uint64
-	checkpointTs          uint64
+	sinkEmittedResolvedTs   uint64
+	globalResolvedTs        uint64
+	localResolvedTs         uint64
+	checkpointTs            uint64
+	flushCheckpointInterval time.Duration
 
 	ddlPuller       puller.Puller
 	ddlPullerCancel context.CancelFunc
@@ -165,6 +164,7 @@ func newProcessor(
 	captureInfo model.CaptureInfo,
 	checkpointTs uint64,
 	errCh chan error,
+	flushCheckpointInterval time.Duration,
 ) (*processor, error) {
 	etcdCli := session.Client()
 	endpoints := session.Client().Endpoints()
@@ -177,7 +177,7 @@ func newProcessor(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	cdcEtcdCli := kv.NewCDCEtcdClient(etcdCli)
+	cdcEtcdCli := kv.NewCDCEtcdClient(ctx, etcdCli)
 	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
 
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
@@ -396,11 +396,13 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			// It is more accurate to get tso from PD, but in most cases we have
 			// deployed NTP service, a little bias is acceptable here.
 			metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
-
-			p.position.ResolvedTs = minResolvedTs
 			resolvedTsGauge.Set(float64(phyTs))
-			if err := retryFlushTaskStatusAndPosition(); err != nil {
-				return errors.Trace(err)
+
+			if p.position.ResolvedTs < minResolvedTs {
+				p.position.ResolvedTs = minResolvedTs
+				if err := retryFlushTaskStatusAndPosition(); err != nil {
+					return errors.Trace(err)
+				}
 			}
 		case <-p.localCheckpointTsReceiver.C:
 			checkpointTs := atomic.LoadUint64(&p.checkpointTs)
@@ -409,10 +411,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			// deployed NTP service, a little bias is acceptable here.
 			metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 
-			if p.position.CheckPointTs >= checkpointTs {
-				continue
-			}
-			if time.Since(lastFlushTime) < defaultFlushTaskPositionInterval {
+			if time.Since(lastFlushTime) < p.flushCheckpointInterval {
 				continue
 			}
 
@@ -1169,6 +1168,7 @@ func runProcessor(
 	changefeedID string,
 	captureInfo model.CaptureInfo,
 	checkpointTs uint64,
+	flushCheckpointInterval time.Duration,
 ) (*processor, error) {
 	opts := make(map[string]string, len(info.Opts)+2)
 	for k, v := range info.Opts {
@@ -1188,7 +1188,8 @@ func runProcessor(
 		cancel()
 		return nil, errors.Trace(err)
 	}
-	processor, err := newProcessor(ctx, credential, session, info, sink, changefeedID, captureInfo, checkpointTs, errCh)
+	processor, err := newProcessor(ctx, credential, session, info, sink,
+		changefeedID, captureInfo, checkpointTs, errCh, flushCheckpointInterval)
 	if err != nil {
 		cancel()
 		return nil, err

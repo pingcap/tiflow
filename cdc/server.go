@@ -44,12 +44,14 @@ const (
 )
 
 type options struct {
-	pdEndpoints   string
-	credential    *security.Credential
-	addr          string
-	advertiseAddr string
-	gcTTL         int64
-	timezone      *time.Location
+	pdEndpoints            string
+	credential             *security.Credential
+	addr                   string
+	advertiseAddr          string
+	gcTTL                  int64
+	timezone               *time.Location
+	ownerFlushInterval     time.Duration
+	processorFlushInterval time.Duration
 }
 
 func (o *options) validateAndAdjust() error {
@@ -135,6 +137,20 @@ func Timezone(tz *time.Location) ServerOption {
 	}
 }
 
+// OwnerFlushInterval returns a ServerOption that sets the ownerFlushInterval
+func OwnerFlushInterval(dur time.Duration) ServerOption {
+	return func(o *options) {
+		o.ownerFlushInterval = dur
+	}
+}
+
+// ProcessorFlushInterval returns a ServerOption that sets the processorFlushInterval
+func ProcessorFlushInterval(dur time.Duration) ServerOption {
+	return func(o *options) {
+		o.processorFlushInterval = dur
+	}
+}
+
 // Credential returns a ServerOption that sets the TLS
 func Credential(credential *security.Credential) ServerOption {
 	return func(o *options) {
@@ -170,7 +186,10 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 		zap.String("address", opts.addr),
 		zap.String("advertise-address", opts.advertiseAddr),
 		zap.Int64("gc-ttl", opts.gcTTL),
-		zap.Any("timezone", opts.timezone))
+		zap.Any("timezone", opts.timezone),
+		zap.Duration("owner-flush-interval", opts.ownerFlushInterval),
+		zap.Duration("processor-flush-interval", opts.processorFlushInterval),
+	)
 
 	s := &Server{
 		opts: opts,
@@ -257,7 +276,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			continue
 		}
 		log.Info("campaign owner successfully", zap.String("capture", s.capture.info.ID))
-		owner, err := NewOwner(s.pdClient, s.opts.credential, s.capture.session, s.opts.gcTTL)
+		owner, err := NewOwner(ctx, s.pdClient, s.opts.credential, s.capture.session, s.opts.gcTTL, s.opts.ownerFlushInterval)
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
 			continue
@@ -282,13 +301,14 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.credential, s.opts.advertiseAddr)
+	ctx = util.PutCaptureAddrInCtx(ctx, s.opts.advertiseAddr)
+	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
+	procOpts := &processorOpts{flushCheckpointInterval: s.opts.processorFlushInterval}
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.credential, s.opts.advertiseAddr, procOpts)
 	if err != nil {
 		return err
 	}
 	s.capture = capture
-	ctx = util.PutCaptureAddrInCtx(ctx, s.capture.info.AdvertiseAddr)
-	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

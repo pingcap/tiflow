@@ -60,7 +60,7 @@ func (s *ownerSuite) SetUpTest(c *check.C) {
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	s.client = kv.NewCDCEtcdClient(client)
+	s.client = kv.NewCDCEtcdClient(context.TODO(), client)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
@@ -465,12 +465,13 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	c.Assert(err, check.IsNil)
 	sampleCF.sink = sink
 
-	capture, err := NewCapture(ctx, []string{s.clientURL.String()}, &security.Credential{}, "127.0.0.1:12034")
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()},
+		&security.Credential{}, "127.0.0.1:12034", &processorOpts{flushCheckpointInterval: time.Millisecond * 200})
 	c.Assert(err, check.IsNil)
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
 
-	owner, err := NewOwner(nil, &security.Credential{}, capture.session, DefaultCDCGCSafePointTTL)
+	owner, err := NewOwner(ctx, nil, &security.Credential{}, capture.session, DefaultCDCGCSafePointTTL, time.Millisecond*200)
 	c.Assert(err, check.IsNil)
 
 	sampleCF.etcdCli = owner.etcdClient
