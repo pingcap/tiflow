@@ -38,6 +38,11 @@ const (
 	captureSessionTTL = 3
 )
 
+// processorOpts records options for processor
+type processorOpts struct {
+	flushCheckpointInterval time.Duration
+}
+
 // Capture represents a Capture server, it monitors the changefeed information in etcd and schedules Task on it.
 type Capture struct {
 	etcdClient kv.CDCEtcdClient
@@ -51,10 +56,18 @@ type Capture struct {
 	// session keeps alive between the capture and etcd
 	session  *concurrency.Session
 	election *concurrency.Election
+
+	opts *processorOpts
 }
 
 // NewCapture returns a new Capture instance
-func NewCapture(ctx context.Context, pdEndpoints []string, credential *security.Credential, advertiseAddr string) (c *Capture, err error) {
+func NewCapture(
+	ctx context.Context,
+	pdEndpoints []string,
+	credential *security.Credential,
+	advertiseAddr string,
+	opts *processorOpts,
+) (c *Capture, err error) {
 	tlsConfig, err := credential.ToTLSConfig()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -91,7 +104,7 @@ func NewCapture(ctx context.Context, pdEndpoints []string, credential *security.
 		return nil, errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "create capture session")
 	}
 	elec := concurrency.NewElection(sess, kv.CaptureOwnerKey)
-	cli := kv.NewCDCEtcdClient(etcdCli)
+	cli := kv.NewCDCEtcdClient(ctx, etcdCli)
 	id := uuid.New().String()
 	info := &model.CaptureInfo{
 		ID:            id,
@@ -107,6 +120,7 @@ func NewCapture(ctx context.Context, pdEndpoints []string, credential *security.
 		session:    sess,
 		election:   elec,
 		info:       info,
+		opts:       opts,
 	}
 
 	return
@@ -224,7 +238,7 @@ func (c *Capture) assignTask(ctx context.Context, task *Task) (*processor, error
 		zap.String("changefeedid", task.ChangeFeedID))
 
 	p, err := runProcessor(
-		ctx, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS)
+		ctx, c.credential, c.session, *cf, task.ChangeFeedID, *c.info, task.CheckpointTS, c.opts.flushCheckpointInterval)
 	if err != nil {
 		log.Error("run processor failed",
 			zap.String("changefeedid", task.ChangeFeedID),
