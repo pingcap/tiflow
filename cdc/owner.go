@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
-	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -194,7 +193,7 @@ func (o *Owner) newChangeFeed(
 	processorsInfos model.ProcessorsInfos,
 	taskPositions map[string]*model.TaskPosition,
 	info *model.ChangeFeedInfo,
-	checkpointTs uint64) (*changeFeed, error) {
+	checkpointTs uint64) (cf *changeFeed, resultErr error) {
 	log.Info("Find new changefeed", zap.Stringer("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 
@@ -237,6 +236,11 @@ func (o *Owner) newChangeFeed(
 	}
 
 	ddlHandler := newDDLHandler(o.pdClient, o.credential, kvStore, checkpointTs)
+	defer func() {
+		if resultErr != nil {
+			ddlHandler.Close()
+		}
+	}()
 
 	existingTables := make(map[model.TableID]model.Ts)
 	for captureID, taskStatus := range processorsInfos {
@@ -253,6 +257,11 @@ func (o *Owner) newChangeFeed(
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
+	defer func() {
+		if resultErr != nil {
+			cancel()
+		}
+	}()
 	schemas := make(map[model.SchemaID]tableIDMap)
 	tables := make(map[model.TableID]model.TableName)
 	partitions := make(map[model.TableID][]int64)
@@ -326,9 +335,13 @@ func (o *Owner) newChangeFeed(
 
 	sink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
 	if err != nil {
-		cancel()
 		return nil, errors.Trace(err)
 	}
+	defer func() {
+		if resultErr != nil && sink != nil {
+			sink.Close()
+		}
+	}()
 	go func() {
 		err := <-errCh
 		if errors.Cause(err) != context.Canceled {
@@ -344,7 +357,7 @@ func (o *Owner) newChangeFeed(
 		log.Error("error on running owner", zap.Error(err))
 	}
 
-	cf := &changeFeed{
+	cf = &changeFeed{
 		info:          info,
 		id:            id,
 		ddlHandler:    ddlHandler,
@@ -657,11 +670,7 @@ func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// TODO Closing the resource should not be here
-	err = cf.ddlHandler.Close()
-	log.Info("stop changefeed ddl handler", zap.String("changefeed id", job.CfID), logutil.ZapErrorFilter(err, context.Canceled))
-	err = cf.sink.Close()
-	log.Info("stop changefeed sink", zap.String("changefeed id", job.CfID), logutil.ZapErrorFilter(err, context.Canceled))
+	cf.Close()
 	// Only need to process stoppedFeeds with `AdminStop` command here.
 	// For `AdminResume`, we remove stopped feed in changefeed initialization phase.
 	// For `AdminRemove`, we need to update stoppedFeeds when removing a stopped changefeed.
