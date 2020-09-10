@@ -62,8 +62,6 @@ const (
 	defaultMemBufferCapacity int64 = 10 * 1024 * 1024 * 1024 // 10G
 
 	defaultSyncResolvedBatch = 1024
-
-	defaultFlushTaskPositionInterval = 200 * time.Millisecond
 )
 
 var (
@@ -86,10 +84,11 @@ type processor struct {
 
 	sink sink.Sink
 
-	sinkEmittedResolvedTs uint64
-	globalResolvedTs      uint64
-	localResolvedTs       uint64
-	checkpointTs          uint64
+	sinkEmittedResolvedTs   uint64
+	globalResolvedTs        uint64
+	localResolvedTs         uint64
+	checkpointTs            uint64
+	flushCheckpointInterval time.Duration
 
 	ddlPuller       puller.Puller
 	ddlPullerCancel context.CancelFunc
@@ -165,18 +164,20 @@ func newProcessor(
 	captureInfo model.CaptureInfo,
 	checkpointTs uint64,
 	errCh chan error,
+	flushCheckpointInterval time.Duration,
 ) (*processor, error) {
 	etcdCli := session.Client()
 	endpoints := session.Client().Endpoints()
 	pdCli, err := fNewPDCli(ctx, endpoints, credential.PDSecurityOption())
 	if err != nil {
-		return nil, errors.Annotatef(err, "create pd client failed, addr: %v", endpoints)
+		return nil, errors.Annotatef(
+			cerror.WrapError(cerror.ErrNewProcessorFailed, err), "create pd client failed, addr: %v", endpoints)
 	}
 	kvStorage, err := kv.CreateTiStore(strings.Join(endpoints, ","), credential)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	cdcEtcdCli := kv.NewCDCEtcdClient(etcdCli)
+	cdcEtcdCli := kv.NewCDCEtcdClient(ctx, etcdCli)
 	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
 
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
@@ -395,11 +396,13 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			// It is more accurate to get tso from PD, but in most cases we have
 			// deployed NTP service, a little bias is acceptable here.
 			metricResolvedTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
-
-			p.position.ResolvedTs = minResolvedTs
 			resolvedTsGauge.Set(float64(phyTs))
-			if err := retryFlushTaskStatusAndPosition(); err != nil {
-				return errors.Trace(err)
+
+			if p.position.ResolvedTs < minResolvedTs {
+				p.position.ResolvedTs = minResolvedTs
+				if err := retryFlushTaskStatusAndPosition(); err != nil {
+					return errors.Trace(err)
+				}
 			}
 		case <-p.localCheckpointTsReceiver.C:
 			checkpointTs := atomic.LoadUint64(&p.checkpointTs)
@@ -408,10 +411,7 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			// deployed NTP service, a little bias is acceptable here.
 			metricCheckpointTsLagGauge.Set(float64(oracle.GetPhysical(time.Now())-phyTs) / 1e3)
 
-			if p.position.CheckPointTs >= checkpointTs {
-				continue
-			}
-			if time.Since(lastFlushTime) < defaultFlushTaskPositionInterval {
+			if time.Since(lastFlushTime) < p.flushCheckpointInterval {
 				continue
 			}
 
@@ -487,7 +487,7 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 		time.Sleep(1 * time.Second)
 	})
 	if p.isStopped() {
-		return cerror.ErrAdminStopProcessor.FastGenByArgs()
+		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	//p.position.Count = p.sink.Count()
 	err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
@@ -506,7 +506,7 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 // tables may cause checkpoint ts fallback in processor.
 func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 	if p.isStopped() {
-		return cerror.ErrAdminStopProcessor.FastGenByArgs()
+		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	var tablesToRemove []model.TableID
 	newTaskStatus, newModRevision, err := p.etcdCli.AtomicPutTaskStatus(ctx, p.changefeedID, p.captureInfo.ID,
@@ -521,7 +521,7 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 				if err != nil {
 					return false, backoff.Permanent(errors.Trace(err))
 				}
-				return false, backoff.Permanent(cerror.ErrAdminStopProcessor.FastGenByArgs())
+				return false, backoff.Permanent(cerror.ErrAdminStopProcessor.GenWithStackByArgs())
 			}
 			toRemove, err := p.handleTables(ctx, taskStatus)
 			tablesToRemove = append(tablesToRemove, toRemove...)
@@ -604,10 +604,10 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 		} else {
 			replicaInfo, exist := status.Tables[tableID]
 			if !exist {
-				return tablesToRemove, errors.NotFoundf("replicaInfo of table(%d)", tableID)
+				return tablesToRemove, cerror.ErrProcessorTableNotFound.GenWithStack("replicaInfo of table(%d)", tableID)
 			}
 			if p.changefeed.Config.Cyclic.IsEnabled() && replicaInfo.MarkTableID == 0 {
-				return tablesToRemove, errors.NotValidf("normal table(%d) and mark table not match ", tableID)
+				return tablesToRemove, cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", tableID)
 			}
 			p.addTable(ctx, tableID, replicaInfo)
 		}
@@ -651,10 +651,10 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		globalResolvedTsReceiver = globalResolvedTsNotifier.NewReceiver(1 * time.Second)
 	)
 
-	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) error {
+	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
-			return nil
+			return
 		}
 		if lastCheckPointTs < changefeedStatus.CheckpointTs {
 			p.schemaStorage.DoGC(changefeedStatus.CheckpointTs)
@@ -666,7 +666,6 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			log.Debug("Update globalResolvedTs", zap.Uint64("globalResolvedTs", lastResolvedTs))
 			globalResolvedTsNotifier.Notify()
 		}
-		return nil
 	}
 
 	go func() {
@@ -721,9 +720,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 
-		if err := updateStatus(changefeedStatus); err != nil {
-			return err
-		}
+		updateStatus(changefeedStatus)
 
 		ch := p.etcdCli.Client.Watch(ctx, watchKey, clientv3.WithRev(statusRev+1), clientv3.WithFilterDelete())
 		for resp := range ch {
@@ -731,16 +728,14 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 				break
 			}
 			if resp.Err() != nil {
-				return err
+				return cerror.WrapError(cerror.ErrProcessorEtcdWatch, err)
 			}
 			for _, ev := range resp.Events {
 				var status model.ChangeFeedStatus
 				if err := status.Unmarshal(ev.Kv.Value); err != nil {
 					return err
 				}
-				if err := updateStatus(&status); err != nil {
-					return err
-				}
+				updateStatus(&status)
 			}
 		}
 	}
@@ -958,17 +953,17 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				if os.IsNotExist(errors.Cause(err)) {
 					err = os.MkdirAll(p.changefeed.SortDir, 0755)
 					if err != nil {
-						p.errCh <- errors.Annotate(err, "create dir")
+						p.errCh <- errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "create dir")
 						return nil
 					}
 				} else {
-					p.errCh <- errors.Annotate(err, "sort dir check")
+					p.errCh <- errors.Annotate(cerror.WrapError(cerror.ErrProcessorSortDir, err), "sort dir check")
 					return nil
 				}
 			}
 			sorterImpl = puller.NewFileSorter(p.changefeed.SortDir)
 		default:
-			p.errCh <- errors.Errorf("unknown sort engine %s", p.changefeed.Engine)
+			p.errCh <- cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine)
 			return nil
 		}
 		sorter := puller.NewRectifier(sorterImpl, p.changefeed.GetTargetTs())
@@ -1173,6 +1168,7 @@ func runProcessor(
 	changefeedID string,
 	captureInfo model.CaptureInfo,
 	checkpointTs uint64,
+	flushCheckpointInterval time.Duration,
 ) (*processor, error) {
 	opts := make(map[string]string, len(info.Opts)+2)
 	for k, v := range info.Opts {
@@ -1192,7 +1188,8 @@ func runProcessor(
 		cancel()
 		return nil, errors.Trace(err)
 	}
-	processor, err := newProcessor(ctx, credential, session, info, sink, changefeedID, captureInfo, checkpointTs, errCh)
+	processor, err := newProcessor(ctx, credential, session, info, sink,
+		changefeedID, captureInfo, checkpointTs, errCh, flushCheckpointInterval)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -1214,9 +1211,11 @@ func runProcessor(
 				zap.String("processorid", processor.id),
 				zap.Error(err))
 			// record error information in etcd
-			code := "CDC:server:ErrProcessorUnknown"
+			var code string
 			if terror, ok := err.(*errors.Error); ok {
 				code = string(terror.RFCCode())
+			} else {
+				code = string(cerror.ErrProcessorUnknown.RFCCode())
 			}
 			processor.position.Error = &model.RunningError{
 				Addr:    captureInfo.AdvertiseAddr,

@@ -46,7 +46,7 @@ func (m *mockClient) Put(ctx context.Context, key, val string, opts ...clientv3.
 func (s *clientSuite) TestRetry(c *check.C) {
 	cli := clientv3.NewCtxClient(context.TODO())
 	cli.KV = &mockClient{}
-	retrycli := Wrap(cli)
+	retrycli := Wrap(cli, nil)
 	get, err := retrycli.Get(context.TODO(), "")
 	c.Assert(err, check.IsNil)
 	c.Assert(get, check.NotNil)

@@ -15,12 +15,16 @@ package sink
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/davecgh/go-spew/spew"
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -609,6 +613,8 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		tidbTxnMode:         defaultTiDBTxnMode,
 		batchReplaceEnabled: defaultBatchReplaceEnabled,
 		batchReplaceSize:    defaultBatchReplaceSize,
+		readTimeout:         defaultReadTimeout,
+		writeTimeout:        defaultWriteTimeout,
 	})
 	c.Assert(param2, check.DeepEquals, &sinkParams{
 		changefeedID:        "123",
@@ -617,7 +623,57 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		tidbTxnMode:         defaultTiDBTxnMode,
 		batchReplaceEnabled: false,
 		batchReplaceSize:    defaultBatchReplaceSize,
+		readTimeout:         defaultReadTimeout,
+		writeTimeout:        defaultWriteTimeout,
 	})
+}
+
+func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, check.IsNil)
+	columns := []string{"Variable_name", "Value"}
+	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+	)
+	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+	)
+
+	dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
+	c.Assert(err, check.IsNil)
+	dsnStr, err := configureSinkURI(context.TODO(), dsn, time.Local, defaultParams.Clone(), db)
+	c.Assert(err, check.IsNil)
+	expectedParams := []string{
+		"tidb_txn_mode=optimistic",
+		"readTimeout=2m",
+		"writeTimeout=2m",
+		"allow_auto_random_explicit_insert=1",
+	}
+	for _, param := range expectedParams {
+		c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
+	}
+}
+
+func (s MySQLSinkSuite) TestCheckTiDBVariable(c *check.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, check.IsNil)
+	columns := []string{"Variable_name", "Value"}
+
+	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+	)
+	val, err := checkTiDBVariable(context.TODO(), db, "allow_auto_random_explicit_insert", "1")
+	c.Assert(err, check.IsNil)
+	c.Assert(val, check.Equals, "1")
+
+	mock.ExpectQuery("show session variables like 'no_exist_variable';").WillReturnError(sql.ErrNoRows)
+	val, err = checkTiDBVariable(context.TODO(), db, "no_exist_variable", "0")
+	c.Assert(err, check.IsNil)
+	c.Assert(val, check.Equals, "")
+
+	mock.ExpectQuery("show session variables like 'version';").WillReturnError(sql.ErrConnDone)
+	_, err = checkTiDBVariable(context.TODO(), db, "version", "5.7.25-TiDB-v4.0.0")
+	c.Assert(err, check.ErrorMatches, ".*"+sql.ErrConnDone.Error())
 }
 
 /*

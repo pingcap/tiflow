@@ -24,6 +24,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	pd "github.com/tikv/pd/client"
@@ -43,20 +44,22 @@ const (
 )
 
 type options struct {
-	pdEndpoints   string
-	credential    *security.Credential
-	addr          string
-	advertiseAddr string
-	gcTTL         int64
-	timezone      *time.Location
+	pdEndpoints            string
+	credential             *security.Credential
+	addr                   string
+	advertiseAddr          string
+	gcTTL                  int64
+	timezone               *time.Location
+	ownerFlushInterval     time.Duration
+	processorFlushInterval time.Duration
 }
 
 func (o *options) validateAndAdjust() error {
 	if o.pdEndpoints == "" {
-		return errors.New("empty PD address")
+		return cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
 	}
 	if o.addr == "" {
-		return errors.New("empty address")
+		return cerror.ErrInvalidServerOption.GenWithStack("empty address")
 	}
 	if o.advertiseAddr == "" {
 		o.advertiseAddr = o.addr
@@ -66,33 +69,33 @@ func (o *options) validateAndAdjust() error {
 		ip := net.ParseIP(o.advertiseAddr[:idx])
 		// Skip nil as it could be a domain name.
 		if ip != nil && ip.IsUnspecified() {
-			return errors.New("advertise address must be specified as a valid IP")
+			return cerror.ErrInvalidServerOption.GenWithStack("advertise address must be specified as a valid IP")
 		}
 	} else {
-		return errors.New("advertise address or address does not contain a port")
+		return cerror.ErrInvalidServerOption.GenWithStack("advertise address or address does not contain a port")
 	}
 	if o.gcTTL == 0 {
-		return errors.New("empty GC TTL is not allowed")
+		return cerror.ErrInvalidServerOption.GenWithStack("empty GC TTL is not allowed")
 	}
 	var tlsConfig *tls.Config
 	if o.credential != nil {
 		var err error
 		tlsConfig, err = o.credential.ToTLSConfig()
 		if err != nil {
-			return errors.New("invalidate TLS config")
+			return errors.Annotate(err, "invalidate TLS config")
 		}
 		_, err = o.credential.ToGRPCDialOption()
 		if err != nil {
-			return errors.New("invalidate TLS config")
+			return errors.Annotate(err, "invalidate TLS config")
 		}
 	}
 	for _, ep := range strings.Split(o.pdEndpoints, ",") {
 		if tlsConfig != nil {
 			if strings.Index(ep, "http://") == 0 {
-				return errors.New("PD endpoint scheme should be https")
+				return cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be https")
 			}
 		} else if strings.Index(ep, "http://") != 0 {
-			return errors.New("PD endpoint scheme should be http")
+			return cerror.ErrInvalidServerOption.GenWithStack("PD endpoint scheme should be http")
 		}
 	}
 
@@ -134,6 +137,20 @@ func Timezone(tz *time.Location) ServerOption {
 	}
 }
 
+// OwnerFlushInterval returns a ServerOption that sets the ownerFlushInterval
+func OwnerFlushInterval(dur time.Duration) ServerOption {
+	return func(o *options) {
+		o.ownerFlushInterval = dur
+	}
+}
+
+// ProcessorFlushInterval returns a ServerOption that sets the processorFlushInterval
+func ProcessorFlushInterval(dur time.Duration) ServerOption {
+	return func(o *options) {
+		o.processorFlushInterval = dur
+	}
+}
+
 // Credential returns a ServerOption that sets the TLS
 func Credential(credential *security.Credential) ServerOption {
 	return func(o *options) {
@@ -169,7 +186,10 @@ func NewServer(opt ...ServerOption) (*Server, error) {
 		zap.String("address", opts.addr),
 		zap.String("advertise-address", opts.advertiseAddr),
 		zap.Int64("gc-ttl", opts.gcTTL),
-		zap.Any("timezone", opts.timezone))
+		zap.Any("timezone", opts.timezone),
+		zap.Duration("owner-flush-interval", opts.ownerFlushInterval),
+		zap.Duration("processor-flush-interval", opts.processorFlushInterval),
+	)
 
 	s := &Server{
 		opts: opts,
@@ -200,7 +220,7 @@ func (s *Server) Run(ctx context.Context) error {
 			}),
 		))
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.WrapError(cerror.ErrServerNewPDClient, err)
 	}
 	s.pdClient = pdClient
 
@@ -217,7 +237,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	// When a capture suicided, restart it
 	for {
-		if err := s.run(ctx); errors.Cause(err) != ErrSuicide {
+		if err := s.run(ctx); cerror.ErrCaptureSuicide.NotEqual(err) {
 			return err
 		}
 		log.Info("server recovered", zap.String("capture", s.capture.info.ID))
@@ -256,7 +276,7 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 			continue
 		}
 		log.Info("campaign owner successfully", zap.String("capture", s.capture.info.ID))
-		owner, err := NewOwner(s.pdClient, s.opts.credential, s.capture.session, s.opts.gcTTL)
+		owner, err := NewOwner(ctx, s.pdClient, s.opts.credential, s.capture.session, s.opts.gcTTL, s.opts.ownerFlushInterval)
 		if err != nil {
 			log.Warn("create new owner failed", zap.Error(err))
 			continue
@@ -281,13 +301,14 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 }
 
 func (s *Server) run(ctx context.Context) (err error) {
-	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.credential, s.opts.advertiseAddr)
+	ctx = util.PutCaptureAddrInCtx(ctx, s.opts.advertiseAddr)
+	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
+	procOpts := &processorOpts{flushCheckpointInterval: s.opts.processorFlushInterval}
+	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.credential, s.opts.advertiseAddr, procOpts)
 	if err != nil {
 		return err
 	}
 	s.capture = capture
-	ctx = util.PutCaptureAddrInCtx(ctx, s.capture.info.AdvertiseAddr)
-	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

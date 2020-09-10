@@ -80,6 +80,9 @@ type Owner struct {
 	gcTTL int64
 	// last update gc safepoint time. zero time means has not updated or cleared
 	gcSafepointLastUpdate time.Time
+	// record last time that flushes all changefeeds' replication status
+	lastFlushChangefeeds    time.Time
+	flushChangefeedInterval time.Duration
 }
 
 const (
@@ -90,25 +93,33 @@ const (
 )
 
 // NewOwner creates a new Owner instance
-func NewOwner(pdClient pd.Client, credential *security.Credential, sess *concurrency.Session, gcTTL int64) (*Owner, error) {
-	cli := kv.NewCDCEtcdClient(sess.Client())
+func NewOwner(
+	ctx context.Context,
+	pdClient pd.Client,
+	credential *security.Credential,
+	sess *concurrency.Session,
+	gcTTL int64,
+	flushChangefeedInterval time.Duration,
+) (*Owner, error) {
+	cli := kv.NewCDCEtcdClient(ctx, sess.Client())
 	endpoints := sess.Client().Endpoints()
 
 	owner := &Owner{
-		done:                  make(chan struct{}),
-		session:               sess,
-		pdClient:              pdClient,
-		credential:            credential,
-		changeFeeds:           make(map[model.ChangeFeedID]*changeFeed),
-		failInitFeeds:         make(map[model.ChangeFeedID]struct{}),
-		stoppedFeeds:          make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
-		captures:              make(map[model.CaptureID]*model.CaptureInfo),
-		rebalanceTigger:       make(map[model.ChangeFeedID]bool),
-		manualScheduleCommand: make(map[model.ChangeFeedID][]*model.MoveTableJob),
-		pdEndpoints:           endpoints,
-		cfRWriter:             cli,
-		etcdClient:            cli,
-		gcTTL:                 gcTTL,
+		done:                    make(chan struct{}),
+		session:                 sess,
+		pdClient:                pdClient,
+		credential:              credential,
+		changeFeeds:             make(map[model.ChangeFeedID]*changeFeed),
+		failInitFeeds:           make(map[model.ChangeFeedID]struct{}),
+		stoppedFeeds:            make(map[model.ChangeFeedID]*model.ChangeFeedStatus),
+		captures:                make(map[model.CaptureID]*model.CaptureInfo),
+		rebalanceTigger:         make(map[model.ChangeFeedID]bool),
+		manualScheduleCommand:   make(map[model.ChangeFeedID][]*model.MoveTableJob),
+		pdEndpoints:             endpoints,
+		cfRWriter:               cli,
+		etcdClient:              cli,
+		gcTTL:                   gcTTL,
+		flushChangefeedInterval: flushChangefeedInterval,
 	}
 
 	return owner, nil
@@ -217,11 +228,11 @@ func (o *Owner) newChangeFeed(
 	if info.Engine == model.SortInFile {
 		err = os.MkdirAll(info.SortDir, 0755)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
 		}
 		err = util.IsDirAndWritable(info.SortDir)
 		if err != nil {
-			return nil, err
+			return nil, cerror.WrapError(cerror.ErrOwnerSortDir, err)
 		}
 	}
 
@@ -553,7 +564,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		if !o.gcSafepointLastUpdate.IsZero() {
 			_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, 0, 0)
 			if err != nil {
-				return errors.Trace(err)
+				return cerror.WrapError(cerror.ErrOwnerUpdateGCSafepoint, err)
 			}
 			o.gcSafepointLastUpdate = *new(time.Time)
 		}
@@ -569,9 +580,12 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 				minCheckpointTs = changefeed.status.CheckpointTs
 			}
 		}
-		err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
-		if err != nil {
-			return errors.Trace(err)
+		if time.Since(o.lastFlushChangefeeds) > o.flushChangefeedInterval {
+			err := o.cfRWriter.PutAllChangeFeedStatus(ctx, snapshot)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			o.lastFlushChangefeeds = time.Now()
 		}
 	}
 	for _, status := range o.stoppedFeeds {
@@ -583,7 +597,7 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 		if err != nil {
 			log.Info("failed to update service safe point", zap.Error(err))
-			return errors.Trace(err)
+			return cerror.WrapError(cerror.ErrOwnerUpdateGCSafepoint, err)
 		}
 		o.gcSafepointLastUpdate = time.Now()
 	}
@@ -624,7 +638,7 @@ func (o *Owner) handleDDL(ctx context.Context) error {
 func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	cf, ok := o.changeFeeds[job.CfID]
 	if !ok {
-		return errors.Errorf("changefeed %s not found in owner cache", job.CfID)
+		return cerror.ErrOwnerChangefeedNotFound.GenWithStackByArgs(job.CfID)
 	}
 	for captureID := range cf.taskStatus {
 		newStatus, _, err := cf.etcdCli.AtomicPutTaskStatus(ctx, cf.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
@@ -809,7 +823,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 					}
 					delete(o.stoppedFeeds, job.CfID)
 				default:
-					return errors.Errorf("changefeed in abnormal state: %s, replication status: %+v", feedState, status)
+					return cerror.ErrChangefeedAbnormalState.GenWithStackByArgs(feedState, status)
 				}
 			}
 			// remove changefeed info
@@ -1029,7 +1043,7 @@ func (o *Owner) EnqueueJob(job model.AdminJob) error {
 	switch job.Type {
 	case model.AdminResume, model.AdminRemove, model.AdminStop, model.AdminFinish:
 	default:
-		return errors.Errorf("invalid admin job type: %d", job.Type)
+		return cerror.ErrInvalidAdminJobType.GenWithStackByArgs(job.Type)
 	}
 	o.adminJobsLock.Lock()
 	o.adminJobs = append(o.adminJobs, job)
@@ -1184,7 +1198,7 @@ func (o *Owner) watchCapture(ctx context.Context) error {
 			err = mvcc.ErrCompacted
 		})
 		if err != nil {
-			return errors.Trace(resp.Err())
+			return cerror.WrapError(cerror.ErrOwnerEtcdWatch, resp.Err())
 		}
 		for _, ev := range resp.Events {
 			c := &model.CaptureInfo{}

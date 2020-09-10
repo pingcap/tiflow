@@ -24,6 +24,8 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/retry"
+	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
@@ -111,8 +113,17 @@ type CDCEtcdClient struct {
 }
 
 //NewCDCEtcdClient returns a new CDCEtcdClient
-func NewCDCEtcdClient(cli *clientv3.Client) CDCEtcdClient {
-	return CDCEtcdClient{Client: etcd.Wrap(cli)}
+func NewCDCEtcdClient(ctx context.Context, cli *clientv3.Client) CDCEtcdClient {
+	captureAddr := util.CaptureAddrFromCtx(ctx)
+	metrics := map[string]prometheus.Counter{
+		etcd.EtcdPut:    etcdRequestCounter.WithLabelValues(etcd.EtcdPut, captureAddr),
+		etcd.EtcdGet:    etcdRequestCounter.WithLabelValues(etcd.EtcdGet, captureAddr),
+		etcd.EtcdDel:    etcdRequestCounter.WithLabelValues(etcd.EtcdDel, captureAddr),
+		etcd.EtcdTxn:    etcdRequestCounter.WithLabelValues(etcd.EtcdTxn, captureAddr),
+		etcd.EtcdGrant:  etcdRequestCounter.WithLabelValues(etcd.EtcdGrant, captureAddr),
+		etcd.EtcdRevoke: etcdRequestCounter.WithLabelValues(etcd.EtcdRevoke, captureAddr),
+	}
+	return CDCEtcdClient{Client: etcd.Wrap(cli, metrics)}
 }
 
 // ClearAllCDCInfo delete all keys created by CDC
