@@ -392,7 +392,6 @@ func (d *CanalEventBatchEncoder) MixedBuild(withVersion bool) []byte {
 
 //Size implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Size() int {
-
 	return d.size
 }
 

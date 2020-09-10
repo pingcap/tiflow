@@ -6,11 +6,6 @@
 # This configuration will affect both filter and sink related configurations, the default is true
 case-sensitive = true
 
-# 允许输出行变化的旧值，可以用于判断行变化是insert还是update操作
-# When set enable-old-value, cdc will output the old value of row change event,
-# it will help distinguishing `update` and `insert` operation.
-enable-old-value = false
-
 [filter]
 # 忽略哪些 StartTs 的事务
 # Transactions with the following StartTs will be ignored

@@ -55,8 +55,8 @@ var _ = check.Suite(&canalBatchSuite{
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
-		StartTs:  2,
-		CommitTs: 3,
+		StartTs:  3,
+		CommitTs: 4,
 		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 	}}, {}},
