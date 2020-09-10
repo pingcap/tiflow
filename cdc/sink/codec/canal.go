@@ -343,7 +343,7 @@ func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent)
 
 // AppendResolvedEvent appends a resolved event to the encoder
 func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	if ts <= d.resolvedTs {
+	if ts < d.resolvedTs {
 		return EncoderNoOperation, nil
 	}
 	d.resolvedTs = ts
@@ -375,7 +375,7 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 			for _, row := range txn.Rows {
 				err := canalMessageEncoder.appendRowChangedEvent(row)
 				if err != nil {
-					panic(err)
+					log.Fatal("Error when append row change event", zap.Error(err))
 				}
 			}
 			d.size -= len(txn.Rows)
@@ -392,6 +392,7 @@ func (d *CanalEventBatchEncoder) MixedBuild(withVersion bool) []byte {
 
 //Size implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Size() int {
+
 	return d.size
 }
 
@@ -432,14 +433,33 @@ func (d *canalMessageEncoder) appendRowChangedEvent(e *model.RowChangedEvent) er
 func (d *canalMessageEncoder) encodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
 	entry, err := d.entryBuilder.FromDdlEvent(e)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+		return nil, errors.Trace(err)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	d.messages.Messages = append(d.messages.Messages, b)
-	return d.build(), nil
+
+	messages := new(canal.Messages)
+	messages.Messages = append(messages.Messages, b)
+	b, err = messages.Marshal()
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+	}
+
+	packet := &canal.Packet{
+		VersionPresent: &canal.Packet_Version{
+			Version: CanalPacketVersion,
+		},
+		Type: canal.PacketType_MESSAGES,
+	}
+	packet.Body = b
+	b, err = packet.Marshal()
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+	}
+
+	return NewMQMessage(nil, b, e.CommitTs), nil
 }
 
 func (d *canalMessageEncoder) build() *MQMessage {

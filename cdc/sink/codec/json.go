@@ -413,9 +413,6 @@ func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, e
 
 // UpdateResolvedTs implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) UpdateResolvedTs(ts uint64) (EncoderResult, error) {
-	if d.Size() == 0 {
-		return EncoderNoOperation, nil
-	}
 	// nothing for now
 	return EncoderNeedAsyncWrite, nil
 }
