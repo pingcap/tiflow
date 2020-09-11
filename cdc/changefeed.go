@@ -846,3 +846,15 @@ func (c *changeFeed) pullDDLJob() error {
 	}
 	return nil
 }
+
+func (c *changeFeed) Close() {
+	err := c.ddlHandler.Close()
+	if err != nil {
+		log.Warn("failed to close ddl handler", zap.Error(err))
+	}
+	err = c.sink.Close()
+	if err != nil {
+		log.Warn("failed to close owner sink", zap.Error(err))
+	}
+	log.Info("changefeed closed", zap.String("id", c.id))
+}
