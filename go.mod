@@ -50,3 +50,5 @@ require (
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
+
+replace github.com/pingcap/tidb-tools => github.com/amyangfei/tidb-tools v4.0.4-0.20200911071102-80b1881cb8e0+incompatible
