@@ -16,6 +16,7 @@ package codec
 import (
 	"fmt"
 	"github.com/pingcap/ticdc/cdc/sink/common"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -379,9 +380,10 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 				}
 			}
 			d.size -= len(txn.Rows)
-			messages = append(messages, canalMessageEncoder.build())
+			messages = append(messages, canalMessageEncoder.build(txn.CommitTs))
 		}
 	}
+	sort.Slice(messages, func(i, j int) bool { return messages[i].Ts < messages[j].Ts })
 	return messages
 }
 
@@ -461,7 +463,7 @@ func (d *canalMessageEncoder) encodeDDLEvent(e *model.DDLEvent) (*MQMessage, err
 	return NewMQMessage(nil, b, e.CommitTs), nil
 }
 
-func (d *canalMessageEncoder) build() *MQMessage {
+func (d *canalMessageEncoder) build(commitTs uint64) *MQMessage {
 	err := d.refreshPacketBody()
 	if err != nil {
 		log.Fatal("Error when generating Canal packet", zap.Error(err))
@@ -470,7 +472,7 @@ func (d *canalMessageEncoder) build() *MQMessage {
 	if err != nil {
 		log.Fatal("Error when serializing Canal packet", zap.Error(err))
 	}
-	ret := NewMQMessage(nil, value, 0)
+	ret := NewMQMessage(nil, value, commitTs)
 	d.messages.Reset()
 	return ret
 }

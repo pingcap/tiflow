@@ -59,7 +59,6 @@ func (c *UnresolvedTxnCache) Append(row *model.RowChangedEvent) {
 
 // Resolved returns resolved txns according to resolvedTs
 func (c *UnresolvedTxnCache) Resolved(resolvedTs uint64) map[model.TableID][]*model.SingleTableTxn {
-
 	if len(c.unresolvedTxns) == 0 {
 		return nil
 	}
