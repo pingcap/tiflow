@@ -37,6 +37,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
+	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
@@ -1009,13 +1010,13 @@ func isIgnorableDDLError(err error) bool {
 	}
 }
 
-func getSQLErrCode(err error) (errors.ErrCode, bool) {
+func getSQLErrCode(err error) (terror.ErrCode, bool) {
 	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
 	if !ok {
 		return -1, false
 	}
 
-	return errors.ErrCode(mysqlErr.Number), true
+	return terror.ErrCode(mysqlErr.Number), true
 }
 
 func buildColumnList(names []string) string {
