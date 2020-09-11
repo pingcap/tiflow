@@ -17,6 +17,7 @@ require (
 	github.com/google/btree v1.0.0
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/websocket v1.4.1 // indirect
+	github.com/grandecola/mmap v0.6.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/integralist/go-findroot v0.0.0-20160518114804-ac90681525dc
 	github.com/jarcoal/httpmock v1.0.5
