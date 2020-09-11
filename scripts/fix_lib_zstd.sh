@@ -3,6 +3,7 @@
 user=$(whoami)
 GOOS=$(go env GOOS)
 GOARCH=$(go env GOARCH)
+GOPATH=$(go env GOPATH)
 module="github.com/valyala/gozstd@v1.7.0"
 
 GO111MODULE=on go mod download ${module}

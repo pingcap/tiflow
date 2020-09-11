@@ -35,7 +35,8 @@ import (
 	"go.uber.org/zap"
 )
 
-const syncInterval = time.Minute * 10 //Interval for set syncpoint, todo: parameterization
+//const syncInterval = time.Minute * 10 //Interval for set syncpoint, todo: parameterization
+const syncInterval = time.Second * 10 //Interval for set syncpoint, todo: parameterization
 
 type tableIDMap = map[model.TableID]struct{}
 
@@ -719,12 +720,16 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	}
 
 	//if (c.status.ResolvedTs == c.status.CheckpointTs && (c.updateResolvedTs == false || c.status.ResolvedTs == c.ddlResolvedTs)) || c.status.ResolvedTs == 0 {
-	if (c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs) || c.status.ResolvedTs == 0 {
+	if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
 		log.Debug("achive the sync point", zap.Uint64("ResolvedTs", c.status.ResolvedTs))
 		//c.syncPointTs = c.targetTs //恢复syncPointTs，使得ResoledTs可以继续推进
 		log.Info("achive the sync point with timer", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
 		c.updateResolvedTs = true
 		c.sinkSyncpoint(ctx)
+	}
+
+	if c.status.ResolvedTs == 0 {
+		c.updateResolvedTs = true
 	}
 
 	if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs {
@@ -917,6 +922,6 @@ func (c *changeFeed) sinkSyncpoint(ctx context.Context) error {
 	}
 	tx.Exec("insert into TiCDC.syncpoint(cf, primary_ts, secondary_ts) VALUES (?,?,?)", c.id, c.status.CheckpointTs, slaveTs)
 	//tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, 0)
-	tx.Commit() //TODO 处理错误
+	tx.Commit() //TODO deal with error
 	return nil
 }
