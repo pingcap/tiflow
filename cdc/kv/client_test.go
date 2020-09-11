@@ -202,7 +202,6 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 
 func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	wg := &sync.WaitGroup{}
 	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
 	server2, addr := newMockService(ctx, c, ch2, wg)
@@ -211,6 +210,8 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 		server2.Stop()
 		wg.Wait()
 	}()
+	// Cancel first, and then close the server.
+	defer cancel()
 
 	cluster := mocktikv.NewCluster()
 	mvccStore := mocktikv.MustNewMVCCStore()
@@ -263,7 +264,7 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	ch2 <- largeMsg
 	select {
 	case event = <-eventCh:
-	case <-time.After(time.Second):
+	case <-time.After(30 * time.Second): // Send 128MB object may costs lots of time.
 		c.Fatalf("recving message takes too long")
 	}
 	c.Assert(len(event.Val.Value), check.Equals, largeValSize)
