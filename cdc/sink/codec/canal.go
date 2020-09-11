@@ -318,7 +318,6 @@ func NewCanalEntryBuilder(forceHkPk bool) *canalEntryBuilder {
 // CanalEventBatchEncoder encodes the events into the byte of a batch into.
 type CanalEventBatchEncoder struct {
 	forceHkPk  bool
-	size       int
 	resolvedTs uint64
 	txnCache   *common.UnresolvedTxnCache
 }
@@ -337,7 +336,6 @@ func (d *CanalEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, e
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
-	d.size++
 	d.txnCache.Append(e)
 	return EncoderNoOperation, nil
 }
@@ -348,9 +346,6 @@ func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, 
 		return EncoderNoOperation, nil
 	}
 	d.resolvedTs = ts
-	if d.Size() == 0 {
-		return EncoderNoOperation, nil
-	}
 	return EncoderNeedAsyncWrite, nil
 }
 
@@ -362,9 +357,6 @@ func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, 
 
 // Build implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Build() []*MQMessage {
-	if d.Size() == 0 {
-		return nil
-	}
 	resolvedTxns := d.txnCache.Resolved(d.resolvedTs)
 	if len(resolvedTxns) == 0 {
 		return nil
@@ -379,7 +371,6 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 					log.Fatal("Error when append row change event", zap.Error(err))
 				}
 			}
-			d.size -= len(txn.Rows)
 			messages = append(messages, canalMessageEncoder.build(txn.CommitTs))
 		}
 	}
@@ -394,7 +385,8 @@ func (d *CanalEventBatchEncoder) MixedBuild(withVersion bool) []byte {
 
 //Size implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Size() int {
-	return d.size
+	// FIXME encoder with transaction support is hard to calculate the encoded buffer size
+	return -1
 }
 
 // Reset implements the EventBatchEncoder interface
