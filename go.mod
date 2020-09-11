@@ -31,7 +31,7 @@ require (
 	github.com/pingcap/log v0.0.0-20200828042413-fce0951f1463
 	github.com/pingcap/parser v0.0.0-20200911054040-258297116c4b
 	github.com/pingcap/tidb v1.1.0-beta.0.20200911063238-51d365fc45fd
-	github.com/pingcap/tidb-tools v4.0.6-0.20200909062246-98d05bb77362+incompatible
+	github.com/pingcap/tidb-tools v4.0.6-0.20200828085514-03575b185007+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
@@ -50,5 +50,3 @@ require (
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
-
-replace github.com/pingcap/tidb-tools => github.com/amyangfei/tidb-tools v4.0.4-0.20200911071102-80b1881cb8e0+incompatible
