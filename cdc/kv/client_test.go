@@ -15,7 +15,6 @@ package kv
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -93,7 +92,7 @@ func (s *mockChangeDataService) EventFeed(server cdcpb.ChangeData_EventFeedServe
 
 func newMockService(ctx context.Context, c *check.C, ch chan *cdcpb.ChangeDataEvent, wg *sync.WaitGroup) (grpcServer *grpc.Server, addr string) {
 	lc := &net.ListenConfig{}
-	lis, err := lc.Listen(ctx, "tcp", fmt.Sprintf("127.0.0.1:0"))
+	lis, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
 	c.Assert(err, check.IsNil)
 	addr = lis.Addr().String()
 	grpcServer = grpc.NewServer()
