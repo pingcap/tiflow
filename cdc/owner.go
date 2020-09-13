@@ -503,10 +503,20 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			continue
 		}
 		o.changeFeeds[changeFeedID] = newCf
-		//create the sync table
-		newCf.createSynctable()
-		//start SyncPeriod for create the sync point
-		newCf.startSyncPeriod(ctx)
+		if newCf.info.SyncPoint {
+			log.Info("syncpoint is on", zap.Bool("syncpoint", newCf.info.SyncPoint))
+			//create the sync table
+			newCf.createSynctable()
+			//start SyncPeriod for create the sync point
+			syncInterval, err := time.ParseDuration(newCf.info.SyncInterval)
+			if err != nil {
+				syncInterval = defaultSyncInterval
+			}
+			newCf.startSyncPeriod(ctx, syncInterval)
+		} else {
+			log.Info("syncpoint is off", zap.Bool("syncpoint", newCf.info.SyncPoint))
+		}
+
 		delete(o.stoppedFeeds, changeFeedID)
 	}
 	o.adminJobsLock.Lock()

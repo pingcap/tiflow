@@ -97,7 +97,7 @@ function run() {
 
     
     SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1"
-    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --sync-point --sync-interval=10s
 
     goSql
 

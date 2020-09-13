@@ -230,15 +230,17 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		}
 	}
 	info := &model.ChangeFeedInfo{
-		SinkURI:    sinkURI,
-		Opts:       make(map[string]string),
-		CreateTime: time.Now(),
-		StartTs:    startTs,
-		TargetTs:   targetTs,
-		Config:     cfg,
-		Engine:     model.SortEngine(sortEngine),
-		SortDir:    sortDir,
-		State:      model.StateNormal,
+		SinkURI:      sinkURI,
+		Opts:         make(map[string]string),
+		CreateTime:   time.Now(),
+		StartTs:      startTs,
+		TargetTs:     targetTs,
+		Config:       cfg,
+		Engine:       model.SortEngine(sortEngine),
+		SortDir:      sortDir,
+		State:        model.StateNormal,
+		SyncPoint:    syncPoint,
+		SyncInterval: syncInterval,
 	}
 
 	tz, err := util.GetTimezone(timezone)
@@ -346,6 +348,8 @@ func newCreateChangefeedCommand() *cobra.Command {
 	changefeedConfigVariables(command)
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 	command.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
+	command.PersistentFlags().BoolVar(&syncPoint, "sync-point", false, "(Expremental) Set and Record syncpoint in replication(default off)")
+	command.PersistentFlags().StringVar(&syncInterval, "sync-interval", "10m", "(Expremental) Set the interval for syncpoint in replication(default 10min)")
 
 	return command
 }

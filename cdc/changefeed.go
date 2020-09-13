@@ -35,8 +35,7 @@ import (
 	"go.uber.org/zap"
 )
 
-//const syncInterval = time.Minute * 10 //Interval for set syncpoint, todo: parameterization
-const syncInterval = time.Second * 10 //Interval for set syncpoint, todo: parameterization
+const defaultSyncInterval = time.Minute * 10 //default Interval for record syncpoint
 
 type tableIDMap = map[model.TableID]struct{}
 
@@ -719,23 +718,26 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		}
 	}
 
-	//if (c.status.ResolvedTs == c.status.CheckpointTs && (c.updateResolvedTs == false || c.status.ResolvedTs == c.ddlResolvedTs)) || c.status.ResolvedTs == 0 {
-	if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
-		log.Debug("achive the sync point", zap.Uint64("ResolvedTs", c.status.ResolvedTs))
-		//c.syncPointTs = c.targetTs //恢复syncPointTs，使得ResoledTs可以继续推进
-		log.Info("achive the sync point with timer", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
-		c.updateResolvedTs = true
-		c.sinkSyncpoint(ctx)
-	}
+	//sync-point on
+	if c.info.SyncPoint {
+		//if (c.status.ResolvedTs == c.status.CheckpointTs && (c.updateResolvedTs == false || c.status.ResolvedTs == c.ddlResolvedTs)) || c.status.ResolvedTs == 0 {
+		if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
+			log.Debug("achive the sync point", zap.Uint64("ResolvedTs", c.status.ResolvedTs))
+			//c.syncPointTs = c.targetTs //恢复syncPointTs，使得ResoledTs可以继续推进
+			log.Info("achive the sync point with timer", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
+			c.updateResolvedTs = true
+			c.sinkSyncpoint(ctx)
+		}
 
-	if c.status.ResolvedTs == 0 {
-		c.updateResolvedTs = true
-	}
+		if c.status.ResolvedTs == 0 {
+			c.updateResolvedTs = true
+		}
 
-	if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs {
-		log.Info("achive the sync point with ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
-		c.sinkSyncpoint(ctx)
-		c.ddlTs = 0
+		if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs {
+			log.Info("achive the sync point with ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
+			c.sinkSyncpoint(ctx)
+			c.ddlTs = 0
+		}
 	}
 
 	if len(c.taskPositions) < len(c.taskStatus) {
@@ -831,15 +833,21 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	var tsUpdated bool
 
-	if c.updateResolvedTs && minResolvedTs > c.status.ResolvedTs {
-		//prevResolvedTs := c.status.ResolvedTs
+	//syncpoint on
+	if c.info.SyncPoint {
+		if c.updateResolvedTs && minResolvedTs > c.status.ResolvedTs {
+			//prevResolvedTs := c.status.ResolvedTs
+			c.status.ResolvedTs = minResolvedTs
+			tsUpdated = true
+			/*if prevResolvedTs == c.status.CheckpointTs || prevResolvedTs == 0 {
+				//到达sync point
+				//todo 需要重新开始启动计时
+				c.startTimer <- true
+			}*/
+		}
+	} else if minResolvedTs > c.status.ResolvedTs {
 		c.status.ResolvedTs = minResolvedTs
 		tsUpdated = true
-		/*if prevResolvedTs == c.status.CheckpointTs || prevResolvedTs == 0 {
-			//到达sync point
-			//todo 需要重新开始启动计时
-			c.startTimer <- true
-		}*/
 	}
 
 	if minCheckpointTs > c.status.CheckpointTs {
@@ -882,9 +890,10 @@ func (c *changeFeed) pullDDLJob() error {
 }
 
 // startSyncPeriod start a timer for every changefeed to create sync point by time
-func (c *changeFeed) startSyncPeriod(ctx context.Context) {
+func (c *changeFeed) startSyncPeriod(ctx context.Context, interval time.Duration) {
+	log.Debug("sync ticker start", zap.Duration("sync-interval", interval))
 	go func(ctx context.Context) {
-		ticker := time.NewTicker(syncInterval)
+		ticker := time.NewTicker(interval)
 		for {
 			select {
 			case <-ctx.Done():

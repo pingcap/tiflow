@@ -72,6 +72,9 @@ var (
 	captureID    string
 	interval     uint
 
+	syncPoint    bool
+	syncInterval string
+
 	defaultContext context.Context
 )
 
