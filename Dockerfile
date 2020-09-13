@@ -2,7 +2,6 @@ FROM golang:1.14-alpine as builder
 RUN apk add --no-cache git make bash
 WORKDIR /go/src/github.com/pingcap/ticdc
 COPY . .
-RUN go env -w GO111MODULE=on && go env -w GOPROXY=https://goproxy.cn,direct
 RUN make
 
 FROM alpine:3.12

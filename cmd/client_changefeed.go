@@ -311,6 +311,8 @@ func changefeedConfigVariables(command *cobra.Command) {
 	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
 	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
 	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
+	command.PersistentFlags().BoolVar(&syncPoint, "sync-point", false, "(Expremental) Set and Record syncpoint in replication(default off)")
+	command.PersistentFlags().StringVar(&syncInterval, "sync-interval", "10m", "(Expremental) Set the interval for syncpoint in replication(default 10min)")
 }
 
 func newCreateChangefeedCommand() *cobra.Command {
@@ -348,8 +350,6 @@ func newCreateChangefeedCommand() *cobra.Command {
 	changefeedConfigVariables(command)
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 	command.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
-	command.PersistentFlags().BoolVar(&syncPoint, "sync-point", false, "(Expremental) Set and Record syncpoint in replication(default off)")
-	command.PersistentFlags().StringVar(&syncInterval, "sync-interval", "10m", "(Expremental) Set the interval for syncpoint in replication(default 10min)")
 
 	return command
 }

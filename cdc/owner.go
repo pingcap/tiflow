@@ -353,6 +353,7 @@ func (o *Owner) newChangeFeed(
 		updateResolvedTs:  true,
 		startTimer:        make(chan bool),
 		syncDB:            syncDB,
+		syncCancel:        nil,
 		taskStatus:        processorsInfos,
 		taskPositions:     taskPositions,
 		etcdCli:           o.etcdClient,
@@ -502,21 +503,26 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 				zap.String("changefeed", changeFeedID), zap.Error(err))
 			continue
 		}
-		o.changeFeeds[changeFeedID] = newCf
+
 		if newCf.info.SyncPoint {
 			log.Info("syncpoint is on", zap.Bool("syncpoint", newCf.info.SyncPoint))
 			//create the sync table
-			newCf.createSynctable()
+			err := newCf.createSynctable(ctx)
+			if err != nil {
+				return err
+			}
+
 			//start SyncPeriod for create the sync point
 			syncInterval, err := time.ParseDuration(newCf.info.SyncInterval)
 			if err != nil {
 				syncInterval = defaultSyncInterval
 			}
-			newCf.startSyncPeriod(ctx, syncInterval)
+			newCf.startSyncPointTicker(ctx, syncInterval)
 		} else {
 			log.Info("syncpoint is off", zap.Bool("syncpoint", newCf.info.SyncPoint))
 		}
 
+		o.changeFeeds[changeFeedID] = newCf
 		delete(o.stoppedFeeds, changeFeedID)
 	}
 	o.adminJobsLock.Lock()
@@ -798,6 +804,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			cf.stopSyncPointTicker()
 		case model.AdminRemove, model.AdminFinish:
 			if cf != nil {
 				err := o.dispatchJob(ctx, job)
@@ -832,6 +839,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			cf.stopSyncPointTicker()
 		case model.AdminResume:
 			// resume changefeed must read checkpoint from ChangeFeedStatus
 			if errors.Cause(err) == model.ErrChangeFeedNotExists {
@@ -862,6 +870,13 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			err = o.etcdClient.SaveChangeFeedInfo(ctx, cfInfo, job.CfID)
 			if err != nil {
 				return errors.Trace(err)
+			}
+			if cf.info.SyncPoint {
+				syncInterval, err := time.ParseDuration(cf.info.SyncInterval)
+				if err != nil {
+					syncInterval = defaultSyncInterval
+				}
+				cf.startSyncPointTicker(ctx, syncInterval)
 			}
 		}
 		// TODO: we need a better admin job workflow. Supposing uses create

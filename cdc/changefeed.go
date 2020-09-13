@@ -87,6 +87,7 @@ type changeFeed struct {
 	updateResolvedTs bool
 	startTimer       chan bool
 	syncDB           *sql.DB
+	syncCancel       context.CancelFunc
 	taskStatus       model.ProcessorsInfos
 	taskPositions    map[model.CaptureID]*model.TaskPosition
 	filter           *filter.Filter
@@ -722,8 +723,6 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if c.info.SyncPoint {
 		//if (c.status.ResolvedTs == c.status.CheckpointTs && (c.updateResolvedTs == false || c.status.ResolvedTs == c.ddlResolvedTs)) || c.status.ResolvedTs == 0 {
 		if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
-			log.Debug("achive the sync point", zap.Uint64("ResolvedTs", c.status.ResolvedTs))
-			//c.syncPointTs = c.targetTs //恢复syncPointTs，使得ResoledTs可以继续推进
 			log.Info("achive the sync point with timer", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
 			c.updateResolvedTs = true
 			c.sinkSyncpoint(ctx)
@@ -906,12 +905,31 @@ func (c *changeFeed) startSyncPeriod(ctx context.Context, interval time.Duration
 }
 
 //createSynctable create a sync table to record the
-func (c *changeFeed) createSynctable() {
+func (c *changeFeed) createSynctable(ctx context.Context) error {
 	database := "TiCDC"
-	c.syncDB.Exec("CREATE DATABASE IF NOT EXISTS " + database)
-	c.syncDB.Exec("USE " + database)
-	c.syncDB.Exec("CREATE TABLE  IF NOT EXISTS syncpoint (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `primary_ts` ) )")
-	// todo err 处理
+	tx, err := c.syncDB.BeginTx(ctx, nil)
+	if err != nil {
+		log.Info("create sync table: begin Tx fail")
+		return err
+	}
+	_, err = tx.Exec("CREATE DATABASE IF NOT EXISTS " + database)
+	//_,err := c.syncDB.Exec("CREATE DATABASE IF NOT EXISTS " + database)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	_, err = tx.Exec("USE " + database)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS syncpoint (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `primary_ts` ) )")
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	err = tx.Commit()
+	return err
 }
 
 //sinkSyncpoint record the syncpoint(a map with ts) in downstream db
@@ -933,4 +951,17 @@ func (c *changeFeed) sinkSyncpoint(ctx context.Context) error {
 	//tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, 0)
 	tx.Commit() //TODO deal with error
 	return nil
+}
+
+func (c *changeFeed) stopSyncPointTicker() {
+	if c.syncCancel != nil {
+		c.syncCancel()
+		c.syncCancel = nil
+	}
+}
+
+func (c *changeFeed) startSyncPointTicker(ctx context.Context, interval time.Duration) {
+	var syncCtx context.Context
+	syncCtx, c.syncCancel = context.WithCancel(ctx)
+	c.startSyncPeriod(syncCtx, interval)
 }
