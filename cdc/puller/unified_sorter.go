@@ -1,81 +1,59 @@
 package puller
 
 import (
+	"bufio"
+	"encoding"
+	"go.uber.org/zap"
+	"os"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-	"io"
-	"os"
-	"syscall"
+	"github.com/pingcap/ticdc/cdc/model"
 )
 
-import "github.com/grandecola/mmap"
+const fileBufferSize = 16 * 1024 * 1024
 
-type persister interface {
-	io.ReaderAt
-	io.WriterAt
-	io.Closer
+type sorterBackEnd interface {
+	readNext(*model.PolymorphicEvent) error
+	writeNext(event *model.PolymorphicEvent) error
 }
 
-type filePersister struct {
-	file *mmap.File
+type fileSorterBackEnd struct {
+	f *os.File
+	buf *bufio.ReadWriter
+	serde serializerDeserializer
 	name string
 }
 
-func newFilePersister(fileName string, size int64) (*filePersister, error) {
-	fd, err := os.Create(fileName)
+type serializerDeserializer interface {
+	encoding.BinaryMarshaler
+	encoding.BinaryUnmarshaler
+}
+
+func newFileSorterBackEnd(fileName string, serde serializerDeserializer) (*fileSorterBackEnd, error) {
+	f, err := os.Open(fileName)
 	if err != nil {
 		return nil, errors.AddStack(err)
 	}
 
-	err = fd.Truncate(size)
-	if err != nil {
-		return nil, errors.AddStack(err)
-	}
+	reader := bufio.NewReaderSize(f, fileBufferSize)
+	writer := bufio.NewWriterSize(f, fileBufferSize)
+	buf := bufio.NewReadWriter(reader, writer)
 
-	mappedFile, err := mmap.NewSharedFileMmap(fd, 0, int(size), syscall.PROT_READ | syscall.PROT_WRITE)
-	if err != nil {
-		return nil, errors.AddStack(err)
-	}
-
-	err = mappedFile.Advise(syscall.MADV_SEQUENTIAL)
-	if err != nil {
-		return nil, errors.AddStack(err)
-	}
-
-	log.Debug("mmapped file", zap.String("file-name", fileName), zap.Int64("size", size))
-
-	return &filePersister{
-		file: mappedFile,
-		name: fileName,
-	}, nil
+	log.Debug("new FileSorterBackEnd created", zap.String("filename", fileName))
+	return &fileSorterBackEnd{
+		f: f,
+		buf: buf,
+		serde: serde,
+		name: fileName}, nil
 }
 
-func (f *filePersister) ReadAt(p []byte, offset int64) (n int, err error) {
-	return f.file.ReadAt(p, offset)
+func (f *fileSorterBackEnd) readNext(*model.PolymorphicEvent) error {
+	
 }
 
-func (f *filePersister) WriteAt(p []byte, offset int64) (n int, err error) {
-	return f.file.WriteAt(p, offset)
+func (f *fileSorterBackEnd) writeNext(event *model.PolymorphicEvent) error {
+	panic("implement me")
 }
-
-func (f *filePersister) Close() error {
-	err := f.file.Unmap()
-	if err != nil {
-		return err
-	}
-	log.Debug("closed file", zap.String("file-name", f.name))
-	return err
-}
-
-func (f *filePersister) Flush() error {
-	err := f.file.Flush(syscall.MS_ASYNC)
-	if err != nil {
-		return err
-	}
-	log.Debug("flushed file", zap.String("file-name", f.name))
-	return err
-}
-
 
 
