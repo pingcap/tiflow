@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package version
 
 import (
 	"context"
@@ -128,4 +128,18 @@ func (s *checkSuite) TestCompareVersion(c *check.C) {
 		Compare(*semver.New("3.0.5-beta.12")), check.Equals, 0)
 	c.Assert(semver.New(removeVAndHash("v2.1.0-rc.1-7-g38c939f-dirty")).
 		Compare(*semver.New("2.1.0-rc.1")), check.Equals, 0)
+}
+
+func (s *checkSuite) TestReleaseSemver(c *check.C) {
+	cases := []struct{ releaseVersion, releaseSemver string }{
+		{"None", ""},
+		{"HEAD", ""},
+		{"v4.0.5", "4.0.5"},
+		{"v4.0.2-152-g62d7075-dev", "4.0.2"},
+	}
+
+	for _, cs := range cases {
+		ReleaseVersion = cs.releaseVersion
+		c.Assert(ReleaseSemver(), check.Equals, cs.releaseSemver, check.Commentf("%v", cs))
+	}
 }
