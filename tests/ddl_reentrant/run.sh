@@ -33,7 +33,7 @@ ddls=("create database ddl_reentrant" false
 function complete_ddls() {
     tidb_build_branch=$(mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -e \
         "select tidb_version()\G"|grep "Git Branch"|awk -F: '{print $(NF)}'|tr -d " ")
-    if [[ "$tidb_build_branch" == "release-4.0" ]] || [[ $tidb_build_branch =~ .*tags/v4.0.* ]]; then
+    if [[ ! $tidb_build_branch =~ master ]]; then
         echo "skip some DDLs in tidb v4.0.x"
     else
         # DDLs that are supportted since 5.0
