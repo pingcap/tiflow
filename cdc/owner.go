@@ -871,13 +871,6 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if cf.info.SyncPoint {
-				syncInterval, err := time.ParseDuration(cf.info.SyncInterval)
-				if err != nil {
-					syncInterval = defaultSyncInterval
-				}
-				cf.startSyncPointTicker(ctx, syncInterval)
-			}
 		}
 		// TODO: we need a better admin job workflow. Supposing uses create
 		// multiple admin jobs to a specific changefeed at the same time, such
