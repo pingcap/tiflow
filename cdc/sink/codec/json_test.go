@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
-
 	"github.com/pingcap/ticdc/cdc/model"
 )
 

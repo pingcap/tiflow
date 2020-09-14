@@ -16,7 +16,6 @@ package kafka
 import (
 	"context"
 	"fmt"
-	"go.uber.org/zap"
 	"regexp"
 	"strings"
 	"sync"
@@ -27,11 +26,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
 )
 
 // Config stores the Kafka configuration

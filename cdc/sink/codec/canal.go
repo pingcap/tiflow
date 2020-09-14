@@ -15,7 +15,6 @@ package codec
 
 import (
 	"fmt"
-	"github.com/pingcap/ticdc/cdc/sink/common"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,8 +27,8 @@ import (
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	parser_types "github.com/pingcap/parser/types"
-
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/common"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	"golang.org/x/text/encoding"

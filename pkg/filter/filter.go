@@ -15,7 +15,6 @@ package filter
 
 import (
 	"github.com/pingcap/parser/model"
-
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
 

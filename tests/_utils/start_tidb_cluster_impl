@@ -221,9 +221,7 @@ run_sql "select tidb_version();set @@global.tidb_enable_clustered_index=0;" ${DO
 sleep 2
 
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-run_sql "update mysql.tidb set variable_value='false' where variable_name='tikv_gc_enable';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-run_sql "update mysql.tidb set variable_value='false' where variable_name='tikv_gc_enable';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 cat - >"$OUT_DIR/tiflash-config.toml" <<EOF
 tmp_path = "${OUT_DIR}/tiflash/tmp"

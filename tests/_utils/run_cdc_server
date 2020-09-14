@@ -85,7 +85,7 @@ pid=$(ps -e | grep -m1 run_cdc_server | awk '{print $1}'|tr -d '[:space:]')
 else
     echo "unkonwn system" && false
 fi
-
+# Uncomment to turn on grpc versbose log.
 # GRPC_GO_LOG_VERBOSITY_LEVEL=99 GRPC_GO_LOG_SEVERITY_LEVEL=debug \
 
 if [[ "$restart" == "true" ]]; then

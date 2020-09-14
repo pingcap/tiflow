@@ -17,9 +17,8 @@ import (
 	"strings"
 
 	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/ticdc/cdc/model"
+	"go.uber.org/zap"
 )
 
 // EventBatchEncoder is an abstraction for events encoder

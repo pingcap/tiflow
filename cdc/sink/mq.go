@@ -110,7 +110,7 @@ func newMqSink(
 		}
 	case codec.ProtocolCanal:
 		if !config.EnableOldValue {
-			return nil, errors.New("enable-old-value must be turned on when sink type is canal")
+			log.Warn("mqSink View all updates as inserts if enable old value is not enabled")
 		}
 		var forceHkPk bool
 		forceHKeyToPKey, ok := opts["force-handle-key-pkey"]
@@ -287,7 +287,6 @@ const batchSizeLimit = 4 * 1024 * 1024 // 4MB
 func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 	input := k.partitionInput[partition]
 	encoder := k.newEncoder()
-
 	tick := time.NewTicker(500 * time.Millisecond)
 	defer tick.Stop()
 
@@ -314,9 +313,6 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 				if err != nil {
 					return 0, err
 				}
-			}
-			if k.protocol == codec.ProtocolCanal {
-				thisBatchSize -= encoder.Size()
 			}
 			log.Debug("MQSink flushed", zap.Int("thisBatchSize", thisBatchSize))
 			return thisBatchSize, nil
