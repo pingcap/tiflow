@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -70,7 +71,7 @@ func (s *Server) startStatusHTTP() error {
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return err
+		return cerror.WrapError(cerror.ErrServeHTTP, err)
 	}
 	go func() {
 		log.Info("status http server is running", zap.String("addr", addr))
@@ -80,7 +81,7 @@ func (s *Server) startStatusHTTP() error {
 			err = s.statusServer.Serve(ln)
 		}
 		if err != nil && err != http.ErrServerClosed {
-			log.Error("status server error", zap.Error(err))
+			log.Error("status server error", zap.Error(cerror.WrapError(cerror.ErrServeHTTP, err)))
 		}
 	}()
 	return nil

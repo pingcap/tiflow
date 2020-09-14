@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
-	pd "github.com/pingcap/pd/v4/client"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
@@ -40,6 +39,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/prometheus/client_golang/prometheus"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -56,8 +56,11 @@ const (
 	tikvRequestMaxBackoff     = 20000   // Maximum total sleep time(in ms)
 	grpcInitialWindowSize     = 1 << 30 // The value for initial window size on a stream
 	grpcInitialConnWindowSize = 1 << 30 // The value for initial window size on a connection
-	grpcInitialMaxRecvMsgSize = 1 << 30 // The maximum message size the client can receive
+	grpcMaxCallRecvMsgSize    = 1 << 30 // The maximum message size the client can receive
 	grpcConnCount             = 10
+
+	// The threshold of warning a message is too large. TiKV split events into 6MB per-message.
+	warnRecvMsgSizeThreshold = 12 * 1024 * 1024
 )
 
 type singleRegionInfo struct {
@@ -197,7 +200,7 @@ func (a *connArray) Init(ctx context.Context) error {
 			grpcTLSOption,
 			grpc.WithInitialWindowSize(grpcInitialWindowSize),
 			grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
-			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcInitialMaxRecvMsgSize)),
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(grpcMaxCallRecvMsgSize)),
 			grpc.WithConnectParams(grpc.ConnectParams{
 				Backoff: gbackoff.Config{
 					BaseDelay:  time.Second,
@@ -212,7 +215,6 @@ func (a *connArray) Init(ctx context.Context) error {
 				Timeout:             3 * time.Second,
 				PermitWithoutStream: true,
 			}),
-			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(128*1024*1024)),
 		)
 		cancel()
 
@@ -1070,6 +1072,17 @@ func (s *eventFeedSession) receiveFromStream(
 			// Do no return error but gracefully stop the goroutine here. Then the whole job will not be canceled and
 			// connection will be retried.
 			return nil
+		}
+
+		size := cevent.Size()
+		if size > warnRecvMsgSizeThreshold {
+			regionCount := 0
+			if cevent.ResolvedTs != nil {
+				regionCount = len(cevent.ResolvedTs.Regions)
+			}
+			log.Warn("change data event size too large",
+				zap.Int("size", size), zap.Int("event length", len(cevent.Events)),
+				zap.Int("resolved region count", regionCount))
 		}
 
 		for _, event := range cevent.Events {

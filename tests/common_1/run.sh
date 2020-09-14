@@ -33,7 +33,7 @@ function run() {
     run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     tidb_build_branch=$(mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} -e \
         "select tidb_version()\G"|grep "Git Branch"|awk -F: '{print $(NF)}'|tr -d " ")
-    if [[ "$tidb_build_branch" == "release-4.0" ]] || [[ $tidb_build_branch =~ .*tags/v4.0.* ]]; then
+    if [[ ! $tidb_build_branch =~ ^(master)$ ]]; then
         echo "skip some SQLs in tidb v4.0.x"
     else
         run_sql_file $CUR/data/test_v5.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}

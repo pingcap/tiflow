@@ -54,7 +54,7 @@ func (s *etcdSuite) SetUpTest(c *check.C) {
 		DialTimeout: 3 * time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	s.client = NewCDCEtcdClient(client)
+	s.client = NewCDCEtcdClient(context.TODO(), client)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.e.Err(), func(e error) { c.Log(e) })
 }
@@ -416,7 +416,7 @@ func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
 	leases := make(map[string]int64)
 
 	for _, cinfo := range testCases {
-		sess, err := concurrency.NewSession(s.client.Client, concurrency.WithTTL(10))
+		sess, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(10))
 		c.Assert(err, check.IsNil)
 		err = s.client.PutCaptureInfo(ctx, cinfo, sess.Lease())
 		c.Assert(err, check.IsNil)

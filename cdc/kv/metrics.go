@@ -75,6 +75,13 @@ var (
 			Help:      "The number of region in one batch resolved ts event",
 			Buckets:   prometheus.ExponentialBuckets(2, 2, 16),
 		}, []string{"capture", "changefeed"})
+	etcdRequestCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "etcd",
+			Name:      "request_count",
+			Help:      "request counter of etcd operation",
+		}, []string{"type", "capture"})
 )
 
 // InitMetrics registers all metrics in the kv package
@@ -87,4 +94,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(sendEventCounter)
 	registry.MustRegister(clientChannelSize)
 	registry.MustRegister(batchResolvedEventSize)
+	registry.MustRegister(etcdRequestCounter)
 }
