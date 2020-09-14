@@ -221,6 +221,7 @@ func newProcessor(
 		localResolvedNotifier: localResolvedNotifier,
 		localResolvedReceiver: localResolvedNotifier.NewReceiver(50 * time.Millisecond),
 
+		checkpointTs:              checkpointTs,
 		localCheckpointTsNotifier: localCheckpointTsNotifier,
 		localCheckpointTsReceiver: localCheckpointTsNotifier.NewReceiver(50 * time.Millisecond),
 
@@ -406,6 +407,10 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			}
 		case <-p.localCheckpointTsReceiver.C:
 			checkpointTs := atomic.LoadUint64(&p.checkpointTs)
+			if checkpointTs == 0 {
+				log.Warn("0 is not a valid checkpointTs")
+				continue
+			}
 			phyTs := oracle.ExtractPhysical(checkpointTs)
 			// It is more accurate to get tso from PD, but in most cases we have
 			// deployed NTP service, a little bias is acceptable here.

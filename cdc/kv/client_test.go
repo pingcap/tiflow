@@ -15,7 +15,6 @@ package kv
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -91,10 +90,12 @@ func (s *mockChangeDataService) EventFeed(server cdcpb.ChangeData_EventFeedServe
 	return nil
 }
 
-func newMockService(c *check.C, port int, ch chan *cdcpb.ChangeDataEvent, wg *sync.WaitGroup) *grpc.Server {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func newMockService(ctx context.Context, c *check.C, ch chan *cdcpb.ChangeDataEvent, wg *sync.WaitGroup) (grpcServer *grpc.Server, addr string) {
+	lc := &net.ListenConfig{}
+	lis, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
 	c.Assert(err, check.IsNil)
-	grpcServer := grpc.NewServer()
+	addr = lis.Addr().String()
+	grpcServer = grpc.NewServer()
 	mockService := &mockChangeDataService{c: c, ch: ch}
 	cdcpb.RegisterChangeDataServer(grpcServer, mockService)
 	wg.Add(1)
@@ -103,7 +104,7 @@ func newMockService(c *check.C, port int, ch chan *cdcpb.ChangeDataEvent, wg *sy
 		c.Assert(err, check.IsNil)
 		wg.Done()
 	}()
-	return grpcServer
+	return
 }
 
 type mockPDClient struct {
@@ -124,9 +125,11 @@ func (m *mockPDClient) GetStore(ctx context.Context, storeID uint64) (*metapb.St
 
 // Use etcdSuite to workaround the race. See comments of `TestConnArray`.
 func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	wg := &sync.WaitGroup{}
 	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
-	server2 := newMockService(c, 23376, ch2, wg)
+	server2, addr := newMockService(ctx, c, ch2, wg)
 	defer func() {
 		close(ch2)
 		server2.Stop()
@@ -141,16 +144,14 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	c.Assert(err, check.IsNil)
 
-	cluster.AddStore(1, "localhost:23375")
-	cluster.AddStore(2, "localhost:23376")
+	cluster.AddStore(1, "localhost:1")
+	cluster.AddStore(2, addr)
 	cluster.Bootstrap(3, []uint64{1, 2}, []uint64{4, 5}, 4)
 
 	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
 	isPullInit := &mockPullerInit{}
 	cdcClient, err := NewCDCClient(context.Background(), pdClient, kvStorage.(tikv.Storage), &security.Credential{})
 	c.Assert(err, check.IsNil)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	eventCh := make(chan *model.RegionFeedEvent, 10)
 	wg.Add(1)
 	go func() {
@@ -196,6 +197,77 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 		c.Fatalf("reconnection not succeed in 1 second")
 	}
 	checkEvent(event, ts.Ver)
+	cancel()
+}
+
+func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+	ch2 := make(chan *cdcpb.ChangeDataEvent, 10)
+	server2, addr := newMockService(ctx, c, ch2, wg)
+	defer func() {
+		close(ch2)
+		server2.Stop()
+		wg.Wait()
+	}()
+	// Cancel first, and then close the server.
+	defer cancel()
+
+	cluster := mocktikv.NewCluster()
+	mvccStore := mocktikv.MustNewMVCCStore()
+	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
+	c.Assert(err, check.IsNil)
+	pdClient = &mockPDClient{Client: pdClient, version: util.MinTiKVVersion.String()}
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	c.Assert(err, check.IsNil)
+
+	cluster.AddStore(2, addr)
+	cluster.Bootstrap(3, []uint64{2}, []uint64{4}, 4)
+
+	lockresolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage))
+	isPullInit := &mockPullerInit{}
+	cdcClient, err := NewCDCClient(ctx, pdClient, kvStorage.(tikv.Storage), &security.Credential{})
+	c.Assert(err, check.IsNil)
+	eventCh := make(chan *model.RegionFeedEvent, 10)
+	wg.Add(1)
+	go func() {
+		err := cdcClient.EventFeed(ctx, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1, false, lockresolver, isPullInit, eventCh)
+		c.Assert(errors.Cause(err), check.Equals, context.Canceled)
+		wg.Done()
+	}()
+
+	var event *model.RegionFeedEvent
+	select {
+	case event = <-eventCh:
+	case <-time.After(time.Second):
+		c.Fatalf("recving message takes too long")
+	}
+	c.Assert(event, check.NotNil)
+
+	largeValSize := 128*1024*1024 + 1 // 128MB + 1
+	largeMsg := &cdcpb.ChangeDataEvent{Events: []*cdcpb.Event{
+		{
+			RegionId: 3,
+			Event: &cdcpb.Event_Entries_{
+				Entries: &cdcpb.Event_Entries{
+					Entries: []*cdcpb.Event_Row{{
+						Type:     cdcpb.Event_COMMITTED,
+						OpType:   cdcpb.Event_Row_PUT,
+						Key:      []byte("a"),
+						Value:    make([]byte, largeValSize),
+						CommitTs: 2, // ResolvedTs = 1
+					}},
+				},
+			},
+		},
+	}}
+	ch2 <- largeMsg
+	select {
+	case event = <-eventCh:
+	case <-time.After(30 * time.Second): // Send 128MB object may costs lots of time.
+		c.Fatalf("recving message takes too long")
+	}
+	c.Assert(len(event.Val.Value), check.Equals, largeValSize)
 	cancel()
 }
 
