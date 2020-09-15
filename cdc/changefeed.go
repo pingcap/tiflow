@@ -743,7 +743,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			minResolvedTs = appliedTs
 		}
 		if appliedTs != math.MaxUint64 {
-			log.Info("some operation is still unapplied",
+			log.Debug("some operation is still unapplied",
 				zap.String("captureID", captureID),
 				zap.Uint64("appliedTs", appliedTs),
 				zap.Stringer("status", status))
