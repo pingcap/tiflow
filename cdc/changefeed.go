@@ -889,7 +889,6 @@ func (c *changeFeed) pullDDLJob() error {
 	return nil
 }
 
-
 // startSyncPeriod start a timer for every changefeed to create sync point by time
 func (c *changeFeed) startSyncPeriod(ctx context.Context, interval time.Duration) {
 	log.Debug("sync ticker start", zap.Duration("sync-interval", interval))
@@ -966,6 +965,7 @@ func (c *changeFeed) startSyncPointTicker(ctx context.Context, interval time.Dur
 	var syncCtx context.Context
 	syncCtx, c.syncCancel = context.WithCancel(ctx)
 	c.startSyncPeriod(syncCtx, interval)
+}
 
 func (c *changeFeed) Close() {
 	err := c.ddlHandler.Close()

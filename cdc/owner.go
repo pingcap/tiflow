@@ -338,8 +338,8 @@ func (o *Owner) newChangeFeed(
 		return nil, errors.Trace(err)
 	}
 	defer func() {
-		if resultErr != nil && sink != nil {
-			sink.Close()
+		if resultErr != nil && primarySink != nil {
+			primarySink.Close()
 		}
 	}()
 	go func() {

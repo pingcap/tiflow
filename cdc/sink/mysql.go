@@ -1064,7 +1064,20 @@ func NewSyncpointSinklink(ctx context.Context, info *model.ChangeFeedInfo, id st
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	dsnStr, err = configureSinkURI(ctx, dsn, util.TimezoneFromCtx(ctx), params)
+
+	tz := util.TimezoneFromCtx(ctx)
+	// create test db used for parameter detection
+	if dsn.Params == nil {
+		dsn.Params = make(map[string]string, 1)
+	}
+	dsn.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	testDB, err := sql.Open("mysql", dsn.FormatDSN())
+	if err != nil {
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection when configuring sink")
+	}
+	defer testDB.Close()
+	dsnStr, err = configureSinkURI(ctx, dsn, tz, params, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
