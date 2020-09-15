@@ -76,7 +76,7 @@ var (
 
 	syncPoint    bool
 	syncInterval string
-  
+
 	optForceRemove bool
 
 	defaultContext context.Context
