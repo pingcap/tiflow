@@ -23,6 +23,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	"github.com/pingcap/ticdc/cdc/sink/dispatcher"
@@ -34,8 +37,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/security"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 type mqSink struct {
@@ -82,7 +83,8 @@ func newMqSink(
 	protocol.FromString(config.Sink.Protocol)
 
 	newEncoder := codec.NewEventBatchEncoder(protocol)
-	if protocol == codec.ProtocolAvro {
+	switch protocol {
+	case codec.ProtocolAvro:
 		registryURI, ok := opts["registry"]
 		if !ok {
 			return nil, cerror.ErrPrepareAvroFailed.GenWithStack(`Avro protocol requires parameter "registry"`)
@@ -106,22 +108,37 @@ func newMqSink(
 			avroEncoder.SetValueSchemaManager(valueSchemaManager)
 			return avroEncoder
 		}
+	case codec.ProtocolCanal:
+		if !config.EnableOldValue {
+			log.Warn("mqSink View all updates as inserts if enable old value is not enabled")
+		}
+		var forceHkPk bool
+		forceHKeyToPKey, ok := opts["force-handle-key-pkey"]
+		if !ok || forceHKeyToPKey == "false" {
+			forceHkPk = false
+		} else if forceHKeyToPKey == "true" {
+			forceHkPk = true
+		}
+		newEncoder1 := newEncoder
+		newEncoder = func() codec.EventBatchEncoder {
+			canalEncoder := newEncoder1().(*codec.CanalEventBatchEncoder)
+			canalEncoder.SetForceHandleKeyPKey(forceHkPk)
+			return canalEncoder
+		}
 	}
 
 	k := &mqSink{
-		mqProducer: mqProducer,
-		dispatcher: d,
-		newEncoder: newEncoder,
-		filter:     filter,
-		protocol:   protocol,
-
+		mqProducer:          mqProducer,
+		dispatcher:          d,
+		newEncoder:          newEncoder,
+		filter:              filter,
+		protocol:            protocol,
 		partitionNum:        partitionNum,
 		partitionInput:      partitionInput,
 		partitionResolvedTs: make([]uint64, partitionNum),
 		resolvedNotifier:    notifier,
 		resolvedReceiver:    notifier.NewReceiver(50 * time.Millisecond),
-
-		statistics: NewStatistics(ctx, "MQ", opts),
+		statistics:          NewStatistics(ctx, "MQ", opts),
 	}
 
 	go func() {
@@ -144,6 +161,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 			continue
 		}
 		partition := k.dispatcher.Dispatch(row)
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -230,8 +248,14 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if msg == nil {
 		return nil
 	}
+	var partition int32 = -1
+	if k.protocol == codec.ProtocolCanal {
+		// see https://github.com/alibaba/canal/blob/master/connector/core/src/main/java/com/alibaba/otter/canal/connector/core/producer/MQMessageUtils.java#L257
+		partition = 0
+	}
 	log.Debug("emit ddl event", zap.String("query", ddl.Query), zap.Uint64("commit-ts", ddl.CommitTs))
-	err = k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedSyncWrite, -1)
+
+	err = k.writeToProducer(ctx, msg.Key, msg.Value, codec.EncoderNeedSyncWrite, partition)
 	return errors.Trace(err)
 }
 
@@ -268,6 +292,9 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 
 	flushToProducer := func(op codec.EncoderResult) error {
 		return k.statistics.RecordBatchExecution(func() (int, error) {
+			if op == codec.EncoderNoOperation {
+				return 0, nil
+			}
 			messages := encoder.Build()
 			thisBatchSize := len(messages)
 			if thisBatchSize == 0 {
@@ -291,6 +318,7 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			return thisBatchSize, nil
 		})
 	}
+
 	for {
 		var e struct {
 			row        *model.RowChangedEvent
@@ -308,7 +336,11 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		}
 		if e.row == nil {
 			if e.resolvedTs != 0 {
-				if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
+				op, err := encoder.AppendResolvedEvent(e.resolvedTs)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				if err := flushToProducer(op); err != nil {
 					return errors.Trace(err)
 				}
 				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
@@ -325,10 +357,8 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 			op = codec.EncoderNeedAsyncWrite
 		}
 
-		if encoder.Size() >= batchSizeLimit || op != codec.EncoderNoOperation {
-			if err := flushToProducer(op); err != nil {
-				return errors.Trace(err)
-			}
+		if err := flushToProducer(op); err != nil {
+			return errors.Trace(err)
 		}
 	}
 }

@@ -44,7 +44,7 @@ func (c *UnresolvedTxnCache) Append(filter *filter.Filter, rows ...*model.RowCha
 	defer c.unresolvedTxnsMu.Unlock()
 	appendRows := 0
 	for _, row := range rows {
-		if filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
+		if filter != nil && filter.ShouldIgnoreDMLEvent(row.StartTs, row.Table.Schema, row.Table.Table) {
 			log.Info("Row changed event ignored", zap.Uint64("start-ts", row.StartTs))
 			continue
 		}
