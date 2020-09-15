@@ -35,6 +35,9 @@ const (
 type RegionFeedEvent struct {
 	Val      *RawKVEntry
 	Resolved *ResolvedSpan
+
+	// Additonal debug info
+	RegionID uint64
 }
 
 // GetValue returns the underlying value
@@ -66,9 +69,17 @@ type RawKVEntry struct {
 	StartTs  uint64
 	// Commit or resolved TS
 	CRTs uint64
+
+	// Additonal debug info
+	RegionID uint64
 }
 
 func (v *RawKVEntry) String() string {
-	return fmt.Sprintf("OpType: %v, Key: %s, Value: %s, StartTs: %d, CRTs: %d",
-		v.OpType, string(v.Key), string(v.Value), v.StartTs, v.CRTs)
+	return fmt.Sprintf("OpType: %v, Key: %s, Value: %s, StartTs: %d, CRTs: %d, RegionID: %d",
+		v.OpType, string(v.Key), string(v.Value), v.StartTs, v.CRTs, v.RegionID)
+}
+
+// ApproximateSize calculate the approximate size of this event
+func (v *RawKVEntry) ApproximateSize() int64 {
+	return int64(len(v.Key) + len(v.Value) + len(v.OldValue))
 }

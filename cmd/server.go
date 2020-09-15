@@ -15,11 +15,14 @@ package cmd
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -32,6 +35,9 @@ var (
 	gcTTL         int64
 	logFile       string
 	logLevel      string
+
+	ownerFlushInterval     time.Duration
+	processorFlushInterval time.Duration
 
 	serverCmd = &cobra.Command{
 		Use:   "server",
@@ -50,11 +56,13 @@ func init() {
 	serverCmd.Flags().Int64Var(&gcTTL, "gc-ttl", cdc.DefaultCDCGCSafePointTTL, "CDC GC safepoint TTL duration, specified in seconds")
 	serverCmd.Flags().StringVar(&logFile, "log-file", "", "log file path")
 	serverCmd.Flags().StringVar(&logLevel, "log-level", "info", "log level (etc: debug|info|warn|error)")
+	serverCmd.Flags().DurationVar(&ownerFlushInterval, "owner-flush-interval", time.Millisecond*200, "owner flushes changefeed status interval")
+	serverCmd.Flags().DurationVar(&processorFlushInterval, "processor-flush-interval", time.Millisecond*100, "processor flushes task status interval")
 	addSecurityFlags(serverCmd.Flags(), true /* isServer */)
 }
 
 func runEServer(cmd *cobra.Command, args []string) error {
-	cancel := initCmd(cmd, &util.Config{
+	cancel := initCmd(cmd, &logutil.Config{
 		File:  logFile,
 		Level: logLevel,
 	})
@@ -64,14 +72,17 @@ func runEServer(cmd *cobra.Command, args []string) error {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
 
-	util.LogVersionInfo()
+	version.LogVersionInfo()
 	opts := []cdc.ServerOption{
 		cdc.PDEndpoints(serverPdAddr),
 		cdc.Address(address),
 		cdc.AdvertiseAddress(advertiseAddr),
 		cdc.GCTTL(gcTTL),
 		cdc.Timezone(tz),
-		cdc.Credential(getCredential())}
+		cdc.Credential(getCredential()),
+		cdc.OwnerFlushInterval(ownerFlushInterval),
+		cdc.ProcessorFlushInterval(processorFlushInterval),
+	}
 	server, err := cdc.NewServer(opts...)
 	if err != nil {
 		return errors.Annotate(err, "new server")

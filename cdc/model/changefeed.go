@@ -21,9 +21,12 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"go.uber.org/zap"
 )
 
 // SortEngine is the sorter engine
@@ -89,9 +92,31 @@ var changeFeedIDRe *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z0-9]+(\-[a-zA-Z0
 // the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task".
 func ValidateChangefeedID(changefeedID string) error {
 	if !changeFeedIDRe.MatchString(changefeedID) {
-		return errors.New(`bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task"`)
+		return cerror.ErrInvalidChangefeedID.GenWithStackByArgs()
 	}
 	return nil
+}
+
+// String implements fmt.Stringer interface, but hide some sensitive information
+func (info *ChangeFeedInfo) String() (str string) {
+	var err error
+	str, err = info.Marshal()
+	if err != nil {
+		log.Error("failed to marshal changefeed info", zap.Error(err))
+		return
+	}
+	clone := new(ChangeFeedInfo)
+	err = clone.Unmarshal([]byte(str))
+	if err != nil {
+		log.Error("failed to unmarshal changefeed info", zap.Error(err))
+		return
+	}
+	clone.SinkURI = "***"
+	str, err = clone.Marshal()
+	if err != nil {
+		log.Error("failed to marshal changefeed info", zap.Error(err))
+	}
+	return
 }
 
 // GetStartTs returns StartTs if it's  specified or using the CreateTime of changefeed.
@@ -122,20 +147,22 @@ func (info *ChangeFeedInfo) GetTargetTs() uint64 {
 // Marshal returns the json marshal format of a ChangeFeedInfo
 func (info *ChangeFeedInfo) Marshal() (string, error) {
 	data, err := json.Marshal(info)
-	return string(data), errors.Trace(err)
+	return string(data), cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
 
 // Unmarshal unmarshals into *ChangeFeedInfo from json marshal byte slice
 func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, &info)
 	if err != nil {
-		return errors.Annotatef(err, "Unmarshal data: %v", data)
+		return errors.Annotatef(
+			cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
 	}
 	// TODO(neil) find a better way to let sink know cyclic is enabled.
 	if info.Config != nil && info.Config.Cyclic.IsEnabled() {
 		cyclicCfg, err := info.Config.Cyclic.Marshal()
 		if err != nil {
-			return errors.Annotatef(err, "Marshal data: %v", data)
+			return errors.Annotatef(
+				cerror.WrapError(cerror.ErrMarshalFailed, err), "Marshal data: %v", data)
 		}
 		info.Opts[mark.OptCyclicConfig] = string(cyclicCfg)
 	}

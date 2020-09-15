@@ -67,6 +67,13 @@ var (
 			Name:      "channel_size",
 			Help:      "size of each channel in kv client",
 		}, []string{"id", "channel"})
+	etcdRequestCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "etcd",
+			Name:      "request_count",
+			Help:      "request counter of etcd operation",
+		}, []string{"type", "capture"})
 )
 
 // InitMetrics registers all metrics in the kv package
@@ -78,4 +85,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(pullEventCounter)
 	registry.MustRegister(sendEventCounter)
 	registry.MustRegister(clientChannelSize)
+	registry.MustRegister(etcdRequestCounter)
 }

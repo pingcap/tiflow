@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/security"
 	"go.uber.org/zap"
@@ -75,7 +76,7 @@ func NewAvroSchemaManager(
 	// Test connectivity to the Schema Registry
 	req, err := http.NewRequestWithContext(ctx, "GET", registryURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	httpCli, err := httputil.NewClient(credential)
 	if err != nil {
@@ -84,17 +85,19 @@ func NewAvroSchemaManager(
 	resp, err := httpCli.Do(req)
 
 	if err != nil {
-		return nil, errors.Annotate(err, "Test connection to Schema Registry failed")
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "Test connection to Schema Registry failed")
 	}
 	defer resp.Body.Close()
 
 	text, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.Annotate(err, "Reading response from Schema Registry failed")
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "Reading response from Schema Registry failed")
 	}
 
 	if string(text[:]) != "{}" {
-		return nil, errors.New("Unexpected response from Schema Registry")
+		return nil, cerror.ErrAvroSchemaAPIError.GenWithStack("Unexpected response from Schema Registry")
 	}
 
 	log.Info("Successfully tested connectivity to Schema Registry", zap.String("registryURL", registryURL))
@@ -110,7 +113,8 @@ func NewAvroSchemaManager(
 var regexRemoveSpaces = regexp.MustCompile(`\s`)
 
 // Register the latest schema for a table to the Registry, by passing in a Codec
-func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableName, codec *goavro.Codec) error {
+// Returns the Schema's ID and err
+func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableName, codec *goavro.Codec) (int, error) {
 	// The Schema Registry expects the JSON to be without newline characters
 	reqBody := registerRequest{
 		Schema: regexRemoveSpaces.ReplaceAllString(codec.Schema(), ""),
@@ -119,25 +123,26 @@ func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableN
 	}
 	payload, err := json.Marshal(&reqBody)
 	if err != nil {
-		return errors.Annotate(err, "Could not marshal request to the Registry")
+		return 0, errors.Annotate(
+			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "Could not marshal request to the Registry")
 	}
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(m.tableNameToSchemaSubject(tableName)) + "/versions"
 	log.Debug("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return 0, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs()
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json")
 	resp, err := httpRetry(ctx, m.credential, req, false)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Annotate(err, "Failed to read response from Registry")
+		return 0, errors.Annotate(err, "Failed to read response from Registry")
 	}
 
 	if resp.StatusCode != 200 {
@@ -146,18 +151,19 @@ func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableN
 			zap.String("uri", uri),
 			zap.ByteString("requestBody", payload),
 			zap.ByteString("responseBody", body))
-		return errors.New("Failed to register schema to the Registry, HTTP error")
+		return 0, cerror.ErrAvroSchemaAPIError.GenWithStack("Failed to register schema to the Registry, HTTP error")
 	}
 
 	var jsonResp registerResponse
 	err = json.Unmarshal(body, &jsonResp)
 
 	if err != nil {
-		return errors.Annotate(err, "Failed to parse result from Registry")
+		return 0, errors.Annotate(
+			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "Failed to parse result from Registry")
 	}
 
 	if jsonResp.ID == 0 {
-		return errors.Errorf("Illegal schema ID returned from Registry %d", jsonResp.ID)
+		return 0, cerror.ErrAvroSchemaAPIError.GenWithStack("Illegal schema ID returned from Registry %d", jsonResp.ID)
 	}
 
 	log.Info("Registered schema successfully",
@@ -165,7 +171,7 @@ func (m *AvroSchemaManager) Register(ctx context.Context, tableName model.TableN
 		zap.String("uri", uri),
 		zap.ByteString("body", body))
 
-	return nil
+	return jsonResp.ID, nil
 }
 
 // Lookup the latest schema and the Registry designated ID for that schema.
@@ -191,11 +197,12 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 
 	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
 	if err != nil {
-		return nil, 0, errors.Annotate(err, "Error constructing request for Registry lookup")
+		return nil, 0, errors.Annotate(
+			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "Error constructing request for Registry lookup")
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json, application/vnd.schemaregistry+json, application/json")
 
-	resp, err := httpRetry(ctx, m.credential, req, false)
+	resp, err := httpRetry(ctx, m.credential, req, true)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -203,7 +210,8 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, 0, errors.Annotate(err, "Failed to read response from Registry")
+		return nil, 0, errors.Annotate(
+			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "Failed to read response from Registry")
 	}
 
 	if resp.StatusCode != 200 && resp.StatusCode != 404 {
@@ -212,7 +220,7 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 			zap.String("uri", uri),
 
 			zap.ByteString("responseBody", body))
-		return nil, 0, errors.New("Failed to query schema from the Registry, HTTP error")
+		return nil, 0, cerror.ErrAvroSchemaAPIError.GenWithStack("Failed to query schema from the Registry, HTTP error")
 	}
 
 	if resp.StatusCode == 404 {
@@ -220,19 +228,21 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 			zap.String("key", key),
 			zap.Uint64("tiSchemaID", tiSchemaID))
 
-		return nil, 0, errors.New("Schema not found in Registry")
+		return nil, 0, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs("Schema not found in Registry")
 	}
 
 	var jsonResp lookupResponse
 	err = json.Unmarshal(body, &jsonResp)
 	if err != nil {
-		return nil, 0, errors.Annotate(err, "Failed to parse result from Registry")
+		return nil, 0, errors.Annotate(
+			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "Failed to parse result from Registry")
 	}
 
 	cacheEntry := new(schemaCacheEntry)
 	cacheEntry.codec, err = goavro.NewCodec(jsonResp.Schema)
 	if err != nil {
-		return nil, 0, errors.Annotate(err, "Creating Avro codec failed")
+		return nil, 0, errors.Annotate(
+			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "Creating Avro codec failed")
 	}
 	cacheEntry.registryID = jsonResp.RegistryID
 	cacheEntry.tiSchemaID = tiSchemaID
@@ -246,6 +256,57 @@ func (m *AvroSchemaManager) Lookup(ctx context.Context, tableName model.TableNam
 	return cacheEntry.codec, cacheEntry.registryID, nil
 }
 
+// SchemaGenerator represents a function that returns an Avro schema in JSON.
+// Used for lazy evaluation
+type SchemaGenerator func() (string, error)
+
+// GetCachedOrRegister checks if the suitable Avro schema has been cached.
+// If not, a new schema is generated, registered and cached.
+func (m *AvroSchemaManager) GetCachedOrRegister(ctx context.Context, tableName model.TableName, tiSchemaID uint64, schemaGen SchemaGenerator) (*goavro.Codec, int, error) {
+	key := m.tableNameToSchemaSubject(tableName)
+	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
+		log.Info("Avro schema GetCachedOrRegister cache hit",
+			zap.String("key", key),
+			zap.Uint64("tiSchemaID", tiSchemaID),
+			zap.Int("registryID", entry.registryID))
+		return entry.codec, entry.registryID, nil
+	}
+
+	log.Info("Avro schema lookup cache miss",
+		zap.String("key", key),
+		zap.Uint64("tiSchemaID", tiSchemaID))
+
+	schema, err := schemaGen()
+	if err != nil {
+		return nil, 0, errors.Annotate(err, "GetCachedOrRegister: SchemaGen failed")
+	}
+
+	codec, err := goavro.NewCodec(schema)
+	if err != nil {
+		return nil, 0, errors.Annotate(
+			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "GetCachedOrRegister: Could not make goavro codec")
+	}
+
+	id, err := m.Register(ctx, tableName, codec)
+	if err != nil {
+		return nil, 0, errors.Annotate(
+			cerror.WrapError(cerror.ErrAvroSchemaAPIError, err), "GetCachedOrRegister: Could not register schema")
+	}
+
+	cacheEntry := new(schemaCacheEntry)
+	cacheEntry.codec = codec
+	cacheEntry.registryID = id
+	cacheEntry.tiSchemaID = tiSchemaID
+	m.cache[m.tableNameToSchemaSubject(tableName)] = cacheEntry
+
+	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
+		zap.Uint64("tiSchemaID", cacheEntry.tiSchemaID),
+		zap.Int("registryID", cacheEntry.registryID),
+		zap.String("schema", cacheEntry.codec.Schema()))
+
+	return codec, id, nil
+}
+
 // ClearRegistry clears the Registry subject for the given table. Should be idempotent.
 // Exported for testing.
 func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.TableName) error {
@@ -253,7 +314,7 @@ func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.T
 	req, err := http.NewRequestWithContext(ctx, "DELETE", uri, nil)
 	if err != nil {
 		log.Error("Could not construct request for clearRegistry", zap.String("uri", uri))
-		return err
+		return cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	req.Header.Add("Accept", "application/vnd.schemaregistry.v1+json, application/vnd.schemaregistry+json, application/json")
 	resp, err := httpRetry(ctx, m.credential, req, true)
@@ -272,7 +333,7 @@ func (m *AvroSchemaManager) ClearRegistry(ctx context.Context, tableName model.T
 	}
 
 	log.Error("Error when clearing Registry", zap.Int("status", resp.StatusCode))
-	return errors.Errorf("Error when clearing Registry, status = %d", resp.StatusCode)
+	return cerror.ErrAvroSchemaAPIError.GenWithStack("Error when clearing Registry, status = %d", resp.StatusCode)
 }
 
 func httpRetry(ctx context.Context, credential *security.Credential, r *http.Request, allow404 bool) (*http.Response, error) {
@@ -292,7 +353,7 @@ func httpRetry(ctx context.Context, credential *security.Credential, r *http.Req
 	}
 
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	for {
 		if data != nil {

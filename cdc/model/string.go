@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
 // QuoteSchema quotes a full table name
@@ -53,7 +53,7 @@ func HolderString(n int) string {
 func ExtractKeySuffix(key string) (string, error) {
 	subs := strings.Split(key, "/")
 	if len(subs) < 2 {
-		return "", errors.Errorf("invalid key: %s", key)
+		return "", cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
 	}
 	return subs[len(subs)-1], nil
 }

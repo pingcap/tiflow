@@ -11,11 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package logutil
 
 import (
 	"context"
-	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/pingcap/check"
@@ -33,8 +33,8 @@ type logSuite struct{}
 
 var _ = check.Suite(&logSuite{})
 
-func (s *logSuite) TestInitLogger(c *check.C) {
-	f := path.Join(c.MkDir(), "test")
+func (s *logSuite) TestInitLoggerAndSetLogLevel(c *check.C) {
+	f := filepath.Join(c.MkDir(), "test")
 	cfg := &Config{
 		Level: "warning",
 		File:  f,
@@ -43,6 +43,20 @@ func (s *logSuite) TestInitLogger(c *check.C) {
 	err := InitLogger(cfg)
 	c.Assert(err, check.IsNil)
 	c.Assert(log.GetLevel(), check.Equals, zapcore.WarnLevel)
+
+	// Set a different level.
+	err = SetLogLevel("info")
+	c.Assert(err, check.IsNil)
+	c.Assert(log.GetLevel(), check.Equals, zapcore.InfoLevel)
+
+	// Set the same level.
+	err = SetLogLevel("info")
+	c.Assert(err, check.IsNil)
+	c.Assert(log.GetLevel(), check.Equals, zapcore.InfoLevel)
+
+	// Set an invalid level.
+	err = SetLogLevel("badlevel")
+	c.Assert(err, check.NotNil)
 }
 
 func (s *logSuite) TestZapErrorFilter(c *check.C) {

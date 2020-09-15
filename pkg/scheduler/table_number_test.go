@@ -84,4 +84,22 @@ func (s *tableNumberSuite) TestCalRebalanceOperates(c *check.C) {
 	}
 
 	c.Assert(fmt.Sprintf("%.2f%%", skewness*100), check.Equals, "14.14%")
+
+	scheduler.ResetWorkloads("capture1", model.TaskWorkload{
+		1: model.WorkloadInfo{Workload: 1},
+		2: model.WorkloadInfo{Workload: 1},
+		3: model.WorkloadInfo{Workload: 1}})
+	scheduler.ResetWorkloads("capture2", model.TaskWorkload{})
+	scheduler.ResetWorkloads("capture3", model.TaskWorkload{})
+	c.Assert(fmt.Sprintf("%.2f%%", scheduler.Skewness()*100), check.Equals, "141.42%")
+	skewness, moveJobs = scheduler.CalRebalanceOperates(0)
+
+	for tableID, job := range moveJobs {
+		c.Assert(len(job.From), check.Greater, 0)
+		c.Assert(len(job.To), check.Greater, 0)
+		c.Assert(job.TableID, check.Equals, tableID)
+		c.Assert(job.From, check.Not(check.Equals), job.To)
+		c.Assert(job.Status, check.Equals, model.MoveTableStatusNone)
+	}
+	c.Assert(fmt.Sprintf("%.2f%%", skewness*100), check.Equals, "0.00%")
 }

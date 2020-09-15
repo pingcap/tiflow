@@ -18,8 +18,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
@@ -185,7 +185,7 @@ func EndCompare(lhs []byte, rhs []byte) int {
 func Intersect(lhs ComparableSpan, rhs ComparableSpan) (span ComparableSpan, err error) {
 	if lhs.Start != nil && EndCompare(lhs.Start, rhs.End) >= 0 ||
 		rhs.Start != nil && EndCompare(rhs.Start, lhs.End) >= 0 {
-		return ComparableSpan{}, errors.Errorf("span do not overlap: %+v vs %+v", lhs, rhs)
+		return ComparableSpan{}, cerror.ErrIntersectNoOverlap.GenWithStackByArgs(lhs, rhs)
 	}
 
 	start := lhs.Start

@@ -11,17 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mqProducer
+package framework
 
-import (
-	"context"
-)
+// MqListener represents a callback function for listening on the MQ output
+type MqListener func(states interface{}, topic string, key []byte, value []byte) error
 
-// Producer is a interface of mq producer
-type Producer interface {
-	SendMessage(ctx context.Context, key []byte, value []byte, partition int32) error
-	SyncBroadcastMessage(ctx context.Context, key []byte, value []byte) error
-	Flush(ctx context.Context) error
-	GetPartitionNum() int32
-	Close() error
+// Environment is an abstract of the CDC-Upstream-Downstream-MQ complex to be tested
+type Environment interface {
+	Setup()
+	TearDown()
+	Reset()
+	RunTest(Task)
+	SetListener(states interface{}, listener MqListener)
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/scheduler"
 	"github.com/pingcap/tidb/sessionctx/binloginfo"
@@ -376,7 +377,7 @@ func (c *changeFeed) updateTaskStatus(ctx context.Context, taskStatus map[model.
 		newStatus, _, err := c.etcdCli.AtomicPutTaskStatus(ctx, c.id, captureID, func(modRevision int64, taskStatus *model.TaskStatus) (bool, error) {
 			if taskStatus.SomeOperationsUnapplied() {
 				log.Error("unexpected task status, there are operations unapplied in this status", zap.Any("status", taskStatus))
-				return false, errors.Errorf("waiting to processor handle the operation finished time out")
+				return false, cerror.ErrWaitHandleOperationTimeout.GenWithStackByArgs()
 			}
 			taskStatus.Tables = status.Tables
 			taskStatus.Operation = status.Operation
@@ -559,7 +560,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			addID := job.BinlogInfo.TableInfo.ID
 			table, exist := c.schema.TableByID(addID)
 			if !exist {
-				return errors.NotFoundf("table(%d)", addID)
+				return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(addID)
 			}
 			c.addTable(table, job.BinlogInfo.FinishedTS)
 		case timodel.ActionDropTable:
@@ -568,7 +569,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 		case timodel.ActionRenameTable:
 			tableName, exist := c.schema.GetTableNameByID(job.TableID)
 			if !exist {
-				return errors.NotFoundf("table(%d)", job.TableID)
+				return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(job.TableID)
 			}
 			// no id change just update name
 			c.tables[job.TableID] = tableName
@@ -579,7 +580,7 @@ func (c *changeFeed) applyJob(ctx context.Context, job *timodel.Job) (skip bool,
 			addID := job.BinlogInfo.TableInfo.ID
 			table, exist := c.schema.TableByID(addID)
 			if !exist {
-				return errors.NotFoundf("table(%d)", addID)
+				return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(addID)
 			}
 			c.addTable(table, job.BinlogInfo.FinishedTS)
 		case timodel.ActionTruncateTablePartition, timodel.ActionAddTablePartition, timodel.ActionDropTablePartition:
@@ -668,13 +669,13 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 		// If DDL executing failed, pause the changefeed and print log, rather
 		// than return an error and break the running of this owner.
 		if err != nil {
-			if errors.Cause(err) != model.ErrorDDLEventIgnored {
+			if cerror.ErrDDLEventIgnored.NotEqual(err) {
 				c.ddlState = model.ChangeFeedDDLExecuteFailed
 				log.Error("Execute DDL failed",
 					zap.String("ChangeFeedID", c.id),
 					zap.Error(err),
 					zap.Reflect("ddlJob", todoDDLJob))
-				return errors.Trace(model.ErrExecDDLFailed)
+				return cerror.ErrExecDDLFailed.GenWithStackByArgs()
 			}
 		} else {
 			executed = true
@@ -888,6 +889,7 @@ func (c *changeFeed) pullDDLJob() error {
 	return nil
 }
 
+
 // startSyncPeriod start a timer for every changefeed to create sync point by time
 func (c *changeFeed) startSyncPeriod(ctx context.Context, interval time.Duration) {
 	log.Debug("sync ticker start", zap.Duration("sync-interval", interval))
@@ -964,4 +966,15 @@ func (c *changeFeed) startSyncPointTicker(ctx context.Context, interval time.Dur
 	var syncCtx context.Context
 	syncCtx, c.syncCancel = context.WithCancel(ctx)
 	c.startSyncPeriod(syncCtx, interval)
+
+func (c *changeFeed) Close() {
+	err := c.ddlHandler.Close()
+	if err != nil {
+		log.Warn("failed to close ddl handler", zap.Error(err))
+	}
+	err = c.sink.Close()
+	if err != nil {
+		log.Warn("failed to close owner sink", zap.Error(err))
+	}
+	log.Info("changefeed closed", zap.String("id", c.id))
 }

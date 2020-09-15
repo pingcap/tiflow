@@ -20,16 +20,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/ticdc/pkg/notify"
-
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
-	"golang.org/x/sync/errgroup"
-
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/notify"
 	"github.com/pingcap/ticdc/pkg/util"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // EntrySorter accepts out-of-order raw kv entries and output sorted entries
@@ -138,7 +135,8 @@ func (es *EntrySorter) Run(ctx context.Context) error {
 
 				resEvents := make([]*model.PolymorphicEvent, len(resolvedTsGroup))
 				for i, rts := range resolvedTsGroup {
-					resEvents[i] = model.NewResolvedPolymorphicEvent(rts)
+					// regionID = 0 means the event is produced by TiCDC
+					resEvents[i] = model.NewResolvedPolymorphicEvent(0, rts)
 				}
 				toSort = append(toSort, resEvents...)
 				startTime := time.Now()

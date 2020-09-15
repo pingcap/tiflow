@@ -16,9 +16,9 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	liberrors "errors"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -36,8 +36,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/sink"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/httputil"
+	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -50,6 +51,10 @@ var (
 	certPath      string
 	keyPath       string
 	allowedCertCN string
+)
+
+var (
+	errOwnerNotFound = liberrors.New("owner not found")
 )
 
 func addSecurityFlags(flags *pflag.FlagSet, isServer bool) {
@@ -76,9 +81,9 @@ func getCredential() *security.Credential {
 }
 
 // initCmd initializes the logger, the default context and returns its cancel function.
-func initCmd(cmd *cobra.Command, logCfg *util.Config) context.CancelFunc {
+func initCmd(cmd *cobra.Command, logCfg *logutil.Config) context.CancelFunc {
 	// Init log.
-	err := util.InitLogger(logCfg)
+	err := logutil.InitLogger(logCfg)
 	if err != nil {
 		cmd.Printf("init logger error %v\n", errors.ErrorStack(err))
 		os.Exit(1)
@@ -130,18 +135,31 @@ func getOwnerCapture(ctx context.Context) (*capture, error) {
 			return c, nil
 		}
 	}
-	return nil, errors.NotFoundf("owner")
+	return nil, errors.Trace(errOwnerNotFound)
 }
 
-func applyAdminChangefeed(ctx context.Context, job model.AdminJob) error {
+func applyAdminChangefeed(ctx context.Context, job model.AdminJob, credential *security.Credential) error {
 	owner, err := getOwnerCapture(ctx)
 	if err != nil {
 		return err
 	}
-	addr := fmt.Sprintf("http://%s/capture/owner/admin", owner.AdvertiseAddr)
-	resp, err := http.PostForm(addr, url.Values(map[string][]string{
-		cdc.APIOpVarAdminJob:     {fmt.Sprint(int(job.Type))},
-		cdc.APIOpVarChangefeedID: {job.CfID},
+	scheme := "http"
+	if credential.IsTLSEnabled() {
+		scheme = "https"
+	}
+	addr := fmt.Sprintf("%s://%s/capture/owner/admin", scheme, owner.AdvertiseAddr)
+	cli, err := httputil.NewClient(credential)
+	if err != nil {
+		return err
+	}
+	forceRemoveOpt := "false"
+	if job.Opts != nil && job.Opts.ForceRemove {
+		forceRemoveOpt = "true"
+	}
+	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
+		cdc.APIOpVarAdminJob:           {fmt.Sprint(int(job.Type))},
+		cdc.APIOpVarChangefeedID:       {job.CfID},
+		cdc.APIOpForceRemoveChangefeed: {forceRemoveOpt},
 	}))
 	if err != nil {
 		return err
@@ -156,13 +174,23 @@ func applyAdminChangefeed(ctx context.Context, job model.AdminJob) error {
 	return nil
 }
 
-func applyOwnerChangefeedQuery(ctx context.Context, cid model.ChangeFeedID) (string, error) {
+func applyOwnerChangefeedQuery(
+	ctx context.Context, cid model.ChangeFeedID, credential *security.Credential,
+) (string, error) {
 	owner, err := getOwnerCapture(ctx)
 	if err != nil {
 		return "", err
 	}
-	addr := fmt.Sprintf("http://%s/capture/owner/changefeed/query", owner.AdvertiseAddr)
-	resp, err := http.PostForm(addr, url.Values(map[string][]string{
+	scheme := "http"
+	if credential.IsTLSEnabled() {
+		scheme = "https"
+	}
+	addr := fmt.Sprintf("%s://%s/capture/owner/changefeed/query", scheme, owner.AdvertiseAddr)
+	cli, err := httputil.NewClient(credential)
+	if err != nil {
+		return "", err
+	}
+	resp, err := cli.PostForm(addr, url.Values(map[string][]string{
 		cdc.APIOpVarChangefeedID: {cid},
 	}))
 	if err != nil {

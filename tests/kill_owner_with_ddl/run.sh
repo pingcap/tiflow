@@ -45,7 +45,7 @@ function run() {
     start_tidb_cluster --workdir $WORK_DIR
     cd $WORK_DIR
 
-    pd_addr="http://$UP_PD_HOST:$UP_PD_PORT"
+    pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
     SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1"
 
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr

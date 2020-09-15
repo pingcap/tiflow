@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package util
+package version
 
 import (
 	"context"
@@ -23,8 +23,8 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/metapb"
-	pd "github.com/pingcap/pd/v4/client"
-	"github.com/pingcap/pd/v4/pkg/tempurl"
+	pd "github.com/tikv/pd/client"
+	"github.com/tikv/pd/pkg/tempurl"
 )
 
 type checkSuite struct{}
@@ -92,7 +92,8 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return []*metapb.Store{{Version: MinTiKVVersion.String()}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
-		c.Assert(err, check.ErrorMatches, "PD .* is not supported.*")
+		c.Assert(err, check.ErrorMatches,
+			".*PD .* is not supported.*")
 	}
 
 	{
@@ -104,7 +105,8 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			return []*metapb.Store{{Version: `1.0.0-alpha-271-g824ae7fd`}}
 		}
 		err := CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, true)
-		c.Assert(err, check.ErrorMatches, "TiKV .* is not supported.*")
+		c.Assert(err, check.ErrorMatches,
+			".*TiKV .* is not supported.*")
 		err = CheckClusterVersion(context.Background(), &mock, pdHTTP, nil, false)
 		c.Assert(err, check.IsNil)
 	}
@@ -126,4 +128,18 @@ func (s *checkSuite) TestCompareVersion(c *check.C) {
 		Compare(*semver.New("3.0.5-beta.12")), check.Equals, 0)
 	c.Assert(semver.New(removeVAndHash("v2.1.0-rc.1-7-g38c939f-dirty")).
 		Compare(*semver.New("2.1.0-rc.1")), check.Equals, 0)
+}
+
+func (s *checkSuite) TestReleaseSemver(c *check.C) {
+	cases := []struct{ releaseVersion, releaseSemver string }{
+		{"None", ""},
+		{"HEAD", ""},
+		{"v4.0.5", "4.0.5"},
+		{"v4.0.2-152-g62d7075-dev", "4.0.2"},
+	}
+
+	for _, cs := range cases {
+		ReleaseVersion = cs.releaseVersion
+		c.Assert(ReleaseSemver(), check.Equals, cs.releaseSemver, check.Commentf("%v", cs))
+	}
 }

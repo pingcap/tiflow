@@ -47,7 +47,7 @@ function run() {
 
     run_cdc_cli changefeed cyclic create-marktables \
         --cyclic-upstream-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/" \
-        --pd "http://${UP_PD_HOST}:${UP_PD_PORT}"
+        --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}"
 
     run_cdc_cli changefeed cyclic create-marktables \
         --cyclic-upstream-dsn="root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/" \
@@ -64,13 +64,13 @@ function run() {
         --cyclic-upstream-ssl-key=$TLS_DIR/server-key.pem
 
     # record tso after we create tables to not block on waiting mark tables DDLs.
-    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST:$UP_PD_PORT)
+    start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 
     run_cdc_server \
         --workdir $WORK_DIR \
         --binary $CDC_BINARY \
         --logsuffix "_${TEST_NAME}_upsteam" \
-        --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
+        --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
         --addr "127.0.0.1:8300"
 
     run_cdc_server \
@@ -91,7 +91,7 @@ function run() {
 
     run_cdc_cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
-        --pd "http://${UP_PD_HOST}:${UP_PD_PORT}" \
+        --pd "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" \
         --cyclic-replica-id 1 \
         --cyclic-filter-replica-ids 2 \
         --cyclic-sync-ddl true
@@ -106,6 +106,7 @@ function run() {
     run_cdc_cli changefeed create --start-ts=$start_ts \
         --sink-uri="mysql://root@${UP_TIDB_HOST}:${UP_TIDB_PORT}/" \
         --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
+        --changefeed-id "tls-changefeed" \
         --ca=$TLS_DIR/ca.pem \
         --cert=$TLS_DIR/client.pem \
         --key=$TLS_DIR/client-key.pem \
@@ -162,6 +163,20 @@ function run() {
         echo "must not connect successfully"
         exit 1
     fi
+
+    # Check cli TLS
+    run_cdc_cli changefeed list \
+        --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
+        --ca=$TLS_DIR/ca.pem \
+        --cert=$TLS_DIR/client.pem \
+        --key=$TLS_DIR/client-key.pem
+
+    run_cdc_cli changefeed query \
+        --changefeed-id "tls-changefeed" \
+        --pd "https://${TLS_PD_HOST}:${TLS_PD_PORT}" \
+        --ca=$TLS_DIR/ca.pem \
+        --cert=$TLS_DIR/client.pem \
+        --key=$TLS_DIR/client-key.pem
 
     cleanup_process $CDC_BINARY
 }

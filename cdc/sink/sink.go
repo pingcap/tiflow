@@ -18,9 +18,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/cdclog"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
 )
 
@@ -44,7 +45,7 @@ type Sink interface {
 
 	// FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
 	// TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
-	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) error
+	FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error)
 
 	// EmitCheckpointTs sends CheckpointTs to Sink
 	// TiCDC guarantees that all Events **in the cluster** which of commitTs less than or equal `checkpointTs` are sent to downstream successfully.
@@ -59,18 +60,22 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return nil, errors.Annotatef(err, "parse sinkURI failed")
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 	switch strings.ToLower(sinkURI.Scheme) {
 	case "blackhole":
 		return newBlackHoleSink(ctx, opts), nil
 	case "mysql", "tidb", "mysql+ssl", "tidb+ssl":
 		return newMySQLSink(ctx, changefeedID, sinkURI, filter, opts)
-	case "kafka":
+	case "kafka", "kafka+ssl":
 		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh)
 	case "pulsar", "pulsar+ssl":
 		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
+	case "local":
+		return cdclog.NewLocalFileSink(sinkURI)
+	case "s3":
+		return cdclog.NewS3Sink(sinkURI)
 	default:
-		return nil, errors.Errorf("the sink scheme (%s) is not supported", sinkURI.Scheme)
+		return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}
 }
