@@ -726,7 +726,10 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
 			log.Info("achive the sync point with timer", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
 			c.updateResolvedTs = true
-			c.sinkSyncpoint(ctx)
+			err := c.sinkSyncpoint(ctx)
+			if err != nil {
+				log.Error("syncpoint sinl fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs))
+			}
 		}
 
 		if c.status.ResolvedTs == 0 {
@@ -735,7 +738,10 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 		if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs {
 			log.Info("achive the sync point with ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
-			c.sinkSyncpoint(ctx)
+			err := c.sinkSyncpoint(ctx)
+			if err != nil {
+				log.Error("syncpoint sinl fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs))
+			}
 			c.ddlTs = 0
 		}
 	}
@@ -916,17 +922,26 @@ func (c *changeFeed) createSynctable(ctx context.Context) error {
 	_, err = tx.Exec("CREATE DATABASE IF NOT EXISTS " + database)
 	//_,err := c.syncDB.Exec("CREATE DATABASE IF NOT EXISTS " + database)
 	if err != nil {
-		tx.Rollback()
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(err2.Error())
+		}
 		return err
 	}
 	_, err = tx.Exec("USE " + database)
 	if err != nil {
-		tx.Rollback()
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(err2.Error())
+		}
 		return err
 	}
 	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS syncpoint (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `primary_ts` ) )")
 	if err != nil {
-		tx.Rollback()
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(err2.Error())
+		}
 		return err
 	}
 	err = tx.Commit()
@@ -941,17 +956,27 @@ func (c *changeFeed) sinkSyncpoint(ctx context.Context) error {
 		return err
 	}
 	row := tx.QueryRow("select @@tidb_current_ts")
-	var slaveTs string
-	err = row.Scan(&slaveTs)
+	var secondaryTs string
+	err = row.Scan(&secondaryTs)
 	if err != nil {
 		log.Info("sync table: get tidb_current_ts err")
-		tx.Rollback()
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(err2.Error())
+		}
 		return err
 	}
-	tx.Exec("insert into TiCDC.syncpoint(cf, primary_ts, secondary_ts) VALUES (?,?,?)", c.id, c.status.CheckpointTs, slaveTs)
+	_, err = tx.Exec("insert into TiCDC.syncpoint(cf, primary_ts, secondary_ts) VALUES (?,?,?)", c.id, c.status.CheckpointTs, secondaryTs)
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(err2.Error())
+		}
+		return err
+	}
 	//tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, 0)
-	tx.Commit() //TODO deal with error
-	return nil
+	err = tx.Commit() //TODO deal with error
+	return err
 }
 
 func (c *changeFeed) stopSyncPointTicker() {
