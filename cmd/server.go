@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/ticdc/cdc"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -71,7 +72,7 @@ func runEServer(cmd *cobra.Command, args []string) error {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
 
-	util.LogVersionInfo()
+	version.LogVersionInfo()
 	opts := []cdc.ServerOption{
 		cdc.PDEndpoints(serverPdAddr),
 		cdc.Address(address),
