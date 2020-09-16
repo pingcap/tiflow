@@ -63,6 +63,7 @@ const (
 	defaultBatchReplaceSize    = 20
 	defaultReadTimeout         = "2m"
 	defaultWriteTimeout        = "2m"
+	defaultSafeMode            = true
 )
 
 var (
@@ -291,7 +292,7 @@ var defaultParams = &sinkParams{
 	batchReplaceSize:    defaultBatchReplaceSize,
 	readTimeout:         defaultReadTimeout,
 	writeTimeout:        defaultWriteTimeout,
-	safeMode:            true,
+	safeMode:            defaultSafeMode,
 }
 
 func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (string, error) {

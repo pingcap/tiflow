@@ -665,6 +665,7 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		batchReplaceSize:    defaultBatchReplaceSize,
 		readTimeout:         defaultReadTimeout,
 		writeTimeout:        defaultWriteTimeout,
+		safeMode:            defaultSafeMode,
 	})
 	c.Assert(param2, check.DeepEquals, &sinkParams{
 		changefeedID:        "123",
@@ -675,6 +676,7 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		batchReplaceSize:    defaultBatchReplaceSize,
 		readTimeout:         defaultReadTimeout,
 		writeTimeout:        defaultWriteTimeout,
+		safeMode:            defaultSafeMode,
 	})
 }
 
