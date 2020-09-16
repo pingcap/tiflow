@@ -830,7 +830,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			continue
 		}
 
-		// Branch for delete event or update event
+		// Case for delete event or update event
 		// If old value is enabled and not in safe mode,
 		// update will be translated to DELETE + INSERT(or REPLACE) SQL.
 		if len(row.PreColumns) != 0 {
@@ -843,7 +843,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			}
 		}
 
-		// Branch for insert event or update event
+		// Case for insert event or update event
 		if len(row.Columns) != 0 {
 			if s.params.batchReplaceEnabled {
 				query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
@@ -1014,7 +1014,7 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column) (string, []
 		if wargs[i] == nil {
 			builder.WriteString(quotes.QuoteName(colNames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(quotes.QuoteName(colNames[i]) + " = ?")
+			builder.WriteString(quotes.QuoteName(colNames[i]) + "=?")
 			args = append(args, wargs[i])
 		}
 	}
