@@ -361,9 +361,9 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 		return nil
 	}
 	messages := make([]*MQMessage, 0, len(resolvedTxns))
+	canalMessageEncoder := newCanalMessageEncoder(d.forceHkPk)
 	for _, txns := range resolvedTxns {
 		for _, txn := range txns {
-			canalMessageEncoder := newCanalMessageEncoder(d.forceHkPk)
 			for _, row := range txn.Rows {
 				err := canalMessageEncoder.appendRowChangedEvent(row)
 				if err != nil {
@@ -407,7 +407,6 @@ type canalMessageEncoder struct {
 	entryBuilder *canalEntryBuilder
 }
 
-// AppendRowChangedEvent implements the EventBatchEncoder interface
 func (d *canalMessageEncoder) appendRowChangedEvent(e *model.RowChangedEvent) error {
 	entry, err := d.entryBuilder.FromRowEvent(e)
 	if err != nil {
@@ -465,6 +464,7 @@ func (d *canalMessageEncoder) build(commitTs uint64) *MQMessage {
 	}
 	ret := NewMQMessage(nil, value, commitTs)
 	d.messages.Reset()
+	d.packet.Body = nil
 	return ret
 }
 
