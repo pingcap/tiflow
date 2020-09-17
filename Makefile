@@ -14,7 +14,11 @@ TEST_DIR := /tmp/tidb_cdc_test
 SHELL	 := /usr/bin/env bash
 
 GO       := GO111MODULE=on go
-GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
+ifeq (${CDC_ENABLE_VENDOR}, 1)
+GOVENDORFLAG := -mod=vendor
+endif
+
+GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 ifeq ($(GOVERSION114), 1)
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race -gcflags=all=-d=checkptr=0
 else
@@ -24,7 +28,7 @@ endif
 ARCH  := "`uname -s`"
 LINUX := "Linux"
 MAC   := "Darwin"
-PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests'
+PACKAGE_LIST := go list ./...| grep -vE 'vendor|proto|ticdc\/tests|integration'
 PACKAGES  := $$($(PACKAGE_LIST))
 PACKAGE_DIRECTORIES := $(PACKAGE_LIST) | sed 's|github.com/pingcap/$(PROJECT)/||'
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor')
@@ -35,11 +39,12 @@ FAILPOINT := bin/failpoint-ctl
 FAILPOINT_ENABLE  := $$(echo $(FAILPOINT_DIR) | xargs $(FAILPOINT) enable >/dev/null)
 FAILPOINT_DISABLE := $$(find $(FAILPOINT_DIR) | xargs $(FAILPOINT) disable >/dev/null)
 
-LDFLAGS += -X "$(CDC_PKG)/pkg/util.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
-LDFLAGS += -X "$(CDC_PKG)/pkg/util.GitHash=$(shell git rev-parse HEAD)"
-LDFLAGS += -X "$(CDC_PKG)/pkg/util.ReleaseVersion=$(shell git describe --tags --dirty="-dev")"
-LDFLAGS += -X "$(CDC_PKG)/pkg/util.GitBranch=$(shell git rev-parse --abbrev-ref HEAD)"
-LDFLAGS += -X "$(CDC_PKG)/pkg/util.GoVersion=$(shell go version)"
+RELEASE_VERSION ?= $(shell git describe --tags --dirty="-dev")
+LDFLAGS += -X "$(CDC_PKG)/pkg/version.ReleaseVersion=$(RELEASE_VERSION)"
+LDFLAGS += -X "$(CDC_PKG)/pkg/version.BuildTS=$(shell date -u '+%Y-%m-%d %H:%M:%S')"
+LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitHash=$(shell git rev-parse HEAD)"
+LDFLAGS += -X "$(CDC_PKG)/pkg/version.GitBranch=$(shell git rev-parse --abbrev-ref HEAD)"
+LDFLAGS += -X "$(CDC_PKG)/pkg/version.GoVersion=$(shell go version)"
 
 default: build buildsucc
 
@@ -84,6 +89,7 @@ check_third_party_binary:
 	@which bin/go-ycsb
 	@which bin/etcdctl
 	@which bin/jq
+	@which bin/minio
 
 integration_test_build: check_failpoint_ctl
 	./scripts/fix_lib_zstd.sh
@@ -106,7 +112,7 @@ fmt:
 	@echo "gofmt (simplify)"
 	@gofmt -s -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 
-lint:tools/bin/revive
+lint: tools/bin/revive
 	@echo "linting"
 	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
 
@@ -125,7 +131,7 @@ tidy:
 check: check-copyright fmt lint check-static tidy
 
 coverage:
-	GO111MODULE=off go get github.com/zhouqiang-cl/gocovmerge
+	GO111MODULE=off go get github.com/wadey/gocovmerge
 	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
 	grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
@@ -139,20 +145,18 @@ else
 endif
 
 check-static: tools/bin/golangci-lint
-	$(GO) mod vendor
-	tools/bin/golangci-lint \
-		run ./... # $$($(PACKAGE_DIRECTORIES))
+	tools/bin/golangci-lint run --timeout 10m0s
 
 clean:
 	go clean -i ./...
 	rm -rf *.out
 
 tools/bin/revive: tools/check/go.mod
-	cd tools/check; \
+	cd tools/check; test -e ../bin/revive || \
 	$(GO) build -o ../bin/revive github.com/mgechev/revive
 
 tools/bin/golangci-lint: tools/check/go.mod
-	cd tools/check; \
+	cd tools/check; test -e ../bin/golangci-lint || \
 	$(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 
 failpoint-enable:

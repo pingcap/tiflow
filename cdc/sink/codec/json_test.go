@@ -48,7 +48,7 @@ var _ = check.Suite(&batchSuite{
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 	}, {
 		CommitTs: 4,
-		Table:    &model.TableName{Schema: "a", Table: "c", Partition: 6},
+		Table:    &model.TableName{Schema: "a", Table: "c", TableID: 6, IsPartition: true},
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
@@ -84,16 +84,7 @@ var _ = check.Suite(&batchSuite{
 })
 
 func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEncoder, newDecoder func(key []byte, value []byte) (EventBatchDecoder, error)) {
-	for _, cs := range s.rowCases {
-		encoder := newEncoder()
-		for _, row := range cs {
-			_, err := encoder.AppendRowChangedEvent(row)
-			c.Assert(err, check.IsNil)
-		}
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
-		c.Assert(err, check.IsNil)
+	checkRowDecoder := func(decoder EventBatchDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -108,17 +99,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			index++
 		}
 	}
-
-	for _, cs := range s.ddlCases {
-		encoder := newEncoder()
-		for _, ddl := range cs {
-			_, err := encoder.AppendDDLEvent(ddl)
-			c.Assert(err, check.IsNil)
-		}
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
-		c.Assert(err, check.IsNil)
+	checkDDLDecoder := func(decoder EventBatchDecoder, cs []*model.DDLEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -133,17 +114,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			index++
 		}
 	}
-
-	for _, cs := range s.resolvedTsCases {
-		encoder := newEncoder()
-		for _, ts := range cs {
-			_, err := encoder.AppendResolvedEvent(ts)
-			c.Assert(err, check.IsNil)
-		}
-		key, value := encoder.Build()
-		c.Assert(len(key)+len(value), check.Equals, encoder.Size())
-		decoder, err := newDecoder(key, value)
-		c.Assert(err, check.IsNil)
+	checkTSDecoder := func(decoder EventBatchDecoder, cs []uint64) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -158,10 +129,93 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 			index++
 		}
 	}
+
+	for _, cs := range s.rowCases {
+		encoder := newEncoder()
+		mixedEncoder := newEncoder()
+		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
+		for _, row := range cs {
+			_, err := encoder.AppendRowChangedEvent(row)
+			c.Assert(err, check.IsNil)
+
+			op, err := mixedEncoder.AppendRowChangedEvent(row)
+			c.Assert(op, check.Equals, EncoderNoOperation)
+			c.Assert(err, check.IsNil)
+		}
+		// test mixed decode
+		mixed := mixedEncoder.MixedBuild(true)
+		c.Assert(len(mixed), check.Equals, mixedEncoder.Size())
+		mixedDecoder, err := newDecoder(mixed, nil)
+		c.Assert(err, check.IsNil)
+		checkRowDecoder(mixedDecoder, cs)
+		// test normal decode
+		if len(cs) > 0 {
+			size := encoder.Size()
+			res := encoder.Build()
+			c.Assert(res, check.HasLen, 1)
+			c.Assert(len(res[0].Key)+len(res[0].Value), check.Equals, size)
+			decoder, err := newDecoder(res[0].Key, res[0].Value)
+			c.Assert(err, check.IsNil)
+			checkRowDecoder(decoder, cs)
+		}
+	}
+
+	for _, cs := range s.ddlCases {
+		encoder := newEncoder()
+		mixedEncoder := newEncoder()
+		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
+		for i, ddl := range cs {
+			msg, err := encoder.EncodeDDLEvent(ddl)
+			c.Assert(err, check.IsNil)
+			c.Assert(msg, check.NotNil)
+			decoder, err := newDecoder(msg.Key, msg.Value)
+			c.Assert(err, check.IsNil)
+			checkDDLDecoder(decoder, cs[i:i+1])
+
+			msg, err = mixedEncoder.EncodeDDLEvent(ddl)
+			c.Assert(msg, check.IsNil)
+			c.Assert(err, check.IsNil)
+		}
+
+		// test mixed encode
+		mixed := mixedEncoder.MixedBuild(true)
+		c.Assert(len(mixed), check.Equals, mixedEncoder.Size())
+		mixedDecoder, err := newDecoder(mixed, nil)
+		c.Assert(err, check.IsNil)
+		checkDDLDecoder(mixedDecoder, cs)
+	}
+
+	for _, cs := range s.resolvedTsCases {
+		encoder := newEncoder()
+		mixedEncoder := newEncoder()
+		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
+		for i, ts := range cs {
+			msg, err := encoder.EncodeCheckpointEvent(ts)
+			c.Assert(err, check.IsNil)
+			c.Assert(msg, check.NotNil)
+			decoder, err := newDecoder(msg.Key, msg.Value)
+			c.Assert(err, check.IsNil)
+			checkTSDecoder(decoder, cs[i:i+1])
+
+			msg, err = mixedEncoder.EncodeCheckpointEvent(ts)
+			c.Assert(msg, check.IsNil)
+			c.Assert(err, check.IsNil)
+		}
+
+		// test mixed encode
+		mixed := mixedEncoder.MixedBuild(true)
+		c.Assert(len(mixed), check.Equals, mixedEncoder.Size())
+		mixedDecoder, err := newDecoder(mixed, nil)
+		c.Assert(err, check.IsNil)
+		checkTSDecoder(mixedDecoder, cs)
+	}
 }
 
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
-	s.testBatchCodec(c, NewJSONEventBatchEncoder, NewJSONEventBatchDecoder)
+	s.testBatchCodec(c, func() EventBatchEncoder {
+		encoder := NewJSONEventBatchEncoder()
+		return encoder
+	}, NewJSONEventBatchDecoder)
 }
 
 var _ = check.Suite(&columnSuite{})
@@ -190,4 +244,25 @@ func (s *columnSuite) TestFormatCol(c *check.C) {
 	err = row2.Decode(rowEncode)
 	c.Assert(err, check.IsNil)
 	c.Assert(row2, check.DeepEquals, row)
+}
+
+func (s *columnSuite) TestVarBinaryCol(c *check.C) {
+	col := &model.Column{
+		Name:  "test",
+		Type:  mysql.TypeString,
+		Flag:  model.BinaryFlag,
+		Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+	}
+	jsonCol := column{}
+	jsonCol.FromSinkColumn(col)
+	row := &mqMessageRow{Update: map[string]column{"test": jsonCol}}
+	rowEncode, err := row.Encode()
+	c.Assert(err, check.IsNil)
+	row2 := new(mqMessageRow)
+	err = row2.Decode(rowEncode)
+	c.Assert(err, check.IsNil)
+	c.Assert(row2, check.DeepEquals, row)
+	jsonCol2 := row2.Update["test"]
+	col2 := jsonCol2.ToSinkColumn("test")
+	c.Assert(col2, check.DeepEquals, col)
 }

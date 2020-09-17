@@ -6,15 +6,18 @@ services:
     image: ticdc:latest
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./Dockerfile.development
     volumes:
       - ./docker/data:/data
       - ./docker/logs:/logs
       - ./docker/config:/config
     command:
-      - /bin/bash
-      - -c
-      - /usr/bin/tail -f /dev/null
+      - /usr/bin/socat
+      - -v
+      - tcp-l:1234,fork
+      - exec:'/bin/cat'
+    ports:
+      - "1234:1234"
     depends_on:
       - "upstream-pd"
       - "schema-registry"
@@ -29,15 +32,16 @@ services:
     image: ticdc:latest
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./Dockerfile.development
     volumes:
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     entrypoint: "/cdc server"
     command:
       - --addr=0.0.0.0:8300
       - --pd=http://upstream-pd:2379
       - --log-file=/logs/capturer0.log
+      - --log-level=debug
       - --advertise-addr=capturer0:8300
     depends_on:
       - "upstream-tidb"
@@ -49,15 +53,16 @@ services:
     image: ticdc:latest
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./Dockerfile.development
     volumes:
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     entrypoint: "/cdc server"
     command:
       - --addr=0.0.0.0:8300
       - --pd=http://upstream-pd:2379
       - --log-file=/logs/capturer1.log
+      - --log-level=debug
       - --advertise-addr=capturer1:8300
     depends_on:
       - "upstream-tidb"
@@ -69,15 +74,16 @@ services:
     image: ticdc:latest
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./Dockerfile.development
     volumes:
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     entrypoint: "/cdc server"
     command:
       - --addr=0.0.0.0:8300
       - --pd=http://upstream-pd:2379
       - --log-file=/logs/capturer2.log
+      - --log-level=debug
       - --advertise-addr=capturer2:8300
     depends_on:
       - "upstream-tidb"
@@ -91,7 +97,7 @@ services:
       - "2379:2379"
     volumes:
       - ./docker/config/pd.toml:/pd.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --name=upstream-pd
@@ -103,13 +109,14 @@ services:
       - --data-dir=/data/upstream-pd
       - --config=/pd.toml
       - --log-file=/logs/upstream-pd.log
+      - -L=debug
     restart: on-failure
 
   upstream-tikv0:
     image: pingcap/tikv:nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160
@@ -118,6 +125,7 @@ services:
       - --pd=upstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/upstream-tikv0.log
+      - --log-level=debug
     depends_on:
       - "upstream-pd"
     restart: on-failure
@@ -135,6 +143,7 @@ services:
       - --pd=upstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/upstream-tikv1.log
+      - --log-level=debug
     depends_on:
       - "upstream-pd"
     restart: on-failure
@@ -143,7 +152,7 @@ services:
     image: pingcap/tikv:nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160
@@ -152,6 +161,7 @@ services:
       - --pd=upstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/upstream-tikv2.log
+      - --log-level=debug
     depends_on:
       - "upstream-pd"
     restart: on-failure
@@ -170,6 +180,7 @@ services:
       - --config=/tidb.toml
       - --log-file=/logs/upstream-tidb.log
       - --advertise-address=upstream-tidb
+      - -L=debug
     depends_on:
       - "upstream-tikv0"
       - "upstream-tikv1"
@@ -182,7 +193,7 @@ services:
       - "3379:2379"
     volumes:
       - ./docker/config/pd.toml:/pd.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --name=downstream-pd
@@ -194,13 +205,14 @@ services:
       - --data-dir=/data/downstream-pd
       - --config=/pd.toml
       - --log-file=/logs/downstream-pd.log
+      - -L=debug
     restart: on-failure
 
   downstream-tikv0:
     image: pingcap/tikv:nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160
@@ -209,6 +221,7 @@ services:
       - --pd=downstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/downstream-tikv0.log
+      - --log-level=debug
     depends_on:
       - "downstream-pd"
     restart: on-failure
@@ -217,7 +230,7 @@ services:
     image: pingcap/tikv:nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160
@@ -226,6 +239,7 @@ services:
       - --pd=downstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/downstream-tikv1.log
+      - --log-level=debug
     depends_on:
       - "downstream-pd"
     restart: on-failure
@@ -234,7 +248,7 @@ services:
     image: pingcap/tikv:nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160
@@ -243,6 +257,7 @@ services:
       - --pd=downstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/downstream-tikv2.log
+      - --log-level=debug
     depends_on:
       - "downstream-pd"
     restart: on-failure
@@ -261,6 +276,7 @@ services:
       - --config=/tidb.toml
       - --log-file=/logs/downstream-tidb.log
       - --advertise-address=downstream-tidb
+      - -L=debug
     depends_on:
       - "downstream-tikv0"
       - "downstream-tikv1"
@@ -333,7 +349,8 @@ services:
       CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
       CONNECT_OFFSET_STORAGE_TOPIC: docker-connect-offsets
       CONNECT_STATUS_STORAGE_TOPIC: docker-connect-status
-      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_KEY_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
       CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
       CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
@@ -358,3 +375,13 @@ services:
         # Now launch Kafka Connect
         sleep infinity &
         /etc/confluent/docker/run
+
+  kafka-connect-healthcheck:
+    image: devshawn/kafka-connect-healthcheck:0.1.0
+    container_name: kafka-connect-healthcheck
+    depends_on:
+      - kafka-connect-01
+    ports:
+      - 18083:18083
+    environment:
+      HEALTHCHECK_CONNECT_URL: 'http://kafka-connect-01:8083'

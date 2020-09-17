@@ -38,6 +38,9 @@ func (s *taskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
 			5: {
 				Delete: true, BoundaryTs: 6, Done: true,
 			},
+			6: {
+				Delete: false, BoundaryTs: 7, Done: false,
+			},
 		},
 		AdminJobType: AdminStop,
 	}
@@ -54,16 +57,20 @@ func (s *taskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
 			5: {
 				Delete: true, BoundaryTs: 6, Done: true,
 			},
+			6: {
+				Delete: false, BoundaryTs: 7, Done: false,
+			},
 		})
 		c.Assert(clone.AdminJobType, check.Equals, AdminStop)
 	}
 
 	assertIsSnapshot()
 
-	info.Tables[6] = &TableReplicaInfo{StartTs: 100}
-	info.Operation = map[TableID]*TableOperation{
-		6: {Delete: true, BoundaryTs: 6, Done: true},
-	}
+	info.Tables[7] = &TableReplicaInfo{StartTs: 100}
+	info.Operation[7] = &TableOperation{Delete: true, BoundaryTs: 7, Done: true}
+
+	info.Operation[5].BoundaryTs = 8
+	info.Tables[1].StartTs = 200
 
 	assertIsSnapshot()
 }

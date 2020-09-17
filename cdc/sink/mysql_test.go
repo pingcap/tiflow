@@ -15,13 +15,18 @@ package sink
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/pingcap/parser/mysql"
-
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/davecgh/go-spew/spew"
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
+	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
@@ -39,102 +44,99 @@ var _ = check.Suite(&MySQLSinkSuite{})
 func newMySQLSink4Test(c *check.C) *mysqlSink {
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
+	params := defaultParams.Clone()
+	params.batchReplaceEnabled = false
 	return &mysqlSink{
 		txnCache:   common.NewUnresolvedTxnCache(),
 		filter:     f,
 		statistics: NewStatistics(context.TODO(), "test", make(map[string]string)),
+		params:     params,
 	}
 }
 
 func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 	testCases := []struct {
 		input    []*model.RowChangedEvent
-		expected map[model.TableName][]*model.Txn
+		expected map[model.TableID][]*model.SingleTableTxn
 	}{{
 		input:    []*model.RowChangedEvent{},
-		expected: map[model.TableName][]*model.Txn{},
+		expected: map[model.TableID][]*model.SingleTableTxn{},
 	}, {
 		input: []*model.RowChangedEvent{
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
-				Keys:     []string{"a", "b"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
-				Keys:     []string{"b", "c"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
-				Keys:     []string{"a", "b"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 		},
-		expected: map[model.TableName][]*model.Txn{
-			{Schema: "s1", Table: "t1"}: {
+		expected: map[model.TableID][]*model.SingleTableTxn{
+			1: {
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  1,
 					CommitTs: 2,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
-							Keys:     []string{"a", "b"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						},
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
-							Keys:     []string{"b", "c"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						},
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
-							Keys:     []string{"a", "b"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
-					Keys: []string{"a", "b", "b", "c", "a", "b"},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  3,
 					CommitTs: 4,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						},
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						},
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
-					Keys: []string{"`s1`.`t1`"},
 				},
 			},
 		},
@@ -143,103 +145,103 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  5,
 				CommitTs: 6,
-				Table:    &model.TableName{Schema: "s1", Table: "t1"},
+				Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			},
 			{
 				StartTs:  1,
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "s1", Table: "t2"},
+				Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			},
 			{
 				StartTs:  3,
 				CommitTs: 4,
-				Table:    &model.TableName{Schema: "s1", Table: "t2"},
+				Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			},
 			{
 				StartTs:  5,
 				CommitTs: 6,
-				Table:    &model.TableName{Schema: "s1", Table: "t2"},
+				Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			},
 		},
-		expected: map[model.TableName][]*model.Txn{
-			{Schema: "s1", Table: "t1"}: {
+		expected: map[model.TableID][]*model.SingleTableTxn{
+			1: {
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  1,
 					CommitTs: 2,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
-					Keys: []string{"`s1`.`t1`"},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  3,
 					CommitTs: 4,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
-					Keys: []string{"`s1`.`t1`"},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 					StartTs:  5,
 					CommitTs: 6,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  5,
 							CommitTs: 6,
-							Table:    &model.TableName{Schema: "s1", Table: "t1"},
+							Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 						}},
-					Keys: []string{"`s1`.`t1`"},
 				},
 			},
-			{Schema: "s1", Table: "t2"}: {
+			2: {
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 					StartTs:  1,
 					CommitTs: 2,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  1,
 							CommitTs: 2,
-							Table:    &model.TableName{Schema: "s1", Table: "t2"},
+							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 						}},
-					Keys: []string{"`s1`.`t2`"},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 					StartTs:  3,
 					CommitTs: 4,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  3,
 							CommitTs: 4,
-							Table:    &model.TableName{Schema: "s1", Table: "t2"},
+							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 						}},
-					Keys: []string{"`s1`.`t2`"},
 				},
 				{
+					Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 					StartTs:  5,
 					CommitTs: 6,
 					Rows: []*model.RowChangedEvent{
 						{
 							StartTs:  5,
 							CommitTs: 6,
-							Table:    &model.TableName{Schema: "s1", Table: "t2"},
+							Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 						}},
-					Keys: []string{"`s1`.`t2`"},
 				},
 			},
 		},
@@ -256,16 +258,16 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 
 func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 	testCases := []struct {
-		txns                     []*model.Txn
+		txns                     []*model.SingleTableTxn
 		expectedOutputRows       [][]*model.RowChangedEvent
 		exportedOutputReplicaIDs []uint64
 		maxTxnRow                int
 	}{
 		{
-			txns:      []*model.Txn{},
+			txns:      []*model.SingleTableTxn{},
 			maxTxnRow: 4,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
@@ -276,7 +278,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			exportedOutputReplicaIDs: []uint64{1},
 			maxTxnRow:                2,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}, {CommitTs: 1}},
@@ -289,7 +291,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			exportedOutputReplicaIDs: []uint64{1},
 			maxTxnRow:                2,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}, {CommitTs: 1}},
@@ -313,7 +315,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			exportedOutputReplicaIDs: []uint64{1, 1},
 			maxTxnRow:                4,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
@@ -338,7 +340,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 			exportedOutputReplicaIDs: []uint64{1, 2, 3},
 			maxTxnRow:                4,
 		}, {
-			txns: []*model.Txn{
+			txns: []*model.SingleTableTxn{
 				{
 					CommitTs:  1,
 					Rows:      []*model.RowChangedEvent{{CommitTs: 1}},
@@ -416,7 +418,6 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
 				StartTs:  418658114257813514,
 				CommitTs: 418658114257813515,
 				Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-				Delete:   true,
 				PreColumns: []*model.Column{nil, {
 					Name:  "a1",
 					Type:  mysql.TypeLong,
@@ -429,20 +430,302 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
 					Value: 1,
 				}},
 				IndexColumns: [][]int{{1, 2}},
-				Keys:         []string{"11`common_1`.`uk_without_pk`"},
 			},
 		},
 		expected: &preparedDMLs{
-			sqls:   []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
-			values: [][]interface{}{{1, 1}},
+			sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
+			values:   [][]interface{}{{1, 1}},
+			rowCount: 1,
 		},
 	}}
 	ms := newMySQLSink4Test(c)
 	for i, tc := range testCases {
-		dmls, err := ms.prepareDMLs(tc.input, 0, 0)
-		c.Assert(err, check.IsNil)
+		dmls := ms.prepareDMLs(tc.input, 0, 0)
 		c.Assert(dmls, check.DeepEquals, tc.expected, check.Commentf("%d", i))
 	}
+}
+
+func (s MySQLSinkSuite) TestPrepareUpdate(c *check.C) {
+	testCases := []struct {
+		quoteTable   string
+		preCols      []*model.Column
+		cols         []*model.Column
+		expectedSQL  string
+		expectedArgs []interface{}
+	}{
+		{
+			quoteTable:   "`test`.`t1`",
+			preCols:      []*model.Column{},
+			cols:         []*model.Column{},
+			expectedSQL:  "",
+			expectedArgs: nil,
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test2"},
+			},
+			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? LIMIT 1;",
+			expectedArgs: []interface{}{1, "test2", 1},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 2},
+				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test2"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
+			expectedArgs: []interface{}{2, "test2", 1, "test"},
+		},
+	}
+	for _, tc := range testCases {
+		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols)
+		c.Assert(query, check.Equals, tc.expectedSQL)
+		c.Assert(args, check.DeepEquals, tc.expectedArgs)
+	}
+}
+
+func (s MySQLSinkSuite) TestMapReplace(c *check.C) {
+	testCases := []struct {
+		quoteTable    string
+		cols          []*model.Column
+		expectedQuery string
+		expectedArgs  []interface{}
+	}{
+		{
+			quoteTable: "`test`.`t1`",
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Value: "varchar"},
+				{Name: "c", Type: mysql.TypeLong, Value: 1, Flag: model.GeneratedColumnFlag},
+				{Name: "d", Type: mysql.TypeTiny, Value: uint8(255)},
+			},
+			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`d`) VALUES ",
+			expectedArgs:  []interface{}{1, "varchar", uint8(255)},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Value: "varchar"},
+				{Name: "c", Type: mysql.TypeLong, Value: 1},
+				{Name: "d", Type: mysql.TypeTiny, Value: uint8(255)},
+			},
+			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`c`,`d`) VALUES ",
+			expectedArgs:  []interface{}{1, "varchar", 1, uint8(255)},
+		},
+	}
+	for _, tc := range testCases {
+		// multiple times to verify the stability of column sequence in query string
+		for i := 0; i < 10; i++ {
+			query, args := prepareReplace(tc.quoteTable, tc.cols, false, false)
+			c.Assert(query, check.Equals, tc.expectedQuery)
+			c.Assert(args, check.DeepEquals, tc.expectedArgs)
+		}
+	}
+}
+
+type sqlArgs [][]interface{}
+
+func (a sqlArgs) Len() int           { return len(a) }
+func (a sqlArgs) Less(i, j int) bool { return fmt.Sprintf("%s", a[i]) < fmt.Sprintf("%s", a[j]) }
+func (a sqlArgs) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+
+func (s MySQLSinkSuite) TestReduceReplace(c *check.C) {
+	testCases := []struct {
+		replaces   map[string][][]interface{}
+		batchSize  int
+		sort       bool
+		expectSQLs []string
+		expectArgs [][]interface{}
+	}{
+		{
+			replaces: map[string][][]interface{}{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES ": {
+					[]interface{}{1, "1"},
+					[]interface{}{2, "2"},
+					[]interface{}{3, "3"},
+				},
+			},
+			batchSize: 1,
+			sort:      false,
+			expectSQLs: []string{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)",
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)",
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)",
+			},
+			expectArgs: [][]interface{}{
+				{1, "1"},
+				{2, "2"},
+				{3, "3"},
+			},
+		},
+		{
+			replaces: map[string][][]interface{}{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES ": {
+					[]interface{}{1, "1"},
+					[]interface{}{2, "2"},
+					[]interface{}{3, "3"},
+					[]interface{}{4, "3"},
+					[]interface{}{5, "5"},
+				},
+			},
+			batchSize: 3,
+			sort:      false,
+			expectSQLs: []string{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?),(?,?)",
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?)",
+			},
+			expectArgs: [][]interface{}{
+				{1, "1", 2, "2", 3, "3"},
+				{4, "3", 5, "5"},
+			},
+		},
+		{
+			replaces: map[string][][]interface{}{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES ": {
+					[]interface{}{1, "1"},
+					[]interface{}{2, "2"},
+					[]interface{}{3, "3"},
+					[]interface{}{4, "3"},
+					[]interface{}{5, "5"},
+				},
+			},
+			batchSize: 10,
+			sort:      false,
+			expectSQLs: []string{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?),(?,?),(?,?),(?,?)",
+			},
+			expectArgs: [][]interface{}{
+				{1, "1", 2, "2", 3, "3", 4, "3", 5, "5"},
+			},
+		},
+		{
+			replaces: map[string][][]interface{}{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES ": {
+					[]interface{}{1, "1"},
+					[]interface{}{2, "2"},
+					[]interface{}{3, "3"},
+					[]interface{}{4, "3"},
+					[]interface{}{5, "5"},
+					[]interface{}{6, "6"},
+				},
+				"REPLACE INTO `test`.`t2`(`a`,`b`) VALUES ": {
+					[]interface{}{7, ""},
+					[]interface{}{8, ""},
+					[]interface{}{9, ""},
+				},
+			},
+			batchSize: 3,
+			sort:      true,
+			expectSQLs: []string{
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?),(?,?)",
+				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?),(?,?)",
+				"REPLACE INTO `test`.`t2`(`a`,`b`) VALUES (?,?),(?,?),(?,?)",
+			},
+			expectArgs: [][]interface{}{
+				{1, "1", 2, "2", 3, "3"},
+				{4, "3", 5, "5", 6, "6"},
+				{7, "", 8, "", 9, ""},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		sqls, args := reduceReplace(tc.replaces, tc.batchSize)
+		if tc.sort {
+			sort.Strings(sqls)
+			sort.Sort(sqlArgs(args))
+		}
+		c.Assert(sqls, check.DeepEquals, tc.expectSQLs)
+		c.Assert(args, check.DeepEquals, tc.expectArgs)
+	}
+}
+func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
+	param1 := defaultParams.Clone()
+	param2 := param1.Clone()
+	param2.changefeedID = "123"
+	param2.batchReplaceEnabled = false
+	param2.maxTxnRow = 1
+	c.Assert(param1, check.DeepEquals, &sinkParams{
+		workerCount:         defaultWorkerCount,
+		maxTxnRow:           defaultMaxTxnRow,
+		tidbTxnMode:         defaultTiDBTxnMode,
+		batchReplaceEnabled: defaultBatchReplaceEnabled,
+		batchReplaceSize:    defaultBatchReplaceSize,
+		readTimeout:         defaultReadTimeout,
+		writeTimeout:        defaultWriteTimeout,
+		safeMode:            defaultSafeMode,
+	})
+	c.Assert(param2, check.DeepEquals, &sinkParams{
+		changefeedID:        "123",
+		workerCount:         defaultWorkerCount,
+		maxTxnRow:           1,
+		tidbTxnMode:         defaultTiDBTxnMode,
+		batchReplaceEnabled: false,
+		batchReplaceSize:    defaultBatchReplaceSize,
+		readTimeout:         defaultReadTimeout,
+		writeTimeout:        defaultWriteTimeout,
+		safeMode:            defaultSafeMode,
+	})
+}
+
+func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, check.IsNil)
+	columns := []string{"Variable_name", "Value"}
+	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+	)
+	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+	)
+
+	dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
+	c.Assert(err, check.IsNil)
+	dsnStr, err := configureSinkURI(context.TODO(), dsn, time.Local, defaultParams.Clone(), db)
+	c.Assert(err, check.IsNil)
+	expectedParams := []string{
+		"tidb_txn_mode=optimistic",
+		"readTimeout=2m",
+		"writeTimeout=2m",
+		"allow_auto_random_explicit_insert=1",
+	}
+	for _, param := range expectedParams {
+		c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
+	}
+}
+
+func (s MySQLSinkSuite) TestCheckTiDBVariable(c *check.C) {
+	db, mock, err := sqlmock.New()
+	c.Assert(err, check.IsNil)
+	columns := []string{"Variable_name", "Value"}
+
+	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+	)
+	val, err := checkTiDBVariable(context.TODO(), db, "allow_auto_random_explicit_insert", "1")
+	c.Assert(err, check.IsNil)
+	c.Assert(val, check.Equals, "1")
+
+	mock.ExpectQuery("show session variables like 'no_exist_variable';").WillReturnError(sql.ErrNoRows)
+	val, err = checkTiDBVariable(context.TODO(), db, "no_exist_variable", "0")
+	c.Assert(err, check.IsNil)
+	c.Assert(val, check.Equals, "")
+
+	mock.ExpectQuery("show session variables like 'version';").WillReturnError(sql.ErrConnDone)
+	_, err = checkTiDBVariable(context.TODO(), db, "version", "5.7.25-TiDB-v4.0.0")
+	c.Assert(err, check.ErrorMatches, ".*"+sql.ErrConnDone.Error())
 }
 
 /*
@@ -479,7 +762,7 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
    		db: db,
    	}
 
-   	t := model.Txn{
+   	t := model.SingleTableTxn{
    		DDL: &model.DDL{
    			Database: "test",
    			Table:    "user",
@@ -512,7 +795,7 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
    		db: db,
    	}
 
-   	t := model.Txn{
+   	t := model.SingleTableTxn{
    		DDL: &model.DDL{
    			Database: "test",
    			Table:    "user",
@@ -585,7 +868,7 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
    		infoGetter: &helper,
    	}
 
-   	t := model.Txn{
+   	t := model.SingleTableTxn{
    		DMLs: []*model.DML{
    			{
    				Database: "test",
@@ -625,7 +908,7 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
    		infoGetter: &helper,
    	}
 
-   	t := model.Txn{
+   	t := model.SingleTableTxn{
    		DMLs: []*model.DML{
    			{
    				Database: "test",

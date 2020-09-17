@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"go.uber.org/zap"
 )
@@ -93,7 +94,7 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 	for _, ruleConfig := range ruleConfigs {
 		f, err := filter.Parse(ruleConfig.Matcher)
 		if err != nil {
-			return nil, err
+			return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err)
 		}
 		if !cfg.CaseSensitive {
 			f = filter.CaseInsensitive(f)
@@ -103,13 +104,18 @@ func NewDispatcher(cfg *config.ReplicaConfig, partitionNum int32) (Dispatcher, e
 		rule.fromString(ruleConfig.Dispatcher)
 		switch rule {
 		case dispatchRuleRowID, dispatchRuleIndexValue:
+			if cfg.EnableOldValue {
+				log.Warn("This index-value distribution mode " +
+					"does not guarantee row-level orderliness when " +
+					"switching on the old value, so please use caution!")
+			}
 			d = newIndexValueDispatcher(partitionNum)
 		case dispatchRuleTS:
 			d = newTsDispatcher(partitionNum)
 		case dispatchRuleTable:
-			d = newTsDispatcher(partitionNum)
+			d = newTableDispatcher(partitionNum)
 		case dispatchRuleDefault:
-			d = newDefaultDispatcher(partitionNum)
+			d = newDefaultDispatcher(partitionNum, cfg.EnableOldValue)
 		}
 		rules = append(rules, struct {
 			Dispatcher

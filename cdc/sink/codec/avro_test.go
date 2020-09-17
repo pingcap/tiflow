@@ -40,13 +40,16 @@ var _ = check.Suite(&avroBatchEncoderSuite{})
 func (s *avroBatchEncoderSuite) SetUpSuite(c *check.C) {
 	startHTTPInterceptForTestingRegistry(c)
 
-	manager, err := NewAvroSchemaManager(context.Background(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
+	keyManager, err := NewAvroSchemaManager(context.Background(), &security.Credential{}, "http://127.0.0.1:8081", "-key")
+	c.Assert(err, check.IsNil)
+
+	valueManager, err := NewAvroSchemaManager(context.Background(), &security.Credential{}, "http://127.0.0.1:8081", "-value")
 	c.Assert(err, check.IsNil)
 
 	s.encoder = &AvroEventBatchEncoder{
-		valueSchemaManager: manager,
-		keyBuf:             nil,
-		valueBuf:           nil,
+		valueSchemaManager: valueManager,
+		keySchemaManager:   keyManager,
+		resultBuf:          make([]*MQMessage, 0, 4096),
 	}
 }
 
@@ -72,18 +75,14 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	table := model.TableName{
-		Schema:    "testdb",
-		Table:     "test1",
-		Partition: 0,
+		Schema: "testdb",
+		Table:  "test1",
 	}
 
-	err = s.encoder.valueSchemaManager.Register(context.Background(), table, avroCodec)
-	c.Assert(err, check.IsNil)
-
-	r, err := s.encoder.avroEncode(&table, 1, []*model.Column{
-		{Name: "id", Value: int32(1), Type: mysql.TypeLong},
-		{Name: "myint", Value: int32(2), Type: mysql.TypeLong},
-		{Name: "mybool", Value: uint8(1), Type: mysql.TypeTiny},
+	r, err := avroEncode(&table, s.encoder.valueSchemaManager, 1, []*model.Column{
+		{Name: "id", Value: int64(1), Type: mysql.TypeLong},
+		{Name: "myint", Value: int64(2), Type: mysql.TypeLong},
+		{Name: "mybool", Value: int64(1), Type: mysql.TypeTiny},
 		{Name: "myfloat", Value: float32(3.14), Type: mysql.TypeFloat},
 		{Name: "mybytes", Value: []byte("Hello World"), Type: mysql.TypeBlob},
 		{Name: "ts", Value: time.Now().Format(types.TimeFSPFormat), Type: mysql.TypeTimestamp},
@@ -144,11 +143,10 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 			Schema: "test",
 			Table:  "person",
 		},
-		Delete: false,
 		Columns: []*model.Column{
-			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
+			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: int64(1)},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
-			{Name: "tiny", Type: mysql.TypeTiny, Value: uint8(255)},
+			{Name: "tiny", Type: mysql.TypeTiny, Value: int64(255)},
 			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 		},
 	}
@@ -184,7 +182,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 		testCaseDdl.TableInfo.ColumnInfo[i].FromTiColumnInfo(v)
 	}
 
-	_, err := s.encoder.AppendDDLEvent(testCaseDdl)
+	_, err := s.encoder.EncodeDDLEvent(testCaseDdl)
 	c.Check(err, check.IsNil)
 
 	_, err = s.encoder.AppendRowChangedEvent(testCaseUpdate)

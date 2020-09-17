@@ -1,8 +1,8 @@
 def prepare_binaries() {
     stage('Prepare Binaries') {
-        def TIDB_BRANCH = "master"
-        def TIKV_BRANCH = "master"
-        def PD_BRANCH = "master"
+        def TIDB_BRANCH = params.getOrDefault("release_test__tidb_commit", "master")
+        def TIKV_BRANCH = params.getOrDefault("release_test__tikv_commit", "master")
+        def PD_BRANCH = params.getOrDefault("release_test__pd_commit", "master")
 
         // parse tidb branch
         def m1 = ghprbCommentBody =~ /tidb\s*=\s*([^\s\\]+)(\s|\\|$)/
@@ -34,6 +34,7 @@ def prepare_binaries() {
             node ("${GO_TEST_SLAVE}") {
                 deleteDir()
                 container("golang") {
+                    println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
                     def tidb_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tidb/${TIDB_BRANCH}/sha1").trim()
                     def tikv_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/tikv/${TIKV_BRANCH}/sha1").trim()
                     def pd_sha1 = sh(returnStdout: true, script: "curl ${FILE_SERVER_URL}/download/refs/pingcap/pd/${PD_BRANCH}/sha1").trim()
@@ -44,10 +45,12 @@ def prepare_binaries() {
                         tidb_url="${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
                         tikv_url="${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
                         pd_url="${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
+                        minio_url="${FILE_SERVER_URL}/download/minio.tar.gz"
 
                         curl \${tidb_url} | tar xz -C ./tmp bin/tidb-server
                         curl \${pd_url} | tar xz -C ./tmp bin/*
                         curl \${tikv_url} | tar xz -C ./tmp bin/tikv-server
+                        curl \${minio_url} | tar xz -C ./tmp/bin minio
                         mv tmp/bin/* third_bin
                         curl http://download.pingcap.org/tiflash-nightly-linux-amd64.tar.gz | tar xz -C third_bin
                         mv third_bin/tiflash-nightly-linux-amd64/* third_bin
@@ -70,6 +73,7 @@ def prepare_binaries() {
         prepares["build binaries"] = {
             node ("${GO_TEST_SLAVE}") {
                 container("golang") {
+                    println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
                     def ws = pwd()
                     deleteDir()
                     unstash 'ticdc'
@@ -139,6 +143,7 @@ def tests(sink_type, node_label) {
                         sh "mv ${ws}/third_bin/* ./bin/"
                         try {
                             sh """
+                                sudo pip install s3cmd
                                 rm -rf /tmp/tidb_cdc_test
                                 mkdir -p /tmp/tidb_cdc_test
                                 GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make integration_test_${sink_type} CASE=${case_name}

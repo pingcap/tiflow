@@ -16,10 +16,10 @@ package cdc
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc"
 	"go.uber.org/zap"
@@ -166,7 +166,7 @@ restart:
 func (w *TaskWatcher) parseTask(ctx context.Context,
 	key, val []byte) (*Task, error) {
 	if len(key) <= len(w.cfg.Prefix) {
-		return nil, errors.New("invalid task key: " + string(key))
+		return nil, cerror.ErrInvalidTaskKey.GenWithStackByArgs(string(key))
 	}
 	changeFeedID := string(key[len(w.cfg.Prefix)+1:])
 	cf, err := w.capture.etcdClient.GetChangeFeedInfo(ctx, changeFeedID)
@@ -174,7 +174,7 @@ func (w *TaskWatcher) parseTask(ctx context.Context,
 		return nil, err
 	}
 	status, _, err := w.capture.etcdClient.GetChangeFeedStatus(ctx, changeFeedID)
-	if err != nil && errors.Cause(err) != model.ErrChangeFeedNotExists {
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
 	checkpointTs := cf.GetCheckpointTs(status)

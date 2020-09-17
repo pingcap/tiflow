@@ -15,6 +15,8 @@ package codec
 
 import (
 	"fmt"
+	"go.uber.org/zap"
+	"log"
 	"strconv"
 	"strings"
 
@@ -24,6 +26,7 @@ import (
 	"github.com/pingcap/parser/mysql"
 	parser_types "github.com/pingcap/parser/types"
 	"github.com/pingcap/ticdc/cdc/model"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -44,7 +47,7 @@ func convertToCanalTs(commitTs uint64) int64 {
 
 // get the canal EventType according to the RowChangedEvent
 func convertRowEventType(e *model.RowChangedEvent) canal.EventType {
-	if e.Delete {
+	if e.IsDelete() {
 		return canal.EventType_DELETE
 	}
 	return canal.EventType_UPDATE
@@ -187,7 +190,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 			default:
 				decoded, err := b.bytesDecoder.Bytes(v)
 				if err != nil {
-					return nil, errors.Trace(err)
+					return nil, cerror.WrapError(cerror.ErrCanalDecodeFailed, err)
 				}
 				value = string(decoded)
 				sqlType = JavaSQLTypeBLOB // change sql type to Blob when the type is []byte according to canal
@@ -216,7 +219,7 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 		if e == nil {
 			continue
 		}
-		c, err := b.buildColumn(column, column.Name, !e.Delete)
+		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -227,7 +230,7 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 		if e == nil {
 			continue
 		}
-		c, err := b.buildColumn(column, column.Name, !e.Delete)
+		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -256,7 +259,7 @@ func (b *canalEntryBuilder) FromRowEvent(e *model.RowChangedEvent) (*canal.Entry
 	}
 	rcBytes, err := proto.Marshal(rc)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	// build entry
@@ -282,7 +285,7 @@ func (b *canalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error
 	}
 	rcBytes, err := proto.Marshal(rc)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	// build entry
@@ -309,11 +312,17 @@ type CanalEventBatchEncoder struct {
 	entryBuilder *canalEntryBuilder
 }
 
-// AppendResolvedEvent implements the EventBatchEncoder interface
+// AppendResolvedEvent appends a resolved event to the encoder
+// TODO TXN support
 func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
+	return EncoderNoOperation, nil
+}
+
+// EncodeCheckpointEvent implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore the event is ignored.
-	return EncoderNoOperation, nil
+	return nil, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
@@ -324,37 +333,63 @@ func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return EncoderNoOperation, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	d.messages.Messages = append(d.messages.Messages, b)
 	return EncoderNoOperation, nil
 }
 
-// AppendDDLEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendDDLEvent(e *model.DDLEvent) (EncoderResult, error) {
+// EncodeDDLEvent implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
 	entry, err := d.entryBuilder.FromDdlEvent(e)
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	b, err := proto.Marshal(entry)
 	if err != nil {
-		return EncoderNoOperation, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	d.messages.Messages = append(d.messages.Messages, b)
-	return EncoderNeedSyncWrite, nil
+
+	messages := new(canal.Messages)
+	messages.Messages = append(messages.Messages, b)
+	b, err = messages.Marshal()
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+	}
+
+	packet := &canal.Packet{
+		VersionPresent: &canal.Packet_Version{
+			Version: CanalPacketVersion,
+		},
+		Type: canal.PacketType_MESSAGES,
+	}
+	packet.Body = b
+	b, err = packet.Marshal()
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+	}
+
+	return NewMQMessage(nil, b, e.CommitTs), nil
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) Build() (key []byte, value []byte) {
+func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 	err := d.refreshPacketBody()
 	if err != nil {
-		panic(err)
+		log.Fatal("Error when generating Canal packet", zap.Error(err))
 	}
-	value, err = proto.Marshal(d.packet)
+	value, err := proto.Marshal(d.packet)
 	if err != nil {
-		panic(err)
+		log.Fatal("Error when serializing Canal packet", zap.Error(err))
 	}
-	return nil, value
+	ret := NewMQMessage(nil, value, 0)
+	d.messages.Reset()
+	return []*MQMessage{ret}
+}
+
+// MixedBuild implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) MixedBuild(withVersion bool) []byte {
+	panic("Mixed Build only use for JsonEncoder")
 }
 
 // Size implements the EventBatchEncoder interface
@@ -365,6 +400,11 @@ func (d *CanalEventBatchEncoder) Size() int {
 		panic(err)
 	}
 	return proto.Size(d.packet)
+}
+
+// Reset implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoder) Reset() {
+	panic("Reset only used for JsonEncoder")
 }
 
 // refreshPacketBody() marshals the messages to the packet body

@@ -26,8 +26,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/kv"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.etcd.io/etcd/clientv3"
@@ -51,6 +52,8 @@ func (s *Server) startStatusHTTP() error {
 	serverMux.HandleFunc("/capture/owner/move_table", s.handleMoveTable)
 	serverMux.HandleFunc("/capture/owner/changefeed/query", s.handleChangefeedQuery)
 
+	serverMux.HandleFunc("/admin/log", handleAdminLogLevel)
+
 	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
 
@@ -68,7 +71,7 @@ func (s *Server) startStatusHTTP() error {
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return err
+		return cerror.WrapError(cerror.ErrServeHTTP, err)
 	}
 	go func() {
 		log.Info("status http server is running", zap.String("addr", addr))
@@ -78,7 +81,7 @@ func (s *Server) startStatusHTTP() error {
 			err = s.statusServer.Serve(ln)
 		}
 		if err != nil && err != http.ErrServerClosed {
-			log.Error("status server error", zap.Error(err))
+			log.Error("status server error", zap.Error(cerror.WrapError(cerror.ErrServeHTTP, err)))
 		}
 	}()
 	return nil
@@ -125,8 +128,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, req *http.Request) {
 	s.ownerLock.RLock()
 	defer s.ownerLock.RUnlock()
 	st := status{
-		Version: util.ReleaseVersion,
-		GitHash: util.GitHash,
+		Version: version.ReleaseVersion,
+		GitHash: version.GitHash,
 		Pid:     os.Getpid(),
 	}
 	if s.capture != nil {
