@@ -836,6 +836,7 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			cf.stopSyncPointTicker()
 		case model.AdminRemove, model.AdminFinish:
 			if cf != nil {
+				cf.stopSyncPointTicker()
 				err := o.dispatchJob(ctx, job)
 				if err != nil {
 					return errors.Trace(err)
@@ -883,7 +884,6 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 			}
-			cf.stopSyncPointTicker()
 		case model.AdminResume:
 			// resume changefeed must read checkpoint from ChangeFeedStatus
 			if cerror.ErrChangeFeedNotExists.Equal(err) {
@@ -1326,48 +1326,3 @@ func (o *Owner) startCaptureWatcher(ctx context.Context) {
 		}
 	}()
 }
-
-/*func (o *Owner) configureSinkURI(ctx context.Context, dsnCfg *dmysql.Config, tz *time.Location) (string, error) {
-if dsnCfg.Params == nil {
-	dsnCfg.Params = make(map[string]string, 1)
-}
-dsnCfg.DBName = ""
-dsnCfg.InterpolateParams = true
-dsnCfg.MultiStatements = true
-dsnCfg.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
-
-testDB, err := sql.Open("mysql", dsnCfg.FormatDSN())
-if err != nil {
-	return "", errors.Annotate(err, "fail to open MySQL connection when configuring sink")
-}
-defer testDB.Close()
-log.Debug("Opened connection to configure some tidb special parameters")
-
-var variableName string
-var autoRandomInsertEnabled string
-queryStr := "show session variables like 'allow_auto_random_explicit_insert';"
-err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &autoRandomInsertEnabled)
-if err != nil && err != sql.ErrNoRows {
-	return "", errors.Annotate(err, "fail to query sink for support of auto-random")
-}
-if err == nil && (autoRandomInsertEnabled == "off" || autoRandomInsertEnabled == "0") {
-	dsnCfg.Params["allow_auto_random_explicit_insert"] = "1"
-	log.Debug("Set allow_auto_random_explicit_insert to 1")
-}
-
-var txnMode string
-queryStr = "show session variables like 'tidb_txn_mode';"
-err = testDB.QueryRowContext(ctx, queryStr).Scan(&variableName, &txnMode)
-if err != nil && err != sql.ErrNoRows {
-	return "", errors.Annotate(err, "fail to query sink for txn mode")
-}
-/*if err == nil {
-	dsnCfg.Params["tidb_txn_mode"] = params.tidbTxnMode
-}*/
-
-/*	dsnClone := dsnCfg.Clone()
-	dsnClone.Passwd = "******"
-	log.Info("sink uri is configured", zap.String("format dsn", dsnClone.FormatDSN()))
-
-	return dsnCfg.FormatDSN(), nil
-}*/

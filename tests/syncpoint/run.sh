@@ -11,6 +11,8 @@ SINK_TYPE=$1
 CDC_COUNT=3
 DB_COUNT=4
 
+# The follow `sleep 2` make sure the ddl and dml operation can always execute during the test.
+# So every syncpoint will have different data and the diff tool can judge the syncpoint's validity.
 function ddl() {
     run_sql "DROP table IF EXISTS testSync.simple1"
     sleep 2

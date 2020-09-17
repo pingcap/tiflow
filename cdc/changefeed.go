@@ -917,16 +917,15 @@ func (c *changeFeed) createSynctable(ctx context.Context) error {
 	tx, err := c.syncDB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Info("create sync table: begin Tx fail")
-		return err
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 	_, err = tx.Exec("CREATE DATABASE IF NOT EXISTS " + database)
-	//_,err := c.syncDB.Exec("CREATE DATABASE IF NOT EXISTS " + database)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
 			log.Error(err2.Error())
 		}
-		return err
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 	_, err = tx.Exec("USE " + database)
 	if err != nil {
@@ -934,18 +933,18 @@ func (c *changeFeed) createSynctable(ctx context.Context) error {
 		if err2 != nil {
 			log.Error(err2.Error())
 		}
-		return err
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS syncpoint (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `primary_ts` ) )")
+	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS syncpoint (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `cf`, `primary_ts` ) )")
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
 			log.Error(err2.Error())
 		}
-		return err
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 	err = tx.Commit()
-	return err
+	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
 //sinkSyncpoint record the syncpoint(a map with ts) in downstream db
@@ -953,7 +952,7 @@ func (c *changeFeed) sinkSyncpoint(ctx context.Context) error {
 	tx, err := c.syncDB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Info("sync table: begin Tx fail")
-		return err
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 	row := tx.QueryRow("select @@tidb_current_ts")
 	var secondaryTs string
@@ -964,7 +963,7 @@ func (c *changeFeed) sinkSyncpoint(ctx context.Context) error {
 		if err2 != nil {
 			log.Error(err2.Error())
 		}
-		return err
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 	_, err = tx.Exec("insert into TiCDC.syncpoint(cf, primary_ts, secondary_ts) VALUES (?,?,?)", c.id, c.status.CheckpointTs, secondaryTs)
 	if err != nil {
@@ -972,11 +971,10 @@ func (c *changeFeed) sinkSyncpoint(ctx context.Context) error {
 		if err2 != nil {
 			log.Error(err2.Error())
 		}
-		return err
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	//tx.Exec("insert into TiCDC.syncpoint( master_ts, slave_ts) VALUES (?,?)", c.status.CheckpointTs, 0)
-	err = tx.Commit() //TODO deal with error
-	return err
+	err = tx.Commit()
+	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
 func (c *changeFeed) stopSyncPointTicker() {
