@@ -359,7 +359,7 @@ func (o *Owner) newChangeFeed(
 
 	syncDB, err := sink.NewSyncpointSinklink(ctx, info, id)
 	if err != nil {
-		log.Error("error on running owner", zap.Error(err))
+		return nil, errors.Trace(err)
 	}
 
 	cf = &changeFeed{
@@ -541,13 +541,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-
-			//start SyncPeriod for create the sync point
-			syncInterval, err := time.ParseDuration(newCf.info.SyncInterval)
-			if err != nil {
-				syncInterval = defaultSyncInterval
-			}
-			newCf.startSyncPointTicker(ctx, syncInterval)
+			newCf.startSyncPointTicker(ctx, newCf.info.SyncInterval)
 		} else {
 			log.Info("syncpoint is off", zap.Bool("syncpoint", newCf.info.SyncPoint))
 		}

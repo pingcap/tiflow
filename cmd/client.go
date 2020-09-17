@@ -75,7 +75,7 @@ var (
 	interval     uint
 
 	syncPoint    bool
-	syncInterval string
+	syncInterval time.Duration
 
 	optForceRemove bool
 

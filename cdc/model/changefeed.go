@@ -82,8 +82,8 @@ type ChangeFeedInfo struct {
 	ErrorHis []int64               `json:"history"`
 	Error    *RunningError         `json:"error"`
 
-	SyncPoint    bool   `json:"sync-point"`
-	SyncInterval string `json:"sync-interval"`
+	SyncPoint    bool          `json:"sync-point"`
+	SyncInterval time.Duration `json:"sync-interval"`
 }
 
 var changeFeedIDRe *regexp.Regexp = regexp.MustCompile(`^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$`)

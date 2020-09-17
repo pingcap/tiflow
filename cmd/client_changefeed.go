@@ -344,7 +344,7 @@ func changefeedConfigVariables(command *cobra.Command) {
 	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
 	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
 	command.PersistentFlags().BoolVar(&syncPoint, "sync-point", false, "(Expremental) Set and Record syncpoint in replication(default off)")
-	command.PersistentFlags().StringVar(&syncInterval, "sync-interval", "10m", "(Expremental) Set the interval for syncpoint in replication(default 10min)")
+	command.PersistentFlags().DurationVar(&syncInterval, "sync-interval", 10*time.Minute, "(Expremental) Set the interval for syncpoint in replication(default 10min)")
 }
 
 func newCreateChangefeedCommand() *cobra.Command {
