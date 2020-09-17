@@ -2,6 +2,7 @@ package puller
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"go.uber.org/zap"
 	"os"
@@ -152,8 +153,8 @@ func (f *fileSorterBackEnd) writeNext(event *model.PolymorphicEvent) error {
 }
 
 type memorySorterBackEnd struct {
-	events     []*model.PolymorphicEvent
-	readIndex  int
+	events    []*model.PolymorphicEvent
+	readIndex int
 }
 
 func (m *memorySorterBackEnd) readNext() (*model.PolymorphicEvent, error) {
@@ -175,4 +176,58 @@ func (m *memorySorterBackEnd) flushAndReset() error {
 	m.events = m.events[0:0]
 	m.readIndex = 0
 	return nil
+}
+
+type flushTask struct {
+	heapSorterId  int
+	backend       sorterBackEnd
+	maxResolvedTs uint64
+	finished      chan struct{}
+}
+
+type heapSorter struct {
+	inputCh  chan *model.PolymorphicEvent
+	outputCh chan *flushTask
+	heap     sortHeap
+}
+
+func (h *heapSorter) run(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case event := <-h.inputCh:
+			h.heap.Push(event)
+		}
+	}
+}
+
+type UnifiedSorter struct {
+	inputCh  chan *model.PolymorphicEvent
+	outputCh chan *model.PolymorphicEvent
+	dir      string
+}
+
+func NewUnifiedSorter(dir string) *UnifiedSorter {
+	return &UnifiedSorter{
+		inputCh:  make(chan *model.PolymorphicEvent, 128000),
+		outputCh: make(chan *model.PolymorphicEvent, 128000),
+		dir:      dir,
+	}
+}
+
+func (s *UnifiedSorter) Run(ctx context.Context) error {
+	panic("implement me")
+}
+
+func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
+	select {
+	case <-ctx.Done():
+		return
+	case s.inputCh <- entry:
+	}
+}
+
+func (s *UnifiedSorter) Output() <-chan *model.PolymorphicEvent {
+	return s.outputCh
 }

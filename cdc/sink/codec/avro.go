@@ -105,6 +105,10 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		}
 	}
 
+	if len(e.Columns) == 0 {
+		log.Fatal("AppendRowChangedEvent: no primary key is found", zap.String("table", e.Table.String()))
+	}
+
 	res, err := avroEncode(e.Table, a.keySchemaManager, e.TableInfoVersion, pkeyCols)
 	if err != nil {
 		log.Warn("AppendRowChangedEvent: avro encoding failed", zap.String("table", e.Table.String()))

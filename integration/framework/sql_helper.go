@@ -325,7 +325,7 @@ func (s *sqlRequest) upsert(ctx context.Context) error {
 }
 
 func (s *sqlRequest) delete(ctx context.Context) error {
-	db, err := sqlbuilder.New("mysql", s.helper.downstream)
+	db, err := sqlbuilder.New("mysql", s.helper.upstream)
 	if err != nil {
 		return errors.AddStack(err)
 	}
