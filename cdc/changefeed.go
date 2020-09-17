@@ -36,8 +36,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultSyncInterval = time.Minute * 10 //default Interval for record syncpoint
-
 type tableIDMap = map[model.TableID]struct{}
 
 // OwnerDDLHandler defines the ddl handler for Owner
