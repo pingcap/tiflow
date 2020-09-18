@@ -31,10 +31,10 @@ function run() {
     fi
 
     run_sql_file $CUR/data/test1.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    check_table_exists new_ci_collation_test.t1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-    check_table_exists new_ci_collation_test.t2 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-    check_table_exists new_ci_collation_test.t3 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-    check_table_exists new_ci_collation_test.t4 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    for i in $(seq 1 5); do
+        table="new_ci_collation_test.t$i"
+        check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    done
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
     run_sql_file $CUR/data/test2.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
