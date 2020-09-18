@@ -1016,7 +1016,7 @@ func NewSyncpointSinklink(ctx context.Context, info *model.ChangeFeedInfo, id st
 	}
 	//todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
 	scheme := strings.ToLower(sinkURI.Scheme)
-	if scheme != "mysql" && scheme != "tidb" {
+	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
 		return nil, errors.New("can create mysql sink with unsupported scheme")
 	}
 	params := defaultParams
