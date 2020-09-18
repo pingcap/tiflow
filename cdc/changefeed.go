@@ -723,13 +723,12 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	//sync-point on
 	if c.info.SyncPoint {
 		c.syncpointMutex.Lock()
-		//if (c.status.ResolvedTs == c.status.CheckpointTs && (c.updateResolvedTs == false || c.status.ResolvedTs == c.ddlResolvedTs)) || c.status.ResolvedTs == 0 {
 		if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
-			log.Info("achive the sync point with timer", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
+			log.Info("sync point reached by ticker", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
 			c.updateResolvedTs = true
 			err := c.sinkSyncpoint(ctx)
 			if err != nil {
-				log.Error("syncpoint sinl fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs))
+				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs))
 			}
 		}
 
@@ -738,10 +737,10 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		}
 
 		if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs {
-			log.Info("achive the sync point with ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
+			log.Info("sync point reached by ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
 			err := c.sinkSyncpoint(ctx)
 			if err != nil {
-				log.Error("syncpoint sinl fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs))
+				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs))
 			}
 			c.ddlTs = 0
 		}
@@ -817,7 +816,6 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 		if minResolvedTs > c.ddlResolvedTs {
 			minResolvedTs = c.ddlResolvedTs
-			//c.ddlTs = c.ddlResolvedTs
 		}
 	}
 
@@ -843,14 +841,8 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	//syncpoint on
 	if c.info.SyncPoint {
 		if c.updateResolvedTs && minResolvedTs > c.status.ResolvedTs {
-			//prevResolvedTs := c.status.ResolvedTs
 			c.status.ResolvedTs = minResolvedTs
 			tsUpdated = true
-			/*if prevResolvedTs == c.status.CheckpointTs || prevResolvedTs == 0 {
-				//到达sync point
-				//todo 需要重新开始启动计时
-				c.startTimer <- true
-			}*/
 		}
 		c.syncpointMutex.Unlock()
 	} else if minResolvedTs > c.status.ResolvedTs {
