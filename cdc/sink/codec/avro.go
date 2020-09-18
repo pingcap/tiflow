@@ -125,7 +125,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 // AppendResolvedEvent is no-op for Avro
 func (a *AvroEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	return EncoderNoOperation, nil
+	return EncoderNeedAsyncWrite, nil
 }
 
 // EncodeCheckpointEvent is no-op for now

@@ -464,7 +464,7 @@ func (d *canalMessageEncoder) build(commitTs uint64) *MQMessage {
 	}
 	ret := NewMQMessage(nil, value, commitTs)
 	d.messages.Reset()
-	d.packet.Body = nil
+	d.packet.Body = d.packet.Body[:0]
 	return ret
 }
 
