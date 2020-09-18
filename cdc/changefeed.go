@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -83,6 +84,7 @@ type changeFeed struct {
 	ddlState         model.ChangeFeedDDLState
 	targetTs         uint64
 	ddlTs            uint64
+	syncpointMutex   sync.Mutex
 	updateResolvedTs bool
 	startTimer       chan bool
 	syncDB           *sql.DB
@@ -720,6 +722,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	//sync-point on
 	if c.info.SyncPoint {
+		c.syncpointMutex.Lock()
 		//if (c.status.ResolvedTs == c.status.CheckpointTs && (c.updateResolvedTs == false || c.status.ResolvedTs == c.ddlResolvedTs)) || c.status.ResolvedTs == 0 {
 		if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
 			log.Info("achive the sync point with timer", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
@@ -849,6 +852,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 				c.startTimer <- true
 			}*/
 		}
+		c.syncpointMutex.Unlock()
 	} else if minResolvedTs > c.status.ResolvedTs {
 		c.status.ResolvedTs = minResolvedTs
 		tsUpdated = true
@@ -903,7 +907,9 @@ func (c *changeFeed) startSyncPeriod(ctx context.Context, interval time.Duration
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				c.syncpointMutex.Lock()
 				c.updateResolvedTs = false
+				c.syncpointMutex.Unlock()
 			}
 		}
 	}(ctx)
