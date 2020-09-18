@@ -113,13 +113,22 @@ func newMqSink(
 			log.Warn("mqSink treats all updates as inserts if enable old value is not enabled")
 		}
 		var forceHkPk bool
-		forceHKeyToPKey, ok := opts["force-handle-key-pkey"]
-		if ok && forceHKeyToPKey == "true" {
+		forceHkPkOpt, ok := opts["force-handle-key-pkey"]
+		if ok && forceHkPkOpt == "true" {
 			forceHkPk = true
 		}
-		newEncoder1 := newEncoder
+		var supportTxn bool
+		supportTxnOpt, ok := opts["support-txn"]
+		if ok && supportTxnOpt == "true" {
+			supportTxn = true
+		}
 		newEncoder = func() codec.EventBatchEncoder {
-			canalEncoder := newEncoder1().(*codec.CanalEventBatchEncoder)
+			if supportTxn {
+				canalEncoder := codec.NewCanalEventBatchEncoderWithTxn().(*codec.CanalEventBatchEncoderWithTxn)
+				canalEncoder.SetForceHandleKeyPKey(forceHkPk)
+				return canalEncoder
+			}
+			canalEncoder := codec.NewCanalEventBatchEncoderWithoutTxn().(*codec.CanalEventBatchEncoderWithoutTxn)
 			canalEncoder.SetForceHandleKeyPKey(forceHkPk)
 			return canalEncoder
 		}

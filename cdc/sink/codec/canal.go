@@ -306,41 +306,41 @@ func (b *canalEntryBuilder) FromDdlEvent(e *model.DDLEvent) (*canal.Entry, error
 }
 
 // NewCanalEntryBuilder creates a new canalEntryBuilder
-func NewCanalEntryBuilder(forceHkPk bool) *canalEntryBuilder {
+func NewCanalEntryBuilder() *canalEntryBuilder {
 	d := charmap.ISO8859_1.NewDecoder()
 	return &canalEntryBuilder{
 		bytesDecoder: d,
-		forceHkPk:    forceHkPk,
+		forceHkPk:    false,
 	}
 }
 
-// CanalEventBatchEncoder encodes the events into the byte of a batch into.
-type CanalEventBatchEncoder struct {
+// CanalEventBatchEncoderWithTxn encodes the events into the byte by transaction.
+type CanalEventBatchEncoderWithTxn struct {
 	forceHkPk  bool
 	resolvedTs uint64
 	txnCache   *common.UnresolvedTxnCache
 }
 
 // SetForceHandleKeyPKey set forceHandleKeyPKey, then handle key will be regarded as primary key
-func (d *CanalEventBatchEncoder) SetForceHandleKeyPKey(forceHkPk bool) {
+func (d *CanalEventBatchEncoderWithTxn) SetForceHandleKeyPKey(forceHkPk bool) {
 	d.forceHkPk = forceHkPk
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
+func (d *CanalEventBatchEncoderWithTxn) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore the event is ignored.
 	return nil, nil
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
+func (d *CanalEventBatchEncoderWithTxn) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	d.txnCache.Append(nil, e)
 	return EncoderNoOperation, nil
 }
 
 // AppendResolvedEvent appends a resolved event to the encoder
-func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
+func (d *CanalEventBatchEncoderWithTxn) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
 	if ts < d.resolvedTs {
 		return EncoderNoOperation, nil
 	}
@@ -349,19 +349,21 @@ func (d *CanalEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, 
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
-	canalMessageEncoder := newCanalMessageEncoder(d.forceHkPk)
+func (d *CanalEventBatchEncoderWithTxn) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
+	canalMessageEncoder := newCanalMessageEncoder()
+	canalMessageEncoder.setForceHandleKeyPKey(d.forceHkPk)
 	return canalMessageEncoder.encodeDDLEvent(e)
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) Build() []*MQMessage {
+func (d *CanalEventBatchEncoderWithTxn) Build() []*MQMessage {
 	resolvedTxns := d.txnCache.Resolved(d.resolvedTs)
 	if len(resolvedTxns) == 0 {
 		return nil
 	}
 	messages := make([]*MQMessage, 0, len(resolvedTxns))
-	canalMessageEncoder := newCanalMessageEncoder(d.forceHkPk)
+	canalMessageEncoder := newCanalMessageEncoder()
+	canalMessageEncoder.setForceHandleKeyPKey(d.forceHkPk)
 	for _, txns := range resolvedTxns {
 		for _, txn := range txns {
 			for _, row := range txn.Rows {
@@ -378,33 +380,105 @@ func (d *CanalEventBatchEncoder) Build() []*MQMessage {
 }
 
 // MixedBuild implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) MixedBuild(withVersion bool) []byte {
+func (d *CanalEventBatchEncoderWithTxn) MixedBuild(withVersion bool) []byte {
 	panic("Mixed Build only use for JsonEncoder")
 }
 
 //Size implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) Size() int {
+func (d *CanalEventBatchEncoderWithTxn) Size() int {
 	// FIXME encoder with transaction support is hard to calculate the encoded buffer size
 	return -1
 }
 
 // Reset implements the EventBatchEncoder interface
-func (d *CanalEventBatchEncoder) Reset() {
+func (d *CanalEventBatchEncoderWithTxn) Reset() {
 	panic("Reset only used for JsonEncoder")
 }
 
-// NewCanalEventBatchEncoder creates a new CanalEventBatchEncoder.
-func NewCanalEventBatchEncoder() EventBatchEncoder {
-	encoder := &CanalEventBatchEncoder{
+// NewCanalEventBatchEncoderWithTxn creates a new CanalEventBatchEncoderWithTxn.
+func NewCanalEventBatchEncoderWithTxn() EventBatchEncoder {
+	encoder := &CanalEventBatchEncoderWithTxn{
 		txnCache: common.NewUnresolvedTxnCache(),
 	}
 	return encoder
+}
+
+// CanalEventBatchEncoderWithoutTxn encodes the events into the byte of a batch .
+type CanalEventBatchEncoderWithoutTxn struct {
+	encoder *canalMessageEncoder
+}
+
+// SetForceHandleKeyPKey set forceHandleKeyPKey, then handle key will be regarded as primary key
+func (d *CanalEventBatchEncoderWithoutTxn) SetForceHandleKeyPKey(forceHkPk bool) {
+	d.encoder.setForceHandleKeyPKey(forceHkPk)
+}
+
+// EncodeCheckpointEvent implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoderWithoutTxn) EncodeCheckpointEvent(ts uint64) (*MQMessage, error) {
+	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
+	// Therefore the event is ignored.
+	return nil, nil
+}
+
+// AppendRowChangedEvent implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoderWithoutTxn) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
+	err := d.encoder.appendRowChangedEvent(e)
+	return EncoderNoOperation, err
+}
+
+// AppendResolvedEvent appends a resolved event to the encoder
+func (d *CanalEventBatchEncoderWithoutTxn) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
+	return EncoderNeedAsyncWrite, nil
+}
+
+// EncodeDDLEvent implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoderWithoutTxn) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, error) {
+	return d.encoder.encodeDDLEvent(e)
+}
+
+// Build implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoderWithoutTxn) Build() []*MQMessage {
+	return []*MQMessage{d.encoder.build(0)}
+}
+
+// MixedBuild implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoderWithoutTxn) MixedBuild(withVersion bool) []byte {
+	panic("Mixed Build only use for JsonEncoder")
+}
+
+//Size implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoderWithoutTxn) Size() int {
+	// FIXME encoder with transaction support is hard to calculate the encoded buffer size
+	return d.encoder.size()
+}
+
+// Reset implements the EventBatchEncoder interface
+func (d *CanalEventBatchEncoderWithoutTxn) Reset() {
+	panic("Reset only used for JsonEncoder")
+}
+
+// NewCanalEventBatchEncoderWithoutTxn creates a new NewCanalEventBatchEncoderWithoutTxn.
+func NewCanalEventBatchEncoderWithoutTxn() EventBatchEncoder {
+	encoder := &CanalEventBatchEncoderWithoutTxn{
+		encoder: newCanalMessageEncoder(),
+	}
+	return encoder
+}
+
+// NewCanalEventBatchEncoder creates a new NewCanalEventBatchEncoderWithoutTxn.
+func NewCanalEventBatchEncoder() EventBatchEncoder {
+	// canal protocol does not support transaction by default
+	return NewCanalEventBatchEncoderWithoutTxn()
 }
 
 type canalMessageEncoder struct {
 	messages     *canal.Messages
 	packet       *canal.Packet
 	entryBuilder *canalEntryBuilder
+}
+
+func (d *canalMessageEncoder) setForceHandleKeyPKey(forceHkPk bool) {
+	d.entryBuilder.forceHkPk = forceHkPk
 }
 
 func (d *canalMessageEncoder) appendRowChangedEvent(e *model.RowChangedEvent) error {
@@ -480,7 +554,16 @@ func (d *canalMessageEncoder) refreshPacketBody() error {
 	return err
 }
 
-func newCanalMessageEncoder(forceHkPK bool) *canalMessageEncoder {
+func (d *canalMessageEncoder) size() int {
+	// TODO: avoid marshaling the messages every time for calculating the size of the packet
+	err := d.refreshPacketBody()
+	if err != nil {
+		panic(err)
+	}
+	return proto.Size(d.packet)
+}
+
+func newCanalMessageEncoder() *canalMessageEncoder {
 	p := &canal.Packet{
 		VersionPresent: &canal.Packet_Version{
 			Version: CanalPacketVersion,
@@ -491,7 +574,7 @@ func newCanalMessageEncoder(forceHkPK bool) *canalMessageEncoder {
 	encoder := &canalMessageEncoder{
 		messages:     &canal.Messages{},
 		packet:       p,
-		entryBuilder: NewCanalEntryBuilder(forceHkPK),
+		entryBuilder: NewCanalEntryBuilder(),
 	}
 	return encoder
 }

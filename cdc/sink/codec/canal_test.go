@@ -105,9 +105,9 @@ var _ = check.Suite(&canalBatchSuite{
 	}}, {}},
 })
 
-func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
+func (s *canalBatchSuite) TestCanalEventBatchEncoderWithTxn(c *check.C) {
 	for i, cs := range s.rowCases {
-		encoder := NewCanalEventBatchEncoder()
+		encoder := NewCanalEventBatchEncoderWithTxn()
 		var mxCommitTs uint64
 		for _, row := range cs {
 			_, err := encoder.AppendRowChangedEvent(row)
@@ -132,6 +132,50 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 			c.Assert(err, check.IsNil)
 			c.Assert(len(messages.GetMessages()), check.Equals, s.rowCaseExpectValues[i].rowNumPerTxn[j])
 		}
+	}
+
+	for _, cs := range s.ddlCases {
+		encoder := NewCanalEventBatchEncoder()
+		for _, ddl := range cs {
+			msg, err := encoder.EncodeDDLEvent(ddl)
+			c.Assert(err, check.IsNil)
+			c.Assert(msg, check.NotNil)
+			c.Assert(msg.Key, check.IsNil)
+
+			packet := &canal.Packet{}
+			err = proto.Unmarshal(msg.Value, packet)
+			c.Assert(err, check.IsNil)
+			c.Assert(packet.GetType(), check.Equals, canal.PacketType_MESSAGES)
+			messages := &canal.Messages{}
+			err = proto.Unmarshal(packet.GetBody(), messages)
+			c.Assert(err, check.IsNil)
+			c.Assert(len(messages.GetMessages()), check.Equals, 1)
+			c.Assert(err, check.IsNil)
+		}
+	}
+}
+
+func (s *canalBatchSuite) TestCanalEventBatchEncoderWithoutTxn(c *check.C) {
+	for _, cs := range s.rowCases {
+		encoder := NewCanalEventBatchEncoderWithoutTxn()
+		for _, row := range cs {
+			_, err := encoder.AppendRowChangedEvent(row)
+			c.Assert(err, check.IsNil)
+		}
+		size := encoder.Size()
+		res := encoder.Build()
+		c.Assert(res, check.HasLen, 1)
+		c.Assert(res[0].Key, check.IsNil)
+		c.Assert(len(res[0].Value), check.Equals, size)
+
+		packet := &canal.Packet{}
+		err := proto.Unmarshal(res[0].Value, packet)
+		c.Assert(err, check.IsNil)
+		c.Assert(packet.GetType(), check.Equals, canal.PacketType_MESSAGES)
+		messages := &canal.Messages{}
+		err = proto.Unmarshal(packet.GetBody(), messages)
+		c.Assert(err, check.IsNil)
+		c.Assert(len(messages.GetMessages()), check.Equals, len(cs))
 	}
 
 	for _, cs := range s.ddlCases {
@@ -182,7 +226,8 @@ func testInsert(c *check.C) {
 		},
 	}
 
-	builder := NewCanalEntryBuilder(false)
+	builder := NewCanalEntryBuilder()
+	builder.forceHkPk = true
 	entry, err := builder.FromRowEvent(testCaseInsert)
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
@@ -258,7 +303,8 @@ func testUpdate(c *check.C) {
 			{Name: "name", Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag, Value: "Nancy"},
 		},
 	}
-	builder := NewCanalEntryBuilder(true)
+	builder := NewCanalEntryBuilder()
+	builder.forceHkPk = true
 	entry, err := builder.FromRowEvent(testCaseUpdate)
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
@@ -331,7 +377,8 @@ func testDelete(c *check.C) {
 		},
 	}
 
-	builder := NewCanalEntryBuilder(false)
+	builder := NewCanalEntryBuilder()
+	builder.forceHkPk = true
 	entry, err := builder.FromRowEvent(testCaseDelete)
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
@@ -372,7 +419,8 @@ func testDdl(c *check.C) {
 		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
 		Type:  mm.ActionCreateTable,
 	}
-	builder := NewCanalEntryBuilder(false)
+	builder := NewCanalEntryBuilder()
+	builder.forceHkPk = true
 	entry, err := builder.FromDdlEvent(testCaseDdl)
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
