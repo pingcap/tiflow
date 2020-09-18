@@ -6,13 +6,19 @@ import (
 	"encoding/binary"
 	"go.uber.org/zap"
 	"os"
+	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 )
 
-const fileBufferSize = 16 * 1024 * 1024
+const (
+	fileBufferSize     = 16 * 1024 * 1024
+	heapSizeLimit      = 4 * 1024 * 1024 // 4MB
+	numConcurrentHeaps = 16
+	memoryLimit        = 1024 * 1024 * 1024 // 1GB
+)
 
 type sorterBackEnd interface {
 	readNext() (*model.PolymorphicEvent, error)
@@ -157,6 +163,8 @@ type memorySorterBackEnd struct {
 	readIndex int
 }
 
+
+
 func (m *memorySorterBackEnd) readNext() (*model.PolymorphicEvent, error) {
 	ret := m.events[m.readIndex]
 	m.readIndex += 1
@@ -178,6 +186,28 @@ func (m *memorySorterBackEnd) flushAndReset() error {
 	return nil
 }
 
+type backEndPool struct {
+	memoryUseEstimate uint64
+	fileNameCounter   uint64
+	mu                sync.Mutex
+	cache             []*sorterBackEnd
+	dir               string
+}
+
+func newBackEndPool(dir string) *backEndPool {
+	return &backEndPool{
+		memoryUseEstimate: 0,
+		fileNameCounter:   0,
+		mu:                sync.Mutex{},
+		cache:             make([]*sorterBackEnd, 1024),
+		dir:               dir,
+	}
+}
+
+func (p *backEndPool) alloc() (sorterBackEnd, error) {
+	
+}
+
 type flushTask struct {
 	heapSorterId  int
 	backend       sorterBackEnd
@@ -191,12 +221,29 @@ type heapSorter struct {
 	heap     sortHeap
 }
 
+// flush should only be called within the main loop in run().
+func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
+	if h.heap.Len() == 0 {
+		return nil
+	}
+
+}
+
 func (h *heapSorter) run(ctx context.Context) error {
+	var maxResolved uint64
+	maxResolved = 0
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case event := <-h.inputCh:
+			if event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved {
+				if event.RawKV.CRTs < maxResolved {
+					log.Fatal("ResolvedTs regression, bug?", zap.Uint64("event-resolvedTs", event.RawKV.CRTs),
+						zap.Uint64("max-resolvedTs", maxResolved))
+				}
+				maxResolved = event.RawKV.CRTs
+			}
 			h.heap.Push(event)
 		}
 	}
