@@ -33,6 +33,8 @@ function run() {
     run_sql_file $CUR/data/test1.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_table_exists new_ci_collation_test.t1 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_table_exists new_ci_collation_test.t2 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists new_ci_collation_test.t3 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    check_table_exists new_ci_collation_test.t4 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
     run_sql_file $CUR/data/test2.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
@@ -40,6 +42,6 @@ function run() {
     cleanup_process $CDC_BINARY
 }
 
-# trap stop_tidb_cluster EXIT
+trap stop_tidb_cluster EXIT
 run $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
