@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"go.uber.org/zap"
 	"os"
 	"sync"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -24,7 +27,8 @@ type sorterBackEnd interface {
 	readNext() (*model.PolymorphicEvent, error)
 	writeNext(event *model.PolymorphicEvent) error
 	getSize() int
-	flushAndReset() error
+	flush() error
+	reset() error
 }
 
 type fileSorterBackEnd struct {
@@ -36,18 +40,20 @@ type fileSorterBackEnd struct {
 	size       int
 }
 
+func (f *fileSorterBackEnd) flush() error {
+	err := f.readWriter.Flush()
+	if err != nil {
+		return errors.AddStack(err)
+	}
+	return nil
+}
+
 func (f *fileSorterBackEnd) getSize() int {
 	return f.size
 }
 
-func (f *fileSorterBackEnd) flushAndReset() error {
-	err := f.readWriter.Flush()
-
-	if err != nil {
-		return errors.AddStack(err)
-	}
-
-	err = f.f.Truncate(int64(f.size))
+func (f *fileSorterBackEnd) reset() error {
+	err := f.f.Truncate(int64(f.size))
 	if err != nil {
 		return errors.AddStack(err)
 	}
@@ -163,8 +169,6 @@ type memorySorterBackEnd struct {
 	readIndex int
 }
 
-
-
 func (m *memorySorterBackEnd) readNext() (*model.PolymorphicEvent, error) {
 	ret := m.events[m.readIndex]
 	m.readIndex += 1
@@ -180,7 +184,11 @@ func (m *memorySorterBackEnd) getSize() int {
 	return -1
 }
 
-func (m *memorySorterBackEnd) flushAndReset() error {
+func (m *memorySorterBackEnd) flush() error {
+	return nil
+}
+
+func (m *memorySorterBackEnd) reset() error {
 	m.events = m.events[0:0]
 	m.readIndex = 0
 	return nil
@@ -190,7 +198,7 @@ type backEndPool struct {
 	memoryUseEstimate uint64
 	fileNameCounter   uint64
 	mu                sync.Mutex
-	cache             []*sorterBackEnd
+	cache             []unsafe.Pointer
 	dir               string
 }
 
@@ -199,52 +207,173 @@ func newBackEndPool(dir string) *backEndPool {
 		memoryUseEstimate: 0,
 		fileNameCounter:   0,
 		mu:                sync.Mutex{},
-		cache:             make([]*sorterBackEnd, 1024),
+		cache:             make([]unsafe.Pointer, 256),
 		dir:               dir,
 	}
 }
 
 func (p *backEndPool) alloc() (sorterBackEnd, error) {
-	
+	if atomic.LoadUint64(&p.memoryUseEstimate) < memoryLimit {
+		ret := new(memorySorterBackEnd)
+		atomic.AddUint64(&p.memoryUseEstimate, heapSizeLimit)
+		return ret, nil
+	}
+
+	for i := range p.cache {
+		ptr := &p.cache[i]
+		ret := atomic.SwapPointer(ptr, nil)
+		if ret != nil {
+			return *(*sorterBackEnd)(ret), nil
+		}
+	}
+
+	fname := fmt.Sprintf("sort-%d", atomic.AddUint64(&p.fileNameCounter, 1))
+	ret, err := newFileSorterBackEnd(fname, &msgPackGenSerde{})
+	if err != nil {
+		return nil, errors.AddStack(err)
+	}
+
+	atomic.AddUint64(&p.memoryUseEstimate, heapSizeLimit)
+	return ret, nil
+}
+
+func (p *backEndPool) dealloc(backEnd sorterBackEnd) {
+	switch b := backEnd.(type) {
+	case *memorySorterBackEnd:
+		// Let GC do its job
+		return
+	case *fileSorterBackEnd:
+		for i := range p.cache {
+			ptr := &p.cache[i]
+			if atomic.CompareAndSwapPointer(ptr, nil, unsafe.Pointer(b)) {
+				return
+			}
+		}
+		// Cache is full. Let GC do its job
+	}
 }
 
 type flushTask struct {
 	heapSorterId  int
 	backend       sorterBackEnd
 	maxResolvedTs uint64
-	finished      chan struct{}
+	finished      chan error
 }
 
 type heapSorter struct {
-	inputCh  chan *model.PolymorphicEvent
-	outputCh chan *flushTask
-	heap     sortHeap
+	id          int
+	inputCh     chan *model.PolymorphicEvent
+	outputCh    chan *flushTask
+	heap        sortHeap
+	backEndPool *backEndPool
+}
+
+func newHeapSorter(id int, pool *backEndPool) *heapSorter {
+	return &heapSorter{
+		id:          id,
+		inputCh:     make(chan *model.PolymorphicEvent, 1024*1024),
+		outputCh:    make(chan *flushTask, 1024),
+		heap:        make(sortHeap, 0, 65536),
+		backEndPool: pool,
+	}
 }
 
 // flush should only be called within the main loop in run().
 func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
-	if h.heap.Len() == 0 {
-		return nil
+	isEmptyFlush := h.heap.Len() == 0
+	var backEnd sorterBackEnd = nil
+
+	if !isEmptyFlush {
+		var err error
+		backEnd, err = h.backEndPool.alloc()
+		if err != nil {
+			return errors.AddStack(err)
+		}
 	}
 
+	task := &flushTask{
+		heapSorterId:  h.id,
+		backend:       backEnd,
+		maxResolvedTs: maxResolvedTs,
+		finished:      make(chan error),
+	}
+
+	var oldHeap sortHeap
+	if !isEmptyFlush {
+		oldHeap = h.heap
+		h.heap = make(sortHeap, 0, 65536)
+	}
+
+	go func() {
+		defer close(task.finished)
+		batchSize := oldHeap.Len()
+		for oldHeap.Len() > 0 {
+			event := oldHeap.Pop().(*sortItem).entry
+			err := task.backend.writeNext(event)
+			if err != nil {
+				task.finished <- err
+				return
+			}
+		}
+		log.Debug("Unified Sorter flushTask finished",
+			zap.Int("heap-id", task.heapSorterId),
+			zap.Uint64("resolvedTs", task.maxResolvedTs),
+			zap.Int("size", batchSize))
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case h.outputCh <- task:
+	}
+	return nil
 }
 
 func (h *heapSorter) run(ctx context.Context) error {
-	var maxResolved uint64
+	var (
+		maxResolved           uint64
+		heapSizeBytesEstimate int64
+	)
 	maxResolved = 0
+	heapSizeBytesEstimate = 0
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case event := <-h.inputCh:
-			if event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved {
+			h.heap.Push(event)
+			isResolvedEvent := event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved
+			if isResolvedEvent {
 				if event.RawKV.CRTs < maxResolved {
 					log.Fatal("ResolvedTs regression, bug?", zap.Uint64("event-resolvedTs", event.RawKV.CRTs),
 						zap.Uint64("max-resolvedTs", maxResolved))
 				}
 				maxResolved = event.RawKV.CRTs
 			}
-			h.heap.Push(event)
+
+			heapSizeBytesEstimate += event.RawKV.ApproximateSize()
+			if heapSizeBytesEstimate >= heapSizeLimit || isResolvedEvent {
+				err := h.flush(ctx, maxResolved)
+				if err != nil {
+					return errors.AddStack(err)
+				}
+				heapSizeBytesEstimate = 0
+			}
+		}
+	}
+}
+
+func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan *model.PolymorphicEvent) error {
+	lastResolvedTs := make([]uint64, numSorters)
+	minResolvedTs := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case task := <-in:
+			if lastResolvedTs[task.heapSorterId] < task.maxResolvedTs {
+				lastResolvedTs[task.heapSorterId] = task.maxResolvedTs
+			}
 		}
 	}
 }
@@ -253,6 +382,7 @@ type UnifiedSorter struct {
 	inputCh  chan *model.PolymorphicEvent
 	outputCh chan *model.PolymorphicEvent
 	dir      string
+	pool     *backEndPool
 }
 
 func NewUnifiedSorter(dir string) *UnifiedSorter {
@@ -260,11 +390,49 @@ func NewUnifiedSorter(dir string) *UnifiedSorter {
 		inputCh:  make(chan *model.PolymorphicEvent, 128000),
 		outputCh: make(chan *model.PolymorphicEvent, 128000),
 		dir:      dir,
+		pool:     newBackEndPool(dir),
 	}
 }
 
 func (s *UnifiedSorter) Run(ctx context.Context) error {
-	panic("implement me")
+	nextSorterId := 0
+	heapSorters := make([]*heapSorter, numConcurrentHeaps)
+	for i := range heapSorters {
+		heapSorters[i] = newHeapSorter(i, s.pool)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case event := <-s.inputCh:
+			if event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved {
+				// broadcast resolved events
+				for _, sorter := range heapSorters {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case sorter.inputCh <- event:
+					}
+				}
+				log.Debug("Unified Sorter: event broadcast", zap.Uint64("CRTs", event.CRTs))
+				continue
+			}
+
+			// dispatch a row changed event
+			targetId := nextSorterId % numConcurrentHeaps
+			nextSorterId++
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case heapSorters[targetId].inputCh <- event:
+			}
+
+			log.Debug("Unified Sorter: event dispatched",
+				zap.Uint64("CRTs", event.CRTs),
+				zap.Int("heap-id", targetId))
+		}
+	}
 }
 
 func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
