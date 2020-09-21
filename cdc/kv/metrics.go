@@ -67,6 +67,14 @@ var (
 			Name:      "channel_size",
 			Help:      "size of each channel in kv client",
 		}, []string{"id", "channel"})
+	batchResolvedEventSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "batch_resolved_event_size",
+			Help:      "The number of region in one batch resolved ts event",
+			Buckets:   prometheus.ExponentialBuckets(2, 2, 16),
+		}, []string{"capture", "changefeed"})
 	etcdRequestCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
@@ -85,5 +93,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(pullEventCounter)
 	registry.MustRegister(sendEventCounter)
 	registry.MustRegister(clientChannelSize)
+	registry.MustRegister(batchResolvedEventSize)
 	registry.MustRegister(etcdRequestCounter)
 }
