@@ -23,7 +23,7 @@ function run() {
     TOPIC_NAME="ticdc-new_ci_collation-test-$RANDOM"
     case $SINK_TYPE in
         kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4";;
-        *) SINK_URI="mysql://root@127.0.0.1:3306/?safe-mode=false";;
+        *) SINK_URI="mysql://root@127.0.0.1:3306/?safe-mode=true";;
     esac
     cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config $CUR/conf/changefeed.toml
     if [ "$SINK_TYPE" == "kafka" ]; then
