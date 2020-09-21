@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	"github.com/pingcap/parser/terror"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/common"
 	"github.com/pingcap/ticdc/pkg/config"
@@ -63,6 +62,7 @@ const (
 	defaultBatchReplaceSize    = 20
 	defaultReadTimeout         = "2m"
 	defaultWriteTimeout        = "2m"
+	defaultSafeMode            = true
 )
 
 var (
@@ -274,6 +274,8 @@ type sinkParams struct {
 	batchReplaceSize    int
 	readTimeout         string
 	writeTimeout        string
+	enableOldValue      bool
+	safeMode            bool
 }
 
 func (s *sinkParams) Clone() *sinkParams {
@@ -289,6 +291,7 @@ var defaultParams = &sinkParams{
 	batchReplaceSize:    defaultBatchReplaceSize,
 	readTimeout:         defaultReadTimeout,
 	writeTimeout:        defaultWriteTimeout,
+	safeMode:            defaultSafeMode,
 }
 
 func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (string, error) {
@@ -349,7 +352,14 @@ func configureSinkURI(
 }
 
 // newMySQLSink creates a new MySQL sink using schema storage
-func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL, filter *tifilter.Filter, opts map[string]string) (Sink, error) {
+func newMySQLSink(
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI *url.URL,
+	filter *tifilter.Filter,
+	replicaConfig *config.ReplicaConfig,
+	opts map[string]string,
+) (Sink, error) {
 	var db *sql.DB
 	params := defaultParams.Clone()
 
@@ -429,6 +439,18 @@ func newMySQLSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI 
 		}
 		params.batchReplaceSize = size
 	}
+
+	// TODO: force safe mode in startup phase
+	s = sinkURI.Query().Get("safe-mode")
+	if s != "" {
+		safeModeEnabled, err := strconv.ParseBool(s)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		params.safeMode = safeModeEnabled
+	}
+
+	params.enableOldValue = replicaConfig.EnableOldValue
 
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
@@ -778,19 +800,40 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	values := make([][]interface{}, 0, len(rows))
 	replaces := make(map[string][][]interface{})
 	rowCount := 0
+	translateToInsert := s.params.enableOldValue && !s.params.safeMode
+
+	// flush cached batch replace or insert, to keep the sequence of DMLs
+	flushCacheDMLs := func() {
+		if s.params.batchReplaceEnabled && len(replaces) > 0 {
+			replaceSqls, replaceValues := reduceReplace(replaces, s.params.batchReplaceSize)
+			sqls = append(sqls, replaceSqls...)
+			values = append(values, replaceValues...)
+			replaces = make(map[string][][]interface{})
+		}
+	}
+
 	for _, row := range rows {
 		var query string
 		var args []interface{}
 		quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
-		// TODO(leoppro): using `UPDATE` instead of `REPLACE` if the old value is enabled
-		if len(row.PreColumns) != 0 {
-			// flush cached batch replace, we must keep the sequence of DMLs
-			if s.params.batchReplaceEnabled && len(replaces) > 0 {
-				replaceSqls, replaceValues := reduceReplace(replaces, s.params.batchReplaceSize)
-				sqls = append(sqls, replaceSqls...)
-				values = append(values, replaceValues...)
-				replaces = make(map[string][][]interface{})
+
+		// Translate to UPDATE if old value is enabled, not in safe mode and is update event
+		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
+			flushCacheDMLs()
+			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns)
+			if query != "" {
+				sqls = append(sqls, query)
+				values = append(values, args)
+				rowCount++
 			}
+			continue
+		}
+
+		// Case for delete event or update event
+		// If old value is enabled and not in safe mode,
+		// update will be translated to DELETE + INSERT(or REPLACE) SQL.
+		if len(row.PreColumns) != 0 {
+			flushCacheDMLs()
 			query, args = prepareDelete(quoteTable, row.PreColumns)
 			if query != "" {
 				sqls = append(sqls, query)
@@ -798,9 +841,11 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 				rowCount++
 			}
 		}
+
+		// Case for insert event or update event
 		if len(row.Columns) != 0 {
 			if s.params.batchReplaceEnabled {
-				query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */)
+				query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
 				if query != "" {
 					if _, ok := replaces[query]; !ok {
 						replaces[query] = make([][]interface{}, 0)
@@ -809,7 +854,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 					rowCount++
 				}
 			} else {
-				query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */)
+				query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
 				sqls = append(sqls, query)
 				values = append(values, args)
 				if query != "" {
@@ -820,11 +865,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 			}
 		}
 	}
-	if s.params.batchReplaceEnabled {
-		replaceSqls, replaceValues := reduceReplace(replaces, s.params.batchReplaceSize)
-		sqls = append(sqls, replaceSqls...)
-		values = append(values, replaceValues...)
-	}
+	flushCacheDMLs()
+
 	dmls := &preparedDMLs{
 		sqls:   sqls,
 		values: values,
@@ -864,7 +906,12 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 	return nil
 }
 
-func prepareReplace(quoteTable string, cols []*model.Column, appendPlaceHolder bool) (string, []interface{}) {
+func prepareReplace(
+	quoteTable string,
+	cols []*model.Column,
+	appendPlaceHolder bool,
+	translateToInsert bool,
+) (string, []interface{}) {
 	var builder strings.Builder
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols))
@@ -880,7 +927,11 @@ func prepareReplace(quoteTable string, cols []*model.Column, appendPlaceHolder b
 	}
 
 	colList := "(" + buildColumnList(columnNames) + ")"
-	builder.WriteString("REPLACE INTO " + quoteTable + colList + " VALUES ")
+	if translateToInsert {
+		builder.WriteString("INSERT INTO " + quoteTable + colList + " VALUES ")
+	} else {
+		builder.WriteString("REPLACE INTO " + quoteTable + colList + " VALUES ")
+	}
 	if appendPlaceHolder {
 		builder.WriteString("(" + model.HolderString(len(columnNames)) + ");")
 	}
@@ -924,6 +975,51 @@ func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string
 		}
 	}
 	return sqls, args
+}
+
+func prepareUpdate(quoteTable string, preCols, cols []*model.Column) (string, []interface{}) {
+	var builder strings.Builder
+	builder.WriteString("UPDATE " + quoteTable + " SET ")
+
+	columnNames := make([]string, 0, len(cols))
+	args := make([]interface{}, 0, len(cols)+len(preCols))
+	for _, col := range cols {
+		if col == nil || col.Flag.IsGeneratedColumn() {
+			continue
+		}
+		columnNames = append(columnNames, col.Name)
+		args = append(args, col.Value)
+	}
+	if len(args) == 0 {
+		return "", nil
+	}
+	for i, column := range columnNames {
+		if i == len(columnNames)-1 {
+			builder.WriteString("`" + model.EscapeName(column) + "`=?")
+		} else {
+			builder.WriteString("`" + model.EscapeName(column) + "`=?,")
+		}
+	}
+
+	builder.WriteString(" WHERE ")
+	colNames, wargs := whereSlice(preCols)
+	if len(wargs) == 0 {
+		return "", nil
+	}
+	for i := 0; i < len(colNames); i++ {
+		if i > 0 {
+			builder.WriteString(" AND ")
+		}
+		if wargs[i] == nil {
+			builder.WriteString(quotes.QuoteName(colNames[i]) + " IS NULL")
+		} else {
+			builder.WriteString(quotes.QuoteName(colNames[i]) + "=?")
+			args = append(args, wargs[i])
+		}
+	}
+	builder.WriteString(" LIMIT 1;")
+	sql := builder.String()
+	return sql, args
 }
 
 func prepareDelete(quoteTable string, cols []*model.Column) (string, []interface{}) {
@@ -984,13 +1080,13 @@ func isIgnorableDDLError(err error) bool {
 	}
 }
 
-func getSQLErrCode(err error) (terror.ErrCode, bool) {
+func getSQLErrCode(err error) (errors.ErrCode, bool) {
 	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
 	if !ok {
 		return -1, false
 	}
 
-	return terror.ErrCode(mysqlErr.Number), true
+	return errors.ErrCode(mysqlErr.Number), true
 }
 
 func buildColumnList(names []string) string {

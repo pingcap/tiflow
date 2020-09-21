@@ -29,7 +29,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/logutil"
-	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/version"
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
@@ -186,7 +186,7 @@ func newCliCommand() *cobra.Command {
 			}
 			ctx := defaultContext
 			errorTiKVIncompatible := true // Error if TiKV is incompatible.
-			err = util.CheckClusterVersion(ctx, pdCli, pdEndpoints[0], credential, errorTiKVIncompatible)
+			err = version.CheckClusterVersion(ctx, pdCli, pdEndpoints[0], credential, errorTiKVIncompatible)
 			if err != nil {
 				return err
 			}
