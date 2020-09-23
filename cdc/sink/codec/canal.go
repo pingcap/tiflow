@@ -185,7 +185,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 			// special handle for text and blob
 			// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
 			switch sqlType {
-			case JavaSQLTypeVARCHAR:
+			case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR:
 				value = string(v)
 			default:
 				decoded, err := b.bytesDecoder.Bytes(v)
