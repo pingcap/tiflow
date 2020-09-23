@@ -24,9 +24,9 @@ func TestDockerComposeOperator_SetupTearDown(t *testing.T) {
 	st, err := find.Repo()
 	assert.NoError(t, err)
 
-	d := &dockerComposeOperator{
-		fileName:   st.Path + "/docker-compose-avro.yml",
-		controller: "controller0",
+	d := &DockerComposeOperator{
+		FileName:   st.Path + "/docker-compose-avro.yml",
+		Controller: "controller0",
 	}
 	d.Setup()
 	d.TearDown()

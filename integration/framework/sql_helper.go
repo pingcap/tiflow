@@ -249,16 +249,13 @@ func (r *syncSQLRequest) Send() Awaitable {
 		defer rows.Close()
 
 		if !rows.Next() {
-			// Upstream does not have the row
-			if r.requestType != sqlRequestTypeDelete {
-				log.Warn("ReadBack: no row, likely to be bug")
-			}
-		} else {
-			r.data, err = rowsToMap(rows)
-			if err != nil {
-				log.Warn("ReadBack", zap.Error(err))
-				return
-			}
+			log.Warn("ReadBack:", zap.Error(err))
+			return
+		}
+		r.data, err = rowsToMap(rows)
+		if err != nil {
+			log.Warn("ReadBack", zap.Error(err))
+			return
 		}
 
 		atomic.StoreUint32(&r.hasReadBack, 1)
@@ -328,7 +325,7 @@ func (s *sqlRequest) upsert(ctx context.Context) error {
 }
 
 func (s *sqlRequest) delete(ctx context.Context) error {
-	db, err := sqlbuilder.New("mysql", s.helper.upstream)
+	db, err := sqlbuilder.New("mysql", s.helper.downstream)
 	if err != nil {
 		return errors.AddStack(err)
 	}
@@ -450,7 +447,7 @@ func getUniqueIndexColumn(ctx context.Context, db sqlbuilder.Database, dbName st
 	row, err := db.QueryRowContext(ctx, `
 		SELECT GROUP_CONCAT(COLUMN_NAME SEPARATOR ' ') FROM INFORMATION_SCHEMA.STATISTICS
 		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
-		GROUP BY INDEX_NAME
+		GROUP BY INDEX_NAME 
 		ORDER BY FIELD(INDEX_NAME,'PRIMARY') DESC
 	`, dbName, tableName)
 	if err != nil {
