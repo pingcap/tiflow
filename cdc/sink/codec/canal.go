@@ -135,7 +135,6 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	sqlType := MysqlToJavaType(c.Type)
 	mysqlType := parser_types.TypeStr(c.Type)
-	log.Print("qinggniq before ", zap.String("name", colName), zap.Int32("sqlType", int32(sqlType)), zap.String("mysqlType", mysqlType), zap.String("value", fmt.Sprintf("%v", c.Value)))
 	if c.Flag.IsBinary() {
 		if parser_types.IsTypeBlob(c.Type) {
 			mysqlType = strings.Replace(mysqlType, "text", "blob", 1)
@@ -203,7 +202,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 			value = fmt.Sprintf("%v", v)
 		}
 	}
-	log.Print("qinggniq after ", zap.String("name", colName), zap.Int32("sqlType", int32(sqlType)), zap.String("mysqlType", mysqlType), zap.String("value", fmt.Sprintf("%v", c.Value)))
+
 	canalColumn := &canal.Column{
 		SqlType:       int32(sqlType),
 		Name:          colName,
@@ -220,7 +219,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
 	var columns []*canal.Column
 	for _, column := range e.Columns {
-		if e == nil {
+		if column == nil {
 			continue
 		}
 		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
@@ -231,7 +230,7 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 	}
 	var preColumns []*canal.Column
 	for _, column := range e.PreColumns {
-		if e == nil {
+		if column == nil {
 			continue
 		}
 		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
@@ -378,16 +377,22 @@ func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, 
 
 // Build implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Build() []*MQMessage {
+	if len(d.messages.Messages) == 0 {
+		return nil
+	}
+
 	err := d.refreshPacketBody()
 	if err != nil {
 		log.Fatal("Error when generating Canal packet", zap.Error(err))
 	}
+
 	value, err := proto.Marshal(d.packet)
 	if err != nil {
 		log.Fatal("Error when serializing Canal packet", zap.Error(err))
 	}
 	ret := NewMQMessage(nil, value, 0)
 	d.messages.Reset()
+	d.resetPacket()
 	return []*MQMessage{ret}
 }
 
@@ -418,24 +423,30 @@ func (d *CanalEventBatchEncoder) refreshPacketBody() error {
 	if newSize > oldSize {
 		// resize packet body slice
 		d.packet.Body = append(d.packet.Body, make([]byte, newSize-oldSize)...)
+	} else {
+		d.packet.Body = d.packet.Body[:newSize]
 	}
-	_, err := d.messages.MarshalToSizedBuffer(d.packet.Body[:newSize])
+
+	_, err := d.messages.MarshalToSizedBuffer(d.packet.Body)
 	return err
 }
 
-// NewCanalEventBatchEncoder creates a new CanalEventBatchEncoder.
-func NewCanalEventBatchEncoder() EventBatchEncoder {
-	p := &canal.Packet{
+func (d *CanalEventBatchEncoder) resetPacket() {
+	d.packet = &canal.Packet{
 		VersionPresent: &canal.Packet_Version{
 			Version: CanalPacketVersion,
 		},
 		Type: canal.PacketType_MESSAGES,
 	}
+}
 
+// NewCanalEventBatchEncoder creates a new CanalEventBatchEncoder.
+func NewCanalEventBatchEncoder() EventBatchEncoder {
 	encoder := &CanalEventBatchEncoder{
 		messages:     &canal.Messages{},
-		packet:       p,
 		entryBuilder: NewCanalEntryBuilder(),
 	}
+
+	encoder.resetPacket()
 	return encoder
 }
