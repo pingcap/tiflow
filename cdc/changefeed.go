@@ -919,7 +919,7 @@ func (c *changeFeed) createSynctable(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(err2.Error())
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -927,7 +927,7 @@ func (c *changeFeed) createSynctable(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(err2.Error())
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -935,7 +935,7 @@ func (c *changeFeed) createSynctable(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(err2.Error())
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -957,7 +957,7 @@ func (c *changeFeed) sinkSyncpoint(ctx context.Context) error {
 		log.Info("sync table: get tidb_current_ts err")
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(err2.Error())
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
@@ -965,7 +965,7 @@ func (c *changeFeed) sinkSyncpoint(ctx context.Context) error {
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Error(err2.Error())
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
