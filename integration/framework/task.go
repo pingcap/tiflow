@@ -35,16 +35,17 @@ type Task interface {
 type TaskContext struct {
 	Upstream     *sql.DB
 	Downstream   *sql.DB
-	env          Environment
-	waitForReady func() error
+	Env          Environment
+	WaitForReady func() error
 	Ctx          context.Context
 }
 
 // CDCProfile represents the command line arguments used to create the changefeed
 type CDCProfile struct {
-	PDUri   string
-	SinkURI string
-	Opts    map[string]string
+	PDUri      string
+	SinkURI    string
+	ConfigFile string
+	Opts       map[string]string
 }
 
 // CreateDB creates a database in both the upstream and the downstream
@@ -92,6 +93,10 @@ func (p *CDCProfile) String() string {
 	}
 
 	builder.WriteString("--sink-uri=" + p.SinkURI + " ")
+
+	if p.ConfigFile != "" {
+		builder.WriteString("--config=" + p.ConfigFile + " ")
+	}
 
 	if p.Opts == nil || len(p.Opts) == 0 {
 		return builder.String()
