@@ -2,6 +2,7 @@ package puller
 
 import (
 	"bufio"
+	"container/heap"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -308,7 +309,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		defer close(task.finished)
 		batchSize := oldHeap.Len()
 		for oldHeap.Len() > 0 {
-			event := oldHeap.Pop().(*sortItem).entry
+			event := heap.Pop(&oldHeap).(*sortItem).entry
 			err := task.backend.writeNext(event)
 			if err != nil {
 				task.finished <- err
@@ -341,7 +342,7 @@ func (h *heapSorter) run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case event := <-h.inputCh:
-			h.heap.Push(event)
+			heap.Push(&h.heap, event)
 			isResolvedEvent := event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved
 			if isResolvedEvent {
 				if event.RawKV.CRTs < maxResolved {
@@ -366,6 +367,9 @@ func (h *heapSorter) run(ctx context.Context) error {
 func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan *model.PolymorphicEvent) error {
 	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := 0
+
+	
+
 	for {
 		select {
 		case <-ctx.Done():
