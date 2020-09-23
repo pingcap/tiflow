@@ -374,13 +374,13 @@ func (d *CanalEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, 
 
 // Build implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoder) Build() []*MQMessage {
+	if len(d.messages.Messages) == 0 {
+		return nil
+	}
+
 	err := d.refreshPacketBody()
 	if err != nil {
 		log.Fatal("Error when generating Canal packet", zap.Error(err))
-	}
-
-	if len(d.messages.Messages) == 0 {
-		return nil
 	}
 
 	value, err := proto.Marshal(d.packet)
