@@ -77,6 +77,6 @@ func testCanal() {
 }
 
 func main() {
-	testAvro()
 	testCanal()
+	testAvro()
 }

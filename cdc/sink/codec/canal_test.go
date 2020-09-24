@@ -227,12 +227,12 @@ func testUpdate(c *check.C) {
 			Table:  "person",
 		},
 		Columns: []*model.Column{
-			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 1},
-			{Name: "name", Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag, Value: "Bob"},
+			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
+			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
 		},
 		PreColumns: []*model.Column{
-			{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag, Value: 2},
-			{Name: "name", Type: mysql.TypeVarchar, Flag: model.HandleKeyFlag, Value: "Nancy"},
+			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 2},
+			{Name: "name", Type: mysql.TypeVarchar, Value: "Nancy"},
 		},
 	}
 	builder := NewCanalEntryBuilder()
@@ -268,7 +268,7 @@ func testUpdate(c *check.C) {
 			c.Assert(col.GetMysqlType(), check.Equals, "int")
 		case "name":
 			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
-			c.Assert(col.GetIsKey(), check.IsTrue)
+			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "Nancy")
 			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
@@ -288,7 +288,7 @@ func testUpdate(c *check.C) {
 			c.Assert(col.GetMysqlType(), check.Equals, "int")
 		case "name":
 			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
-			c.Assert(col.GetIsKey(), check.IsTrue)
+			c.Assert(col.GetIsKey(), check.IsFalse)
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "Bob")
 			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
