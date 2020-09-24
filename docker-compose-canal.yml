@@ -303,7 +303,7 @@ services:
   canal-adapter:
     image: canal-adapter:latest
     build:
-      context: .
+      context: ./scripts/canal/docker/
       dockerfile: ./scripts/canal/docker/Dockerfile
     ports:
       - 8081:8081
