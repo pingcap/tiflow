@@ -98,12 +98,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		mqMessage.Value = nil
 	}
 
-	pkeyCols := make([]*model.Column, 0)
-	for _, col := range e.Columns {
-		if col.Flag.IsHandleKey() {
-			pkeyCols = append(pkeyCols, col)
-		}
-	}
+	pkeyCols := e.HandleKeyColumns()
 
 	res, err := avroEncode(e.Table, a.keySchemaManager, e.TableInfoVersion, pkeyCols)
 	if err != nil {

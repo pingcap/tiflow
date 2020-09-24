@@ -193,7 +193,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 			// special handle for text and blob
 			// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
 			switch sqlType {
-			case JavaSQLTypeVARCHAR:
+			case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR:
 				value = string(v)
 			default:
 				decoded, err := b.bytesDecoder.Bytes(v)
@@ -372,7 +372,11 @@ func (d *CanalEventBatchEncoderWithTxn) Build() []*MQMessage {
 					log.Fatal("Error when append row change event", zap.Error(err))
 				}
 			}
-			messages = append(messages, canalMessageEncoder.build(txn.CommitTs))
+			message := canalMessageEncoder.build(txn.CommitTs)
+			if message == nil {
+				continue
+			}
+			messages = append(messages, message)
 		}
 	}
 	sort.Slice(messages, func(i, j int) bool { return messages[i].Ts < messages[j].Ts })
@@ -438,7 +442,11 @@ func (d *CanalEventBatchEncoderWithoutTxn) EncodeDDLEvent(e *model.DDLEvent) (*M
 
 // Build implements the EventBatchEncoder interface
 func (d *CanalEventBatchEncoderWithoutTxn) Build() []*MQMessage {
-	return []*MQMessage{d.encoder.build(0)}
+	ret := d.encoder.build(0)
+	if ret == nil {
+		return nil
+	}
+	return []*MQMessage{ret}
 }
 
 // MixedBuild implements the EventBatchEncoder interface
@@ -528,17 +536,22 @@ func (d *canalMessageEncoder) encodeDDLEvent(e *model.DDLEvent) (*MQMessage, err
 }
 
 func (d *canalMessageEncoder) build(commitTs uint64) *MQMessage {
+	if len(d.messages.Messages) == 0 {
+		return nil
+	}
+
 	err := d.refreshPacketBody()
 	if err != nil {
 		log.Fatal("Error when generating Canal packet", zap.Error(err))
 	}
+
 	value, err := proto.Marshal(d.packet)
 	if err != nil {
 		log.Fatal("Error when serializing Canal packet", zap.Error(err))
 	}
 	ret := NewMQMessage(nil, value, commitTs)
 	d.messages.Reset()
-	d.packet.Body = d.packet.Body[:0]
+	d.resetPacket()
 	return ret
 }
 
@@ -549,8 +562,11 @@ func (d *canalMessageEncoder) refreshPacketBody() error {
 	if newSize > oldSize {
 		// resize packet body slice
 		d.packet.Body = append(d.packet.Body, make([]byte, newSize-oldSize)...)
+	} else {
+		d.packet.Body = d.packet.Body[:newSize]
 	}
-	_, err := d.messages.MarshalToSizedBuffer(d.packet.Body[:newSize])
+
+	_, err := d.messages.MarshalToSizedBuffer(d.packet.Body)
 	return err
 }
 
@@ -563,18 +579,20 @@ func (d *canalMessageEncoder) size() int {
 	return proto.Size(d.packet)
 }
 
-func newCanalMessageEncoder() *canalMessageEncoder {
-	p := &canal.Packet{
+func (d *canalMessageEncoder) resetPacket() {
+	d.packet = &canal.Packet{
 		VersionPresent: &canal.Packet_Version{
 			Version: CanalPacketVersion,
 		},
 		Type: canal.PacketType_MESSAGES,
 	}
+}
 
+func newCanalMessageEncoder() *canalMessageEncoder {
 	encoder := &canalMessageEncoder{
 		messages:     &canal.Messages{},
-		packet:       p,
 		entryBuilder: NewCanalEntryBuilder(),
 	}
+	encoder.resetPacket()
 	return encoder
 }

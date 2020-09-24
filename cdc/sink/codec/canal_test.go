@@ -164,6 +164,12 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoderWithoutTxn(c *check.C) {
 		}
 		size := encoder.Size()
 		res := encoder.Build()
+
+		if len(cs) == 0 {
+			c.Assert(res, check.IsNil)
+			continue
+		}
+
 		c.Assert(res, check.HasLen, 1)
 		c.Assert(res[0].Key, check.IsNil)
 		c.Assert(len(res[0].Value), check.Equals, size)

@@ -25,12 +25,12 @@ require (
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/pingcap/br v0.0.0-20200907090854-8a4cd9e0abd1
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
-	github.com/pingcap/errors v0.11.5-0.20200902104258-eba4f1d8f6de
+	github.com/pingcap/errors v0.11.5-0.20200917111840-a15ef68f753d
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
 	github.com/pingcap/kvproto v0.0.0-20200909045102-2ac90648531b
 	github.com/pingcap/log v0.0.0-20200828042413-fce0951f1463
-	github.com/pingcap/parser v0.0.0-20200911054040-258297116c4b
-	github.com/pingcap/tidb v1.1.0-beta.0.20200911063238-51d365fc45fd
+	github.com/pingcap/parser v0.0.0-20200921063432-e220cfcfd026
+	github.com/pingcap/tidb v1.1.0-beta.0.20200921080130-30cfb6af225c
 	github.com/pingcap/tidb-tools v4.0.6-0.20200828085514-03575b185007+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
@@ -50,3 +50,5 @@ require (
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
+
+replace github.com/pingcap/tidb-tools => github.com/pingcap/tidb-tools v4.0.0-beta.0.20200921090810-52b9534ff3d5+incompatible
