@@ -7,9 +7,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"go.uber.org/zap"
+	"io"
+	"math"
 	"os"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/pingcap/errors"
@@ -122,6 +125,9 @@ func (f *fileSorterBackEnd) readNext() (*model.PolymorphicEvent, error) {
 	var size int
 	err := binary.Read(f.readWriter, binary.LittleEndian, &size)
 	if err != nil {
+		if err == io.EOF {
+			return nil, nil
+		}
 		return nil, errors.AddStack(err)
 	}
 
@@ -366,17 +372,136 @@ func (h *heapSorter) run(ctx context.Context) error {
 
 func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan *model.PolymorphicEvent) error {
 	lastResolvedTs := make([]uint64, numSorters)
-	minResolvedTs := 0
+	minResolvedTs := uint64(0)
 
-	
+	pendingSet := make(map[*flushTask]*model.PolymorphicEvent, 0)
+
+	sendResolvedEvent := func() error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case out <- model.NewResolvedPolymorphicEvent(0, minResolvedTs):
+		}
+		return nil
+	}
+
+	onMinResolvedTsUpdate := func() error {
+		workingSet := make(map[*flushTask]struct{}, 0)
+		sortHeap := new(sortHeap)
+		for task, cache := range pendingSet {
+			if task.maxResolvedTs <= minResolvedTs {
+				var event *model.PolymorphicEvent
+				if cache != nil {
+					event = cache
+				} else {
+					var err error
+					event, err = task.backend.readNext()
+					if err != nil {
+						return errors.Trace(err)
+					}
+				}
+
+				if event == nil || event.CRTs > minResolvedTs {
+					continue
+				}
+
+				pendingSet[task] = nil
+				workingSet[task] = struct{}{}
+
+				heap.Push(sortHeap, &sortItem{
+					entry: event,
+					data:  task,
+				})
+			}
+		}
+
+		log.Debug("Started merging", zap.Int("num-flush-tasks", len(workingSet)))
+
+		resolvedTicker := time.NewTicker(1 * time.Second)
+		for sortHeap.Len() > 0 {
+			item := heap.Pop(sortHeap).(*sortItem)
+			task := item.data.(*flushTask)
+			event := item.entry
+
+			if event.RawKV != nil && event.RawKV.OpType != model.OpTypeResolved {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case out <- event:
+				}
+			} else {
+				// TODO redact
+				log.Fatal("unexpected event, please report a bug", zap.Reflect("event", event))
+			}
+
+			// read next event from backend
+			event, err := task.backend.readNext()
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			if event == nil {
+				// EOF
+				delete(workingSet, task)
+				delete(pendingSet, task)
+				continue
+			}
+
+			if event.CRTs >= minResolvedTs {
+				// we have processed all events from this task that need to be processed in this merge
+				delete(workingSet, task)
+				pendingSet[task] = event
+				continue
+			}
+
+			if event.RawKV != nil && event.RawKV.OpType != model.OpTypeResolved {
+				heap.Push(sortHeap, &sortItem{
+					entry: event,
+					data:  task,
+				})
+			}
+
+			select {
+			case <-resolvedTicker.C:
+				err := sendResolvedEvent()
+				if err != nil {
+					return errors.Trace(err)
+				}
+			default:
+			}
+		}
+
+		err := sendResolvedEvent()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		return nil
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case task := <-in:
+			pendingSet[task] = nil
+
 			if lastResolvedTs[task.heapSorterId] < task.maxResolvedTs {
 				lastResolvedTs[task.heapSorterId] = task.maxResolvedTs
+			}
+
+			minTemp := uint64(math.MaxUint64)
+			for _, ts := range lastResolvedTs {
+				if minTemp > ts {
+					minTemp = ts
+				}
+			}
+
+			if minTemp > minResolvedTs {
+				err := onMinResolvedTsUpdate()
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 		}
 	}
@@ -404,6 +529,8 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	for i := range heapSorters {
 		heapSorters[i] = newHeapSorter(i, s.pool)
 	}
+
+	
 
 	for {
 		select {
