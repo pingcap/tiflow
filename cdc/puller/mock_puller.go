@@ -200,7 +200,7 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	mvccListener := newMVCCListener(mocktikv.MustNewMVCCStore())
 
 	m.mvccStore = mvccListener
-	store, err := mockstore.NewMockTikvStore()
+	store, err := mockstore.NewMockStore()
 	if err != nil {
 		log.Fatal("create mock puller failed", zap.Error(err))
 	}

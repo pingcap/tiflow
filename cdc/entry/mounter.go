@@ -30,7 +30,9 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/table"
+	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -46,7 +48,7 @@ type baseKVEntry struct {
 	CRTs uint64
 
 	PhysicalTableID int64
-	RecordID        int64
+	RecordID        kv.Handle
 	Delete          bool
 }
 
@@ -88,8 +90,12 @@ func (idx *indexKVEntry) unflatten(tableInfo *model.TableInfo, tz *time.Location
 		return cerror.ErrIndexKeyTableNotFound.GenWithStackByArgs(idx.IndexID)
 	}
 	if !isDistinct(index, idx.IndexValue) {
-		idx.RecordID = idx.IndexValue[len(idx.IndexValue)-1].GetInt64()
-		idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-1]
+		idx.RecordID = idx.baseKVEntry.RecordID
+		if idx.baseKVEntry.RecordID.IsInt() {
+			idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-1]
+		} else {
+			idx.IndexValue = idx.IndexValue[:len(idx.IndexValue)-idx.RecordID.NumCols()]
+		}
 	}
 	for i, v := range idx.IndexValue {
 		colOffset := index.Columns[i].Offset
@@ -252,7 +258,7 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 		}
 		switch {
 		case bytes.HasPrefix(key, recordPrefix):
-			rowKV, err := m.unmarshalRowKVEntry(tableInfo, key, raw.Value, raw.OldValue, baseInfo)
+			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
@@ -279,13 +285,10 @@ func (m *mounterImpl) unmarshalAndMountRowChanged(ctx context.Context, raw *mode
 	return row, err
 }
 
-func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, restKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
-	key, recordID, err := decodeRecordID(restKey)
+func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
+	recordID, err := tablecodec.DecodeRowKey(rawKey)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-	if len(key) != 0 {
-		return nil, cerror.ErrInvalidRecordKey.GenWithStackByArgs(key)
 	}
 	decodeRow := func(rawColValue []byte) (map[int64]types.Datum, bool, error) {
 		if len(rawColValue) == 0 {
@@ -308,7 +311,7 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, restKey []
 	}
 
 	if base.Delete && !m.enableOldValue && tableInfo.PKIsHandle {
-		id, pkValue, err := fetchHandleValue(tableInfo, recordID)
+		id, pkValue, err := fetchHandleValue(tableInfo, recordID.IntValue())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -339,17 +342,26 @@ func (m *mounterImpl) unmarshalIndexKVEntry(restKey []byte, rawValue []byte, raw
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	var recordID int64
+	var handle kv.Handle
 
 	if len(rawValue) == 8 {
 		// primary key or unique index
+		var recordID int64
 		buf := bytes.NewBuffer(rawValue)
 		err = binary.Read(buf, binary.BigEndian, &recordID)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		handle = kv.IntHandle(recordID)
+	} else if len(rawValue) > 0 && rawValue[0] == tablecodec.CommonHandleFlag {
+		handleLen := uint16(rawValue[1])<<8 + uint16(rawValue[2])
+		handleEndOff := 3 + handleLen
+		handle, err = kv.NewCommonHandle(rawValue[3:handleEndOff])
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
-	base.RecordID = recordID
+	base.RecordID = handle
 	return &indexKVEntry{
 		baseKVEntry: base,
 		IndexID:     indexID,
@@ -456,10 +468,14 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 
 	schemaName := tableInfo.TableName.Schema
 	tableName := tableInfo.TableName.Table
+	var intRowID int64
+	if row.RecordID.IsInt() {
+		intRowID = row.RecordID.IntValue()
+	}
 	return &model.RowChangedEvent{
 		StartTs:          row.StartTs,
 		CommitTs:         row.CRTs,
-		RowID:            row.RecordID,
+		RowID:            intRowID,
 		TableInfoVersion: tableInfo.TableInfoVersion,
 		Table: &model.TableName{
 			Schema:      schemaName,
@@ -516,10 +532,14 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 			Flag:  tableInfo.ColumnsFlag[colInfo.ID],
 		}
 	}
+	var intRowID int64
+	if idx.RecordID.IsInt() {
+		intRowID = idx.RecordID.IntValue()
+	}
 	return &model.RowChangedEvent{
 		StartTs:  idx.StartTs,
 		CommitTs: idx.CRTs,
-		RowID:    idx.RecordID,
+		RowID:    intRowID,
 		Table: &model.TableName{
 			Schema:      tableInfo.TableName.Schema,
 			Table:       tableInfo.TableName.Table,

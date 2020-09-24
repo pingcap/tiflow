@@ -646,7 +646,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 }
 
 func (t *schemaSuite) TestCreateSnapFromMeta(c *C) {
-	store, err := mockstore.NewMockTikvStore()
+	store, err := mockstore.NewMockStore()
 	c.Assert(err, IsNil)
 
 	session.SetSchemaLease(0)
