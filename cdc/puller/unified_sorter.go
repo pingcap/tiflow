@@ -275,11 +275,11 @@ type heapSorter struct {
 	backEndPool *backEndPool
 }
 
-func newHeapSorter(id int, pool *backEndPool) *heapSorter {
+func newHeapSorter(id int, pool *backEndPool, out chan *flushTask) *heapSorter {
 	return &heapSorter{
 		id:          id,
 		inputCh:     make(chan *model.PolymorphicEvent, 1024*1024),
-		outputCh:    make(chan *flushTask, 1024),
+		outputCh:    out,
 		heap:        make(sortHeap, 0, 65536),
 		backEndPool: pool,
 	}
@@ -348,7 +348,7 @@ func (h *heapSorter) run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case event := <-h.inputCh:
-			heap.Push(&h.heap, event)
+			heap.Push(&h.heap, &sortItem{entry: event})
 			isResolvedEvent := event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved
 			if isResolvedEvent {
 				if event.RawKV.CRTs < maxResolved {
@@ -418,6 +418,8 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 		log.Debug("Started merging", zap.Int("num-flush-tasks", len(workingSet)))
 
 		resolvedTicker := time.NewTicker(1 * time.Second)
+		defer resolvedTicker.Stop()
+
 		for sortHeap.Len() > 0 {
 			item := heap.Pop(sortHeap).(*sortItem)
 			task := item.data.(*flushTask)
@@ -526,16 +528,28 @@ func NewUnifiedSorter(dir string) *UnifiedSorter {
 func (s *UnifiedSorter) Run(ctx context.Context) error {
 	nextSorterId := 0
 	heapSorters := make([]*heapSorter, numConcurrentHeaps)
+
+	sorterOutCh := make(chan *flushTask, 4096)
+	defer close(sorterOutCh)
+
 	for i := range heapSorters {
-		heapSorters[i] = newHeapSorter(i, s.pool)
+		heapSorters[i] = newHeapSorter(i, s.pool, sorterOutCh)
 	}
 
-	
+	errCh := make(chan error)
+	go func() {
+		errCh <- runMerger(ctx, numConcurrentHeaps, sorterOutCh, s.outputCh)
+		close(errCh)
+	}()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err := <-errCh:
+			if err != nil {
+				return errors.Trace(err)
+			}
 		case event := <-s.inputCh:
 			if event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved {
 				// broadcast resolved events
