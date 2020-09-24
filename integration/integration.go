@@ -54,8 +54,8 @@ func testAvro() {
 
 func testCanal() {
 	testCases := []framework.Task{
-		//canal.NewSimpleCase(),
-		//canal.NewDeleteCase(),
+		canal.NewSimpleCase(),
+		canal.NewDeleteCase(),
 		canal.NewManyTypesCase(),
 		canal.NewUnsignedCase(),
 		canal.NewCompositePKeyCase(),
