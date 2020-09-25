@@ -376,11 +376,11 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 
 	pendingSet := make(map[*flushTask]*model.PolymorphicEvent, 0)
 
-	sendResolvedEvent := func() error {
+	sendResolvedEvent := func(ts uint64) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case out <- model.NewResolvedPolymorphicEvent(0, minResolvedTs):
+		case out <- model.NewResolvedPolymorphicEvent(0, ts):
 		}
 		return nil
 	}
@@ -465,7 +465,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 
 			select {
 			case <-resolvedTicker.C:
-				err := sendResolvedEvent()
+				err := sendResolvedEvent(event.CRTs)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -473,7 +473,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 			}
 		}
 
-		err := sendResolvedEvent()
+		err := sendResolvedEvent(minResolvedTs)
 		if err != nil {
 			return errors.Trace(err)
 		}
