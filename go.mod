@@ -54,3 +54,5 @@ require (
 	gopkg.in/yaml.v2 v2.3.0 // indirect
 	upper.io/db.v3 v3.7.1+incompatible
 )
+
+replace github.com/pingcap/tidb-tools => github.com/pingcap/tidb-tools v4.0.0-beta.0.20200921090810-52b9534ff3d5+incompatible

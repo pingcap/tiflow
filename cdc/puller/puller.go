@@ -139,8 +139,17 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	metricEventCounterKv := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "kv")
 	metricEventCounterResolved := kvEventCounter.WithLabelValues(captureAddr, changefeedID, "resolved")
 	metricTxnCollectCounterKv := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
-	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "kv")
-
+	metricTxnCollectCounterResolved := txnCollectCounter.WithLabelValues(captureAddr, changefeedID, tableName, "resolved")
+	defer func() {
+		outputChanSizeGauge.DeleteLabelValues(captureAddr, changefeedID, tableName)
+		eventChanSizeGauge.DeleteLabelValues(captureAddr, changefeedID, tableName)
+		memBufferSizeGauge.DeleteLabelValues(captureAddr, changefeedID, tableName)
+		pullerResolvedTsGauge.DeleteLabelValues(captureAddr, changefeedID, tableName)
+		kvEventCounter.DeleteLabelValues(captureAddr, changefeedID, "kv")
+		kvEventCounter.DeleteLabelValues(captureAddr, changefeedID, "resolved")
+		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, tableName, "kv")
+		txnCollectCounter.DeleteLabelValues(captureAddr, changefeedID, tableName, "resolved")
+	}()
 	g.Go(func() error {
 		for {
 			select {
