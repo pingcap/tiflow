@@ -25,15 +25,15 @@ require (
 	github.com/mattn/go-colorable v0.1.7 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-shellwords v1.0.3
-	github.com/pingcap/br v0.0.0-20200918114808-5af97a1a579f
+	github.com/pingcap/br v0.0.0-20200923023944-7456456854e4
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20200917111840-a15ef68f753d
 	github.com/pingcap/failpoint v0.0.0-20200702092429-9f69995143ce
 	github.com/pingcap/kvproto v0.0.0-20200916031750-f9473f2c5379
 	github.com/pingcap/log v0.0.0-20200828042413-fce0951f1463
-	github.com/pingcap/parser v0.0.0-20200921041333-cd2542b7a8a2
-	github.com/pingcap/tidb v1.1.0-beta.0.20200922071159-640cb42f5486
-	github.com/pingcap/tidb-tools v4.0.6-0.20200828085514-03575b185007+incompatible
+	github.com/pingcap/parser v0.0.0-20200924053142-5d7e8ebf605e
+	github.com/pingcap/tidb v1.1.0-beta.0.20200927065602-486e473a86e9
+	github.com/pingcap/tidb-tools v4.0.5-0.20200820092506-34ea90c93237+incompatible
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
