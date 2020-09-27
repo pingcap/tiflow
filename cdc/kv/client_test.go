@@ -211,7 +211,6 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	// Cancel first, and then close the server.
 	defer cancel()
 
-
 	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
