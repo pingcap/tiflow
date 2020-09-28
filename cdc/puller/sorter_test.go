@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	numProducers = 10
+	numProducers          = 10
 	eventCountPerProducer = 10000000
 )
 
@@ -36,7 +36,7 @@ type sorterSuite struct{}
 
 var _ = check.Suite(&sorterSuite{})
 
-func generateMockRawKV(ts uint64) *model.RawKVEntry{
+func generateMockRawKV(ts uint64) *model.RawKVEntry {
 	return &model.RawKVEntry{
 		OpType:   model.OpTypePut,
 		Key:      []byte{},
@@ -55,7 +55,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 }
 
 func testSorter(c *check.C, sorter EventSorter) {
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), 10 * time.Minute)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	errg, ctx := errgroup.WithContext(timeoutCtx)
@@ -70,8 +70,8 @@ func testSorter(c *check.C, sorter EventSorter) {
 		finalI := i
 		errg.Go(func() error {
 			for j := 0; j < eventCountPerProducer; j++ {
-				sorter.AddEntry(ctx, model.NewPolymorphicEvent(generateMockRawKV(uint64(j) << 5)))
-				if j % 10000 == 0 {
+				sorter.AddEntry(ctx, model.NewPolymorphicEvent(generateMockRawKV(uint64(j)<<5)))
+				if j%10000 == 0 {
 					atomic.StoreUint64(&producerProgress[finalI], uint64(j))
 				}
 			}
@@ -80,7 +80,7 @@ func testSorter(c *check.C, sorter EventSorter) {
 	}
 
 	// launch the resolver
-	errg.Go(func () error {
+	errg.Go(func() error {
 		ticker := time.NewTicker(200 * time.Millisecond)
 		defer ticker.Stop()
 		for {
@@ -113,10 +113,10 @@ func testSorter(c *check.C, sorter EventSorter) {
 				lastTs = event.CRTs
 				if event.RawKV.OpType != model.OpTypeResolved {
 					counter += 1
-					if counter % 10000 == 0 {
+					if counter%10000 == 0 {
 						log.Debug("Messages received", zap.Int("counter", counter))
 					}
-					if counter >= numProducers * eventCountPerProducer {
+					if counter >= numProducers*eventCountPerProducer {
 						log.Debug("Unified Sorter test successful")
 						return nil
 					}
@@ -124,7 +124,6 @@ func testSorter(c *check.C, sorter EventSorter) {
 			}
 		}
 	})
-
 
 	err := errg.Wait()
 	c.Assert(err, check.IsNil)

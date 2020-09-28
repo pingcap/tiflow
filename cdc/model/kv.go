@@ -64,18 +64,18 @@ type ResolvedSpan struct {
 
 // RawKVEntry notify the KV operator
 type RawKVEntry struct {
-	OpType OpType            `msg:"op_type"`
-	Key    []byte            `msg:"key"`
+	OpType OpType `msg:"op_type"`
+	Key    []byte `msg:"key"`
 	// nil for delete type
-	Value []byte             `msg:"value"`
+	Value []byte `msg:"value"`
 	// nil for insert type
-	OldValue []byte          `msg:"old_value"`
-	StartTs  uint64          `msg:"start_ts"`
+	OldValue []byte `msg:"old_value"`
+	StartTs  uint64 `msg:"start_ts"`
 	// Commit or resolved TS
-	CRTs uint64              `msg:"crts"`
+	CRTs uint64 `msg:"crts"`
 
 	// Additonal debug info
-	RegionID uint64          `msg:"region_id"`
+	RegionID uint64 `msg:"region_id"`
 }
 
 func (v *RawKVEntry) String() string {
