@@ -15,12 +15,11 @@ package codec
 
 import (
 	"fmt"
-	"go.uber.org/zap"
 	"log"
 	"strconv"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pingcap/errors"
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
@@ -28,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
+	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 )
