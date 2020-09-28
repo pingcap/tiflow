@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	mm "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
