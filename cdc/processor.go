@@ -495,12 +495,15 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	//p.position.Count = p.sink.Count()
-	err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
-	if err == nil {
+	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
+	if err != nil {
+		if errors.Cause(err) != context.Canceled {
+			log.Error("failed to flush task position", zap.Error(err))
+			return errors.Trace(err)
+		}
+	}
+	if updated {
 		log.Debug("flushed task position", zap.Stringer("position", p.position))
-	} else if errors.Cause(err) != context.Canceled {
-		log.Error("failed to flush task position", zap.Error(err))
-		return errors.Trace(err)
 	}
 	return nil
 }
@@ -1231,7 +1234,7 @@ func runProcessor(
 				Code:    code,
 				Message: err.Error(),
 			}
-			err = processor.etcdCli.PutTaskPosition(ctx, processor.changefeedID, processor.captureInfo.ID, processor.position)
+			_, err = processor.etcdCli.PutTaskPositionOnChange(ctx, processor.changefeedID, processor.captureInfo.ID, processor.position)
 			if err != nil {
 				log.Warn("upload processor error failed", zap.Error(err))
 			}
