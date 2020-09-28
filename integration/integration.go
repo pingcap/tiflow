@@ -20,12 +20,14 @@ import (
 	canal2 "github.com/pingcap/ticdc/integration/framework/canal"
 	"github.com/pingcap/ticdc/integration/tests/avro"
 	"github.com/pingcap/ticdc/integration/tests/canal"
+	"go.uber.org/zap"
 
 	avro2 "github.com/pingcap/ticdc/integration/framework/avro"
 
 	"go.uber.org/zap/zapcore"
 )
 
+var testProtocol = flag.String("protocol", "avro", "the protocol we want to test: avro or canal")
 var dockerComposeFile = flag.String("docker-compose-file", "", "the path of the Docker-compose yml file")
 
 func testAvro() {
@@ -77,6 +79,13 @@ func testCanal() {
 }
 
 func main() {
-	testCanal()
-	testAvro()
+	flag.Parse()
+	if *testProtocol == "avro" {
+		testAvro()
+	} else if *testProtocol == "canal" {
+		testCanal()
+	} else
+	{
+		log.Fatal("Unknown sink protocol", zap.String("protocol", *testProtocol))
+	}
 }
