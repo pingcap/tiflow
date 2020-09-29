@@ -310,12 +310,12 @@ func (m *mounterImpl) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []b
 		return nil, errors.Trace(err)
 	}
 
-	if base.Delete && !m.enableOldValue && tableInfo.PKIsHandle {
-		id, pkValue, err := fetchHandleValue(tableInfo, recordID.IntValue())
+	if base.Delete && !m.enableOldValue && (tableInfo.PKIsHandle || tableInfo.IsCommonHandle) {
+		handleColIDs, fieldTps, _ := tableInfo.GetRowColInfos()
+		preRow, err = tablecodec.DecodeHandleToDatumMap(recordID, handleColIDs, fieldTps, m.tz, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		preRow = map[int64]types.Datum{id: *pkValue}
 		preRowExist = true
 	}
 
@@ -442,7 +442,7 @@ func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntr
 	// if m.enableNewValue == false and row.Delete == false, go into this function
 	// if m.enableNewValue == false and row.Delete == true and tableInfo.PKIsHandle = true, go into this function
 	// only if m.enableNewValue == false and row.Delete == true and tableInfo.PKIsHandle == false, skip this function
-	if !m.enableOldValue && row.Delete && !tableInfo.PKIsHandle {
+	if !m.enableOldValue && row.Delete && !(tableInfo.PKIsHandle || tableInfo.IsCommonHandle) {
 		return nil, nil
 	}
 
@@ -533,7 +533,7 @@ func (m *mounterImpl) mountIndexKVEntry(tableInfo *model.TableInfo, idx *indexKV
 		}
 	}
 	var intRowID int64
-	if idx.RecordID.IsInt() {
+	if idx.RecordID != nil && idx.RecordID.IsInt() {
 		intRowID = idx.RecordID.IntValue()
 	}
 	return &model.RowChangedEvent{
@@ -622,26 +622,4 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) interface{} {
 
 	d := table.GetZeroValue(col)
 	return d.GetValue()
-}
-
-func fetchHandleValue(tableInfo *model.TableInfo, recordID int64) (pkCoID int64, pkValue *types.Datum, err error) {
-	handleColOffset := -1
-	for i, col := range tableInfo.Columns {
-		if mysql.HasPriKeyFlag(col.Flag) {
-			handleColOffset = i
-			break
-		}
-	}
-	if handleColOffset == -1 {
-		return -1, nil, cerror.ErrFetchHandleValue.GenWithStackByArgs()
-	}
-	handleCol := tableInfo.Columns[handleColOffset]
-	pkCoID = handleCol.ID
-	pkValue = &types.Datum{}
-	if mysql.HasUnsignedFlag(handleCol.Flag) {
-		pkValue.SetUint64(uint64(recordID))
-	} else {
-		pkValue.SetInt64(recordID)
-	}
-	return
 }
