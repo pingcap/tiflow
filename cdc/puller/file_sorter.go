@@ -249,7 +249,17 @@ type sortItem struct {
 type sortHeap []*sortItem
 
 func (h sortHeap) Len() int           { return len(h) }
-func (h sortHeap) Less(i, j int) bool { return h[i].entry.CRTs < h[j].entry.CRTs }
+func (h sortHeap) Less(i, j int) bool {
+	if h[i].entry.CRTs == h[j].entry.CRTs {
+		if h[j].entry.RawKV != nil && h[j].entry.RawKV.OpType == model.OpTypeResolved {
+			return true
+		}
+		if h[i].entry.RawKV != nil && h[i].entry.RawKV.OpType == model.OpTypeDelete {
+			return true
+		}
+	}
+	return h[i].entry.CRTs < h[j].entry.CRTs
+}
 func (h sortHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 func (h *sortHeap) Push(x interface{}) {
 	*h = append(*h, x.(*sortItem))

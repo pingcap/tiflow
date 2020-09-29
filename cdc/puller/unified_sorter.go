@@ -37,7 +37,8 @@ const (
 	fileBufferSize     = 16 * 1024 * 1024
 	heapSizeLimit      = 4 * 1024 * 1024 // 4MB
 	numConcurrentHeaps = 16
-	memoryLimit        = 1024 * 1024 * 1024 // 1GB
+	memoryLimit        = 128 * 1024 * 1024 // 1GB
+	magic              = 0xbeefbeef
 )
 
 type sorterBackEnd interface {
@@ -102,6 +103,7 @@ type msgPackGenSerde struct {
 }
 
 func (m *msgPackGenSerde) marshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error) {
+	bytes = bytes[:0]
 	return event.RawKV.MarshalMsg(bytes)
 }
 
@@ -142,8 +144,20 @@ func newFileSorterBackEnd(fileName string, serde serializerDeserializer) (*fileS
 }
 
 func (f *fileSorterBackEnd) readNext() (*model.PolymorphicEvent, error) {
+	var m uint32
+	err := binary.Read(f.readWriter, binary.LittleEndian, &m)
+	if err != nil {
+		if err == io.EOF {
+			return nil, nil
+		}
+		return nil, errors.AddStack(err)
+	}
+	if m != magic {
+		panic("wrong magic")
+	}
+
 	var size uint32
-	err := binary.Read(f.readWriter, binary.LittleEndian, &size)
+	err = binary.Read(f.readWriter, binary.LittleEndian, &size)
 	if err != nil {
 		if err == io.EOF {
 			return nil, nil
@@ -178,6 +192,15 @@ func (f *fileSorterBackEnd) writeNext(event *model.PolymorphicEvent) error {
 	}
 
 	size := len(f.rawBytes)
+	if size == 0 {
+		panic("size is 0!")
+	}
+
+	err = binary.Write(f.readWriter, binary.LittleEndian, uint32(magic))
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
 	err = binary.Write(f.readWriter, binary.LittleEndian, uint32(size))
 	if err != nil {
 		return errors.AddStack(err)
@@ -188,7 +211,7 @@ func (f *fileSorterBackEnd) writeNext(event *model.PolymorphicEvent) error {
 		return errors.AddStack(err)
 	}
 
-	f.size += f.size + 8
+	f.size = f.size + 8 + size
 	return nil
 }
 
@@ -237,7 +260,6 @@ func newBackEndPool(dir string) *backEndPool {
 	return &backEndPool{
 		memoryUseEstimate: 0,
 		fileNameCounter:   0,
-		mu:                sync.Mutex{},
 		cache:             make([]unsafe.Pointer, 256),
 		dir:               dir,
 	}
@@ -257,7 +279,7 @@ func (p *backEndPool) alloc() (sorterBackEnd, error) {
 		ret := atomic.SwapPointer(ptr, nil)
 		if ret != nil {
 			log.Debug("Unified Sorter: returning cached file backEnd")
-			return *(*sorterBackEnd)(ret), nil
+			return (*fileSorterBackEnd)(ret), nil
 		}
 	}
 
@@ -455,6 +477,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				} else {
 					var err error
 
+					after := time.After(5 * time.Second)
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
@@ -462,16 +485,22 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 						if err != nil {
 							return errors.Trace(err)
 						}
+					case <-after:
+						panic("waiting for flushTask for too long")
 					}
+
 
 					event, err = task.backend.readNext()
 					if err != nil {
 						return errors.Trace(err)
 					}
 
+					if event == nil {
+						panic("event is nil")
+					}
 				}
 
-				if event != nil && event.CRTs > minResolvedTs {
+				if event.CRTs > minResolvedTs {
 					pendingSet[task] = event
 					continue
 				}
@@ -510,6 +539,8 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 			}
 			return nil
 		}
+
+		counter := 0
 		for sortHeap.Len() > 0 {
 			item := heap.Pop(sortHeap).(*sortItem)
 			task := item.data.(*flushTask)
@@ -542,7 +573,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				continue
 			}
 
-			if event.CRTs >= minResolvedTs {
+			if event.CRTs > minResolvedTs || (event.CRTs == minResolvedTs && event.RawKV.OpType == model.OpTypeResolved) {
 				// we have processed all events from this task that need to be processed in this merge
 				err := retire(task)
 				if err != nil {
@@ -551,6 +582,10 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				continue
 			}
 
+			counter += 1
+			if counter % 10000 == 0{
+				log.Debug("Merging progress", zap.Int("counter", counter))
+			}
 			heap.Push(sortHeap, &sortItem{
 				entry: event,
 				data:  task,
@@ -564,8 +599,12 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				}
 			default:
 			}
+
 		}
 
+		if len(workingSet) != 0 {
+			panic("workingSet is not empty")
+		}
 		log.Debug("Unified Sorter: merging ended", zap.Uint64("resolvedTs", minResolvedTs))
 		err := sendResolvedEvent(minResolvedTs)
 		if err != nil {

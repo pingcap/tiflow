@@ -72,7 +72,7 @@ func testSorter(c *check.C, sorter EventSorter) {
 			for j := 0; j < eventCountPerProducer; j++ {
 				sorter.AddEntry(ctx, model.NewPolymorphicEvent(generateMockRawKV(uint64(j)<<5)))
 				if j%10000 == 0 {
-					atomic.StoreUint64(&producerProgress[finalI], uint64(j))
+					atomic.StoreUint64(&producerProgress[finalI], uint64(j)<<5)
 				}
 			}
 			return nil
@@ -104,6 +104,8 @@ func testSorter(c *check.C, sorter EventSorter) {
 	errg.Go(func() error {
 		counter := 0
 		lastTs := uint64(0)
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
@@ -121,6 +123,8 @@ func testSorter(c *check.C, sorter EventSorter) {
 						return nil
 					}
 				}
+			case <-ticker.C:
+				log.Debug("Consumer is alive")
 			}
 		}
 	})
