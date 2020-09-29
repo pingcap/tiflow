@@ -128,7 +128,7 @@ tidy:
 	@echo "go mod tidy"
 	./tools/check/check-tidy.sh
 
-check: check-copyright fmt lint check-static tidy
+check: check-copyright fmt lint check-static tidy rfc_error_check
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
@@ -164,3 +164,7 @@ failpoint-enable:
 
 failpoint-disable:
 	$(FAILPOINT_DISABLE)
+
+rfc_error_check:
+	@echo "check rfc error conflict"
+	_utils/error_gen/check.sh

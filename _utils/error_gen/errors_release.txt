@@ -1,0 +1,135 @@
+ErrWriteTsConflict,[CDC:ErrWriteTsConflict]write ts conflict
+ErrChangeFeedNotExists,[CDC:ErrChangeFeedNotExists]changefeed not exists, key: %s
+ErrChangeFeedAlreadyExists,[CDC:ErrChangeFeedAlreadyExists]changefeed already exists, key: %s
+ErrTaskStatusNotExists,[CDC:ErrTaskStatusNotExists]task status not exists, key: %s
+ErrTaskPositionNotExists,[CDC:ErrTaskPositionNotExists]task position not exists, key: %s
+ErrCaptureNotExist,[CDC:ErrCaptureNotExist]capture not exists, key: %s
+ErrGetAllStoresFailed,[CDC:ErrGetAllStoresFailed]get stores from pd failed
+ErrMetaListDatabases,[CDC:ErrMetaListDatabases]meta store list databases
+ErrGRPCDialFailed,[CDC:ErrGRPCDialFailed]grpc dial failed
+ErrTiKVEventFeed,[CDC:ErrTiKVEventFeed]tikv event feed failed
+ErrPDBatchLoadRegions,[CDC:ErrPDBatchLoadRegions]pd batch load regions failed
+ErrMetaNotInRegion,[CDC:ErrMetaNotInRegion]meta not exists in region
+ErrRegionsNotCoverSpan,[CDC:ErrRegionsNotCoverSpan]regions not completely left cover span, span %v regions: %v
+ErrGetTiKVRPCContext,[CDC:ErrGetTiKVRPCContext]get tikv grpc context failed
+ErrPendingRegionCancel,[CDC:ErrPendingRegionCancel]pending region cancelled due to stream disconnecting
+ErrEventFeedAborted,[CDC:ErrEventFeedAborted]single event feed aborted
+ErrUnknownKVEventType,[CDC:ErrUnknownKVEventType]unknown kv event type: %v, entry: %v
+ErrNoPendingRegion,[CDC:ErrNoPendingRegion]received event regionID %v, requestID %v from %v, but neither pending region nor running region was found
+ErrPrewriteNotMatch,[CDC:ErrPrewriteNotMatch]prewrite not match, key: %b, start-ts: %d
+ErrGetRegionFailed,[CDC:ErrGetRegionFailed]get region failed
+ErrScanLockFailed,[CDC:ErrScanLockFailed]scan lock failed
+ErrResolveLocks,[CDC:ErrResolveLocks]resolve locks failed
+ErrLocateRegion,[CDC:ErrLocateRegion]locate region by id
+ErrKVStorageSendReq,[CDC:ErrKVStorageSendReq]send req to kv storage
+ErrKVStorageRegionError,[CDC:ErrKVStorageRegionError]req with region error
+ErrKVStorageBackoffFailed,[CDC:ErrKVStorageBackoffFailed]backoff failed
+ErrKVStorageRespEmpty,[CDC:ErrKVStorageRespEmpty]tikv response body missing
+ErrEventFeedEventError,[CDC:ErrEventFeedEventError]eventfeed returns event error
+ErrPDEtcdAPIError,[CDC:ErrPDEtcdAPIError]etcd api call error
+ErrCachedTSONotExists,[CDC:ErrCachedTSONotExists]GetCachedCurrentVersion: cache entry does not exist
+ErrGetStoreSnapshot,[CDC:ErrGetStoreSnapshot]get snapshot failed
+ErrNewStore,[CDC:ErrNewStore]new store faile
+ErrEncodeFailed,[CDC:ErrEncodeFailed]encode failed: %s
+ErrDecodeFailed,[CDC:ErrDecodeFailed]decode failed: %s
+ErrFilterRuleInvalid,[CDC:ErrFilterRuleInvalid]filter rule is invalid
+ErrAdminStopProcessor,[CDC:ErrAdminStopProcessor]stop processor by admin command
+ErrVersionIncompatible,[CDC:ErrVersionIncompatible]version is incompatible: %s
+ErrCreateMarkTableFailed,[CDC:ErrCreateMarkTableFailed]create mark table failed
+ErrExecDDLFailed,[CDC:ErrExecDDLFailed]exec DDL failed
+ErrDDLEventIgnored,[CDC:ErrDDLEventIgnored]ddl event is ignored
+ErrKafkaSendMessage,[CDC:ErrKafkaSendMessage]kafka send message failed
+ErrKafkaAsyncSendMessage,[CDC:ErrKafkaAsyncSendMessage]kafka async send message failed
+ErrKafkaFlushUnfished,[CDC:ErrKafkaFlushUnfished]flush not finished before producer close
+ErrKafkaInvalidPartitionNum,[CDC:ErrKafkaInvalidPartitionNum]invalid partition num %d
+ErrKafkaNewSaramaProducer,[CDC:ErrKafkaNewSaramaProducer]new sarama producer
+ErrKafkaInvalidClientID,[CDC:ErrKafkaInvalidClientID]invalid kafka client ID '%s'
+ErrKafkaInvalidVersion,[CDC:ErrKafkaInvalidVersion]invalid kafka version
+ErrPulsarNewProducer,[CDC:ErrPulsarNewProducer]new pulsar producer
+ErrPulsarSendMessage,[CDC:ErrPulsarSendMessage]pulsar send message failed
+ErrFileSinkCreateDir,[CDC:ErrFileSinkCreateDir]file sink create dir
+ErrFileSinkFileOp,[CDC:ErrFileSinkFileOp]file sink file operation
+ErrFileSinkMetaAlreadyExists,[CDC:ErrFileSinkMetaAlreadyExists]file sink meta file already exists
+ErrS3SinkWriteStorage,[CDC:ErrS3SinkWriteStorage]write to storage
+ErrS3SinkInitialzie,[CDC:ErrS3SinkInitialzie]new s3 sink
+ErrS3SinkStorageAPI,[CDC:ErrS3SinkStorageAPI]s3 sink storage api
+ErrPrepareAvroFailed,[CDC:ErrPrepareAvroFailed]prepare avro failed
+ErrAsyncBroadcaseNotSupport,[CDC:ErrAsyncBroadcaseNotSupport]Async broadcasts not supported
+ErrKafkaInvalidConfig,[CDC:ErrKafkaInvalidConfig]kafka config invalid
+ErrSinkURIInvalid,[CDC:ErrSinkURIInvalid]sink uri invalid
+ErrMySQLTxnError,[CDC:ErrMySQLTxnError]MySQL txn error
+ErrMySQLQueryError,[CDC:ErrMySQLQueryError]MySQL query error
+ErrMySQLConnectionError,[CDC:ErrMySQLConnectionError]MySQL connection error
+ErrMySQLInvalidConfig,[CDC:ErrMySQLInvalidConfig]MySQL config invaldi
+ErrMySQLWorkerPanic,[CDC:ErrMySQLWorkerPanic]MySQL worker panic
+ErrAvroToEnvelopeError,[CDC:ErrAvroToEnvelopeError]to envelope failed
+ErrAvroUnknownType,[CDC:ErrAvroUnknownType]unknown type for Avro: %v
+ErrAvroMarshalFailed,[CDC:ErrAvroMarshalFailed]json marshal failed
+ErrAvroEncodeFailed,[CDC:ErrAvroEncodeFailed]encode to avro native data
+ErrAvroEncodeToBinary,[CDC:ErrAvroEncodeToBinary]encode to binray from native
+ErrAvroSchemaAPIError,[CDC:ErrAvroSchemaAPIError]schema manager API error
+ErrMaxwellEncodeFailed,[CDC:ErrMaxwellEncodeFailed]maxwell encode failed
+ErrMaxwellDecodeFailed,[CDC:ErrMaxwellDecodeFailed]maxwell decode failed
+ErrMaxwellInvalidData,[CDC:ErrMaxwellInvalidData]maxwell invalid data
+ErrJSONCodecInvalidData,[CDC:ErrJSONCodecInvalidData]json codec invalid data
+ErrCanalDecodeFailed,[CDC:ErrCanalDecodeFailed]canal decode failed
+ErrCanalEncodeFailed,[CDC:ErrCanalEncodeFailed]canal encode failed
+ErrToTLSConfigFailed,[CDC:ErrToTLSConfigFailed]generate tls config failed
+ErrCheckClusterVersionFromPD,[CDC:ErrCheckClusterVersionFromPD]failed to request PD
+ErrNewSemVersion,[CDC:ErrNewSemVersion]create sem version
+ErrCheckDirWritable,[CDC:ErrCheckDirWritable]check dir writable failed
+ErrLoadTimezone,[CDC:ErrLoadTimezone]load timezone
+ErrURLFormatInvalid,[CDC:ErrURLFormatInvalid]url format is invalid
+ErrIntersectNoOverlap,[CDC:ErrIntersectNoOverlap]span doesn't overlap: %+v vs %+v
+ErrInvalidRecordKey,[CDC:ErrInvalidRecordKey]invalid record key - %q
+ErrCodecDecode,[CDC:ErrCodecDecode]codec decode error
+ErrUnknownMetaType,[CDC:ErrUnknownMetaType]unknown meta type %v
+ErrFetchHandleValue,[CDC:ErrFetchHandleValue]can't find handle column, please check if the pk is handle
+ErrDatumUnflatten,[CDC:ErrDatumUnflatten]unflatten datume data
+ErrWrongTableInfo,[CDC:ErrWrongTableInfo]wrong table info in unflatten, table id %d, index table id: %d
+ErrIndexKeyTableNotFound,[CDC:ErrIndexKeyTableNotFound]table not found with index ID %d in index kv
+ErrDecodeRowToDatum,[CDC:ErrDecodeRowToDatum]decode row data to datum failed
+ErrMarshalFailed,[CDC:ErrMarshalFailed]marshal failed
+ErrUnmarshalFailed,[CDC:ErrUnmarshalFailed]unmarshal failed
+ErrInvalidChangefeedID,[CDC:ErrInvalidChangefeedID]bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", eg, "simple-changefeed-task"
+ErrInvalidEtcdKey,[CDC:ErrInvalidEtcdKey]invalid key: %s
+ErrSchemaStorageUnresolved,[CDC:ErrSchemaStorageUnresolved]can not found schema snapshot, the specified ts(%d) is more than resolvedTs(%d)
+ErrSchemaStorageGCed,[CDC:ErrSchemaStorageGCed]can not found schema snapshot, the specified ts(%d) is less than gcTS(%d)
+ErrSchemaSnapshotNotFound,[CDC:ErrSchemaSnapshotNotFound]can not found schema snapshot, ts: %d
+ErrSchemaStorageTableMiss,[CDC:ErrSchemaStorageTableMiss]table %d not found
+ErrSnapshotSchemaNotFound,[CDC:ErrSnapshotSchemaNotFound]schema %d not found in schema snapshot
+ErrSnapshotTableNotFound,[CDC:ErrSnapshotTableNotFound]table %d not found in schema snapshot
+ErrSnapshotSchemaExists,[CDC:ErrSnapshotSchemaExists]schema %s(%d) already exists
+ErrSnapshotTableExists,[CDC:ErrSnapshotTableExists]table %s.%s already exists
+ErrBufferReachLimit,[CDC:ErrBufferReachLimit]puller mem buffer reach size limit
+ErrFileSorterOpenFile,[CDC:ErrFileSorterOpenFile]open file failed
+ErrFileSorterReadFile,[CDC:ErrFileSorterReadFile]read file failed
+ErrFileSorterWriteFile,[CDC:ErrFileSorterWriteFile]write file failed
+ErrFileSorterEncode,[CDC:ErrFileSorterEncode]encode failed
+ErrFileSorterDecode,[CDC:ErrFileSorterDecode]decode failed
+ErrFileSorterInvalidData,[CDC:ErrFileSorterInvalidData]invalid data
+ErrCaptureSuicide,[CDC:ErrCaptureSuicide]capture suicide
+ErrNewCaptureFailed,[CDC:ErrNewCaptureFailed]new capture failed
+ErrCaptureRegister,[CDC:ErrCaptureRegister]capture register to etcd failed
+ErrNewProcessorFailed,[CDC:ErrNewProcessorFailed]new processor failed
+ErrProcessorUnknown,[CDC:ErrProcessorUnknown]processor running unknown error
+ErrProcessorTableNotFound,[CDC:ErrProcessorTableNotFound]table not found in processor cache
+ErrProcessorEtcdWatch,[CDC:ErrProcessorEtcdWatch]etcd watch returns error
+ErrProcessorSortDir,[CDC:ErrProcessorSortDir]sort dir error
+ErrUnknownSortEngine,[CDC:ErrUnknownSortEngine]unknown sort engine %s
+ErrInvalidTaskKey,[CDC:ErrInvalidTaskKey]invalid task key: %s
+ErrInvalidServerOption,[CDC:ErrInvalidServerOption]invalid server option
+ErrServerNewPDClient,[CDC:ErrServerNewPDClient]server creates pd client failed
+ErrServeHTTP,[CDC:ErrServeHTTP]serve http error
+ErrCaptureCampaignOwner,[CDC:ErrCaptureCampaignOwner]campaign owner failed
+ErrCaptureResignOwner,[CDC:ErrCaptureResignOwner]resign owner failed
+ErrWaitHandleOperationTimeout,[CDC:ErrWaitHandleOperationTimeout]waiting processor to handle the operation finished timeout
+ErrSupportPostOnly,[CDC:ErrSupportPostOnly]this api supports POST method only
+ErrAPIInvalidParam,[CDC:ErrAPIInvalidParam]invalid api parameter
+ErrInternalServerError,[CDC:ErrInternalServerError]internal server error
+ErrOwnerSortDir,[CDC:ErrOwnerSortDir]owner sort dir
+ErrOwnerUpdateGCSafepoint,[CDC:ErrOwnerUpdateGCSafepoint]owner update gc safepoint
+ErrOwnerChangefeedNotFound,[CDC:ErrOwnerChangefeedNotFound]changefeed %s not found in owner cache
+ErrChangefeedAbnormalState,[CDC:ErrChangefeedAbnormalState]changefeed in abnormal state: %s, replication status: %+v
+ErrInvalidAdminJobType,[CDC:ErrInvalidAdminJobType]invalid admin job type: %d
+ErrOwnerEtcdWatch,[CDC:ErrOwnerEtcdWatch]etcd watch returns error

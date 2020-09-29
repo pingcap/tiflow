@@ -1,0 +1,810 @@
+[error.CDC:ErrAPIInvalidParam]
+error = "invalid api parameter"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrAdminStopProcessor]
+error = "stop processor by admin command"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrAsyncBroadcaseNotSupport]
+error = "Async broadcasts not supported"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrAvroEncodeFailed]
+error = "encode to avro native data"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrAvroEncodeToBinary]
+error = "encode to binray from native"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrAvroMarshalFailed]
+error = "json marshal failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrAvroSchemaAPIError]
+error = "schema manager API error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrAvroToEnvelopeError]
+error = "to envelope failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrAvroUnknownType]
+error = "unknown type for Avro: %v"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrBufferReachLimit]
+error = "puller mem buffer reach size limit"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrCachedTSONotExists]
+error = "GetCachedCurrentVersion: cache entry does not exist"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrCanalDecodeFailed]
+error = "canal decode failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrCanalEncodeFailed]
+error = "canal encode failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrCaptureCampaignOwner]
+error = "campaign owner failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrCaptureNotExist]
+error = "capture not exists, key: %s"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrCaptureRegister]
+error = "capture register to etcd failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrCaptureResignOwner]
+error = "resign owner failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrCaptureSuicide]
+error = "capture suicide"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrChangeFeedAlreadyExists]
+error = "changefeed already exists, key: %s"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrChangeFeedNotExists]
+error = "changefeed not exists, key: %s"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrChangefeedAbnormalState]
+error = "changefeed in abnormal state: %s, replication status: %+v"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrCheckClusterVersionFromPD]
+error = "failed to request PD"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrCheckDirWritable]
+error = "check dir writable failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrCodecDecode]
+error = "codec decode error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrCreateMarkTableFailed]
+error = "create mark table failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrDDLEventIgnored]
+error = "ddl event is ignored"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrDatumUnflatten]
+error = "unflatten datume data"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrDecodeFailed]
+error = "decode failed: %s"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrDecodeRowToDatum]
+error = "decode row data to datum failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrEncodeFailed]
+error = "encode failed: %s"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrEventFeedAborted]
+error = "single event feed aborted"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrEventFeedEventError]
+error = "eventfeed returns event error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrExecDDLFailed]
+error = "exec DDL failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrFetchHandleValue]
+error = "can't find handle column, please check if the pk is handle"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrFileSinkCreateDir]
+error = "file sink create dir"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrFileSinkFileOp]
+error = "file sink file operation"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrFileSinkMetaAlreadyExists]
+error = "file sink meta file already exists"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrFileSorterDecode]
+error = "decode failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrFileSorterEncode]
+error = "encode failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrFileSorterInvalidData]
+error = "invalid data"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrFileSorterOpenFile]
+error = "open file failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrFileSorterReadFile]
+error = "read file failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrFileSorterWriteFile]
+error = "write file failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrFilterRuleInvalid]
+error = "filter rule is invalid"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrGRPCDialFailed]
+error = "grpc dial failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrGetAllStoresFailed]
+error = "get stores from pd failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrGetRegionFailed]
+error = "get region failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrGetStoreSnapshot]
+error = "get snapshot failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrGetTiKVRPCContext]
+error = "get tikv grpc context failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrIndexKeyTableNotFound]
+error = "table not found with index ID %d in index kv"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrInternalServerError]
+error = "internal server error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrIntersectNoOverlap]
+error = "span doesn't overlap: %+v vs %+v"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrInvalidAdminJobType]
+error = "invalid admin job type: %d"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrInvalidChangefeedID]
+error = "bad changefeed id, please match the pattern \"^[a-zA-Z0-9]+(\\-[a-zA-Z0-9]+)*$\", eg, \"simple-changefeed-task\""
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrInvalidEtcdKey]
+error = "invalid key: %s"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrInvalidRecordKey]
+error = "invalid record key - %q"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrInvalidServerOption]
+error = "invalid server option"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrInvalidTaskKey]
+error = "invalid task key: %s"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrJSONCodecInvalidData]
+error = "json codec invalid data"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrKVStorageBackoffFailed]
+error = "backoff failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrKVStorageRegionError]
+error = "req with region error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrKVStorageRespEmpty]
+error = "tikv response body missing"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrKVStorageSendReq]
+error = "send req to kv storage"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrKafkaAsyncSendMessage]
+error = "kafka async send message failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrKafkaFlushUnfished]
+error = "flush not finished before producer close"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrKafkaInvalidClientID]
+error = "invalid kafka client ID '%s'"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrKafkaInvalidConfig]
+error = "kafka config invalid"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrKafkaInvalidPartitionNum]
+error = "invalid partition num %d"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrKafkaInvalidVersion]
+error = "invalid kafka version"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrKafkaNewSaramaProducer]
+error = "new sarama producer"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrKafkaSendMessage]
+error = "kafka send message failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrLoadTimezone]
+error = "load timezone"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrLocateRegion]
+error = "locate region by id"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrMarshalFailed]
+error = "marshal failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrMaxwellDecodeFailed]
+error = "maxwell decode failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrMaxwellEncodeFailed]
+error = "maxwell encode failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrMaxwellInvalidData]
+error = "maxwell invalid data"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrMetaListDatabases]
+error = "meta store list databases"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrMetaNotInRegion]
+error = "meta not exists in region"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrMySQLConnectionError]
+error = "MySQL connection error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrMySQLInvalidConfig]
+error = "MySQL config invaldi"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrMySQLQueryError]
+error = "MySQL query error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrMySQLTxnError]
+error = "MySQL txn error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrMySQLWorkerPanic]
+error = "MySQL worker panic"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrNewCaptureFailed]
+error = "new capture failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrNewProcessorFailed]
+error = "new processor failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrNewSemVersion]
+error = "create sem version"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrNewStore]
+error = "new store faile"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrNoPendingRegion]
+error = "received event regionID %v, requestID %v from %v, but neither pending region nor running region was found"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrOwnerChangefeedNotFound]
+error = "changefeed %s not found in owner cache"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrOwnerEtcdWatch]
+error = "etcd watch returns error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrOwnerSortDir]
+error = "owner sort dir"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrOwnerUpdateGCSafepoint]
+error = "owner update gc safepoint"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrPDBatchLoadRegions]
+error = "pd batch load regions failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrPDEtcdAPIError]
+error = "etcd api call error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrPendingRegionCancel]
+error = "pending region cancelled due to stream disconnecting"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrPrepareAvroFailed]
+error = "prepare avro failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrPrewriteNotMatch]
+error = "prewrite not match, key: %b, start-ts: %d"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrProcessorEtcdWatch]
+error = "etcd watch returns error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrProcessorSortDir]
+error = "sort dir error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrProcessorTableNotFound]
+error = "table not found in processor cache"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrProcessorUnknown]
+error = "processor running unknown error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrPulsarNewProducer]
+error = "new pulsar producer"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrPulsarSendMessage]
+error = "pulsar send message failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrRegionsNotCoverSpan]
+error = "regions not completely left cover span, span %v regions: %v"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrResolveLocks]
+error = "resolve locks failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrS3SinkInitialzie]
+error = "new s3 sink"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrS3SinkStorageAPI]
+error = "s3 sink storage api"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrS3SinkWriteStorage]
+error = "write to storage"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrScanLockFailed]
+error = "scan lock failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrSchemaSnapshotNotFound]
+error = "can not found schema snapshot, ts: %d"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrSchemaStorageGCed]
+error = "can not found schema snapshot, the specified ts(%d) is less than gcTS(%d)"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrSchemaStorageTableMiss]
+error = "table %d not found"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrSchemaStorageUnresolved]
+error = "can not found schema snapshot, the specified ts(%d) is more than resolvedTs(%d)"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrServeHTTP]
+error = "serve http error"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrServerNewPDClient]
+error = "server creates pd client failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrSinkURIInvalid]
+error = "sink uri invalid"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrSnapshotSchemaExists]
+error = "schema %s(%d) already exists"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrSnapshotSchemaNotFound]
+error = "schema %d not found in schema snapshot"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrSnapshotTableExists]
+error = "table %s.%s already exists"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrSnapshotTableNotFound]
+error = "table %d not found in schema snapshot"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrSupportPostOnly]
+error = "this api supports POST method only"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrTaskPositionNotExists]
+error = "task position not exists, key: %s"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrTaskStatusNotExists]
+error = "task status not exists, key: %s"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrTiKVEventFeed]
+error = "tikv event feed failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrToTLSConfigFailed]
+error = "generate tls config failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrURLFormatInvalid]
+error = "url format is invalid"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrUnknownKVEventType]
+error = "unknown kv event type: %v, entry: %v"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrUnknownMetaType]
+error = "unknown meta type %v"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrUnknownSortEngine]
+error = "unknown sort engine %s"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrUnmarshalFailed]
+error = "unmarshal failed"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrVersionIncompatible]
+error = "version is incompatible: %s"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrWaitHandleOperationTimeout]
+error = "waiting processor to handle the operation finished timeout"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrWriteTsConflict]
+error = "write ts conflict"
+description = ""
+workaround = ""
+tags = []
+
+[error.CDC:ErrWrongTableInfo]
+error = "wrong table info in unflatten, table id %d, index table id: %d"
+description = ""
+workaround = ""
+tags = []
+
