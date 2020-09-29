@@ -15,7 +15,6 @@ package codec
 
 import (
 	"fmt"
-	"go.uber.org/zap"
 	"log"
 	"strconv"
 	"strings"
@@ -28,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
+	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 )
@@ -49,6 +49,9 @@ func convertToCanalTs(commitTs uint64) int64 {
 func convertRowEventType(e *model.RowChangedEvent) canal.EventType {
 	if e.IsDelete() {
 		return canal.EventType_DELETE
+	}
+	if len(e.PreColumns) == 0 {
+		return canal.EventType_INSERT
 	}
 	return canal.EventType_UPDATE
 }
@@ -185,7 +188,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 			// special handle for text and blob
 			// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
 			switch sqlType {
-			case JavaSQLTypeVARCHAR:
+			case JavaSQLTypeVARCHAR, JavaSQLTypeCHAR:
 				value = string(v)
 			default:
 				decoded, err := b.bytesDecoder.Bytes(v)
