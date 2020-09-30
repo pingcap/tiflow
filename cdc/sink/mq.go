@@ -107,9 +107,7 @@ func newMqSink(
 			return avroEncoder
 		}
 	} else if protocol == codec.ProtocolCanal && !config.EnableOldValue {
-		log.Warn("Old value not enabled when using Canal protocol")
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-			errors.New("Canal protocol requires old value support"))
+		log.Fatal("Old value not enabled when using Canal protocol")
 	}
 
 	k := &mqSink{
