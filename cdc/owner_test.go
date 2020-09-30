@@ -78,7 +78,6 @@ func (s *ownerSuite) TearDownTest(c *check.C) {
 
 type mockPDClient struct {
 	pd.Client
-	err error
 }
 
 func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
