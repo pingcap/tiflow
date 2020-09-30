@@ -15,6 +15,7 @@ package cdc
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store/mockstore"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 	"golang.org/x/sync/errgroup"
@@ -72,6 +74,26 @@ func (s *ownerSuite) TearDownTest(c *check.C) {
 	if err != nil {
 		c.Errorf("Error group error: %s", err)
 	}
+}
+
+type mockPDClient struct {
+	pd.Client
+	err error
+}
+
+func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+	return 0, errors.New("mock error")
+}
+
+func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
+	mockOwner := Owner{
+		pdClient:              &mockPDClient{},
+		gcSafepointLastUpdate: time.Now(),
+	}
+
+	// Owner should ignore UpdateServiceGCSafePoint error.
+	err := mockOwner.flushChangeFeedInfos(s.ctx)
+	c.Assert(err, check.IsNil)
 }
 
 /*
