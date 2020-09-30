@@ -720,33 +720,6 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 		}
 	}
 
-	//sync-point on
-	if c.info.SyncPointEnabled {
-		c.syncpointMutex.Lock()
-		defer c.syncpointMutex.Unlock()
-		if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
-			log.Info("sync point reached by ticker", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
-			c.updateResolvedTs = true
-			err := c.sinkSyncpoint(ctx)
-			if err != nil {
-				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
-			}
-		}
-
-		if c.status.ResolvedTs == 0 {
-			c.updateResolvedTs = true
-		}
-
-		if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs {
-			log.Info("sync point reached by ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
-			err := c.sinkSyncpoint(ctx)
-			if err != nil {
-				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
-			}
-			c.ddlTs = 0
-		}
-	}
-
 	if len(c.taskPositions) < len(c.taskStatus) {
 		log.Debug("skip update resolved ts",
 			zap.Int("taskPositions", len(c.taskPositions)),
@@ -838,6 +811,39 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	checkUpdateTs()
 
 	var tsUpdated bool
+
+	//sync-point on
+	if c.info.SyncPointEnabled {
+		c.syncpointMutex.Lock()
+		defer c.syncpointMutex.Unlock()
+		// ResolvedTs == CheckpointTs means a syncpoint reached;
+		// !c.updateResolvedTs means the syncpoint is setted by ticker;
+		// c.ddlTs == 0 means no DDL wait to exec and we can sink the syncpoint record securely ( c.ddlTs != 0 means some DDL should be sink to downstream and this syncpoint is fake ).
+		if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs && c.ddlTs == 0 {
+			log.Info("sync point reached by ticker", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs), zap.Uint64("ddlExecutedTs", c.ddlExecutedTs))
+			c.updateResolvedTs = true
+			err := c.sinkSyncpoint(ctx)
+			if err != nil {
+				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
+			}
+		}
+
+		if c.status.ResolvedTs == 0 {
+			c.updateResolvedTs = true
+		}
+
+		// ResolvedTs == CheckpointTs means a syncpoint reached;
+		// ResolvedTs == ddlTs means the syncpoint is setted by DDL;
+		// ddlTs <= ddlExecutedTs means the DDL has been execed.
+		if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs && c.ddlTs <= c.ddlExecutedTs {
+			log.Info("sync point reached by ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs), zap.Uint64("ddlExecutedTs", c.ddlExecutedTs))
+			err := c.sinkSyncpoint(ctx)
+			if err != nil {
+				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
+			}
+			c.ddlTs = 0
+		}
+	}
 
 	//syncpoint on
 	if c.info.SyncPointEnabled {

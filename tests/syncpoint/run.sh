@@ -26,6 +26,12 @@ function ddl() {
     sleep 2
     run_sql "INSERT INTO testSync.simple1(id, val) VALUES (3, 3);"
     sleep 2
+    run_sql "INSERT INTO testSync.simple1(id, val) VALUES (4, 4);"
+    sleep 2
+    run_sql "INSERT INTO testSync.simple1(id, val) VALUES (5, 5);"
+    sleep 2
+    run_sql "INSERT INTO testSync.simple1(id, val) VALUES (6, 6);"
+    sleep 2
     run_sql "CREATE table testSync.simple2(id int primary key, val int);"
     sleep 2
     run_sql "INSERT INTO testSync.simple2(id, val) VALUES (1, 1);"
@@ -33,6 +39,12 @@ function ddl() {
     run_sql "INSERT INTO testSync.simple2(id, val) VALUES (2, 2);"
     sleep 2
     run_sql "INSERT INTO testSync.simple2(id, val) VALUES (3, 3);"
+    sleep 2
+    run_sql "INSERT INTO testSync.simple2(id, val) VALUES (4, 4);"
+    sleep 2
+    run_sql "INSERT INTO testSync.simple2(id, val) VALUES (5, 5);"
+    sleep 2
+    run_sql "INSERT INTO testSync.simple2(id, val) VALUES (6, 6);"
     sleep 2
     run_sql "CREATE index simple1_val ON testSync.simple1(val);"
     sleep 2
