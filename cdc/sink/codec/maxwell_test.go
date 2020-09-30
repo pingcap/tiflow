@@ -28,7 +28,7 @@ var _ = check.Suite(&maxwellbatchSuite{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns:  []*model.Column{{Name: "col1", Type: 3, Value: 10}},
-	}}},
+	}}, {}},
 	ddlCases: [][]*model.DDLEvent{{{
 		CommitTs: 1,
 		TableInfo: &model.SimpleTableInfo{
@@ -80,6 +80,10 @@ func (s *maxwellbatchSuite) testmaxwellBatchCodec(c *check.C, newEncoder func() 
 		// test normal decode
 		size := encoder.Size()
 		messages := encoder.Build()
+		if len(cs) == 0 {
+			c.Assert(messages, check.IsNil)
+			continue
+		}
 		c.Assert(messages, check.HasLen, 1)
 		c.Assert(len(messages[0].Key)+len(messages[0].Value), check.Equals, size)
 		decoder, err := newDecoder(messages[0].Key, messages[0].Value)
