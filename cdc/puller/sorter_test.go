@@ -17,6 +17,7 @@ import (
 	"context"
 	"go.uber.org/zap/zapcore"
 	"math"
+	"net/http"
 	"sync/atomic"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	_ "net/http/pprof"
 )
 
 const (
@@ -50,6 +52,10 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 
 func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	log.SetLevel(zapcore.DebugLevel)
+	go func() {
+		err := http.ListenAndServe("localhost:6060", nil)
+		c.Check(err, check.IsNil)
+	}()
 	sorter := NewUnifiedSorter("./sorter")
 	testSorter(c, sorter)
 }
@@ -75,6 +81,8 @@ func testSorter(c *check.C, sorter EventSorter) {
 					atomic.StoreUint64(&producerProgress[finalI], uint64(j)<<5)
 				}
 			}
+			sorter.AddEntry(ctx, model.NewPolymorphicEvent(generateMockRawKV(uint64(eventCountPerProducer)<<5)))
+			atomic.StoreUint64(&producerProgress[finalI], uint64(eventCountPerProducer)<<5)
 			return nil
 		})
 	}
@@ -96,6 +104,9 @@ func testSorter(c *check.C, sorter EventSorter) {
 					}
 				}
 				sorter.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, resolvedTs))
+				if resolvedTs == uint64(eventCountPerProducer)<<5 {
+					return nil
+				}
 			}
 		}
 	})
@@ -111,7 +122,10 @@ func testSorter(c *check.C, sorter EventSorter) {
 			case <-ctx.Done():
 				return ctx.Err()
 			case event := <-sorter.Output():
-				c.Assert(event.CRTs, check.GreaterEqual, lastTs)
+				//c.Assert(event.CRTs, check.GreaterEqual, lastTs)
+				if event.CRTs < lastTs {
+					panic("regressed")
+				}
 				lastTs = event.CRTs
 				if event.RawKV.OpType != model.OpTypeResolved {
 					counter += 1

@@ -34,8 +34,8 @@ import (
 )
 
 const (
-	fileBufferSize     = 16 * 1024 * 1024
-	heapSizeLimit      = 4 * 1024 * 1024 // 4MB
+	fileBufferSize     = 1 * 1024 * 1024 // 1MB
+	heapSizeLimit      = 16 * 1024 * 1024 // 16MB
 	numConcurrentHeaps = 16
 	memoryLimit        = 128 * 1024 * 1024 // 1GB
 	magic              = 0xbeefbeef
@@ -78,7 +78,7 @@ func (f *fileSorterBackEnd) getSize() int {
 }
 
 func (f *fileSorterBackEnd) reset() error {
-	err := f.f.Truncate(int64(f.size))
+	err := f.f.Truncate(int64(0))
 	if err != nil {
 		return errors.AddStack(err)
 	}
@@ -313,6 +313,7 @@ func (p *backEndPool) dealloc(backEnd sorterBackEnd) error {
 			}
 		}
 		// Cache is full. Let GC do its job
+		return nil
 	}
 	panic("Unexpected type")
 }
@@ -323,6 +324,7 @@ type flushTask struct {
 	maxResolvedTs uint64
 	finished      chan error
 	dealloc       func() error
+	lastTs        uint64  // for debugging TODO remove
 }
 
 type heapSorter struct {
@@ -418,6 +420,7 @@ func (h *heapSorter) run(ctx context.Context) error {
 	)
 	maxResolved = 0
 	heapSizeBytesEstimate = 0
+	flushTicker := time.NewTicker(5 * time.Second)
 	for {
 		select {
 		case <-ctx.Done():
@@ -434,8 +437,17 @@ func (h *heapSorter) run(ctx context.Context) error {
 				maxResolved = event.RawKV.CRTs
 			}
 
-			heapSizeBytesEstimate += event.RawKV.ApproximateSize()
-			if heapSizeBytesEstimate >= heapSizeLimit || isResolvedEvent {
+			heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 128
+
+			if isResolvedEvent {
+				select {
+				case <-flushTicker.C:
+				default:
+					continue
+				}
+			}
+
+			if heapSizeBytesEstimate >= heapSizeLimit {
 				err := h.flush(ctx, maxResolved)
 				if err != nil {
 					return errors.AddStack(err)
@@ -452,17 +464,20 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 
 	pendingSet := make(map[*flushTask]*model.PolymorphicEvent, 0)
 
+	lastOutputTs := uint64(0)
+
 	sendResolvedEvent := func(ts uint64) error {
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case out <- model.NewResolvedPolymorphicEvent(0, ts):
-				return nil
-			default:
-				log.Warn("sendResolvedEvent blocked!")
-			}
+		if ts < lastOutputTs {
+			panic("regressed")
 		}
+		lastOutputTs = ts
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case out <- model.NewResolvedPolymorphicEvent(0, ts):
+			return nil
+		}
+		return nil
 	}
 
 	onMinResolvedTsUpdate := func() error {
@@ -522,6 +537,9 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 
 		retire := func(task *flushTask) error {
 			delete(workingSet, task)
+			if pendingSet[task] != nil {
+				return nil
+			}
 			nextEvent, err := task.backend.readNext()
 			if err != nil {
 				return errors.Trace(err)
@@ -547,6 +565,10 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 			event := item.entry
 
 			if event.RawKV != nil && event.RawKV.OpType != model.OpTypeResolved {
+				if event.CRTs < lastOutputTs {
+					panic("regressed")
+				}
+				lastOutputTs = event.CRTs
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -554,7 +576,20 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				}
 			}
 
-			// read next event from backend
+			if event.CRTs < task.lastTs {
+				panic("regressed")
+			}
+			task.lastTs = event.CRTs
+
+			select {
+			case <-resolvedTicker.C:
+				err := sendResolvedEvent(event.CRTs)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			default:
+			}
+
 			event, err := task.backend.readNext()
 			if err != nil {
 				return errors.Trace(err)
@@ -575,6 +610,9 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 
 			if event.CRTs > minResolvedTs || (event.CRTs == minResolvedTs && event.RawKV.OpType == model.OpTypeResolved) {
 				// we have processed all events from this task that need to be processed in this merge
+				if event.CRTs > minResolvedTs || event.RawKV.OpType != model.OpTypeResolved {
+					pendingSet[task] = event
+				}
 				err := retire(task)
 				if err != nil {
 					return errors.Trace(err)
@@ -590,22 +628,12 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				entry: event,
 				data:  task,
 			})
-
-			select {
-			case <-resolvedTicker.C:
-				err := sendResolvedEvent(event.CRTs)
-				if err != nil {
-					return errors.Trace(err)
-				}
-			default:
-			}
-
 		}
 
 		if len(workingSet) != 0 {
 			panic("workingSet is not empty")
 		}
-		log.Debug("Unified Sorter: merging ended", zap.Uint64("resolvedTs", minResolvedTs))
+		log.Debug("Unified Sorter: merging ended", zap.Uint64("resolvedTs", minResolvedTs), zap.Uint64("lastTs", lastOutputTs))
 		err := sendResolvedEvent(minResolvedTs)
 		if err != nil {
 			return errors.Trace(err)
