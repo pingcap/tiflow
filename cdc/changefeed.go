@@ -729,7 +729,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			c.updateResolvedTs = true
 			err := c.sinkSyncpoint(ctx)
 			if err != nil {
-				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs))
+				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
 			}
 		}
 
@@ -741,7 +741,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			log.Info("sync point reached by ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
 			err := c.sinkSyncpoint(ctx)
 			if err != nil {
-				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs))
+				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
 			}
 			c.ddlTs = 0
 		}
