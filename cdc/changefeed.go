@@ -723,6 +723,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	//sync-point on
 	if c.info.SyncPointEnabled {
 		c.syncpointMutex.Lock()
+		defer c.syncpointMutex.Unlock()
 		if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
 			log.Info("sync point reached by ticker", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs))
 			c.updateResolvedTs = true
@@ -844,7 +845,6 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			c.status.ResolvedTs = minResolvedTs
 			tsUpdated = true
 		}
-		c.syncpointMutex.Unlock()
 	} else if minResolvedTs > c.status.ResolvedTs {
 		c.status.ResolvedTs = minResolvedTs
 		tsUpdated = true
