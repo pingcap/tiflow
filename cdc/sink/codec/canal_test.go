@@ -91,6 +91,12 @@ func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
 		}
 		size := encoder.Size()
 		res := encoder.Build()
+
+		if len(cs) == 0 {
+			c.Assert(res, check.IsNil)
+			continue
+		}
+
 		c.Assert(res, check.HasLen, 1)
 		c.Assert(res[0].Key, check.IsNil)
 		c.Assert(len(res[0].Value), check.Equals, size)
@@ -143,6 +149,24 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
 			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 			{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		},
+		PreColumns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
+			{Name: "name", Type: mysql.TypeVarchar, Value: "Alice"},
+			{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
+			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+			{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		},
+	}
+	testCaseInsert := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "cdc",
+			Table:  "person",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
+			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
 		},
 	}
 	testCaseDelete := &model.RowChangedEvent{
@@ -220,6 +244,44 @@ func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
 			c.Assert(err, check.IsNil)
 			c.Assert(s, check.Equals, "测试blob")
 			c.Assert(col.GetMysqlType(), check.Equals, "blob")
+		}
+	}
+
+	// test insert
+	entry, err = builder.FromRowEvent(testCaseInsert)
+	c.Assert(err, check.IsNil)
+	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
+	header = entry.GetHeader()
+	c.Assert(header.GetExecuteTime(), check.Equals, int64(1591943372224))
+	c.Assert(header.GetSourceType(), check.Equals, canal.Type_MYSQL)
+	c.Assert(header.GetSchemaName(), check.Equals, testCaseInsert.Table.Schema)
+	c.Assert(header.GetTableName(), check.Equals, testCaseInsert.Table.Table)
+	c.Assert(header.GetEventType(), check.Equals, canal.EventType_INSERT)
+	store = entry.GetStoreValue()
+	c.Assert(store, check.NotNil)
+	rc = &canal.RowChange{}
+	err = proto.Unmarshal(store, rc)
+	c.Assert(err, check.IsNil)
+	c.Assert(rc.GetIsDdl(), check.IsFalse)
+	rowDatas = rc.GetRowDatas()
+	c.Assert(len(rowDatas), check.Equals, 1)
+	columns = rowDatas[0].AfterColumns
+	c.Assert(len(columns), check.Equals, len(testCaseInsert.Columns))
+	for _, col := range columns {
+		c.Assert(col.GetUpdated(), check.IsTrue)
+		switch col.GetName() {
+		case "id":
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeBIGINT))
+			c.Assert(col.GetIsKey(), check.IsTrue)
+			c.Assert(col.GetIsNull(), check.IsFalse)
+			c.Assert(col.GetValue(), check.Equals, "1")
+			c.Assert(col.GetMysqlType(), check.Equals, "int")
+		case "name":
+			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
+			c.Assert(col.GetIsKey(), check.IsFalse)
+			c.Assert(col.GetIsNull(), check.IsFalse)
+			c.Assert(col.GetValue(), check.Equals, "Bob")
+			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
 		}
 	}
 

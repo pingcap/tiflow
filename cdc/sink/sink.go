@@ -66,15 +66,15 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 	case "blackhole":
 		return newBlackHoleSink(ctx, opts), nil
 	case "mysql", "tidb", "mysql+ssl", "tidb+ssl":
-		return newMySQLSink(ctx, changefeedID, sinkURI, filter, opts)
+		return newMySQLSink(ctx, changefeedID, sinkURI, filter, config, opts)
 	case "kafka", "kafka+ssl":
 		return newKafkaSaramaSink(ctx, sinkURI, filter, config, opts, errCh)
 	case "pulsar", "pulsar+ssl":
 		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	case "local":
-		return cdclog.NewLocalFileSink(sinkURI)
+		return cdclog.NewLocalFileSink(ctx, sinkURI, errCh)
 	case "s3":
-		return cdclog.NewS3Sink(sinkURI)
+		return cdclog.NewS3Sink(ctx, sinkURI, errCh)
 	default:
 		return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}

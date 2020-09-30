@@ -495,12 +495,15 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	//p.position.Count = p.sink.Count()
-	err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
-	if err == nil {
+	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
+	if err != nil {
+		if errors.Cause(err) != context.Canceled {
+			log.Error("failed to flush task position", zap.Error(err))
+			return errors.Trace(err)
+		}
+	}
+	if updated {
 		log.Debug("flushed task position", zap.Stringer("position", p.position))
-	} else if errors.Cause(err) != context.Canceled {
-		log.Error("failed to flush task position", zap.Error(err))
-		return errors.Trace(err)
 	}
 	return nil
 }
@@ -584,7 +587,7 @@ func (p *processor) removeTable(tableID int64) {
 // handleTables handles table scheduler on this processor, add or remove table puller
 func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) (tablesToRemove []model.TableID, err error) {
 	for tableID, opt := range status.Operation {
-		if opt.Done {
+		if opt.TableProcessed() {
 			continue
 		}
 		if opt.Delete {
@@ -593,6 +596,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 				if !exist {
 					log.Warn("table which will be deleted is not found", zap.Int64("tableID", tableID))
 					opt.Done = true
+					opt.Status = model.OperFinished
 					continue
 				}
 				stopped, checkpointTs := table.safeStop()
@@ -603,6 +607,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 					if checkpointTs <= p.position.CheckPointTs {
 						tablesToRemove = append(tablesToRemove, tableID)
 						opt.Done = true
+						opt.Status = model.OperFinished
 					}
 				}
 			}
@@ -615,6 +620,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 				return tablesToRemove, cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%d) and mark table not match ", tableID)
 			}
 			p.addTable(ctx, tableID, replicaInfo)
+			opt.Status = model.OperProcessed
 		}
 	}
 
@@ -631,6 +637,7 @@ func (p *processor) handleTables(ctx context.Context, status *model.TaskStatus) 
 				continue
 			}
 			status.Operation[tableID].Done = true
+			status.Operation[tableID].Status = model.OperFinished
 		default:
 			goto done
 		}
@@ -1227,7 +1234,7 @@ func runProcessor(
 				Code:    code,
 				Message: err.Error(),
 			}
-			err = processor.etcdCli.PutTaskPosition(ctx, processor.changefeedID, processor.captureInfo.ID, processor.position)
+			_, err = processor.etcdCli.PutTaskPositionOnChange(ctx, processor.changefeedID, processor.captureInfo.ID, processor.position)
 			if err != nil {
 				log.Warn("upload processor error failed", zap.Error(err))
 			}

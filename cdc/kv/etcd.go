@@ -669,26 +669,29 @@ func (c CDCEtcdClient) GetTaskPosition(
 	return resp.Kvs[0].ModRevision, info, errors.Trace(err)
 }
 
-// PutTaskPosition puts task process into etcd.
-func (c CDCEtcdClient) PutTaskPosition(
+// PutTaskPositionOnChange puts task position information into etcd if the
+// task position value changes or the presvious value does not exist in etcd.
+// returns true if task position is written to etcd.
+func (c CDCEtcdClient) PutTaskPositionOnChange(
 	ctx context.Context,
 	changefeedID string,
 	captureID string,
 	info *model.TaskPosition,
-) error {
+) (bool, error) {
 	data, err := info.Marshal()
 	if err != nil {
-		return errors.Trace(err)
+		return false, errors.Trace(err)
 	}
 
 	key := GetEtcdKeyTaskPosition(changefeedID, captureID)
-
-	_, err = c.Client.Put(ctx, key, data)
+	resp, err := c.Client.Txn(ctx).If(
+		clientv3.Compare(clientv3.ModRevision(key), ">", 0),
+		clientv3.Compare(clientv3.Value(key), "=", data),
+	).Else(clientv3.OpPut(key, data)).Commit()
 	if err != nil {
-		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return false, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
-
-	return nil
+	return !resp.Succeeded, nil
 }
 
 // DeleteTaskPosition remove task position from etcd

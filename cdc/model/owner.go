@@ -123,13 +123,34 @@ type MoveTableJob struct {
 	Status           MoveTableStatus
 }
 
+// All TableOperation status
+const (
+	OperDispatched uint64 = iota
+	OperProcessed
+	OperFinished
+)
+
 // TableOperation records the current information of a table migration
 type TableOperation struct {
 	Delete bool `json:"delete"`
 	// if the operation is a delete operation, BoundaryTs is checkpoint ts
 	// if the operation is a add operation, BoundaryTs is start ts
 	BoundaryTs uint64 `json:"boundary_ts"`
-	Done       bool   `json:"done"`
+	Done       bool   `json:"done"` // deprecated, will be removed in the next version
+	Status     uint64 `json:"status,omitempty"`
+}
+
+// TableProcessed returns whether the table has been processed by processor
+func (o *TableOperation) TableProcessed() bool {
+	// TODO: remove o.Done
+	return o.Status == OperProcessed || o.Status == OperFinished || o.Done
+}
+
+// TableApplied returns whether the table has finished the startup procedure.
+// Returns true if table has been processed by processor and resolved ts reaches global resolved ts.
+func (o *TableOperation) TableApplied() bool {
+	// TODO: remove o.Done
+	return o.Status == OperFinished || o.Done
 }
 
 // Clone returns a deep-clone of the struct
@@ -232,13 +253,14 @@ func (ts *TaskStatus) AddTable(id TableID, table *TableReplicaInfo, boundaryTs T
 	ts.Operation[id] = &TableOperation{
 		Delete:     false,
 		BoundaryTs: boundaryTs,
+		Status:     OperDispatched,
 	}
 }
 
 // SomeOperationsUnapplied returns true if there are some operations not applied
 func (ts *TaskStatus) SomeOperationsUnapplied() bool {
 	for _, o := range ts.Operation {
-		if !o.Done {
+		if !o.TableApplied() {
 			return true
 		}
 	}
@@ -249,7 +271,7 @@ func (ts *TaskStatus) SomeOperationsUnapplied() bool {
 func (ts *TaskStatus) AppliedTs() Ts {
 	appliedTs := uint64(math.MaxUint64)
 	for _, o := range ts.Operation {
-		if !o.Done {
+		if !o.TableApplied() {
 			if appliedTs > o.BoundaryTs {
 				appliedTs = o.BoundaryTs
 			}

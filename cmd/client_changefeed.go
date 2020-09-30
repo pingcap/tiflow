@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -248,6 +249,18 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			FilterReplicaID: filter,
 			SyncDDL:         cyclicSyncDDL,
 			// TODO(neil) enable ID bucket.
+		}
+	}
+
+	if !cfg.EnableOldValue {
+		sinkURIParsed, err := url.Parse(sinkURI)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		}
+
+		if strings.ToLower(sinkURIParsed.Scheme) == "kafka" && sinkURIParsed.Query().Get("protocol") == "canal" {
+			log.Warn("Attempting to use Canal without old value. CDC will enable old value and continue.")
+			cfg.EnableOldValue = true
 		}
 	}
 

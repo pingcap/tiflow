@@ -445,6 +445,57 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
 	}
 }
 
+func (s MySQLSinkSuite) TestPrepareUpdate(c *check.C) {
+	testCases := []struct {
+		quoteTable   string
+		preCols      []*model.Column
+		cols         []*model.Column
+		expectedSQL  string
+		expectedArgs []interface{}
+	}{
+		{
+			quoteTable:   "`test`.`t1`",
+			preCols:      []*model.Column{},
+			cols:         []*model.Column{},
+			expectedSQL:  "",
+			expectedArgs: nil,
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test2"},
+			},
+			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? LIMIT 1;",
+			expectedArgs: []interface{}{1, "test2", 1},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 2},
+				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test2"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
+			expectedArgs: []interface{}{2, "test2", 1, "test"},
+		},
+	}
+	for _, tc := range testCases {
+		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols)
+		c.Assert(query, check.Equals, tc.expectedSQL)
+		c.Assert(args, check.DeepEquals, tc.expectedArgs)
+	}
+}
+
 func (s MySQLSinkSuite) TestMapReplace(c *check.C) {
 	testCases := []struct {
 		quoteTable    string
@@ -478,7 +529,7 @@ func (s MySQLSinkSuite) TestMapReplace(c *check.C) {
 	for _, tc := range testCases {
 		// multiple times to verify the stability of column sequence in query string
 		for i := 0; i < 10; i++ {
-			query, args := prepareReplace(tc.quoteTable, tc.cols, false)
+			query, args := prepareReplace(tc.quoteTable, tc.cols, false, false)
 			c.Assert(query, check.Equals, tc.expectedQuery)
 			c.Assert(args, check.DeepEquals, tc.expectedArgs)
 		}
@@ -614,6 +665,7 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		batchReplaceSize:    defaultBatchReplaceSize,
 		readTimeout:         defaultReadTimeout,
 		writeTimeout:        defaultWriteTimeout,
+		safeMode:            defaultSafeMode,
 	})
 	c.Assert(param2, check.DeepEquals, &sinkParams{
 		changefeedID:        "123",
@@ -624,6 +676,7 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 		batchReplaceSize:    defaultBatchReplaceSize,
 		readTimeout:         defaultReadTimeout,
 		writeTimeout:        defaultWriteTimeout,
+		safeMode:            defaultSafeMode,
 	})
 }
 
