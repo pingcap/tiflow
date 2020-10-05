@@ -12,7 +12,6 @@
     * [bin/etcdctl](https://github.com/etcd-io/etcd/tree/master/etcdctl)
     * [bin/jq](https://stedolan.github.io/jq/)
     * [bin/minio](https://github.com/minio/minio)
-    
 
     > If you are running tests on MacOS, tidb related binaries can be downloaded from tiup mirrors, such as https://tiup-mirrors.pingcap.com/tidb-v4.0.2-darwin-amd64.tar.gz. And `sync_diff_inspector` can be compiled by yourself from source [tidb-tools](https://github.com/pingcap/tidb-tools)
 
