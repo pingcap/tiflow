@@ -670,6 +670,16 @@ func (o *Owner) handleDDL(ctx context.Context) error {
 	return nil
 }
 
+// handleSyncPoint call handleSyncPoint of every changefeeds
+func (o *Owner) handleSyncPoint(ctx context.Context) error {
+	for _, cf := range o.changeFeeds {
+		if err := cf.handleSyncPoint(ctx); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 // dispatchJob dispatches job to processors
 func (o *Owner) dispatchJob(ctx context.Context, job model.AdminJob) error {
 	cf, ok := o.changeFeeds[job.CfID]
@@ -1050,6 +1060,11 @@ func (o *Owner) run(ctx context.Context) error {
 	}
 
 	err = o.handleDDL(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = o.handleSyncPoint(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
