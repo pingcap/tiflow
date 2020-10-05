@@ -15,7 +15,6 @@ package cdc
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"math"
 	"sync"
@@ -87,7 +86,7 @@ type changeFeed struct {
 	syncpointMutex   sync.Mutex
 	updateResolvedTs bool
 	startTimer       chan bool
-	syncDB           *sql.DB
+	syncpointSink    sink.SyncpointSink
 	syncCancel       context.CancelFunc
 	taskStatus       model.ProcessorsInfos
 	taskPositions    map[model.CaptureID]*model.TaskPosition
@@ -705,7 +704,7 @@ func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
 		if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
 			log.Info("sync point reached by ticker", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs), zap.Uint64("ddlExecutedTs", c.ddlExecutedTs))
 			c.updateResolvedTs = true
-			err := c.sinkSyncpoint(ctx)
+			err := c.syncpointSink.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
 			if err != nil {
 				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
 			}
@@ -720,7 +719,7 @@ func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
 		// ddlTs <= ddlExecutedTs means the DDL has been execed.
 		if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs && c.ddlTs <= c.ddlExecutedTs {
 			log.Info("sync point reached by ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs), zap.Uint64("ddlExecutedTs", c.ddlExecutedTs))
-			err := c.sinkSyncpoint(ctx)
+			err := c.syncpointSink.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
 			if err != nil {
 				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
 			}
@@ -922,72 +921,6 @@ func (c *changeFeed) startSyncPeriod(ctx context.Context, interval time.Duration
 	}(ctx)
 }
 
-//createSynctable create a sync table to record the
-func (c *changeFeed) createSynctable(ctx context.Context) error {
-	database := "TiCDC"
-	tx, err := c.syncDB.BeginTx(ctx, nil)
-	if err != nil {
-		log.Info("create sync table: begin Tx fail")
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	_, err = tx.Exec("CREATE DATABASE IF NOT EXISTS " + database)
-	if err != nil {
-		err2 := tx.Rollback()
-		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
-		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	_, err = tx.Exec("USE " + database)
-	if err != nil {
-		err2 := tx.Rollback()
-		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
-		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS syncpoint (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `cf`, `primary_ts` ) )")
-	if err != nil {
-		err2 := tx.Rollback()
-		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
-		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	err = tx.Commit()
-	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-}
-
-//sinkSyncpoint record the syncpoint(a map with ts) in downstream db
-func (c *changeFeed) sinkSyncpoint(ctx context.Context) error {
-	tx, err := c.syncDB.BeginTx(ctx, nil)
-	if err != nil {
-		log.Info("sync table: begin Tx fail")
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	row := tx.QueryRow("select @@tidb_current_ts")
-	var secondaryTs string
-	err = row.Scan(&secondaryTs)
-	if err != nil {
-		log.Info("sync table: get tidb_current_ts err")
-		err2 := tx.Rollback()
-		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
-		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	_, err = tx.Exec("insert into TiCDC.syncpoint(cf, primary_ts, secondary_ts) VALUES (?,?,?)", c.id, c.status.CheckpointTs, secondaryTs)
-	if err != nil {
-		err2 := tx.Rollback()
-		if err2 != nil {
-			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
-		}
-		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-	}
-	err = tx.Commit()
-	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
-}
-
 func (c *changeFeed) stopSyncPointTicker() {
 	if c.syncCancel != nil {
 		c.syncCancel()
@@ -1009,6 +942,12 @@ func (c *changeFeed) Close() {
 	err = c.sink.Close()
 	if err != nil {
 		log.Warn("failed to close owner sink", zap.Error(err))
+	}
+	if c.syncpointSink != nil {
+		err = c.syncpointSink.Close()
+		if err != nil {
+			log.Warn("failed to close owner sink", zap.Error(err))
+		}
 	}
 	log.Info("changefeed closed", zap.String("id", c.id))
 }

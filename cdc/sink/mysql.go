@@ -74,6 +74,9 @@ var (
 	}
 )
 
+type mysqlSyncpointSink struct {
+	db *sql.DB
+}
 type mysqlSink struct {
 	db     *sql.DB
 	params *sinkParams
@@ -1102,14 +1105,10 @@ func buildColumnList(names []string) string {
 	return b.String()
 }
 
-//NewSyncpointSinklink create a sink to record the syncpoint map in downstream DB for every changefeed
-func NewSyncpointSinklink(ctx context.Context, info *model.ChangeFeedInfo, id string) (*sql.DB, error) {
+// newSyncpointSink create a sink to record the syncpoint map in downstream DB for every changefeed
+func newMySQLSyncpointSink(ctx context.Context, id string, sinkURI *url.URL) (SyncpointSink, error) {
 	var syncDB *sql.DB
-	// parse sinkURI as a URI
-	sinkURI, err := url.Parse(info.SinkURI)
-	if err != nil {
-		return nil, errors.Annotatef(err, "parse sinkURI failed")
-	}
+
 	//todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
@@ -1187,6 +1186,78 @@ func NewSyncpointSinklink(ctx context.Context, info *model.ChangeFeedInfo, id st
 	}
 
 	log.Info("Start mysql syncpoint sink")
+	syncpointSink := &mysqlSyncpointSink{
+		db: syncDB,
+	}
 
-	return syncDB, nil
+	return syncpointSink, nil
+}
+
+func (s *mysqlSyncpointSink) CreateSynctable(ctx context.Context) error {
+	database := "TiCDC"
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		log.Info("create sync table: begin Tx fail")
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	_, err = tx.Exec("CREATE DATABASE IF NOT EXISTS " + database)
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+		}
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	_, err = tx.Exec("USE " + database)
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+		}
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS syncpoint (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `cf`, `primary_ts` ) )")
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+		}
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	err = tx.Commit()
+	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+}
+
+func (s *mysqlSyncpointSink) SinkSyncpoint(ctx context.Context, id string, checkpointTs uint64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		log.Info("sync table: begin Tx fail")
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	row := tx.QueryRow("select @@tidb_current_ts")
+	var secondaryTs string
+	err = row.Scan(&secondaryTs)
+	if err != nil {
+		log.Info("sync table: get tidb_current_ts err")
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+		}
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	_, err = tx.Exec("insert into TiCDC.syncpoint(cf, primary_ts, secondary_ts) VALUES (?,?,?)", id, checkpointTs, secondaryTs)
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+		}
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	err = tx.Commit()
+	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+}
+
+func (s *mysqlSyncpointSink) Close() error {
+	err := s.db.Close()
+	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }

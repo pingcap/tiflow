@@ -357,9 +357,13 @@ func (o *Owner) newChangeFeed(
 		log.Error("error on running owner", zap.Error(err))
 	}
 
-	syncDB, err := sink.NewSyncpointSinklink(ctx, info, id)
-	if err != nil {
-		return nil, errors.Trace(err)
+	var syncpointSink sink.SyncpointSink
+	syncpointSink = nil
+	if info.SyncPointEnabled {
+		syncpointSink, err = sink.NewSyncpointSink(ctx, id, info.SinkURI)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	cf = &changeFeed{
@@ -383,7 +387,7 @@ func (o *Owner) newChangeFeed(
 		ddlTs:             0,
 		updateResolvedTs:  true,
 		startTimer:        make(chan bool),
-		syncDB:            syncDB,
+		syncpointSink:     syncpointSink,
 		syncCancel:        nil,
 		taskStatus:        processorsInfos,
 		taskPositions:     taskPositions,
@@ -537,7 +541,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		if newCf.info.SyncPointEnabled {
 			log.Info("syncpoint is on", zap.Bool("syncpoint", newCf.info.SyncPointEnabled))
 			//create the sync table
-			err := newCf.createSynctable(ctx)
+			err := newCf.syncpointSink.CreateSynctable(ctx)
 			if err != nil {
 				return err
 			}
