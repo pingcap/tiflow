@@ -52,11 +52,11 @@ func (p *Pipeline) AppendNode(ctx Context, name string, node Node) {
 	lastRunner := p.runners[len(p.runners)-1]
 	runner := newNodeRunner(name, node, lastRunner)
 	p.runners = append(p.runners, runner)
+	p.runnersWg.Add(1)
 	go p.driveRunner(ctx, lastRunner, runner)
 }
 
 func (p *Pipeline) driveRunner(ctx Context, previousRunner, runner runner) {
-	p.runnersWg.Add(1)
 	defer p.runnersWg.Done()
 	defer blackhole(previousRunner)
 	err := runner.run(ctx)
