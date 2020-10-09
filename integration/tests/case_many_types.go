@@ -14,13 +14,13 @@
 package tests
 
 import (
-	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
 	"math"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/integration/framework/avro"
+	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
 // ManyTypesCase is base impl of test case for different types data

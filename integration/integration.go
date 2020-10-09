@@ -15,15 +15,14 @@ package main
 
 import (
 	"flag"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
+	avro2 "github.com/pingcap/ticdc/integration/framework/avro"
 	canal2 "github.com/pingcap/ticdc/integration/framework/canal"
 	"github.com/pingcap/ticdc/integration/tests/avro"
 	"github.com/pingcap/ticdc/integration/tests/canal"
 	"go.uber.org/zap"
-
-	avro2 "github.com/pingcap/ticdc/integration/framework/avro"
-
 	"go.uber.org/zap/zapcore"
 )
 

@@ -15,9 +15,9 @@ package avro
 
 import (
 	"database/sql"
-	"github.com/pingcap/ticdc/integration/framework"
 	"testing"
 
+	"github.com/pingcap/ticdc/integration/framework"
 	"github.com/stretchr/testify/require"
 )
 

@@ -16,6 +16,7 @@ package canal
 import (
 	"database/sql"
 	"errors"
+
 	"github.com/integralist/go-findroot/find"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"

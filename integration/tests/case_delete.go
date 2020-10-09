@@ -15,11 +15,11 @@ package tests
 
 import (
 	"errors"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/integration/framework/avro"
+	"github.com/pingcap/ticdc/integration/framework/canal"
 	"go.uber.org/zap"
 )
 

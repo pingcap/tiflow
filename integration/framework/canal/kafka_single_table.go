@@ -15,14 +15,14 @@ package canal
 
 import (
 	"database/sql"
-	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/integration/framework"
-	"go.uber.org/zap"
 	"io/ioutil"
 	"net/http"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/integration/framework"
+	"go.uber.org/zap"
 )
 
 const (

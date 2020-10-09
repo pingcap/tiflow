@@ -15,13 +15,13 @@ package tests
 
 import (
 	"fmt"
-	"github.com/pingcap/log"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
 	"math/rand"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/integration/framework/avro"
+	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
 // AlterCase is base impl of test case for alter operation

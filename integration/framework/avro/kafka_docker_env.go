@@ -16,13 +16,14 @@ package avro
 import (
 	"encoding/json"
 	"errors"
+	"io/ioutil"
+	"net/http"
+	"path"
+
 	"github.com/integralist/go-findroot/find"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 	"go.uber.org/zap"
-	"io/ioutil"
-	"net/http"
-	"path"
 )
 
 const (
