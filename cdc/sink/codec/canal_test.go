@@ -232,7 +232,6 @@ func testInsert(c *check.C) {
 		},
 	}
 
-
 	builder := NewCanalEntryBuilder()
 	builder.forceHkPk = true
 	entry, err := builder.FromRowEvent(testCaseInsert)
