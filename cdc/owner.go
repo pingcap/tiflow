@@ -538,7 +538,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 
 		if newCf.info.SyncPointEnabled {
-			log.Info("syncpoint is on", zap.Bool("syncpoint", newCf.info.SyncPointEnabled))
+			log.Info("syncpoint is on, creating the sync table")
 			//create the sync table
 			err := newCf.syncpointSink.CreateSynctable(ctx)
 			if err != nil {
@@ -546,7 +546,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 			}
 			newCf.startSyncPointTicker(ctx, newCf.info.SyncPointInterval)
 		} else {
-			log.Info("syncpoint is off", zap.Bool("syncpoint", newCf.info.SyncPointEnabled))
+			log.Info("syncpoint is off")
 		}
 
 		o.changeFeeds[changeFeedID] = newCf
