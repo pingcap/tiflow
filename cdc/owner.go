@@ -358,7 +358,6 @@ func (o *Owner) newChangeFeed(
 	}
 
 	var syncpointSink sink.SyncpointSink
-	syncpointSink = nil
 	if info.SyncPointEnabled {
 		syncpointSink, err = sink.NewSyncpointSink(ctx, id, info.SinkURI)
 		if err != nil {

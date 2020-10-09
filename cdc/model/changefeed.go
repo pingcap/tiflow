@@ -82,7 +82,7 @@ type ChangeFeedInfo struct {
 	ErrorHis []int64               `json:"history"`
 	Error    *RunningError         `json:"error"`
 
-	SyncPointEnabled  bool          `json:"sync-point-Enabled"`
+	SyncPointEnabled  bool          `json:"sync-point-enabled"`
 	SyncPointInterval time.Duration `json:"sync-point-interval"`
 }
 

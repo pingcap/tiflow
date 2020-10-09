@@ -1182,7 +1182,7 @@ func newMySQLSyncpointSink(ctx context.Context, id string, sinkURI *url.URL) (Sy
 	}
 	err = syncDB.PingContext(ctx)
 	if err != nil {
-		return nil, errors.Annotatef(err, "fail to open MySQL connection")
+		return nil, errors.Annotate(err, "fail to open MySQL connection")
 	}
 
 	log.Info("Start mysql syncpoint sink")
@@ -1197,7 +1197,7 @@ func (s *mysqlSyncpointSink) CreateSynctable(ctx context.Context) error {
 	database := "TiCDC"
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		log.Info("create sync table: begin Tx fail")
+		log.Error("create sync table: begin Tx fail", zap.Error(err))
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 	_, err = tx.Exec("CREATE DATABASE IF NOT EXISTS " + database)
@@ -1231,7 +1231,7 @@ func (s *mysqlSyncpointSink) CreateSynctable(ctx context.Context) error {
 func (s *mysqlSyncpointSink) SinkSyncpoint(ctx context.Context, id string, checkpointTs uint64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		log.Info("sync table: begin Tx fail")
+		log.Error("sync table: begin Tx fail", zap.Error(err))
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
 	row := tx.QueryRow("select @@tidb_current_ts")
