@@ -25,8 +25,8 @@ type compositePKeyCase struct {
 // NewCompositePKeyCase create a test case which have composite primary key
 func NewCompositePKeyCase() *compositePKeyCase {
 	return &compositePKeyCase{
-		tests.CompositePKeyCase{
-			tests.NewCompositePKeyCase(tests.ProtocolAvro),
+		CompositePKeyCase: tests.CompositePKeyCase{
+			Task: tests.NewCompositePKeyCase(tests.ProtocolAvro),
 		},
 	}
 }

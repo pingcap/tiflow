@@ -24,21 +24,21 @@ import (
 	"github.com/pingcap/ticdc/integration/framework"
 )
 
-//nolint:unused
+// AlterCase is base impl of test case for alter operation
 type AlterCase struct {
 	framework.Task
 }
 
 // NewAlterCase create a test case which contains alter ddls
 func NewAlterCase(typ ProtocolType) *AlterCase {
-	switch typ{
+	switch typ {
 	case ProtocolAvro:
 		return &AlterCase{
-		&avro.SingleTableTask{TableName: "test"},
+			Task: &avro.SingleTableTask{TableName: "test"},
 		}
 	case ProtocolCanal:
 		return &AlterCase{
-			&canal.SingleTableTask{TableName: "test"},
+			Task: &canal.SingleTableTask{TableName: "test"},
 		}
 	default:
 		log.Error("unknown protocol")
@@ -46,10 +46,12 @@ func NewAlterCase(typ ProtocolType) *AlterCase {
 	}
 }
 
+// Name impl framework.Task interface
 func (c *AlterCase) Name() string {
 	return "Alter"
 }
 
+// Run impl framework.Task interface
 func (c *AlterCase) Run(ctx *framework.TaskContext) error {
 	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key)")
 	if err != nil {

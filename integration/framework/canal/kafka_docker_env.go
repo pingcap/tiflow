@@ -68,8 +68,8 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 
 	return &KafkaDockerEnv{KafkaDockerEnv: framework.KafkaDockerEnv{
 		DockerComposeOperator: framework.DockerComposeOperator{
-			FileName:   file,
-			Controller: controllerContainerName,
+			FileName:      file,
+			Controller:    controllerContainerName,
 			HealthChecker: healthChecker,
 		},
 	}}

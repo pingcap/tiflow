@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
-//nolint:unused
+// SimpleCase is base impl of simple test case
 type SimpleCase struct {
 	framework.Task
 }
@@ -31,11 +31,11 @@ func NewSimpleCase(typ ProtocolType) *SimpleCase {
 	switch typ {
 	case ProtocolAvro:
 		return &SimpleCase{
-			&avro.SingleTableTask{TableName: "test"},
+			Task: &avro.SingleTableTask{TableName: "test"},
 		}
 	case ProtocolCanal:
 		return &SimpleCase{
-			&canal.SingleTableTask{TableName: "test"},
+			Task: &canal.SingleTableTask{TableName: "test"},
 		}
 	default:
 		log.Error("unknown protocol")
@@ -43,10 +43,12 @@ func NewSimpleCase(typ ProtocolType) *SimpleCase {
 	}
 }
 
+// Name impl framework.Task interface
 func (s *SimpleCase) Name() string {
 	return "Simple"
 }
 
+// Run impl framework.Task interface
 func (s *SimpleCase) Run(ctx *framework.TaskContext) error {
 	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key, value int)")
 	if err != nil {

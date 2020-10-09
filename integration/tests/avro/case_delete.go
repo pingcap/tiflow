@@ -25,8 +25,8 @@ type deleteCase struct {
 // NewDeleteCase create a test case which contains delete ddls
 func NewDeleteCase() *deleteCase {
 	return &deleteCase{
-		tests.DeleteCase{
-			tests.NewDeleteCase(tests.ProtocolAvro),
+		DeleteCase: tests.DeleteCase{
+			Task: tests.NewDeleteCase(tests.ProtocolAvro),
 		},
 	}
 }

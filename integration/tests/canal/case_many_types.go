@@ -28,8 +28,8 @@ type manyTypesCase struct {
 // NewManyTypesCase create a test case which has many types
 func NewManyTypesCase() *manyTypesCase {
 	return &manyTypesCase{
-		tests.ManyTypesCase{
-			tests.NewManyTypesCase(tests.ProtocolCanal),
+		ManyTypesCase: tests.ManyTypesCase{
+			Task: tests.NewManyTypesCase(tests.ProtocolCanal),
 		},
 	}
 }

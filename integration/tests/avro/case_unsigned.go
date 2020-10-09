@@ -25,8 +25,8 @@ type unsignedCase struct {
 // NewUnsignedCase create a test case to check the correction of unsigned integer
 func NewUnsignedCase() *unsignedCase {
 	return &unsignedCase{
-		tests.UnsignedCase{
-			tests.NewUnsignedCase(tests.ProtocolAvro),
+		UnsignedCase: tests.UnsignedCase{
+			Task: tests.NewUnsignedCase(tests.ProtocolAvro),
 		},
 	}
 }

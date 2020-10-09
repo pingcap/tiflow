@@ -25,8 +25,8 @@ type simpleCase struct {
 // NewSimpleCase create a test case which has some simple dmls, ddls
 func NewSimpleCase() *simpleCase {
 	return &simpleCase{
-		tests.SimpleCase{
-			tests.NewSimpleCase(tests.ProtocolCanal),
+		SimpleCase: tests.SimpleCase{
+			Task: tests.NewSimpleCase(tests.ProtocolCanal),
 		},
 	}
 }

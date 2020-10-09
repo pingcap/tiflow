@@ -25,8 +25,8 @@ type alterCase struct {
 // NewAlterCase create a test case which contains alter ddls
 func NewAlterCase() *alterCase {
 	return &alterCase{
-		tests.AlterCase{
-			tests.NewAlterCase(tests.ProtocolCanal),
+		AlterCase: tests.AlterCase{
+			Task: tests.NewAlterCase(tests.ProtocolCanal),
 		},
 	}
 }

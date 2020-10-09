@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
-//nolint:unused
+// CompositePKeyCase is base impl of test case for composite primary keys
 type CompositePKeyCase struct {
 	framework.Task
 }
@@ -31,11 +31,11 @@ func NewCompositePKeyCase(typ ProtocolType) *CompositePKeyCase {
 	switch typ {
 	case ProtocolAvro:
 		return &CompositePKeyCase{
-			&avro.SingleTableTask{TableName: "test"},
+			Task: &avro.SingleTableTask{TableName: "test"},
 		}
 	case ProtocolCanal:
 		return &CompositePKeyCase{
-			&canal.SingleTableTask{TableName: "test"},
+			Task: &canal.SingleTableTask{TableName: "test"},
 		}
 	default:
 		log.Error("unknown protocol")
@@ -43,10 +43,12 @@ func NewCompositePKeyCase(typ ProtocolType) *CompositePKeyCase {
 	}
 }
 
+// Name impl framework.Task interface
 func (s *CompositePKeyCase) Name() string {
 	return "Composite Primary Key"
 }
 
+// Run impl framework.Task interface
 func (s *CompositePKeyCase) Run(ctx *framework.TaskContext) error {
 	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id1 int, id2 int, value int, primary key (id1, id2))")
 	if err != nil {

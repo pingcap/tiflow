@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/ticdc/integration/framework"
 )
 
-//nolint:unused
+// ManyTypesCase is base impl of test case for different types data
 type ManyTypesCase struct {
 	framework.Task
 }
@@ -33,11 +33,11 @@ func NewManyTypesCase(typ ProtocolType) *ManyTypesCase {
 	switch typ {
 	case ProtocolAvro:
 		return &ManyTypesCase{
-			&avro.SingleTableTask{TableName: "test"},
+			Task: &avro.SingleTableTask{TableName: "test"},
 		}
 	case ProtocolCanal:
 		return &ManyTypesCase{
-			&canal.SingleTableTask{TableName: "test"},
+			Task: &canal.SingleTableTask{TableName: "test"},
 		}
 	default:
 		log.Error("unknown protocol")
@@ -45,10 +45,12 @@ func NewManyTypesCase(typ ProtocolType) *ManyTypesCase {
 	}
 }
 
+// Name impl framework.Task interface
 func (s *ManyTypesCase) Name() string {
 	return "Many Types"
 }
 
+// Run impl framework.Task interface
 func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 	createDBQuery := `create table test (
 		id          INT,

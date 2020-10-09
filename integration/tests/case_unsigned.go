@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
-//nolint:unused
+// UnsignedCase is base impl of test case for unsigned int type data
 type UnsignedCase struct {
 	framework.Task
 }
@@ -30,11 +30,11 @@ func NewUnsignedCase(typ ProtocolType) *UnsignedCase {
 	switch typ {
 	case ProtocolAvro:
 		return &UnsignedCase{
-			&avro.SingleTableTask{TableName: "test"},
+			Task: &avro.SingleTableTask{TableName: "test"},
 		}
 	case ProtocolCanal:
 		return &UnsignedCase{
-			&canal.SingleTableTask{TableName: "test"},
+			Task: &canal.SingleTableTask{TableName: "test"},
 		}
 	default:
 		log.Error("unknown protocol")
@@ -42,10 +42,12 @@ func NewUnsignedCase(typ ProtocolType) *UnsignedCase {
 	}
 }
 
+// Name impl framework.Task interface
 func (s *UnsignedCase) Name() string {
 	return "Unsigned"
 }
 
+// Run impl framework.Task interface
 func (s *UnsignedCase) Run(ctx *framework.TaskContext) error {
 	createDBQuery := `create table test (
 		id          INT,

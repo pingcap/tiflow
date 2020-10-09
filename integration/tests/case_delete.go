@@ -23,7 +23,7 @@ import (
 	"go.uber.org/zap"
 )
 
-//nolint:unused
+// DeleteCase is base impl of test case for delete operation
 type DeleteCase struct {
 	framework.Task
 }
@@ -33,11 +33,11 @@ func NewDeleteCase(typ ProtocolType) *DeleteCase {
 	switch typ {
 	case ProtocolAvro:
 		return &DeleteCase{
-			&avro.SingleTableTask{TableName: "test"},
+			Task: &avro.SingleTableTask{TableName: "test"},
 		}
 	case ProtocolCanal:
 		return &DeleteCase{
-			&canal.SingleTableTask{TableName: "test"},
+			Task: &canal.SingleTableTask{TableName: "test"},
 		}
 	default:
 		log.Error("unknown protocol")
@@ -45,11 +45,12 @@ func NewDeleteCase(typ ProtocolType) *DeleteCase {
 	}
 }
 
-
+// Name impl framework.Task interface
 func (c *DeleteCase) Name() string {
 	return "Delete"
 }
 
+// Run impl framework.Task interface
 func (c *DeleteCase) Run(ctx *framework.TaskContext) error {
 	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key, value int)")
 	if err != nil {
