@@ -78,21 +78,25 @@ func (s *ownerSuite) TearDownTest(c *check.C) {
 
 type mockPDClient struct {
 	pd.Client
+	invokeCounter int
 }
 
 func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+	m.invokeCounter++
 	return 0, errors.New("mock error")
 }
 
 func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
+	mockPDCli := &mockPDClient{}
 	mockOwner := Owner{
-		pdClient:              &mockPDClient{},
+		pdClient:              mockPDCli,
 		gcSafepointLastUpdate: time.Now(),
 	}
 
 	// Owner should ignore UpdateServiceGCSafePoint error.
 	err := mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
+	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
 }
 
 /*
