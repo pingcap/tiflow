@@ -14,27 +14,24 @@
 package canal
 
 import (
-	"github.com/pingcap/ticdc/integration/framework/canal"
 	"math"
 	"time"
 
 	"github.com/pingcap/ticdc/integration/framework"
+	"github.com/pingcap/ticdc/integration/tests"
 )
 
-//nolint:unused
 type manyTypesCase struct {
-	canal.SingleTableTask
+	tests.ManyTypesCase
 }
 
 // NewManyTypesCase create a test case which has many types
 func NewManyTypesCase() *manyTypesCase {
-	manyTypesCase := new(manyTypesCase)
-	manyTypesCase.SingleTableTask.TableName = "test"
-	return manyTypesCase
-}
-
-func (s *manyTypesCase) Name() string {
-	return "Many Types"
+	return &manyTypesCase{
+		tests.ManyTypesCase{
+			tests.NewManyTypesCase(tests.ProtocolCanal),
+		},
+	}
 }
 
 func (s *manyTypesCase) Run(ctx *framework.TaskContext) error {

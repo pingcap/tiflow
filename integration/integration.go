@@ -57,9 +57,9 @@ func testCanal() {
 		canal.NewSimpleCase(),
 		canal.NewDeleteCase(),
 		canal.NewManyTypesCase(),
-		//canal.NewUnsignedCase(), //now canal adapter can not deal with unsigned int greater than int max
+		//canal.NewUnsignedCase(),
 		canal.NewCompositePKeyCase(),
-		//canal.NewAlterCase(), // basic implementation can not grantee ddl dml sequence, so can not pass
+		canal.NewAlterCase(), // this case is slow, so put it last
 	}
 
 	log.SetLevel(zapcore.DebugLevel)
@@ -77,6 +77,6 @@ func testCanal() {
 }
 
 func main() {
+	//testAvro()
 	testCanal()
-	testAvro()
 }

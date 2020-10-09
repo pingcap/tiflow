@@ -9,7 +9,50 @@ on:
     branches: [ master ]
 
 jobs:
+  Canal-integration:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.14.0'
+
+      - name: Cache Vendor
+        id: cache-vendor
+        uses: actions/cache@v2
+        with:
+          path: vendor
+          key: ${{ runner.os }}-cdc-integration-vendor-${{ hashFiles('go.sum') }}
+
+      - name: Update Vendor
+        run: go mod vendor
+
+      - name: Build Integration Framework
+        run: |
+          cd $GITHUB_WORKSPACE/integration
+          go build
+
+      - name: Run Integration Framework
+        timeout-minutes: 45
+        run: |
+          cd $GITHUB_WORKSPACE/integration
+          ./integration -protocol=canal
+
+      - uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: logs
+          path: ${{ github.workspace }}/docker/logs/*
+
+      - name: Clean Up
+        run: |
+          $GITHUB_WORKSPACE/scripts/canal/canal-local-test.sh down
+
   Avro-integration:
+    needs: [Canal-integration]
     runs-on: ubuntu-latest
 
     steps:

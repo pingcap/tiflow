@@ -45,7 +45,7 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 	return &framework.CDCProfile{
 		PDUri:      "http://upstream-pd:2379",
 		SinkURI:    "kafka://kafka:9092/" + testDbName + "?protocol=canal",
-		Opts:       map[string]string{"force-handle-key-pkey": "true"},
+		Opts:       map[string]string{"force-handle-key-pkey": "true", "support-txn": "true"},
 		ConfigFile: "/config/canal-test-config.toml",
 	}
 }
@@ -58,13 +58,13 @@ func (c *SingleTableTask) Prepare(taskContext *framework.TaskContext) error {
 	}
 
 	_ = taskContext.Upstream.Close()
-	taskContext.Upstream, err = sql.Open("mysql", upstreamDSN+testDbName)
+	taskContext.Upstream, err = sql.Open("mysql", framework.UpstreamDSN+testDbName)
 	if err != nil {
 		return err
 	}
 
 	_ = taskContext.Downstream.Close()
-	taskContext.Downstream, err = sql.Open("mysql", downstreamDSN+testDbName)
+	taskContext.Downstream, err = sql.Open("mysql", framework.DownstreamDSN+testDbName)
 	if err != nil {
 		return err
 	}

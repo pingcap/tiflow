@@ -14,57 +14,19 @@
 package avro
 
 import (
-	"github.com/pingcap/errors"
-	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/framework/avro"
+	"github.com/pingcap/ticdc/integration/tests"
 )
 
 //nolint:unused
 type compositePKeyCase struct {
-	avro.SingleTableTask
+	tests.CompositePKeyCase
 }
 
 // NewCompositePKeyCase create a test case which have composite primary key
 func NewCompositePKeyCase() *compositePKeyCase {
-	compositePKeyCase := new(compositePKeyCase)
-	compositePKeyCase.SingleTableTask.TableName = "test"
-	return compositePKeyCase
-}
-
-func (s *compositePKeyCase) Name() string {
-	return "Composite Primary Key"
-}
-
-func (s *compositePKeyCase) Run(ctx *framework.TaskContext) error {
-	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id1 int, id2 int, value int, primary key (id1, id2))")
-	if err != nil {
-		return err
+	return &compositePKeyCase{
+		tests.CompositePKeyCase{
+			tests.NewCompositePKeyCase(tests.ProtocolAvro),
+		},
 	}
-
-	// Get a handle of an existing table
-	table := ctx.SQLHelper().GetTable("test")
-	// Create an SQL request, send it to the upstream, wait for completion and check the correctness of replication
-	err = table.Insert(map[string]interface{}{
-		"id1":   0,
-		"id2":   1,
-		"value": 0,
-	}).Send().Wait().Check()
-	if err != nil {
-		return errors.AddStack(err)
-	}
-
-	err = table.Upsert(map[string]interface{}{
-		"id1":   0,
-		"id2":   1,
-		"value": 1,
-	}).Send().Wait().Check()
-	if err != nil {
-		return err
-	}
-
-	err = table.Delete(map[string]interface{}{
-		"id1": 0,
-		"id2": 1,
-	}).Send().Wait().Check()
-	return err
 }
