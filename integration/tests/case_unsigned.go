@@ -51,8 +51,9 @@ func (s *UnsignedCase) Name() string {
 func (s *UnsignedCase) Run(ctx *framework.TaskContext) error {
 	createDBQuery := `create table test (
 		id          INT,
-		t_int       INT ,
-		t_bigint    BIGINT ,
+		t_int       INT UNSIGNED,
+		t_bigint    BIGINT UNSIGNED,
+		t_bit       BIT(64),
 		PRIMARY KEY (id)
 	)
     `
@@ -77,6 +78,7 @@ func (s *UnsignedCase) Run(ctx *framework.TaskContext) error {
 		"id":       0,
 		"t_int":    0xFEEDBEEF,
 		"t_bigint": uint64(0xFEEDBEEFFEEDBEEF),
+		"t_bit":    uint64(0xFFFFFFFFFFFFFFFA),
 	}).Send().Wait().Check()
 
 }
