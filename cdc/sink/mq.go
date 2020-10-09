@@ -110,7 +110,8 @@ func newMqSink(
 		}
 	case codec.ProtocolCanal:
 		if !config.EnableOldValue {
-			log.Warn("mqSink treats all updates as inserts if enable old value is not enabled")
+			log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
 		}
 		var forceHkPk bool
 		forceHkPkOpt, ok := opts["force-handle-key-pkey"]

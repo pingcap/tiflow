@@ -695,6 +695,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	minResolvedTs := c.targetTs
 	minCheckpointTs := c.targetTs
 
+	// prevMinResolvedTs and prevMinCheckpointTs are used for debug
 	prevMinResolvedTs := c.targetTs
 	prevMinCheckpointTs := c.targetTs
 	checkUpdateTs := func() {
@@ -732,7 +733,8 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			}
 		}
 	}
-	checkUpdateTs()
+	prevMinCheckpointTs = minCheckpointTs
+	prevMinResolvedTs = minResolvedTs
 
 	for captureID, status := range c.taskStatus {
 		appliedTs := status.AppliedTs()
@@ -784,6 +786,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 			minResolvedTs = c.ddlResolvedTs
 		}
 	}
+	checkUpdateTs()
 
 	// if minResolvedTs is greater than the finishedTS of ddl job which is not executed,
 	// we need to execute this ddl job

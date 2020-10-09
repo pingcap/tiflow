@@ -232,6 +232,7 @@ func testInsert(c *check.C) {
 		},
 	}
 
+
 	builder := NewCanalEntryBuilder()
 	builder.forceHkPk = true
 	entry, err := builder.FromRowEvent(testCaseInsert)
@@ -364,6 +365,7 @@ func testUpdate(c *check.C) {
 		case "name":
 			c.Assert(col.GetSqlType(), check.Equals, int32(JavaSQLTypeVARCHAR))
 			c.Assert(col.GetIsKey(), check.IsTrue)
+
 			c.Assert(col.GetIsNull(), check.IsFalse)
 			c.Assert(col.GetValue(), check.Equals, "Bob")
 			c.Assert(col.GetMysqlType(), check.Equals, "varchar")
