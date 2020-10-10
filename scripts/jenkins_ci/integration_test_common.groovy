@@ -141,7 +141,7 @@ def tests(sink_type, node_label) {
                         sh """
                             mkdir bin
                             curl -L http://fileserver.pingcap.net/download/test/cdc/ci/third_bin_${env.BUILD_NUMBER}.tar.gz | tar xvz -C .
-                            curl -L http://fileserver.pingcap.net/download/test/cdc/ci/ticdc_bin_${env.BUILD_NUMBER}.tar.gz | tar xvz -C ./bin
+                            curl -L http://fileserver.pingcap.net/download/test/cdc/ci/ticdc_bin_${env.BUILD_NUMBER}.tar.gz | tar xvz -C .
                             mv ./third_bin/* ./bin
                         """
                         try {
