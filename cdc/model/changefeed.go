@@ -36,6 +36,7 @@ type SortEngine string
 const (
 	SortInMemory SortEngine = "memory"
 	SortInFile   SortEngine = "file"
+	SortUnified  SortEngine = "unified"
 )
 
 // FeedState represents the running state of a changefeed

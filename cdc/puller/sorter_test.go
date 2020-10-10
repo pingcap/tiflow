@@ -15,6 +15,7 @@ package puller
 
 import (
 	"context"
+	"github.com/pingcap/errors"
 	"go.uber.org/zap/zapcore"
 	"math"
 	"net/http"
@@ -62,7 +63,6 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 func testSorter(c *check.C, sorter EventSorter) {
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
 
 	errg, ctx := errgroup.WithContext(timeoutCtx)
 	errg.Go(func() error {
@@ -134,6 +134,7 @@ func testSorter(c *check.C, sorter EventSorter) {
 					}
 					if counter >= numProducers*eventCountPerProducer {
 						log.Debug("Unified Sorter test successful")
+						cancel()
 						return nil
 					}
 				}
@@ -144,5 +145,8 @@ func testSorter(c *check.C, sorter EventSorter) {
 	})
 
 	err := errg.Wait()
+	if err == errors.Cause(err) {
+		return
+	}
 	c.Assert(err, check.IsNil)
 }

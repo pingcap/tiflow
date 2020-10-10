@@ -95,6 +95,19 @@ func (f *fileSorterBackEnd) reset() error {
 	return nil
 }
 
+func (f *fileSorterBackEnd) free() error {
+	err := f.f.Close()
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
+	err = os.Remove(f.name)
+	if err != nil {
+		return errors.AddStack(err)
+	}
+	return nil
+}
+
 type serializerDeserializer interface {
 	marshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error)
 	unmarshal(event *model.PolymorphicEvent, bytes []byte) ([]byte, error)
@@ -253,17 +266,49 @@ type backEndPool struct {
 	memoryUseEstimate int64
 	fileNameCounter   uint64
 	mu                sync.Mutex
-	cache             []unsafe.Pointer
+	cache             [256]unsafe.Pointer
 	dir               string
 }
 
 func newBackEndPool(dir string) *backEndPool {
-	return &backEndPool{
+	ret := &backEndPool{
 		memoryUseEstimate: 0,
 		fileNameCounter:   0,
-		cache:             make([]unsafe.Pointer, 256),
 		dir:               dir,
 	}
+
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+
+		for {
+			select {
+			case <-ticker.C:
+			}
+
+			freedCount := 0
+			for i := range ret.cache {
+				ptr := &ret.cache[i]
+				innerPtr := atomic.SwapPointer(ptr, nil)
+				if innerPtr == nil {
+					continue
+				}
+				backEnd := (*fileSorterBackEnd)(innerPtr)
+				err := backEnd.free()
+				if err != nil {
+					log.Fatal("Cannot remove temporary file for sorting", zap.String("file", backEnd.name))
+				}
+				log.Info("Temporary file removed", zap.String("file", backEnd.name))
+				freedCount += 1
+
+				if freedCount >= 16 {
+					freedCount = 0
+					break
+				}
+			}
+		}
+	}()
+
+	return ret
 }
 
 func (p *backEndPool) alloc() (sorterBackEnd, error) {
@@ -273,13 +318,10 @@ func (p *backEndPool) alloc() (sorterBackEnd, error) {
 		return ret, nil
 	}
 
-	log.Debug("Unified Sorter: insufficient memory, using files to sort")
-
 	for i := range p.cache {
 		ptr := &p.cache[i]
 		ret := atomic.SwapPointer(ptr, nil)
 		if ret != nil {
-			log.Debug("Unified Sorter: returning cached file backEnd")
 			return (*fileSorterBackEnd)(ret), nil
 		}
 	}
@@ -430,7 +472,6 @@ func (h *heapSorter) run(ctx context.Context) error {
 			heap.Push(&h.heap, &sortItem{entry: event})
 			isResolvedEvent := event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved
 			if isResolvedEvent {
-				log.Debug("heapSorter got resolved event", zap.Uint64("CRTs", event.RawKV.CRTs), zap.Int("heap-id", h.id))
 				if event.RawKV.CRTs < maxResolved {
 					log.Fatal("ResolvedTs regression, bug?", zap.Uint64("event-resolvedTs", event.RawKV.CRTs),
 						zap.Uint64("max-resolvedTs", maxResolved))
@@ -440,15 +481,14 @@ func (h *heapSorter) run(ctx context.Context) error {
 
 			heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 128
 
-			if isResolvedEvent {
-				select {
-				case <-flushTicker.C:
-				default:
-					continue
-				}
+			needFlush := heapSizeBytesEstimate >= heapSizeLimit || isResolvedEvent
+			select {
+			case <-flushTicker.C:
+				needFlush = true
+			default:
 			}
 
-			if heapSizeBytesEstimate >= heapSizeLimit {
+			if needFlush {
 				err := h.flush(ctx, maxResolved)
 				if err != nil {
 					return errors.AddStack(err)
@@ -481,7 +521,6 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 	}
 
 	onMinResolvedTsUpdate := func() error {
-		log.Debug("onMinResolvedTsUpdate", zap.Uint64("minResolvedTs", minResolvedTs))
 		workingSet := make(map[*flushTask]struct{}, 0)
 		sortHeap := new(sortHeap)
 		for task, cache := range pendingSet {
@@ -573,6 +612,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				case out <- event:
 				}
 			}
+			counter += 1
 
 			if event.CRTs < task.lastTs {
 				log.Fatal("unified sorter: ts regressed in one backEnd, bug?", zap.Uint64("cur-ts", event.CRTs), zap.Uint64("last-ts", task.lastTs))
@@ -618,7 +658,6 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				continue
 			}
 
-			counter += 1
 			if counter % 10000 == 0{
 				log.Debug("Merging progress", zap.Int("counter", counter))
 			}
@@ -743,10 +782,6 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 				return ctx.Err()
 			case heapSorters[targetId].inputCh <- event:
 			}
-
-			//log.Debug("Unified Sorter: event dispatched",
-			//	zap.Uint64("CRTs", event.CRTs),
-			//	zap.Int("heap-id", targetId))
 		}
 	}
 }
