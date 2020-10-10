@@ -31,7 +31,7 @@ const (
 	DownstreamDSN = "root@tcp(127.0.0.1:5000)/"
 )
 
-// KafkaDockerEnv represents the docker-compose service defined in docker-compose-avro.yml
+// KafkaDockerEnv represents the docker-compose service
 type KafkaDockerEnv struct {
 	DockerComposeOperator
 }

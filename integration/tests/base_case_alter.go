@@ -18,10 +18,7 @@ import (
 	"math/rand"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
 // AlterCase is base impl of test case for alter operation
@@ -30,19 +27,9 @@ type AlterCase struct {
 }
 
 // NewAlterCase create a test case which contains alter ddls
-func NewAlterCase(typ ProtocolType) *AlterCase {
-	switch typ {
-	case ProtocolAvro:
-		return &AlterCase{
-			Task: &avro.SingleTableTask{TableName: "test"},
-		}
-	case ProtocolCanal:
-		return &AlterCase{
-			Task: &canal.SingleTableTask{TableName: "test"},
-		}
-	default:
-		log.Error("unknown protocol")
-		return nil
+func NewAlterCase(task framework.Task) AlterCase {
+	return AlterCase{
+		Task: task,
 	}
 }
 

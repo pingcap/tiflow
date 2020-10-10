@@ -15,10 +15,7 @@ package tests
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
 // SimpleCase is base impl of simple test case
@@ -27,19 +24,9 @@ type SimpleCase struct {
 }
 
 // NewSimpleCase create a test case which has some simple dmls, ddls
-func NewSimpleCase(typ ProtocolType) *SimpleCase {
-	switch typ {
-	case ProtocolAvro:
-		return &SimpleCase{
-			Task: &avro.SingleTableTask{TableName: "test"},
-		}
-	case ProtocolCanal:
-		return &SimpleCase{
-			Task: &canal.SingleTableTask{TableName: "test"},
-		}
-	default:
-		log.Error("unknown protocol")
-		return nil
+func NewSimpleCase(task framework.Task) SimpleCase {
+	return SimpleCase{
+		Task: task,
 	}
 }
 

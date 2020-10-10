@@ -17,10 +17,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
 // ManyTypesCase is base impl of test case for different types data
@@ -29,19 +26,9 @@ type ManyTypesCase struct {
 }
 
 // NewManyTypesCase create a test case which has many types
-func NewManyTypesCase(typ ProtocolType) *ManyTypesCase {
-	switch typ {
-	case ProtocolAvro:
-		return &ManyTypesCase{
-			Task: &avro.SingleTableTask{TableName: "test"},
-		}
-	case ProtocolCanal:
-		return &ManyTypesCase{
-			Task: &canal.SingleTableTask{TableName: "test"},
-		}
-	default:
-		log.Error("unknown protocol")
-		return nil
+func NewManyTypesCase(task framework.Task) ManyTypesCase {
+	return ManyTypesCase{
+		Task: task,
 	}
 }
 

@@ -18,27 +18,27 @@ type Task interface {
 	Run(taskContext *TaskContext) error
 }
 ```
-
-For the time being, if you would like to write Avro tests, it is recommended to embed `framework.AvroSingleTableTask` in your own struct, which executes the necessary setup steps, including creating the Kafka Connect sink and creating the changefeed with appropriate configurations.
+For the time being, if you would like to write a test case for Avro and Canal, it is recommended to write a base case which define the common operations of test, and write construct functions for Avro and Canal, pass `canal.SingleTableTask` or `canal.SingleTableTask` as parameters, which execute the necessary setup steps, including creating the Kafka Connect sink and creating the changefeed with appropriate configurations. In the same time, you can custom different operations for Avro and Canal, for example canal now is not support 'Year' data type, you should rewrite the 'Run()' function for Canal.
 
 
 Example:
 ```go
-type myCase struct {
-	framework.AvroSingleTableTask
+// tests/base_mycase.go
+type MyCase struct {
+	framework.Task
 }
 
-func newMyCase() *myCase{
-	myCase := new(myCase)
-	myCase.AvroSingleTableTask.TableName = "test"
-	return myCase
+func NewMyCase(task framework) MyCase{
+	return MyCase{
+        Task: task,  
+    }   
 }
 
-func (c *myCase) Name() string {
+func (c *MyCase) Name() string {
 	return "My Case"
 }
 
-func (c *alterCase) Run(ctx *framework.TaskContext) error {
+func (c *MyCase) Run(ctx *framework.TaskContext) error {
 	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key, value int)")
 	if err != nil {
 		return err
@@ -68,5 +68,31 @@ func (c *alterCase) Run(ctx *framework.TaskContext) error {
 
 	// Wait on SQL requests in batch and check the correctness
 	return framework.All(ctx.SQLHelper(), reqs).Wait().Check()
+}
+
+// tests/canal_test_case.go
+type canalMyCase struct {
+	MyCase
+}
+
+func NewAvroAlterCase() *canalMyCase {
+	return &canalMyCase{
+		MyCase: NewMyCase(&canal.SingleTableTask{TableName: "test"}),
+	}
+}
+
+func (c *canalMyCase) Run(ctx *framework.TaskContext) error {
+    // rewrite for specific operation
+}
+
+// tests/avro_test_case.go
+type avroMyCase struct {
+	MyCase
+}
+
+func NewAvroAlterCase() *avroMyCase {
+	return &avroMyCase{
+		MyCase: NewMyCase(&avro.SingleTableTask{TableName: "test"}),
+	}
 }
 ```

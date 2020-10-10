@@ -18,8 +18,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
 	"go.uber.org/zap"
 )
 
@@ -29,19 +27,9 @@ type DeleteCase struct {
 }
 
 // NewDeleteCase create a test case which contains delete ddls
-func NewDeleteCase(typ ProtocolType) *DeleteCase {
-	switch typ {
-	case ProtocolAvro:
-		return &DeleteCase{
-			Task: &avro.SingleTableTask{TableName: "test"},
-		}
-	case ProtocolCanal:
-		return &DeleteCase{
-			Task: &canal.SingleTableTask{TableName: "test"},
-		}
-	default:
-		log.Error("unknown protocol")
-		return nil
+func NewDeleteCase(task framework.Task) DeleteCase {
+	return DeleteCase{
+		Task: task,
 	}
 }
 

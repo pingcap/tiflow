@@ -11,30 +11,65 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package canal
+package tests
 
 import (
 	"math"
 	"time"
 
 	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/tests"
+	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
-type manyTypesCase struct {
-	tests.ManyTypesCase
+//nolint:unused
+type canalAlterCase struct {
+	AlterCase
 }
 
-// NewManyTypesCase create a test case which has many types
-func NewManyTypesCase() *manyTypesCase {
-	return &manyTypesCase{
-		ManyTypesCase: tests.ManyTypesCase{
-			Task: tests.NewManyTypesCase(tests.ProtocolCanal),
-		},
+// NewCanalAlterCase construct alter case for canal
+func NewCanalAlterCase() *canalAlterCase {
+	return &canalAlterCase{
+		AlterCase: NewAlterCase(&canal.SingleTableTask{TableName: "test"}),
 	}
 }
 
-func (s *manyTypesCase) Run(ctx *framework.TaskContext) error {
+//nolint:unused
+type canalCompositePKeyCase struct {
+	CompositePKeyCase
+}
+
+// NewCanalCompositePKeyCase construct composite primary key case for canal
+func NewCanalCompositePKeyCase() *canalCompositePKeyCase {
+	return &canalCompositePKeyCase{
+		CompositePKeyCase: NewCompositePKeyCase(&canal.SingleTableTask{TableName: "test"}),
+	}
+}
+
+//nolint:unused
+type canalDeleteCase struct {
+	DeleteCase
+}
+
+// NewCanalDeleteCase construct delete case for canal
+func NewCanalDeleteCase() *canalDeleteCase {
+	return &canalDeleteCase{
+		DeleteCase: NewDeleteCase(&canal.SingleTableTask{TableName: "test"}),
+	}
+}
+
+//nolint:unused
+type canalManyTypesCase struct {
+	ManyTypesCase
+}
+
+// NewCanalManyTypesCase construct many types case for canal
+func NewCanalManyTypesCase() *canalManyTypesCase {
+	return &canalManyTypesCase{
+		ManyTypesCase: NewManyTypesCase(&canal.SingleTableTask{TableName: "test"}),
+	}
+}
+
+func (s *canalManyTypesCase) Run(ctx *framework.TaskContext) error {
 	createDBQuery := `create table test (
 		id          INT,
 		t_boolean   BOOLEAN,
@@ -91,4 +126,28 @@ func (s *manyTypesCase) Run(ctx *framework.TaskContext) error {
 		"t_json":      nil,
 	}).Send().Wait().Check()
 
+}
+
+//nolint:unused
+type canalSimpleCase struct {
+	SimpleCase
+}
+
+// NewCanalSimpleCase construct simple case for canal
+func NewCanalSimpleCase() *canalSimpleCase {
+	return &canalSimpleCase{
+		SimpleCase: NewSimpleCase(&canal.SingleTableTask{TableName: "test"}),
+	}
+}
+
+//nolint:unused
+type canalUnsignedCase struct {
+	UnsignedCase
+}
+
+// NewCanalUnsignedCase construct unsigned case for canal
+func NewCanalUnsignedCase() *canalUnsignedCase {
+	return &canalUnsignedCase{
+		UnsignedCase: NewUnsignedCase(&canal.SingleTableTask{TableName: "test"}),
+	}
 }

@@ -15,10 +15,7 @@ package tests
 
 import (
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
 // CompositePKeyCase is base impl of test case for composite primary keys
@@ -27,19 +24,9 @@ type CompositePKeyCase struct {
 }
 
 // NewCompositePKeyCase create a test case which have composite primary key
-func NewCompositePKeyCase(typ ProtocolType) *CompositePKeyCase {
-	switch typ {
-	case ProtocolAvro:
-		return &CompositePKeyCase{
-			Task: &avro.SingleTableTask{TableName: "test"},
-		}
-	case ProtocolCanal:
-		return &CompositePKeyCase{
-			Task: &canal.SingleTableTask{TableName: "test"},
-		}
-	default:
-		log.Error("unknown protocol")
-		return nil
+func NewCompositePKeyCase(task framework.Task) CompositePKeyCase {
+	return CompositePKeyCase{
+		Task: task,
 	}
 }
 

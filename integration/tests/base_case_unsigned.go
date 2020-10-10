@@ -14,10 +14,7 @@
 package tests
 
 import (
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
 )
 
 // UnsignedCase is base impl of test case for unsigned int type data
@@ -26,19 +23,9 @@ type UnsignedCase struct {
 }
 
 // NewUnsignedCase create a test case to check the correction of unsigned integer
-func NewUnsignedCase(typ ProtocolType) *UnsignedCase {
-	switch typ {
-	case ProtocolAvro:
-		return &UnsignedCase{
-			Task: &avro.SingleTableTask{TableName: "test"},
-		}
-	case ProtocolCanal:
-		return &UnsignedCase{
-			Task: &canal.SingleTableTask{TableName: "test"},
-		}
-	default:
-		log.Error("unknown protocol")
-		return nil
+func NewUnsignedCase(task framework.Task) UnsignedCase {
+	return UnsignedCase{
+		Task: task,
 	}
 }
 
