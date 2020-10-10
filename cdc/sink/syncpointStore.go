@@ -22,8 +22,8 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
-// SyncpointLink is an abstraction for anything that a changefeed may emit into.
-type SyncpointLink interface {
+// SyncpointStore is an abstraction for anything that a changefeed may emit into.
+type SyncpointStore interface {
 	// CreateSynctable create a table to record the syncpoints
 	CreateSynctable(ctx context.Context) error
 
@@ -34,8 +34,8 @@ type SyncpointLink interface {
 	Close() error
 }
 
-// NewSyncpointLink creates a new Spyncpoint sink with the sink-uri
-func NewSyncpointLink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string) (SyncpointLink, error) {
+// NewSyncpointStore creates a new Spyncpoint sink with the sink-uri
+func NewSyncpointStore(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string) (SyncpointStore, error) {
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
@@ -43,7 +43,7 @@ func NewSyncpointLink(ctx context.Context, changefeedID model.ChangeFeedID, sink
 	}
 	switch strings.ToLower(sinkURI.Scheme) {
 	case "mysql", "tidb", "mysql+ssl", "tidb+ssl":
-		return newMySQLSyncpointLink(ctx, changefeedID, sinkURI)
+		return newMySQLSyncpointStore(ctx, changefeedID, sinkURI)
 	default:
 		return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}

@@ -77,7 +77,7 @@ var (
 	}
 )
 
-type mysqlSyncpointLink struct {
+type mysqlSyncpointStore struct {
 	db *sql.DB
 }
 type mysqlSink struct {
@@ -1108,8 +1108,8 @@ func buildColumnList(names []string) string {
 	return b.String()
 }
 
-// newSyncpointLink create a sink to record the syncpoint map in downstream DB for every changefeed
-func newMySQLSyncpointLink(ctx context.Context, id string, sinkURI *url.URL) (SyncpointLink, error) {
+// newSyncpointStore create a sink to record the syncpoint map in downstream DB for every changefeed
+func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (SyncpointStore, error) {
 	var syncDB *sql.DB
 
 	//todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
@@ -1189,14 +1189,14 @@ func newMySQLSyncpointLink(ctx context.Context, id string, sinkURI *url.URL) (Sy
 	}
 
 	log.Info("Start mysql syncpoint sink")
-	syncpointLink := &mysqlSyncpointLink{
+	syncpointStore := &mysqlSyncpointStore{
 		db: syncDB,
 	}
 
-	return syncpointLink, nil
+	return syncpointStore, nil
 }
 
-func (s *mysqlSyncpointLink) CreateSynctable(ctx context.Context) error {
+func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
 	database := mark.SchemaName
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1231,7 +1231,7 @@ func (s *mysqlSyncpointLink) CreateSynctable(ctx context.Context) error {
 	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
-func (s *mysqlSyncpointLink) SinkSyncpoint(ctx context.Context, id string, checkpointTs uint64) error {
+func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, checkpointTs uint64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("sync table: begin Tx fail", zap.Error(err))
@@ -1260,7 +1260,7 @@ func (s *mysqlSyncpointLink) SinkSyncpoint(ctx context.Context, id string, check
 	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
-func (s *mysqlSyncpointLink) Close() error {
+func (s *mysqlSyncpointStore) Close() error {
 	err := s.db.Close()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }
