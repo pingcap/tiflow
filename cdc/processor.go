@@ -860,6 +860,9 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				p.sinkEmittedResolvedNotifier.Notify()
 				continue
 			}
+			// Global resolved ts should fallback in some table rebalance cases,
+			// since the start-ts(from checkpoint ts) or a rebalanced table could
+			// be less then the global resolved ts.
 			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
 			if resolvedTs > localResolvedTs {
 				log.Info("global resolved ts fallback",
