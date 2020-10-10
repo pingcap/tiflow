@@ -863,6 +863,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
 			if resolvedTs > localResolvedTs {
 				log.Info("global resolved ts fallback",
+					zap.String("changefeed", p.changefeedID),
 					zap.Uint64("localResolvedTs", localResolvedTs),
 					zap.Uint64("resolvedTs", resolvedTs),
 				)
@@ -871,6 +872,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 			if row.CRTs <= resolvedTs {
 				log.Fatal("The CRTs must be greater than the resolvedTs",
 					zap.String("model", "processor"),
+					zap.String("changefeed", p.changefeedID),
 					zap.Uint64("resolvedTs", resolvedTs),
 					zap.Any("row", row))
 			}
