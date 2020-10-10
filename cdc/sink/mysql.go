@@ -65,6 +65,9 @@ const (
 	defaultSafeMode            = true
 )
 
+// SyncpointTableName is the name of table where all syncpoint maps sit
+const syncpointTableName string = "syncpoint_v1"
+
 var (
 	validSchemes = map[string]bool{
 		"mysql":     true,
@@ -1194,7 +1197,7 @@ func newMySQLSyncpointSink(ctx context.Context, id string, sinkURI *url.URL) (Sy
 }
 
 func (s *mysqlSyncpointSink) CreateSynctable(ctx context.Context) error {
-	database := "TiCDC"
+	database := mark.SchemaName
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("create sync table: begin Tx fail", zap.Error(err))
@@ -1216,7 +1219,7 @@ func (s *mysqlSyncpointSink) CreateSynctable(ctx context.Context) error {
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS syncpoint (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `cf`, `primary_ts` ) )")
+	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS " + syncpointTableName + " (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `cf`, `primary_ts` ) )")
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
@@ -1245,7 +1248,7 @@ func (s *mysqlSyncpointSink) SinkSyncpoint(ctx context.Context, id string, check
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	_, err = tx.Exec("insert into TiCDC.syncpoint(cf, primary_ts, secondary_ts) VALUES (?,?,?)", id, checkpointTs, secondaryTs)
+	_, err = tx.Exec("insert into "+mark.SchemaName+"."+syncpointTableName+"(cf, primary_ts, secondary_ts) VALUES (?,?,?)", id, checkpointTs, secondaryTs)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {

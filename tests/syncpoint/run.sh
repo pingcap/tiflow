@@ -121,7 +121,7 @@ function run() {
 
     sleep 60
 
-    run_sql "SELECT primary_ts, secondary_ts FROM TiCDC.syncpoint;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+    run_sql "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     echo "____________________________________"
     cat "$OUT_DIR/sql_res.$TEST_NAME.txt"
     checkDiff
