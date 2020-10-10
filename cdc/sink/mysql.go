@@ -77,7 +77,7 @@ var (
 	}
 )
 
-type mysqlSyncpointSink struct {
+type mysqlSyncpointLink struct {
 	db *sql.DB
 }
 type mysqlSink struct {
@@ -1108,8 +1108,8 @@ func buildColumnList(names []string) string {
 	return b.String()
 }
 
-// newSyncpointSink create a sink to record the syncpoint map in downstream DB for every changefeed
-func newMySQLSyncpointSink(ctx context.Context, id string, sinkURI *url.URL) (SyncpointSink, error) {
+// newSyncpointLink create a sink to record the syncpoint map in downstream DB for every changefeed
+func newMySQLSyncpointLink(ctx context.Context, id string, sinkURI *url.URL) (SyncpointLink, error) {
 	var syncDB *sql.DB
 
 	//todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
@@ -1189,14 +1189,14 @@ func newMySQLSyncpointSink(ctx context.Context, id string, sinkURI *url.URL) (Sy
 	}
 
 	log.Info("Start mysql syncpoint sink")
-	syncpointSink := &mysqlSyncpointSink{
+	syncpointLink := &mysqlSyncpointLink{
 		db: syncDB,
 	}
 
-	return syncpointSink, nil
+	return syncpointLink, nil
 }
 
-func (s *mysqlSyncpointSink) CreateSynctable(ctx context.Context) error {
+func (s *mysqlSyncpointLink) CreateSynctable(ctx context.Context) error {
 	database := mark.SchemaName
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1231,7 +1231,7 @@ func (s *mysqlSyncpointSink) CreateSynctable(ctx context.Context) error {
 	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
-func (s *mysqlSyncpointSink) SinkSyncpoint(ctx context.Context, id string, checkpointTs uint64) error {
+func (s *mysqlSyncpointLink) SinkSyncpoint(ctx context.Context, id string, checkpointTs uint64) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("sync table: begin Tx fail", zap.Error(err))
@@ -1260,7 +1260,7 @@ func (s *mysqlSyncpointSink) SinkSyncpoint(ctx context.Context, id string, check
 	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
-func (s *mysqlSyncpointSink) Close() error {
+func (s *mysqlSyncpointLink) Close() error {
 	err := s.db.Close()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }

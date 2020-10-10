@@ -86,7 +86,7 @@ type changeFeed struct {
 	syncpointMutex   sync.Mutex
 	updateResolvedTs bool
 	startTimer       chan bool
-	syncpointSink    sink.SyncpointSink
+	syncpointLink    sink.SyncpointLink
 	syncCancel       context.CancelFunc
 	taskStatus       model.ProcessorsInfos
 	taskPositions    map[model.CaptureID]*model.TaskPosition
@@ -704,7 +704,7 @@ func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
 		if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
 			log.Info("sync point reached by ticker", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs), zap.Uint64("ddlExecutedTs", c.ddlExecutedTs))
 			c.updateResolvedTs = true
-			err := c.syncpointSink.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
+			err := c.syncpointLink.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
 			if err != nil {
 				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
 			}
@@ -719,7 +719,7 @@ func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
 		// ddlTs <= ddlExecutedTs means the DDL has been execed.
 		if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs && c.ddlTs <= c.ddlExecutedTs {
 			log.Info("sync point reached by ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs), zap.Uint64("ddlExecutedTs", c.ddlExecutedTs))
-			err := c.syncpointSink.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
+			err := c.syncpointLink.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
 			if err != nil {
 				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
 			}
@@ -943,8 +943,8 @@ func (c *changeFeed) Close() {
 	if err != nil {
 		log.Warn("failed to close owner sink", zap.Error(err))
 	}
-	if c.syncpointSink != nil {
-		err = c.syncpointSink.Close()
+	if c.syncpointLink != nil {
+		err = c.syncpointLink.Close()
 		if err != nil {
 			log.Warn("failed to close owner sink", zap.Error(err))
 		}
