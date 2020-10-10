@@ -838,7 +838,6 @@ func (p *processor) syncResolved(ctx context.Context) error {
 		return nil
 	}
 
-	var resolvedTs uint64
 	for {
 		select {
 		case <-ctx.Done():
@@ -855,11 +854,11 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
-				resolvedTs = row.CRTs
 				atomic.StoreUint64(&p.sinkEmittedResolvedTs, row.CRTs)
 				p.sinkEmittedResolvedNotifier.Notify()
 				continue
 			}
+			resolvedTs := atomic.LoadUint64(&p.localResolvedTs)
 			if row.CRTs <= resolvedTs {
 				log.Fatal("The CRTs must be greater than the resolvedTs",
 					zap.String("model", "processor"),
