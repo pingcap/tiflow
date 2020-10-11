@@ -28,8 +28,8 @@ type MyCase struct {
 	framework.Task
 }
 
-func NewMyCase(task framework) MyCase{
-	return MyCase{
+func NewMyCase(task framework) *MyCase{
+	return &MyCase{
         Task: task,  
     }   
 }
@@ -77,7 +77,7 @@ type canalMyCase struct {
 
 func NewCanalMyCase() *canalMyCase {
 	return &canalMyCase{
-		MyCase: NewMyCase(&canal.SingleTableTask{TableName: "test"}),
+		MyCase: *NewMyCase(&canal.SingleTableTask{TableName: "test"}),
 	}
 }
 
