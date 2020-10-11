@@ -24,8 +24,8 @@ type SimpleCase struct {
 }
 
 // NewSimpleCase create a test case which has some simple dmls, ddls
-func NewSimpleCase(task framework.Task) SimpleCase {
-	return SimpleCase{
+func NewSimpleCase(task framework.Task) *SimpleCase {
+	return &SimpleCase{
 		Task: task,
 	}
 }

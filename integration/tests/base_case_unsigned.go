@@ -23,8 +23,8 @@ type UnsignedCase struct {
 }
 
 // NewUnsignedCase create a test case to check the correction of unsigned integer
-func NewUnsignedCase(task framework.Task) UnsignedCase {
-	return UnsignedCase{
+func NewUnsignedCase(task framework.Task) *UnsignedCase {
+	return &UnsignedCase{
 		Task: task,
 	}
 }

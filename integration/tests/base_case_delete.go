@@ -27,8 +27,8 @@ type DeleteCase struct {
 }
 
 // NewDeleteCase create a test case which contains delete ddls
-func NewDeleteCase(task framework.Task) DeleteCase {
-	return DeleteCase{
+func NewDeleteCase(task framework.Task) *DeleteCase {
+	return &DeleteCase{
 		Task: task,
 	}
 }

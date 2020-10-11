@@ -18,7 +18,7 @@ type Task interface {
 	Run(taskContext *TaskContext) error
 }
 ```
-For the time being, if you would like to write a test case for Avro and Canal, it is recommended to write a base case which define the common operations of test, and write construct functions for Avro and Canal, pass `canal.SingleTableTask` or `canal.SingleTableTask` as parameters, which execute the necessary setup steps, including creating the Kafka Connect sink and creating the changefeed with appropriate configurations. In the same time, you can custom different operations for Avro and Canal, for example canal now is not support 'Year' data type, you should rewrite the 'Run()' function for Canal.
+For the time being, if you would like to write a test case for Avro and Canal, it is recommended to write a base case which define the common operations of test, and write construct function, pass `canal.SingleTableTask` or `canal.SingleTableTask` as parameters, which execute the necessary setup steps, including creating the Kafka Connect sink and creating the changefeed with appropriate configurations. In the same time, if you would like to custom different operations for Avro and Canal, for example canal now is not support 'Year' data type, you should rewrite the 'Run()' function for Canal.
 
 
 Example:
@@ -75,7 +75,7 @@ type canalMyCase struct {
 	MyCase
 }
 
-func NewAvroAlterCase() *canalMyCase {
+func NewCanalMyCase() *canalMyCase {
 	return &canalMyCase{
 		MyCase: NewMyCase(&canal.SingleTableTask{TableName: "test"}),
 	}
@@ -85,14 +85,16 @@ func (c *canalMyCase) Run(ctx *framework.TaskContext) error {
     // rewrite for specific operation
 }
 
-// tests/avro_test_case.go
-type avroMyCase struct {
-	MyCase
-}
-
-func NewAvroAlterCase() *avroMyCase {
-	return &avroMyCase{
-		MyCase: NewMyCase(&avro.SingleTableTask{TableName: "test"}),
-	}
+// tests/integration.go
+func main() {
+    task := &canal.SingleTableTask{TableName: "test"}
+    testCases := []framework.Task{
+        tests.NewCanalMyCase(),
+    }
+    task := &avro.SingleTableTask{TableName: "test"}
+    testCases := []framework.Task{
+        tests.NewMyCase(task),
+    }
+    //run
 }
 ```

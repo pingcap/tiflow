@@ -27,8 +27,8 @@ type AlterCase struct {
 }
 
 // NewAlterCase create a test case which contains alter ddls
-func NewAlterCase(task framework.Task) AlterCase {
-	return AlterCase{
+func NewAlterCase(task framework.Task) *AlterCase {
+	return &AlterCase{
 		Task: task,
 	}
 }

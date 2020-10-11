@@ -22,42 +22,6 @@ import (
 )
 
 //nolint:unused
-type canalAlterCase struct {
-	AlterCase
-}
-
-// NewCanalAlterCase construct alter case for canal
-func NewCanalAlterCase() *canalAlterCase {
-	return &canalAlterCase{
-		AlterCase: NewAlterCase(&canal.SingleTableTask{TableName: "test"}),
-	}
-}
-
-//nolint:unused
-type canalCompositePKeyCase struct {
-	CompositePKeyCase
-}
-
-// NewCanalCompositePKeyCase construct composite primary key case for canal
-func NewCanalCompositePKeyCase() *canalCompositePKeyCase {
-	return &canalCompositePKeyCase{
-		CompositePKeyCase: NewCompositePKeyCase(&canal.SingleTableTask{TableName: "test"}),
-	}
-}
-
-//nolint:unused
-type canalDeleteCase struct {
-	DeleteCase
-}
-
-// NewCanalDeleteCase construct delete case for canal
-func NewCanalDeleteCase() *canalDeleteCase {
-	return &canalDeleteCase{
-		DeleteCase: NewDeleteCase(&canal.SingleTableTask{TableName: "test"}),
-	}
-}
-
-//nolint:unused
 type canalManyTypesCase struct {
 	ManyTypesCase
 }
@@ -65,7 +29,7 @@ type canalManyTypesCase struct {
 // NewCanalManyTypesCase construct many types case for canal
 func NewCanalManyTypesCase() *canalManyTypesCase {
 	return &canalManyTypesCase{
-		ManyTypesCase: NewManyTypesCase(&canal.SingleTableTask{TableName: "test"}),
+		ManyTypesCase: *NewManyTypesCase(&canal.SingleTableTask{TableName: "test"}),
 	}
 }
 
@@ -126,28 +90,4 @@ func (s *canalManyTypesCase) Run(ctx *framework.TaskContext) error {
 		"t_json":      nil,
 	}).Send().Wait().Check()
 
-}
-
-//nolint:unused
-type canalSimpleCase struct {
-	SimpleCase
-}
-
-// NewCanalSimpleCase construct simple case for canal
-func NewCanalSimpleCase() *canalSimpleCase {
-	return &canalSimpleCase{
-		SimpleCase: NewSimpleCase(&canal.SingleTableTask{TableName: "test"}),
-	}
-}
-
-//nolint:unused
-type canalUnsignedCase struct {
-	UnsignedCase
-}
-
-// NewCanalUnsignedCase construct unsigned case for canal
-func NewCanalUnsignedCase() *canalUnsignedCase {
-	return &canalUnsignedCase{
-		UnsignedCase: NewUnsignedCase(&canal.SingleTableTask{TableName: "test"}),
-	}
 }

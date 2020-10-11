@@ -24,8 +24,8 @@ type CompositePKeyCase struct {
 }
 
 // NewCompositePKeyCase create a test case which have composite primary key
-func NewCompositePKeyCase(task framework.Task) CompositePKeyCase {
-	return CompositePKeyCase{
+func NewCompositePKeyCase(task framework.Task) *CompositePKeyCase {
+	return &CompositePKeyCase{
 		Task: task,
 	}
 }

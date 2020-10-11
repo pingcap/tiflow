@@ -26,8 +26,8 @@ type ManyTypesCase struct {
 }
 
 // NewManyTypesCase create a test case which has many types
-func NewManyTypesCase(task framework.Task) ManyTypesCase {
-	return ManyTypesCase{
+func NewManyTypesCase(task framework.Task) *ManyTypesCase {
+	return &ManyTypesCase{
 		Task: task,
 	}
 }

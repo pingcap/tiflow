@@ -29,13 +29,14 @@ var testProtocol = flag.String("protocol", "avro", "the protocol we want to test
 var dockerComposeFile = flag.String("docker-compose-file", "", "the path of the Docker-compose yml file")
 
 func testAvro() {
+	task := &avro.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
-		tests.NewAvroAlterCase(),
-		tests.NewAvroSimpleCase(),
-		tests.NewAvroManyTypesCase(),
-		tests.NewAvroUnsignedCase(),
-		tests.NewAvroCompositePKeyCase(),
-		tests.NewAvroAlterCase(), // this case is slow, so put it last
+		tests.NewSimpleCase(task),
+		tests.NewDeleteCase(task),
+		tests.NewManyTypesCase(task),
+		tests.NewUnsignedCase(task),
+		tests.NewCompositePKeyCase(task),
+		tests.NewAlterCase(task), // this case is slow, so put it last
 	}
 
 	log.SetLevel(zapcore.DebugLevel)
@@ -53,13 +54,14 @@ func testAvro() {
 }
 
 func testCanal() {
+	task := &canal.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
-		tests.NewCanalSimpleCase(),
-		tests.NewCanalDeleteCase(),
+		tests.NewSimpleCase(task),
+		tests.NewDeleteCase(task),
 		tests.NewCanalManyTypesCase(),
-		//tests.NewCanalUnsignedCase(), //now canal adapter can not deal with unsigned int greater than int max
-		tests.NewCanalCompositePKeyCase(),
-		//tests.NewCanalAlterCase(), // basic implementation can not grantee ddl dml sequence, so can not pass
+		//tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
+		tests.NewCompositePKeyCase(task),
+		//tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
 	}
 
 	log.SetLevel(zapcore.DebugLevel)
