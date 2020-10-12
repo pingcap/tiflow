@@ -87,7 +87,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						PRIMARY KEY (id)
 					)`
 	default:
-		return errors.New("Unknown test case type")
+		return errors.New("unknown test case type")
 	}
 
 	_, err := ctx.Upstream.ExecContext(ctx.Ctx, createDBQuery)
@@ -125,8 +125,8 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		"t_set":       "a,b",
 		"t_json":      nil,
 	}
-	switch s.Task.(type) {
-	case *avro.SingleTableTask:
+	_, ok := s.Task.(*avro.SingleTableTask)
+	if ok {
 		data["t_year"] = 2019
 		data["t_bit"] = 0b1001001
 	}
