@@ -14,9 +14,11 @@
 package framework
 
 import (
+	"os"
 	"os/exec"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"go.uber.org/zap"
@@ -58,6 +60,24 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 
 	log.Info("Finished executing command", zap.String("cmd", cmd.String()))
 	return bytes
+}
+
+// DumpStdout dumps all container logs
+func (d *DockerComposeOperator) DumpStdout() error {
+	log.Info("Dumping container logs")
+	cmd := exec.Command("docker-compose", "-f", d.FileName, "logs", "-t")
+	f, err := os.Create("./stdout.log")
+	if err != nil {
+		return errors.AddStack(err)
+	}
+	defer f.Close()
+	cmd.Stdout = f
+	err = cmd.Run()
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
+	return nil
 }
 
 // TearDown terminates a docker-compose service and remove all volumes

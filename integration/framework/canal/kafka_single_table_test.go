@@ -17,6 +17,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/pingcap/ticdc/integration/framework"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,10 +32,10 @@ func TestCanalSingleTableTest_Prepare(t *testing.T) {
 	env.Setup()
 	env.RunTest(&emptyCanalSingleTableTask{SingleTableTask{TableName: "test"}})
 
-	_, err := sql.Open("mysql", upstreamDSN+"testdb")
+	_, err := sql.Open("mysql", framework.UpstreamDSN+"testdb")
 	require.NoError(t, err)
 
-	_, err = sql.Open("mysql", downstreamDSN+"testdb")
+	_, err = sql.Open("mysql", framework.DownstreamDSN+"testdb")
 	require.NoError(t, err)
 
 	err = env.HealthChecker()

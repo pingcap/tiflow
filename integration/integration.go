@@ -15,15 +15,13 @@ package main
 
 import (
 	"flag"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
-	canal2 "github.com/pingcap/ticdc/integration/framework/canal"
-	"github.com/pingcap/ticdc/integration/tests/avro"
-	"github.com/pingcap/ticdc/integration/tests/canal"
+	"github.com/pingcap/ticdc/integration/framework/avro"
+	"github.com/pingcap/ticdc/integration/framework/canal"
+	"github.com/pingcap/ticdc/integration/tests"
 	"go.uber.org/zap"
-
-	avro2 "github.com/pingcap/ticdc/integration/framework/avro"
-
 	"go.uber.org/zap/zapcore"
 )
 
@@ -31,17 +29,18 @@ var testProtocol = flag.String("protocol", "avro", "the protocol we want to test
 var dockerComposeFile = flag.String("docker-compose-file", "", "the path of the Docker-compose yml file")
 
 func testAvro() {
+	task := &avro.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
-		avro.NewSimpleCase(),
-		avro.NewDeleteCase(),
-		avro.NewManyTypesCase(),
-		avro.NewUnsignedCase(),
-		avro.NewCompositePKeyCase(),
-		avro.NewAlterCase(), // this case is slow, so put it last
+		tests.NewSimpleCase(task),
+		tests.NewDeleteCase(task),
+		tests.NewManyTypesCase(task),
+		tests.NewUnsignedCase(task),
+		tests.NewCompositePKeyCase(task),
+		tests.NewAlterCase(task), // this case is slow, so put it last
 	}
 
 	log.SetLevel(zapcore.DebugLevel)
-	env := avro2.NewKafkaDockerEnv(*dockerComposeFile)
+	env := avro.NewKafkaDockerEnv(*dockerComposeFile)
 	env.Setup()
 
 	for i := range testCases {
@@ -55,17 +54,18 @@ func testAvro() {
 }
 
 func testCanal() {
+	task := &canal.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
-		canal.NewSimpleCase(),
-		canal.NewDeleteCase(),
-		canal.NewManyTypesCase(),
-		//canal.NewUnsignedCase(), //now canal adapter can not deal with unsigned int greater than int max
-		canal.NewCompositePKeyCase(),
-		//canal.NewAlterCase(), // basic implementation can not grantee ddl dml sequence, so can not pass
+		tests.NewSimpleCase(task),
+		tests.NewDeleteCase(task),
+		tests.NewManyTypesCase(task),
+		//tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
+		tests.NewCompositePKeyCase(task),
+		//tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
 	}
 
 	log.SetLevel(zapcore.DebugLevel)
-	env := canal2.NewKafkaDockerEnv(*dockerComposeFile)
+	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
 	env.Setup()
 
 	for i := range testCases {
@@ -84,8 +84,7 @@ func main() {
 		testAvro()
 	} else if *testProtocol == "canal" {
 		testCanal()
-	} else
-	{
+	} else {
 		log.Fatal("Unknown sink protocol", zap.String("protocol", *testProtocol))
 	}
 }
