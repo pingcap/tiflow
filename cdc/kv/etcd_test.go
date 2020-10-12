@@ -149,15 +149,25 @@ func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
 func (s *etcdSuite) TestGetPutTaskPosition(c *check.C) {
 	ctx := context.Background()
 	info := &model.TaskPosition{
-		ResolvedTs:   66,
+		ResolvedTs:   99,
 		CheckPointTs: 77,
 	}
 
 	feedID := "feedid"
 	captureID := "captureid"
 
-	err := s.client.PutTaskPosition(ctx, feedID, captureID, info)
+	updated, err := s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
 	c.Assert(err, check.IsNil)
+	c.Assert(updated, check.IsTrue)
+
+	updated, err = s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
+	c.Assert(err, check.IsNil)
+	c.Assert(updated, check.IsFalse)
+
+	info.CheckPointTs = 99
+	updated, err = s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
+	c.Assert(err, check.IsNil)
+	c.Assert(updated, check.IsTrue)
 
 	_, getInfo, err := s.client.GetTaskPosition(ctx, feedID, captureID)
 	c.Assert(err, check.IsNil)
@@ -178,7 +188,7 @@ func (s *etcdSuite) TestDeleteTaskPosition(c *check.C) {
 	feedID := "feedid"
 	captureID := "captureid"
 
-	err := s.client.PutTaskPosition(ctx, feedID, captureID, info)
+	_, err := s.client.PutTaskPositionOnChange(ctx, feedID, captureID, info)
 	c.Assert(err, check.IsNil)
 
 	err = s.client.DeleteTaskPosition(ctx, feedID, captureID)
