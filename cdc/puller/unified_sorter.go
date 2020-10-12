@@ -23,6 +23,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -153,7 +154,7 @@ func (f *fileSorterBackEnd) readNext() (*model.PolymorphicEvent, error) {
 		return nil, errors.AddStack(err)
 	}
 	if m != magic {
-		panic("wrong magic")
+		log.Fatal("fileSorterBackEnd: wrong magic. Damaged file or bug?", zap.Uint32("magic", m))
 	}
 
 	var size uint32
@@ -193,7 +194,7 @@ func (f *fileSorterBackEnd) writeNext(event *model.PolymorphicEvent) error {
 
 	size := len(f.rawBytes)
 	if size == 0 {
-		panic("size is 0!")
+		log.Fatal("fileSorterBackEnd: serialized to empty byte array. Bug?")
 	}
 
 	err = binary.Write(f.readWriter, binary.LittleEndian, uint32(magic))
@@ -315,7 +316,7 @@ func (p *backEndPool) dealloc(backEnd sorterBackEnd) error {
 		// Cache is full. Let GC do its job
 		return nil
 	}
-	panic("Unexpected type")
+	log.Fatal("backEndPool: unexpected backEnd type to be deallocated", zap.Reflect("type", reflect.TypeOf(backEnd)))
 }
 
 type flushTask struct {
@@ -468,7 +469,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 
 	sendResolvedEvent := func(ts uint64) error {
 		if ts < lastOutputTs {
-			panic("regressed")
+			log.Fatal("unified sorter: output ts regressed, bug?", zap.Uint64("cur-ts", ts), zap.Uint64("last-ts", lastOutputTs))
 		}
 		lastOutputTs = ts
 		select {
@@ -477,7 +478,6 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 		case out <- model.NewResolvedPolymorphicEvent(0, ts):
 			return nil
 		}
-		return nil
 	}
 
 	onMinResolvedTsUpdate := func() error {
@@ -501,7 +501,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 							return errors.Trace(err)
 						}
 					case <-after:
-						panic("waiting for flushTask for too long")
+						log.Warn("unified sorter: backEnd flush too long", zap.Uint64("minResolvedTs", task.maxResolvedTs))
 					}
 
 
@@ -511,7 +511,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 					}
 
 					if event == nil {
-						panic("event is nil")
+						log.Fatal("Unexpected end of backEnd data, bug?", zap.Uint64("minResolvedTs", task.maxResolvedTs))
 					}
 				}
 
@@ -529,8 +529,6 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				})
 			}
 		}
-
-		log.Debug("Started merging", zap.Int("num-flush-tasks", len(workingSet)))
 
 		resolvedTicker := time.NewTicker(1 * time.Second)
 		defer resolvedTicker.Stop()
@@ -566,7 +564,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 
 			if event.RawKV != nil && event.RawKV.OpType != model.OpTypeResolved {
 				if event.CRTs < lastOutputTs {
-					panic("regressed")
+					log.Fatal("unified sorter: output ts regressed, bug?", zap.Uint64("cur-ts", event.CRTs), zap.Uint64("last-ts", lastOutputTs))
 				}
 				lastOutputTs = event.CRTs
 				select {
@@ -577,7 +575,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 			}
 
 			if event.CRTs < task.lastTs {
-				panic("regressed")
+				log.Fatal("unified sorter: ts regressed in one backEnd, bug?", zap.Uint64("cur-ts", event.CRTs), zap.Uint64("last-ts", task.lastTs))
 			}
 			task.lastTs = event.CRTs
 
@@ -631,9 +629,12 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 		}
 
 		if len(workingSet) != 0 {
-			panic("workingSet is not empty")
+			log.Fatal("unified sorter: merging ended prematurely, bug?", zap.Uint64("resolvedTs", minResolvedTs))
 		}
-		log.Debug("Unified Sorter: merging ended", zap.Uint64("resolvedTs", minResolvedTs), zap.Uint64("lastTs", lastOutputTs))
+
+		if counter >= 10000 {
+			log.Debug("Unified Sorter: merging ended", zap.Uint64("resolvedTs", minResolvedTs), zap.Uint64("count", counter))
+		}
 		err := sendResolvedEvent(minResolvedTs)
 		if err != nil {
 			return errors.Trace(err)
@@ -649,8 +650,6 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 		case task := <-in:
 			if task == nil {
 				return errors.New("Unified Sorter: nil flushTask, exiting")
-			} else {
-				log.Debug("Merger got flushTask", zap.Int("heap-id", task.heapSorterId))
 			}
 
 			if task.backend != nil {
@@ -733,7 +732,6 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 					case sorter.inputCh <- event:
 					}
 				}
-				log.Debug("Unified Sorter: event broadcast", zap.Uint64("CRTs", event.CRTs))
 				continue
 			}
 
