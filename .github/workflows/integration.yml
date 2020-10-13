@@ -33,6 +33,9 @@ jobs:
       - name: Pull images
         run: docker-compose -f docker-compose-canal.yml pull --ignore-pull-failures
 
+      - name: TiKV version
+        run: docker run pingcap/tikv:nightly -V
+        
       - name: Build Integration Framework
         run: |
           cd $GITHUB_WORKSPACE/integration
@@ -78,6 +81,9 @@ jobs:
 
       - name: Pull images
         run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
+
+      - name: TiKV version
+        run: docker run pingcap/tikv:nightly -V
 
       - name: Build Integration Framework
         run: |
