@@ -34,7 +34,7 @@ jobs:
         run: docker-compose -f docker-compose-canal.yml pull --ignore-pull-failures
 
       - name: TiKV version
-        run: docker run pingcap/tikv:nightly -V
+        run: docker run pingcap/tikv:release-4.0-nightly -V
 
       - name: Build Integration Framework
         run: |
@@ -83,7 +83,7 @@ jobs:
         run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
 
       - name: TiKV version
-        run: docker run pingcap/tikv:nightly -V
+        run: docker run pingcap/tikv:release-4.0-nightly -V
 
       - name: Build Integration Framework
         run: |
