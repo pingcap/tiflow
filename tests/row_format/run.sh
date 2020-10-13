@@ -29,7 +29,23 @@ function run() {
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
-    run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
+    run_sql "SET GLOBAL tidb_row_format_version = 1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    sleep 2
+    run_sql_file $CUR/data/step1.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
+    run_sql "SET GLOBAL tidb_row_format_version = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    sleep 2
+    run_sql_file $CUR/data/step2.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
+    run_sql "SET GLOBAL tidb_row_format_version = 1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    sleep 2
+    run_sql_file $CUR/data/step3.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
+    run_sql "SET GLOBAL tidb_row_format_version = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    sleep 2
+    run_sql_file $CUR/data/step4.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
     # sync_diff can't check non-exist table, so we check expected tables are created in downstream first
     check_table_exists row_format.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
