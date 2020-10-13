@@ -418,7 +418,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		heapSorterID:  h.id,
 		backend:       backEnd,
 		maxResolvedTs: maxResolvedTs,
-		finished:      make(chan error),
+		finished:      make(chan error, 2),
 	}
 
 	var oldHeap sortHeap
@@ -453,8 +453,10 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		err := task.backend.flush()
 		if err != nil {
 			task.finished <- err
+			return
 		}
 
+		task.finished <- nil
 		log.Debug("Unified Sorter flushTask finished",
 			zap.Int("heap-id", task.heapSorterID),
 			zap.Uint64("resolvedTs", task.maxResolvedTs),
@@ -544,7 +546,6 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				} else {
 					var err error
 
-					after := time.After(5 * time.Second)
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
@@ -552,8 +553,6 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 						if err != nil {
 							return errors.Trace(err)
 						}
-					case <-after:
-						log.Warn("unified sorter: backEnd flush too long", zap.Uint64("minResolvedTs", task.maxResolvedTs))
 					}
 
 					event, err = task.backend.readNext()
