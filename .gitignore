@@ -42,3 +42,6 @@ tiflash-config-preprocessed.toml
 # Files generated when running docker-compose
 docker/data
 docker/logs
+
+# Generated code for serialization of events
+cdc/model/kv_gen*

@@ -20,6 +20,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"io"
 	"math"
 	"os"
@@ -754,50 +755,51 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	sorterOutCh := make(chan *flushTask, 4096)
 	defer close(sorterOutCh)
 
-	errCh := make(chan error)
+	errg, subctx := errgroup.WithContext(ctx)
+
 	for i := range heapSorters {
 		finalI := i
 		heapSorters[finalI] = newHeapSorter(finalI, s.pool, sorterOutCh)
-		go func() {
-			errCh <- heapSorters[finalI].run(ctx)
-		}()
+		errg.Go(func() error {
+			return heapSorters[finalI].run(subctx)
+		})
 	}
 
-	go func() {
-		errCh <- runMerger(ctx, numConcurrentHeaps, sorterOutCh, s.outputCh)
-	}()
+	errg.Go(func() error {
+		return runMerger(subctx, numConcurrentHeaps, sorterOutCh, s.outputCh)
+	})
 
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case err := <-errCh:
-			if err != nil {
-				return errors.Trace(err)
-			}
-		case event := <-s.inputCh:
-			if event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved {
-				// broadcast resolved events
-				for _, sorter := range heapSorters {
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case sorter.inputCh <- event:
-					}
-				}
-				continue
-			}
-
-			// dispatch a row changed event
-			targetID := nextSorterID % numConcurrentHeaps
-			nextSorterID++
+	errg.Go(func() error {
+		for {
 			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case heapSorters[targetID].inputCh <- event:
+			case <-subctx.Done():
+				return subctx.Err()
+			case event := <-s.inputCh:
+				if event.RawKV != nil && event.RawKV.OpType == model.OpTypeResolved {
+					// broadcast resolved events
+					for _, sorter := range heapSorters {
+						select {
+						case <-subctx.Done():
+							return subctx.Err()
+						case sorter.inputCh <- event:
+						}
+					}
+					continue
+				}
+
+				// dispatch a row changed event
+				targetID := nextSorterID % numConcurrentHeaps
+				nextSorterID++
+				select {
+				case <-subctx.Done():
+					return subctx.Err()
+				case heapSorters[targetID].inputCh <- event:
+				}
 			}
 		}
-	}
+	})
+
+	return errg.Wait()
 }
 
 // AddEntry implements the EventSorter interface
