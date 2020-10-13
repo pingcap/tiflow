@@ -333,13 +333,13 @@ func (o *Owner) newChangeFeed(
 	}
 	errCh := make(chan error, 1)
 
-	sink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
+	primarySink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	defer func() {
-		if resultErr != nil && sink != nil {
-			sink.Close()
+		if resultErr != nil && primarySink != nil {
+			primarySink.Close()
 		}
 	}()
 	go func() {
@@ -352,9 +352,17 @@ func (o *Owner) newChangeFeed(
 		cancel()
 	}()
 
-	err = sink.Initialize(ctx, sinkTableInfo)
+	err = primarySink.Initialize(ctx, sinkTableInfo)
 	if err != nil {
 		log.Error("error on running owner", zap.Error(err))
+	}
+
+	var syncpointStore sink.SyncpointStore
+	if info.SyncPointEnabled {
+		syncpointStore, err = sink.NewSyncpointStore(ctx, id, info.SinkURI)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	cf = &changeFeed{
@@ -375,11 +383,16 @@ func (o *Owner) newChangeFeed(
 		ddlState:          model.ChangeFeedSyncDML,
 		ddlExecutedTs:     checkpointTs,
 		targetTs:          info.GetTargetTs(),
+		ddlTs:             0,
+		updateResolvedTs:  true,
+		startTimer:        make(chan bool),
+		syncpointStore:    syncpointStore,
+		syncCancel:        nil,
 		taskStatus:        processorsInfos,
 		taskPositions:     taskPositions,
 		etcdCli:           o.etcdClient,
 		filter:            filter,
-		sink:              sink,
+		sink:              primarySink,
 		cyclicEnabled:     info.Config.Cyclic.IsEnabled(),
 		lastRebalanceTime: time.Now(),
 	}
@@ -523,6 +536,19 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 				zap.String("changefeed", changeFeedID), zap.Error(err))
 			continue
 		}
+
+		if newCf.info.SyncPointEnabled {
+			log.Info("syncpoint is on, creating the sync table")
+			//create the sync table
+			err := newCf.syncpointStore.CreateSynctable(ctx)
+			if err != nil {
+				return err
+			}
+			newCf.startSyncPointTicker(ctx, newCf.info.SyncPointInterval)
+		} else {
+			log.Info("syncpoint is off")
+		}
+
 		o.changeFeeds[changeFeedID] = newCf
 		delete(o.stoppedFeeds, changeFeedID)
 	}
@@ -643,6 +669,16 @@ func (o *Owner) handleDDL(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+		}
+	}
+	return nil
+}
+
+// handleSyncPoint call handleSyncPoint of every changefeeds
+func (o *Owner) handleSyncPoint(ctx context.Context) error {
+	for _, cf := range o.changeFeeds {
+		if err := cf.handleSyncPoint(ctx); err != nil {
+			return errors.Trace(err)
 		}
 	}
 	return nil
@@ -805,8 +841,10 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			cf.stopSyncPointTicker()
 		case model.AdminRemove, model.AdminFinish:
 			if cf != nil {
+				cf.stopSyncPointTicker()
 				err := o.dispatchJob(ctx, job)
 				if err != nil {
 					return errors.Trace(err)
@@ -1026,6 +1064,11 @@ func (o *Owner) run(ctx context.Context) error {
 	}
 
 	err = o.handleDDL(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = o.handleSyncPoint(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
