@@ -30,6 +30,9 @@ jobs:
       - name: Update Vendor
         run: go mod vendor
 
+      - name: Pull images
+        run: docker-compose -f docker-compose-canal.yml pull --ignore-pull-failures
+
       - name: Build Integration Framework
         run: |
           cd $GITHUB_WORKSPACE/integration
@@ -72,6 +75,9 @@ jobs:
 
       - name: Update Vendor
         run: go mod vendor
+
+      - name: Pull images
+        run: docker-compose -f docker-compose-avro.yml pull --ignore-pull-failures
 
       - name: Build Integration Framework
         run: |
