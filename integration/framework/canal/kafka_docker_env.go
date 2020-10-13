@@ -15,11 +15,11 @@ package canal
 
 import (
 	"database/sql"
-	"github.com/pingcap/errors"
 	"io/ioutil"
 	"net/http"
 
 	"github.com/integralist/go-findroot/find"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 	"go.uber.org/zap"
