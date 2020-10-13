@@ -101,6 +101,7 @@ services:
       - --data-dir=/data/upstream-pd
       - --config=/pd.toml
       - --log-file=/logs/upstream-pd.log
+      - -L=debug
     restart: on-failure
 
   upstream-tikv0:
@@ -192,6 +193,7 @@ services:
       - --data-dir=/data/downstream-pd
       - --config=/pd.toml
       - --log-file=/logs/downstream-pd.log
+      - -L=debug
     restart: on-failure
 
   downstream-tikv0:
