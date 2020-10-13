@@ -15,9 +15,11 @@ package canal
 
 import (
 	"database/sql"
-	"errors"
+	"io/ioutil"
+	"net/http"
 
 	"github.com/integralist/go-findroot/find"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 	"go.uber.org/zap"
@@ -35,22 +37,10 @@ type KafkaDockerEnv struct {
 
 // NewKafkaDockerEnv creates a new KafkaDockerEnv
 func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
-	checkDbConn := func(dns string) error {
-		db, err := sql.Open("mysql", dns)
-		if err != nil {
-			return err
-		}
-		if db == nil {
-			return errors.New("Can not connect to " + dns)
-		}
-		defer db.Close()
-		err = db.Ping()
-		if err != nil {
-			return err
-		}
-		return nil
-	}
 	healthChecker := func() error {
+		if err := checkCanalAdapterState(); err != nil {
+			return err
+		}
 		if err := checkDbConn(framework.UpstreamDSN); err != nil {
 			return err
 		}
@@ -74,4 +64,46 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 			HealthChecker: healthChecker,
 		},
 	}}
+}
+
+func checkDbConn(dns string) error {
+	db, err := sql.Open("mysql", dns)
+	if err != nil {
+		return err
+	}
+	if db == nil {
+		return errors.New("Can not connect to " + dns)
+	}
+	defer db.Close()
+	err = db.Ping()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func checkCanalAdapterState() error {
+	resp, err := http.Get(
+		"http://127.0.0.1:8081/syncSwitch/" + testDbName)
+	if err != nil {
+		return err
+	}
+
+	if resp.Body == nil {
+		return errors.New("Canal Adapter Rest API returned empty body, there is no subscript topic")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		str, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		log.Warn(
+			"Canal Adapter Rest API returned",
+			zap.Int("status", resp.StatusCode),
+			zap.ByteString("body", str))
+		return errors.Errorf("Kafka Connect Rest API returned status code %d", resp.StatusCode)
+	}
+	return nil
 }
