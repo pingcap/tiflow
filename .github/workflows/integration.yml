@@ -54,6 +54,7 @@ jobs:
           path: ${{ github.workspace }}/docker/logs/*
 
       - name: Clean Up
+        if: ${{ always() }}
         run: |
           $GITHUB_WORKSPACE/scripts/canal/canal-local-test.sh down
 
@@ -103,5 +104,6 @@ jobs:
           path: ${{ github.workspace }}/docker/logs/*
 
       - name: Clean Up
+        if: ${{ always() }}
         run: |
           $GITHUB_WORKSPACE/scripts/avro-local-test.sh down
