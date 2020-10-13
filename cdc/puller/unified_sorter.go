@@ -28,10 +28,10 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/mackerelio/go-osstat/memory"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/mackerelio/go-osstat/memory"
 )
 
 const (
@@ -281,9 +281,7 @@ func newBackEndPool(dir string) *backEndPool {
 		ticker := time.NewTicker(15 * time.Second)
 
 		for {
-			select {
-			case <-ticker.C:
-			}
+			<-ticker.C
 
 			// update memPressure
 			memory, err := memory.Get()
@@ -377,7 +375,7 @@ func (p *backEndPool) dealloc(backEnd sorterBackEnd) error {
 }
 
 type flushTask struct {
-	heapSorterId  int
+	heapSorterID  int
 	backend       sorterBackEnd
 	maxResolvedTs uint64
 	finished      chan error
@@ -417,7 +415,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	}
 
 	task := &flushTask{
-		heapSorterId:  h.id,
+		heapSorterID:  h.id,
 		backend:       backEnd,
 		maxResolvedTs: maxResolvedTs,
 		finished:      make(chan error),
@@ -436,7 +434,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}
 	}
 
-	log.Debug("Unified Sorter new flushTask", zap.Int("heap-id", task.heapSorterId),
+	log.Debug("Unified Sorter new flushTask", zap.Int("heap-id", task.heapSorterID),
 		zap.Uint64("resolvedTs", task.maxResolvedTs))
 	go func() {
 		defer close(task.finished)
@@ -458,7 +456,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}
 
 		log.Debug("Unified Sorter flushTask finished",
-			zap.Int("heap-id", task.heapSorterId),
+			zap.Int("heap-id", task.heapSorterID),
 			zap.Uint64("resolvedTs", task.maxResolvedTs),
 			zap.Int("size", batchSize))
 	}()
@@ -518,7 +516,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := uint64(0)
 
-	pendingSet := make(map[*flushTask]*model.PolymorphicEvent, 0)
+	pendingSet := make(map[*flushTask]*model.PolymorphicEvent)
 
 	lastOutputTs := uint64(0)
 
@@ -536,7 +534,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 	}
 
 	onMinResolvedTsUpdate := func() error {
-		workingSet := make(map[*flushTask]struct{}, 0)
+		workingSet := make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
 		for task, cache := range pendingSet {
 			if task.maxResolvedTs <= minResolvedTs {
@@ -709,8 +707,8 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				pendingSet[task] = nil
 			} // otherwise it is an empty flush
 
-			if lastResolvedTs[task.heapSorterId] < task.maxResolvedTs {
-				lastResolvedTs[task.heapSorterId] = task.maxResolvedTs
+			if lastResolvedTs[task.heapSorterID] < task.maxResolvedTs {
+				lastResolvedTs[task.heapSorterID] = task.maxResolvedTs
 			}
 
 			minTemp := uint64(math.MaxUint64)
@@ -731,6 +729,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 	}
 }
 
+// UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
 type UnifiedSorter struct {
 	inputCh  chan *model.PolymorphicEvent
 	outputCh chan *model.PolymorphicEvent
@@ -738,6 +737,7 @@ type UnifiedSorter struct {
 	pool     *backEndPool
 }
 
+// NewUnifiedSorter creates a new UnifiedSorter
 func NewUnifiedSorter(dir string) *UnifiedSorter {
 	return &UnifiedSorter{
 		inputCh:  make(chan *model.PolymorphicEvent, 128000),
@@ -747,8 +747,9 @@ func NewUnifiedSorter(dir string) *UnifiedSorter {
 	}
 }
 
+// Run implements the EventSorter interface
 func (s *UnifiedSorter) Run(ctx context.Context) error {
-	nextSorterId := 0
+	nextSorterID := 0
 	heapSorters := make([]*heapSorter, numConcurrentHeaps)
 
 	sorterOutCh := make(chan *flushTask, 4096)
@@ -789,17 +790,18 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 			}
 
 			// dispatch a row changed event
-			targetId := nextSorterId % numConcurrentHeaps
-			nextSorterId++
+			targetID := nextSorterID % numConcurrentHeaps
+			nextSorterID++
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case heapSorters[targetId].inputCh <- event:
+			case heapSorters[targetID].inputCh <- event:
 			}
 		}
 	}
 }
 
+// AddEntry implements the EventSorter interface
 func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEvent) {
 	select {
 	case <-ctx.Done():
@@ -808,6 +810,7 @@ func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEv
 	}
 }
 
+// Output implements the EventSorter interface
 func (s *UnifiedSorter) Output() <-chan *model.PolymorphicEvent {
 	return s.outputCh
 }

@@ -17,7 +17,6 @@ require (
 	github.com/google/btree v1.0.0
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/websocket v1.4.1 // indirect
-	github.com/grandecola/mmap v0.6.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/integralist/go-findroot v0.0.0-20160518114804-ac90681525dc
 	github.com/jarcoal/httpmock v1.0.5
@@ -25,7 +24,6 @@ require (
 	github.com/linkedin/goavro/v2 v2.9.7
 	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-shellwords v1.0.3
-	github.com/pascaldekloe/colfer v1.8.1 // indirect
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/br v0.0.0-20200907090854-8a4cd9e0abd1
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
@@ -43,7 +41,6 @@ require (
 	github.com/stretchr/testify v1.5.1
 	github.com/tikv/pd v1.1.0-beta.0.20200907080620-6830f5bb92a2
 	github.com/tinylib/msgp v1.1.2
-	github.com/ttacon/chalk v0.0.0-20160626202418-22c06c80ed31 // indirect
 	github.com/uber-go/atomic v1.3.2
 	github.com/vmihailenco/msgpack/v5 v5.0.0-beta.1
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200425165423-262c93980547
