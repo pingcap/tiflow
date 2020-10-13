@@ -105,5 +105,7 @@ func (p *CDCProfile) String() string {
 	for k, v := range p.Opts {
 		builder.WriteString("--opts=\"" + k + "=" + v + "\" ")
 	}
+
+	builder.WriteString(" --log-level debug")
 	return builder.String()
 }
