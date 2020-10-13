@@ -31,8 +31,8 @@ import (
 )
 
 const (
-	numProducers          = 10
-	eventCountPerProducer = 1000000000
+	numProducers          = 16
+	eventCountPerProducer = 10000
 )
 
 type sorterSuite struct{}
@@ -89,7 +89,7 @@ func testSorter(c *check.C, sorter EventSorter) {
 
 	// launch the resolver
 	errg.Go(func() error {
-		ticker := time.NewTicker(200 * time.Millisecond)
+		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {

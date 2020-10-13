@@ -24,7 +24,6 @@ import (
 	"math"
 	"os"
 	"reflect"
-	"runtime"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -32,13 +31,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/mackerelio/go-osstat/memory"
 )
 
 const (
 	fileBufferSize      = 1 * 1024 * 1024  // 1MB
 	heapSizeLimit       = 16 * 1024 * 1024 // 16MB
 	numConcurrentHeaps  = 16
-	memoryPressureThres = 85
+	memoryPressureThres = 70
 	magic               = 0xbeefbeef
 )
 
@@ -286,12 +286,15 @@ func newBackEndPool(dir string) *backEndPool {
 			}
 
 			// update memPressure
-			var mstats runtime.MemStats
-			runtime.ReadMemStats(&mstats)
-			memPressure := mstats.HeapAlloc * 100 / mstats.Sys
+			memory, err := memory.Get()
+			if err != nil {
+				log.Fatal("unified sorter: getting system memory usage failed", zap.Error(err))
+			}
+
+			memPressure := memory.Used * 100 / memory.Total
 			atomic.StoreInt32(&ret.memPressure, int32(memPressure))
-			if memPressure > 80 {
-				log.Info("unified sorter: high memory pressure", zap.Uint64("memPressure", memPressure))
+			if memPressure > 50 {
+				log.Debug("unified sorter: high memory pressure", zap.Uint64("memPressure", memPressure))
 			}
 
 			// garbage collect temporary files in batches
