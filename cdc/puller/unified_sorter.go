@@ -24,7 +24,7 @@ import (
 	"math"
 	"os"
 	"reflect"
-	"sync"
+	"runtime"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -35,11 +35,11 @@ import (
 )
 
 const (
-	fileBufferSize     = 1 * 1024 * 1024 // 1MB
-	heapSizeLimit      = 16 * 1024 * 1024 // 16MB
-	numConcurrentHeaps = 16
-	memoryLimit        = 128 * 1024 * 1024 // 1GB
-	magic              = 0xbeefbeef
+	fileBufferSize      = 1 * 1024 * 1024  // 1MB
+	heapSizeLimit       = 16 * 1024 * 1024 // 16MB
+	numConcurrentHeaps  = 16
+	memoryPressureThres = 85
+	magic               = 0xbeefbeef
 )
 
 type sorterBackEnd interface {
@@ -265,7 +265,7 @@ func (m *memorySorterBackEnd) reset() error {
 type backEndPool struct {
 	memoryUseEstimate int64
 	fileNameCounter   uint64
-	mu                sync.Mutex
+	memPressure       int32
 	cache             [256]unsafe.Pointer
 	dir               string
 }
@@ -285,6 +285,16 @@ func newBackEndPool(dir string) *backEndPool {
 			case <-ticker.C:
 			}
 
+			// update memPressure
+			var mstats runtime.MemStats
+			runtime.ReadMemStats(&mstats)
+			memPressure := mstats.HeapAlloc * 100 / mstats.Sys
+			atomic.StoreInt32(&ret.memPressure, int32(memPressure))
+			if memPressure > 80 {
+				log.Info("unified sorter: high memory pressure", zap.Uint64("memPressure", memPressure))
+			}
+
+			// garbage collect temporary files in batches
 			freedCount := 0
 			for i := range ret.cache {
 				ptr := &ret.cache[i]
@@ -312,7 +322,7 @@ func newBackEndPool(dir string) *backEndPool {
 }
 
 func (p *backEndPool) alloc() (sorterBackEnd, error) {
-	if atomic.LoadInt64(&p.memoryUseEstimate) < memoryLimit {
+	if atomic.LoadInt32(&p.memPressure) < memoryPressureThres {
 		ret := new(memorySorterBackEnd)
 		atomic.AddInt64(&p.memoryUseEstimate, heapSizeLimit)
 		return ret, nil
@@ -357,8 +367,10 @@ func (p *backEndPool) dealloc(backEnd sorterBackEnd) error {
 		}
 		// Cache is full. Let GC do its job
 		return nil
+	default:
+		log.Fatal("backEndPool: unexpected backEnd type to be deallocated", zap.Reflect("type", reflect.TypeOf(backEnd)))
 	}
-	log.Fatal("backEndPool: unexpected backEnd type to be deallocated", zap.Reflect("type", reflect.TypeOf(backEnd)))
+	return nil
 }
 
 type flushTask struct {
@@ -367,7 +379,7 @@ type flushTask struct {
 	maxResolvedTs uint64
 	finished      chan error
 	dealloc       func() error
-	lastTs        uint64  // for debugging TODO remove
+	lastTs        uint64 // for debugging TODO remove
 }
 
 type heapSorter struct {
@@ -463,7 +475,7 @@ func (h *heapSorter) run(ctx context.Context) error {
 	)
 	maxResolved = 0
 	heapSizeBytesEstimate = 0
-	flushTicker := time.NewTicker(5 * time.Second)
+	flushTicker := time.NewTicker(30 * time.Second)
 	for {
 		select {
 		case <-ctx.Done():
@@ -542,7 +554,6 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 					case <-after:
 						log.Warn("unified sorter: backEnd flush too long", zap.Uint64("minResolvedTs", task.maxResolvedTs))
 					}
-
 
 					event, err = task.backend.readNext()
 					if err != nil {
@@ -658,7 +669,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				continue
 			}
 
-			if counter % 10000 == 0{
+			if counter%10000 == 0 {
 				log.Debug("Merging progress", zap.Int("counter", counter))
 			}
 			heap.Push(sortHeap, &sortItem{
@@ -672,7 +683,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 		}
 
 		if counter >= 10000 {
-			log.Debug("Unified Sorter: merging ended", zap.Uint64("resolvedTs", minResolvedTs), zap.Uint64("count", counter))
+			log.Debug("Unified Sorter: merging ended", zap.Uint64("resolvedTs", minResolvedTs), zap.Int("count", counter))
 		}
 		err := sendResolvedEvent(minResolvedTs)
 		if err != nil {

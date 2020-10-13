@@ -32,7 +32,7 @@ import (
 
 const (
 	numProducers          = 10
-	eventCountPerProducer = 10000000
+	eventCountPerProducer = 1000000000
 )
 
 type sorterSuite struct{}

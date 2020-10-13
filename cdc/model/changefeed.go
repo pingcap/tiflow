@@ -173,7 +173,7 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 func (info *ChangeFeedInfo) VerifyAndFix() error {
 	defaultConfig := config.GetDefaultReplicaConfig()
 	if info.Engine == "" {
-		info.Engine = SortInMemory
+		info.Engine = SortUnified
 	}
 	if info.Config.Filter == nil {
 		info.Config.Filter = defaultConfig.Filter

@@ -23,6 +23,7 @@ require (
 	github.com/jarcoal/httpmock v1.0.5
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/linkedin/goavro/v2 v2.9.7
+	github.com/mackerelio/go-osstat v0.1.0
 	github.com/mattn/go-shellwords v1.0.3
 	github.com/pascaldekloe/colfer v1.8.1 // indirect
 	github.com/philhofer/fwd v1.0.0 // indirect
