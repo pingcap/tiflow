@@ -84,7 +84,7 @@ services:
     restart: on-failure
 
   upstream-pd:
-    image: pingcap/pd:nightly
+    image: pingcap/pd:release-4.0-nightly
     ports:
       - "2379:2379"
     volumes:
@@ -105,7 +105,7 @@ services:
     restart: on-failure
 
   upstream-tikv0:
-    image: pingcap/tikv:nightly
+    image: pingcap/tikv:release-4.0-nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
       - /data
@@ -122,7 +122,7 @@ services:
     restart: on-failure
 
   upstream-tikv1:
-    image: pingcap/tikv:nightly
+    image: pingcap/tikv:release-4.0-nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
       - /data
@@ -139,7 +139,7 @@ services:
     restart: on-failure
 
   upstream-tikv2:
-    image: pingcap/tikv:nightly
+    image: pingcap/tikv:release-4.0-nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
       - /data
@@ -156,7 +156,7 @@ services:
     restart: on-failure
 
   upstream-tidb:
-    image: pingcap/tidb:nightly
+    image: pingcap/tidb:release-4.0-nightly
     ports:
       - "4000:4000"
       - "10080:10080"
@@ -176,7 +176,7 @@ services:
     restart: on-failure
 
   downstream-pd:
-    image: pingcap/pd:nightly
+    image: pingcap/pd:release-4.0-nightly
     ports:
       - "3379:2379"
     volumes:
@@ -197,7 +197,7 @@ services:
     restart: on-failure
 
   downstream-tikv0:
-    image: pingcap/tikv:nightly
+    image: pingcap/tikv:release-4.0-nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
       - /data
@@ -214,7 +214,7 @@ services:
     restart: on-failure
 
   downstream-tikv1:
-    image: pingcap/tikv:nightly
+    image: pingcap/tikv:release-4.0-nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
       - /data
@@ -231,7 +231,7 @@ services:
     restart: on-failure
 
   downstream-tikv2:
-    image: pingcap/tikv:nightly
+    image: pingcap/tikv:release-4.0-nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
       - /data
@@ -248,7 +248,7 @@ services:
     restart: on-failure
 
   downstream-tidb:
-    image: pingcap/tidb:nightly
+    image: pingcap/tidb:release-4.0-nightly
     ports:
       - "5000:4000"
       - "20080:10080"

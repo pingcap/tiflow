@@ -35,7 +35,7 @@ jobs:
 
       - name: TiKV version
         run: docker run pingcap/tikv:nightly -V
-        
+
       - name: Build Integration Framework
         run: |
           cd $GITHUB_WORKSPACE/integration
