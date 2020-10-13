@@ -16,9 +16,8 @@ package puller
 import (
 	"context"
 	"github.com/pingcap/errors"
-	"go.uber.org/zap/zapcore"
 	"math"
-	"net/http"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -52,11 +51,8 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 }
 
 func (s *sorterSuite) TestSorterBasic(c *check.C) {
-	log.SetLevel(zapcore.DebugLevel)
-	go func() {
-		err := http.ListenAndServe("localhost:6060", nil)
-		c.Check(err, check.IsNil)
-	}()
+	err := os.MkdirAll("./sorter", 0755)
+	c.Assert(err, check.IsNil)
 	sorter := NewUnifiedSorter("./sorter")
 	testSorter(c, sorter)
 }
