@@ -10,7 +10,6 @@ on:
 
 jobs:
   Avro-integration:
-    needs: [Canal-integration]
     runs-on: ubuntu-latest
 
     steps:
@@ -53,6 +52,7 @@ jobs:
           $GITHUB_WORKSPACE/scripts/avro-local-test.sh down
 
   Canal-integration:
+    needs: [Avro-integration]
     runs-on: ubuntu-latest
 
     steps:
