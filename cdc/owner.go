@@ -603,9 +603,10 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 		if !o.gcSafepointLastUpdate.IsZero() {
 			_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, 0, 0)
 			if err != nil {
-				return cerror.WrapError(cerror.ErrOwnerUpdateGCSafepoint, err)
+				log.Warn("failed to update service safe point", zap.Error(err))
+			} else {
+				o.gcSafepointLastUpdate = time.Time{}
 			}
-			o.gcSafepointLastUpdate = *new(time.Time)
 		}
 		return nil
 	}
@@ -635,10 +636,10 @@ func (o *Owner) flushChangeFeedInfos(ctx context.Context) error {
 	if time.Since(o.gcSafepointLastUpdate) > GCSafepointUpdateInterval {
 		_, err := o.pdClient.UpdateServiceGCSafePoint(ctx, CDCServiceSafePointID, o.gcTTL, minCheckpointTs)
 		if err != nil {
-			log.Info("failed to update service safe point", zap.Error(err))
-			return cerror.WrapError(cerror.ErrOwnerUpdateGCSafepoint, err)
+			log.Warn("failed to update service safe point", zap.Error(err))
+		} else {
+			o.gcSafepointLastUpdate = time.Now()
 		}
-		o.gcSafepointLastUpdate = time.Now()
 	}
 	return nil
 }
