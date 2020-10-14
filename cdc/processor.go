@@ -873,7 +873,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				resolvedTs = localResolvedTs
 			}
 			if row.CRTs <= resolvedTs {
-				<-row.Finished
+				_ = row.WaitPrepare(ctx)
 				log.Fatal("The CRTs must be greater than the resolvedTs",
 					zap.String("model", "processor"),
 					zap.String("changefeed", p.changefeedID),
@@ -1098,6 +1098,7 @@ func (p *processor) sorterConsume(
 				continue
 			}
 
+			pEvent.Finished = make(chan struct{})
 			select {
 			case <-ctx.Done():
 				if errors.Cause(ctx.Err()) != context.Canceled {

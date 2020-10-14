@@ -192,7 +192,6 @@ func (f *fileSorterBackEnd) readNext() (*model.PolymorphicEvent, error) {
 	}
 
 	event := new(model.PolymorphicEvent)
-	event.Finished = make(chan struct{})
 	_, err = f.serde.unmarshal(event, f.rawBytes)
 	if err != nil {
 		return nil, errors.AddStack(err)

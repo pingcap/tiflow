@@ -37,7 +37,7 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 		StartTs:  rawKV.StartTs,
 		CRTs:     rawKV.CRTs,
 		RawKV:    rawKV,
-		Finished: make(chan struct{}),
+		Finished: nil,
 	}
 }
 
