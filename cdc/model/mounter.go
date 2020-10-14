@@ -25,7 +25,7 @@ type PolymorphicEvent struct {
 
 	RawKV    *RawKVEntry
 	Row      *RowChangedEvent
-	Finished chan struct{}
+	Finished chan struct{} `msgpack:",omitempty"`
 }
 
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
