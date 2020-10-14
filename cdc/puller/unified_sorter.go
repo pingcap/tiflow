@@ -25,6 +25,7 @@ import (
 	"math"
 	"os"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -279,7 +280,7 @@ func newBackEndPool(dir string) *backEndPool {
 	}
 
 	go func() {
-		ticker := time.NewTicker(15 * time.Second)
+		ticker := time.NewTicker(5 * time.Second)
 
 		for {
 			<-ticker.C
@@ -729,6 +730,11 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 	}
 }
 
+var (
+	pool *backEndPool
+	poolMu sync.Mutex
+)
+
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
 type UnifiedSorter struct {
 	inputCh  chan *model.PolymorphicEvent
@@ -739,11 +745,18 @@ type UnifiedSorter struct {
 
 // NewUnifiedSorter creates a new UnifiedSorter
 func NewUnifiedSorter(dir string) *UnifiedSorter {
+	poolMu.Lock()
+	defer poolMu.Unlock()
+
+	if pool == nil {
+		pool = newBackEndPool(dir)
+	}
+
 	return &UnifiedSorter{
 		inputCh:  make(chan *model.PolymorphicEvent, 128000),
 		outputCh: make(chan *model.PolymorphicEvent, 128000),
 		dir:      dir,
-		pool:     newBackEndPool(dir),
+		pool:     pool,
 	}
 }
 
