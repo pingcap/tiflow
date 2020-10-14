@@ -39,7 +39,7 @@ import (
 const (
 	fileBufferSize      = 1 * 1024 * 1024  // 1MB
 	heapSizeLimit       = 16 * 1024 * 1024 // 16MB
-	numConcurrentHeaps  = 16
+	numConcurrentHeaps  = 8
 	memoryPressureThres = 70
 	magic               = 0xbeefbeef
 )
