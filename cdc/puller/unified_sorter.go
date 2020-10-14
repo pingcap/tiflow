@@ -529,10 +529,6 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 	lastOutputTs := uint64(0)
 
 	sendResolvedEvent := func(ts uint64) error {
-		if ts < lastOutputTs {
-			log.Fatal("unified sorter: output ts regressed, bug?", zap.Uint64("cur-ts", ts), zap.Uint64("last-ts", lastOutputTs))
-		}
-		lastOutputTs = ts
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
