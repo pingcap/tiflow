@@ -309,11 +309,11 @@ func newBackEndPool(dir string) *backEndPool {
 				backEnd := (*fileSorterBackEnd)(innerPtr)
 				err := backEnd.free()
 				if err != nil {
-					log.Fatal("Cannot remove temporary file for sorting", zap.String("file", backEnd.name), zap.Error(err))
+					log.Warn("Cannot remove temporary file for sorting", zap.String("file", backEnd.name), zap.Error(err))
+				} else {
+					log.Info("Temporary file removed", zap.String("file", backEnd.name))
+					freedCount += 1
 				}
-				log.Info("Temporary file removed", zap.String("file", backEnd.name))
-				freedCount += 1
-
 				if freedCount >= 16 {
 					freedCount = 0
 					break
@@ -369,7 +369,11 @@ func (p *backEndPool) dealloc(backEnd sorterBackEnd) error {
 				return nil
 			}
 		}
-		// Cache is full. Let GC do its job
+		// Cache is full.
+		err := b.free()
+		if err != nil {
+			return errors.AddStack(err)
+		}
 		return nil
 	default:
 		log.Fatal("backEndPool: unexpected backEnd type to be deallocated", zap.Reflect("type", reflect.TypeOf(backEnd)))
@@ -564,7 +568,9 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 					}
 
 					if event == nil {
-						log.Fatal("Unexpected end of backEnd data, bug?", zap.Uint64("minResolvedTs", task.maxResolvedTs))
+						log.Fatal("Unexpected end of backEnd data, bug?",
+							zap.Uint64("minResolvedTs", task.maxResolvedTs),
+							zap.Int("size", task.backend.getSize()))
 					}
 				}
 
