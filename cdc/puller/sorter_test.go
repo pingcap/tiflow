@@ -118,12 +118,11 @@ func testSorter(c *check.C, sorter EventSorter) {
 			case <-ctx.Done():
 				return ctx.Err()
 			case event := <-sorter.Output():
-				//c.Assert(event.CRTs, check.GreaterEqual, lastTs)
-				if event.CRTs < lastTs {
-					panic("regressed")
-				}
-				lastTs = event.CRTs
 				if event.RawKV.OpType != model.OpTypeResolved {
+					if event.CRTs < lastTs {
+						panic("regressed")
+					}
+					lastTs = event.CRTs
 					counter += 1
 					if counter%10000 == 0 {
 						log.Debug("Messages received", zap.Int("counter", counter))
