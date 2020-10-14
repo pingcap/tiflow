@@ -1098,7 +1098,7 @@ func (p *processor) sorterConsume(
 				continue
 			}
 
-			pEvent.Finished = make(chan struct{})
+			pEvent.SetUpFinishedChan()
 			select {
 			case <-ctx.Done():
 				if errors.Cause(ctx.Err()) != context.Canceled {

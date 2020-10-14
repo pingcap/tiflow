@@ -25,7 +25,7 @@ type PolymorphicEvent struct {
 
 	RawKV    *RawKVEntry
 	Row      *RowChangedEvent
-	Finished chan struct{} `msgpack:",omitempty"`
+	finished chan struct{}
 }
 
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV
@@ -37,7 +37,7 @@ func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 		StartTs:  rawKV.StartTs,
 		CRTs:     rawKV.CRTs,
 		RawKV:    rawKV,
-		Finished: nil,
+		finished: nil,
 	}
 }
 
@@ -47,7 +47,7 @@ func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *Polymorphi
 		CRTs:     resolvedTs,
 		RawKV:    &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
 		Row:      nil,
-		Finished: nil,
+		finished: nil,
 	}
 }
 
@@ -56,21 +56,28 @@ func (e *PolymorphicEvent) RegionID() uint64 {
 	return e.RawKV.RegionID
 }
 
+// SetUpFinishedChan creates an internal channel to support PrepareFinished and WaitPrepare
+func (e *PolymorphicEvent) SetUpFinishedChan() {
+	if e.finished == nil {
+		e.finished = make(chan struct{})
+	}
+}
+
 // PrepareFinished marks the prepare process is finished
 // In prepare process, Mounter will translate raw KV to row data
 func (e *PolymorphicEvent) PrepareFinished() {
-	if e.Finished != nil {
-		close(e.Finished)
+	if e.finished != nil {
+		close(e.finished)
 	}
 }
 
 // WaitPrepare waits for prepare process finished
 func (e *PolymorphicEvent) WaitPrepare(ctx context.Context) error {
-	if e.Finished != nil {
+	if e.finished != nil {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-e.Finished:
+		case <-e.finished:
 		}
 	}
 	return nil
