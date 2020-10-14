@@ -1080,6 +1080,16 @@ func (p *processor) sorterConsume(
 			if pEvent == nil {
 				continue
 			}
+
+			select {
+			case <-ctx.Done():
+				if errors.Cause(ctx.Err()) != context.Canceled {
+					p.errCh <- ctx.Err()
+				}
+				return
+			case p.mounter.Input() <- pEvent:
+			}
+
 			if pEvent.RawKV != nil && pEvent.RawKV.OpType == model.OpTypeResolved {
 				atomic.StoreUint64(pResolvedTs, pEvent.CRTs)
 				lastResolvedTs = pEvent.CRTs
@@ -1136,14 +1146,6 @@ func (p *processor) pullerConsume(
 			}
 			pEvent := model.NewPolymorphicEvent(rawKV)
 			sorter.AddEntry(ctx, pEvent)
-			select {
-			case <-ctx.Done():
-				if errors.Cause(ctx.Err()) != context.Canceled {
-					p.errCh <- ctx.Err()
-				}
-				return
-			case p.mounter.Input() <- pEvent:
-			}
 		}
 	}
 }
