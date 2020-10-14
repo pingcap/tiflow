@@ -858,6 +858,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				continue
 			}
 			if row.CRTs <= resolvedTs {
+				<-row.Finished
 				log.Fatal("The CRTs must be greater than the resolvedTs",
 					zap.String("model", "processor"),
 					zap.Uint64("resolvedTs", resolvedTs),
