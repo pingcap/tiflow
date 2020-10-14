@@ -495,12 +495,15 @@ func (p *processor) flushTaskPosition(ctx context.Context) error {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
 	}
 	//p.position.Count = p.sink.Count()
-	err := p.etcdCli.PutTaskPosition(ctx, p.changefeedID, p.captureInfo.ID, p.position)
-	if err == nil {
+	updated, err := p.etcdCli.PutTaskPositionOnChange(ctx, p.changefeedID, p.captureInfo.ID, p.position)
+	if err != nil {
+		if errors.Cause(err) != context.Canceled {
+			log.Error("failed to flush task position", zap.Error(err))
+			return errors.Trace(err)
+		}
+	}
+	if updated {
 		log.Debug("flushed task position", zap.Stringer("position", p.position))
-	} else if errors.Cause(err) != context.Canceled {
-		log.Error("failed to flush task position", zap.Error(err))
-		return errors.Trace(err)
 	}
 	return nil
 }
@@ -857,10 +860,23 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				p.sinkEmittedResolvedNotifier.Notify()
 				continue
 			}
+			// Global resolved ts should fallback in some table rebalance cases,
+			// since the start-ts(from checkpoint ts) or a rebalanced table could
+			// be less then the global resolved ts.
+			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
+			if resolvedTs > localResolvedTs {
+				log.Info("global resolved ts fallback",
+					zap.String("changefeed", p.changefeedID),
+					zap.Uint64("localResolvedTs", localResolvedTs),
+					zap.Uint64("resolvedTs", resolvedTs),
+				)
+				resolvedTs = localResolvedTs
+			}
 			if row.CRTs <= resolvedTs {
 				<-row.Finished
 				log.Fatal("The CRTs must be greater than the resolvedTs",
 					zap.String("model", "processor"),
+					zap.String("changefeed", p.changefeedID),
 					zap.Uint64("resolvedTs", resolvedTs),
 					zap.Any("row", row))
 			}
@@ -1240,7 +1256,7 @@ func runProcessor(
 				Code:    code,
 				Message: err.Error(),
 			}
-			err = processor.etcdCli.PutTaskPosition(ctx, processor.changefeedID, processor.captureInfo.ID, processor.position)
+			_, err = processor.etcdCli.PutTaskPositionOnChange(ctx, processor.changefeedID, processor.captureInfo.ID, processor.position)
 			if err != nil {
 				log.Warn("upload processor error failed", zap.Error(err))
 			}

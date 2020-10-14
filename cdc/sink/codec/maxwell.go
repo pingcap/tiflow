@@ -27,8 +27,9 @@ import (
 
 // MaxwellEventBatchEncoder is a maxwell format encoder implementation
 type MaxwellEventBatchEncoder struct {
-	keyBuf   *bytes.Buffer
-	valueBuf *bytes.Buffer
+	keyBuf    *bytes.Buffer
+	valueBuf  *bytes.Buffer
+	batchSize int
 }
 
 type maxwellMessage struct {
@@ -142,6 +143,8 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 
 	d.valueBuf.Write(valueLenByte[:])
 	d.valueBuf.Write(value)
+
+	d.batchSize += 1
 	return EncoderNoOperation, nil
 }
 
@@ -260,6 +263,10 @@ func (d *MaxwellEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage
 
 // Build implements the EventBatchEncoder interface
 func (d *MaxwellEventBatchEncoder) Build() []*MQMessage {
+	if d.batchSize == 0 {
+		return nil
+	}
+
 	ret := NewMQMessage(d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0)
 	d.Reset()
 	return []*MQMessage{ret}
@@ -274,6 +281,7 @@ func (d *MaxwellEventBatchEncoder) MixedBuild(withVersion bool) []byte {
 func (d *MaxwellEventBatchEncoder) Reset() {
 	d.keyBuf.Reset()
 	d.valueBuf.Reset()
+	d.batchSize = 0
 	var versionByte [8]byte
 	binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
 	d.keyBuf.Write(versionByte[:])

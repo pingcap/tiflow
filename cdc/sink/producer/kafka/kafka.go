@@ -99,6 +99,11 @@ func (k *kafkaSaramaProducer) SendMessage(ctx context.Context, key []byte, value
 		failpoint.Return(nil)
 	})
 
+	failpoint.Inject("SinkFlushDMLPanic", func() {
+		time.Sleep(time.Second)
+		log.Fatal("SinkFlushDMLPanic")
+	})
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -240,6 +245,12 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 			atomic.StoreUint64(&k.partitionOffset[msg.Partition].flushed, flushedOffset)
 			k.flushedNotifier.Notify()
 		case err := <-k.asyncClient.Errors():
+			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
+			// because Go would store the type info and the resulted `error` variable would not be nil,
+			// which will cause the pkg/error library to malfunction.
+			if err == nil {
+				return nil
+			}
 			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
 		}
 	}

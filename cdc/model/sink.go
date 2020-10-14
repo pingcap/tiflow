@@ -183,7 +183,7 @@ func (b *ColumnFlagType) UnsetIsUnsigned() {
 type TableName struct {
 	Schema      string `toml:"db-name" json:"db-name"`
 	Table       string `toml:"tbl-name" json:"tbl-name"`
-	TableID     int64  `toml:"tbl-id" json:"tbl-"`
+	TableID     int64  `toml:"tbl-id" json:"tbl-id"`
 	IsPartition bool   `toml:"is-partition" json:"is-partition"`
 }
 
@@ -234,6 +234,31 @@ type RowChangedEvent struct {
 // IsDelete returns true if the row is a delete event
 func (r *RowChangedEvent) IsDelete() bool {
 	return len(r.PreColumns) != 0 && len(r.Columns) == 0
+}
+
+// HandleKeyColumns returns the column(s) corresponding to the handle key(s)
+func (r *RowChangedEvent) HandleKeyColumns() []*Column {
+	pkeyCols := make([]*Column, 0)
+
+	var cols []*Column
+	if r.IsDelete() {
+		cols = r.PreColumns
+	} else {
+		cols = r.Columns
+	}
+
+	for _, col := range cols {
+		if col != nil && col.Flag.IsHandleKey() {
+			pkeyCols = append(pkeyCols, col)
+		}
+	}
+
+	if len(pkeyCols) == 0 {
+		// TODO redact the message
+		log.Fatal("Cannot find handle key columns, bug?", zap.Reflect("event", r))
+	}
+
+	return pkeyCols
 }
 
 // Column represents a column value in row changed event

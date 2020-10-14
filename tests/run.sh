@@ -41,12 +41,15 @@ run_case() {
     bash "$script" "$sink_type"
 }
 
-test_case=$1
-sink_type=$2
+sink_type=$1
+
+set +eu
+test_case=$2
 
 if [ -z "$test_case" ]; then
     test_case="*"
 fi
+set -eu
 
 if [ "$test_case" == "*" ]; then
     for script in $CUR/*/run.sh; do

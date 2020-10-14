@@ -98,12 +98,7 @@ func (a *AvroEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		mqMessage.Value = nil
 	}
 
-	pkeyCols := make([]*model.Column, 0)
-	for _, col := range e.Columns {
-		if col.Flag.IsHandleKey() {
-			pkeyCols = append(pkeyCols, col)
-		}
-	}
+	pkeyCols := e.HandleKeyColumns()
 
 	if len(e.Columns) == 0 {
 		log.Fatal("AppendRowChangedEvent: no primary key is found", zap.String("table", e.Table.String()))
