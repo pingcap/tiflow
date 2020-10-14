@@ -49,17 +49,17 @@ groups:
       value: '{{ $value }}'
       summary: ticdc_puller_entry_sorter merge duration time more than 2s
 
-  - alert: ticdc_mounter_unmarshal_and_mount_time_more_than_10ms
-    expr: histogram_quantile(0.9, rate(ticdc_mounter_unmarshal_and_mount_bucket[1m])) * 1000 > 10
+  - alert: ticdc_mounter_unmarshal_and_mount_time_more_than_1s
+    expr: histogram_quantile(0.9, rate(ticdc_mounter_unmarshal_and_mount_bucket[1m])) * 1000 > 1000
     for: 1m
     labels:
       env: ENV_LABELS_ENV
       level: warning
-      expr: histogram_quantile(0.9, rate(ticdc_mounter_unmarshal_and_mount_bucket[1m])) * 1000 > 10
+      expr: histogram_quantile(0.9, rate(ticdc_mounter_unmarshal_and_mount_bucket[1m])) * 1000 > 1000
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
-      summary: cdc_mounter unmarshal and mount time more than 10ms
+      summary: cdc_mounter unmarshal and mount time more than 1s
 
   - alert: cdc_sink_execute_duration_time_more_than_10s
     expr: histogram_quantile(0.9, rate(ticdc_sink_txn_exec_duration_bucket[1m])) > 10
