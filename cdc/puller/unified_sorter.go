@@ -287,12 +287,12 @@ func newBackEndPool(dir string) *backEndPool {
 			<-ticker.C
 
 			// update memPressure
-			memory, err := memory.Get()
+			m, err := memory.Get()
 			if err != nil {
 				log.Fatal("unified sorter: getting system memory usage failed", zap.Error(err))
 			}
 
-			memPressure := memory.Used * 100 / memory.Total
+			memPressure := m.Used * 100 / m.Total
 			atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 			if memPressure > 50 {
 				log.Debug("unified sorter: high memory pressure", zap.Uint64("memPressure", memPressure))
@@ -309,7 +309,7 @@ func newBackEndPool(dir string) *backEndPool {
 				backEnd := (*fileSorterBackEnd)(innerPtr)
 				err := backEnd.free()
 				if err != nil {
-					log.Fatal("Cannot remove temporary file for sorting", zap.String("file", backEnd.name))
+					log.Fatal("Cannot remove temporary file for sorting", zap.String("file", backEnd.name), zap.Error(err))
 				}
 				log.Info("Temporary file removed", zap.String("file", backEnd.name))
 				freedCount += 1
