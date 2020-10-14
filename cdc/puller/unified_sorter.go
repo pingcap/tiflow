@@ -731,7 +731,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 }
 
 var (
-	pool *backEndPool
+	pool   *backEndPool
 	poolMu sync.Mutex
 )
 
