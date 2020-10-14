@@ -275,15 +275,17 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		}
 	}
 	info := &model.ChangeFeedInfo{
-		SinkURI:    sinkURI,
-		Opts:       make(map[string]string),
-		CreateTime: time.Now(),
-		StartTs:    startTs,
-		TargetTs:   targetTs,
-		Config:     cfg,
-		Engine:     model.SortEngine(sortEngine),
-		SortDir:    sortDir,
-		State:      model.StateNormal,
+		SinkURI:           sinkURI,
+		Opts:              make(map[string]string),
+		CreateTime:        time.Now(),
+		StartTs:           startTs,
+		TargetTs:          targetTs,
+		Config:            cfg,
+		Engine:            model.SortEngine(sortEngine),
+		SortDir:           sortDir,
+		State:             model.StateNormal,
+		SyncPointEnabled:  syncPointEnabled,
+		SyncPointInterval: syncPointInterval,
 	}
 
 	tz, err := util.GetTimezone(timezone)
@@ -354,6 +356,8 @@ func changefeedConfigVariables(command *cobra.Command) {
 	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
 	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
 	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
+	command.PersistentFlags().BoolVar(&syncPointEnabled, "sync-point", false, "(Expremental) Set and Record syncpoint in replication(default off)")
+	command.PersistentFlags().DurationVar(&syncPointInterval, "sync-interval", 10*time.Minute, "(Expremental) Set the interval for syncpoint in replication(default 10min)")
 }
 
 func newCreateChangefeedCommand() *cobra.Command {

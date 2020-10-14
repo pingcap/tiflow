@@ -860,9 +860,22 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				p.sinkEmittedResolvedNotifier.Notify()
 				continue
 			}
+			// Global resolved ts should fallback in some table rebalance cases,
+			// since the start-ts(from checkpoint ts) or a rebalanced table could
+			// be less then the global resolved ts.
+			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
+			if resolvedTs > localResolvedTs {
+				log.Info("global resolved ts fallback",
+					zap.String("changefeed", p.changefeedID),
+					zap.Uint64("localResolvedTs", localResolvedTs),
+					zap.Uint64("resolvedTs", resolvedTs),
+				)
+				resolvedTs = localResolvedTs
+			}
 			if row.CRTs <= resolvedTs {
 				log.Fatal("The CRTs must be greater than the resolvedTs",
 					zap.String("model", "processor"),
+					zap.String("changefeed", p.changefeedID),
 					zap.Uint64("resolvedTs", resolvedTs),
 					zap.Any("row", row))
 			}
