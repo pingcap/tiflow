@@ -66,13 +66,13 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 	}}
 }
 
-func checkDbConn(dns string) error {
-	db, err := sql.Open("mysql", dns)
+func checkDbConn(dsn string) error {
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return err
 	}
 	if db == nil {
-		return errors.New("Can not connect to " + dns)
+		return errors.New("Can not connect to " + dsn)
 	}
 	defer db.Close()
 	err = db.Ping()

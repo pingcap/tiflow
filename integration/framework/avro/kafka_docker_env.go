@@ -66,7 +66,7 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 			return errors.New("kafka connect healthcheck did not return health info")
 		}
 
-		if !healthy.(bool) {
+		if v, ok := healthy.(bool); !ok || !v {
 			return errors.New("kafka connect not healthy")
 		}
 
