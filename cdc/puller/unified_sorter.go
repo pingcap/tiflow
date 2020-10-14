@@ -340,7 +340,7 @@ func (p *backEndPool) alloc() (sorterBackEnd, error) {
 		}
 	}
 
-	fname := fmt.Sprintf("%s/sort-%d", p.dir, atomic.AddUint64(&p.fileNameCounter, 1))
+	fname := fmt.Sprintf("%s/sort-%d-%d", p.dir, os.Getpid(), atomic.AddUint64(&p.fileNameCounter, 1))
 	log.Debug("Unified Sorter: trying to create file backEnd")
 	ret, err := newFileSorterBackEnd(fname, &msgPackGenSerde{})
 	if err != nil {
