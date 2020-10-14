@@ -193,15 +193,8 @@ func flushEventsToFile(ctx context.Context, fullpath string, entries []*model.Po
 	dataBuf := new(bytes.Buffer)
 	var dataLen [8]byte
 	for _, entry := range entries {
-		err := entry.WaitPrepare(ctx)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		if entry.Row == nil {
-			continue
-		}
 		dataBuf.Reset()
-		err = msgpack.NewEncoder(dataBuf).Encode(entry)
+		err := msgpack.NewEncoder(dataBuf).Encode(entry)
 		if err != nil {
 			return 0, cerror.WrapError(cerror.ErrFileSorterEncode, err)
 		}
