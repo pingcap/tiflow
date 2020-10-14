@@ -440,9 +440,10 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 func (m *mounterImpl) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
 	// if m.enableOldValue == true, go into this function
 	// if m.enableNewValue == false and row.Delete == false, go into this function
-	// if m.enableNewValue == false and row.Delete == true and tableInfo.PKIsHandle = true, go into this function
-	// only if m.enableNewValue == false and row.Delete == true and tableInfo.PKIsHandle == false, skip this function
-	if !m.enableOldValue && row.Delete && !(tableInfo.PKIsHandle || tableInfo.IsCommonHandle) {
+	// if m.enableNewValue == false and row.Delete == true and use explict row id, go into this function
+	// only if m.enableNewValue == false and row.Delete == true and use implicit row id(_tidb_rowid), skip this function
+	useImplicitTiDBRowID := !tableInfo.PKIsHandle && !tableInfo.IsCommonHandle
+	if !m.enableOldValue && row.Delete && useImplicitTiDBRowID {
 		return nil, nil
 	}
 

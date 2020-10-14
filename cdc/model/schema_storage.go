@@ -108,9 +108,10 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 		}
 		ti.rowColInfos[i] = rowcodec.ColInfo{
-			ID:         col.ID,
-			IsPKHandle: pkIsHandle,
-			Ft:         col.FieldType.Clone(),
+			ID:            col.ID,
+			IsPKHandle:    pkIsHandle,
+			Ft:            col.FieldType.Clone(),
+			VirtualGenCol: col.IsGenerated(),
 		}
 		ti.rowColFieldTps[col.ID] = ti.rowColInfos[i].Ft
 	}
