@@ -640,7 +640,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 
 			select {
 			case <-resolvedTicker.C:
-				err := sendResolvedEvent(event.CRTs)
+				err := sendResolvedEvent(event.CRTs - 1)
 				if err != nil {
 					return errors.Trace(err)
 				}
