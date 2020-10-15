@@ -39,7 +39,7 @@ const (
 // newBlackHoleSink creates a block hole sink
 func newTicdcToOraclSink(ctx context.Context, opts map[string]string) *ticdcToOraclSink {
 
-	address := "127.0.0.1:9098"
+	address := "172.16.4.91:9098"
 	//address := "192.168.198.48:9099"
 	conn, err := grpc.Dial(
 		address,
@@ -67,7 +67,8 @@ func newTicdcToOraclSink(ctx context.Context, opts map[string]string) *ticdcToOr
 		return nil
 	}
 	client := DSGEntryProtocol.NewDsgTicdcStreamingClient(conn)
-	request, err := client.DsgTicdcStreamingRequest(ctx)
+	grpcCtx := context.Background()
+	request, err := client.DsgTicdcStreamingRequest(grpcCtx)
 	if err != nil {
 		fmt.Print(err)
 		return nil
@@ -96,6 +97,8 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 	var schemaName string
 	var tableName string
 	var batchID string
+	var colType string
+
 	if len(rows) == 0 {
 		return nil
 	} else {
@@ -131,7 +134,11 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 				columnBuilder.ColName = &column.Name
 				columnValue := model.ColumnValueString(column.Value)
 				columnBuilder.ColValue = &columnValue
-				colType := "integer"
+				if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
+					colType = "integer"
+				} else if column.Type == 15 || column.Type == 253 || column.Type == 245 {
+					colType = "string"
+				}
 				columnBuilder.ColType = &colType
 				rowdataBuilder.Columns = append(rowdataBuilder.Columns, columnBuilder)
 			}
@@ -143,7 +150,11 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 					columnBuilder.ColName = &column.Name
 					columnValue := model.ColumnValueString(column.Value)
 					columnBuilder.ColValue = &columnValue
-					colType := "integer"
+					if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
+						colType = "integer"
+					} else if column.Type == 15 || column.Type == 253 || column.Type == 245 {
+						colType = "string"
+					}
 					columnBuilder.ColType = &colType
 					rowdataBuilder.Columns = append(rowdataBuilder.Columns, columnBuilder)
 				}
@@ -156,7 +167,11 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 				columnBuilder.ColName = &column.Name
 				columnValue := model.ColumnValueString(column.Value)
 				columnBuilder.ColValue = &columnValue
-				colType := "integer"
+				if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
+					colType = "integer"
+				} else if column.Type == 15 || column.Type == 253 || column.Type == 245 {
+					colType = "string"
+				}
 				columnBuilder.ColType = &colType
 				colFlag := int32(0)
 				columnBuilder.ColFlags = &colFlag
@@ -168,7 +183,11 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 				columnBuilder.ColName = &column.Name
 				columnValue := model.ColumnValueString(column.Value)
 				columnBuilder.ColValue = &columnValue
-				colType := "integer"
+				if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
+					colType = "integer"
+				} else if column.Type == 15 || column.Type == 253 || column.Type == 245 {
+					colType = "string"
+				}
 				columnBuilder.ColType = &colType
 				colFlag := int32(1)
 				columnBuilder.ColFlags = &colFlag
@@ -211,7 +230,22 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 	log.Info("show entryBuilder ", zap.Reflect("e", entryBuilder))
 	err = b.clientRequest.Send(entryBuilder)
 	if err != nil {
-		return errors.Trace(err)
+		log.Warn("the connection to dsg server is broken")
+		_, err2 := b.clientRequest.CloseAndRecv()
+		if err2 != nil {
+			log.Warn("error when close the connection", zap.Error(err2))
+		}
+		client := DSGEntryProtocol.NewDsgTicdcStreamingClient(b.clientConn)
+		grpcCtx := context.Background()
+		request, err := client.DsgTicdcStreamingRequest(grpcCtx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		b.clientRequest = request
+		err = b.clientRequest.Send(entryBuilder)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 	log.Info("send data success!")
 
@@ -251,6 +285,5 @@ func (b *ticdcToOraclSink) Initialize(ctx context.Context, tableInfo []*model.Si
 }
 
 func (b *ticdcToOraclSink) Close() error {
-	defer b.clientConn.Close()
 	return nil
 }
