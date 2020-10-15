@@ -63,9 +63,9 @@ def prepare_binaries() {
                         mv jq third_bin
                         chmod a+x third_bin/*
                         rm -rf tmp
+                        tar czvf third_bin.tar.gz third_bin/*
+                        curl -F test/cdc/ci/third_bin_${env.BUILD_NUMBER}.tar.gz=@third_bin.tar.gz http://fileserver.pingcap.net/upload
                     """
-
-                    stash includes: "third_bin/**", name: "third_binaries"
                 }
             }
         }
@@ -84,9 +84,10 @@ def prepare_binaries() {
                             GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make integration_test_build
                             GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make kafka_consumer
                             GO111MODULE=off GOPATH=\$GOPATH:${ws}/go PATH=\$GOPATH/bin:${ws}/go/bin:\$PATH make check_failpoint_ctl
+                            tar czvf ticdc_bin.tar.gz bin/*
+                            curl -F test/cdc/ci/ticdc_bin_${env.BUILD_NUMBER}.tar.gz=@ticdc_bin.tar.gz http://fileserver.pingcap.net/upload
                         """
                     }
-                    stash includes: "go/src/github.com/pingcap/ticdc/bin/**", name: "ticdc_binaries", useDefaultExcludes: false
                 }
             }
         }
@@ -107,7 +108,6 @@ def tests(sink_type, node_label) {
                     println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
                     println "work space path:\n${ws}"
                     unstash 'ticdc'
-                    unstash 'ticdc_binaries'
 
                     dir("go/src/github.com/pingcap/ticdc") {
                         sh """
@@ -136,11 +136,14 @@ def tests(sink_type, node_label) {
                     println "debug command:\nkubectl -n jenkins-ci exec -ti ${NODE_NAME} bash"
                     println "work space path:\n${ws}"
                     unstash 'ticdc'
-                    unstash 'third_binaries'
-                    unstash 'ticdc_binaries'
 
                     dir("go/src/github.com/pingcap/ticdc") {
-                        sh "mv ${ws}/third_bin/* ./bin/"
+                        sh """
+                            mkdir bin
+                            curl -L http://fileserver.pingcap.net/download/test/cdc/ci/third_bin_${env.BUILD_NUMBER}.tar.gz | tar xvz -C .
+                            curl -L http://fileserver.pingcap.net/download/test/cdc/ci/ticdc_bin_${env.BUILD_NUMBER}.tar.gz | tar xvz -C .
+                            mv ./third_bin/* ./bin
+                        """
                         try {
                             sh """
                                 sudo pip install s3cmd
