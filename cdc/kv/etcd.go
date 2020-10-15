@@ -132,6 +132,14 @@ func (c CDCEtcdClient) ClearAllCDCInfo(ctx context.Context) error {
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
+func (c CDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, error) {
+	resp, err := c.Client.Get(ctx, EtcdKeyBase, clientv3.WithPrefix())
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	return resp.Kvs, nil
+}
+
 // RevokeAllLeases revokes all leases passed from parameter
 func (c CDCEtcdClient) RevokeAllLeases(ctx context.Context, leases map[string]int64) error {
 	for _, lease := range leases {

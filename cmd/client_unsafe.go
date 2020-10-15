@@ -30,6 +30,7 @@ func newUnsafeCommand() *cobra.Command {
 	command.AddCommand(
 		newDeleteServiceGcSafepointCommand(),
 		newResetCommand(),
+		newShowMetadataCommand(),
 	)
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to confirm executing meta command")
 	return command
@@ -67,6 +68,26 @@ func newResetCommand() *cobra.Command {
 
 			cmd.Println("reset and all metadata truncated in PD!")
 
+			return nil
+		},
+	}
+	return command
+}
+
+func newShowMetadataCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "show-metadata",
+		Short: "Show metadata stored in PD",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := defaultContext
+			kvs, err := cdcEtcdCli.GetAllCDCInfo(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			for _, kv := range kvs {
+				cmd.Printf("Key: %s, Value: %s\n", string(kv.Key), string(kv.Value))
+			}
+			cmd.Printf("show %d KVs", len(kvs))
 			return nil
 		},
 	}
