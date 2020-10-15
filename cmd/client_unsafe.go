@@ -87,7 +87,7 @@ func newShowMetadataCommand() *cobra.Command {
 			for _, kv := range kvs {
 				cmd.Printf("Key: %s, Value: %s\n", string(kv.Key), string(kv.Value))
 			}
-			cmd.Printf("show %d KVs", len(kvs))
+			cmd.Printf("Show %d KVs\n", len(kvs))
 			return nil
 		},
 	}
