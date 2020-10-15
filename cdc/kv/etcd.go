@@ -132,6 +132,7 @@ func (c CDCEtcdClient) ClearAllCDCInfo(ctx context.Context) error {
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
 
+// GetAllCDCInfo get all keys created by CDC
 func (c CDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, error) {
 	resp, err := c.Client.Get(ctx, EtcdKeyBase, clientv3.WithPrefix())
 	if err != nil {
