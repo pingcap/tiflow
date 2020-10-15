@@ -256,17 +256,8 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 }
 
 func (b *ticdcToOraclSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
-	log.Debug("BlockHoleSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolvedTs))
-	err := b.statistics.RecordBatchExecution(func() (int, error) {
-		// TODO: add some random replication latency
-		accumulated := atomic.LoadUint64(&b.accumulated)
-		batchSize := accumulated - b.lastAccumulated
-		b.lastAccumulated = accumulated
-		return int(batchSize), nil
-	})
-	b.statistics.PrintStatus()
 	atomic.StoreUint64(&b.checkpointTs, resolvedTs)
-	return resolvedTs, err
+	return resolvedTs, nil
 }
 
 func (b *ticdcToOraclSink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
