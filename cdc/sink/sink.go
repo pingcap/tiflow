@@ -75,6 +75,8 @@ func NewSink(ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr st
 		return cdclog.NewLocalFileSink(ctx, sinkURI, errCh)
 	case "s3":
 		return cdclog.NewS3Sink(ctx, sinkURI, errCh)
+	case "dsg":
+		return newTicdcToOraclSink(ctx, opts), nil
 	default:
 		return nil, cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", sinkURI.Scheme)
 	}

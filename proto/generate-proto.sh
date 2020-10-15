@@ -7,3 +7,5 @@ echo "generate canal protocol code..."
 
 protoc --gofast_out=./canal EntryProtocol.proto
 protoc --gofast_out=./canal CanalProtocol.proto
+protoc --gofast_out=plugins=grpc:./dsg DSGEntryProtocol.proto
+protoc --gofast_out=plugins=grpc:./dsg DsgTicdcProtocol.proto

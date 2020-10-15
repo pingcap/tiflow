@@ -1,0 +1,20 @@
+syntax = "proto2";
+
+option java_multiple_files = true;
+option java_package = "com.publics.protocol";
+option java_outer_classname = "DsgTicdcProtocol";
+option optimize_for = SPEED;
+
+import "DSGEntryProtocol.proto";
+
+// The greeting service definition.
+service DsgTicdcStreaming {
+  // Streams a many greetings
+  rpc DsgTicdcStreamingRequest (stream Entry) returns (DsgTicdcStreamingReply) {}
+}
+
+// The response message containing the greetings
+message DsgTicdcStreamingReply {
+  required int32 code = 1;
+  optional string message = 2;
+}

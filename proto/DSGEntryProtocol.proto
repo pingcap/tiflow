@@ -1,0 +1,248 @@
+//protoc -I=E:\workspace_hadoop\AutoMatic_Public_Module_Package\protocols --java_out=E:\workspace_hadoop\AutoMatic_Public_Module_Package\src\ E:\workspace_hadoop\AutoMatic_Public_Module_Package\protocols\EntryProtocol.proto
+syntax = "proto2";
+//package com.alibaba.otter.canal.protocol;
+
+option java_package = "com.publics.protocol";
+option java_outer_classname = "CanalDataEntry";
+option optimize_for = SPEED;
+
+/****************************************************************
+ * message model
+ *如果要在Enum中新增类型，确保以前的类型的下标值不变.
+ ****************************************************************/
+message Entry {
+
+	optional string userID = 1;
+	optional string flowID = 2;
+	/*PB数据的状态，如果=false，直接读取 errorMsg*/
+	optional bool statFlag = 3;
+	/*批次ID*/
+	optional string  batchID = 4;
+	/*条数*/
+	optional int32 batchCountNo = 5;
+    /**协议头部信息**/
+    optional Header header = 6;
+
+    /**打散后的事件类型**/
+    optional EntryType entryType = 7 [default = ROWDATA];
+
+    /**传输的二进制数组**/
+    optional bytes storeValue = 8;
+    
+    optional string errorMsg = 9;
+    
+    optional int32 theLastNum = 10;
+    optional int32 thisRowNum = 11;
+}
+
+/**message Header**/
+message Header {
+
+	/** 变更数据的schemaname**/
+    optional string schemaName = 1;
+
+    /**变更数据的tablename**/
+    optional string tableName = 2;
+    
+    /**数据变更类型**/
+    optional EventType eventType = 3 [default = UPDATE];
+    
+    optional string fileNo = 4;
+    
+    optional string scnInfo = 5;
+    
+    optional string objnInfo = 6;
+    
+    optional string operType = 7;
+    
+    optional int64 rowsNum = 8;
+    
+    optional int64 colsNum = 9;
+}
+
+/**每个字段的数据结构**/
+message Column {
+
+	optional int32 colNo = 1;
+	optional string colType = 2;
+	/**字段名称(忽略大小写)，在mysql中是没有的**/
+    optional string colName = 3;
+    /** 字段标识 **/
+    optional int32 colFlags = 4;
+    /** 数据的长度 **/
+    optional int32 colValueLen = 5;
+    optional string colValue = 6;
+    
+}
+
+message RowData {
+
+	optional int32 colValueLens = 1;
+    /** 字段信息，增量数据(修改前,删除前) **/
+    repeated Column columns = 2;
+}
+
+/**message row 每行变更数据的数据结构**/
+message RowDataList {
+
+    /** 一次数据库变更可能存在多行  **/
+    repeated RowData rowDatas = 1;
+
+}
+
+/**开始事务的一些信息**/
+message TransactionBegin {
+
+    /**已废弃，请使用header里的executeTime**/
+    optional int64 executeTime = 1;
+
+    /**已废弃，Begin里不提供事务id**/
+    optional string transactionId = 2;
+
+    /**预留扩展**/
+    repeated Pair props = 3;
+
+    /**执行的thread Id**/
+    optional int64 threadId = 4;
+    
+}
+
+message TableInfo{
+
+	/**协议的版本号**/
+    optional int32 version = 1 [default = 1];
+
+	/** 变更数据的来源**/
+    optional DBType sourceType = 2 [default = MYSQL];
+	optional string schemaName = 3;
+	optional string tableName = 4;
+	optional string tableID = 5;
+	optional int32 objnNo = 6;
+	optional string tableCharacterSet = 7;
+	optional string createTime = 8;
+	optional string tableDescription = 9;
+	
+	repeated PrimaryInfo primaryInfos = 10;
+	repeated ColumnInfo columnInfos = 11;
+	repeated IndexInfo indexInfos = 12;
+}
+
+message PrimaryInfo{
+	optional string columnNo = 1;
+	optional string columnName = 2;
+}
+
+
+message ColumnInfo {
+	
+	/*列名称*/
+	optional string colName = 1;
+	/*列长度*/
+	optional string colLen = 2;
+	/*列的精度*/
+	optional string data_precision = 3;
+	/*数据类型*/
+	optional string dataType = 4;
+	/*数据对应的Java类型*/
+	optional string colJavaType = 5;
+	/*列类型定义*/
+	optional string columnType = 6;
+	optional bytes generalType = 7;
+	/*列的序列*/
+	optional int32 orderNo = 8;
+	/*是否为主键*/
+	optional bool isPrimaryKey = 9;
+	/*是否为空*/
+	optional bool isNullable = 10;
+	/*列编码*/
+	optional string colEncoding = 11;
+	optional string colDescription = 12;
+
+}
+
+message IndexInfo {
+
+	/* 列名称 */
+	optional string colName = 1;
+	/*索引名称*/
+	optional string indexName = 2;
+	/*索引类型*/
+	optional string indexType = 3;
+	/*** 索引标识
+	 * =3000, unique index
+	 * =1000, pk index
+	 * =4000, normal index
+	 */
+	optional int32  uniqueFlag = 4;
+	/* 索引编号*/
+	optional int32 indexNo = 5;
+	/* 索引说明 */
+	optional string indexComment = 6;
+}
+
+/**结束事务的一些信息**/
+message TransactionEnd {
+
+    /**已废弃，请使用header里的executeTime**/
+    optional int64 executeTime = 1;
+
+    /**事务号**/
+    optional string transactionId = 2;
+
+    /**预留扩展**/
+    repeated Pair props = 3;
+}
+
+/**预留扩展**/
+message Pair {
+    optional string key = 1;
+    optional string value = 2;
+}
+
+/**打散后的事件类型，主要用于标识事务的开始，变更数据，结束**/
+enum EntryType {
+
+    TRANSACTIONBEGIN = 1;
+    TABLEINFO = 2;
+    ROWDATA = 3;
+    ROWDATALIST = 4;
+    TRANSACTIONEND = 5;
+    /** 心跳类型，内部使用，外部暂不可见，可忽略 **/
+    HEARTBEAT = 6;
+}
+
+/** 事件类型 **/
+enum EventType {
+	
+	FULLINSERT = 1;
+    INSERT = 2;
+    UPDATE = 3;
+    DELETE = 4;
+    FULLDELETE = 5;
+    CREATE = 6;
+    ALTER = 7;
+    ERASE = 8;
+    QUERY = 9;
+    DROP = 10;
+    TRUNCATE = 11;
+    RENAME = 12;
+    /**CREATE INDEX**/
+    CINDEX = 13;
+    DINDEX = 14;
+    TABLE_END = 15;
+    FULL_DOWN = 16;
+}
+
+/**数据库/接口类型**/
+enum DBType {
+
+    ORACLE = 1;
+    MYSQL = 2;
+    PGSQL = 3;
+    OB_MYSQL = 4;
+    OB_ORACLE = 5;
+    MPP = 6;
+    HTTP = 7;
+    FTP = 8;
+}
+
