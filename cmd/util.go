@@ -255,7 +255,7 @@ func verifyTables(ctx context.Context, credential *security.Credential, cfg *con
 		return nil, nil, errors.Trace(err)
 	}
 
-	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs)
+	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, false /* explicitTables */)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -268,7 +268,7 @@ func verifyTables(ctx context.Context, credential *security.Credential, cfg *con
 		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
 			continue
 		}
-		if !tableInfo.IsEligible() {
+		if !tableInfo.IsEligible(false /* forceReplicate */) {
 			ineligibleTables = append(ineligibleTables, tableName)
 		} else {
 			eligibleTables = append(eligibleTables, tableName)

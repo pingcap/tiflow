@@ -100,6 +100,8 @@ type mysqlSink struct {
 	// metrics used by mysql sink only
 	metricConflictDetectDurationHis prometheus.Observer
 	metricBucketSizeCounters        []prometheus.Counter
+
+	forceReplicate bool
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -525,6 +527,7 @@ func newMySQLSink(
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
 		errCh:                           make(chan error, 1),
+		forceReplicate:                  replicaConfig.ForceReplicate,
 	}
 
 	if val, ok := opts[mark.OptCyclicConfig]; ok {
@@ -826,7 +829,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		// Translate to UPDATE if old value is enabled, not in safe mode and is update event
 		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 			flushCacheDMLs()
-			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns)
+			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
 			if query != "" {
 				sqls = append(sqls, query)
 				values = append(values, args)
@@ -840,7 +843,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		// update will be translated to DELETE + INSERT(or REPLACE) SQL.
 		if len(row.PreColumns) != 0 {
 			flushCacheDMLs()
-			query, args = prepareDelete(quoteTable, row.PreColumns)
+			query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
 			if query != "" {
 				sqls = append(sqls, query)
 				values = append(values, args)
@@ -987,7 +990,7 @@ func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string
 	return sqls, args
 }
 
-func prepareUpdate(quoteTable string, preCols, cols []*model.Column) (string, []interface{}) {
+func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("UPDATE " + quoteTable + " SET ")
 
@@ -1012,7 +1015,7 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column) (string, []
 	}
 
 	builder.WriteString(" WHERE ")
-	colNames, wargs := whereSlice(preCols)
+	colNames, wargs := whereSlice(preCols, forceReplicate)
 	if len(wargs) == 0 {
 		return "", nil
 	}
@@ -1032,11 +1035,11 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column) (string, []
 	return sql, args
 }
 
-func prepareDelete(quoteTable string, cols []*model.Column) (string, []interface{}) {
+func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quoteTable + " WHERE ")
 
-	colNames, wargs := whereSlice(cols)
+	colNames, wargs := whereSlice(cols, forceReplicate)
 	if len(wargs) == 0 {
 		return "", nil
 	}
@@ -1057,7 +1060,7 @@ func prepareDelete(quoteTable string, cols []*model.Column) (string, []interface
 	return sql, args
 }
 
-func whereSlice(cols []*model.Column) (colNames []string, args []interface{}) {
+func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for _, col := range cols {
 		if col == nil || !col.Flag.IsHandleKey() {
@@ -1065,6 +1068,15 @@ func whereSlice(cols []*model.Column) (colNames []string, args []interface{}) {
 		}
 		colNames = append(colNames, col.Name)
 		args = append(args, col.Value)
+	}
+	// if no explicit row id but force replicate, use all key-values in where condition
+	if len(cols) == 0 && forceReplicate {
+		colNames = make([]string, 0, len(cols))
+		args = make([]interface{}, 0, len(cols))
+		for _, col := range cols {
+			colNames = append(colNames, col.Name)
+			args = append(args, col.Value)
+		}
 	}
 	return
 }

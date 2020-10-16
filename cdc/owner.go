@@ -214,7 +214,7 @@ func (o *Owner) newChangeFeed(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, checkpointTs)
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, checkpointTs, info.Config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -294,7 +294,7 @@ func (o *Owner) newChangeFeed(
 			log.Warn("table not found for table ID", zap.Int64("tid", tid))
 			continue
 		}
-		if !tblInfo.IsEligible() {
+		if !tblInfo.IsEligible(info.Config.ForceReplicate) {
 			log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
 			continue
 		}

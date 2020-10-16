@@ -52,7 +52,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 		Query:      "create database test",
 	}
 	// reconstruct the local schema
-	snap := newEmptySchemaSnapshot()
+	snap := newEmptySchemaSnapshot(false)
 	err := snap.handleDDL(job)
 	c.Assert(err, IsNil)
 	_, exist := snap.SchemaByID(job.SchemaID)
@@ -195,7 +195,7 @@ func (*schemaSuite) TestTable(c *C) {
 	jobs = append(jobs, job)
 
 	// reconstruct the local schema
-	snap := newEmptySchemaSnapshot()
+	snap := newEmptySchemaSnapshot(false)
 	for _, job := range jobs {
 		err := snap.handleDDL(job)
 		c.Assert(err, IsNil)
@@ -277,7 +277,7 @@ func (*schemaSuite) TestTable(c *C) {
 
 func (t *schemaSuite) TestHandleDDL(c *C) {
 
-	snap := newEmptySchemaSnapshot()
+	snap := newEmptySchemaSnapshot(false)
 	dbName := timodel.NewCIStr("Test")
 	colName := timodel.NewCIStr("A")
 	tbName := timodel.NewCIStr("T")
@@ -527,7 +527,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	}
 
 	jobs = append(jobs, job)
-	storage, err := NewSchemaStorage(nil, 0, nil)
+	storage, err := NewSchemaStorage(nil, 0, nil, false)
 	c.Assert(err, IsNil)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
@@ -665,7 +665,7 @@ func (t *schemaSuite) TestCreateSnapFromMeta(c *C) {
 	c.Assert(err, IsNil)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
 	c.Assert(err, IsNil)
-	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver)
+	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver, false)
 	c.Assert(err, IsNil)
 	_, ok := snap.GetTableByName("test", "simple_test1")
 	c.Assert(ok, IsTrue)
@@ -676,4 +676,12 @@ func (t *schemaSuite) TestCreateSnapFromMeta(c *C) {
 	c.Assert(ok, IsTrue)
 	c.Assert(dbInfo.Name.O, Equals, "test2")
 	c.Assert(len(dbInfo.Tables), Equals, 3)
+
+	cloneSnap := snap.Clone()
+	c.Assert(cloneSnap.currentTs, Equals, snap.currentTs)
+	c.Assert(len(cloneSnap.tables), Equals, len(snap.tables))
+	c.Assert(cloneSnap.ineligibleTableID, DeepEquals, snap.ineligibleTableID)
+	tableCount := len(snap.tables)
+	cloneSnap.tables = make(map[int64]*model.TableInfo)
+	c.Assert(len(snap.tables), Equals, tableCount)
 }

@@ -77,6 +77,8 @@ var (
 	syncPointEnabled  bool
 	syncPointInterval time.Duration
 
+	forceReplicateTable bool
+
 	optForceRemove bool
 
 	defaultContext context.Context
