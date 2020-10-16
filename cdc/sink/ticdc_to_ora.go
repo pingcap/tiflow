@@ -266,6 +266,7 @@ func (b *ticdcToOraclSink) EmitCheckpointTs(ctx context.Context, ts uint64) erro
 }
 
 func (b *ticdcToOraclSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+
 	log.Debug("BlockHoleSink: DDL Event", zap.Any("ddl", ddl))
 	return nil
 }
