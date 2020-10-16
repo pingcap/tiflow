@@ -311,6 +311,7 @@ func testUpdate(c *check.C) {
 	}
 	builder := NewCanalEntryBuilder()
 	builder.forceHkPk = true
+
 	entry, err := builder.FromRowEvent(testCaseUpdate)
 	c.Assert(err, check.IsNil)
 	c.Assert(entry.GetEntryType(), check.Equals, canal.EntryType_ROWDATA)
