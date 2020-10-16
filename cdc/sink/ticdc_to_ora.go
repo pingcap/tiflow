@@ -134,10 +134,19 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 				columnBuilder.ColName = &column.Name
 				columnValue := model.ColumnValueString(column.Value)
 				columnBuilder.ColValue = &columnValue
+				//27个
 				if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
 					colType = "integer"
-				} else if column.Type == 15 || column.Type == 253 || column.Type == 245 {
+				} else if column.Type == 15 || column.Type == 253 || column.Type == 245 || column.Type == 254 {
 					colType = "string"
+				} else if column.Type == 10 || column.Type == 14 {
+					colType = "date"
+				} else if column.Type == 7 || column.Type == 12 {
+					colType = "datetime"
+				} else if column.Type == 11 {
+					colType = "time"
+				} else if column.Type == 13 {
+					colType = "year"
 				}
 				columnBuilder.ColType = &colType
 				rowdataBuilder.Columns = append(rowdataBuilder.Columns, columnBuilder)
@@ -152,8 +161,16 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 					columnBuilder.ColValue = &columnValue
 					if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
 						colType = "integer"
-					} else if column.Type == 15 || column.Type == 253 || column.Type == 245 {
+					} else if column.Type == 15 || column.Type == 253 || column.Type == 245 || column.Type == 254 {
 						colType = "string"
+					} else if column.Type == 10 || column.Type == 14 {
+						colType = "date"
+					} else if column.Type == 7 || column.Type == 12 {
+						colType = "datetime"
+					} else if column.Type == 11 {
+						colType = "time"
+					} else if column.Type == 13 {
+						colType = "year"
 					}
 					columnBuilder.ColType = &colType
 					rowdataBuilder.Columns = append(rowdataBuilder.Columns, columnBuilder)
@@ -169,8 +186,16 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 				columnBuilder.ColValue = &columnValue
 				if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
 					colType = "integer"
-				} else if column.Type == 15 || column.Type == 253 || column.Type == 245 {
+				} else if column.Type == 15 || column.Type == 253 || column.Type == 245 || column.Type == 254 {
 					colType = "string"
+				} else if column.Type == 10 || column.Type == 14 {
+					colType = "date"
+				} else if column.Type == 7 || column.Type == 12 {
+					colType = "datetime"
+				} else if column.Type == 11 {
+					colType = "time"
+				} else if column.Type == 13 {
+					colType = "year"
 				}
 				columnBuilder.ColType = &colType
 				colFlag := int32(0)
@@ -185,8 +210,16 @@ func (b *ticdcToOraclSink) EmitRowChangedEvents(ctx context.Context, rows ...*mo
 				columnBuilder.ColValue = &columnValue
 				if column.Type == 1 || column.Type == 2 || column.Type == 3 || column.Type == 4 || column.Type == 5 || column.Type == 8 || column.Type == 9 {
 					colType = "integer"
-				} else if column.Type == 15 || column.Type == 253 || column.Type == 245 {
+				} else if column.Type == 15 || column.Type == 253 || column.Type == 245 || column.Type == 254 {
 					colType = "string"
+				} else if column.Type == 10 || column.Type == 14 {
+					colType = "date"
+				} else if column.Type == 7 || column.Type == 12 {
+					colType = "datetime"
+				} else if column.Type == 11 {
+					colType = "time"
+				} else if column.Type == 13 {
+					colType = "year"
 				}
 				columnBuilder.ColType = &colType
 				colFlag := int32(1)
