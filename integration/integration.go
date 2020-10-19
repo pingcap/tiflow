@@ -61,7 +61,7 @@ func testCanal() {
 		tests.NewManyTypesCase(task),
 		//tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
 		tests.NewCompositePKeyCase(task),
-		//tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
+		tests.NewAlterCase(task), 
 	}
 
 	log.SetLevel(zapcore.DebugLevel)
