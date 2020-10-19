@@ -744,7 +744,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 	}()
 	t := meta.NewMeta(txn)
 
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(t, 0)
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(t, 0, false)
 	c.Assert(err, check.IsNil)
 
 	cf := &changeFeed{
