@@ -10,9 +10,13 @@ SINK_TYPE=$1
 
 function check_data_subset() {
     tbl=$1
+    up_host=$2
+    up_port=$3
+    down_host=$4
+    down_port=$5
     for i in $(seq 0 100); do
         stmt="select * from $tbl order by id limit $i,1\G"
-        query=$(mysql -h${UP_TIDB_HOST} -uroot -P${UP_TIDB_PORT} -e "${stmt}")
+        query=$(mysql -h${up_host} -P${up_port} -uroot -e "${stmt}")
         clean_query="${query//\*/}"
         if [ -n "$clean_query" ]; then
             data_id=$(echo $clean_query|awk '{print $(NF-2)}')
@@ -30,7 +34,7 @@ function check_data_subset() {
                 condition="${condition} a=$data_a"
             fi
             stmt2="select * from $tbl where $condition"
-            query2=$(mysql -h${DOWN_TIDB_HOST} -uroot -P${DOWN_TIDB_PORT} -e "${stmt2}")
+            query2=$(mysql -h${down_host} -P${down_port} -uroot -e "${stmt2}")
             if [ -z "$query2" ]; then
                 echo "id=$data_id,a=$data_a doesn't exist in downstream table $tbl"
                 exit 1
@@ -38,6 +42,8 @@ function check_data_subset() {
         fi
     done
 }
+
+export -f check_data_subset
 
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
@@ -69,7 +75,8 @@ function run() {
     # data could be duplicated due to https://github.com/pingcap/ticdc/issues/964,
     # so we just check downstream contains all data in upstream.
     for i in $(seq 0 6); do
-        check_data_subset "force_replicate_table.t$i"
+        ensure 5 check_data_subset "force_replicate_table.t$i" \
+            ${UP_TIDB_HOST} ${UP_TIDB_PORT} ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     done
     cleanup_process $CDC_BINARY
 }
