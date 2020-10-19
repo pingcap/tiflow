@@ -201,42 +201,51 @@ func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field
 
 // Clone clones Storage
 func (s *schemaSnapshot) Clone() *schemaSnapshot {
-	n := &schemaSnapshot{
-		tableNameToID:  make(map[model.TableName]int64, len(s.tableNameToID)),
-		schemaNameToID: make(map[string]int64, len(s.schemaNameToID)),
+	clone := *s
 
-		schemas:        make(map[int64]*timodel.DBInfo, len(s.schemas)),
-		tables:         make(map[int64]*model.TableInfo, len(s.tables)),
-		partitionTable: make(map[int64]*model.TableInfo, len(s.partitionTable)),
-
-		truncateTableID:   make(map[int64]struct{}, len(s.truncateTableID)),
-		ineligibleTableID: make(map[int64]struct{}, len(s.ineligibleTableID)),
-
-		currentTs:      s.currentTs,
-		explicitTables: s.explicitTables,
-	}
+	tableNameToID := make(map[model.TableName]int64, len(s.tableNameToID))
 	for k, v := range s.tableNameToID {
-		n.tableNameToID[k] = v
+		tableNameToID[k] = v
 	}
+	clone.tableNameToID = tableNameToID
+
+	schemaNameToID := make(map[string]int64, len(s.schemaNameToID))
 	for k, v := range s.schemaNameToID {
-		n.schemaNameToID[k] = v
+		schemaNameToID[k] = v
 	}
+	clone.schemaNameToID = schemaNameToID
+
+	schemas := make(map[int64]*timodel.DBInfo, len(s.schemas))
 	for k, v := range s.schemas {
-		n.schemas[k] = v.Clone()
+		schemas[k] = v.Clone()
 	}
+	clone.schemas = schemas
+
+	tables := make(map[int64]*model.TableInfo, len(s.tables))
 	for k, v := range s.tables {
-		n.tables[k] = v.Clone()
+		tables[k] = v.Clone()
 	}
+	clone.tables = tables
+
+	partitionTable := make(map[int64]*model.TableInfo, len(s.partitionTable))
 	for k, v := range s.partitionTable {
-		n.partitionTable[k] = v.Clone()
+		partitionTable[k] = v.Clone()
 	}
+	clone.partitionTable = partitionTable
+
+	truncateTableID := make(map[int64]struct{}, len(s.truncateTableID))
 	for k, v := range s.truncateTableID {
-		n.truncateTableID[k] = v
+		truncateTableID[k] = v
 	}
+	clone.truncateTableID = truncateTableID
+
+	ineligibleTableID := make(map[int64]struct{}, len(s.ineligibleTableID))
 	for k, v := range s.ineligibleTableID {
-		n.ineligibleTableID[k] = v
+		ineligibleTableID[k] = v
 	}
-	return n
+	clone.ineligibleTableID = ineligibleTableID
+
+	return &clone
 }
 
 // GetTableNameByID looks up a TableName with the given table id

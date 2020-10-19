@@ -1070,7 +1070,7 @@ func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, a
 		args = append(args, col.Value)
 	}
 	// if no explicit row id but force replicate, use all key-values in where condition
-	if len(cols) == 0 && forceReplicate {
+	if len(colNames) == 0 && forceReplicate {
 		colNames = make([]string, 0, len(cols))
 		args = make([]interface{}, 0, len(cols))
 		for _, col := range cols {
