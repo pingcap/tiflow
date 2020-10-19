@@ -755,6 +755,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 		orphanTables:  make(map[model.TableID]model.Ts),
 		toCleanTables: make(map[model.TableID]model.Ts),
 		filter:        f,
+		info:          &model.ChangeFeedInfo{Config: config.GetDefaultReplicaConfig()},
 	}
 	for i, job := range jobs {
 		err = cf.schema.HandleDDL(job)

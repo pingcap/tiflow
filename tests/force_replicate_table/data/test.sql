@@ -35,3 +35,14 @@ delete from t2 where id < 3;
 delete from t3 where id < 3;
 delete from t4 where id < '3';
 delete from t5 where id < '3';
+
+create table t6 (id int primary key, a int) PARTITION BY RANGE ( id ) ( PARTITION p0 VALUES LESS THAN (6),PARTITION p1 VALUES LESS THAN (11),PARTITION p2 VALUES LESS THAN (21));
+insert into t6 (id) values (1),(2),(3),(4),(5),(6);
+insert into t6 (id) values (7),(8),(9);
+insert into t6 (id) values (11),(12),(20);
+alter table t6 add partition (partition p3 values less than (30), partition p4 values less than (40));
+insert into t6 (id) values (25),(29),(35);
+alter table t6 truncate partition p0;
+alter table t6 drop partition p1;
+insert into t6 (id) values (7),(8),(9);
+update t6 set id=id+10 where id=9;

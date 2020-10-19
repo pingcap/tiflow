@@ -8,6 +8,37 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
+function check_data_subset() {
+    tbl=$1
+    for i in $(seq 0 100); do
+        stmt="select * from $tbl order by id limit $i,1\G"
+        query=$(mysql -h${UP_TIDB_HOST} -uroot -P${UP_TIDB_PORT} -e "${stmt}")
+        clean_query="${query//\*/}"
+        if [ -n "$clean_query" ]; then
+            data_id=$(echo $clean_query|awk '{print $(NF-2)}')
+            data_a=$(echo $clean_query|awk '{print $(NF)}')
+            condition=""
+            if [[ "$data_id" -eq "NULL" ]]; then
+                condition="id is NULL"
+            else
+                condition="id=$data_id"
+            fi
+            condition="${condition} AND "
+            if [[ "$data_a" -eq "NULL" ]]; then
+                condition="${condition} a is NULL"
+            else
+                condition="${condition} a=$data_a"
+            fi
+            stmt2="select * from $tbl where $condition"
+            query2=$(mysql -h${DOWN_TIDB_HOST} -uroot -P${DOWN_TIDB_PORT} -e "${stmt2}")
+            if [ -z "$query2" ]; then
+                echo "id=$data_id,a=$data_a doesn't exist in downstream table $tbl"
+                exit 1
+            fi
+        fi
+    done
+}
+
 function run() {
     rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
@@ -31,11 +62,15 @@ function run() {
     fi
 
     run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    for i in $(seq 0 5); do
+    for i in $(seq 0 6); do
         table="force_replicate_table.t$i"
         check_table_exists $table ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     done
-    check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+    # data could be duplicated due to https://github.com/pingcap/ticdc/issues/964,
+    # so we just check downstream contains all data in upstream.
+    for i in $(seq 0 6); do
+        check_data_subset "force_replicate_table.t$i"
+    done
     cleanup_process $CDC_BINARY
 }
 
