@@ -11,30 +11,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package tests
 
 import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/integration/framework"
 )
 
-//nolint:unused
-type simpleCase struct {
-	framework.AvroSingleTableTask
+// CompositePKeyCase is base impl of test case for composite primary keys
+type CompositePKeyCase struct {
+	framework.Task
 }
 
-func newSimpleCase() *simpleCase {
-	simpleCase := new(simpleCase)
-	simpleCase.AvroSingleTableTask.TableName = "test"
-	return simpleCase
+// NewCompositePKeyCase create a test case which have composite primary key
+func NewCompositePKeyCase(task framework.Task) *CompositePKeyCase {
+	return &CompositePKeyCase{
+		Task: task,
+	}
 }
 
-func (s *simpleCase) Name() string {
-	return "Simple"
+// Name impl framework.Task interface
+func (s *CompositePKeyCase) Name() string {
+	return "Composite Primary Key"
 }
 
-func (s *simpleCase) Run(ctx *framework.TaskContext) error {
-	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key, value int)")
+// Run impl framework.Task interface
+func (s *CompositePKeyCase) Run(ctx *framework.TaskContext) error {
+	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id1 int, id2 int, value int, primary key (id1, id2))")
 	if err != nil {
 		return err
 	}
@@ -43,32 +46,17 @@ func (s *simpleCase) Run(ctx *framework.TaskContext) error {
 	table := ctx.SQLHelper().GetTable("test")
 	// Create an SQL request, send it to the upstream, wait for completion and check the correctness of replication
 	err = table.Insert(map[string]interface{}{
-		"id":    0,
+		"id1":   0,
+		"id2":   1,
 		"value": 0,
 	}).Send().Wait().Check()
 	if err != nil {
 		return errors.AddStack(err)
 	}
 
-	// To wait on a batch of SQL requests, create a slice of Awaitables
-	reqs := make([]framework.Awaitable, 0)
-	for i := 1; i < 1000; i++ {
-		// Only send, do not wait
-		req := table.Insert(map[string]interface{}{
-			"id":    i,
-			"value": i,
-		}).Send()
-		reqs = append(reqs, req)
-	}
-
-	// Wait on SQL requests in batch and check the correctness
-	err = framework.All(ctx.SQLHelper(), reqs).Wait().Check()
-	if err != nil {
-		return err
-	}
-
 	err = table.Upsert(map[string]interface{}{
-		"id":    0,
+		"id1":   0,
+		"id2":   1,
 		"value": 1,
 	}).Send().Wait().Check()
 	if err != nil {
@@ -76,7 +64,8 @@ func (s *simpleCase) Run(ctx *framework.TaskContext) error {
 	}
 
 	err = table.Delete(map[string]interface{}{
-		"id": 0,
+		"id1": 0,
+		"id2": 1,
 	}).Send().Wait().Check()
 	return err
 }
