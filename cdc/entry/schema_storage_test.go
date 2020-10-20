@@ -52,7 +52,7 @@ func (t *schemaSuite) TestSchema(c *C) {
 		Query:      "create database test",
 	}
 	// reconstruct the local schema
-	snap := newEmptySchemaSnapshot()
+	snap := newEmptySchemaSnapshot(false)
 	err := snap.handleDDL(job)
 	c.Assert(err, IsNil)
 	_, exist := snap.SchemaByID(job.SchemaID)
@@ -195,7 +195,7 @@ func (*schemaSuite) TestTable(c *C) {
 	jobs = append(jobs, job)
 
 	// reconstruct the local schema
-	snap := newEmptySchemaSnapshot()
+	snap := newEmptySchemaSnapshot(false)
 	for _, job := range jobs {
 		err := snap.handleDDL(job)
 		c.Assert(err, IsNil)
@@ -277,7 +277,7 @@ func (*schemaSuite) TestTable(c *C) {
 
 func (t *schemaSuite) TestHandleDDL(c *C) {
 
-	snap := newEmptySchemaSnapshot()
+	snap := newEmptySchemaSnapshot(false)
 	dbName := timodel.NewCIStr("Test")
 	colName := timodel.NewCIStr("A")
 	tbName := timodel.NewCIStr("T")
@@ -527,7 +527,7 @@ func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	}
 
 	jobs = append(jobs, job)
-	storage, err := NewSchemaStorage(nil, 0, nil)
+	storage, err := NewSchemaStorage(nil, 0, nil, false)
 	c.Assert(err, IsNil)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
@@ -665,7 +665,7 @@ func (t *schemaSuite) TestCreateSnapFromMeta(c *C) {
 	c.Assert(err, IsNil)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
 	c.Assert(err, IsNil)
-	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver)
+	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver, false)
 	c.Assert(err, IsNil)
 	_, ok := snap.GetTableByName("test", "simple_test1")
 	c.Assert(ok, IsTrue)
@@ -676,4 +676,82 @@ func (t *schemaSuite) TestCreateSnapFromMeta(c *C) {
 	c.Assert(ok, IsTrue)
 	c.Assert(dbInfo.Name.O, Equals, "test2")
 	c.Assert(len(dbInfo.Tables), Equals, 3)
+}
+
+func (t *schemaSuite) TestSnapshotClone(c *C) {
+	store, err := mockstore.NewMockTikvStore()
+	c.Assert(err, IsNil)
+
+	session.SetSchemaLease(0)
+	session.DisableStats4Test()
+	domain, err := session.BootstrapSession(store)
+	c.Assert(err, IsNil)
+	domain.SetStatsUpdating(true)
+	tk := testkit.NewTestKit(c, store)
+	tk.MustExec("create database test2")
+	tk.MustExec("create table test.simple_test1 (id bigint primary key)")
+	tk.MustExec("create table test.simple_test2 (id bigint primary key)")
+	tk.MustExec("create table test2.simple_test3 (id bigint primary key)")
+	tk.MustExec("create table test2.simple_test4 (id bigint primary key)")
+	tk.MustExec("create table test2.simple_test5 (a bigint)")
+	ver, err := store.CurrentVersion()
+	c.Assert(err, IsNil)
+	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
+	c.Assert(err, IsNil)
+	snap, err := newSchemaSnapshotFromMeta(meta, ver.Ver, false /* explicitTables */)
+	c.Assert(err, IsNil)
+
+	clone := snap.Clone()
+	c.Assert(clone.tableNameToID, DeepEquals, snap.tableNameToID)
+	c.Assert(clone.schemaNameToID, DeepEquals, snap.schemaNameToID)
+	c.Assert(clone.truncateTableID, DeepEquals, snap.truncateTableID)
+	c.Assert(clone.ineligibleTableID, DeepEquals, snap.ineligibleTableID)
+	c.Assert(clone.currentTs, Equals, snap.currentTs)
+	c.Assert(clone.explicitTables, Equals, snap.explicitTables)
+	c.Assert(len(clone.tables), Equals, len(snap.tables))
+	c.Assert(len(clone.schemas), Equals, len(snap.schemas))
+	c.Assert(len(clone.partitionTable), Equals, len(snap.partitionTable))
+
+	tableCount := len(snap.tables)
+	clone.tables = make(map[int64]*model.TableInfo)
+	c.Assert(len(snap.tables), Equals, tableCount)
+}
+
+func (t *schemaSuite) TestExplicitTables(c *C) {
+	store, err := mockstore.NewMockTikvStore()
+	c.Assert(err, IsNil)
+
+	session.SetSchemaLease(0)
+	session.DisableStats4Test()
+	domain, err := session.BootstrapSession(store)
+	c.Assert(err, IsNil)
+	domain.SetStatsUpdating(true)
+	tk := testkit.NewTestKit(c, store)
+	ver1, err := store.CurrentVersion()
+	c.Assert(err, IsNil)
+	tk.MustExec("create database test2")
+	tk.MustExec("create table test.simple_test1 (id bigint primary key)")
+	tk.MustExec("create table test.simple_test2 (id bigint unique key)")
+	tk.MustExec("create table test2.simple_test3 (a bigint)")
+	tk.MustExec("create table test2.simple_test4 (a varchar(20) unique key)")
+	tk.MustExec("create table test2.simple_test5 (a varchar(20))")
+	ver2, err := store.CurrentVersion()
+	c.Assert(err, IsNil)
+	meta1, err := kv.GetSnapshotMeta(store, ver1.Ver)
+	c.Assert(err, IsNil)
+	snap1, err := newSchemaSnapshotFromMeta(meta1, ver1.Ver, true /* explicitTables */)
+	c.Assert(err, IsNil)
+	meta2, err := kv.GetSnapshotMeta(store, ver2.Ver)
+	c.Assert(err, IsNil)
+	snap2, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, false /* explicitTables */)
+	c.Assert(err, IsNil)
+	snap3, err := newSchemaSnapshotFromMeta(meta2, ver2.Ver, true /* explicitTables */)
+	c.Assert(err, IsNil)
+
+	c.Assert(len(snap2.tables)-len(snap1.tables), Equals, 5)
+	// some system tables are also ineligible
+	c.Assert(len(snap2.ineligibleTableID), GreaterEqual, 4)
+
+	c.Assert(len(snap3.tables)-len(snap1.tables), Equals, 5)
+	c.Assert(snap3.ineligibleTableID, HasLen, 0)
 }
