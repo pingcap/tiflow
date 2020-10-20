@@ -168,7 +168,6 @@ var (
 	ErrAPIInvalidParam            = errors.Normalize("invalid api parameter", errors.RFCCodeText("CDC:ErrAPIInvalidParam"))
 	ErrInternalServerError        = errors.Normalize("internal server error", errors.RFCCodeText("CDC:ErrInternalServerError"))
 	ErrOwnerSortDir               = errors.Normalize("owner sort dir", errors.RFCCodeText("CDC:ErrOwnerSortDir"))
-	ErrOwnerUpdateGCSafepoint     = errors.Normalize("owner update gc safepoint", errors.RFCCodeText("CDC:ErrOwnerUpdateGCSafepoint"))
 	ErrOwnerChangefeedNotFound    = errors.Normalize("changefeed %s not found in owner cache", errors.RFCCodeText("CDC:ErrOwnerChangefeedNotFound"))
 	ErrChangefeedAbnormalState    = errors.Normalize("changefeed in abnormal state: %s, replication status: %+v", errors.RFCCodeText("CDC:ErrChangefeedAbnormalState"))
 	ErrInvalidAdminJobType        = errors.Normalize("invalid admin job type: %d", errors.RFCCodeText("CDC:ErrInvalidAdminJobType"))

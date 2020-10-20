@@ -11,28 +11,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package tests
 
 import (
 	"github.com/pingcap/ticdc/integration/framework"
 )
 
-//nolint:unused
-type unsignedCase struct {
-	framework.AvroSingleTableTask
+// UnsignedCase is base impl of test case for unsigned int type data
+type UnsignedCase struct {
+	framework.Task
 }
 
-func newUnsignedCase() *unsignedCase {
-	unsignedCase := new(unsignedCase)
-	unsignedCase.AvroSingleTableTask.TableName = "test"
-	return unsignedCase
+// NewUnsignedCase create a test case to check the correction of unsigned integer
+func NewUnsignedCase(task framework.Task) *UnsignedCase {
+	return &UnsignedCase{
+		Task: task,
+	}
 }
 
-func (s *unsignedCase) Name() string {
-	return "Many Types"
+// Name impl framework.Task interface
+func (s *UnsignedCase) Name() string {
+	return "Unsigned"
 }
 
-func (s *unsignedCase) Run(ctx *framework.TaskContext) error {
+// Run impl framework.Task interface
+func (s *UnsignedCase) Run(ctx *framework.TaskContext) error {
 	createDBQuery := `create table test (
 		id          INT,
 		t_int       INT UNSIGNED,

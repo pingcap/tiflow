@@ -11,33 +11,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package framework
+package canal
 
 import (
 	"database/sql"
 	"testing"
 
+	"github.com/pingcap/ticdc/integration/framework"
 	"github.com/stretchr/testify/require"
 )
 
-type emptyAvroSingleTableTask struct {
-	AvroSingleTableTask
+type emptyCanalSingleTableTask struct {
+	SingleTableTask
 }
 
-func TestAvroSingleTableTest_Prepare(t *testing.T) {
-	env := NewAvroKafkaDockerEnv("")
+func TestCanalSingleTableTest_Prepare(t *testing.T) {
+	env := NewKafkaDockerEnv("")
 	require.NotNil(t, env)
 
 	env.Setup()
-	env.RunTest(&emptyAvroSingleTableTask{AvroSingleTableTask{TableName: "test"}})
+	env.RunTest(&emptyCanalSingleTableTask{SingleTableTask{TableName: "test"}})
 
-	_, err := sql.Open("mysql", upstreamDSN+"testdb")
+	_, err := sql.Open("mysql", framework.UpstreamDSN+"testdb")
 	require.NoError(t, err)
 
-	_, err = sql.Open("mysql", downstreamDSN+"testdb")
+	_, err = sql.Open("mysql", framework.DownstreamDSN+"testdb")
 	require.NoError(t, err)
 
-	err = env.healthChecker()
+	err = env.HealthChecker()
 	require.NoError(t, err)
 
 	env.TearDown()
