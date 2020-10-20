@@ -750,6 +750,8 @@ github.com/pingcap/tipb v0.0.0-20190428032612-535e1abaa330/go.mod h1:RtkHW8WbcNx
 github.com/pingcap/tipb v0.0.0-20200417094153-7316d94df1ee/go.mod h1:RtkHW8WbcNxj8lsbzjaILci01CtYnYbIkQhjyZWrWVI=
 github.com/pingcap/tiup v1.2.1-0.20201020055305-b2c1045702e5 h1:9fNU9EnIZyTlIQZyL8HtVvrqUdAk65NtH0YyijqpD98=
 github.com/pingcap/tiup v1.2.1-0.20201020055305-b2c1045702e5/go.mod h1:q8WzflNHjE1U49k2qstTL0clx2pKh8pkOzUFV4RTvQo=
+github.com/pingcap/tiup v1.2.1-0.20201020062953-f35a0dd68405 h1:kuMGaZQyo5me2uX9iSWZUJ+SZxrrFQqQkaou6/Hjheo=
+github.com/pingcap/tiup v1.2.1-0.20201020062953-f35a0dd68405/go.mod h1:q8WzflNHjE1U49k2qstTL0clx2pKh8pkOzUFV4RTvQo=
 github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4/go.mod h1:4OwLy04Bl9Ef3GJJCoec+30X3LQs/0/m4HFRt/2LUSA=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
