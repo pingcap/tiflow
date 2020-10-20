@@ -262,6 +262,11 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			log.Warn("Attempting to use Canal without old value. CDC will enable old value and continue.")
 			cfg.EnableOldValue = true
 		}
+
+		if cfg.ForceReplicate {
+			log.Error("if use force replicate, old value feature must be enabled")
+			return nil, cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
+		}
 	}
 
 	for _, rules := range cfg.Sink.DispatchRules {
@@ -300,17 +305,21 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			return nil, err
 		}
 		if len(ineligibleTables) != 0 {
-			cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", ineligibleTables)
-			if !noConfirm {
-				cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
-				var yOrN string
-				_, err := fmt.Scan(&yOrN)
-				if err != nil {
-					return nil, err
-				}
-				if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
-					cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
-					return nil, nil
+			if cfg.ForceReplicate {
+				cmd.Printf("[WARN] force to replicate some ineligible tables, %#v\n", ineligibleTables)
+			} else {
+				cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", ineligibleTables)
+				if !noConfirm {
+					cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
+					var yOrN string
+					_, err := fmt.Scan(&yOrN)
+					if err != nil {
+						return nil, err
+					}
+					if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+						cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
+						return nil, nil
+					}
 				}
 			}
 		}
