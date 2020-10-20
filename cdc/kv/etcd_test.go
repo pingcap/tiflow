@@ -455,15 +455,15 @@ func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
 }
 
 func (s *etcdSuite) TestGetAllCDCInfo(c *check.C) {
-	captureId := "CAPTURE_ID"
-	changefeedId := "CHANGEFEED_ID"
+	captureID := "CAPTURE_ID"
+	changefeedID := "CHANGEFEED_ID"
 	ctx := context.Background()
-	err := s.client.PutTaskWorkload(ctx, changefeedId, captureId, &model.TaskWorkload{
+	err := s.client.PutTaskWorkload(ctx, changefeedID, captureID, &model.TaskWorkload{
 		11: model.WorkloadInfo{Workload: 1},
 		22: model.WorkloadInfo{Workload: 22},
 	})
 	c.Assert(err, check.IsNil)
-	err = s.client.PutTaskStatus(ctx, changefeedId, captureId, &model.TaskStatus{
+	err = s.client.PutTaskStatus(ctx, changefeedID, captureID, &model.TaskStatus{
 		Tables: map[model.TableID]*model.TableReplicaInfo{11: {StartTs: 22}},
 	})
 	c.Assert(err, check.IsNil)
