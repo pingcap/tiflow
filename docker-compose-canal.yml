@@ -6,22 +6,17 @@ services:
     image: ticdc:latest
     build:
       context: .
-      dockerfile: ./Dockerfile.development
+      dockerfile: ./Dockerfile
     volumes:
       - ./docker/data:/data
       - ./docker/logs:/logs
       - ./docker/config:/config
     command:
-      - /usr/bin/socat
-      - -v
-      - tcp-l:1234,fork
-      - exec:'/bin/cat'
-    ports:
-      - "1234:1234"
+      - /bin/bash
+      - -c
+      - /usr/bin/tail -f /dev/null
     depends_on:
       - "upstream-pd"
-      - "schema-registry"
-      - "kafka-connect-01"
       - "kafka"
       - "capturer0"
       - "capturer1"
@@ -32,7 +27,7 @@ services:
     image: ticdc:latest
     build:
       context: .
-      dockerfile: ./Dockerfile.development
+      dockerfile: ./Dockerfile
     volumes:
       - /data
       - ./docker/logs:/logs
@@ -41,7 +36,6 @@ services:
       - --addr=0.0.0.0:8300
       - --pd=http://upstream-pd:2379
       - --log-file=/logs/capturer0.log
-      - --log-level=debug
       - --advertise-addr=capturer0:8300
     depends_on:
       - "upstream-tidb"
@@ -53,7 +47,7 @@ services:
     image: ticdc:latest
     build:
       context: .
-      dockerfile: ./Dockerfile.development
+      dockerfile: ./Dockerfile
     volumes:
       - /data
       - ./docker/logs:/logs
@@ -62,7 +56,6 @@ services:
       - --addr=0.0.0.0:8300
       - --pd=http://upstream-pd:2379
       - --log-file=/logs/capturer1.log
-      - --log-level=debug
       - --advertise-addr=capturer1:8300
     depends_on:
       - "upstream-tidb"
@@ -74,7 +67,7 @@ services:
     image: ticdc:latest
     build:
       context: .
-      dockerfile: ./Dockerfile.development
+      dockerfile: ./Dockerfile
     volumes:
       - /data
       - ./docker/logs:/logs
@@ -83,7 +76,6 @@ services:
       - --addr=0.0.0.0:8300
       - --pd=http://upstream-pd:2379
       - --log-file=/logs/capturer2.log
-      - --log-level=debug
       - --advertise-addr=capturer2:8300
     depends_on:
       - "upstream-tidb"
@@ -125,7 +117,6 @@ services:
       - --pd=upstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/upstream-tikv0.log
-      - --log-level=debug
     depends_on:
       - "upstream-pd"
     restart: on-failure
@@ -134,7 +125,7 @@ services:
     image: pingcap/tikv:release-4.0-nightly
     volumes:
       - ./docker/config/tikv.toml:/tikv.toml:ro
-      - ./docker/data:/data
+      - /data
       - ./docker/logs:/logs
     command:
       - --addr=0.0.0.0:20160
@@ -143,7 +134,6 @@ services:
       - --pd=upstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/upstream-tikv1.log
-      - --log-level=debug
     depends_on:
       - "upstream-pd"
     restart: on-failure
@@ -161,7 +151,6 @@ services:
       - --pd=upstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/upstream-tikv2.log
-      - --log-level=debug
     depends_on:
       - "upstream-pd"
     restart: on-failure
@@ -180,7 +169,6 @@ services:
       - --config=/tidb.toml
       - --log-file=/logs/upstream-tidb.log
       - --advertise-address=upstream-tidb
-      - -L=debug
     depends_on:
       - "upstream-tikv0"
       - "upstream-tikv1"
@@ -221,7 +209,6 @@ services:
       - --pd=downstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/downstream-tikv0.log
-      - --log-level=debug
     depends_on:
       - "downstream-pd"
     restart: on-failure
@@ -239,7 +226,6 @@ services:
       - --pd=downstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/downstream-tikv1.log
-      - --log-level=debug
     depends_on:
       - "downstream-pd"
     restart: on-failure
@@ -257,7 +243,6 @@ services:
       - --pd=downstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/downstream-tikv2.log
-      - --log-level=debug
     depends_on:
       - "downstream-pd"
     restart: on-failure
@@ -276,14 +261,13 @@ services:
       - --config=/tidb.toml
       - --log-file=/logs/downstream-tidb.log
       - --advertise-address=downstream-tidb
-      - -L=debug
     depends_on:
       - "downstream-tikv0"
       - "downstream-tikv1"
       - "downstream-tikv2"
     restart: on-failure
 
-# The rest of the file is adapted from https://github.com/confluentinc/demo-scene/blob/master/connect-jdbc/docker-compose.yml
+  # The rest of the file is adapted from https://github.com/confluentinc/demo-scene/blob/master/connect-jdbc/docker-compose.yml
 
   zookeeper:
     image: confluentinc/cp-zookeeper:5.5.1
@@ -296,7 +280,7 @@ services:
     image: confluentinc/cp-enterprise-kafka:5.5.1
     container_name: kafka
     depends_on:
-      - zookeeper
+      - "zookeeper"
     ports:
       # Exposes 9092 for external connections to the broker
       # Use kafka:29092 for connections internal on the docker network
@@ -318,70 +302,24 @@ services:
       CONFLUENT_METRICS_ENABLE: 'true'
       CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
 
-  schema-registry:
-    image: confluentinc/cp-schema-registry:5.5.1
-    container_name: schema-registry
+  canal-adapter:
+    image: canal-adapter:latest
+    build:
+      context: ./scripts/canal/docker/
+      dockerfile: ./Dockerfile
     ports:
       - 8081:8081
-    depends_on:
-      - zookeeper
-      - kafka
+    volumes:
+      - ./docker/logs:/root/logs
     environment:
-      SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:2181
-
-  kafka-connect-01:
-    image: confluentinc/cp-kafka-connect:5.5.1
-    container_name: kafka-connect-01
+      KAFKA_SERVER: kafka:9092
+      ZOOKEEPER_SERVER: zookeeper:2181
+      DB_NAME: testdb
+      DOWNSTREAM_DB_HOST: downstream-tidb
+      DOWNSTREAM_DB_PORT: 4000
     depends_on:
-      - zookeeper
-      - kafka
-      - schema-registry
-      - downstream-tidb
-    ports:
-      - 8083:8083
-    environment:
-      CONNECT_LOG4J_APPENDER_STDOUT_LAYOUT_CONVERSIONPATTERN: "[%d] %p %X{connector.context}%m (%c:%L)%n"
-      CONNECT_BOOTSTRAP_SERVERS: "kafka:29092"
-      CONNECT_REST_PORT: 8083
-      CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect-01"
-      CONNECT_GROUP_ID: compose-connect-group
-      CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
-      CONNECT_OFFSET_STORAGE_TOPIC: docker-connect-offsets
-      CONNECT_STATUS_STORAGE_TOPIC: docker-connect-status
-      CONNECT_KEY_CONVERTER: io.confluent.connect.avro.AvroConverter
-      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
-      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
-      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
-      CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-      CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
-      CONNECT_LOG4J_ROOT_LOGLEVEL: "INFO"
-      CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect.runtime.rest=WARN,org.reflections=ERROR"
-      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: "1"
-      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: "1"
-      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: "1"
-      CONNECT_PLUGIN_PATH: '/usr/share/java'
-    command:
-      - /bin/bash
-      - -c
-      - |
-        # JDBC Drivers
-        # ------------
-        # MySQL
-        cd /usr/share/java/kafka-connect-jdbc/
-        wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-java-8.0.21.tar.gz
-        tar -xf mysql-connector-java-8.0.21.tar.gz
-        mv mysql-connector-java-8.0.21/mysql-connector-java-8.0.21.jar ./
-        # Now launch Kafka Connect
-        sleep infinity &
-        /etc/confluent/docker/run
-
-  kafka-connect-healthcheck:
-    image: devshawn/kafka-connect-healthcheck:0.1.0
-    container_name: kafka-connect-healthcheck
-    depends_on:
-      - kafka-connect-01
-    ports:
-      - 18083:18083
-    environment:
-      HEALTHCHECK_CONNECT_URL: 'http://kafka-connect-01:8083'
+      - "zookeeper"
+      - "kafka"
+      - "upstream-tidb"
+      - "downstream-tidb"
+    restart: on-failure

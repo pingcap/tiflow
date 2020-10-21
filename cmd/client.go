@@ -77,6 +77,9 @@ var (
 	captureID    string
 	interval     uint
 
+	syncPointEnabled  bool
+	syncPointInterval time.Duration
+
 	optForceRemove bool
 
 	defaultContext context.Context
