@@ -120,6 +120,7 @@ services:
       - --pd=upstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/upstream-tikv0.log
+      - --log-level=debug
     depends_on:
       - "upstream-pd"
     restart: on-failure
@@ -137,6 +138,7 @@ services:
       - --pd=upstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/upstream-tikv1.log
+      - --log-level=debug
     depends_on:
       - "upstream-pd"
     restart: on-failure
@@ -154,6 +156,7 @@ services:
       - --pd=upstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/upstream-tikv2.log
+      - --log-level=debug
     depends_on:
       - "upstream-pd"
     restart: on-failure
@@ -172,6 +175,7 @@ services:
       - --config=/tidb.toml
       - --log-file=/logs/upstream-tidb.log
       - --advertise-address=upstream-tidb
+      - -L=debug
     depends_on:
       - "upstream-tikv0"
       - "upstream-tikv1"
@@ -212,6 +216,7 @@ services:
       - --pd=downstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/downstream-tikv0.log
+      - --log-level=debug
     depends_on:
       - "downstream-pd"
     restart: on-failure
@@ -229,6 +234,7 @@ services:
       - --pd=downstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/downstream-tikv1.log
+      - --log-level=debug
     depends_on:
       - "downstream-pd"
     restart: on-failure
@@ -246,6 +252,7 @@ services:
       - --pd=downstream-pd:2379
       - --config=/tikv.toml
       - --log-file=/logs/downstream-tikv2.log
+      - --log-level=debug
     depends_on:
       - "downstream-pd"
     restart: on-failure
@@ -264,6 +271,7 @@ services:
       - --config=/tidb.toml
       - --log-file=/logs/downstream-tidb.log
       - --advertise-address=downstream-tidb
+      - -L=debug
     depends_on:
       - "downstream-tikv0"
       - "downstream-tikv1"

@@ -62,7 +62,7 @@ func testCanal() {
 func testCanalJson() {
 	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
 	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
-	task := &canal.SingleTableTask{TableName: "test"}
+	task := &canal.SingleTableTask{TableName: "test", UseJson: true}
 	testCases := []framework.Task{
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),

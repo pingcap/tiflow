@@ -311,9 +311,15 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 		}
 		if e.row == nil {
 			if e.resolvedTs != 0 {
-				if err := flushToProducer(codec.EncoderNeedAsyncWrite); err != nil {
+				op, err := encoder.AppendResolvedEvent(e.resolvedTs)
+				if err != nil {
 					return errors.Trace(err)
 				}
+
+				if err := flushToProducer(op); err != nil {
+					return errors.Trace(err)
+				}
+
 				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
 				k.resolvedNotifier.Notify()
 			}

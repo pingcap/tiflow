@@ -16,11 +16,11 @@ package codec
 import (
 	"encoding/json"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerrors "github.com/pingcap/ticdc/pkg/errors"
 	canal "github.com/pingcap/ticdc/proto/canal"
 	"go.uber.org/zap"
-	"log"
 )
 
 // CanalFlatEventBatchEncoder encodes Canal flat messages in JSON format
@@ -120,12 +120,10 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		tikvTs:        e.CommitTs,
 	}
 
-	if data != nil {
-		ret.Data = append(ret.Data, data)
-	}
-	if oldData != nil {
-		ret.Old = append(ret.Old, oldData)
-	}
+	// We need to ensure that both Data and Old have exactly one element,
+	// even if the element could be nil. Changing this could break Alibaba's adapter
+	ret.Data = append(ret.Data, data)
+	ret.Old = append(ret.Old, oldData)
 
 	return ret, nil
 }
@@ -157,12 +155,14 @@ func (c *CanalFlatEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEv
 	if err != nil {
 		return EncoderNoOperation, errors.Trace(err)
 	}
+	log.Debug("AppendRowChangedEvent", zap.Reflect("msg", msg), zap.Reflect("event", e))
 	c.unresolvedBuf = append(c.unresolvedBuf, msg)
 	return EncoderNoOperation, nil
 }
 
 // AppendResolvedEvent receives the latest resolvedTs
 func (c *CanalFlatEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
+	log.Debug("AppendResolvedEvent", zap.Uint64("ts", ts))
 	nextIdx := 0
 	for _, msg := range c.unresolvedBuf {
 		if msg.tikvTs <= ts {
@@ -194,6 +194,7 @@ func (c *CanalFlatEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessa
 
 // Build implements the EventBatchEncoder interface
 func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
+	log.Debug("Build")
 	if len(c.resolvedBuf) == 0 {
 		return nil
 	}
@@ -205,6 +206,7 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 			return nil
 		}
 		ret[i] = NewMQMessage(nil, value, c.resolvedBuf[i].tikvTs)
+		log.Debug("CanalJson", zap.ByteString("message", ret[i].Value))
 	}
 	c.resolvedBuf = c.resolvedBuf[0:0]
 	return ret
