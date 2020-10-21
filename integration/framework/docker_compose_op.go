@@ -29,11 +29,16 @@ type DockerComposeOperator struct {
 	FileName      string
 	Controller    string
 	HealthChecker func() error
+	ExecEnv       []string
 }
 
 // Setup brings up a docker-compose service
 func (d *DockerComposeOperator) Setup() {
 	cmd := exec.Command("docker-compose", "-f", d.FileName, "up", "-d")
+	cmd.Env = os.Environ()
+	for _, e := range d.ExecEnv {
+		cmd.Env = append(cmd.Env, e)
+	}
 	runCmdHandleError(cmd)
 
 	if d.HealthChecker != nil {
