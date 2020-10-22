@@ -1,7 +1,0 @@
-package puller
-
-type miniEvent struct {
-	ts    uint64
-	key   binary
-	value binary
-}

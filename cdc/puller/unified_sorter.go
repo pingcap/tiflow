@@ -64,7 +64,7 @@ type fileSorterBackEnd struct {
 func (f *fileSorterBackEnd) flush() error {
 	err := f.readWriter.Flush()
 	if err != nil {
-		return errors.AddStack(err)
+		return errors.Trace(err)
 	}
 
 	_, err = f.f.Seek(0, 0)
@@ -83,12 +83,12 @@ func (f *fileSorterBackEnd) getSize() int {
 func (f *fileSorterBackEnd) reset() error {
 	err := f.f.Truncate(int64(0))
 	if err != nil {
-		return errors.AddStack(err)
+		return errors.Trace(err)
 	}
 
 	_, err = f.f.Seek(0, 0)
 	if err != nil {
-		return errors.AddStack(err)
+		return errors.Trace(err)
 	}
 
 	f.size = 0
@@ -100,12 +100,12 @@ func (f *fileSorterBackEnd) reset() error {
 func (f *fileSorterBackEnd) free() error {
 	err := f.f.Close()
 	if err != nil {
-		return errors.AddStack(err)
+		return errors.Trace(err)
 	}
 
 	err = os.Remove(f.name)
 	if err != nil {
-		return errors.AddStack(err)
+		return errors.Trace(err)
 	}
 	return nil
 }
@@ -130,7 +130,7 @@ func (m *msgPackGenSerde) unmarshal(event *model.PolymorphicEvent, bytes []byte)
 
 	bytes, err := event.RawKV.UnmarshalMsg(bytes)
 	if err != nil {
-		return nil, errors.AddStack(err)
+		return nil, errors.Trace(err)
 	}
 
 	event.StartTs = event.RawKV.StartTs
@@ -142,7 +142,7 @@ func (m *msgPackGenSerde) unmarshal(event *model.PolymorphicEvent, bytes []byte)
 func newFileSorterBackEnd(fileName string, serde serializerDeserializer) (*fileSorterBackEnd, error) {
 	f, err := os.Create(fileName)
 	if err != nil {
-		return nil, errors.AddStack(err)
+		return nil, errors.Trace(err)
 	}
 
 	reader := bufio.NewReaderSize(f, fileBufferSize)
@@ -166,7 +166,7 @@ func (f *fileSorterBackEnd) readNext() (*model.PolymorphicEvent, error) {
 		if err == io.EOF {
 			return nil, nil
 		}
-		return nil, errors.AddStack(err)
+		return nil, errors.Trace(err)
 	}
 	if m != magic {
 		log.Fatal("fileSorterBackEnd: wrong magic. Damaged file or bug?", zap.Uint32("magic", m))
@@ -178,7 +178,7 @@ func (f *fileSorterBackEnd) readNext() (*model.PolymorphicEvent, error) {
 		if err == io.EOF {
 			return nil, nil
 		}
-		return nil, errors.AddStack(err)
+		return nil, errors.Trace(err)
 	}
 
 	if cap(f.rawBytes) < int(size) {
@@ -188,13 +188,13 @@ func (f *fileSorterBackEnd) readNext() (*model.PolymorphicEvent, error) {
 
 	err = binary.Read(f.readWriter, binary.LittleEndian, f.rawBytes)
 	if err != nil {
-		return nil, errors.AddStack(err)
+		return nil, errors.Trace(err)
 	}
 
 	event := new(model.PolymorphicEvent)
 	_, err = f.serde.unmarshal(event, f.rawBytes)
 	if err != nil {
-		return nil, errors.AddStack(err)
+		return nil, errors.Trace(err)
 	}
 
 	return event, nil
@@ -204,7 +204,7 @@ func (f *fileSorterBackEnd) writeNext(event *model.PolymorphicEvent) error {
 	var err error
 	f.rawBytes, err = f.serde.marshal(event, f.rawBytes)
 	if err != nil {
-		return errors.AddStack(err)
+		return errors.Trace(err)
 	}
 
 	size := len(f.rawBytes)
@@ -214,17 +214,17 @@ func (f *fileSorterBackEnd) writeNext(event *model.PolymorphicEvent) error {
 
 	err = binary.Write(f.readWriter, binary.LittleEndian, uint32(magic))
 	if err != nil {
-		return errors.AddStack(err)
+		return errors.Trace(err)
 	}
 
 	err = binary.Write(f.readWriter, binary.LittleEndian, uint32(size))
 	if err != nil {
-		return errors.AddStack(err)
+		return errors.Trace(err)
 	}
 
 	err = binary.Write(f.readWriter, binary.LittleEndian, f.rawBytes)
 	if err != nil {
-		return errors.AddStack(err)
+		return errors.Trace(err)
 	}
 
 	f.size = f.size + 8 + size
@@ -343,7 +343,7 @@ func (p *backEndPool) alloc() (sorterBackEnd, error) {
 	log.Debug("Unified Sorter: trying to create file backEnd")
 	ret, err := newFileSorterBackEnd(fname, &msgPackGenSerde{})
 	if err != nil {
-		return nil, errors.AddStack(err)
+		return nil, errors.Trace(err)
 	}
 
 	atomic.AddInt64(&p.memoryUseEstimate, heapSizeLimit)
@@ -371,7 +371,7 @@ func (p *backEndPool) dealloc(backEnd sorterBackEnd) error {
 		// Cache is full.
 		err := b.free()
 		if err != nil {
-			return errors.AddStack(err)
+			return errors.Trace(err)
 		}
 		return nil
 	default:
@@ -410,13 +410,13 @@ func newHeapSorter(id int, pool *backEndPool, out chan *flushTask) *heapSorter {
 // flush should only be called within the main loop in run().
 func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	isEmptyFlush := h.heap.Len() == 0
-	var backEnd sorterBackEnd = nil
+	var backEnd sorterBackEnd
 
 	if !isEmptyFlush {
 		var err error
 		backEnd, err = h.backEndPool.alloc()
 		if err != nil {
-			return errors.AddStack(err)
+			return errors.Trace(err)
 		}
 	}
 
@@ -512,7 +512,7 @@ func (h *heapSorter) run(ctx context.Context) error {
 			if needFlush {
 				err := h.flush(ctx, maxResolved)
 				if err != nil {
-					return errors.AddStack(err)
+					return errors.Trace(err)
 				}
 				heapSizeBytesEstimate = 0
 			}

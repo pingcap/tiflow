@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 	"io/ioutil"
 	"net/http"
+	"time"
 )
 
 // AvroSingleTableTask provides a basic implementation for an Avro test case
@@ -62,7 +63,7 @@ func (a *AvroSingleTableTask) Prepare(taskContext *TaskContext) error {
 	if err != nil {
 		return err
 	}
-	// taskContext.Downstream.SetConnMaxLifetime(5 * time.Second)
+	taskContext.Downstream.SetConnMaxLifetime(5 * time.Second)
 
 	// TODO better way to generate JSON
 	connectorConfigFmt := `{
