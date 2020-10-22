@@ -101,6 +101,11 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		for i := range rowData.AfterColumns {
 			data[rowData.AfterColumns[i].Name] = rowData.AfterColumns[i].Value
 		}
+	} else {
+		// The event type is DELETE
+		// The following line is important because Alibaba's adapter expects this
+		// TODO figure out whether flink or other potential data consumers expects this!
+		data = oldData
 	}
 
 	ret := &canalFlatMessage{
