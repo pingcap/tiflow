@@ -236,7 +236,7 @@ func (r *RowChangedEvent) IsDelete() bool {
 	return len(r.PreColumns) != 0 && len(r.Columns) == 0
 }
 
-// HandleKeyColumns returns the column(s) corresponding to the handle key(s)
+// PrimaryKeyColumns returns the column(s) corresponding to the handle key(s)
 func (r *RowChangedEvent) PrimaryKeyColumns() []*Column {
 	pkeyCols := make([]*Column, 0)
 
@@ -256,7 +256,6 @@ func (r *RowChangedEvent) PrimaryKeyColumns() []*Column {
 	// It is okay not to have primary keys, so the empty array is an acceptable result
 	return pkeyCols
 }
-
 
 // HandleKeyColumns returns the column(s) corresponding to the handle key(s)
 func (r *RowChangedEvent) HandleKeyColumns() []*Column {

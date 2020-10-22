@@ -36,9 +36,7 @@ type DockerComposeOperator struct {
 func (d *DockerComposeOperator) Setup() {
 	cmd := exec.Command("docker-compose", "-f", d.FileName, "up", "-d")
 	cmd.Env = os.Environ()
-	for _, e := range d.ExecEnv {
-		cmd.Env = append(cmd.Env, e)
-	}
+	cmd.Env = append(cmd.Env, d.ExecEnv...)
 	runCmdHandleError(cmd)
 
 	if d.HealthChecker != nil {

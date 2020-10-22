@@ -155,6 +155,7 @@ func (c *CanalFlatEventBatchEncoder) EncodeCheckpointEvent(ts uint64) (*MQMessag
 	return nil, nil
 }
 
+// AppendRowChangedEvent implements the interface EventBatchEncoder
 func (c *CanalFlatEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) (EncoderResult, error) {
 	msg, err := c.newFlatMessageForDML(e)
 	if err != nil {

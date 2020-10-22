@@ -105,7 +105,7 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 		c.Assert(err, check.IsNil)
 		c.Assert(result, check.Equals, EncoderNoOperation)
 
-		if i >= 100 && (i % 100 == 0 || i == 999) {
+		if i >= 100 && (i%100 == 0 || i == 999) {
 			resolvedTs := uint64(i - 50)
 			if i == 999 {
 				resolvedTs = 999
@@ -117,14 +117,14 @@ func (s *canalFlatSuite) TestBatching(c *check.C) {
 
 			msgs := encoder.Build()
 			c.Assert(msgs, check.NotNil)
-			c.Assert(msgs, check.HasLen, int(resolvedTs - lastResolved))
+			c.Assert(msgs, check.HasLen, int(resolvedTs-lastResolved))
 
 			for j := range msgs {
 				var msg canalFlatMessage
 				err := json.Unmarshal(msgs[j].Value, &msg)
 				c.Assert(err, check.IsNil)
 				c.Assert(msg.EventType, check.Equals, "UPDATE")
-				c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(lastResolved + uint64(i)))
+				c.Assert(msg.ExecutionTime, check.Equals, convertToCanalTs(lastResolved+uint64(i)))
 			}
 
 			lastResolved = resolvedTs

@@ -28,7 +28,7 @@ const (
 // SingleTableTask provides a basic implementation for an Avro test case
 type SingleTableTask struct {
 	TableName string
-	UseJson   bool
+	UseJSON   bool
 }
 
 // Name implements Task
@@ -40,7 +40,7 @@ func (c *SingleTableTask) Name() string {
 // GetCDCProfile implements Task
 func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 	var protocol string
-	if c.UseJson {
+	if c.UseJSON {
 		protocol = "canal-json"
 	} else {
 		protocol = "canal"

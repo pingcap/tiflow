@@ -59,10 +59,10 @@ func testCanal() {
 	runTests(testCases, env)
 }
 
-func testCanalJson() {
+func testCanalJSON() {
 	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
 	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
-	task := &canal.SingleTableTask{TableName: "test", UseJson: true}
+	task := &canal.SingleTableTask{TableName: "test", UseJSON: true}
 	testCases := []framework.Task{
 		tests.NewSimpleCase(task),
 		tests.NewDeleteCase(task),
@@ -96,7 +96,7 @@ func main() {
 	} else if *testProtocol == "canal" {
 		testCanal()
 	} else if *testProtocol == "canalJson" {
-		testCanalJson()
+		testCanalJSON()
 	} else {
 		log.Fatal("Unknown sink protocol", zap.String("protocol", *testProtocol))
 	}
