@@ -116,6 +116,10 @@ lint: tools/bin/revive
 	@echo "linting"
 	@tools/bin/revive -formatter friendly -config tools/check/revive.toml $(FILES)
 
+errdoc: tools/bin/errdoc-gen
+	@echo "generator errors.toml"
+	./tools/check/check-errdoc.sh
+
 check-copyright:
 	@echo "check-copyright"
 	@./scripts/check-copyright.sh
@@ -128,7 +132,7 @@ tidy:
 	@echo "go mod tidy"
 	./tools/check/check-tidy.sh
 
-check: check-copyright fmt lint check-static tidy
+check: check-copyright fmt lint check-static tidy errdoc
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
@@ -154,6 +158,10 @@ clean:
 tools/bin/revive: tools/check/go.mod
 	cd tools/check; test -e ../bin/revive || \
 	$(GO) build -o ../bin/revive github.com/mgechev/revive
+
+tools/bin/errdoc-gen: tools/check/go.mod
+	cd tools/check; test -e ../bin/errdoc-gen || \
+	$(GO) build -o ../bin/errdoc-gen github.com/pingcap/tiup/components/errdoc/errdoc-gen
 
 tools/bin/golangci-lint: tools/check/go.mod
 	cd tools/check; test -e ../bin/golangci-lint || \
