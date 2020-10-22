@@ -55,7 +55,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 	})
 	encodedBytes, err := charmap.ISO8859_1.NewDecoder().Bytes([]byte("测试blob"))
 	c.Assert(err, check.IsNil)
-	c.Assert(msg.Data, check.DeepEquals, []map[string]string{
+	c.Assert(msg.Data, check.DeepEquals, []map[string]interface{}{
 		{
 			"id":      "1",
 			"name":    "Bob",
@@ -64,7 +64,7 @@ func (s *canalFlatSuite) TestNewCanalFlatMessageFromDML(c *check.C) {
 			"blob":    string(encodedBytes),
 		},
 	})
-	c.Assert(msg.Old, check.DeepEquals, []map[string]string{
+	c.Assert(msg.Old, check.DeepEquals, []map[string]interface{}{
 		{
 			"id":      "1",
 			"name":    "Alice",
