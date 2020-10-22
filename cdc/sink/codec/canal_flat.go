@@ -103,10 +103,10 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 	if len(rowData.AfterColumns) > 0 {
 		data = make(map[string]interface{}, len(rowData.AfterColumns))
 		for i := range rowData.AfterColumns {
-			if !rowData.BeforeColumns[i].GetIsNull() {
+			if !rowData.AfterColumns[i].GetIsNull() {
 				data[rowData.AfterColumns[i].Name] = rowData.AfterColumns[i].Value
 			} else {
-				data[rowData.BeforeColumns[i].Name] = nil
+				data[rowData.AfterColumns[i].Name] = nil
 			}
 		}
 	} else {
