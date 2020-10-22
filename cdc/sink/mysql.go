@@ -65,6 +65,9 @@ const (
 	defaultSafeMode            = true
 )
 
+// SyncpointTableName is the name of table where all syncpoint maps sit
+const syncpointTableName string = "syncpoint_v1"
+
 var (
 	validSchemes = map[string]bool{
 		"mysql":     true,
@@ -74,6 +77,9 @@ var (
 	}
 )
 
+type mysqlSyncpointStore struct {
+	db *sql.DB
+}
 type mysqlSink struct {
 	db     *sql.DB
 	params *sinkParams
@@ -94,6 +100,8 @@ type mysqlSink struct {
 	// metrics used by mysql sink only
 	metricConflictDetectDurationHis prometheus.Observer
 	metricBucketSizeCounters        []prometheus.Counter
+
+	forceReplicate bool
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -519,6 +527,7 @@ func newMySQLSink(
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
 		errCh:                           make(chan error, 1),
+		forceReplicate:                  replicaConfig.ForceReplicate,
 	}
 
 	if val, ok := opts[mark.OptCyclicConfig]; ok {
@@ -820,7 +829,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		// Translate to UPDATE if old value is enabled, not in safe mode and is update event
 		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 			flushCacheDMLs()
-			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns)
+			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
 			if query != "" {
 				sqls = append(sqls, query)
 				values = append(values, args)
@@ -834,7 +843,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		// update will be translated to DELETE + INSERT(or REPLACE) SQL.
 		if len(row.PreColumns) != 0 {
 			flushCacheDMLs()
-			query, args = prepareDelete(quoteTable, row.PreColumns)
+			query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
 			if query != "" {
 				sqls = append(sqls, query)
 				values = append(values, args)
@@ -885,6 +894,10 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 }
 
 func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+	failpoint.Inject("SinkFlushDMLPanic", func() {
+		time.Sleep(time.Second)
+		log.Fatal("SinkFlushDMLPanic")
+	})
 	failpoint.Inject("MySQLSinkExecDMLError", func() {
 		// Add a delay to ensure the sink worker with `MySQLSinkHangLongTime`
 		// failpoint injected is executed first.
@@ -977,7 +990,7 @@ func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string
 	return sqls, args
 }
 
-func prepareUpdate(quoteTable string, preCols, cols []*model.Column) (string, []interface{}) {
+func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("UPDATE " + quoteTable + " SET ")
 
@@ -1002,7 +1015,7 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column) (string, []
 	}
 
 	builder.WriteString(" WHERE ")
-	colNames, wargs := whereSlice(preCols)
+	colNames, wargs := whereSlice(preCols, forceReplicate)
 	if len(wargs) == 0 {
 		return "", nil
 	}
@@ -1022,11 +1035,11 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column) (string, []
 	return sql, args
 }
 
-func prepareDelete(quoteTable string, cols []*model.Column) (string, []interface{}) {
+func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quoteTable + " WHERE ")
 
-	colNames, wargs := whereSlice(cols)
+	colNames, wargs := whereSlice(cols, forceReplicate)
 	if len(wargs) == 0 {
 		return "", nil
 	}
@@ -1047,7 +1060,7 @@ func prepareDelete(quoteTable string, cols []*model.Column) (string, []interface
 	return sql, args
 }
 
-func whereSlice(cols []*model.Column) (colNames []string, args []interface{}) {
+func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for _, col := range cols {
 		if col == nil || !col.Flag.IsHandleKey() {
@@ -1055,6 +1068,15 @@ func whereSlice(cols []*model.Column) (colNames []string, args []interface{}) {
 		}
 		colNames = append(colNames, col.Name)
 		args = append(args, col.Value)
+	}
+	// if no explicit row id but force replicate, use all key-values in where condition
+	if len(colNames) == 0 && forceReplicate {
+		colNames = make([]string, 0, len(cols))
+		args = make([]interface{}, 0, len(cols))
+		for _, col := range cols {
+			colNames = append(colNames, col.Name)
+			args = append(args, col.Value)
+		}
 	}
 	return
 }
@@ -1100,4 +1122,161 @@ func buildColumnList(names []string) string {
 	}
 
 	return b.String()
+}
+
+// newSyncpointStore create a sink to record the syncpoint map in downstream DB for every changefeed
+func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (SyncpointStore, error) {
+	var syncDB *sql.DB
+
+	//todo If is neither mysql nor tidb, such as kafka, just ignore this feature.
+	scheme := strings.ToLower(sinkURI.Scheme)
+	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
+		return nil, errors.New("can create mysql sink with unsupported scheme")
+	}
+	params := defaultParams
+	s := sinkURI.Query().Get("tidb-txn-mode")
+	if s != "" {
+		if s == "pessimistic" || s == "optimistic" {
+			params.tidbTxnMode = s
+		} else {
+			log.Warn("invalid tidb-txn-mode, should be pessimistic or optimistic, use optimistic as default")
+		}
+	}
+	var tlsParam string
+	if sinkURI.Query().Get("ssl-ca") != "" {
+		credential := security.Credential{
+			CAPath:   sinkURI.Query().Get("ssl-ca"),
+			CertPath: sinkURI.Query().Get("ssl-cert"),
+			KeyPath:  sinkURI.Query().Get("ssl-key"),
+		}
+		tlsCfg, err := credential.ToTLSConfig()
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to open MySQL connection")
+		}
+		name := "cdc_mysql_tls" + "syncpoint" + id
+		err = dmysql.RegisterTLSConfig(name, tlsCfg)
+		if err != nil {
+			return nil, errors.Annotate(err, "fail to open MySQL connection")
+		}
+		tlsParam = "?tls=" + name
+	}
+
+	// dsn format of the driver:
+	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+	username := sinkURI.User.Username()
+	password, _ := sinkURI.User.Password()
+	port := sinkURI.Port()
+	if username == "" {
+		username = "root"
+	}
+	if port == "" {
+		port = "4000"
+	}
+
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
+	dsn, err := dmysql.ParseDSN(dsnStr)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	tz := util.TimezoneFromCtx(ctx)
+	// create test db used for parameter detection
+	if dsn.Params == nil {
+		dsn.Params = make(map[string]string, 1)
+	}
+	dsn.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	testDB, err := sql.Open("mysql", dsn.FormatDSN())
+	if err != nil {
+		return nil, errors.Annotate(
+			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection when configuring sink")
+	}
+	defer testDB.Close()
+	dsnStr, err = configureSinkURI(ctx, dsn, tz, params, testDB)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	syncDB, err = sql.Open("mysql", dsnStr)
+	if err != nil {
+		return nil, errors.Annotate(err, "Open database connection failed")
+	}
+	err = syncDB.PingContext(ctx)
+	if err != nil {
+		return nil, errors.Annotate(err, "fail to open MySQL connection")
+	}
+
+	log.Info("Start mysql syncpoint sink")
+	syncpointStore := &mysqlSyncpointStore{
+		db: syncDB,
+	}
+
+	return syncpointStore, nil
+}
+
+func (s *mysqlSyncpointStore) CreateSynctable(ctx context.Context) error {
+	database := mark.SchemaName
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		log.Error("create sync table: begin Tx fail", zap.Error(err))
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	_, err = tx.Exec("CREATE DATABASE IF NOT EXISTS " + database)
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+		}
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	_, err = tx.Exec("USE " + database)
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+		}
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	_, err = tx.Exec("CREATE TABLE  IF NOT EXISTS " + syncpointTableName + " (cf varchar(255),primary_ts varchar(18),secondary_ts varchar(18),PRIMARY KEY ( `cf`, `primary_ts` ) )")
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+		}
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	err = tx.Commit()
+	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+}
+
+func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, checkpointTs uint64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		log.Error("sync table: begin Tx fail", zap.Error(err))
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	row := tx.QueryRow("select @@tidb_current_ts")
+	var secondaryTs string
+	err = row.Scan(&secondaryTs)
+	if err != nil {
+		log.Info("sync table: get tidb_current_ts err")
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+		}
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	_, err = tx.Exec("insert into "+mark.SchemaName+"."+syncpointTableName+"(cf, primary_ts, secondary_ts) VALUES (?,?,?)", id, checkpointTs, secondaryTs)
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error(cerror.WrapError(cerror.ErrMySQLTxnError, err2).Error())
+		}
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+	err = tx.Commit()
+	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+}
+
+func (s *mysqlSyncpointStore) Close() error {
+	err := s.db.Close()
+	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
 }

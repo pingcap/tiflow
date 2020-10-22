@@ -187,7 +187,7 @@ func newProcessor(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := createSchemaStorage(endpoints, credential, checkpointTs, filter)
+	schemaStorage, err := createSchemaStorage(endpoints, credential, checkpointTs, filter, changefeed.Config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -860,9 +860,22 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				p.sinkEmittedResolvedNotifier.Notify()
 				continue
 			}
+			// Global resolved ts should fallback in some table rebalance cases,
+			// since the start-ts(from checkpoint ts) or a rebalanced table could
+			// be less then the global resolved ts.
+			localResolvedTs := atomic.LoadUint64(&p.localResolvedTs)
+			if resolvedTs > localResolvedTs {
+				log.Info("global resolved ts fallback",
+					zap.String("changefeed", p.changefeedID),
+					zap.Uint64("localResolvedTs", localResolvedTs),
+					zap.Uint64("resolvedTs", resolvedTs),
+				)
+				resolvedTs = localResolvedTs
+			}
 			if row.CRTs <= resolvedTs {
 				log.Fatal("The CRTs must be greater than the resolvedTs",
 					zap.String("model", "processor"),
+					zap.String("changefeed", p.changefeedID),
 					zap.Uint64("resolvedTs", resolvedTs),
 					zap.Any("row", row))
 			}
@@ -885,7 +898,13 @@ func (p *processor) collectMetrics(ctx context.Context) error {
 	}
 }
 
-func createSchemaStorage(pdEndpoints []string, credential *security.Credential, checkpointTs uint64, filter *filter.Filter) (*entry.SchemaStorage, error) {
+func createSchemaStorage(
+	pdEndpoints []string,
+	credential *security.Credential,
+	checkpointTs uint64,
+	filter *filter.Filter,
+	forceReplicate bool,
+) (*entry.SchemaStorage, error) {
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","), credential)
 	if err != nil {
@@ -895,7 +914,7 @@ func createSchemaStorage(pdEndpoints []string, credential *security.Credential, 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return entry.NewSchemaStorage(meta, checkpointTs, filter)
+	return entry.NewSchemaStorage(meta, checkpointTs, filter, forceReplicate)
 }
 
 func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
