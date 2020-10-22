@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package tests
 
 import (
 	"fmt"
@@ -21,22 +21,25 @@ import (
 	"github.com/pingcap/ticdc/integration/framework"
 )
 
-//nolint:unused
-type alterCase struct {
-	framework.AvroSingleTableTask
+// AlterCase is base impl of test case for alter operation
+type AlterCase struct {
+	framework.Task
 }
 
-func newAlterCase() *alterCase {
-	alterCase := new(alterCase)
-	alterCase.AvroSingleTableTask.TableName = "test"
-	return alterCase
+// NewAlterCase create a test case which contains alter ddls
+func NewAlterCase(task framework.Task) *AlterCase {
+	return &AlterCase{
+		Task: task,
+	}
 }
 
-func (c *alterCase) Name() string {
+// Name impl framework.Task interface
+func (c *AlterCase) Name() string {
 	return "Alter"
 }
 
-func (c *alterCase) Run(ctx *framework.TaskContext) error {
+// Run impl framework.Task interface
+func (c *AlterCase) Run(ctx *framework.TaskContext) error {
 	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key)")
 	if err != nil {
 		return err
