@@ -729,6 +729,8 @@ func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
 					log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
 					return err
 				}
+				// syncpointRecorded is not used any more afterward, but we still maintain the right value of it.
+				syncpointRecorded = true
 			}
 			c.ddlTs = 0
 		}
