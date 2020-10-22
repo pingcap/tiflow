@@ -40,19 +40,19 @@ func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 }
 
 type canalFlatMessage struct {
-	ID            int64               `json:"id"`
-	Schema        string              `json:"database"`
-	Table         string              `json:"table"`
-	PKNames       []string            `json:"pkNames"`
-	IsDDL         bool                `json:"isDdl"`
-	EventType     string              `json:"type"`
-	ExecutionTime int64               `json:"es"`
-	BuildTime     uint64              `json:"ts"`
-	Query         string              `json:"sql"`
-	SQLType       map[string]int32    `json:"sqlType"`
-	MySQLType     map[string]string   `json:"mysqlType"`
-	Data          []map[string]string `json:"data"`
-	Old           []map[string]string `json:"old"`
+	ID            int64                    `json:"id"`
+	Schema        string                   `json:"database"`
+	Table         string                   `json:"table"`
+	PKNames       []string                 `json:"pkNames"`
+	IsDDL         bool                     `json:"isDdl"`
+	EventType     string                   `json:"type"`
+	ExecutionTime int64                    `json:"es"`
+	BuildTime     uint64                   `json:"ts"`
+	Query         string                   `json:"sql"`
+	SQLType       map[string]int32         `json:"sqlType"`
+	MySQLType     map[string]string        `json:"mysqlType"`
+	Data          []map[string]interface{} `json:"data"`
+	Old           []map[string]interface{} `json:"old"`
 	tikvTs        uint64
 }
 
@@ -85,21 +85,29 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 	}
 
 	var (
-		data    map[string]string
-		oldData map[string]string
+		data    map[string]interface{}
+		oldData map[string]interface{}
 	)
 
 	if len(rowData.BeforeColumns) > 0 {
-		oldData = make(map[string]string, len(rowData.BeforeColumns))
+		oldData = make(map[string]interface{}, len(rowData.BeforeColumns))
 		for i := range rowData.BeforeColumns {
-			oldData[rowData.BeforeColumns[i].Name] = rowData.BeforeColumns[i].Value
+			if !rowData.BeforeColumns[i].GetIsNull() {
+				oldData[rowData.BeforeColumns[i].Name] = rowData.BeforeColumns[i].Value
+			} else {
+				oldData[rowData.BeforeColumns[i].Name] = nil
+			}
 		}
 	}
 
 	if len(rowData.AfterColumns) > 0 {
-		data = make(map[string]string, len(rowData.AfterColumns))
+		data = make(map[string]interface{}, len(rowData.AfterColumns))
 		for i := range rowData.AfterColumns {
-			data[rowData.AfterColumns[i].Name] = rowData.AfterColumns[i].Value
+			if !rowData.BeforeColumns[i].GetIsNull() {
+				data[rowData.AfterColumns[i].Name] = rowData.AfterColumns[i].Value
+			} else {
+				data[rowData.BeforeColumns[i].Name] = nil
+			}
 		}
 	} else {
 		// The event type is DELETE
@@ -120,8 +128,8 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		Query:         "",
 		SQLType:       sqlType,
 		MySQLType:     mysqlType,
-		Data:          make([]map[string]string, 0),
-		Old:           make([]map[string]string, 0),
+		Data:          make([]map[string]interface{}, 0),
+		Old:           make([]map[string]interface{}, 0),
 		tikvTs:        e.CommitTs,
 	}
 
