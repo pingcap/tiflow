@@ -51,6 +51,7 @@ type ReplicaConfig replicaConfig
 type replicaConfig struct {
 	CaseSensitive  bool             `toml:"case-sensitive" json:"case-sensitive"`
 	EnableOldValue bool             `toml:"enable-old-value" json:"enable-old-value"`
+	ForceReplicate bool             `toml:"force-replicate" json:"force-replicate"`
 	Filter         *FilterConfig    `toml:"filter" json:"filter"`
 	Mounter        *MounterConfig   `toml:"mounter" json:"mounter"`
 	Sink           *SinkConfig      `toml:"sink" json:"sink"`

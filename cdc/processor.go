@@ -187,7 +187,7 @@ func newProcessor(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := createSchemaStorage(endpoints, credential, checkpointTs, filter)
+	schemaStorage, err := createSchemaStorage(endpoints, credential, checkpointTs, filter, changefeed.Config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -901,7 +901,13 @@ func (p *processor) collectMetrics(ctx context.Context) error {
 	}
 }
 
-func createSchemaStorage(pdEndpoints []string, credential *security.Credential, checkpointTs uint64, filter *filter.Filter) (*entry.SchemaStorage, error) {
+func createSchemaStorage(
+	pdEndpoints []string,
+	credential *security.Credential,
+	checkpointTs uint64,
+	filter *filter.Filter,
+	forceReplicate bool,
+) (*entry.SchemaStorage, error) {
 	// TODO here we create another pb client,we should reuse them
 	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","), credential)
 	if err != nil {
@@ -911,7 +917,7 @@ func createSchemaStorage(pdEndpoints []string, credential *security.Credential, 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return entry.NewSchemaStorage(meta, checkpointTs, filter)
+	return entry.NewSchemaStorage(meta, checkpointTs, filter, forceReplicate)
 }
 
 func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {

@@ -166,7 +166,7 @@ func (c *changeFeed) addTable(tblInfo *model.TableInfo, targetTs model.Ts) {
 		return
 	}
 
-	if !tblInfo.IsEligible() {
+	if !tblInfo.IsEligible(c.info.Config.ForceReplicate) {
 		log.Warn("skip ineligible table", zap.Int64("tid", tblInfo.ID), zap.Stringer("table", tblInfo.TableName))
 		return
 	}

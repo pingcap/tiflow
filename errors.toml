@@ -446,6 +446,11 @@ error = '''
 received event regionID %v, requestID %v from %v, but neither pending region nor running region was found
 '''
 
+["CDC:ErrOldValueNotEnabled"]
+error = '''
+old value is not enabled
+'''
+
 ["CDC:ErrOwnerChangefeedNotFound"]
 error = '''
 changefeed %s not found in owner cache
