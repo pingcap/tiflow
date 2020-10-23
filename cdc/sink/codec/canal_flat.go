@@ -111,8 +111,7 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 		}
 	} else {
 		// The event type is DELETE
-		// The following line is important because Alibaba's adapter expects this
-		// TODO figure out whether flink or other potential data consumers expects this!
+		// The following line is important because Alibaba's adapter expects this, and so does Flink.
 		data = oldData
 	}
 
@@ -169,14 +168,12 @@ func (c *CanalFlatEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEv
 	if err != nil {
 		return EncoderNoOperation, errors.Trace(err)
 	}
-	log.Debug("AppendRowChangedEvent", zap.Reflect("msg", msg), zap.Reflect("event", e))
 	c.unresolvedBuf = append(c.unresolvedBuf, msg)
 	return EncoderNoOperation, nil
 }
 
 // AppendResolvedEvent receives the latest resolvedTs
 func (c *CanalFlatEventBatchEncoder) AppendResolvedEvent(ts uint64) (EncoderResult, error) {
-	log.Debug("AppendResolvedEvent", zap.Uint64("ts", ts))
 	nextIdx := 0
 	for _, msg := range c.unresolvedBuf {
 		if msg.tikvTs <= ts {
@@ -208,7 +205,6 @@ func (c *CanalFlatEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessa
 
 // Build implements the EventBatchEncoder interface
 func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
-	log.Debug("Build")
 	if len(c.resolvedBuf) == 0 {
 		return nil
 	}
@@ -220,7 +216,6 @@ func (c *CanalFlatEventBatchEncoder) Build() []*MQMessage {
 			return nil
 		}
 		ret[i] = NewMQMessage(nil, value, c.resolvedBuf[i].tikvTs)
-		log.Debug("CanalJson", zap.ByteString("message", ret[i].Value))
 	}
 	c.resolvedBuf = c.resolvedBuf[0:0]
 	return ret
