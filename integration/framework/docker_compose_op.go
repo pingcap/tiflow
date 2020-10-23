@@ -69,7 +69,7 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 func (d *DockerComposeOperator) DumpStdout() error {
 	log.Info("Dumping container logs")
 	cmd := exec.Command("docker-compose", "-f", d.FileName, "logs", "-t")
-	f, err := os.Create("./stdout.log")
+	f, err := os.Create("../docker/logs/stdout.log")
 	if err != nil {
 		return errors.AddStack(err)
 	}
