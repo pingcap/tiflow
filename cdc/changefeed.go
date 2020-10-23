@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -78,14 +79,20 @@ type changeFeed struct {
 	info   *model.ChangeFeedInfo
 	status *model.ChangeFeedStatus
 
-	schema        *entry.SingleSchemaSnapshot
-	ddlState      model.ChangeFeedDDLState
-	targetTs      uint64
-	taskStatus    model.ProcessorsInfos
-	taskPositions map[model.CaptureID]*model.TaskPosition
-	filter        *filter.Filter
-	sink          sink.Sink
-	scheduler     scheduler.Scheduler
+	schema           *entry.SingleSchemaSnapshot
+	ddlState         model.ChangeFeedDDLState
+	targetTs         uint64
+	ddlTs            uint64
+	syncpointMutex   sync.Mutex
+	updateResolvedTs bool
+	startTimer       chan bool
+	syncpointStore   sink.SyncpointStore
+	syncCancel       context.CancelFunc
+	taskStatus       model.ProcessorsInfos
+	taskPositions    map[model.CaptureID]*model.TaskPosition
+	filter           *filter.Filter
+	sink             sink.Sink
+	scheduler        scheduler.Scheduler
 
 	cyclicEnabled bool
 
@@ -159,7 +166,7 @@ func (c *changeFeed) addTable(tblInfo *model.TableInfo, targetTs model.Ts) {
 		return
 	}
 
-	if !tblInfo.IsEligible() {
+	if !tblInfo.IsEligible(c.info.Config.ForceReplicate) {
 		log.Warn("skip ineligible table", zap.Int64("tid", tblInfo.ID), zap.Stringer("table", tblInfo.TableName))
 		return
 	}
@@ -685,6 +692,50 @@ func (c *changeFeed) handleDDL(ctx context.Context, captures map[string]*model.C
 	return nil
 }
 
+// handleSyncPoint record every syncpoint to downstream if the syncpoint feature is enable
+func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
+	//sync-point on
+	if c.info.SyncPointEnabled {
+		c.syncpointMutex.Lock()
+		defer c.syncpointMutex.Unlock()
+		// ticker and ddl can trigger syncpoint record at the same time, only record once
+		syncpointRecorded := false
+		// ResolvedTs == CheckpointTs means a syncpoint reached;
+		// !c.updateResolvedTs means the syncpoint is setted by ticker;
+		// c.ddlTs == 0 means no DDL wait to exec and we can sink the syncpoint record securely ( c.ddlTs != 0 means some DDL should be sink to downstream and this syncpoint is fake ).
+		if c.status.ResolvedTs == c.status.CheckpointTs && !c.updateResolvedTs {
+			log.Info("sync point reached by ticker", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs), zap.Uint64("ddlExecutedTs", c.ddlExecutedTs))
+			c.updateResolvedTs = true
+			err := c.syncpointStore.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
+			if err != nil {
+				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
+				return err
+			}
+			syncpointRecorded = true
+		}
+
+		if c.status.ResolvedTs == 0 {
+			c.updateResolvedTs = true
+		}
+
+		// ResolvedTs == CheckpointTs means a syncpoint reached;
+		// ResolvedTs == ddlTs means the syncpoint is setted by DDL;
+		// ddlTs <= ddlExecutedTs means the DDL has been execed.
+		if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs && c.ddlTs <= c.ddlExecutedTs {
+			log.Info("sync point reached by ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs), zap.Uint64("ddlExecutedTs", c.ddlExecutedTs))
+			if !syncpointRecorded {
+				err := c.syncpointStore.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
+				if err != nil {
+					log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
+					return err
+				}
+			}
+			c.ddlTs = 0
+		}
+	}
+	return nil
+}
+
 // calcResolvedTs update every changefeed's resolve ts and checkpoint ts.
 func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if c.ddlState != model.ChangeFeedSyncDML && c.ddlState != model.ChangeFeedWaitToExecDDL {
@@ -796,6 +847,7 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 	if len(c.ddlJobHistory) > 0 && minResolvedTs >= c.ddlJobHistory[0].BinlogInfo.FinishedTS {
 		minResolvedTs = c.ddlJobHistory[0].BinlogInfo.FinishedTS
 		c.ddlState = model.ChangeFeedWaitToExecDDL
+		c.ddlTs = minResolvedTs
 	}
 
 	// if downstream sink is the MQ sink, the MQ sink do not promise that checkpoint is less than globalResolvedTs
@@ -806,7 +858,15 @@ func (c *changeFeed) calcResolvedTs(ctx context.Context) error {
 
 	var tsUpdated bool
 
-	if minResolvedTs > c.status.ResolvedTs {
+	//syncpoint on
+	if c.info.SyncPointEnabled {
+		c.syncpointMutex.Lock()
+		if c.updateResolvedTs && minResolvedTs > c.status.ResolvedTs {
+			c.status.ResolvedTs = minResolvedTs
+			tsUpdated = true
+		}
+		c.syncpointMutex.Unlock()
+	} else if minResolvedTs > c.status.ResolvedTs {
 		c.status.ResolvedTs = minResolvedTs
 		tsUpdated = true
 	}
@@ -850,6 +910,37 @@ func (c *changeFeed) pullDDLJob() error {
 	return nil
 }
 
+// startSyncPeriod start a timer for every changefeed to create sync point by time
+func (c *changeFeed) startSyncPeriod(ctx context.Context, interval time.Duration) {
+	log.Debug("sync ticker start", zap.Duration("sync-interval", interval))
+	go func(ctx context.Context) {
+		ticker := time.NewTicker(interval)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				c.syncpointMutex.Lock()
+				c.updateResolvedTs = false
+				c.syncpointMutex.Unlock()
+			}
+		}
+	}(ctx)
+}
+
+func (c *changeFeed) stopSyncPointTicker() {
+	if c.syncCancel != nil {
+		c.syncCancel()
+		c.syncCancel = nil
+	}
+}
+
+func (c *changeFeed) startSyncPointTicker(ctx context.Context, interval time.Duration) {
+	var syncCtx context.Context
+	syncCtx, c.syncCancel = context.WithCancel(ctx)
+	c.startSyncPeriod(syncCtx, interval)
+}
+
 func (c *changeFeed) Close() {
 	err := c.ddlHandler.Close()
 	if err != nil {
@@ -858,6 +949,12 @@ func (c *changeFeed) Close() {
 	err = c.sink.Close()
 	if err != nil {
 		log.Warn("failed to close owner sink", zap.Error(err))
+	}
+	if c.syncpointStore != nil {
+		err = c.syncpointStore.Close()
+		if err != nil {
+			log.Warn("failed to close owner sink", zap.Error(err))
+		}
 	}
 	log.Info("changefeed closed", zap.String("id", c.id))
 }

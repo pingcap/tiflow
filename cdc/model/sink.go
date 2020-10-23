@@ -183,7 +183,7 @@ func (b *ColumnFlagType) UnsetIsUnsigned() {
 type TableName struct {
 	Schema      string `toml:"db-name" json:"db-name"`
 	Table       string `toml:"tbl-name" json:"tbl-name"`
-	TableID     int64  `toml:"tbl-id" json:"tbl-"`
+	TableID     int64  `toml:"tbl-id" json:"tbl-id"`
 	IsPartition bool   `toml:"is-partition" json:"is-partition"`
 }
 

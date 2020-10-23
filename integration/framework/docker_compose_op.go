@@ -24,19 +24,20 @@ import (
 	"go.uber.org/zap"
 )
 
-type dockerComposeOperator struct {
-	fileName      string
-	controller    string
-	healthChecker func() error
+// DockerComposeOperator represent a docker compose
+type DockerComposeOperator struct {
+	FileName      string
+	Controller    string
+	HealthChecker func() error
 }
 
 // Setup brings up a docker-compose service
-func (d *dockerComposeOperator) Setup() {
-	cmd := exec.Command("docker-compose", "-f", d.fileName, "up", "--detach")
+func (d *DockerComposeOperator) Setup() {
+	cmd := exec.Command("docker-compose", "-f", d.FileName, "up", "-d")
 	runCmdHandleError(cmd)
 
-	if d.healthChecker != nil {
-		err := retry.Run(time.Second, 120, d.healthChecker)
+	if d.HealthChecker != nil {
+		err := retry.Run(time.Second, 120, d.HealthChecker)
 		if err != nil {
 			log.Fatal("Docker service health check failed after max retries", zap.Error(err))
 		}
@@ -62,9 +63,9 @@ func runCmdHandleError(cmd *exec.Cmd) []byte {
 }
 
 // DumpStdout dumps all container logs
-func (d *dockerComposeOperator) DumpStdout() error {
+func (d *DockerComposeOperator) DumpStdout() error {
 	log.Info("Dumping container logs")
-	cmd := exec.Command("docker-compose", "-f", d.fileName, "logs", "-t")
+	cmd := exec.Command("docker-compose", "-f", d.FileName, "logs", "-t")
 	f, err := os.Create("./stdout.log")
 	if err != nil {
 		return errors.AddStack(err)
@@ -80,17 +81,17 @@ func (d *dockerComposeOperator) DumpStdout() error {
 }
 
 // TearDown terminates a docker-compose service and remove all volumes
-func (d *dockerComposeOperator) TearDown() {
+func (d *DockerComposeOperator) TearDown() {
 	log.Info("Start tearing down docker-compose services")
-	cmd := exec.Command("docker-compose", "-f", d.fileName, "down", "-v")
+	cmd := exec.Command("docker-compose", "-f", d.FileName, "down", "-v")
 	runCmdHandleError(cmd)
 	log.Info("Finished tearing down docker-compose services")
 }
 
 // ExecInController provides a way to execute commands inside a container in the service
-func (d *dockerComposeOperator) ExecInController(shellCmd string) ([]byte, error) {
-	log.Info("Start executing in the controller container", zap.String("shellCmd", shellCmd))
-	cmd := exec.Command("docker", "exec", d.controller, "sh", "-c", shellCmd)
-	defer log.Info("Finished executing in the controller container", zap.String("shellCmd", shellCmd))
+func (d *DockerComposeOperator) ExecInController(shellCmd string) ([]byte, error) {
+	log.Info("Start executing in the Controller container", zap.String("shellCmd", shellCmd))
+	cmd := exec.Command("docker", "exec", d.Controller, "sh", "-c", shellCmd)
+	defer log.Info("Finished executing in the Controller container", zap.String("shellCmd", shellCmd))
 	return cmd.Output()
 }

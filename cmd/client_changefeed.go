@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -251,6 +252,23 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		}
 	}
 
+	if !cfg.EnableOldValue {
+		sinkURIParsed, err := url.Parse(sinkURI)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		}
+
+		if strings.ToLower(sinkURIParsed.Scheme) == "kafka" && sinkURIParsed.Query().Get("protocol") == "canal" {
+			log.Warn("Attempting to use Canal without old value. CDC will enable old value and continue.")
+			cfg.EnableOldValue = true
+		}
+
+		if cfg.ForceReplicate {
+			log.Error("if use force replicate, old value feature must be enabled")
+			return nil, cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
+		}
+	}
+
 	for _, rules := range cfg.Sink.DispatchRules {
 		switch strings.ToLower(rules.Dispatcher) {
 		case "rowid", "index-value":
@@ -262,15 +280,17 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		}
 	}
 	info := &model.ChangeFeedInfo{
-		SinkURI:    sinkURI,
-		Opts:       make(map[string]string),
-		CreateTime: time.Now(),
-		StartTs:    startTs,
-		TargetTs:   targetTs,
-		Config:     cfg,
-		Engine:     model.SortEngine(sortEngine),
-		SortDir:    sortDir,
-		State:      model.StateNormal,
+		SinkURI:           sinkURI,
+		Opts:              make(map[string]string),
+		CreateTime:        time.Now(),
+		StartTs:           startTs,
+		TargetTs:          targetTs,
+		Config:            cfg,
+		Engine:            model.SortEngine(sortEngine),
+		SortDir:           sortDir,
+		State:             model.StateNormal,
+		SyncPointEnabled:  syncPointEnabled,
+		SyncPointInterval: syncPointInterval,
 	}
 
 	tz, err := util.GetTimezone(timezone)
@@ -285,17 +305,21 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			return nil, err
 		}
 		if len(ineligibleTables) != 0 {
-			cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", ineligibleTables)
-			if !noConfirm {
-				cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
-				var yOrN string
-				_, err := fmt.Scan(&yOrN)
-				if err != nil {
-					return nil, err
-				}
-				if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
-					cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
-					return nil, nil
+			if cfg.ForceReplicate {
+				cmd.Printf("[WARN] force to replicate some ineligible tables, %#v\n", ineligibleTables)
+			} else {
+				cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n", ineligibleTables)
+				if !noConfirm {
+					cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
+					var yOrN string
+					_, err := fmt.Scan(&yOrN)
+					if err != nil {
+						return nil, err
+					}
+					if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+						cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")
+						return nil, nil
+					}
 				}
 			}
 		}
@@ -341,6 +365,8 @@ func changefeedConfigVariables(command *cobra.Command) {
 	command.PersistentFlags().Uint64Var(&cyclicReplicaID, "cyclic-replica-id", 0, "(Expremental) Cyclic replication replica ID of changefeed")
 	command.PersistentFlags().UintSliceVar(&cyclicFilterReplicaIDs, "cyclic-filter-replica-ids", []uint{}, "(Expremental) Cyclic replication filter replica ID of changefeed")
 	command.PersistentFlags().BoolVar(&cyclicSyncDDL, "cyclic-sync-ddl", true, "(Expremental) Cyclic replication sync DDL of changefeed")
+	command.PersistentFlags().BoolVar(&syncPointEnabled, "sync-point", false, "(Expremental) Set and Record syncpoint in replication(default off)")
+	command.PersistentFlags().DurationVar(&syncPointInterval, "sync-interval", 10*time.Minute, "(Expremental) Set the interval for syncpoint in replication(default 10min)")
 }
 
 func newCreateChangefeedCommand() *cobra.Command {

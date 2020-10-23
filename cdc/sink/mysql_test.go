@@ -490,8 +490,132 @@ func (s MySQLSinkSuite) TestPrepareUpdate(c *check.C) {
 		},
 	}
 	for _, tc := range testCases {
-		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols)
+		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols, false)
 		c.Assert(query, check.Equals, tc.expectedSQL)
+		c.Assert(args, check.DeepEquals, tc.expectedArgs)
+	}
+}
+
+func (s MySQLSinkSuite) TestPrepareDelete(c *check.C) {
+	testCases := []struct {
+		quoteTable   string
+		preCols      []*model.Column
+		expectedSQL  string
+		expectedArgs []interface{}
+	}{
+		{
+			quoteTable:   "`test`.`t1`",
+			preCols:      []*model.Column{},
+			expectedSQL:  "",
+			expectedArgs: nil,
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1;",
+			expectedArgs: []interface{}{1},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
+			expectedArgs: []interface{}{1, "test"},
+		},
+	}
+	for _, tc := range testCases {
+		query, args := prepareDelete(tc.quoteTable, tc.preCols, false)
+		c.Assert(query, check.Equals, tc.expectedSQL)
+		c.Assert(args, check.DeepEquals, tc.expectedArgs)
+	}
+}
+
+func (s MySQLSinkSuite) TestWhereSlice(c *check.C) {
+	testCases := []struct {
+		cols             []*model.Column
+		forceReplicate   bool
+		expectedColNames []string
+		expectedArgs     []interface{}
+	}{
+		{
+			cols:             []*model.Column{},
+			forceReplicate:   false,
+			expectedColNames: nil,
+			expectedArgs:     nil,
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+			forceReplicate:   false,
+			expectedColNames: []string{"a"},
+			expectedArgs:     []interface{}{1},
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			forceReplicate:   false,
+			expectedColNames: []string{"a", "b"},
+			expectedArgs:     []interface{}{1, "test"},
+		},
+		{
+			cols:             []*model.Column{},
+			forceReplicate:   true,
+			expectedColNames: []string{},
+			expectedArgs:     []interface{}{},
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+			forceReplicate:   true,
+			expectedColNames: []string{"a"},
+			expectedArgs:     []interface{}{1},
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			forceReplicate:   true,
+			expectedColNames: []string{"a", "b"},
+			expectedArgs:     []interface{}{1, "test"},
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.UniqueKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+			forceReplicate:   true,
+			expectedColNames: []string{"a", "b"},
+			expectedArgs:     []interface{}{1, "test"},
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag, Value: "test"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			forceReplicate:   true,
+			expectedColNames: []string{"a", "b", "c"},
+			expectedArgs:     []interface{}{1, "test", 100},
+		},
+	}
+	for _, tc := range testCases {
+		colNames, args := whereSlice(tc.cols, tc.forceReplicate)
+		c.Assert(colNames, check.DeepEquals, tc.expectedColNames)
 		c.Assert(args, check.DeepEquals, tc.expectedArgs)
 	}
 }
