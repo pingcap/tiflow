@@ -551,8 +551,11 @@ func (p *processor) flushTaskStatusAndPosition(ctx context.Context) error {
 	for _, tableID := range tablesToRemove {
 		p.removeTable(tableID)
 	}
-	p.statusModRevision = newModRevision
-	p.status = newTaskStatus
+	// newModRevision == 0 means status is not updated
+	if newModRevision > 0 {
+		p.statusModRevision = newModRevision
+		p.status = newTaskStatus
+	}
 	syncTableNumGauge.
 		WithLabelValues(p.changefeedID, p.captureInfo.AdvertiseAddr).
 		Set(float64(len(p.status.Tables)))
