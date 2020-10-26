@@ -286,6 +286,7 @@ type sinkParams struct {
 	enableOldValue      bool
 	safeMode            bool
 	timezone            string
+	tls                 string
 }
 
 func (s *sinkParams) Clone() *sinkParams {
@@ -363,16 +364,7 @@ func configureSinkURI(
 	return dsnCfg.FormatDSN(), nil
 }
 
-// newMySQLSink creates a new MySQL sink using schema storage
-func newMySQLSink(
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	sinkURI *url.URL,
-	filter *tifilter.Filter,
-	replicaConfig *config.ReplicaConfig,
-	opts map[string]string,
-) (Sink, error) {
-	var db *sql.DB
+func parseSinkURI(ctx context.Context, sinkURI *url.URL, opts map[string]string) (*sinkParams, error) {
 	params := defaultParams.Clone()
 
 	if cid, ok := opts[OptChangefeedID]; ok {
@@ -415,7 +407,6 @@ func newMySQLSink(
 			log.Warn("invalid tidb-txn-mode, should be pessimistic or optimistic, use optimistic as default")
 		}
 	}
-	var tlsParam string
 	if sinkURI.Query().Get("ssl-ca") != "" {
 		credential := security.Credential{
 			CAPath:   sinkURI.Query().Get("ssl-ca"),
@@ -426,13 +417,13 @@ func newMySQLSink(
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to open MySQL connection")
 		}
-		name := "cdc_mysql_tls" + changefeedID
+		name := "cdc_mysql_tls" + params.changefeedID
 		err = dmysql.RegisterTLSConfig(name, tlsCfg)
 		if err != nil {
 			return nil, errors.Annotate(
 				cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
 		}
-		tlsParam = "?tls=" + name
+		params.tls = "?tls=" + name
 	}
 
 	s = sinkURI.Query().Get("batch-replace-enable")
@@ -473,6 +464,26 @@ func newMySQLSink(
 		params.timezone = fmt.Sprintf(`"%s"`, tz.String())
 	}
 
+	return params, nil
+}
+
+// newMySQLSink creates a new MySQL sink using schema storage
+func newMySQLSink(
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI *url.URL,
+	filter *tifilter.Filter,
+	replicaConfig *config.ReplicaConfig,
+	opts map[string]string,
+) (Sink, error) {
+	var db *sql.DB
+
+	opts[OptChangefeedID] = changefeedID
+	params, err := parseSinkURI(ctx, sinkURI, opts)
+	if err != nil {
+		return nil, err
+	}
+
 	params.enableOldValue = replicaConfig.EnableOldValue
 
 	// dsn format of the driver:
@@ -487,7 +498,7 @@ func newMySQLSink(
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, params.tls)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
