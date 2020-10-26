@@ -48,6 +48,7 @@ func SetupEmbedEtcd(dir string) (clientURL *url.URL, e *embed.Etcd, err error) {
 	cfg.LPUrls = []url.URL{*urls[0]}
 	cfg.LCUrls = []url.URL{*urls[1]}
 	cfg.Logger = "zap"
+	cfg.LogLevel = "error"
 	clientURL = urls[1]
 
 	e, err = embed.StartEtcd(cfg)
