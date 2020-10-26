@@ -128,6 +128,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 			checkpointTs = workerCheckpointTs
 		}
 	}
+	s.statistics.PrintStatus()
 	return checkpointTs, nil
 }
 
