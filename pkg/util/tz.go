@@ -29,6 +29,8 @@ func GetTimezone(name string) (tz *time.Location, err error) {
 		tz, err = GetLocalTimezone()
 		err = cerror.WrapError(cerror.ErrLoadTimezone, err)
 	case "cst":
+		// CST is ambiguous, it can represent 4 timezones, but here we treat it
+		// as China Standard Time (+08:00)
 		tz = time.FixedZone("CST", 3600*8)
 	case "null":
 		tz = nil
