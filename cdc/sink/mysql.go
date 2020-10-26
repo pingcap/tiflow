@@ -333,7 +333,9 @@ func configureSinkURI(
 	dsnCfg.DBName = ""
 	dsnCfg.InterpolateParams = true
 	dsnCfg.MultiStatements = true
-	dsnCfg.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	if tz != nil {
+		dsnCfg.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	}
 	dsnCfg.Params["readTimeout"] = params.readTimeout
 	dsnCfg.Params["writeTimeout"] = params.writeTimeout
 
@@ -483,7 +485,9 @@ func newMySQLSink(
 	if dsn.Params == nil {
 		dsn.Params = make(map[string]string, 1)
 	}
-	dsn.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	if tz != nil {
+		dsn.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	}
 	testDB, err := sql.Open("mysql", dsn.FormatDSN())
 	if err != nil {
 		return nil, errors.Annotate(
@@ -1185,7 +1189,9 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 	if dsn.Params == nil {
 		dsn.Params = make(map[string]string, 1)
 	}
-	dsn.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	if tz != nil {
+		dsn.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	}
 	testDB, err := sql.Open("mysql", dsn.FormatDSN())
 	if err != nil {
 		return nil, errors.Annotate(

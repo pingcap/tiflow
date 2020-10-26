@@ -28,6 +28,10 @@ func GetTimezone(name string) (tz *time.Location, err error) {
 	case "", "system", "local":
 		tz, err = GetLocalTimezone()
 		err = cerror.WrapError(cerror.ErrLoadTimezone, err)
+	case "cst":
+		tz = time.FixedZone("CST", 3600*8)
+	case "null":
+		tz = nil
 	default:
 		tz, err = time.LoadLocation(name)
 		err = cerror.WrapError(cerror.ErrLoadTimezone, err)
