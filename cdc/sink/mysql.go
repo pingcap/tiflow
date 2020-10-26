@@ -285,6 +285,7 @@ type sinkParams struct {
 	writeTimeout        string
 	enableOldValue      bool
 	safeMode            bool
+	timezone            string
 }
 
 func (s *sinkParams) Clone() *sinkParams {
@@ -323,7 +324,6 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 func configureSinkURI(
 	ctx context.Context,
 	dsnCfg *dmysql.Config,
-	tz *time.Location,
 	params *sinkParams,
 	testDB *sql.DB,
 ) (string, error) {
@@ -333,7 +333,10 @@ func configureSinkURI(
 	dsnCfg.DBName = ""
 	dsnCfg.InterpolateParams = true
 	dsnCfg.MultiStatements = true
-	dsnCfg.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	// if timezone is empty string, we don't pass this variable in dsn
+	if params.timezone != "" {
+		dsnCfg.Params["time_zone"] = params.timezone
+	}
 	dsnCfg.Params["readTimeout"] = params.readTimeout
 	dsnCfg.Params["writeTimeout"] = params.writeTimeout
 
@@ -378,7 +381,6 @@ func newMySQLSink(
 	if caddr, ok := opts[OptCaptureAddr]; ok {
 		params.captureAddr = caddr
 	}
-	tz := util.TimezoneFromCtx(ctx)
 
 	if sinkURI == nil {
 		return nil, cerror.ErrMySQLConnectionError.GenWithStack("fail to open MySQL sink, empty URL")
@@ -459,6 +461,18 @@ func newMySQLSink(
 		params.safeMode = safeModeEnabled
 	}
 
+	if _, ok := sinkURI.Query()["time-zone"]; ok {
+		s = sinkURI.Query().Get("time-zone")
+		if s == "" {
+			params.timezone = ""
+		} else {
+			params.timezone = fmt.Sprintf(`"%s"`, s)
+		}
+	} else {
+		tz := util.TimezoneFromCtx(ctx)
+		params.timezone = fmt.Sprintf(`"%s"`, tz.String())
+	}
+
 	params.enableOldValue = replicaConfig.EnableOldValue
 
 	// dsn format of the driver:
@@ -483,7 +497,9 @@ func newMySQLSink(
 	if dsn.Params == nil {
 		dsn.Params = make(map[string]string, 1)
 	}
-	dsn.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	if params.timezone != "" {
+		dsn.Params["time_zone"] = params.timezone
+	}
 	testDB, err := sql.Open("mysql", dsn.FormatDSN())
 	if err != nil {
 		return nil, errors.Annotate(
@@ -491,7 +507,7 @@ func newMySQLSink(
 	}
 	defer testDB.Close()
 
-	dsnStr, err = configureSinkURI(ctx, dsn, tz, params, testDB)
+	dsnStr, err = configureSinkURI(ctx, dsn, params, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1134,7 +1150,7 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
 		return nil, errors.New("can create mysql sink with unsupported scheme")
 	}
-	params := defaultParams
+	params := defaultParams.Clone()
 	s := sinkURI.Query().Get("tidb-txn-mode")
 	if s != "" {
 		if s == "pessimistic" || s == "optimistic" {
@@ -1161,6 +1177,17 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 		}
 		tlsParam = "?tls=" + name
 	}
+	if _, ok := sinkURI.Query()["time-zone"]; ok {
+		s = sinkURI.Query().Get("time-zone")
+		if s == "" {
+			params.timezone = ""
+		} else {
+			params.timezone = fmt.Sprintf(`"%s"`, s)
+		}
+	} else {
+		tz := util.TimezoneFromCtx(ctx)
+		params.timezone = fmt.Sprintf(`"%s"`, tz.String())
+	}
 
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
@@ -1180,19 +1207,17 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 		return nil, errors.Trace(err)
 	}
 
-	tz := util.TimezoneFromCtx(ctx)
 	// create test db used for parameter detection
 	if dsn.Params == nil {
 		dsn.Params = make(map[string]string, 1)
 	}
-	dsn.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
 	testDB, err := sql.Open("mysql", dsn.FormatDSN())
 	if err != nil {
 		return nil, errors.Annotate(
 			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection when configuring sink")
 	}
 	defer testDB.Close()
-	dsnStr, err = configureSinkURI(ctx, dsn, tz, params, testDB)
+	dsnStr, err = configureSinkURI(ctx, dsn, params, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
