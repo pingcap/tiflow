@@ -63,6 +63,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 	pdHTTP := fmt.Sprintf("http://%s", pdURL.Host)
 	srv := http.Server{Addr: pdURL.Host, Handler: &mock}
 	go func() {
+		//nolint:errcheck
 		srv.ListenAndServe()
 	}()
 	defer srv.Close()
