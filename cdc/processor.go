@@ -665,6 +665,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 		globalResolvedTsNotifier = new(notify.Notifier)
 		globalResolvedTsReceiver = globalResolvedTsNotifier.NewReceiver(1 * time.Second)
 	)
+	defer globalResolvedTsNotifier.Close()
 
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&

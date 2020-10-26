@@ -343,7 +343,11 @@ func (o *Owner) newChangeFeed(
 		}
 	}()
 	go func() {
-		err := <-errCh
+		var err error
+		select {
+		case <-ctx.Done():
+		case err = <-errCh:
+		}
 		if errors.Cause(err) != context.Canceled {
 			log.Error("error on running owner", zap.Error(err))
 		} else {
@@ -395,6 +399,7 @@ func (o *Owner) newChangeFeed(
 		sink:              primarySink,
 		cyclicEnabled:     info.Config.Cyclic.IsEnabled(),
 		lastRebalanceTime: time.Now(),
+		kvStore:           kvStore,
 	}
 	return cf, nil
 }
@@ -1007,6 +1012,9 @@ loop:
 			}
 			break loop
 		}
+	}
+	for _, cf := range o.changeFeeds {
+		cf.Close()
 	}
 	if o.stepDown != nil {
 		if err := o.stepDown(ctx); err != nil {
