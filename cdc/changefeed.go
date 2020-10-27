@@ -20,8 +20,6 @@ import (
 	"sync"
 	"time"
 
-	tidbkv "github.com/pingcap/tidb/kv"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/parser/model"
@@ -116,7 +114,6 @@ type changeFeed struct {
 	lastRebalanceTime time.Time
 
 	etcdCli kv.CDCEtcdClient
-	kvStore tidbkv.Storage
 }
 
 // String implements fmt.Stringer interface.
@@ -958,10 +955,6 @@ func (c *changeFeed) Close() {
 		if err != nil {
 			log.Warn("failed to close owner sink", zap.Error(err))
 		}
-	}
-	err = c.kvStore.Close()
-	if err != nil {
-		log.Warn("failed to close kv store", zap.Error(err))
 	}
 	log.Info("changefeed closed", zap.String("id", c.id))
 }

@@ -19,7 +19,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -205,11 +204,7 @@ func (o *Owner) newChangeFeed(
 		failpoint.Return(nil, errors.New("failpoint injected retriable error"))
 	})
 
-	// TODO here we create another pb client,we should reuse them
-	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","), o.credential)
-	if err != nil {
-		return nil, err
-	}
+	kvStore := util.KVStorageFromCtx(ctx)
 	meta, err := kv.GetSnapshotMeta(kvStore, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -399,7 +394,6 @@ func (o *Owner) newChangeFeed(
 		sink:              primarySink,
 		cyclicEnabled:     info.Config.Cyclic.IsEnabled(),
 		lastRebalanceTime: time.Now(),
-		kvStore:           kvStore,
 	}
 	return cf, nil
 }

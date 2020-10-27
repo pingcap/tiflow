@@ -19,7 +19,6 @@ import (
 	"io"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -78,7 +77,6 @@ type processor struct {
 
 	pdCli      pd.Client
 	credential *security.Credential
-	kvStorage  tidbkv.Storage
 	etcdCli    kv.CDCEtcdClient
 	session    *concurrency.Session
 
@@ -173,21 +171,18 @@ func newProcessor(
 		return nil, errors.Annotatef(
 			cerror.WrapError(cerror.ErrNewProcessorFailed, err), "create pd client failed, addr: %v", endpoints)
 	}
-	kvStorage, err := kv.CreateTiStore(strings.Join(endpoints, ","), credential)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	cdcEtcdCli := kv.NewCDCEtcdClient(ctx, etcdCli)
 	limitter := puller.NewBlurResourceLimmter(defaultMemBufferCapacity)
 
 	log.Info("start processor with startts", zap.Uint64("startts", checkpointTs))
 	ddlspans := []regionspan.Span{regionspan.GetDDLSpan(), regionspan.GetAddIndexDDLSpan()}
+	kvStorage := util.KVStorageFromCtx(ctx)
 	ddlPuller := puller.NewPuller(pdCli, credential, kvStorage, checkpointTs, ddlspans, limitter, false)
 	filter, err := filter.NewFilter(changefeed.Config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := createSchemaStorage(endpoints, credential, checkpointTs, filter, changefeed.Config.ForceReplicate)
+	schemaStorage, err := createSchemaStorage(kvStorage, checkpointTs, filter, changefeed.Config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -203,7 +198,6 @@ func newProcessor(
 		changefeed:    changefeed,
 		pdCli:         pdCli,
 		credential:    credential,
-		kvStorage:     kvStorage,
 		etcdCli:       cdcEtcdCli,
 		session:       session,
 		sink:          sink,
@@ -903,18 +897,12 @@ func (p *processor) collectMetrics(ctx context.Context) error {
 }
 
 func createSchemaStorage(
-	pdEndpoints []string,
-	credential *security.Credential,
+	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 	filter *filter.Filter,
 	forceReplicate bool,
 ) (*entry.SchemaStorage, error) {
-	// TODO here we create another pb client,we should reuse them
-	kvStore, err := kv.CreateTiStore(strings.Join(pdEndpoints, ","), credential)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	meta, err := kv.GetSnapshotMeta(kvStore, checkpointTs)
+	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -970,7 +958,8 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 		// start table puller
 		enableOldValue := p.changefeed.Config.EnableOldValue
 		span := regionspan.GetTableSpan(tableID, enableOldValue)
-		plr := puller.NewPuller(p.pdCli, p.credential, p.kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
+		kvStorage := util.KVStorageFromCtx(ctx)
+		plr := puller.NewPuller(p.pdCli, p.credential, kvStorage, replicaInfo.StartTs, []regionspan.Span{span}, p.limitter, enableOldValue)
 		go func() {
 			err := plr.Run(ctx)
 			if errors.Cause(err) != context.Canceled {
