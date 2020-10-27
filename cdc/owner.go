@@ -343,7 +343,7 @@ func (o *Owner) newChangeFeed(
 		case <-ctx.Done():
 		case err = <-errCh:
 		}
-		if errors.Cause(err) != context.Canceled {
+		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Error("error on running owner", zap.Error(err))
 		} else {
 			log.Info("owner exited")
