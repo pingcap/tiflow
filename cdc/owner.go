@@ -1039,7 +1039,11 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 				// TODO: because the main loop has many serial steps, it is hard to do a partial update without change
 				// majority logical. For now just to wakeup the main loop ASAP to reduce latency, the efficiency of etcd
 				// operations should be resolved in future release.
-				output <- struct{}{}
+
+				select {
+				case <-ctx.Done():
+				case output <- struct{}{}:
+				}
 			}
 		}
 	}()
