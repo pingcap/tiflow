@@ -1201,7 +1201,7 @@ func (s *eventFeedSession) sendResolvedTs(
 					zap.Uint64("regionID", regionID),
 					zap.Uint64("requestID", state.requestID),
 					zap.String("addr", addr))
-				return nil
+				continue
 			}
 			select {
 			case state.regionEventCh <- &regionEvent{
