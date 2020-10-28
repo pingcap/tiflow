@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"testing"
@@ -490,8 +491,132 @@ func (s MySQLSinkSuite) TestPrepareUpdate(c *check.C) {
 		},
 	}
 	for _, tc := range testCases {
-		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols)
+		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols, false)
 		c.Assert(query, check.Equals, tc.expectedSQL)
+		c.Assert(args, check.DeepEquals, tc.expectedArgs)
+	}
+}
+
+func (s MySQLSinkSuite) TestPrepareDelete(c *check.C) {
+	testCases := []struct {
+		quoteTable   string
+		preCols      []*model.Column
+		expectedSQL  string
+		expectedArgs []interface{}
+	}{
+		{
+			quoteTable:   "`test`.`t1`",
+			preCols:      []*model.Column{},
+			expectedSQL:  "",
+			expectedArgs: nil,
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1;",
+			expectedArgs: []interface{}{1},
+		},
+		{
+			quoteTable: "`test`.`t1`",
+			preCols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
+			expectedArgs: []interface{}{1, "test"},
+		},
+	}
+	for _, tc := range testCases {
+		query, args := prepareDelete(tc.quoteTable, tc.preCols, false)
+		c.Assert(query, check.Equals, tc.expectedSQL)
+		c.Assert(args, check.DeepEquals, tc.expectedArgs)
+	}
+}
+
+func (s MySQLSinkSuite) TestWhereSlice(c *check.C) {
+	testCases := []struct {
+		cols             []*model.Column
+		forceReplicate   bool
+		expectedColNames []string
+		expectedArgs     []interface{}
+	}{
+		{
+			cols:             []*model.Column{},
+			forceReplicate:   false,
+			expectedColNames: nil,
+			expectedArgs:     nil,
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+			forceReplicate:   false,
+			expectedColNames: []string{"a"},
+			expectedArgs:     []interface{}{1},
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			forceReplicate:   false,
+			expectedColNames: []string{"a", "b"},
+			expectedArgs:     []interface{}{1, "test"},
+		},
+		{
+			cols:             []*model.Column{},
+			forceReplicate:   true,
+			expectedColNames: []string{},
+			expectedArgs:     []interface{}{},
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+			forceReplicate:   true,
+			expectedColNames: []string{"a"},
+			expectedArgs:     []interface{}{1},
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag | model.HandleKeyFlag, Value: "test"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			forceReplicate:   true,
+			expectedColNames: []string{"a", "b"},
+			expectedArgs:     []interface{}{1, "test"},
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.UniqueKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test"},
+			},
+			forceReplicate:   true,
+			expectedColNames: []string{"a", "b"},
+			expectedArgs:     []interface{}{1, "test"},
+		},
+		{
+			cols: []*model.Column{
+				{Name: "a", Type: mysql.TypeLong, Flag: model.MultipleKeyFlag, Value: 1},
+				{Name: "b", Type: mysql.TypeVarString, Flag: model.MultipleKeyFlag, Value: "test"},
+				{Name: "c", Type: mysql.TypeLong, Flag: model.GeneratedColumnFlag, Value: 100},
+			},
+			forceReplicate:   true,
+			expectedColNames: []string{"a", "b", "c"},
+			expectedArgs:     []interface{}{1, "test", 100},
+		},
+	}
+	for _, tc := range testCases {
+		colNames, args := whereSlice(tc.cols, tc.forceReplicate)
+		c.Assert(colNames, check.DeepEquals, tc.expectedColNames)
 		c.Assert(args, check.DeepEquals, tc.expectedArgs)
 	}
 }
@@ -651,6 +776,7 @@ func (s MySQLSinkSuite) TestReduceReplace(c *check.C) {
 		c.Assert(args, check.DeepEquals, tc.expectArgs)
 	}
 }
+
 func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 	param1 := defaultParams.Clone()
 	param2 := param1.Clone()
@@ -690,10 +816,17 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
 	)
+	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+	)
+	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+	)
 
 	dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
 	c.Assert(err, check.IsNil)
-	dsnStr, err := configureSinkURI(context.TODO(), dsn, time.Local, defaultParams.Clone(), db)
+	params := defaultParams.Clone()
+	dsnStr, err := configureSinkURI(context.TODO(), dsn, params, db)
 	c.Assert(err, check.IsNil)
 	expectedParams := []string{
 		"tidb_txn_mode=optimistic",
@@ -703,6 +836,86 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 	}
 	for _, param := range expectedParams {
 		c.Assert(strings.Contains(dsnStr, param), check.IsTrue)
+	}
+	c.Assert(strings.Contains(dsnStr, "time_zone"), check.IsFalse)
+
+	params.timezone = `"UTC"`
+	dsnStr, err = configureSinkURI(context.TODO(), dsn, params, db)
+	c.Assert(err, check.IsNil)
+	c.Assert(strings.Contains(dsnStr, "time_zone=%22UTC%22"), check.IsTrue)
+}
+
+func (s MySQLSinkSuite) TestParseSinkURI(c *check.C) {
+	expected := defaultParams.Clone()
+	expected.workerCount = 64
+	expected.maxTxnRow = 20
+	expected.batchReplaceEnabled = true
+	expected.batchReplaceSize = 50
+	expected.safeMode = true
+	expected.timezone = `"UTC"`
+	expected.changefeedID = "cf-id"
+	expected.captureAddr = "127.0.0.1:8300"
+	expected.tidbTxnMode = "pessimistic"
+	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
+		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=true" +
+		"&tidb-txn-mode=pessimistic"
+	opts := map[string]string{
+		OptChangefeedID: expected.changefeedID,
+		OptCaptureAddr:  expected.captureAddr,
+	}
+	uri, err := url.Parse(uriStr)
+	c.Assert(err, check.IsNil)
+	params, err := parseSinkURI(context.TODO(), uri, opts)
+	c.Assert(err, check.IsNil)
+	c.Assert(params, check.DeepEquals, expected)
+}
+
+func (s MySQLSinkSuite) TestParseSinkURITimezone(c *check.C) {
+	uris := []string{
+		"mysql://127.0.0.1:3306/?time-zone=Asia/Shanghai&worker-count=32",
+		"mysql://127.0.0.1:3306/?time-zone=&worker-count=32",
+		"mysql://127.0.0.1:3306/?worker-count=32",
+	}
+	expected := []string{
+		"\"Asia/Shanghai\"",
+		"",
+		"\"UTC\"",
+	}
+	ctx := context.TODO()
+	opts := map[string]string{}
+	for i, uriStr := range uris {
+		uri, err := url.Parse(uriStr)
+		c.Assert(err, check.IsNil)
+		params, err := parseSinkURI(ctx, uri, opts)
+		c.Assert(err, check.IsNil)
+		c.Assert(params.timezone, check.Equals, expected[i])
+	}
+}
+
+func (s MySQLSinkSuite) TestParseSinkURIBadQueryString(c *check.C) {
+	uris := []string{
+		"",
+		"postgre://127.0.0.1:3306",
+		"mysql://127.0.0.1:3306/?worker-count=not-number",
+		"mysql://127.0.0.1:3306/?max-txn-row=not-number",
+		"mysql://127.0.0.1:3306/?ssl-ca=only-ca-exists",
+		"mysql://127.0.0.1:3306/?batch-replace-enable=not-bool",
+		"mysql://127.0.0.1:3306/?batch-replace-enable=true&batch-replace-size=not-number",
+		"mysql://127.0.0.1:3306/?safe-mode=not-bool",
+	}
+	ctx := context.TODO()
+	opts := map[string]string{OptChangefeedID: "changefeed-01"}
+	var uri *url.URL
+	var err error
+	for _, uriStr := range uris {
+		if uriStr != "" {
+			uri, err = url.Parse(uriStr)
+			c.Assert(err, check.IsNil)
+		} else {
+			uri = nil
+		}
+		_, err = parseSinkURI(ctx, uri, opts)
+		c.Assert(err, check.NotNil)
 	}
 }
 

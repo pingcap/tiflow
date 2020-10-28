@@ -11,42 +11,51 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package tests
 
 import (
-	"errors"
-
-	"github.com/pingcap/log"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/integration/framework"
-	"go.uber.org/zap"
 )
 
-//nolint:unused
-type deleteCase struct {
-	framework.AvroSingleTableTask
+// SimpleCase is base impl of simple test case
+type SimpleCase struct {
+	framework.Task
 }
 
-func newDeleteCase() *deleteCase {
-	deleteCase := new(deleteCase)
-	deleteCase.AvroSingleTableTask.TableName = "test"
-	return deleteCase
+// NewSimpleCase create a test case which has some simple dmls, ddls
+func NewSimpleCase(task framework.Task) *SimpleCase {
+	return &SimpleCase{
+		Task: task,
+	}
 }
 
-func (c *deleteCase) Name() string {
-	return "Delete"
+// Name impl framework.Task interface
+func (s *SimpleCase) Name() string {
+	return "Simple"
 }
 
-func (c *deleteCase) Run(ctx *framework.TaskContext) error {
+// Run impl framework.Task interface
+func (s *SimpleCase) Run(ctx *framework.TaskContext) error {
 	_, err := ctx.Upstream.ExecContext(ctx.Ctx, "create table test (id int primary key, value int)")
 	if err != nil {
 		return err
 	}
 
+	// Get a handle of an existing table
 	table := ctx.SQLHelper().GetTable("test")
+	// Create an SQL request, send it to the upstream, wait for completion and check the correctness of replication
+	err = table.Insert(map[string]interface{}{
+		"id":    0,
+		"value": 0,
+	}).Send().Wait().Check()
+	if err != nil {
+		return errors.AddStack(err)
+	}
 
 	// To wait on a batch of SQL requests, create a slice of Awaitables
 	reqs := make([]framework.Awaitable, 0)
-	for i := 0; i < 1000; i++ {
+	for i := 1; i < 1000; i++ {
 		// Only send, do not wait
 		req := table.Insert(map[string]interface{}{
 			"id":    i,
@@ -55,36 +64,22 @@ func (c *deleteCase) Run(ctx *framework.TaskContext) error {
 		reqs = append(reqs, req)
 	}
 
+	// Wait on SQL requests in batch and check the correctness
 	err = framework.All(ctx.SQLHelper(), reqs).Wait().Check()
 	if err != nil {
 		return err
 	}
 
-	deletes := make([]framework.Awaitable, 0, 1000)
-	for i := 0; i < 1000; i++ {
-		req := table.Delete(map[string]interface{}{
-			"id": i,
-		}).Send()
-		deletes = append(deletes, req)
-	}
-
-	for _, req := range deletes {
-		err := req.Wait().Check()
-		if err != nil {
-			return err
-		}
-	}
-
-	count := 0
-	err = ctx.Downstream.QueryRowContext(ctx.Ctx, "select count(*) from test").Scan(&count)
+	err = table.Upsert(map[string]interface{}{
+		"id":    0,
+		"value": 1,
+	}).Send().Wait().Check()
 	if err != nil {
 		return err
 	}
 
-	if count != 0 {
-		log.Warn("table is not empty", zap.Int("count", count))
-		return errors.New("table is not empty")
-	}
-
-	return nil
+	err = table.Delete(map[string]interface{}{
+		"id": 0,
+	}).Send().Wait().Check()
+	return err
 }

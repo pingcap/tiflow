@@ -100,6 +100,8 @@ type mysqlSink struct {
 	// metrics used by mysql sink only
 	metricConflictDetectDurationHis prometheus.Observer
 	metricBucketSizeCounters        []prometheus.Counter
+
+	forceReplicate bool
 }
 
 func (s *mysqlSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
@@ -126,6 +128,7 @@ func (s *mysqlSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64
 			checkpointTs = workerCheckpointTs
 		}
 	}
+	s.statistics.PrintStatus()
 	return checkpointTs, nil
 }
 
@@ -282,6 +285,8 @@ type sinkParams struct {
 	writeTimeout        string
 	enableOldValue      bool
 	safeMode            bool
+	timezone            string
+	tls                 string
 }
 
 func (s *sinkParams) Clone() *sinkParams {
@@ -320,7 +325,6 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 func configureSinkURI(
 	ctx context.Context,
 	dsnCfg *dmysql.Config,
-	tz *time.Location,
 	params *sinkParams,
 	testDB *sql.DB,
 ) (string, error) {
@@ -330,7 +334,10 @@ func configureSinkURI(
 	dsnCfg.DBName = ""
 	dsnCfg.InterpolateParams = true
 	dsnCfg.MultiStatements = true
-	dsnCfg.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	// if timezone is empty string, we don't pass this variable in dsn
+	if params.timezone != "" {
+		dsnCfg.Params["time_zone"] = params.timezone
+	}
 	dsnCfg.Params["readTimeout"] = params.readTimeout
 	dsnCfg.Params["writeTimeout"] = params.writeTimeout
 
@@ -357,16 +364,7 @@ func configureSinkURI(
 	return dsnCfg.FormatDSN(), nil
 }
 
-// newMySQLSink creates a new MySQL sink using schema storage
-func newMySQLSink(
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	sinkURI *url.URL,
-	filter *tifilter.Filter,
-	replicaConfig *config.ReplicaConfig,
-	opts map[string]string,
-) (Sink, error) {
-	var db *sql.DB
+func parseSinkURI(ctx context.Context, sinkURI *url.URL, opts map[string]string) (*sinkParams, error) {
 	params := defaultParams.Clone()
 
 	if cid, ok := opts[OptChangefeedID]; ok {
@@ -375,7 +373,6 @@ func newMySQLSink(
 	if caddr, ok := opts[OptCaptureAddr]; ok {
 		params.captureAddr = caddr
 	}
-	tz := util.TimezoneFromCtx(ctx)
 
 	if sinkURI == nil {
 		return nil, cerror.ErrMySQLConnectionError.GenWithStack("fail to open MySQL sink, empty URL")
@@ -410,7 +407,6 @@ func newMySQLSink(
 			log.Warn("invalid tidb-txn-mode, should be pessimistic or optimistic, use optimistic as default")
 		}
 	}
-	var tlsParam string
 	if sinkURI.Query().Get("ssl-ca") != "" {
 		credential := security.Credential{
 			CAPath:   sinkURI.Query().Get("ssl-ca"),
@@ -421,13 +417,13 @@ func newMySQLSink(
 		if err != nil {
 			return nil, errors.Annotate(err, "fail to open MySQL connection")
 		}
-		name := "cdc_mysql_tls" + changefeedID
+		name := "cdc_mysql_tls" + params.changefeedID
 		err = dmysql.RegisterTLSConfig(name, tlsCfg)
 		if err != nil {
 			return nil, errors.Annotate(
 				cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection")
 		}
-		tlsParam = "?tls=" + name
+		params.tls = "?tls=" + name
 	}
 
 	s = sinkURI.Query().Get("batch-replace-enable")
@@ -456,6 +452,38 @@ func newMySQLSink(
 		params.safeMode = safeModeEnabled
 	}
 
+	if _, ok := sinkURI.Query()["time-zone"]; ok {
+		s = sinkURI.Query().Get("time-zone")
+		if s == "" {
+			params.timezone = ""
+		} else {
+			params.timezone = fmt.Sprintf(`"%s"`, s)
+		}
+	} else {
+		tz := util.TimezoneFromCtx(ctx)
+		params.timezone = fmt.Sprintf(`"%s"`, tz.String())
+	}
+
+	return params, nil
+}
+
+// newMySQLSink creates a new MySQL sink using schema storage
+func newMySQLSink(
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI *url.URL,
+	filter *tifilter.Filter,
+	replicaConfig *config.ReplicaConfig,
+	opts map[string]string,
+) (Sink, error) {
+	var db *sql.DB
+
+	opts[OptChangefeedID] = changefeedID
+	params, err := parseSinkURI(ctx, sinkURI, opts)
+	if err != nil {
+		return nil, err
+	}
+
 	params.enableOldValue = replicaConfig.EnableOldValue
 
 	// dsn format of the driver:
@@ -470,7 +498,7 @@ func newMySQLSink(
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, tlsParam)
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, sinkURI.Hostname(), port, params.tls)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
@@ -480,7 +508,9 @@ func newMySQLSink(
 	if dsn.Params == nil {
 		dsn.Params = make(map[string]string, 1)
 	}
-	dsn.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
+	if params.timezone != "" {
+		dsn.Params["time_zone"] = params.timezone
+	}
 	testDB, err := sql.Open("mysql", dsn.FormatDSN())
 	if err != nil {
 		return nil, errors.Annotate(
@@ -488,7 +518,7 @@ func newMySQLSink(
 	}
 	defer testDB.Close()
 
-	dsnStr, err = configureSinkURI(ctx, dsn, tz, params, testDB)
+	dsnStr, err = configureSinkURI(ctx, dsn, params, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -525,6 +555,7 @@ func newMySQLSink(
 		metricConflictDetectDurationHis: metricConflictDetectDurationHis,
 		metricBucketSizeCounters:        metricBucketSizeCounters,
 		errCh:                           make(chan error, 1),
+		forceReplicate:                  replicaConfig.ForceReplicate,
 	}
 
 	if val, ok := opts[mark.OptCyclicConfig]; ok {
@@ -826,7 +857,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		// Translate to UPDATE if old value is enabled, not in safe mode and is update event
 		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 			flushCacheDMLs()
-			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns)
+			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
 			if query != "" {
 				sqls = append(sqls, query)
 				values = append(values, args)
@@ -840,7 +871,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		// update will be translated to DELETE + INSERT(or REPLACE) SQL.
 		if len(row.PreColumns) != 0 {
 			flushCacheDMLs()
-			query, args = prepareDelete(quoteTable, row.PreColumns)
+			query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
 			if query != "" {
 				sqls = append(sqls, query)
 				values = append(values, args)
@@ -987,7 +1018,7 @@ func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string
 	return sqls, args
 }
 
-func prepareUpdate(quoteTable string, preCols, cols []*model.Column) (string, []interface{}) {
+func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("UPDATE " + quoteTable + " SET ")
 
@@ -1012,7 +1043,7 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column) (string, []
 	}
 
 	builder.WriteString(" WHERE ")
-	colNames, wargs := whereSlice(preCols)
+	colNames, wargs := whereSlice(preCols, forceReplicate)
 	if len(wargs) == 0 {
 		return "", nil
 	}
@@ -1032,11 +1063,11 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column) (string, []
 	return sql, args
 }
 
-func prepareDelete(quoteTable string, cols []*model.Column) (string, []interface{}) {
+func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quoteTable + " WHERE ")
 
-	colNames, wargs := whereSlice(cols)
+	colNames, wargs := whereSlice(cols, forceReplicate)
 	if len(wargs) == 0 {
 		return "", nil
 	}
@@ -1057,7 +1088,7 @@ func prepareDelete(quoteTable string, cols []*model.Column) (string, []interface
 	return sql, args
 }
 
-func whereSlice(cols []*model.Column) (colNames []string, args []interface{}) {
+func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
 	for _, col := range cols {
 		if col == nil || !col.Flag.IsHandleKey() {
@@ -1065,6 +1096,15 @@ func whereSlice(cols []*model.Column) (colNames []string, args []interface{}) {
 		}
 		colNames = append(colNames, col.Name)
 		args = append(args, col.Value)
+	}
+	// if no explicit row id but force replicate, use all key-values in where condition
+	if len(colNames) == 0 && forceReplicate {
+		colNames = make([]string, 0, len(cols))
+		args = make([]interface{}, 0, len(cols))
+		for _, col := range cols {
+			colNames = append(colNames, col.Name)
+			args = append(args, col.Value)
+		}
 	}
 	return
 }
@@ -1121,7 +1161,7 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 	if scheme != "mysql" && scheme != "tidb" && scheme != "mysql+ssl" && scheme != "tidb+ssl" {
 		return nil, errors.New("can create mysql sink with unsupported scheme")
 	}
-	params := defaultParams
+	params := defaultParams.Clone()
 	s := sinkURI.Query().Get("tidb-txn-mode")
 	if s != "" {
 		if s == "pessimistic" || s == "optimistic" {
@@ -1148,6 +1188,17 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 		}
 		tlsParam = "?tls=" + name
 	}
+	if _, ok := sinkURI.Query()["time-zone"]; ok {
+		s = sinkURI.Query().Get("time-zone")
+		if s == "" {
+			params.timezone = ""
+		} else {
+			params.timezone = fmt.Sprintf(`"%s"`, s)
+		}
+	} else {
+		tz := util.TimezoneFromCtx(ctx)
+		params.timezone = fmt.Sprintf(`"%s"`, tz.String())
+	}
 
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
@@ -1167,19 +1218,17 @@ func newMySQLSyncpointStore(ctx context.Context, id string, sinkURI *url.URL) (S
 		return nil, errors.Trace(err)
 	}
 
-	tz := util.TimezoneFromCtx(ctx)
 	// create test db used for parameter detection
 	if dsn.Params == nil {
 		dsn.Params = make(map[string]string, 1)
 	}
-	dsn.Params["time_zone"] = fmt.Sprintf(`"%s"`, tz.String())
 	testDB, err := sql.Open("mysql", dsn.FormatDSN())
 	if err != nil {
 		return nil, errors.Annotate(
 			cerror.WrapError(cerror.ErrMySQLConnectionError, err), "fail to open MySQL connection when configuring sink")
 	}
 	defer testDB.Close()
-	dsnStr, err = configureSinkURI(ctx, dsn, tz, params, testDB)
+	dsnStr, err = configureSinkURI(ctx, dsn, params, testDB)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1252,7 +1301,7 @@ func (s *mysqlSyncpointStore) SinkSyncpoint(ctx context.Context, id string, chec
 		}
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-	_, err = tx.Exec("insert into "+mark.SchemaName+"."+syncpointTableName+"(cf, primary_ts, secondary_ts) VALUES (?,?,?)", id, checkpointTs, secondaryTs)
+	_, err = tx.Exec("insert ignore into "+mark.SchemaName+"."+syncpointTableName+"(cf, primary_ts, secondary_ts) VALUES (?,?,?)", id, checkpointTs, secondaryTs)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
