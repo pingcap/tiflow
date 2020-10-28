@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc"
 	gbackoff "google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/keepalive"
+	"net/url"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -37,9 +38,9 @@ const (
 )
 
 // newBlackHoleSink creates a block hole sink
-func newTicdcToOraclSink(ctx context.Context, opts map[string]string) *ticdcToOraclSink {
+func newTicdcToOraclSink(ctx context.Context, sinkURI *url.URL, opts map[string]string) *ticdcToOraclSink {
 
-	address := "172.16.4.91:9098"
+	address := fmt.Sprintf("%s:%s", sinkURI.Host, sinkURI.Port())
 	//address := "192.168.198.48:9099"
 	conn, err := grpc.Dial(
 		address,
