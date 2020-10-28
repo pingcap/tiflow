@@ -29,7 +29,9 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/mvcc"
+	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -76,10 +78,13 @@ func NewCapture(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	logConfig := logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   pdEndpoints,
 		TLS:         tlsConfig,
 		Context:     ctx,
+		LogConfig:   &logConfig,
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{
 			grpcTLSOption,
