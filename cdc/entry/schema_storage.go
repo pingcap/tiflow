@@ -47,6 +47,9 @@ type schemaSnapshot struct {
 	ineligibleTableID map[int64]struct{}
 
 	currentTs uint64
+
+	// if explicit is true, treat tables without explicit row id as eligible
+	explicitTables bool
 }
 
 // SingleSchemaSnapshot is a single schema snapshot independent of schema storage
@@ -93,11 +96,11 @@ func (s *SingleSchemaSnapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo,
 }
 
 // NewSingleSchemaSnapshotFromMeta creates a new single schema snapshot from a tidb meta
-func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*SingleSchemaSnapshot, error) {
-	return newSchemaSnapshotFromMeta(meta, currentTs)
+func NewSingleSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, explicitTables bool) (*SingleSchemaSnapshot, error) {
+	return newSchemaSnapshotFromMeta(meta, currentTs, explicitTables)
 }
 
-func newEmptySchemaSnapshot() *schemaSnapshot {
+func newEmptySchemaSnapshot(explicitTables bool) *schemaSnapshot {
 	return &schemaSnapshot{
 		tableNameToID:  make(map[model.TableName]int64),
 		schemaNameToID: make(map[string]int64),
@@ -108,11 +111,13 @@ func newEmptySchemaSnapshot() *schemaSnapshot {
 
 		truncateTableID:   make(map[int64]struct{}),
 		ineligibleTableID: make(map[int64]struct{}),
+
+		explicitTables: explicitTables,
 	}
 }
 
-func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*schemaSnapshot, error) {
-	snap := newEmptySchemaSnapshot()
+func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, explicitTables bool) (*schemaSnapshot, error) {
+	snap := newEmptySchemaSnapshot(explicitTables)
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
@@ -132,7 +137,7 @@ func newSchemaSnapshotFromMeta(meta *timeta.Meta, currentTs uint64) (*schemaSnap
 			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
 			snap.tables[tableInfo.ID] = tableInfo
 			snap.tableNameToID[model.TableName{Schema: dbinfo.Name.O, Table: tableInfo.Name.O}] = tableInfo.ID
-			isEligible := tableInfo.IsEligible()
+			isEligible := tableInfo.IsEligible(explicitTables)
 			if !isEligible {
 				snap.ineligibleTableID[tableInfo.ID] = struct{}{}
 			}
@@ -196,39 +201,51 @@ func (s *schemaSnapshot) PrintStatus(logger func(msg string, fields ...zap.Field
 
 // Clone clones Storage
 func (s *schemaSnapshot) Clone() *schemaSnapshot {
-	n := &schemaSnapshot{
-		tableNameToID:  make(map[model.TableName]int64, len(s.tableNameToID)),
-		schemaNameToID: make(map[string]int64, len(s.schemaNameToID)),
+	clone := *s
 
-		schemas:        make(map[int64]*timodel.DBInfo, len(s.schemas)),
-		tables:         make(map[int64]*model.TableInfo, len(s.tables)),
-		partitionTable: make(map[int64]*model.TableInfo, len(s.partitionTable)),
-
-		truncateTableID:   make(map[int64]struct{}, len(s.truncateTableID)),
-		ineligibleTableID: make(map[int64]struct{}, len(s.ineligibleTableID)),
-	}
+	tableNameToID := make(map[model.TableName]int64, len(s.tableNameToID))
 	for k, v := range s.tableNameToID {
-		n.tableNameToID[k] = v
+		tableNameToID[k] = v
 	}
+	clone.tableNameToID = tableNameToID
+
+	schemaNameToID := make(map[string]int64, len(s.schemaNameToID))
 	for k, v := range s.schemaNameToID {
-		n.schemaNameToID[k] = v
+		schemaNameToID[k] = v
 	}
+	clone.schemaNameToID = schemaNameToID
+
+	schemas := make(map[int64]*timodel.DBInfo, len(s.schemas))
 	for k, v := range s.schemas {
-		n.schemas[k] = v.Clone()
+		schemas[k] = v.Clone()
 	}
+	clone.schemas = schemas
+
+	tables := make(map[int64]*model.TableInfo, len(s.tables))
 	for k, v := range s.tables {
-		n.tables[k] = v.Clone()
+		tables[k] = v.Clone()
 	}
+	clone.tables = tables
+
+	partitionTable := make(map[int64]*model.TableInfo, len(s.partitionTable))
 	for k, v := range s.partitionTable {
-		n.partitionTable[k] = v.Clone()
+		partitionTable[k] = v.Clone()
 	}
+	clone.partitionTable = partitionTable
+
+	truncateTableID := make(map[int64]struct{}, len(s.truncateTableID))
 	for k, v := range s.truncateTableID {
-		n.truncateTableID[k] = v
+		truncateTableID[k] = v
 	}
+	clone.truncateTableID = truncateTableID
+
+	ineligibleTableID := make(map[int64]struct{}, len(s.ineligibleTableID))
 	for k, v := range s.ineligibleTableID {
-		n.ineligibleTableID[k] = v
+		ineligibleTableID[k] = v
 	}
-	return n
+	clone.ineligibleTableID = ineligibleTableID
+
+	return &clone
 }
 
 // GetTableNameByID looks up a TableName with the given table id
@@ -464,14 +481,14 @@ func (s *schemaSnapshot) createTable(table *model.TableInfo) error {
 	schema.Tables = append(schema.Tables, table.TableInfo)
 
 	s.tables[table.ID] = table
-	if !table.IsEligible() {
+	if !table.IsEligible(s.explicitTables) {
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
 		s.ineligibleTableID[table.ID] = struct{}{}
 	}
 	if pi := table.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
 			s.partitionTable[partition.ID] = table
-			if !table.IsEligible() {
+			if !table.IsEligible(s.explicitTables) {
 				s.ineligibleTableID[partition.ID] = struct{}{}
 			}
 		}
@@ -489,14 +506,14 @@ func (s *schemaSnapshot) replaceTable(table *model.TableInfo) error {
 		return cerror.ErrSnapshotTableNotFound.GenWithStack("table %s(%d)", table.Name, table.ID)
 	}
 	s.tables[table.ID] = table
-	if !table.IsEligible() {
+	if !table.IsEligible(s.explicitTables) {
 		log.Warn("this table is not eligible to replicate", zap.String("tableName", table.Name.O), zap.Int64("tableID", table.ID))
 		s.ineligibleTableID[table.ID] = struct{}{}
 	}
 	if pi := table.GetPartitionInfo(); pi != nil {
 		for _, partition := range pi.Definitions {
 			s.partitionTable[partition.ID] = table
-			if !table.IsEligible() {
+			if !table.IsEligible(s.explicitTables) {
 				s.ineligibleTableID[partition.ID] = struct{}{}
 			}
 		}
@@ -610,25 +627,27 @@ type SchemaStorage struct {
 	gcTs       uint64
 	resolvedTs uint64
 
-	filter *filter.Filter
+	filter         *filter.Filter
+	explicitTables bool
 }
 
 // NewSchemaStorage creates a new schema storage
-func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter) (*SchemaStorage, error) {
+func NewSchemaStorage(meta *timeta.Meta, startTs uint64, filter *filter.Filter, forceReplicate bool) (*SchemaStorage, error) {
 	var snap *schemaSnapshot
 	var err error
 	if meta == nil {
-		snap = newEmptySchemaSnapshot()
+		snap = newEmptySchemaSnapshot(forceReplicate)
 	} else {
-		snap, err = newSchemaSnapshotFromMeta(meta, startTs)
+		snap, err = newSchemaSnapshotFromMeta(meta, startTs, forceReplicate)
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	schema := &SchemaStorage{
-		snaps:      []*schemaSnapshot{snap},
-		resolvedTs: startTs,
-		filter:     filter,
+		snaps:          []*schemaSnapshot{snap},
+		resolvedTs:     startTs,
+		filter:         filter,
+		explicitTables: forceReplicate,
 	}
 	return schema, nil
 }
@@ -702,7 +721,7 @@ func (s *SchemaStorage) HandleDDLJob(job *timodel.Job) error {
 		}
 		snap = lastSnap.Clone()
 	} else {
-		snap = newEmptySchemaSnapshot()
+		snap = newEmptySchemaSnapshot(s.explicitTables)
 	}
 	if err := snap.handleDDL(job); err != nil {
 		return errors.Trace(err)

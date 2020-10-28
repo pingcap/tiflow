@@ -166,7 +166,7 @@ func (c *changeFeed) addTable(tblInfo *model.TableInfo, targetTs model.Ts) {
 		return
 	}
 
-	if !tblInfo.IsEligible() {
+	if !tblInfo.IsEligible(c.info.Config.ForceReplicate) {
 		log.Warn("skip ineligible table", zap.Int64("tid", tblInfo.ID), zap.Stringer("table", tblInfo.TableName))
 		return
 	}
@@ -698,6 +698,8 @@ func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
 	if c.info.SyncPointEnabled {
 		c.syncpointMutex.Lock()
 		defer c.syncpointMutex.Unlock()
+		// ticker and ddl can trigger syncpoint record at the same time, only record once
+		syncpointRecorded := false
 		// ResolvedTs == CheckpointTs means a syncpoint reached;
 		// !c.updateResolvedTs means the syncpoint is setted by ticker;
 		// c.ddlTs == 0 means no DDL wait to exec and we can sink the syncpoint record securely ( c.ddlTs != 0 means some DDL should be sink to downstream and this syncpoint is fake ).
@@ -707,7 +709,9 @@ func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
 			err := c.syncpointStore.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
 			if err != nil {
 				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
+				return err
 			}
+			syncpointRecorded = true
 		}
 
 		if c.status.ResolvedTs == 0 {
@@ -719,9 +723,12 @@ func (c *changeFeed) handleSyncPoint(ctx context.Context) error {
 		// ddlTs <= ddlExecutedTs means the DDL has been execed.
 		if c.status.ResolvedTs == c.status.CheckpointTs && c.status.ResolvedTs == c.ddlTs && c.ddlTs <= c.ddlExecutedTs {
 			log.Info("sync point reached by ddl", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Bool("updateResolvedTs", c.updateResolvedTs), zap.Uint64("ddlResolvedTs", c.ddlResolvedTs), zap.Uint64("ddlTs", c.ddlTs), zap.Uint64("ddlExecutedTs", c.ddlExecutedTs))
-			err := c.syncpointStore.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
-			if err != nil {
-				log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
+			if !syncpointRecorded {
+				err := c.syncpointStore.SinkSyncpoint(ctx, c.id, c.status.CheckpointTs)
+				if err != nil {
+					log.Error("syncpoint sink fail", zap.Uint64("ResolvedTs", c.status.ResolvedTs), zap.Uint64("CheckpointTs", c.status.CheckpointTs), zap.Error(err))
+					return err
+				}
 			}
 			c.ddlTs = 0
 		}

@@ -19,7 +19,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -205,16 +204,12 @@ func (o *Owner) newChangeFeed(
 		failpoint.Return(nil, errors.New("failpoint injected retriable error"))
 	})
 
-	// TODO here we create another pb client,we should reuse them
-	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","), o.credential)
-	if err != nil {
-		return nil, err
-	}
+	kvStore := util.KVStorageFromCtx(ctx)
 	meta, err := kv.GetSnapshotMeta(kvStore, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, checkpointTs)
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, checkpointTs, info.Config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -294,7 +289,7 @@ func (o *Owner) newChangeFeed(
 			log.Warn("table not found for table ID", zap.Int64("tid", tid))
 			continue
 		}
-		if !tblInfo.IsEligible() {
+		if !tblInfo.IsEligible(info.Config.ForceReplicate) {
 			log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
 			continue
 		}
@@ -343,8 +338,12 @@ func (o *Owner) newChangeFeed(
 		}
 	}()
 	go func() {
-		err := <-errCh
-		if errors.Cause(err) != context.Canceled {
+		var err error
+		select {
+		case <-ctx.Done():
+		case err = <-errCh:
+		}
+		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Error("error on running owner", zap.Error(err))
 		} else {
 			log.Info("owner exited")
@@ -1008,6 +1007,9 @@ loop:
 			break loop
 		}
 	}
+	for _, cf := range o.changeFeeds {
+		cf.Close()
+	}
 	if o.stepDown != nil {
 		if err := o.stepDown(ctx); err != nil {
 			return err
@@ -1037,7 +1039,11 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 				// TODO: because the main loop has many serial steps, it is hard to do a partial update without change
 				// majority logical. For now just to wakeup the main loop ASAP to reduce latency, the efficiency of etcd
 				// operations should be resolved in future release.
-				output <- struct{}{}
+
+				select {
+				case <-ctx.Done():
+				case output <- struct{}{}:
+				}
 			}
 		}
 	}()
