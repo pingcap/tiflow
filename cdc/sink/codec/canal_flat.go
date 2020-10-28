@@ -15,6 +15,7 @@ package codec
 
 import (
 	"encoding/json"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
