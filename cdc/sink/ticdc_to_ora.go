@@ -41,6 +41,8 @@ const (
 func newTicdcToOraclSink(ctx context.Context, sinkURI *url.URL, opts map[string]string) *ticdcToOraclSink {
 
 	address := fmt.Sprintf("%s:%s", sinkURI.Host, sinkURI.Port())
+	log.Info("sinkURI.Host ", zap.Reflect("", sinkURI.Host))
+	log.Info("sinkURI.Port ", zap.Reflect("", sinkURI.Port()))
 	//address := "192.168.198.48:9099"
 	conn, err := grpc.Dial(
 		address,
