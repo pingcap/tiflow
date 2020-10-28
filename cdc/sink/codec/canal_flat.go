@@ -199,7 +199,7 @@ func (c *CanalFlatEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessa
 	}
 	value, err := json.Marshal(msg)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerrors.WrapError(cerrors.ErrCanalEncodeFailed, err)
 	}
 	return NewMQMessage(nil, value, e.CommitTs), nil
 }
@@ -232,8 +232,7 @@ func (c *CanalFlatEventBatchEncoder) Size() int {
 	return -1
 }
 
-// Reset resets the internal state of the encoder
+// Reset is only supported by JSONEventBatchEncoder
 func (c *CanalFlatEventBatchEncoder) Reset() {
-	c.unresolvedBuf = make([]*canalFlatMessage, 0)
-	c.resolvedBuf = make([]*canalFlatMessage, 0)
+	panic("not supported")
 }
