@@ -60,7 +60,12 @@ func (r *Receiver) signalNonBlocking() bool {
 func (r *Receiver) signalTickLoop() {
 	go func() {
 	loop:
-		for range r.ticker.C {
+		for {
+			select {
+			case <-r.closeCh:
+				break
+			case <-r.ticker.C:
+			}
 			exit := r.signalNonBlocking()
 			if exit {
 				break loop
