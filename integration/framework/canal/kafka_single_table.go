@@ -28,6 +28,7 @@ const (
 // SingleTableTask provides a basic implementation for an Avro test case
 type SingleTableTask struct {
 	TableName string
+	UseJSON   bool
 }
 
 // Name implements Task
@@ -38,9 +39,15 @@ func (c *SingleTableTask) Name() string {
 
 // GetCDCProfile implements Task
 func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
+	var protocol string
+	if c.UseJSON {
+		protocol = "canal-json"
+	} else {
+		protocol = "canal"
+	}
 	return &framework.CDCProfile{
 		PDUri:      "http://upstream-pd:2379",
-		SinkURI:    "kafka://kafka:9092/" + testDbName + "?protocol=canal",
+		SinkURI:    "kafka://kafka:9092/" + testDbName + "?protocol=" + protocol,
 		Opts:       map[string]string{"force-handle-key-pkey": "true", "support-txn": "true"},
 		ConfigFile: "/config/canal-test-config.toml",
 	}
