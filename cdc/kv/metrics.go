@@ -13,24 +13,28 @@
 
 package kv
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/pingcap/ticdc/cdc"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
 
 var (
-	eventFeedErrorCounter = prometheus.NewCounterVec(
+	eventFeedErrorCounter = promauto.With(cdc.Registry).NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
 			Name:      "event_feed_error_count",
 			Help:      "The number of error return by tikv",
 		}, []string{"type"})
-	eventFeedGauge = prometheus.NewGauge(
+	eventFeedGauge = promauto.With(cdc.Registry).NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
 			Name:      "event_feed_count",
 			Help:      "The number of event feed running",
 		})
-	scanRegionsDuration = prometheus.NewHistogramVec(
+	scanRegionsDuration = promauto.With(cdc.Registry).NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
@@ -38,7 +42,7 @@ var (
 			Help:      "The time it took to finish a scanRegions call.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"capture"})
-	eventSize = prometheus.NewHistogramVec(
+	eventSize = promauto.With(cdc.Registry).NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
@@ -46,28 +50,28 @@ var (
 			Help:      "Size of KV events.",
 			Buckets:   prometheus.ExponentialBuckets(16, 2, 25),
 		}, []string{"capture"})
-	pullEventCounter = prometheus.NewCounterVec(
+	pullEventCounter = promauto.With(cdc.Registry).NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
 			Name:      "pull_event_count",
 			Help:      "event count received by this puller",
 		}, []string{"type", "capture", "changefeed"})
-	sendEventCounter = prometheus.NewCounterVec(
+	sendEventCounter = promauto.With(cdc.Registry).NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
 			Name:      "send_event_count",
 			Help:      "event count sent to event channel by this puller",
 		}, []string{"type", "capture", "changefeed"})
-	clientChannelSize = prometheus.NewGaugeVec(
+	clientChannelSize = promauto.With(cdc.Registry).NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
 			Name:      "channel_size",
 			Help:      "size of each channel in kv client",
 		}, []string{"id", "channel"})
-	batchResolvedEventSize = prometheus.NewHistogramVec(
+	batchResolvedEventSize = promauto.With(cdc.Registry).NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
@@ -75,7 +79,7 @@ var (
 			Help:      "The number of region in one batch resolved ts event",
 			Buckets:   prometheus.ExponentialBuckets(2, 2, 16),
 		}, []string{"capture", "changefeed"})
-	etcdRequestCounter = prometheus.NewCounterVec(
+	etcdRequestCounter = promauto.With(cdc.Registry).NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "etcd",
@@ -83,16 +87,3 @@ var (
 			Help:      "request counter of etcd operation",
 		}, []string{"type", "capture"})
 )
-
-// InitMetrics registers all metrics in the kv package
-func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(eventFeedErrorCounter)
-	registry.MustRegister(scanRegionsDuration)
-	registry.MustRegister(eventSize)
-	registry.MustRegister(eventFeedGauge)
-	registry.MustRegister(pullEventCounter)
-	registry.MustRegister(sendEventCounter)
-	registry.MustRegister(clientChannelSize)
-	registry.MustRegister(batchResolvedEventSize)
-	registry.MustRegister(etcdRequestCounter)
-}
