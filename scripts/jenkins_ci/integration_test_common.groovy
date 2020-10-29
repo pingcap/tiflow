@@ -122,14 +122,11 @@ def tests(sink_type, node_label) {
 
         def step_cases = []
         def step_length = (int)(cases_name.size() / CONCURRENT_NUMBER + 0.5)
-        println step_length
         for(int i in 1..CONCURRENT_NUMBER) {
             def end = i*step_length-1
             if (i == CONCURRENT_NUMBER){
                 end = cases_name.size()-1
             }
-            println(end)
-            println(cases_name[(i-1)*step_length..end])
             step_cases.add(cases_name[(i-1)*step_length..end])
         }
         step_cases.eachWithIndex{ case_names, index ->
