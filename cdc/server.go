@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/ticdc/cdc/kv"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
@@ -304,6 +306,18 @@ func (s *Server) campaignOwnerLoop(ctx context.Context) error {
 func (s *Server) run(ctx context.Context) (err error) {
 	ctx = util.PutCaptureAddrInCtx(ctx, s.opts.advertiseAddr)
 	ctx = util.PutTimezoneInCtx(ctx, s.opts.timezone)
+	kvStore, err := kv.CreateTiStore(strings.Join(s.pdEndpoints, ","), s.opts.credential)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		err := kvStore.Close()
+		if err != nil {
+			log.Warn("kv store close failed", zap.Error(err))
+		}
+	}()
+	ctx = util.PutKVStorageInCtx(ctx, kvStore)
+
 	procOpts := &processorOpts{flushCheckpointInterval: s.opts.processorFlushInterval}
 	capture, err := NewCapture(ctx, s.pdEndpoints, s.opts.credential, s.opts.advertiseAddr, procOpts)
 	if err != nil {
