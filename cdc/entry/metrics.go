@@ -14,20 +14,19 @@
 package entry
 
 import (
-	"github.com/pingcap/ticdc/cdc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var (
-	mounterInputChanSizeGauge = promauto.With(cdc.Registry).NewGaugeVec(
+	mounterInputChanSizeGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "mounter",
 			Name:      "input_chan_size",
 			Help:      "mounter input chan size",
 		}, []string{"capture", "changefeed"})
-	mountDuration = promauto.With(cdc.Registry).NewHistogramVec(
+	mountDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "mounter",

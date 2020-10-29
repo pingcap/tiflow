@@ -14,13 +14,12 @@
 package sink
 
 import (
-	"github.com/pingcap/ticdc/cdc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var (
-	execBatchHistogram = promauto.With(cdc.Registry).NewHistogramVec(
+	execBatchHistogram = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
@@ -28,7 +27,7 @@ var (
 			Help:      "Bucketed histogram of batch size of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
 		}, []string{"capture", "changefeed"})
-	execTxnHistogram = promauto.With(cdc.Registry).NewHistogramVec(
+	execTxnHistogram = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
@@ -36,14 +35,14 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of a txn.",
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2 ms */, 2, 18),
 		}, []string{"capture", "changefeed"})
-	executionErrorCounter = promauto.With(cdc.Registry).NewCounterVec(
+	executionErrorCounter = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "execution_error",
 			Help:      "total count of execution errors",
 		}, []string{"capture", "changefeed"})
-	conflictDetectDurationHis = promauto.With(cdc.Registry).NewHistogramVec(
+	conflictDetectDurationHis = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
@@ -51,21 +50,21 @@ var (
 			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 21),
 		}, []string{"capture", "changefeed"})
-	bucketSizeCounter = promauto.With(cdc.Registry).NewCounterVec(
+	bucketSizeCounter = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "bucket_size",
 			Help:      "size of the DML bucket",
 		}, []string{"capture", "changefeed", "bucket"})
-	totalRowsCountGauge = promauto.With(cdc.Registry).NewGaugeVec(
+	totalRowsCountGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "total_rows_count",
 			Help:      "totla count of rows",
 		}, []string{"capture", "changefeed"})
-	totalFlushedRowsCountGauge = promauto.With(cdc.Registry).NewGaugeVec(
+	totalFlushedRowsCountGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",

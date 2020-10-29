@@ -25,58 +25,56 @@ const (
 )
 
 var (
-	Registry = prometheus.NewRegistry()
-
-	resolvedTsGauge = promauto.With(Registry).NewGaugeVec(
+	resolvedTsGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "resolved_ts",
 			Help:      "local resolved ts of processor",
 		}, []string{"changefeed", "capture"})
-	resolvedTsLagGauge = promauto.With(Registry).NewGaugeVec(
+	resolvedTsLagGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "resolved_ts_lag",
 			Help:      "local resolved ts lag of processor",
 		}, []string{"changefeed", "capture"})
-	tableResolvedTsGauge = promauto.With(Registry).NewGaugeVec(
+	tableResolvedTsGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "table_resolved_ts",
 			Help:      "local resolved ts of processor",
 		}, []string{"changefeed", "capture", "table"})
-	checkpointTsGauge = promauto.With(Registry).NewGaugeVec(
+	checkpointTsGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "checkpoint_ts",
 			Help:      "global checkpoint ts of processor",
 		}, []string{"changefeed", "capture"})
-	checkpointTsLagGauge = promauto.With(Registry).NewGaugeVec(
+	checkpointTsLagGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "checkpoint_ts_lag",
 			Help:      "global checkpoint ts lag of processor",
 		}, []string{"changefeed", "capture"})
-	syncTableNumGauge = promauto.With(Registry).NewGaugeVec(
+	syncTableNumGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "num_of_tables",
 			Help:      "number of synchronized table of processor",
 		}, []string{"changefeed", "capture"})
-	txnCounter = promauto.With(Registry).NewCounterVec(
+	txnCounter = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "txn_count",
 			Help:      "txn count received/executed by this processor",
 		}, []string{"type", "changefeed", "capture"})
-	updateInfoDuration = promauto.With(Registry).NewHistogramVec(
+	updateInfoDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
@@ -84,7 +82,7 @@ var (
 			Help:      "The time it took to update sub changefeed info.",
 			Buckets:   prometheus.ExponentialBuckets(0.00005, 2, 18),
 		}, []string{"capture"})
-	waitEventPrepareDuration = promauto.With(Registry).NewHistogramVec(
+	waitEventPrepareDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
@@ -92,21 +90,21 @@ var (
 			Help:      "Bucketed histogram of processing time (s) of waiting event prepare in processor.",
 			Buckets:   prometheus.ExponentialBuckets(0.000001, 10, 10),
 		}, []string{"changefeed", "capture"})
-	tableOutputChanSizeGauge = promauto.With(Registry).NewGaugeVec(
+	tableOutputChanSizeGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "txn_output_chan_size",
 			Help:      "size of row changed event output channel from table to processor",
 		}, []string{"changefeed", "capture"})
-	processorErrorCounter = promauto.With(Registry).NewCounterVec(
+	processorErrorCounter = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
 			Name:      "exit_with_error_count",
 			Help:      "counter for processor exits with error",
 		}, []string{"changefeed", "capture"})
-	sinkFlushRowChangedDuration = promauto.With(Registry).NewHistogramVec(
+	sinkFlushRowChangedDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "processor",
@@ -117,6 +115,7 @@ var (
 )
 
 func init() {
-	Registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	Registry.MustRegister(prometheus.NewGoCollector())
+	prometheus.DefaultRegisterer = prometheus.NewRegistry()
+	prometheus.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	prometheus.MustRegister(prometheus.NewGoCollector())
 }
