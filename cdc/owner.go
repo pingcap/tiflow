@@ -186,16 +186,16 @@ func (o *Owner) addOrphanTable(cid model.CaptureID, tableID model.TableID, start
 	}
 }
 
-func (o *Owner) newChangeFeed(
-	ctx context.Context,
-	id model.ChangeFeedID,
-	processorsInfos model.ProcessorsInfos,
-	taskPositions map[string]*model.TaskPosition,
-	info *model.ChangeFeedInfo,
-	checkpointTs uint64) (cf *changeFeed, resultErr error) {
+func (o *Owner) newChangeFeed(ctx context.Context, cli kv.CDCEtcdClient, id model.ChangeFeedID, processorsInfos model.ProcessorsInfos, taskPositions map[string]*model.TaskPosition, info *model.ChangeFeedInfo, checkpointTs uint64) (cf *changeFeed, resultErr error) {
 	log.Info("Find new changefeed", zap.Stringer("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
-
+	safePoint, err := cli.GetGCSafePoint(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if checkpointTs < safePoint {
+		return nil, tikv.ErrGCTooEarly.GenWithStackByArgs(checkpointTs, safePoint)
+	}
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
@@ -505,7 +505,7 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 		}
 		checkpointTs := cfInfo.GetCheckpointTs(status)
 
-		newCf, err := o.newChangeFeed(ctx, changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
+		newCf, err := o.newChangeFeed(ctx, o.etcdClient, changeFeedID, taskStatus, taskPositions, cfInfo, checkpointTs)
 		if err != nil {
 			cfInfo.Error = &model.RunningError{
 				Addr:    util.CaptureAddrFromCtx(ctx),

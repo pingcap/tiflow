@@ -16,6 +16,7 @@ package kv
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -25,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/retry"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/tidb/store/tikv"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -852,4 +854,20 @@ func (c CDCEtcdClient) GetOwnerID(ctx context.Context, key string) (string, erro
 		return "", concurrency.ErrElectionNoLeader
 	}
 	return string(resp.Kvs[0].Value), nil
+}
+
+// GetGCSafePoint get tikv GC safe point
+func (c CDCEtcdClient) GetGCSafePoint(ctx context.Context) (uint64, error) {
+	resp, err := c.Client.Get(ctx, tikv.GcSavedSafePoint)
+	if err != nil {
+		return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	if resp.Count == 0 {
+		return 0, errors.Wrap(cerror.ErrPDEtcdAPIError, "can't find the GC safe point")
+	}
+	safePoint, err := strconv.ParseUint(string(resp.Kvs[0].Value), 10, 64)
+	if err != nil {
+		return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
+	return safePoint, nil
 }

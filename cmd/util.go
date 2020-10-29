@@ -22,7 +22,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -216,19 +215,12 @@ func jsonPrint(cmd *cobra.Command, v interface{}) error {
 }
 
 func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) error {
-	resp, err := cli.Client.Get(ctx, tikv.GcSavedSafePoint)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if resp.Count == 0 {
-		return nil
-	}
-	safePoint, err := strconv.ParseUint(string(resp.Kvs[0].Value), 10, 64)
+	safePoint, err := cli.GetGCSafePoint(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	if startTs < safePoint {
-		return errors.Errorf("startTs %d less than gcSafePoint %d", startTs, safePoint)
+		return errors.Wrap(tikv.ErrGCTooEarly.GenWithStackByArgs(startTs, safePoint), "startTs less than gcSafePoint")
 	}
 	return nil
 }
