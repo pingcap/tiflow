@@ -438,7 +438,7 @@ create sem version
 
 ["CDC:ErrNewStore"]
 error = '''
-new store faile
+new store failed
 '''
 
 ["CDC:ErrNoPendingRegion"]
