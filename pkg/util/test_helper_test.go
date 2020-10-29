@@ -17,10 +17,15 @@ import (
 	"context"
 	"errors"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/pingcap/check"
 )
+
+func Test(t *testing.T) {
+	check.TestingT(t)
+}
 
 type testHelperSuite struct{}
 
