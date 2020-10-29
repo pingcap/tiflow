@@ -113,9 +113,3 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.002 /* 2ms */, 2, 20),
 		}, []string{"changefeed", "capture"})
 )
-
-func init() {
-	prometheus.DefaultRegisterer = prometheus.NewRegistry()
-	prometheus.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	prometheus.MustRegister(prometheus.NewGoCollector())
-}

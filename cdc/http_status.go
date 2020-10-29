@@ -29,7 +29,6 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/version"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
@@ -54,7 +53,6 @@ func (s *Server) startStatusHTTP() error {
 
 	serverMux.HandleFunc("/admin/log", handleAdminLogLevel)
 
-	prometheus.DefaultGatherer = registry
 	serverMux.Handle("/metrics", promhttp.Handler())
 
 	credential := &security.Credential{}
