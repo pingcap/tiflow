@@ -40,21 +40,26 @@ func NewCanalFlatEventBatchEncoder() EventBatchEncoder {
 	}
 }
 
+// adapted from https://github.com/alibaba/canal/blob/master/protocol/src/main/java/com/alibaba/otter/canal/protocol/FlatMessage.java
 type canalFlatMessage struct {
-	ID            int64                    `json:"id"`
-	Schema        string                   `json:"database"`
-	Table         string                   `json:"table"`
-	PKNames       []string                 `json:"pkNames"`
-	IsDDL         bool                     `json:"isDdl"`
-	EventType     string                   `json:"type"`
-	ExecutionTime int64                    `json:"es"`
-	BuildTime     uint64                   `json:"ts"`
-	Query         string                   `json:"sql"`
-	SQLType       map[string]int32         `json:"sqlType"`
-	MySQLType     map[string]string        `json:"mysqlType"`
-	Data          []map[string]interface{} `json:"data"`
-	Old           []map[string]interface{} `json:"old"`
-	tikvTs        uint64
+	// ignored by consumers
+	ID            int64    `json:"id"`
+	Schema        string   `json:"database"`
+	Table         string   `json:"table"`
+	PKNames       []string `json:"pkNames"`
+	IsDDL         bool     `json:"isDdl"`
+	EventType     string   `json:"type"`
+	ExecutionTime int64    `json:"es"`
+	// officially the time of building the MQ message, actually ignored
+	BuildTime uint64            `json:"ts"`
+	Query     string            `json:"sql"`
+	SQLType   map[string]int32  `json:"sqlType"`
+	MySQLType map[string]string `json:"mysqlType"`
+	// A Datum should be a string or nil
+	Data []map[string]interface{} `json:"data"`
+	Old  []map[string]interface{} `json:"old"`
+	// Used internally by CanalFlatEventBatchEncoder
+	tikvTs uint64
 }
 
 func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEvent) (*canalFlatMessage, error) {
@@ -117,14 +122,14 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDML(e *model.RowChangedEve
 	}
 
 	ret := &canalFlatMessage{
-		ID:            0,
+		ID:            0, // ignored by both Canal Adapter and Flink
 		Schema:        header.SchemaName,
 		Table:         header.TableName,
 		PKNames:       pkNames,
 		IsDDL:         false,
 		EventType:     header.GetEventType().String(),
 		ExecutionTime: header.ExecuteTime,
-		BuildTime:     0,
+		BuildTime:     0, // ignored by both Canal Adapter and Flink
 		Query:         "",
 		SQLType:       sqlType,
 		MySQLType:     mysqlType,
@@ -145,13 +150,13 @@ func (c *CanalFlatEventBatchEncoder) newFlatMessageForDDL(e *model.DDLEvent) (*c
 	header := c.builder.buildHeader(e.CommitTs, e.TableInfo.Schema, e.TableInfo.Table, convertDdlEventType(e), 1)
 
 	ret := &canalFlatMessage{
-		ID:            0,
+		ID:            0, // ignored by both Canal Adapter and Flink
 		Schema:        header.SchemaName,
 		Table:         header.TableName,
 		IsDDL:         true,
 		EventType:     header.GetEventType().String(),
 		ExecutionTime: header.ExecuteTime,
-		BuildTime:     0,
+		BuildTime:     0, // ignored by both Canal Adapter and Flink
 		Query:         e.Query,
 		tikvTs:        e.CommitTs,
 	}

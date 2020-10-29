@@ -269,7 +269,7 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 	}
 
 	for _, col := range cols {
-		if col != nil && (col.Flag.IsHandleKey()) {
+		if col != nil && col.Flag.IsHandleKey() {
 			pkeyCols = append(pkeyCols, col)
 		}
 	}
