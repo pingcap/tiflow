@@ -296,7 +296,10 @@ func (ti *TableInfo) ExistTableUniqueColumn() bool {
 }
 
 // IsEligible returns whether the table is a eligible table
-func (ti *TableInfo) IsEligible() bool {
+func (ti *TableInfo) IsEligible(forceReplicate bool) bool {
+	if forceReplicate {
+		return true
+	}
 	if ti.IsView() {
 		return true
 	}

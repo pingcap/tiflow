@@ -19,7 +19,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -205,16 +204,12 @@ func (o *Owner) newChangeFeed(
 		failpoint.Return(nil, errors.New("failpoint injected retriable error"))
 	})
 
-	// TODO here we create another pb client,we should reuse them
-	kvStore, err := kv.CreateTiStore(strings.Join(o.pdEndpoints, ","), o.credential)
-	if err != nil {
-		return nil, err
-	}
+	kvStore := util.KVStorageFromCtx(ctx)
 	meta, err := kv.GetSnapshotMeta(kvStore, checkpointTs)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, checkpointTs)
+	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, checkpointTs, info.Config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -294,7 +289,7 @@ func (o *Owner) newChangeFeed(
 			log.Warn("table not found for table ID", zap.Int64("tid", tid))
 			continue
 		}
-		if !tblInfo.IsEligible() {
+		if !tblInfo.IsEligible(info.Config.ForceReplicate) {
 			log.Warn("skip ineligible table", zap.Int64("tid", tid), zap.Stringer("table", table))
 			continue
 		}
@@ -333,18 +328,22 @@ func (o *Owner) newChangeFeed(
 	}
 	errCh := make(chan error, 1)
 
-	sink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
+	primarySink, err := sink.NewSink(ctx, id, info.SinkURI, filter, info.Config, info.Opts, errCh)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	defer func() {
-		if resultErr != nil && sink != nil {
-			sink.Close()
+		if resultErr != nil && primarySink != nil {
+			primarySink.Close()
 		}
 	}()
 	go func() {
-		err := <-errCh
-		if errors.Cause(err) != context.Canceled {
+		var err error
+		select {
+		case <-ctx.Done():
+		case err = <-errCh:
+		}
+		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Error("error on running owner", zap.Error(err))
 		} else {
 			log.Info("owner exited")
@@ -352,9 +351,17 @@ func (o *Owner) newChangeFeed(
 		cancel()
 	}()
 
-	err = sink.Initialize(ctx, sinkTableInfo)
+	err = primarySink.Initialize(ctx, sinkTableInfo)
 	if err != nil {
 		log.Error("error on running owner", zap.Error(err))
+	}
+
+	var syncpointStore sink.SyncpointStore
+	if info.SyncPointEnabled {
+		syncpointStore, err = sink.NewSyncpointStore(ctx, id, info.SinkURI)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	cf = &changeFeed{
@@ -375,11 +382,16 @@ func (o *Owner) newChangeFeed(
 		ddlState:          model.ChangeFeedSyncDML,
 		ddlExecutedTs:     checkpointTs,
 		targetTs:          info.GetTargetTs(),
+		ddlTs:             0,
+		updateResolvedTs:  true,
+		startTimer:        make(chan bool),
+		syncpointStore:    syncpointStore,
+		syncCancel:        nil,
 		taskStatus:        processorsInfos,
 		taskPositions:     taskPositions,
 		etcdCli:           o.etcdClient,
 		filter:            filter,
-		sink:              sink,
+		sink:              primarySink,
 		cyclicEnabled:     info.Config.Cyclic.IsEnabled(),
 		lastRebalanceTime: time.Now(),
 	}
@@ -523,6 +535,19 @@ func (o *Owner) loadChangeFeeds(ctx context.Context) error {
 				zap.String("changefeed", changeFeedID), zap.Error(err))
 			continue
 		}
+
+		if newCf.info.SyncPointEnabled {
+			log.Info("syncpoint is on, creating the sync table")
+			//create the sync table
+			err := newCf.syncpointStore.CreateSynctable(ctx)
+			if err != nil {
+				return err
+			}
+			newCf.startSyncPointTicker(ctx, newCf.info.SyncPointInterval)
+		} else {
+			log.Info("syncpoint is off")
+		}
+
 		o.changeFeeds[changeFeedID] = newCf
 		delete(o.stoppedFeeds, changeFeedID)
 	}
@@ -643,6 +668,16 @@ func (o *Owner) handleDDL(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+		}
+	}
+	return nil
+}
+
+// handleSyncPoint call handleSyncPoint of every changefeeds
+func (o *Owner) handleSyncPoint(ctx context.Context) error {
+	for _, cf := range o.changeFeeds {
+		if err := cf.handleSyncPoint(ctx); err != nil {
+			return errors.Trace(err)
 		}
 	}
 	return nil
@@ -805,8 +840,10 @@ func (o *Owner) handleAdminJob(ctx context.Context) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			cf.stopSyncPointTicker()
 		case model.AdminRemove, model.AdminFinish:
 			if cf != nil {
+				cf.stopSyncPointTicker()
 				err := o.dispatchJob(ctx, job)
 				if err != nil {
 					return errors.Trace(err)
@@ -970,6 +1007,9 @@ loop:
 			break loop
 		}
 	}
+	for _, cf := range o.changeFeeds {
+		cf.Close()
+	}
 	if o.stepDown != nil {
 		if err := o.stepDown(ctx); err != nil {
 			return err
@@ -999,7 +1039,11 @@ func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {
 				// TODO: because the main loop has many serial steps, it is hard to do a partial update without change
 				// majority logical. For now just to wakeup the main loop ASAP to reduce latency, the efficiency of etcd
 				// operations should be resolved in future release.
-				output <- struct{}{}
+
+				select {
+				case <-ctx.Done():
+				case output <- struct{}{}:
+				}
 			}
 		}
 	}()
@@ -1026,6 +1070,11 @@ func (o *Owner) run(ctx context.Context) error {
 	}
 
 	err = o.handleDDL(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = o.handleSyncPoint(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}

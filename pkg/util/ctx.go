@@ -16,6 +16,8 @@ package util
 import (
 	"context"
 	"time"
+
+	"github.com/pingcap/tidb/kv"
 )
 
 type ctxKey string
@@ -26,6 +28,7 @@ const (
 	ctxKeyChangefeedID = ctxKey("changefeedID")
 	ctxKeyIsOwner      = ctxKey("isOwner")
 	ctxKeyTimezone     = ctxKey("timezone")
+	ctxKeyKVStorage    = ctxKey("kvStorage")
 )
 
 // CaptureAddrFromCtx returns a capture ID stored in the specified context.
@@ -46,6 +49,11 @@ func PutCaptureAddrInCtx(ctx context.Context, captureAddr string) context.Contex
 // PutTimezoneInCtx returns a new child context with the given timezone
 func PutTimezoneInCtx(ctx context.Context, timezone *time.Location) context.Context {
 	return context.WithValue(ctx, ctxKeyTimezone, timezone)
+}
+
+// PutKVStorageInCtx returns a new child context with the given tikv store
+func PutKVStorageInCtx(ctx context.Context, store kv.Storage) context.Context {
+	return context.WithValue(ctx, ctxKeyKVStorage, store)
 }
 
 type tableinfo struct {
@@ -74,6 +82,15 @@ func TimezoneFromCtx(ctx context.Context) *time.Location {
 		return nil
 	}
 	return tz
+}
+
+// KVStorageFromCtx returns a tikv store
+func KVStorageFromCtx(ctx context.Context) kv.Storage {
+	store, ok := ctx.Value(ctxKeyKVStorage).(kv.Storage)
+	if !ok {
+		return nil
+	}
+	return store
 }
 
 // SetOwnerInCtx returns a new child context with the owner flag set.
