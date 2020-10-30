@@ -64,6 +64,7 @@ func waitTiDBStarted(dsn string) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		log.Info("database started", zap.String("DSN", dsn))
 		return nil
 	})
 }
