@@ -33,6 +33,9 @@ import (
 	"github.com/spf13/cobra"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/clientv3"
+	etcdlogutil "go.etcd.io/etcd/pkg/logutil"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -145,10 +148,14 @@ func newCliCommand() *cobra.Command {
 			}
 
 			pdEndpoints := strings.Split(cliPdAddr, ",")
+
+			logConfig := etcdlogutil.DefaultZapLoggerConfig
+			logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 			etcdCli, err := clientv3.New(clientv3.Config{
 				Context:     defaultContext,
 				Endpoints:   pdEndpoints,
 				TLS:         tlsConfig,
+				LogConfig:   &logConfig,
 				DialTimeout: 30 * time.Second,
 				DialOptions: []grpc.DialOption{
 					grpcTLSOption,

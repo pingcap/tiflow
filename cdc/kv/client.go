@@ -351,12 +351,14 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		}
 		err = version.CheckStoreVersion(ctx, c.pd, storeID)
 		if err != nil {
+			conn.Close()
 			log.Error("check tikv version failed", zap.Error(err), zap.Uint64("storeID", storeID))
 			return errors.Trace(err)
 		}
 		client := cdcpb.NewChangeDataClient(conn)
 		stream, err = client.EventFeed(ctx)
 		if err != nil {
+			conn.Close()
 			err = cerror.WrapError(cerror.ErrTiKVEventFeed, err)
 			log.Info("establish stream to store failed, retry later", zap.String("addr", addr), zap.Error(err))
 			return err
@@ -1199,7 +1201,7 @@ func (s *eventFeedSession) sendResolvedTs(
 					zap.Uint64("regionID", regionID),
 					zap.Uint64("requestID", state.requestID),
 					zap.String("addr", addr))
-				return nil
+				continue
 			}
 			select {
 			case state.regionEventCh <- &regionEvent{

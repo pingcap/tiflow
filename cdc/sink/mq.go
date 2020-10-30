@@ -108,10 +108,13 @@ func newMqSink(
 			avroEncoder.SetValueSchemaManager(valueSchemaManager)
 			return avroEncoder
 		}
-	case codec.ProtocolCanal:
+	case codec.ProtocolCanal, codec.ProtocolCanalJSON:
 		if !config.EnableOldValue {
 			log.Error("Old value is not enabled when using Canal protocol. Please update changefeed config")
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
+		}
+		if protocol == codec.ProtocolCanalJSON {
+			break
 		}
 		var forceHkPk bool
 		forceHkPkOpt, ok := opts["force-handle-key-pkey"]
@@ -134,7 +137,6 @@ func newMqSink(
 			return canalEncoder
 		}
 	}
-
 	k := &mqSink{
 		mqProducer:          mqProducer,
 		dispatcher:          d,
@@ -351,6 +353,11 @@ func (k *mqSink) runWorker(ctx context.Context, partition int32) error {
 				if err := flushToProducer(op); err != nil {
 					return errors.Trace(err)
 				}
+
+				if err := flushToProducer(op); err != nil {
+					return errors.Trace(err)
+				}
+
 				atomic.StoreUint64(&k.partitionResolvedTs[partition], e.resolvedTs)
 				k.resolvedNotifier.Notify()
 			}
