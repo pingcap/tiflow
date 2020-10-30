@@ -36,18 +36,15 @@ type DockerComposeOperator struct {
 func (d *DockerComposeOperator) Setup() {
 	cmd := exec.Command("docker-compose", "-f", d.FileName, "up", "-d")
 	runCmdHandleError(cmd)
-	log.Info("database startedAA")
 	err := waitTiDBStarted(UpstreamDSN)
 	if err != nil {
 		log.Fatal("ping upstream database but not receive a pong", zap.Error(err))
 	}
-	log.Info("database startedBB")
 	err = waitTiDBStarted(DownstreamDSN)
 	if err != nil {
 		log.Fatal("ping downstream database but not receive a pong", zap.Error(err))
 	}
 
-	log.Info("database startedCC")
 	if d.HealthChecker != nil {
 		err := retry.Run(time.Second, 120, d.HealthChecker)
 		if err != nil {
@@ -67,7 +64,6 @@ func waitTiDBStarted(dsn string) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Info("database started", zap.String("DSN", dsn))
 		return nil
 	})
 }

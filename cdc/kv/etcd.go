@@ -863,7 +863,10 @@ func (c CDCEtcdClient) GetGCSafePoint(ctx context.Context) (uint64, error) {
 		return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
 	if resp.Count == 0 {
-		return 0, errors.Wrap(cerror.ErrPDEtcdAPIError, "can't find the GC safe point")
+		// If and only if the TiDB cluster has just been started and GC worker has never been run,
+		// the GcSavedSafePoint will be empty.
+		// We can assume that all data has been safe since the cluster started because no data has been deleted by GC.
+		return 0, nil
 	}
 	safePoint, err := strconv.ParseUint(string(resp.Kvs[0].Value), 10, 64)
 	if err != nil {
