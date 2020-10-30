@@ -130,7 +130,6 @@ func testSorter(c *check.C, sorter EventSorter) {
 					if counter >= numProducers*eventCountPerProducer {
 						log.Debug("Unified Sorter test successful")
 						cancel()
-						return nil
 					}
 				}
 			case <-ticker.C:

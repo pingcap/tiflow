@@ -25,6 +25,7 @@ import (
 	"math"
 	"os"
 	"reflect"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -37,10 +38,10 @@ import (
 )
 
 const (
-	fileBufferSize      = 1 * 1024 * 1024  // 1MB
-	heapSizeLimit       = 16 * 1024 * 1024 // 16MB
+	fileBufferSize      = 1 * 1024 * 1024    // 1MB
+	heapSizeLimit       = 1024 * 1024 * 1024 // 1GB
 	numConcurrentHeaps  = 8
-	memoryPressureThres = 70
+	memoryPressureThres = 50
 	magic               = 0xbeefbeef
 )
 
@@ -62,17 +63,19 @@ type fileSorterBackEnd struct {
 }
 
 func (f *fileSorterBackEnd) flush() error {
+	log.Debug("fileSorterBackEnd", zap.Int("buffer size", f.readWriter.Writer.Size()))
+
 	err := f.readWriter.Flush()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	_, err = f.f.Seek(0, 0)
+	err = f.f.Close()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	f.readWriter.Reader.Reset(f.f)
-	f.readWriter.Writer.Reset(f.f)
+	f.f = nil
+
 	return nil
 }
 
@@ -81,19 +84,23 @@ func (f *fileSorterBackEnd) getSize() int {
 }
 
 func (f *fileSorterBackEnd) reset() error {
+	if f.f == nil {
+		return nil
+	}
+
 	err := f.f.Truncate(int64(0))
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	_, err = f.f.Seek(0, 0)
+	f.size = 0
+
+	err = f.f.Close()
 	if err != nil {
 		return errors.Trace(err)
 	}
+	f.f = nil
 
-	f.size = 0
-	f.readWriter.Reader.Reset(f.f)
-	f.readWriter.Writer.Reset(f.f)
 	return nil
 }
 
@@ -102,6 +109,8 @@ func (f *fileSorterBackEnd) free() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	f.f = nil
 
 	err = os.Remove(f.name)
 	if err != nil {
@@ -160,6 +169,10 @@ func newFileSorterBackEnd(fileName string, serde serializerDeserializer) (*fileS
 }
 
 func (f *fileSorterBackEnd) readNext() (*model.PolymorphicEvent, error) {
+	if err := f.reopen(); err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	var m uint32
 	err := binary.Read(f.readWriter, binary.LittleEndian, &m)
 	if err != nil {
@@ -201,6 +214,10 @@ func (f *fileSorterBackEnd) readNext() (*model.PolymorphicEvent, error) {
 }
 
 func (f *fileSorterBackEnd) writeNext(event *model.PolymorphicEvent) error {
+	if err := f.reopen(); err != nil {
+		return errors.Trace(err)
+	}
+
 	var err error
 	f.rawBytes, err = f.serde.marshal(event, f.rawBytes)
 	if err != nil {
@@ -228,6 +245,19 @@ func (f *fileSorterBackEnd) writeNext(event *model.PolymorphicEvent) error {
 	}
 
 	f.size = f.size + 8 + size
+	return nil
+}
+
+func (f *fileSorterBackEnd) reopen() error {
+	if f.f == nil {
+		fd, err := os.Open(f.name)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		f.f = fd
+		f.readWriter.Reader.Reset(f.f)
+		f.readWriter.Writer.Reset(f.f)
+	}
 	return nil
 }
 
@@ -295,6 +325,10 @@ func newBackEndPool(dir string) *backEndPool {
 			atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 			if memPressure > 50 {
 				log.Debug("unified sorter: high memory pressure", zap.Uint64("memPressure", memPressure))
+				// Increase GC frequency to avoid necessary OOM
+				debug.SetGCPercent(10)
+			} else {
+				debug.SetGCPercent(100)
 			}
 
 			// garbage collect temporary files in batches
@@ -324,7 +358,7 @@ func newBackEndPool(dir string) *backEndPool {
 	return ret
 }
 
-func (p *backEndPool) alloc() (sorterBackEnd, error) {
+func (p *backEndPool) alloc(ctx context.Context) (sorterBackEnd, error) {
 	if atomic.LoadInt32(&p.memPressure) < memoryPressureThres {
 		ret := new(memorySorterBackEnd)
 		atomic.AddInt64(&p.memoryUseEstimate, heapSizeLimit)
@@ -341,12 +375,13 @@ func (p *backEndPool) alloc() (sorterBackEnd, error) {
 
 	fname := fmt.Sprintf("%s/sort-%d-%d", p.dir, os.Getpid(), atomic.AddUint64(&p.fileNameCounter, 1))
 	log.Debug("Unified Sorter: trying to create file backEnd")
+
 	ret, err := newFileSorterBackEnd(fname, &msgPackGenSerde{})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	atomic.AddInt64(&p.memoryUseEstimate, heapSizeLimit)
+
 	return ret, nil
 }
 
@@ -373,6 +408,7 @@ func (p *backEndPool) dealloc(backEnd sorterBackEnd) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+
 		return nil
 	default:
 		log.Fatal("backEndPool: unexpected backEnd type to be deallocated", zap.Reflect("type", reflect.TypeOf(backEnd)))
@@ -414,7 +450,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 
 	if !isEmptyFlush {
 		var err error
-		backEnd, err = h.backEndPool.alloc()
+		backEnd, err = h.backEndPool.alloc(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -500,15 +536,9 @@ func (h *heapSorter) run(ctx context.Context) error {
 				maxResolved = event.RawKV.CRTs
 			}
 
-			heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 128
+			heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 48
 
 			needFlush := heapSizeBytesEstimate >= heapSizeLimit || isResolvedEvent
-			select {
-			case <-flushTicker.C:
-				needFlush = true
-			default:
-			}
-
 			if needFlush {
 				err := h.flush(ctx, maxResolved)
 				if err != nil {
@@ -516,6 +546,12 @@ func (h *heapSorter) run(ctx context.Context) error {
 				}
 				heapSizeBytesEstimate = 0
 			}
+		case <-flushTicker.C:
+			err := h.flush(ctx, maxResolved)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			heapSizeBytesEstimate = 0
 		}
 	}
 }
