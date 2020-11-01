@@ -111,6 +111,7 @@ const (
 	ProtocolCanal
 	ProtocolAvro
 	ProtocolMaxwell
+	ProtocolCanalJSON
 )
 
 // FromString converts the protocol from string to Protocol enum type
@@ -124,6 +125,8 @@ func (p *Protocol) FromString(protocol string) {
 		*p = ProtocolAvro
 	case "maxwell":
 		*p = ProtocolMaxwell
+	case "canal-json":
+		*p = ProtocolCanalJSON
 	default:
 		*p = ProtocolDefault
 		log.Warn("can't support codec protocol, using default protocol", zap.String("protocol", protocol))
@@ -141,6 +144,8 @@ func NewEventBatchEncoder(p Protocol) func() EventBatchEncoder {
 		return NewAvroEventBatchEncoder
 	case ProtocolMaxwell:
 		return NewMaxwellEventBatchEncoder
+	case ProtocolCanalJSON:
+		return NewCanalFlatEventBatchEncoder
 	default:
 		log.Warn("unknown codec protocol value of EventBatchEncoder", zap.Int("protocol_value", int(p)))
 		return NewJSONEventBatchEncoder
