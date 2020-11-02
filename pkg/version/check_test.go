@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"testing"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
@@ -26,6 +27,10 @@ import (
 	pd "github.com/tikv/pd/client"
 	"github.com/tikv/pd/pkg/tempurl"
 )
+
+func Test(t *testing.T) {
+	check.TestingT(t)
+}
 
 type checkSuite struct{}
 
@@ -56,11 +61,12 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 	}
 	pdURL, _ := url.Parse(tempurl.Alloc())
 	pdHTTP := fmt.Sprintf("http://%s", pdURL.Host)
-	svr := http.Server{Addr: pdURL.Host, Handler: &mock}
+	srv := http.Server{Addr: pdURL.Host, Handler: &mock}
 	go func() {
-		c.Assert(svr.ListenAndServe(), check.IsNil)
+		//nolint:errcheck
+		srv.ListenAndServe()
 	}()
-	defer svr.Close()
+	defer srv.Close()
 	for i := 0; i < 20; i++ {
 		time.Sleep(100 * time.Millisecond)
 		_, err := http.Get(pdHTTP)
@@ -68,7 +74,7 @@ func (s *checkSuite) TestCheckClusterVersion(c *check.C) {
 			break
 		}
 		c.Error(err)
-		if i == 199 {
+		if i == 19 {
 			c.Fatal("http server timeout", err)
 		}
 	}
