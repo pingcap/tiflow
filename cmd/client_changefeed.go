@@ -220,7 +220,7 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			}
 			startTs = oracle.ComposeTS(ts, logical)
 		}
-		if err := verifyStartTs(ctx, startTs, cdcEtcdCli); err != nil {
+		if err := verifyStartTs(ctx, startTs); err != nil {
 			return nil, err
 		}
 		if err := verifyTargetTs(ctx, startTs, targetTs); err != nil {

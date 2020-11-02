@@ -25,6 +25,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/pingcap/ticdc/pkg/util"
+
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -38,7 +40,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
-	"github.com/pingcap/tidb/store/tikv"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -214,15 +215,8 @@ func jsonPrint(cmd *cobra.Command, v interface{}) error {
 	return nil
 }
 
-func verifyStartTs(ctx context.Context, startTs uint64, cli kv.CDCEtcdClient) error {
-	safePoint, err := cli.GetGCSafePoint(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if startTs < safePoint {
-		return errors.Wrap(tikv.ErrGCTooEarly.GenWithStackByArgs(startTs, safePoint), "startTs less than gcSafePoint")
-	}
-	return nil
+func verifyStartTs(ctx context.Context, startTs uint64) error {
+	return util.CheckSafetyOfStartTs(ctx, pdCli, startTs)
 }
 
 func verifyTargetTs(ctx context.Context, startTs, targetTs uint64) error {
