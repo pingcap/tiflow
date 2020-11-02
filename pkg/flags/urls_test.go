@@ -14,8 +14,14 @@
 package flags
 
 import (
+	"testing"
+
 	. "github.com/pingcap/check"
 )
+
+func Test(t *testing.T) {
+	TestingT(t)
+}
 
 var _ = Suite(&testUrlsSuite{})
 
