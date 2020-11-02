@@ -41,7 +41,7 @@ const (
 	fileBufferSize      = 1 * 1024 * 1024    // 1MB
 	heapSizeLimit       = 1024 * 1024 * 1024 // 1GB
 	numConcurrentHeaps  = 8
-	memoryPressureThres = 50
+	memoryPressureThres = 60
 	magic               = 0xbeefbeef
 )
 
@@ -107,14 +107,16 @@ func (f *fileSorterBackEnd) reset() error {
 }
 
 func (f *fileSorterBackEnd) free() error {
-	err := f.f.Close()
-	if err != nil {
-		return errors.Trace(err)
+	if f.f != nil {
+		err := f.f.Close()
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	f.f = nil
 
-	err = os.Remove(f.name)
+	err := os.Remove(f.name)
 	if err != nil {
 		return errors.Trace(err)
 	}
