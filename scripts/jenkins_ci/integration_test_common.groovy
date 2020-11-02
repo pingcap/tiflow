@@ -2,37 +2,6 @@ CONCURRENT_NUMBER = 6
 
 def prepare_binaries() {
     stage('Prepare Binaries') {
-<<<<<<< HEAD
-        def TIDB_BRANCH = params.getOrDefault("release_test__tidb_commit", "release-4.0")
-        def TIKV_BRANCH = params.getOrDefault("release_test__tikv_commit", "release-4.0")
-        def PD_BRANCH = params.getOrDefault("release_test__pd_commit", "release-4.0")
-
-        // parse tidb branch
-        def m1 = ghprbCommentBody =~ /tidb\s*=\s*([^\s\\]+)(\s|\\|$)/
-        if (m1) {
-            TIDB_BRANCH = "${m1[0][1]}"
-        }
-        m1 = null
-        println "TIDB_BRANCH=${TIDB_BRANCH}"
-
-        // parse tikv branch
-        def m2 = ghprbCommentBody =~ /tikv\s*=\s*([^\s\\]+)(\s|\\|$)/
-        if (m2) {
-            TIKV_BRANCH = "${m2[0][1]}"
-        }
-        m2 = null
-        println "TIKV_BRANCH=${TIKV_BRANCH}"
-
-        // parse pd branch
-        def m3 = ghprbCommentBody =~ /pd\s*=\s*([^\s\\]+)(\s|\\|$)/
-        if (m3) {
-            PD_BRANCH = "${m3[0][1]}"
-        }
-        m3 = null
-        println "PD_BRANCH=${PD_BRANCH}"
-
-=======
->>>>>>> 230114b... test: refine the integration tests script (#1033)
         def prepares = [:]
 
         prepares["build binaries"] = {
@@ -172,9 +141,9 @@ def tests(sink_type, node_label) {
 }
 
 def download_binaries(){
-    def TIDB_BRANCH = params.getOrDefault("release_test__tidb_commit", "master")
-    def TIKV_BRANCH = params.getOrDefault("release_test__tikv_commit", "master")
-    def PD_BRANCH = params.getOrDefault("release_test__pd_commit", "master")
+    def TIDB_BRANCH = params.getOrDefault("release_test__tidb_commit", "release-4.0")
+    def TIKV_BRANCH = params.getOrDefault("release_test__tikv_commit", "release-4.0")
+    def PD_BRANCH = params.getOrDefault("release_test__pd_commit", "release-4.0")
 
     // parse tidb branch
     def m1 = ghprbCommentBody =~ /tidb\s*=\s*([^\s\\]+)(\s|\\|$)/
