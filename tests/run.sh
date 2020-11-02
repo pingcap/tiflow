@@ -33,7 +33,7 @@ run_case() {
     local case=$1
     local script=$2
     local sink_type=$3
-    echo "Running test $script using Sink-Type: $sink_type..."
+    echo "=================>> Running test $script using Sink-Type: $sink_type... <<================="
     PATH="$CUR/../bin:$CUR/_utils:$PATH" \
     LD_LIBRARY_PATH="$CUR/../bin:$CUR/_utils:$PATH" \
     OUT_DIR=$OUT_DIR \
