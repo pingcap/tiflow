@@ -88,14 +88,16 @@ func (f *fileSorterBackEnd) reset() error {
 		return nil
 	}
 
-	err := f.f.Truncate(int64(0))
-	if err != nil {
-		return errors.Trace(err)
+	if f.size > 0 {
+		err := f.f.Truncate(int64(0))
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		f.size = 0
 	}
 
-	f.size = 0
-
-	err = f.f.Close()
+	err := f.f.Close()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -250,7 +252,7 @@ func (f *fileSorterBackEnd) writeNext(event *model.PolymorphicEvent) error {
 
 func (f *fileSorterBackEnd) reopen() error {
 	if f.f == nil {
-		fd, err := os.Open(f.name)
+		fd, err := os.OpenFile(f.name, os.O_APPEND | os.O_RDWR, 0644)
 		if err != nil {
 			return errors.Trace(err)
 		}

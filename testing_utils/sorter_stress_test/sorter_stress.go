@@ -12,6 +12,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"strings"
 )
 
 
@@ -35,7 +36,9 @@ func main() {
 
  	sorter := puller.NewUnifiedSorter(*sorterDir)
 
- 	eg, ctx := errgroup.WithContext(context.Background())
+ 	ctx1, cancel := context.WithCancel(context.Background())
+
+ 	eg, ctx := errgroup.WithContext(ctx1)
 
  	eg.Go(func() error {
 		return sorter.Run(ctx)
@@ -61,7 +64,7 @@ func main() {
 					}
 					if counter >= *numBatches * *msgsPerBatch {
 						log.Debug("Unified Sorter test successful")
-						os.Exit(0)
+						cancel()
 						return nil
 					}
 				}
@@ -86,6 +89,9 @@ func main() {
 
 	err = eg.Wait()
 	if err != nil {
+		if strings.Contains(err.Error(), "context canceled") {
+			return
+		}
 		log.Error("sorter_stress_test:", zap.Error(err))
 	}
 }
