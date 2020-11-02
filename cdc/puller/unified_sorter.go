@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/pingcap/ticdc/pkg/config"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"io"
@@ -38,11 +39,8 @@ import (
 )
 
 const (
-	fileBufferSize      = 1 * 1024 * 1024    // 1MB
-	heapSizeLimit       = 1024 * 1024 * 1024 // 1GB
-	numConcurrentHeaps  = 8
-	memoryPressureThres = 60
-	magic               = 0xbeefbeef
+	fileBufferSize = 1 * 1024 * 1024 // 1MB
+	magic          = 0xbeefbeef
 )
 
 type sorterBackEnd interface {
@@ -254,7 +252,7 @@ func (f *fileSorterBackEnd) writeNext(event *model.PolymorphicEvent) error {
 
 func (f *fileSorterBackEnd) reopen() error {
 	if f.f == nil {
-		fd, err := os.OpenFile(f.name, os.O_APPEND | os.O_RDWR, 0644)
+		fd, err := os.OpenFile(f.name, os.O_APPEND|os.O_RDWR, 0644)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -363,9 +361,12 @@ func newBackEndPool(dir string) *backEndPool {
 }
 
 func (p *backEndPool) alloc(ctx context.Context) (sorterBackEnd, error) {
-	if atomic.LoadInt32(&p.memPressure) < memoryPressureThres {
+	sorterConfig := config.GetSorterConfig()
+	if atomic.LoadInt64(&p.memoryUseEstimate) < int64(sorterConfig.MaxMemoryConsumption) &&
+		atomic.LoadInt32(&p.memPressure) < int32(sorterConfig.MaxMemoryPressure) {
+
 		ret := new(memorySorterBackEnd)
-		atomic.AddInt64(&p.memoryUseEstimate, heapSizeLimit)
+		atomic.AddInt64(&p.memoryUseEstimate, int64(sorterConfig.ChunkSizeLimit))
 		return ret, nil
 	}
 
@@ -385,11 +386,11 @@ func (p *backEndPool) alloc(ctx context.Context) (sorterBackEnd, error) {
 		return nil, errors.Trace(err)
 	}
 
-
 	return ret, nil
 }
 
 func (p *backEndPool) dealloc(backEnd sorterBackEnd) error {
+	sorterConfig := config.GetSorterConfig()
 	err := backEnd.reset()
 	if err != nil {
 		return errors.Trace(err)
@@ -397,7 +398,7 @@ func (p *backEndPool) dealloc(backEnd sorterBackEnd) error {
 
 	switch b := backEnd.(type) {
 	case *memorySorterBackEnd:
-		atomic.AddInt64(&p.memoryUseEstimate, -heapSizeLimit)
+		atomic.AddInt64(&p.memoryUseEstimate, -int64(sorterConfig.ChunkSizeLimit))
 		// Let GC do its job
 		return nil
 	case *fileSorterBackEnd:
@@ -525,6 +526,7 @@ func (h *heapSorter) run(ctx context.Context) error {
 	maxResolved = 0
 	heapSizeBytesEstimate = 0
 	flushTicker := time.NewTicker(30 * time.Second)
+	sorterConfig := config.GetSorterConfig()
 	for {
 		select {
 		case <-ctx.Done():
@@ -542,7 +544,7 @@ func (h *heapSorter) run(ctx context.Context) error {
 
 			heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 48
 
-			needFlush := heapSizeBytesEstimate >= heapSizeLimit || isResolvedEvent
+			needFlush := heapSizeBytesEstimate >= int64(sorterConfig.ChunkSizeLimit) || isResolvedEvent
 			if needFlush {
 				err := h.flush(ctx, maxResolved)
 				if err != nil {
@@ -804,8 +806,11 @@ func NewUnifiedSorter(dir string) *UnifiedSorter {
 
 // Run implements the EventSorter interface
 func (s *UnifiedSorter) Run(ctx context.Context) error {
+	sorterConfig := config.GetSorterConfig()
+	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
+
 	nextSorterID := 0
-	heapSorters := make([]*heapSorter, numConcurrentHeaps)
+	heapSorters := make([]*heapSorter, sorterConfig.NumConcurrentWorker)
 
 	sorterOutCh := make(chan *flushTask, 4096)
 	defer close(sorterOutCh)

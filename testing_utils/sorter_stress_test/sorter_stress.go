@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -6,6 +19,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	"github.com/pingcap/ticdc/pkg/config"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"math/rand"
@@ -15,15 +29,21 @@ import (
 	"strings"
 )
 
-
 var sorterDir = flag.String("dir", "./sorter", "temporary directory used for sorting")
-var numBatches = flag.Int("num-batches", 512, "number of batches of ordered events")
+var numBatches = flag.Int("num-batches", 256, "number of batches of ordered events")
 var msgsPerBatch = flag.Int("num-messages-per-batch", 102400, "number of events in a batch")
 var bytesPerMsg = flag.Int("bytes-per-message", 1024, "number of bytes in an event")
 
 func main() {
 	flag.Parse()
 	log.SetLevel(zap.DebugLevel)
+
+	config.SetSorterConfig(&config.SorterConfig{
+		NumConcurrentWorker:  8,
+		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:    60,
+		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
+	})
 
 	go func() {
 		_ = http.ListenAndServe("localhost:6060", nil)
@@ -34,13 +54,13 @@ func main() {
 		log.Error("sorter_stress_test:", zap.Error(err))
 	}
 
- 	sorter := puller.NewUnifiedSorter(*sorterDir)
+	sorter := puller.NewUnifiedSorter(*sorterDir)
 
- 	ctx1, cancel := context.WithCancel(context.Background())
+	ctx1, cancel := context.WithCancel(context.Background())
 
- 	eg, ctx := errgroup.WithContext(ctx1)
+	eg, ctx := errgroup.WithContext(ctx1)
 
- 	eg.Go(func() error {
+	eg.Go(func() error {
 		return sorter.Run(ctx)
 	})
 
@@ -62,7 +82,7 @@ func main() {
 					if counter%10000 == 0 {
 						log.Debug("Messages received", zap.Int("counter", counter))
 					}
-					if counter >= *numBatches * *msgsPerBatch {
+					if counter >= *numBatches**msgsPerBatch {
 						log.Debug("Unified Sorter test successful")
 						cancel()
 						return nil
@@ -72,7 +92,7 @@ func main() {
 		}
 	})
 
- 	eg1 := errgroup.Group{}
+	eg1 := errgroup.Group{}
 	for i := 0; i < *numBatches; i++ {
 		eg1.Go(func() error {
 			generateGroup(ctx, sorter)
@@ -105,10 +125,9 @@ func generateGroup(ctx context.Context, sorter puller.EventSorter) {
 }
 
 var (
-	key = []byte(randSeq(10))
+	key   = []byte(randSeq(10))
 	value = []byte(randSeq(*bytesPerMsg))
 )
-
 
 func newMockRawKV(ts uint64) *model.RawKVEntry {
 	return &model.RawKVEntry{
@@ -131,5 +150,3 @@ func randSeq(n int) string {
 	}
 	return string(b)
 }
-
-

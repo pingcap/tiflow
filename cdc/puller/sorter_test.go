@@ -15,15 +15,16 @@ package puller
 
 import (
 	"context"
-	"github.com/pingcap/errors"
 	"math"
 	"os"
 	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	_ "net/http/pprof"
@@ -51,6 +52,13 @@ func generateMockRawKV(ts uint64) *model.RawKVEntry {
 }
 
 func (s *sorterSuite) TestSorterBasic(c *check.C) {
+	config.SetSorterConfig(&config.SorterConfig{
+		NumConcurrentWorker:  8,
+		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:    60,
+		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
+	})
+
 	err := os.MkdirAll("./sorter", 0755)
 	c.Assert(err, check.IsNil)
 	sorter := NewUnifiedSorter("./sorter")
