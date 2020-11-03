@@ -99,7 +99,7 @@ function checkPrimaryTsNotInDDL() {
 function checkDiff() {
     primaryArr=(`grep primary_ts $OUT_DIR/sql_res.$TEST_NAME.txt | awk -F ": " '{print $2}'`)
     secondaryArr=(`grep secondary_ts $OUT_DIR/sql_res.$TEST_NAME.txt | awk -F ": " '{print $2}'`)
-    tsos=($(curl -s http://$UP_TIDB_HOST:$UP_TIDB_STATUS_PORT/ddl/history |grep -E "start_ts|FinishedTS"|grep -oE "[0-9]*"))
+    tsos=($(curl -s http://$UP_TIDB_HOST:$UP_TIDB_STATUS/ddl/history |grep -E "start_ts|FinishedTS"|grep -oE "[0-9]*"))
     num=${#primaryArr[*]}
     for ((i=0;i<$num;i++))
     do
