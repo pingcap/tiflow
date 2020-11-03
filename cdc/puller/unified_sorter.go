@@ -11,6 +11,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/*
+Benchmark results:
+
+Data    Time
+50GB    7 min
+100GB   16 min
+200GB   32 min
+
+Machine specifications:
+
+CPU: Intel(R) Xeon(R) CPU E5-2630 v4 @ 2.20GHz
+Memory: 16GB DDR4 2133MHz * 8
+Disk: Intel Corporation NVMe Datacenter SSD
+
+Sorter configuration:
+
+{
+	NumConcurrentWorker:  16,
+	ChunkSizeLimit:       1 * 1024 * 1024 * 1024,   // 1GB
+	MaxMemoryPressure:    60,
+	MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,  // 16GB
+}
+*/
+
 package puller
 
 import (
