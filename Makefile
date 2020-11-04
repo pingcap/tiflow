@@ -102,11 +102,11 @@ integration_test_build: check_failpoint_ctl
 
 integration_test: integration_test_mysql
 
-integration_test_mysql: check_third_party_binary
-	tests/run.sh mysql $(CASE)
+integration_test_mysql:
+	tests/run.sh mysql "$(CASE)"
 
 integration_test_kafka: check_third_party_binary
-	tests/run.sh kafka $(CASE)
+	tests/run.sh kafka "$(CASE)"
 
 fmt:
 	@echo "gofmt (simplify)"

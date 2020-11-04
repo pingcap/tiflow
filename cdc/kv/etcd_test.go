@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
@@ -29,7 +28,9 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
+	"go.etcd.io/etcd/pkg/logutil"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -49,9 +50,12 @@ func (s *etcdSuite) SetUpTest(c *check.C) {
 	var err error
 	s.clientURL, s.e, err = etcd.SetupEmbedEtcd(dir)
 	c.Assert(err, check.IsNil)
+	logConfig := logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{s.clientURL.String()},
 		DialTimeout: 3 * time.Second,
+		LogConfig:   &logConfig,
 	})
 	c.Assert(err, check.IsNil)
 	s.client = NewCDCEtcdClient(context.TODO(), client)
@@ -321,7 +325,6 @@ func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
 	})
 	for i := 0; i < 50; i++ {
 		_, _, err = s.client.GetChangeFeedStatus(ctx, "test1")
-		log.Warn("nil", zap.Error(err))
 		if err != nil {
 			if cerror.ErrChangeFeedNotExists.Equal(err) {
 				return
@@ -448,4 +451,35 @@ func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
 	queryLeases, err = s.client.GetCaptureLeases(ctx)
 	c.Assert(err, check.IsNil)
 	c.Check(queryLeases, check.DeepEquals, map[string]int64{})
+}
+
+func (s *etcdSuite) TestGetAllCDCInfo(c *check.C) {
+	captureID := "CAPTURE_ID"
+	changefeedID := "CHANGEFEED_ID"
+	ctx := context.Background()
+	err := s.client.PutTaskWorkload(ctx, changefeedID, captureID, &model.TaskWorkload{
+		11: model.WorkloadInfo{Workload: 1},
+		22: model.WorkloadInfo{Workload: 22},
+	})
+	c.Assert(err, check.IsNil)
+	err = s.client.PutTaskStatus(ctx, changefeedID, captureID, &model.TaskStatus{
+		Tables: map[model.TableID]*model.TableReplicaInfo{11: {StartTs: 22}},
+	})
+	c.Assert(err, check.IsNil)
+	kvs, err := s.client.GetAllCDCInfo(ctx)
+	c.Assert(err, check.IsNil)
+	expected := []struct {
+		key   string
+		value string
+	}{{
+		key:   "/tidb/cdc/task/status/CAPTURE_ID/CHANGEFEED_ID",
+		value: "{\"tables\":{\"11\":{\"start-ts\":22,\"mark-table-id\":0}},\"operation\":null,\"admin-job-type\":0}",
+	}, {
+		key:   "/tidb/cdc/task/workload/CAPTURE_ID/CHANGEFEED_ID",
+		value: "{\"11\":{\"workload\":1},\"22\":{\"workload\":22}}",
+	}}
+	for i, kv := range kvs {
+		c.Assert(string(kv.Key), check.Equals, expected[i].key)
+		c.Assert(string(kv.Value), check.Equals, expected[i].value)
+	}
 }

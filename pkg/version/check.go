@@ -38,7 +38,7 @@ var minPDVersion *semver.Version = semver.New("4.0.0-rc.1")
 // MinTiKVVersion is the version of the minimal compatible TiKV.
 var MinTiKVVersion *semver.Version = semver.New("4.0.0-rc.1")
 
-var versionHash = regexp.MustCompile("-[0-9]+-g[0-9a-f]{7,}")
+var versionHash = regexp.MustCompile("-[0-9]+-g[0-9a-f]{7,}(-dev)?")
 
 func removeVAndHash(v string) string {
 	if v == "" {
