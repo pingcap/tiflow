@@ -883,7 +883,11 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		}
 	})
 
-	return errg.Wait()
+	err := errg.Wait()
+	if err != nil {
+		log.Warn("Unified Sorter exited with error", zap.Error(err))
+	}
+	return err
 }
 
 // AddEntry implements the EventSorter interface
