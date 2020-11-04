@@ -679,7 +679,7 @@ func (t *schemaSuite) TestCreateSnapFromMeta(c *C) {
 }
 
 func (t *schemaSuite) TestSnapshotClone(c *C) {
-	store, err := mockstore.NewMockTikvStore()
+	store, err := mockstore.NewMockStore()
 	c.Assert(err, IsNil)
 
 	session.SetSchemaLease(0)
@@ -718,7 +718,7 @@ func (t *schemaSuite) TestSnapshotClone(c *C) {
 }
 
 func (t *schemaSuite) TestExplicitTables(c *C) {
-	store, err := mockstore.NewMockTikvStore()
+	store, err := mockstore.NewMockStore()
 	c.Assert(err, IsNil)
 
 	session.SetSchemaLease(0)

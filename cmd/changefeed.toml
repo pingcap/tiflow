@@ -32,9 +32,9 @@ dispatchers = [
 	{matcher = ['test3.*', 'test4.*'], dispatcher = "rowid"},
 ]
 # 对于 MQ 类的 Sink，可以指定消息的协议格式
-# 协议目前支持 default, canal, avro 和 maxwell 四种，default 为 ticdc-open-protocol
+# 协议目前支持 default, canal 两种，default 为 ticdc-open-protocol
 # For MQ Sinks, you can configure the protocol of the messages sending to MQ
-# Currently the protocol support default, canal, avro and maxwell. Default is ticdc-open-protocol
+# Currently the protocol support default and canal
 protocol = "default"
 
 [cyclic-replication]
