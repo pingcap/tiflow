@@ -85,14 +85,14 @@ func init() {
 	//register pulsar sink
 	sinkIniterMap["pulsar"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
-		return cdclog.NewLocalFileSink(ctx, sinkURI, errCh)
+		return newPulsarSink(ctx, sinkURI, filter, config, opts, errCh)
 	}
 	sinkIniterMap["pulsar+ssl"] = sinkIniterMap["pulsar"]
 
 	// register local sink
 	sinkIniterMap["local"] = func(ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
 		filter *filter.Filter, config *config.ReplicaConfig, opts map[string]string, errCh chan error) (Sink, error) {
-		return newBlackHoleSink(ctx, opts), nil
+		return cdclog.NewLocalFileSink(ctx, sinkURI, errCh)
 	}
 
 	// register s3 sink
