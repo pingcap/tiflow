@@ -549,7 +549,7 @@ func (h *heapSorter) run(ctx context.Context) error {
 	)
 	maxResolved = 0
 	heapSizeBytesEstimate = 0
-	flushTicker := time.NewTicker(30 * time.Second)
+	flushTicker := time.NewTicker(5 * time.Second)
 	sorterConfig := config.GetSorterConfig()
 	for {
 		select {
@@ -568,7 +568,7 @@ func (h *heapSorter) run(ctx context.Context) error {
 
 			heapSizeBytesEstimate += event.RawKV.ApproximateSize() + 48
 
-			needFlush := heapSizeBytesEstimate >= int64(sorterConfig.ChunkSizeLimit) || isResolvedEvent
+			needFlush := heapSizeBytesEstimate >= int64(sorterConfig.ChunkSizeLimit)
 			if needFlush {
 				err := h.flush(ctx, maxResolved)
 				if err != nil {
