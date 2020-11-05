@@ -12,7 +12,11 @@ The current version of TiCDC supports four protocols for writing to a message qu
 
 所有的协议均能保证，如果忽略重复消息，在**同一 Partition 中，同一数据表中**的改动，按照 commit 时间戳顺序输出。重复消息在 TiCDC 与 TiKV 的连接中断重连，或数据表在 TiCDC 节点迁移的时候**可能发生**。
 
-All protocols guarantee that, with duplicate messages ignored, **in any given partition, **data changes** to **a given table** are ordered by their commit timestamps. Duplication **can** happen when a TiCDC node re-establishes connection with TiKV or when the replication task of a table is being migrated across TiCDC nodes.
+All protocols guarantee that, with duplicate messages ignored, **in any given partition**, **data changes** to **a given table** are ordered by their commit timestamps. Duplication **can** happen when a TiCDC node re-establishes connection with TiKV or when the replication task of a table is being migrated across TiCDC nodes.
+
+除了 Avro 协议之外，所有其他协议均可以输出行变更之前的旧值 (old value)。
+
+Except for Avro, all protocols support outputting the old value before the change.
 
 
 # Protocols 分协议介绍
