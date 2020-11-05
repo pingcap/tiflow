@@ -10,10 +10,13 @@ import (
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
+	"github.com/pingcap/ticdc/pkg/quotes"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -26,9 +29,9 @@ func init() {
 }
 
 type simpleMySQLSink struct {
-	enableOldValue bool
-	checkOldValue  bool
-	db             *sql.DB
+	enableOldValue      bool
+	enableCheckOldValue bool
+	db                  *sql.DB
 }
 
 func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.ReplicaConfig, opts map[string]string) (*simpleMySQLSink, error) {
@@ -79,7 +82,7 @@ func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.Re
 		enableOldValue: config.EnableOldValue,
 	}
 	if checkOldValue, ok := opts["check-old-value"]; ok {
-		sink.checkOldValue = strings.ToLower(checkOldValue) == "true"
+		sink.enableCheckOldValue = strings.ToLower(checkOldValue) == "true"
 	}
 	return sink, nil
 }
@@ -98,12 +101,24 @@ func (s *simpleMySQLSink) EmitRowChangedEvents(ctx context.Context, rows ...*mod
 		for _, row := range rows {
 			if len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				// update
+				if s.enableCheckOldValue {
+					err := s.checkOldValue(ctx, row)
+					if err != nil {
+						return errors.Trace(err)
+					}
+				}
 				sql, args = prepareUpdate(row.Table.QuoteString(), row.PreColumns, row.Columns, true)
 			} else if len(row.PreColumns) == 0 {
 				// insert
 				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, true, true)
 			} else if len(row.Columns) == 0 {
 				// delete
+				if s.enableCheckOldValue {
+					err := s.checkOldValue(ctx, row)
+					if err != nil {
+						return errors.Trace(err)
+					}
+				}
 				sql, args = prepareDelete(row.Table.QuoteString(), row.PreColumns, true)
 			}
 			_, err := s.db.ExecContext(ctx, sql, args...)
@@ -151,4 +166,49 @@ func (s *simpleMySQLSink) EmitCheckpointTs(ctx context.Context, ts uint64) error
 // Close closes the Sink
 func (s *simpleMySQLSink) Close() error {
 	return s.db.Close()
+}
+
+func prepareCheckSQL(quoteTable string, cols []*model.Column) (string, []interface{}) {
+	var builder strings.Builder
+	builder.WriteString("SELECT count(1) FROM " + quoteTable + " WHERE ")
+
+	colNames, wargs := whereSlice(cols, true)
+	if len(wargs) == 0 {
+		return "", nil
+	}
+	args := make([]interface{}, 0, len(wargs))
+	for i := 0; i < len(colNames); i++ {
+		if i > 0 {
+			builder.WriteString(" AND ")
+		}
+		if wargs[i] == nil {
+			builder.WriteString(quotes.QuoteName(colNames[i]) + " IS NULL")
+		} else {
+			builder.WriteString(quotes.QuoteName(colNames[i]) + " = ?")
+			args = append(args, wargs[i])
+		}
+	}
+	builder.WriteString(" LIMIT 1;")
+	sql := builder.String()
+	return sql, args
+}
+
+func (s *simpleMySQLSink) checkOldValue(ctx context.Context, row *model.RowChangedEvent) error {
+	sql, args := prepareCheckSQL(row.Table.QuoteString(), row.PreColumns)
+	result, err := s.db.QueryContext(ctx, sql, args...)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	var count int
+	if result.Next() {
+		err := result.Scan(&count)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	if count == 0 {
+		log.Error("can't pass the check, the old value of this row is not exist", zap.Any("row", row))
+		return errors.New("check failed")
+	}
+	return nil
 }
