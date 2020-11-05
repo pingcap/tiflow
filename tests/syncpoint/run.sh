@@ -81,12 +81,34 @@ function deployConfig() {
     echo "snapshot = \"$2\"" >> $CUR/conf/diff_config.toml
 }
 
+# check wheter the given tso happens in a DDL job, if true returns the start_ts
+# and commit_ts of the DDL job
+function checkPrimaryTsNotInDDL() {
+    primary_ts=$1
+    tsos=$2
+    count=$(( ${#tsos[@]} / 2 ))
+    for i in $(seq 1 $count); do
+        start_ts=${tsos[(( 2 * $i - 2 ))]}
+        commit_ts=${tsos[(( 2 * $i - 1 ))]}
+        if [[ ($primary_ts > $start_ts) && ($primary_ts < $commit_ts) ]]; then
+            echo "$start_ts $commit_ts"
+        fi
+    done
+}
+
 function checkDiff() {
     primaryArr=(`grep primary_ts $OUT_DIR/sql_res.$TEST_NAME.txt | awk -F ": " '{print $2}'`)
     secondaryArr=(`grep secondary_ts $OUT_DIR/sql_res.$TEST_NAME.txt | awk -F ": " '{print $2}'`)
+    tsos=($(curl -s http://$UP_TIDB_HOST:$UP_TIDB_STATUS/ddl/history |grep -E "start_ts|FinishedTS"|grep -oE "[0-9]*"))
     num=${#primaryArr[*]}
     for ((i=0;i<$num;i++))
     do
+        check_in_ddl=$(checkPrimaryTsNotInDDL ${primaryArr[$i]} $tsos)
+        if [[ ! -z $check_in_ddl ]]; then
+            echo "syncpoint ${primaryArr[$i]} ${secondaryArr[$i]} " \
+                "is recorded in a DDL event(${check_in_ddl[0]}), skip the check of it"
+            continue
+        fi
         deployConfig ${primaryArr[$i]} ${secondaryArr[$i]}
         check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
     done
