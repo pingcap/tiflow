@@ -1,0 +1,91 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package main
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/pingcap/log"
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+)
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	_ = ctx
+	defer cancel()
+
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
+	go func() {
+		sig := <-sc
+		fmt.Printf("\nGot signal [%v] to exit.\n", sig)
+		log.Warn("received signal to exit", zap.Stringer("signal", sig))
+		switch sig {
+		case syscall.SIGTERM:
+			cancel()
+			os.Exit(0)
+		default:
+			cancel()
+			os.Exit(1)
+		}
+	}()
+
+	var (
+		upstream, downstream, interval string
+		accounts, tables, concurrency  int
+		testRound                      int64
+		cleanupOnly                    bool
+	)
+	cmd := &cobra.Command{
+		Use:   "bank",
+		Short: "bank is a test case that simulates bank scenarios",
+		Run: func(cmd *cobra.Command, args []string) {
+			switch {
+			case len(upstream) == 0, len(downstream) == 0:
+				log.Fatal("upstream or downstream should not be emptry")
+			}
+			verifyInterval, err := time.ParseDuration(interval)
+			if err != nil {
+				log.Fatal("fail to parse interval", zap.String("interval", interval), zap.Error(err))
+			}
+			run(ctx, upstream, downstream, accounts, tables, concurrency, verifyInterval, testRound, cleanupOnly)
+		},
+	}
+	cmd.PersistentFlags().StringVarP(&upstream, "upstream", "u", "", "Upstream TiDB DSN, please specify target database in DSN")
+	cmd.PersistentFlags().StringVarP(&downstream, "downstream", "d", "", "Downstream TiDB DSN, please specify target database in DSN")
+	cmd.PersistentFlags().StringVar(&interval, "interval", "2s", "Interval of verify tables")
+	cmd.PersistentFlags().Int64Var(&testRound, "test-round", math.MaxInt64, "Total around of verify tables")
+	cmd.PersistentFlags().IntVar(&accounts, "accounts", 100, "Accounts for each table")
+	cmd.PersistentFlags().IntVar(&tables, "tables", 1, "Accounts for each tables")
+	cmd.PersistentFlags().IntVar(&concurrency, "concurrency", 10, "concurrency of transaction for each table")
+	cmd.PersistentFlags().BoolVar(&cleanupOnly, "cleanup", false, "cleanup all tables used in the test")
+
+	// Ouputs cmd.Print to stdout.
+	cmd.SetOut(os.Stdout)
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
