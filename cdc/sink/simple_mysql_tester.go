@@ -163,7 +163,7 @@ func (s *simpleMySQLSink) EmitRowChangedEvents(ctx context.Context, rows ...*mod
 func (s *simpleMySQLSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	var sql string
 	if len(ddl.TableInfo.Table) == 0 {
-		sql = fmt.Sprintf("%s", ddl.Query)
+		sql = ddl.Query
 	} else {
 		sql = fmt.Sprintf("use %s;%s", ddl.TableInfo.Schema, ddl.Query)
 	}
