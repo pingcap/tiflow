@@ -11,84 +11,68 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package avro
+package mysql
 
 import (
-	"encoding/json"
-	"errors"
-	"io/ioutil"
-	"net/http"
-	"path"
+	"database/sql"
 
 	"github.com/integralist/go-findroot/find"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 	"go.uber.org/zap"
 )
 
 const (
-	healthCheckURI          = "http://127.0.0.1:18083"
-	dockerComposeFilePath   = "/docker-compose-avro.yml"
+	dockerComposeFilePath   = "/docker-compose.yml"
 	controllerContainerName = "ticdc_controller_1"
 )
 
-// KafkaDockerEnv represents the docker-compose service defined in docker-compose-avro.yml
-type KafkaDockerEnv struct {
+// DockerEnv represents the docker-compose service defined in docker-compose-canal.yml
+type DockerEnv struct {
 	framework.DockerEnv
 }
 
-// NewKafkaDockerEnv creates a new KafkaDockerEnv
-func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
+// NewDockerEnv creates a new KafkaDockerEnv
+func NewDockerEnv(dockerComposeFile string) *DockerEnv {
 	healthChecker := func() error {
-		resp, err := http.Get(healthCheckURI)
-		if err != nil {
+		if err := checkDbConn(framework.UpstreamDSN); err != nil {
 			return err
 		}
-
-		if resp.Body == nil {
-			return errors.New("kafka Connect HealthCheck returns empty body")
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		bytes, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-
-		m := make(map[string]interface{})
-		err = json.Unmarshal(bytes, &m)
-		if err != nil {
-			return err
-		}
-
-		healthy, ok := m["healthy"]
-		if !ok {
-			return errors.New("kafka connect healthcheck did not return health info")
-		}
-
-		if v, ok := healthy.(bool); !ok || !v {
-			return errors.New("kafka connect not healthy")
-		}
-
-		return nil
+		return checkDbConn(framework.DownstreamDSN)
 	}
-
 	var file string
 	if dockerComposeFile == "" {
 		st, err := find.Repo()
 		if err != nil {
 			log.Fatal("Could not find git repo root", zap.Error(err))
 		}
-		file = path.Join(st.Path, dockerComposeFilePath)
+		file = st.Path + dockerComposeFilePath
 	} else {
 		file = dockerComposeFile
 	}
 
-	return &KafkaDockerEnv{DockerEnv: framework.DockerEnv{
+	return &DockerEnv{DockerEnv: framework.DockerEnv{
 		DockerComposeOperator: framework.DockerComposeOperator{
 			FileName:      file,
 			Controller:    controllerContainerName,
 			HealthChecker: healthChecker,
 		},
 	}}
+}
+
+func checkDbConn(dsn string) error {
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return err
+	}
+	if db == nil {
+		return errors.New("Can not connect to " + dsn)
+	}
+	defer db.Close()
+	err = db.Ping()
+	if err != nil {
+		return err
+	}
+	return nil
 }

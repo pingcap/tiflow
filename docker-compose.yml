@@ -8,7 +8,7 @@
           context: .
           dockerfile: ./Dockerfile
         volumes:
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command: -c "/usr/bin/tail -f /dev/null"
         entrypoint: "/bin/sh"
@@ -23,7 +23,7 @@
           context: .
           dockerfile: ./Dockerfile
         volumes:
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         entrypoint: "/cdc server"
         command:
@@ -42,7 +42,7 @@
           context: .
           dockerfile: ./Dockerfile
         volumes:
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         entrypoint: "/cdc server"
         command:
@@ -61,7 +61,7 @@
           context: .
           dockerfile: ./Dockerfile
         volumes:
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         entrypoint: "/cdc server"
         command:
@@ -80,7 +80,7 @@
           - "2379:2379"
         volumes:
           - ./docker/config/pd.toml:/pd.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --name=upstream-pd
@@ -98,7 +98,7 @@
         image: pingcap/tikv:nightly
         volumes:
           - ./docker/config/tikv.toml:/tikv.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --addr=0.0.0.0:20160
@@ -115,7 +115,7 @@
         image: pingcap/tikv:nightly
         volumes:
           - ./docker/config/tikv.toml:/tikv.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --addr=0.0.0.0:20160
@@ -132,7 +132,7 @@
         image: pingcap/tikv:nightly
         volumes:
           - ./docker/config/tikv.toml:/tikv.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --addr=0.0.0.0:20160
@@ -171,7 +171,7 @@
           - "3379:2379"
         volumes:
           - ./docker/config/pd.toml:/pd.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --name=downstream-pd
@@ -189,7 +189,7 @@
         image: pingcap/tikv:nightly
         volumes:
           - ./docker/config/tikv.toml:/tikv.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --addr=0.0.0.0:20160
@@ -206,7 +206,7 @@
         image: pingcap/tikv:nightly
         volumes:
           - ./docker/config/tikv.toml:/tikv.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --addr=0.0.0.0:20160
@@ -223,7 +223,7 @@
         image: pingcap/tikv:nightly
         volumes:
           - ./docker/config/tikv.toml:/tikv.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --addr=0.0.0.0:20160

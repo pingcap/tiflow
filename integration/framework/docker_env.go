@@ -31,19 +31,19 @@ const (
 	DownstreamDSN = "root@tcp(127.0.0.1:5000)/"
 )
 
-// KafkaDockerEnv represents the docker-compose service
-type KafkaDockerEnv struct {
+// DockerEnv represents the docker-compose service
+type DockerEnv struct {
 	DockerComposeOperator
 }
 
 // Reset implements Environment
-func (e *KafkaDockerEnv) Reset() {
+func (e *DockerEnv) Reset() {
 	e.TearDown()
 	e.Setup()
 }
 
 // RunTest implements Environment
-func (e *KafkaDockerEnv) RunTest(task Task) {
+func (e *DockerEnv) RunTest(task Task) {
 	cmdLine := "/cdc " + task.GetCDCProfile().String()
 	bytes, err := e.ExecInController(cmdLine)
 	if err != nil {
@@ -100,6 +100,6 @@ func (e *KafkaDockerEnv) RunTest(task Task) {
 }
 
 // SetListener implements Environment. Currently unfinished, will be used to monitor Kafka output
-func (e *KafkaDockerEnv) SetListener(states interface{}, listener MqListener) {
+func (e *DockerEnv) SetListener(states interface{}, listener MqListener) {
 	// TODO
 }

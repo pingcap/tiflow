@@ -15,10 +15,12 @@ package tests
 
 import (
 	"errors"
-	"github.com/pingcap/ticdc/integration/framework/avro"
-	"github.com/pingcap/ticdc/integration/framework/canal"
 	"math"
 	"time"
+
+	"github.com/pingcap/ticdc/integration/framework/avro"
+	"github.com/pingcap/ticdc/integration/framework/canal"
+	"github.com/pingcap/ticdc/integration/framework/mysql"
 
 	"github.com/pingcap/ticdc/integration/framework"
 )
@@ -77,6 +79,28 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 						t_datetime  DATETIME,
 						t_timestamp TIMESTAMP NULL,
 						t_time      TIME,
+						t_char      CHAR,
+						t_varchar   VARCHAR(10),
+						t_blob      BLOB,
+						t_text      TEXT,
+						t_enum      ENUM ('enum1', 'enum2', 'enum3'),
+						t_set       SET ('a', 'b', 'c'),
+						t_json      JSON,
+						PRIMARY KEY (id)
+					)`
+	case *mysql.SingleTableTask:
+		createDBQuery = `create table test (
+						id          INT,
+						t_boolean   BOOLEAN,
+						t_bigint    BIGINT,
+						t_double    DOUBLE,
+						t_decimal   DECIMAL(38, 19),
+						t_bit       BIT(64),
+						t_date      DATE,
+						t_datetime  DATETIME,
+						t_timestamp TIMESTAMP NULL,
+						t_time      TIME,
+						t_year      YEAR,
 						t_char      CHAR,
 						t_varchar   VARCHAR(10),
 						t_blob      BLOB,
