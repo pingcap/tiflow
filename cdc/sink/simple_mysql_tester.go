@@ -62,7 +62,7 @@ func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.Re
 		port = "4000"
 	}
 
-	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/", username, password, sinkURI.Hostname(), port)
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s:%s)/?multiStatements=true", username, password, sinkURI.Hostname(), port)
 	dsn, err := dmysql.ParseDSN(dsnStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
@@ -96,6 +96,9 @@ func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.Re
 	}
 	if checkOldValue, ok := opts["check-old-value"]; ok {
 		sink.enableCheckOldValue = strings.ToLower(checkOldValue) == "true"
+		if sink.enableCheckOldValue {
+			log.Info("the old value checker is enabled")
+		}
 	}
 	return sink, nil
 }
@@ -158,8 +161,17 @@ func (s *simpleMySQLSink) EmitRowChangedEvents(ctx context.Context, rows ...*mod
 // EmitDDLEvent sends DDL Event to Sink
 // EmitDDLEvent should execute DDL to downstream synchronously
 func (s *simpleMySQLSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	sql := fmt.Sprintf("use %s;%s", ddl.TableInfo.Schema, ddl.Query)
+	var sql string
+	if len(ddl.TableInfo.Table) == 0 {
+		sql = fmt.Sprintf("%s", ddl.Query)
+	} else {
+		sql = fmt.Sprintf("use %s;%s", ddl.TableInfo.Schema, ddl.Query)
+	}
 	_, err := s.db.ExecContext(ctx, sql)
+	if err != nil && isIgnorableDDLError(err) {
+		log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
+		return nil
+	}
 	return err
 }
 

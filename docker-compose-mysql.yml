@@ -6,10 +6,12 @@
         image: ticdc:latest
         build:
           context: .
-          dockerfile: ./Dockerfile
+          dockerfile: ./Dockerfile.development
         volumes:
           - /data
           - ./docker/logs:/logs
+        environment:
+          GO_FAILPOINTS: ${GO_FAILPOINTS}
         command: -c "/usr/bin/tail -f /dev/null"
         entrypoint: "/bin/sh"
         depends_on:
@@ -21,10 +23,12 @@
         image: ticdc:latest
         build:
           context: .
-          dockerfile: ./Dockerfile
+          dockerfile: ./Dockerfile.development
         volumes:
           - /data
           - ./docker/logs:/logs
+        environment:
+          GO_FAILPOINTS: ${GO_FAILPOINTS}
         entrypoint: "/cdc server"
         command:
           - --addr=0.0.0.0:8300
@@ -40,10 +44,12 @@
         image: ticdc:latest
         build:
           context: .
-          dockerfile: ./Dockerfile
+          dockerfile: ./Dockerfile.development
         volumes:
           - /data
           - ./docker/logs:/logs
+        environment:
+          GO_FAILPOINTS: ${GO_FAILPOINTS}
         entrypoint: "/cdc server"
         command:
           - --addr=0.0.0.0:8300
@@ -59,10 +65,12 @@
         image: ticdc:latest
         build:
           context: .
-          dockerfile: ./Dockerfile
+          dockerfile: ./Dockerfile.development
         volumes:
           - /data
           - ./docker/logs:/logs
+        environment:
+          GO_FAILPOINTS: ${GO_FAILPOINTS}
         entrypoint: "/cdc server"
         command:
           - --addr=0.0.0.0:8300

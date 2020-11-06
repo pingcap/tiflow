@@ -19,6 +19,7 @@ GOVENDORFLAG := -mod=vendor
 endif
 
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath 
 ifeq ($(GOVERSION114), 1)
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race -gcflags=all=-d=checkptr=0
 else
@@ -77,7 +78,7 @@ unit_test: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
 check_failpoint_ctl:
-	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILD) -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl
+	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILDNOVENDOR) -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl
 
 check_third_party_binary:
 	@which bin/tidb-server
@@ -167,8 +168,8 @@ tools/bin/golangci-lint: tools/check/go.mod
 	cd tools/check; test -e ../bin/golangci-lint || \
 	$(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 
-failpoint-enable:
+failpoint-enable: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 
-failpoint-disable:
+failpoint-disable: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)

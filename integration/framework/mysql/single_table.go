@@ -27,7 +27,8 @@ const (
 
 // SingleTableTask provides a basic implementation for an Avro test case
 type SingleTableTask struct {
-	TableName string
+	TableName     string
+	CheckOleValue bool
 }
 
 // Name implements Task
@@ -38,9 +39,13 @@ func (c *SingleTableTask) Name() string {
 
 // GetCDCProfile implements Task
 func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
+	sinkURI := "mysql://downstream-tidb:4000/" + testDbName
+	if c.CheckOleValue {
+		sinkURI = "simple-mysql://downstream-tidb:4000/" + testDbName + "?check-old-value=true"
+	}
 	return &framework.CDCProfile{
 		PDUri:      "http://upstream-pd:2379",
-		SinkURI:    "mysql://downstream-tidb:4000/" + testDbName ,
+		SinkURI:    sinkURI,
 		Opts:       map[string]string{},
 		ConfigFile: "",
 	}

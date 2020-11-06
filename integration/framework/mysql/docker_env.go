@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	dockerComposeFilePath   = "/docker-compose.yml"
+	dockerComposeFilePath   = "/docker-compose-mysql.yml"
 	controllerContainerName = "ticdc_controller_1"
 )
 
