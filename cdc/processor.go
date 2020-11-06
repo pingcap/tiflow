@@ -846,7 +846,7 @@ func (p *processor) syncResolved(ctx context.Context) error {
 				continue
 			}
 			failpoint.Inject("ProcessorSyncResolvedError", func() {
-				failpoint.Return(errors.New("processor sync resolvd injected error"))
+				failpoint.Return(errors.New("processor sync resolved injected error"))
 			})
 			if row.RawKV != nil && row.RawKV.OpType == model.OpTypeResolved {
 				err := flushRowChangedEvents()

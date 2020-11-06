@@ -217,7 +217,7 @@ type RowChangedEvent struct {
 	StartTs  uint64 `json:"start-ts"`
 	CommitTs uint64 `json:"commit-ts"`
 
-	RowID int64 `json:"row-id"`
+	RowID int64 `json:"row-id"` // Deprecated. It is empty when the RowID comes from clustered index table.
 
 	Table *TableName `json:"table"`
 

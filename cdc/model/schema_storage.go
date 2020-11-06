@@ -22,6 +22,8 @@ import (
 
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
+	"github.com/pingcap/parser/types"
+	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/util/rowcodec"
 )
 
@@ -48,7 +50,7 @@ type TableInfo struct {
 	ColumnsFlag map[int64]ColumnFlagType
 
 	// only for new row format decoder
-	handleColID int64
+	handleColID []int64
 
 	// the mounter will choose this index to output delete events
 	// special value:
@@ -58,6 +60,7 @@ type TableInfo struct {
 
 	IndexColumnsOffset [][]int
 	rowColInfos        []rowcodec.ColInfo
+	rowColFieldTps     map[int64]*types.FieldType
 }
 
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
@@ -72,38 +75,45 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		uniqueColumns:    make(map[int64]struct{}),
 		RowColumnsOffset: make(map[int64]int, len(info.Columns)),
 		ColumnsFlag:      make(map[int64]ColumnFlagType, len(info.Columns)),
-		handleColID:      -1,
+		handleColID:      []int64{-1},
 		HandleIndexID:    HandleIndexTableIneligible,
 		rowColInfos:      make([]rowcodec.ColInfo, len(info.Columns)),
+		rowColFieldTps:   make(map[int64]*types.FieldType, len(info.Columns)),
 	}
 
 	rowColumnsCurrentOffset := 0
 
 	for i, col := range ti.Columns {
 		ti.columnsOffset[col.ID] = i
-		isPK := false
+		pkIsHandle := false
 		if IsColCDCVisible(col) {
 			ti.RowColumnsOffset[col.ID] = rowColumnsCurrentOffset
 			rowColumnsCurrentOffset++
-			isPK = (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == model.ExtraHandleID
-			if isPK {
+			pkIsHandle = (ti.PKIsHandle && mysql.HasPriKeyFlag(col.Flag)) || col.ID == model.ExtraHandleID
+			if pkIsHandle {
 				// pk is handle
-				ti.handleColID = col.ID
+				ti.handleColID = []int64{col.ID}
 				ti.HandleIndexID = HandleIndexPKIsHandle
 				ti.uniqueColumns[col.ID] = struct{}{}
 				ti.IndexColumnsOffset = append(ti.IndexColumnsOffset, []int{ti.RowColumnsOffset[col.ID]})
+			} else if ti.IsCommonHandle {
+				ti.HandleIndexID = HandleIndexPKIsHandle
+				ti.handleColID = ti.handleColID[:0]
+				pkIdx := tables.FindPrimaryIndex(info)
+				for _, pkCol := range pkIdx.Columns {
+					id := info.Columns[pkCol.Offset].ID
+					ti.handleColID = append(ti.handleColID, id)
+				}
 			}
+
 		}
 		ti.rowColInfos[i] = rowcodec.ColInfo{
-			ID:         col.ID,
-			IsPKHandle: isPK,
-			Tp:         int32(col.Tp),
-			Flag:       int32(col.Flag),
-			Flen:       col.Flen,
-			Decimal:    col.Decimal,
-			Elems:      col.Elems,
-			Collate:    col.Collate,
+			ID:            col.ID,
+			IsPKHandle:    pkIsHandle,
+			Ft:            col.FieldType.Clone(),
+			VirtualGenCol: col.IsGenerated(),
 		}
+		ti.rowColFieldTps[col.ID] = ti.rowColInfos[i].Ft
 	}
 
 	for i, idx := range ti.Indices {
@@ -243,8 +253,8 @@ func (ti *TableInfo) GetIndexInfo(indexID int64) (info *model.IndexInfo, exist b
 }
 
 // GetRowColInfos returns all column infos for rowcodec
-func (ti *TableInfo) GetRowColInfos() (int64, []rowcodec.ColInfo) {
-	return ti.handleColID, ti.rowColInfos
+func (ti *TableInfo) GetRowColInfos() ([]int64, map[int64]*types.FieldType, []rowcodec.ColInfo) {
+	return ti.handleColID, ti.rowColFieldTps, ti.rowColInfos
 }
 
 // IsColCDCVisible returns whether the col is visible for CDC

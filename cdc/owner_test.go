@@ -731,7 +731,7 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
 
-	store, err := mockstore.NewMockTikvStore()
+	store, err := mockstore.NewMockStore()
 	c.Assert(err, check.IsNil)
 	defer func() {
 		_ = store.Close()
