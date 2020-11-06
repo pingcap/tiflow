@@ -43,9 +43,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/pingcap/ticdc/pkg/config"
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 	"io"
 	"math"
 	"os"
@@ -60,6 +57,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/config"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -855,12 +855,20 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		finalI := i
 		heapSorters[finalI] = newHeapSorter(finalI, s.pool, sorterOutCh)
 		errg.Go(func() error {
-			return heapSorters[finalI].run(subctx)
+			err := heapSorters[finalI].run(subctx)
+			if err != nil && errors.Cause(err) != context.Canceled {
+				log.Error("Unified Sorter: heapSorter exited with error", zap.Error(err))
+			}
+			return err
 		})
 	}
 
 	errg.Go(func() error {
-		return runMerger(subctx, numConcurrentHeaps, sorterOutCh, s.outputCh)
+		err := runMerger(subctx, numConcurrentHeaps, sorterOutCh, s.outputCh)
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Error("Unified Sorter: merger exited with error", zap.Error(err))
+		}
+		return err
 	})
 
 	errg.Go(func() error {
