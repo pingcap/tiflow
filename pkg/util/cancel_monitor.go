@@ -37,9 +37,7 @@ func MonitorCancelLatency(ctx context.Context, identifier string) func() {
 					return
 				case <-ticker.C:
 					elapsed++
-					if elapsed > 5 {
-						log.Warn("MonitorCancelLatency: Cancellation is taking too long", zap.String("identifier", identifier), zap.Int("elapsed seconds", elapsed))
-					}
+					log.Warn("MonitorCancelLatency: Cancellation is taking too long", zap.String("identifier", identifier), zap.Int("elapsed seconds", elapsed))
 				}
 			}
 		case <-finishedCh:

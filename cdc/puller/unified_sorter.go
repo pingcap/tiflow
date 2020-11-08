@@ -916,10 +916,10 @@ func (s *UnifiedSorter) Output() <-chan *model.PolymorphicEvent {
 }
 
 func printError(err error) error {
-	if err != nil && (errors.Cause(err) != context.Canceled ||
-		errors.Cause(err) != context.DeadlineExceeded ||
-		strings.Contains(err.Error(), "context canceled") ||
-		strings.Contains(err.Error(), "context deadline exceeded")) {
+	if err != nil && errors.Cause(err) != context.Canceled &&
+		errors.Cause(err) != context.DeadlineExceeded &&
+		!strings.Contains(err.Error(), "context canceled") &&
+		!strings.Contains(err.Error(), "context deadline exceeded") {
 
 		log.Warn("Unified Sorter: Error detected", zap.Error(err))
 	}
