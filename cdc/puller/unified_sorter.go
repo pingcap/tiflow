@@ -43,11 +43,13 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/pingcap/ticdc/pkg/util"
 	"io"
 	"math"
 	"os"
 	"reflect"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -840,6 +842,9 @@ func NewUnifiedSorter(dir string) *UnifiedSorter {
 
 // Run implements the EventSorter interface
 func (s *UnifiedSorter) Run(ctx context.Context) error {
+	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
+	defer finish()
+
 	sorterConfig := config.GetSorterConfig()
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
 
@@ -855,20 +860,12 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		finalI := i
 		heapSorters[finalI] = newHeapSorter(finalI, s.pool, sorterOutCh)
 		errg.Go(func() error {
-			err := heapSorters[finalI].run(subctx)
-			if err != nil && errors.Cause(err) != context.Canceled {
-				log.Error("Unified Sorter: heapSorter exited with error", zap.Error(err))
-			}
-			return err
+			return printError(heapSorters[finalI].run(subctx))
 		})
 	}
 
 	errg.Go(func() error {
-		err := runMerger(subctx, numConcurrentHeaps, sorterOutCh, s.outputCh)
-		if err != nil && errors.Cause(err) != context.Canceled {
-			log.Error("Unified Sorter: merger exited with error", zap.Error(err))
-		}
-		return err
+		return printError(runMerger(subctx, numConcurrentHeaps, sorterOutCh, s.outputCh))
 	})
 
 	errg.Go(func() error {
@@ -901,11 +898,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 		}
 	})
 
-	err := errg.Wait()
-	if err != nil {
-		log.Warn("Unified Sorter exited with error", zap.Error(err))
-	}
-	return err
+	return printError(errg.Wait())
 }
 
 // AddEntry implements the EventSorter interface
@@ -920,4 +913,15 @@ func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEv
 // Output implements the EventSorter interface
 func (s *UnifiedSorter) Output() <-chan *model.PolymorphicEvent {
 	return s.outputCh
+}
+
+func printError(err error) error {
+	if err != nil && (errors.Cause(err) != context.Canceled ||
+		errors.Cause(err) != context.DeadlineExceeded ||
+		strings.Contains(err.Error(), "context canceled") ||
+		strings.Contains(err.Error(), "context deadline exceeded")) {
+
+		log.Warn("Unified Sorter: Error detected", zap.Error(err))
+	}
+	return err
 }

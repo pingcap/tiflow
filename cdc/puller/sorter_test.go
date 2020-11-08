@@ -31,8 +31,7 @@ import (
 )
 
 const (
-	numProducers          = 16
-	eventCountPerProducer = 10000
+	numProducers = 16
 )
 
 type sorterSuite struct{}
@@ -62,13 +61,46 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 	err := os.MkdirAll("./sorter", 0755)
 	c.Assert(err, check.IsNil)
 	sorter := NewUnifiedSorter("./sorter")
-	testSorter(c, sorter)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+	testSorter(ctx, c, sorter, 10000)
 }
 
-func testSorter(c *check.C, sorter EventSorter) {
-	timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+func (s *sorterSuite) TestSorterCancel(c *check.C) {
+	config.SetSorterConfig(&config.SorterConfig{
+		NumConcurrentWorker:  8,
+		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
+		MaxMemoryPressure:    60,
+		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
+	})
 
-	errg, ctx := errgroup.WithContext(timeoutCtx)
+	err := os.MkdirAll("./sorter", 0755)
+	c.Assert(err, check.IsNil)
+	sorter := NewUnifiedSorter("./sorter")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	finishedCh := make(chan struct{})
+	go func() {
+		testSorter(ctx, c, sorter, 10000000)
+		close(finishedCh)
+	}()
+
+	after := time.After(20 * time.Second)
+	select {
+	case <-after:
+		c.FailNow()
+	case <-finishedCh:
+	}
+
+	log.Info("Sorter successfully cancelled")
+}
+
+func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) {
+	ctx, cancel := context.WithCancel(ctx)
+	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
 		return sorter.Run(ctx)
 	})
@@ -79,14 +111,20 @@ func testSorter(c *check.C, sorter EventSorter) {
 	for i := 0; i < numProducers; i++ {
 		finalI := i
 		errg.Go(func() error {
-			for j := 0; j < eventCountPerProducer; j++ {
+			for j := 0; j < count; j++ {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+				}
+
 				sorter.AddEntry(ctx, model.NewPolymorphicEvent(generateMockRawKV(uint64(j)<<5)))
 				if j%10000 == 0 {
 					atomic.StoreUint64(&producerProgress[finalI], uint64(j)<<5)
 				}
 			}
-			sorter.AddEntry(ctx, model.NewPolymorphicEvent(generateMockRawKV(uint64(eventCountPerProducer)<<5)))
-			atomic.StoreUint64(&producerProgress[finalI], uint64(eventCountPerProducer)<<5)
+			sorter.AddEntry(ctx, model.NewPolymorphicEvent(generateMockRawKV(uint64(count)<<5)))
+			atomic.StoreUint64(&producerProgress[finalI], uint64(count)<<5)
 			return nil
 		})
 	}
@@ -108,7 +146,7 @@ func testSorter(c *check.C, sorter EventSorter) {
 					}
 				}
 				sorter.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, resolvedTs))
-				if resolvedTs == uint64(eventCountPerProducer)<<5 {
+				if resolvedTs == uint64(count)<<5 {
 					return nil
 				}
 			}
@@ -135,7 +173,7 @@ func testSorter(c *check.C, sorter EventSorter) {
 					if counter%10000 == 0 {
 						log.Debug("Messages received", zap.Int("counter", counter))
 					}
-					if counter >= numProducers*eventCountPerProducer {
+					if counter >= numProducers*count {
 						log.Debug("Unified Sorter test successful")
 						cancel()
 					}
@@ -147,7 +185,7 @@ func testSorter(c *check.C, sorter EventSorter) {
 	})
 
 	err := errg.Wait()
-	if err == errors.Cause(err) {
+	if errors.Cause(err) == context.Canceled || errors.Cause(err) == context.DeadlineExceeded {
 		return
 	}
 	c.Assert(err, check.IsNil)
