@@ -163,6 +163,11 @@ func (a *AvroEventBatchEncoder) Size() int {
 	return sum
 }
 
+// SetMaxMessageBytes is no-op for now
+func (a *AvroEventBatchEncoder) SetMaxMessageBytes(size int) {
+	// no op
+}
+
 func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column) (*avroEncodeResult, error) {
 	schemaGen := func() (string, error) {
 		schema, err := ColumnInfoToAvroSchema(table.Table, cols)

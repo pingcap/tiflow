@@ -297,9 +297,12 @@ func mqMessageToDDLEvent(key *mqMessageKey, value *mqMessageDDL) *model.DDLEvent
 
 // JSONEventBatchEncoder encodes the events into the byte of a batch into.
 type JSONEventBatchEncoder struct {
-	keyBuf            *bytes.Buffer
-	valueBuf          *bytes.Buffer
+	// TODO remove deprecated fields
+	keyBuf            *bytes.Buffer  // Deprecated: only used for MixedBuild for now
+	valueBuf          *bytes.Buffer  // Deprecated: only used for MixedBuild for now
 	supportMixedBuild bool // TODO decouple this out
+
+	messageBuf        []*MQMessage
 }
 
 // SetMixedBuildSupport is used by CDC Log
@@ -363,11 +366,13 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	d.keyBuf.Write(keyLenByte[:])
-	d.keyBuf.Write(key)
+	if d.supportMixedBuild {
+		d.keyBuf.Write(keyLenByte[:])
+		d.keyBuf.Write(key)
 
-	d.valueBuf.Write(valueLenByte[:])
-	d.valueBuf.Write(value)
+		d.valueBuf.Write(valueLenByte[:])
+		d.valueBuf.Write(value)
+	}
 	return EncoderNoOperation, nil
 }
 
@@ -480,6 +485,12 @@ func (d *JSONEventBatchEncoder) Reset() {
 	d.keyBuf.Reset()
 	d.valueBuf.Reset()
 }
+
+// SetMaxMessageBytes is no-op for now
+func (d *JSONEventBatchEncoder) SetMaxMessageBytes(size int) {
+	// no op
+}
+
 
 // NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.
 func NewJSONEventBatchEncoder() EventBatchEncoder {

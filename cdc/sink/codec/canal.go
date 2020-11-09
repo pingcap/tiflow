@@ -416,6 +416,11 @@ func (d *CanalEventBatchEncoder) Reset() {
 	panic("Reset only used for JsonEncoder")
 }
 
+// SetMaxMessageBytes is no-op for now
+func (d *CanalEventBatchEncoder) SetMaxMessageBytes(size int) {
+	// no op
+}
+
 // refreshPacketBody() marshals the messages to the packet body
 func (d *CanalEventBatchEncoder) refreshPacketBody() error {
 	oldSize := len(d.packet.Body)

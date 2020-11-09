@@ -241,3 +241,8 @@ func (c *CanalFlatEventBatchEncoder) Size() int {
 func (c *CanalFlatEventBatchEncoder) Reset() {
 	panic("not supported")
 }
+
+// SetMaxMessageBytes is no-op for now
+func (c *CanalFlatEventBatchEncoder) SetMaxMessageBytes(size int) {
+	// no op
+}
