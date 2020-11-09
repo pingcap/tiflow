@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
@@ -45,6 +46,8 @@ type simpleMySQLSink struct {
 	enableOldValue      bool
 	enableCheckOldValue bool
 	db                  *sql.DB
+	rowsBuffer          []*model.RowChangedEvent
+	rowsBufferLock      sync.Mutex
 }
 
 func newSimpleMySQLSink(ctx context.Context, sinkURI *url.URL, config *config.ReplicaConfig, opts map[string]string) (*simpleMySQLSink, error) {
@@ -111,6 +114,13 @@ func (s *simpleMySQLSink) Initialize(ctx context.Context, tableInfo []*model.Sim
 // EmitRowChangedEvents sends Row Changed Event to Sink
 // EmitRowChangedEvents may write rows to downstream directly;
 func (s *simpleMySQLSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
+	s.rowsBufferLock.Lock()
+	defer s.rowsBufferLock.Unlock()
+	s.rowsBuffer = append(s.rowsBuffer, rows...)
+	return nil
+}
+
+func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	var sql string
 	var args []interface{}
 	if s.enableOldValue {
@@ -178,6 +188,20 @@ func (s *simpleMySQLSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent)
 // FlushRowChangedEvents flushes each row which of commitTs less than or equal to `resolvedTs` into downstream.
 // TiCDC guarantees that all of Event which of commitTs less than or equal to `resolvedTs` are sent to Sink through `EmitRowChangedEvents`
 func (s *simpleMySQLSink) FlushRowChangedEvents(ctx context.Context, resolvedTs uint64) (uint64, error) {
+	s.rowsBufferLock.Lock()
+	defer s.rowsBufferLock.Unlock()
+	newBuffer := make([]*model.RowChangedEvent, 0, len(s.rowsBuffer))
+	for _, row := range s.rowsBuffer {
+		if row.CommitTs <= resolvedTs {
+			err := s.executeRowChangedEvents(ctx, row)
+			if err != nil {
+				return 0, err
+			}
+		} else {
+			newBuffer = append(newBuffer, row)
+		}
+	}
+	s.rowsBuffer = newBuffer
 	return resolvedTs, nil
 }
 
