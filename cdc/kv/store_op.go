@@ -18,8 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -31,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store"
 	"github.com/pingcap/tidb/store/tikv"
+	"go.uber.org/zap"
 )
 
 const (
