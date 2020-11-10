@@ -16,6 +16,7 @@ package framework
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os/exec"
 	"time"
 
@@ -38,8 +39,25 @@ type DockerEnv struct {
 
 // Reset implements Environment
 func (e *DockerEnv) Reset() {
-	e.TearDown()
-	e.Setup()
+	e.ExecInController(`/cdc cli unsafe reset --no-confirm --pd="http://upstream-pd:2379"`)
+
+	upstream, err := sql.Open("mysql", UpstreamDSN)
+	if err != nil {
+		log.Fatal("ResetEnv: cannot connect to upstream database", zap.Error(err))
+	}
+	defer upstream.Close()
+	if err := dropAllSchemas(upstream); err != nil {
+		log.Fatal("ResetEnv: error found when dropping all schema", zap.Error(err))
+	}
+
+	downstream, err := sql.Open("mysql", DownstreamDSN)
+	if err != nil {
+		log.Fatal("ResetEnv: cannot connect to downstream database", zap.Error(err))
+	}
+	defer downstream.Close()
+	if err := dropAllSchemas(downstream); err != nil {
+		log.Fatal("ResetEnv: error found when dropping all schema", zap.Error(err))
+	}
 }
 
 // RunTest implements Environment
@@ -102,4 +120,37 @@ func (e *DockerEnv) RunTest(task Task) {
 // SetListener implements Environment. Currently unfinished, will be used to monitor Kafka output
 func (e *DockerEnv) SetListener(states interface{}, listener MqListener) {
 	// TODO
+}
+
+var systemSchema = map[string]struct{}{
+	"INFORMATION_SCHEMA": {},
+	"METRICS_SCHEMA":     {},
+	"PERFORMANCE_SCHEMA": {},
+	"mysql":              {},
+}
+
+func dropAllSchemas(db *sql.DB) error {
+	result, err := db.Query("show databases;")
+	if err != nil {
+		return err
+	}
+	var schemaNames []string
+	var schema string
+	for result.Next() {
+		err := result.Scan(&schema)
+		if err != nil {
+			return err
+		}
+		schemaNames = append(schemaNames, schema)
+	}
+	for _, schema := range schemaNames {
+		if _, ok := systemSchema[schema]; ok {
+			continue
+		}
+		_, err := db.Exec(fmt.Sprintf("drop databses %s;", schema))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
