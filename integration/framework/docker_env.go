@@ -39,7 +39,11 @@ type DockerEnv struct {
 
 // Reset implements Environment
 func (e *DockerEnv) Reset() {
-	e.ExecInController(`/cdc cli unsafe reset --no-confirm --pd="http://upstream-pd:2379"`)
+	stdout, err := e.ExecInController(`/cdc cli unsafe reset --no-confirm --pd="http://upstream-pd:2379"`)
+	if err != nil {
+		log.Fatal("ResetEnv: cannot reset the cdc cluster", zap.ByteString("stdout", stdout), zap.Error(err))
+	}
+	log.Info("ResetEnv: reset the cdc cluster", zap.ByteString("stdout", stdout))
 
 	upstream, err := sql.Open("mysql", UpstreamDSN)
 	if err != nil {
@@ -147,7 +151,7 @@ func dropAllSchemas(db *sql.DB) error {
 		if _, ok := systemSchema[schema]; ok {
 			continue
 		}
-		_, err := db.Exec(fmt.Sprintf("drop databses %s;", schema))
+		_, err := db.Exec(fmt.Sprintf("drop databases %s;", schema))
 		if err != nil {
 			return err
 		}
