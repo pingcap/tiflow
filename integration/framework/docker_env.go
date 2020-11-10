@@ -151,7 +151,7 @@ func dropAllSchemas(db *sql.DB) error {
 		if _, ok := systemSchema[schema]; ok {
 			continue
 		}
-		_, err := db.Exec(fmt.Sprintf("drop databases %s;", schema))
+		_, err := db.Exec(fmt.Sprintf("drop database %s;", schema))
 		if err != nil {
 			return err
 		}
