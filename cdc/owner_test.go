@@ -484,6 +484,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 			cancel: cancel,
 			wg:     errg,
 		},
+		cancel: cancel,
 	}
 	errCh := make(chan error, 1)
 	sink, err := sink.NewSink(ctx, cfID, "blackhole://", f, replicaConf, map[string]string{}, errCh)
