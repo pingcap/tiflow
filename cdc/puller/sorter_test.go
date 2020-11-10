@@ -60,7 +60,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 	err := os.MkdirAll("./sorter", 0755)
 	c.Assert(err, check.IsNil)
-	sorter := NewUnifiedSorter("./sorter")
+	sorter := NewUnifiedSorter("./sorter", "test")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
@@ -77,7 +77,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 
 	err := os.MkdirAll("./sorter", 0755)
 	c.Assert(err, check.IsNil)
-	sorter := NewUnifiedSorter("./sorter")
+	sorter := NewUnifiedSorter("./sorter", "test")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -507,8 +507,11 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}
 	}
 
-	log.Debug("Unified Sorter new flushTask", zap.Int("heap-id", task.heapSorterID),
+	log.Debug("Unified Sorter new flushTask",
+		zap.String("table", tableNameFromCtx(ctx)),
+		zap.Int("heap-id", task.heapSorterID),
 		zap.Uint64("resolvedTs", task.maxResolvedTs))
+
 	go func() {
 		defer close(task.finished)
 		if isEmptyFlush {
@@ -516,22 +519,32 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}
 		batchSize := oldHeap.Len()
 		for oldHeap.Len() > 0 {
+			select {
+			case <-ctx.Done():
+				task.finished <- ctx.Err()
+				_ = task.backend.reset()
+			default:
+			}
+
 			event := heap.Pop(&oldHeap).(*sortItem).entry
 			err := task.backend.writeNext(event)
 			if err != nil {
 				task.finished <- err
+				_ = task.backend.reset()  // prevents fd leaks
 				return
 			}
 		}
 		err := task.backend.flush()
 		if err != nil {
 			task.finished <- err
+			_ = task.backend.reset()
 			return
 		}
 
 		task.finished <- nil
 		log.Debug("Unified Sorter flushTask finished",
 			zap.Int("heap-id", task.heapSorterID),
+			zap.String("table", tableNameFromCtx(ctx)),
 			zap.Uint64("resolvedTs", task.maxResolvedTs),
 			zap.Int("size", batchSize))
 	}()
@@ -603,6 +616,27 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 	minResolvedTs := uint64(0)
 
 	pendingSet := make(map[*flushTask]*model.PolymorphicEvent)
+	defer func() {
+		// clean up resources
+		for task, _ := range pendingSet {
+			err := printError(task.dealloc())
+			if err != nil {
+				_ = task.backend.reset()
+			}
+		}
+
+		for {
+			select {
+			case task := <-in:
+				err := printError(task.dealloc())
+				if err != nil {
+					_ = task.backend.reset()
+				}
+			default:
+				return
+			}
+		}
+	}()
 
 	lastOutputTs := uint64(0)
 
@@ -618,6 +652,21 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 	onMinResolvedTsUpdate := func() error {
 		workingSet := make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
+
+		defer func() {
+			// clean up
+			for _, item := range *sortHeap {
+				if item != nil {
+					if task, ok := item.data.(*flushTask); ok {
+						err := printError(task.dealloc())
+						if err != nil {
+							_ = task.backend.reset()
+						}
+					}
+				}
+			}
+		}()
+
 		for task, cache := range pendingSet {
 			if task.maxResolvedTs <= minResolvedTs {
 				var event *model.PolymorphicEvent
@@ -672,6 +721,7 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 			}
 			nextEvent, err := task.backend.readNext()
 			if err != nil {
+				_ = task.backend.reset()   // prevents fd leak
 				return errors.Trace(err)
 			}
 
@@ -686,6 +736,12 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				pendingSet[task] = nextEvent
 			}
 			return nil
+		}
+
+		if sortHeap.Len() > 0 {
+			log.Debug("Unified Sorter: start merging",
+				zap.String("table", tableNameFromCtx(ctx)),
+				zap.Uint64("minResolvedTs", minResolvedTs))
 		}
 
 		counter := 0
@@ -751,8 +807,10 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 				continue
 			}
 
-			if counter%10000 == 0 {
-				log.Debug("Merging progress", zap.Int("counter", counter))
+			if counter%10 == 0 {
+				log.Debug("Merging progress",
+					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Int("counter", counter))
 			}
 			heap.Push(sortHeap, &sortItem{
 				entry: event,
@@ -764,8 +822,10 @@ func runMerger(ctx context.Context, numSorters int, in chan *flushTask, out chan
 			log.Fatal("unified sorter: merging ended prematurely, bug?", zap.Uint64("resolvedTs", minResolvedTs))
 		}
 
-		if counter >= 10000 {
-			log.Debug("Unified Sorter: merging ended", zap.Uint64("resolvedTs", minResolvedTs), zap.Int("count", counter))
+		if counter > 0 {
+			log.Debug("Unified Sorter: merging ended",
+				zap.String("table", tableNameFromCtx(ctx)),
+				zap.Uint64("resolvedTs", minResolvedTs), zap.Int("count", counter))
 		}
 		err := sendResolvedEvent(minResolvedTs)
 		if err != nil {
@@ -817,14 +877,15 @@ var (
 
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
 type UnifiedSorter struct {
-	inputCh  chan *model.PolymorphicEvent
-	outputCh chan *model.PolymorphicEvent
-	dir      string
-	pool     *backEndPool
+	inputCh   chan *model.PolymorphicEvent
+	outputCh  chan *model.PolymorphicEvent
+	dir       string
+	pool      *backEndPool
+	tableName string  // used only for debugging and tracing
 }
 
 // NewUnifiedSorter creates a new UnifiedSorter
-func NewUnifiedSorter(dir string) *UnifiedSorter {
+func NewUnifiedSorter(dir string, tableName string) *UnifiedSorter {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
@@ -837,6 +898,7 @@ func NewUnifiedSorter(dir string) *UnifiedSorter {
 		outputCh: make(chan *model.PolymorphicEvent, 128000),
 		dir:      dir,
 		pool:     pool,
+		tableName: tableName,
 	}
 }
 
@@ -844,6 +906,8 @@ func NewUnifiedSorter(dir string) *UnifiedSorter {
 func (s *UnifiedSorter) Run(ctx context.Context) error {
 	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
+
+	valueCtx := context.WithValue(ctx, "sorter", s)
 
 	sorterConfig := config.GetSorterConfig()
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
@@ -854,7 +918,7 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	sorterOutCh := make(chan *flushTask, 4096)
 	defer close(sorterOutCh)
 
-	errg, subctx := errgroup.WithContext(ctx)
+	errg, subctx := errgroup.WithContext(valueCtx)
 
 	for i := range heapSorters {
 		finalI := i
@@ -915,6 +979,7 @@ func (s *UnifiedSorter) Output() <-chan *model.PolymorphicEvent {
 	return s.outputCh
 }
 
+// printError is a helper for tracing errors on function returns
 func printError(err error) error {
 	if err != nil && errors.Cause(err) != context.Canceled &&
 		errors.Cause(err) != context.DeadlineExceeded &&
@@ -924,4 +989,12 @@ func printError(err error) error {
 		log.Warn("Unified Sorter: Error detected", zap.Error(err))
 	}
 	return err
+}
+
+// tableNameFromCtx is used for retrieving the table's name from a context within the Unified Sorter
+func tableNameFromCtx(ctx context.Context) string {
+	if sorter, ok := ctx.Value("sorter").(*UnifiedSorter); ok {
+		return sorter.tableName
+	}
+	return ""
 }

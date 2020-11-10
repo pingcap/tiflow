@@ -991,7 +991,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				sorterImpl = puller.NewFileSorter(p.changefeed.SortDir)
 			} else {
 				// Unified Sorter
-				sorterImpl = puller.NewUnifiedSorter(p.changefeed.SortDir)
+				sorterImpl = puller.NewUnifiedSorter(p.changefeed.SortDir, tableName)
 			}
 		default:
 			p.errCh <- cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine)
