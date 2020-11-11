@@ -15,16 +15,10 @@ package pipeline
 
 // Node represents a handle unit for the message stream in pipeline
 type Node interface {
+	Init(c Context) error
 	// Receive receives the message from the previous node
 	Receive(c Context) error
-}
-
-// NodeFunc represents a handle unit for the message stream in pipeline
-type NodeFunc func(ctx Context) error
-
-// Receive receives the message from the previous node
-func (f NodeFunc) Receive(ctx Context) error {
-	return f(ctx)
+	Destroy(c Context) error
 }
 
 type concurrentNodeGroup struct {
@@ -39,8 +33,25 @@ func NewConcurrentNodeGroup(nodes ...Node) Node {
 	}
 }
 
+func (cng *concurrentNodeGroup) Init(ctx Context) error {
+	for _, node := range cng.nodeGroup {
+		if err := node.Init(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (cng *concurrentNodeGroup) Receive(ctx Context) error {
 	err := cng.nodeGroup[cng.currentIndex].Receive(ctx)
 	cng.currentIndex = (cng.currentIndex + 1) % len(cng.nodeGroup)
 	return err
+}
+func (cng *concurrentNodeGroup) Destroy(ctx Context) error {
+	for _, node := range cng.nodeGroup {
+		if err := node.Destroy(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }

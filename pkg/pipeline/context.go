@@ -31,38 +31,34 @@ type Context interface {
 
 	// StdContext returns a std context
 	StdContext() context.Context
-	// Cancel cancels the context
-	Cancel()
 	// Done returns a channel like context.Context.Done
 	Done() <-chan struct{}
+
+	Throw(error)
 }
 
 type baseContext struct {
 	parent Context
 }
 
-func (ctx *baseContext) ReplicaConfig() *config.ReplicaConfig {
+func (ctx baseContext) ReplicaConfig() *config.ReplicaConfig {
 	return ctx.parent.ReplicaConfig()
 }
 
-func (ctx *baseContext) Message() *Message {
+func (ctx baseContext) Message() *Message {
 	return ctx.parent.Message()
 }
 
-func (ctx *baseContext) SendToNextNode(msg *Message) {
+func (ctx baseContext) SendToNextNode(msg *Message) {
 	ctx.parent.SendToNextNode(msg)
 }
 
-func (ctx *baseContext) Done() <-chan struct{} {
+func (ctx baseContext) Done() <-chan struct{} {
 	return ctx.parent.Done()
 }
 
-func (ctx *baseContext) StdContext() context.Context {
+func (ctx baseContext) StdContext() context.Context {
 	return ctx.parent.StdContext()
-}
-
-func (ctx *baseContext) Cancel() {
-	ctx.parent.Cancel()
 }
 
 type rootContext struct {
@@ -72,12 +68,13 @@ type rootContext struct {
 }
 
 // NewRootContext returns a new root context
-func NewRootContext(config *config.ReplicaConfig) Context {
-	return &rootContext{
+func NewRootContext(config *config.ReplicaConfig) (Context, context.CancelFunc) {
+	ctx := &rootContext{
 		baseContext: baseContext{},
 		config:      config,
 		closeCh:     make(chan struct{}),
 	}
+	return ctx, func() { ctx.cancel() }
 }
 
 func (ctx *rootContext) Message() *Message {
@@ -101,7 +98,7 @@ func (ctx *rootContext) StdContext() context.Context {
 	}
 }
 
-func (ctx *rootContext) Cancel() {
+func (ctx *rootContext) cancel() {
 	defer func() {
 		// Avoid panic because repeated close channel
 		recover() //nolint:errcheck
@@ -115,7 +112,7 @@ type messageContext struct {
 }
 
 func withMessage(ctx Context, msg *Message) Context {
-	return &messageContext{
+	return messageContext{
 		baseContext: baseContext{
 			parent: ctx,
 		},
@@ -123,7 +120,7 @@ func withMessage(ctx Context, msg *Message) Context {
 	}
 }
 
-func (ctx *messageContext) Message() *Message {
+func (ctx messageContext) Message() *Message {
 	return ctx.message
 }
 
@@ -151,7 +148,7 @@ type cancelStdContext struct {
 }
 
 func (ctx cancelStdContext) Deadline() (deadline time.Time, ok bool) {
-	return time.Now(), false
+	return time.Time{}, false
 }
 
 func (ctx cancelStdContext) Done() <-chan struct{} {

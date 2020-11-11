@@ -42,17 +42,15 @@ func newNodeRunner(name string, node Node, previous runner) *nodeRunner {
 }
 
 func (r *nodeRunner) run(ctx Context) error {
+	ctx = withOutputCh(ctx, r.outputCh)
 	defer func() {
-		msg := (&Message{}).SetLifecycleMessage((&LifecycleMessage{}).SetStopped())
-		err := r.node.Receive(withMessage(ctx, msg))
+		err := r.node.Destroy(ctx)
 		if err != nil {
 			log.Error("found an error when stopping node", zap.String("node name", r.name), zap.Error(err))
 		}
 		close(r.outputCh)
 	}()
-	ctx = withOutputCh(ctx, r.outputCh)
-	msg := (&Message{}).SetLifecycleMessage((&LifecycleMessage{}).SetStarted())
-	err := r.node.Receive(withMessage(ctx, msg))
+	err := r.node.Init(ctx)
 	if err != nil {
 		return err
 	}
