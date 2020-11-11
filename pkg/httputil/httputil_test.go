@@ -75,6 +75,7 @@ func (s *httputilSuite) TestHttputilNewClient(c *check.C) {
 
 func handler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
+	//nolint:errcheck
 	w.Write([]byte(httputilServerMsg))
 }
 
@@ -88,6 +89,9 @@ func runServer(ctx context.Context, tlsCfg *tls.Config, port int, c *check.C) *h
 	}
 
 	tlsListener := tls.NewListener(conn, tlsCfg)
-	go server.Serve(tlsListener)
+	go func() {
+		//nolint:errcheck
+		server.Serve(tlsListener)
+	}()
 	return server
 }
