@@ -35,7 +35,7 @@ function run() {
     fi
 
     sleep 5
-    GO111MODULE=on go run main.go -pd http://$UP_PD_HOST_1:$UP_PD_PORT_1  2>&1 | tee $WORK_DIR/tester.log &
+    GO111MODULE=on go run $CUR/main.go -pd http://$UP_PD_HOST_1:$UP_PD_PORT_1  2>&1 | tee $WORK_DIR/tester.log &
 
     # Add a check table to reduce check time, or if we check data with sync diff
     # directly, there maybe a lot of diff data at first because of the incremental scan
