@@ -16,10 +16,6 @@ package util
 import (
 	"context"
 
-	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-	"go.uber.org/zap"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/store/tikv"
 	pd "github.com/tikv/pd/client"
@@ -40,13 +36,6 @@ func CheckSafetyOfStartTs(ctx context.Context, pdCli pd.Client, startTs uint64) 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	gcSafePoint, err := pdCli.UpdateGCSafePoint(ctx, 0)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	log.Info("show gc",
-		zap.Uint64("gc-safe-point", gcSafePoint), zap.Time("gc-safe-point-time", oracle.GetTimeFromTS(gcSafePoint)),
-		zap.Uint64("min-service-gc-ts", minServiceGCTs), zap.Time("min-service-gc-ts-time", oracle.GetTimeFromTS(minServiceGCTs)))
 	if startTs < minServiceGCTs {
 		return errors.Wrap(tikv.ErrGCTooEarly.GenWithStackByArgs(startTs, minServiceGCTs), "startTs less than gcSafePoint")
 	}
