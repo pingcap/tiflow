@@ -71,6 +71,11 @@ func (m baseMockPdClient) GetClusterID(ctx context.Context) uint64 {
 	panic("not implemented")
 }
 
+// GetMemberInfo gets the members Info from PD
+func (m baseMockPdClient) GetMemberInfo(ctx context.Context) ([]*pdpb.Member, error) {
+	panic("not implemented")
+}
+
 // GetLeaderAddr returns current leader's address. It returns "" before
 // syncing leader from server.
 func (m baseMockPdClient) GetLeaderAddr() string {
@@ -110,7 +115,7 @@ func (m baseMockPdClient) GetRegionByID(ctx context.Context, regionID uint64) (*
 // Limit limits the maximum number of regions returned.
 // If a region has no leader, corresponding leader will be placed by a peer
 // with empty value (PeerID is 0).
-func (m baseMockPdClient) ScanRegions(ctx context.Context, key []byte, endKey []byte, limit int) ([]*metapb.Region, []*metapb.Peer, error) {
+func (m baseMockPdClient) ScanRegions(ctx context.Context, key []byte, endKey []byte, limit int) ([]*pd.Region, error) {
 	panic("not implemented")
 }
 
@@ -146,6 +151,12 @@ func (m baseMockPdClient) UpdateServiceGCSafePoint(ctx context.Context, serviceI
 // ScatterRegion scatters the specified region. Should use it for a batch of regions,
 // and the distribution of these regions will be dispersed.
 func (m baseMockPdClient) ScatterRegion(ctx context.Context, regionID uint64) error {
+	panic("not implemented")
+}
+
+// ScatterRegionWithOption scatters the specified region with the given options, should use it
+// for a batch of regions.
+func (m baseMockPdClient) ScatterRegionWithOption(ctx context.Context, regionID uint64, opts ...pd.ScatterRegionOption) error {
 	panic("not implemented")
 }
 
