@@ -1,3 +1,16 @@
+// Copyright 2020 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package util
 
 import (
@@ -20,11 +33,11 @@ var _ = check.Suite(&gcServiceuite{
 
 func (s *gcServiceuite) TestCheckSafetyOfStartTs(c *check.C) {
 	ctx := context.Background()
-	s.pdCli.UpdateServiceGCSafePoint(ctx, "service1", 10, 60)
+	s.pdCli.UpdateServiceGCSafePoint(ctx, "service1", 10, 60) //nolint:errcheck
 	err := CheckSafetyOfStartTs(ctx, s.pdCli, 50)
 	c.Assert(err.Error(), check.Equals, "startTs less than gcSafePoint: [tikv:9006]GC life time is shorter than transaction duration, transaction starts at 50, GC safe point is 60")
-	s.pdCli.UpdateServiceGCSafePoint(ctx, "service2", 10, 80)
-	s.pdCli.UpdateServiceGCSafePoint(ctx, "service3", 10, 70)
+	s.pdCli.UpdateServiceGCSafePoint(ctx, "service2", 10, 80) //nolint:errcheck
+	s.pdCli.UpdateServiceGCSafePoint(ctx, "service3", 10, 70) //nolint:errcheck
 	err = CheckSafetyOfStartTs(ctx, s.pdCli, 65)
 	c.Assert(err, check.IsNil)
 	c.Assert(s.pdCli.serviceSafePoint, check.DeepEquals, map[string]uint64{"service1": 60, "service2": 80, "service3": 70, "ticdc-changefeed-creating": 65})
