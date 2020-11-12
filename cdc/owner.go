@@ -975,12 +975,18 @@ func (o *Owner) Run(ctx context.Context, tickTime time.Duration) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	go func() {
+		if err := o.watchCampaignKey(ctx); err != nil {
+			cancel()
+		}
+	}()
+
 	if err := o.throne(ctx); err != nil {
 		return err
 	}
 
-	ctx1, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx1, cancel1 := context.WithCancel(ctx)
+	defer cancel1()
 	changedFeeds := o.watchFeedChange(ctx1)
 
 	ticker := time.NewTicker(tickTime)
@@ -994,7 +1000,8 @@ loop:
 			close(o.done)
 			break loop
 		case <-ctx.Done():
-			return ctx.Err()
+			err = ctx.Err()
+			break loop
 		case <-changedFeeds:
 		case <-ticker.C:
 		}
@@ -1017,6 +1024,27 @@ loop:
 	}
 
 	return err
+}
+
+// watchCampaignKey watches the aliveness of campaign owner key in etcd
+func (o *Owner) watchCampaignKey(ctx context.Context) error {
+	key := fmt.Sprintf("%s/%x", kv.CaptureOwnerKey, o.session.Lease())
+restart:
+	wch := o.etcdClient.Client.Watch(ctx, key)
+	for resp := range wch {
+		err := resp.Err()
+		if err != nil {
+			log.Error("watch owner campaign key failed, restart the watcher", zap.Error(err))
+			goto restart
+		}
+		for _, ev := range resp.Events {
+			if ev.Type == clientv3.EventTypeDelete {
+				log.Warn("owner campaign key deleted", zap.String("key", key))
+				return cerror.ErrOwnerCampaignKeyDeleted.GenWithStackByArgs()
+			}
+		}
+	}
+	return nil
 }
 
 func (o *Owner) watchFeedChange(ctx context.Context) chan struct{} {

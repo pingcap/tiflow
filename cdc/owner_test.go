@@ -16,7 +16,9 @@ package cdc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/pingcap/check"
@@ -767,4 +769,46 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 		c.Assert(cf.schemas, check.DeepEquals, expectSchemas[i])
 		c.Assert(cf.tables, check.DeepEquals, expectTables[i])
 	}
+}
+
+func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
+	ctx := context.Background()
+	capture, err := NewCapture(ctx, []string{s.clientURL.String()},
+		&security.Credential{}, "127.0.0.1:12034", &processorOpts{})
+	c.Assert(err, check.IsNil)
+	err = capture.Campaign(ctx)
+	c.Assert(err, check.IsNil)
+
+	cctx, cancel := context.WithCancel(ctx)
+	owner, err := NewOwner(cctx, nil, &security.Credential{}, capture.session,
+		DefaultCDCGCSafePointTTL, time.Millisecond*200)
+	c.Assert(err, check.IsNil)
+
+	// check campaign key deleted can be detected
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := owner.watchCampaignKey(cctx)
+		c.Assert(cerror.ErrOwnerCampaignKeyDeleted.Equal(err), check.IsTrue)
+		cancel()
+	}()
+	etcdCli := owner.etcdClient.Client.Unwrap()
+	key := fmt.Sprintf("%s/%x", kv.CaptureOwnerKey, owner.session.Lease())
+	_, err = etcdCli.Delete(ctx, key)
+	c.Assert(err, check.IsNil)
+	wg.Wait()
+
+	// check the watch routine can be canceled
+	err = capture.Campaign(ctx)
+	c.Assert(err, check.IsNil)
+	cctx, cancel = context.WithCancel(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := owner.watchCampaignKey(cctx)
+		c.Assert(err, check.IsNil)
+	}()
+	cancel()
+	wg.Wait()
 }
