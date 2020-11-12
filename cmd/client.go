@@ -73,9 +73,10 @@ var (
 	cliLogLevel       string
 	changefeedListAll bool
 
-	changefeedID string
-	captureID    string
-	interval     uint
+	changefeedID            string
+	captureID               string
+	interval                uint
+	disableGCSafePointCheck bool
 
 	syncPointEnabled  bool
 	syncPointInterval time.Duration

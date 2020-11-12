@@ -216,6 +216,9 @@ func jsonPrint(cmd *cobra.Command, v interface{}) error {
 }
 
 func verifyStartTs(ctx context.Context, startTs uint64) error {
+	if disableGCSafePointCheck {
+		return nil
+	}
 	return util.CheckSafetyOfStartTs(ctx, pdCli, startTs)
 }
 

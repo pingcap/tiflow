@@ -189,10 +189,11 @@ func (o *Owner) addOrphanTable(cid model.CaptureID, tableID model.TableID, start
 func (o *Owner) newChangeFeed(ctx context.Context, id model.ChangeFeedID, processorsInfos model.ProcessorsInfos, taskPositions map[string]*model.TaskPosition, info *model.ChangeFeedInfo, checkpointTs uint64) (cf *changeFeed, resultErr error) {
 	log.Info("Find new changefeed", zap.Stringer("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
-
-	err := util.CheckSafetyOfStartTs(ctx, o.pdClient, checkpointTs)
-	if err != nil {
-		return nil, errors.Trace(err)
+	if info.Config.CheckGCSafePoint {
+		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, checkpointTs)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(checkpointTs-300, checkpointTs))
