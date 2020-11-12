@@ -207,7 +207,6 @@ func newQueryChangefeedCommand() *cobra.Command {
 	}
 	command.PersistentFlags().BoolVarP(&simplified, "simple", "s", false, "Output simplified replication status")
 	command.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
-
 	_ = command.MarkPersistentFlagRequired("changefeed-id")
 	return command
 }

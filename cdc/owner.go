@@ -186,7 +186,13 @@ func (o *Owner) addOrphanTable(cid model.CaptureID, tableID model.TableID, start
 	}
 }
 
-func (o *Owner) newChangeFeed(ctx context.Context, id model.ChangeFeedID, processorsInfos model.ProcessorsInfos, taskPositions map[string]*model.TaskPosition, info *model.ChangeFeedInfo, checkpointTs uint64) (cf *changeFeed, resultErr error) {
+func (o *Owner) newChangeFeed(
+	ctx context.Context,
+	id model.ChangeFeedID,
+	processorsInfos model.ProcessorsInfos,
+	taskPositions map[string]*model.TaskPosition,
+	info *model.ChangeFeedInfo,
+	checkpointTs uint64) (cf *changeFeed, resultErr error) {
 	log.Info("Find new changefeed", zap.Stringer("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
 	if info.Config.CheckGCSafePoint {
