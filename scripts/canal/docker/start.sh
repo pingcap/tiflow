@@ -14,6 +14,7 @@ echo "kafka server ${KAFKA_SERVER}"
 echo "db name ${DB_NAME}"
 echo "downstream db host ${DOWNSTREAM_DB_HOST}"
 echo "downstream db port ${DOWNSTREAM_DB_PORT}"
+echo "use flatMessage: ${USE_FLAT_MESSAGE}"
 
 WORK_DIR=$(pwd)
 cat - >"${WORK_DIR}/conf/application.yml" <<EOF
@@ -27,7 +28,7 @@ spring:
 
 canal.conf:
   mode: kafka # tcp rocketMQ rabbitMQ
-  flatMessage: false
+  flatMessage: ${USE_FLAT_MESSAGE}
   zookeeperHosts:
   syncBatchSize: 1000
   retries: 0

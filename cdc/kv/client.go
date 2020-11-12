@@ -983,7 +983,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 			return nil
 		} else if compatibility := innerErr.GetCompatibility(); compatibility != nil {
 			log.Error("tikv reported compatibility error, which is not expected",
-				zap.Uint64("storeID", errInfo.rpcCtx.GetStoreID()),
+				zap.String("rpcCtx", errInfo.rpcCtx.String()),
 				zap.Stringer("error", compatibility))
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(compatibility)
 		} else {

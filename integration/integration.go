@@ -29,6 +29,7 @@ var testProtocol = flag.String("protocol", "avro", "the protocol we want to test
 var dockerComposeFile = flag.String("docker-compose-file", "", "the path of the Docker-compose yml file")
 
 func testAvro() {
+	env := avro.NewKafkaDockerEnv(*dockerComposeFile)
 	task := &avro.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
 		tests.NewSimpleCase(task),
@@ -39,21 +40,12 @@ func testAvro() {
 		tests.NewAlterCase(task), // this case is slow, so put it last
 	}
 
-	log.SetLevel(zapcore.DebugLevel)
-	env := avro.NewKafkaDockerEnv(*dockerComposeFile)
-	env.Setup()
-
-	for i := range testCases {
-		env.RunTest(testCases[i])
-		if i < len(testCases)-1 {
-			env.Reset()
-		}
-	}
-
-	env.TearDown()
+	runTests(testCases, env)
 }
 
 func testCanal() {
+	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
+	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=false"}
 	task := &canal.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
 		tests.NewSimpleCase(task),
@@ -64,13 +56,32 @@ func testCanal() {
 		//tests.NewAlterCase(task), // basic implementation can not grantee ddl dml sequence, so can not pass
 	}
 
-	log.SetLevel(zapcore.DebugLevel)
+	runTests(testCases, env)
+}
+
+func testCanalJSON() {
 	env := canal.NewKafkaDockerEnv(*dockerComposeFile)
+	env.DockerComposeOperator.ExecEnv = []string{"USE_FLAT_MESSAGE=true"}
+	task := &canal.SingleTableTask{TableName: "test", UseJSON: true}
+	testCases := []framework.Task{
+		tests.NewSimpleCase(task),
+		tests.NewDeleteCase(task),
+		tests.NewManyTypesCase(task),
+		//tests.NewUnsignedCase(task), //now canal adapter can not deal with unsigned int greater than int max
+		tests.NewCompositePKeyCase(task),
+		tests.NewAlterCase(task),
+	}
+
+	runTests(testCases, env)
+}
+
+func runTests(cases []framework.Task, env framework.Environment) {
+	log.SetLevel(zapcore.DebugLevel)
 	env.Setup()
 
-	for i := range testCases {
-		env.RunTest(testCases[i])
-		if i < len(testCases)-1 {
+	for i := range cases {
+		env.RunTest(cases[i])
+		if i < len(cases)-1 {
 			env.Reset()
 		}
 	}
@@ -84,6 +95,8 @@ func main() {
 		testAvro()
 	} else if *testProtocol == "canal" {
 		testCanal()
+	} else if *testProtocol == "canalJson" {
+		testCanalJSON()
 	} else {
 		log.Fatal("Unknown sink protocol", zap.String("protocol", *testProtocol))
 	}
