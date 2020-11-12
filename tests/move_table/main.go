@@ -19,7 +19,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -35,9 +37,14 @@ import (
 )
 
 var pd = flag.String("pd", "http://127.0.0.1:2379", "PD address and port")
+var logLevel = flag.String("log-level", "debug", "Set log level of the logger")
 
 func main() {
 	flag.Parse()
+	if strings.ToLower(*logLevel) == "debug" {
+		log.SetLevel(zapcore.DebugLevel)
+	}
+
 	log.Info("table mover started")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -47,7 +54,7 @@ func main() {
 		log.Fatal("failed to create cluster info", zap.Error(err))
 	}
 
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	for {
 		select {
 		case <-ctx.Done():
@@ -62,35 +69,28 @@ func main() {
 				log.Warn("error refreshing cluster info", zap.Error(err))
 			}
 
+			log.Info("task status", zap.Reflect("status", cluster.captures))
+
 			if len(cluster.captures) <= 1 {
 				log.Warn("no enough captures", zap.Reflect("captures", cluster.captures))
 				continue
 			}
 
-			var (
-				tableID       int64
-				sourceCapture string
-				targetCapture string
-				changefeed    string
-			)
+			var sourceCapture string
+
 			for capture, tables := range cluster.captures {
 				if len(tables) == 0 {
 					continue
 				}
-
-				tableID = tables[0].ID
 				sourceCapture = capture
-				changefeed = tables[0].changefeed
+				break
 			}
 
-			if tableID == 0 {
-				log.Warn("no table", zap.Reflect("captures", cluster.captures))
-				continue
-			}
+			var targetCapture string
 
-			for capture := range cluster.captures {
-				if capture != sourceCapture {
-					targetCapture = sourceCapture
+			for candidateCapture := range cluster.captures {
+				if candidateCapture != sourceCapture {
+					targetCapture = candidateCapture
 				}
 			}
 
@@ -98,20 +98,50 @@ func main() {
 				log.Fatal("no target, unexpected")
 			}
 
-			err = moveTable(ctx, cluster.ownerAddr, changefeed, targetCapture, tableID)
-			if err != nil {
-				log.Warn("failed to move table", zap.Error(err))
+			// move all tables to another capture
+			for _, table := range cluster.captures[sourceCapture] {
+				err = moveTable(ctx, cluster.ownerAddr, table.Changefeed, targetCapture, table.ID)
+				if err != nil {
+					log.Warn("failed to move table", zap.Error(err))
+					continue
+				}
+
+				log.Info("moved table successful", zap.Int64("tableID", table.ID))
 			}
 
-			log.Info("moved table successful", zap.Int64("tableID", tableID))
+			log.Info("all tables are moved", zap.String("sourceCapture", sourceCapture), zap.String("targetCapture", targetCapture))
+
+			for counter := 0; counter < 30; counter++ {
+				err := retry.Run(100*time.Millisecond, 5, func() error {
+					return cluster.refreshInfo(ctx)
+				})
+
+				if err != nil {
+					log.Warn("error refreshing cluster info", zap.Error(err))
+				}
+
+				tables, ok := cluster.captures[sourceCapture]
+				if !ok {
+					log.Warn("source capture is gone", zap.String("sourceCapture", sourceCapture))
+					break
+				}
+
+				if len(tables) == 0 {
+					log.Info("source capture is now empty", zap.String("sourceCapture", sourceCapture))
+					break
+				}
+
+				if counter != 30 {
+					log.Debug("source capture is not empty, will try again", zap.String("sourceCapture", sourceCapture))
+					time.Sleep(time.Second * 10)
+				}
+			}
 		}
 	}
-
 }
-
 type tableInfo struct {
 	ID         int64
-	changefeed string
+	Changefeed string
 }
 
 type cluster struct {
@@ -155,6 +185,8 @@ func newCluster(ctx context.Context, pd string) (*cluster, error) {
 		cdcEtcdCli: kv.NewCDCEtcdClient(ctx, etcdCli),
 	}
 
+	log.Info("new cluster initialized")
+
 	return ret, nil
 }
 
@@ -164,11 +196,14 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	log.Debug("retrieved owner ID", zap.String("ownerID", ownerID))
+
 	captureInfo, err := c.cdcEtcdCli.GetCaptureInfo(ctx, ownerID)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
+	log.Debug("retrieved owner addr", zap.String("ownerAddr", captureInfo.AdvertiseAddr))
 	c.ownerAddr = captureInfo.AdvertiseAddr
 
 	_, changefeeds, err := c.cdcEtcdCli.GetChangeFeeds(ctx)
@@ -178,6 +213,8 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 	if len(changefeeds) == 0 {
 		return errors.New("No changefeed")
 	}
+
+	log.Debug("retrieved changefeeds", zap.Reflect("changefeeds", changefeeds))
 
 	var changefeed string
 	for k := range changefeeds {
@@ -190,13 +227,15 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	log.Debug("retrieved all tasks", zap.Reflect("tasks", allTasks))
+
 	c.captures = make(map[string][]*tableInfo)
 	for capture, taskInfo := range allTasks {
-		c.captures[capture] = make([]*tableInfo, len(taskInfo.Tables))
+		c.captures[capture] = make([]*tableInfo, 0, len(taskInfo.Tables))
 		for tableID := range taskInfo.Tables {
 			c.captures[capture] = append(c.captures[capture], &tableInfo{
 				ID:         tableID,
-				changefeed: changefeed,
+				Changefeed: changefeed,
 			})
 		}
 	}
@@ -206,18 +245,25 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 
 func moveTable(ctx context.Context, ownerAddr string, changefeed string, target string, tableID int64) error {
 	formStr := fmt.Sprintf("cf-id=%s&target-cp-id=%s&table-id=%d", changefeed, target, tableID)
+	log.Debug("preparing HTTP API call to owner", zap.String("formStr", formStr))
 	rd := bytes.NewReader([]byte(formStr))
-	req, err := http.NewRequestWithContext(ctx, "POST", ownerAddr+"/capture/owner/move_table", rd)
+	req, err := http.NewRequestWithContext(ctx, "POST", "http://"+ownerAddr+"/capture/owner/move_table", rd)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Warn("http error", zap.ByteString("body", body))
 		return errors.New(resp.Status)
 	}
 

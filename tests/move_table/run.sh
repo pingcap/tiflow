@@ -19,9 +19,7 @@ function run() {
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
     run_sql "CREATE DATABASE move_table;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=move_table
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "cdc1" --addr 127.0.0.1:8300
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "cdc2" --addr 127.0.0.1:8301
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "cdc3" --addr 127.0.0.1:8302
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "1" --addr 127.0.0.1:8300
 
     TOPIC_NAME="ticdc-move-table-test-$RANDOM"
     case $SINK_TYPE in
@@ -33,11 +31,6 @@ function run() {
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
-
-    sleep 5
-    cd $CUR
-    GO111MODULE=on go run main.go -pd http://$UP_PD_HOST_1:$UP_PD_PORT_1  2>&1 | tee $WORK_DIR/tester.log &
-    cd $WORK_DIR
 
     # Add a check table to reduce check time, or if we check data with sync diff
     # directly, there maybe a lot of diff data at first because of the incremental scan
@@ -59,8 +52,17 @@ function run() {
 
     run_sql "create table move_table.USERTABLE2 like move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "insert into move_table.USERTABLE2 select * from move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "create table move_table.USERTABLE3 like move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "insert into move_table.USERTABLE3 select * from move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     run_sql "create table move_table.check4(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
+    sleep 10
     check_table_exists "move_table.USERTABLE2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "2" --addr 127.0.0.1:8301
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "3" --addr 127.0.0.1:8302
+
+    check_table_exists "move_table.USERTABLE3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
     check_table_exists "move_table.check4" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
 
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
