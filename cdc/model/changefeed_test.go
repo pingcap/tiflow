@@ -162,7 +162,10 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 		SinkURI: "blackhole://",
 		Opts:    map[string]string{},
 		StartTs: 417257993615179777,
-		Config:  &config.ReplicaConfig{},
+		Config: &config.ReplicaConfig{
+			CaseSensitive:  true,
+			EnableOldValue: true,
+		},
 	}
 
 	err := info.VerifyAndFix()
@@ -172,7 +175,6 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 	marshalConfig1, err := info.Config.Marshal()
 	c.Assert(err, check.IsNil)
 	defaultConfig := config.GetDefaultReplicaConfig()
-	defaultConfig.CaseSensitive = false
 	marshalConfig2, err := defaultConfig.Marshal()
 	c.Assert(err, check.IsNil)
 	c.Assert(marshalConfig1, check.Equals, marshalConfig2)
