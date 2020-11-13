@@ -243,6 +243,7 @@ func (c *CanalFlatEventBatchEncoder) Reset() {
 }
 
 // SetMaxMessageBytes is no-op for now
-func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]interface{}) {
+func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 	// no op
+	return nil
 }

@@ -417,8 +417,9 @@ func (d *CanalEventBatchEncoder) Reset() {
 }
 
 // SetMaxMessageBytes is no-op for now
-func (d *CanalEventBatchEncoder) SetParams(params map[string]interface{}) {
+func (d *CanalEventBatchEncoder) SetParams(params map[string]string) error {
 	// no op
+	return nil
 }
 
 // refreshPacketBody() marshals the messages to the packet body

@@ -507,9 +507,29 @@ func (d *JSONEventBatchEncoder) Reset() {
 	d.valueBuf.Reset()
 }
 
-// SetMaxMessageBytes is no-op for now
-func (d *JSONEventBatchEncoder) SetParams(params map[string]interface{}) {
-	// no op
+// SetParams is no-op for now
+func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
+	var err error
+	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
+		d.maxKafkaMessageSize, err = strconv.Atoi(maxMessageBytes)
+		if err != nil {
+			// TODO add error code
+			return errors.Trace(err)
+		}
+	} else {
+		d.maxKafkaMessageSize = 64 * 1024 * 1024   // 64M
+	}
+
+	if maxBatchSize, ok := params["max-batch-size"]; ok {
+		d.maxBatchSize, err = strconv.Atoi(maxBatchSize)
+		if err != nil {
+			// TODO add error code
+			return errors.Trace(err)
+		}
+	} else {
+		d.maxBatchSize = 4096
+	}
+	return nil
 }
 
 // NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.

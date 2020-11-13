@@ -150,8 +150,9 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 }
 
 // SetMaxMessageBytes is no-op for Maxwell for now
-func (d *MaxwellEventBatchEncoder) SetParams(params map[string]interface{}) {
+func (d *MaxwellEventBatchEncoder) SetParams(params map[string]string) error {
 	panic("implement me")
+	return nil
 }
 
 // Column represents a column in maxwell

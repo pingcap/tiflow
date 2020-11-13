@@ -164,8 +164,9 @@ func (a *AvroEventBatchEncoder) Size() int {
 }
 
 // SetMaxMessageBytes is no-op for now
-func (a *AvroEventBatchEncoder) SetParams(params map[string]interface{}) {
+func (a *AvroEventBatchEncoder) SetParams(params map[string]string) error {
 	// no op
+	return nil
 }
 
 func avroEncode(table *model.TableName, manager *AvroSchemaManager, tableVersion uint64, cols []*model.Column) (*avroEncodeResult, error) {

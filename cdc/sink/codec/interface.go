@@ -45,8 +45,8 @@ type EventBatchEncoder interface {
 	Size() int
 	// Reset reset the kv buffer
 	Reset()
-	// SetMaxMessageBytes instructs the encoder not to generate any single message larger than `size`.
-	SetParams(params map[string]interface{})
+	// SetParams provides the encoder with more info on the sink
+	SetParams(params map[string]string) error
 }
 
 // MQMessage represents an MQ message to the mqSink

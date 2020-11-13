@@ -111,6 +111,7 @@ func newMqSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
 	}
 
+
 	k := &mqSink{
 		mqProducer: mqProducer,
 		dispatcher: d,
@@ -404,6 +405,7 @@ func newKafkaSaramaSink(ctx context.Context, sinkURI *url.URL, filter *filter.Fi
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 		config.MaxMessageBytes = c
+		opts["max-message-bytes"] = strconv.Itoa(c)
 	}
 
 	s = sinkURI.Query().Get("compression")
