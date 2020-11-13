@@ -22,17 +22,17 @@ import (
 )
 
 const (
-	// CDCChangefeedCreatingServiceGCSafePointID is service GC safe point ID
-	CDCChangefeedCreatingServiceGCSafePointID = "ticdc-changefeed-creating"
-	// CDCChangefeedCreatingServiceGCSafePointTTL is service GC safe point TTL
-	CDCChangefeedCreatingServiceGCSafePointTTL = 10 * 60 // 10 mins
+	// cdcChangefeedCreatingServiceGCSafePointID is service GC safe point ID
+	cdcChangefeedCreatingServiceGCSafePointID = "ticdc-changefeed-creating"
+	// cdcChangefeedCreatingServiceGCSafePointTTL is service GC safe point TTL
+	cdcChangefeedCreatingServiceGCSafePointTTL = 10 * 60 // 10 mins
 )
 
 // CheckSafetyOfStartTs checks if the startTs less than the minimum of Service-GC-Ts
 // and this function will update the service GC to startTs
 func CheckSafetyOfStartTs(ctx context.Context, pdCli pd.Client, startTs uint64) error {
-	minServiceGCTs, err := pdCli.UpdateServiceGCSafePoint(ctx, CDCChangefeedCreatingServiceGCSafePointID,
-		CDCChangefeedCreatingServiceGCSafePointTTL, startTs)
+	minServiceGCTs, err := pdCli.UpdateServiceGCSafePoint(ctx, cdcChangefeedCreatingServiceGCSafePointID,
+		cdcChangefeedCreatingServiceGCSafePointTTL, startTs)
 	if err != nil {
 		return errors.Trace(err)
 	}

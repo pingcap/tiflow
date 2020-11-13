@@ -25,8 +25,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/pingcap/ticdc/pkg/util"
-
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -40,6 +38,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/httputil"
 	"github.com/pingcap/ticdc/pkg/logutil"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"go.etcd.io/etcd/clientv3/concurrency"
