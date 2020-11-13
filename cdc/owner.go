@@ -1031,6 +1031,7 @@ loop:
 // watchCampaignKey watches the aliveness of campaign owner key in etcd
 func (o *Owner) watchCampaignKey(ctx context.Context) error {
 	key := fmt.Sprintf("%s/%x", kv.CaptureOwnerKey, o.session.Lease())
+restart:
 	resp, err := o.etcdClient.Client.Get(ctx, key)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
@@ -1038,7 +1039,6 @@ func (o *Owner) watchCampaignKey(ctx context.Context) error {
 	if resp.Count == 0 {
 		return cerror.ErrOwnerCampaignKeyDeleted.GenWithStackByArgs()
 	}
-restart:
 	wch := o.etcdClient.Client.Watch(ctx, key, clientv3.WithRev(resp.Header.Revision+1))
 	for resp := range wch {
 		err := resp.Err()
