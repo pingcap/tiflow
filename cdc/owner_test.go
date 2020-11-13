@@ -793,22 +793,30 @@ func (s *ownerSuite) TestWatchCampaignKey(c *check.C) {
 		c.Assert(cerror.ErrOwnerCampaignKeyDeleted.Equal(err), check.IsTrue)
 		cancel()
 	}()
+	// ensure the watch loop has started
+	time.Sleep(time.Millisecond * 100)
 	etcdCli := owner.etcdClient.Client.Unwrap()
 	key := fmt.Sprintf("%s/%x", kv.CaptureOwnerKey, owner.session.Lease())
 	_, err = etcdCli.Delete(ctx, key)
 	c.Assert(err, check.IsNil)
 	wg.Wait()
 
+	// check key is deleted before watch loop starts
+	cctx, cancel = context.WithCancel(ctx)
+	err = owner.watchCampaignKey(cctx)
+	c.Assert(cerror.ErrOwnerCampaignKeyDeleted.Equal(err), check.IsTrue)
+
 	// check the watch routine can be canceled
 	err = capture.Campaign(ctx)
 	c.Assert(err, check.IsNil)
-	cctx, cancel = context.WithCancel(ctx)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := owner.watchCampaignKey(cctx)
 		c.Assert(err, check.IsNil)
 	}()
+	// ensure the watch loop has started
+	time.Sleep(time.Millisecond * 100)
 	cancel()
 	wg.Wait()
 }
