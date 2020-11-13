@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/etcd"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 )
@@ -70,6 +71,8 @@ func (s *taskSuite) TearDownTest(c *check.C) {
 }
 
 func (s *taskSuite) TestNewTaskWatcher(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	// Create a capture instance by initialize the struct,
 	// NewCapture can not be used because it requires to
 	// initialize the PD service witch does not support to
@@ -117,6 +120,8 @@ func (s *taskSuite) teardownFeedInfo(c *check.C, changeFeedID string) {
 }
 
 func (s *taskSuite) TestParseTask(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changeFeedID := "task-suite-changefeed"
@@ -147,6 +152,8 @@ func (s *taskSuite) TestParseTask(c *check.C) {
 }
 
 func (s *taskSuite) TestWatch(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s.setupFeedInfo(c, "changefeed-1")
@@ -222,6 +229,8 @@ func (s *taskSuite) TestWatch(c *check.C) {
 }
 
 func (s *taskSuite) TestRebuildTaskEvents(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	type T map[string]*TaskEvent
 	tests := []struct {
 		desc     string

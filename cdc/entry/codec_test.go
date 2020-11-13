@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
@@ -30,6 +31,7 @@ type codecSuite struct {
 var _ = check.Suite(&codecSuite{})
 
 func (s *codecSuite) TestDecodeRecordKey(c *check.C) {
+	defer testleak.AfterTest(c)()
 	recordPrefix := tablecodec.GenTableRecordPrefix(12345)
 	key := tablecodec.EncodeRecordKey(recordPrefix, kv.IntHandle(67890))
 	key, tableID, err := decodeTableID(key)
@@ -47,6 +49,7 @@ type decodeMetaKeySuite struct {
 var _ = check.Suite(&decodeMetaKeySuite{})
 
 func (s *decodeMetaKeySuite) TestDecodeListData(c *check.C) {
+	defer testleak.AfterTest(c)()
 	key := []byte("hello")
 	var index int64 = 3
 

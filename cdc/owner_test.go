@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/security"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/store/mockstore"
 	pd "github.com/tikv/pd/client"
@@ -74,6 +75,7 @@ func (s *ownerSuite) TearDownTest(c *check.C) {
 	if err != nil {
 		c.Errorf("Error group error: %s", err)
 	}
+	s.client.Client.Unwrap().Close() //nolint:errcheck
 }
 
 type mockPDClient struct {
@@ -87,6 +89,7 @@ func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID s
 }
 
 func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
+	defer testleak.AfterTest(c)()
 	mockPDCli := &mockPDClient{}
 	mockOwner := Owner{
 		pdClient:              mockPDCli,
@@ -97,6 +100,7 @@ func (s *ownerSuite) TestOwnerFlushChangeFeedInfos(c *check.C) {
 	err := mockOwner.flushChangeFeedInfos(s.ctx)
 	c.Assert(err, check.IsNil)
 	c.Assert(mockPDCli.invokeCounter, check.Equals, 1)
+	s.TearDownTest(c)
 }
 
 /*
@@ -189,6 +193,7 @@ func (h *handlerForPrueDMLTest) PutAllChangeFeedStatus(ctx context.Context, info
 }
 
 func (s *ownerSuite) TestPureDML(c *check.C) {
+		defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
 	handler := &handlerForPrueDMLTest{
 		index:            -1,
@@ -351,6 +356,7 @@ func (h *handlerForDDLTest) PutAllChangeFeedStatus(ctx context.Context, infos ma
 }
 
 func (s *ownerSuite) TestDDL(c *check.C) {
+		defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	handler := &handlerForDDLTest{
@@ -457,9 +463,12 @@ func (s *ownerSuite) TestDDL(c *check.C) {
 */
 
 func (s *ownerSuite) TestHandleAdmin(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	cfID := "test_handle_admin"
 
-	ctx := context.TODO()
+	ctx, cancel0 := context.WithCancel(context.Background())
+	defer cancel0()
 	cctx, cancel := context.WithCancel(ctx)
 	errg, _ := errgroup.WithContext(cctx)
 
@@ -489,6 +498,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	errCh := make(chan error, 1)
 	sink, err := sink.NewSink(ctx, cfID, "blackhole://", f, replicaConf, map[string]string{}, errCh)
 	c.Assert(err, check.IsNil)
+	defer sink.Close() //nolint:errcheck
 	sampleCF.sink = sink
 
 	capture, err := NewCapture(ctx, []string{s.clientURL.String()},
@@ -584,9 +594,11 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	default:
 		c.Fatal("changefeed context is expected canceled")
 	}
+	owner.etcdClient.Client.Unwrap().Close() //nolint:errcheck
 }
 
 func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var (
 		jobs = []*timodel.Job{
 			{
@@ -783,4 +795,5 @@ func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
 		c.Assert(cf.schemas, check.DeepEquals, expectSchemas[i])
 		c.Assert(cf.tables, check.DeepEquals, expectTables[i])
 	}
+	s.TearDownTest(c)
 }

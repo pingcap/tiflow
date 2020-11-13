@@ -25,6 +25,7 @@ import (
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/etcd"
 	"github.com/pingcap/ticdc/pkg/util"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.etcd.io/etcd/embed"
@@ -70,9 +71,14 @@ func (s *etcdSuite) TearDownTest(c *check.C) {
 	if err != nil {
 		c.Errorf("Error group error: %s", err)
 	}
+	s.client.Client.Unwrap().Close()
 }
 
 func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
+	defer testleak.AfterTest(c)()
+	// `TearDownTest` must be called before leak test, so we take advantage of
+	// the stack feature of defer. Ditto for all tests with etcdSuite.
+	defer s.TearDownTest(c)
 	testCases := []struct {
 		ids     []string
 		details []string
@@ -108,6 +114,8 @@ func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
 }
 
 func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx := context.Background()
 	info := &model.TaskStatus{
 		Tables: map[model.TableID]*model.TableReplicaInfo{
@@ -132,6 +140,8 @@ func (s *etcdSuite) TestGetPutTaskStatus(c *check.C) {
 }
 
 func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx := context.Background()
 	info := &model.TaskStatus{
 		Tables: map[model.TableID]*model.TableReplicaInfo{
@@ -151,6 +161,8 @@ func (s *etcdSuite) TestDeleteTaskStatus(c *check.C) {
 }
 
 func (s *etcdSuite) TestGetPutTaskPosition(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx := context.Background()
 	info := &model.TaskPosition{
 		ResolvedTs:   99,
@@ -184,6 +196,8 @@ func (s *etcdSuite) TestGetPutTaskPosition(c *check.C) {
 }
 
 func (s *etcdSuite) TestDeleteTaskPosition(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx := context.Background()
 	info := &model.TaskPosition{
 		ResolvedTs:   77,
@@ -202,6 +216,8 @@ func (s *etcdSuite) TestDeleteTaskPosition(c *check.C) {
 }
 
 func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx := context.Background()
 	detail := &model.ChangeFeedInfo{
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
@@ -223,6 +239,8 @@ func (s *etcdSuite) TestOpChangeFeedDetail(c *check.C) {
 }
 
 func (s *etcdSuite) TestPutAllChangeFeedStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	var (
 		status1 = &model.ChangeFeedStatus{
 			ResolvedTs:   2200,
@@ -269,6 +287,8 @@ func (s *etcdSuite) TestPutAllChangeFeedStatus(c *check.C) {
 }
 
 func (s etcdSuite) TestGetAllChangeFeedStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	var (
 		changefeeds = map[model.ChangeFeedID]*model.ChangeFeedStatus{
 			"cf1": {
@@ -289,6 +309,8 @@ func (s etcdSuite) TestGetAllChangeFeedStatus(c *check.C) {
 }
 
 func (s *etcdSuite) TestRemoveChangeFeedStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx := context.Background()
 	changefeedID := "test-remove-changefeed-status"
 	status := &model.ChangeFeedStatus{
@@ -306,6 +328,8 @@ func (s *etcdSuite) TestRemoveChangeFeedStatus(c *check.C) {
 }
 
 func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx := context.Background()
 	err := s.client.PutChangeFeedStatus(ctx, "test1", &model.ChangeFeedStatus{
 		ResolvedTs: 1,
@@ -337,6 +361,8 @@ func (s *etcdSuite) TestSetChangeFeedStatusTTL(c *check.C) {
 }
 
 func (s *etcdSuite) TestDeleteTaskWorkload(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx := context.Background()
 	workload := &model.TaskWorkload{
 		1001: model.WorkloadInfo{Workload: 1},
@@ -357,6 +383,8 @@ func (s *etcdSuite) TestDeleteTaskWorkload(c *check.C) {
 }
 
 func (s *etcdSuite) TestGetAllTaskWorkload(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx := context.Background()
 	feeds := []string{"feed1", "feed2"}
 	captures := []string{"capture1", "capture2", "capture3"}
@@ -389,6 +417,8 @@ func (s *etcdSuite) TestGetAllTaskWorkload(c *check.C) {
 }
 
 func (s *etcdSuite) TestCreateChangefeed(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	ctx := context.Background()
 	detail := &model.ChangeFeedInfo{
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
@@ -411,7 +441,10 @@ func (c Captures) Less(i, j int) bool { return c[i].ID < c[j].ID }
 func (c Captures) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 
 func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
-	ctx := context.Background()
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	testCases := []*model.CaptureInfo{
 		{
 			ID:            "a3f41a6a-3c31-44f4-aa27-344c1b8cd658",
@@ -429,7 +462,8 @@ func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
 	leases := make(map[string]int64)
 
 	for _, cinfo := range testCases {
-		sess, err := concurrency.NewSession(s.client.Client.Unwrap(), concurrency.WithTTL(10))
+		sess, err := concurrency.NewSession(s.client.Client.Unwrap(),
+			concurrency.WithTTL(10), concurrency.WithContext(ctx))
 		c.Assert(err, check.IsNil)
 		err = s.client.PutCaptureInfo(ctx, cinfo, sess.Lease())
 		c.Assert(err, check.IsNil)
@@ -454,6 +488,8 @@ func (s *etcdSuite) TestGetAllCaptureLeases(c *check.C) {
 }
 
 func (s *etcdSuite) TestGetAllCDCInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
+	defer s.TearDownTest(c)
 	captureID := "CAPTURE_ID"
 	changefeedID := "CHANGEFEED_ID"
 	ctx := context.Background()
