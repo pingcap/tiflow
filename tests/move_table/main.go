@@ -139,6 +139,7 @@ func main() {
 		}
 	}
 }
+
 type tableInfo struct {
 	ID         int64
 	Changefeed string

@@ -915,15 +915,6 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
 
-	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
-
-	if replicaInfo.StartTs < globalcheckpointTs {
-		log.Fatal("addTable: startTs < checkpoint",
-			zap.Int64("tableID", tableID),
-			zap.Uint64("checkpoint", globalcheckpointTs),
-			zap.Uint64("startTs", replicaInfo.StartTs))
-	}
-
 	var tableName string
 	err := retry.Run(time.Millisecond*5, 3, func() error {
 		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
@@ -946,6 +937,16 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 			return
 		}
 	}
+
+	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
+
+	if replicaInfo.StartTs < globalcheckpointTs {
+		log.Fatal("addTable: startTs < checkpoint",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpoint", globalcheckpointTs),
+			zap.Uint64("startTs", replicaInfo.StartTs))
+	}
+
 	globalResolvedTs := atomic.LoadUint64(&p.sinkEmittedResolvedTs)
 	log.Debug("Add table", zap.Int64("tableID", tableID),
 		zap.String("name", tableName),
