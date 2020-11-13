@@ -86,6 +86,7 @@ type processor struct {
 	globalResolvedTs        uint64
 	localResolvedTs         uint64
 	checkpointTs            uint64
+	globalcheckpointTs      uint64
 	flushCheckpointInterval time.Duration
 
 	ddlPuller       puller.Puller
@@ -662,6 +663,7 @@ func (p *processor) globalStatusWorker(ctx context.Context) error {
 	defer globalResolvedTsNotifier.Close()
 
 	updateStatus := func(changefeedStatus *model.ChangeFeedStatus) {
+		atomic.StoreUint64(&p.globalcheckpointTs, changefeedStatus.CheckpointTs)
 		if lastResolvedTs == changefeedStatus.ResolvedTs &&
 			lastCheckPointTs == changefeedStatus.CheckpointTs {
 			return
@@ -912,6 +914,15 @@ func createSchemaStorage(
 func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *model.TableReplicaInfo) {
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
+
+	globalcheckpointTs := atomic.LoadUint64(&p.globalcheckpointTs)
+
+	if replicaInfo.StartTs < globalcheckpointTs {
+		log.Fatal("addTable: startTs < checkpoint",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("checkpoint", globalcheckpointTs),
+			zap.Uint64("startTs", replicaInfo.StartTs))
+	}
 
 	var tableName string
 	err := retry.Run(time.Millisecond*5, 3, func() error {
