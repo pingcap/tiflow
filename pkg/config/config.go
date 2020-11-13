@@ -26,7 +26,7 @@ import (
 
 var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:  true,
-	EnableOldValue: false,
+	EnableOldValue: true,
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
