@@ -164,7 +164,7 @@ func (a *AvroEventBatchEncoder) Size() int {
 }
 
 // SetMaxMessageBytes is no-op for now
-func (a *AvroEventBatchEncoder) SetMaxMessageBytes(size int) {
+func (a *AvroEventBatchEncoder) SetParams(params map[string]interface{}) {
 	// no op
 }
 

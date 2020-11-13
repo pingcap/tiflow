@@ -508,7 +508,7 @@ func (d *JSONEventBatchEncoder) Reset() {
 }
 
 // SetMaxMessageBytes is no-op for now
-func (d *JSONEventBatchEncoder) SetMaxMessageBytes(size int) {
+func (d *JSONEventBatchEncoder) SetParams(params map[string]interface{}) {
 	// no op
 }
 

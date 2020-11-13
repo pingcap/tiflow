@@ -150,7 +150,7 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 }
 
 // SetMaxMessageBytes is no-op for Maxwell for now
-func (d *MaxwellEventBatchEncoder) SetMaxMessageBytes(size int) {
+func (d *MaxwellEventBatchEncoder) SetParams(params map[string]interface{}) {
 	panic("implement me")
 }
 

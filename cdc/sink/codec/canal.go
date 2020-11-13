@@ -417,7 +417,7 @@ func (d *CanalEventBatchEncoder) Reset() {
 }
 
 // SetMaxMessageBytes is no-op for now
-func (d *CanalEventBatchEncoder) SetMaxMessageBytes(size int) {
+func (d *CanalEventBatchEncoder) SetParams(params map[string]interface{}) {
 	// no op
 }
 
