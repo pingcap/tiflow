@@ -526,11 +526,11 @@ func (c *changeFeed) handleMoveTableJobs(ctx context.Context, captures map[model
 			replicaInfo.StartTs = c.status.CheckpointTs
 			if !exist {
 				// the target capture is not exist, add table to orphanTables.
-				c.orphanTables[tableID] = job.TableReplicaInfo.StartTs
+				c.orphanTables[tableID] = replicaInfo.StartTs
 				log.Warn("the target capture is not exist, sent the table to orphanTables", zap.Reflect("job", job))
 				continue
 			}
-			status.AddTable(tableID, job.TableReplicaInfo, c.status.CheckpointTs)
+			status.AddTable(tableID, replicaInfo, c.status.CheckpointTs)
 			job.Status = model.MoveTableStatusFinished
 			delete(c.moveTableJobs, tableID)
 			log.Info("handle the move job, add table to the target capture", zap.Reflect("job", job))
