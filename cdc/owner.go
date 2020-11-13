@@ -1000,6 +1000,8 @@ loop:
 			close(o.done)
 			break loop
 		case <-ctx.Done():
+			// FIXME: cancel the context doesn't ensure all resources are destructed, is it reasonable?
+			// Anyway we just break loop here to ensure the following destruction.
 			err = ctx.Err()
 			break loop
 		case <-changedFeeds:
