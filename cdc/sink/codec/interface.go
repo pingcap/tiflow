@@ -56,6 +56,11 @@ type MQMessage struct {
 	Ts    uint64 // reserved for possible output sorting
 }
 
+// Length returns the expected size of the Kafka message
+func (m *MQMessage) Length() int {
+	return len(m.Key) + len(m.Value)
+}
+
 // NewMQMessage should be used when creating a MQMessage struct.
 // It copies the input byte slices to avoid any surprises in asynchronous MQ writes.
 func NewMQMessage(key []byte, value []byte, ts uint64) *MQMessage {

@@ -298,11 +298,15 @@ func mqMessageToDDLEvent(key *mqMessageKey, value *mqMessageDDL) *model.DDLEvent
 // JSONEventBatchEncoder encodes the events into the byte of a batch into.
 type JSONEventBatchEncoder struct {
 	// TODO remove deprecated fields
-	keyBuf            *bytes.Buffer  // Deprecated: only used for MixedBuild for now
-	valueBuf          *bytes.Buffer  // Deprecated: only used for MixedBuild for now
-	supportMixedBuild bool // TODO decouple this out
+	keyBuf            *bytes.Buffer // Deprecated: only used for MixedBuild for now
+	valueBuf          *bytes.Buffer // Deprecated: only used for MixedBuild for now
+	supportMixedBuild bool          // TODO decouple this out
 
-	messageBuf        []*MQMessage
+	messageBuf   []*MQMessage
+	curBatchSize int
+	// configs
+	maxKafkaMessageSize int
+	maxBatchSize        int
 }
 
 // SetMixedBuildSupport is used by CDC Log
@@ -372,6 +376,23 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 
 		d.valueBuf.Write(valueLenByte[:])
 		d.valueBuf.Write(value)
+	} else {
+		if len(d.messageBuf) == 0 ||
+			d.curBatchSize >= d.maxBatchSize ||
+			d.messageBuf[len(d.messageBuf) - 1].Length() + len(key) + len(value) + 16 > d.maxKafkaMessageSize {
+
+			var versionByte []byte
+			binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+
+			d.messageBuf = append(d.messageBuf, NewMQMessage(versionByte, nil, 0))
+			d.curBatchSize = 0
+		}
+
+		message := d.messageBuf[len(d.messageBuf) - 1]
+		message.Key = append(message.Key, keyLenByte[:]...)
+		message.Key = append(message.Key, key...)
+		message.Value = append(message.Value, valueLenByte[:]...)
+		message.Value = append(message.Value, value...)
 	}
 	return EncoderNoOperation, nil
 }
@@ -490,7 +511,6 @@ func (d *JSONEventBatchEncoder) Reset() {
 func (d *JSONEventBatchEncoder) SetMaxMessageBytes(size int) {
 	// no op
 }
-
 
 // NewJSONEventBatchEncoder creates a new JSONEventBatchEncoder.
 func NewJSONEventBatchEncoder() EventBatchEncoder {
