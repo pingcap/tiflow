@@ -1176,6 +1176,11 @@ func (o *Owner) cleanUpStaleTasks(ctx context.Context, captures []*model.Capture
 			captureIDs[captureID] = struct{}{}
 		}
 
+		log.Debug("cleanUpStaleTasks",
+			zap.Reflect("statuses", statuses),
+			zap.Reflect("positions", positions),
+			zap.Reflect("workloads", workloads))
+
 		for captureID := range captureIDs {
 			if _, ok := active[captureID]; !ok {
 				status, ok1 := statuses[captureID]
