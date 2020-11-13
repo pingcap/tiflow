@@ -484,6 +484,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 			cancel: cancel,
 			wg:     errg,
 		},
+		cancel: cancel,
 	}
 	errCh := make(chan error, 1)
 	sink, err := sink.NewSink(ctx, cfID, "blackhole://", f, replicaConf, map[string]string{}, errCh)
@@ -537,6 +538,15 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	st, _, err := owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminStop)
+	// check changefeed context is canceled
+	select {
+	case <-cctx.Done():
+	default:
+		c.Fatal("changefeed context is expected canceled")
+	}
+
+	cctx, cancel = context.WithCancel(ctx)
+	sampleCF.cancel = cancel
 
 	c.Assert(owner.EnqueueJob(model.AdminJob{CfID: cfID, Type: model.AdminResume}), check.IsNil)
 	c.Assert(owner.handleAdminJob(ctx), check.IsNil)
@@ -568,6 +578,12 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	st, _, err = owner.etcdClient.GetChangeFeedStatus(ctx, cfID)
 	c.Assert(err, check.IsNil)
 	c.Assert(st.AdminJobType, check.Equals, model.AdminRemove)
+	// check changefeed context is canceled
+	select {
+	case <-cctx.Done():
+	default:
+		c.Fatal("changefeed context is expected canceled")
+	}
 }
 
 func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {
