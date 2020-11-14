@@ -79,7 +79,7 @@ unit_test: check_failpoint_ctl
 leak_test: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
-	$(GOTEST) --tags leak $(PACKAGES) || { $(FAILPOINT_DISABLE); exit 1; }
+	$(GOTEST) -count=1 --tags leak $(PACKAGES) || { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
 check_failpoint_ctl:
