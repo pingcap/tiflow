@@ -156,10 +156,12 @@ func (s *taskSuite) TestWatch(c *check.C) {
 	defer s.TearDownTest(c)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	client := kv.NewCDCEtcdClient(ctx, s.c)
+	defer client.Close() //nolint:errcheck
+
 	s.setupFeedInfo(c, "changefeed-1")
 	defer s.teardownFeedInfo(c, "changefeed-1")
 
-	client := kv.NewCDCEtcdClient(context.TODO(), s.c)
 	// Watch with a canceled context
 	failedCtx, cancel := context.WithCancel(context.Background())
 	cancel()

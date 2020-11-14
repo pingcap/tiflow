@@ -75,7 +75,7 @@ func (s *ownerSuite) TearDownTest(c *check.C) {
 	if err != nil {
 		c.Errorf("Error group error: %s", err)
 	}
-	s.client.Client.Unwrap().Close() //nolint:errcheck
+	s.client.Close() //nolint:errcheck
 }
 
 type mockPDClient struct {
@@ -594,7 +594,7 @@ func (s *ownerSuite) TestHandleAdmin(c *check.C) {
 	default:
 		c.Fatal("changefeed context is expected canceled")
 	}
-	owner.etcdClient.Client.Unwrap().Close() //nolint:errcheck
+	owner.etcdClient.Close() //nolint:errcheck
 }
 
 func (s *ownerSuite) TestChangefeedApplyDDLJob(c *check.C) {

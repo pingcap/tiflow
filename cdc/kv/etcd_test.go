@@ -71,7 +71,7 @@ func (s *etcdSuite) TearDownTest(c *check.C) {
 	if err != nil {
 		c.Errorf("Error group error: %s", err)
 	}
-	s.client.Client.Unwrap().Close()
+	s.client.Close() //nolint:errcheck
 }
 
 func (s *etcdSuite) TestGetChangeFeeds(c *check.C) {
