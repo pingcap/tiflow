@@ -416,7 +416,7 @@ func (d *CanalEventBatchEncoder) Reset() {
 	panic("Reset only used for JsonEncoder")
 }
 
-// SetMaxMessageBytes is no-op for now
+// SetParams is no-op for now
 func (d *CanalEventBatchEncoder) SetParams(params map[string]string) error {
 	// no op
 	return nil

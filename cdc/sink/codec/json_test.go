@@ -132,6 +132,9 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 
 	for _, cs := range s.rowCases {
 		encoder := newEncoder()
+		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
+		c.Assert(err, check.IsNil)
+
 		mixedEncoder := newEncoder()
 		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for _, row := range cs {
@@ -150,10 +153,8 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		checkRowDecoder(mixedDecoder, cs)
 		// test normal decode
 		if len(cs) > 0 {
-			size := encoder.Size()
 			res := encoder.Build()
 			c.Assert(res, check.HasLen, 1)
-			c.Assert(len(res[0].Key)+len(res[0].Value), check.Equals, size)
 			decoder, err := newDecoder(res[0].Key, res[0].Value)
 			c.Assert(err, check.IsNil)
 			checkRowDecoder(decoder, cs)
@@ -163,6 +164,9 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	for _, cs := range s.ddlCases {
 		encoder := newEncoder()
 		mixedEncoder := newEncoder()
+		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
+		c.Assert(err, check.IsNil)
+
 		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
@@ -188,6 +192,9 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 	for _, cs := range s.resolvedTsCases {
 		encoder := newEncoder()
 		mixedEncoder := newEncoder()
+		err := encoder.SetParams(map[string]string{"max-message-bytes": "8192", "max-batch-size": "64"})
+		c.Assert(err, check.IsNil)
+
 		mixedEncoder.(*JSONEventBatchEncoder).SetMixedBuildSupport(true)
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
@@ -209,6 +216,70 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 		c.Assert(err, check.IsNil)
 		checkTSDecoder(mixedDecoder, cs)
 	}
+}
+
+func (s *batchSuite) TestMaxMessageBytes(c *check.C) {
+	encoder := NewJSONEventBatchEncoder()
+	err := encoder.SetParams(map[string]string{"max-message-bytes": "256"})
+	c.Check(err, check.IsNil)
+
+	testEvent := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+
+	for i := 0; i < 10000; i++ {
+		r, err := encoder.AppendRowChangedEvent(testEvent)
+		c.Check(r, check.Equals, EncoderNoOperation)
+		c.Check(err, check.IsNil)
+	}
+
+	messages := encoder.Build()
+	for _, msg := range messages {
+		c.Assert(msg.Length(), check.LessEqual, 256)
+	}
+}
+
+func (s *batchSuite) TestMaxBatchSize(c *check.C) {
+	encoder := NewJSONEventBatchEncoder()
+	err := encoder.SetParams(map[string]string{"max-batch-size": "64"})
+	c.Check(err, check.IsNil)
+
+	testEvent := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+	}
+
+	for i := 0; i < 10000; i++ {
+		r, err := encoder.AppendRowChangedEvent(testEvent)
+		c.Check(r, check.Equals, EncoderNoOperation)
+		c.Check(err, check.IsNil)
+	}
+
+	messages := encoder.Build()
+	sum := 0
+	for _, msg := range messages {
+		decoder, err := NewJSONEventBatchDecoder(msg.Key, msg.Value)
+		c.Check(err, check.IsNil)
+		count := 0
+		for {
+			t, hasNext, err := decoder.HasNext()
+			c.Check(err, check.IsNil)
+			if !hasNext {
+				break
+			}
+
+			c.Check(t, check.Equals, model.MqMessageTypeRow)
+			_, err = decoder.NextRowChangedEvent()
+			c.Check(err, check.IsNil)
+			count++
+		}
+		c.Check(count, check.LessEqual, 64)
+		sum += count
+	}
+	c.Check(sum, check.Equals, 10000)
 }
 
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {

@@ -242,7 +242,7 @@ func (c *CanalFlatEventBatchEncoder) Reset() {
 	panic("not supported")
 }
 
-// SetMaxMessageBytes is no-op for now
+// SetParams is no-op for now
 func (c *CanalFlatEventBatchEncoder) SetParams(params map[string]string) error {
 	// no op
 	return nil

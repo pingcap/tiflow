@@ -32,7 +32,6 @@ type MaxwellEventBatchEncoder struct {
 	batchSize int
 }
 
-
 type maxwellMessage struct {
 	Database string                 `json:"database"`
 	Table    string                 `json:"table"`
@@ -149,9 +148,8 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 	return EncoderNoOperation, nil
 }
 
-// SetMaxMessageBytes is no-op for Maxwell for now
+// SetParams is no-op for Maxwell for now
 func (d *MaxwellEventBatchEncoder) SetParams(params map[string]string) error {
-	panic("implement me")
 	return nil
 }
 

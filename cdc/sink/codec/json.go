@@ -379,7 +379,7 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 	} else {
 		if len(d.messageBuf) == 0 ||
 			d.curBatchSize >= d.maxBatchSize ||
-			d.messageBuf[len(d.messageBuf) - 1].Length() + len(key) + len(value) + 16 > d.maxKafkaMessageSize {
+			d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.maxKafkaMessageSize {
 
 			versionHead := make([]byte, 8)
 			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
@@ -388,11 +388,12 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 			d.curBatchSize = 0
 		}
 
-		message := d.messageBuf[len(d.messageBuf) - 1]
+		message := d.messageBuf[len(d.messageBuf)-1]
 		message.Key = append(message.Key, keyLenByte[:]...)
 		message.Key = append(message.Key, key...)
 		message.Value = append(message.Value, valueLenByte[:]...)
 		message.Value = append(message.Value, value...)
+		d.curBatchSize++
 	}
 	return EncoderNoOperation, nil
 }
@@ -504,7 +505,7 @@ func (d *JSONEventBatchEncoder) Reset() {
 	d.valueBuf.Reset()
 }
 
-// SetParams is no-op for now
+// SetParams reads relevant parameters for Open Protocol
 func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 	var err error
 	if maxMessageBytes, ok := params["max-message-bytes"]; ok {
@@ -514,7 +515,7 @@ func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 			return errors.Trace(err)
 		}
 	} else {
-		d.maxKafkaMessageSize = 64 * 1024 * 1024   // 64M
+		d.maxKafkaMessageSize = 64 * 1024 * 1024 // 64M
 	}
 
 	if maxBatchSize, ok := params["max-batch-size"]; ok {

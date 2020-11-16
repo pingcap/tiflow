@@ -46,11 +46,12 @@ import (
 
 // Sarama configuration options
 var (
-	kafkaAddrs        []string
-	kafkaTopic        string
-	kafkaPartitionNum int32
-	kafkaGroupID      = fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
-	kafkaVersion      = "2.4.0"
+	kafkaAddrs           []string
+	kafkaTopic           string
+	kafkaPartitionNum    int32
+	kafkaGroupID         = fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
+	kafkaVersion         = "2.4.0"
+	kafkaMaxMessageBytes = math.MaxInt64
 
 	downstreamURIStr string
 
@@ -121,6 +122,16 @@ func init() {
 			log.Fatal("invalid partition-num of upstream-uri")
 		}
 		kafkaPartitionNum = int32(c)
+	}
+
+	s = upstreamURI.Query().Get("max-message-bytes")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			log.Fatal("invalid max-message-bytes of upstream-uri")
+		}
+		log.Info("Setting max-message-bytes", zap.Int("max-message-bytes", c))
+		kafkaMaxMessageBytes = c
 	}
 }
 
@@ -370,6 +381,10 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 ClaimMessages:
 	for message := range claim.Messages() {
 		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
+		if len(message.Key)+len(message.Value) > kafkaMaxMessageBytes {
+			log.Fatal("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
+				zap.Int("recevied-bytes", len(message.Key)+len(message.Value)))
+		}
 		batchDecoder, err := codec.NewJSONEventBatchDecoder(message.Key, message.Value)
 		if err != nil {
 			return errors.Trace(err)

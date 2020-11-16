@@ -116,7 +116,6 @@ func newMqSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-
 	newEncoder1 := newEncoder
 	newEncoder = func() codec.EventBatchEncoder {
 		ret := newEncoder1()
@@ -126,7 +125,6 @@ func newMqSink(
 		}
 		return ret
 	}
-
 
 	k := &mqSink{
 		mqProducer: mqProducer,
