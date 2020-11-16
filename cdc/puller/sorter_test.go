@@ -15,6 +15,8 @@ package puller
 
 import (
 	"context"
+	"github.com/pingcap/failpoint"
+	sorter2 "github.com/pingcap/ticdc/cdc/puller/sorter"
 	"math"
 	"os"
 	"sync/atomic"
@@ -60,7 +62,7 @@ func (s *sorterSuite) TestSorterBasic(c *check.C) {
 
 	err := os.MkdirAll("./sorter", 0755)
 	c.Assert(err, check.IsNil)
-	sorter := NewUnifiedSorter("./sorter", "test")
+	sorter := sorter2.NewUnifiedSorter("./sorter", "test")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
@@ -99,6 +101,11 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 }
 
 func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) {
+	err := failpoint.Enable("sorterDebug", "return(true)")
+	if err != nil {
+		log.Fatal("Could not enable failpoint", zap.Error(err))
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
@@ -184,7 +191,7 @@ func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) 
 		}
 	})
 
-	err := errg.Wait()
+	err = errg.Wait()
 	if errors.Cause(err) == context.Canceled || errors.Cause(err) == context.DeadlineExceeded {
 		return
 	}

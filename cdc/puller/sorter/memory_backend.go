@@ -26,6 +26,10 @@ type memoryBackEnd struct {
 	borrowed int32
 }
 
+func newMemoryBackEnd() *memoryBackEnd {
+	return &memoryBackEnd{}
+}
+
 func (m *memoryBackEnd) reader() (backEndReader, error) {
 	failpoint.Inject("sorterDebug", func() {
 		if atomic.SwapInt32(&m.borrowed, 1) != 0 {
@@ -88,18 +92,26 @@ type memoryBackEndWriter struct {
 	bytesWritten int64
 }
 
-func (m memoryBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
-	panic("implement me")
+func (w *memoryBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
+	w.backEnd.events = append(w.backEnd.events, event)
+	// 8 * 5 is for the 5 fields in PolymorphicEvent, each of which is thought of as a 64-bit pointer
+	w.bytesWritten += 8 * 5 + event.RawKV.ApproximateSize()
+	return nil
 }
 
-func (m memoryBackEndWriter) writtenCount() int {
-	panic("implement me")
+func (w *memoryBackEndWriter) writtenCount() int {
+	return len(w.backEnd.events)
 }
 
-func (m memoryBackEndWriter) dataSize() uint64 {
-	panic("implement me")
+// dataSize for the memoryBackEnd returns only an estimation, as there is no serialization taking place.
+func (w *memoryBackEndWriter) dataSize() uint64 {
+	return uint64(w.bytesWritten)
 }
 
-func (m memoryBackEndWriter) flushAndClose() error {
-	panic("implement me")
+func (w *memoryBackEndWriter) flushAndClose() error {
+	failpoint.Inject("sorterDebug", func() {
+		atomic.StoreInt32(&w.backEnd.borrowed, 0)
+	})
+
+	return nil
 }

@@ -16,9 +16,11 @@ package main
 import (
 	"context"
 	"flag"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	pullerSorter "github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/pkg/config"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -37,6 +39,10 @@ var bytesPerMsg = flag.Int("bytes-per-message", 1024, "number of bytes in an eve
 func main() {
 	flag.Parse()
 	log.SetLevel(zap.DebugLevel)
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter.sorterDebug", "return(true)")
+	if err != nil {
+		log.Fatal("Could not enable failpoint", zap.Error(err))
+	}
 
 	config.SetSorterConfig(&config.SorterConfig{
 		NumConcurrentWorker:  8,
@@ -49,12 +55,12 @@ func main() {
 		_ = http.ListenAndServe("localhost:6060", nil)
 	}()
 
-	err := os.MkdirAll(*sorterDir, 0755)
+	err = os.MkdirAll(*sorterDir, 0755)
 	if err != nil {
 		log.Error("sorter_stress_test:", zap.Error(err))
 	}
 
-	sorter := puller.NewUnifiedSorter(*sorterDir, "test")
+	sorter := pullerSorter.NewUnifiedSorter(*sorterDir, "test")
 
 	ctx1, cancel := context.WithCancel(context.Background())
 

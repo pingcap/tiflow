@@ -42,7 +42,7 @@ type fileBackEnd struct {
 	borrowed int32
 }
 
-func newFileSorterBackEnd(fileName string, serde serializerDeserializer) (*fileBackEnd, error) {
+func newFileBackEnd(fileName string, serde serializerDeserializer) (*fileBackEnd, error) {
 	f, err := os.Create(fileName)
 	if err != nil {
 		return nil, errors.Trace(err)
