@@ -236,6 +236,11 @@ func (r *fileBackEndReader) resetAndClose() error {
 	}
 
 	atomic.AddInt64(&openFDCount, -1)
+
+	failpoint.Inject("sorterDebug", func() {
+		atomic.StoreInt32(&r.backEnd.borrowed, 0)
+	})
+
 	return nil
 }
 
@@ -313,5 +318,10 @@ func (w *fileBackEndWriter) flushAndClose() error {
 	}
 
 	atomic.AddInt64(&openFDCount, -1)
+
+	failpoint.Inject("sorterDebug", func() {
+		atomic.StoreInt32(&w.backEnd.borrowed, 0)
+	})
+
 	return nil
 }
