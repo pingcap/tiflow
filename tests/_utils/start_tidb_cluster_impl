@@ -213,13 +213,6 @@ while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character
     sleep 2
 done
 
-# TODO: remove this after TiCDC supports TiDB clustered index
-run_sql "select tidb_version();set @@global.tidb_enable_clustered_index=0;" ${UP_TIDB_HOST} ${UP_TIDB_PORT} || echo "tidb_enable_clustered_index not supports"
-run_sql "select tidb_version();set @@global.tidb_enable_clustered_index=0;" ${UP_TIDB_HOST} ${UP_TIDB_OTHER_PORT} || echo "tidb_enable_clustered_index not supports"
-run_sql "select tidb_version();set @@global.tidb_enable_clustered_index=0;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} || echo "tidb_enable_clustered_index not supports"
-# TiDB global variables cache 2 seconds
-sleep 2
-
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
@@ -306,7 +299,7 @@ echo "Starting Upstream TiFlash..."
 mkdir -p ${OUT_DIR}/tiflash/ && cp $CUR/tiflash-users.toml ${OUT_DIR}/tiflash/users.toml
 tiflash server --config-file "$OUT_DIR/tiflash-config.toml" &
 
-echo "Verifying Upsteam TiFlash is started..."
+echo "Verifying Upstream TiFlash is started..."
 # Make sure TiFlash is started.
 while ! curl -o /dev/null -sf http://127.0.0.1:17000/metrics 1>/dev/null 2>&1; do
     i=$((i + 1))

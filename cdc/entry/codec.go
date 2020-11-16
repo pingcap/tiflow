@@ -17,9 +17,12 @@ import (
 	"bytes"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -181,19 +184,27 @@ func decodeMetaKey(ek []byte) (meta, error) {
 }
 
 // decodeRow decodes a byte slice into datums with a existing row map.
-func decodeRow(b []byte, recordID int64, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
+func decodeRow(b []byte, recordID kv.Handle, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	if len(b) == 0 {
 		return map[int64]types.Datum{}, nil
 	}
+	handleColIDs, handleColFt, reqCols := tableInfo.GetRowColInfos()
+	var datums map[int64]types.Datum
+	var err error
 	if rowcodec.IsNewFormat(b) {
-		return decodeRowV2(b, recordID, tableInfo, tz)
+		datums, err = decodeRowV2(b, reqCols, tz)
+	} else {
+		datums, err = decodeRowV1(b, tableInfo, tz)
 	}
-	return decodeRowV1(b, recordID, tableInfo, tz)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return tablecodec.DecodeHandleToDatumMap(recordID, handleColIDs, handleColFt, tz, datums)
 }
 
 // decodeRowV1 decodes value data using old encoding format.
 // Row layout: colID1, value1, colID2, value2, .....
-func decodeRowV1(b []byte, recordID int64, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
+func decodeRowV1(b []byte, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	row := make(map[int64]types.Datum)
 	if len(b) == 1 && b[0] == codec.NilFlag {
 		b = b[1:]
@@ -235,24 +246,15 @@ func decodeRowV1(b []byte, recordID int64, tableInfo *model.TableInfo, tz *time.
 		}
 		row[id] = datum
 	}
-
-	if tableInfo.PKIsHandle {
-		id, pkValue, err := fetchHandleValue(tableInfo, recordID)
-		if err != nil {
-			return nil, err
-		}
-		row[id] = *pkValue
-	}
 	return row, nil
 }
 
 // decodeRowV2 decodes value data using new encoding format.
 // Ref: https://github.com/pingcap/tidb/pull/12634
 //      https://github.com/pingcap/tidb/blob/master/docs/design/2018-07-19-row-format.md
-func decodeRowV2(data []byte, recordID int64, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
-	handleColID, reqCols := tableInfo.GetRowColInfos()
-	decoder := rowcodec.NewDatumMapDecoder(reqCols, handleColID, tz)
-	datums, err := decoder.DecodeToDatumMap(data, recordID, nil)
+func decodeRowV2(data []byte, columns []rowcodec.ColInfo, tz *time.Location) (map[int64]types.Datum, error) {
+	decoder := rowcodec.NewDatumMapDecoder(columns, tz)
+	datums, err := decoder.DecodeToDatumMap(data, nil)
 	if err != nil {
 		return datums, cerror.WrapError(cerror.ErrDecodeRowToDatum, err)
 	}
