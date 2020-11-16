@@ -111,6 +111,22 @@ func newMqSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, errors.New("Canal requires old value to be enabled"))
 	}
 
+	// pre-flight verification of encoder parameters
+	if err := newEncoder().SetParams(opts); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+
+	newEncoder1 := newEncoder
+	newEncoder = func() codec.EventBatchEncoder {
+		ret := newEncoder1()
+		err := ret.SetParams(opts)
+		if err != nil {
+			log.Fatal("MQ Encoder could not parse parameters", zap.Error(err))
+		}
+		return ret
+	}
+
 
 	k := &mqSink{
 		mqProducer: mqProducer,

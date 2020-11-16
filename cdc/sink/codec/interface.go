@@ -42,6 +42,7 @@ type EventBatchEncoder interface {
 	// TODO decouple it out
 	MixedBuild(withVersion bool) []byte
 	// Size returns the size of the batch(bytes)
+	// Deprecated: Size is deprecated
 	Size() int
 	// Reset reset the kv buffer
 	Reset()

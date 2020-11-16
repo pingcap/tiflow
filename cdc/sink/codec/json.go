@@ -381,10 +381,10 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 			d.curBatchSize >= d.maxBatchSize ||
 			d.messageBuf[len(d.messageBuf) - 1].Length() + len(key) + len(value) + 16 > d.maxKafkaMessageSize {
 
-			var versionByte []byte
-			binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
+			versionHead := make([]byte, 8)
+			binary.BigEndian.PutUint64(versionHead, BatchVersion1)
 
-			d.messageBuf = append(d.messageBuf, NewMQMessage(versionByte, nil, 0))
+			d.messageBuf = append(d.messageBuf, NewMQMessage(versionHead, nil, 0))
 			d.curBatchSize = 0
 		}
 
@@ -439,20 +439,17 @@ func (d *JSONEventBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*MQMessage, e
 
 // Build implements the EventBatchEncoder interface
 func (d *JSONEventBatchEncoder) Build() (mqMessages []*MQMessage) {
-	if d.valueBuf.Len() == 0 {
-		return nil
+	if d.supportMixedBuild {
+		if d.valueBuf.Len() == 0 {
+			return nil
+		}
+		ret := NewMQMessage(d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0)
+		return []*MQMessage{ret}
 	}
 
-	ret := NewMQMessage(d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0)
-
-	if !d.supportMixedBuild {
-		d.keyBuf.Reset()
-		d.valueBuf.Reset()
-		var versionByte [8]byte
-		binary.BigEndian.PutUint64(versionByte[:], BatchVersion1)
-		d.keyBuf.Write(versionByte[:])
-	}
-	return []*MQMessage{ret}
+	ret := d.messageBuf
+	d.messageBuf = make([]*MQMessage, 0)
+	return ret
 }
 
 // MixedBuild implements the EventBatchEncoder interface
