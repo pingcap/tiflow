@@ -140,6 +140,11 @@ func (p *backEndPool) dealloc(backEnd backEnd) error {
 		// Let GC do its job
 		return nil
 	case *fileBackEnd:
+		failpoint.Inject("sorterDebug", func() {
+			if atomic.LoadInt32(&b.borrowed) != 0 {
+				log.Fatal("Deallocating a fileBackEnd in use", zap.String("filename", b.fileName))
+			}
+		})
 		for i := range p.cache {
 			ptr := &p.cache[i]
 			if atomic.CompareAndSwapPointer(ptr, nil, unsafe.Pointer(b)) {

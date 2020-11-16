@@ -59,14 +59,22 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 		defer func() {
 			// clean up
-			for _, item := range *sortHeap {
-				if item != nil {
-					if task, ok := item.data.(*flushTask); ok {
-						err := printError(task.dealloc())
-						if err != nil {
-							_ = task.backend.free()
-						}
-					}
+			for task := range workingSet {
+				select {
+				case <-ctx.Done():
+					break
+				case err := <-task.finished:
+					_ = printError(err)
+				}
+
+				if task.reader != nil {
+					err := task.reader.resetAndClose()
+					task.reader = nil
+					_ = printError(err)
+				}
+				err := task.dealloc()
+				if printError(err) != nil {
+					_ = task.backend.free()
 				}
 			}
 		}()
@@ -131,7 +139,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			}
 			nextEvent, err := task.reader.readNext()
 			if err != nil {
-				_ = task.reader.resetAndClose()   // prevents fd leak
+				_ = task.reader.resetAndClose() // prevents fd leak
 				return errors.Trace(err)
 			}
 
@@ -202,7 +210,12 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				delete(workingSet, task)
 				delete(pendingSet, task)
 
-				err := task.dealloc()
+				err := task.reader.resetAndClose()
+				if err != nil {
+					return errors.Trace(err)
+				}
+
+				err = task.dealloc()
 				if err != nil {
 					return errors.Trace(err)
 				}

@@ -79,7 +79,7 @@ func (f *fileBackEnd) reader() (backEndReader, error) {
 	failpoint.Inject("sorterDebug", func() {
 		info, err := fd.Stat()
 		if err != nil {
-			failpoint.Return(errors.Trace(err))
+			failpoint.Return(nil, errors.Trace(err))
 		}
 		totalSize = info.Size()
 	})
@@ -109,7 +109,7 @@ func (f *fileBackEnd) writer() (backEndWriter, error) {
 	failpoint.Inject("sorterDebug", func() {
 		info, err := fd.Stat()
 		if err != nil {
-			failpoint.Return(errors.Trace(err))
+			failpoint.Return(nil, errors.Trace(err))
 		}
 
 		if info.Size() > 0 {
@@ -216,11 +216,32 @@ func (r *fileBackEndReader) resetAndClose() error {
 	defer func() {
 		// fail-fast for double-close
 		r.f = nil
+
+		failpoint.Inject("sorterDebug", func() {
+			atomic.StoreInt32(&r.backEnd.borrowed, 0)
+		})
+
 	}()
+
+	if r.f == nil {
+		failpoint.Inject("sorterDebug", func() {
+			log.Fatal("Double closing of file", zap.String("filename", r.backEnd.fileName))
+		})
+		log.Warn("Double closing of file", zap.String("filename", r.backEnd.fileName))
+		return nil
+	}
 
 	err := r.f.Truncate(0)
 	if err != nil {
 		failpoint.Inject("sorterDebug", func() {
+			info, err := r.f.Stat()
+			if err != nil {
+				failpoint.Return(errors.Trace(err))
+			}
+
+			log.Info("file debug info", zap.String("filename", info.Name()),
+				zap.Int64("size", info.Size()))
+
 			failpoint.Return(errors.Trace(err))
 		})
 		log.Warn("fileBackEndReader: could not truncate file", zap.Error(err))
@@ -236,10 +257,6 @@ func (r *fileBackEndReader) resetAndClose() error {
 	}
 
 	atomic.AddInt64(&openFDCount, -1)
-
-	failpoint.Inject("sorterDebug", func() {
-		atomic.StoreInt32(&r.backEnd.borrowed, 0)
-	})
 
 	return nil
 }

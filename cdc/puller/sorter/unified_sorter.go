@@ -15,6 +15,8 @@ package sorter
 
 import (
 	"context"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util"
@@ -51,6 +53,10 @@ func NewUnifiedSorter(dir string, tableName string) *UnifiedSorter {
 
 // Run implements the EventSorter interface
 func (s *UnifiedSorter) Run(ctx context.Context) error {
+	failpoint.Inject("sorterDebug", func() {
+		log.Info("sorterDebug: Running Unified Sorter in debug mode")
+	})
+
 	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
 
