@@ -401,8 +401,8 @@ func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
 		config.Producer.Compression = sarama.CompressionNone
 	}
 
-	// Time out in one minute(120 * 500ms).
-	config.Producer.Retry.Max = 120
+	// Time out in ten minutes(1200 * 500ms).
+	config.Producer.Retry.Max = 1200
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
 
 	// Time out in five minutes(600 * 500ms).
