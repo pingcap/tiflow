@@ -99,23 +99,12 @@ func (f *fileBackEnd) writer() (backEndWriter, error) {
 		}
 	})
 
-	fd, err := os.OpenFile(f.fileName, os.O_APPEND|os.O_RDWR, 0644)
+	fd, err := os.OpenFile(f.fileName, os.O_TRUNC|os.O_RDWR, 0644)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	atomic.AddInt64(&openFDCount, 1)
-
-	failpoint.Inject("sorterDebug", func() {
-		info, err := fd.Stat()
-		if err != nil {
-			failpoint.Return(nil, errors.Trace(err))
-		}
-
-		if info.Size() > 0 {
-			log.Fatal("fileBackEnd: writing on non-empty file", zap.String("fileName", f.fileName))
-		}
-	})
 
 	return &fileBackEndWriter{
 		backEnd: f,
