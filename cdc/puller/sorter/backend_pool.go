@@ -33,8 +33,8 @@ import (
 )
 
 var (
-	pool   *backEndPool
-	poolMu sync.Mutex // this mutex is for delayed initialization of `pool` only
+	pool   *backEndPool // this is the singleton instance of backEndPool
+	poolMu sync.Mutex   // this mutex is for delayed initialization of `pool` only
 )
 
 type backEndPool struct {
@@ -71,7 +71,8 @@ func newBackEndPool(dir string) *backEndPool {
 			memPressure := m.Used * 100 / m.Total
 			atomic.StoreInt32(&ret.memPressure, int32(memPressure))
 			if memPressure > 50 {
-				log.Debug("unified sorter: high memory pressure", zap.Uint64("memPressure", memPressure))
+				log.Debug("unified sorter: high memory pressure", zap.Uint64("memPressure", memPressure),
+					zap.Int64("usedBySorter", atomic.LoadInt64(&ret.memoryUseEstimate)))
 				// Increase GC frequency to avoid necessary OOM
 				debug.SetGCPercent(10)
 			} else {

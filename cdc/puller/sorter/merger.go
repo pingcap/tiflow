@@ -43,6 +43,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	}()
 
 	lastOutputTs := uint64(0)
+	var lastEvent *model.PolymorphicEvent
+	var lastTask *flushTask
 
 	sendResolvedEvent := func(ts uint64) error {
 		select {
@@ -80,53 +82,57 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		}()
 
 		for task, cache := range pendingSet {
-			if task.maxResolvedTs <= minResolvedTs {
-				var event *model.PolymorphicEvent
-				if cache != nil {
-					event = cache
-				} else {
-					var err error
+			var event *model.PolymorphicEvent
+			if cache != nil {
+				event = cache
+			} else {
+				var err error
 
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case err := <-task.finished:
-						if err != nil {
-							return errors.Trace(err)
-						}
-					}
-
-					if task.reader == nil {
-						task.reader, err = task.backend.reader()
-						if err != nil {
-							return errors.Trace(err)
-						}
-					}
-
-					event, err = task.reader.readNext()
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case err := <-task.finished:
 					if err != nil {
 						return errors.Trace(err)
 					}
+				}
 
-					if event == nil {
-						log.Fatal("Unexpected end of backEnd data, bug?",
-							zap.Uint64("minResolvedTs", task.maxResolvedTs))
+				if task.reader == nil {
+					task.reader, err = task.backend.reader()
+					if err != nil {
+						return errors.Trace(err)
 					}
 				}
 
-				if event.CRTs > minResolvedTs {
-					pendingSet[task] = event
-					continue
+				event, err = task.reader.readNext()
+				if err != nil {
+					return errors.Trace(err)
 				}
 
-				pendingSet[task] = nil
-				workingSet[task] = struct{}{}
-
-				heap.Push(sortHeap, &sortItem{
-					entry: event,
-					data:  task,
-				})
+				if event == nil {
+					log.Fatal("Unexpected end of backEnd data, bug?",
+						zap.Uint64("minResolvedTs", task.maxResolvedTs))
+				}
 			}
+
+			if event.CRTs > minResolvedTs {
+				pendingSet[task] = event
+				continue
+			}
+
+			pendingSet[task] = nil
+			workingSet[task] = struct{}{}
+
+			/*log.Debug("push", zap.Uint64("CRTs", event.CRTs),
+			zap.String("table", tableNameFromCtx(ctx)),
+			zap.Int("heap-id", task.heapSorterID),
+			zap.Int("task-id", task.taskID))
+			*/
+
+			heap.Push(sortHeap, &sortItem{
+				entry: event,
+				data:  task,
+			})
 		}
 
 		resolvedTicker := time.NewTicker(1 * time.Second)
@@ -157,6 +163,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				}
 			} else {
 				pendingSet[task] = nextEvent
+				if nextEvent.CRTs < minResolvedTs {
+					log.Fatal("remaining event CRTs too small", zap.Uint64("next-ts", nextEvent.CRTs), zap.Uint64("minResolvedTs", minResolvedTs))
+				}
 			}
 			return nil
 		}
@@ -172,12 +181,43 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			item := heap.Pop(sortHeap).(*sortItem)
 			task := item.data.(*flushTask)
 			event := item.entry
+			/*
+				log.Debug("pop", zap.Uint64("CRTs", event.CRTs),
+					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Int("heap-id", task.heapSorterID),
+					zap.Int("task-id", task.taskID))
+			*/
+			if event.CRTs < task.lastTs {
+				log.Fatal("unified sorter: ts regressed in one backEnd, bug?", zap.Uint64("cur-ts", event.CRTs), zap.Uint64("last-ts", task.lastTs))
+			}
+			task.lastTs = event.CRTs
 
 			if event.RawKV != nil && event.RawKV.OpType != model.OpTypeResolved {
 				if event.CRTs < lastOutputTs {
-					log.Fatal("unified sorter: output ts regressed, bug?", zap.Uint64("cur-ts", event.CRTs), zap.Uint64("last-ts", lastOutputTs))
+					for sortHeap.Len() > 0 {
+						item := heap.Pop(sortHeap).(*sortItem)
+						task := item.data.(*flushTask)
+						event := item.entry
+						log.Debug("dump", zap.Reflect("event", event), zap.Int("heap-id", task.heapSorterID))
+					}
+					log.Fatal("unified sorter: output ts regressed, bug?",
+						zap.Int("counter", counter),
+						zap.Uint64("minResolvedTs", minResolvedTs),
+						zap.Int("cur-heap-id", task.heapSorterID),
+						zap.Int("cur-task-id", task.taskID),
+						zap.Uint64("cur-task-resolved", task.maxResolvedTs),
+						zap.Reflect("cur-event", event),
+						zap.Uint64("cur-ts", event.CRTs),
+						zap.Int("last-heap-id", lastTask.heapSorterID),
+						zap.Int("last-task-id", lastTask.taskID),
+						zap.Uint64("last-task-resolved", task.maxResolvedTs),
+						zap.Reflect("last-event", lastEvent),
+						zap.Uint64("last-ts", lastOutputTs),
+						zap.Int("sort-heap-len", sortHeap.Len()))
 				}
 				lastOutputTs = event.CRTs
+				lastEvent = event
+				lastTask = task
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -185,11 +225,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				}
 			}
 			counter += 1
-
-			if event.CRTs < task.lastTs {
-				log.Fatal("unified sorter: ts regressed in one backEnd, bug?", zap.Uint64("cur-ts", event.CRTs), zap.Uint64("last-ts", task.lastTs))
-			}
-			task.lastTs = event.CRTs
 
 			select {
 			case <-resolvedTicker.C:
@@ -240,6 +275,14 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					zap.String("table", tableNameFromCtx(ctx)),
 					zap.Int("counter", counter))
 			}
+			/*
+				log.Debug("push",
+					zap.Uint64("CRTs", event.CRTs),
+					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Int("heap-id", task.heapSorterID),
+					zap.Int("task-id", task.taskID))
+			*/
+
 			heap.Push(sortHeap, &sortItem{
 				entry: event,
 				data:  task,
@@ -269,7 +312,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			return ctx.Err()
 		case task := <-in:
 			if task == nil {
-				return errors.New("Unified Sorter: nil flushTask, exiting")
+				log.Info("Merger input channel closed, exiting",
+					zap.String("table", tableNameFromCtx(ctx)),
+					zap.Uint64("max-output", minResolvedTs))
+				return nil
 			}
 
 			if task.backend != nil {

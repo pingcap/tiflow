@@ -31,6 +31,7 @@ const (
 )
 
 type flushTask struct {
+	taskID        int
 	heapSorterID  int
 	backend       backEnd
 	reader        backEndReader
@@ -43,6 +44,7 @@ type flushTask struct {
 
 type heapSorter struct {
 	id          int
+	taskCounter int
 	inputCh     chan *model.PolymorphicEvent
 	outputCh    chan *flushTask
 	heap        sortHeap
@@ -62,6 +64,9 @@ func newHeapSorter(id int, pool *backEndPool, out chan *flushTask) *heapSorter {
 // flush should only be called within the main loop in run().
 func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	isEmptyFlush := h.heap.Len() == 0
+	if isEmptyFlush {
+		return nil
+	}
 	var backEnd backEnd
 
 	if !isEmptyFlush {
@@ -73,11 +78,13 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	}
 
 	task := &flushTask{
+		taskID:        h.taskCounter,
 		heapSorterID:  h.id,
 		backend:       backEnd,
 		maxResolvedTs: maxResolvedTs,
 		finished:      make(chan error, 2),
 	}
+	h.taskCounter++
 
 	var oldHeap sortHeap
 	if !isEmptyFlush {
@@ -204,6 +211,10 @@ func (h *heapSorter) run(ctx context.Context) error {
 						zap.Uint64("max-resolvedTs", maxResolved))
 				}
 				maxResolved = event.RawKV.CRTs
+			}
+
+			if event.RawKV.CRTs < maxResolved {
+				log.Fatal("Bad input to sorter", zap.Uint64("cur-ts", event.RawKV.CRTs), zap.Uint64("maxResolved", maxResolved))
 			}
 
 			// 5 * 8 is for the 5 fields in PolymorphicEvent

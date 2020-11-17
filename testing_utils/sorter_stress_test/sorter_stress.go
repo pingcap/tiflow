@@ -16,6 +16,12 @@ package main
 import (
 	"context"
 	"flag"
+	"math/rand"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
+	"strings"
+
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
@@ -24,11 +30,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"math/rand"
-	"net/http"
-	_ "net/http/pprof"
-	"os"
-	"strings"
 )
 
 var sorterDir = flag.String("dir", "./sorter", "temporary directory used for sorting")

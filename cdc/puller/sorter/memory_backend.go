@@ -14,6 +14,7 @@
 package sorter
 
 import (
+	"go.uber.org/zap"
 	"sync/atomic"
 
 	"github.com/pingcap/failpoint"
@@ -90,12 +91,23 @@ func (r *memoryBackEndReader) resetAndClose() error {
 type memoryBackEndWriter struct {
 	backEnd      *memoryBackEnd
 	bytesWritten int64
+	// for debugging only
+	maxTs uint64
 }
 
 func (w *memoryBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 	w.backEnd.events = append(w.backEnd.events, event)
 	// 8 * 5 is for the 5 fields in PolymorphicEvent, each of which is thought of as a 64-bit pointer
 	w.bytesWritten += 8*5 + event.RawKV.ApproximateSize()
+
+	failpoint.Inject("sorterDebug", func() {
+		if event.CRTs < w.maxTs {
+			log.Fatal("memoryBackEnd: ts regressed, bug?",
+				zap.Uint64("prev-ts", w.maxTs),
+				zap.Uint64("cur-ts", event.CRTs))
+		}
+		w.maxTs = event.CRTs
+	})
 	return nil
 }
 

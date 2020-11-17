@@ -15,13 +15,14 @@ package sorter
 
 import (
 	"context"
+	"sync/atomic"
+
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/util"
 	"golang.org/x/sync/errgroup"
-	"sync/atomic"
 )
 
 // UnifiedSorter provides both sorting in memory and in file. Memory pressure is used to determine which one to use.
