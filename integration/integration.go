@@ -80,10 +80,10 @@ func testMySQL() {
 	env := mysql.NewDockerEnv(*dockerComposeFile)
 	task := &mysql.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
-		tests.NewSimpleCase(task),
-		tests.NewDeleteCase(task),
-		tests.NewManyTypesCase(task),
-		tests.NewUnsignedCase(task),
+		// tests.NewSimpleCase(task),
+		// tests.NewDeleteCase(task),
+		// tests.NewManyTypesCase(task),
+		// tests.NewUnsignedCase(task),
 		tests.NewCompositePKeyCase(task),
 		tests.NewAlterCase(task),
 	}
@@ -110,6 +110,7 @@ func testMySQLWithCheckingOldvValue() {
 func runTests(cases []framework.Task, env framework.Environment) {
 	log.SetLevel(zapcore.DebugLevel)
 	env.Setup()
+	env.Reset()
 
 	for i := range cases {
 		env.RunTest(cases[i])

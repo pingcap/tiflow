@@ -64,7 +64,7 @@ func (c *AlterCase) Run(ctx *framework.TaskContext) error {
 			reqs = append(reqs, awaitable)
 		}
 
-		err = framework.All(ctx.SQLHelper(), reqs).SetTimeOut(5 * time.Minute).Wait().Check()
+		err = framework.All(ctx.SQLHelper(), reqs).SetTimeOut(60 * time.Minute).Wait().Check()
 		if err != nil {
 			return errors.AddStack(err)
 		}
