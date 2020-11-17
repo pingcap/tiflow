@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/puller"
+	psorter "github.com/pingcap/ticdc/cdc/puller/sorter"
 	"github.com/pingcap/ticdc/cdc/sink"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/filter"
@@ -991,7 +992,7 @@ func (p *processor) addTable(ctx context.Context, tableID int64, replicaInfo *mo
 				sorterImpl = puller.NewFileSorter(p.changefeed.SortDir)
 			} else {
 				// Unified Sorter
-				sorterImpl = puller.NewUnifiedSorter(p.changefeed.SortDir, tableName)
+				sorterImpl = psorter.NewUnifiedSorter(p.changefeed.SortDir, tableName)
 			}
 		default:
 			p.errCh <- cerror.ErrUnknownSortEngine.GenWithStackByArgs(p.changefeed.Engine)

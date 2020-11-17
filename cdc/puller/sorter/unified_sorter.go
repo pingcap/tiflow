@@ -30,7 +30,10 @@ type UnifiedSorter struct {
 	outputCh  chan *model.PolymorphicEvent
 	dir       string
 	pool      *backEndPool
-	tableName string  // used only for debugging and tracing
+	tableName string // used only for debugging and tracing
+}
+
+type ctxKey struct {
 }
 
 // NewUnifiedSorter creates a new UnifiedSorter
@@ -43,10 +46,10 @@ func NewUnifiedSorter(dir string, tableName string) *UnifiedSorter {
 	}
 
 	return &UnifiedSorter{
-		inputCh:  make(chan *model.PolymorphicEvent, 128000),
-		outputCh: make(chan *model.PolymorphicEvent, 128000),
-		dir:      dir,
-		pool:     pool,
+		inputCh:   make(chan *model.PolymorphicEvent, 128000),
+		outputCh:  make(chan *model.PolymorphicEvent, 128000),
+		dir:       dir,
+		pool:      pool,
 		tableName: tableName,
 	}
 }
@@ -60,15 +63,13 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	finish := util.MonitorCancelLatency(ctx, "Unified Sorter")
 	defer finish()
 
-	valueCtx := context.WithValue(ctx, "sorter", s)
+	valueCtx := context.WithValue(ctx, ctxKey{}, s)
 
 	sorterConfig := config.GetSorterConfig()
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
 
 	nextSorterID := 0
 	heapSorters := make([]*heapSorter, sorterConfig.NumConcurrentWorker)
-
-
 
 	errg, subctx := errgroup.WithContext(valueCtx)
 
@@ -140,4 +141,12 @@ func (s *UnifiedSorter) AddEntry(ctx context.Context, entry *model.PolymorphicEv
 // Output implements the EventSorter interface
 func (s *UnifiedSorter) Output() <-chan *model.PolymorphicEvent {
 	return s.outputCh
+}
+
+// tableNameFromCtx is used for retrieving the table's name from a context within the Unified Sorter
+func tableNameFromCtx(ctx context.Context) string {
+	if sorter, ok := ctx.Value(ctxKey{}).(*UnifiedSorter); ok {
+		return sorter.tableName
+	}
+	return ""
 }

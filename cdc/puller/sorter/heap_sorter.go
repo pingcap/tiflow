@@ -109,6 +109,14 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}
 		backEndFinal := backEnd
 		writer, err := backEnd.writer()
+		if err != nil {
+			if backEndFinal != nil {
+				_ = task.dealloc()
+			}
+			task.finished <- errors.Trace(err)
+			return
+		}
+
 		defer func() {
 			// handle errors (or aborts) gracefully to prevent resource leaking (especially FD's)
 			if writer != nil {
@@ -149,7 +157,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}
 
 		backEndFinal = nil
-		task.finished <- nil   // DO NOT access `task` beyond this point in this function
+		task.finished <- nil // DO NOT access `task` beyond this point in this function
 		log.Debug("Unified Sorter flushTask finished",
 			zap.Int("heap-id", task.heapSorterID),
 			zap.String("table", tableNameFromCtx(ctx)),
@@ -223,12 +231,4 @@ func (h *heapSorter) run(ctx context.Context) error {
 			rateCounter = 0
 		}
 	}
-}
-
-// tableNameFromCtx is used for retrieving the table's name from a context within the Unified Sorter
-func tableNameFromCtx(ctx context.Context) string {
-	if sorter, ok := ctx.Value("sorter").(*UnifiedSorter); ok {
-		return sorter.tableName
-	}
-	return ""
 }

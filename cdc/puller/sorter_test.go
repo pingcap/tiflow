@@ -79,7 +79,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 
 	err := os.MkdirAll("./sorter", 0755)
 	c.Assert(err, check.IsNil)
-	sorter := NewUnifiedSorter("./sorter", "test")
+	sorter := sorter2.NewUnifiedSorter("./sorter", "test")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -101,7 +101,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 }
 
 func testSorter(ctx context.Context, c *check.C, sorter EventSorter, count int) {
-	err := failpoint.Enable("sorterDebug", "return(true)")
+	err := failpoint.Enable("github.com/pingcap/ticdc/cdc/puller/sorter/sorterDebug", "return(true)")
 	if err != nil {
 		log.Fatal("Could not enable failpoint", zap.Error(err))
 	}

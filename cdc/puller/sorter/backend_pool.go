@@ -32,10 +32,9 @@ import (
 	"go.uber.org/zap"
 )
 
-
 var (
 	pool   *backEndPool
-	poolMu sync.Mutex   // this mutex is for delayed initialization of `pool` only
+	poolMu sync.Mutex // this mutex is for delayed initialization of `pool` only
 )
 
 type backEndPool struct {

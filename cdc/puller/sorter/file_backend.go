@@ -187,10 +187,12 @@ func (r *fileBackEndReader) readNext() (*model.PolymorphicEvent, error) {
 		r.rawBytesBuf = r.rawBytesBuf[:size]
 	}
 
-	n, err := r.reader.Read(r.rawBytesBuf)
+	// short reads are possible with bufio, hence the need for io.ReadFull
+	n, err := io.ReadFull(r.reader, r.rawBytesBuf)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	if n != int(size) {
 		return nil, errors.Errorf("fileSorterBackEnd: expected %d bytes, actually read %d bytes", size, n)
 	}
@@ -293,12 +295,17 @@ func (w *fileBackEndWriter) writeNext(event *model.PolymorphicEvent) error {
 		return errors.Trace(err)
 	}
 
-	n, err := w.writer.Write(w.rawBytesBuf)
-	if err != nil {
-		return errors.Trace(err)
+	// short writes are possible with bufio
+	offset := 0
+	for offset < size {
+		n, err := w.writer.Write(w.rawBytesBuf[offset:])
+		if err != nil {
+			return errors.Trace(err)
+		}
+		offset += n
 	}
-	if n != size {
-		return errors.Errorf("fileSorterBackEnd: expected to write %d bytes, actually wrote %d bytes", size, n)
+	if offset != size {
+		return errors.Errorf("fileSorterBackEnd: expected to write %d bytes, actually wrote %d bytes", size, offset)
 	}
 
 	w.eventsWritten++

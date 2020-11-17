@@ -34,7 +34,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 	defer func() {
 		log.Info("Unified Sorter: merger exiting, cleaning up resources", zap.Int("pending-set-size", len(pendingSet)))
 		// clean up resources
-		for task, _ := range pendingSet {
+		for task := range pendingSet {
 			err := printError(task.dealloc())
 			if err != nil && task.backend != nil {
 				_ = task.backend.free()

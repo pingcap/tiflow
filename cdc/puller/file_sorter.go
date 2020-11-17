@@ -236,7 +236,6 @@ func NewFileSorter(dir string) *FileSorter {
 type sortItem struct {
 	entry     *model.PolymorphicEvent
 	fileIndex int
-	data      interface{}
 }
 
 type sortHeap []*sortItem
