@@ -35,6 +35,7 @@ type flushTask struct {
 	heapSorterID  int
 	backend       backEnd
 	reader        backEndReader
+	tsLowerBound  uint64
 	maxResolvedTs uint64
 	finished      chan error
 	dealloc       func() error
@@ -67,7 +68,10 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	if isEmptyFlush {
 		return nil
 	}
-	var backEnd backEnd
+	var (
+		backEnd    backEnd
+		lowerBound uint64
+	)
 
 	if !isEmptyFlush {
 		var err error
@@ -75,12 +79,15 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+
+		lowerBound = h.heap[0].entry.CRTs
 	}
 
 	task := &flushTask{
 		taskID:        h.taskCounter,
 		heapSorterID:  h.id,
 		backend:       backEnd,
+		tsLowerBound:  lowerBound,
 		maxResolvedTs: maxResolvedTs,
 		finished:      make(chan error, 2),
 	}
@@ -185,10 +192,8 @@ func (h *heapSorter) run(ctx context.Context) error {
 	var (
 		maxResolved           uint64
 		heapSizeBytesEstimate int64
+		rateCounter           int
 	)
-	maxResolved = 0
-	heapSizeBytesEstimate = 0
-	rateCounter := 0
 
 	rateTicker := time.NewTicker(1 * time.Second)
 	defer rateTicker.Stop()

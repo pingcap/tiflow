@@ -82,6 +82,10 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		}()
 
 		for task, cache := range pendingSet {
+			if task.tsLowerBound > minResolvedTs {
+				// the condition above implies that for any event in task.backend, CRTs > minResolvedTs.
+				continue
+			}
 			var event *model.PolymorphicEvent
 			if cache != nil {
 				event = cache
@@ -122,12 +126,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 			pendingSet[task] = nil
 			workingSet[task] = struct{}{}
-
-			/*log.Debug("push", zap.Uint64("CRTs", event.CRTs),
-			zap.String("table", tableNameFromCtx(ctx)),
-			zap.Int("heap-id", task.heapSorterID),
-			zap.Int("task-id", task.taskID))
-			*/
 
 			heap.Push(sortHeap, &sortItem{
 				entry: event,
@@ -181,12 +179,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			item := heap.Pop(sortHeap).(*sortItem)
 			task := item.data.(*flushTask)
 			event := item.entry
-			/*
-				log.Debug("pop", zap.Uint64("CRTs", event.CRTs),
-					zap.String("table", tableNameFromCtx(ctx)),
-					zap.Int("heap-id", task.heapSorterID),
-					zap.Int("task-id", task.taskID))
-			*/
+
 			if event.CRTs < task.lastTs {
 				log.Fatal("unified sorter: ts regressed in one backEnd, bug?", zap.Uint64("cur-ts", event.CRTs), zap.Uint64("last-ts", task.lastTs))
 			}
@@ -275,13 +268,6 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					zap.String("table", tableNameFromCtx(ctx)),
 					zap.Int("counter", counter))
 			}
-			/*
-				log.Debug("push",
-					zap.Uint64("CRTs", event.CRTs),
-					zap.String("table", tableNameFromCtx(ctx)),
-					zap.Int("heap-id", task.heapSorterID),
-					zap.Int("task-id", task.taskID))
-			*/
 
 			heap.Push(sortHeap, &sortItem{
 				entry: event,

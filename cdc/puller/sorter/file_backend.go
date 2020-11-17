@@ -225,15 +225,15 @@ func (r *fileBackEndReader) resetAndClose() error {
 	err := r.f.Truncate(0)
 	if err != nil {
 		failpoint.Inject("sorterDebug", func() {
-			info, err := r.f.Stat()
-			if err != nil {
+			info, err1 := r.f.Stat()
+			if err1 != nil {
 				failpoint.Return(errors.Trace(err))
 			}
 
 			log.Info("file debug info", zap.String("filename", info.Name()),
 				zap.Int64("size", info.Size()))
 
-			failpoint.Return(errors.Trace(err))
+			failpoint.Return(nil)
 		})
 		log.Warn("fileBackEndReader: could not truncate file", zap.Error(err))
 	}
