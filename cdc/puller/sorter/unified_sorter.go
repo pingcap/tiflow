@@ -155,7 +155,6 @@ func tableNameFromCtx(ctx context.Context) string {
 }
 
 func init() {
-	log.Info("Unified Sorter initialized")
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		for range ticker.C {
