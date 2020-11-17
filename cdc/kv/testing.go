@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/regionspan"
@@ -162,7 +161,8 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 		require.Equal(t, err, context.Canceled)
 	}()
 
-	preRegions, _, err := pdCli.ScanRegions(context.Background(), nil, nil, 10000)
+	mockTableID := int64(999)
+	preRegions, err := pdCli.ScanRegions(context.Background(), nil, nil, 10000)
 	require.NoError(t, err)
 
 	for i := 0; i < 2; i++ {
@@ -172,21 +172,21 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 			splitStore, ok := storage.(kv.SplittableStore)
 			require.True(t, ok)
 			for _, r := range preRegions {
-				splitKey := r.GetStartKey()
+				splitKey := r.Meta.GetStartKey()
 				if len(splitKey) == 0 {
 					splitKey = []byte{0}
 				} else {
 					splitKey = append(splitKey, 0)
 				}
 				splitKeys := [][]byte{splitKey}
-				_, err := splitStore.SplitRegions(context.Background(), splitKeys, false)
+				_, err := splitStore.SplitRegions(context.Background(), splitKeys, false, &mockTableID)
 				require.NoError(t, err)
 			}
 
 			time.Sleep(time.Second * 3)
 
-			var afterRegions []*metapb.Region
-			afterRegions, _, err = pdCli.ScanRegions(context.Background(), nil, nil, 10000)
+			var afterRegions []*pd.Region
+			afterRegions, err = pdCli.ScanRegions(context.Background(), nil, nil, 10000)
 			require.NoError(t, err)
 			require.Greater(t, len(afterRegions), len(preRegions))
 
@@ -195,7 +195,7 @@ func TestSplit(t require.TestingT, pdCli pd.Client, storage kv.Storage) {
 
 		// Put a key on every region and check we can get the event.
 		for _, r := range regions {
-			key := r.GetStartKey()
+			key := r.Meta.GetStartKey()
 			if len(key) == 0 {
 				key = []byte{0}
 			}

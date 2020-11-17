@@ -66,6 +66,8 @@ func (bs *bufferSuite) TestWaitsCanBeCanceled(c *check.C) {
 	timeout, cancel := context.WithTimeout(ctx, time.Millisecond)
 	defer cancel()
 	stopped := make(chan struct{})
+	// sleep here to let context timeout first
+	time.Sleep(time.Millisecond)
 	go func() {
 		for {
 			err := b.AddEntry(timeout, model.RegionFeedEvent{

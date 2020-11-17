@@ -43,7 +43,7 @@ type clientSuite struct {
 var _ = check.Suite(&clientSuite{})
 
 func (s *clientSuite) TestNewClose(c *check.C) {
-	cluster := mocktikv.NewCluster()
+	cluster := mocktikv.NewCluster(mocktikv.MustNewMVCCStore())
 	pdCli := mocktikv.NewPDClient(cluster)
 
 	cli, err := NewCDCClient(context.Background(), pdCli, nil, &security.Credential{})
@@ -136,9 +136,7 @@ func (s *etcdSuite) TestConnectOfflineTiKV(c *check.C) {
 		wg.Wait()
 	}()
 
-	cluster := mocktikv.NewCluster()
-	mvccStore := mocktikv.MustNewMVCCStore()
-	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -213,9 +211,7 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 	// Cancel first, and then close the server.
 	defer cancel()
 
-	cluster := mocktikv.NewCluster()
-	mvccStore := mocktikv.MustNewMVCCStore()
-	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, version: version.MinTiKVVersion.String()}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
@@ -273,9 +269,7 @@ func (s *etcdSuite) TestRecvLargeMessageSize(c *check.C) {
 
 // TODO enable the test
 func (s *etcdSuite) TodoTestIncompatibleTiKV(c *check.C) {
-	cluster := mocktikv.NewCluster()
-	mvccStore := mocktikv.MustNewMVCCStore()
-	rpcClient, pdClient, err := mocktikv.NewTiKVAndPDClient(cluster, mvccStore, "")
+	rpcClient, cluster, pdClient, err := mocktikv.NewTiKVAndPDClient("")
 	c.Assert(err, check.IsNil)
 	pdClient = &mockPDClient{Client: pdClient, version: "v2.1.0" /* CDC is not compatible with 2.1.0 */}
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
