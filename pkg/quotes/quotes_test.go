@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -26,6 +27,7 @@ type quotesSuite struct{}
 var _ = check.Suite(&quotesSuite{})
 
 func (s *quotesSuite) TestQuoteSchema(c *check.C) {
+	defer testleak.AfterTest(c)()
 	cases := []struct {
 		schema   string
 		table    string
@@ -41,6 +43,7 @@ func (s *quotesSuite) TestQuoteSchema(c *check.C) {
 }
 
 func (s *quotesSuite) TestQuoteName(c *check.C) {
+	defer testleak.AfterTest(c)()
 	cases := []struct {
 		name     string
 		expected string
@@ -57,6 +60,7 @@ func (s *quotesSuite) TestQuoteName(c *check.C) {
 }
 
 func (s *quotesSuite) TestEscapeName(c *check.C) {
+	defer testleak.AfterTest(c)()
 	cases := []struct {
 		name     string
 		expected string

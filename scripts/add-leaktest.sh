@@ -17,7 +17,7 @@
 set -eu
 
 sed -i'~' -e '
-  /^func (.*Suite) Test.*(c \*check.C) {/ {
+  /^func (.*) Test.*(c \*check.C) {/ {
     n
     /testleak.AfterTest/! i\
 		defer testleak.AfterTest(c)()
