@@ -17,6 +17,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math/rand"
+	"net/http"
+	"os"
+	"strings"
+	"sync/atomic"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -26,11 +32,6 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"math/rand"
-	"net/http"
-	"os"
-	"strings"
-	"sync/atomic"
 )
 
 var sorterDir = flag.String("dir", "./sorter", "temporary directory used for sorting")
@@ -68,7 +69,7 @@ func main() {
 
 	var finishCount int32
 	for i := 0; i < *numSorters; i++ {
-		sorters[i] = pullerSorter.NewUnifiedSorter(*sorterDir, fmt.Sprintf("test-%d", i))
+		sorters[i] = pullerSorter.NewUnifiedSorter(*sorterDir, fmt.Sprintf("test-%d", i), "0.0.0.0:0")
 		finalI := i
 
 		// run sorter

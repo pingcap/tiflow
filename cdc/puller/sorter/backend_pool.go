@@ -39,13 +39,14 @@ var (
 
 type backEndPool struct {
 	memoryUseEstimate int64
+	onDiskDataSize    int64
 	fileNameCounter   uint64
 	memPressure       int32
 	cache             [256]unsafe.Pointer
 	dir               string
 }
 
-func newBackEndPool(dir string) *backEndPool {
+func newBackEndPool(dir string, captureAddr string) *backEndPool {
 	ret := &backEndPool{
 		memoryUseEstimate: 0,
 		fileNameCounter:   0,
@@ -55,8 +56,16 @@ func newBackEndPool(dir string) *backEndPool {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 
+		metricSorterInMemoryDataSizeGauge := sorterInMemoryDataSizeGauge.WithLabelValues(captureAddr)
+		metricSorterOnDiskDataSizeGauge := sorterOnDiskDataSizeGauge.WithLabelValues(captureAddr)
+		metricSorterOpenFileCountGauge := sorterOpenFileCountGauge.WithLabelValues(captureAddr)
+
 		for {
 			<-ticker.C
+
+			metricSorterInMemoryDataSizeGauge.Set(float64(atomic.LoadInt64(&ret.memoryUseEstimate)))
+			metricSorterOnDiskDataSizeGauge.Set(float64(atomic.LoadInt64(&ret.onDiskDataSize)))
+			metricSorterOpenFileCountGauge.Set(float64(atomic.LoadInt64(&openFDCount)))
 
 			// update memPressure
 			m, err := memory.Get()

@@ -40,6 +40,7 @@ type fileBackEnd struct {
 	fileName string
 	serde    serializerDeserializer
 	borrowed int32
+	size     int64
 }
 
 func newFileBackEnd(fileName string, serde serializerDeserializer) (*fileBackEnd, error) {
@@ -208,6 +209,8 @@ func (r *fileBackEndReader) resetAndClose() error {
 		// fail-fast for double-close
 		r.f = nil
 
+		atomic.AddInt64(&pool.onDiskDataSize, -r.backEnd.size)
+
 		failpoint.Inject("sorterDebug", func() {
 			atomic.StoreInt32(&r.backEnd.borrowed, 0)
 		})
@@ -331,6 +334,8 @@ func (w *fileBackEndWriter) flushAndClose() error {
 	}
 
 	atomic.AddInt64(&openFDCount, -1)
+	w.backEnd.size = w.bytesWritten
+	atomic.AddInt64(&pool.onDiskDataSize, w.bytesWritten)
 
 	failpoint.Inject("sorterDebug", func() {
 		atomic.StoreInt32(&w.backEnd.borrowed, 0)

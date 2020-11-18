@@ -40,12 +40,12 @@ type ctxKey struct {
 }
 
 // NewUnifiedSorter creates a new UnifiedSorter
-func NewUnifiedSorter(dir string, tableName string) *UnifiedSorter {
+func NewUnifiedSorter(dir string, tableName string, captureAddr string) *UnifiedSorter {
 	poolMu.Lock()
 	defer poolMu.Unlock()
 
 	if pool == nil {
-		pool = newBackEndPool(dir)
+		pool = newBackEndPool(dir, captureAddr)
 	}
 
 	return &UnifiedSorter{

@@ -23,8 +23,9 @@ import (
 )
 
 type memoryBackEnd struct {
-	events   []*model.PolymorphicEvent
-	borrowed int32
+	events        []*model.PolymorphicEvent
+	estimatedSize int64
+	borrowed      int32
 }
 
 func newMemoryBackEnd() *memoryBackEnd {
@@ -85,6 +86,8 @@ func (r *memoryBackEndReader) resetAndClose() error {
 		atomic.StoreInt32(&r.backEnd.borrowed, 0)
 	})
 
+	atomic.AddInt64(&pool.memoryUseEstimate, -r.backEnd.estimatedSize)
+
 	return nil
 }
 
@@ -124,6 +127,9 @@ func (w *memoryBackEndWriter) flushAndClose() error {
 	failpoint.Inject("sorterDebug", func() {
 		atomic.StoreInt32(&w.backEnd.borrowed, 0)
 	})
+
+	w.backEnd.estimatedSize = w.bytesWritten
+	atomic.AddInt64(&pool.memoryUseEstimate, w.bytesWritten)
 
 	return nil
 }

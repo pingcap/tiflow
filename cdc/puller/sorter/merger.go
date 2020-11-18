@@ -16,6 +16,7 @@ package sorter
 import (
 	"container/heap"
 	"context"
+	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 	"math"
 	"strings"
@@ -27,6 +28,18 @@ import (
 )
 
 func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out chan *model.PolymorphicEvent) error {
+	captureAddr := util.CaptureAddrFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	_, tableName := util.TableIDFromCtx(ctx)
+
+	metricSorterEventCount := sorterEventCount.MustCurryWith(map[string]string{
+		"capture":    captureAddr,
+		"changefeed": changefeedID,
+		"table":      tableName})
+	metricSorterResolvedTsGauge := sorterResolvedTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricSorterMergerStartTsGauge := sorterMergerStartTsGauge.WithLabelValues(captureAddr, changefeedID, tableName)
+	metricSorterMergeCountHistogram := sorterMergeCountHistogram.WithLabelValues(captureAddr, changefeedID, tableName)
+
 	lastResolvedTs := make([]uint64, numSorters)
 	minResolvedTs := uint64(0)
 
@@ -51,11 +64,15 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		case <-ctx.Done():
 			return ctx.Err()
 		case out <- model.NewResolvedPolymorphicEvent(0, ts):
+			metricSorterEventCount.WithLabelValues("resolved").Inc()
+			metricSorterResolvedTsGauge.Set(float64(ts))
 			return nil
 		}
 	}
 
 	onMinResolvedTsUpdate := func() error {
+		metricSorterMergerStartTsGauge.Set(float64(minResolvedTs))
+
 		workingSet := make(map[*flushTask]struct{})
 		sortHeap := new(sortHeap)
 
@@ -215,6 +232,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				case <-ctx.Done():
 					return ctx.Err()
 				case out <- event:
+					metricSorterEventCount.WithLabelValues("kv").Inc()
 				}
 			}
 			counter += 1
@@ -288,6 +306,8 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		if err != nil {
 			return errors.Trace(err)
 		}
+
+		metricSorterMergeCountHistogram.Observe(float64(counter))
 
 		return nil
 	}

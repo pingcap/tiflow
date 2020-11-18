@@ -16,6 +16,7 @@ package sorter
 import (
 	"container/heap"
 	"context"
+	"github.com/pingcap/ticdc/pkg/util"
 	"sync/atomic"
 	"time"
 
@@ -64,6 +65,11 @@ func newHeapSorter(id int, pool *backEndPool, out chan *flushTask) *heapSorter {
 
 // flush should only be called within the main loop in run().
 func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
+	captureAddr := util.CaptureAddrFromCtx(ctx)
+	changefeedID := util.ChangefeedIDFromCtx(ctx)
+	_, tableName := util.TableIDFromCtx(ctx)
+	sorterFlushCountHistogram.WithLabelValues(captureAddr, changefeedID, tableName).Observe(float64(h.heap.Len()))
+
 	isEmptyFlush := h.heap.Len() == 0
 	if isEmptyFlush {
 		return nil
@@ -96,8 +102,6 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 	var oldHeap sortHeap
 	if !isEmptyFlush {
 		task.dealloc = func() error {
-			dataSize := atomic.SwapInt64(&task.dataSize, 0)
-			atomic.AddInt64(&pool.memoryUseEstimate, -dataSize)
 			if task.backend != nil {
 				task.backend = nil
 				return pool.dealloc(backEnd)
@@ -158,7 +162,6 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 		}
 
 		dataSize := writer.dataSize()
-		atomic.AddInt64(&pool.memoryUseEstimate, int64(dataSize))
 		atomic.StoreInt64(&task.dataSize, int64(dataSize))
 		eventCount := writer.writtenCount()
 
