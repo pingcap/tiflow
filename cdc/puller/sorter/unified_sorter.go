@@ -71,35 +71,33 @@ func (s *UnifiedSorter) Run(ctx context.Context) error {
 	sorterConfig := config.GetSorterConfig()
 	numConcurrentHeaps := sorterConfig.NumConcurrentWorker
 
-	nextSorterID := 0
-	heapSorters := make([]*heapSorter, sorterConfig.NumConcurrentWorker)
-
 	errg, subctx := errgroup.WithContext(valueCtx)
+	heapSorterCollectCh := make(chan *flushTask, 4096)
+	// mergerCleanUp will consumer the remaining elements in heapSorterCollectCh to prevent any FD leak.
+	defer mergerCleanUp(heapSorterCollectCh)
 
-	var activeHeapCount int32
-
-	sorterOutCh := make(chan *flushTask, 4096)
-	defer mergerCleanUp(sorterOutCh)
-
+	heapSorterErrg, subsubctx := errgroup.WithContext(subctx)
+	heapSorters := make([]*heapSorter, sorterConfig.NumConcurrentWorker)
 	for i := range heapSorters {
 		finalI := i
-		heapSorters[finalI] = newHeapSorter(finalI, s.pool, sorterOutCh)
-		errg.Go(func() error {
-			atomic.AddInt32(&activeHeapCount, 1)
-			defer func() {
-				if atomic.AddInt32(&activeHeapCount, -1) == 0 {
-					close(sorterOutCh)
-				}
-			}()
-			return printError(heapSorters[finalI].run(subctx))
+		heapSorters[finalI] = newHeapSorter(finalI, heapSorterCollectCh)
+		heapSorterErrg.Go(func() error {
+			return printError(heapSorters[finalI].run(subsubctx))
 		})
 	}
 
 	errg.Go(func() error {
-		return printError(runMerger(subctx, numConcurrentHeaps, sorterOutCh, s.outputCh))
+		// must wait for all writers to exit to close the channel.
+		defer close(heapSorterCollectCh)
+		return heapSorterErrg.Wait()
 	})
 
 	errg.Go(func() error {
+		return printError(runMerger(subctx, numConcurrentHeaps, heapSorterCollectCh, s.outputCh))
+	})
+
+	errg.Go(func() error {
+		nextSorterID := 0
 		for {
 			select {
 			case <-subctx.Done():

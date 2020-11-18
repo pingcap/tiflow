@@ -50,16 +50,14 @@ type heapSorter struct {
 	inputCh     chan *model.PolymorphicEvent
 	outputCh    chan *flushTask
 	heap        sortHeap
-	backEndPool *backEndPool
 }
 
-func newHeapSorter(id int, pool *backEndPool, out chan *flushTask) *heapSorter {
+func newHeapSorter(id int, out chan *flushTask) *heapSorter {
 	return &heapSorter{
-		id:          id,
-		inputCh:     make(chan *model.PolymorphicEvent, 1024*1024),
-		outputCh:    out,
-		heap:        make(sortHeap, 0, 65536),
-		backEndPool: pool,
+		id:       id,
+		inputCh:  make(chan *model.PolymorphicEvent, 1024*1024),
+		outputCh: out,
+		heap:     make(sortHeap, 0, 65536),
 	}
 }
 
@@ -81,7 +79,7 @@ func (h *heapSorter) flush(ctx context.Context, maxResolvedTs uint64) error {
 
 	if !isEmptyFlush {
 		var err error
-		backEnd, err = h.backEndPool.alloc(ctx)
+		backEnd, err = pool.alloc(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
