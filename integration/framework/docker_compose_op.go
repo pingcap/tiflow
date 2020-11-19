@@ -14,6 +14,7 @@
 package framework
 
 import (
+	"database/sql"
 	"os"
 	"os/exec"
 	"time"
@@ -39,6 +40,14 @@ func (d *DockerComposeOperator) Setup() {
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, d.ExecEnv...)
 	runCmdHandleError(cmd)
+	err := waitTiDBStarted(UpstreamDSN)
+	if err != nil {
+		log.Fatal("ping upstream database but not receive a pong", zap.Error(err))
+	}
+	err = waitTiDBStarted(DownstreamDSN)
+	if err != nil {
+		log.Fatal("ping downstream database but not receive a pong", zap.Error(err))
+	}
 
 	if d.HealthChecker != nil {
 		err := retry.Run(time.Second, 120, d.HealthChecker)
@@ -46,6 +55,21 @@ func (d *DockerComposeOperator) Setup() {
 			log.Fatal("Docker service health check failed after max retries", zap.Error(err))
 		}
 	}
+}
+
+func waitTiDBStarted(dsn string) error {
+	return retry.Run(time.Second, 60, func() error {
+		upstream, err := sql.Open("mysql", dsn)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		defer upstream.Close()
+		err = upstream.Ping()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		return nil
+	})
 }
 
 func runCmdHandleError(cmd *exec.Cmd) []byte {

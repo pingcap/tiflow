@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/tablecodec"
 )
 
@@ -27,6 +28,7 @@ var _ = check.Suite(&spanSuite{})
 func Test(t *testing.T) { check.TestingT(t) }
 
 func (s *spanSuite) TestStartCompare(c *check.C) {
+	defer testleak.AfterTest(c)()
 	tests := []struct {
 		lhs []byte
 		rhs []byte
@@ -47,6 +49,7 @@ func (s *spanSuite) TestStartCompare(c *check.C) {
 }
 
 func (s *spanSuite) TestEndCompare(c *check.C) {
+	defer testleak.AfterTest(c)()
 	tests := []struct {
 		lhs []byte
 		rhs []byte
@@ -67,6 +70,7 @@ func (s *spanSuite) TestEndCompare(c *check.C) {
 }
 
 func (s *spanSuite) TestIntersect(c *check.C) {
+	defer testleak.AfterTest(c)()
 	tests := []struct {
 		lhs ComparableSpan
 		rhs ComparableSpan
@@ -100,6 +104,7 @@ func (s *spanSuite) TestIntersect(c *check.C) {
 }
 
 func (s *spanSuite) TestGetTableSpan(c *check.C) {
+	defer testleak.AfterTest(c)()
 	span := GetTableSpan(123, false)
 	c.Assert(span.Start, check.Less, span.End)
 	prefix := []byte(tablecodec.GenTablePrefix(123))
@@ -116,6 +121,7 @@ func (s *spanSuite) TestGetTableSpan(c *check.C) {
 }
 
 func (s *spanSuite) TestSpanHack(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		input  Span
 		expect Span

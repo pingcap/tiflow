@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type mockEntrySorterSuite struct{}
@@ -33,6 +34,7 @@ func TestSuite(t *testing.T) {
 }
 
 func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		input      []*model.RawKVEntry
 		resolvedTs uint64
@@ -122,6 +124,7 @@ func (s *mockEntrySorterSuite) TestEntrySorter(c *check.C) {
 }
 
 func (s *mockEntrySorterSuite) TestEntrySorterRandomly(c *check.C) {
+	defer testleak.AfterTest(c)()
 	es := NewEntrySorter()
 	ctx, cancel := context.WithCancel(context.Background())
 

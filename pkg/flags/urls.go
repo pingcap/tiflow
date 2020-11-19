@@ -14,12 +14,9 @@
 package flags
 
 import (
-	"net"
-	"net/url"
 	"strings"
 
 	"github.com/pingcap/errors"
-	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/types"
 )
 
@@ -39,14 +36,6 @@ func (us *URLsValue) Set(s string) error {
 	return nil
 }
 
-func (us *URLsValue) String() string {
-	all := make([]string, len(*us))
-	for i, u := range *us {
-		all[i] = u.String()
-	}
-	return strings.Join(all, ",")
-}
-
 // HostString return a string of host:port format list separated by comma
 func (us *URLsValue) HostString() string {
 	all := make([]string, len(*us))
@@ -56,61 +45,9 @@ func (us *URLsValue) HostString() string {
 	return strings.Join(all, ",")
 }
 
-// StringSlice return a slice of string with formatted URL
-func (us *URLsValue) StringSlice() []string {
-	all := make([]string, len(*us))
-	for i, u := range *us {
-		all[i] = u.String()
-	}
-	return all
-}
-
-// URLSlice return a slice of URLs
-func (us *URLsValue) URLSlice() []url.URL {
-	urls := []url.URL(*us)
-	return urls
-}
-
 // NewURLsValue return a URLsValue from a string of URLs list
 func NewURLsValue(init string) (*URLsValue, error) {
 	v := &URLsValue{}
 	err := v.Set(init)
 	return v, err
-}
-
-// ParseHostPortAddr returns a scheme://host:port or host:port list
-func ParseHostPortAddr(s string) ([]string, error) {
-	strs := strings.Split(s, ",")
-	addrs := make([]string, 0, len(strs))
-
-	for _, str := range strs {
-		str = strings.TrimSpace(str)
-
-		// str may looks like 127.0.0.1:8000
-		if _, _, err := net.SplitHostPort(str); err == nil {
-			addrs = append(addrs, str)
-			continue
-		}
-
-		u, err := url.Parse(str)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrURLFormatInvalid,
-				errors.Errorf("parse url %s failed %v", str, err))
-		}
-		if u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "unix" && u.Scheme != "unixs" {
-			return nil, cerror.WrapError(cerror.ErrURLFormatInvalid,
-				errors.Errorf("URL scheme must be http, https, unix, or unixs: %s", str))
-		}
-		if _, _, err := net.SplitHostPort(u.Host); err != nil {
-			return nil, cerror.WrapError(cerror.ErrURLFormatInvalid,
-				errors.Errorf(`URL address does not have the form "host:port": %s`, str))
-		}
-		if u.Path != "" {
-			return nil, cerror.WrapError(cerror.ErrURLFormatInvalid,
-				errors.Errorf("URL must not contain a path: %s", str))
-		}
-		addrs = append(addrs, u.String())
-	}
-
-	return addrs, nil
 }

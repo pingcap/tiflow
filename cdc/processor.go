@@ -329,12 +329,14 @@ func (p *processor) positionWorker(ctx context.Context) error {
 			if inErr != nil {
 				if errors.Cause(inErr) != context.Canceled {
 					logError := log.Error
+					errField := zap.Error(inErr)
 					if cerror.ErrAdminStopProcessor.Equal(inErr) {
 						logError = log.Warn
+						errField = zap.String("error", inErr.Error())
 					}
 					logError(
 						"update info failed",
-						zap.String("changefeed", p.changefeedID), zap.Error(inErr),
+						zap.String("changefeed", p.changefeedID), errField,
 					)
 				}
 				if p.isStopped() || cerror.ErrAdminStopProcessor.Equal(inErr) {
