@@ -167,7 +167,7 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 
 	err := info.VerifyAndFix()
 	c.Assert(err, check.IsNil)
-	c.Assert(info.Engine, check.Equals, SortUnified)
+	c.Assert(info.Engine, check.Equals, SortInMemory)
 
 	marshalConfig1, err := info.Config.Marshal()
 	c.Assert(err, check.IsNil)
