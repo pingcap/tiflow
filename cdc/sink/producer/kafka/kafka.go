@@ -386,7 +386,7 @@ func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
 		return nil, errors.Trace(err)
 	}
 	config.Version = version
-	config.Metadata.Retry.Max = 20
+	config.Metadata.Retry.Max = 120
 	config.Metadata.Retry.Backoff = 500 * time.Millisecond
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
@@ -411,7 +411,7 @@ func newSaramaConfig(ctx context.Context, c Config) (*sarama.Config, error) {
 		config.Producer.Compression = sarama.CompressionNone
 	}
 
-	config.Producer.Retry.Max = 20
+	config.Producer.Retry.Max = 600
 	config.Producer.Retry.Backoff = 500 * time.Millisecond
 
 	config.Admin.Retry.Max = 10000
