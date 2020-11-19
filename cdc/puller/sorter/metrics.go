@@ -76,3 +76,15 @@ var (
 		Buckets:   prometheus.ExponentialBuckets(16, 4, 10),
 	}, []string{"capture", "changefeed", "table"})
 )
+
+// InitMetrics registers all metrics in this file
+func InitMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(sorterEventCount)
+	registry.MustRegister(sorterResolvedTsGauge)
+	registry.MustRegister(sorterMergerStartTsGauge)
+	registry.MustRegister(sorterInMemoryDataSizeGauge)
+	registry.MustRegister(sorterOnDiskDataSizeGauge)
+	registry.MustRegister(sorterOpenFileCountGauge)
+	registry.MustRegister(sorterFlushCountHistogram)
+	registry.MustRegister(sorterMergeCountHistogram)
+}
