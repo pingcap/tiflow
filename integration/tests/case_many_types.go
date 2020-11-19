@@ -18,11 +18,10 @@ import (
 	"math"
 	"time"
 
+	"github.com/pingcap/ticdc/integration/framework"
 	"github.com/pingcap/ticdc/integration/framework/avro"
 	"github.com/pingcap/ticdc/integration/framework/canal"
 	"github.com/pingcap/ticdc/integration/framework/mysql"
-
-	"github.com/pingcap/ticdc/integration/framework"
 )
 
 // ManyTypesCase is base impl of test case for different types data

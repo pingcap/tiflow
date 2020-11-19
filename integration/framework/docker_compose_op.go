@@ -36,7 +36,6 @@ type DockerComposeOperator struct {
 // Setup brings up a docker-compose service
 func (d *DockerComposeOperator) Setup() {
 	cmd := exec.Command("docker-compose", "-f", d.FileName, "up", "-d")
-	// cmd := exec.Command("echo", "${GO_FAILPOINTS}")
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, d.ExecEnv...)
 	runCmdHandleError(cmd)
