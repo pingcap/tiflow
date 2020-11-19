@@ -78,8 +78,7 @@ func (s *schemaStorageSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 				Primary: true,
 			},
 		},
-		IsCommonHandle: true,
-		PKIsHandle:     false,
+		PKIsHandle: false,
 	}
 	info := WrapTableInfo(1, "", 0, &t)
 	cols := info.GetUniqueKeys()
@@ -170,8 +169,7 @@ func (s *schemaStorageSuite) TestUniqueKeyIsHandle(c *check.C) {
 				Unique: true,
 			},
 		},
-		IsCommonHandle: false,
-		PKIsHandle:     false,
+		PKIsHandle: false,
 	}
 	info := WrapTableInfo(1, "", 0, &t)
 	cols := info.GetUniqueKeys()
@@ -274,8 +272,7 @@ func (s *schemaStorageSuite) TestHandleKeyPriority(c *check.C) {
 				Unique: true,
 			},
 		},
-		IsCommonHandle: false,
-		PKIsHandle:     false,
+		PKIsHandle: false,
 	}
 	info := WrapTableInfo(1, "", 0, &t)
 	cols := info.GetUniqueKeys()
@@ -328,8 +325,7 @@ func (s *schemaStorageSuite) TestTableInfoGetterFuncs(c *check.C) {
 				Unique: true,
 			},
 		},
-		IsCommonHandle: false,
-		PKIsHandle:     false,
+		PKIsHandle: false,
 	}
 	info := WrapTableInfo(1, "test", 0, &t)
 
@@ -347,9 +343,8 @@ func (s *schemaStorageSuite) TestTableInfoGetterFuncs(c *check.C) {
 	_, exists = info.GetIndexInfo(1)
 	c.Assert(exists, check.IsFalse)
 
-	handleColIDs, fts, colInfos := info.GetRowColInfos()
-	c.Assert(handleColIDs, check.DeepEquals, []int64{-1})
-	c.Assert(len(fts), check.Equals, 3)
+	handleID, colInfos := info.GetRowColInfos()
+	c.Assert(handleID, check.Equals, int64(-1))
 	c.Assert(len(colInfos), check.Equals, 3)
 
 	c.Assert(info.IsColumnUnique(0), check.IsFalse)
@@ -379,8 +374,7 @@ func (s *schemaStorageSuite) TestTableInfoGetterFuncs(c *check.C) {
 				Unique: true,
 			},
 		},
-		IsCommonHandle: false,
-		PKIsHandle:     false,
+		PKIsHandle: false,
 	}
 	info = WrapTableInfo(1, "test", 0, &t)
 	c.Assert(info.IsEligible(false), check.IsFalse)
