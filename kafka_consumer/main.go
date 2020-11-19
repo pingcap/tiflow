@@ -53,6 +53,7 @@ var (
 	kafkaVersion         = "2.4.0"
 	kafkaMaxMessageBytes = math.MaxInt64
 
+	maxBatchSize int
 	downstreamURIStr string
 
 	logPath       string
@@ -72,6 +73,7 @@ func init() {
 	flag.StringVar(&ca, "ca", "", "CA certificate path for Kafka SSL connection")
 	flag.StringVar(&cert, "cert", "", "Certificate path for Kafka SSL connection")
 	flag.StringVar(&key, "key", "", "Private key path for Kafka SSL connection")
+	flag.IntVar(&maxBatchSize, "max-batch-size", 4096,"The limit of acceptable batch size in Open Protocol")
 
 	flag.Parse()
 
@@ -402,6 +404,7 @@ ClaimMessages:
 				log.Fatal("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
 					zap.Int("recevied-bytes", len(message.Key)+len(message.Value)))
 			}
+
 			switch tp {
 			case model.MqMessageTypeDDL:
 				ddl, err := batchDecoder.NextDDLEvent()
@@ -449,6 +452,11 @@ ClaimMessages:
 				}
 			}
 			session.MarkMessage(message, "")
+		}
+
+		if counter > maxBatchSize {
+			log.Fatal("Open Protocl max-batch-size exceeded", zap.Int("max-batch-size", maxBatchSize),
+				zap.Int("actual-batch-size", counter))
 		}
 	}
 
