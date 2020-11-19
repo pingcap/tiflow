@@ -53,7 +53,7 @@ var (
 	kafkaVersion         = "2.4.0"
 	kafkaMaxMessageBytes = math.MaxInt64
 
-	maxBatchSize int
+	maxBatchSize     int
 	downstreamURIStr string
 
 	logPath       string
@@ -73,7 +73,7 @@ func init() {
 	flag.StringVar(&ca, "ca", "", "CA certificate path for Kafka SSL connection")
 	flag.StringVar(&cert, "cert", "", "Certificate path for Kafka SSL connection")
 	flag.StringVar(&key, "key", "", "Private key path for Kafka SSL connection")
-	flag.IntVar(&maxBatchSize, "max-batch-size", 4096,"The limit of acceptable batch size in Open Protocol")
+	flag.IntVar(&maxBatchSize, "max-batch-size", 4096, "The limit of acceptable batch size in Open Protocol")
 
 	flag.Parse()
 
