@@ -23,7 +23,7 @@ function run_length_limit() {
 
     cd $WORK_DIR
 
-    run_sql "CREATE DATABASE if exists kafka_message;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "DROP DATABASE if exists kafka_message;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
     run_sql "CREATE DATABASE kafka_message;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -79,7 +79,7 @@ function run_batch_size_limit() {
 
     cd $WORK_DIR
 
-    run_sql "CREATE DATABASE if exists kafka_message;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+    run_sql "DROP DATABASE if exists kafka_message;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
     start_ts=$(run_cdc_cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
     run_sql "CREATE DATABASE kafka_message;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
