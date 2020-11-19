@@ -1040,7 +1040,7 @@ restart:
 	if resp.Count == 0 {
 		return cerror.ErrOwnerCampaignKeyDeleted.GenWithStackByArgs()
 	}
-	// watch the key change from the next revision relatived to the current 
+	// watch the key change from the next revision relatived to the current
 	wch := o.etcdClient.Client.Watch(ctx, key, clientv3.WithRev(resp.Header.Revision+1))
 	for resp := range wch {
 		err := resp.Err()
