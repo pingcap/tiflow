@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 )
 
@@ -27,6 +28,7 @@ type configSuite struct{}
 var _ = check.Suite(&configSuite{})
 
 func (s *configSuite) TestFillV1(c *check.C) {
+	defer testleak.AfterTest(c)()
 	v1Config := `
 {
     "sink-uri":"blackhole://",
@@ -158,6 +160,7 @@ func (s *configSuite) TestFillV1(c *check.C) {
 }
 
 func (s *configSuite) TestVerifyAndFix(c *check.C) {
+	defer testleak.AfterTest(c)()
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
 		Opts:    map[string]string{},
@@ -185,6 +188,7 @@ type changefeedSuite struct{}
 var _ = check.Suite(&changefeedSuite{})
 
 func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
+	defer testleak.AfterTest(c)()
 	now := time.Now()
 	info := &ChangeFeedInfo{
 		ErrorHis: []int64{},
@@ -211,6 +215,7 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 }
 
 func (s *changefeedSuite) TestChangefeedInfoStringer(c *check.C) {
+	defer testleak.AfterTest(c)()
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
 		StartTs: 418881574869139457,

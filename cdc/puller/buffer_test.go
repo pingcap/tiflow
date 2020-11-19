@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type bufferSuite struct{}
@@ -29,6 +30,7 @@ type bufferSuite struct{}
 var _ = check.Suite(&bufferSuite{})
 
 func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
+	defer testleak.AfterTest(c)()
 	b := makeChanBuffer()
 	ctx := context.Background()
 	var wg sync.WaitGroup
@@ -60,6 +62,7 @@ func (bs *bufferSuite) TestCanAddAndReadEntriesInOrder(c *check.C) {
 }
 
 func (bs *bufferSuite) TestWaitsCanBeCanceled(c *check.C) {
+	defer testleak.AfterTest(c)()
 	b := makeChanBuffer()
 	ctx := context.Background()
 
@@ -95,6 +98,7 @@ type memBufferSuite struct{}
 var _ = check.Suite(&memBufferSuite{})
 
 func (bs *memBufferSuite) TestMemBuffer(c *check.C) {
+	defer testleak.AfterTest(c)()
 	limitter := NewBlurResourceLimmter(1024 * 1024)
 	bf := makeMemBuffer(limitter)
 

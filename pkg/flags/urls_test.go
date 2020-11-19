@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func Test(t *testing.T) {
@@ -28,6 +29,7 @@ var _ = check.Suite(&testUrlsSuite{})
 type testUrlsSuite struct{}
 
 func (t *testUrlsSuite) TestNewURLsValue(c *check.C) {
+	defer testleak.AfterTest(c)()
 	cases := []struct {
 		url        string
 		hostString string
@@ -49,6 +51,7 @@ func (t *testUrlsSuite) TestNewURLsValue(c *check.C) {
 }
 
 func (t *testUrlsSuite) TestNewURLsValueError(c *check.C) {
+	defer testleak.AfterTest(c)()
 	urls := []string{
 		"http:///192.168.199.111:2379",
 		"http://192.168.199.111",

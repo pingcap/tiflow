@@ -15,6 +15,7 @@ package util
 
 import (
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type tzSuite struct{}
@@ -22,6 +23,7 @@ type tzSuite struct{}
 var _ = check.Suite(&tzSuite{})
 
 func (s *tzSuite) TestGetTimezoneFromZonefile(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var (
 		testCases = []struct {
 			hasErr   bool
