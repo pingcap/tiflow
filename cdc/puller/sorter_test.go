@@ -74,7 +74,7 @@ func (s *sorterSuite) TestSorterCancel(c *check.C) {
 		NumConcurrentWorker:  8,
 		ChunkSizeLimit:       1 * 1024 * 1024 * 1024,
 		MaxMemoryPressure:    60,
-		MaxMemoryConsumption: 16 * 1024 * 1024 * 1024,
+		MaxMemoryConsumption: 0,
 	})
 
 	err := os.MkdirAll("./sorter", 0755)

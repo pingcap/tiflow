@@ -51,10 +51,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			if task.reader != nil {
 				_ = printError(task.reader.resetAndClose())
 			}
-			err := printError(task.dealloc())
-			if err != nil && task.backend != nil {
-				_ = task.backend.free()
-			}
+			_ = printError(task.dealloc())
 		}
 	}()
 
@@ -94,10 +91,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 					task.reader = nil
 					_ = printError(err)
 				}
-				err := task.dealloc()
-				if printError(err) != nil {
-					_ = task.backend.free()
-				}
+				_ = printError(task.dealloc())
 			}
 		}()
 
@@ -365,10 +359,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 
 func mergerCleanUp(in <-chan *flushTask) {
 	for task := range in {
-		err := printError(task.dealloc())
-		if err != nil && task.backend != nil {
-			_ = task.backend.free()
-		}
+		_ = printError(task.dealloc())
 	}
 }
 
