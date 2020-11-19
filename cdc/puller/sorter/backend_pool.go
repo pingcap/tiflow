@@ -151,7 +151,8 @@ func (p *backEndPool) dealloc(backEnd backEnd) error {
 	case *fileBackEnd:
 		failpoint.Inject("sorterDebug", func() {
 			if atomic.LoadInt32(&b.borrowed) != 0 {
-				log.Fatal("Deallocating a fileBackEnd in use", zap.String("filename", b.fileName))
+				log.Warn("Deallocating a fileBackEnd in use", zap.String("filename", b.fileName))
+				failpoint.Return(nil)
 			}
 		})
 		for i := range p.cache {
