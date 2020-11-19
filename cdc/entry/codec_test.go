@@ -17,11 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/ticdc/pkg/util/testleak"
-	"github.com/pingcap/tidb/kv"
->>>>>>> 388fbcc... tests: add leak test in all unit test cases (#1078)
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
 )

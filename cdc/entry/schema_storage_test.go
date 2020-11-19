@@ -651,17 +651,11 @@ func (t *schemaSuite) TestMultiVersionStorage(c *check.C) {
 	c.Assert(errors.Cause(err), check.Equals, context.Canceled)
 }
 
-<<<<<<< HEAD
-func (t *schemaSuite) TestCreateSnapFromMeta(c *C) {
-	store, err := mockstore.NewMockTikvStore()
-	c.Assert(err, IsNil)
-=======
 func (t *schemaSuite) TestCreateSnapFromMeta(c *check.C) {
 	defer testleak.AfterTest(c)()
-	store, err := mockstore.NewMockStore()
+	store, err := mockstore.NewMockTikvStore()
 	c.Assert(err, check.IsNil)
 	defer store.Close() //nolint:errcheck
->>>>>>> 388fbcc... tests: add leak test in all unit test cases (#1078)
 
 	session.SetSchemaLease(0)
 	session.DisableStats4Test()
@@ -693,17 +687,11 @@ func (t *schemaSuite) TestCreateSnapFromMeta(c *check.C) {
 	c.Assert(len(dbInfo.Tables), check.Equals, 3)
 }
 
-<<<<<<< HEAD
-func (t *schemaSuite) TestSnapshotClone(c *C) {
-	store, err := mockstore.NewMockTikvStore()
-	c.Assert(err, IsNil)
-=======
 func (t *schemaSuite) TestSnapshotClone(c *check.C) {
 	defer testleak.AfterTest(c)()
-	store, err := mockstore.NewMockStore()
+	store, err := mockstore.NewMockTikvStore()
 	c.Assert(err, check.IsNil)
 	defer store.Close() //nolint:errcheck
->>>>>>> 388fbcc... tests: add leak test in all unit test cases (#1078)
 
 	session.SetSchemaLease(0)
 	session.DisableStats4Test()
@@ -741,17 +729,11 @@ func (t *schemaSuite) TestSnapshotClone(c *check.C) {
 	c.Assert(len(snap.tables), check.Equals, tableCount)
 }
 
-<<<<<<< HEAD
-func (t *schemaSuite) TestExplicitTables(c *C) {
-	store, err := mockstore.NewMockTikvStore()
-	c.Assert(err, IsNil)
-=======
 func (t *schemaSuite) TestExplicitTables(c *check.C) {
 	defer testleak.AfterTest(c)()
-	store, err := mockstore.NewMockStore()
+	store, err := mockstore.NewMockTikvStore()
 	c.Assert(err, check.IsNil)
 	defer store.Close() //nolint:errcheck
->>>>>>> 388fbcc... tests: add leak test in all unit test cases (#1078)
 
 	session.SetSchemaLease(0)
 	session.DisableStats4Test()

@@ -44,14 +44,10 @@ type clientSuite struct {
 var _ = check.Suite(&clientSuite{})
 
 func (s *clientSuite) TestNewClose(c *check.C) {
-<<<<<<< HEAD
-	cluster := mocktikv.NewCluster()
-=======
 	defer testleak.AfterTest(c)()
 	store := mocktikv.MustNewMVCCStore()
 	defer store.Close() //nolint:errcheck
-	cluster := mocktikv.NewCluster(store)
->>>>>>> 388fbcc... tests: add leak test in all unit test cases (#1078)
+	cluster := mocktikv.NewCluster()
 	pdCli := mocktikv.NewPDClient(cluster)
 	defer pdCli.Close() //nolint:errcheck
 
