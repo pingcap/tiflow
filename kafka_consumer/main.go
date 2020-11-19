@@ -381,14 +381,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 ClaimMessages:
 	for message := range claim.Messages() {
 		log.Info("Message claimed", zap.Int32("partition", message.Partition), zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
-		if len(message.Key)+len(message.Value) > kafkaMaxMessageBytes {
-			log.Fatal("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
-				zap.Int("recevied-bytes", len(message.Key)+len(message.Value)))
-		}
 		batchDecoder, err := codec.NewJSONEventBatchDecoder(message.Key, message.Value)
 		if err != nil {
 			return errors.Trace(err)
 		}
+
+		counter := 0
 		for {
 			tp, hasNext, err := batchDecoder.HasNext()
 			if err != nil {
@@ -396,6 +394,13 @@ ClaimMessages:
 			}
 			if !hasNext {
 				break
+			}
+
+			counter++
+			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
+			if len(message.Key)+len(message.Value) > kafkaMaxMessageBytes && counter > 1 {
+				log.Fatal("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
+					zap.Int("recevied-bytes", len(message.Key)+len(message.Value)))
 			}
 			switch tp {
 			case model.MqMessageTypeDDL:

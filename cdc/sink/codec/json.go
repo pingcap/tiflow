@@ -35,6 +35,8 @@ import (
 const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
+	// DefaultMaxMessageBytes sets the default value for max-message-bytes
+	DefaultMaxMessageBytes int = 64 * 1024 * 1024 // 64M
 )
 
 type column struct {
@@ -393,6 +395,12 @@ func (d *JSONEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEvent) 
 		message.Key = append(message.Key, key...)
 		message.Value = append(message.Value, valueLenByte[:]...)
 		message.Value = append(message.Value, value...)
+
+		if message.Length() > d.maxKafkaMessageSize {
+			// `len(d.messageBuf) == 1` is implied
+			log.Warn("Event does not fit into max-message-bytes. Adjust relevant configurations to avoid service interruptions.",
+				zap.Int("event-len", message.Length()), zap.Int("max-message-bytes", d.maxKafkaMessageSize))
+		}
 		d.curBatchSize++
 	}
 	return EncoderNoOperation, nil
@@ -515,7 +523,7 @@ func (d *JSONEventBatchEncoder) SetParams(params map[string]string) error {
 			return errors.Trace(err)
 		}
 	} else {
-		d.maxKafkaMessageSize = 64 * 1024 * 1024 // 64M
+		d.maxKafkaMessageSize = DefaultMaxMessageBytes
 	}
 
 	if maxBatchSize, ok := params["max-batch-size"]; ok {
