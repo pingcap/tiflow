@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 
 	"github.com/pingcap/check"
 )
@@ -31,6 +32,7 @@ type decodeFileSuite struct{}
 var _ = check.Suite(&decodeFileSuite{})
 
 func (s *decodeFileSuite) TestCanDecodeTOML(c *check.C) {
+	defer testleak.AfterTest(c)()
 	dir := c.MkDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `
@@ -99,6 +101,7 @@ polling-time = 5
 }
 
 func (s *decodeFileSuite) TestAndWriteExampleTOML(c *check.C) {
+	defer testleak.AfterTest(c)()
 	content := `
 # 指定配置文件中涉及的库名、表名是否为大小写敏感的
 # 该配置会同时影响 filter 和 sink 相关配置，默认为 true
@@ -183,6 +186,7 @@ sync-ddl = true
 }
 
 func (s *decodeFileSuite) TestShouldReturnErrForUnknownCfgs(c *check.C) {
+	defer testleak.AfterTest(c)()
 	dir := c.MkDir()
 	path := filepath.Join(dir, "config.toml")
 	content := `filter-case-insensitive = true`

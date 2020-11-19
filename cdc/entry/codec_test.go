@@ -17,6 +17,11 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/ticdc/pkg/util/testleak"
+	"github.com/pingcap/tidb/kv"
+>>>>>>> 388fbcc... tests: add leak test in all unit test cases (#1078)
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
 )
@@ -29,6 +34,7 @@ type codecSuite struct {
 var _ = check.Suite(&codecSuite{})
 
 func (s *codecSuite) TestDecodeRecordKey(c *check.C) {
+	defer testleak.AfterTest(c)()
 	recordPrefix := tablecodec.GenTableRecordPrefix(12345)
 	key := tablecodec.EncodeRecordKey(recordPrefix, 67890)
 	key, tableID, err := decodeTableID(key)
@@ -46,6 +52,7 @@ type decodeMetaKeySuite struct {
 var _ = check.Suite(&decodeMetaKeySuite{})
 
 func (s *decodeMetaKeySuite) TestDecodeListData(c *check.C) {
+	defer testleak.AfterTest(c)()
 	key := []byte("hello")
 	var index int64 = 3
 

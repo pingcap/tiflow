@@ -21,6 +21,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	canal "github.com/pingcap/ticdc/proto/canal"
 )
 
@@ -83,6 +84,7 @@ var _ = check.Suite(&canalBatchSuite{
 })
 
 func (s *canalBatchSuite) TestCanalEventBatchEncoder(c *check.C) {
+	defer testleak.AfterTest(c)()
 	for _, cs := range s.rowCases {
 		encoder := NewCanalEventBatchEncoder()
 		for _, row := range cs {
@@ -137,6 +139,7 @@ type canalEntrySuite struct{}
 var _ = check.Suite(&canalEntrySuite{})
 
 func (s *canalEntrySuite) TestConvertEntry(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testInsert(c)
 	testUpdate(c)
 	testDelete(c)

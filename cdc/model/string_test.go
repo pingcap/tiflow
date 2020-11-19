@@ -15,6 +15,7 @@ package model
 
 import (
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type stringSuite struct{}
@@ -22,6 +23,7 @@ type stringSuite struct{}
 var _ = check.Suite(&stringSuite{})
 
 func (s *stringSuite) TestExtractKeySuffix(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		input  string
 		expect string
