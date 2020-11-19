@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type overlapSuite struct{}
@@ -25,6 +26,7 @@ type overlapSuite struct{}
 var _ = check.Suite(&overlapSuite{})
 
 func (s *overlapSuite) TestOverlapCoveringMerge(c *check.C) {
+	defer testleak.AfterTest(c)()
 	tests := []struct {
 		name string
 		// inputs is a slice of coverings. The inner slice represents a covering

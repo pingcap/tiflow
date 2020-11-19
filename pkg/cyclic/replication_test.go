@@ -19,15 +19,17 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-type cyclicSuit struct{}
+type cyclicSuite struct{}
 
-var _ = check.Suite(&cyclicSuit{})
+var _ = check.Suite(&cyclicSuite{})
 
 func Test(t *testing.T) { check.TestingT(t) }
 
-func (s *cyclicSuit) TestRelaxSQLMode(c *check.C) {
+func (s *cyclicSuite) TestRelaxSQLMode(c *check.C) {
+	defer testleak.AfterTest(c)()
 	tests := []struct {
 		oldMode string
 		newMode string
@@ -44,7 +46,8 @@ func (s *cyclicSuit) TestRelaxSQLMode(c *check.C) {
 	}
 }
 
-func (s *cyclicSuit) TestIsTablePaired(c *check.C) {
+func (s *cyclicSuite) TestIsTablePaired(c *check.C) {
+	defer testleak.AfterTest(c)()
 	tests := []struct {
 		tables   []model.TableName
 		isParied bool

@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -72,6 +73,7 @@ func waitEntriesReceived(ctx context.Context, currentNum *int32, expectedNum int
 }
 
 func (s *rectifierSuite) TestRectifierSafeStop(c *check.C) {
+	defer testleak.AfterTest(c)()
 	mockSorter := newMockSorter()
 	r := NewRectifier(mockSorter, math.MaxUint64)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -140,6 +142,7 @@ func (s *rectifierSuite) TestRectifierSafeStop(c *check.C) {
 }
 
 func (s *rectifierSuite) TestRectifierFinished(c *check.C) {
+	defer testleak.AfterTest(c)()
 	mockSorter := newMockSorter()
 	r := NewRectifier(mockSorter, 7)
 	ctx, cancel := context.WithCancel(context.Background())

@@ -15,6 +15,7 @@ package util
 
 import (
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 const (
@@ -29,6 +30,7 @@ type bitFlagSuite struct{}
 var _ = check.Suite(&bitFlagSuite{})
 
 func (b *bitFlagSuite) TestExample(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var flag Flag
 
 	flag.Add(FlagA)
@@ -46,6 +48,7 @@ func (b *bitFlagSuite) TestExample(c *check.C) {
 }
 
 func (b *bitFlagSuite) TestAdd(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var flag Flag
 
 	flag.Add(FlagA)
@@ -57,6 +60,7 @@ func (b *bitFlagSuite) TestAdd(c *check.C) {
 }
 
 func (b *bitFlagSuite) TestRemove(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var flag Flag
 
 	flag.Add(FlagA, FlagB, FlagC)
@@ -68,6 +72,7 @@ func (b *bitFlagSuite) TestRemove(c *check.C) {
 }
 
 func (b *bitFlagSuite) TestClear(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var flag Flag
 
 	flag.Add(FlagA, FlagB, FlagC)
