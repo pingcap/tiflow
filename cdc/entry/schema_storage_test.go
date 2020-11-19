@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	parser_types "github.com/pingcap/parser/types"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/tidb/session"
@@ -384,87 +383,6 @@ func testDoDDLAndCheck(c *C, snap *schemaSnapshot, job *timodel.Job, isErr bool)
 type getUniqueKeysSuite struct{}
 
 var _ = Suite(&getUniqueKeysSuite{})
-
-func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *C) {
-	t := timodel.TableInfo{
-		Columns: []*timodel.ColumnInfo{
-			{Name: timodel.CIStr{O: "name"},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
-			},
-			{Name: timodel.CIStr{O: "id"}},
-		},
-		Indices: []*timodel.IndexInfo{
-			{
-				Name: timodel.CIStr{
-					O: "name",
-				},
-				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "name"},
-						Offset: 0},
-				},
-				Unique: true,
-			},
-			{
-				Name: timodel.CIStr{
-					O: "PRIMARY",
-				},
-				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "id"},
-						Offset: 1},
-				},
-				Primary: true,
-			},
-		},
-		PKIsHandle: false,
-	}
-	info := model.WrapTableInfo(1, "", 0, &t)
-	cols := info.GetUniqueKeys()
-	c.Assert(cols, DeepEquals, [][]string{
-		{"id"}, {"name"},
-	})
-}
-
-func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *C) {
-	t := timodel.TableInfo{
-		Indices: []*timodel.IndexInfo{
-			{
-				Name: timodel.CIStr{
-					O: "uniq_job",
-				},
-				Columns: []*timodel.IndexColumn{
-					{Name: timodel.CIStr{O: "job"}},
-				},
-				Unique: true,
-			},
-		},
-		Columns: []*timodel.ColumnInfo{
-			{
-				Name: timodel.CIStr{
-					O: "job",
-				},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.NotNullFlag,
-				},
-			},
-			{
-				Name: timodel.CIStr{
-					O: "uid",
-				},
-				FieldType: parser_types.FieldType{
-					Flag: mysql.PriKeyFlag,
-				},
-			},
-		},
-		PKIsHandle: true,
-	}
-	info := model.WrapTableInfo(1, "", 0, &t)
-	cols := info.GetUniqueKeys()
-	c.Assert(cols, DeepEquals, [][]string{
-		{"uid"}, {"job"},
-	})
-}
 
 func (t *schemaSuite) TestMultiVersionStorage(c *C) {
 	ctx, cancel := context.WithCancel(context.Background())
