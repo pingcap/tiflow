@@ -451,6 +451,11 @@ error = '''
 old value is not enabled
 '''
 
+["CDC:ErrOwnerCampaignKeyDeleted"]
+error = '''
+owner campaign key deleted
+'''
+
 ["CDC:ErrOwnerChangefeedNotFound"]
 error = '''
 changefeed %s not found in owner cache
