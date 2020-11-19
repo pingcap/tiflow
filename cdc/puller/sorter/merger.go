@@ -48,6 +48,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		log.Info("Unified Sorter: merger exiting, cleaning up resources", zap.Int("pending-set-size", len(pendingSet)))
 		// clean up resources
 		for task := range pendingSet {
+			if task.reader != nil {
+				_ = printError(task.reader.resetAndClose())
+			}
 			err := printError(task.dealloc())
 			if err != nil && task.backend != nil {
 				_ = task.backend.free()
@@ -312,6 +315,9 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 		return nil
 	}
 
+	resolveTicker := time.NewTicker(1 * time.Second)
+	defer resolveTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -345,6 +351,11 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				if err != nil {
 					return errors.Trace(err)
 				}
+			}
+		case <-resolveTicker.C:
+			err := sendResolvedEvent(minResolvedTs)
+			if err != nil {
+				return errors.Trace(err)
 			}
 		}
 	}
