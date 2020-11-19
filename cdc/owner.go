@@ -195,7 +195,12 @@ func (o *Owner) newChangeFeed(
 	checkpointTs uint64) (cf *changeFeed, resultErr error) {
 	log.Info("Find new changefeed", zap.Stringer("info", info),
 		zap.String("id", id), zap.Uint64("checkpoint ts", checkpointTs))
-
+	if info.Config.CheckGCSafePoint {
+		err := util.CheckSafetyOfStartTs(ctx, o.pdClient, checkpointTs)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(nil, tikv.ErrGCTooEarly.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})

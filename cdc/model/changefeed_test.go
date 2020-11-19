@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
@@ -30,6 +31,7 @@ type configSuite struct{}
 var _ = check.Suite(&configSuite{})
 
 func (s *configSuite) TestFillV1(c *check.C) {
+	defer testleak.AfterTest(c)()
 	v1Config := `
 {
     "sink-uri":"blackhole://",
@@ -164,11 +166,15 @@ func (s *configSuite) TestFillV1(c *check.C) {
 }
 
 func (s *configSuite) TestVerifyAndFix(c *check.C) {
+	defer testleak.AfterTest(c)()
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
 		Opts:    map[string]string{},
 		StartTs: 417257993615179777,
-		Config:  &config.ReplicaConfig{},
+		Config: &config.ReplicaConfig{
+			CheckGCSafePoint: true,
+			CaseSensitive:    true,
+		},
 	}
 
 	err := info.VerifyAndFix()
@@ -178,7 +184,6 @@ func (s *configSuite) TestVerifyAndFix(c *check.C) {
 	marshalConfig1, err := info.Config.Marshal()
 	c.Assert(err, check.IsNil)
 	defaultConfig := config.GetDefaultReplicaConfig()
-	defaultConfig.CaseSensitive = false
 	marshalConfig2, err := defaultConfig.Marshal()
 	c.Assert(err, check.IsNil)
 	c.Assert(marshalConfig1, check.Equals, marshalConfig2)
@@ -189,6 +194,7 @@ type changefeedSuite struct{}
 var _ = check.Suite(&changefeedSuite{})
 
 func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
+	defer testleak.AfterTest(c)()
 	now := time.Now()
 	info := &ChangeFeedInfo{
 		ErrorHis: []int64{},
@@ -215,6 +221,7 @@ func (s *changefeedSuite) TestCheckErrorHistory(c *check.C) {
 }
 
 func (s *changefeedSuite) TestChangefeedInfoStringer(c *check.C) {
+	defer testleak.AfterTest(c)()
 	info := &ChangeFeedInfo{
 		SinkURI: "blackhole://",
 		StartTs: 418881574869139457,

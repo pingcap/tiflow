@@ -21,6 +21,7 @@ import (
 	"runtime"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type fileUtilSuite struct{}
@@ -28,6 +29,7 @@ type fileUtilSuite struct{}
 var _ = check.Suite(&fileUtilSuite{})
 
 func (s *fileUtilSuite) TestIsDirWritable(c *check.C) {
+	defer testleak.AfterTest(c)()
 	dir := c.MkDir()
 	err := IsDirWritable(dir)
 	c.Assert(err, check.IsNil)
@@ -45,6 +47,7 @@ func (s *fileUtilSuite) TestIsDirWritable(c *check.C) {
 }
 
 func (s *fileUtilSuite) TestIsDirAndWritable(c *check.C) {
+	defer testleak.AfterTest(c)()
 	dir := c.MkDir()
 	path := filepath.Join(dir, "file.test")
 

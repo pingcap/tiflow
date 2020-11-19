@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 
 	"github.com/pingcap/check"
 )
@@ -26,6 +27,7 @@ type tableNumberSuite struct{}
 var _ = check.Suite(&tableNumberSuite{})
 
 func (s *tableNumberSuite) TestDistributeTables(c *check.C) {
+	defer testleak.AfterTest(c)()
 	scheduler := newTableNumberScheduler()
 	scheduler.ResetWorkloads("capture1", model.TaskWorkload{
 		1: model.WorkloadInfo{Workload: 1},
@@ -58,6 +60,7 @@ func (s *tableNumberSuite) TestDistributeTables(c *check.C) {
 }
 
 func (s *tableNumberSuite) TestCalRebalanceOperates(c *check.C) {
+	defer testleak.AfterTest(c)()
 	scheduler := newTableNumberScheduler()
 	scheduler.ResetWorkloads("capture1", model.TaskWorkload{
 		1: model.WorkloadInfo{Workload: 1},

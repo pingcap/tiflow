@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func TestSuite(t *testing.T) {
@@ -29,6 +30,7 @@ type helperSuite struct{}
 var _ = check.Suite(&helperSuite{})
 
 func (s *helperSuite) TestWrapError(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var (
 		rfcError  = ErrDecodeFailed
 		err       = errors.New("test")

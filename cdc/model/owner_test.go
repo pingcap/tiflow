@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func TestSuite(t *testing.T) { check.TestingT(t) }
@@ -153,6 +154,7 @@ type taskStatusSuite struct{}
 var _ = check.Suite(&taskStatusSuite{})
 
 func (s *taskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
+	defer testleak.AfterTest(c)()
 	info := TaskStatus{
 
 		Tables: map[TableID]*TableReplicaInfo{
@@ -203,6 +205,7 @@ func (s *taskStatusSuite) TestShouldBeDeepCopy(c *check.C) {
 }
 
 func (s *taskStatusSuite) TestProcSnapshot(c *check.C) {
+	defer testleak.AfterTest(c)()
 	info := TaskStatus{
 		Tables: map[TableID]*TableReplicaInfo{
 			10: {StartTs: 100},
@@ -278,6 +281,7 @@ type removeTableSuite struct{}
 var _ = check.Suite(&removeTableSuite{})
 
 func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
+	defer testleak.AfterTest(c)()
 	info := TaskStatus{
 		Tables: map[TableID]*TableReplicaInfo{
 			1: {StartTs: 100},
@@ -293,6 +297,7 @@ func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
 }
 
 func (s *removeTableSuite) TestShouldHandleTableNotFound(c *check.C) {
+	defer testleak.AfterTest(c)()
 	info := TaskStatus{}
 	_, found := info.RemoveTable(404, 666)
 	c.Assert(found, check.IsFalse)

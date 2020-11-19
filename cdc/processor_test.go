@@ -109,6 +109,7 @@ type processorTestCase struct {
 }
 
 func (p *processorSuite) TestProcessor(c *check.C) {
+		defer testleak.AfterTest(c)()
 	c.Skip("can't create mock puller")
 	cases := &processorTestCase{
 		rawTxnTs: [][]uint64{
@@ -209,6 +210,7 @@ func runCase(c *check.C, cases *processorTestCase) {
 }
 
 func (p *processorSuite) TestDiffProcessTableInfos(c *check.C) {
+		defer testleak.AfterTest(c)()
 	infos := make([]*model.ProcessTableInfo, 0, 3)
 	for i := uint64(0); i < uint64(3); i++ {
 		infos = append(infos, &model.ProcessTableInfo{ID: i, StartTs: 10 * i})
@@ -243,6 +245,7 @@ type txnChannelSuite struct{}
 var _ = check.Suite(&txnChannelSuite{})
 
 func (s *txnChannelSuite) TestShouldForwardTxnsByTs(c *check.C) {
+		defer testleak.AfterTest(c)()
 	input := make(chan model.RawTxn, 5)
 	var lastTs uint64
 	callback := func(ts uint64) {
@@ -288,6 +291,7 @@ func (s *txnChannelSuite) TestShouldForwardTxnsByTs(c *check.C) {
 }
 
 func (s *txnChannelSuite) TestShouldBeCancellable(c *check.C) {
+		defer testleak.AfterTest(c)()
 	input := make(chan model.RawTxn, 5)
 	tc := newTxnChannel(input, 5, func(ts uint64) {})
 	ctx, cancel := context.WithCancel(context.Background())

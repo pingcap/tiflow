@@ -16,6 +16,7 @@ package kv
 import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type MatcherSuite struct{}
@@ -23,6 +24,7 @@ type MatcherSuite struct{}
 var _ = check.Suite(&MatcherSuite{})
 
 func (s *MatcherSuite) TestMatcher(c *check.C) {
+	defer testleak.AfterTest(c)()
 	matcher := newMatcher()
 	matcher.putPrewriteRow(&cdcpb.Event_Row{
 		StartTs: 1,

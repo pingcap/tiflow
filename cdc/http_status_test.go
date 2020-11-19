@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/check"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3/concurrency"
 )
 
@@ -55,6 +56,7 @@ func (s *httpStatusSuite) waitUntilServerOnline(c *check.C) {
 }
 
 func (s *httpStatusSuite) TestHTTPStatus(c *check.C) {
+	defer testleak.AfterTest(c)()
 	server := &Server{opts: testingServerOptions}
 	err := server.startStatusHTTP()
 	c.Assert(err, check.IsNil)

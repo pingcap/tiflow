@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/filter"
 	"github.com/pingcap/ticdc/pkg/notify"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -42,7 +43,7 @@ func Test(t *testing.T) { check.TestingT(t) }
 
 var _ = check.Suite(&MySQLSinkSuite{})
 
-func newMySQLSink4Test(c *check.C) *mysqlSink {
+func newMySQLSink4Test(ctx context.Context, c *check.C) *mysqlSink {
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
 	params := defaultParams.Clone()
@@ -50,12 +51,13 @@ func newMySQLSink4Test(c *check.C) *mysqlSink {
 	return &mysqlSink{
 		txnCache:   common.NewUnresolvedTxnCache(),
 		filter:     f,
-		statistics: NewStatistics(context.TODO(), "test", make(map[string]string)),
+		statistics: NewStatistics(ctx, "test", make(map[string]string)),
 		params:     params,
 	}
 }
 
 func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		input    []*model.RowChangedEvent
 		expected map[model.TableID][]*model.SingleTableTxn
@@ -247,10 +249,10 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 			},
 		},
 	}}
-	ctx := context.Background()
-
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	for _, tc := range testCases {
-		ms := newMySQLSink4Test(c)
+		ms := newMySQLSink4Test(ctx, c)
 		err := ms.EmitRowChangedEvents(ctx, tc.input...)
 		c.Assert(err, check.IsNil)
 		c.Assert(ms.txnCache.Unresolved(), check.DeepEquals, tc.expected)
@@ -258,6 +260,7 @@ func (s MySQLSinkSuite) TestEmitRowChangedEvents(c *check.C) {
 }
 
 func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		txns                     []*model.SingleTableTxn
 		expectedOutputRows       [][]*model.RowChangedEvent
@@ -407,6 +410,7 @@ func (s MySQLSinkSuite) TestMysqlSinkWorker(c *check.C) {
 }
 
 func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		input    []*model.RowChangedEvent
 		expected *preparedDMLs
@@ -439,7 +443,9 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
 			rowCount: 1,
 		},
 	}}
-	ms := newMySQLSink4Test(c)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ms := newMySQLSink4Test(ctx, c)
 	for i, tc := range testCases {
 		dmls := ms.prepareDMLs(tc.input, 0, 0)
 		c.Assert(dmls, check.DeepEquals, tc.expected, check.Commentf("%d", i))
@@ -447,6 +453,7 @@ func (s MySQLSinkSuite) TestPrepareDML(c *check.C) {
 }
 
 func (s MySQLSinkSuite) TestPrepareUpdate(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		quoteTable   string
 		preCols      []*model.Column
@@ -498,6 +505,7 @@ func (s MySQLSinkSuite) TestPrepareUpdate(c *check.C) {
 }
 
 func (s MySQLSinkSuite) TestPrepareDelete(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		quoteTable   string
 		preCols      []*model.Column
@@ -538,6 +546,7 @@ func (s MySQLSinkSuite) TestPrepareDelete(c *check.C) {
 }
 
 func (s MySQLSinkSuite) TestWhereSlice(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		cols             []*model.Column
 		forceReplicate   bool
@@ -622,6 +631,7 @@ func (s MySQLSinkSuite) TestWhereSlice(c *check.C) {
 }
 
 func (s MySQLSinkSuite) TestMapReplace(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		quoteTable    string
 		cols          []*model.Column
@@ -668,6 +678,7 @@ func (a sqlArgs) Less(i, j int) bool { return fmt.Sprintf("%s", a[i]) < fmt.Spri
 func (a sqlArgs) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
 func (s MySQLSinkSuite) TestReduceReplace(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		replaces   map[string][][]interface{}
 		batchSize  int
@@ -778,6 +789,7 @@ func (s MySQLSinkSuite) TestReduceReplace(c *check.C) {
 }
 
 func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
+	defer testleak.AfterTest(c)()
 	param1 := defaultParams.Clone()
 	param2 := param1.Clone()
 	param2.changefeedID = "123"
@@ -807,8 +819,10 @@ func (s MySQLSinkSuite) TestSinkParamsClone(c *check.C) {
 }
 
 func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
+	defer testleak.AfterTest(c)()
 	db, mock, err := sqlmock.New()
 	c.Assert(err, check.IsNil)
+	defer db.Close() //nolint:errcheck
 	columns := []string{"Variable_name", "Value"}
 	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
 		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
@@ -846,6 +860,7 @@ func (s MySQLSinkSuite) TestConfigureSinkURI(c *check.C) {
 }
 
 func (s MySQLSinkSuite) TestParseSinkURI(c *check.C) {
+	defer testleak.AfterTest(c)()
 	expected := defaultParams.Clone()
 	expected.workerCount = 64
 	expected.maxTxnRow = 20
@@ -871,6 +886,7 @@ func (s MySQLSinkSuite) TestParseSinkURI(c *check.C) {
 }
 
 func (s MySQLSinkSuite) TestParseSinkURITimezone(c *check.C) {
+	defer testleak.AfterTest(c)()
 	uris := []string{
 		"mysql://127.0.0.1:3306/?time-zone=Asia/Shanghai&worker-count=32",
 		"mysql://127.0.0.1:3306/?time-zone=&worker-count=32",
@@ -893,6 +909,7 @@ func (s MySQLSinkSuite) TestParseSinkURITimezone(c *check.C) {
 }
 
 func (s MySQLSinkSuite) TestParseSinkURIBadQueryString(c *check.C) {
+	defer testleak.AfterTest(c)()
 	uris := []string{
 		"",
 		"postgre://127.0.0.1:3306",
@@ -920,8 +937,10 @@ func (s MySQLSinkSuite) TestParseSinkURIBadQueryString(c *check.C) {
 }
 
 func (s MySQLSinkSuite) TestCheckTiDBVariable(c *check.C) {
+	defer testleak.AfterTest(c)()
 	db, mock, err := sqlmock.New()
 	c.Assert(err, check.IsNil)
+	defer db.Close() //nolint:errcheck
 	columns := []string{"Variable_name", "Value"}
 
 	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
