@@ -63,12 +63,6 @@ func newFileBackEnd(fileName string, serde serializerDeserializer) (*fileBackEnd
 }
 
 func (f *fileBackEnd) reader() (backEndReader, error) {
-	failpoint.Inject("sorterDebug", func() {
-		if atomic.SwapInt32(&f.borrowed, 1) != 0 {
-			log.Fatal("fileBackEnd: already borrowed", zap.String("fileName", f.fileName))
-		}
-	})
-
 	fd, err := os.OpenFile(f.fileName, os.O_RDONLY, 0644)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -85,6 +79,12 @@ func (f *fileBackEnd) reader() (backEndReader, error) {
 		totalSize = info.Size()
 	})
 
+	failpoint.Inject("sorterDebug", func() {
+		if atomic.SwapInt32(&f.borrowed, 1) != 0 {
+			log.Fatal("fileBackEnd: already borrowed", zap.String("fileName", f.fileName))
+		}
+	})
+
 	return &fileBackEndReader{
 		backEnd:   f,
 		f:         fd,
@@ -94,18 +94,18 @@ func (f *fileBackEnd) reader() (backEndReader, error) {
 }
 
 func (f *fileBackEnd) writer() (backEndWriter, error) {
-	failpoint.Inject("sorterDebug", func() {
-		if atomic.SwapInt32(&f.borrowed, 1) != 0 {
-			log.Fatal("fileBackEnd: already borrowed", zap.String("fileName", f.fileName))
-		}
-	})
-
 	fd, err := os.OpenFile(f.fileName, os.O_TRUNC|os.O_RDWR, 0644)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	atomic.AddInt64(&openFDCount, 1)
+
+	failpoint.Inject("sorterDebug", func() {
+		if atomic.SwapInt32(&f.borrowed, 1) != 0 {
+			log.Fatal("fileBackEnd: already borrowed", zap.String("fileName", f.fileName))
+		}
+	})
 
 	return &fileBackEndWriter{
 		backEnd: f,

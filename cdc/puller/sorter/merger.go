@@ -259,6 +259,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				if err != nil {
 					return errors.Trace(err)
 				}
+				task.reader = nil
 
 				err = task.dealloc()
 				if err != nil {
