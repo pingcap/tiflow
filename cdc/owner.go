@@ -347,13 +347,13 @@ func (o *Owner) newChangeFeed(
 		select {
 		case <-ctx.Done():
 		case err = <-errCh:
+			cancel()
 		}
 		if err != nil && errors.Cause(err) != context.Canceled {
-			log.Error("error on running owner", zap.Error(err))
+			log.Error("error on running changefeed", zap.Error(err), zap.String("changefeed", id))
 		} else {
-			log.Info("owner exited")
+			log.Info("changefeed exited", zap.String("changfeed", id))
 		}
-		cancel()
 	}()
 
 	err = primarySink.Initialize(ctx, sinkTableInfo)
@@ -399,6 +399,7 @@ func (o *Owner) newChangeFeed(
 		sink:              primarySink,
 		cyclicEnabled:     info.Config.Cyclic.IsEnabled(),
 		lastRebalanceTime: time.Now(),
+		cancel:            cancel,
 	}
 	return cf, nil
 }
