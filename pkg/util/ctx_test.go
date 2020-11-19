@@ -15,6 +15,8 @@ package util
 
 import (
 	"context"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -34,6 +36,8 @@ func (s *ctxValueSuite) TestShouldReturnCaptureID(c *check.C) {
 func (s *ctxValueSuite) TestCaptureIDNotSet(c *check.C) {
 	defer testleak.AfterTest(c)()
 	c.Assert(CaptureAddrFromCtx(context.Background()), check.Equals, "")
+	captureAddr := CaptureAddrFromCtx(context.Background())
+	c.Assert(captureAddr, check.Equals, "")
 	ctx := context.WithValue(context.Background(), ctxKeyCaptureAddr, 1321)
 	c.Assert(CaptureAddrFromCtx(ctx), check.Equals, "")
 }
@@ -56,8 +60,133 @@ func (s *ctxValueSuite) TestCanceledContext(c *check.C) {
 func (s *ctxValueSuite) TestChangefeedIDNotSet(c *check.C) {
 	defer testleak.AfterTest(c)()
 	c.Assert(ChangefeedIDFromCtx(context.Background()), check.Equals, "")
+	changefeedID := ChangefeedIDFromCtx(context.Background())
+	c.Assert(changefeedID, check.Equals, "")
 	ctx := context.WithValue(context.Background(), ctxKeyChangefeedID, 1321)
-	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "")
+	changefeedID = ChangefeedIDFromCtx(ctx)
+	c.Assert(changefeedID, check.Equals, "")
+}
+
+func (s *ctxValueSuite) TestShouldReturnTimezone(c *check.C) {
+	defer testleak.AfterTest(c)()
+	tz, _ := getTimezoneFromZonefile("UTC")
+	ctx := PutTimezoneInCtx(context.Background(), tz)
+	tz = TimezoneFromCtx(ctx)
+	c.Assert(tz.String(), check.Equals, "UTC")
+}
+
+func (s *ctxValueSuite) TestTimezoneNotSet(c *check.C) {
+	defer testleak.AfterTest(c)()
+	tz := TimezoneFromCtx(context.Background())
+	c.Assert(tz, check.IsNil)
+	ctx := context.WithValue(context.Background(), ctxKeyTimezone, 1321)
+	tz = TimezoneFromCtx(ctx)
+	c.Assert(tz, check.IsNil)
+}
+
+func (s *ctxValueSuite) TestShouldReturnTableInfo(c *check.C) {
+	defer testleak.AfterTest(c)()
+	ctx := PutTableInfoInCtx(context.Background(), 1321, "ello")
+	tableID, tableName := TableIDFromCtx(ctx)
+	c.Assert(tableID, check.Equals, int64(1321))
+	c.Assert(tableName, check.Equals, "ello")
+}
+
+func (s *ctxValueSuite) TestTableInfoNotSet(c *check.C) {
+	defer testleak.AfterTest(c)()
+	tableID, tableName := TableIDFromCtx(context.Background())
+	c.Assert(tableID, check.Equals, int64(0))
+	c.Assert(tableName, check.Equals, "")
+	ctx := context.WithValue(context.Background(), ctxKeyTableID, 1321)
+	tableID, tableName = TableIDFromCtx(ctx)
+	c.Assert(tableID, check.Equals, int64(0))
+	c.Assert(tableName, check.Equals, "")
+}
+
+
+func (s *ctxValueSuite) TestShouldReturnKVStorage(c *check.C) {
+	defer testleak.AfterTest(c)()
+	kvStorage := newMockStorage()
+	ctx := PutKVStorageInCtx(context.Background(), kvStorage)
+	kvStorage, err := KVStorageFromCtx(ctx)
+	c.Assert(kvStorage.Name(), check.Equals, "KVMockStorage")
+	c.Assert(err, check.IsNil)
+}
+
+func (s *ctxValueSuite) TestKVStorageNotSet(c *check.C) {
+	defer testleak.AfterTest(c)()
+	//Context not set value
+	kvStorage, err := KVStorageFromCtx(context.Background())
+	c.Assert(kvStorage, check.IsNil)
+	c.Assert(err, check.NotNil)
+	//Type of value is not kv.Storage
+	ctx := context.WithValue(context.Background(), ctxKeyKVStorage, 1321)
+	kvStorage, err = KVStorageFromCtx(ctx)
+	c.Assert(kvStorage, check.IsNil)
+	c.Assert(err, check.NotNil)
+}
+
+type mockStorage struct {
+}
+
+func (s *mockStorage) Begin() (kv.Transaction, error) {
+	return nil, nil
+}
+
+func (s *mockStorage) BeginWithStartTS(startTS uint64) (kv.Transaction, error) {
+	return nil, nil
+}
+
+func (s *mockStorage) Close() error {
+	return nil
+}
+
+func (s *mockStorage) UUID() string {
+	return ""
+}
+
+func (s *mockStorage) CurrentVersion() (kv.Version, error) {
+	return kv.Version{1}, nil
+}
+
+func (s *mockStorage) GetMPPClient() kv.MPPClient {
+	return nil
+}
+func (s *mockStorage) GetClient() kv.Client {
+	return nil
+}
+
+func (s *mockStorage) GetOracle() oracle.Oracle {
+	return nil
+}
+
+func (s *mockStorage) SupportDeleteRange() (supported bool) {
+	return false
+}
+
+func (s *mockStorage) Name() string {
+	return "KVMockStorage"
+}
+
+func (s *mockStorage) Describe() string {
+	return "KVMockStorage is a mock Store implementation, only for unittests in KV package"
+}
+
+func (s *mockStorage) ShowStatus(ctx context.Context, key string) (interface{}, error) {
+	return nil, nil
+}
+
+func (s *mockStorage) GetMemCache() kv.MemManager {
+	return nil
+}
+
+func (s *mockStorage) GetSnapshot(ver kv.Version) kv.Snapshot {
+	return nil
+}
+
+// newMockStorage creates a new mockStorage.
+func newMockStorage() kv.Storage {
+	return &mockStorage{}
 }
 
 func (s *ctxValueSuite) TestZapFieldWithContext(c *check.C) {
