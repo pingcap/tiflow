@@ -18,20 +18,18 @@ import (
 	"math"
 
 	"github.com/pingcap/check"
-	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/kvproto/pkg/pdpb"
 	pd "github.com/tikv/pd/client"
 )
 
-type gcServiceuite struct {
+type gcServiceSuite struct {
 	pdCli mockPdClientForServiceGCSafePoint
 }
 
-var _ = check.Suite(&gcServiceuite{
+var _ = check.Suite(&gcServiceSuite{
 	mockPdClientForServiceGCSafePoint{serviceSafePoint: make(map[string]uint64)},
 })
 
-func (s *gcServiceuite) TestCheckSafetyOfStartTs(c *check.C) {
+func (s *gcServiceSuite) TestCheckSafetyOfStartTs(c *check.C) {
 	ctx := context.Background()
 	s.pdCli.UpdateServiceGCSafePoint(ctx, "service1", 10, 60) //nolint:errcheck
 	err := CheckSafetyOfStartTs(ctx, s.pdCli, 50)
@@ -45,7 +43,7 @@ func (s *gcServiceuite) TestCheckSafetyOfStartTs(c *check.C) {
 }
 
 type mockPdClientForServiceGCSafePoint struct {
-	baseMockPdClient
+	pd.Client
 	serviceSafePoint map[string]uint64
 }
 
@@ -61,111 +59,4 @@ func (m mockPdClientForServiceGCSafePoint) UpdateServiceGCSafePoint(ctx context.
 	}
 	m.serviceSafePoint[serviceID] = safePoint
 	return minSafePoint, nil
-}
-
-type baseMockPdClient struct {
-}
-
-// GetClusterID gets the cluster ID from PD.
-func (m baseMockPdClient) GetClusterID(ctx context.Context) uint64 {
-	panic("not implemented")
-}
-
-// GetMemberInfo gets the members Info from PD
-func (m baseMockPdClient) GetMemberInfo(ctx context.Context) ([]*pdpb.Member, error) {
-	panic("not implemented")
-}
-
-// GetLeaderAddr returns current leader's address. It returns "" before
-// syncing leader from server.
-func (m baseMockPdClient) GetLeaderAddr() string {
-	panic("not implemented")
-}
-
-// GetTS gets a timestamp from PD.
-func (m baseMockPdClient) GetTS(ctx context.Context) (int64, int64, error) {
-	panic("not implemented")
-}
-
-// GetTSAsync gets a timestamp from PD, without block the caller.
-func (m baseMockPdClient) GetTSAsync(ctx context.Context) pd.TSFuture {
-	panic("not implemented")
-}
-
-// GetRegion gets a region and its leader Peer from PD by key.
-// The region may expire after split. Caller is responsible for caching and
-// taking care of region change.
-// Also it may return nil if PD finds no Region for the key temporarily,
-// client should retry later.
-func (m baseMockPdClient) GetRegion(ctx context.Context, key []byte) (*pd.Region, error) {
-	panic("not implemented")
-}
-
-// GetPrevRegion gets the previous region and its leader Peer of the region where the key is located.
-func (m baseMockPdClient) GetPrevRegion(ctx context.Context, key []byte) (*pd.Region, error) {
-	panic("not implemented")
-}
-
-// GetRegionByID gets a region and its leader Peer from PD by id.
-func (m baseMockPdClient) GetRegionByID(ctx context.Context, regionID uint64) (*pd.Region, error) {
-	panic("not implemented")
-}
-
-// ScanRegion gets a list of regions, starts from the region that contains key.
-// Limit limits the maximum number of regions returned.
-// If a region has no leader, corresponding leader will be placed by a peer
-// with empty value (PeerID is 0).
-func (m baseMockPdClient) ScanRegions(ctx context.Context, key []byte, endKey []byte, limit int) ([]*pd.Region, error) {
-	panic("not implemented")
-}
-
-// GetStore gets a store from PD by store id.
-// The store may expire later. Caller is responsible for caching and taking care
-// of store change.
-func (m baseMockPdClient) GetStore(ctx context.Context, storeID uint64) (*metapb.Store, error) {
-	panic("not implemented")
-}
-
-// GetAllStores gets all stores from pd.
-// The store may expire later. Caller is responsible for caching and taking care
-// of store change.
-func (m baseMockPdClient) GetAllStores(ctx context.Context, opts ...pd.GetStoreOption) ([]*metapb.Store, error) {
-	panic("not implemented")
-}
-
-// Update GC safe point. TiKV will check it and do GC themselves if necessary.
-// If the given safePoint is less than the current one, it will not be updated.
-// Returns the new safePoint after updating.
-func (m baseMockPdClient) UpdateGCSafePoint(ctx context.Context, safePoint uint64) (uint64, error) {
-	panic("not implemented")
-}
-
-// UpdateServiceGCSafePoint updates the safepoint for specific service and
-// returns the minimum safepoint across all services, this value is used to
-// determine the safepoint for multiple services, it does not tigger a GC
-// job. Use UpdateGCSafePoint to trigger the GC job if needed.
-func (m baseMockPdClient) UpdateServiceGCSafePoint(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
-	panic("not implemented")
-}
-
-// ScatterRegion scatters the specified region. Should use it for a batch of regions,
-// and the distribution of these regions will be dispersed.
-func (m baseMockPdClient) ScatterRegion(ctx context.Context, regionID uint64) error {
-	panic("not implemented")
-}
-
-// ScatterRegionWithOption scatters the specified region with the given options, should use it
-// for a batch of regions.
-func (m baseMockPdClient) ScatterRegionWithOption(ctx context.Context, regionID uint64, opts ...pd.ScatterRegionOption) error {
-	panic("not implemented")
-}
-
-// GetOperator gets the status of operator of the specified region.
-func (m baseMockPdClient) GetOperator(ctx context.Context, regionID uint64) (*pdpb.GetOperatorResponse, error) {
-	panic("not implemented")
-}
-
-// Close closes the client.
-func (m baseMockPdClient) Close() {
-	panic("not implemented")
 }
