@@ -64,6 +64,7 @@ function run_length_limit() {
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     cleanup_process $CDC_BINARY
+    stop_tidb_cluster
 }
 
 function run_batch_size_limit() {
@@ -119,8 +120,10 @@ function run_batch_size_limit() {
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     cleanup_process $CDC_BINARY
+    stop_tidb_cluster
 }
 
 trap stop_tidb_cluster EXIT
-run $*
+run_length_limit $*
+run_batch_size_limit $*
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
