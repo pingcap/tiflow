@@ -292,12 +292,7 @@ func (s *removeTableSuite) TestShouldReturnRemovedTable(c *check.C) {
 	c.Assert(replicaInfo, check.DeepEquals, &TableReplicaInfo{StartTs: 200})
 }
 
-<<<<<<< HEAD
-func (s *removeTableSuite) TestShouldHandleTableNotFoundCorrectly(c *check.C) {
-=======
 func (s *removeTableSuite) TestShouldHandleTableNotFound(c *check.C) {
-	defer testleak.AfterTest(c)()
->>>>>>> d981921... tests: add more unit tests in cdc/model package (#1081)
 	info := TaskStatus{}
 	_, found := info.RemoveTable(404, 666)
 	c.Assert(found, check.IsFalse)

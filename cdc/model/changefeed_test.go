@@ -20,11 +20,8 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
-<<<<<<< HEAD
-=======
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
->>>>>>> d981921... tests: add more unit tests in cdc/model package (#1081)
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 )
