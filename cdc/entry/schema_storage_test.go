@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
-	parser_types "github.com/pingcap/parser/types"
 	"github.com/pingcap/ticdc/cdc/kv"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
@@ -394,7 +393,7 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsNotHandle(c *c
 	t := timodel.TableInfo{
 		Columns: []*timodel.ColumnInfo{
 			{Name: timodel.CIStr{O: "name"},
-				FieldType: parser_types.FieldType{
+				FieldType: types.FieldType{
 					Flag: mysql.NotNullFlag,
 				},
 			},
@@ -450,7 +449,7 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *chec
 				Name: timodel.CIStr{
 					O: "job",
 				},
-				FieldType: parser_types.FieldType{
+				FieldType: types.FieldType{
 					Flag: mysql.NotNullFlag,
 				},
 			},
@@ -458,7 +457,7 @@ func (s *getUniqueKeysSuite) TestPKShouldBeInTheFirstPlaceWhenPKIsHandle(c *chec
 				Name: timodel.CIStr{
 					O: "uid",
 				},
-				FieldType: parser_types.FieldType{
+				FieldType: types.FieldType{
 					Flag: mysql.PriKeyFlag,
 				},
 			},
