@@ -164,6 +164,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 			nextEvent, err := task.reader.readNext()
 			if err != nil {
 				_ = task.reader.resetAndClose() // prevents fd leak
+				task.reader = nil
 				return errors.Trace(err)
 			}
 
@@ -174,6 +175,7 @@ func runMerger(ctx context.Context, numSorters int, in <-chan *flushTask, out ch
 				if err != nil {
 					return errors.Trace(err)
 				}
+				task.reader = nil
 
 				err = task.dealloc()
 				if err != nil {
