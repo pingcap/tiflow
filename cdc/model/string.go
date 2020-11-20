@@ -14,28 +14,13 @@
 package model
 
 import (
-	"fmt"
 	"strings"
 
 	cerror "github.com/pingcap/ticdc/pkg/errors"
 )
 
-// QuoteSchema quotes a full table name
-func QuoteSchema(schema string, table string) string {
-	return fmt.Sprintf("`%s`.`%s`", EscapeName(schema), EscapeName(table))
-}
-
-// QuoteName wraps a name with "`"
-func QuoteName(name string) string {
-	return "`" + EscapeName(name) + "`"
-}
-
-// EscapeName replaces all "`" in name with "``"
-func EscapeName(name string) string {
-	return strings.Replace(name, "`", "``", -1)
-}
-
 // HolderString returns a string of place holders separated by comma
+// n must be greater or equal than 1, or the function will panic
 func HolderString(n int) string {
 	var builder strings.Builder
 	builder.Grow((n-1)*2 + 1)

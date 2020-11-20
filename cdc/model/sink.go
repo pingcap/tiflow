@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/parser/model"
+	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/pingcap/ticdc/pkg/util"
 	"go.uber.org/zap"
 )
@@ -194,7 +195,7 @@ func (t TableName) String() string {
 
 // QuoteString returns quoted full table name
 func (t TableName) QuoteString() string {
-	return QuoteSchema(t.Schema, t.Table)
+	return quotes.QuoteSchema(t.Schema, t.Table)
 }
 
 // GetSchema returns schema name.
