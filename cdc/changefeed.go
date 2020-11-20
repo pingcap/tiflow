@@ -114,6 +114,9 @@ type changeFeed struct {
 	lastRebalanceTime time.Time
 
 	etcdCli kv.CDCEtcdClient
+
+	// context cancel function for all internal goroutines
+	cancel context.CancelFunc
 }
 
 // String implements fmt.Stringer interface.
@@ -945,18 +948,19 @@ func (c *changeFeed) startSyncPointTicker(ctx context.Context, interval time.Dur
 
 func (c *changeFeed) Close() {
 	err := c.ddlHandler.Close()
-	if err != nil {
+	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Warn("failed to close ddl handler", zap.Error(err))
 	}
 	err = c.sink.Close()
-	if err != nil {
+	if err != nil && errors.Cause(err) != context.Canceled {
 		log.Warn("failed to close owner sink", zap.Error(err))
 	}
 	if c.syncpointStore != nil {
 		err = c.syncpointStore.Close()
-		if err != nil {
+		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Warn("failed to close owner sink", zap.Error(err))
 		}
 	}
+	c.cancel()
 	log.Info("changefeed closed", zap.String("id", c.id))
 }

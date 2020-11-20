@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func Test(t *testing.T) {
@@ -30,6 +31,7 @@ type notifySuite struct{}
 var _ = check.Suite(&notifySuite{})
 
 func (s *notifySuite) TestNotifyHub(c *check.C) {
+	defer testleak.AfterTest(c)()
 	notifier := new(Notifier)
 	r1 := notifier.NewReceiver(-1)
 	r2 := notifier.NewReceiver(-1)
@@ -60,6 +62,7 @@ func (s *notifySuite) TestNotifyHub(c *check.C) {
 }
 
 func (s *notifySuite) TestContinusStop(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	notifier := new(Notifier)

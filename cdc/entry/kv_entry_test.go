@@ -435,22 +435,27 @@ func (s *kvEntrySuite) testUkWithNoPk(c *check.C, newRowFormat bool) {
 }
 
 func (s *kvEntrySuite) TestCreateTable(c *check.C) {
+		defer testleak.AfterTest(c)()
 	s.testCreateTable(c, true)
 	s.testCreateTable(c, false)
 }
 func (s *kvEntrySuite) TestPkIsNotHandleDML(c *check.C) {
+		defer testleak.AfterTest(c)()
 	s.testPkIsNotHandleDML(c, true)
 	s.testPkIsNotHandleDML(c, false)
 }
 func (s *kvEntrySuite) TestPkIsHandleDML(c *check.C) {
+		defer testleak.AfterTest(c)()
 	s.testPkIsHandleDML(c, true)
 	s.testPkIsHandleDML(c, false)
 }
 func (s *kvEntrySuite) TestUkWithNull(c *check.C) {
+		defer testleak.AfterTest(c)()
 	s.testUkWithNull(c, true)
 	s.testUkWithNull(c, false)
 }
 func (s *kvEntrySuite) TestUkWithNoPk(c *check.C) {
+		defer testleak.AfterTest(c)()
 	s.testUkWithNoPk(c, true)
 	s.testUkWithNoPk(c, false)
 }

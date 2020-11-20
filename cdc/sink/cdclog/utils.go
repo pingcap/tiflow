@@ -22,12 +22,12 @@ import (
 
 	"github.com/pingcap/br/pkg/storage"
 	"github.com/pingcap/log"
+	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/cdc/sink/codec"
+	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/pingcap/ticdc/cdc/model"
-	"github.com/pingcap/ticdc/cdc/sink/codec"
 )
 
 const (
@@ -237,7 +237,7 @@ func makeLogMetaContent(tableInfos []*model.SimpleTableInfo) *logMeta {
 	for _, table := range tableInfos {
 		if table != nil {
 			log.Info("[makeLogMetaContent]", zap.Reflect("table", table))
-			names[table.TableID] = model.QuoteSchema(table.Schema, table.Table)
+			names[table.TableID] = quotes.QuoteSchema(table.Schema, table.Table)
 		}
 	}
 	meta.Names = names

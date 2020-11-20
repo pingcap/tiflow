@@ -224,6 +224,13 @@ func (m *MockPullerManager) setUp(newRowFormat bool) {
 	mvccListener.registerPostRollback(m.postRollback)
 }
 
+// TearDown release all resources in a mock puller manager
+func (m *MockPullerManager) TearDown() {
+	m.mvccStore.Close() //nolint:errcheck
+	m.store.Close()     //nolint:errcheck
+	m.domain.Close()
+}
+
 // CreatePuller returns a mock puller with the specified start ts and spans
 func (m *MockPullerManager) CreatePuller(startTs uint64, spans []regionspan.ComparableSpan) Puller {
 	return &mockPuller{
