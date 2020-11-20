@@ -110,7 +110,6 @@ func testMySQLWithCheckingOldvValue() {
 func runTests(cases []framework.Task, env framework.Environment) {
 	log.SetLevel(zapcore.DebugLevel)
 	env.Setup()
-	env.Reset()
 
 	for i := range cases {
 		env.RunTest(cases[i])

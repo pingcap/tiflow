@@ -117,15 +117,16 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 	if err != nil {
 		return err
 	}
+	if _, ok := s.Task.(*avro.SingleTableTask); ok {
+		_, err = ctx.Downstream.ExecContext(ctx.Ctx, "drop table if exists test")
+		if err != nil {
+			return err
+		}
 
-	_, err = ctx.Downstream.ExecContext(ctx.Ctx, "drop table if exists test")
-	if err != nil {
-		return err
-	}
-
-	_, err = ctx.Downstream.ExecContext(ctx.Ctx, createDBQuery)
-	if err != nil {
-		return err
+		_, err = ctx.Downstream.ExecContext(ctx.Ctx, createDBQuery)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Get a handle of an existing table
@@ -153,5 +154,5 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["t_year"] = 2019
 		data["t_bit"] = 0b1001001
 	}
-	return table.Insert(data).Send().Wait().Check()
+	return table.Insert(data).Send().SetTimeOut(1 * time.Hour).Wait().Check()
 }

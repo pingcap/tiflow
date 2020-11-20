@@ -56,6 +56,20 @@ func (d *DockerComposeOperator) Setup() {
 	}
 }
 
+// RestartComponents restarts a docker-compose service
+func (d *DockerComposeOperator) RestartComponents(names ...string) {
+	for _, name := range names {
+		cmd := exec.Command("docker-compose", "-f", d.FileName, "rm", "-sf", name)
+		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env, d.ExecEnv...)
+		runCmdHandleError(cmd)
+	}
+	cmd := exec.Command("docker-compose", "-f", d.FileName, "up", "-d")
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, d.ExecEnv...)
+	runCmdHandleError(cmd)
+}
+
 func waitTiDBStarted(dsn string) error {
 	return retry.Run(time.Second, 60, func() error {
 		upstream, err := sql.Open("mysql", dsn)
