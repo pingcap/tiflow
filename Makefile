@@ -98,7 +98,7 @@ integration_test_build: check_failpoint_ctl
 		-coverpkg=github.com/pingcap/ticdc/... \
 		-o bin/cdc.test github.com/pingcap/ticdc \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./main.go \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
