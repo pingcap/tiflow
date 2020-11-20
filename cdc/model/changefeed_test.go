@@ -14,13 +14,16 @@
 package model
 
 import (
+	"math"
 	"time"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
 	"github.com/pingcap/ticdc/pkg/config"
+	cerror "github.com/pingcap/ticdc/pkg/errors"
 	"github.com/pingcap/ticdc/pkg/util/testleak"
 	filter "github.com/pingcap/tidb-tools/pkg/table-filter"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 type configSuite struct{}
@@ -95,7 +98,7 @@ func (s *configSuite) TestFillV1(c *check.C) {
             ]
         },
         "cyclic-replication":{
-            "enable":false,
+            "enable":true,
             "replica-id":1,
             "filter-replica-ids":[
                 2,
@@ -112,7 +115,9 @@ func (s *configSuite) TestFillV1(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(cfg, check.DeepEquals, &ChangeFeedInfo{
 		SinkURI: "blackhole://",
-		Opts:    map[string]string{},
+		Opts: map[string]string{
+			"_cyclic_relax_sql_mode": `{"enable":true,"replica-id":1,"filter-replica-ids":[2,3],"id-buckets":4,"sync-ddl":true}`,
+		},
 		StartTs: 417136892416622595,
 		Engine:  "memory",
 		SortDir: ".",
@@ -150,6 +155,7 @@ func (s *configSuite) TestFillV1(c *check.C) {
 				},
 			},
 			Cyclic: &config.CyclicConfig{
+				Enable:          true,
 				ReplicaID:       1,
 				FilterReplicaID: []uint64{2, 3},
 				IDBuckets:       4,
@@ -222,4 +228,50 @@ func (s *changefeedSuite) TestChangefeedInfoStringer(c *check.C) {
 	}
 	str := info.String()
 	c.Check(str, check.Matches, ".*sink-uri\":\"\\*\\*\\*\".*")
+}
+
+func (s *changefeedSuite) TestValidateChangefeedID(c *check.C) {
+	validIDs := []string{
+		"test",
+		"1",
+		"9ff52aca-aea6-4022-8ec4-fbee3f2c7890",
+	}
+	for _, id := range validIDs {
+		err := ValidateChangefeedID(id)
+		c.Assert(err, check.IsNil)
+	}
+
+	invalidIDs := []string{
+		"",
+		"test_task",
+		"job$",
+	}
+	for _, id := range invalidIDs {
+		err := ValidateChangefeedID(id)
+		c.Assert(cerror.ErrInvalidChangefeedID.Equal(err), check.IsTrue)
+	}
+}
+
+func (s *changefeedSuite) TestGetTs(c *check.C) {
+	var (
+		startTs      uint64 = 418881574869139457
+		targetTs     uint64 = 420891571239139085
+		checkpointTs uint64 = 420874357546418177
+		createTime          = time.Now()
+		info                = &ChangeFeedInfo{
+			SinkURI:    "blackhole://",
+			CreateTime: createTime,
+		}
+	)
+	c.Assert(info.GetStartTs(), check.Equals, oracle.EncodeTSO(createTime.Unix()*1000))
+	info.StartTs = startTs
+	c.Assert(info.GetStartTs(), check.Equals, startTs)
+
+	c.Assert(info.GetTargetTs(), check.Equals, uint64(math.MaxUint64))
+	info.TargetTs = targetTs
+	c.Assert(info.GetTargetTs(), check.Equals, targetTs)
+
+	c.Assert(info.GetCheckpointTs(nil), check.Equals, startTs)
+	status := &ChangeFeedStatus{CheckpointTs: checkpointTs}
+	c.Assert(info.GetCheckpointTs(status), check.Equals, checkpointTs)
 }
