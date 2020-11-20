@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type kafkaSuite struct{}
@@ -26,6 +27,7 @@ var _ = check.Suite(&kafkaSuite{})
 func Test(t *testing.T) { check.TestingT(t) }
 
 func (s *kafkaSuite) TestClientID(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		role         string
 		addr         string

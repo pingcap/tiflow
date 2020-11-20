@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -212,6 +213,7 @@ func (s *batchSuite) testBatchCodec(c *check.C, newEncoder func() EventBatchEnco
 }
 
 func (s *batchSuite) TestDefaultEventBatchCodec(c *check.C) {
+	defer testleak.AfterTest(c)()
 	s.testBatchCodec(c, func() EventBatchEncoder {
 		encoder := NewJSONEventBatchEncoder()
 		return encoder
@@ -223,6 +225,7 @@ var _ = check.Suite(&columnSuite{})
 type columnSuite struct{}
 
 func (s *columnSuite) TestFormatCol(c *check.C) {
+	defer testleak.AfterTest(c)()
 	row := &mqMessageRow{Update: map[string]column{"test": {
 		Type:  mysql.TypeString,
 		Value: "测",
@@ -247,6 +250,7 @@ func (s *columnSuite) TestFormatCol(c *check.C) {
 }
 
 func (s *columnSuite) TestVarBinaryCol(c *check.C) {
+	defer testleak.AfterTest(c)()
 	col := &model.Column{
 		Name:  "test",
 		Type:  mysql.TypeString,

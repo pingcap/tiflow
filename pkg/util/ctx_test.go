@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type ctxValueSuite struct{}
@@ -24,22 +25,26 @@ type ctxValueSuite struct{}
 var _ = check.Suite(&ctxValueSuite{})
 
 func (s *ctxValueSuite) TestShouldReturnCaptureID(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := PutCaptureAddrInCtx(context.Background(), "ello")
 	c.Assert(CaptureAddrFromCtx(ctx), check.Equals, "ello")
 }
 
 func (s *ctxValueSuite) TestCaptureIDNotSet(c *check.C) {
+	defer testleak.AfterTest(c)()
 	c.Assert(CaptureAddrFromCtx(context.Background()), check.Equals, "")
 	ctx := context.WithValue(context.Background(), ctxKeyCaptureAddr, 1321)
 	c.Assert(CaptureAddrFromCtx(ctx), check.Equals, "")
 }
 
 func (s *ctxValueSuite) TestShouldReturnChangefeedID(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := PutChangefeedIDInCtx(context.Background(), "ello")
 	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "ello")
 }
 
 func (s *ctxValueSuite) TestChangefeedIDNotSet(c *check.C) {
+	defer testleak.AfterTest(c)()
 	c.Assert(ChangefeedIDFromCtx(context.Background()), check.Equals, "")
 	ctx := context.WithValue(context.Background(), ctxKeyChangefeedID, 1321)
 	c.Assert(ChangefeedIDFromCtx(ctx), check.Equals, "")
