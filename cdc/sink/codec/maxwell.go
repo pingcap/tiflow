@@ -107,7 +107,9 @@ func rowEventToMaxwellMessage(e *model.RowChangedEvent) (*mqMessageKey, *maxwell
 	} else if e.IsDelete() {
 		value.Type = "delete"
 		for _, v := range e.PreColumns {
-			value.Old[v.Name] = v.Value
+			if v != nil {
+				value.Old[v.Name] = v.Value
+			}
 		}
 	} else {
 		value.Type = "update"
