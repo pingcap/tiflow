@@ -220,7 +220,7 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 			}
 			startTs = oracle.ComposeTS(ts, logical)
 		}
-		if err := verifyStartTs(ctx, startTs, cdcEtcdCli); err != nil {
+		if err := verifyStartTs(ctx, startTs); err != nil {
 			return nil, err
 		}
 		if err := verifyTargetTs(ctx, startTs, targetTs); err != nil {
@@ -233,6 +233,9 @@ func verifyChangefeedParamers(ctx context.Context, cmd *cobra.Command, isCreate 
 		if err := strictDecodeFile(configFile, "cdc", cfg); err != nil {
 			return nil, err
 		}
+	}
+	if disableGCSafePointCheck {
+		cfg.CheckGCSafePoint = false
 	}
 	if cyclicReplicaID != 0 || len(cyclicFilterReplicaIDs) != 0 {
 		if !(cyclicReplicaID != 0 && len(cyclicFilterReplicaIDs) != 0) {
@@ -404,6 +407,7 @@ func newCreateChangefeedCommand() *cobra.Command {
 	changefeedConfigVariables(command)
 	command.PersistentFlags().BoolVar(&noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 	command.PersistentFlags().StringVarP(&changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
+	command.PersistentFlags().BoolVarP(&disableGCSafePointCheck, "disable-gc-check", "", false, "Disable GC safe point check")
 
 	return command
 }
