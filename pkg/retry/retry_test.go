@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func Test(t *testing.T) { check.TestingT(t) }
@@ -29,6 +30,7 @@ type runSuite struct{}
 var _ = check.Suite(&runSuite{})
 
 func (s *runSuite) TestShouldRetryAtMostSpecifiedTimes(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var callCount int
 	f := func() error {
 		callCount++
@@ -46,6 +48,7 @@ func (s *runSuite) TestShouldRetryAtMostSpecifiedTimes(c *check.C) {
 }
 
 func (s *runSuite) TestShouldStopOnSuccess(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var callCount int
 	f := func() error {
 		callCount++
@@ -61,6 +64,7 @@ func (s *runSuite) TestShouldStopOnSuccess(c *check.C) {
 }
 
 func (s *runSuite) TestShouldBeCtxAware(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var callCount int
 	f := func() error {
 		callCount++

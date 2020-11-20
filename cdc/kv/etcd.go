@@ -126,6 +126,11 @@ func NewCDCEtcdClient(ctx context.Context, cli *clientv3.Client) CDCEtcdClient {
 	return CDCEtcdClient{Client: etcd.Wrap(cli, metrics)}
 }
 
+// Close releases resources in CDCEtcdClient
+func (c CDCEtcdClient) Close() error {
+	return c.Client.Unwrap().Close()
+}
+
 // ClearAllCDCInfo delete all keys created by CDC
 func (c CDCEtcdClient) ClearAllCDCInfo(ctx context.Context) error {
 	_, err := c.Client.Delete(ctx, EtcdKeyBase, clientv3.WithPrefix())

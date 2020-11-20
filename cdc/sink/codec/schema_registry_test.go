@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type AvroSchemaRegistrySuite struct {
@@ -173,6 +174,7 @@ func getTestingContext() context.Context {
 }
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
+	defer testleak.AfterTest(c)()
 	table := model.TableName{
 		Schema: "testdb",
 		Table:  "test1",
@@ -240,6 +242,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistry(c *check.C) {
 }
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistryBad(c *check.C) {
+	defer testleak.AfterTest(c)()
 	_, err := NewAvroSchemaManager(getTestingContext(), &security.Credential{}, "http://127.0.0.1:808", "-value")
 	c.Assert(err, check.NotNil)
 
@@ -248,6 +251,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryBad(c *check.C) {
 }
 
 func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
+	defer testleak.AfterTest(c)()
 	table := model.TableName{
 		Schema: "testdb",
 		Table:  "test1",
@@ -290,6 +294,7 @@ func (s *AvroSchemaRegistrySuite) TestSchemaRegistryIdempotent(c *check.C) {
 }
 
 func (s *AvroSchemaRegistrySuite) TestHTTPRetry(c *check.C) {
+	defer testleak.AfterTest(c)()
 	payload := []byte("test")
 	req, err := http.NewRequest("POST", "http://127.0.0.1:8081/may-fail", bytes.NewReader(payload))
 	c.Assert(err, check.IsNil)

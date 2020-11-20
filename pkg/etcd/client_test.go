@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
 )
 
@@ -44,6 +45,7 @@ func (m *mockClient) Put(ctx context.Context, key, val string, opts ...clientv3.
 }
 
 func (s *clientSuite) TestRetry(c *check.C) {
+	defer testleak.AfterTest(c)()
 	cli := clientv3.NewCtxClient(context.TODO())
 	cli.KV = &mockClient{}
 	retrycli := Wrap(cli, nil)
