@@ -18,6 +18,7 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/types"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type columnFlagTypeSuite struct{}
@@ -25,6 +26,7 @@ type columnFlagTypeSuite struct{}
 var _ = check.Suite(&columnFlagTypeSuite{})
 
 func (s *columnFlagTypeSuite) TestSetFlag(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var flag ColumnFlagType
 	flag.SetIsBinary()
 	flag.SetIsGeneratedColumn()
@@ -57,6 +59,7 @@ func (s *columnFlagTypeSuite) TestSetFlag(c *check.C) {
 }
 
 func (s *columnFlagTypeSuite) TestFlagValue(c *check.C) {
+	defer testleak.AfterTest(c)()
 	c.Assert(BinaryFlag, check.Equals, ColumnFlagType(0b1))
 	c.Assert(HandleKeyFlag, check.Equals, ColumnFlagType(0b10))
 	c.Assert(GeneratedColumnFlag, check.Equals, ColumnFlagType(0b100))

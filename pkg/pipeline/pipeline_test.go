@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 
 	"github.com/pingcap/check"
 )
@@ -53,6 +54,7 @@ func (e echoNode) Receive(ctx Context) error {
 }
 
 func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
+	defer testleak.AfterTest(c)()
 	expected := []*Message{
 		(&Message{}).SetLifecycleMessage((&LifecycleMessage{}).SetStarted()),
 		(&Message{}).SetRowChangedEvent(&model.RowChangedEvent{
@@ -113,6 +115,7 @@ func (s *pipelineSuite) TestPipelineUsage(c *check.C) {
 }
 
 func (s *pipelineSuite) TestPipelineError(c *check.C) {
+	defer testleak.AfterTest(c)()
 	expected := []*Message{
 		(&Message{}).SetLifecycleMessage((&LifecycleMessage{}).SetStarted()),
 		(&Message{}).SetRowChangedEvent(&model.RowChangedEvent{
@@ -182,4 +185,5 @@ func (s *pipelineSuite) TestPipelineError(c *check.C) {
 	errs := p.Wait()
 	c.Assert(errs, check.DeepEquals, []error{expectedError})
 	c.Assert(index, check.Equals, len(expected))
+	ctx.Cancel()
 }
