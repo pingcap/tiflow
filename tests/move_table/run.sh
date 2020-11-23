@@ -40,7 +40,6 @@ function run() {
     run_sql "CREATE table move_table.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_table_exists "move_table.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-    sleep 5
     cd $CUR
     GO111MODULE=on go run main.go 2>&1 | tee $WORK_DIR/tester.log &
     cd $WORK_DIR

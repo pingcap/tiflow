@@ -67,7 +67,11 @@ func main() {
 		}
 		return nil
 	})
-	
+
+	if err != nil {
+		log.Fatal("Fail to get captures", zap.Error(err))
+	}
+
 	var sourceCapture string
 
 	for capture, tables := range cluster.captures {
