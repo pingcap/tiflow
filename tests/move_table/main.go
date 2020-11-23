@@ -55,19 +55,19 @@ func main() {
 	}
 
 	err = retry.Run(100*time.Millisecond, 20, func() error {
-		return cluster.refreshInfo(ctx)
+		err := cluster.refreshInfo(ctx)
+		if err != nil {
+			log.Warn("error refreshing cluster info", zap.Error(err))
+		}
+
+		log.Info("task status", zap.Reflect("status", cluster.captures))
+
+		if len(cluster.captures) <= 1 {
+			return errors.New("too few captures")
+		}
+		return nil
 	})
-
-	if err != nil {
-		log.Warn("error refreshing cluster info", zap.Error(err))
-	}
-
-	log.Info("task status", zap.Reflect("status", cluster.captures))
-
-	if len(cluster.captures) <= 1 {
-		log.Fatal("no enough captures", zap.Reflect("captures", cluster.captures))
-	}
-
+	
 	var sourceCapture string
 
 	for capture, tables := range cluster.captures {
