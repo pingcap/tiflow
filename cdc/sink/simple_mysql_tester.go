@@ -259,5 +259,6 @@ func (s *simpleMySQLSink) checkOldValue(ctx context.Context, row *model.RowChang
 		log.Error("can't pass the check, the old value of this row is not exist", zap.Any("row", row))
 		return errors.New("check failed")
 	}
+	log.Debug("pass the old value check", zap.String("sql", sql), zap.Any("args", args), zap.Int("count", count))
 	return nil
 }

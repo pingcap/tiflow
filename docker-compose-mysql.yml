@@ -10,6 +10,7 @@
         volumes:
           - /data
           - ./docker/logs:/logs
+          - ./docker/config:/config
         environment:
           GO_FAILPOINTS: ${GO_FAILPOINTS}
         command: -c "/usr/bin/tail -f /dev/null"

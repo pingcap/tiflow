@@ -47,7 +47,7 @@ func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
 		PDUri:      "http://upstream-pd:2379",
 		SinkURI:    sinkURI,
 		Opts:       map[string]string{},
-		ConfigFile: "",
+		ConfigFile: "/config/enable-oldvalue-config.toml",
 	}
 }
 
