@@ -87,8 +87,8 @@ function run_batch_size_limit() {
     run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "info"
 
     TOPIC_NAME="ticdc-kafka-message-test-$RANDOM"
-    SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
-    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --sort-dir="$sort_dir" --opts="max-batch-size=3"
+    SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&max-batch-size=3"
+    run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --sort-dir="$sort_dir"
     if [ "$SINK_TYPE" == "kafka" ]; then
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4&max-batch-size=3"
     fi
