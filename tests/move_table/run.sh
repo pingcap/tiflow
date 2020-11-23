@@ -39,38 +39,18 @@ function run() {
     check_table_exists "move_table.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "2" --addr 127.0.0.1:8301
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "3" --addr 127.0.0.1:8302
+
+    sleep 20
+    cd $CUR
+    GO111MODULE=on go run main.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log &
+    cd $WORK_DIR
+
     run_sql "truncate table move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
     run_sql "CREATE table move_table.check2(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
     check_table_exists "move_table.check2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
-    check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
-
-    go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=move_table
-    run_sql "CREATE table move_table.check3(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    check_table_exists "move_table.check3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
-    check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
-
-    run_sql "create table move_table.USERTABLE2 like move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "insert into move_table.USERTABLE2 select * from move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "create table move_table.USERTABLE3 like move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "insert into move_table.USERTABLE3 select * from move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "create table move_table.USERTABLE4 like move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "insert into move_table.USERTABLE4 select * from move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "create table move_table.USERTABLE5 like move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "insert into move_table.USERTABLE5 select * from move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-    run_sql "create table move_table.check4(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-
-    sleep 10
-    check_table_exists "move_table.USERTABLE2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "2" --addr 127.0.0.1:8301
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "3" --addr 127.0.0.1:8302
-
-    check_table_exists "move_table.USERTABLE3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
-    check_table_exists "move_table.USERTABLE4" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
-    check_table_exists "move_table.USERTABLE5" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
-    check_table_exists "move_table.check4" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
-
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
     cleanup_process $CDC_BINARY

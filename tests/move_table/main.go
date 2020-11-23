@@ -46,7 +46,7 @@ func main() {
 	}
 
 	log.Info("table mover started")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
 	cluster, err := newCluster(ctx, *pd)
