@@ -32,6 +32,9 @@ function run() {
       run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?partition-num=4"
     fi
 
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "2" --addr 127.0.0.1:8301
+    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "3" --addr 127.0.0.1:8302
+
     # Add a check table to reduce check time, or if we check data with sync diff
     # directly, there maybe a lot of diff data at first because of the incremental scan
     run_sql "CREATE table move_table.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -39,10 +42,7 @@ function run() {
     check_table_exists "move_table.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "2" --addr 127.0.0.1:8301
-    run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "debug" --logsuffix "3" --addr 127.0.0.1:8302
-
-    sleep 20
+    sleep 60
     cd $CUR
     GO111MODULE=on go run main.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log &
     cd $WORK_DIR
