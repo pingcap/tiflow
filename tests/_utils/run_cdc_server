@@ -86,7 +86,6 @@ if [[ "$restart" == "true" ]]; then
       GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
         --log-file $workdir/cdc$logsuffix.log \
         --log-level $log_level \
-        --sorter-max-memory-consumption 0 \
         $tls \
         $certcn \
         $addr \
@@ -100,7 +99,6 @@ else
   GO_FAILPOINTS=$failpoint $binary -test.coverprofile="$OUT_DIR/cov.$TEST_NAME.$pid.out" server \
     --log-file $workdir/cdc$logsuffix.log \
     --log-level $log_level \
-    --sorter-max-memory-consumption 0 \
     $tls \
     $certcn \
     $addr \
