@@ -44,7 +44,7 @@ function run() {
 
     sleep 60
     cd $CUR
-    GO111MODULE=on go run main.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log &
+    GO111MODULE=on go run main.go 2>&1 | tee $WORK_DIR/tester.log &
     cd $WORK_DIR
 
     run_sql "truncate table move_table.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
