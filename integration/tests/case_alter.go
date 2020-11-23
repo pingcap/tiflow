@@ -16,7 +16,6 @@ package tests
 import (
 	"fmt"
 	"math/rand"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/ticdc/integration/framework"
@@ -64,7 +63,7 @@ func (c *AlterCase) Run(ctx *framework.TaskContext) error {
 			reqs = append(reqs, awaitable)
 		}
 
-		err = framework.All(ctx.SQLHelper(), reqs).SetTimeOut(60 * time.Minute).Wait().Check()
+		err = framework.All(ctx.SQLHelper(), reqs).Wait().Check()
 		if err != nil {
 			return errors.AddStack(err)
 		}

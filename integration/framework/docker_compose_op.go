@@ -50,6 +50,7 @@ func (d *DockerComposeOperator) Setup() {
 	d.WaitClusterStarted()
 }
 
+// WaitClusterStarted waits the cluster is started and ready
 func (d *DockerComposeOperator) WaitClusterStarted() {
 	if d.HealthChecker != nil {
 		err := retry.Run(time.Second, 120, d.HealthChecker)

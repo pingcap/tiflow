@@ -103,7 +103,6 @@ func (d *KafkaDockerEnv) Setup() {
 
 // Reset implements Environment
 func (d *KafkaDockerEnv) Reset() {
-	d.HealthChecker()
 	d.DockerEnv.Reset()
 	if err := d.resetSchemaRegistry(); err != nil {
 		log.Fatal("failed to reset schema registry", zap.Error(err))
