@@ -42,7 +42,7 @@ function run() {
     check_table_exists "move_table.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
     check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
-    sleep 60
+    sleep 10
     cd $CUR
     GO111MODULE=on go run main.go 2>&1 | tee $WORK_DIR/tester.log &
     cd $WORK_DIR

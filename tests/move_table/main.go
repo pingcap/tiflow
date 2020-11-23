@@ -54,88 +54,78 @@ func main() {
 		log.Fatal("failed to create cluster info", zap.Error(err))
 	}
 
-	ticker := time.NewTicker(1 * time.Second)
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("Exiting", zap.Error(ctx.Err()))
-			return
-		case <-ticker.C:
-			err := retry.Run(100*time.Millisecond, 20, func() error {
-				return cluster.refreshInfo(ctx)
-			})
+	err = retry.Run(100*time.Millisecond, 20, func() error {
+		return cluster.refreshInfo(ctx)
+	})
 
-			if err != nil {
-				log.Warn("error refreshing cluster info", zap.Error(err))
-			}
+	if err != nil {
+		log.Warn("error refreshing cluster info", zap.Error(err))
+	}
 
-			log.Info("task status", zap.Reflect("status", cluster.captures))
+	log.Info("task status", zap.Reflect("status", cluster.captures))
 
-			if len(cluster.captures) <= 1 {
-				log.Warn("no enough captures", zap.Reflect("captures", cluster.captures))
-				continue
-			}
+	if len(cluster.captures) <= 1 {
+		log.Fatal("no enough captures", zap.Reflect("captures", cluster.captures))
+	}
 
-			var sourceCapture string
+	var sourceCapture string
 
-			for capture, tables := range cluster.captures {
-				if len(tables) == 0 {
-					continue
-				}
-				sourceCapture = capture
-				break
-			}
+	for capture, tables := range cluster.captures {
+		if len(tables) == 0 {
+			continue
+		}
+		sourceCapture = capture
+		break
+	}
 
-			var targetCapture string
+	var targetCapture string
 
-			for candidateCapture := range cluster.captures {
-				if candidateCapture != sourceCapture {
-					targetCapture = candidateCapture
-				}
-			}
+	for candidateCapture := range cluster.captures {
+		if candidateCapture != sourceCapture {
+			targetCapture = candidateCapture
+		}
+	}
 
-			if targetCapture == "" {
-				log.Fatal("no target, unexpected")
-			}
+	if targetCapture == "" {
+		log.Fatal("no target, unexpected")
+	}
 
-			// move all tables to another capture
-			for _, table := range cluster.captures[sourceCapture] {
-				err = moveTable(ctx, cluster.ownerAddr, table.Changefeed, targetCapture, table.ID)
-				if err != nil {
-					log.Warn("failed to move table", zap.Error(err))
-					continue
-				}
+	// move all tables to another capture
+	for _, table := range cluster.captures[sourceCapture] {
+		err = moveTable(ctx, cluster.ownerAddr, table.Changefeed, targetCapture, table.ID)
+		if err != nil {
+			log.Warn("failed to move table", zap.Error(err))
+			continue
+		}
 
-				log.Info("moved table successful", zap.Int64("tableID", table.ID))
-			}
+		log.Info("moved table successful", zap.Int64("tableID", table.ID))
+	}
 
-			log.Info("all tables are moved", zap.String("sourceCapture", sourceCapture), zap.String("targetCapture", targetCapture))
+	log.Info("all tables are moved", zap.String("sourceCapture", sourceCapture), zap.String("targetCapture", targetCapture))
 
-			for counter := 0; counter < 30; counter++ {
-				err := retry.Run(100*time.Millisecond, 5, func() error {
-					return cluster.refreshInfo(ctx)
-				})
+	for counter := 0; counter < 30; counter++ {
+		err := retry.Run(100*time.Millisecond, 5, func() error {
+			return cluster.refreshInfo(ctx)
+		})
 
-				if err != nil {
-					log.Warn("error refreshing cluster info", zap.Error(err))
-				}
+		if err != nil {
+			log.Warn("error refreshing cluster info", zap.Error(err))
+		}
 
-				tables, ok := cluster.captures[sourceCapture]
-				if !ok {
-					log.Warn("source capture is gone", zap.String("sourceCapture", sourceCapture))
-					break
-				}
+		tables, ok := cluster.captures[sourceCapture]
+		if !ok {
+			log.Warn("source capture is gone", zap.String("sourceCapture", sourceCapture))
+			break
+		}
 
-				if len(tables) == 0 {
-					log.Info("source capture is now empty", zap.String("sourceCapture", sourceCapture))
-					break
-				}
+		if len(tables) == 0 {
+			log.Info("source capture is now empty", zap.String("sourceCapture", sourceCapture))
+			break
+		}
 
-				if counter != 30 {
-					log.Debug("source capture is not empty, will try again", zap.String("sourceCapture", sourceCapture))
-					time.Sleep(time.Second * 10)
-				}
-			}
+		if counter != 30 {
+			log.Debug("source capture is not empty, will try again", zap.String("sourceCapture", sourceCapture))
+			time.Sleep(time.Second * 10)
 		}
 	}
 }
