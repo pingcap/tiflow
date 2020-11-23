@@ -217,6 +217,15 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 		break
 	}
 
+	c.captures = make(map[string][]*tableInfo)
+	_, captures, err := c.cdcEtcdCli.GetCaptures(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for _, capture := range captures {
+		c.captures[capture.ID] = make([]*tableInfo, 0)
+	}
+
 	allTasks, err := c.cdcEtcdCli.GetAllTaskStatus(ctx, changefeed)
 	if err != nil {
 		return errors.Trace(err)
@@ -224,9 +233,11 @@ func (c *cluster) refreshInfo(ctx context.Context) error {
 
 	log.Debug("retrieved all tasks", zap.Reflect("tasks", allTasks))
 
-	c.captures = make(map[string][]*tableInfo)
 	for capture, taskInfo := range allTasks {
-		c.captures[capture] = make([]*tableInfo, 0, len(taskInfo.Tables))
+		if _, ok := c.captures[capture]; !ok {
+			c.captures[capture] = make([]*tableInfo, 0, len(taskInfo.Tables))
+		}
+
 		for tableID := range taskInfo.Tables {
 			c.captures[capture] = append(c.captures[capture], &tableInfo{
 				ID:         tableID,
