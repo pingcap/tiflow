@@ -50,7 +50,7 @@ func (s *notifySuite) TestNotifyHub(c *check.C) {
 	r2.Stop()
 	r3.Stop()
 	c.Assert(len(notifier.receivers), check.Equals, 0)
-	time.Sleep(time.Second)
+	time.Sleep(time.Second * 8)
 	r4 := notifier.NewReceiver(-1)
 	<-r4.C
 	r4.Stop()
