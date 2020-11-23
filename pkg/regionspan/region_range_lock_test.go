@@ -18,11 +18,12 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
-type regionRangeLockSuit struct{}
+type regionRangeLockSuite struct{}
 
-var _ = check.Suite(&regionRangeLockSuit{})
+var _ = check.Suite(&regionRangeLockSuite{})
 
 func mustSuccess(c *check.C, res LockRangeResult, expectedCheckpointTs uint64) {
 	c.Assert(res.Status, check.Equals, LockRangeStatusSuccess)
@@ -62,7 +63,8 @@ func unlockRange(l *RegionRangeLock, startKey, endKey string, regionID, version 
 	l.UnlockRange([]byte(startKey), []byte(endKey), regionID, version, checkpointTs)
 }
 
-func (s *regionRangeLockSuit) TestRegionRangeLock(c *check.C) {
+func (s *regionRangeLockSuite) TestRegionRangeLock(c *check.C) {
+	defer testleak.AfterTest(c)()
 	l := NewRegionRangeLock([]byte("a"), []byte("h"), math.MaxUint64)
 	mustLockRangeSuccess(c, l, "a", "e", 1, 1, math.MaxUint64)
 	unlockRange(l, "a", "e", 1, 1, 100)
@@ -77,7 +79,8 @@ func (s *regionRangeLockSuit) TestRegionRangeLock(c *check.C) {
 	unlockRange(l, "a", "h", 1, 3, 120)
 }
 
-func (s *regionRangeLockSuit) TestRegionRangeLockStale(c *check.C) {
+func (s *regionRangeLockSuite) TestRegionRangeLockStale(c *check.C) {
+	defer testleak.AfterTest(c)()
 	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64)
 	mustLockRangeSuccess(c, l, "c", "g", 1, 10, math.MaxUint64)
 	mustLockRangeSuccess(c, l, "j", "n", 2, 8, math.MaxUint64)
@@ -96,7 +99,8 @@ func (s *regionRangeLockSuit) TestRegionRangeLockStale(c *check.C) {
 	unlockRange(l, "a", "z", 1, 11, 2)
 }
 
-func (s *regionRangeLockSuit) TestRegionRangeLockLockingRegionID(c *check.C) {
+func (s *regionRangeLockSuite) TestRegionRangeLockLockingRegionID(c *check.C) {
+	defer testleak.AfterTest(c)()
 	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64)
 	mustLockRangeSuccess(c, l, "c", "d", 1, 10, math.MaxUint64)
 
@@ -129,7 +133,8 @@ func (s *regionRangeLockSuit) TestRegionRangeLockLockingRegionID(c *check.C) {
 	unlockRange(l, "g", "h", 1, 12, 30)
 }
 
-func (s *regionRangeLockSuit) TestRangeTsMap(c *check.C) {
+func (s *regionRangeLockSuite) TestRangeTsMap(c *check.C) {
+	defer testleak.AfterTest(c)()
 	m := NewRangeTsMap([]byte("a"), []byte("z"), math.MaxUint64)
 
 	mustGetMin := func(startKey, endKey string, expectedTs uint64) {

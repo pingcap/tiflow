@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/pkg/regionspan"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type spanFrontierSuite struct{}
@@ -30,6 +31,7 @@ func Test(t *testing.T) { check.TestingT(t) }
 var _ = check.Suite(&spanFrontierSuite{})
 
 func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
+	defer testleak.AfterTest(c)()
 	keyA := []byte("a")
 	keyB := []byte("b")
 	keyC := []byte("c")
@@ -163,6 +165,7 @@ func (s *spanFrontierSuite) TestSpanFrontier(c *check.C) {
 }
 
 func (s *spanFrontierSuite) TestMinMax(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var keyMin []byte
 	var keyMax []byte
 	var keyMid = []byte("m")
@@ -198,6 +201,7 @@ func (s *spanFrontierSuite) TestMinMax(c *check.C) {
 }
 
 func (s *spanFrontierSuite) TestSpanFrontierDisjoinSpans(c *check.C) {
+	defer testleak.AfterTest(c)()
 	key1 := []byte("1")
 	key2 := []byte("2")
 	keyA := []byte("a")
@@ -262,6 +266,7 @@ func (s *spanFrontierSuite) TestSpanFrontierDisjoinSpans(c *check.C) {
 }
 
 func (s *spanFrontierSuite) TestSpanFrontierRandomly(c *check.C) {
+	defer testleak.AfterTest(c)()
 	var keyMin []byte
 	var keyMax []byte
 	spMinMax := regionspan.ComparableSpan{Start: keyMin, End: keyMax}

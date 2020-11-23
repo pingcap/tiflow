@@ -313,13 +313,9 @@ type Consumer struct {
 // NewConsumer creates a new cdc kafka consumer
 func NewConsumer(ctx context.Context) (*Consumer, error) {
 	// TODO support filter in downstream sink
-	tz := time.Local
-	if strings.ToLower(timezone) != "system" {
-		var err error
-		tz, err = time.LoadLocation(timezone)
-		if err != nil {
-			return nil, errors.Annotate(err, "can not load timezone")
-		}
+	tz, err := util.GetTimezone(timezone)
+	if err != nil {
+		return nil, errors.Annotate(err, "can not load timezone")
 	}
 	ctx = util.PutTimezoneInCtx(ctx, tz)
 	filter, err := cdcfilter.NewFilter(config.GetDefaultReplicaConfig())

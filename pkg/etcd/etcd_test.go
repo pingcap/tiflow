@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/embed"
 )
@@ -50,6 +51,7 @@ func (s *etcdSuite) TearDownTest(c *check.C) {
 }
 
 func (s *etcdSuite) TestEmbedEtcd(c *check.C) {
+	defer testleak.AfterTest(c)()
 	curl := s.clientURL.String()
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{curl},
@@ -68,4 +70,5 @@ func (s *etcdSuite) TestEmbedEtcd(c *check.C) {
 	c.Assert(err2, check.IsNil)
 	c.Assert(resp.Kvs, check.HasLen, 1)
 	c.Assert(resp.Kvs[0].Value, check.DeepEquals, []byte(val))
+	s.TearDownTest(c)
 }

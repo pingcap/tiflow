@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/ticdc/pkg/config"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/parser/model"
@@ -29,6 +30,7 @@ var _ = check.Suite(&filterSuite{})
 func Test(t *testing.T) { check.TestingT(t) }
 
 func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
+	defer testleak.AfterTest(c)()
 	filter, err := NewFilter(config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
 	c.Assert(filter.ShouldIgnoreTable("information_schema", ""), check.IsTrue)
@@ -40,6 +42,7 @@ func (s *filterSuite) TestShouldUseDefaultRules(c *check.C) {
 }
 
 func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
+	defer testleak.AfterTest(c)()
 	filter, err := NewFilter(&config.ReplicaConfig{
 		Filter: &config.FilterConfig{
 			Rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
@@ -62,6 +65,7 @@ func (s *filterSuite) TestShouldUseCustomRules(c *check.C) {
 }
 
 func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		cases []struct {
 			schema string
@@ -117,6 +121,7 @@ func (s *filterSuite) TestShouldIgnoreTxn(c *check.C) {
 }
 
 func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
+	defer testleak.AfterTest(c)()
 	config := &config.ReplicaConfig{
 		Filter: &config.FilterConfig{
 			DDLAllowlist: []model.ActionType{model.ActionAddForeignKey},
@@ -130,6 +135,7 @@ func (s *filterSuite) TestShouldDiscardDDL(c *check.C) {
 }
 
 func (s *filterSuite) TestShouldIgnoreDDL(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		cases []struct {
 			schema  string

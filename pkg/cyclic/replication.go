@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/pkg/config"
 	"github.com/pingcap/ticdc/pkg/cyclic/mark"
+	"github.com/pingcap/ticdc/pkg/quotes"
 )
 
 // RelaxSQLMode returns relaxed SQL mode, "STRICT_TRANS_TABLES" is removed.
@@ -65,7 +66,7 @@ func (*Cyclic) UdpateSourceTableCyclicMark(sourceSchema, sourceTable string, buc
 	schema, table := mark.GetMarkTableName(sourceSchema, sourceTable)
 	return fmt.Sprintf(
 		`INSERT INTO %s VALUES (%d, %d, 0, %d) ON DUPLICATE KEY UPDATE val = val + 1;`,
-		model.QuoteSchema(schema, table), bucket, replicaID, startTs)
+		quotes.QuoteSchema(schema, table), bucket, replicaID, startTs)
 }
 
 // FilterReplicaID return a slice of replica IDs needs to be filtered.

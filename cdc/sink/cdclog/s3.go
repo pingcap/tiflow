@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/model"
 	"github.com/pingcap/ticdc/cdc/sink/codec"
 	cerror "github.com/pingcap/ticdc/pkg/errors"
+	"github.com/pingcap/ticdc/pkg/quotes"
 	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
@@ -241,14 +242,14 @@ func (s *s3Sink) EmitCheckpointTs(ctx context.Context, ts uint64) error {
 func (s *s3Sink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	switch ddl.Type {
 	case parsemodel.ActionCreateTable:
-		s.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		s.logMeta.Names[ddl.TableInfo.TableID] = quotes.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 		err := s.flushLogMeta(ctx)
 		if err != nil {
 			return err
 		}
 	case parsemodel.ActionRenameTable:
 		delete(s.logMeta.Names, ddl.PreTableInfo.TableID)
-		s.logMeta.Names[ddl.TableInfo.TableID] = model.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
+		s.logMeta.Names[ddl.TableInfo.TableID] = quotes.QuoteSchema(ddl.TableInfo.Schema, ddl.TableInfo.Table)
 		err := s.flushLogMeta(ctx)
 		if err != nil {
 			return err
