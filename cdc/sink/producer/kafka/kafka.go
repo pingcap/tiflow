@@ -269,6 +269,12 @@ func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Conf
 	if err != nil {
 		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
+	defer func() {
+		err := admin.Close()
+		if err != nil {
+			log.Warn("close admin client failed", zap.Error(err))
+		}
+	}()
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -302,17 +308,15 @@ func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Conf
 		}
 	}
 
-	err = admin.Close()
-	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
 	return partitionNum, nil
 }
+
+var newSaramaConfigImpl = newSaramaConfig
 
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(ctx context.Context, address string, topic string, config Config, errCh chan error) (*kafkaSaramaProducer, error) {
 	log.Info("Starting kafka sarama producer ...", zap.Reflect("config", config))
-	cfg, err := newSaramaConfig(ctx, config)
+	cfg, err := newSaramaConfigImpl(ctx, config)
 	if err != nil {
 		return nil, err
 	}

@@ -62,10 +62,12 @@ func (s *kafkaSuite) TestClientID(c *check.C) {
 }
 
 func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	topic := "unit_test_1"
 	leader := sarama.NewMockBroker(c, 2)
+	defer leader.Close()
 	metadataResponse := new(sarama.MetadataResponse)
 	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
 	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
@@ -76,9 +78,9 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	prodSuccess := new(sarama.ProduceResponse)
 	prodSuccess.AddTopicPartition(topic, 0, sarama.ErrNoError)
 	prodSuccess.AddTopicPartition(topic, 1, sarama.ErrNoError)
-	// 200 async messages and 1 sync message, Kafka flush could be in batch,
-	// just add enough mock messages handling
-	for i := 0; i < 201; i++ {
+	// 200 async messages and 2 sync message, Kafka flush could be in batch,
+	// we can set flush.maxmessages to 1 to control message count exactly.
+	for i := 0; i < 202; i++ {
 		leader.Returns(prodSuccess)
 	}
 
@@ -90,6 +92,18 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 	config.Version = "0.9.0.0"
 	config.PartitionNum = int32(2)
 	config.TopicPreProcess = false
+
+	newSaramaConfigImplBak := newSaramaConfigImpl
+	newSaramaConfigImpl = func(ctx context.Context, config Config) (*sarama.Config, error) {
+		cfg, err := newSaramaConfigImplBak(ctx, config)
+		c.Assert(err, check.IsNil)
+		cfg.Producer.Flush.MaxMessages = 1
+		return cfg, err
+	}
+	defer func() {
+		newSaramaConfigImpl = newSaramaConfigImplBak
+	}()
+
 	producer, err := NewKafkaSaramaProducer(ctx, leader.Addr(), topic, config, errCh)
 	c.Assert(err, check.IsNil)
 	c.Assert(producer.GetPartitionNum(), check.Equals, int32(2))
@@ -158,11 +172,13 @@ func (s *kafkaSuite) TestSaramaProducer(c *check.C) {
 }
 
 func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
+	defer testleak.AfterTest(c)
 	topic := "unit_test_2"
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	broker := sarama.NewMockBroker(c, 1)
+	defer broker.Close()
 	metaResponse := sarama.NewMockMetadataResponse(c).
 		SetBroker(broker.Addr(), broker.BrokerID()).
 		SetLeader(topic, 0, broker.BrokerID()).
@@ -175,7 +191,7 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 
 	config := NewKafkaConfig()
 	config.PartitionNum = int32(0)
-	cfg, err := newSaramaConfig(ctx, config)
+	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
 	num, err := kafkaTopicPreProcess(topic, broker.Addr(), config, cfg)
 	c.Assert(err, check.IsNil)
@@ -191,6 +207,7 @@ func (s *kafkaSuite) TestTopicPreProcess(c *check.C) {
 }
 
 func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
+	defer testleak.AfterTest(c)()
 	topic := "unit_test_3"
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -203,10 +220,11 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 		"DescribeConfigsRequest": sarama.NewMockDescribeConfigsResponse(c),
 		"CreateTopicsRequest":    sarama.NewMockCreateTopicsResponse(c),
 	})
+	defer broker.Close()
 
 	config := NewKafkaConfig()
 	config.PartitionNum = int32(0)
-	cfg, err := newSaramaConfig(ctx, config)
+	cfg, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(err, check.IsNil)
 	num, err := kafkaTopicPreProcess(topic, broker.Addr(), config, cfg)
 	c.Assert(err, check.IsNil)
@@ -214,16 +232,17 @@ func (s *kafkaSuite) TestTopicPreProcessCreate(c *check.C) {
 }
 
 func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	config := NewKafkaConfig()
 	config.Version = "invalid"
-	_, err := newSaramaConfig(ctx, config)
+	_, err := newSaramaConfigImpl(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, "invalid version.*")
 
 	ctx = util.SetOwnerInCtx(ctx)
 	config.Version = "2.6.0"
 	config.ClientID = "^invalid$"
-	_, err = newSaramaConfig(ctx, config)
+	_, err = newSaramaConfigImpl(ctx, config)
 	c.Assert(cerror.ErrKafkaInvalidClientID.Equal(err), check.IsTrue)
 
 	config.ClientID = "test-kafka-client"
@@ -240,7 +259,7 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	}
 	for _, cc := range compressionCases {
 		config.Compression = cc.algorithm
-		cfg, err := newSaramaConfig(ctx, config)
+		cfg, err := newSaramaConfigImpl(ctx, config)
 		c.Assert(err, check.IsNil)
 		c.Assert(cfg.Producer.Compression, check.Equals, cc.expected)
 	}
@@ -248,11 +267,12 @@ func (s *kafkaSuite) TestNewSaramaConfig(c *check.C) {
 	config.Credential = &security.Credential{
 		CAPath: "/invalid/ca/path",
 	}
-	_, err = newSaramaConfig(ctx, config)
+	_, err = newSaramaConfigImpl(ctx, config)
 	c.Assert(errors.Cause(err), check.ErrorMatches, ".*no such file or directory")
 }
 
 func (s *kafkaSuite) TestCreateProducerFailed(c *check.C) {
+	defer testleak.AfterTest(c)()
 	ctx := context.Background()
 	errCh := make(chan error, 1)
 	config := NewKafkaConfig()
