@@ -67,25 +67,39 @@ func (a *SingleTableTask) Prepare(taskContext *framework.TaskContext) error {
 		return err
 	}
 	taskContext.Downstream.SetConnMaxLifetime(5 * time.Second)
+	if taskContext.WaitForReady != nil {
+		log.Info("Waiting for env to be ready")
+		return taskContext.WaitForReady()
+	}
 
+	return nil
+}
+
+// Run implements Task
+func (a *SingleTableTask) Run(taskContext *framework.TaskContext) error {
+	log.Warn("SingleTableTask has been run")
+	return nil
+}
+
+func createConnector() error {
 	// TODO better way to generate JSON
 	connectorConfigFmt := `{
-	  "name": "jdbc-sink-connector",
-	  "config": {
-		"connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
-		"tasks.max": "1",
-		"topics": "testdb_%s",
-		"connection.url": "jdbc:mysql://root@downstream-tidb:4000/testdb",
-		"connection.ds.pool.size": 5,
-		"table.name.format": "%s",
-		"insert.mode": "upsert",
-		"delete.enabled": true,
-		"pk.mode": "record_key",
-		"auto.create": true,
-		"auto.evolve": true
-	  }
-	}`
-	connectorConfig := fmt.Sprintf(connectorConfigFmt, a.TableName, a.TableName)
+		"name": "jdbc-sink-connector",
+		"config": {
+		  "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+		  "tasks.max": "1",
+		  "topics": "testdb_%s",
+		  "connection.url": "jdbc:mysql://root@downstream-tidb:4000/testdb",
+		  "connection.ds.pool.size": 5,
+		  "table.name.format": "%s",
+		  "insert.mode": "upsert",
+		  "delete.enabled": true,
+		  "pk.mode": "record_key",
+		  "auto.create": true,
+		  "auto.evolve": true
+		}
+	  }`
+	connectorConfig := fmt.Sprintf(connectorConfigFmt, "test", "test")
 	log.Debug("Creating Kafka sink connector", zap.String("config", connectorConfig))
 
 	resp, err := http.Post(
@@ -112,17 +126,5 @@ func (a *SingleTableTask) Prepare(taskContext *framework.TaskContext) error {
 			zap.ByteString("body", str))
 		return errors.Errorf("Kafka Connect Rest API returned status code %d", resp.StatusCode)
 	}
-
-	if taskContext.WaitForReady != nil {
-		log.Info("Waiting for env to be ready")
-		return taskContext.WaitForReady()
-	}
-
-	return nil
-}
-
-// Run implements Task
-func (a *SingleTableTask) Run(taskContext *framework.TaskContext) error {
-	log.Warn("SingleTableTask has been run")
 	return nil
 }

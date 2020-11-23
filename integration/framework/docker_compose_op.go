@@ -47,7 +47,10 @@ func (d *DockerComposeOperator) Setup() {
 	if err != nil {
 		log.Fatal("ping downstream database but not receive a pong", zap.Error(err))
 	}
+	d.WaitClusterStarted()
+}
 
+func (d *DockerComposeOperator) WaitClusterStarted() {
 	if d.HealthChecker != nil {
 		err := retry.Run(time.Second, 120, d.HealthChecker)
 		if err != nil {

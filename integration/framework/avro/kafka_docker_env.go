@@ -15,12 +15,12 @@ package avro
 
 import (
 	"encoding/json"
-	"errors"
 	"io/ioutil"
 	"net/http"
 	"path"
 
 	"github.com/integralist/go-findroot/find"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/ticdc/integration/framework"
 	"go.uber.org/zap"
@@ -91,4 +91,74 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 			HealthChecker: healthChecker,
 		},
 	}}
+}
+
+// Setup brings up a docker-compose service
+func (d *KafkaDockerEnv) Setup() {
+	d.DockerEnv.Setup()
+	if err := createConnector(); err != nil {
+		log.Fatal("failed to create connector", zap.Error(err))
+	}
+}
+
+// Reset implements Environment
+func (d *KafkaDockerEnv) Reset() {
+	d.HealthChecker()
+	d.DockerEnv.Reset()
+	if err := d.resetSchemaRegistry(); err != nil {
+		log.Fatal("failed to reset schema registry", zap.Error(err))
+	}
+	if err := d.resetKafkaConnector(); err != nil {
+		log.Fatal("failed to reset kafka connector", zap.Error(err))
+	}
+}
+
+func (d *KafkaDockerEnv) resetSchemaRegistry() error {
+	resp, err := http.Get("http://127.0.0.1:8081/subjects")
+	if err != nil {
+		return err
+	}
+	if resp.Body == nil {
+		return errors.New("get schema registry subjects returns empty body")
+	}
+	defer resp.Body.Close()
+
+	bytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	subs := []string{}
+	err = json.Unmarshal(bytes, &subs)
+	if err != nil {
+		return err
+	}
+	for _, sub := range subs {
+		url := "http://127.0.0.1:8081/subjects/" + sub
+		req, err := http.NewRequest(http.MethodDelete, url, nil)
+		if err != nil {
+			return err
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+	}
+	log.Info("Deleted the schema registry subjects", zap.Any("subjects", subs))
+	return nil
+}
+
+func (d *KafkaDockerEnv) resetKafkaConnector() error {
+	url := "http://127.0.0.1:8083/connectors/jdbc-sink-connector/"
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		return err
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	return createConnector()
 }

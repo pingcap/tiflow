@@ -154,5 +154,5 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 		data["t_year"] = 2019
 		data["t_bit"] = 0b1001001
 	}
-	return table.Insert(data).Send().SetTimeOut(1 * time.Hour).Wait().Check()
+	return table.Insert(data).Send().Wait().Check()
 }
