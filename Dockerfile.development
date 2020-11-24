@@ -4,7 +4,9 @@ WORKDIR /go/src/github.com/pingcap/ticdc
 COPY . .
 ENV CDC_ENABLE_VENDOR=1
 RUN go mod vendor
+RUN make failpoint-enable
 RUN make
+RUN make failpoint-disable
 
 FROM alpine:3.12
 RUN apk add --no-cache tzdata bash curl socat

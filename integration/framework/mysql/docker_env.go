@@ -11,12 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package canal
+package mysql
 
 import (
 	"database/sql"
-	"io/ioutil"
-	"net/http"
 
 	"github.com/integralist/go-findroot/find"
 	"github.com/pingcap/errors"
@@ -26,21 +24,18 @@ import (
 )
 
 const (
-	dockerComposeFilePath   = "/docker-compose-canal.yml"
+	dockerComposeFilePath   = "/docker-compose-mysql.yml"
 	controllerContainerName = "ticdc_controller_1"
 )
 
-// KafkaDockerEnv represents the docker-compose service defined in docker-compose-canal.yml
-type KafkaDockerEnv struct {
+// DockerEnv represents the docker-compose service defined in docker-compose-canal.yml
+type DockerEnv struct {
 	framework.DockerEnv
 }
 
-// NewKafkaDockerEnv creates a new KafkaDockerEnv
-func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
+// NewDockerEnv creates a new KafkaDockerEnv
+func NewDockerEnv(dockerComposeFile string) *DockerEnv {
 	healthChecker := func() error {
-		if err := checkCanalAdapterState(); err != nil {
-			return err
-		}
 		if err := checkDbConn(framework.UpstreamDSN); err != nil {
 			return err
 		}
@@ -57,7 +52,7 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 		file = dockerComposeFile
 	}
 
-	return &KafkaDockerEnv{DockerEnv: framework.DockerEnv{
+	return &DockerEnv{DockerEnv: framework.DockerEnv{
 		DockerComposeOperator: framework.DockerComposeOperator{
 			FileName:      file,
 			Controller:    controllerContainerName,
@@ -78,32 +73,6 @@ func checkDbConn(dsn string) error {
 	err = db.Ping()
 	if err != nil {
 		return err
-	}
-	return nil
-}
-
-func checkCanalAdapterState() error {
-	resp, err := http.Get(
-		"http://127.0.0.1:8081/syncSwitch/" + testDbName)
-	if err != nil {
-		return err
-	}
-
-	if resp.Body == nil {
-		return errors.New("Canal Adapter Rest API returned empty body, there is no subscript topic")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		str, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		log.Warn(
-			"Canal Adapter Rest API returned",
-			zap.Int("status", resp.StatusCode),
-			zap.ByteString("body", str))
-		return errors.Errorf("Kafka Connect Rest API returned status code %d", resp.StatusCode)
 	}
 	return nil
 }

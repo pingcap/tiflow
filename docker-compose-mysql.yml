@@ -6,10 +6,13 @@
         image: ticdc:latest
         build:
           context: .
-          dockerfile: ./Dockerfile
+          dockerfile: ./Dockerfile.development
         volumes:
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
+          - ./docker/config:/config
+        environment:
+          GO_FAILPOINTS: ${GO_FAILPOINTS}
         command: -c "/usr/bin/tail -f /dev/null"
         entrypoint: "/bin/sh"
         depends_on:
@@ -21,15 +24,20 @@
         image: ticdc:latest
         build:
           context: .
-          dockerfile: ./Dockerfile
+          dockerfile: ./Dockerfile.development
         volumes:
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
+        ports:
+          - "8300:8300"
+        environment:
+          GO_FAILPOINTS: ${GO_FAILPOINTS}
         entrypoint: "/cdc server"
         command:
           - --addr=0.0.0.0:8300
           - --pd=http://upstream-pd:2379
           - --log-file=/logs/capturer0.log
+          - --log-level=debug
           - --advertise-addr=capturer0:8300
         depends_on:
           - "upstream-tidb"
@@ -40,15 +48,20 @@
         image: ticdc:latest
         build:
           context: .
-          dockerfile: ./Dockerfile
+          dockerfile: ./Dockerfile.development
         volumes:
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
+        ports:
+          - "8301:8300"
+        environment:
+          GO_FAILPOINTS: ${GO_FAILPOINTS}
         entrypoint: "/cdc server"
         command:
           - --addr=0.0.0.0:8300
           - --pd=http://upstream-pd:2379
           - --log-file=/logs/capturer1.log
+          - --log-level=debug
           - --advertise-addr=capturer1:8300
         depends_on:
           - "upstream-tidb"
@@ -59,15 +72,20 @@
         image: ticdc:latest
         build:
           context: .
-          dockerfile: ./Dockerfile
+          dockerfile: ./Dockerfile.development
         volumes:
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
+        ports:
+          - "8302:8300"
+        environment:
+          GO_FAILPOINTS: ${GO_FAILPOINTS}
         entrypoint: "/cdc server"
         command:
           - --addr=0.0.0.0:8300
           - --pd=http://upstream-pd:2379
           - --log-file=/logs/capturer2.log
+          - --log-level=debug
           - --advertise-addr=capturer2:8300
         depends_on:
           - "upstream-tidb"
@@ -80,7 +98,7 @@
           - "2379:2379"
         volumes:
           - ./docker/config/pd.toml:/pd.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --name=upstream-pd
@@ -98,7 +116,7 @@
         image: pingcap/tikv:nightly
         volumes:
           - ./docker/config/tikv.toml:/tikv.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --addr=0.0.0.0:20160
@@ -115,7 +133,7 @@
         image: pingcap/tikv:nightly
         volumes:
           - ./docker/config/tikv.toml:/tikv.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --addr=0.0.0.0:20160
@@ -132,7 +150,7 @@
         image: pingcap/tikv:nightly
         volumes:
           - ./docker/config/tikv.toml:/tikv.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --addr=0.0.0.0:20160
@@ -171,7 +189,7 @@
           - "3379:2379"
         volumes:
           - ./docker/config/pd.toml:/pd.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --name=downstream-pd
@@ -189,7 +207,7 @@
         image: pingcap/tikv:nightly
         volumes:
           - ./docker/config/tikv.toml:/tikv.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --addr=0.0.0.0:20160
@@ -206,7 +224,7 @@
         image: pingcap/tikv:nightly
         volumes:
           - ./docker/config/tikv.toml:/tikv.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --addr=0.0.0.0:20160
@@ -223,7 +241,7 @@
         image: pingcap/tikv:nightly
         volumes:
           - ./docker/config/tikv.toml:/tikv.toml:ro
-          - ./docker/data:/data
+          - /data
           - ./docker/logs:/logs
         command:
           - --addr=0.0.0.0:20160
