@@ -999,7 +999,7 @@ func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string
 		cacheArgs := make([]interface{}, 0)
 		last := false
 		for i, val := range vals {
-			cacheCount += 1
+			cacheCount++
 			if i == len(vals)-1 || cacheCount >= batchSize {
 				last = true
 			}

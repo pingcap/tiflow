@@ -303,7 +303,8 @@ func kafkaTopicPreProcess(topic, address string, config Config, cfg *sarama.Conf
 			NumPartitions:     partitionNum,
 			ReplicationFactor: config.ReplicationFactor,
 		}, false)
-		if err != nil {
+		// TODO idenfity the cause of "Topic with this name already exists"
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
 			return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 		}
 	}

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package canal
+package mysql
 
 import (
 	"database/sql"
@@ -27,8 +27,8 @@ const (
 
 // SingleTableTask provides a basic implementation for an Avro test case
 type SingleTableTask struct {
-	TableName string
-	UseJSON   bool
+	TableName     string
+	CheckOleValue bool
 }
 
 // Name implements Task
@@ -39,17 +39,15 @@ func (c *SingleTableTask) Name() string {
 
 // GetCDCProfile implements Task
 func (c *SingleTableTask) GetCDCProfile() *framework.CDCProfile {
-	var protocol string
-	if c.UseJSON {
-		protocol = "canal-json"
-	} else {
-		protocol = "canal"
+	sinkURI := "mysql://downstream-tidb:4000/" + testDbName
+	if c.CheckOleValue {
+		sinkURI = "simple-mysql://downstream-tidb:4000/" + testDbName + "?check-old-value=true"
 	}
 	return &framework.CDCProfile{
 		PDUri:      "http://upstream-pd:2379",
-		SinkURI:    "kafka://kafka:9092/" + testDbName + "?kafka-version=2.6.0&protocol=" + protocol,
-		Opts:       map[string]string{"force-handle-key-pkey": "true", "support-txn": "true"},
-		ConfigFile: "/config/canal-test-config.toml",
+		SinkURI:    sinkURI,
+		Opts:       map[string]string{},
+		ConfigFile: "/config/enable-oldvalue-config.toml",
 	}
 }
 
