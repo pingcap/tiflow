@@ -15,13 +15,33 @@ package model
 
 import (
 	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type stringSuite struct{}
 
 var _ = check.Suite(&stringSuite{})
 
+func (s *stringSuite) TestHolderString(c *check.C) {
+	testCases := []struct {
+		count    int
+		expected string
+	}{
+		{1, "?"},
+		{2, "?,?"},
+		{10, "?,?,?,?,?,?,?,?,?,?"},
+	}
+	for _, tc := range testCases {
+		s := HolderString(tc.count)
+		c.Assert(s, check.Equals, tc.expected)
+	}
+	// test invalid input
+	c.Assert(func() { HolderString(0) }, check.Panics, "strings.Builder.Grow: negative count")
+	c.Assert(func() { HolderString(-1) }, check.Panics, "strings.Builder.Grow: negative count")
+}
+
 func (s *stringSuite) TestExtractKeySuffix(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		input  string
 		expect string

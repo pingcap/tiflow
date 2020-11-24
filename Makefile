@@ -76,6 +76,12 @@ unit_test: check_failpoint_ctl
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	$(FAILPOINT_DISABLE)
 
+leak_test: check_failpoint_ctl
+	$(FAILPOINT_ENABLE)
+	@export log_level=error;\
+	$(GOTEST) -count=1 --tags leak $(PACKAGES) || { $(FAILPOINT_DISABLE); exit 1; }
+	$(FAILPOINT_DISABLE)
+
 check_failpoint_ctl:
 	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILD) -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl
 
