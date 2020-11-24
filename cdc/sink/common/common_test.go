@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/ticdc/cdc/model"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 type SinkCommonSuite struct{}
@@ -27,6 +28,7 @@ func Test(t *testing.T) { check.TestingT(t) }
 var _ = check.Suite(&SinkCommonSuite{})
 
 func (s SinkCommonSuite) TestSplitResolvedTxn(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCases := []struct {
 		unresolvedTxns         map[model.TableID][]*model.SingleTableTxn
 		resolvedTs             uint64

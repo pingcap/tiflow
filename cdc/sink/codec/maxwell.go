@@ -148,6 +148,11 @@ func (d *MaxwellEventBatchEncoder) AppendRowChangedEvent(e *model.RowChangedEven
 	return EncoderNoOperation, nil
 }
 
+// SetParams is no-op for Maxwell for now
+func (d *MaxwellEventBatchEncoder) SetParams(params map[string]string) error {
+	return nil
+}
+
 // Column represents a column in maxwell
 type Column struct {
 	Type string `json:"type"`

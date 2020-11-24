@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/ticdc/cdc/puller"
 	"github.com/pingcap/ticdc/pkg/regionspan"
 	"github.com/pingcap/ticdc/pkg/security"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 	"github.com/pingcap/tidb/types"
 	"go.uber.org/zap"
 )
@@ -58,6 +59,7 @@ func (s *avroBatchEncoderSuite) TearDownSuite(c *check.C) {
 }
 
 func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
+	defer testleak.AfterTest(c)()
 	avroCodec, err := goavro.NewCodec(`
         {
           "type": "record",
@@ -99,6 +101,7 @@ func (s *avroBatchEncoderSuite) TestAvroEncodeOnly(c *check.C) {
 }
 
 func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
+	defer testleak.AfterTest(c)()
 	avroCodec, err := goavro.NewCodec(`
         {
           "type": "record",
@@ -137,6 +140,7 @@ func (s *avroBatchEncoderSuite) TestAvroEnvelope(c *check.C) {
 }
 
 func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
+	defer testleak.AfterTest(c)()
 	testCaseUpdate := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
@@ -160,9 +164,11 @@ func (s *avroBatchEncoderSuite) TestAvroEncode(c *check.C) {
 		Type:  model2.ActionCreateTable,
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	pm := puller.NewMockPullerManager(c, true)
+	defer pm.TearDown()
 	pm.MustExec(testCaseDdl.Query)
 	ddlPlr := pm.CreatePuller(0, []regionspan.ComparableSpan{regionspan.ToComparableSpan(regionspan.GetDDLSpan())})
 	go func() {

@@ -92,7 +92,7 @@ func (p *CDCProfile) String() string {
 		log.Fatal("SinkURI cannot be empty!")
 	}
 
-	builder.WriteString("--sink-uri=" + p.SinkURI + " ")
+	builder.WriteString("--sink-uri=\"" + p.SinkURI + "\" ")
 
 	if p.ConfigFile != "" {
 		builder.WriteString("--config=" + p.ConfigFile + " ")

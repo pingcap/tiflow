@@ -16,59 +16,50 @@ package flags
 import (
 	"testing"
 
-	. "github.com/pingcap/check"
+	"github.com/pingcap/check"
+	"github.com/pingcap/ticdc/pkg/util/testleak"
 )
 
 func Test(t *testing.T) {
-	TestingT(t)
+	check.TestingT(t)
 }
 
-var _ = Suite(&testUrlsSuite{})
+var _ = check.Suite(&testUrlsSuite{})
 
 type testUrlsSuite struct{}
 
-func (t *testUrlsSuite) TestParseHostPortAddr(c *C) {
+func (t *testUrlsSuite) TestNewURLsValue(c *check.C) {
+	defer testleak.AfterTest(c)()
+	cases := []struct {
+		url        string
+		hostString string
+	}{
+		{"http://127.0.0.1:2379", "127.0.0.1:2379"},
+		{"http://127.0.0.1:2379,http://127.0.0.1:2380", "127.0.0.1:2379,127.0.0.1:2380"},
+		{"http://pd-1:2379,http://pd-2:2380", "pd-1:2379,pd-2:2380"},
+		{"https://127.0.0.1:2379,https://127.0.0.1:2380", "127.0.0.1:2379,127.0.0.1:2380"},
+		// TODO: unix socket not supported now
+		// {"unix:///home/tidb/tidb.sock", "/home/tidb/tidb.sock"},
+	}
+
+	for _, testCase := range cases {
+		urlsValue, err := NewURLsValue(testCase.url)
+		c.Assert(err, check.IsNil)
+		hs := urlsValue.HostString()
+		c.Assert(hs, check.Equals, testCase.hostString)
+	}
+}
+
+func (t *testUrlsSuite) TestNewURLsValueError(c *check.C) {
+	defer testleak.AfterTest(c)()
 	urls := []string{
-		"127.0.0.1:2379",
-		"127.0.0.1:2379,127.0.0.2:2379",
-		"localhost:2379",
-		"pump-1:8250,pump-2:8250",
-		"http://127.0.0.1:2379",
-		"https://127.0.0.1:2379",
-		"http://127.0.0.1:2379,http://127.0.0.2:2379",
-		"https://127.0.0.1:2379,https://127.0.0.2:2379",
-		"unix:///home/tidb/tidb.sock",
+		"http:///192.168.199.111:2379",
+		"http://192.168.199.111",
+		"127.0.0.1:1080",
+		"http://192.168.199.112:8080/api/v1",
 	}
-
-	expectUrls := [][]string{
-		{"127.0.0.1:2379"},
-		{"127.0.0.1:2379", "127.0.0.2:2379"},
-		{"localhost:2379"},
-		{"pump-1:8250", "pump-2:8250"},
-		{"http://127.0.0.1:2379"},
-		{"https://127.0.0.1:2379"},
-		{"http://127.0.0.1:2379", "http://127.0.0.2:2379"},
-		{"https://127.0.0.1:2379", "https://127.0.0.2:2379"},
-		{"unix:///home/tidb/tidb.sock"},
-	}
-
-	for i, url := range urls {
-		urlList, err := ParseHostPortAddr(url)
-		c.Assert(err, Equals, nil)
-		c.Assert(len(urlList), Equals, len(expectUrls[i]))
-		for j, u := range urlList {
-			c.Assert(u, Equals, expectUrls[i][j])
-		}
-	}
-
-	inValidUrls := []string{
-		"127.0.0.1",
-		"http:///127.0.0.1:2379",
-		"htt://127.0.0.1:2379",
-	}
-
-	for _, url := range inValidUrls {
-		_, err := ParseHostPortAddr(url)
-		c.Assert(err, NotNil)
+	for _, url := range urls {
+		_, err := NewURLsValue(url)
+		c.Assert(err, check.NotNil)
 	}
 }
