@@ -19,6 +19,7 @@ GOVENDORFLAG := -mod=vendor
 endif
 
 GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath 
 ifeq ($(GOVERSION114), 1)
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3 --race -gcflags=all=-d=checkptr=0
 else
@@ -83,7 +84,7 @@ leak_test: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
 check_failpoint_ctl:
-	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILD) -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl
+	which $(FAILPOINT) >/dev/null 2>&1 || $(GOBUILDNOVENDOR) -o $(FAILPOINT) github.com/pingcap/failpoint/failpoint-ctl
 
 check_third_party_binary:
 	@which bin/tidb-server
@@ -142,8 +143,8 @@ check: check-copyright fmt lint check-static tidy errdoc
 
 coverage:
 	GO111MODULE=off go get github.com/wadey/gocovmerge
-	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
-	grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
+	gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" > "$(TEST_DIR)/all_cov.out"
+	grep -vE ".*.pb.go|$(CDC_PKG)/cdc/kv/testing.go|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
 ifeq ("$(JenkinsCI)", "1")
 	GO111MODULE=off go get github.com/mattn/goveralls
 	@goveralls -coverprofile=$(TEST_DIR)/all_cov.out -service=jenkins-ci -repotoken $(COVERALLS_TOKEN)
@@ -173,8 +174,8 @@ tools/bin/golangci-lint: tools/check/go.mod
 	cd tools/check; test -e ../bin/golangci-lint || \
 	$(GO) build -o ../bin/golangci-lint github.com/golangci/golangci-lint/cmd/golangci-lint
 
-failpoint-enable:
+failpoint-enable: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 
-failpoint-disable:
+failpoint-disable: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
