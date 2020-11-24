@@ -218,7 +218,7 @@ func (s *schemaSnapshot) Clone() *schemaSnapshot {
 	schemas := make(map[int64]*timodel.DBInfo, len(s.schemas))
 	for k, v := range s.schemas {
 		schemas[k] = v.Clone()
-	}	
+	}
 	clone.schemas = schemas
 
 	tables := make(map[int64]*model.TableInfo, len(s.tables))
