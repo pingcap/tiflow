@@ -416,6 +416,12 @@ func (d *CanalEventBatchEncoder) Reset() {
 	panic("Reset only used for JsonEncoder")
 }
 
+// SetParams is no-op for now
+func (d *CanalEventBatchEncoder) SetParams(params map[string]string) error {
+	// no op
+	return nil
+}
+
 // refreshPacketBody() marshals the messages to the packet body
 func (d *CanalEventBatchEncoder) refreshPacketBody() error {
 	oldSize := len(d.packet.Body)
